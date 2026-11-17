@@ -811,6 +811,227 @@ pub fn build_ld(ld: &Ld) -> Result<Group, BuildError> {
     close(&parts, hdr).map_err(BuildError::Group)
 }
 
+/// `pco_add64_32(.s = true)`: the 64-bit address `{lo, hi} + off` into the
+/// pair `dst`, `dst + 1` (low dword first), as pco's tile-buffer store
+/// computes a pixel's address in its tile buffer (`trans_store_output_fs`,
+/// pco_trans_nir.c:675-683): `lo` the buffer's low dword, `hi` its high one
+/// (pco moves it to a temporary first), `off` the `tiled_st_comp` special
+/// register. One phase-0 `add64_32` writing both ports, `olchk` set, `is0 =
+/// s0` and `is5 = fte`, as pco's group is (`tests/es3_pvr_mrt4.rs` holds it
+/// to pco's bytes).
+pub fn build_add64_32(dst: Operand, lo: Operand, hi: Operand, off: Operand) -> Result<Group, BuildError> {
+    use super::isa::PH_0;
+    let r =
+        instr_region("add64_32", PH_0, &[Mods::default(); 3], &[("s", 1), ("s2neg", 0)]).map_err(BuildError::Form)?;
+    let slot =
+        super::pack::slot_of(PH_0).ok_or(BuildError::Phases(super::pack::NotPackable::UnknownPhase { phase: PH_0 }))?;
+    let mut instrs: [Option<(u8, Region)>; MAX_INSTRS] = [None; MAX_INSTRS];
+    instrs[slot as usize] = Some((PH_0, r));
+    let ops = [Some(lo), Some(hi), Some(off), None, None, None];
+    let mux = enum_val("is0_sel", "s0")?;
+    let mut lower = Region::new(BitSetId::Src, choose_src_variant(&ops, mux).map_err(BuildError::Fit)?);
+    fill_srcs(&mut lower, &ops, mux).map_err(BuildError::Fit)?;
+    let upper = Some(Region::new(BitSetId::Src, narrowest_upper_src()?));
+    let mut iss = Region::new(BitSetId::Iss, 0);
+    iss.set("is5", enum_val("is5_sel", "fte")?).map_err(|_| BuildError::Unsupported("is5 does not take fte"))?;
+    let dst_ops = [Some(dst), Some(Operand { bank: dst.bank, index: dst.index + 1 })];
+    let dv = super::legalise::choose_dst_variant(&dst_ops).map_err(BuildError::Fit)?;
+    let mut d = Region::new(BitSetId::Dst, dv);
+    super::legalise::fill_dsts(&mut d, &dst_ops).map_err(BuildError::Fit)?;
+    let hv = super::pack::header_variant_of(ALUTYPE_MAIN).ok_or(BuildError::Unsupported("no main header variant"))?;
+    let mut hdr = Region::new(BitSetId::IgrpHdr, hv);
+    let oporg = super::pack::oporg_for(&[PH_0]).ok_or(BuildError::Phases(super::pack::NotPackable::NotAKnownSet))?;
+    for (f, v) in [("oporg", oporg), ("w0p", 1), ("w1p", 1), ("olchk", 1), ("rpt", 1)] {
+        hdr.set(f, v).map_err(|_| BuildError::Unsupported("a header field that does not take its value"))?;
+    }
+    let parts =
+        Parts { alutype: ALUTYPE_MAIN, instrs, lower: Some(lower), upper, iss: Some(iss), dst: Some(d), align_pad: 0 };
+    close(&parts, hdr).map_err(BuildError::Group)
+}
+
+/// `pco_st_tiled`: one 32-bit dword `data` stored to the tile-buffer address
+/// in the pair `addr`, `addr + 1` under the sample mask `mask`, on DRC 0,
+/// cache mode write-through (`trans_store_output_fs`, pco_trans_nir.c:
+/// 708-715). Form `st_immbl_tiled`, burst 1; the data in source slot s0, the
+/// address in s3 and the mask in s4 (`srcseldata`, `srcseladd`, `srcmask`);
+/// header `oporg = be`, no write port, `olchk`. Nothing may overwrite
+/// `data`, `addr` or `mask` before a `wdf` on DRC 0
+/// ([`super::fragment::wait_data`]), which pco places after each store.
+pub fn build_st_tiled(data: Operand, addr: Operand, mask: Operand) -> Result<Group, BuildError> {
+    use super::isa::PH_BACKEND;
+    const S0: u32 = 0;
+    const S3: u32 = 3;
+    const S4: u32 = 4;
+    let extra = [
+        ("drc", 0),
+        ("srcseladd", S3),
+        ("burstlen", 1),
+        ("cachemode_st", enum_val("cachemode_st", "write_through")?),
+        ("srcseldata", S0),
+        ("dsize", enum_val("dsize", "32bit")?),
+        ("srcmask", S4),
+    ];
+    let r = instr_region("st.tiled", PH_BACKEND, &[Mods::default(); 3], &extra).map_err(BuildError::Form)?;
+    let slot = super::pack::slot_of(PH_BACKEND)
+        .ok_or(BuildError::Phases(super::pack::NotPackable::UnknownPhase { phase: PH_BACKEND }))?;
+    let mut instrs: [Option<(u8, Region)>; MAX_INSTRS] = [None; MAX_INSTRS];
+    instrs[slot as usize] = Some((PH_BACKEND, r));
+    let lower_ops = [Some(data), None, None, None, None, None];
+    let mut lower = Region::new(BitSetId::Src, choose_src_variant(&lower_ops, 0).map_err(BuildError::Fit)?);
+    fill_srcs(&mut lower, &lower_ops, 0).map_err(BuildError::Fit)?;
+    let upper_ops = [None, None, None, Some(addr), Some(mask), None];
+    let mut upper = Region::new(BitSetId::Src, choose_src_variant(&upper_ops, 0).map_err(BuildError::Fit)?);
+    fill_srcs(&mut upper, &upper_ops, 0).map_err(BuildError::Fit)?;
+    let hv = super::pack::header_variant_of(ALUTYPE_MAIN).ok_or(BuildError::Unsupported("no main header variant"))?;
+    let mut hdr = Region::new(BitSetId::IgrpHdr, hv);
+    let oporg =
+        super::pack::oporg_for(&[PH_BACKEND]).ok_or(BuildError::Phases(super::pack::NotPackable::NotAKnownSet))?;
+    for (f, v) in [("oporg", oporg), ("rpt", 1), ("olchk", 1)] {
+        hdr.set(f, v).map_err(|_| BuildError::Unsupported("a header field that does not take its value"))?;
+    }
+    let iss = super::pack::iss_present(ALUTYPE_MAIN, true).then(|| Region::new(BitSetId::Iss, 0));
+    let parts =
+        Parts { alutype: ALUTYPE_MAIN, instrs, lower: Some(lower), upper: Some(upper), iss, dst: None, align_pad: 0 };
+    close(&parts, hdr).map_err(BuildError::Group)
+}
+
+/// `savmsk` in mode `icm`: the input coverage mask, the multisampled half
+/// of a tile-buffer store's mask (pco_trans_nir.c:695-699), shaped as
+/// [`super::shapes::SAVMSK`].
+pub const SAVMSK_ICM: super::shapes::Template = super::shapes::Template {
+    name: "savmsk.icm",
+    bitwise: false,
+    dst: true,
+    dst_w1: false,
+    header: &[],
+    steps: &[super::shapes::Step { op: "savmsk", phase: super::isa::PH_BACKEND, fields: &[("msk_mode", "icm")] }],
+    slots: [Some(super::shapes::Arg::Special(0)), None, None, None, None, None],
+    mux: None,
+    iss: &[],
+};
+
+/// `pco_csel(.tst_op_main = GZERO, .tst_type_main = U32)`: `dest = c > 0 ?
+/// x : y`, the tile-buffer store's choice of the single-sampled mask `x`
+/// over the multisampled one `y` (pco_trans_nir.c:701-707): `ft0 = x` (s0),
+/// `ft1 = y` (s3), `c` on the feed-through (s1), `movc` taking ft0 when the
+/// test holds and ft1 (`is4`) when not. Operands (`c`, `x`, `y`).
+pub const CSEL_GZ: super::shapes::Template = {
+    use super::isa::{PH_0, PH_1, PH_2_MOV, PH_2_TST};
+    use super::shapes::{Arg, Step, Template};
+    Template {
+        name: "csel.gz",
+        bitwise: false,
+        dst: true,
+        dst_w1: false,
+        header: &[],
+        steps: &[
+            Step { op: "mbyp", phase: PH_0, fields: &[] },
+            Step { op: "mbyp", phase: PH_1, fields: &[] },
+            Step {
+                op: "tst",
+                phase: PH_2_TST,
+                fields: &[("tst_op", "gz"), ("pwen", "0"), ("type", "u32"), ("p2end", "1"), ("elem", "0")],
+            },
+            Step {
+                op: "movc",
+                phase: PH_2_MOV,
+                fields: &[("movw0", "ft0"), ("movw1", "ft0"), ("maskw0", "eall"), ("p2end", "0")],
+            },
+        ],
+        slots: [Some(Arg::Op(1)), Some(Arg::Op(0)), None, Some(Arg::Op(2)), None, None],
+        mux: Some("s1"),
+        iss: &[("is1", "fte"), ("is4", "ft1")],
+    }
+};
+
+/// The special register holding a pixel's offset of output dword `c` in a
+/// tile buffer, `PCO_SR_TILED_ST_COMP0 + c` (58..61, then 123..126 for 4..7;
+/// docs/online-shaderc/isa.md).
+pub const fn tiled_st_comp(c: u16) -> u16 {
+    if c < 4 {
+        58 + c
+    } else {
+        123 + c - 4
+    }
+}
+
+/// The groups that store `n` output dwords to a tile buffer, in pco's order
+/// (`trans_store_output_fs`): the sample mask first -- `savmsk.vm`,
+/// `savmsk.icm`, `fs_is_single_sampled` (`pck.cov` of 1.0, a shift right by
+/// one, `tstz`) and the `csel` between the two -- then per dword the
+/// buffer's high address dword moved to a temporary, the `add64_32` of the
+/// pixel's offset, the `st.tiled` and its `wdf`. pco recomputes the mask
+/// for every dword; it is computed once here, into `scratch + 2`, and every
+/// store takes the high dword in `scratch` and the address pair in
+/// `scratch + 3`, `+ 4`, once the `wdf` after the store before has drained
+/// it. Five temporaries from `scratch`.
+struct TileStores {
+    /// (shared register of the buffer's address pair, dword index in the
+    /// target, the temporary holding the dword), in emit order.
+    dwords: [(u16, u16, u16); 16],
+    n: usize,
+    scratch: u16,
+}
+
+impl TileStores {
+    /// Groups of the mask, then four per dword.
+    const MASK_GROUPS: usize = 6;
+    const DWORD_GROUPS: usize = 4;
+
+    fn groups(&self) -> usize {
+        if self.n == 0 {
+            0
+        } else {
+            Self::MASK_GROUPS + Self::DWORD_GROUPS * self.n
+        }
+    }
+
+    fn group(&self, k: usize) -> Result<Group, BuildError> {
+        use super::shapes::{build_opt, PCK_COV, SAVMSK, TSTZ, USHR};
+        const SPECIAL: u32 = 0;
+        const TEMP: u32 = 1;
+        const SHARED: u32 = 4;
+        /* pco_fone and pco_one: special 64 (1.0) and special 1 (1) */
+        const FONE: u32 = 64;
+        const ONE: u32 = 1;
+        let t = |r: u16| Operand { bank: TEMP, index: u32::from(r) };
+        let s = self.scratch;
+        let (vm, icm, mask) = (t(s), t(s + 1), t(s + 2));
+        if k < Self::MASK_GROUPS {
+            return match k {
+                0 => build_opt(&SAVMSK, &[None; 3], Some(vm)),
+                1 => build_opt(&SAVMSK_ICM, &[None; 3], Some(icm)),
+                2 => build_opt(&PCK_COV, &[Some(Operand { bank: SPECIAL, index: FONE }), None, None], Some(mask)),
+                3 => build_opt(&USHR, &[Some(mask), Some(Operand { bank: SPECIAL, index: ONE }), None], Some(mask)),
+                4 => build_opt(&TSTZ, &[Some(mask), None, None], Some(mask)),
+                _ => build_opt(&CSEL_GZ, &[Some(mask), Some(vm), Some(icm)], Some(mask)),
+            };
+        }
+        let k = k - Self::MASK_GROUPS;
+        let (sh, c, data) = self.dwords[k / Self::DWORD_GROUPS];
+        let (hi, addr) = (t(s), t(s + 3));
+        let sh = |i: u16| Operand { bank: SHARED, index: u32::from(sh + i) };
+        match k % Self::DWORD_GROUPS {
+            0 => {
+                use super::sel::{Bank, OpType, SelDst, SelGroup, SelOp, SelSrc};
+                build_group(&SelGroup {
+                    op: SelOp::Copy,
+                    ty: OpType::F32,
+                    dst: Some(SelDst::Fixed { bank: Bank::Temp, reg: s }),
+                    srcs: [
+                        Some(SelSrc::Fixed { bank: Bank::Shared, reg: sh(1).index as u16, mods: Mods::default() }),
+                        None,
+                        None,
+                    ],
+                })
+            }
+            1 => build_add64_32(addr, sh(0), hi, Operand { bank: SPECIAL, index: u32::from(tiled_st_comp(c)) }),
+            2 => build_st_tiled(t(data), addr, mask),
+            _ => super::fragment::wait_data(),
+        }
+    }
+}
+
 /// One output dword the epilogue writes: where it comes from and where it
 /// goes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1915,22 +2136,40 @@ pub enum TargetOut {
     Packed { dwords: [(super::sel::Bank, u16); 4], n: u8 },
 }
 
+/// Where [`build_fragment_shader_targets`] puts one attachment's dwords: the
+/// placement `src/pvr/mrt_layout.rs` gives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetPlace {
+    /// Pixel output registers `first..`.
+    Register(u16),
+    /// A tile buffer, from its dword 0, at the address the driver puts in
+    /// shared registers `sh`, `sh + 1` (the record's `tile_buffer_sh` plus
+    /// two per buffer before it).
+    TileBuffer { sh: u16 },
+}
+
 /// A fragment shader writing several colour attachments of different
-/// classes, none blended: output (`reg`, out) is packed for its own target
-/// and written to pixel output registers `reg..`, where the end-of-tile
-/// program emits that attachment from (`chain::target_out_regs`). Each
-/// output works in its own six temporaries from `free + 6j`: the colour
-/// moved into the first four (only red for R16F and R32F) and packed into
-/// the fifth and sixth; an integer target's dwords not already in a
-/// temporary moved into the first ones. The packs come after every move,
-/// then the kill test and the feedback of a shader that discards, then the
-/// writes in register order, the last one ending the program. Returns the
-/// bytes written and the temporaries.
+/// classes, none blended: output (`place`, out) is packed for its own target
+/// and written where the end-of-tile program emits that attachment from
+/// (`src/pvr/mrt_layout.rs`): pixel output registers `first..`, or a tile
+/// buffer the end-of-tile program loads back ([`TileStores`]). Each output
+/// works in its own six temporaries from `free + 6j`: the colour moved into
+/// the first four (only red for R16F and R32F) and packed into the fifth and
+/// sixth; an integer target's dwords not already in a temporary moved into
+/// the first ones. The packs come after every move, then the kill test and
+/// the feedback of a shader that discards (and a written depth's `depthf`,
+/// as [`build_fragment_shader_outputs`] orders it), then the register writes
+/// in order, the last one ending the program -- or, when a target is
+/// spilled, the tile-buffer stores after them and a `nop` ending it, as pco
+/// orders them. Returns the bytes written and the temporaries.
 pub fn build_fragment_shader_targets(
     iterated: &[super::fragment::Iterated],
     arithmetic: &[super::sel::SelGroup],
-    outs: &[(u16, TargetOut)],
+    outs: &[(TargetPlace, TargetOut)],
     discard: Option<u16>,
+    /* The clamped depth of a `gl_FragDepth`, fed back after the kill test
+     * (under it when the shader discards) and before the pixel writes. */
+    depth: Option<u16>,
     free: u16,
     buf: &mut [u8],
 ) -> Result<(usize, u16), BuildError> {
@@ -1941,7 +2180,10 @@ pub fn build_fragment_shader_targets(
         Move { ty: OpType, src: (Bank, u16), dst: u16 },
         Pck { format: &'static str, scale: u32, rpt: u32, first: u16, dst: u16 },
         Kill(u8),
+        Depth(u8),
         Write { index: u16, src: u16 },
+        Tile(usize),
+        End,
     }
     if outs.is_empty() || outs.len() > MAX_RGBA8_OUTPUTS {
         return Err(BuildError::Unsupported("a target list of other than 1..=4 outputs"));
@@ -1949,8 +2191,10 @@ pub fn build_fragment_shader_targets(
     let temps = free
         .checked_add(6 * outs.len() as u16)
         .ok_or(BuildError::Unsupported("no temporaries left for the colours"))?;
-    /* at most 4 x (4 moves, 2 packs, 4 writes) and the 3 kill steps */
-    let mut steps = [Step::Kill(0); 43];
+    let mut tiles = TileStores { dwords: [(0, 0, 0); 16], n: 0, scratch: temps };
+    /* at most 4 x (4 moves, 2 packs, 4 writes), the 4 kill and depth steps,
+     * the tile-buffer stores of up to twelve dwords and the end */
+    let mut steps = [Step::Kill(0); 44 + TileStores::MASK_GROUPS + 12 * TileStores::DWORD_GROUPS + 1];
     let mut n = 0usize;
     let mut push = |s: Step| {
         steps[n] = s;
@@ -1958,7 +2202,7 @@ pub fn build_fragment_shader_targets(
     };
     let mut writes = [(0u16, 0u16); MAX_RGBA8_OUTPUTS];
     let mut nw = 0usize;
-    for (j, &(reg, out)) in outs.iter().enumerate() {
+    for (j, &(place, out)) in outs.iter().enumerate() {
         let b = free + 6 * j as u16;
         /* where each written dword is packed (an integer one: moved) */
         let (srcs, ns): ([u16; 4], usize) = match out {
@@ -1994,14 +2238,29 @@ pub fn build_fragment_shader_targets(
                 TargetOut::Packed { dwords, .. } if dwords[k].0 == Bank::Temp => dwords[k].1,
                 _ => s,
             };
-            let index = reg + k as u16;
-            if nw == writes.len() || usize::from(index) >= MAX_RGBA8_OUTPUTS {
-                return Err(BuildError::Unsupported("a colour output past the pixel's four output registers"));
+            match place {
+                TargetPlace::Register(first) => {
+                    let index = first + k as u16;
+                    if nw == writes.len() || usize::from(index) >= MAX_RGBA8_OUTPUTS {
+                        return Err(BuildError::Unsupported("a colour output past the pixel's four output registers"));
+                    }
+                    writes[nw] = (index, src);
+                    nw += 1;
+                }
+                TargetPlace::TileBuffer { sh } => {
+                    if tiles.n == tiles.dwords.len() {
+                        return Err(BuildError::Unsupported("more tile-buffer dwords than three targets hold"));
+                    }
+                    tiles.dwords[tiles.n] = (sh, k as u16, src);
+                    tiles.n += 1;
+                }
             }
-            writes[nw] = (index, src);
-            nw += 1;
         }
     }
+    let temps = match tiles.n {
+        0 => temps,
+        _ => temps.checked_add(5).ok_or(BuildError::Unsupported("no temporaries left for the tile-buffer stores"))?,
+    };
     for (j, &(_, out)) in outs.iter().enumerate() {
         let b = free + 6 * j as u16;
         match out {
@@ -2019,12 +2278,23 @@ pub fn build_fragment_shader_targets(
         }
     }
     if discard.is_some() {
-        for k in 0..3 {
+        /* with a depth: tstz, alphaf, depthf (under p0), wdf */
+        let kills: &[u8] = if depth.is_some() { &[0, 1, 3, 2] } else { &[0, 1, 2] };
+        for &k in kills {
             push(Step::Kill(k));
         }
+    } else if depth.is_some() {
+        push(Step::Depth(0));
+        push(Step::Depth(1));
     }
     for &(index, src) in &writes[..nw] {
         push(Step::Write { index, src });
+    }
+    for k in 0..tiles.groups() {
+        push(Step::Tile(k));
+    }
+    if tiles.n != 0 {
+        push(Step::End);
     }
     let last = n - 1;
     let mut pro = Prologue::new(iterated, arithmetic);
@@ -2057,10 +2327,28 @@ pub fn build_fragment_shader_targets(
                             None,
                         ),
                         1 => super::shapes::build_opt(&super::shapes::ALPHA_FEEDBACK, &[None; 3], None),
+                        3 => super::shapes::build_opt(
+                            &super::shapes::DEPTH_FEEDBACK_KEPT,
+                            &[Some(Operand { bank: TEMP, index: depth.unwrap_or(0) as u32 }), None, None],
+                            None,
+                        ),
+                        _ => super::fragment::wait_data(),
+                    }
+                }
+                Step::Depth(s) => {
+                    let src = depth.ok_or(BuildError::Unsupported("a depth feedback with no depth"))?;
+                    match s {
+                        0 => super::shapes::build_opt(
+                            &super::shapes::DEPTH_FEEDBACK,
+                            &[Some(Operand { bank: 1, index: src as u32 }), None, None],
+                            None,
+                        ),
                         _ => super::fragment::wait_data(),
                     }
                 }
                 Step::Write { index, src } => build_pixout_write_to(index, src, k == last),
+                Step::Tile(t) => tiles.group(t),
+                Step::End => super::fragment::end_nop(),
             }
             .map(Some)
         },
