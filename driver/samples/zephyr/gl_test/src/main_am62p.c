@@ -54,6 +54,16 @@ int main(void)
 	pvr_backend_set_option(PVR_BACKEND_OPT_FS_TEMPS_MIN, (uint32_t)CONFIG_GL_TEST_PVR_FS_TEMPS_MIN);
 	printk("gl_test: PVR_BACKEND_OPT_FS_TEMPS_MIN=%d\n", CONFIG_GL_TEST_PVR_FS_TEMPS_MIN);
 #endif
+#ifdef CONFIG_PVR_GL_TEST_MRT4
+	{
+		extern int pvr_debug_set_draw_targets(int n);
+
+		/* four draw buffers and colour attachments, before any context */
+		int ret = pvr_debug_set_draw_targets(4);
+
+		printk("gl_test: pvr_debug_set_draw_targets(4)=%d (the 4-target knob on)\n", ret);
+	}
+#endif
 	int rc;
 
 	if (CONFIG_GL_TEST_PANEL) {
