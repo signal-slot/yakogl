@@ -517,6 +517,13 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         }
         let int_format = integer_texture_internalformat(t);
         let rgb10a2 = rgb10a2_texture_surface(t.texfmt).is_some();
+        /* GL_RGB16F (es3_formats) is held as four halves, the RGBA16F
+         * surface; GL_EXT_color_buffer_half_float makes it colour-renderable
+         * (ES 3.0 table 3.13 alone does not). The ES 2.0 report has no
+         * such texture. */
+        let rgb16f = !crate::REPORT_ES2
+            && t.texfmt == GLES_TEXFMT_RGBA16F
+            && super::es3_formats::by_index(t.es3_fmt).is_some_and(|e| e.internalformat == GL_RGB16F);
 
         if t.mem.impl_.is_null()
             || t.width == 0
@@ -534,7 +541,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
             /* an ES 3.0 format of es3_formats is no render target, but
              * RGB10_A2 (ES 3.0 table 3.13): held as RGBA8, or in its own
              * class where the back end renders it */
-            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2)
+            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2 && !rgb16f)
             || a.level < 0
             || a.level as u32 >= t.chain_levels as u32
             || a.level as usize >= CAP_MIP_LEVELS
@@ -554,6 +561,7 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
              * attachment by its sized format: GL_RGBA32F is not
              * colour-renderable without GL_EXT_color_buffer_float */
             GLES_TEXFMT_RGBA16F if t.rgba32f => GL_RGBA32F,
+            GLES_TEXFMT_RGBA16F if rgb16f => GL_RGB16F,
             GLES_TEXFMT_RGBA16F => GL_RGBA16F,
             GLES_TEXFMT_R16F => GL_R16F,
             GLES_TEXFMT_R32F => GL_R32F,
@@ -649,8 +657,13 @@ fn is_color_format(f: GLenum) -> bool {
             | GL_RGB16F
             | GL_RG16F
             | GL_R16F
-            | GL_R32F
     ) || is_integer_color_format(f)
+        /* ES 3.0 table 3.13: R32F, like RG32F and RGBA32F, is colour-renderable
+         * only with GL_EXT_color_buffer_float, which this build does not list
+         * (GL_EXT_color_buffer_half_float names the 16F ones alone;
+         * docs/notes/es3-float-targets.md section 5). The ES 2.0 report keeps
+         * its answer: it refuses the name before it gets here. */
+        || (f == GL_R32F && (crate::REPORT_ES2 || r32f_color_renderable()))
         /* ES 3.0 table 3.13: colour-renderable, so renderbuffer storage. In
          * its own 10/10/10/2 surface where the back end renders the class
          * (`rgb10a2_surface`), else held as RGBA8 (eight bits a channel,
@@ -658,6 +671,24 @@ fn is_color_format(f: GLenum) -> bool {
          * (es3_formats' fallback class). ES 2.0 has no such name. */
         || (f == GL_RGB10_A2 && !crate::REPORT_ES2)
 }
+
+/// Is GL_R32F colour-renderable in this ES 3.0 build: only where
+/// GL_EXT_color_buffer_float is listed (none lists it yet), or where a host
+/// test stands in for such a build ([`HOST_R32F_RT`]).
+fn r32f_color_renderable() -> bool {
+    #[cfg(any(test, feature = "host-test"))]
+    if HOST_R32F_RT.load(core::sync::atomic::Ordering::Relaxed) {
+        return true;
+    }
+    crate::gl::state::extension_listed("GL_EXT_color_buffer_float")
+}
+
+/// Host tests only: R32F is a colour target as GL_EXT_color_buffer_float
+/// makes it, for a test of the R32F surface the back ends render (the host
+/// back ends draw nothing, and the extension string is not changed). Off
+/// unless a test sets it; `reset_for_tests` turns it off again.
+#[cfg(any(test, feature = "host-test"))]
+pub static HOST_R32F_RT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// The surface (`GLES_SURF_*`) of an ES 3.0 integer colour format, by its GL
 /// name, in any build (the ES 2.0 report refuses the formats elsewhere).
@@ -1283,7 +1314,8 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
     }
     stamp_target_use(c, loc);
     let format = match st.internalformat {
-        GL_RGBA16F => GLES_SURF_RGBA16F,
+        /* RGB16F and RG16F keep four halves (`renderbuffer_surf_format`) */
+        GL_RGBA16F | GL_RGB16F | GL_RG16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
         f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 || f == GL_RGB10_A2 => renderbuffer_surf_format(f),
@@ -3910,6 +3942,7 @@ pub(crate) fn reset_for_tests() {
         *TARGET_USE.get() = [[0; MAX_TEXTURES]; MAX_CONTEXTS];
         *DEPTH_TARGET.get() = [[DepthTarget { level: 0, resolved: 0 }; MAX_TEXTURES]; MAX_CONTEXTS];
     };
+    HOST_R32F_RT.store(false, core::sync::atomic::Ordering::Relaxed);
     super::blit::reset_for_tests();
 }
 
@@ -7096,6 +7129,7 @@ mod tests {
          * GL_RGBA16F one held half the bytes the PBE writes. */
         let gl = TestGl::new(8, 8);
         bound_fb();
+        HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed); /* R32F as the extension makes it */
         for (format, surf, bpp) in [
             (GL_RGBA16F, GLES_SURF_RGBA16F, 8u32),
             (GL_RGB16F, GLES_SURF_RGBA16F, 8),
@@ -7205,6 +7239,7 @@ mod tests {
     #[test]
     fn float_target_formats_follow_the_colour_texture() {
         let gl = TestGl::new(8, 8);
+        HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed); /* R32F as the extension makes it */
         for (internal, surf) in [(GL_R16F, GLES_SURF_R16F), (GL_R32F, GLES_SURF_R32F), (GL_RGBA8, GLES_SURF_RGBA8888)] {
             let tex = bind_new_texture(GL_TEXTURE_2D);
             // SAFETY: plain GL calls.
@@ -7320,6 +7355,7 @@ mod tests {
     #[cfg(not(feature = "report-es2"))]
     fn read_pixels_of_r16f_and_r32f_targets_fill_rgba() {
         let _gl = TestGl::new(8, 8);
+        HOST_R32F_RT.store(true, core::sync::atomic::Ordering::Relaxed); /* R32F as the extension makes it */
         for internal in [GL_R16F, GL_R32F] {
             let tex = bind_new_texture(GL_TEXTURE_2D);
             let v = [0.75f32];

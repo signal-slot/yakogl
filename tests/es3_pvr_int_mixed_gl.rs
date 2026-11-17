@@ -673,6 +673,9 @@ fn try_draw(fs: &str) -> (GLenum, Option<Frame>) {
     EMITS.lock().unwrap().clear();
     KICKS.lock().unwrap().clear();
     with_platform(|p| p.log.clear());
+    /* the back end names a refusal once (glog_once!): an earlier test of the
+     * file that hit the same refusal must not leave this one's line out */
+    yakogl::osal::new_log_epoch();
     let src = std::ffi::CString::new(fs).unwrap();
     // SAFETY: plain GL calls; POS is a static.
     unsafe {
