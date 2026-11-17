@@ -198,57 +198,72 @@ from the first is "private classes not run", not a pass. The snapshot
 directory is removed after a rehearsal; nothing is pushed and no remote is
 added.
 
-### Rehearsal on the origin/main tip (2026-11-15)
+### Rehearsal on the origin/main tip (2026-11-17)
 
-- **R** (source): `cc2cc536c12a6778b348a28f3ef215127f509b78`, origin/main's
-  tip as last fetched by the farm (a fresh `git fetch origin` was not possible
-  from the worker).
-- **Identity and date**: `YakoGL rehearsal <rehearsal@example.invalid>`,
-  `2026-11-15T00:00:00+00:00`, given as `--author` and `--date`.
-- **Tool output**: `source cc2cc536c12a6778b348a28f3ef215127f509b78`,
-  `snapshot 02b31704b517434f65f2e9d314b0a63c9093e9be`, `files 6892`,
+- **R** (source): `239b538dce0420f96a6dfbe46f7be60d62cf9cdd`, origin/main's
+  tip as held by the farm's read-only copies of the remote's refs (the two
+  copies of `main` both resolve to it; commit date 2026-11-17). A fresh
+  `git fetch origin` was not possible from the worker (host key
+  verification). R is a commit of origin/main, not of the integration
+  branch, and a descendant of the previous rehearsal's source
+  `cc2cc536c12a6778b348a28f3ef215127f509b78`.
+- **Identity and date**: `yakogl rehearsal <rehearsal@invalid>`,
+  `2026-01-01T00:00:00Z`, given as `--author` and `--date`.
+- **Tool output**: `source 239b538dce0420f96a6dfbe46f7be60d62cf9cdd`,
+  `snapshot fa5e7d71e70e115991cd6396a6904321430c2953`, `files 11098`,
   `exclusions: none (tools/release/snapshot-exclude lists no path)`; exit 0.
-  The self-test passed.
-- **Shape**: `git rev-list --count 02b31704` 1; `git log --format=%P` empty;
-  `.git/config` of the snapshot has no `[remote]` section (no remote). Author
-  and committer are the rehearsal identity at `2026-11-15T00:00:00Z`. The
-  snapshot's tree (`b295edbf`) is R's tree byte for byte. `fresh/yakogl`
-  (Undecided item 6) is no longer in R's tree, so no gitlink was carried.
+  The same command into a second output directory printed the same
+  `snapshot` hash: the tool is deterministic. Its `--self-test` is the
+  `tools/check.sh` row (held item snapshot-gate-row), not part of this
+  rehearsal.
+- **Shape**: `git rev-list --count fa5e7d71` 1; `git log --format=%P` empty
+  (one root commit, no parent); the snapshot's `.git/config` has no
+  `[remote]` section (no remote; none was added). Author and committer are
+  the rehearsal identity at `2026-01-01T00:00:00Z`. The snapshot's tree
+  (`37a1d7cb`) is R's tree byte for byte (equal `{tree}` ids), so a kept
+  submodule gitlink — which the tool refuses, exit 8 — never arose.
 - **Redaction scan, public classes**: exit **3**, "0 H/M finding(s), 3
-  class(es) not run, 98 informational, 128 look-alike(s) dropped: NOT
-  COMPLETE (private classes not run)" (6669 files scanned). Exit 3 is not a
-  pass. The scan ran on the snapshot commit (fetched into the source
-  checkout) with the snapshot's own `redaction-scan.allow` (`--allow`); the
-  script is byte-equal to the snapshot's copy.
+  class(es) not run, 98 informational, 132 look-alike(s) dropped: NOT
+  COMPLETE (private classes not run)" (10875 files scanned; `third_party/`
+  and `docs/release/redaction-audit.md` excluded, as Part 3 does). Exit 3
+  is not a pass for checklist line 8. The scan ran on the snapshot commit
+  through the Procedure's fallback (the worker cannot `cd` outside its
+  checkout): the snapshot was fetched into a clean source checkout
+  (`git fetch <outdir> HEAD`), `FETCH_HEAD` was scanned with
+  `--allow <outdir>/tools/release/redaction-scan.allow`, and the scan's
+  `redaction-scan.py` and allow file are byte-equal to the snapshot's
+  copies (blob `1e5a1d94`, blob `de757d79`, both unchanged at R).
 - **Redaction scan, private classes**: not run on this snapshot; no
-  private-values file exists on the farm, and the worker could not put a
-  value set in the scan's environment. This is a gap, not a pass. An earlier
-  run with a partial set held in process memory only, as in `da99b2d7`, on
-  the snapshot of an earlier tip (`2b94031f`) found the 7 `lab-host` hits
-  below; their lines are unchanged at R.
-- **Licence audit** (`--root` the snapshot, byte-equal script): exit **0**
-  with the five `--fail-on` classes, exit **0** with `,undecided` appended:
-  6858 files, 3117 with an SPDX line, 3428 allowlisted; missing-spdx 0,
-  unknown-id 0, unused-license 0, third-party-mismatch 0, undecided 0,
-  generated 71 (mismatch 0), third-party-unlabelled 13 (information);
-  findings 0.
+  private-values file exists on the farm and none was built. This is a gap,
+  not a pass. The last private run — a partial set held in process memory
+  only, as in `da99b2d7`, on the snapshot of an earlier tip (`2b94031f`) —
+  found the 7 `lab-host` hits below. `docs/notes/x2-glmark2-slow-scenes.md`
+  changed since (`6ca3428f` appended an eighth-attempt section), but the
+  three hit lines and their values are unchanged at R; a private run on R
+  still waits on the owner's full set.
+- **Licence audit** (`--root` the snapshot checkout, byte-equal script,
+  blob `74f70bcc`): exit **0** with the five `--fail-on` classes, exit **0**
+  with `,undecided` appended: 11064 files, 4145 with an SPDX line, 6208
+  allowlisted; missing-spdx 0, unknown-id 0, unused-license 0,
+  third-party-mismatch 0, undecided 0, generated 77 (mismatch 0),
+  third-party-unlabelled 13 (information); findings 0.
 
-H/M hits on the snapshot (masked; paths and lines in the snapshot, the same
-as in R): none on the public classes. R's allow file carries the rules for
-the three fixture values of `tools/probes/rpi5_display/verdicts_selftest.sh`
-that earlier tips reported. From the earlier private run:
+H/M hits on the snapshot (masked; paths and lines in the snapshot): none on
+the public classes. R's allow file carries the rules for the three fixture
+values of `tools/probes/rpi5_display/verdicts_selftest.sh`; the scan dropped
+them, as in earlier runs. From the earlier private run, re-read at R:
 
 | Class | Where | Value | Disposition |
 |---|---|---|---|
-| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:41` | `L***[6]` ×2, `h***[4]` | open: farm machine names in a board note; plan #363's notes-hostnames item rewords them |
+| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:41` | `L***[6]` ×2, `h***[4]` | open: farm machine names in a board note; plan #363's notes-hostnames item rewords the file |
 | `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:42` | `n***[5]`, `n***[3]`, `s***[8]` | open: as above |
 | `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:43` | `n***[5]` | open: as above |
 
 The same note also names a worker's host (`o***[5]`) at lines 32, 42, 52,
-62, 71, 79 and 87; the partial set did not hold it, so whether the private
-class counts it is the owner's set to decide. The notes-hostnames item
-covers the file. None was fixed in the rehearsal. R does not meet line 8: the private
-classes have not passed on it. Checklist row 8 is unchanged.
+62, 71, 79, 87 and 97; the partial set did not hold it, so whether the
+private class counts it is the owner's set to decide. The notes-hostnames
+item covers the file. None was fixed in the rehearsal. R does not meet line
+8: the private classes have not passed on it. Checklist row 8 is unchanged.
 
 The real snapshot of the commit to publish, line 8 on it with the owner's
 private file, D7 (promote and make public) and D8 (the date) are the
