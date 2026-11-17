@@ -74,9 +74,9 @@ Kept, on purpose:
 
 Nothing below is in `snapshot-exclude`: no recorded owner decision says it
 leaves the public tree. Each is a question for the owner. Counts are at
-`f7a525e6`.
+`34200a05`.
 
-1. **`tools/cts/log/**`** (356 tracked files in 23 slice directories plus
+1. **`tools/cts/log/**`** (865 tracked files in 38 slice directories plus
    `README.md`). `docs/README.md` ("Removed records") records the 2026-10-16
    removal of the directory's old per-session logs, and files committed
    there again since `e839242b` (2026-10-27): the slices RESULTS.md rows
@@ -106,16 +106,51 @@ leaves the public tree. Each is a question for the owner. Counts are at
    agrees" (for the ref; the filter-repo option that drops it was not chosen,
    decision 1 chose a fresh history). Its text names the farm tooling
    (`ccfarm`, `ask_farm`); `building.md` and `CONTRIBUTING.md` cite it.
-6. **`fresh/yakogl`**, a gitlink (mode 160000, `5b***[40]`, 40 characters)
-   with no `.gitmodules`, added by `13a8fba6` ("Fresh clone of origin/main",
-   a session's scratch clone). In a public tree it is a dangling submodule
-   pointing at a commit of the non-public repository. No decision names it.
-   Not a redaction hit, but the tool carries it into the snapshot unless told
-   otherwise.
+6. **`fresh/yakogl`**: settled. The gitlink is no longer in the tree
+   (`git ls-files -s` lists no mode 160000 entry); `a59c5c87` removed it.
+   The number stays so that the Rehearsal's reference to it holds.
 7. **`website/`** and **`.github/workflows/pages.yml`**: the stage-3
    criterion asks for "a website consistent with the status sources", which
    implies they stay; no decision records it. Presumed kept; the owner
    should confirm.
+
+8. **Commit hashes in text.** Backticked 7-12 hex hashes name commits of
+   the non-public history, which a one-commit repository does not hold:
+   `CHANGELOG.md` 145 (in 112 lines), `tools/cts/log/` 122 in 34 files, the
+   rest of `docs/` 2165 in 246 files (`git grep -hoE
+   '`[0-9a-f]{7,12}`'`). They stay readable but no `git show` resolves them.
+   Decision 4 keeps the `<hash>:<path>` citations; it does not speak of
+   these. Leave them as provenance of the private history, or reword?
+9. **Issue and pull request references.** `#NNNN` (2 to 4 digits) in tracked
+   Markdown outside `third_party/`: 1780 occurrences in 324 files, 25 of
+   them `#1606`. They point at the private repository's issues, which a
+   public reader cannot open, and in the public repository `#N` links to a
+   different issue or pull request. Keep, or reword?
+10. **Links that assume the repository name.** `github.com/signal-slot/yakogl`
+    in 18 tracked files (49 lines) outside `third_party/`. Will the public
+    repository have the same name and the branch `main`? If not, they change.
+11. **Fork pull requests and self-hosted runners.**
+    `.github/workflows/gate.yml` has `on: pull_request` (branches
+    `[main, ccfarm/integration]`), `schedule` and `workflow_dispatch`, and
+    one job with `runs-on: [self-hosted, Linux, X64, yakogl-gate]` (the
+    other has `runs-on: ubuntu-latest`). In a public repository a fork's
+    pull request can reach a self-hosted runner. Does the owner restrict
+    fork pull requests in the repository settings at D7, or change the
+    workflow (also the `ccfarm/integration` branch name)?
+12. **Step 8, the first tag.** `CHANGELOG.md` has `## [Unreleased]` (line 14)
+    and `## [0.1.0] - 2026-10-27` (line 322); no version is tagged. The
+    public history starts later than that date. `ROADMAP.md` ("State")
+    says the public repository's history starts with one fresh commit, and
+    `SECURITY.md` says nothing of the private history. What does the
+    `[0.1.0]` section say and date, what is the tag's name, and when is it
+    made, and do `ROADMAP.md` and `SECURITY.md` mention the private history?
+13. **Lab tooling names.** `git grep -il -e orion -e ccfarm -e ask_farm`
+    outside `third_party/` finds 56 files (4 name `orion`, 53 `ccfarm` or
+    `ask_farm`): 22 in `docs/notes/`, 7 in `tools/cts/`, 5 each in
+    `docs/release/` and `docs/es3/`, the rest elsewhere. `CLAUDE.md`
+    (item 5) is one of them. Is the VM-lab tool `orion` public? If it is,
+    the names stay, with an allow rule for the scan; if not, the text is
+    reworded.
 
 For each: keep, or exclude (the path then goes into
 `tools/release/snapshot-exclude` with the decision cited), or keep and
