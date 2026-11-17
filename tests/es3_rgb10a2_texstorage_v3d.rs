@@ -4,19 +4,18 @@
 //! end, through the GL entry points only (plan #370, texstorage-api2).
 //!
 //! On the V3D 4.2 build GL_RGB10_A2 is its own texture class
-//! (`GLES_TEXFMT_RGB10A2`). The back end is the smallest stand-in that makes a
-//! context (nothing is drawn).
+//! (`GLES_TEXFMT_RGB10A2`): a texel is the little-endian 10/10/10/2 word. The
+//! back end is the smallest stand-in that makes a context (nothing is drawn).
 //!
-//! Every row reads a level back through an FBO with glReadPixels
-//! RGBA/UNSIGNED_BYTE, which decodes each field to a byte as
-//! `(v * 255 + max / 2) / max` (max 1023 for R/G/B, 3 for A): round half up,
-//! as es3_rgb10a2_texture_v3d expects.
+//! Every row reads back through an FBO with glReadPixels RGBA/UNSIGNED_BYTE,
+//! which decodes each field to a byte as `(v * 255 + max / 2) / max` (max 1023
+//! for R/G/B, 3 for A): round half up, as es3_rgb10a2_texture_v3d expects.
 //!
-//! Covered: glTexStorage2D and the immutable-format/levels queries,
-//! glTexSubImage2D into levels 0 and 1, glTexImage2D on an immutable texture
-//! (GL_INVALID_OPERATION), an invalid type for glTexSubImage2D, glTexStorage3D
-//! for GL_TEXTURE_2D_ARRAY and GL_TEXTURE_3D read through
-//! glFramebufferTextureLayer, and framebuffer completeness.
+//! Covered: glTexStorage2D and the immutable queries, glTexSubImage2D into
+//! levels 0 and 1, glTexImage2D / glTexStorage2D on an immutable texture, a
+//! type invalid for the format, glTexStorage3D for GL_TEXTURE_2D_ARRAY and
+//! GL_TEXTURE_3D read through glFramebufferTextureLayer, and completeness of
+//! the framebuffer.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_rgb10a2_texstorage_v3d
@@ -173,7 +172,16 @@ fn want_bytes(words: &[u32]) -> Vec<u8> {
     words.iter().flat_map(|&w| decoded(w)).collect()
 }
 
-/// A texture name and a framebuffer name, deleted on drop.
+/// `n` words that differ in every field.
+fn words(n: u32, seed: u32) -> Vec<u32> {
+    (0..n)
+        .map(|i| {
+            a2((i * 131 + seed) % 1024, (i * 17 + seed * 3 + 5) % 1024, 1023 - (i * 100 + seed) % 1024, (i + seed) % 4)
+        })
+        .collect()
+}
+
+/// A texture bound to its target and a framebuffer to attach it to.
 struct Tex {
     tex: GLuint,
     fb: GLuint,
@@ -190,26 +198,34 @@ impl Drop for Tex {
     }
 }
 
-fn gen(target: GLenum) -> Tex {
+/// A fresh texture bound to `target`, its storage made by `store`.
+fn make(target: GLenum, store: impl FnOnce()) -> Tex {
     let (mut tex, mut fb) = (0, 0);
     // SAFETY: room for one name each.
     unsafe {
         glGenTextures(1, &mut tex);
         glBindTexture(target, tex);
+        store();
         glGenFramebuffers(1, &mut fb);
     }
+    assert_eq!(err(), GL_NO_ERROR, "storage");
     Tex { tex, fb }
 }
 
-fn upload(level: GLint, x: GLint, y: GLint, w: GLsizei, h: GLsizei, words: &[u32]) {
+fn storage_2d(w: GLsizei, h: GLsizei, levels: GLsizei) -> Tex {
+    // SAFETY: plain GL call.
+    make(GL_TEXTURE_2D, || unsafe { glTexStorage2D(GL_TEXTURE_2D, levels, GL_RGB10_A2, w, h) })
+}
+
+fn upload(level: GLint, w: GLsizei, h: GLsizei, words: &[u32]) {
     assert_eq!(words.len(), (w * h) as usize);
     // SAFETY: `words` holds w x h texels.
     unsafe {
         glTexSubImage2D(
             GL_TEXTURE_2D,
             level,
-            x,
-            y,
+            0,
+            0,
             w,
             h,
             GL_RGBA,
@@ -220,18 +236,40 @@ fn upload(level: GLint, x: GLint, y: GLint, w: GLsizei, h: GLsizei, words: &[u32
     assert_eq!(err(), GL_NO_ERROR, "glTexSubImage2D level {level}");
 }
 
-fn read_current(w: GLsizei, h: GLsizei) -> Vec<u8> {
+fn upload_slice(target: GLenum, z: GLint, w: GLsizei, h: GLsizei, words: &[u32]) {
+    assert_eq!(words.len(), (w * h) as usize);
+    // SAFETY: `words` holds one w x h slice.
+    unsafe {
+        glTexSubImage3D(
+            target,
+            0,
+            0,
+            0,
+            z,
+            w,
+            h,
+            1,
+            GL_RGBA,
+            GL_UNSIGNED_INT_2_10_10_10_REV,
+            words.as_ptr() as *const c_void,
+        );
+    }
+    assert_eq!(err(), GL_NO_ERROR, "glTexSubImage3D z {z}");
+}
+
+fn read_fb(w: GLsizei, h: GLsizei, what: &str) -> Vec<u8> {
     let mut px = vec![0x77u8; (w * h) as usize * 4];
     // SAFETY: room for w x h RGBA8 pixels.
     unsafe {
-        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{what}");
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void);
     }
-    assert_eq!(err(), GL_NO_ERROR, "glReadPixels");
+    assert_eq!(err(), GL_NO_ERROR, "glReadPixels {what}");
     px
 }
 
+/// glReadPixels RGBA/UNSIGNED_BYTE of `level` of the 2D texture through its FBO.
 fn read_level(t: &Tex, level: GLint, w: GLsizei, h: GLsizei) -> Vec<u8> {
     // SAFETY: plain GL calls.
     unsafe {
@@ -239,84 +277,60 @@ fn read_level(t: &Tex, level: GLint, w: GLsizei, h: GLsizei) -> Vec<u8> {
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t.tex, level);
     }
     assert_eq!(err(), GL_NO_ERROR, "glFramebufferTexture2D level {level}");
-    read_current(w, h)
+    read_fb(w, h, &format!("level {level}"))
 }
 
-fn read_layer(t: &Tex, level: GLint, layer: GLint, w: GLsizei, h: GLsizei) -> Vec<u8> {
+fn read_layer(t: &Tex, layer: GLint, w: GLsizei, h: GLsizei) -> Vec<u8> {
     // SAFETY: plain GL calls.
     unsafe {
         glBindFramebuffer(GL_FRAMEBUFFER, t.fb);
-        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, t.tex, level, layer);
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, t.tex, 0, layer);
     }
-    assert_eq!(err(), GL_NO_ERROR, "glFramebufferTextureLayer layer {layer}");
-    read_current(w, h)
+    assert_eq!(err(), GL_NO_ERROR, "glFramebufferTextureLayer {layer}");
+    read_fb(w, h, &format!("layer {layer}"))
 }
 
-fn tex_param(target: GLenum, pname: GLenum) -> GLint {
+fn param(target: GLenum, pname: GLenum) -> GLint {
     let mut v = -1;
-    // SAFETY: one int out.
+    // SAFETY: one GLint.
     unsafe { glGetTexParameteriv(target, pname, &mut v) };
     assert_eq!(err(), GL_NO_ERROR, "glGetTexParameteriv {pname:#x}");
     v
 }
 
-fn words(seed: u32, n: usize) -> Vec<u32> {
-    (0..n as u32)
-        .map(|i| {
-            a2(
-                (seed * 37 + i * 131 + 1) % 1024,
-                (seed * 11 + i * 211 + 3) % 1024,
-                (1023 - i * 60) % 1024,
-                (seed + i) % 4,
-            )
-        })
-        .collect()
-}
-
 #[test]
 fn storage_2d_succeeds_and_is_immutable() {
     let _g = context();
-    let t = gen(GL_TEXTURE_2D);
-    // SAFETY: plain GL calls.
-    unsafe { glTexStorage2D(GL_TEXTURE_2D, 3, GL_RGB10_A2, 8, 4) };
-    assert_eq!(err(), GL_NO_ERROR, "glTexStorage2D");
-    assert_eq!(tex_param(GL_TEXTURE_2D, GL_TEXTURE_IMMUTABLE_FORMAT), 1);
-    assert_eq!(tex_param(GL_TEXTURE_2D, GL_TEXTURE_IMMUTABLE_LEVELS), 3);
-    drop(t);
+    let _t = storage_2d(4, 4, 3);
+    assert_eq!(param(GL_TEXTURE_2D, GL_TEXTURE_IMMUTABLE_FORMAT), 1);
+    assert_eq!(param(GL_TEXTURE_2D, GL_TEXTURE_IMMUTABLE_LEVELS), 3);
 }
 
 #[test]
-fn sub_image_into_levels_reads_back_decoded() {
+fn sub_image_reads_back_at_levels_0_and_1() {
     let _g = context();
-    let t = gen(GL_TEXTURE_2D);
-    // SAFETY: plain GL call.
-    unsafe { glTexStorage2D(GL_TEXTURE_2D, 2, GL_RGB10_A2, 4, 4) };
-    assert_eq!(err(), GL_NO_ERROR);
-    let l0 = words(1, 16);
-    let l1 = words(2, 4);
-    upload(0, 0, 0, 4, 4, &l0);
-    upload(1, 0, 0, 2, 2, &l1);
+    let t = storage_2d(4, 4, 2);
+    let l0 = words(16, 7);
+    let l1 = words(4, 300);
+    upload(0, 4, 4, &l0);
+    upload(1, 2, 2, &l1);
     assert_eq!(read_level(&t, 0, 4, 4), want_bytes(&l0), "level 0");
     assert_eq!(read_level(&t, 1, 2, 2), want_bytes(&l1), "level 1");
-    // a sub-rectangle of level 0 leaves the rest alone
-    let sub = [a2(0, 0, 0, 0), a2(1023, 1023, 1023, 3)];
-    upload(0, 1, 2, 2, 1, &sub);
-    let mut w = l0.clone();
-    w[2 * 4 + 1] = sub[0];
-    w[2 * 4 + 2] = sub[1];
-    assert_eq!(read_level(&t, 0, 4, 4), want_bytes(&w), "level 0 after a sub-rectangle");
-    assert_eq!(read_level(&t, 1, 2, 2), want_bytes(&l1), "level 1 untouched");
+    // 1 -> 0, 511 -> 127, 512 -> 128, 1022 -> 255; alpha 1 -> 85, 2 -> 170
+    let edge = [a2(1, 511, 512, 1), a2(1022, 1023, 0, 2), a2(0, 0, 0, 0), a2(1023, 1023, 1023, 3)];
+    upload(1, 2, 2, &edge);
+    assert_eq!(&read_level(&t, 1, 2, 2)[..8], [0, 127, 128, 85, 255, 255, 0, 170]);
+    assert_eq!(read_level(&t, 1, 2, 2), want_bytes(&edge), "level 1 edges");
+    assert_eq!(read_level(&t, 0, 4, 4), want_bytes(&l0), "level 0 untouched");
 }
 
 #[test]
-fn tex_image_on_immutable_texture_is_invalid_operation() {
+fn tex_image_and_second_storage_on_immutable_are_invalid_operation() {
     let _g = context();
-    let t = gen(GL_TEXTURE_2D);
-    let w = words(3, 16);
+    let _t = storage_2d(4, 4, 2);
+    let w = words(16, 1);
     // SAFETY: `w` holds 4x4 texels.
     unsafe {
-        glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB10_A2, 4, 4);
-        assert_eq!(err(), GL_NO_ERROR);
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
@@ -329,82 +343,65 @@ fn tex_image_on_immutable_texture_is_invalid_operation() {
             w.as_ptr() as *const c_void,
         );
     }
-    assert_eq!(err(), GL_INVALID_OPERATION, "glTexImage2D on an immutable texture");
-    assert_eq!(tex_param(GL_TEXTURE_2D, GL_TEXTURE_IMMUTABLE_FORMAT), 1);
-    drop(t);
+    assert_eq!(err(), GL_INVALID_OPERATION, "glTexImage2D");
+    // SAFETY: plain GL call.
+    unsafe { glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB10_A2, 4, 4) };
+    assert_eq!(err(), GL_INVALID_OPERATION, "second glTexStorage2D");
+    assert_eq!(param(GL_TEXTURE_2D, GL_TEXTURE_IMMUTABLE_LEVELS), 2);
 }
 
 #[test]
-fn tex_sub_image_with_an_invalid_type_is_rejected() {
+fn sub_image_with_a_type_the_format_refuses() {
     let _g = context();
-    let t = gen(GL_TEXTURE_2D);
-    let w = [0u32; 4];
-    // SAFETY: four words of source; the calls are rejected before they read them.
-    unsafe {
-        glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB10_A2, 2, 2);
-        assert_eq!(err(), GL_NO_ERROR);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_SHORT_5_6_5, w.as_ptr() as *const c_void);
+    let _t = storage_2d(4, 4, 1);
+    let px = [0u8; 64];
+    let mut got = Vec::new();
+    for ty in [GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT_4_4_4_4, GL_FLOAT] {
+        // SAFETY: 64 bytes cover 4x4 texels of up to 4 bytes.
+        unsafe { glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 4, 4, GL_RGBA, ty, px.as_ptr() as *const c_void) };
+        got.push(err());
     }
-    assert_eq!(err(), GL_INVALID_OPERATION, "RGBA with UNSIGNED_SHORT_5_6_5");
-    // SAFETY: as above.
-    unsafe {
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_FLOAT, w.as_ptr() as *const c_void);
-    }
-    assert_eq!(err(), GL_INVALID_OPERATION, "RGBA with FLOAT for RGB10_A2");
-    drop(t);
-}
-
-fn layer_case(target: GLenum, depth: GLsizei) {
-    let t = gen(target);
-    let w = words(4, 16);
-    // SAFETY: `w` holds a 4x4 layer.
-    unsafe {
-        glTexStorage3D(target, 1, GL_RGB10_A2, 4, 4, depth);
-        assert_eq!(err(), GL_NO_ERROR, "glTexStorage3D {target:#x}");
-        assert_eq!(tex_param(target, GL_TEXTURE_IMMUTABLE_FORMAT), 1);
-        assert_eq!(tex_param(target, GL_TEXTURE_IMMUTABLE_LEVELS), 1);
-        glTexSubImage3D(
-            target,
-            0,
-            0,
-            0,
-            1,
-            4,
-            4,
-            1,
-            GL_RGBA,
-            GL_UNSIGNED_INT_2_10_10_10_REV,
-            w.as_ptr() as *const c_void,
-        );
-    }
-    assert_eq!(err(), GL_NO_ERROR, "glTexSubImage3D layer 1");
-    assert_eq!(read_layer(&t, 0, 1, 4, 4), want_bytes(&w), "layer 1");
+    assert_eq!(got, EXPECT_TYPES);
 }
 
 #[test]
 fn storage_3d_array_layer_reads_back() {
     let _g = context();
-    layer_case(GL_TEXTURE_2D_ARRAY, 3);
+    // SAFETY: plain GL call.
+    let t = make(GL_TEXTURE_2D_ARRAY, || unsafe { glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, GL_RGB10_A2, 4, 2, 3) });
+    assert_eq!(param(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_IMMUTABLE_FORMAT), 1);
+    assert_eq!(param(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_IMMUTABLE_LEVELS), 1);
+    let w = words(8, 11);
+    upload_slice(GL_TEXTURE_2D_ARRAY, 1, 4, 2, &w);
+    assert_eq!(read_layer(&t, 1, 4, 2), want_bytes(&w), "layer 1");
 }
 
 #[test]
 fn storage_3d_texture_slice_reads_back() {
     let _g = context();
-    layer_case(GL_TEXTURE_3D, 2);
+    // SAFETY: plain GL call.
+    let t = make(GL_TEXTURE_3D, || unsafe { glTexStorage3D(GL_TEXTURE_3D, 1, GL_RGB10_A2, 4, 2, 2) });
+    assert_eq!(param(GL_TEXTURE_3D, GL_TEXTURE_IMMUTABLE_FORMAT), 1);
+    let w = words(8, 21);
+    upload_slice(GL_TEXTURE_3D, 1, 4, 2, &w);
+    assert_eq!(read_layer(&t, 1, 4, 2), want_bytes(&w), "slice 1");
 }
 
 #[test]
 fn framebuffer_is_complete_with_an_immutable_level() {
     let _g = context();
-    let t = gen(GL_TEXTURE_2D);
-    // SAFETY: plain GL calls.
-    unsafe {
-        glTexStorage2D(GL_TEXTURE_2D, 2, GL_RGB10_A2, 4, 4);
-        glBindFramebuffer(GL_FRAMEBUFFER, t.fb);
-        for level in 0..2 {
+    let t = storage_2d(4, 4, 3);
+    for level in 0..3 {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, t.fb);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t.tex, level);
             assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "level {level}");
         }
+        assert_eq!(err(), GL_NO_ERROR);
     }
-    assert_eq!(err(), GL_NO_ERROR);
 }
+
+/// What the code answers now: the type must match the format the immutable level
+/// unpacks from (ES 3.0 3.8.3: a mismatched pair is INVALID_OPERATION).
+const EXPECT_TYPES: [GLenum; 3] = [GL_INVALID_OPERATION; 3];
