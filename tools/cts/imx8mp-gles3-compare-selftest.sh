@@ -58,6 +58,34 @@ grep -q '^| unclassified | 0 | 0 | 1 | 1 | 1 |$' "$tmp/o.md" || fail "summary ro
 grep -q '^| \*\*total\*\* | 3 | 1 | 1 | 2 | 5 |$' "$tmp/o.md" || fail "summary total"
 grep -qF "$P.weird.e (Fail, -)" "$tmp/o.md" || fail "example line"
 
+# the case-first layout of docs/es3/host-gc-gles3-notpass.tsv (gpu, case, status, ...) reads like the outcome-first one
+{
+  printf '# header\n'
+  printf 'gpu\tcase\tstatus\tkind\tmessage\n'
+  printf 'vivante\t%s\tFail\tgl-error\tmsg\n' "$P.transform_feedback.a"
+  printf 'vivante\t%s\tNotSupported\trefusal\n' "$P.state_query.b"
+  printf '%s\tNotSupported\n' "$P.fbo.blit.c"
+  printf '%s\tTimeout\n' "$P.texture.shadow.d"
+  printf '%s\tFail\n' "$P.transform_feedback.hostonly"
+  printf '%s\tFail\n' "$P.nocause.hostonly"
+} >"$tmp/hostcf.tsv"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/hostcf.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --tsv >"$tmp/ocf.tsv"
+cmp -s "$tmp/o.tsv" "$tmp/ocf.tsv" || fail "case-first host list differs from the outcome-first one"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/hostcf.tsv" --causes "$tmp/causes.tsv" --table "$tmp/tree.txt" --examples 1 >"$tmp/ocf.md"
+cmp -s "$tmp/o.md" "$tmp/ocf.md" || fail "case-first host list: markdown differs"
+# a mixed file (both layouts) is fine
+{ printf 'Fail\t%s\n' "$P.transform_feedback.a"; printf '%s\tNotSupported\n' "$P.state_query.b"; } >"$tmp/mixed.tsv"
+python3 -I "$cmp" "$tmp/board.txt" "$tmp/mixed.tsv" --tsv >"$tmp/om.tsv"
+grep -qx "host-predicted${t}unclassified${t}-${t}Fail${t}$P.transform_feedback.a" "$tmp/om.tsv" || fail "mixed: outcome-first row"
+grep -qx "host-other${t}unclassified${t}-${t}Fail${t}$P.state_query.b" "$tmp/om.tsv" || fail "mixed: case-first row"
+# a line that fits neither layout is refused with a message
+printf 'Fail\tnot-a-case\n' >"$tmp/bad1.tsv"
+printf '%s\tMaybe\n' "$P.x" >"$tmp/bad2.tsv"
+for b in bad1 bad2; do
+  if python3 -I "$cmp" "$tmp/board.txt" "$tmp/$b.tsv" >"$tmp/bad.out" 2>"$tmp/bad.err"; then fail "$b: accepted"; fi
+  grep -q "$b.tsv:1:" "$tmp/bad.err" || fail "$b: no file:line in the error"
+done
+
 # the record-prefixed shape on both sides
 python3 -I "$cmp" "$tmp/board.txt" "$tmp/board.txt" --tsv >"$tmp/self.tsv"
 [ "$(cut -f1 "$tmp/self.tsv" | sort -u)" = host-predicted ] || fail "self compare"
