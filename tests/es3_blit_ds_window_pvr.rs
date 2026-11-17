@@ -878,10 +878,16 @@ fn filled(f: &dyn Fn(u32, u32) -> f32, w: u32, h: u32) -> Vec<f32> {
     (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| f(x, y)).collect()
 }
 
+/// One blit: the source rectangle, the destination rectangle, the scissor.
+type Blit = ([i32; 4], [i32; 4], Option<[i32; 4]>);
+
+/// A plane's value at (x, y).
+type PlaneFn = fn(u32, u32) -> f32;
+
 /// The blits of the window: whole, scaled, flipped past the edge with the
 /// scissor, and a sub-rectangle. Every sample point of the destination
 /// rectangle (cut to the target) is inside the source (a `sw` x `sh` image).
-fn window_cases(sw: i32, sh: i32) -> Vec<([i32; 4], [i32; 4], Option<[i32; 4]>)> {
+fn window_cases(sw: i32, sh: i32) -> Vec<Blit> {
     vec![
         ([0, 0, sw, sh], [0, 0, WW as i32, WH as i32], None),
         ([0, 0, sw, sh], [20, 14, 24, 20], None),
@@ -1034,12 +1040,11 @@ fn check(dir: Dir, mask: GLbitfield) {
             // SAFETY: plain GL call.
             unsafe { glFinish() };
             for (plane, bit) in [(D, DEPTH), (S, STENCIL)] {
-                let (win_f, src_f, dst_f): (fn(u32, u32) -> f32, fn(u32, u32) -> f32, fn(u32, u32) -> f32) =
-                    if plane == D {
-                        (win_depth, src_depth, dst_depth)
-                    } else {
-                        (win_stencil, src_stencil, dst_stencil)
-                    };
+                let (win_f, src_f, dst_f): (PlaneFn, PlaneFn, PlaneFn) = if plane == D {
+                    (win_depth, src_depth, dst_depth)
+                } else {
+                    (win_stencil, src_stencil, dst_stencil)
+                };
                 let moved = mask & bit != 0;
                 match dir {
                     Dir::IntoWindow => {
