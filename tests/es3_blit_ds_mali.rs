@@ -380,8 +380,8 @@ fn check_readback(s: Shape) {
 #[test]
 fn the_mali_table_has_neither_entry() {
     assert!(yakogl_backend_mali.depth_resolve.is_some());
-    assert!(yakogl_backend_mali.ds_write.is_none(), "src/mali/backend.rs:3731");
-    assert!(yakogl_backend_mali.stencil_resolve.is_none(), "src/mali/backend.rs:3732");
+    assert!(yakogl_backend_mali.ds_write.is_none(), "the Mali's table has a ds_write");
+    assert!(yakogl_backend_mali.stencil_resolve.is_none(), "the Mali's table has a stencil_resolve");
     assert_eq!(BACKEND.ds_write.is_some(), yakogl_backend_mali.ds_write.is_some());
     assert_eq!(BACKEND.stencil_resolve.is_some(), yakogl_backend_mali.stencil_resolve.is_some());
 }

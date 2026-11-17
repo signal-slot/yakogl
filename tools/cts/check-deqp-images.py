@@ -20,6 +20,9 @@ Zephyr merges them), the Kconfig files and the tables, and fails when
   - the library's own defaults moved away from conformance (REPORT_ES2 not
     default y, the compiler not the choice's default, a precompiled tier or
     test knob on by default);
+  - the sample's sources call a test knob (gc_/v3d_/pvr_debug_*) outside an
+    `#if defined(CONFIG_X)` block of a deqp Kconfig probe symbol (default n,
+    depending on DEQP_TEST_KNOBS), or a board's configuration sets X=y;
   - the memory carve-outs differ from the ones of the last passing sweeps
     (Pi 4: 48 MiB / 16 MiB of tiled copies, and texture-2048.conf's 64 / 24
     MiB for image T5; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out),
@@ -168,6 +171,33 @@ def selects(filt, name):
     return False
 
 
+KNOB = re.compile(r'\b(gc_debug_set_\w+|v3d_debug_\w+|gc_debug_\w+|pvr_debug_\w+)\s*\(')
+
+
+def knob_calls(text):
+    """[(guards, name)] for each test-knob call or declaration in C/C++ TEXT.
+    guards is the CONFIG_ symbols of the enclosing `#if defined(CONFIG_X)` /
+    `#ifdef CONFIG_X` blocks (their #else / #elif branches are not guarded)."""
+    out, stack = [], []
+    for l in text.splitlines():
+        d = re.match(r'\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)$', l)
+        if d:
+            kw, rest = d.group(1), d.group(2).strip()
+            m = re.fullmatch(r'defined\s*\(\s*CONFIG_(\w+)\s*\)' if kw == 'if' else r'CONFIG_(\w+)', rest)
+            if kw in ('if', 'ifdef'):
+                stack.append(m.group(1) if m else None)
+            elif kw == 'ifndef':
+                stack.append(None)
+            elif kw in ('elif', 'else') and stack:
+                stack[-1] = None
+            elif kw == 'endif' and stack:
+                stack.pop()
+            continue
+        for m in KNOB.finditer(l):
+            out.append(([g for g in stack if g], m.group(1)))
+    return out
+
+
 def check_repo():
     bad, notes = [], []
     syms = kconfig_symbols()
@@ -227,14 +257,26 @@ def check_repo():
             bad.append('zephyr/Kconfig: %s is on by default' % s)
     if not has('DEQP_TEST_KNOBS', r'select YAKOGL_TEST_KNOBS'):
         notes.append('deqp/Kconfig: DEQP_TEST_KNOBS no longer selects YAKOGL_TEST_KNOBS (fine only if no knob is called)')
-    # the sample sets none of the knobs: no call of a test-knob entry point
+    # the sample sets none of the knobs: no call of a test-knob entry point,
+    # except under a probe symbol of deqp/Kconfig (default n, depends on
+    # DEQP_TEST_KNOBS) that no board's conformance configuration turns on
+    def probe_symbol(s):
+        return has(s, r'default n') and has(s, r'depends on [^\n]*\bDEQP_TEST_KNOBS\b') \
+            and re.search(r'^config\s+%s\s*$' % s, dq, re.M) is not None
     for d in (DEQP,):
         for dp, _, fn in os.walk(os.path.join(d, 'src')):
             for f in fn:
-                t = read(os.path.join(dp, f))
-                for m in re.finditer(r'\b(gc_debug_set_\w+|v3d_debug_\w+|gc_debug_\w+|pvr_debug_\w+)\s*\(', t):
-                    bad.append('%s calls the test knob %s (a conformance image sets none)'
-                               % (os.path.relpath(os.path.join(dp, f), REPO), m.group(1)))
+                rel = os.path.relpath(os.path.join(dp, f), REPO)
+                found = []
+                for guards, knob in knob_calls(read(os.path.join(dp, f))):
+                    probe = [g for g in guards if probe_symbol(g)]
+                    if not probe:
+                        found.append('%s calls the test knob %s (a conformance image sets none)' % (rel, knob))
+                    for g in probe:
+                        for name, c in boards.items():
+                            if c.get(g) == 'y':
+                                found.append('%s: %s=y turns on the test knob %s (%s)' % (name, g, knob, rel))
+                bad += sorted(set(found), key=found.index)
     # PowerVR switches the sample passes: their Kconfig defaults must be the library's
     for s, want in (('DEQP_PVR_NATIVE_CUBE', 'default -1'), ('DEQP_PVR_NATIVE_ARRAY', 'default -1'),
                     ('DEQP_PVR_NATIVE_3D', 'default -1')):
@@ -365,6 +407,12 @@ def self_test():
     ok(rows == [('MS4', ' multisample.* (with DEQP_GL_CONFIG_NAME=rgba8888d24s8ms4)', 'dEQP-GLES2.functional.multisample.*')],
        'the ms4 table is one labelled row with its render config')
     ok(selects('a.b.*,c.d.*', 'c.d.e') and not selects('a.b.*', 'a.c.d'), 'filters select like dEQP patterns')
+    src = ('#if defined(CONFIG_A_MRT4)\nint v3d_debug_set_x(int n);\n#endif\n'
+           '#ifdef CONFIG_B\n#if 1\npvr_debug_set_y(4);\n#endif\n#else\ngc_debug_set_z(1);\n#endif\n'
+           'v3d_debug_set_w(2);\n#ifndef CONFIG_C\npvr_debug_set_v(3);\n#endif\n')
+    ok(knob_calls(src) == [(['A_MRT4'], 'v3d_debug_set_x'), (['B'], 'pvr_debug_set_y'), ([], 'gc_debug_set_z'),
+                           ([], 'v3d_debug_set_w'), ([], 'pvr_debug_set_v')],
+       'a knob call is guarded by its #if defined / #ifdef symbols only, not by #else, #ifndef or a bare call')
     print('check-deqp-images self-test: %d checks failed' % fails)
     return fails
 
