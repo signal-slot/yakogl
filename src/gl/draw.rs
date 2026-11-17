@@ -755,9 +755,17 @@ fn compare_op(mode: GLenum, func: GLenum, t: &GlTexture) -> u8 {
     } else {
         16
     };
-    let fixed_depth = matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL)
-        && !matches!(t.type_, GL_FLOAT | GL_FLOAT_32_UNSIGNED_INT_24_8_REV);
-    op | if fixed_depth { 8 } else { 0 }
+    op | if texture_fixed_depth(t) { 8 } else { 0 }
+}
+
+/// Is `t` a fixed-point depth texture (DEPTH_COMPONENT16/24,
+/// DEPTH24_STENCIL8, or an unsized depth of UNSIGNED_SHORT / UNSIGNED_INT),
+/// whose shadow look-ups clamp Dref to [0, 1] (ES 3.0.6 3.8.15.1)? Not a
+/// float one (DEPTH_COMPONENT32F, DEPTH32F_STENCIL8). [`compare_op`]'s bit
+/// 3, and the V3D's `LodKey::fixed_depth` ([`stage_lod_key`]).
+fn texture_fixed_depth(t: &GlTexture) -> bool {
+    matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL)
+        && !matches!(t.type_, GL_FLOAT | GL_FLOAT_32_UNSIGNED_INT_24_8_REV)
 }
 
 pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
@@ -1783,9 +1791,10 @@ static LOD_VARIANT_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// The texture a stage's sampler binding reads at this draw: its minification
 /// and magnification filters (a sampler object's in place of the texture's
-/// own, ES 3.0 3.8.2), whether it has more than one level, and its storage
-/// format (`GLES_TEXFMT_*`). `None`: no texture there.
-fn binding_filters(c: &GlContext, unit: usize, gl_type: u16) -> Option<(GLenum, GLenum, bool, u8)> {
+/// own, ES 3.0 3.8.2), whether it has more than one level, its storage
+/// format (`GLES_TEXFMT_*`), and whether it is a fixed-point depth texture
+/// ([`texture_fixed_depth`]). `None`: no texture there.
+fn binding_filters(c: &GlContext, unit: usize, gl_type: u16) -> Option<(GLenum, GLenum, bool, u8, bool)> {
     let (bound, target) = match binding_type(gl_type) {
         GL_SAMPLER_CUBE_T | GL_SAMPLER_CUBE_SHADOW_T => (*c.bound_texture_cube.get(unit)?, GL_TEXTURE_CUBE_MAP),
         GL_SAMPLER_2D_ARRAY_T | GL_SAMPLER_2D_ARRAY_SHADOW_T => {
@@ -1800,7 +1809,7 @@ fn binding_filters(c: &GlContext, unit: usize, gl_type: u16) -> Option<(GLenum, 
         Some((min, mag, _, _, _)) => (min, mag),
         None => (t.min_filter, t.mag_filter),
     };
-    Some((min, mag, t.levels > 1, t.texfmt))
+    Some((min, mag, t.levels > 1, t.texfmt, texture_fixed_depth(t)))
 }
 
 /// Can a cube sampler with these filters read past a face's edge? A LINEAR
@@ -1817,9 +1826,12 @@ fn cube_filters_see_seams(min: GLenum, mag: GLenum) -> bool {
 /// those with mag LINEAR and min NEAREST_MIPMAP_* (`mag_switch`), those
 /// whose texture is stored in a class of 32-bit channels (`ret32`: R32F, a
 /// depth texture, and RGBA32F / RGBA32UI / RGBA32I, which the V3D's TMU
-/// returns at 32 bits a channel, `gles_texfmt_return_32`), and the cube bindings whose filters
+/// returns at 32 bits a channel, `gles_texfmt_return_32`), the cube bindings whose filters
 /// make the V3D's seamless filtering differ from ES 2.0's per-face rule
-/// (`cube_noseam`: mag LINEAR, or min LINEAR / LINEAR_MIPMAP_*).
+/// (`cube_noseam`: mag LINEAR, or min LINEAR / LINEAR_MIPMAP_*), and the
+/// shadow bindings whose texture is a fixed-point depth (`fixed_depth`:
+/// DEPTH_COMPONENT16/24, DEPTH24_STENCIL8, whose reference the V3D clamps
+/// to [0, 1]; never DEPTH_COMPONENT32F or DEPTH32F_STENCIL8).
 fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAMPLERS]) -> u64 {
     if sense == 0 {
         return 0;
@@ -1828,12 +1840,18 @@ fn stage_lod_key(c: &GlContext, sense: u64, sh: &ShcShader, units: &[u8; CAP_SAM
     let mut k = shaderc::LodKey::NONE;
     for (binding, gl_type) in sh.sampler_bindings() {
         let bit = 1u32.checked_shl(u32::from(binding)).unwrap_or(0);
-        if (s.mip_free | s.mag_switch | s.ret32 | s.cube_noseam) & bit == 0 || binding as usize >= CAP_SAMPLERS {
+        if (s.mip_free | s.mag_switch | s.ret32 | s.cube_noseam | s.fixed_depth) & bit == 0
+            || binding as usize >= CAP_SAMPLERS
+        {
             continue;
         }
-        let Some((min, mag, levels, texfmt)) = binding_filters(c, units[binding as usize] as usize, gl_type) else {
+        let Some((min, mag, levels, texfmt, fixed)) = binding_filters(c, units[binding as usize] as usize, gl_type)
+        else {
             continue;
         };
+        if s.fixed_depth & bit != 0 && fixed {
+            k.fixed_depth |= bit;
+        }
         if s.ret32 & bit != 0 && crate::backend::gles_texfmt_return_32(texfmt) {
             k.ret32 |= bit;
         }
