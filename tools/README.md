@@ -676,8 +676,10 @@ builds itself; it is not a `tools/check.sh` row yet.
 <rundir>`: the STM32MP257F-DK's return trial and later images, booted once
 from the board's own U-Boot off the microSD and back in ST's Linux without a
 person (`docs/notes/pre-study-stm32mp257f-dk.md` section 6, #1281). It is
-self-contained (not a `tools/board.sh` backend yet: the board.sh dispatch is
-a later item) because the board's Linux has no `fw_setenv`: `install` reads
+self-contained (the only board.sh entry on this board dispatches to the
+U-Boot one-shot of the next section, not to this runner; the dispatch of
+this standalone route is a later item) because the board's Linux has no
+`fw_setenv`: `install` reads
 the card's `u-boot-env` partition with `dd`, puts the standalone-boot hook in
 front of `bootcmd` with `uboot_env.py` on the host, writes the two copies'
 range back and proves it with the board's `fw_printenv` (the pristine image
@@ -690,6 +692,46 @@ line; the verdict line has board.sh's shape. `tools/board_stm32mp2_selftest.sh`
 runs every verb under `--dry-run` with the board tools stubbed, the
 environment edits on a synthetic image and synthetic consoles through the
 verdict (a `tools/check.sh` row, scope tools).
+
+## board-stm32mp2-uboot.sh — the STM32MP257F-DK's typed U-Boot one-shot
+
+`tools/board-stm32mp2-uboot.sh [--dry-run] status | stage <image> | run
+[--expect-watchdog] <image> <logdir> [name] | disarm`: run one Zephyr image
+from ST's own U-Boot (2023.10, after TF-A v2.10 BL2/BL31 and OP-TEE 4.0) and
+return the board to ST's Linux. `BOARD_BOOT` picks the route: `uboot-mmc`
+stages the script and the image on the bootfs (`/boot/yakogl/`) of the
+microSD ST's U-Boot booted from (its default), or `uboot-tftp` serves them
+once through `tools/tftp_oneshot.py` on UDP port 69 (ST's U-Boot has no
+`CONFIG_TFTP_PORT`: `NETBOOT_SERVER` names no port). Everything U-Boot is
+made to do is one line typed at its prompt by `tools/mp2_uboot_console.py`
+(autoboot stopped, the script sourced at `${scriptaddr}`, `run bootcmd` at
+the end): nothing is armed in the stored U-Boot environment, `bootcmd` is
+never written, everything the line sets is `mp2z_*` and RAM-only, and BL2's
+IWDG bounds a hang at ~32 s (`docs/notes/stm32mp257f-dk-uboot-boot.md`,
+#1281; the scripts and their mkimage step: `driver/tools/uboot-mp2/`).
+`tools/board.sh stm32mp257f-dk` dispatches to it: `run`, `probe`, `status`
+and `disarm` map to the runner's verbs (board.sh adds the image check
+against the DK's 0xa0000000..0xb0000000 window and the board lease, takes
+no board lock — the runner's board lock would refuse one already held —
+and exits with the runner's code); `install` and `uninstall` mean nothing
+for a route that arms nothing, and `default` and `tree` are refused with a
+pointer (the bootcmd hook for the standalone boot is the previous
+section's). The runner makes its own run directory under the log directory
+(`meta.txt`, `console.raw`, `console.ts`, `typed.log`, `env-before.txt` and
+`env-after.txt`, `boot-sha256.txt` and `boot-sha256.after.txt`, the two
+diffs, `verdict.txt`) and prints board.sh's verdict line in its `row` form,
+never DEV; `python3 -I tools/mp2_uboot_record_check.py <rundir>` reads the
+record. What goes into the note is the output of
+`tools/probes/stm32mp257f_dk/env_read/summarize.py` (`## fw_printenv diff:
+empty`, `## /boot files outside yakogl/: unchanged`), the headings
+`python3 -I tools/mp2_uboot_note_check.py` checks. Self-tests without the
+board: `tools/board_stm32mp2_uboot_selftest.sh` (every verb, the board
+tools stubbed, the live refusals on a fake board),
+`driver/tools/uboot-mp2/selftest.sh` (script lint and checks),
+`driver/tools/uboot-mp2/qemu/run.sh` (both scripts under real U-Boot 2023.10
+in QEMU, a skip line where QEMU is absent), and
+`python3 -I tools/uboot_env_mp2_selftest.py` (the DK's environment layout
+against `uboot_env.py`).
 
 ## land.sh — land one branch tip on main
 
