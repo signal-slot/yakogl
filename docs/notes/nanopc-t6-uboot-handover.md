@@ -23,8 +23,8 @@ this note and the code cite facts with file:line and transcribe nothing.
 ## 1. The GPU clock without Linux
 
 Code (paths under driver/rust/src): `gpu_clock` (read only) and
-`gpu_clock_set` (soc/rk3588.rs:404), called by `gpu_up`
-(board/nanopc_t6_gpu.rs:240) after the RK806 reads and before the supply check.
+`gpu_clock_set` (driver/rust/src/soc/rk3588.rs:404), called by `gpu_up`
+(driver/rust/src/board/nanopc_t6_gpu.rs:240) after the RK806 reads and before the supply check.
 
 The CRU is at 0xfd7c0000. `CLKSEL_CON(158)` (0xfd7c0578) holds `clk_gpu_src`:
 divider in bits 4:0 (field + 1), mux in bits 7:5, the PVTPLL select in bit 14.
@@ -64,7 +64,7 @@ setting), then, only when the stacks divider is not 1, `SET_SEL159` =
 the CRU is rated again; a field that did not take is `ClockRefusal::ReadBack`,
 a rate other than 300 MHz is `ClockRefusal::Rate`.
 
-Tests (soc/rk3588.rs): `the_pvtpll_is_left_for_cpll_over_5_in_one_write`,
+Tests (driver/rust/src/soc/rk3588.rs): `the_pvtpll_is_left_for_cpll_over_5_in_one_write`,
 `a_divider_off_the_table_is_rewritten_to_5`,
 `a_mux_value_past_the_parents_is_rewritten`,
 `the_stacks_divider_is_set_to_1_after_the_source`,
@@ -96,9 +96,9 @@ read (section 4 (c)). The QoS words are section 7.
 
 ## 2. The GPU power-on from U-Boot's state
 
-Code (under driver/rust/src): `gpu_up` (board/nanopc_t6_gpu.rs:240) and
-`supply_on` in the same file; `pd_gpu_on` (soc/rk3588.rs:662);
-`dcdc1_enable_frame` (ip/rk806.rs:83). The PMU is at 0xfd8d8000 (`PWR_GATE` 0x14c,
+Code (under driver/rust/src): `gpu_up` (driver/rust/src/board/nanopc_t6_gpu.rs:240) and
+`supply_on` in the same file; `pd_gpu_on` (driver/rust/src/soc/rk3588.rs:662);
+`dcdc1_enable_frame` (driver/rust/src/ip/rk806.rs:83). The PMU is at 0xfd8d8000 (`PWR_GATE` 0x14c,
 `BUS_IDLE_REQ` 0x10c, `BUS_IDLE_ACK` 0x118, `BUS_IDLE_ST` 0x120,
 `REPAIR_STATUS` 0x290; PD_GPU is bit 0 of the gate and idle words, bit 1 of
 `REPAIR_STATUS` reads powered).
@@ -215,7 +215,7 @@ issue #26.
    `pmic dev <its name>`, `pmic dump`. Wanted: `POWER_EN0` (Linux and the image
    read 0x0f), `POWER_SLP_EN0` (register 0x06, Linux reads 0xe0),
    `BUCK1_CONFIG` (register 0x10, 0xa4), `BUCK1_ON_VSEL` (register 0x1a, 0x1c =
-   675 mV; ip/rk806.rs:46-48, :179). Never a `regulator` command: `regulator
+   675 mV; driver/rust/src/ip/rk806.rs:46-48, :179). Never a `regulator` command: `regulator
    value` and `regulator enable` write. Decides: whether DCDC1 is on, and for
    an off supply whether `BUCK1_ON_VSEL` covers 675 mV (`SupplyBelowOpp`).
 7. **Leave.** `reset`. Never `bootm`, `booti` or `go`.
@@ -421,7 +421,7 @@ what they are, not by row number:
   the state U-Boot hands over, not something a command at the prompt adds.
 - UART2: read from offset 4, because offset 0 pops a received byte.
 - `CNTFRQ_EL0` and the `SCTLR_EL2` bits are not printed by the early banner
-  (a small item after #341 that touches `ffi/rk3588.rs` and the header).
+  (a small item after #341 that touches `driver/rust/src/ffi/rk3588.rs` and the header).
 
 None of the changes the audit found was made by this plan.
 
@@ -429,7 +429,7 @@ None of the changes the audit found was made by this plan.
 
 Code (under driver/rust/src):
 
-- soc/rk3588.rs holds the choice: `QosPolicy` with `Reset` (`MODE` 3,
+- driver/rust/src/soc/rk3588.rs holds the choice: `QosPolicy` with `Reset` (`MODE` 3,
   `BANDWIDTH` 0x12d, `SATURATION` 0x40, the values the image leaves) and
   `LinuxZero` (all three 0, what Linux reads with the GPU active, 2026-10-26),
   `QOS_POLICY_WORDS` (0x0c, 0x10, 0x14; :536), and `qos_apply` (:564), which
@@ -439,7 +439,7 @@ Code (under driver/rust/src):
   `qos_linux_zero_policy_writes_only_mode_bandwidth_saturation`.
 - `gpu_up` applies it. Right after `pd_gpu_on` returns `Ok` and `pd_after` is
   read, it calls `rk3588::qos_apply(m, b.qos, GPU_QOS_POLICY)` with
-  `GPU_QOS_POLICY` = `QosPolicy::LinuxZero` (board/nanopc_t6_gpu.rs:172, :322),
+  `GPU_QOS_POLICY` = `QosPolicy::LinuxZero` (driver/rust/src/board/nanopc_t6_gpu.rs:172, :322),
   then reads the five words of each block into `GpuUp.qos` (:323-327), so the
   record shows the words after the write. The choice is `LinuxZero` because
   every Z1 to Z4 board run so far worked under Linux's zeroed words (doc

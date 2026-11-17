@@ -333,7 +333,7 @@ board run of the item should print the 2D-array cases with both values.
 
 Edit: `src/vivante/texture.rs` (the two spots above, plus the doc comment on
 `format_words`), `src/backend.rs` (a sentence in `GlesTextureBind::swizzle`'s
-doc: a 128-bit class ignores it on the GC7000). Add `tests/es3_sampler_state_gc.rs`.
+doc: a 128-bit class ignores it on the GC7000). Add `tests/es3_tex_swizzle_gc.rs`.
 `tests/gc_npot_repeat.rs` must still pass unchanged (2D and cube keep
 `WWRAP == UWRAP`). Docs: `docs/es3-cts-failures.md:70` and RC18
 (`:357-370`), `docs/es3/backend-caps.md` (GC7000UL column of the swizzle and
@@ -342,7 +342,7 @@ shader-table output; this change touches no shader), no `YakoglBackend` /
 table-struct field is added, so the `grep -rl 'YakoglBackend {' tests src` rule
 of CLAUDE.md has nothing to recheck.
 
-## 6. Host test cases for `tests/es3_sampler_state_gc.rs`
+## 6. Host test cases for `tests/es3_tex_swizzle_gc.rs`
 
 Style of `tests/es3_formats_gc.rs` and `tests/es3_wide128_planes_gc.rs`: the
 pure ones call `format_words(&bind, false)` / the sampler-word function;
@@ -425,7 +425,7 @@ Wrap R (SAMP_CTRL0 bits 0-2 U, 3-5 V, 6-8 W):
     and `WRAP_S = CLAMP_TO_EDGE`: the sampler register reads U = 2, W = 1; a
     sampler object (`glSamplerParameteri(..., GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE)`)
     bound to the unit overrides the texture's `wrap_r` (the draw's texture loop in
-    `gl/draw.rs` swaps the sampler object's wraps in), W = 2.
+    `src/gl/draw.rs` swaps the sampler object's wraps in), W = 2.
 
 Cases 12-16 need 3D sampling to reach the back end at all: the GC mask
 (`GC_SAMPLED_TEXFMTS`) is about texel formats, not targets, and the GL core
@@ -516,7 +516,8 @@ Two small items; both edit `src/vivante/texture.rs`, so they follow
 * Files: `src/vivante/texture.rs` (`format_words`: add `descriptor_swizzle`,
   use it for the four `texdesc_swizzle_*` terms; the exact code is in 5.1),
   `src/backend.rs` (one sentence in the `swizzle` doc: a 128-bit class ignores it
-  on the GC7000), `tests/es3_sampler_state_gc.rs` (cases 1-8, 10, 11 of section 6),
+  on the GC7000), `tests/es3_tex_swizzle_gc.rs` and `tests/es3_wide128_swizzle_gc.rs`
+  (cases 1-8, 10, 11 of section 6, case 3 beside the 128-bit join),
   docs: `docs/es3-cts-failures.md` (`:70` and RC18 `:357-370`),
   `docs/es3/backend-caps.md` (GC7000UL column), `docs/es3/gc-formats.md` if it
   lists the swizzle fields.
@@ -525,7 +526,7 @@ Two small items; both edit `src/vivante/texture.rs`, so they follow
   `YakoglBackend` or other table field is added; no generated file moves.
 * Host check: the pull request's CI gate;
   `cargo test --features host-test,gpu-vivante,shaderc-online --test
-  es3_sampler_state_gc` and the in-crate `src/vivante/backend_tests.rs`
+  es3_tex_swizzle_gc` and the in-crate `src/vivante/backend_tests.rs`
   (`a_texture_with_no_alpha_samples_alpha_one`, `a_luminance_depth_texture_...`,
   `narrow_luminance_alpha_textures_...`), which pin today's identity words and
   must still pass unchanged.
@@ -534,7 +535,7 @@ Two small items; both edit `src/vivante/texture.rs`, so they follow
 
 **gc-wrap-r**.
 * Files: `src/vivante/texture.rs` (`emit_slot`: `wwrap`, 5.2),
-  `tests/es3_sampler_state_gc.rs` (cases 12-16), docs as above. Optional pure
+  `tests/es3_tex_swizzle_gc.rs` (cases 12-16), docs as above. Optional pure
   helper `pub fn sampler_ctrl0(t)` so the wrap cases need no stream.
 * Words: SAMP_CTRL0 bits 6-8 (`regs.rs:729`, `N:1958-1960`); 2D, cube and
   2D-array keep W = U (`tests/gc_npot_repeat.rs:533-536` must stay green).

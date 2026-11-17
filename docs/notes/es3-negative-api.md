@@ -77,7 +77,7 @@ Not in these rows, same rule: `glTexImage2D/3D(RGBA, FLOAT)` into an unsized
 internal format (`es3_image_check`, `texture.rs:5913`) is accepted too; no
 listed case reaches it, so leave it to the fix item to decide with its test.
 
-**Host test (fix item `fix-texsub`).** New `tests/es3_negative_api_texsub.rs`
+**Host test (fix item `fix-texsub`).** A new test file, never committed
 (not `report-es2`, no GPU gate; the stand-in back end): the two dEQP
 sequences above, plus controls that still pass: `RGB`/`FLOAT` into an
 `RGB32F` texture, `RED`/`FLOAT` into `R32F`, `RGBA`/`UNSIGNED_BYTE` into
@@ -129,7 +129,7 @@ programs through the `ui` setters: if it does, the alternative is a
 `report-es2`-style build option and the dEQP rows move only in the
 `report-es2=off` image, which is the one these rows come from.
 
-**Host test (`fix-uniformui`).** New `tests/es3_negative_api_uniform.rs`
+**Host test (`fix-uniformui`).** A new test file, never committed
 (needs `shaderc-online`, ES 3.0 report, `gpu-*`: the pattern of
 `tests/es3_link_iface.rs`): the two dEQP programs/sequences, plus the Qt
 control (an ES 1.00 program with an `int` uniform loaded by `glUniform1ui`
@@ -170,7 +170,7 @@ this note. If the rows still fail then, the likely remainder is the
 `glReadPixels` path when the *read* framebuffer differs from the bound one
 (`as_read`, `framebuffer.rs:2807`), which has no replay here.
 
-**Host test.** `tests/es3_negative_api_readpixels.rs` (after #339; its
+**Host test.** A new test file, never committed (after #339; its
 `max_samples` field is in every `YakoglBackend {` literal by then, grep
 `tests/` and `src/` for them): the three format mismatches (already green,
 they pin the rule) and the multisample read.

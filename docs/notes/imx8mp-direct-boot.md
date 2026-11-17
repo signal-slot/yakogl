@@ -84,7 +84,8 @@ nothing is written to the eMMC user area. The loader's eMMC source (the
 AM62P design of 2026-10-02) stays for an image whose compressed form
 outgrows the slot.
 
-The time this costs is the inflate: RFC 1951 in Rust (`loader/src/inflate.rs`,
+The time this costs is the inflate: RFC 1951 in Rust
+(`driver/samples/zephyr/boot_stage2/loader/src/inflate.rs`,
 table-driven since 2026-10-21: the bit-by-bit form took about half a second
 for 1.8 MB on an x86 host, the table form well under 50 ms) on one A53. The
 loader's own number on the A53 is the first thing the board run reports
@@ -98,14 +99,15 @@ Slint's pre-rendered glyphs and the shader table).
 Two images, two board qualifiers:
 
 - **The loader**, `driver/samples/zephyr/boot_stage2` built for
-  `verdin_imx8mp/mimx8ml8/a53` with `boards/verdin_imx8mp_mimx8ml8_a53.overlay`
+  `verdin_imx8mp/mimx8ml8/a53` with
+  `driver/samples/zephyr/boot_stage2/boards/verdin_imx8mp_mimx8ml8_a53.overlay`
   and `.conf`: its RAM is 0x40200000 + 32 MiB (TF-A's BL33 entry; SPL appends
   the FIT's devicetree right after the file, inside this RAM), one core, UART3
   console (not connected on the lab carrier: the loader is silent there), the
   GPU off. It identity-maps 0x48000000 .. 0x58000000 write-back and inflates
   the payload to 0x48000000 (`BOOT_STAGE2_LOAD`, the Kconfig defaults for
   this board), then jumps with DAIF masked, the EL1 timers stopped, the MMU
-  and caches off (`loader/src/lib.rs`, `bs2_jump`). The payload's header is
+  and caches off (`driver/samples/zephyr/boot_stage2/loader/src/lib.rs`, `bs2_jump`). The payload's header is
   version 1 or 2 here (one image; 2 with LZ4 or a zero range). Version 3, a
   table of segments each at its own load address, is the AM62P showcase's
   and changes nothing on this route: `am62p-direct-boot.md`, "The second
@@ -199,7 +201,7 @@ on this carrier, the panel and the camera are the result channel):**
    to 01:00 JST):
    - 1280x800 with the backlight at the first frame: the cluster filled
      the panel at once, and stood still. The sample's first-frame check
-     (`check/src/lib.rs REFERENCE`, five pixel positions of the 1024x600
+     (`examples/slint/check/src/lib.rs REFERENCE`, five pixel positions of the 1024x600
      design) failed on the scaled layout and the run sat in the failure
      hold. The verdict now counts only at 1024x600 (main.c); elsewhere it
      is printed and the run goes on unchecked.
@@ -244,7 +246,7 @@ on this carrier, the panel and the camera are the result channel):**
      `f5960887...`. The owner: 「起動直後に、数字は動いてる。左のゲージは
      ゆっくり動いてて２秒後くらいから早く動き出す。そのタイミングで右も
      動き出す。」 That is the demo's own script, not the presentation:
-     `demo_vehicle()` (rust/src/lib.rs) holds the speed at 0 and ramps
+     `demo_vehicle()` (`examples/slint/rust/src/lib.rs`) holds the speed at 0 and ramps
      the rpm from 800 to 1000 for the first 3 s, then ramps the speed
      0 -> 120 km/h over 12 s with the rpm cycling 1500 -> 6000 every 3 s;
      trip, odometer and the clock count from t = 0. The same on every
@@ -506,7 +508,7 @@ uncached window and invalidates before it reads):
 |---|---|---|
 | 0x81000000 | 0x800 | M7 status block (`SAF7`, word offsets of `struct m7_status`) |
 | 0x81000800 | | M7 control block (`CTL7`; TAKEOVER_AT_BOOT sets `takeover = 1`) |
-| 0x81005000 | 0x800 | the frame ring (`<cluster/frame_ring.h>` version 3, 3 slots) |
+| 0x81005000 | 0x800 | the frame ring (`driver/samples/zephyr/cluster/include/cluster/frame_ring.h` version 3, 3 slots) |
 | 0x81005800 | 160 B | the M7's page: vehicle state (seqlock `gen`), background descriptor |
 | 0x81408000 | 4 MiB | `fb_app`, the M7's stand-in; never an A53 buffer |
 | 0x81808000, 0x81c08000 | 2 x 4 MiB | the M7's scan-out pair |

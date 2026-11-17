@@ -39,7 +39,7 @@ apart (below). Only a read of register 0x30 settles it ("The exact read").
   `identity ...: GC7000 rev 0x6204 product 0x70003 customer 0x.. eco ..`.
   That log line goes to the console (`ylog!`, level Inf).
 - `driver/samples/zephyr/gc_clear/src/main.c:152` and
-  `gc_fence/src/main.c:92` print `customer 0x%x` as well, again on the
+  `driver/samples/zephyr/gc_fence/src/main.c:92` print `customer 0x%x` as well, again on the
   console.
 - The Verdin bring-up of 2026-09-20 (`docs/notes/imx8mp-gc-bringup.md:212`)
   recorded the verdict only: "GC7000 rev 0x6204". The SNVS record has no
@@ -191,7 +191,7 @@ If the board reports **0x11** (the code's assumption):
 If the board reports **0**:
 
 - `profile.rs:107`, `backend.rs:768`, `es2-cts-failures.md:88`,
-  `es3/backend-caps.md:91`, `gc-tiled-targets.md:100` and the tests
+  `docs/es3/backend-caps.md:91`, `gc-tiled-targets.md:100` and the tests
   `tests/vivante_profile.rs:40`, `tests/vivante_npot.rs` cite the wrong
   row. The part is the informal `gc7000UL_6200` row: `V4Compression` 1,
   `REG_ZCompression` 1, `VMSAA` 1, Streams 8, `LocalStorageSize` /

@@ -143,8 +143,8 @@ Nothing for correctness; only checks and the cap:
 Each step keeps the tree green. `src/vivante/**` is held by plan #366 until
 it releases it; steps 3 and 6 touch it (tests only in step 3).
 
-1. `tests/gc_ubo_large_block.rs` (new, host, `gpu-vivante,shaderc-online`,
-   §7 items 1-3). Compile and run with the lane-faithful interpreter of
+1. A new host test file for the large block, never committed (host,
+   `gpu-vivante,shaderc-online`, §7 items 1-3). Compile and run with the lane-faithful interpreter of
    `tests/common/mod.rs:282` a 16384-byte block read at the first and last
    dword by constant and by run-time index. Green before any raise: it
    pins that §2 already holds at the real size.
@@ -167,7 +167,7 @@ it releases it; steps 3 and 6 touch it (tests only in step 3).
    constant file") is corrected in the same commit. This waits for the board
    run of step 7 (see §8) and for plan #375's `tests/es3_limits_ubo_unchanged.rs`.
 5. `tests/es3_limits_ubo_unchanged.rs` (GC rows of its `gpu-vivante`
-   feature set) and a new `tests/es3_limits_gc_ubo.rs` (model:
+   feature set) and a new limits test file, never committed (model:
    `tests/es3_limits_v3d.rs`): 16384 / 50688 through `glGetIntegerv`,
    `glGetFloatv`, `glGetInteger64v`. The same commit as step 4.
 6. `tests/vivante_imx8mp_limits.rs`: pin the new values if it asserts a
@@ -193,7 +193,7 @@ it releases it; steps 3 and 6 touch it (tests only in step 3).
    `Rig`): a full block, the slot's value is the copy's address, the copy
    holds dwords 0 and 4095, no fault; and a draw that needs more than the
    arena.
-5. **Report**: `tests/es3_limits_gc_ubo.rs` (§6 item 5); `es2_report_guard`
+5. **Report**: the new GC limits test of §6 item 5 (never committed); `es2_report_guard`
    (`cargo test --features report-es2 --test es2_report_guard`) unchanged:
    no ES 2.0 shader has block members.
 6. **dEQP (host-only, `tools/cts/host-deqp-run.sh run`, not edited)**:
@@ -251,7 +251,7 @@ Body:
 > path is already memory `load` for block-only registers
 > (`select.rs` `block_read`, `backend.rs` `ubo_copy`), so the raise is
 > design `docs/notes/gc-ubo-block-raise.md`:
-> 1. `tests/gc_ubo_large_block.rs` host tests (16384-byte block, first/last
+> 1. new host tests for the large block (16384-byte block, first/last
 >    dword, constant and run-time index, twelve blocks);
 > 2. backend test that a 4096-dword stage copy is whole and an oversized
 >    draw takes `ensure_extra` (needs `src/vivante/**`, plan #366);
@@ -259,7 +259,7 @@ Body:
 >    (never run on silicon) at the first/last dword, past 16 KiB and past
 >    64 KiB; dEQP `functional.ubo` and `implementation_limits`;
 > 4. only then `context.rs` arm for `gpu-vivante` (16384 / 50688),
->    `tests/es3_limits_gc_ubo.rs`, the GC rows of `es3_caps.rs`
+>    a new limits test, the GC rows of `es3_caps.rs`
 >    `known_gaps()`, `ubo-limits.md` §5, RC10, `tools/cts/RESULTS.md`.
 > Optional later: per-block addresses (Mesa shape) if the flat copy costs.
 > Board step waits for the boards (plan #347).

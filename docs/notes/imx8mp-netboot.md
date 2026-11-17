@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Verdin iMX8M Plus: boot Zephyr from U-Boot over TFTP (plan, 2026-10-03)
 
-Status: finished record, moved here from `driver/docs/imx8mp-netboot-plan.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03 (step C after the LCDIF-read fix at the end). The current design is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c.
+Status: finished record, moved here from the driver docs on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03 (step C after the LCDIF-read fix at the end). The current design is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c.
 
 Goal (user, 2026-10-03): a result counts only when the board's own boot
 loader started Zephyr, never kexec. Until now the Verdin iMX8M Plus (Mallow
@@ -28,7 +28,7 @@ U-Boot boot partition. What only a board run can settle is marked
 Tools: `tools/board.sh imx8mp` (the runner, backend uboot-tftp; it replaced the board's own netboot runner in Step 1 of `one-method.md`), `tools/uboot-netboot-lib.sh`
 (the U-Boot side, the same for the AM62P), `tools/tftp_oneshot.py`
 (the TFTP server, unchanged). Image side: `CONFIG_GC_BOARD_WDOG_SELF_ARM`
-(`driver/zephyr/lib/gc_board/gc_wdog_arm.c` over `driver/rust` `ip::imx_wdog`).
+(`driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c` over `driver/rust` `ip::imx_wdog`).
 
 ## 1. What the board has (read 2026-10-03)
 
@@ -165,7 +165,8 @@ refuses the load rather than overwriting U-Boot if that is ever wrong.
 
 ## 4. Watchdog: WDOG1 armed by the image
 
-`CONFIG_GC_BOARD_WDOG_SELF_ARM` (default n; `driver/zephyr/lib/gc_board/Kconfig`):
+`CONFIG_GC_BOARD_WDOG_SELF_ARM` (default n;
+`driver/zephyr/lib/board/imx8mp/Kconfig`):
 
 1. **PRE_KERNEL_1 priority 1** (after the WDOG and SNVS mappings at 0):
    `device_map` WDOG1 (0x30280000) and the CCM (0x30380000), then
@@ -325,8 +326,8 @@ Preconditions (host side, no board):
 5. If anything fails: `disarm` (a pending one-shot) or `uninstall`, both
    from Linux.
 
-Images (2026-10-03, this branch, `-DEXTRA_CONF_FILE=prj_parity.conf`, a
-1024x600 window). The build logs have no gcc warning, only one rustc
+Images (2026-10-03, this branch, built with a parity overlay conf passed as
+`-DEXTRA_CONF_FILE`, a 1024x600 window). The build logs have no gcc warning, only one rustc
 future-incompatibility note about the toolchain's own `core`, which the
 control has too. Each image carries its build time (the panel console's
 first line, `GC_BUILD_STAMP`), so a rebuild of the same tree has another
@@ -584,7 +585,7 @@ MEDIAMIX powered down (section 3), and a read of a powered-down or unclocked
 domain is never answered: the core stalled until WDOG1 reset the SoC 60 s
 after arming. On the kexec route Linux leaves the display running, so the
 read was always answered there. The display driver already guarded its own
-LCDIF reads with `media_powered()` (`src/display/imx8mp_display.c`); the
+LCDIF reads with `media_powered()` (`driver/src/display/imx8mp_display.c`); the
 console, which runs earlier, did not.
 
 ### Fix

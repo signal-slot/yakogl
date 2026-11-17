@@ -454,7 +454,7 @@ keeps its first-version line numbers where they are not marked.
 1. **The answer.** `backend::samples_rendered_depth` (`src/backend.rs:1858`)
    has V3D and PowerVR arms only. Add a `gpu-vivante` arm calling a new
    `vivante::backend::gc_depth_sampled(id, w, h)`. The GL core's caller
-   (`gl/texture.rs`, `depth_for_draw`) needs no change: it already asks,
+   (`src/gl/texture.rs`, `depth_for_draw`) needs no change: it already asks,
    submits the kick (`flush`, no wait) and puts `depth_id` into the binding.
    The comments that say "not tried on either board" are then updated.
 2. **A lookup in the cache.** New `ds_cache::sampleable(id, w, h) ->
@@ -467,7 +467,7 @@ keeps its first-version line numbers where they are not marked.
    and `Surface::stride`. It must not wait: pending kicks are fine,
    they are ordered before the draw in the same ring (the GL core flushed
    first); only the CPU read of `resolve_depth` needs `finish`.
-3. **The descriptor.** `build_descriptor` (`vivante/texture.rs:306`) and
+3. **The descriptor.** `build_descriptor` (`src/vivante/texture.rs:306`) and
    `emit_slot` (`:480`): when `t.depth_id != 0`, take the surface from
    `ds_cache::sampleable` and write the table above instead of the texture's
    own `base_gpu` (`:431`), stride and format (`format_of`). **[2026-11-07]**
@@ -490,8 +490,8 @@ keeps its first-version line numbers where they are not marked.
    sampler is a packed depth view" must lower the sample to the
    three-channel sample plus the rebuild above. That is the largest part,
    and it is in `src/shaderc`. Alternative without shader work: **a GPU
-   resolve pass**, a full-target quad (the mechanism of `vivante/mipmap.rs`,
-   `GC_INTERNAL_MIPGEN_PS` in `vivante/internal.rs`) that samples the surface
+   resolve pass**, a full-target quad (the mechanism of `src/vivante/mipmap.rs`,
+   `GC_INTERNAL_MIPGEN_PS` in `src/vivante/internal.rs`) that samples the surface
    and writes the depth into the texture's R32F storage (needs R32F as a PE
    colour target: unmeasured). It keeps `depth_id == 0`, so shaderc and
    `build_descriptor` are untouched, drops the CPU loop and the `finish`, and

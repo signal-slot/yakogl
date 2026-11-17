@@ -194,7 +194,8 @@ Compare m11, m12, m13 and the refract rows below.
   literal (`src/shaderc/online/lower.rs:5465-5476`), and nothing else folds:
   `alu_sized` pushes every operation as it comes (`lower.rs:7251-7255`) and
   the GC selection has no folder (`select.rs` never calls
-  `fold::fold_float`; only `powervr/select.rs:3865` and `v3d/prepare.rs:729`
+  `fold::fold_float`; only `src/shaderc/online/powervr/select.rs:3865` and
+  `src/shaderc/online/v3d/prepare.rs:729`
   do). So `1.0/1.2` becomes a `mul 1.0, u0.x` (m11), `1.2*1.2` a `mul u0.x,
   u0.x` (m12), and a `const vec4` light position divided by its `w` a chain
   of four `rcp` and two `mul` of constants (refract's fragment shader, 11
@@ -203,7 +204,7 @@ Compare m11, m12, m13 and the refract rows below.
   turns all of these into immediates (`-1.44`, `0.8333`, `-0.6944`, `0.832`,
   `0.5547` in the listings).
 * **Negate.** `Fneg` is a source modifier on this ISA, and the lowering
-  says so (`vivante/builtins.rs:29-34`: "cost no instruction of their own
+  says so (`src/shaderc/online/vivante/builtins.rs:29-34`: "cost no instruction of their own
   when their consumer can take the modifier"). But selection emits `mov d,
   -s` for it (`builtins.rs:228-232`), and `propagate_copies` declines any
   copy that carries a negate or absolute (`select.rs:3448`, the
@@ -297,7 +298,7 @@ shaders' instruction count scales their time, which holds only above the
 The ms column adds up to about 0.9 to 1.8 (shadow) and 3.2 to 5.8 (refract);
 rows 1 to 3 together are most of it. The same rows
 help every other shader the GC compiles. The PowerVR side already folds
-(`powervr/select.rs:3865`); a change in the shared `lower.rs` would move its
+(`src/shaderc/online/powervr/select.rs:3865`); a change in the shared `lower.rs` would move its
 and the V3D's output too, so a GC-only change belongs in `select.rs`.
 `tests/internal_programs.rs` holds the internal programs word for word and
 must stay green.
@@ -321,8 +322,8 @@ noise-compiler-fix did (`gc-terrain-shaders.md`, "What to do"). The patch
 stood at the end of this note until item x2-tiled-probe-run landed it
 ("Landed" below).
 
-**The two passes** (a new `vivante/peephole.rs`, called from
-`alloc::eliminate_dead`):
+**The two passes** (`src/shaderc/online/vivante/peephole.rs`, the landed
+patch's new file, called from `alloc::eliminate_dead`):
 
 1. **Copy fold** (rank 1's negate half and rank 3's lane half), at the start
    of `eliminate_dead`. Each `mov t.mask, s` of a temporary or an input, with

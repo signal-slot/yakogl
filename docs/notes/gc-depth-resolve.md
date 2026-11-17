@@ -45,7 +45,7 @@ Micro-benchmark: `time_one_1024_square_resolve` in the same file, one
 | per row, chunks_exact (after) | 0.556 ms | 0.655 ms |
 
 About 2x. What is left is the f64 divide per texel (`unorm24_depth`, in
-`src/vivante/ds_retention.rs`, which this change does not touch; a reciprocal
+`src/ds_retention.rs`, which this change does not touch; a reciprocal
 multiply was not tried, it is not bit-exact by construction and would need an
 exhaustive check over the 2^24 values).
 

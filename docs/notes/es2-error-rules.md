@@ -4,7 +4,7 @@
 
 **Status (2026-10-25): every row with an enum rule is gated** (see the
 tranche table at the end); no dEQP-GLES2 case reaches them (finding 3 below).
-The proposed `src/gl/es2_rules.rs` does not exist. #1246 tracks it.
+The proposed rules module was never committed. #1246 tracks it.
 
 Static audit for plan #4 item `es2-error-rules-diag`, written 2026-10-09 at
 the integration tip `334d4e6`. **Nothing was built or run for this file.** It
@@ -42,7 +42,7 @@ where the repository already cites a rule I say so.
    `fbo` at 711 of 711 except the one `depth_component24` case, fixed on the
    host in `4e9397c` and not yet run on a board. #1246 (ES 3.0
    renderbuffer formats still accepted) is row 36 here.
-5. Fix: one predicate file `src/gl/es2_rules.rs` and a guard
+5. Fix: one predicate module and a guard
    `if crate::REPORT_ES2 && !es2_rules::x(v)` at each entry point
    (section "Fix proposal"). It is a `const` branch, not a `cfg`, so the ES 3.0
    build compiles to the code it has today. Cost: host tests that use ES 3.0
@@ -261,7 +261,7 @@ real run (this file predicts all-pass for the DB), and #1246
 
 **Files and functions.**
 
-1. New `src/gl/es2_rules.rs` (declare in `src/gl/mod.rs`). Pure `const fn`
+1. New rules module (declare in `src/gl/mod.rs`). Pure `const fn`
    predicates returning "is this value in ES 2.0 plus the advertised
    extensions", each with a doc line naming the spec section, so one file
    lists the ES 2.0 surface and the advertised-extension baseline above is
@@ -378,6 +378,6 @@ integration results of old PRs #35 and #64.)
 
 ### Remaining
 
-- the shared `src/gl/es2_rules.rs` of the proposal, once more than one file needs the same predicate.
+- the shared rules module of the proposal, once more than one file needs the same predicate.
 
 Rows 4, 5, 33, 43, 44 stay as decided in the proposal (no enum rule).

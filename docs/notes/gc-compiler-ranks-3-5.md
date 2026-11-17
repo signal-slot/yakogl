@@ -185,7 +185,7 @@ The others:
 **(b) Where.** A new pass `Sel::fuse_mul_add` in `select.rs`, run after
 `propagate_copies` and before `fold_constant_reads`, so that the fold sees
 the `mad`'s constant operands (`select.rs:4057-4058`). The rules, all on
-`SelInstr`, mirror `powervr/prepare.rs:996` `fuse_mul_add`:
+`SelInstr`, mirror `src/shaderc/online/powervr/prepare.rs:996` `fuse_mul_add`:
 
 - the `mul` is F32, not saturated, with no condition, and writes a
   `SelDst::Virtual` written once;
@@ -207,7 +207,7 @@ the `mad`'s constant operands (`select.rs:4057-4058`). The rules, all on
   (`select.rs:3999`), no `codegen.rs` change is needed, and a
   `#pragma STDGL invariant(all)` sets it on every output (`ir.rs:601-610`).
   This is the conservative form of PowerVR's per-output rule
-  (`powervr/prepare.rs:1103` `fusion_pairs`). Matrix products are already
+  (`src/shaderc/online/powervr/prepare.rs:1103` `fusion_pairs`). Matrix products are already
   `Ffma`s from the front end (`lower.rs:6140`) and stay as they are.
 
 Whether the GC7000's `mad` rounds once or twice is not known
@@ -325,7 +325,7 @@ table: "the constructor's lanes visible to readers").
   comment at `select.rs:4037-4040` ("the folded definitions never get one")
   already allows the gaps in numbering this leaves. Integer and boolean
   operations are left as they are: the PowerVR rules for them
-  (`powervr/select.rs:3993-4058`) are a separate item if ever needed.
+  (`src/shaderc/online/powervr/select.rs:3993-4058`) are a separate item if ever needed.
 - 4b: in `Sel::alu` before `builtins::native`, a match on `(op, constant
   operand)` that records the value as an alias of its other operand (with
   `neg` for `* -1.0`) instead of emitting. This uses the existing
@@ -550,7 +550,7 @@ The order to land them, smallest risk first: **4 (T), 3 (4a/4b), 5 (4c),
 guard and 3's zero rule. T is listed fourth by size and lands first
 because it is one function with no rounding question. All of them
 come after or beside x2-tiled-probe-run (sr patch, rank 1). None changes
-the same lines as the sr patch (`vivante/alloc.rs`). Rank 1 touches
+the same lines as the sr patch (`src/shaderc/online/vivante/alloc.rs`). Rank 1 touches
 `select.rs` `loop_convert` (`select.rs:2943`), away from all five. The
 expected total, without overlap with the sr patch's 10.6 ms and rank 1's
 15.6 ms: **about 26 ms a frame** (35 at 0.8 ns). The tilt-shift passes'

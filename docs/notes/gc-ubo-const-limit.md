@@ -195,8 +195,8 @@ plans #18/#19); the design avoids them. Size estimates are lines of Rust.
    parameter. A new field on `ir::Module` is the alternative but
    `lower.rs:931` builds the module and is held; pass it beside the module.
 2. **select.rs** (~80 lines, `src/shaderc/online/select.rs`; not under
-   `vivante/**`, so it may collide with item `gc-const-array`, which edits
-   `vivante/**` and may touch the same functions: do this after it merges).
+   `src/shaderc/online/vivante/**`, so it may collide with item `gc-const-array`, which edits
+   `src/shaderc/online/vivante/**` and may touch the same functions: do this after it merges).
    - `uniform_block` (1388): push `ConstSlot::uniform(d)` only for registers
      that hold at least one non-member dword. Keep a `reg_of[old_reg]` map
      (u16 per register, arena-allocated) so `uniform_src` and
@@ -207,7 +207,7 @@ plans #18/#19); the design avoids them. Size estimates are lines of Rust.
      `mov t.x, imm(dword_off*4)` + `load.u32 got, t.x, u[ubo_addr]`, then the
      usual swizzle (copy the `LoadUniformIdx` tail, lines 2362-2410, into one
      helper both use). `RGROUP_IMMED` is not allowed for `load`
-     (`vivante/build.rs:364`), so the offset needs the `mov`. A read of a
+     (`src/shaderc/online/vivante/build.rs:364`), so the offset needs the `mov`. A read of a
      mixed register (default uniform and member dwords) is not split: the
      register stays in the file and is read as today; only an all-member
      register leaves it.

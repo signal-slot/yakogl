@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # What a draw writes on the GC7000, and where YakoGL's state goes
 
-Status: finished record, moved here from `driver/docs/imx8mp-draw-state.md` on 2026-10-11. A map from Mesa's etnaviv written before the board arrived. The back end it planned is src/vivante/ (regs.rs, state.rs, backend.rs) and src/vivante/VIVANTE_NOTES.md.
+Status: finished record, moved here from the driver docs on 2026-10-11. A map from Mesa's etnaviv written before the board arrived. The back end it planned is src/vivante/ (regs.rs, state.rs, backend.rs) and src/vivante/VIVANTE_NOTES.md.
 
 Preparation for M6 of `docs/notes/imx8mp-gc-bringup.md`, written from Mesa's etnaviv
 driver on this host (`src/gallium/drivers/etnaviv/etnaviv_emit.c`,

@@ -81,7 +81,7 @@ Results at `cc27948`:
 | V3D | same | same | same | same |
 
 This matches the boards: AM62P images 1-7 at `b83216d4` failed exactly these 9 cases (record `bf5c575`,
-unmerged; summarised in `docs/plan-status.md`, stage 1) **[read]**. No regression is recorded for them on
+unmerged; summarised in the plan-status page of the time, stage 1) **[read]**. No regression is recorded for them on
 the i.MX8MP or the Pi 4.
 
 The PowerVR expressions of `highp.common_subexpression_3`, `gl_Position.x` (`in0` = `a_input.x`, `in1` = `.y`,
@@ -152,11 +152,11 @@ measurement. It is not needed for the fix, because removing the context dependen
 whichever way `fmad` rounds.
 
 **GC7000 and V3D [read, measured].** Neither back end has a context-dependent fusion. GC7000 `select` emits
-`mad` only for an IR `Ffma` (`vivante/builtins.rs:139`, plus fixed driver arithmetic for `gl_FragCoord` and
+`mad` only for an IR `Ffma` (`src/shaderc/online/vivante/builtins.rs:139`, plus fixed driver arithmetic for `gl_FragCoord` and
 `gl_PointCoord`). The front end creates `Ffma` only from the shape of a construct (matrix products
-`lower.rs:6039`, `mix` `lower.rs:6487`), never from use counts. V3D has no FMA: `v3d/prepare.rs:888-901`
+`lower.rs:6039`, `mix` `lower.rs:6487`), never from use counts. V3D has no FMA: `src/shaderc/online/v3d/prepare.rs:888-901`
 splits every `Ffma` into `fmul` + `fadd`. On V3D, the coordinate (binning) shader and the render shader are
-both `prepare_vertex_with` of the same module, with and without varyings (`v3d/chain.rs:445-446`), and with
+both `prepare_vertex_with` of the same module, with and without varyings (`src/shaderc/online/v3d/chain.rs:445-446`), and with
 no fusion they compute the same position. Both back ends are deterministic for these cases, and their 24
 tests run active.
 

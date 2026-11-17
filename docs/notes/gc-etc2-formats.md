@@ -177,7 +177,7 @@ then.
 | 3 | `texture.rs:129-131` | `ETC2_SRGB_RGB` / `_RGBA`: `decoded = false` | the linear row's words (format 0, ext 0 and 2) plus `SAMP_CTRL1.SRGB` (`F:278`, `D:246-247`) | refused today; etc2-srgb-gc |
 | 4 | `texture.rs:398-399` (`samp_ctrl1`) | SRGB only for `GLES_TEXFMT_SRGB8_A8` | SRGB for every sRGB format incl. the compressed ones | the two classes must be added |
 | 5 | `texture.rs:142-176` (`unorm_format`) | every class in it has `int_filter: true` | sRGB formats off (`F:317-318`) | the two sRGB classes need `int_filter: false`, as `SRGB8_A8` has (test `texture.rs:648`) |
-| 6 | `texture.rs:165-172` | `ETC2_RGBA` ext 2, `ETC2_RGB_PT` ext 1, both `compressed` | same words (`F:245-246`) | none in the words. But the GL core cannot reach `_PT`: `compressed_format_info` (`gl/texture.rs:3374-3384`) has no `GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2`, and no sRGB twin class exists |
+| 6 | `texture.rs:165-172` | `ETC2_RGBA` ext 2, `ETC2_RGB_PT` ext 1, both `compressed` | same words (`F:245-246`) | none in the words. But the GL core cannot reach `_PT`: `compressed_format_info` (`src/gl/texture.rs:3374-3384`) has no `GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2`, and no sRGB twin class exists |
 | 7 | `texture.rs:228` | `no_alpha` forces swizzle A to 1 for `ETC2_RGB` | none (the format gives alpha 1) | redundant, same value |
 | 8 | `texture.rs` | no R11 / RG11 EAC class | ext 3, 4, 5, 0x0d; `int_filter` off (`F:332-333`) | out of this plan's items: no GL-core class (`compressed_block_bytes` knows the sizes only) |
 | 9 | `GC_SAMPLED_TEXFMTS` (`src/backend.rs`) | linear ETC2 classes only | HALTI0 for sRGB and ext (`S:406-410`), met | etc2-srgb-gc adds the two sRGB bits |

@@ -79,7 +79,7 @@ is measurable here**, including the `gl_DepthRange` fill and the program,
 attribute and state steps. The estimates this note first carried for them
 (0.4 to 0.9 us for the uniform fill) were wrong and are withdrawn.
 
-The GC7000 back end (`vivante/backend.rs`, laps at 2553-2886), 44,178 draws:
+The GC7000 back end (`src/vivante/backend.rs`, laps at 2553-2886), 44,178 draws:
 
 | Step | laps | as lapped | less laps (1.50 us each) |
 |---|---|---|---|
@@ -102,7 +102,7 @@ the GL core's 0.2 us are the back end and everything around it: about 4 us
 (PowerVR, loaded host) and about 6 us (V3D).
 
 **A suspect that did not hold.** The V3D `check_program` hashes the whole
-uploaded code at every draw (`v3d/backend.rs:3065-3090`, called at `3204`).
+uploaded code at every draw (`src/v3d/backend.rs:3065-3090`, called at `3204`).
 With it returning at once the run measured 15.3 us a draw against 14.7 us:
 no gain outside the 5% repeat error. It is not the cost.
 
@@ -114,15 +114,15 @@ a measurement.
 * **GC7000 `emit_draw`** (1.1 us): about 120 `state()` writes a draw, none
   skipped when equal to the previous draw's: `emit_raster_state` (1269),
   `emit_ra_state` (1726), `emit_msaa_state` (808), `emit_pe_state` (1404),
-  `shader::emit_shader_state` (`vivante/shader.rs:166-380`, which rebuilds the
+  `shader::emit_shader_state` (`src/vivante/shader.rs:166-380`, which rebuilds the
   `vs_input`, `vs_output` and `interp` tables from the shaders and elements),
   `emit_shader_code` (380), `emit_uniforms` (573), `emit_flushes` (1746),
   the stalls (1926, 1933).
-* **PowerVR `record_draw`** (`pvr/backend.rs:6033-`): the vertex-fetch PDS
+* **PowerVR `record_draw`** (`src/pvr/backend.rs:6033-`): the vertex-fetch PDS
   generator (6179), the kick-USC PDS generator (6381) and the coefficient
   PDS (6412-) run at every draw, the middle one for inputs that are the same
   for every draw of the program.
-* **V3D** (about 6 us, the largest): `state::job_state` (`v3d/state.rs:528`)
+* **V3D** (about 6 us, the largest): `state::job_state` (`src/v3d/state.rs:528`)
   rebuilds the state structs, `programs` (3096) and `texture_units` (4732,
   twice) scan the uniform streams, `v3d_job_draw` (`driver/src/v3d/v3d_job.c:950`)
   writes three uniform streams (`write_uniforms`, 354) and the shader state
@@ -153,18 +153,18 @@ the design as the repository's comments cite it (`v3dx_emit.c` in
 |---|---|---|---|---|
 | F0 | **Make the step laps visible and cheap on the host.** Let `osal_linux_query` add up `OSAL_QUERY_DRAW_STATS`, print a `gm2: draw-steps` line (`shim.c`, `report.py`), and answer the clock for the PowerVR and GC7000 too; and take no lap at all when no totals are wanted (below). This is the measuring tool every later fix needs. | `src/osal/linux.c:1081-1146`; `tools/hostharness/glmark2/shim.c` | None itself; makes F1 to F5 measurable | Low. |
 | F1 | **No step laps unless the OSAL keeps the totals.** `Timer::start` asks once whether the OSAL keeps draw-step totals (the first `report_draw_stats` that answers `-ENOTSUP` clears a flag; the Zephyr OSAL that keeps them, `zephyr_timing.c`, leaves it set) and takes no clock read or report while it is clear. | `src/draw_steps.rs:108-170`; laps `src/gl/draw.rs:3265-4055` (6 reads), `src/vivante/backend.rs:2485-2886` (12) | **Measured: 8.4 us of the V3D host build's 14.7 us** (6 reads a draw at 1.4 us); on the PowerVR and GC7000 host builds none (no clock answered); on a board whichever one `clock_ns` costs there: the Zephyr `k_cycle_get` answer is cheap, to be measured by item F0 on the board | Low. The fake-clock tests of `draw_steps` (`draw.rs:4926`, `gl.set_clock`) keep passing if installing a clock sets the flag. This also corrects every earlier V3D host ms-a-frame (`FINDINGS-v3d-allscenes.md`, `-refract-budget.md`, the TFU tables): all are over by about 1.4 us a lap-read. |
-| F2 | **Done (see "F2 done"). GC7000: emit a state group only when it differs from the frame's last draw.** Keep each group's last words in the open frame (as the V3D keeps `PACK` rows), cleared at `frame_open`/`emit_context_init` (`vivante/backend.rs:1942`); skip equal groups: raster, RA, MSAA, PE, shader state, shader code, prefetch. | `src/vivante/backend.rs:1903-1937` and the emitters above; `src/vivante/shader.rs:166`, `380`, `418` | up to **1.1 us** of the 1.1 us `emit_draw` step (about 40% of the back end's 2.9 us); more on the board (non-cacheable stores, shorter stream for the front end) | Medium to high: `emit_prefetch`'s constant-file steering and the stalls fix an order (`shader.rs:398-417`); the golden streams of `tools/vivante/cs_golden.c` must stay equal on a first draw. |
+| F2 | **Done (see "F2 done"). GC7000: emit a state group only when it differs from the frame's last draw.** Keep each group's last words in the open frame (as the V3D keeps `PACK` rows), cleared at `frame_open`/`emit_context_init` (`src/vivante/backend.rs:1942`); skip equal groups: raster, RA, MSAA, PE, shader state, shader code, prefetch. | `src/vivante/backend.rs:1903-1937` and the emitters above; `src/vivante/shader.rs:166`, `380`, `418` | up to **1.1 us** of the 1.1 us `emit_draw` step (about 40% of the back end's 2.9 us); more on the board (non-cacheable stores, shorter stream for the front end) | Medium to high: `emit_prefetch`'s constant-file steering and the stalls fix an order (`shader.rs:398-417`); the golden streams of `tools/vivante/cs_golden.c` must stay equal on a first draw. |
 | F3 | **GC7000: build `emit_shader_state`'s tables once per (program, element layout).** | `src/vivante/shader.rs:166-380` | part of F2's 1.1 us (est. 0.2-0.4) | Medium; subsumed by F2 for a draw equal to the last. |
 | F4 | **PowerVR: the kick-USC and coefficient PDS programs once per (program, variant, sample rate).** Keep their `pds_put` offsets in `ProgGpu`; only the vertex-fetch data is per draw. | `src/pvr/backend.rs:6373-6560`, `6179` | est. 0.2-0.6 us of the PowerVR's ~1.7-4 us; unmeasured (no laps in this back end) | Medium: the PDS arena is a per-frame bump (`pds_put`), a cached block must outlive the frame. Needs F0 laps in `record_draw` first. |
 | F5 | **V3D: attribute the 6 us before changing anything.** Add laps (or `GM2_PERF=1` where `perf` is allowed) around `state::job_state`, `programs`, `texture_units`, `v3d_job_draw` and `flush_job`, and count jobs a frame (`gm2: v3d-frames`). | `src/v3d/backend.rs:5380-5582`, `3191`, `4891` | unknown; this is the largest back end cost (6 of 6.3 us) | None for the measurement. `src/v3d/**` is owned by the lazy-raster item until it merges. |
-| - | *Withdrawn:* a once-per-program `check_program` (`v3d/backend.rs:3065`): measured no gain. The GL core's `gl_DepthRange` fill (`draw.rs:2864`) and `GlesDraw::ZERO` (`3263`): below the resolution of this method (each step is one clock read). | | 0 | |
+| - | *Withdrawn:* a once-per-program `check_program` (`src/v3d/backend.rs:3065`): measured no gain. The GL core's `gl_DepthRange` fill (`draw.rs:2864`) and `GlesDraw::ZERO` (`3263`): below the resolution of this method (each step is one clock read). | | 0 | |
 
 The GL core needs no work for this scene. The next runs belong to F0, then
 F1 (to take the timer out of every V3D figure), then F2 and F5.
 
 ## F2 done
 
-`src/vivante/dedup.rs`, called from `emit_draw` (`vivante/backend.rs`).
+`src/vivante/dedup.rs`, called from `emit_draw` (`src/vivante/backend.rs`).
 Each of the nine state groups (vertex elements, index, streams, raster,
 RA, MSAA, PE, shader wiring, program = instruction ranges and constant
 file) is written into a scratch buffer and copied into the stream only
@@ -185,7 +185,7 @@ skip words that differ, so a `host-test` build writes the words on every key
 hit anyway and panics if they differ (`dedup::set_verify`): the whole
 GC7000 host suite (110 test binaries) runs with that check and passes. The
 first draw of a stream writes every group, so the golden first-draw streams
-are unchanged; `state_multi_fixp` (`vivante/cmd.rs`) now checks the room once
+are unchanged; `state_multi_fixp` (`src/vivante/cmd.rs`) now checks the room once
 a command instead of once a word.
 
 Measured with `tests/gc_state_dedup.rs`

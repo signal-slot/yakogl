@@ -264,13 +264,13 @@ two other notes' work; listed for ordering, not to be done twice.
 5. **Tests for the clear of R32/RG32 beside another attachment** (R32 beside
    RGBA8UI now; RG32 beside any after item 3): `glClearBuffer`, `glClear` and a
    masked clear, the other attachment's pixels surviving. Files:
-   `tests/es3_int_rt_mrt_gc.rs` (new cases, not ignored for R32), or a new file
-   `tests/es3_int32_rt_mrt_gc.rs` modelled on `tests/es3_int32_rt_gc.rs`.
+   `tests/es3_int_rt_mrt_gc.rs` (new cases, not ignored for R32), or a new
+   test file modelled on `tests/es3_int32_rt_gc.rs`.
 6. **CPU blit/copy of a tiled RG32 storage**: pin that `glBlitFramebuffer`,
    `glCopyTexSubImage2D` and `glReadPixels` of an RG32I/UI attachment see
    the shadow's untiled bytes after a kick (`kick_pending` then `retire`), by a
    host test with the stand-in GPU of `tests/es3_int32_rt_gc.rs`. Files: a new
-   test (`tests/es3_int32_rt_blit_gc.rs`); no code unless it fails
+   test file (never committed); no code unless it fails
    (`src/vivante/wide_target.rs`, `src/gl/blit.rs`).
 7. **Docs after the board**: `docs/es3/int-rt-gc.md` (the 32-bit-channel
    paragraph "for the board to confirm" turns into the record), RC1 and RC2 rows

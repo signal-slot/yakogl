@@ -2,7 +2,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # AM62P: boot Zephyr from U-Boot over TFTP (plan, 2026-09-29)
 
-Status: finished record, moved here from `driver/docs/am62p-netboot-plan.md` on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03. The current design (the hook, the go entry, the RTI self-arm, the TFTP runner) is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/am62p/rti_arm.c.
+Status: finished record, moved here from the driver docs on 2026-10-11. Steps A, B and C passed on the board on 2026-10-03. The current design (the hook, the go entry, the RTI self-arm, the TFTP runner) is docs/standalone-boot.md; the code is tools/board.sh, tools/uboot-netboot-lib.sh and driver/zephyr/lib/board/am62p/rti_arm.c.
 
 Goal (user, 2026-09-29): replace "U-Boot -> Linux -> kexec-zephyr" on the Verdin
 AM62P with a host-controlled boot of the Zephyr image straight from U-Boot.
@@ -34,7 +34,7 @@ complete kexec cycle's UART log that contains a whole U-Boot boot
 | Env storage | `/dev/emmc-boot0` offset `-0x2200`, size `0x2000`, **one copy (not redundant)** | `/etc/fw_env.config` on the board |
 | Linux tool | libubootenv `fw_setenv` 0.3.5, with `-s <script>` (many variables in one write) | `fw_setenv --help` on the board |
 | `bootdelay` | `0` (the compiled-in default is `1`) | env; strings of `u-boot.img` |
-| `bootcmd` | the stock persistent boot: `ext4load` `/stock/r5_ddr.bin`, `/stock/r5_tcm.bin`, `/stock/zephyr_a53.bin`, then `dcache off && icache off && go 0x82000000`; on any failure `bootflow scan -b` (Torizon Linux) | env; platform notes `docs/uboot-boot.md` ("電源投入で自動起動", 2026-09-06) |
+| `bootcmd` | the stock persistent boot: `ext4load` `/stock/r5_ddr.bin`, `/stock/r5_tcm.bin`, `/stock/zephyr_a53.bin`, then `dcache off && icache off && go 0x82000000`; on any failure `bootflow scan -b` (Torizon Linux) | env; earlier platform notes ("電源投入で自動起動", 2026-09-06) |
 | `bootcmd_orig` | `bootflow scan -b` | env |
 | compiled-in default `bootcmd` | `bootflow scan -b` (what a bad env CRC falls back to) | strings of `u-boot.img` |
 | `/sysroot/stock/` | `r5_ddr.bin`, `r5_tcm.bin`, `r5_layout.txt`, `zephyr_a53.bin.stock-bak`. There is **no `zephyr_a53.bin`**, so today's `bootcmd` falls through to Linux | `ls` on the board |
@@ -46,8 +46,8 @@ complete kexec cycle's UART log that contains a whole U-Boot boot
 | Network commands | `dhcp`, `tftpboot [loadAddress] [[hostIPaddr:]bootfilename]`, `ping`; env `tftpblocksize`, `tftpwindowsize`, `tftptimeout`, `tftptimeoutcountmax`, `netretry`, `autoload`. **No `tftpdstp`** (always UDP port 69), no `wget`; fastboot over UDP/TCP is present | strings of `u-boot.img` |
 | Ethernet in U-Boot | `Net: eth0: ethernet@8000000port@1 [PRIME]`, then `Could not get PHY for mdio@f00: addr 7` and `ethernet@8000000port@2: phy_connect() failed` | the saved UART log |
 
-The last row corrects a note (`docs/uboot-boot.md`, "新イメージの書き込みに
-Linux が要る理由"). It read "Could not get PHY" as "U-Boot's Ethernet does not
+The last row corrects a note in those earlier platform notes ("新イメージの
+書き込みに Linux が要る理由"). It read "Could not get PHY" as "U-Boot's Ethernet does not
 work". But the error is for **port 2** (PHY address 7, the second Ethernet, not
 the one in use). Port 1 (PHY address 0) registers as `eth0 [PRIME]`. Whether
 `dhcp` and `tftpboot` then work is **unmeasured**. The first board step
@@ -122,8 +122,8 @@ Why not the mechanisms already in the env:
 - `preboot` would also work (it runs before autoboot), but it already holds
   Toradex's `fdtfile` logic. `bootcmd` already carries one local change
   (the stock one), so our one local change goes in the same place, in front.
-- Interrupting U-Boot over the UART bridge and typing commands (what the platform's
-  `uboot-boot-zephyr.sh` does) needs no env change. But if the host or the
+- Interrupting U-Boot over the UART bridge and typing commands by hand
+  needs no env change. But if the host or the
   bridge fails half-way, the board waits at the U-Boot prompt, with no
   watchdog, until a person comes. Not used for unattended runs.
 
@@ -152,7 +152,7 @@ and the board's own `fw_setenv --help`.
 - **`go`, not `booti`**: `booti` reads `text_offset=0` from the AArch64 header
   and moves the image to 0x80000000 (TF-A), and it does not start. With
   `dcache off; icache off; go 0x82000000` it does. This was measured on this
-  board on 2026-09-05 (`docs/uboot-boot.md`, "ハマりどころ").
+  board on 2026-09-05 (the same notes, "ハマりどころ").
 - **No dtb**: the Zephyr image has its devicetree built in; `go` passes none.
 - The image is the same `zephyr.bin` the kexec route uses (built with
   `CONFIG_AARCH64_IMAGE_HEADER=y`, linked at 0x82000000). The runner refuses an
@@ -172,7 +172,7 @@ ran before the image. So there is no CPSW receive DMA writing into Zephyr's
 memory, no split-EOI GIC mode, no tidss shutdown and no runtime-PM state left
 behind (`driver/tools/kexec-zephyr/README.md` lists what Linux leaves). The GPU
 and display paths were first brought up on this board under a U-Boot `go` entry
-(`docs/gpu-port-plan.md`, "Reflash loop"). Whether today's gl_test image
+(the earlier GPU port plan, "Reflash loop"). Whether today's gl_test image
 behaves the same under both entries is **unmeasured**; step C in section 7
 compares the two on the same image.
 
@@ -180,7 +180,7 @@ compares the two on the same image.
 
 - Under kexec, the image's only way back is the RTI watchdog **Linux** started
   (systemd `RuntimeWatchdogUSec=30s`; `watchdog0` "K3 RTI Watchdog", 60 s). The
-  SoC-layer feeder (`soc/ti/k3/am62px/soc_a53_wdt.c`,
+  SoC-layer feeder (`driver/soc/ti/k3/am62px/soc_a53_wdt.c`,
   `CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT`) feeds it for a bounded time
   (`..._SECONDS`: 150 for gl_test, 600 for deqp), then lets it reset the SoC.
 - Under U-Boot `go`, **nobody starts the RTI**. This U-Boot has no watchdog
@@ -190,7 +190,7 @@ compares the two on the same image.
   someone cuts the power. That happened once with kexec, on 2026-09-23; since
   then the loader refuses to jump without a running RTI.
 - So **the image must arm the RTI itself** before a netboot is allowed. This is
-  Z1: `driver/samples/zephyr/common/rti_arm.c`, behind
+  Z1: `driver/zephyr/lib/board/am62p/rti_arm.c`, behind
   `CONFIG_YAKOGL_AM62P_RTI_SELF_ARM` (default n; it requires the SoC-layer feeder
   off, see below). At `POST_KERNEL` 47 (a `BUILD_ASSERT` keeps it after TISCI):
   1. TISCI device **125** (MAIN RTI0: `power-domains = <&k3_pds 0x7d 1>` in the
@@ -231,7 +231,8 @@ compares the two on the same image.
   `POST_KERNEL` 0, before any TISCI power-on. On a U-Boot entry, RTI0 may be
   powered off at that point, and that read could abort. Z1 covers the kexec
   entry itself (step 2 above), so one image serves both entries.
-- Built (2026-09-29, `build-gltest.sh`, online compiler, tree `5abeee3f-dirty`):
+- Built (2026-09-29, by a session build script, online compiler, tree
+  `5abeee3f-dirty`):
 
   | gl_test image | options | `zephyr.bin` bytes | sha256 | marker |
   |---|---|---|---|---|

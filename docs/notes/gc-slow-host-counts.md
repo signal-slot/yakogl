@@ -188,7 +188,7 @@ predictions, where the notes give none.
 | resolve-own-kick | shadow | waits other | 1.8 (1.7 resolve) | 1.0 or less from `resolve_depth` | | the resolve waits for K2 only, not K1 |
 | | refract | waits other | 9.4 | no change from the resolve (0 now); at most -1 | | the resolve's `finish()` is not a counted caller in refract now |
 | | all | bytes, kicks, draws | | no change | | |
-| resolve-wide | all | any harness row | | no change | | wider loads, the same bytes and calls: the harness counts neither CPU loads nor stores. Proof is `tests/gc_depth_resolve_loads.rs`, then the board (page 0 v0) |
+| resolve-wide | all | any harness row | | no change | | wider loads, the same bytes and calls: the harness counts neither CPU loads nor stores. Proof is a new loads test (never committed), then the board (page 0 v0) |
 | gc-cache-skip | all | invalidated / flushed KiB (calls) | terrain 512 + 604 (120), shadow 7600 + 7506 (12), refract 7600 + 7522 (30) | 0 (0) for ranges inside a GPU allocation | | **if the skip is in the Rust back end** (the `osal::cache_*` calls). If it is in `z_cache_*` / `gc_render_cache_*` (SR cause 2 names these), the host harness sits in front of the OSAL table and sees no change: the count stays and the fix's test is a stand-in OSAL |
 | rs-clear-wire | terrain | draws (RS blits, Mpx) | 59.0 (0, 0.00) | 51 (8 to 16, 2.18 per colour or depth plane) | | SD: 8 clear quads go; Mesa has 51 draws. 4 clears at 800x600 and 4 at 256x256, all full, unscissored and with sizes multiple of 16 x 4 |
 | | terrain | draw box Mpx | 4.89 | 2.71 | | the clear quads' 2.18 Mpx are no longer draw boxes |

@@ -179,8 +179,8 @@ board session measures.
 1. **The PERF pages stop saturating** (makes the next board session able to
    tell CPU from GPU; no effect on a frame). `driver/samples/zephyr/glmark2/src/gm_perf_page.h`
    (`sat16`, page 0, 1, 3 units: ms when a mean exceeds 65 535 us, or a
-   16-us unit), `main.cpp` (the writer), `host/perf_page_test.c` and
-   `host/run.sh` (the host packing and decode check),
+   16-us unit), `main.cpp` (the writer), `perf_page_test.c` and `run.sh` in
+   `driver/samples/zephyr/glmark2/host/` (the host packing and decode check),
    `driver/rust/src/board/record.rs:1190` (the decoder's unit). Add the
    mipmap counters (`gc_backend_mip_chains`, refusals) to a page, so
    rank 4 and rank 6 need no inference from kick counts. Host: the packing

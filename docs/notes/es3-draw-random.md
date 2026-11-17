@@ -228,7 +228,7 @@ not run dEQP-GLES3 (#316), so this is a reading of code.
   `src/backend.h`, `src/abi_layout*` and every back end's reading of
   `GlesAttrib`. Option (i) is the smaller change. Take option (ii) only if a
   board shows that the fetch cost matters.
-- **Host test:** a new `tests/es3_draw_random_gc.rs` with
+- **Host test:** a new `tests/es3_draw_random.rs` with
   `host-test,gpu-vivante,shaderc-online`. For (i), a stand-in back end with
   the Vivante's `native_attrib_formats` draws a `GL_UNSIGNED_BYTE` x4 ->
   `uvec4` buffer array (case 72's shape: offset 5) and expects converted

@@ -205,7 +205,7 @@ Two independent halves; neither needs a per-draw shader key in the TE route.
 * If the swizzle item has landed: the identity-swizzle clause for a compare-on
   binding (`gc-texture-swizzle-wrap.md` 5.1) is this item's line to add.
 
-### 4.2 Compiler half: `src/shaderc/online/select.rs`, `vivante/builtins.rs`
+### 4.2 Compiler half: `src/shaderc/online/select.rs`, `src/shaderc/online/vivante/builtins.rs`
 
 * `select.rs`: a new arm in front of the "not selected yet" refusal for
   `ir::Op::Tex { shadow: true, proj: false, ret: F32, offset: None,
@@ -252,7 +252,7 @@ beside `LodKey` (`src/shaderc/mod.rs:~564`), with the binding's swizzle (the
 Mesa pass takes it). It gives non-PCF results (Mesa forces NEAREST for it). Not
 needed to start; list it as a follow-up if the 32f cases show clamp errors.
 
-## 5. Host tests for `tests/es3_shadow_gc.rs`
+## 5. Host tests for a GC shadow test (a new test file, never committed)
 
 Style of `tests/es3_wide128_gc.rs` (compile and decode with
 `decode_instr`) and `tests/es3_formats_gc.rs` / `es3_wide128_planes_gc.rs` (the
@@ -378,7 +378,7 @@ Where the numbers come from:
 Three items, in this order; the first two are host work.
 
 **gc-shadow-sampler** (`src/vivante/regs.rs`, `src/vivante/texture.rs`,
-`tests/es3_shadow_gc.rs` cases 1-6). Words: SAMP_CTRL0 bit 17 `COMPARE_ENABLE`,
+cases 1-6 of the new GC shadow test file of section 5). Words: SAMP_CTRL0 bit 17 `COMPARE_ENABLE`,
 bits 18-20 `COMPARE_FUNC` (`N:1974-1977`), table `[7,2,4,0,3,5,1,6]` (`X:132-139`),
 MIP LINEAR -> NEAREST when a compare is on (`D:324-328`); `compare_op: 16` in the
 incomplete-texture stand-in; every hand-built `GlesTextureBind` that pins the
@@ -388,7 +388,8 @@ table-struct field is added. Docs: `docs/es3/backend-caps.md` (GC7000UL, "Compar
 sampler"), RC5 in `docs/es3-cts-failures.md`.
 
 **gc-shadow-compiler** (`src/shaderc/online/select.rs`,
-`src/shaderc/online/vivante/builtins.rs`, `tests/es3_shadow_gc.rs` cases 7-10).
+`src/shaderc/online/vivante/builtins.rs`, cases 7-10 of the same new test
+file).
 Instructions: `texld` with src2 = the reference lane (`K:555-558`, `M:206-233`),
 `texldlpcf` for an explicit level; one-lane result; shadow with a bias, a
 projective form, an offset or gradients stays refused by name. **First step: a

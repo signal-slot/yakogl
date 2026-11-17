@@ -89,7 +89,8 @@ Console output is unchanged: the same `pr_info` lines, the same order.
 
 - `driver/tools/pvrlab/gl_test.c`: `s_msaa_rec`, filled in `case_msaa_at`
   (4x half only) and `msaa_print_map`; exported `gl_test_msaa_page()`.
-- `driver/samples/zephyr/gc_gl_test/src/main.c`: `msaa_page_tag()` and the
+- `driver/samples/zephyr/gl_test/src/main_imx8mp.c` (the session's
+  `gc_gl_test` sample, now under `gl_test`): `msaa_page_tag()` and the
   first lines of `report_result()`; in the sweep image (the one
   `imx8mp-gltest-build.sh` builds) the page selector also runs case 16 alone,
   so no index arithmetic is needed.

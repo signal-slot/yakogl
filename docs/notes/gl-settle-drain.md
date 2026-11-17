@@ -99,7 +99,7 @@ a frame, plus the first frame's set-up.
   same completion.
 - **Write-after-GPU-read of levels 1...** On the V3D no pending draw reads the
   storage: draws sample tiled copies made when the draw was recorded
-  (`samples_texel_copies: true`, `v3d/backend.rs:6442`), so `sampled_pending`
+  (`samples_texel_copies: true`, `src/v3d/backend.rs:6442`), so `sampled_pending`
   is false by construction. On PowerVR and the GC7000 it is a real term:
   a previous frame's draw may still sample the old levels (`last_use`).
 - **A backend still sampling the old levels.** The same, and a TFU job

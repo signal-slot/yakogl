@@ -71,7 +71,7 @@ which the GPU chain turns into about 9 recorded draws: 43 in all), shadow 3,
 refract 2 (+1 `glGenerateMipmap`).
 
 Limits (as in `tools/hostharness/glmark2/README.md`): nothing renders, and
-`osal/linux.c` completes every kick at once, so GPU time and GPU waits are
+`src/osal/linux.c` completes every kick at once, so GPU time and GPU waits are
 not here, and the depth resolve reads malloc'd, cached memory. Counts are x86-64
 instructions (Ir), not A53 ones; they rank, they do not time. Two figures are
 the host OSAL's, not the board's: `memset` in `l_gpu_alloc`

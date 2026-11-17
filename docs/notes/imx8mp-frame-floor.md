@@ -58,7 +58,7 @@ panel's VSYNC**, and glmark2 asked for no wait.
   the LCDIF clears it. The LCDIF clears it "on VSYNC of next frame"
   (`driver/rust/src/ip/lcdifv3.rs:21-27`, `:239-251`, `:284-292`).
 - The panel runs at 58.76 Hz (69.3 MHz pixel clock,
-  `driver/samples/zephyr/gc_common/verdin_imx8mp_display.dtsi:169`;
+  `driver/samples/zephyr/common/verdin_imx8mp_display.dtsi:169`;
   `driver/src/display/NOTES.md:180-186`, measured 17 018 us).
 - glmark2 calls `eglSwapInterval(dpy, 0)`
   (`$GLMARK2_SRC/src/gl-state-egl.cpp:426-427`, upstream 22c527cb): it asks
@@ -153,7 +153,7 @@ Evidence:
 - `driver/rust/src/ip/lcdifv3.rs:21-27`: the shadow load completes on the next
   VSYNC. `:239-251`: `wait_shadow_loaded` spins until then. `:284-292`:
   `set_fb` always waits.
-- `driver/samples/zephyr/gc_common/verdin_imx8mp_display.dtsi:169`:
+- `driver/samples/zephyr/common/verdin_imx8mp_display.dtsi:169`:
   `pixel-clock-frequency = <69300000>`. `driver/src/display/NOTES.md:180-186`:
   htotal 1404, vtotal 840, so 58.761 Hz; measured 17 018 us a frame.
 - `$GLMARK2_SRC/src/gl-state-egl.cpp:426-427`: glmark2 asks for swap interval
