@@ -322,8 +322,9 @@ fn run(vs_src: &str, fs_src: &str) -> Result<([f32; 4], f32), String> {
         usize::from(v.reflection.uniform_dwords),
     )?;
     let mut rows: Vec<[u32; LANES]> = Vec::new();
-    for rec in 0..p.attributes.iter().filter(|e| e.1.is_some()).count() {
-        for c in 0..p.vs.vattr_sizes[rec] as usize {
+    let n = p.attributes.iter().filter(|e| e.1.is_some()).count();
+    for &size in p.vs.vattr_sizes.iter().take(n) {
+        for c in 0..size as usize {
             rows.push([[0.0f32, 0.0, 0.0, 1.0][c.min(3)].to_bits(); LANES]);
         }
     }

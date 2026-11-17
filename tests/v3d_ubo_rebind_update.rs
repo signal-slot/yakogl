@@ -287,9 +287,9 @@ impl Rig {
         let mut bufs = [0; 24];
         glGenBuffers(24, bufs.as_mut_ptr());
         let mut rig = Rig { prog: p, bufs, gen: [1; 24], index };
-        for b in 0..24 {
+        for (b, &buf) in rig.bufs.iter().enumerate() {
             let d = buffer_data(b, 1);
-            glBindBuffer(GL_UNIFORM_BUFFER, rig.bufs[b]);
+            glBindBuffer(GL_UNIFORM_BUFFER, buf);
             glBufferData(GL_UNIFORM_BUFFER, (d.len() * 4) as GLsizeiptr, d.as_ptr() as *const c_void, GL_DYNAMIC_DRAW);
         }
         rig.gen = [1; 24];

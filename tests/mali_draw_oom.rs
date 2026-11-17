@@ -324,19 +324,17 @@ fn pairs() -> Vec<Pair> {
     // is stored (a placeholder row beside a stored row).
     add(
         "placeholder_beside_stored_row",
-        format!(
-            "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_k;\n\
-             void main() {{\n  gl_Position = a_pos;\n  mat4 m = mat4(2.0) - mat4(0.5);\n  v_k = m[1] + m[2] * 0.25;\n  v_c = a_attr;\n}}\n"
-        ),
+        "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_k;\n\
+             void main() {\n  gl_Position = a_pos;\n  mat4 m = mat4(2.0) - mat4(0.5);\n  v_k = m[1] + m[2] * 0.25;\n  v_c = a_attr;\n}\n"
+        .to_string(),
         "precision mediump float;\nvarying vec4 v_c;\nvarying vec4 v_k;\nvoid main() { gl_FragColor = v_c * v_k; }\n",
     );
     // Both varyings fold: all rows placeholder.
     add(
         "all_rows_placeholder",
-        format!(
-            "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_k;\n\
-             void main() {{\n  gl_Position = a_pos;\n  v_k = vec4(0.25, 0.5, 0.75, 1.0);\n  v_c = vec4(1.0, 0.5, 0.25, 1.0);\n}}\n"
-        ),
+        "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_k;\n\
+             void main() {\n  gl_Position = a_pos;\n  v_k = vec4(0.25, 0.5, 0.75, 1.0);\n  v_c = vec4(1.0, 0.5, 0.25, 1.0);\n}\n"
+        .to_string(),
         "precision mediump float;\nvarying vec4 v_c;\nvarying vec4 v_k;\n\
          void main() { gl_FragColor = vec4(v_c.x, v_c.y, v_k.z, v_k.w); }\n",
     );
@@ -364,19 +362,17 @@ fn pairs() -> Vec<Pair> {
     // assigned), and varyings assigned constants.
     add(
         "random_declared_not_written",
-        format!(
-            "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_u;\nvarying vec2 v_w;\n\
-             void main() {{\n  gl_Position = a_pos;\n  v_c = a_attr;\n}}\n"
-        ),
+        "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_u;\nvarying vec2 v_w;\n\
+             void main() {\n  gl_Position = a_pos;\n  v_c = a_attr;\n}\n"
+            .to_string(),
         "precision mediump float;\nvarying vec4 v_c;\nvarying vec4 v_u;\nvarying vec2 v_w;\n\
          void main() { gl_FragColor = v_c; }\n",
     );
     add(
         "random_declared_unused_in_fragment",
-        format!(
-            "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_u;\n\
-             void main() {{\n  gl_Position = a_pos;\n  v_c = a_attr;\n  v_u = vec4(0.5);\n}}\n"
-        ),
+        "attribute vec4 a_pos;\nattribute vec4 a_attr;\nvarying vec4 v_c;\nvarying vec4 v_u;\n\
+             void main() {\n  gl_Position = a_pos;\n  v_c = a_attr;\n  v_u = vec4(0.5);\n}\n"
+            .to_string(),
         FS_C,
     );
     add(

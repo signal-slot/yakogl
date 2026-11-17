@@ -1133,9 +1133,9 @@ impl Img {
 
     /// Every attachment is as expected, each named in the message.
     fn check(&self, what: &str, s: &Scene) {
-        for k in 0..4 {
+        for (k, want) in self.0.iter().enumerate() {
             let got = s.read(k);
-            if got != self.0[k] {
+            if got != *want {
                 let show = |v: &[Px]| {
                     (0..H)
                         .rev()

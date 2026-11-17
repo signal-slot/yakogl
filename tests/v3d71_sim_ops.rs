@@ -733,8 +733,8 @@ fn discard_clears_msf_lanes() {
     p.push(with_flags(add(AddOp71::Xor, NOPD, S::R(10), S::R(11)), |f| f.apf = Pf::PushZ)); // A = lane 3
     p.push(with_flags(add(AddOp71::Setmsf, NOPD, S::I(0), S::N), |f| f.ac = Cond::IfA));
     let o = p.run().expect("runs");
-    for l in 0..LANES {
-        assert_eq!(o.msf[l] == 0, l == 3, "lane {l}");
+    for (l, msf) in o.msf.iter().enumerate().take(LANES) {
+        assert_eq!(*msf == 0, l == 3, "lane {l}");
     }
     // MSF reads them back; Z is "the flags are 0".
     let mut p = P::default();

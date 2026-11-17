@@ -79,8 +79,9 @@ fn run(src: &str, base: u32) -> Result<Vec<[u32; LANES]>, String> {
     }
     /* row 0: gl_InstanceID, one instance per lane; then a_position */
     let mut rows: Vec<[u32; LANES]> = vec![core::array::from_fn(|l| base + l as u32)];
-    for rec in 0..p.attributes.iter().filter(|e| e.1.is_some()).count() {
-        for c in 0..p.vs.vattr_sizes[rec] as usize {
+    let n = p.attributes.iter().filter(|e| e.1.is_some()).count();
+    for &size in p.vs.vattr_sizes.iter().take(n) {
+        for c in 0..size as usize {
             rows.push([[0.0f32, 0.0, 0.0, 1.0][c.min(3)].to_bits(); LANES]);
         }
     }
