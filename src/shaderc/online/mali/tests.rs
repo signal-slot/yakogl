@@ -1193,7 +1193,7 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
         (FS, "precision mediump float; uniform highp vec4 u; void main(){ gl_FragColor = u; }", MaliError::FsUniform),
-        (FS, "precision mediump float; uniform mat4 u; void main(){ gl_FragColor = u[1]; }", MaliError::FsUniform),
+        (FS, "precision mediump float; uniform mat3 u; void main(){ gl_FragColor = vec4(u[1], 1.0); }", MaliError::FsUniform),
         /* an absolute value second in a sum is a place no reference draws
          * (a uniform first in a product is case 166's, unitype_166a) */
         (FS, "precision mediump float; varying vec4 v; varying vec4 w; void main(){ gl_FragColor = v + abs(w); }", MaliError::FsOperandForm),
@@ -2636,8 +2636,26 @@ fn fs_reference_sources() -> Vec<&'static str> {
     /* the `if`s Mesa flattens into selects, and the ones it keeps (#33) */
     srcs.extend(CFLOW_FLATTEN.iter().map(|c| c.2));
     srcs.extend(CFLOW_BRANCH.iter().map(|c| c.2));
+    /* glmark2's fragment arithmetic (plan #367; tests/mali_fs_arith.rs) */
+    srcs.extend(GM2_FS_ARITH);
+    srcs.push(td!("gm2_fsarith_2.frag"));
     srcs
 }
+
+/// The mediump glmark2 fragment arithmetic references (docs/notes/
+/// mali-fs-arith.md; byte-compared by tests/mali_fs_arith.rs): their rows
+/// and productions, with the highp gm2_fsarith_2's rows.
+const GM2_FS_ARITH: [&str; 9] = [
+    td!("gm2_fsmisc_1.frag"),
+    td!("gm2_fsmisc_2.frag"),
+    td!("gm2_fsmisc_3.frag"),
+    td!("gm2_fsmisc_4.frag"),
+    td!("gm2_fsmisc_5.frag"),
+    td!("gm2_fsmisc_6.frag"),
+    td!("gm2_fsmisc_7.frag"),
+    td!("gm2_fsmisc_8.frag"),
+    td!("gm2_fsarith_1.frag"),
+];
 
 /// The vertex shaders of the references: the populations, the samples, the
 /// point size and the constant product cases.
@@ -3150,7 +3168,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
         O::FaddLscaleF32 => "FADD_LSCALE_F32",
         O::FlogdF32 => "FLOGD_F32",
         O::FexpF32 => "FEXP_F32",
-        O::F32ToS32 => "F32_TO_S32",
+        O::F32ToS32 | O::F32ToS32Rte => "F32_TO_S32",
         O::S32ToF32 => "S32_TO_F32",
         O::IaddS32 => "IADD_S32",
         O::S16ToS32 => "S16_TO_S32",
@@ -3200,7 +3218,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
 
 /// Every op of [`bir::Op`], one value per variant (each width of LD_PKA);
 /// [`all_ops_holds_every_variant_of_op`] fails while a variant is missing.
-const ALL_OPS: [bir::Op; 97] = {
+const ALL_OPS: [bir::Op; 98] = {
     use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
     let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
     [
@@ -3256,6 +3274,7 @@ const ALL_OPS: [bir::Op; 97] = {
         O::FlogdF32,
         O::FexpF32,
         O::F32ToS32,
+        O::F32ToS32Rte,
         O::S32ToF32,
         O::IaddS32,
         O::S16ToS32,
@@ -4698,6 +4717,9 @@ fn the_fragment_productions_are_the_references() {
     fs.extend(UNITYPE_166_POPULATION.iter().map(|c| c.1));
     /* a varying's lanes swapped under an fneg (`-a2.yx`) */
     fs.push(td!("fsneg_swapped.frag"));
+    /* glmark2's fragment arithmetic (a constant pair first in a fused
+     * product, gm2_fsarith_1) */
+    fs.extend(GM2_FS_ARITH);
     /* built for their vertex shaders' link constants and equal lanes: one
      * lane in both halves of an output word (gm2_arithconst_3's three
      * equal colour lanes) */
@@ -7942,13 +7964,13 @@ fn a_shared_negative_zero_turns_each_compare_or_is_refused() {
     }
 }
 
-/// A mediump fragment shader's matrix uniform is refused before its block
-/// is laid out (select.rs `UboLayout::fs16` takes floats, vectors, vec4
-/// arrays and ints), so the layout's `split` mark for a matrix, which it
-/// shares with the other two layouts, is not reached today.
+/// A mediump fragment shader's `mat2` and `mat3` uniforms are refused
+/// before the block is laid out (select.rs `UboLayout::fs16` takes floats,
+/// vectors, vec4 arrays, ints and a `mat4`, glmark2's normal matrix:
+/// tests/mali_fs_arith.rs, gm2_fsarith_1).
 #[test]
 fn a_mediump_fragment_matrix_uniform_is_refused_before_the_push() {
-    for t in ["mat2", "mat3", "mat4"] {
+    for t in ["mat2", "mat3"] {
         let src = format!(
             "precision mediump float; uniform {t} m; varying vec2 a2; void main() {{ gl_FragColor = vec4(a2 + m[1].xy, 0.0, 1.0); }}"
         );

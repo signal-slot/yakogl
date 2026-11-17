@@ -36,7 +36,7 @@ const fn row(op: Alu, bits: u8, width: u8) -> Row {
 }
 
 /// The rows [`emit`] selects, each with the `bi_emit_alu` case it is.
-pub const ROWS: [(Row, &str); 93] = [
+pub const ROWS: [(Row, &str); 98] = [
     (row(Alu::Fadd, 32, 1), "nir_op_fadd: FADD.f32"),
     (row(Alu::Fmul, 32, 1), "nir_op_fmul: FMA.f32 a, b, -0.0"),
     (row(Alu::Ffma, 32, 1), "nir_op_ffma: FMA.f32"),
@@ -204,6 +204,22 @@ pub const ROWS: [(Row, &str); 93] = [
     /* a mediump `fract` (tools/mali/testdata/fsvec_fract_mediump:
      * `FROUND.v2f16.rtn r1, r0.h00`) */
     (row(Alu::Ffloor, 16, 1), "nir_op_ffloor of one 16-bit lane: FROUND.v2f16.rtn a.hN"),
+    /* a mediump `clamp(x, lo, hi)` of a pair (tools/mali/testdata/
+     * gm2_fsmisc_3: `FMAX.v2f16 r0, r0^, 0x34000000.h11`, `FMIN.v2f16 r0,
+     * r0^, u2.w0`) */
+    (row(Alu::Fmax, 16, 2), "nir_op_fmax of two 16-bit lanes: FMAX.v2f16"),
+    (row(Alu::Fmin, 16, 2), "nir_op_fmin of two 16-bit lanes: FMIN.v2f16"),
+    /* a mediump `max(dot(N, L), 0.0)` (tools/mali/testdata/gm2_fsarith_1:
+     * `FMA.v2f16.clamp_0_inf r1, r2.h00, r3^.h00, r1^.h00`, the FCLAMP
+     * folded into its producer) */
+    (row(Alu::Fclamp(clamp::ZERO_INF), 16, 1), "nir_op_fclamp_pos of one 16-bit lane: FCLAMP.v2f16 .clamp_0_inf"),
+    /* a highp `pow(x, 100.0)` (tools/mali/testdata/gm2_fsarith_2:
+     * `FREXPE.f32.log` .. `FMA_RSCALE.f32 r0, u11.w1, r0^, 0x0.neg, r2^`,
+     * `F32_TO_S32`, `FEXP.f32`) */
+    (row(Alu::Fpow, 32, 1), "nir_op_fpow: bi_flog2_32 of the base, bi_fexp_32 of the exponent by it"),
+    /* a mediump `step(0.5, x)` of a pair (tools/mali/testdata/gm2_fsmisc_8:
+     * `FCMP_OR.v2f16.ge.m1 r0, r0^, 0x38000000.h11, 0x0`) */
+    (row(Alu::Fcmp(Cmpf::Ge), 16, 2), "nir_op_fge_pan of two 16-bit lanes: FCMP.v2f16.ge.m1"),
 ];
 
 /// A source of a one-lane 16-bit operation: its lane's half in both
@@ -213,6 +229,33 @@ pub const ROWS: [(Row, &str); 93] = [
 fn lone(s: Src) -> Src {
     s.swz(if s.swz == Swz::H11 { Swz::H11 } else { Swz::H00 })
 }
+
+/// `bi_flog2_32(dst, x)` (bifrost_compile.c:2499-2505) of the fp32 value
+/// `x`: `FREXPE.f32.log`, `S32_TO_F32`, `FADD_LSCALE.f32 -1.0, x`,
+/// `FLOGD.f32`, then `FMA.f32 flogd, add, exponent`, in the call order
+/// (fsarith_77_transc words 23-27).
+pub fn flog2(p: &mut Prog<'_>, x: Src) -> Result<u16, MaliError> {
+    let e = Src::ssa(ins(p, Op::FrexpeF32 { log: true }, &[x])?);
+    let ef = Src::ssa(ins(p, Op::S32ToF32, &[e])?);
+    let add = Src::ssa(ins(p, Op::FaddLscaleF32, &[Src { neg: true, ..ONE }, x])?);
+    let d = Src::ssa(ins(p, Op::FlogdF32, &[x])?);
+    ins(p, Op::FmaF32, &[d, add, ef])
+}
+
+/// `bi_fexp_32(dst, x, log2_base)` (bifrost_compile.c:2450-2460) of the
+/// fp32 value `x`, `log2_base` 1.0 for `exp2` and `log2(a)` for `pow(a,
+/// x)`: the scale `FMA_RSCALE.f32 x, log2_base, -0.0, 24` (times 2^24),
+/// its fixed point `F32_TO_S32` (no `.rtz`, `BI_ROUND_NONE`), then `FEXP.f32
+/// fixed, scale` (gm2_fsmisc_5, gm2_fsmisc_6, gm2_fsarith_1; the 24 a FAU
+/// word moved to a register, fau.rs).
+pub fn fexp2(p: &mut Prog<'_>, x: Src, log2_base: Src) -> Result<u16, MaliError> {
+    let scale = Src::ssa(ins(p, Op::FmaRscaleF32, &[x, log2_base, NEG_ZERO, Src::of(Idx::Const(EXP2_FIXED_BITS))])?);
+    let fixed = Src::ssa(ins(p, Op::F32ToS32Rte, &[scale])?);
+    ins(p, Op::FexpF32, &[fixed, scale])
+}
+
+/// The fraction bits of `bi_fexp_32`'s fixed point (`bi_imm_u32(24)`).
+const EXP2_FIXED_BITS: u32 = 24;
 
 /// `row`'s bit in a set of [`ROWS`] (a program's rows drawn).
 pub fn bit(row: Row) -> u128 {
@@ -254,7 +297,7 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
             p.push(i)?;
             t
         }
-        (Alu::Fclamp(c @ clamp::ZERO_ONE), 16, 1 | 2) => {
+        (Alu::Fclamp(c @ clamp::ZERO_ONE), 16, 1 | 2) | (Alu::Fclamp(c @ clamp::ZERO_INF), 16, 1) => {
             let t = p.temp()?;
             let mut i = Ins::new(Op::FclampV2f16, &[Dest::ssa(t)], &s[..1]);
             i.clamp = c;
@@ -275,6 +318,12 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
         (Alu::Fceil, 16, 1) => ins(p, Op::FroundV2f16 { round: Round::Rtp }, &[lone(s[0])])?,
         (Alu::Ffloor, 16, 1) => ins(p, Op::FroundV2f16 { round: Round::Rtn }, &[lone(s[0])])?,
         (Alu::Fmin, 16, 1) => ins(p, Op::FminV2f16, &[lone(s[0]), lone(s[1])])?,
+        (Alu::Fmax, 16, 2) => ins(p, Op::FmaxV2f16, &s[..2])?,
+        (Alu::Fpow, 32, 1) => {
+            let l = Src::ssa(flog2(p, s[0])?);
+            fexp2(p, s[1], l)?
+        }
+        (Alu::Fmin, 16, 2) => ins(p, Op::FminV2f16, &s[..2])?,
         (Alu::Frsq, 16, 1) => ins(p, Op::FrsqF16, &[lone(s[0])])?,
         (Alu::Frcp, 16, 1) => ins(p, Op::FrcpF16, &[lone(s[0])])?,
         (Alu::Icmp(cmpf @ (Cmpf::Eq | Cmpf::Ne)), 32, 1) => {

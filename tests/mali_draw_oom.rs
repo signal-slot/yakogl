@@ -415,8 +415,6 @@ const COMPILER_REFUSED: &[&str] = &[
     "random_declared_not_written",
     // a loop in a vertex shader
     "random_constant_varying_through_loop",
-    // a constant operation on a value that is not a finite normal float
-    "interaction_constant_varying",
 ];
 
 #[test]

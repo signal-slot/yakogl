@@ -91,6 +91,18 @@ pub fn f16_rtne(bits: u32) -> Option<u16> {
     (q < 0x7c00).then_some(sign | q as u16)
 }
 
+/// The fp32 bits of the normal (or zero) fp16 value `h` ([`f16_rtne`]'s
+/// results are such), exact.
+pub fn f16_bits(h: u16) -> u32 {
+    let sign = u32::from(h & 0x8000) << 16;
+    let e = u32::from(h >> 10 & 0x1f);
+    let man = u32::from(h & 0x3ff);
+    if e == 0 && man == 0 {
+        return sign;
+    }
+    sign | (e + 127 - 15) << 23 | man << 13
+}
+
 /// The generic varyings a stage may have (the selector keeps 16 varying
 /// locations, nir.rs).
 pub const MAX_VARYINGS: usize = 16;
@@ -433,8 +445,8 @@ impl UboLayout {
     /// type (no reference draws it).
     pub fn fs16(m: &Module<'_>, fs: &nir::Nir<'_>, highp: &dyn Fn(&str) -> bool) -> Result<UboLayout, MaliError> {
         use crate::gl::consts::{
-            GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4, GL_FLOAT, GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4,
-            GL_INT,
+            GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4, GL_FLOAT, GL_FLOAT_MAT4, GL_FLOAT_VEC2, GL_FLOAT_VEC3,
+            GL_FLOAT_VEC4, GL_INT,
         };
         let mut l = UboLayout::NONE;
         for u in m.uniforms.iter().filter(|u| u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK) {
@@ -457,6 +469,11 @@ impl UboLayout {
                 GL_FLOAT_VEC2 if u.array_len <= 1 => (2, true),
                 GL_FLOAT_VEC3 if u.array_len <= 1 => (3, true),
                 GL_FLOAT_VEC4 => (4, true),
+                /* a mat4: its columns in order as halves, each column a
+                 * load of its own (gm2_fsarith_1's `nm`: `FMA.v2f16 r2,
+                 * u2.w0, r0.h11, u2.w1`), as the vertex stage's fp16 matrix
+                 * ([`UboLayout::vs`]) */
+                GL_FLOAT_MAT4 if u.array_len <= 1 => (16, true),
                 _ => return Err(MaliError::FsUniform),
             };
             if halves && highp(u.name) {
@@ -464,8 +481,7 @@ impl UboLayout {
             }
             for e in 0..u16::from(u.array_len.max(1)) {
                 l.push(u.dword_off + e * comps, comps, halves)?;
-                /* as the other two layouts mark them; a matrix does not
-                 * reach here today (the match above refuses it) */
+                /* as the other two layouts mark them */
                 if u.array_len > 1 || is_matrix(u.gl_type) {
                     l.split_last();
                 }
