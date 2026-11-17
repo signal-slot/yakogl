@@ -488,3 +488,405 @@ words and test the result against 0 (`LSHIFT_OR`, then `CSEL.u32.eq` or
 `.not`), and that is the same for a true of `1` and of `~0`. The bytes do
 not depend on the values; with `--uniform-values` only the printed FAU
 words change.
+
+## Lowering map (at 008306cb)
+
+Plan #377 item `map-unitype`. A map from the steps of section 4 onto the
+compiler as it is at `008306cb`, for `lower-unitype`. It changes no code. The
+`file:line` citations below are of that commit; sections 1 to 6 cite
+`38ad30eb`, and the lines have moved since (`uniform_of` is now
+`nir.rs:996-1031`, its `_ =>` arm at `:1028`; the vertex `UniformPrecision`
+raise is `mod.rs:1307`; `fs16` is `select.rs:434-486`). Re-read the sites at
+the tip of the session: plan #367's lower-* items edit the same files. The
+tests are those of `tests/mali_deqp_unitype.rs`, run with
+`cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_unitype`.
+Paths without a directory are under `src/shaderc/online/mali/`.
+
+### M0. The raise sites at the tip
+
+| refusal | file:function (line) | condition |
+|---|---|---|
+| `UniformType`, the type, vertex | `nir.rs:uniform_of` (`:1028`) | `gl_type` outside float, vec2/3/4, mat4, int, uint, bool, ivec2/3/4, uvec2/3/4. `GL_FLOAT_MAT2`, `GL_FLOAT_MAT3`, `GL_BOOL_VEC2/3/4` and the non-square matrices fall through. Reached from `nir.rs:build`, arm `IrOp::LoadUniform` (`:3047`), and from `select.rs:UboLayout::vs` through `nir_fs.rs:uniform_extent` (`:5872-5895`, which ends in `nir::uniform_of` at `:5894`). |
+| `UniformType`, an int read | `nir.rs:build`, `IrOp::LoadUniform` (`:3050-3052`) | `gl_type == GL_INT` and the value is not only the index of a `LoadUniformIdx` (`nir.rs:index_only`, `:1053`). This is an int value (intval's), not a type refusal. |
+| `UniformType`, highp fragment | `nir_fs.rs:uniform_extent` (`:5894`) and `nir_fs.rs:uniform_load` (`:5903`), through `select.rs:UboLayout::fs32` (`:393`) | a highp FS reads a type `uniform_of` lacks (the F2 shape; mixprec's after the type). |
+| `UniformPrecision` | `mod.rs:compile_stage`, vertex arm (`:1302-1308`, raise `:1307`) | a uniform the program reads (`ubo.word(..)` is `Some`) whose `uniform_precision` (`mod.rs:1197-1220`) is not `High` and that has no half (`ubo.half(..)` is `None`). A half exists only for a plain float, vec2/3/4 or mat4, no array (`nir.rs:fp16_uniform`, `:1043`). A mediump struct member, and a uniform with no declaration for `uniform_precision` (`gl_DepthRange.near`: its base `gl_DepthRange` is no entry of `decls`, `:1203-1205`, so the lookup is `None`), fall here. |
+| `FsUniform`, the type | `select.rs:UboLayout::fs16` (`:460`, the `_ =>` arm) | any type but int/bool (no array), bvec2/3/4 (no array), float, vec2/3 (no array), vec4. `GL_INT_VEC2/3/4` and every `GL_FLOAT_MAT*` fall through. `fs16` is called from `mod.rs:compile_stage` (`:1459`, `:1469`, `:1475`) and from `vec16.rs:program` (`:448`). |
+| `FsUniform`, highp | `select.rs:UboLayout::fs16` (`:462-464`) | `halves && highp(u.name)`. `highp` is `mod.rs:1395`: `prec(name)` is `High`, and `prec` is a plain name lookup (`mod.rs:1239`), so a struct member or `gl_DepthRange.*` is never highp there. |
+| `FsUniform`, the read | `nir_fs.rs` `:6908`, `:6918`, `:6922`, `:7153`, `:7175`, `:7432`, `:7589`, `:8047`, `:8447`, `:8450`, `:8495`; `vec16.rs:1086-1087` | a half of the fp16 block read other than as its own aligned pair or one lane (`ubo.half(d)` is `None`, or the swizzle has no form). |
+| built-in | `lower.rs:3393-3396` ("this use of gl_DepthRange is not lowered yet") | only the struct as a whole. The members already are rows (`gl_DepthRange.near/far/diff`, float, after the application's uniforms: `lower.rs:14841-14870`), so the front end needs no change. |
+
+Pins in `src/shaderc/online/mali/tests.rs` that a step moves, and are edited
+in the same commit (a test that pins a refusal moves with it): `:1178` (mat2,
+`UniformType`), `:1182` and `:1185` (`UniformPrecision`), `:1194-1196` and
+`:7955` (`FsUniform`), `:4016` (`UniformType`), `:1087` (comment on the bool
+uniform).
+
+### M1. What every step shares: the row model and the frame
+
+* `select.rs:UboRow` (`:241-266`) is `comps` consecutive front-end dwords at
+  Mesa's word `word`, fp32 or fp16 `halves`. `UboLayout::push` (`:332`)
+  appends a row; `row` (`:487`) finds the row of a dword by `dword ..
+  dword + comps`; `half` (`:499`) gives `(word, half, first word)`; `fau`
+  (`:559-570`) turns a word into `FauWord::Uniform { dword }` or
+  `UniformHalves { lo, hi }`; `load_of` (`:532`) cuts the loads; `split_last`
+  (`:345`) marks a row's words as loaded one by one.
+* **A matrix cannot be one row when its columns do not touch.** The front
+  end strides a `mat3` column to 4 dwords and leaves one unused
+  (`reflect.rs:type_layout`, `:136-175`: `mat3` is 12 dwords, `mat2` is 4
+  with stride 2, `mat4` is 16). So a `mat3` is **three rows**, `dword = off
+  + 4c`, `comps = 3`, in consecutive words; a `mat2` and a `mat4` are one
+  row (no hole). Today `vs`, `fs32` and `fs16` push one row per uniform
+  (`select.rs:377`, `:409`, `:469`) and call `split_last` for an array or
+  matrix (`:377-379`, `:409-411`, `:469-471`). The per-column loop is new in
+  all three and is the change shared by M2, M4 and M7. A helper
+  `matrix_cols(gl_type) -> Option<(cols, rows, stride)>` in `select.rs`,
+  used by those three and by `nir.rs`, keeps one table.
+* **The frame needs no change for any step.** It fills the block from the
+  same rows (`src/mali/frame.rs:UboRow`, `:552-557`; `words`, `:559-566`;
+  the fill at `:3008-3022`: `uniforms[r.dword + k]` for a 32-bit row, and
+  for `halves` `f32_to_f16(uniforms[r.dword + c])` for `c < r.comps`, zero
+  past it). The push words come from `UniformHalves { lo, hi }` and
+  `Uniform { dword }` (`:3059-3063`; bounds in `check_draw`, `:2601-2602`).
+  `src/mali/program.rs:77-80` and `:108-111` copy rows and words through.
+  What a step needs is that the compiler's `dword` and `comps` name the
+  front-end dwords the GL core fills. The pad half of a `mat3` column is
+  `hi: None` (`select.rs:563`: `k + 1 < r.comps` is false), and
+  `frame.rs:3014` writes zero for it. The fp16 conversion is the frame's
+  `f32_to_f16` (`frame.rs:586`, round to nearest even, as `_mesa_float_to_half`,
+  section 3.2): a mediump matrix needs nothing new there. A bool or an int
+  is stored raw. GL's `~0`-for-true (section 3.3) is the GL core's
+  conversion at `glUniform`, not the frame's; the `vsbvec3` reference does
+  not depend on it (References).
+* `gl_DepthRange` values come from `src/mali/backend.rs:1816-1818`
+  (`near`, `far`, `diff`); nothing to add.
+
+### M2. Step 1: vertex fp32 `mat2`/`mat3` (T1, T4, T5)
+
+(a) Raise: `nir.rs:uniform_of` `:1028`, through `nir.rs:build` `:3047` and
+`select.rs:UboLayout::vs` (`uniform_extent`, `nir_fs.rs:5894`).
+
+(b) Change:
+
+* `nir.rs:uniform_of`: add `GL_FLOAT_MAT2 => 4` and `GL_FLOAT_MAT3 => 12`
+  (front-end dwords, as `u.dwords`; Mesa's block holds 9 words for the mat3).
+* `nir.rs:build`, arm `IrOp::LoadUniform` (`:3047-3077`): the load is one
+  column. Today `(base, size)` is `(u.dword_off + (dword_off - u.dword_off)
+  / 4 * 4, 4)` when `total == 16`. Make it per type: mat3 base `off +
+  4*col`, `size = 3`; mat2 base `off + 2*col`, `size = 2`, with `col =
+  (dword_off - u.dword_off) / stride`. The guard `first + comps > size`
+  (`:3057`) then holds per column. `vsmat2_highp` and `vsmat3_highp` read
+  each lane as its own `uN.wM` (`FADD.f32`, and the `FMA.f32` chain of
+  `mat3 * vec3`): that is the `else` arm `:3069-3074`, no new instruction.
+* `select.rs:UboLayout::vs` (`:351-385`): rows per column as M1 (mat3: three
+  rows of 3 at front-end `off + 4c`, Mesa words `3c..3c+2`, nine words;
+  mat2: one row of 4), each `split_last` (Mesa loads a column; the offset is
+  not the whole uniform's, `load_of`). The `halves` test (`:368-371`) is
+  false here.
+* `fs32` (`:393`) takes the same rows through the helper, but the highp
+  matrix arithmetic of F2 is mixprec's.
+
+(c) Frame: none (M1).
+
+(d) Un-ignores, in order: `vsmat2_highp`, `vsmat3_highp`. In the same commit
+the pin of `vsmat3_light` in `REFUSED` (`tests/mali_deqp_unitype.rs:27-48`)
+moves from `OTHER_TYPE` to the uniform-array text (`mod.rs:417`, "a uniform
+array"), because its mat3 passes and the `Light` struct array stands first;
+it stays `#[ignore]`d for `lower-uniarray`.
+
+(e) glmark2: none moves. The verdicts file's only uniform-type text is row 20
+(`tests/fixtures/mali_glmark2_verdicts.txt:52`, `ideas:speed=duration vs
+51b2`), an int read (M9), not a matrix. Dependencies: none for the mat2/mat3
+loads. `div` (componentwise `fdiv`), `matrixCompMult` and matrix attributes
+are other families' arithmetic. `vsmat3_light` needs lower-uniarray (the
+`Light` array) and the loops.
+
+(f) Risks: (1) `u.dwords` of a `mat3` is 12 by `type_layout` (3 columns of
+stride 4); check it in `reflect` before writing the row ranges. (2) Mesa's
+block has 9 words with no hole; `UboLayout::push` advances by `row.words()`
+(`:339`), so consecutive rows are consecutive words. (3) A matrix read in one
+column still takes all its words in Mesa (a used uniform is laid whole), so
+`vs` must loop all columns, not the read ones. (4) An array of matrices is
+refused first by `uniform_of` (`:1008`), unchanged.
+
+### M3. Step 5 (the smallest, do it first): highp uniform in a mediump fragment shader, and `gl_DepthRange` (F4, F5, P3)
+
+(a) Raise: `select.rs:UboLayout::fs16` `:462-464` (fragment); `mod.rs:compile_stage`
+`:1307` (vertex, `gl_DepthRange.*` has no precision); `vec16.rs:program`
+`:448` (a one-uniform colour goes through `vec16` first, `mod.rs:1396-1398`).
+
+(b) Change:
+
+* `mod.rs:uniform_precision` (`:1197-1220`): a member of `gl_DepthRange` is
+  highp (GLSL ES 1.00 section 7.5). Return `Some(Precision::High)` when
+  the base is `gl_DepthRange`. This one line makes `depthrange_vs` pass `:1307`.
+  The FS `prec` closure (`:1239`) is a plain `find`: make it `uniform_precision`
+  too, as the vertex arm does at `:1290`, or `highp(name)` is `false` for a
+  struct member and `gl_DepthRange.*` and `fs16` lays them out as halves.
+* `select.rs:UboLayout::fs16` (`:462-464`): when `halves && highp(name)`,
+  push `(comps, false)` instead of returning `FsUniform`. Mesa keeps an
+  explicitly highp uniform fp32 (section 3.2); the four words come out as
+  `FauWord::Uniform` (`select.rs:567`). An array stays refused.
+* `nir_fs.rs`, the mediump `LoadUniform` arm (`:4867-4892`): it reads every
+  lane with `uniform_lane(.., 16, ..)` unless the type is int/bool (`int`,
+  `:4872-4875`). A highp uniform in a mediump shader must read each lane as
+  **32 bits** (`uniform_lane(d, 32, at)`, `:1334`) and narrow it with
+  `Alu::F2fmp` (the narrow that `V2F32_TO_V2F16` is). The colour's pair read
+  (`vectorise`, `:6836`) then sees a narrowed pair. `Leaf::Uniform`
+  (`:6908-6918`) is for fp16 halves and must keep refusing an fp32 word.
+  `fshighp_color` is two `V2F32_TO_V2F16` straight from four FAU words
+  (References, question 3). `depthrange_fs`: near and far in one
+  `V2F32_TO_V2F16`, `diff` through `FMA.f32` and `FADD.f32 r0.h0`.
+* `vec16.rs:program` (`:424-448`) collects every `At::Uni` as a 16-bit
+  one-component node for `fs16`. A highp uniform must not become one: the
+  program returns `None` for it and `nir_fs::walk` decides (as for a mixed
+  shader, `mod.rs:1396`).
+
+(c) Frame: none (M1; `Uniform { dword }`, `frame.rs:3059`). Check only that
+`backend.rs:1816-1818` fills the three rows the front end appends after the
+application's uniforms.
+
+(d) Un-ignores, in order: `depthrange_vs` (the one line, `:1307`),
+`fshighp_color`, `depthrange_fs`.
+
+(e) glmark2: none expected (no `ok` glmark2 shader declares a highp uniform
+in a mediump fragment shader). If the corpus test shows a row moving, move it
+forward in `tests/fixtures/mali_glmark2_verdicts.txt` in the same commit. No
+dependency on intval or uniarray. mixprec owns F2 and shares `fs16`'s highp
+arm and `mod.rs:1437-1449`: land one of the two first and rebase.
+
+(f) Risks: (1) The change is for `!fs.highp` shaders only; it must not set
+`f.mixed` (`mod.rs:1442-1447`, `:1479`) for a value narrowed at once. (2)
+Check in the reference that `fs.highp` is false for the scissor shader (the
+colour is mediump), else the path is `fs32` + `select_highp` and the work is
+elsewhere. (3) `fs16` is also `vec16::program`'s layout: both call sites must
+agree on a row's `halves`.
+
+### M4. Step 2: vertex fp16 `mat2`/`mat3` (T2, T3)
+
+(a) Raise: `nir.rs:uniform_of` `:1028` (type), then `mod.rs:1307`
+(`UniformPrecision`: `fp16_uniform` takes no mat2 or mat3, so no half).
+
+(b) Change:
+
+* `nir.rs:fp16_uniform` (`:1043-1046`): add `GL_FLOAT_MAT2 | GL_FLOAT_MAT3`
+  to the `float` match, and its comment (`:1030-1042`).
+* `nir.rs:build`, fp16 arm (`:3059-3068`): `load16(Kind::Uniform { dword:
+  base, comps: size })` with the column's `base` and `size` of M2, each lane
+  `F16_TO_F32` of its half (`vsfp16_19_hello`'s form, unchanged).
+* `select.rs:UboLayout::vs` (`:368-379`): the `halves` test finds a 16-bit
+  `Kind::Uniform` node inside `dword_off .. dword_off + dwords`: true for a
+  column. Rows as M1: mat3 three rows `comps = 3, halves = true`
+  (`words() = div_ceil(3, 2) = 2`, six words, as `vsmat3_mediump`); mat2
+  one row `comps = 4, halves = true` (two words, one a column). The pad half
+  is `UniformHalves { hi: None }`, so lane 2 is `uN.wM.h00`. The mat4's split
+  rows (`vsfp16_19_hello`, words 6-13) are the model.
+* `vsapi_mat2` adds the 0.05 compare in fp16 (`FCMP_OR.v2f16.lt` on a max of
+  `abs` lanes, then `S16_TO_S32` and `CSEL`). If it stops at another refusal,
+  pin that one and leave the test ignored; the form is not this family's.
+
+(c) Frame: none (M1): `frame.rs:3012-3016` writes `h(2k) | h(2k+1) << 16`
+with zero past `comps`, the mat3's pad half.
+
+(d) Un-ignores, in order: `vsmat2_mediump`, `vsmat3_mediump`, `vsmat3_lowp`,
+`vsapi_mat2` (the last only if its compare passes).
+
+(e) glmark2: none moves (the rows are new and no `ok` row reads a mat2 or
+mat3). No dependency on intval or uniarray.
+
+(f) Risks: (1) lowp is laid out as mediump (`vsmat3_lowp` is the check):
+`fp16` (`mod.rs:1291-1293`) takes both already. (2) A one-lane read of a
+column must not become a 16-bit load at byte offset 2 mod 4 (not pushable,
+section 3.5); the reference pushes all six words whole, so keep the
+one-word loads. (3) A mat3 times vec3 in fp16 may use `FMA.v2f16`
+pairs: an arithmetic form outside this family.
+
+### M5. Step 3: vertex mediump struct members (P1, P2)
+
+(a) Raise: `mod.rs:compile_stage` `:1307`. The member `val.a` is mediump
+(`uniform_precision` reads it from the struct's spelling, `:1205-1219`) and
+has no half, because `fp16` (`mod.rs:1291-1293`) names a plain uniform only
+and a struct is never lowered (section 3.2).
+
+(b) Change:
+
+* `mod.rs:1302-1308`: accept a struct member (`name` contains `.`) of
+  precision Medium or Low as an **fp32** row. The test becomes "highp, or a
+  struct member": Mesa keeps the struct fp32 and reads each mediump member
+  through `f2fmp`.
+* `nir.rs:build`, `LoadUniform` (`:3047`): the member is read fp32 (arm
+  `:3069`); where fp16 arithmetic uses it the walk inserts `Alu::F2fmp`, as it
+  does for varyings. `vsstruct_partial` and `vsstruct_rip` fold
+  `f2f32(f2fmp(x))` to `x` (References, question 2): no conversion for
+  `res = val.a`; the one `FMA.f32 x, 0, x` before the store belongs to the
+  varying store, not to the member. `vsapi_struct` narrows with
+  `V2F32_TO_V2F16` pairs and `FADD.f32 rN.h0` for the odd lane.
+* **The fragment side** (`vsstruct_add` and `vsapi_struct` are compiled as
+  pairs; the FS reads both members as fp32 words and narrows them). `fs16`
+  pushes a member by its `gl_type`, `halves = true` for a float, because
+  `prec` (`mod.rs:1239`) is a name lookup that returns `None` for `val.a`
+  and `highp(name)` is false. That is a **silent wrong layout**, not a
+  refusal, if a struct uniform reaches `fs16`: find out first whether a
+  struct uniform in an FS is refused earlier, and write the test that pins
+  it. Then make `fs16` push a member as `(comps, false)` and the mediump
+  `LoadUniform` arm (`nir_fs.rs:4867`) read it at 32 bits with `F2fmp`:
+  the same mechanism as M3, so do M3's `nir_fs.rs` change first.
+* `UboLayout::vs` (`:351`): a member is one row of its own (`m.uniforms`
+  holds `val.a` and `val.b` as entries with their own `dword_off`), fp32, in
+  declaration order: nothing new, since the node's `bits` is 32.
+
+(c) Frame: none; the row is fp32 (`frame.rs:3017-3018`).
+
+(d) Un-ignores, in order: `vsstruct_partial`, `vsstruct_rip`,
+`vsstruct_add`, `vsapi_struct`. (`depthrange_vs` is taken by M3.)
+
+(e) glmark2: the one struct uniform of the corpus, `texfill.vert`'s
+`u_fill` (`mod.rs:1286-1289`), is highp-qualified and takes the `High` arm
+first: the new arm must not change it. No verdict is expected to move. No
+dependency on intval. Arrays of structs (T10, P4) are lower-uniarray's, with
+`uniform_precision`'s `None` for a nested member (`:1203-1205`).
+
+(f) Risks: (1) The struct is fp32 in both stages while a plain mediump
+uniform beside it (`ref_out0` in `vsstruct_add.frag`) is fp16: one block mixes
+fp32 and fp16 rows. `halves` is a row attribute (`select.rs:249-253`), so
+the layout supports it, but test the push and `load_of` on that mix. (2) The
+reference's VS has no varying program (`out0 + dummy - dummy` folds); ours
+has one unless the fold matches, which is constop's or colourpair's rule: a
+mismatch there is pinned, not fixed here. (3) No check at `:1302` guards the
+FS path (see the fragment side above).
+
+### M6. Step 4: vertex `bvec2/3/4` load (T6, T7)
+
+(a) Raise: `nir.rs:uniform_of` `:1028`.
+
+(b) Change: add `GL_BOOL_VEC2 => 2`, `GL_BOOL_VEC3 => 3`, `GL_BOOL_VEC4 => 4`
+next to the `GL_BOOL` arm (`:1019-1027`). The int filter at `:3050` is
+`GL_INT` only; leave bools alone there (a bool is read through the same
+`IrOp::LoadUniform` and is intval's after the load). `UboLayout::vs` takes
+`comps` from `uniform_extent` and pushes `halves = false`. `reflect.rs:type_layout`
+has `BVec` already (`:151-153`, `bvec3` aligned to 4), so the row is `dword =
+off, comps = 3`.
+
+(c) Frame: none. The word is `uniforms[dword]` raw. The references only OR the
+words and test against 0 (References), so a true of 1 or `~0` gives the same
+bytes.
+
+(d) Un-ignores: **`vsbvec3` stays ignored** while the `==` of bvecs
+(`ball_iequal`: `LSHIFT_OR` + `CSEL.u32.eq`) is refused by intval's text
+(`IntValue` or `CompareForm`): move its pin in `REFUSED` from `OTHER_TYPE`
+to that text in the same commit. If `lower-intval-1` has landed and the
+compare passes, `vsbvec3` is un-ignored here.
+
+(e) glmark2: none. Dependency: **lower-intval** for the bvec `==` and
+`float(bool)` (`b2f32`).
+
+(f) Risks: `index_only` (`:1053`) and the `GL_INT` filter do not cover
+`GL_BOOL`; a bool used as an index is not a dEQP shape here.
+
+### M7. Step 6: fragment fp16 `mat2/3/4` (F1, F6's mat3)
+
+(a) Raise: `select.rs:UboLayout::fs16` `:460`, and `vec16.rs:448` (the same
+call).
+
+(b) Change:
+
+* `select.rs:UboLayout::fs16` (`:446-471`): add `GL_FLOAT_MAT2`,
+  `GL_FLOAT_MAT3`, `GL_FLOAT_MAT4` as `halves = true`. A mat2 is one row
+  `(4, true)` (two words), a mat4 one row `(16, true)` (eight words), a mat3
+  three rows `(3, true)` at `off + 4c` (two words each, six). Each row
+  `split_last` (the loop at `:466-470` already does it for `is_matrix`; the
+  comment at `:463-465` that a matrix does not reach here goes).
+* `nir_fs.rs`, mediump `LoadUniform` arm (`:4867-4892`): lane `c` of
+  front-end dword `dword_off + c` is `uniform_lane(.., 16, at)` (`:4881`);
+  `dword_off` already carries the column stride, so the lane read is
+  unchanged. `f.nir.uniform_load[n] = u.dword_off` (`:4882-4884`) records the
+  load's origin: for a matrix set it to the **column's** first dword, or
+  `load_of` cuts the wrong words.
+* Pair reads (`vectorise`, `:6896-6922`): lanes `(2k, 2k+1)` of a column are
+  one word (`Swz::H01`); lane 2 of a mat3 column is a half alone (`H00`, the
+  `d == e` arm, `:6909-6914`): no code. Test that the pad half is never
+  asked for. The other `Leaf::Uniform` readers (`:7153`, `:7175`, `:7432`,
+  `:7589`, `:8047`, `:8447`) all go through `ubo.half(d)` and follow the
+  rows. `fsmat4_mediump` is `FMA.v2f16` with `.h00`/`.h11` swizzles of the
+  vector.
+
+(c) Frame: none (M1; `frame.rs:3012-3016`).
+
+(d) Un-ignores, in order: `fsmat2_mediump`, `fsmat3_mediump`,
+`fsmat4_mediump`. `fsmulti` (float, ivec3, mat3, bvec2 in one block) needs M8
+too.
+
+(e) glmark2: none expected (no `ok` glmark2 fragment shader reads a matrix
+uniform). No dependency on intval. The `dynamic_*` matrix cases need matrix
+varyings (colour forms) and are outside this step.
+
+(f) Risks: (1) The VS of each pair is compiled first: the `fs*` references
+use a plain `mat4 * vec4` VS (`fsivec4` records the mediump fp16 path), so
+they reach the FS today; confirm with `refusals_pinned`. (2) A mat3 adds
+three rows, bounded by `MAX_LAYOUT_ROWS` (`select.rs:296`, 256) and, for a
+block the program loads, `MAX_UBO_ROWS` (`:301`, 32). (3) A matrix in an
+`fs.highp` shader goes to `fs32` and `uniform_of` (M2), not here.
+
+### M8. Step 7: fragment `ivec2/3/4` load (F3, F6's ivec3)
+
+(a) Raise: `select.rs:UboLayout::fs16` `:460`.
+
+(b) Change: add `GL_INT_VEC2/3/4` (and the `GL_UNSIGNED_INT_VEC*` types if a
+case needs them) with `array_len <= 1` as `(n, false)` next to the bvec arms
+(`:451-455`). In `nir_fs.rs`'s mediump `LoadUniform` arm add them to the
+`int` list (`:4872-4875`) so each lane is read as a raw 32-bit word. The use
+(`vec4(fTest).xy` is `S32_TO_F32` of `u2.w0` and `u2.w1`, then
+`V2F32_TO_V2F16`) is intval's `i2f`, as is the `==`.
+
+(c) Frame: none.
+
+(d) Un-ignores: `fsivec4` and `fsmulti` only once intval's `i2f` and the
+ivec/bvec `==` pass; otherwise both stay `#[ignore]`d and `REFUSED` moves
+their pin from `FS_MEDIUMP` to the new text. `fsmulti` also needs M7's mat3.
+
+(e) glmark2: none. Dependency: **lower-intval-1**.
+
+(f) Risks: `mod.rs:is_float_uniform` (`:1224-1226`) lists the int vector types
+`0x8B53..=0x8B58` and `0x8DC6..=0x8DC8`; `GL_BOOL_VEC4` (`0x8B59`) is not in
+it, so a `bvec4` uniform counts as float for the `mixed` test
+(`mod.rs:1442-1447`). Add it when bvec4 is taken.
+
+### M9. Step 0 (a decision) and the int read
+
+`nir.rs:3050-3052` raises `UniformType` for an int uniform read as a value.
+It should be intval's refusal (`IntValue`), so that the 148 cases of T8, T9,
+T11 and T12 move with their family, not with this one. The only glmark2
+verdict of the family that this can touch is row 20
+(`tests/fixtures/mali_glmark2_verdicts.txt:52`, `ideas:speed=duration vs
+51b2`): its text is "a uniform other than a float, ...". Whoever changes
+`nir.rs:3050` moves that row in the same commit. (The scene's
+`tools/hostharness/glmark2/FINDINGS-mali-allscenes.md:365` records the older
+"an integer or boolean value" text for it; that file is a record and is not
+edited.)
+
+### M10. Order, tests per commit, and dependencies
+
+1. M3: the `uniform_precision` line (`depthrange_vs`), then `fs16` and
+   `nir_fs.rs` (`fshighp_color`, `depthrange_fs`): the smallest complete
+   programs.
+2. M2: `vsmat2_highp`, `vsmat3_highp` (the `vsmat3_light` pin moved), with the
+   per-column rows helper.
+3. M4: `vsmat2_mediump`, `vsmat3_mediump`, `vsmat3_lowp`, `vsapi_mat2`.
+4. M5: `vsstruct_partial`, `vsstruct_rip`, `vsstruct_add`, `vsapi_struct`,
+   after M3's fp32-in-mediump read.
+5. M7: `fsmat2_mediump`, `fsmat3_mediump`, `fsmat4_mediump`.
+6. M6 and M8: `vsbvec3`, `fsivec4`, `fsmulti`: their pins move, or they
+   un-ignore, with `lower-intval-1`.
+
+Each commit un-ignores its tests, moves the other pins (`REFUSED` in
+`tests/mali_deqp_unitype.rs:27-48`, and the unit tests of M0), regenerates
+`tools/mali/corpus-verdicts.txt` and `tests/fixtures/mali_glmark2_verdicts.txt`
+only if a row moves (forward only), and runs `cargo test ... --test
+mali_deqp_unitype` plus the unit tests of `src/shaderc/online/mali/tests.rs`
+it touches.
+
+Dependencies: `lower-intval-1` for `vsbvec3`, `fsivec4`, `fsmulti` and the
+int read (M9); `lower-uniarray` for `vsmat3_light`, every array shape (T10,
+P4, F7) and the nested member of `uniform_precision`; `lower-mixprec` for F2
+(a highp matrix in the fp16 colour), which shares `fs16`'s highp arm and
+`mod.rs:1437-1449`. No frame change is needed by any step (M1);
+`frame-uniarray` (uniform arrays at fp16 strides) is a separate item.
