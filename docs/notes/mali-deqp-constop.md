@@ -499,3 +499,353 @@ Open points of section 9 that these settle:
 - The H1 site is unconfirmed on our side (section 3). Mesa's side is in
   section 8, "References made".
 - The VS S1 cases need `IntValue` in the compare fragment shader (intval).
+
+## 10. Lowering map (at 008306cb31fe)
+
+**Item map-constop, plan #377.** Read at `008306cb31fe`, the integration tip
+(`src/shaderc/online/mali/` has moved a few lines since section 3's `38ad30eb`,
+and #367's `420ea31e` added `const_dot`). Docs only: nothing was built or run,
+so each raise site below is named **by reading** the code against the
+reference's source. The first act of lower-constop is a probe that prints
+every pinned reference's first refusal (`file:line`) and checks this map.
+Paths are `src/shaderc/online/mali/` unless given. Every test of
+`tests/mali_deqp_constop.rs` is ignored today (28 tests, one `REFUSED` row
+each, `refusals_pinned`); a lowering un-ignores a test and deletes its
+`REFUSED` row in the same commit, or repins the row to the next refusal.
+
+### 10.1 What sections 7 and 8 get wrong, from the references and the code
+
+- **Section 7 step 3 (fold `a * c`) is withdrawn.** Mesa keeps both multiplies of
+  `op_degrees` (section 8). Only the exact case folds (`nir_fs.rs:1087-1100`,
+  `fsarith_70_loopcarry`); an inexact product is emitted as two `fmul`s (10.5).
+- **Section 7 step 4 cannot "append a `ConstF32`"** in `glsl.rs`'s `Tree`:
+  `instrs` is a fixed `&mut [IrOp]` copy (`glsl.rs:76`, `alloc_copy` at `:165`)
+  and a value's id is its position. The `+0.0` is made per use, where the NIR
+  builders read the operand (10.6).
+- **The fold is per IR op, not per built-in.** The front end has expanded
+  `mod`, `smoothstep`, `degrees`, `asin`, `atan` into IR ops
+  (`builtin_call.rs:988-1130`) that are not Mesa's GLSL IR bodies; folding each
+  op gives Mesa's bits only where the roundings coincide (10.2).
+- **Our highp FS `sqrt` is not `sqrtf`**: `nir_fs.rs:2381-2385` lowers it to
+  `frcp(frsq(x))`, three roundings when folded step by step; Mesa's GLSL fold is
+  `sqrtf` (`G/ir_expression_operation.py:454`). No reference has a constant
+  `sqrt`: keep it refused (R7).
+
+### 10.2 Step 1: fold the highp operations on constants (`nir.rs`)
+
+S1a, S1c, S5 and the highp counter loop.
+
+**(a) Raise sites**, `Nir::alu_sized` (`nir.rs:1966-2072`), all operands
+`Val::Const`, op not an intrinsic:
+
+| Site | Condition | Reached by |
+|---|---|---|
+| `nir.rs:1998` | an operand is not `plain` (`nir.rs:800-803`: zero or a normal float), tested for **every** op, so a bool `true` (`0xffffffff`) refuses before the op is looked at | `struct_param_out_vs`, `ce_atan_separate_fs` |
+| `nir.rs:2005` | `Alu::Ffma` | `ce_smoothstep_fs` (`ffma(-2, t, 3)`, `builtin_call.rs:1000`), `ce_mod_vec2_float_fs` (`ffma(y, -f, x)`, `:1019`) |
+| `nir.rs:2015` | `fold_float(Frsq)` is `None` (`fold.rs:56-57`) | `ce_inversesqrt_vec4_fs` only if its input leaves `sqrt_exact`; otherwise its first refusal is another row |
+| `nir.rs:2022-2059` | the catch-all arm: `Fclamp`, `Ffloor`, `Fceil`, `Ftrunc`, `Fcmp`, `Icmp`, `B2f`, `Bcsel`, `F2i`, `I2f`, the int ops, `Fsin`, `Fcos`, `Flog2`, `Fddx`, `Fddy` | `ce_floor_fs`, `ce_ceil_fs` (`nir_fs.rs:2386-2387`), `ce_fract_vec2_fs` (`Ffloor` inside `Ffract`, `:2389-2393`), `ce_sign_vec3_fs` (`Fcmp`, `B2f`, `:2395-2402`), `ce_mod` (`Ffloor`), `ce_asin_fs`, `ce_atan_separate_fs`, `loops_while_basic_highp_float_fs` (`Fcmp` on the counter; or `nir_fs.rs:4601` if the walk takes the compare) |
+| `nir.rs:2071` | the result is not `plain` | step 6 only |
+
+**(b) Functions to change and Mesa's rule.** All in `alu_sized`:
+
+- R1. Test `plain` only on the **float** operands of the op. A bool (`Bcsel`'s
+  condition, `B2f`'s source) is `0` or `0xffffffff` and is read as a bool.
+  Move the `:1998` test below the per-op split.
+- R2. `Ffloor`, `Fceil`, `Ftrunc`, `Fcmp`, `B2f`, `I2f`, `F2i` through
+  `fold::fold_float` (`fold.rs:24-93`; exact, no libm; shared with V3D and
+  PowerVR, not changed). `fract` is not an `Alu` here: it is `x + -floor(x)`
+  (`nir_fs.rs:2389`), GLSL's `x - floorf(x)` (`G/ir_expression_operation.py:564`),
+  the same two roundings.
+- R3. Add in `nir.rs`: `Fclamp(mode)` as `min(max(x, lo), hi)` of the mode's
+  bounds, and `Bcsel` on a constant condition (the arm taken; the other may be
+  a lane). Compare results are `0xffffffff` / `0` (`fold.rs:37`).
+- R4. `Ffma` of constants is **unfused**: `a * b` rounded, then `+ c` rounded
+  (`G/ir_expression_operation.py:755`; `fold_float`'s `Ffma` is `fx * fy + fz`).
+  Its source here is the front end's expansion of a built-in on constants, which
+  Mesa folds mul then add; NIR's fused `fmaf` (`N/nir_opcodes.py:1150`) never
+  meets a constant (the late fusion is after folding). Evidence: `ce_mod`'s FAU
+  `0x40233340` (unfused) against `0x40233335` (fused), section 8. This site is
+  also #367's (section 5): land R4 once, in whichever lower item comes first.
+- R5. `mod`: ours is `x * rcp(y)`, `floor`, `ffma(y, -f, x)`
+  (`builtin_call.rs:1013-1021`), Mesa's `x / y` true division. The floors agree
+  unless `x / y` is within an ulp of an integer; `87.65 / 3.7` is not. A host
+  test with a quotient at the edge pins the choice (fold as ours, or refuse a
+  `Ffloor` of a folded `Fmul(_, Frcp(_))` within 2 ulp of an integer). The same
+  caution for `smoothstep` (`:995-996`): `(4 - 3) / (5 - 3)` is exact.
+- R6. Keep refusing `Fsin`, `Fcos`, `Flog2` (Mesa's libm: `fmath` is within 1 ulp,
+  not glibc-exact; `fold_float` folds the exact cases only) and `Fsqrt` (10.1).
+- R7. `asin` and `atan`: Mesa's GLSL front end folds them through its own GLSL IR
+  bodies (`G/builtin_functions.cpp`); ours transcribes `nir_atan`/`build_asin`
+  (`builtin_call.rs:1066-1110`). `asin(0.0)` is `0.0` by any method.
+  `atan(-1.0, -1.0)` must give `0xc016cbe4` (section 8): the lower item computes
+  it on the host first; if the bits differ, `ce_atan_separate_fs` stays
+  ignored with its refusal repinned (no fitted constants).
+- Sign of zero and NaN: Mesa sets no float controls (section 4), so results are
+  IEEE; `plain` stops a fold that would give `NaN`, `inf` or a denormal until
+  step 6.
+
+**(c) Tests un-ignored**: `constop_ce_floor_fs`, `constop_ce_ceil_fs`,
+`constop_ce_fract_vec2_fs`, `constop_ce_sign_vec3_fs`,
+`constop_ce_inversesqrt_vec4_fs` (if its first refusal is in this table),
+`constop_ce_mod_vec2_float_fs`, `constop_ce_smoothstep_fs`, `constop_ce_asin_fs`,
+`constop_struct_param_out_vs`, `constop_loops_while_basic_highp_float_fs`;
+conditionally `constop_ce_atan_separate_fs` (R7). **Repinned, still ignored**:
+`constop_ce_floor_vs` (its fragment shader is the mediump `isOk` compare and
+refuses `IntValue` next, section 2; lower-intval un-ignores it).
+
+**(d) glmark2 verdicts that may move**: by reading none of
+`tests/fixtures/mali_glmark2_verdicts.txt:23` (bump `487d`) or `:27` (effect2d
+`3c3d`, `nir_fs.rs:4528`, `0.0 * TextureStepX`) reaches these arms. A program
+whose first refusal is a catch-all arm moves to its next refusal; the corpus
+run (`tests/mali_glmark2_corpus.rs`, `MALI_GLMARK2_WRITE=1`) decides and the
+fixture moves in the same commit.
+
+**(e) Risks.** (1) `tests.rs:1186` (`gl_Position = vec4(p, 0.0, 0.0)`,
+`ConstantFold`) is `rcp(0)` = `inf` refused at `:2071`: it must stay refused.
+(2) A folded operand now meets `Alu`'s rules (`nir.rs:2078-`: `Fadd(a, 0.0)`
+and the like) that no reference drew with a constant there; each un-ignored
+test must be byte-equal, not only compile. (3) The expansions differ from
+Mesa's GLSL bodies (R5, R7): equal on the measured cases, possibly not on
+`random.*`; the board rerun is the check.
+
+### 10.3 Step 2: constant `dot` and `normalize` in the highp fragment shader
+
+S1b; shared with #367 (section 5: the front end's `dot` is unfused).
+
+**(a)** `nir_fs.rs:2670-2682` (the highp `Fdot2/3/4` arm): `Fmul` of the last
+lane, then `Ffma` down to lane 0 through `op32`, so a constant dot reaches
+`nir.rs:2005`. `ce_dot_vec3_fs` and `ce_normalize_vec3_fs` stop here. The vertex
+arm folds already (`nir.rs:3212`, `const_dot` `:2478-2493`).
+
+**(b)** Before the chain call `nir::const_dot(n, va, vb)` (make it
+`pub(super)`): `result = a0*b0; result += a1*b1; ...` from **lane 0**, each
+product and sum rounded on its own (`G/ir_constant_expression.cpp:45-54`). The
+chain's order (last lane first, fused) differs, so its constants cannot be
+folded op by op. `normalize` is then `frsq` of the dot (`1 / sqrtf`, two
+roundings, `nir.rs:2012-2016`) and the lane products by it. Mesa's words: `dot`
+`0x40400000`, `normalize` `0x3f13cd3a`. The mediump twin (`nir_fs.rs:4789-4806`)
+gets no change: no reference draws a constant mediump dot.
+
+**(c)** `constop_ce_dot_vec3_fs`, `constop_ce_normalize_vec3_fs`.
+**(d)** none by reading (bump `487d`'s `normalize` is of a computed map vector).
+**(e)** A `normalize` of a zero vector gives `rsq(0)` = `inf`: `plain` keeps it
+refused. Both lower items edit this site: coordinate with #367.
+
+### 10.4 Step 3: two fp16 constants in the mediump walk (`nir_fs.rs`)
+
+S2a, S2c, S3.
+
+**(a) Raise sites:**
+
+| Site | Condition |
+|---|---|
+| `nir_fs.rs:1070` (`Fs::op`) | `Fmul` of two constants in a lane of an operation that is **not** all constant |
+| `nir_fs.rs:1102` | `Fadd` of two constants, the same |
+| `nir_fs.rs:4528` | the walk's `Fmul`/`Fadd` with **every** lane constant: an operand or the result not `f16_exact` (S3's `0.05` and `0.333333`; S2c's `1.0 + 0.0` is exact) |
+| `nir_fs.rs:4601` | a compare of two constants that `nir::fold_int` does not fold (S3's `ndx < 1.0`) |
+| `nir_fs.rs:5595` (`Terms::fold`) | an operand or result not `plain`: none seen |
+
+`:1070` and `:1102` are reached when the vector has computed lanes beside
+constant ones (`color = vec4(res, 0, 0, 1) * 0.04 + 0.50`: lanes `y, z, w` are
+`const * const`); the all-lane block `:4507-4529` takes a fully constant vector.
+
+**(b) Rule.** `nir_opt_constant_folding` at 16 bits is
+`f16_rtne(op(f32(a), f32(b)))` with `a`, `b` the fp16 values: `lower_precision`
+rounds each mediump constant with `_mesa_float_to_half` (RTNE,
+`G/lower_precision.cpp:739-746`), and `N/nir_constant_expressions.py:551-556`
+rounds the result. A product or sum of two halves is exact in fp32, so one
+rounding. Mesa folds a lane only where its **pair** is all constant (section 8:
+`op_degrees`' lanes `z, w` are the FAU word `0x38523800`; lanes `x, y` stay an
+`FMA.v2f16` that carries `y`'s constant). Changes:
+
+- In the pair loop of the `Fmul`/`Fadd` arm (`nir_fs.rs:4561-4583`): for a pair
+  whose lanes all have two constant operands, fold each lane to
+  `Val::Const(fp32 bits of the half)` of
+  `f16_rtne(op(half(a), half(b)))`, `half = select::f16_rtne` (`select.rs:77-92`).
+  The fp32 bits of the half keep later `f16_exact` tests true. `f16_rtne` is
+  `None` for a subnormal, a zero from non-zero operands or an overflow: keep
+  `ConstantFold` there (no reference).
+- For a pair with a computed lane beside a constant-operand lane (`:1070`,
+  `:1102`): do not refuse; make `f.node(op, [Const(a), Const(b)])` with the
+  operands rounded to halves so the lane stays an ALU lane (`FMA.v2f16`'s second
+  lane in `op_add_assign_effect` and `op_minus`). Whether `node()` and the pair
+  packer (`vectorise`, `nir_fs.rs:6751`) accept a node of two constants is **not
+  checked**; the first host run shows it, and if not the constant must move to
+  the pair's FAU operand. It is the main risk of the step.
+- A lone lane (a `vec3`'s `z`, partner `Undef`) is a pair of one: same rule;
+  `op_add_assign_effect_mediump_vec3_fs` is its reference.
+- `:4528`: replace the `f16_exact` test of the operands and the result by the
+  same `f16_rtne` fold; #367's `gm2_constfold_2..6` (exact operands) must stay
+  byte-equal (`tests/mali_arith_const.rs` and the `gm2_constfold_*` tests).
+- `:4601`: a compare of two fp16 constants folds on the halves' float values to
+  the bool. It unrolls S3's counter (`0.05`, `0.3833`, `0.7168`, `1.05`: three
+  passes of `res.yzwx`, so `res` is `coords.wxyz`).
+
+**(c) Tests un-ignored**: `constop_op_abs_mediump_float_fs`,
+`constop_op_minus_lowp_float_fs`, `constop_op_add_assign_effect_mediump_vec3_fs`,
+`constop_matrix_preinc_mediump_mat3_fs`, `constop_loops_for_basic_mediump_float_fs`.
+**Repinned**: `constop_op_abs_highp_float_fs` (the mixed-precision program:
+`MixedPrecision` next, lower-mixprec). `constop_op_degrees_mediump_float_fs`
+waits for step 4.
+
+**(d)** none by reading (effect2d `3c3d`'s `:4528` has a uniform operand); the
+corpus run decides.
+**(e)** `:1070`/`:1102` are today's guard against emitting a `Fmul` of two
+constants: mixed vectors now emit ALU lanes with a constant in both operands,
+which no other reference has. A `tests.rs` pin of `ConstantFold` for such a
+shape changes (`grep ConstantFold tests.rs`; `:8853` is one, step 4).
+
+### 10.5 Step 4: S2b keeps both multiplies (`nir_fs.rs:1087-1100`)
+
+**(a)** `nir_fs.rs:1092` (`Fs::op`, the `const_product` arm): the folded `c1 * c2`
+not `f16_exact` returns `ConstantFold`. `constop_op_degrees_mediump_float_fs`
+(`in0 * 57.28125 * 0.04`) stops here, on lane `x`, before step 3's lanes.
+
+**(b)** Mesa keeps `FMA.v2f16 x * 57.28125`, then `FMA.v2f16 * 0.04 + 0.50`
+(section 8): no `a * c`. Why the rule `~fmul(#a, fmul(b, #c))`
+(`N/nir_opt_algebraic.py`, the reassociation of constants) folds case 70's
+`(acc * 2.0) * 0.5` but not this is a **measured** difference with no cause
+established. The criterion both references satisfy is "fold when the folded
+constant is exact in fp16", which is what the code has. So: add that test to the
+arm's guard (`self.const_product(x, y)` is `Some` **and** `f16_exact(c1 * c2)`),
+and let an inexact product fall to `(AluOp::Fmul, _) => self.node(Fmul, [x, y])`
+(`:1105`) instead of returning. Do not generalise from two references: the lower
+item draws one more inexact product with `tools/mali/deqp_ref.sh` before it
+relies on the criterion.
+
+**(c)** `constop_op_degrees_mediump_float_fs` (with step 3: its `y, z, w` lanes
+and `opt.rs`'s fusion into `FMA.v2f16 * 0.04 + 0.5`).
+**(d)** none by reading (a mediump `fmul(fmul(x, #c1), #c2)` with an inexact
+product).
+**(e)** `tests.rs:8853` (`* 0.1 * 0.3` is `ConstantFold`) is drawn by no
+reference ("they pin the walk, not Mesa", section 5 of
+`docs/notes/mali-constant-products.md`): re-pin it in this commit.
+
+### 10.6 Step 5: N1, -0.0 through a variable (`glsl.rs` and the NIR builders)
+
+117 cases, almost all `random.*`.
+
+**(a) Raise sites** (`glsl.rs`, `Tree::neg_zero_compares` and `plus_zero`, called
+from `:177`):
+
+| Site | Condition |
+|---|---|
+| `glsl.rs:1841` | a compare with a `-0.0` side whose other side may fold to a constant (`maybe_const`) |
+| `glsl.rs:1895` | `fneg` of a value that may fold to a zero the rule cannot name (`-abs(0.0)`, a local stored twice) |
+| `glsl.rs:1902` | a `ConstF32` with `-0.0` lanes that other readers share (`zero_for_compares` is not `Some(true)`): `nz_shared_vs` |
+| `glsl.rs:1912` | any other value that folds, or may fold, to `-0.0` in a lane read: `const float z = -0.0;`, `-1.0 * 0.0`, `vec2(-0.0, 1.0).x`: `nz_local_cmp_*`, `nz_prod_vs` |
+
+**(b) Rule.** Copy propagation hands the compare a `load_const -0.0`;
+`flt/fge(a, -0.0) -> (a, 0.0)`, `feq(-0.0, a) -> feq(a, 0.0)`,
+`fneu(a, -0.0) -> fneu(0.0, a)` (`N/nir_opt_algebraic.py:771-776`) build a **new**
+`0.0` for the compare, and another reader keeps `-0.0` (`nz_shared_vs`: the
+compare's inline `0x0`, the output lane's FAU word `0x80000000`). A compare of a
+variable holding `-0.0` is the same as one of the literal.
+
+Change: `Val::Const` is per use in the NIR, so rewrite where the compare is
+**built**: the vertex walk's `AluOp::Feq | Flt | Fle` arms (`nir.rs:3317-3324`)
+and the fragment walk's compare arms (`nir_fs.rs:4586-4620`, and `op32`'s
+`Fcmp`): an operand lane that is `Val::Const(F32_NEG_ZERO)` becomes
+`Val::Const(0)`, with the side convention above (`Fle(a, b)` is `fge(b, a)`,
+`glsl.rs:1816`; `feq`/`fne` swap as `neg_zero_compares`' `swap`). In `plus_zero`
+return `Ok(None)` instead of the refusal at `:1902` and `:1912` only for a lane
+the fold **knows** is `-0.0` (`Lane::K(F32_NEG_ZERO)`); keep the refusals at
+`:1841`, `:1895` and for a `may_be_neg0` that is not `K` (a local stored twice,
+`-abs(0.0)`: no `Val::Const` exists at the NIR level for those). The sign
+survives at the other readers, as in Mesa.
+
+**(c) Tests un-ignored**: `constop_nz_local_cmp_fs`, `constop_nz_local_cmp_vs`,
+`constop_nz_prod_vs`, `constop_nz_shared_vs`. (`nz_local_cmp_fs` may meet
+`ColourForm` first, section 3; un-ignore only if byte-equal, else repin.)
+
+**(d)** `mali_glmark2_verdicts.txt:61` (terrain `1637`, `NegZeroShared`) moves
+to its next refusal or `ok`.
+
+**(e) Risks.** (1) `tests.rs:1177` and `:7930-8058` pin `NegZeroShared`
+(`a_shared_negative_zero_turns_each_compare_or_is_refused`,
+`a_negative_zero_folded_from_other_values_is_mesa_s_or_refused`,
+`a_negated_operand_the_zero_rule_cannot_fold_is_refused`,
+`a_loop_carried_negative_zero_is_refused`,
+`a_compare_of_a_maybe_constant_with_negative_zero_is_refused`): those whose
+operand is a *known* `-0.0` change; the "maybe" and "loop-carried" ones **stay
+refused**. Re-read each against its reference first. (2) `fmul(a, ±0.0) -> 0.0`
+under `nsz` (`:277-278`) is another rule: do not fold a product's zero sign
+through the compare rewrite. (3) VS and FS must give the same words for one
+source (`nz_local_cmp_vs` and `_fs`).
+
+### 10.7 Step 6: non-finite and denormal folds (optional)
+
+**(a)** `nir.rs:1998` (operand not `plain`) and `:2071` (result not `plain`),
+`plain` at `:800`; the mediump twins `nir_fs.rs:4528`, `:5595`.
+`constop_cf_inf_fs` (`3.0e38 * 10.0`) and `constop_cf_denorm_fs`
+(`1.0e-30 * 1.0e-15`) refuse at `:2071`.
+**(b)** Float controls 0: Mesa keeps IEEE results (section 4): `0x7f800000` for
+the product (the FAU word the compare reads) and `0x00000001`, unflushed. Host
+`f32` `+ - * /`, `min`, `max` are IEEE and do not flush on x86-64 or aarch64.
+Allow any `f32` result of `Fadd`, `Fmul`, `Fmin`, `Fmax`, `Fneg`, `Fabs` and the
+compares; keep `Frcp(0)`, `Frsq` of a negative and every `NaN` operand or
+result refused (a `NaN` payload is not measured). `fold::fold_float` stays
+unchanged (other back ends): do it in `nir.rs`.
+**(c)** `constop_cf_inf_fs`, `constop_cf_denorm_fs`. **(d)** none.
+**(e)** `tests.rs:1186` is `Frcp(0)`: `Frcp` keeps `plain` on its result. A
+denormal reaching `F2f16` gets `Fp16Inexact` (`nir.rs:1980`). `fau.rs` and
+`emit.rs` have not carried an infinity or a denormal immediate: the byte test
+shows it.
+
+### 10.8 Step 7: H1, the fp16 constant of a moved varying (`Fp16Inexact`)
+
+`constop_mat3sub_vs`; 3 cases. Last, and left to a second session if 1-6 run
+long.
+
+**(a)** The sites at the tip: `nir.rs:1980` (a constant `F2f16` not exact; also
+`gl_PointSize`, `:3693`), `vec16.rs:476`, and in `nir_fs.rs` `:1946`, `:6753`
+(`vectorise`'s `f16`, a moved varying lane's constant), `:7147`, `:7173`,
+`:7208`, `:7227`, `:7428`, `:7536`, `:7585`, `:7687`, `:7791`, `:8363`, `:8651`,
+`:8809`, `:9030`, `:9787`, `:9807`; `select.rs:77-92` (`f16_rtne`). Which one
+`mat3sub_vs` reaches is **not established** here (the pinned text is the
+generic `mod.rs:530`); the probe names it.
+**(b)** Mesa folds the whole mediump colour **at fp16**: each constant rounded
+to half, each add or subtract rounded (`-2^-11`, `0x9000`, is that result, not
+the fp32 `-0.2` rounded), and the link moves it into the FS as the FAU words
+`0xb8009000`, `0x3c003265` (section 8). Ours folds at fp32 in `alu_sized`,
+then `F2f16` of an inexact result refuses. The rule is step 3's at the vertex
+stage: for a **mediump** operation (`Module::prec`) round each constant operand
+with `f16_rtne`, fold, round the result. The vertex walk has to know an
+operation's precision; how it gets it is the lower item's to find, which is
+why this step is last. `f16_rtne` `None` (subnormal, overflow) keeps
+`Fp16Inexact`; `_mesa_float_to_half` gives a subnormal or infinity (section 7
+step 5) but needs a reference first (`tests.rs:1298`, `1.0e-6` in an FS colour,
+stays pinned).
+**(c)** `constop_mat3sub_vs`. **(d)** none known. **(e)** A varying that is not
+constant takes `F2f16` at the store: fold only a constant operand.
+
+### 10.9 Tests by step
+
+| Step | Un-ignored | Repinned (still ignored, next refusal) |
+|---|---|---|
+| 1 | `ce_floor_fs`, `ce_ceil_fs`, `ce_fract_vec2_fs`, `ce_sign_vec3_fs`, `ce_inversesqrt_vec4_fs`, `ce_mod_vec2_float_fs`, `ce_smoothstep_fs`, `ce_asin_fs`, `struct_param_out_vs`, `loops_while_basic_highp_float_fs`, (`ce_atan_separate_fs` if the bits agree) | `ce_floor_vs` (`IntValue`) |
+| 2 | `ce_dot_vec3_fs`, `ce_normalize_vec3_fs` | |
+| 3 | `op_abs_mediump_float_fs`, `op_minus_lowp_float_fs`, `op_add_assign_effect_mediump_vec3_fs`, `matrix_preinc_mediump_mat3_fs`, `loops_for_basic_mediump_float_fs` | `op_abs_highp_float_fs` (`MixedPrecision`) |
+| 4 | `op_degrees_mediump_float_fs` | |
+| 5 | `nz_local_cmp_fs`, `nz_local_cmp_vs`, `nz_prod_vs`, `nz_shared_vs` | |
+| 6 | `cf_inf_fs`, `cf_denorm_fs` | |
+| 7 | `mat3sub_vs` | |
+
+(All names are `constop_<name>`.) Order: 1, 2, 3, 4, 5, then 6 and 7. Step 5
+needs no `Tree` change beyond relaxing two refusals (10.6), so it can move ahead
+of 3 and 4 if those meet the `node()` risk of 10.4. Yield (section 7): steps 1-2
+about 54 of S1's 83 fragment cases (the 82 vertex ones move to `IntValue`),
+steps 3-4 the 125 lowp and mediump S2a-S3 cases, step 5 up to 117.
+
+### 10.10 glmark2 verdicts at risk, all steps
+
+Three lines of `tests/fixtures/mali_glmark2_verdicts.txt` name these refusals:
+`:23` bump `487d` and `:27` effect2d `3c3d` (`ConstantFold`), `:61` terrain
+`1637` (`NegZeroShared`). By reading only `:61` moves here (step 5); the other
+two stop at `nir_fs.rs:4528` and `nir.rs:2005`, which #367's lower items own,
+though R4 (step 1) and step 3's `:4528` change touch them. Any program whose
+first refusal is a catch-all arm of `nir.rs:2022-2059` may also move: the corpus
+run decides, and the fixture moves in the same commit as the lowering.
+`tools/mali/corpus-verdicts.txt` and `cases.txt` change only if a corpus verdict
+moves. The `tests.rs` pins that name the three errors are in 10.2(e), 10.5(e)
+and 10.6(e).
