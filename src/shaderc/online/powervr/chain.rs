@@ -377,7 +377,28 @@ pub fn build_fragment_for<'a>(
     buf: &mut [u8],
     blend_key: u32,
 ) -> Result<BuiltFragment<'a>, ChainError> {
+    if let Some((t, n)) = mixed_key_targets(blend_key) {
+        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]));
+    }
     build_fragment_with(m, limits, a, buf, blend_key, None)
+}
+
+/// The per-target list a mixed key (`crate::target_key`,
+/// docs/notes/pvr-int-mixed-targets.md section 2.2) carries, draw buffer
+/// `i` at `[i]`, and how many; `None` for every other key, which compiles
+/// as before. A per-target key is an integer target's key
+/// ([`TargetPack::Int`]) or a one-class key `shc_blend_key_rt(class)`
+/// ([`TargetPack::Class`]).
+pub fn mixed_key_targets(blend_key: u32) -> Option<([TargetPack; MAX_PACK_TARGETS], usize)> {
+    let (keys, n) = crate::target_key::shc_blend_key_mixed_targets(blend_key)?;
+    let mut t = [TargetPack::Class(crate::shaderc::SHC_RT_RGBA8); MAX_PACK_TARGETS];
+    for (p, &k) in t.iter_mut().zip(&keys[..n]) {
+        *p = match crate::shaderc::ShcIntRt::of_key(k) {
+            Some(rt) => TargetPack::Int(rt),
+            None => TargetPack::Class(k >> crate::shaderc::SHC_BLEND_KEY_RT_SHIFT),
+        };
+    }
+    Some((t, n))
 }
 
 /// [`build_fragment`] for colour attachments of different classes, the
@@ -1679,6 +1700,15 @@ pub fn compile_fragment_for<'a>(
     a: &'a Arena<'a>,
     blend_key: u32,
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
+    /* A mixed key: each output packed for its own target, and the record
+     * carries the key the back end checks before it draws the targets. No
+     * target reads the pixel, so `uses_fbfetch` stays 0. */
+    if let Some((t, n)) = mixed_key_targets(blend_key) {
+        return compile_fragment_with(m, reflection, a, 0, Some(&t[..n])).map(|mut sh| {
+            sh.blend_key = blend_key;
+            sh
+        });
+    }
     compile_fragment_with(m, reflection, a, blend_key, None)
 }
 
