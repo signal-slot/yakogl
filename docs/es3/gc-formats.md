@@ -104,7 +104,7 @@ but the 128-bit ones.
 | `GLES_TEXFMT_RGBA16I` | `TEXTURE_FORMAT_EXT_A16B16G16R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer) | yes | `isampler*`: the halves, sign-extended by CONFIG2 | linear; none | - | `F:202`; `D:187-189`; `X:90,166` |
 | `GLES_TEXFMT_RGBA32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes, as two planes (HALTI5): the format of each plane; in the mask (gc-wide128-flip) | yes | `usampler*`/`isampler*`: the planes' R,G halves joined (section 3) | linear; none | two G32R32I planes (R,G then B,A), a companion sampler slot and the shader's two look-ups joined (`etnaviv_nir_lower_128bit.c:89-170`; `etnaviv_texture_state.c:286-296,516-557`); R32UI and RG32UI are EXT_R32I / EXT_G32R32I on HALTI5 (`F:286-291`) | `F:229`; `S:423-429`; `X:96` |
 | `GLES_TEXFMT_RGBA32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes, as two planes (HALTI5): the format of each plane, no CONFIG2 sign bit for 32-bit channels (`D:187-189`); in the mask (gc-wide128-flip) | yes | `isampler*`: as RGBA32UI (section 3) | linear; none | as RGBA32UI | `F:230`; `S:423-429`; `X:96` |
-| `GLES_TEXFMT_RGBA32F` | `TEXTURE_FORMAT_EXT_G32R32F` | RGBA | - | no | yes, as two planes (HALF_FLOAT): the format of each plane; in the mask (gc-wide128-flip) | yes | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGB32F / RG32F here, while GL_RGBA32F itself is still held as halves (RGBA16F) by `sized_format` (`src/gl/texture.rs`; `docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
+| `GLES_TEXFMT_RGBA32F` | `TEXTURE_FORMAT_EXT_G32R32F` | RGBA | - | no | yes, as two planes (HALF_FLOAT): the format of each plane; in the mask (gc-wide128-flip) | yes | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGBA32F / RGB32F / RG32F here (GL_RGBA32F through `sized_format`'s `rgba32f_own_class`, `src/gl/texture.rs`; `docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
 | `GLES_TEXFMT_SRGB8_A8` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | no | yes (HALTI0) | yes | - | `SAMP_CTRL1.SRGB`; none | - (the RGBA8 row of the linear twin, `F:278`; no INT_FILTER for sRGB, `F:317-318`) | `D:246-247`; `S:406-407` |
 | `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (own class since gc-r32-flip, `b5e04b14`; before it GL_R32UI was stored in RGBA32UI, which this back end refuses. One format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
 | `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; before the flip it was stored in RGBA32I) | `F:136,286-291`; `X:95` |
@@ -207,7 +207,7 @@ Left:
 
 4. RGBA32F/I/UI as two planes (section 3): in the mask on the host
    (gc-wide128-flip), the board's dEQP `texture.format` rows not yet rerun;
-   GL_RGBA32F itself still stored as halves (`sized_format`). R32I/UI and RG32I/UI are their own classes in the mask
+   GL_RGBA32F stored there too (`sized_format`'s `rgba32f_own_class`). R32I/UI and RG32I/UI are their own classes in the mask
    (`b5e04b14`): the TE samples them as `EXT_R32I` / `EXT_G32R32I`
    (`F:286-291`). Their texture colour attachment has
    `integer_texture_surface` rows (`6c5b004f`, `src/gl/framebuffer.rs`) and a

@@ -24,7 +24,12 @@ hold: `R8/RG8/RGB8/RGBA8_SNORM`, `R11F_G11F_B10F`, `RGB9_E5`, `RGB16F`,
 `{R,RG,RGB,RGBA}{8,16,32}{I,UI}`. The formats the tables already held
 (`R8`, `RG8`, `RGB8`, `RGBA8`, `SRGB8`, `SRGB8_ALPHA8`, `RGB565`, `RGBA4`,
 `RGB5_A1`, `R16F`, `RG16F`, `RGBA16F`, `R32F`, `RGBA32F`) behave as before
-(the sRGB pair in its own class, `docs/es3/srgb.md`);
+(the sRGB pair in its own class, `docs/es3/srgb.md`; `RGBA32F` in
+`GLES_TEXFMT_RGBA32F` on the GC7000UL, whose mask holds that class
+(`texture.rs` `rgba32f_own_class`), under the row `es3_formats::RGBA32F_OWN`
+that `find` never returns, so it follows the ES 3.0 rules there: not
+filterable, no `glGenerateMipmap`, table 3.2's one pair; as halves on every
+other back end);
 `sized_format()` / `texfmt_of()` consult `es3_formats` only for a name they
 do not know.
 
@@ -212,8 +217,9 @@ R11, 8x for the others.
   a per-draw shader key and the compiler's join;
   `docs/notes/gc-128bit-texture-sampling.md`, `gc-128bit-swizzle.md`,
   `tests/es3_wide128_gc.rs`), so RGB32UI/I and RGBA32UI/I are no longer
-  refused and RG32F/RGB32F are stored there; GL_RGBA32F itself is still held
-  as halves (`sized_format`). Host only: the board has not sampled them.
+  refused and RG32F/RGB32F/RGBA32F are stored there (GL_RGBA32F through
+  `sized_format`'s `rgba32f_own_class`). Host only: the board has not sampled
+  them.
   `R32I/UI` and `RG32I/UI` are in the mask (descriptor rows `e40e9418`, flip
   `b5e04b14`): sampled natively, `EXT_R32I` / `EXT_G32R32I`, so the GL core
   stores them natively and no longer refuses them on this back end. The PowerVR's integer cube, 3D and 2D-array samplers
