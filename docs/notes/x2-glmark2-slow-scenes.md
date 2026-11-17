@@ -29,18 +29,19 @@ hang; they give no ms a frame either.
 
 ## Second attempt (plan #355, 2026-11-12): still no measurement
 
-The worker that ran this item (host `orion`, no `target:x2` lease in the
-task) could not reach the board either, so no jump was made and no image was
-built for the board:
+The worker that ran this item (no `target:x2` lease in the task) could not
+reach the board either, so no jump was made and no image was built for the
+board:
 
 - `getent hosts armadillo` returned nothing (the name does not resolve here).
 - `tools/board.sh x2 status` stopped before touching the board:
   `BOARD_HOST: set BOARD_HOST=` (the runner's own message: the variable was unset) (the task carried no
   board access).
 - `ask_farm` answered that the board is reached as root over Tailscale and
-  that login is accepted from the nodes Lepton, Lepton-local, hx90,
-  n5max-local, nuc and system76 only; `orion` is not one of them. The
-  console (CP2102N) is plugged into n5max and is read-only.
+  that login is accepted from six farm nodes only (the node list is
+  environment, never a file), and this item's worker host is not one of
+  them. The console (CP2102N) is plugged into one of those nodes and is
+  read-only.
 
 The board was not touched. The work that did not need it is on the host:
 `docs/notes/gc-tiled-wire.md` W1 to W5 behind the `gc_tiled_rt` knob
@@ -49,17 +50,17 @@ off/on pair of its "session A" is what the board still has to run.
 
 ## Third attempt (plan #355, 2026-11-13): still no measurement
 
-Same worker (host `orion`), same state: `getent hosts armadillo` returned
-nothing and `tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no
-`target:x2` lease reached the task). No jump was made, no image built, the
-board was not touched. W1 to W5 were already on main (`9cdeff6d`), so there
-was nothing left to build on the host for this item. A rerun of the item on
-the same worker later that day (main at `2aee4c92`) found the same three
-facts and did nothing else.
+Same worker as the second attempt, same state: `getent hosts armadillo`
+returned nothing and `tools/board.sh x2 status` stopped at `BOARD_HOST`
+unset (no `target:x2` lease reached the task). No jump was made, no image
+built, the board was not touched. W1 to W5 were already on main
+(`9cdeff6d`), so there was nothing left to build on the host for this
+item. A rerun of the item on the same worker later that day (main at
+`2aee4c92`) found the same three facts and did nothing else.
 
 ## Fourth attempt (plan #355, 2026-11-13): still no measurement
 
-Host `orion` again: `getent hosts armadillo` returned nothing and
+Same worker again: `getent hosts armadillo` returned nothing and
 `tools/board.sh x2 status` stopped at `BOARD_HOST` unset (no `target:x2` or
 `target:x2-console` lease reached the task). No jump, no image, the board was
 not touched. W1 to W5 are on main (`9cdeff6d`); the earlier closed pull
@@ -68,7 +69,7 @@ CI, and was not reused.
 
 ## Fifth attempt (plan #355, 2026-11-13): still no measurement
 
-Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+Same worker again, no `target:x2` or `target:x2-console` lease in the task:
 `getent hosts armadillo` returned nothing and `tools/board.sh x2 status`
 stopped at `BOARD_HOST` unset. No jump, no image, the board was not touched.
 W1 to W5 are on main; the earlier closed pull request (`9698dd11`, a tiled
@@ -76,7 +77,7 @@ chain layout in `tex_layout.rs` with no caller) failed CI and was not reused.
 
 ## Sixth attempt (plan #355, 2026-11-13): still no measurement
 
-Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+Same worker again, no `target:x2` or `target:x2-console` lease in the task:
 `getent hosts armadillo` returned nothing, `tools/board.sh x2 status` stopped
 at `BOARD_HOST` unset, and `ask_farm` for the board's login timed out. No
 jump, no image, the board was not touched. `gc_tiled_rt` (W1 to W5) is already
@@ -84,7 +85,7 @@ on main, so no host change was made.
 
 ## Seventh attempt (plan #355, 2026-11-15): still no measurement
 
-Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+Same worker again, no `target:x2` or `target:x2-console` lease in the task:
 `getent hosts armadillo` returned nothing and `tools/board.sh x2 status`
 stopped at `BOARD_HOST` unset. No jump, no image, the board was not touched.
 `gc_tiled_rt` (W1 to W5) is on main, so no host change was made. The earlier
@@ -94,7 +95,7 @@ session A.
 
 ## Eighth attempt (plan #355, 2026-11-16): still no measurement
 
-Host `orion` again, no `target:x2` or `target:x2-console` lease in the task:
+Same worker again, no `target:x2` or `target:x2-console` lease in the task:
 `getent hosts armadillo` returned nothing and `tools/board.sh x2 status`
 stopped at `BOARD_HOST` unset. No jump, no image, the board was not touched.
 `gc_tiled_rt` (W1 to W5) is on main, so no host change was made. The earlier
