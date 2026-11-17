@@ -131,7 +131,7 @@ check "the Fail's detail is kept, its host, address and MAC redacted" \
   status_of clean dEQP-GLES2.functional.flush_finish.wait "Fail	Image comparison failed on <host> at <addr> & <mac>"
 check "kmsg/<label>.txt for each row, empty for a quiet chunk" \
   bash -c "for l in T1 T2 T3; do [ -f '$tmp/clean/slice/kmsg/'\$l.txt ] && [ ! -s '$tmp/clean/slice/kmsg/'\$l.txt ] || exit 1; done"
-check "each of the 7 slice files has its .license sidecar, the three lines of our results" sidecars clean 7
+check "each of the 10 slice files (7 and the 3 refusals/<label>.txt) has its .license sidecar, the three lines of our results" sidecars clean 10
 check "the stage is deleted from the board at the end" \
   bash -c "[ -d '$tmp/clean/board/root/yakogl-mali' ] && [ -z \"\$(ls -A '$tmp/clean/board/root/yakogl-mali')\" ]"
 check "the run staged only under /root/yakogl-mali/<sha8>/" \
