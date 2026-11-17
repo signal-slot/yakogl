@@ -359,6 +359,35 @@ impl UboLayout {
         self.split[k / 32] |= 1 << (k % 32);
     }
 
+    /// Uniform `u` of `comps` front-end dwords as its rows: one, or a
+    /// matrix whose columns the front end pads (a mat3's stride of 4) one
+    /// row a column, consecutive words in Mesa's block (vsmat3_highp's nine
+    /// words; vsmat3_mediump's six, each column's third half alone with a
+    /// zero pad half). An array's element or a matrix's column is a load of
+    /// its own.
+    fn push_uniform(
+        &mut self,
+        u: &crate::shaderc::online::ir::UniformDecl<'_>,
+        comps: u16,
+        halves: bool,
+    ) -> Result<(), MaliError> {
+        match nir::matrix_cols(u.gl_type) {
+            Some((cols, rows, stride)) if stride != rows => {
+                for c in 0..cols {
+                    self.push(u.dword_off + c * stride, rows, halves)?;
+                    self.split_last();
+                }
+            }
+            _ => {
+                self.push(u.dword_off, comps, halves)?;
+                if u.array_len > 1 || is_matrix(u.gl_type) {
+                    self.split_last();
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// A vertex shader's: the uniforms its program reads.
     pub fn vs(m: &Module<'_>, vs: &nir::Nir<'_>) -> Result<UboLayout, MaliError> {
         let mut l = UboLayout::NONE;
@@ -385,10 +414,7 @@ impl UboLayout {
                 matches!(nd.kind, nir::Kind::Uniform { dword, .. } if nd.bits == 16
                     && dword >= u.dword_off && dword < u.dword_off + u.dwords.max(1))
             });
-            l.push(u.dword_off, comps, halves)?;
-            if u.array_len > 1 || is_matrix(u.gl_type) {
-                l.split_last();
-            }
+            l.push_uniform(u, comps, halves)?;
         }
         Ok(l)
     }
@@ -417,10 +443,7 @@ impl UboLayout {
              * element (uniarray_highp: the four ints at words 0-3, `u_arr`
              * from word 4, `IADD_IMM.i32 #0x10`) */
             let (_, comps) = super::nir_fs::uniform_extent(m, u.dword_off)?;
-            l.push(u.dword_off, comps, false)?;
-            if u.array_len > 1 || is_matrix(u.gl_type) {
-                l.split_last();
-            }
+            l.push_uniform(u, comps, false)?;
         }
         /* gl_FbWposYTransform, a vec4 state slot after the declared
          * uniforms (`_mesa_add_state_reference` appends it to the
@@ -445,8 +468,8 @@ impl UboLayout {
     /// type (no reference draws it).
     pub fn fs16(m: &Module<'_>, fs: &nir::Nir<'_>, highp: &dyn Fn(&str) -> bool) -> Result<UboLayout, MaliError> {
         use crate::gl::consts::{
-            GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4, GL_FLOAT, GL_FLOAT_MAT4, GL_FLOAT_VEC2, GL_FLOAT_VEC3,
-            GL_FLOAT_VEC4, GL_INT,
+            GL_BOOL, GL_BOOL_VEC2, GL_BOOL_VEC3, GL_BOOL_VEC4, GL_FLOAT, GL_FLOAT_MAT2, GL_FLOAT_MAT3, GL_FLOAT_MAT4,
+            GL_FLOAT_VEC2, GL_FLOAT_VEC3, GL_FLOAT_VEC4, GL_INT, GL_INT_VEC2, GL_INT_VEC3, GL_INT_VEC4,
         };
         let mut l = UboLayout::NONE;
         for u in m.uniforms.iter().filter(|u| u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK) {
@@ -465,6 +488,11 @@ impl UboLayout {
                 GL_BOOL_VEC2 if u.array_len <= 1 => (2, false),
                 GL_BOOL_VEC3 if u.array_len <= 1 => (3, false),
                 GL_BOOL_VEC4 if u.array_len <= 1 => (4, false),
+                /* an ivec's lanes too: int16 is off, an int uniform is not
+                 * lowered (fsivec4's `u2.w0`, `u2.w1`) */
+                GL_INT_VEC2 if u.array_len <= 1 => (2, false),
+                GL_INT_VEC3 if u.array_len <= 1 => (3, false),
+                GL_INT_VEC4 if u.array_len <= 1 => (4, false),
                 GL_FLOAT => (1, true),
                 GL_FLOAT_VEC2 if u.array_len <= 1 => (2, true),
                 GL_FLOAT_VEC3 if u.array_len <= 1 => (3, true),
@@ -474,10 +502,29 @@ impl UboLayout {
                  * u2.w0, r0.h11, u2.w1`), as the vertex stage's fp16 matrix
                  * ([`UboLayout::vs`]) */
                 GL_FLOAT_MAT4 if u.array_len <= 1 => (16, true),
+                /* a mat2 one word a column, a mat3 two (its third half
+                 * alone, a zero pad half): fsmat2_mediump, fsmat3_mediump
+                 * ([`UboLayout::push_uniform`]) */
+                GL_FLOAT_MAT2 if u.array_len <= 1 => (4, true),
+                GL_FLOAT_MAT3 if u.array_len <= 1 => (9, true),
                 _ => return Err(MaliError::FsUniform),
             };
-            if halves && highp(u.name) {
-                return Err(MaliError::FsUniform);
+            /* a float uniform Mesa keeps fp32 (declared highp, a struct's
+             * member, gl_DepthRange's): one word a component, read at 32
+             * bits and narrowed (nir_fs.rs, `FsPrecision::fp32_uniforms`;
+             * fshighp_color's `V2F32_TO_V2F16 r0, u2.w0, u2.w1`); an array
+             * of one has no reference */
+            let halves = if halves && highp(u.name) {
+                if u.array_len > 1 {
+                    return Err(MaliError::FsUniform);
+                }
+                false
+            } else {
+                halves
+            };
+            if is_matrix(u.gl_type) {
+                l.push_uniform(u, comps, halves)?;
+                continue;
             }
             for e in 0..u16::from(u.array_len.max(1)) {
                 l.push(u.dword_off + e * comps, comps, halves)?;

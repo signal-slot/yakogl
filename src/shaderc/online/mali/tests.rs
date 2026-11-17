@@ -1175,14 +1175,12 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
          * propagate it */
         (VS, "attribute vec4 p; attribute float d; attribute float a; attribute float b; varying vec4 v; void main(){ gl_Position = p; v = vec4(0.5, d, 1.0, 1.0) * vec4(0.5, -0.0, b, a); }", MaliError::AttributeNumbering),
         (FS, "precision mediump float; varying vec2 a2; const float z = -0.0; void main() { if (z == a2.x) discard; gl_FragColor = vec4(1.0); }", MaliError::NegZeroShared),
-        (VS, "uniform mat2 m; attribute vec2 p; void main(){ gl_Position = vec4(m * p, 0.0, 1.0); }", MaliError::UniformType),
+        /* an int uniform read as a value (a mat2 is deqp_unitype_vsmat2_highp's) */
+        (VS, "uniform int i; attribute vec4 p; void main(){ gl_Position = p * float(i); }", MaliError::UniformType),
         (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
         /* an fp16 uniform that is an array (a plain one is case 19's,
          * the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1) */
         (VS, "uniform mediump vec4 u[2]; void main(){ gl_Position = u[1]; }", MaliError::UniformPrecision),
-        /* a mediump struct member, which Mesa keeps fp32 (no reference;
-         * a highp one is es100/texfill.vert's, ok in the corpus) */
-        (VS, "struct S { mediump vec4 a; }; uniform S s; void main(){ gl_Position = s.a; }", MaliError::UniformPrecision),
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
@@ -1192,8 +1190,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p; }", MaliError::Invariant),
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
-        (FS, "precision mediump float; uniform highp vec4 u; void main(){ gl_FragColor = u; }", MaliError::FsUniform),
-        (FS, "precision mediump float; uniform mat3 u; void main(){ gl_FragColor = vec4(u[1], 1.0); }", MaliError::FsUniform),
+        /* a highp uniform's lanes paired other than in order (in order is
+         * deqp_unitype_fshighp_color's) */
+        (FS, "precision mediump float; uniform highp vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
         /* an absolute value second in a sum is a place no reference draws
          * (a uniform first in a product is case 166's, unitype_166a) */
         (FS, "precision mediump float; varying vec4 v; varying vec4 w; void main(){ gl_FragColor = v + abs(w); }", MaliError::FsOperandForm),
@@ -7969,17 +7968,18 @@ fn a_shared_negative_zero_turns_each_compare_or_is_refused() {
     }
 }
 
-/// A mediump fragment shader's `mat2` and `mat3` uniforms are refused
-/// before the block is laid out (select.rs `UboLayout::fs16` takes floats,
-/// vectors, vec4 arrays, ints and a `mat4`, glmark2's normal matrix:
-/// tests/mali_fs_arith.rs, gm2_fsarith_1).
+/// A mediump fragment shader's `mat2` and `mat3` uniforms are laid out one
+/// row a column (select.rs `UboLayout::fs16`, deqp_unitype_fsmat2_mediump
+/// and deqp_unitype_fsmat3_mediump: a mat2 column one fp16 word, a mat3's
+/// two, its third half alone with a zero pad half): a column's aligned pair
+/// is one word of the push.
 #[test]
-fn a_mediump_fragment_matrix_uniform_is_refused_before_the_push() {
+fn a_mediump_fragment_matrix_uniform_is_laid_out_one_row_a_column() {
     for t in ["mat2", "mat3"] {
         let src = format!(
             "precision mediump float; uniform {t} m; varying vec2 a2; void main() {{ gl_FragColor = vec4(a2 + m[1].xy, 0.0, 1.0); }}"
         );
-        assert_eq!(gap(SHC_STAGE_FRAGMENT, &src), MaliError::FsUniform, "{t}");
+        assert!(compile(SHC_STAGE_FRAGMENT, &src).is_ok(), "{t}");
     }
 }
 

@@ -3387,6 +3387,16 @@ impl<'s> Fs<'s> {
             _ => None,
         }
     }
+
+    /// `v` is the `f2fmp` of a 32-bit uniform word in a mediump shader (the
+    /// walk's read of a float uniform Mesa keeps fp32): its front-end dword.
+    fn wide_uniform(&self, v: Val) -> Option<u16> {
+        let (Alu::F2f16, [Val::Lane(n, _), ..]) = self.alu_of(v)? else { return None };
+        match self.nir.nodes[n as usize] {
+            NirNode { kind: Kind::Uniform { dword, comps: 1 }, bits: 32, .. } => Some(dword),
+            _ => None,
+        }
+    }
 }
 
 /// Walk the body: loads of varyings, uniforms and constants, local copies,
@@ -5400,18 +5410,41 @@ fn walk_nodes(
                 /* an int or a bool: one 32-bit word (a bool's as GL stores
                  * it, read as it is, intbig_case112.expect.json) */
                 let int = decl.is_some_and(|u| {
-                    matches!(u.gl_type as u32, GL_INT | GL_BOOL | GL_BOOL_VEC2 | GL_BOOL_VEC3 | GL_BOOL_VEC4)
-                        && u.array_len <= 1
+                    matches!(
+                        u.gl_type as u32,
+                        GL_INT
+                            | GL_BOOL
+                            | GL_BOOL_VEC2
+                            | GL_BOOL_VEC3
+                            | GL_BOOL_VEC4
+                            | crate::gl::consts::GL_INT_VEC2
+                            | crate::gl::consts::GL_INT_VEC3
+                            | crate::gl::consts::GL_INT_VEC4
+                    ) && u.array_len <= 1
                 });
                 /* a float array's element at a constant index: no reference
                  * draws it (case108_uniidx reads at run-time indices only) */
                 if decl.is_some_and(|u| u.gl_type as u32 == GL_FLOAT && u.array_len > 1) {
                     return Err(MaliError::UniformArray);
                 }
+                /* a float uniform Mesa keeps fp32 (`FsPrecision::fp32_uniforms`):
+                 * each lane a 32-bit word narrowed by its own `f2fmp`
+                 * (fshighp_color: `V2F32_TO_V2F16 r0, u2.w0, u2.w1`) */
+                let k = m.uniforms.iter().position(|u| decl.is_some_and(|d| core::ptr::eq(u, d)));
+                let wide = k.is_some_and(|k| prec.fp32_uniforms & 1u64.checked_shl(k as u32).unwrap_or(0) != 0);
                 for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                    if wide {
+                        let l = f.uniform_lane(dword_off + c as u16, 32, at)?;
+                        *o = f.node16(Alu::F2f16, [l, Val::Undef, Val::Undef], 1, at)?;
+                        continue;
+                    }
                     *o = f.uniform_lane(dword_off + c as u16, if int { 32 } else { 16 }, at)?;
                     if let (Val::Lane(n, _), Some(u), false) = (*o, decl, int) {
-                        f.nir.uniform_load[n as usize] = u.dword_off;
+                        /* a matrix's load is its column's */
+                        f.nir.uniform_load[n as usize] = match nir::matrix_cols(u.gl_type) {
+                            Some((_, _, stride)) => u.dword_off + (dword_off - u.dword_off) / stride * stride,
+                            None => u.dword_off,
+                        };
                     }
                 }
             }
@@ -7204,6 +7237,21 @@ enum Leaf {
         x: u8,
         h: u8,
     },
+    /// Words `comp` and `comp + 1` of the fp32 uniform load at word `base`
+    /// (a float uniform Mesa keeps fp32 in a mediump shader,
+    /// [`super::FsPrecision::fp32_uniforms`]), narrowed together:
+    /// fshighp_color's `V2F32_TO_V2F16 r0, u2.w0, u2.w1`.
+    Wide {
+        base: u16,
+        comp: u8,
+    },
+    /// Word `comp` of that load alone, narrowed into a low half (a lane
+    /// of one-lane arithmetic): vsstruct_partial's `FADD.f32 r1.h0, u2.w0,
+    /// 0x0.neg` of the struct member `val.b`.
+    WideLane {
+        base: u16,
+        comp: u8,
+    },
 }
 
 /// The pair nodes: an operation of two lanes, or a leaf.
@@ -7266,6 +7314,9 @@ impl Pairs {
             /* read by its `exp2` alone, whose sources are not noted */
             P::Leaf(Leaf::Raw { .. }) => Form::Half,
             P::Leaf(Leaf::Part { .. }) => Form::Half,
+            /* a conversion's value, as a varying pair's */
+            P::Leaf(Leaf::Wide { .. }) => Form::Half,
+            P::Leaf(Leaf::WideLane { .. }) => Form::Splat,
             P::Leaf(Leaf::Const(_)) => Form::Const,
             P::Op(Alu::Fneg, _) => Form::Neg,
             P::Op(Alu::Fabs, _) => Form::Abs,
@@ -7329,6 +7380,22 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
          * one aligned pair, in order, the two results narrowed together
          * (gm2_fsmisc_5: `V2F32_TO_V2F16 r0, r0^, r1^` of x and y's `FEXP`);
          * another pairing of the lanes has no reference */
+        /* two words of an fp32 uniform in a mediump shader, each lane's
+         * `f2fmp` paired into one (fshighp_color: `V2F32_TO_V2F16 r0,
+         * u2.w0, u2.w1`); a lane alone or another pairing has no reference */
+        _ if f.wide_uniform(a).is_some() || f.wide_uniform(b).is_some() => {
+            match (f.wide_uniform(a), f.wide_uniform(b)) {
+                (Some(d), Some(e)) => {
+                    let w = ubo.word(d).ok_or(MaliError::FsUniform)?;
+                    if ubo.word(e) != Some(w + 1) || ubo.half(d).is_some() {
+                        return Err(MaliError::FsUniform);
+                    }
+                    let (base, _) = ubo.load_of(w).ok_or(MaliError::FsUniform)?;
+                    P::Leaf(Leaf::Wide { base, comp: (w - base) as u8 })
+                }
+                _ => return Err(MaliError::FsUniform),
+            }
+        }
         (Some((Alu::Fexp2, [x, ..])), Some((Alu::Fexp2, [y, ..])))
             if f.input_lane(x).is_some() || f.input_lane(y).is_some() =>
         {
@@ -8129,6 +8196,13 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         }
     }
     let p = match (f.alu_of(v), f.texel(v), v) {
+        /* an fp32 uniform's word narrowed alone ([`Leaf::WideLane`]) */
+        _ if f.wide_uniform(v).is_some() => {
+            let d = f.wide_uniform(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            let w = ubo.word(d).filter(|_| ubo.half(d).is_none()).ok_or(MaliError::FsUniform)?;
+            let (base, _) = ubo.load_of(w).ok_or(MaliError::FsUniform)?;
+            P::Leaf(Leaf::WideLane { base, comp: (w - base) as u8 })
+        }
         /* `reflect`'s `d * -2.0` is `fneg(fadd(d, d))`, the fneg a source
          * modifier of its reader (fsvec_reflect_mediump: `FADD.v2f16 r2,
          * r2^.h00, r2^.h00`, then `FMA.v2f16 .., r2.neg.h00, ..`) */
@@ -9011,6 +9085,15 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     }
     if ubo_at_store && (0..pr.n).any(ubo_leaf) {
         ubo_load(p, f, &mut lv, &mut rows)?;
+    }
+    /* the colour's fp32 uniform words, narrowed at its store as a
+     * varying's (fshighp_color: two `V2F32_TO_V2F16`, then ATEST) */
+    for r in roots {
+        if let P::Leaf(Leaf::Wide { base, comp }) = pr.nodes[r as usize] {
+            if val[r as usize].is_none() {
+                val[r as usize] = Some(Src::ssa(wide(p, base, comp, &mut rows)?));
+            }
+        }
     }
     /* ATEST on the alpha: the constant's half, or the high half of the
      * second pair's word (a uniform word's own half when it is a splat;
@@ -11401,6 +11484,13 @@ fn mkvec_lanes(p: &mut Prog<'_>, lv: &Leaves, x: [(u8, u8); 2], rows: &mut u128)
     row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
 }
 
+/// Words `comp` and `comp + 1` of the fp32 uniform load at `base`,
+/// narrowed together ([`Leaf::Wide`]): `V2F32_TO_V2F16` of the two FAU words.
+fn wide(p: &mut Prog<'_>, base: u16, comp: u8, rows: &mut u128) -> Result<u16, MaliError> {
+    let s = [Src::of(Idx::Ubo { base, comp }), Src::of(Idx::Ubo { base, comp: comp + 1 })];
+    row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &s)
+}
+
 /// Pair node `x` as a source: a conversion, a constant, a uniform word, a
 /// word of the look-up, or an operation already selected.
 fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Result<Src, MaliError> {
@@ -11434,8 +11524,16 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             let w = lv.tex.get(j as usize).and_then(|w| w[(c as usize / 2) & 3]);
             Src::ssa(w.ok_or(MaliError::Defect(Defect::IrIndex))?).swz(if c % 2 == 0 { Swz::H00 } else { Swz::H11 })
         }
-        P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. } | Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. })
+        P::Leaf(
+            Leaf::Mk { .. }
+            | Leaf::Lanes { .. }
+            | Leaf::Zext(_)
+            | Leaf::Lane { .. }
+            | Leaf::Pack { .. }
+            | Leaf::Wide { .. },
+        )
         | P::Op(..) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
+        P::Leaf(Leaf::WideLane { .. }) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(Swz::H00),
         /* read by its `exp2` alone ([`op`]) */
         P::Leaf(Leaf::Raw { .. }) => return Err(MaliError::Defect(Defect::IrIndex)),
         P::Leaf(Leaf::Part { x, h }) => {
@@ -11472,6 +11570,13 @@ fn op(
             P::Leaf(Leaf::Mk { k: v, c, half }) => val[*y as usize] = Some(Src::ssa(mkvec(p, lv, v, c, half, rows)?)),
             P::Leaf(Leaf::Lanes { k: v, c, e, d }) => {
                 val[*y as usize] = Some(Src::ssa(mkvec_lanes(p, lv, [(v, c), (e, d)], rows)?))
+            }
+            P::Leaf(Leaf::Wide { base, comp }) if val[*y as usize].is_none() => {
+                val[*y as usize] = Some(Src::ssa(wide(p, base, comp, rows)?))
+            }
+            P::Leaf(Leaf::WideLane { base, comp }) if val[*y as usize].is_none() => {
+                let s = [Src::of(Idx::Ubo { base, comp })];
+                val[*y as usize] = Some(Src::ssa(row(p, rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &s)?))
             }
             _ => {}
         }

@@ -269,6 +269,8 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
             rest = rest[a..].find("*/").map_or("", |b| &rest[a + b + 2..]);
         }
         t.push_str(rest);
+        /* a directive (`#version 100`) is no part of the next statement */
+        let t: String = t.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n");
         for stmt in t.split([';', '{', '}']) {
             let w: Vec<&str> = stmt.split_whitespace().collect();
             if w.first() != Some(&"uniform") {
@@ -292,11 +294,21 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
 /// declarator gets none (its location lookup is -1), so 0.
 fn uniform_value(names: &[String], rows: &[(String, u16, u16)], d: u16) -> u32 {
     let (name, first, _) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
+    /* the built-in's state, glDepthRangef(0, 1) by default: near, far, diff */
+    match name.as_str() {
+        "gl_DepthRange.near" => return 0f32.to_bits(),
+        "gl_DepthRange.far" | "gl_DepthRange.diff" => return 1f32.to_bits(),
+        _ => {}
+    }
     if names.iter().any(|n| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
         return 0;
     }
     let k = names.iter().position(|n| n == name).expect("the uniform is declared");
-    (16.0 * (k as f32 + 1.0) + (d - first) as f32).to_bits()
+    /* gl_ref.py counts a matrix's components packed; the front end strides
+     * a mat3's columns to 4 dwords (its 12 dwords, no array here) */
+    let (_, _, count) = rows.iter().find(|r| &r.0 == name).expect("a uniform row holds the dword");
+    let c = if *count == 12 { (d - first) / 4 * 3 + (d - first) % 4 } else { d - first };
+    (16.0 * (k as f32 + 1.0) + c as f32).to_bits()
 }
 
 fn fau_values(f: &[FauWord], uv: &dyn Fn(u16) -> u32) -> Vec<u32> {
@@ -355,8 +367,12 @@ fn padded(words: usize) -> usize {
 pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
     let mut d = Vec::new();
     let names = uniform_names(&r.vs, &r.fs);
-    let uv_v = |x: u16| uniform_value(&names, &pair.vs.uniforms, x);
-    let uv_f = |x: u16| uniform_value(&names, &pair.fs.uniforms, x);
+    /* gl_ref.py sets no struct uniform: such a reference is drawn without
+     * `--uniform-values`, every uniform 0 (deqp_unitype_vsstruct_*) */
+    let member = |r: &(String, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
+    let values = !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member);
+    let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
+    let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 
     /* the vertex stage: position, then varying (empty when none) */
     let (pos, var) = match pair.vs.secondary {

@@ -1017,6 +1017,14 @@ pub struct FsPrecision {
     /// compile from the declarations: a cube look-up of one is 32-bit in a
     /// highp shader (nir_fs.rs `walk_nodes`).
     pub highp_samplers: u32,
+    /// The float uniforms a mediump shader keeps fp32 (bit k: the module's
+    /// uniform k), set by the compile from the declarations: one declared
+    /// highp, a struct's member and `gl_DepthRange`'s (lower_precision
+    /// retypes a plain float variable of a lower precision only,
+    /// lower_precision.cpp:1022-1035). The walk reads each lane at 32 bits
+    /// and narrows it (`f2fmp`, fshighp_color's `V2F32_TO_V2F16 r0, u2.w0,
+    /// u2.w1`).
+    pub fp32_uniforms: u64,
     /// The colour is an ES 3.00 output declared highp: Mesa stores it at
     /// fp32 (`blend[0].type` = `nir_type_float32`, `BLEND.v4.f32`), where
     /// gl_FragColor (mediump in ES 1.00) and a mediump output are fp16
@@ -1200,6 +1208,11 @@ fn uniform_precision(decls: &[super::reflect::UniformDecl<'_>], name: &str) -> O
         return Some(u.precision);
     }
     let (base, member) = name.split_once('.')?;
+    /* the built-in's members are highp (GLSL ES 1.00 section 7.5; the
+     * front end appends them as rows of their own, depthrange_vs) */
+    if base == "gl_DepthRange" {
+        return Some(Precision::High);
+    }
     if member.contains(['.', '[']) {
         return None;
     }
@@ -1300,10 +1313,14 @@ fn compile_stage<'s>(
         if select::UboLayout::loaded(&vs) {
             sc.ubo = ubo.kept()?;
         }
-        /* an fp16 uniform is lowered (nir.rs `fp16_uniform`): any other
-         * uniform not highp has no reference */
+        /* an fp16 uniform is lowered (nir.rs `fp16_uniform`), and a struct's
+         * member is fp32 whatever its precision (lower_precision.cpp:1029-1031
+         * asks for a float base type; vsstruct_partial's `val.a` is `u5.w1`,
+         * its `f2f32(f2fmp(x))` folded): any other uniform not highp has no
+         * reference */
         for u in m.uniforms.iter().filter(|u| ubo.word(u.dword_off).is_some()) {
-            if !matches!(prec(u.name), Some(Precision::High)) && ubo.half(u.dword_off).is_none() {
+            let member = u.name.contains('.') && prec(u.name).is_some();
+            if !member && !matches!(prec(u.name), Some(Precision::High)) && ubo.half(u.dword_off).is_none() {
                 return Err(MaliError::UniformPrecision);
             }
         }
@@ -1390,9 +1407,22 @@ fn compile_stage<'s>(
         if (fs.colour_f32 || fs.colour_u32) && !fs.highp {
             return Err(MaliError::MixedPrecision);
         }
+        /* the float uniforms a mediump shader keeps fp32: declared highp, a
+         * struct's member (lower_precision.cpp:1029-1031 asks for a float
+         * base type) or a built-in's (`gl_DepthRange`, highp) */
+        let fp32 =
+            |name: &str| name.contains('.') || matches!(uniform_precision(precision, name), Some(Precision::High));
+        if !fs.highp {
+            for (k, u) in m.uniforms.iter().enumerate() {
+                let float = matches!(u.gl_type, 0x1406 | 0x8B50..=0x8B52 | 0x8B5A..=0x8B5C);
+                if u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK && float && fp32(u.name) {
+                    fs.fp32_uniforms |= 1u64.checked_shl(k as u32).ok_or(MaliError::FsUniform)?;
+                }
+            }
+        }
         /* a mediump colour of vector arithmetic under one flattened `if`
          * (case 142): Mesa's chunked program (vec16.rs), not the lane walk's */
-        let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+        let highp = |name: &str| fp32(name);
         if !fs.highp && !fs.mixed {
             if let Some(g) = vec16::program(m, scratch, &highp)? {
                 let mut p = prog(scratch)?;
@@ -1453,7 +1483,7 @@ fn compile_stage<'s>(
             /* a mediump shader's colour of masks: the fp16 uniform block
              * (case 72's `u_in`, its fp16 half read by `F16_TO_S32`; case
              * 112's bool, a word) */
-            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            let highp = |name: &str| fp32(name);
             nir_fs::fuse16(&mut f);
             nir_fs::vectorise_int_sources(&mut f)
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
@@ -1465,13 +1495,13 @@ fn compile_stage<'s>(
              * look-up under them, kept as blocks with a branch
              * (cflow_148_texbranch); or a mediump ES 3.00 shader's fp32
              * island of the highp gl_FragCoord (case 218 shadowcmp) */
-            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            let highp = |name: &str| fp32(name);
             select::UboLayout::fs16(m, &f.nir, &highp)
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else {
             /* the fp16 uniform block (LowerPrecisionFloat16Uniforms); a
              * uniform declared highp is Mesa's fp32 one, refused */
-            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
+            let highp = |name: &str| fp32(name);
             select::UboLayout::fs16(m, &f.nir, &highp)
                 .and_then(|ubo| nir_fs::select(&mut p, &mut f, &ubo).map(|()| ubo))
         };

@@ -445,6 +445,21 @@ pub fn program<'s>(
             }
         }
     }
+    /* a float uniform Mesa keeps fp32 is the lane walk's (its narrowing
+     * `f2fmp`, nir_fs.rs `FsPrecision::fp32_uniforms`) */
+    let fp32 = g.nodes[..g.n].iter().any(|nd| {
+        let Kind::Uniform { dword, .. } = nd.kind else { return false };
+        m.uniforms.iter().any(|u| {
+            u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK
+                && dword >= u.dword_off
+                && dword < u.dword_off + u.dwords.max(1)
+                && matches!(u.gl_type, 0x1406 | 0x8B50..=0x8B52 | 0x8B5A..=0x8B5C)
+                && highp(u.name)
+        })
+    });
+    if fp32 {
+        return Ok(None);
+    }
     p.ubo = UboLayout::fs16(m, &g, highp)?;
     /* an `if` whose sides count past bifrost's limit keeps its branch */
     if p.side_count() > nir::PEEPHOLE_LIMIT as usize {

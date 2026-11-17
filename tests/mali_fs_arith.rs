@@ -233,7 +233,9 @@ fn gm2_fsarith_push_the_columns_mesa_reads() {
 /// The shapes past what the references draw stay refused: `pow` by an
 /// exponent nir_opt_algebraic rewrites (2.0: `a * a`), `exp2` of a
 /// varying's lane alone beside a constant, a highp `log2` outside a `pow`,
-/// and a `mat3` uniform of a mediump fragment shader.
+/// and a `mat3` uniform's product in a mediump fragment shader (its
+/// column rows are laid out, deqp_unitype_fsmat3_mediump; the product's
+/// lanes beside the constant are not).
 #[test]
 fn the_shapes_no_reference_draws_stay_refused() {
     let _one = one_at_a_time();
@@ -255,6 +257,6 @@ fn the_shapes_no_reference_draws_stay_refused() {
     );
     refused(
         "precision mediump float; uniform mat3 m; varying vec3 v; void main() { gl_FragColor = vec4(m * v, 1.0); }",
-        "uniform other than",
+        "gl_FragColor lane other than",
     );
 }
