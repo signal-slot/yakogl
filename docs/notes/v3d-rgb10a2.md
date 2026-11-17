@@ -59,6 +59,16 @@ Steps 1 to 3 of (e) are on main; step 4 (the TFU) is not.
   `rgb10a2_texture_without_a_class_blits_as_rgba8`). Builds where the class
   falls back to RGBA8 (PowerVR, GC7000UL, report-es2) are unchanged. The
   Pi 4 dEQP run is pending.
+- **glReadPixels** (host, `read_pixels` in `src/gl/framebuffer.rs`, `8428875e`):
+  reading an `RGB10_A2` attachment, renderbuffer or texture, on the build
+  that stores the class accepts `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV`
+  and returns the little-endian word unchanged (ES 3.0 table 3.2). For
+  `GL_RGBA`/`GL_UNSIGNED_BYTE` it decodes the word: each field becomes
+  `(v*255 + max/2)/max`, with `max` 1023 for R, G, B and 3 for A. Builds
+  where the class falls back to RGBA8 are unchanged. Still `RGBA`/
+  `UNSIGNED_BYTE`: `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE`. Not
+  decoded yet: `glCopyTexImage2D`/`glCopyTexSubImage2D` from the surface.
+  Later items change both. The Pi 4 dEQP run is pending.
 - **Not done**: step 4. `rt_texture` (`src/v3d/backend.rs`) still requires
   `GLES_TEXFMT_RGBA8`, the TFU has no 10/10/10/2 input type
   (`V3D_TFU_TTYPE_*` are R8, RG8, RGBA8, R16F, R32F), and the GL core offers
