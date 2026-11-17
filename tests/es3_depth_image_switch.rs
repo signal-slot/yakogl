@@ -420,10 +420,14 @@ fn draw(depth_too: bool) {
     assert_eq!(err(), GL_NO_ERROR);
 }
 
-/// A CPU read of layered texture `tex`: a one-texel glTexSubImage of its last
-/// image with the value it holds, which settles the texture first.
-fn settle(tex: GLuint, kind: Layered) {
-    let last = kind.images() - 1;
+/// A CPU read of layered texture `tex`: a one-texel glTexSubImage of image
+/// `last` with the value it holds, which settles the texture first. The
+/// settle resolves the plane into the recorded image and the write then puts
+/// back the value read BEFORE the resolve, so `last` must not be the image
+/// the plane holds (the last one drawn): it would overwrite the resolve with
+/// the stale stand-in value (texture.rs `settle_texture`: `resolve_depth`,
+/// then the sub-image write over the rows).
+fn settle_at(tex: GLuint, kind: Layered, last: u32) {
     let v = [texel(tex, last, 0, 0)];
     // SAFETY: one float of pixels, a 1x1 sub-image inside the level.
     unsafe {
@@ -440,6 +444,11 @@ fn settle(tex: GLuint, kind: Layered) {
         }
     }
     assert_eq!(err(), GL_NO_ERROR);
+}
+
+/// `settle_at` the last image (the tests that draw only into image 0).
+fn settle(tex: GLuint, kind: Layered) {
+    settle_at(tex, kind, kind.images() - 1);
 }
 
 fn take() -> Vec<Ev> {
@@ -601,7 +610,10 @@ fn switch_case(kind: Layered, a: u32, b: u32, clear: bool) {
     );
     assert_eq!(image(tex, a), resolved_image(id, 1), "{kind:?}: image {a} took the plane");
     assert_eq!(image(tex, b), seeded_image(b), "{kind:?}: image {b} not yet read");
-    settle(tex, kind);
+    // Read through an image outside {a, b}: a write into b would put the
+    // stale seed back over the plane the read resolved into b.
+    let other = (0..kind.images()).rev().find(|k| *k != a && *k != b).unwrap();
+    settle_at(tex, kind, other);
     assert_eq!(take(), [Ev::Resolve(id, 2)], "{kind:?}: the read");
     assert_eq!(image(tex, a), resolved_image(id, 1), "{kind:?}: image {a} keeps its depth");
     assert_eq!(image(tex, b), resolved_image(id, 2), "{kind:?}: image {b} took the plane");
