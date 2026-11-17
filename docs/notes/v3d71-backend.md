@@ -7,8 +7,8 @@ Plan #365, item `design-note`: item P8 of `docs/notes/pre-study-rpi5.md`
 note is the design. It changes no code. It fixes the file names, types and
 function signatures that the later items implement (`scaffold71`,
 `select71`, `alloc71`, `sched71`, `sched71-cf`, `chain71`, `corpus71`,
-`chain-hook`). The Results section at the end is empty. Item `results-note`
-fills it after `pins42`.
+`chain-hook`). The Results section at the end holds the measurements item
+`results-note` took after `pins42`.
 
 Sources. Mesa lines are Mesa 26.2.1, MIT. The tree read is the dependency
 cache's `mesa-pan/mesa-26.2.1`, from the tarball whose sha256 is
@@ -802,4 +802,108 @@ touch only their own new paths.
 
 ## Results
 
-(Empty. Item `results-note` fills this in after `pins42`.)
+Measured by item `results-note` at `3db63369` (the integration tip: every
+plan #365 item merged, `chain-hook` last). `chain-hook` landed as
+`chain71::compile_program_for(gen, ..)` rather than the `compile_with`
+factoring this section (a) sketched: `Gen::V42` calls
+`chain::compile_program_keyed` unchanged and `Gen::V71` calls
+`compile_program71_keyed`; `chain71::tests::v42_is_the_4_2_chain_word_for_word`
+holds that to the word. Every number below was taken at `3db63369`. Feature
+set `--no-default-features --features
+host-test,gpu-v3d,shaderc-online,no-shader-table`, except
+`tests/es2_report_guard.rs`, which ran its two header feature sets. The
+`v3d_shc --device 71` comparison ran (a Mesa 26.2.1 tree built as
+`tools/v3d/README.md` describes, named by `MESA_V3D_TREE`): no shape is a
+gap. `cargo fmt --check` is clean.
+
+### The four P8 shapes (`tests/v3d71_shapes.rs`: 4 passed)
+
+Every shape's fs, vs and cs compile with `compile_program71`; every word
+decodes with `codec71` and re-encodes to the same bits; the instructions pass
+`verify71` and `registers_fit_threads71`; and the fs runs in `sim71` to the
+shape's colour in every lane. `tests/v3d71_compare` then runs ours and Mesa's
+7.1 program for the same GLSL, each with its own uniform stream, on the
+shape's inputs plus four random ones: same outputs on all 5 cases for all
+four shapes. All four fragment shaders run at 4 threads. Counts are ours /
+Mesa's, printed, not enforced (the packer is not Mesa's list scheduler):
+
+| shape | fs words | sim71 lane 0 colour | instructions | thrsw | ldvary | TMU |
+|---|---|---|---|---|---|---|
+| pass-through | 12 | 0.0, 0.3125, 0.625, 0.9375 | 12 / 9 | 3 / 3 | 4 / 4 | 0 / 0 |
+| uniform | 8 | 0.25, 0.5, 0.75, 1.0 | 8 / 6 | 3 / 3 | 0 / 0 | 0 / 0 |
+| `if` | 15 | 0.0, 0.0, 1.0, 1.0 | 15 / 15 | 3 / 3 | 1 / 1 | 0 / 0 |
+| texture | 12 | 1.0, 0.0, 0.0, 1.0 | 12 / 9 | 3 / 3 | 2 / 2 | 4 / 4 |
+
+### The corpora (`tests/v3d71_online_corpus.rs`: 3 passed)
+
+- **es100**: 126 programs, **125 compile at 7.1** (19 with a branch), 1
+  refused: `es100/varyings15.frag: Alloc(DoesNotFit)` — alloc71 has no
+  spilling yet ((b), an open item). Mesa's table refused two ours compiles
+  (`es100/vtex_struct_sampler.vert`, `es100/vtex_struct_sampler_array.vert`).
+  On the 123 both compile: ours 8318 instructions, Mesa 4865
+  (`es100_counts_71.tsv`).
+- **qpu_corpus_71**: 1090 programs, **873 compile at 7.1** (212 with a
+  branch), 217 refused — every one listed by name in
+  `tools/shaders/known-uncompilable-v3d71.txt`. 216 are programs carrying a
+  desktop-GLSL source our ES-only front end refuses (the same sources
+  `known-uncompilable-v3d.txt` lists at 4.2; Mesa's counts come from
+  glsl2v3d.py's translation): `passthrough.vert` × 55, `points.vert` × 31,
+  `color_uv.vert` × 30, `mvp_color.vert` × 29, `zorder.vert` × 29,
+  `uv.vert` × 19, `mvp.vert` × 17, `interp_color.frag` × 4,
+  `internal/clear.vert` × 1, `internal/fbload.vert` × 1. The 217th is the
+  `es100/varyings15.vert + es100/varyings15.frag` pair, `Alloc(DoesNotFit)`.
+  On the 873 ours has [43151, 51290, 29268] fs/vs/cs instructions against
+  Mesa's [28118, 29584, 19446] (`qpu_counts_71.tsv`): reported, not enforced.
+  sched71's first cut carries none of the shortening passes of (e) (no
+  `hoist`, no `ldvary_back`, no reorder, no +1 SFU read), which is where
+  much of the gap sits.
+- A program that compiles has passed `verify71`, `registers_fit_threads71`
+  and the codec71 round trip inside `build71`; the test re-checks them on the
+  returned code, and `branches_are_structured71` covers the 19 + 212 branched
+  ones.
+
+### The 7.1 unit rows (`--lib`: 53 passed)
+
+`--lib -- v3d::verify71 v3d::select71 v3d::alloc71 v3d::sched71
+v3d::chain71`: 53 passed, 0 failed — among them
+`chain71::tests::v42_is_the_4_2_chain_word_for_word` and
+`shared_refusals_are_the_4_2_chains_at_both_generations`.
+
+### The 4.2 pins, rerun at `3db63369`
+
+Every pinned 4.2 test passes at the tip:
+
+- `tests/v3d_online_corpus.rs`: 1 passed — 324 sources (the pin), 306
+  compiled, 20 refused or unlinked, 33 pairs linked, the default refusal list
+  exact.
+- `--lib -- v3d::roundtrip v3d::golden v3d::mesa_ref`: 31 passed, 2 ignored
+  (the two that name an external tool: `V3D_KEEP_DIR`, `V3D_QPU_REF`; ignored
+  at the baseline as well). The 8,893-word round-trip corpus, the 45 golden
+  rows and the mesa_ref digest live in files that `git diff 0af108a7..HEAD`
+  prints nothing for.
+- `tests/v3d_sim_mesa.rs`: 12 passed. `tests/es2_report_guard.rs`: both
+  header feature sets pass (17 and 18 tests).
+- `cargo fmt --check`: clean.
+
+`git diff 0af108a7..HEAD --stat` (0af108a7 = the `pins42-baseline` snapshot)
+over `prepare.rs`, `alloc.rs`, `sched.rs`, `verify.rs`, `order.rs` and
+`third_party/`: alloc, sched, verify, order and third_party print nothing;
+`prepare.rs` prints +12 lines — the `Prepared::rt_f32` field of `e14d9e2f`, a
+compile key that `prepare_fragment_with` leaves 0 and whose message records
+"with 0 the code is what it was before the key existed".
+
+Two 4.2 pins' *values* differ between `0af108a7` and the tip. Both moved in
+main-line commits of other work, not of this plan, and both state it in their
+commit messages:
+
+- `tests/v3d_sim_mesa.rs`'s `OURS_TOTALS` / `OURS_TOTALS_ES2` (fs totals
+  11079 → 11063, 9823 → 9807): `2a4bc97a`, "one- and two-component float
+  colour outputs get their real TLB component count", "Pins re-measured".
+- the 4.2 refusal list lost `es100/varyings15.vert+es100/varyings15.frag`
+  (`6581f22b`, #359: 15 varying vectors now compile) and gained 54
+  `@report-es2` entries (`9cf452de`), lines the default build does not read.
+
+No commit of this plan changed a 4.2 output word or a 4.2 pin: within
+`0af108a7..HEAD` the 7.1 work is new files, the `mod.rs` declarations, and
+`chain71.rs` — the shared back-half files carry only the `e14d9e2f` field and
+the commits above.

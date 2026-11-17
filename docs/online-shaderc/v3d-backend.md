@@ -23,6 +23,20 @@ References: Mesa 26.2.1 `src/broadcom/compiler/` and `src/broadcom/qpu/` (MIT,
 transcribed with attribution where we follow them). No GPL source is read for this
 work.
 
+## The V3D 7.1 back end (Raspberry Pi 5)
+
+This file describes the 4.2 back end, and it stays the 4.2 record. The 7.1
+back half (plan #365, pre-study P8) lives beside it: `vop71.rs`,
+`select71.rs`, `alloc71.rs`, `sched71.rs`, `sched71_cf.rs`, `verify71.rs` and
+`chain71.rs` next to the earlier `isa71.rs`, `codec71.rs`, `listing71.rs`,
+`golden71.rs`, `roundtrip71.rs` and `sim71.rs` in the same directory.
+`prepare.rs` and `select.rs` run for both generations; from `Selected` on,
+7.1 is those files, entered through `chain71::compile_program_for(Gen::V71,
+..)` — with `Gen::V42` it is `compile_program_keyed` word for word. No 4.2
+output word moved for it: every 4.2 pin in the tests passes with the 7.1
+files in the tree. The design and the host results (the four P8 shapes, the
+corpora, the pins) are `docs/notes/v3d71-backend.md`.
+
 ## What is different from the other two back ends
 
 - **A program, not a stage.** The VS writes its varyings in the order the FS reads
