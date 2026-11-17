@@ -1072,6 +1072,9 @@ TEST_TREE_PATHS=(
   # script imports the two Vivante modules and reads gen_gl_test_shaders.py
   tools/v3d/glsl2v3d.py tools/vivante/glsl2vivante.py tools/vivante/es100.py
   driver/tools/pvrlab/gen_gl_test_shaders.py
+  # tests/v3d71_mesa_corpus.rs reads the table, and runs the script that
+  # remakes it when V3D_SHC is set
+  tools/v3d/es100_counts_71.tsv tools/v3d/es100_ref71.sh
 )
 # The hash of those files (their blob ids; a file changed or added in the
 # working tree by its content). The library's own unit tests (src/lib.rs)
