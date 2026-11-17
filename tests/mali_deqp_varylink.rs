@@ -14,7 +14,7 @@
 mod mali_ref;
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant, lowered by lower-varylink"]
+#[ignore = "differs: Mesa narrows the merged lane once (FADD.f32 into h0, read .h00), ours narrows it twice (V2F32_TO_V2F16 r0, r0), lowered by lower-varylink"]
 fn swz_xx() {
     mali_ref::assert_matches("deqp_varylink_swz_xx");
 }
@@ -60,13 +60,10 @@ fn unwritten() {
 fn refusals_pinned() {
     const EQUAL: &str = "Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet";
     const NO_ATTRIBUTE: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
-    const FRAGCOLOR: &str =
-        "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
     const DISCARD: &str = "Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet";
     const POSITION: &str = "Valhall: a gl_Position lane left unwritten is not lowered yet";
     const VARYING: &str = "Valhall: a varying lane left unwritten is not lowered yet";
     let pins = [
-        ("swz_xx", FRAGCOLOR),
         ("discard", DISCARD),
         ("draw_single", EQUAL),
         ("va_multi3", NO_ATTRIBUTE),
@@ -77,4 +74,15 @@ fn refusals_pinned() {
     for (name, text) in pins {
         mali_ref::assert_refused_ref(&format!("deqp_varylink_{name}"), text);
     }
+}
+
+/// `swz_xx` compiles since the integer and boolean step of plan #377
+/// (ab9cde96) takes its `vec4(RES, RES, RES, 1.0)` colour, with other words
+/// than Mesa's: the `xx` varying's lane, which Mesa's link merges into one,
+/// is narrowed to fp16 twice instead of once.
+#[test]
+fn differences_pinned() {
+    let r = mali_ref::Reference::load("deqp_varylink_swz_xx");
+    let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("swz_xx: refused: {e}"));
+    assert!(!mali_ref::differences(&r, &pair).is_empty(), "swz_xx: now byte-equal; remove its ignore and this pin");
 }
