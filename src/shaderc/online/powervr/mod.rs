@@ -43,6 +43,7 @@ pub mod prepare;
 pub mod sel;
 pub mod select;
 pub mod shapes;
+pub mod ubo_rows;
 pub mod unroll;
 pub mod verify;
 /* The round trip and the default audit both read the offline table. */
