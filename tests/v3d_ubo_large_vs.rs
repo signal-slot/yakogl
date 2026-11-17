@@ -82,8 +82,9 @@ fn run(vs: &str, i: u32) -> Result<[f32; 4], String> {
     }
     // one VPM input row per component of the attribute records
     let mut rows: Vec<[u32; LANES]> = Vec::new();
-    for rec in 0..p.attributes.iter().filter(|e| e.1.is_some()).count() {
-        for c in 0..p.vs.vattr_sizes[rec] as usize {
+    let n = p.attributes.iter().filter(|e| e.1.is_some()).count();
+    for &size in p.vs.vattr_sizes.iter().take(n) {
+        for c in 0..size as usize {
             rows.push([[0.0f32, 0.0, 0.0, 1.0][c.min(3)].to_bits(); LANES]);
         }
     }

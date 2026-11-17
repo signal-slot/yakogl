@@ -601,11 +601,11 @@ fn read_back_of_attachment_3_after_a_depth_tested_draw() {
     let seen = draw();
     let d = the_draw(&seen);
     assert_eq!(d.num_targets, 4);
-    for i in 0..4 {
+    for (i, target) in d.targets.iter().enumerate().take(4) {
         let marker: u8 = if i == 3 { 0xc3 } else { 0x10 + i as u8 };
         // SAFETY: the target is the host buffer `m_gpu_alloc` leaked, 8x8
         // RGBA8, and nothing else touches it while the lock is held.
-        unsafe { core::ptr::write_bytes(d.targets[i].0 as *mut u8, marker, 8 * 8 * 4) };
+        unsafe { core::ptr::write_bytes(target.0 as *mut u8, marker, 8 * 8 * 4) };
     }
     let mut px = [[0u8; 4]; 64];
     // SAFETY: room for 64 RGBA8 pixels; a framebuffer this test made.

@@ -801,9 +801,9 @@ fn four_equal_attachments_draw_at_their_size() {
     let j = assert_one_job("4 x 64x64", &s, 4, 1);
     assert_eq!((j.width, j.height), (64, 64));
     assert_eq!(j.stride, stride(64, 4));
-    for n in 0..3 {
-        assert_ne!(j.rt[n].address, 0, "RT {} has its address", n + 1);
-        assert_eq!(j.rt[n].stride, stride(64, 4), "RT {}'s stride", n + 1);
+    for (n, rt) in j.rt.iter().enumerate().take(3) {
+        assert_ne!(rt.address, 0, "RT {} has its address", n + 1);
+        assert_eq!(rt.stride, stride(64, 4), "RT {}'s stride", n + 1);
     }
     assert!(j.address != j.rt[0].address && j.rt[0].address != j.rt[1].address && j.rt[1].address != j.rt[2].address);
     assert_filled("draw", &read_attachment(3, 64, 64), 64, 64, 64, DRAW[3]);
