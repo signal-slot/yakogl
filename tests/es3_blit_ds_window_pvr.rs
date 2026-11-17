@@ -28,10 +28,9 @@
 //!   depth renderbuffer, the same for stencil, and a D24S8 window with a
 //!   depth-only, a stencil-only and a both-planes mask (the plane the mask does
 //!   not name must keep its value). Both sides' planes are seeded and read
-//!   back through the table's own entries. These need the GL core's window
-//!   path (`DepthSource::Window`, `PlaneDst::Window`: the gl-ds-window item);
-//!   today the window is GL_INVALID_OPERATION on both sides, so they are
-//!   `#[ignore = "needs gl-ds-window"]`.
+//!   back through the table's own entries. They go through the GL core's
+//!   window path (`DepthSource::Window`, `PlaneDst::Window`: the gl-ds-window
+//!   item).
 //!
 //! The window's ds buffer exists in the back end after a GL clear of the
 //! window and a depth-tested draw into it, with a `glFinish` (the way the rig
@@ -53,8 +52,7 @@
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_blit_ds_window_pvr
 //! ```
 //!
-//! (the feature set of tests/es3_blit_ds_pvr.rs; add `-- --ignored` for the
-//! cases that need gl-ds-window). Not built with `report-es2` (glBlitFramebuffer
+//! (the feature set of tests/es3_blit_ds_pvr.rs). Not built with `report-es2` (glBlitFramebuffer
 //! is an ES 3.0 call).
 
 #![cfg(all(
@@ -878,10 +876,16 @@ fn filled(f: &dyn Fn(u32, u32) -> f32, w: u32, h: u32) -> Vec<f32> {
     (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| f(x, y)).collect()
 }
 
+/// One blit: the source rectangle, the destination rectangle, the scissor.
+type WindowCase = ([i32; 4], [i32; 4], Option<[i32; 4]>);
+
+/// A plane's value at (x, y).
+type PlaneFn = fn(u32, u32) -> f32;
+
 /// The blits of the window: whole, scaled, flipped past the edge with the
 /// scissor, and a sub-rectangle. Every sample point of the destination
 /// rectangle (cut to the target) is inside the source (a `sw` x `sh` image).
-fn window_cases(sw: i32, sh: i32) -> Vec<([i32; 4], [i32; 4], Option<[i32; 4]>)> {
+fn window_cases(sw: i32, sh: i32) -> Vec<WindowCase> {
     vec![
         ([0, 0, sw, sh], [0, 0, WW as i32, WH as i32], None),
         ([0, 0, sw, sh], [20, 14, 24, 20], None),
@@ -1034,12 +1038,11 @@ fn check(dir: Dir, mask: GLbitfield) {
             // SAFETY: plain GL call.
             unsafe { glFinish() };
             for (plane, bit) in [(D, DEPTH), (S, STENCIL)] {
-                let (win_f, src_f, dst_f): (fn(u32, u32) -> f32, fn(u32, u32) -> f32, fn(u32, u32) -> f32) =
-                    if plane == D {
-                        (win_depth, src_depth, dst_depth)
-                    } else {
-                        (win_stencil, src_stencil, dst_stencil)
-                    };
+                let (win_f, src_f, dst_f): (PlaneFn, PlaneFn, PlaneFn) = if plane == D {
+                    (win_depth, src_depth, dst_depth)
+                } else {
+                    (win_stencil, src_stencil, dst_stencil)
+                };
                 let moved = mask & bit != 0;
                 match dir {
                     Dir::IntoWindow => {
@@ -1078,25 +1081,21 @@ fn check(dir: Dir, mask: GLbitfield) {
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn depth_from_a_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, DEPTH);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn depth_from_the_window_into_a_renderbuffer() {
     check(Dir::FromWindow, DEPTH);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn stencil_from_a_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, STENCIL);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn stencil_from_the_window_into_a_renderbuffer() {
     check(Dir::FromWindow, STENCIL);
 }
@@ -1105,7 +1104,6 @@ fn stencil_from_the_window_into_a_renderbuffer() {
 /// stencil-only mask its depth (`check` asserts the plane the mask does not
 /// name is as it was), and with both masks takes both.
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn the_d24s8_window_as_a_destination_with_each_mask() {
     check(Dir::IntoWindow, DEPTH);
     check(Dir::IntoWindow, STENCIL);
@@ -1114,7 +1112,6 @@ fn the_d24s8_window_as_a_destination_with_each_mask() {
 
 /// The same for the window as the source of a D24S8 renderbuffer.
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn the_d24s8_window_as_a_source_with_each_mask() {
     check(Dir::FromWindow, DEPTH);
     check(Dir::FromWindow, STENCIL);

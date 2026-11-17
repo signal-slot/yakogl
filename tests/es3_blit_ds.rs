@@ -6,10 +6,11 @@
 //! The GL core copies depth on the CPU into a plane it holds itself: the
 //! R32F texels of a depth texture (gl/blit.rs `copy_depth`), read from a
 //! depth texture's texels or from the depth a back end keeps for a depth
-//! renderbuffer (`backend::depth_resolve`). The copies it cannot make --
-//! into a depth renderbuffer or the window, from the window, any stencil --
-//! need a back-end entry that writes a buffer's plane, and stay
-//! GL_INVALID_OPERATION, named once in the log.
+//! renderbuffer or the window (`backend::depth_resolve`). The copies it
+//! cannot make on a back end without `ds_write` and `stencil_resolve` --
+//! into a depth renderbuffer or the window, any stencil -- stay
+//! GL_INVALID_OPERATION, named once in the log (the window:
+//! tests/es3_blit_ds_window.rs).
 //!
 //! Every expected picture comes from a model written apart from the code:
 //! destination pixel (x, y) of the cut destination rectangle takes source
@@ -742,10 +743,11 @@ fn depth_and_stencil_together_and_a_plane_not_held() {
     release(&[sfb, dfb], &[], &[srb, drb]);
 }
 
-/// What the entries do not reach stays GL_INVALID_OPERATION: the window as
-/// either side of depth, and stencil in or out of a texture.
+/// What the entries do not reach stays GL_INVALID_OPERATION: stencil in or
+/// out of a texture (until gl-ds-layers). The window is
+/// tests/es3_blit_ds_window.rs.
 #[test]
-fn the_window_and_stencil_textures_stay_refused_with_the_entries() {
+fn stencil_in_a_texture_stays_refused_with_the_entries() {
     let _g = context_rw();
     let (rfb, rrb) = renderbuffer_fbo(GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT, 4, 4);
     let tex = depth_texture(D24S8, 4, 4, dst_depth);
@@ -754,8 +756,6 @@ fn the_window_and_stencil_textures_stay_refused_with_the_entries() {
     keep_plane(id, backend::DS_PLANE_DEPTH, 4, 4, bits(src_depth));
     keep_plane(id, backend::DS_PLANE_STENCIL, 4, 4, |_, _| 1);
     let cases = [
-        (rfb, 0, GL_DEPTH_BUFFER_BIT, "depth into the window"),
-        (0, rfb, GL_DEPTH_BUFFER_BIT, "depth from the window"),
         (rfb, tfb, GL_STENCIL_BUFFER_BIT, "stencil into a texture"),
         (tfb, rfb, GL_STENCIL_BUFFER_BIT, "stencil from a texture"),
     ];
@@ -871,9 +871,11 @@ fn the_errors_of_4_3_3_for_depth_and_stencil() {
 
 /* ---- the copies still refused (a back-end entry missing) -------------------- */
 
-/// Into a depth renderbuffer or the window, from the window, and any
-/// stencil: GL_INVALID_OPERATION, nothing read or written (the log line
-/// of each cause is gl/blit.rs's unit test).
+/// Into a depth renderbuffer or the window, and any stencil, on a back end
+/// without `ds_write` and `stencil_resolve`: GL_INVALID_OPERATION, nothing
+/// read or written (the log line of each cause is gl/blit.rs's unit test).
+/// Depth from the window it can read (`depth_resolve`):
+/// tests/es3_blit_ds_window.rs.
 #[test]
 fn copies_without_a_plane_the_core_holds_are_refused_by_name() {
     let _g = context();
@@ -886,7 +888,6 @@ fn copies_without_a_plane_the_core_holds_are_refused_by_name() {
         let cases = [
             (rfb, r2fb, GL_DEPTH_BUFFER_BIT, "into a renderbuffer"),
             (tfb, 0, GL_DEPTH_BUFFER_BIT, "into the window"),
-            (0, tfb, GL_DEPTH_BUFFER_BIT, "from the window"),
             (rfb, r2fb, GL_STENCIL_BUFFER_BIT, "stencil between renderbuffers"),
             (rfb, tfb, GL_STENCIL_BUFFER_BIT, "stencil into a texture"),
             (rfb, tfb, GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, "depth with stencil"),

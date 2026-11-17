@@ -34,11 +34,9 @@
 //! the model of tests/es3_blit_ds_window.rs (`model_axis`, `model`,
 //! `cut_rect`, `mem_row`, copied), compared in 24-bit depth units.
 //!
-//! The cases that need the window path (`DepthSource::Window` /
-//! `PlaneDst::Window` in src/gl/blit.rs, plan item gl-ds-window) are
-//! `#[ignore = "needs gl-ds-window"]`: until it lands the window is
-//! GL_INVALID_OPERATION on both sides, and they fail on that error. The
-//! cases that pass today are not ignored: the V3D entries take the window's
+//! The blits go through the window path (`DepthSource::Window` /
+//! `PlaneDst::Window` in src/gl/blit.rs, plan item gl-ds-window). Beside
+//! them: the V3D entries take the window's
 //! id (a round trip of both planes through `ds_write` and the resolves, an
 //! empty-rectangle probe, an unknown id answering 1), and the window to the
 //! window stays GL_INVALID_OPERATION (ES 3.0.6 4.3.3).
@@ -51,7 +49,7 @@
 //!
 //! Run: `cargo test --no-default-features --features
 //! host-test,gpu-v3d,shaderc-online,no-shader-table --test
-//! es3_blit_ds_window_v3d`, and the ignored cases with `-- --ignored`.
+//! es3_blit_ds_window_v3d`.
 
 #![cfg(all(
     feature = "host-test",
@@ -895,37 +893,31 @@ fn check(dir: Dir, mask: GLbitfield) {
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn depth_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, DEPTH);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn stencil_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, STENCIL);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn depth_and_stencil_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, DEPTH | STENCIL);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn window_depth_into_a_renderbuffer() {
     check(Dir::FromWindow, DEPTH);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn window_stencil_into_a_renderbuffer() {
     check(Dir::FromWindow, STENCIL);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn window_depth_and_stencil_into_a_renderbuffer() {
     check(Dir::FromWindow, DEPTH | STENCIL);
 }
