@@ -223,9 +223,9 @@ task list, `glGetError`/`glGetString`/`glGetIntegerv`, and the full draw path
 - Compressed textures: `GL_ETC1_RGB8_OES`, `GL_COMPRESSED_RGB8_ETC2` and
   `GL_COMPRESSED_RGBA8_ETC2_EAC` through `glCompressedTexImage2D` /
   `glCompressedTexSubImage2D` (whole blocks), decoded by the TPU from the
-  twiddled block layout (`docs/gpu-recipes/mesa_texture_layout.md`); one
+  twiddled block layout (`driver/docs/gpu-recipes/mesa_texture_layout.md`); one
   level per texture, no PVRTC (its TPU format is not documented in Mesa).
-- Blend states and partial colour masks are limited to what `glsl2usc.sh`
+- Blend states and partial colour masks are limited to what `tools/glsl2usc.sh`
   precompiled (the `blend` lines of `tools/shaders/precompiled.list`,
   `SPEC[:MASK]`); CONSTANT_* factors work when their variant exists
   (`const_color,inv_const_color` is in the default list).
@@ -239,7 +239,7 @@ task list, `glGetError`/`glGetString`/`glGetIntegerv`, and the full draw path
   offline table's front-end rewrites them; varyings link by name, case 19).
 - `glCullFace(GL_FRONT_AND_BACK)` treated as no-cull (no "cull-all" backend enum).
 
-Every GL ES 2.0 entry point exists (`tools/pvrlab/gl_test.c` case 14 covers the
+Every GL ES 2.0 entry point exists (`driver/tools/pvrlab/gl_test.c` case 14 covers the
 late additions). Accepted but not modelled by the backend:
 `glSampleCoverage` / alpha-to-coverage (the sample mask
 is not written by the FS; MSAA itself comes from the EGL config, `EGL_SAMPLES 4`,
@@ -603,7 +603,7 @@ against `GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS` (`GLES_VS_TEX_UNITS`),
 of the two stages: ES 2.0.25 2.10.5 counts a unit both stages use twice), and
 fails with "link error: the vertex shader uses N active samplers; this
 implementation exposes M (GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS)" or its fragment
-or combined twin (`program.rs` `check_sampler_counts`, ES 2.0.25 2.10.4). The
+or combined twin (`src/gl/program.rs` `check_sampler_counts`, ES 2.0.25 2.10.4). The
 draw used to wire the first `GLES_VS_TEX_UNITS` and leave the rest unwired; on
 the AM62P a 16-sampler vertex shader hung the GPU.
 
@@ -631,7 +631,7 @@ The other per-program limits are checked at link too, each against the one
 constant its `glGetIntegerv` query answers with (`gl/context.rs`):
 `GL_MAX_VERTEX_UNIFORM_VECTORS` and `GL_MAX_FRAGMENT_UNIFORM_VECTORS` (384
 each, `MAX_UNIFORM_DWORDS / 4`) by the GLSL ES 1.00 Appendix A packing of
-each stage's uniforms (`program.rs` `check_uniform_packing`),
+each stage's uniforms (`src/gl/program.rs` `check_uniform_packing`),
 `GL_MAX_VARYING_VECTORS` (8; 15 on the GC7000) by the same packing of the
 varyings, in the shader back end's link, and `GL_MAX_VERTEX_ATTRIBS` (16) in
 whole locations by the attribute layout. The algorithm is `shaderc/packing.rs`;
@@ -707,7 +707,7 @@ Deviations, each logged by name:
   its own reference.
 - A draw that captures costs a CPU pass: 1.5 us a vertex for a 20-operation
   vertex shader on the x86 host (release), plus the lowering (23 us for that
-  shader); `tf_capture_tests.rs` `capture_cost` measures it. A draw that does
+  shader); `src/gl/tf_capture_tests.rs` `capture_cost` measures it. A draw that does
   not capture pays one flag test.
 
 ## Design invariants
@@ -728,7 +728,7 @@ Deviations, each logged by name:
   wrote, a draw whose inputs change before its kick completes, and they can withhold the
   CPU view; read that module's documentation before writing a test. **The host
   differential harness** (`tools/hostharness/`, whose README lists what is and is not
-  compared) runs gl_test.c, API sweeps and hostile sequences over a recording OSAL (all
+  compared) runs `driver/tools/pvrlab/gl_test.c`, API sweeps and hostile sequences over a recording OSAL (all
   17 operations, GPU memory hashes, decoded kicks) and an interposer on all 222 exported
   entry points, in twelve platform modes, dev and release, with AddressSanitizer on the
   library itself; `compare.sh` repeats the check for any two builds. Nothing is

@@ -73,7 +73,7 @@ creates at the first draw (st_program.c, `st_finalize_nir`,
   in the FS: `nir_opt_varyings` moves work across the varyings) and its place
   in that storage as a vec4 `slot` and `vec4s`. A QUNIFORM_UNIFORM word is
   `slot * 4 + component`. A vector can be split into one entry per component,
-  each at its own slot (es100/utri: `u_scale` at slots 1..4, component k read
+  each at its own slot (`tools/shaders/es100/utri.vert`: `u_scale` at slots 1..4, component k read
   at slot 1 + k), so a name can appear more than once. YakoGL's own compiler
   (`src/shaderc/online/v3d/chain.rs`) writes `word` and `words` instead: the
   IR's dword offset and size, which its QUNIFORM_UNIFORM names directly.
@@ -259,7 +259,7 @@ Mesa compiles the fragment shader for the primitive being drawn
 vertex shader's point size (`v3d_update_compiled_vs`: `per_vertex_point_size`,
 set here when the VS writes `gl_PointSize`). `v3d_shc ... --prim points` builds
 that variant; the default is `triangles`, and `gpu.prim` in the JSON names it.
-Measured 2026-09-24: `points.vert` + `es100/pointcoord.frag` is FS 6 / VS 21 / CS 22
+Measured 2026-09-24: `tools/shaders/points.vert` + `tools/shaders/es100/pointcoord.frag` is FS 6 / VS 21 / CS 22
 for triangles and FS 10 / VS 23 / CS 24 for points (the FS gains the two
 `ldvary` of the point coordinate); `color_uv` is 12 / 31 / 22 in all three.
 The runtime picks the variant at draw time from the primitive.
@@ -398,7 +398,7 @@ models one QPU with 16 lanes: the add and mul ALUs, r0..r5 and rf0..rf63, the
 flags and conditions, the uniform stream, LDVARY (vary and the C coefficient
 in r5), the VPM (LDVPMV_IN, STVPMV), TLB writes with their configuration,
 THRSW and the program end, and REL branches. It is test-only (`host-test`,
-like `eval.rs`). Anything it does not model stops the run with a reason and
+like `src/shaderc/online/eval.rs`). Anything it does not model stops the run with a reason and
 never gives a value.
 
 Every semantic comes from Mesa's compiler (MIT), and the doc comment at the

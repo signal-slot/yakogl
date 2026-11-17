@@ -13,7 +13,7 @@ the frame is borrowed, and the texture emitters take the frame whole.*
 This is the sibling of `src/pvr/` for the i.MX8MP's **GC7000UL** (model `0x7000`,
 revision `0x6204`, product `0x70003`, HALTI5: 2 shader cores, 1 pixel pipe,
 16 varyings, 320 constant registers, 512 instructions and 64 temporaries per
-shader). It turns the resolved draw `gl/draw.rs` produces (``GlesDraw``)
+shader). It turns the resolved draw `src/gl/draw.rs` produces (``GlesDraw``)
 into a command stream the GPU's front end fetches.
 
 **Most of this has since run on hardware.** It was written before there was a
@@ -144,7 +144,7 @@ Files:
   is deliberate for a first backend: the order the registers are written in
   matters more than the number of them, and a state cache is easy to add once
   something on silicon is known to be correct.
-- **32-bit indices end to end.** The backend encodes them, but `gl/draw.rs`
+- **32-bit indices end to end.** The backend encodes them, but `src/gl/draw.rs`
   still widens u8 and u32 index arrays into u16 (and fails a draw whose
   indices exceed 65535), so `index_size` is always 2 today.
 - **`GlesDraw::target_alpha_bits`** is honoured for 0 bits only (2026-09-25): a draw
@@ -158,7 +158,7 @@ Files:
 
 The offline path is the same one the PowerVR uses: an application's GLSL text
 is hashed and looked up in a build-time table (`src/shaderc/offline.rs`,
-`vivante_blobs.rs`). What changes is what a table entry holds.
+`tests/reference/vivante_blobs.rs`). What changes is what a table entry holds.
 
 ``ShcShader`` keeps the reflection the GL core needs -- attributes,
 uniforms with their std430 dword offsets, samplers with their bindings. Its
@@ -278,7 +278,7 @@ after it; it defines none now, 9 with `test-knobs`.
 **Retracted, 2026-09-21:** an earlier version of this section said that only
 the first kick of a run draws, and that the blender swallowed every draw. Both
 were wrong, and both were the test's fault, not the hardware's: the self-test
-in `samples/zephyr/gc_slint` deleted its program and its vertex buffer
+in the `gc_slint` sample (since left the tree) deleted its program and its vertex buffer
 immediately after its first frame, so every frame after that drew with no
 program bound and no attribute arrays enabled. Nothing was drawn because
 nothing was asked for. Anyone who went looking for a driver bug on the
@@ -324,9 +324,9 @@ The cause is one field the Vivante shader table never filled in.
 dwords of its uniform block for `glBlendColor`, and `SHC_NO_BLEND_CONSTS`
 (0xff) means "it does not". This GPU has no blend-constant variant at all --
 `glBlendColor` is pixel-engine state here -- so every entry should say
-`SHC_NO_BLEND_CONSTS`. `gen_shader_table.py` did not emit the field, so every
+`SHC_NO_BLEND_CONSTS`. `tools/vivante/gen_shader_table.py` did not emit the field, so every
 entry got C's default of **0**, which does not read as "none": it reads as "the
-blend constants are at dword 0". `gl/draw.rs` therefore wrote `glBlendColor`
+blend constants are at dword 0". `src/gl/draw.rs` therefore wrote `glBlendColor`
 (all zeros unless the app sets it) over the first four dwords of every
 fragment uniform block, on every draw, immediately after copying the app's
 values in.
@@ -473,7 +473,7 @@ hold code. Check 23 fails for some other reason.
 
 `gl_test` numbers every `expect_*()` within its case and remembers the first
 that failed, and what it read.
-`samples/zephyr/gc_gl_test` puts that in the hold with
+`driver/samples/zephyr/gl_test` puts that in the hold with
 `CONFIG_GC_GL_TEST_REPORT_CHECK=y` (the check) and
 `CONFIG_GC_GL_TEST_REPORT_CHECK_COLOUR=y` (the colour it read). A board run on
 a shared board is minutes; six bits out of it instead of one is what turned
@@ -502,7 +502,7 @@ TEXTURE_HALIGN_SUPER_TILED` (2) -- so the 256-byte stride, the 16 KiB slice and
 the HALIGN all follow from that one choice. Ours is linear and tight, and every
 one of our numbers is consistent with that.
 
-**Linear is not forbidden for a cube.** `etnaviv_texture_desc.c:181` picks the
+**Linear is not forbidden for a cube.** Mesa's `etnaviv_texture_desc.c:181` picks the
 addressing mode from `res->layout` alone:
 
 ```c
@@ -556,7 +556,7 @@ load.u32    t1, t1.xxxx, u0.zxxx          ; from the uniform block's GPU address
 Its constant file is `{fidx, 16, the address, 0}`, with no copy of fcols.
 Mesa's CI passes the GLES2 mustpass on this GPU with that path.
 
-select.rs LoadUniformIdx does the same now. The index is clamped (ir.md), multiplied by
+`src/shaderc/online/select.rs` LoadUniformIdx does the same now. The index is clamped (`docs/online-shaderc/ir.md`), multiplied by
 the stride in bytes, the array's byte offset added, and loaded from a
 `SHC_VIV_CONST_UBO_ADDR` constant (kind 11). The backend copies each stage's
 uniform block into the frame arena per draw, when its table has that slot,
@@ -609,7 +609,7 @@ the GC7000 backend keeps, per mipmapped cube (and array/3D), a copy in the
 4x4-tiled order: level l at a 64-byte boundary, each face `align4(w_l) *
 align4(h_l) * bpp` bytes, faces back to back, descriptor addressing TILED. It
 is rebuilt when the texture's `content_gen` (every CPU write, `stamp_texels`)
-or its render-into stamp (`framebuffer.rs` `TARGET_USE`, a kick that drew into
+or its render-into stamp (`src/gl/framebuffer.rs` `TARGET_USE`, a kick that drew into
 it) is newer than the copy's.
   - Memory: about 2x for a mipmapped cube (the tiled copy pads levels below
     4x4 to one tile: +64 bytes a face at the smallest levels).
@@ -698,7 +698,7 @@ CULL_FACE), but that decides which triangles survive, not what the surviving
 fragment reads.
 
 **Our table had no variants at all** when this was written.
-`gen_shader_table.py` said so in its own header: blending and colour masks are
+`tools/vivante/gen_shader_table.py` said so in its own header: blending and colour masks are
 PE state on this GPU, so every fragment shader appeared exactly once with
 `blend_key` 0. The field exists, shared with the PowerVR table which does use
 it, and was always zero here. The section below is the reading that decided
@@ -758,7 +758,7 @@ after the render-to-face is not a likely cause on our side. (This is the
 end: the answer so far is "more than Mesa", never less.)
 
 **The render target lands where the descriptor says the face is.**
-`gl/framebuffer.rs` computes an attached face's offset as `layer * lh *
+`src/gl/framebuffer.rs` computes an attached face's offset as `layer * lh *
 GL_TEX_LEVEL_PITCH(t, lw) * bytes`, which for an 8x8 RGBA8 cube is `layer *
 256` -- and 256 is exactly the `SLICE` the descriptor declares, because both
 are `pitch * height * bpp`. The two agree by construction rather than by
@@ -882,7 +882,7 @@ and blue below. That is the signature of the value the check *wanted*,
 `0xbf008080`. All three colour channels were right and the check still failed,
 which leaves the one channel the colour code does not carry.
 
-`gl/framebuffer.rs` has a branch for a target stored B,G,R,A, entered for a
+`src/gl/framebuffer.rs` has a branch for a target stored B,G,R,A, entered for a
 scan-out XRGB8888 surface and -- through `rt_rgba8888_is_bgra`, which only
 this backend sets -- for an RGBA8888 target too. It swapped red and blue and
 then wrote `0xff` over the fourth byte. Right for the scan-out surface, whose
@@ -1006,7 +1006,7 @@ guess: three shaders compiled on the host, one bit compared.
     (`PA_VIEWPORT_SCALE_Z` / `OFFSET_Z`) being GL's. Check a `glClear` with a
     non-default `glDepthRangef`.
 11. ~~**Event ids.**~~ *Settled by the driver, not by silicon.* The render
-    service (`src/vivante/gc_render.h` in the driver repository) allocates the
+    service (`driver/src/vivante/gc_render.h`) allocates the
     hardware event, appends the `EVENT` command and hands back a monotonic
     fence; the backend no longer names an id. See "The OSAL contract" above.
 12. **ETC2 through `TEXTURE_FORMAT_ETC1`.** RGB ETC2 is decoded as the ETC1
@@ -1044,14 +1044,14 @@ are recorded here because the audit found them, not because they explain it.
    the formula is 1 for every count up to 12 -- **the corpus cannot tell the two
    rules apart.** The first count where it can is 13, and 13 is reachable:
    `MAX_VERTEX_ATTRIBS` is 16, the chip's own `stream_count`. Fixed in
-   `shaderc/online/abi.rs`; the test pins the step the corpus cannot see.
+   `src/shaderc/online/abi.rs`; the test pins the step the corpus cannot see.
 
 2. `PS_CONTROL_EXT.OUTPUT_MODE0`. etnaviv's `translate_output_mode`
    (`etnaviv_translate.h:446`) tests the component width *before* the
    pure-integer test, so a 32-bit float target takes `UIF32` and everything
    narrower `NORMAL`. We wrote `NORMAL` for every format. Of the formats
    `pe_color_format` renders to, only `R32F` is affected, and it is reachable
-   through a `GL_R32F` FBO colour attachment (`gl/framebuffer.rs:352`). Fixed in
+   through a `GL_R32F` FBO colour attachment (`src/gl/framebuffer.rs:352`). Fixed in
    `shader.rs`; **transcribed, not measured** -- no R32F draw has run on this
    part.
 
@@ -1142,7 +1142,7 @@ RT_COUNT(0) after). 3: caps -- GC7000 MAX_DRAW_BUFFERS 1 -> 4 and
 CAP_COLOR_ATTACHMENTS 3 -> 4, per GPU (the PowerVR stays 3) -- and clears: the
 clear quad writes every attached draw buffer (PS_OUTPUT_REG names the clear
 shader's colour for every RT), and `glClearBuffer*(GL_COLOR, i)`, refused for
-i != 0 today (es3.rs), becomes a clear quad with only RT i's mask on. 4:
+i != 0 today (src/gl/es3.rs), becomes a clear quad with only RT i's mask on. 4:
 gl_test case 106 -- four RGBA8 attachments written with four colours in one
 draw, then glClearBuffer on RT 2, every pixel of every attachment read back. 5:
 opt-in until measured, MAX_DRAW_BUFFERS reporting 4 only with the switch on.
@@ -1195,17 +1195,17 @@ The frame is case 10's frame 5: a clear, one draw, `glFinish`,
 
 | # | step | etnaviv | ours | verdict |
 |---|---|---|---|---|
-| 1 | submit prologue | kernel `etnaviv_cmd_select_pipe`, on a pipe switch only: `GL_FLUSH_CACHE` DEPTH\|COLOR, SEMAPHORE FE->PE, STALL FE->PE, `PIPE_SELECT` 3D | `cmdbuf.rs` `ring_submit`, on every submit: the same words | same (ours on every submit) |
+| 1 | submit prologue | kernel `etnaviv_cmd_select_pipe`, on a pipe switch only: `GL_FLUSH_CACHE` DEPTH\|COLOR, SEMAPHORE FE->PE, STALL FE->PE, `PIPE_SELECT` 3D | `driver/rust/src/gpu/vivante/cmdbuf.rs` `ring_submit`, on every submit: the same words | same (ours on every submit) |
 | 2 | state at the head of a stream | Mesa `etna_reset_gpu_state` | `emit_context_init`: `PIPE_SELECT` 3D again, `GL_FLUSH_CACHE` DESCRIPTOR, icache invalidate | ours adds; nothing is in flight (step 1 stalled) |
 | 3 | before each draw's state | Mesa: no colour flush between draws; the texture caches only when the textures change | `emit_flushes`: `GL_FLUSH_CACHE` COLOR\|DEPTH\|TEXTURE\|SHADER_L1, then TEXTUREVS, SEMAPHORE+STALL RA->PE, `TS_FLUSH_CACHE` | ours flushes more |
 | 4 | shader and sampler state | the shader block ends with `stall(RA, PE)` (`etnaviv_emit.c`; the state audit above) | SEMAPHORE+STALL FE->PE before the textures and the code, SEMAPHORE+STALL RA->PE after the prefetch | the same RA->PE; ours adds FE->PE |
 | 5 | the draw | `DRAW_INSTANCED` | `DRAW_INSTANCED` | same |
 | 6 | clear -> draw | the clear is a resolve-engine fill. Before an `RS_KICKER`, `etna_try_rs_blit` emits `GL_FLUSH_CACHE` COLOR\|DEPTH, `stall(RA, PE)` and `TS_FLUSH_CACHE` | the clear is a quad through the same PE, then step 3 before the next draw | no PE->RS hand-off on our side, so nothing is missing |
 | 7 | end of the user stream | the last command Mesa recorded | the last `DRAW_INSTANCED`, then a pad (test 1: nothing after it) | same |
-| 8 | submit epilogue | kernel `etnaviv_buffer_queue`, 3D: `GL_FLUSH_CACHE` DEPTH\|COLOR, `TS_FLUSH_CACHE`, SEMAPHORE FE->PE, STALL FE->PE, `GL_EVENT` FROM_PE, WAIT, LINK. The BLT steps are skipped: this core has no BLT engine (minor_features5 lacks BLT_ENGINE, tools/cts/RESULTS.md) | `ring_submit` with `GC_SUBMIT_FLUSH_ALL` (`zephyr_gc.c`): `GL_FLUSH_CACHE` DEPTH\|COLOR\|SHADER_L1, `TS_FLUSH_CACHE`, SEMAPHORE FE->PE, STALL FE->PE, `GL_EVENT` FROM_PE, WAIT, LINK (test 2) | same, plus SHADER_L1 |
-| 9 | the interrupt | `irq_handler`: read `INTR_ACKNOWLEDGE` (read to clear), signal the event's fence | `irq.rs` `handle`: the same; `fence_done` only moves forward | same |
+| 8 | submit epilogue | kernel `etnaviv_buffer_queue`, 3D: `GL_FLUSH_CACHE` DEPTH\|COLOR, `TS_FLUSH_CACHE`, SEMAPHORE FE->PE, STALL FE->PE, `GL_EVENT` FROM_PE, WAIT, LINK. The BLT steps are skipped: this core has no BLT engine (minor_features5 lacks BLT_ENGINE, tools/cts/RESULTS.md) | `ring_submit` with `GC_SUBMIT_FLUSH_ALL` (`src/osal/zephyr_gc.c`): `GL_FLUSH_CACHE` DEPTH\|COLOR\|SHADER_L1, `TS_FLUSH_CACHE`, SEMAPHORE FE->PE, STALL FE->PE, `GL_EVENT` FROM_PE, WAIT, LINK (test 2) | same, plus SHADER_L1 |
+| 9 | the interrupt | `irq_handler`: read `INTR_ACKNOWLEDGE` (read to clear), signal the event's fence | `driver/rust/src/gpu/vivante/irq.rs` `handle`: the same; `fence_done` only moves forward | same |
 | 10 | CPU wait | Mesa `etna_transfer_map` flushes the context, then `etna_bo_cpu_prep(READ)`; the kernel waits for the BO's fence | `glFinish` -> `gc_finish` submits, then waits for every frame's fence; `gc_render_wait` polls `fence_done`, which the ISR writes (volatile) | same |
-| 11 | CPU caches | BOs are write-combined (Normal non-cacheable) by default, so `cpu_prep` does no maintenance for them | the carveout and imported surfaces are mapped Normal non-cacheable (`gc_render.c` `map_carveout`, `gc_render_map_phys`); `gpu_read` invalidates anyway | same |
+| 11 | CPU caches | BOs are write-combined (Normal non-cacheable) by default, so `cpu_prep` does no maintenance for them | the carveout and imported surfaces are mapped Normal non-cacheable (`driver/src/vivante/gc_render.c` `map_carveout`, `gc_render_map_phys`); `gpu_read` invalidates anyway | same |
 | 12 | read-back | a tiled target is first resolved by the RS into linear memory (step 6's flush and stall come first); a linear one is read directly | the linear target is read through the non-cacheable view | same, for a linear target |
 
 **So the cause is not a missing sync step on the host side.** The
@@ -1252,7 +1252,7 @@ done
 
 `SEL=512` is `GC_RESULT_SWEEP_SEL_LIST + 0`. It runs cases 1-6, 8, 9 and 10
 on one context, as the regression set does, and ends with the counters
-record (`gc_result.h`, kind SWEEP). Read w3, the bitmap of the cases that
+record (`driver/zephyr/lib/board/imx8mp/gc_result.h`, kind SWEEP). Read w3, the bitmap of the cases that
 passed:
 
 - `0x0000077e`: every case passed;
@@ -1290,8 +1290,8 @@ tools/cts/STATUS.md is that marker. So no record says which check of case 16
 failed.
 
 **What the default i.MX8MP image does.** `CONFIG_GC_GL_TEST_MSAA` is off
-(gc_gl_test/Kconfig), `gc_debug_msaa` is 0, `msaa_on()` is false, and
-`offered_configs()` (gl/egl.rs) leaves out the 4x config (host-tested:
+(driver/samples/zephyr/gl_test/Kconfig), `gc_debug_msaa` is 0, `msaa_on()` is false, and
+`offered_configs()` (src/gl/egl.rs) leaves out the 4x config (host-tested:
 `gl::egl::tests::...4x...`, `valid_config(CONFIG_4X)` false). Case 16's first
 check, `eglChooseConfig samples 4 == 1`, therefore reads 0, then `config
 EGL_SAMPLES` reads garbage, and the case returns -1 before any draw. Case 16
@@ -1377,7 +1377,7 @@ etnaviv, and one open question.
 
 **`PE_COLOR_FORMAT`'s two write masks.** The register has a write-mask bit
 per field: bit 4 for the 4-bit FORMAT, bit 31 for the 7-bit FORMAT_EXT
-(`state_3d.xml.h`: `VIVS_PE_COLOR_FORMAT_FORMAT_MASK 0x00000010`,
+(`driver/src/vivante/hw/state_3d.xml.h`: `VIVS_PE_COLOR_FORMAT_FORMAT_MASK 0x00000010`,
 `..._FORMAT_EXT_MASK 0x80000000`). A set mask bit keeps the field's old
 value. etnaviv writes `FORMAT_EXT(fmt) | FORMAT_MASK` for every format from
 R16F up (`etnaviv_state.c:282-283`), then ORs the blend state's COMPONENTS
@@ -1409,7 +1409,7 @@ texture unit really needs (128, 256 or a page) is not measured; the copy
 makes the question moot for sampling.
 
 **Open: the pixel engine's 64-bit LINEAR write.** The board run of the
-two fixes (`f2a13877`, case 44 alone, `records/imx8mp/gc44-f2a13877/`)
+two fixes (`f2a13877`, case 44 alone, the run's record (gitignored))
 fails at check 3, "drawn: bottom-right ~ green", with the same value the
 probes of #6 read with only a page-aligned base: `0x40042814` for
 `0x40043904`. Worked through step 2's triangle (red, green, blue at (-1,-1),

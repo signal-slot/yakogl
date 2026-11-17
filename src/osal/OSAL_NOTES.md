@@ -2,9 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # YakoGL OSAL — implementation notes
 
-The OSAL (layer 5b, `gles_osal.h`) is the only place the GL core and the GPU
+The OSAL (layer 5b, `include/gles_osal.h`) is the only place the GL core and the GPU
 backend touch the platform. One C translation unit per platform implements
-`struct osal_ops`; `mod.rs` (Rust, part of the crate `yakogl`) provides the single
+`struct osal_ops`; `src/osal/mod.rs` (Rust, part of the crate `yakogl`) provides the single
 `g_osal` pointer and selection glue. The OSALs stay C on purpose: they are thin glue
 over C APIs (Zephyr macros and inlines, board hook pointers, a variadic `log`) that
 stable Rust cannot define.
@@ -17,7 +17,7 @@ module build compiles exactly one of them (`CONFIG_YAKOGL_GPU_*`), and nothing
 above the OSAL knows which. Two more files serve all of them:
 `zephyr_shaderc_scratch.c` and `zephyr_timing.c`.
 
-## Files (all under `yakogl/src/osal/`)
+## Files (all under `src/osal/`)
 
 | File              | Role                                                           |
 |-------------------|---------------------------------------------------------------|
@@ -30,14 +30,14 @@ above the OSAL knows which. Two more files serve all of them:
 | `zephyr_timing.c` | The time answers every Zephyr OSAL gives (`OSAL_QUERY_CLOCK_NS`, `OSAL_QUERY_DRAW_STATS`), in one place so the three cannot drift apart. |
 | `baremetal.c`     | Bare-metal backend skeleton — direct MMIO + static carveout; proves the portability seam (2nd backend, same interface). The board registers its addresses and hooks first (`include/gles_osal_baremetal.h`, `osal_bm_board_config()`); init refuses without them (see below). |
 | `linux.c`         | Host backend with no GPU: malloc'd GPU memory, fake device VAs per heap, submits complete at once. Runs the GL core + PowerVR backend + shader table on a Linux host under ASan/valgrind with a real application's call stream (`-DYAKOGL_OSAL=linux`); the host harness `tools/hostharness/` links it (its recording OSAL can allocate through it). Renders nothing. |
-| `osal_bounds.h`   | `osal_gpu_copy_ok()`: the one argument check every OSAL's `gpu_write` / `gpu_read` makes before its `memcpy` (NULL `mem`, `mem->cpu` or buffer, and `off > size || n > size - off`, a form in which `off + n` cannot wrap). The contract is in `gles_osal.h`; the host checks it with `tools/osal/osal_bounds_check.c` (a `tools/check.sh` row). |
+| `osal_bounds.h`   | `osal_gpu_copy_ok()`: the one argument check every OSAL's `gpu_write` / `gpu_read` makes before its `memcpy` (NULL `mem`, `mem->cpu` or buffer, and `off > size || n > size - off`, a form in which `off + n` cannot wrap). The contract is in `include/gles_osal.h`; the host checks it with `tools/osal/osal_bounds_check.c` (a `tools/check.sh` row). |
 | `mod.rs`          | `struct osal_ops` / `struct osal_gpu_mem` as `#[repr(C)]` (`OsalOps`, `OsalGpuMem`); defines `g_osal` (initial value = the ops table of the OSAL the cargo feature `osal-zephyr` / `osal-baremetal` / `osal-linux` names; null with none, then the application calls `osal_set_ops()` first) + `osal_set_ops()`; the wrappers the core uses and the `glog!` macro (`g_osal->log("%s", line)`). |
-| `render.rs`       | `#[repr(C)]` mirror of the driver's `pvr_render.h` types (`struct pvr_render_kick`, `struct pvr_render_static`): the kick descriptor `submit` takes and what `query` fills. |
-| `mali.rs`         | The Mali-G610's part of the contract (`gpu-mali`): the kick descriptor `submit` takes (`OsalMaliKick`: a command stream's GPU VA and length) and what `query` fills (`OSAL_QUERY_MALI_GPU`: GPU_ID, TILER_FEATURES, the CSIF register counts; `OSAL_QUERY_MALI_TILER_HEAP`: the heap context, first chunk and chunk size), and what `query` is told (`OSAL_QUERY_MALI_FRAME_OPEN`: whether the backend records a frame; without one the OSAL holds a free only for the last submitted kick, as `OSAL_QUERY_GC_FRAME_OPEN`). Both Mali OSALs are Rust (the panthor development OSAL `tools/mali/panthor/src/osal.rs`, later `driver/rust/src/gpu/mali`); the C mirrors (`struct osal_mali_gpu`, `osal_mali_heap`, `osal_mali_kick`) sit in `osal_internal.h` with the ids, pinned by `abi_layout_check.c` / `abi_layout.rs`. Buffers are `gpu_alloc`'s (`OSAL_MEM_GPU_EXEC` for shader code), each a CPU mapping at a GPU VA. |
+| `render.rs`       | `#[repr(C)]` mirror of the driver's `driver/src/pvr_render.h` types (`struct pvr_render_kick`, `struct pvr_render_static`): the kick descriptor `submit` takes and what `query` fills. |
+| `mali.rs`         | The Mali-G610's part of the contract (`gpu-mali`): the kick descriptor `submit` takes (`OsalMaliKick`: a command stream's GPU VA and length) and what `query` fills (`OSAL_QUERY_MALI_GPU`: GPU_ID, TILER_FEATURES, the CSIF register counts; `OSAL_QUERY_MALI_TILER_HEAP`: the heap context, first chunk and chunk size), and what `query` is told (`OSAL_QUERY_MALI_FRAME_OPEN`: whether the backend records a frame; without one the OSAL holds a free only for the last submitted kick, as `OSAL_QUERY_GC_FRAME_OPEN`). Both Mali OSALs are Rust (the panthor development OSAL `tools/mali/panthor/src/osal.rs`, later `driver/rust/src/gpu/mali`); the C mirrors (`struct osal_mali_gpu`, `osal_mali_heap`, `osal_mali_kick`) sit in `osal_internal.h` with the ids, pinned by `src/abi_layout_check.c` / `src/abi_layout.rs`. Buffers are `gpu_alloc`'s (`OSAL_MEM_GPU_EXEC` for shader code), each a CPU mapping at a GPU VA. |
 
-Build files: `yakogl/CMakeLists.txt` (host/Linux/generic → `libyakogl.a`),
-`yakogl/zephyr/{CMakeLists.txt,Kconfig,module.yml}` (Zephyr module,
-`CONFIG_YAKOGL`), `yakogl/baremetal.mk` (cross-compile → `libyakogl.a`). Each runs
+Build files: `CMakeLists.txt` (host/Linux/generic → `libyakogl.a`),
+`zephyr/{CMakeLists.txt,Kconfig,module.yml}` (Zephyr module,
+`CONFIG_YAKOGL`), `baremetal.mk` (cross-compile → `libyakogl.a`). Each runs
 cargo for the crate with the matching `osal-*` feature and compiles the one OSAL TU
 (plus the layout pins `src/abi_layout_check.c` and `src/pvr/ffi_layout_check.c` and, outside Zephyr, the driver's command
 generators). CMake and `baremetal.mk` append the C objects to the cargo static library
@@ -46,9 +46,9 @@ holds `zephyr.c`.
 
 ## The submit/wait contract (`struct osal_kick_desc`)
 
-`gles_osal.h` `submit()` takes an opaque `const void *kick_desc`. The concrete
+`include/gles_osal.h` `submit()` takes an opaque `const void *kick_desc`. The concrete
 shape is `struct osal_kick_desc` (in `osal_internal.h`) = the driver's
-`struct pvr_render_kick` (`src/pvr_render.h`): the per-render register blocks the
+`struct pvr_render_kick` (`driver/src/pvr_render.h`): the per-render register blocks the
 backend generates (VDM stream base, PPP control, ISP/PBE/background-object
 registers). The Zephyr OSAL hands it to the driver's render service
 (`pvr_render_submit`), which owns the firmware objects (render context, client
@@ -66,30 +66,30 @@ allocates the event and returns a monotonic fence.
 
 | osal op        | Driver plumbing wrapped                                        | where |
 |----------------|----------------------------------------------------------------|-------|
-| `init`         | GPU already powered/booted by the pvr DT driver (`pvr_bringup.c` → `pvr_fw_boot`); `pvr_render_init()` builds the render service objects once | `src/pvr_render.c` |
-| `gpu_alloc`    | `pvr_render_alloc()`: page-aligned render-pool span, mapped at the next free VA of the heap named by the base VA (GENERAL / PDS / USC) | `src/pvr_render.c`, `pvr_gpu_bo_alloc` (`src/pvr_drv.h`) |
-| `gpu_free`     | Deferred: the block joins a pending list tagged with the kick being recorded (`s_last_submitted + 1`) and goes back to the render pool's free list (`pvr_render_free`) once a fence at or past that kick has completed (`drain_pending_frees`, run from `wait` and `completed`). A GL object freed while the GPU still reads it is therefore safe. | `src/pvr_render.c` |
-| `mmu_map`      | `pvr_mmu_map` for an explicit VA→phys range                    | `src/pvr_drv.h` |
-| `map_phys`     | `pvr_render_map_phys`: caller-owned pages (scan-out) at a fresh heap VA, no pool memory | `src/pvr_render.h` |
+| `init`         | GPU already powered/booted by the pvr DT driver (`driver/src/pvr_bringup.c` → `pvr_fw_boot`); `pvr_render_init()` builds the render service objects once | `driver/src/pvr_render.c` |
+| `gpu_alloc`    | `pvr_render_alloc()`: page-aligned render-pool span, mapped at the next free VA of the heap named by the base VA (GENERAL / PDS / USC) | `driver/src/pvr_render.c`, `pvr_gpu_bo_alloc` (`driver/src/pvr_drv.h`) |
+| `gpu_free`     | Deferred: the block joins a pending list tagged with the kick being recorded (`s_last_submitted + 1`) and goes back to the render pool's free list (`pvr_render_free`) once a fence at or past that kick has completed (`drain_pending_frees`, run from `wait` and `completed`). A GL object freed while the GPU still reads it is therefore safe. | `driver/src/pvr_render.c` |
+| `mmu_map`      | `pvr_mmu_map` for an explicit VA→phys range                    | `driver/src/pvr_drv.h` |
+| `map_phys`     | `pvr_render_map_phys`: caller-owned pages (scan-out) at a fresh heap VA, no pool memory | `driver/src/pvr_render.h` |
 | `gpu_write`    | `memcpy` into the CPU-mapped carveout + `sys_cache_data_flush_range` | — |
 | `gpu_read`     | `sys_cache_data_invd_range` + `memcpy` out                     | — |
 | `cache_flush`  | `sys_cache_data_flush_range`                                   | — |
 | `cache_invd`   | `sys_cache_data_invd_range`                                    | — |
-| `submit`       | `pvr_render_submit(kick)`: GEOM + FRAG client-CCB commands, MMU cache flush, two KCCB kicks, returns the fence value | `src/pvr_render.c` |
-| `wait`         | `pvr_render_wait(fence, ms)`: UFO poll + FWCCB servicing + HWR detection | `src/pvr_render.c` |
-| `completed`    | `pvr_render_completed()`: the highest fence the GPU has finished (the fragment UFO), without blocking. The backend uses it to reuse a frame set only after its kick is done, and to drain pending frees. Optional: `NULL` means "nothing is known to be complete before `wait` says so" (bare metal). | `src/pvr_render.c` |
-| `query`        | `pvr_render_static_get()`: EOT program, border table, heap bases | `src/pvr_render.h` |
+| `submit`       | `pvr_render_submit(kick)`: GEOM + FRAG client-CCB commands, MMU cache flush, two KCCB kicks, returns the fence value | `driver/src/pvr_render.c` |
+| `wait`         | `pvr_render_wait(fence, ms)`: UFO poll + FWCCB servicing + HWR detection | `driver/src/pvr_render.c` |
+| `completed`    | `pvr_render_completed()`: the highest fence the GPU has finished (the fragment UFO), without blocking. The backend uses it to reuse a frame set only after its kick is done, and to drain pending frees. Optional: `NULL` means "nothing is known to be complete before `wait` says so" (bare metal). | `driver/src/pvr_render.c` |
+| `query`        | `pvr_render_static_get()`: EOT program, border table, heap bases | `driver/src/pvr_render.h` |
 | `reg_read/write` | `sys_read32/sys_write32` on the register base recorded at boot | `pvr_regs()` |
 | `log`          | `vsnprintk` → `LOG_INF`                                        | — |
 
 ### The Vivante variant (`zephyr_gc.c`)
 
-| osal op | Driver plumbing wrapped (`src/vivante/gc_render.h`) |
+| osal op | Driver plumbing wrapped (`driver/src/vivante/gc_render.h`) |
 |---------|------------------------------------------------------|
 | `init` | `gc_render_init(DEVICE_DT_GET_ONE(vivante_gc))`: hardware init, MMU v2 page tables, the FE's idle loop, the interrupt. Idempotent. |
 | `gpu_alloc` | `gc_render_alloc(size, 64, ...)`. 64 is the strictest alignment the hardware asks for (command buffers and shader code), so one value covers every request. `heap_base` is ignored: the carveout is identity-mapped, so an allocation's address is its physical address. |
 | `gpu_free` | `gc_render_free()`, **deferred**: the block is held on a pending list tagged with the sequence of the kick being recorded, and goes back to the pool only once a fence at or beyond it has completed (drained on every free and every submit). The pool has a real free list, so memory handed back early is handed straight out again — to a caller that writes it while the GPU is still reading it. This is the same list `zephyr.c` keeps for the PowerVR. |
-| `mmu_map` | **absent.** The service maps at a VA it chooses; `map_phys` is the entry point, and `gl_egl.c` prefers it anyway. |
+| `mmu_map` | **absent.** The service maps at a VA it chooses; `map_phys` is the entry point, and `src/gl/egl.rs` prefers it anyway. |
 | `map_phys` | `gc_render_map_phys()`. A range already inside the carveout comes back with its identity VA and the carveout's own CPU view — which is what `glReadPixels` on a window surface reads through. |
 | `gpu_write` / `gpu_read` | `memcpy` + `gc_render_cache_flush` / `_invd` (no-ops on the carveout's Normal non-cacheable mapping, correct if a cached buffer is ever handed in). |
 | `submit` | `gc_render_submit(&(struct gc_submit){...}, &fence)` with `GC_SUBMIT_FLUSH_ALL`: the backend does not say which caches its frame dirtied, and a missing flush shows a stale picture rather than an error. |
@@ -103,7 +103,7 @@ allocates the event and returns a monotonic fence.
 `lock` / `unlock` are a `pthread_mutex_t` in `linux.c`. The library takes the pair around each EGL entry point and nowhere
 else, so the mutex does not have to be recursive - and must not be relied on
 to be. It does not make a second thread safe: one thread issues every GL and
-EGL call of the process (`gles_osal.h`, "threads"), no GL entry point takes
+EGL call of the process (`include/gles_osal.h`, "threads"), no GL entry point takes
 the mutex, and the library keeps no per-thread state.
 
 `thread_id` is how the library catches a second thread. The Linux OSAL
@@ -180,13 +180,13 @@ side assumes (2026-10-04, main 8b53557f):
   the swap shows the previous frame's buffer and the next frame goes into one
   the display gave up two presents ago, so no application has to show
   anything itself, and no frame is shown before it is complete.
-     -134, and `egl.rs` `eglSwapBuffers` tests `== -util::ENOTSUP` (-95).
+     -134, and `src/gl/egl.rs` `eglSwapBuffers` tests `== -util::ENOTSUP` (-95).
      So on a Zephyr board without a vertical sync, "no vsync" is never
      seen. The loop then calls the hook `swap_interval` times instead of
      stopping.
-   - A Zephyr OSAL's -134 that reaches `draw.rs` is reported as
+   - A Zephyr OSAL's -134 that reaches `src/gl/draw.rs` is reported as
      `GL_OUT_OF_MEMORY`, not as the backend gap (`GL_INVALID_OPERATION`).
-   - The YakoGL crate's own -110 (`pvr/backend.rs`, "the fence did not
+   - The YakoGL crate's own -110 (`src/pvr/backend.rs`, "the fence did not
      complete") is printed in a Zephyr console, where -110 is `ESHUTDOWN`.
      The same number is what the driver's stopped render service returns
      on the freelist-grow branch (`-errno::ESHUTDOWN`). One printed value,
@@ -200,7 +200,7 @@ is one table file, `driver/rust/src/errno_numbers.rs`, with both numberings
 (`ZEPHYR`, `LINUX`) and each value's header line. Then:
 
 - The driver crate's `errno` is `ZEPHYR`, its only C library. A Linux module
-  that links it again must translate in its own shim, as `record_c.c` does.
+  that links it again must translate in its own shim, as `tools/pvr/km/record_c.c` does.
 - The YakoGL crate's `util::E*` comes from `errno_numbers::numbering(osal-zephyr)`:
   `ZEPHYR` for the Zephyr OSALs, `LINUX` for `linux`.
   `baremetal.c`'s literal -95 is `LINUX`'s, so `osal-baremetal` stays on
@@ -227,11 +227,11 @@ Real (works against the headers; compiles clean under `-Wall -Wextra`):
 Integration (done): the Zephyr OSAL forwards `init` -> `pvr_render_init()`,
 `gpu_alloc` -> `pvr_render_alloc()` (the driver's bump allocator, heap chosen by
 the base VA), `submit`/`wait` -> `pvr_render_submit/wait()`, `query` ->
-`pvr_render_static_get()`; the driver exports it needs live in `src/pvr_drv.h`,
+`pvr_render_static_get()`; the driver exports it needs live in `driver/src/pvr_drv.h`,
 and `pvr_fw_boot()` no longer renders when built with `-DPVR_NO_SELFTEST_RENDER`.
 The Rust library runs on silicon through this OSAL on all three boards, built as a
 Zephyr module (gl_test, dEQP-GLES2, glmark2: `tools/cts/RESULTS.md`). The Linux
-harness that once compiled `zephyr.c` through a Zephyr API shim (`tools/pvrlab`,
+harness that once compiled `zephyr.c` through a Zephyr API shim (`driver/tools/pvrlab`,
 `GLES=1`) verified it with the C core and is retired. On the host the port is checked two ways: unit tests on the strict mocks of
 `src/testutil.rs` (`cargo test --no-default-features --features host-test,gpu-powervr`), which model
 this contract — a CPU view and device memory kept apart, synchronised only by
@@ -240,7 +240,7 @@ allocation), fresh memory filled with 0xA5, allocations that can come without a 
 mapping, injectable `gpu_alloc` / `gpu_write` / `gpu_read` failures, double and foreign
 frees reported, and a kick model that catches a draw whose inputs move before its kick
 completes; and the host differential harness (`tools/hostharness/`, whose README lists
-what is and is not compared): gl_test.c, API sweeps and hostile sequences over a
+what is and is not compared): `driver/tools/pvrlab/gl_test.c`, API sweeps and hostile sequences over a
 recording OSAL (all 17 operations, GPU memory hashes, decoded kicks) and an interposer
 on all 222 exported entry points, in twelve platform modes, dev and release, with
 AddressSanitizer on the library itself. Nothing is rendered. The
@@ -278,7 +278,7 @@ unchanged against a fake board. `submit`, `wait` and `query` still return
 No blocking gaps — `struct osal_ops`, `struct osal_gpu_mem`, and
 `struct shc_shader`/`gles_draw` are sufficient to implement the OSAL. Observations
 (no edits made to the shared headers, per task):
-- `gles_osal.h` has no `unmap`/`mmu_unmap`; fine for the bump allocator, needed
+- `include/gles_osal.h` has no `unmap`/`mmu_unmap`; fine for the bump allocator, needed
   once a reclaiming allocator lands.
 - The opaque `kick_desc` requires an out-of-band shape agreement — provided here
   as `struct osal_kick_desc` in `osal_internal.h` (see the contract note above).
