@@ -8,9 +8,10 @@
 //! [`super::sched71_cf`] run on one selected shader at 4 threads, then 2,
 //! and the words encoded ([`super::codec71::encode71`]) and verified
 //! ([`super::verify71::verify71`]), as `docs/notes/v3d71-backend.md`
-//! section (a) and the contract in [`super::vop71`]'s header say. Until
-//! sched71-cf, a program with no control-flow [`Op71`] is packed by
-//! [`super::sched71::pack71`] directly ([`build71`]).
+//! section (a) and the contract in [`super::vop71`]'s header say. A program
+//! with no control-flow [`Op71`] is packed by [`super::sched71::pack71`]
+//! directly, which gives the words schedule71 would ([`build71`]); its
+//! branches are checked by [`branches_are_structured71`].
 //!
 //! The front half is chain.rs's and shared: unrolling, prepare and the 4.2
 //! selection run unchanged, and their refusals come back as
@@ -24,9 +25,8 @@
 //! [`compile_program_for`] is the generation as the chain's parameter:
 //! [`Gen::V42`] is [`chain::compile_program_keyed`], unchanged.
 //!
-//! While a 7.1 stage is a stub (today sched71_cf, for a program with
-//! control flow), a 7.1 compile returns that stage's named refusal, never a
-//! panic and never a wrong word.
+//! What a 7.1 stage does not compile yet comes back as that stage's named
+//! refusal, never a panic and never a wrong word.
 
 use super::alloc71::{allocate71, Alloc71Error};
 use super::chain::{self, attribute_locations, Prim, Target, V3dError, V3dProgram, VARYING_SLOT_VAR0};
@@ -35,7 +35,7 @@ use super::encode::EncodeError;
 use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with, Prepared, SOp};
 use super::qpu_ffi::Gen;
 use super::sched71::{pack71, Sched71Error};
-use super::sched71_cf::{schedule71, Scheduled71};
+use super::sched71_cf::{branches_are_structured71, schedule71, Scheduled71};
 use super::select::{select_fragment, select_vertex, tmu_input_writes, Pressure, SelectError, Selected, VOp};
 use super::select71::{select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
@@ -203,10 +203,9 @@ pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Resul
         Err(Alloc71Error::DoesNotFit) => (allocate71(&sel71, 2, a)?, 2),
         Err(e) => return Err(e.into()),
     };
-    /* sched71-cf replaces this: until schedule71 handles both cases, a
-     * program with no control-flow Op71 is packed by pack71 as one
-     * straight-line run, with no branches; anything else goes to
-     * schedule71. */
+    /* a program with no control-flow Op71 is one straight-line run, which
+     * pack71 packs as schedule71 would (sched71_cf's tests compare the two
+     * word for word); anything else goes to schedule71 */
     let s = if sel71.ops.iter().any(Op71::is_control_flow) {
         schedule71(&sel71, &al, a)?
     } else {
@@ -219,13 +218,9 @@ pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Resul
     }
     verify71(s.instrs, single_seg).map_err(V3d71Error::Verify)?;
     registers_fit_threads71(s.instrs, threads).map_err(V3d71Error::Verify)?;
-    /* chain.rs build ends with verify.rs branches_are_structured; its 7.1
-     * form (sched71_cf branches_are_structured71) comes with sched71-cf.
-     * Until then a program with a branch is refused, never returned
-     * unchecked. */
-    if !s.back_edges.is_empty() || !s.fwd_branches.is_empty() {
-        return Err(V3d71Error::NotYet("branches_are_structured71 (sched71-cf)"));
-    }
+    /* chain.rs build ends with verify.rs branches_are_structured; this is
+     * its 7.1 form */
+    branches_are_structured71(s.instrs, s.back_edges, s.fwd_branches).map_err(V3d71Error::Verify)?;
     let code = Code71 {
         words,
         instrs: s.instrs,
@@ -611,11 +606,30 @@ mod tests {
                     }
                     Ok(AnyV3dProgram::V42(_)) => panic!("{what}: a 4.2 program for Gen::V71"),
                     /* both pairs are straight-line after select71: pack71
-                     * compiles them (the path sched71-cf replaces) */
+                     * compiles them */
                     Err(e) => panic!("{what}: {e:?}"),
                 }
             });
         }
+    }
+
+    /// es100/databreak.frag's loop, which leaves on data, is a back edge at
+    /// 7.1: schedule71 places it and build71 returns it only after
+    /// branches_are_structured71 (run here again on the returned code).
+    #[test]
+    fn v71_compiles_a_program_with_a_branch() {
+        let fs = include_str!("../../../../tools/shaders/es100/databreak.frag");
+        with_modules(PASSTHROUGH_VS, fs, |v, f, a| {
+            match compile_program_for(Gen::V71, v, f, Prim::Triangles, TARGET71, LodKey::NONE, LodKey::NONE, a) {
+                Ok(AnyV3dProgram::V71(p)) => {
+                    check71("fs", &p.fs.code, p.fs.threads, p.fs.single_seg);
+                    let c = &p.fs.code;
+                    assert!(!c.back_edges.is_empty(), "the loop is not a back edge: {:?}", c.fwd_branches);
+                    assert_eq!(branches_are_structured71(c.instrs, c.back_edges, c.fwd_branches), Ok(()));
+                }
+                r => panic!("{r:?}"),
+            }
+        });
     }
 
     #[test]
