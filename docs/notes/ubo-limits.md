@@ -13,22 +13,22 @@ nothing was run. Mesa is the 26.2.1 tree
 
 ## 1. What is reported and what ES 3.0 asks
 
-`src/gl/state.rs:1266-1270` reports on every GPU:
+`src/gl/state.rs:1283-1290` reports on every GPU:
 
 | query | reported | ES 3.0 minimum |
 |---|---|---|
 | `MAX_UNIFORM_BLOCK_SIZE` | `MAX_UNIFORM_DWORDS * 4` = 6144 | 16384 |
 | `MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS` | `MAX_UNIFORM_DWORDS` = 1536 | 50176 |
 | `MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS` | `MAX_UNIFORM_DWORDS` = 1536 | 50048 |
-| `MAX_{VERTEX,FRAGMENT}_UNIFORM_BLOCKS` | 12 (`:1262`) | 12 |
+| `MAX_{VERTEX,FRAGMENT}_UNIFORM_BLOCKS` | 12 (`:1283`) | 12 |
 | `MAX_COMBINED_UNIFORM_BLOCKS` | `PROG_MAX_BLOCKS` 24 (`program.rs:69`) | 24 |
-| `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` | 1536 (`:1250-1251`) | 1024 / 896 |
+| `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` | 1536 (`:1268-1269`) | 1024 / 896 |
 
 `MAX_UNIFORM_DWORDS` = 1536 (`src/gl/context.rs:83`) is today three
 different things in one constant: the default-block budget
 (`MAX_VERTEX/FRAGMENT_UNIFORM_VECTORS` = 384, `context.rs:89-90`, which the
 Appendix A packing `src/shaderc/packing.rs:150` and `gl_MaxVertexUniformVectors`
-`src/shaderc/online/lower.rs:12650,12881` read), the capacity of the per-stage
+`src/shaderc/online/reflect.rs:1279` reads), the capacity of the per-stage
 block the GL core keeps, and the block-size answer.
 
 **The formula** (ES 3.0 §6.2 / table 6.20, "implementation dependent values"):
@@ -44,7 +44,7 @@ The minimums are this formula at the minimum inputs: 12 * 16384 / 4 + 1024 =
 50176 and 12 * 4096 + 896 = 50048. Mesa computes exactly this
 (`st_extensions.c:271-273`: `MaxUniformComponents + MaxUniformBlockSize / 4 *
 MaxUniformBlocks`, with `MaxUniformBlocks = max_const_buffers - 1`, "the first
-one is for ordinary uniforms", `:262-266`; and `MaxUniformBlockSize =
+one is for ordinary uniforms", `:265-268`; and `MaxUniformBlockSize =
 max_constant_buffer_size`, below 16384 turns UBOs off, `:190-200`). With our
 own inputs (1536 default components, 12 blocks) a 16384-byte block gives
 **1536 + 12 * 4096 = 50688** for both stages, above both minimums. The
@@ -60,30 +60,32 @@ plus the default uniforms.
 Blocks are not hardware UBOs here. They are flattened into the stage's
 default-block rows and read as ordinary uniforms:
 
-1. `fill_uniform_blocks` (`src/gl/program.rs:678`) copies each bound buffer
-   range, member by member (`copy_block_member`, `:720`), into the program's
+1. `fill_uniform_blocks` (`src/gl/program.rs:736`) copies each bound buffer
+   range, member by member (`copy_block_member`, `:778`), into the program's
    per-stage host array (`p.vs_uniforms` / `p.fs_uniforms`) at the member's
-   row. The state.rs comment (`:1256-1261`) says the same.
+   row. The state.rs comment (`:1275-1282`) says the same.
 2. The array is allocated at link at the layout's size, not at the cap:
-   `block_dwords` (`program.rs:1869`) =
-   `max(sh.uniform_dwords, end of the last block-member row).min(MAX_UNIFORM_DWORDS)`,
-   `calloc` at `:2000-2019`, the caps in `vs_uniform_cap`/`fs_uniform_cap`.
-   (`:4858-4862` is a unit-test fixture, not the link.)
-3. At draw, `draw.rs:3908-3913` clamps `vs_dw`/`fs_dw` to `MAX_UNIFORM_DWORDS`
+   `block_dwords` (`program.rs:1878`) =
+   `max(sh.uniform_dwords, end of the last block-member row).min(MAX_UNIFORM_DWORDS)`
+   (since `cb52fae8` `.min(MAX_STAGE_UNIFORM_DWORDS)`),
+   `calloc` at `:2074-2078`, the caps (`:2086-2087`) in `vs_uniform_cap`/`fs_uniform_cap`.
+   (`:4925-4929` is a unit-test fixture, not the link.)
+3. At draw, `draw.rs:4116-4118` clamps `vs_dw`/`fs_dw` to `MAX_UNIFORM_DWORDS`
+   (since `cb52fae8` to `room`, `staging_stage_dwords`, `draw.rs:2527-2532`, at most `MAX_STAGE_UNIFORM_DWORDS`)
    and hands the backend the host array (`vs_uniform_cpu`/`fs_uniform_cpu`,
-   `:3934-3946,3970`) plus the dword count (`u16`, so at most 65535 dwords).
+   `:4150,4174`) plus the dword count (`u16`, so at most 65535 dwords).
 4. The per-program GPU staging buffer is `MAX_UNIFORM_DWORDS * 4 * 2 + 16`
-   bytes (`draw.rs:2312-2314`, test twin `:8404`), used only by backends that
-   do not read the host arrays (`uniforms_host_only()`, `src/backend.rs:2003`).
+   bytes (`draw.rs:2512`, test twin `:8686`), used only by backends that
+   do not read the host arrays (`uniforms_host_only()`, `src/backend.rs:2035`).
 
 So **every stage block above 1536 dwords is cut at `block_dwords` (a member
 past it is simply not stored, `copy_block_member` refuses writes past `cap`)
-and again at `draw.rs:3908`**. The GL core is the first limit on all three
+and again at `draw.rs:4116`**. The GL core is the first limit on all three
 GPUs; the back ends are the second, below.
 
 Block rows and the packing budget [M], settled: block-member rows do not
 count against the 384-row Appendix A budget at link (`packing.rs:150`
-`MAX_ROWS`; `program.rs:1117` leaves `blocks.members` rows out of the
+`MAX_ROWS`; `program.rs:1120` leaves `blocks.members` rows out of the
 default-uniform list). `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`) links 384
 default vec4 next to a 16384-byte block in the fragment and the vertex stage,
 and a 385th default vec4 does not link. The same test draws a stage with the
@@ -97,21 +99,21 @@ default block is full.
 ## 3. V3D (Raspberry Pi 4)
 
 **Read path today.** The V3D back end reads the host arrays only
-(`uniforms_host_only`; `src/v3d/backend.rs:3878-3879`: `storage(d.vs_uniform_cpu,
-d.vs_uniform_dwords)` -> `V3dUniformStorage { words, count }`, `ffi.rs:134`).
+(`uniforms_host_only`; `src/v3d/backend.rs:3890-3891`: `storage(d.vs_uniform_cpu,
+d.vs_uniform_dwords)` -> `V3dUniformStorage { words, count }`, `ffi.rs:138`).
 The compiler turns every uniform read into a `ldunif` of a stream word:
-`Op::LoadUniform` -> `SOp::Uniform(dw)` (`src/shaderc/online/v3d/prepare.rs:1375-1385`),
+`Op::LoadUniform` -> `SOp::Uniform(dw)` (`src/shaderc/online/v3d/prepare.rs:1385-1395`),
 selected as `Uniform { contents: QUNIFORM_UNIFORM, data: dw }`
-(`select.rs:2100`). At draw the stream is built from the array by
-`data` = dword index (`chain.rs:1211-1215`, `shaderc/mod.rs:1134`). So a block
+(`select.rs:2104`). At draw the stream is built from the array by
+`data` = dword index (`chain.rs:1874-1878`, `shaderc/mod.rs:1156-1157`). So a block
 dword costs **one stream word per read in the shader**, not a register, and the
-only bound is `dw < m.uniform_dwords` (`prepare.rs:1380`), i.e. the block the GL
+only bound is `dw < m.uniform_dwords` (`prepare.rs:1390`), i.e. the block the GL
 core fills. There is no 1536 in the V3D compiler or back end; the cap is the GL
 core's.
 
-**Run-time index.** `LoadUniformIdx` (`prepare.rs:1391-1445`) loads every
+**Run-time index.** `LoadUniformIdx` (`prepare.rs:1403-1437`) loads every
 element and selects with the index, up to `MAX_SELECTED` = 256 values, and
-refuses a longer array with `NotYet("... (no ldunifa yet)")` (`:1396-1398`).
+refuses a longer array with `NotYet("... (no ldunifa yet)")` (`:1406-1408`).
 Mesa's path for that is `ldunifa` with `QUNIFORM_UBO_ADDR`
 (`nir_to_vir.c:3188-3197,3241-3360`; `v3d_uniforms.c:320-340` writes the
 buffer's address as a relocation) and for the general UBO `load_ubo` through the
@@ -127,7 +129,7 @@ size. Mesa's v3d reports `max_const_buffer0_size = 16 * 1024 * sizeof(float)`
 = 64 KiB and 16 constant buffers (`v3d_screen.c:164-165`), so the silicon is
 not the limit. Combined components: 50688 by the formula, with the block
 storage `1536 + 12 * 4096 = 50688` dwords per stage, which fits the `u16`
-dword counts (`ffi.rs`, `backend.rs:3712`). The probe `v3d-ubo-sim-probe`
+dword counts (`ffi.rs`, `backend.rs:3724`). The probe `v3d-ubo-sim-probe`
 measures the compiler/sim side.
 
 ## 4. PowerVR (AM62P, BXS-4-64)
@@ -211,7 +213,7 @@ cap `MAX_UNIFORM_BLOCK_SIZE` is `MAX_UNIFORM_DWORDS * 4` for every GPU but
 the V3D (`src/gl/context.rs:109-112`) and `MAX_STAGE_UNIFORM_DWORDS` is
 `MAX_UNIFORM_DWORDS` (`context.rs:124-131`). `block_dwords`
 (`src/gl/program.rs:1878`) and the draw's staging size (`src/gl/draw.rs:2531`)
-follow `MAX_STAGE_UNIFORM_DWORDS`. The comment at `context.rs:104-107`
+follow `MAX_STAGE_UNIFORM_DWORDS`. The comment at `context.rs:104-108`
 ("the GC7000 holds the blocks in its constant file") is stale.
 
 **What is left.** Two steps, in this order:
@@ -250,7 +252,7 @@ block size is not raised here.
 1. **Split the constant.** `MAX_UNIFORM_DWORDS` stays 1536 as the *default
    uniform* budget (vectors, packing, `gl_Max*Vectors`, `GL_MAX_*_UNIFORM_COMPONENTS`).
    A separate per-stage **block storage capacity**, a back-end capability that
-   defaults to 1536, bounds `block_dwords` and `draw.rs:3908-3913`. Raising the
+   defaults to 1536, bounds `block_dwords` and `draw.rs:4116-4118`. Raising the
    shared constant would also raise `gl_MaxVertexUniformVectors` and the
    packing budget, which no GPU has shown it can honour.
 2. **The capability is per back end**, and the report follows it:
@@ -277,13 +279,13 @@ Order matters: each step keeps the tree green.
    blocks, block_bytes)` const fn and the ES 3.0 minimums.
 2. **Done differently** (`cb52fae8`). Planned: a `YakoglBackend` field. Built:
    a cfg-gated const pair, see section 9.
-3. **Done** (`cb52fae8`). `block_dwords` (`program.rs:1889`) and the draw.rs
-   upload caps (`staging_stage_dwords`, `draw.rs:2336-2342`) are bounded by
+3. **Done** (`cb52fae8`). `block_dwords` (`program.rs:1878`) and the draw.rs
+   upload caps (`staging_stage_dwords`, `draw.rs:2527-2532`) are bounded by
    `MAX_STAGE_UNIFORM_DWORDS`. Section 2's question is answered: block rows
    are outside `packing::MAX_ROWS`, pinned by `tests/v3d_ubo_full_stage.rs`
    (`cb2f0ffb`). The default-uniform budget and the packing stay
    `MAX_UNIFORM_DWORDS`.
-4. **Done** (`cb52fae8`). `state.rs:1268-1271` answers
+4. **Done** (`cb52fae8`). `state.rs:1283-1290` answers
    `MAX_UNIFORM_BLOCK_SIZE` and the combined components from the consts (V3D
    16384 / 50688 under `!report-es2`, the others 6144 / 1536);
    `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay 1536.
@@ -295,7 +297,7 @@ Order matters: each step keeps the tree green.
    first and last dword) and `tests/v3d_ubo_full_stage.rs` (`cb2f0ffb`, the
    full-stage host draw).
 6. **Decided: not shown to be needed on the host** (`ldunifa`,
-   `prepare.rs:1396`): section 9's verdict — no host `functional.ubo` case
+   `prepare.rs:1406-1407`): section 9's verdict — no host `functional.ubo` case
    after the raise hit the refusal, and the board run that could show a need
    (step 7, `#320`) is pending.
 7. **Pending**: the Pi 4 board step (#320): a draw with a 16384-byte block
