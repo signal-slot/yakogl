@@ -49,7 +49,7 @@ request is on the console (`gc_power: ...`, `display_power: ...`).
    buffer format" in the note);
 5. waits 60 frames, each with no transfer or underrun error
    (`stm32_ltdc_wait_frame`). The LTDC's frame CRC is not in the driver's C
-   ABI (`yakogl_drv/stm32_ltdc.h`), so there is no CRC check: PASS rests on
+   ABI (`driver/include/yakogl_drv/stm32_ltdc.h`), so there is no CRC check: PASS rests on
    the read-back, the flip's read-back of the scanned address and the frame
    flags; the picture on the KVM.
 

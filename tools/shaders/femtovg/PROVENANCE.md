@@ -55,7 +55,7 @@ Total: 35 fragment shaders + `main.vert` = 36 files, exactly the files present.
 | `main.vert` | | | | |
 
 `tools/shaders/fvgtest_*.frag` (cover, discard, discard2, ftcoord, green, inner) are
-hand-written probes of the old `samples/zephyr/gl_femtovg` sample (now `examples/femtovg`), not femtovg output; they
+hand-written probes of the old `gl_femtovg` sample (now `examples/femtovg`), not femtovg output; they
 are not part of this check and have no femtovg version.
 
 ## How it was checked

@@ -412,7 +412,7 @@ The design's code points 1-5 and 7, with these decisions:
   textures keep the hardware's switch, which they pass today).
   `online_sampler_variant` accepts `cube_noseam` on the program record;
   `mag_switch` stays refused there (it is the vertex record's key).
-- **GL core** (`gl/draw.rs`): `stage_lod_key` sets the bit for a
+- **GL core** (`src/gl/draw.rs`): `stage_lod_key` sets the bit for a
   `GL_SAMPLER_CUBE` binding by `cube_filters_see_seams` (mag LINEAR, or min
   LINEAR / LINEAR_MIPMAP_*); on the V3D a vertex key alone now rebuilds the
   variant's program too (`fs_rebuilt`: the program holds both stages'
@@ -461,11 +461,11 @@ The design's code points 1-5 and 7, with these decisions:
   `texture.vertex.cube` cases (key [k, 0]: the vertex variant linked to the
   retained base program record) gives a program of its own with `tmui` and
   no `tmuscm`, the base untouched, the records balanced.
-- v3d/backend_tests.rs `a_program_reading_a_texture_size_gets_the_bindings_size`:
+- src/v3d/backend_tests.rs `a_program_reading_a_texture_size_gets_the_bindings_size`:
   the size words draw, the table carries the binding's size and the
   stand-in's 1 x 1; tools/v3d/job_check.c part 5: the words read back from
   the indirect buffer, the two refusals.
-- v3d/backend_tests.rs (the black stand-in test): the 1x1 cube record has
+- src/v3d/backend_tests.rs (the black stand-in test): the 1x1 cube record has
   `depth` 6, the layout's layer stride is 64 bytes (the C derives the
   record's `array_stride_64` = 1 from it; that test module stubs the
   derivation, so the field itself is not asserted) and six black faces sit at

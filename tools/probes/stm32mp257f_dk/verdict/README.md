@@ -123,7 +123,7 @@ Samples (`driver/samples/zephyr/<name>/src/main.c`, `NAME` = the directory):
   `mp2: board: run over: PSCI SYSTEM_RESET at <n> ms`
   (`driver/zephyr/lib/board/stm32mp2/board_stm32mp2.c:53` → `stm32mp2.c:156`).
 - `yk-record: %08x %08x %08x %08x` `driver/zephyr/lib/board/include/yakogl_record.h:21-22`
-  (printed by `common/record.c:33`); kinds `yakogl_record.h` (CASE 1 `:25`,
+  (printed by `driver/zephyr/lib/board/common/record.c:33`); kinds `yakogl_record.h` (CASE 1 `:25`,
   APP 2, CHECK 21), status PASS 1 / FAIL 2 `:87-88`; the sample's result
   record is the verdict (`board.c:247-254`); gl_test writes its own kind CASE
   record in `report()` (`main_stm32mp2.c:71-93`, a single pass case with

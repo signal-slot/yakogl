@@ -32,7 +32,7 @@ What the decoder holds to, and why:
 
 - The version word decides the channel group (C offsets from +0x30, D from
   +0x100). A version naming neither stepping decodes no channel - the same
-  rule `src/main.c` states in its own `stopped not measured` line.
+  rule `../src/main.c` states in its own `stopped not measured` line.
 - `linux_ref.sh` reads 64 HVS words and 16 valve/hd words, so the display-list
   memory (+0x4000), the D-group channels and both VID_CTL words (+0x44,
   +0x48) normally are not in its dump; the decoder says `not in dump` rather
