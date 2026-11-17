@@ -11,15 +11,15 @@
 //! `ds_write: None` and `stencil_resolve: None` (src/vivante/backend.rs).
 //! What src/gl/blit.rs does with the window at this base, per blit:
 //!
-//! - stencil, either way: REFUSED_STENCIL (a stencil copy needs both entries
-//!   and renderbuffers on both sides).
+//! - stencil, either way: REFUSED_STENCIL (a stencil copy needs both
+//!   entries).
 //! - depth into the window, or into a renderbuffer (no `ds_write`): the
 //!   destination cannot be written, REFUSED_DEPTH_DST.
 //! - depth from the window into a depth *texture* (the GL core holds the
-//!   texels itself, so no `ds_write` is needed): `depth_source` reads
-//!   textures and renderbuffers only, so the window is REFUSED_DEPTH_SRC.
-//!   After the window lift this blit needs only `depth_resolve`, which the
-//!   table has; its twin below waits for the GL core, not for a table entry.
+//!   texels itself, so no `ds_write` is needed): the GL core's window path
+//!   (gl-ds-window) reads the window through `depth_resolve`, which the
+//!   table has, so it works: `depth_from_the_window_into_a_texture_reads_back_the_window`
+//!   is not ignored.
 //! - window to window: GL_INVALID_OPERATION by ES 3.0.6 4.3.3 (the same
 //!   buffer is read and written), whatever the entries; stays after the lift.
 //! - colour only to the window: unaffected, no error.
@@ -30,7 +30,8 @@
 //! check it.
 //!
 //! `#[ignore]`d twins, for the lift (the `ds_write` and `stencil_resolve`
-//! entries in src/vivante/backend.rs, and the window path in src/gl/blit.rs):
+//! entries in src/vivante/backend.rs; the window path in src/gl/blit.rs is
+//! there):
 //! the same shapes with the expected pixels of tests/es3_blit_ds_window.rs's
 //! model, the window stored top-down (`default_y_up` false: memory row r is
 //! GL row `WIN - 1 - r`) and y-up, read back through the table's entries.
@@ -558,19 +559,10 @@ fn depth_from_a_texture_into_the_window_is_refused_today() {
 }
 
 /// Depth from the window into a renderbuffer: no `ds_write` for the
-/// renderbuffer (REFUSED_DEPTH_DST), and the GL core does not read the
-/// window at this base either.
+/// renderbuffer (REFUSED_DEPTH_DST), though the window can be read.
 #[test]
 fn depth_from_the_window_into_a_renderbuffer_is_refused_today() {
     check_refused(DEPTH, Other::Renderbuffer, false);
-}
-
-/// Depth from the window into a depth texture: the destination could be
-/// written (the GL core holds texels itself), the source cannot be read at
-/// this base (REFUSED_DEPTH_SRC).
-#[test]
-fn depth_from_the_window_into_a_texture_is_refused_today() {
-    check_refused(DEPTH, Other::Texture, false);
 }
 
 /// Stencil into the window from a renderbuffer (REFUSED_STENCIL).
@@ -775,9 +767,8 @@ fn depth_from_the_window_into_a_renderbuffer_reads_back_the_window() {
 }
 
 /// Needs only the window path of the GL core (`depth_resolve` exists, the
-/// texture is written by the GL core), but the same lift.
+/// texture is written by the GL core): passes on the table as it is.
 #[test]
-#[ignore = "needs GC7000UL ds_write/stencil_resolve"]
 fn depth_from_the_window_into_a_texture_reads_back_the_window() {
     check_from_window(DEPTH, Other::Texture);
 }

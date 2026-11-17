@@ -28,10 +28,9 @@
 //!   depth renderbuffer, the same for stencil, and a D24S8 window with a
 //!   depth-only, a stencil-only and a both-planes mask (the plane the mask does
 //!   not name must keep its value). Both sides' planes are seeded and read
-//!   back through the table's own entries. These need the GL core's window
-//!   path (`DepthSource::Window`, `PlaneDst::Window`: the gl-ds-window item);
-//!   today the window is GL_INVALID_OPERATION on both sides, so they are
-//!   `#[ignore = "needs gl-ds-window"]`.
+//!   back through the table's own entries. They go through the GL core's
+//!   window path (`DepthSource::Window`, `PlaneDst::Window`: the gl-ds-window
+//!   item).
 //!
 //! The window's ds buffer exists in the back end after a GL clear of the
 //! window and a depth-tested draw into it, with a `glFinish` (the way the rig
@@ -53,8 +52,7 @@
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_blit_ds_window_pvr
 //! ```
 //!
-//! (the feature set of tests/es3_blit_ds_pvr.rs; add `-- --ignored` for the
-//! cases that need gl-ds-window). Not built with `report-es2` (glBlitFramebuffer
+//! (the feature set of tests/es3_blit_ds_pvr.rs). Not built with `report-es2` (glBlitFramebuffer
 //! is an ES 3.0 call).
 
 #![cfg(all(
@@ -1083,25 +1081,21 @@ fn check(dir: Dir, mask: GLbitfield) {
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn depth_from_a_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, DEPTH);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn depth_from_the_window_into_a_renderbuffer() {
     check(Dir::FromWindow, DEPTH);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn stencil_from_a_renderbuffer_into_the_window() {
     check(Dir::IntoWindow, STENCIL);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn stencil_from_the_window_into_a_renderbuffer() {
     check(Dir::FromWindow, STENCIL);
 }
@@ -1110,7 +1104,6 @@ fn stencil_from_the_window_into_a_renderbuffer() {
 /// stencil-only mask its depth (`check` asserts the plane the mask does not
 /// name is as it was), and with both masks takes both.
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn the_d24s8_window_as_a_destination_with_each_mask() {
     check(Dir::IntoWindow, DEPTH);
     check(Dir::IntoWindow, STENCIL);
@@ -1119,7 +1112,6 @@ fn the_d24s8_window_as_a_destination_with_each_mask() {
 
 /// The same for the window as the source of a D24S8 renderbuffer.
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn the_d24s8_window_as_a_source_with_each_mask() {
     check(Dir::FromWindow, DEPTH);
     check(Dir::FromWindow, STENCIL);
