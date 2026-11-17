@@ -345,7 +345,6 @@ fn assert_rejected(p: GLuint, what: &str) {
 /// Case 1: `GL_NUM_PROGRAM_BINARY_FORMATS` is 1 and the list is `[0x6B47]` through
 /// the three integer query forms.
 #[test]
-#[ignore = "g7-state: GL_NUM_PROGRAM_BINARY_FORMATS / GL_PROGRAM_BINARY_FORMATS still answer 0 / no value (state.rs get_integerv)"]
 fn formats_are_the_one_yakogl_format() {
     let _g = context();
     assert_eq!(geti(GL_NUM_PROGRAM_BINARY_FORMATS), 1);
@@ -367,7 +366,6 @@ fn formats_are_the_one_yakogl_format() {
 
 /// Case 2: Length, and a binary loaded into a new program is the same program.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn length_and_round_trip() {
     let _g = context();
     let un = attach(VS, FS);
@@ -401,7 +399,6 @@ fn length_and_round_trip() {
 /// link `gl_Position = vec4(0.0)` / `o_fragColor = vec4(0.0)`, get the binary,
 /// and its format must be one of `GL_PROGRAM_BINARY_FORMATS`.
 #[test]
-#[ignore = "g7-state: no format is listed (state.rs) and glLinkProgram does not call program_binary::capture yet (program.rs)"]
 fn deqp_get_program_binary_vertex_fragment() {
     let _g = context();
     let n = geti(GL_NUM_PROGRAM_BINARY_FORMATS);
@@ -423,7 +420,6 @@ fn deqp_get_program_binary_vertex_fragment() {
 /// Case 4: dEQP `uniform_reset_on_binary_load`: set bool, int and float uniforms,
 /// draw, load the saved binary into the same current program; all read 0.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn deqp_uniform_reset_on_binary_load() {
     let _g = context();
     let vs = "#version 300 es\nin highp vec4 a_position;\nuniform bool u_boolVar;\nuniform highp int u_intVar;\n\
@@ -481,7 +477,6 @@ fn deqp_uniform_reset_on_binary_load() {
 /// Case 5: dEQP `binary_persistence.*`: after a change to one stage that is not a
 /// relink, the bytes are the same; a relink after a new source changes them.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn persistence_of_the_kept_binary() {
     let _g = context();
     let vs_src = |k: u32| {
@@ -549,7 +544,6 @@ fn persistence_of_the_kept_binary() {
 
 /// Case 6: The binary's attribute assignments are restored; the program's own stay.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn attribute_bindings_come_from_the_binary() {
     let _g = context();
     let src = attach(VS, FS);
@@ -574,7 +568,6 @@ fn attribute_bindings_come_from_the_binary() {
 /// Case 7: Transform feedback state is in the binary; the target's pending request
 /// is not touched.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn transform_feedback_state_round_trips() {
     let _g = context();
     let src = attach(VS, FS);
@@ -610,7 +603,6 @@ fn transform_feedback_state_round_trips() {
 
 /// Case 8: A binary that does not load: link status FALSE, a log, no GL error.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn rejected_binaries_set_the_link_status_and_raise_no_error() {
     let _g = context();
     let src = linked();
@@ -661,7 +653,6 @@ fn rejected_binaries_set_the_link_status_and_raise_no_error() {
 
 /// Case 9: The errors of design (d), each call as the table says.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn errors_of_the_three_calls() {
     let _g = context();
     let pr = linked();
@@ -767,7 +758,6 @@ fn deqp_negative_sequences() {
 /// Case 11: dEQP `state_query.shader.program_binary`: the hint is FALSE, TRUE after
 /// a set and a relink, and the length is written and > 0; a load keeps the hint.
 #[test]
-#[ignore = "g7-state: glLinkProgram does not call program_binary::capture yet and GL_PROGRAM_BINARY_LENGTH answers 0 (program.rs)"]
 fn deqp_state_query_hint_and_length() {
     let _g = context();
     let pr = linked();

@@ -2373,14 +2373,14 @@ mod tests {
         }
     }
 
-    /// No program binary format exists: GL_PROGRAM_BINARY_LENGTH answers 0
-    /// (dEQP's program_binary TCU_CHECKs it), glGetProgramBinary is
-    /// GL_INVALID_OPERATION for any buffer, and glGetFragDataLocation needs
+    /// A linked program has a binary: GL_PROGRAM_BINARY_LENGTH answers its
+    /// length, glGetProgramBinary is GL_INVALID_OPERATION for a buffer
+    /// smaller than that, and glGetFragDataLocation needs
     /// a linked program (ES 3.0 2.12.5; dEQP negative_api.state.
     /// get_frag_data_location).
     #[test]
     #[cfg(not(feature = "report-es2"))]
-    fn program_binary_length_is_zero_and_frag_data_needs_a_link() {
+    fn program_binary_buffer_too_small_and_frag_data_needs_a_link() {
         let gl = fresh();
         let p = gl.program("passthrough.vert", "uniform_color.frag");
         let (mut len, mut fmt, mut n): (GLsizei, GLenum, GLint) = (7, 7, 7);
@@ -2388,7 +2388,8 @@ mod tests {
         // SAFETY: plain GL calls; every out pointer has room.
         unsafe {
             crate::gl::program::glGetProgramiv(p, GL_PROGRAM_BINARY_LENGTH, &mut n);
-            assert_eq!((n, gl.error()), (0, GL_NO_ERROR));
+            assert!(n > 16, "a linked program has a binary");
+            assert_eq!(gl.error(), GL_NO_ERROR);
             glGetProgramBinary(p, 0, &mut len, &mut fmt, buf.as_mut_ptr() as *mut GLvoid);
             assert_eq!(gl.error(), GL_INVALID_OPERATION);
             glGetProgramBinary(p, 16, &mut len, &mut fmt, buf.as_mut_ptr() as *mut GLvoid);
