@@ -729,3 +729,242 @@ position program of every reference is the same 24-word pass-through. The
 - **The constant vertex loops** need no fp16 at all: the rotations of a
   mediump copy of a highp attribute fold into the store order
   (`vs_for_const`, 11 words).
+
+## 8. Lowering map (at 008306cb)
+
+Item map-loops of plan #377. Read at the tip `008306cb`; the sites of
+section 1 have moved since `970d7912`, and the lines below are the tip's. A
+map only: no code, test or reference changed. Paths are under
+`src/shaderc/online/mali/` unless they start with `tests/` or `tools/`.
+Read: `mod.rs` (the texts `:484-493`, the mediump route `:1437-1471`),
+`nir.rs` (`vs_steps`, `build`, `fold_int`, `LoopRegion`), `nir_fs.rs` (the
+walk, `select_highp`, `end_block`, `branch_forms`, `ladder_forms`,
+`vectorize16`), and the back-end files a back edge reaches (`flow.rs`,
+`sched.rs`, `ra.rs`, `opt.rs`, `emit.rs`): they take blocks and a back edge
+since loops-rt (`mali-loop-break.md` Part 2) and raise none of the loop
+refusals.
+
+### 8.1 The raise sites at the tip
+
+| error | file:function (line) | condition |
+|---|---|---|
+| `LoopVertex` | `nir.rs:vs_steps` (`:2770`) | any top-level `IrNode::Loop` of `main`: a `Step::Refuse`, returned by `build` where the node stands |
+| `LoopVertex` | `nir.rs:vs_steps`, closure `flat` (`:2745`) | a `Loop` inside an `if` side (an earlier `Tex`/`ControlFlow` refusal of the side comes first, `:2737-2744`) |
+| `LoopMediump` | `nir_fs.rs:walk_kept_loop` (`:3914-3916`) | `!prec.highp`; reached from `walk_nodes` (`:4212`) when `kept_loop` (`:3723`) says Mesa keeps the loop |
+| `GuardMediump` | `nir_fs.rs:walk_if16` (`:3410-3412`) | a `break`/`continue` guard (`exit` not `IfExit::Plain`) in a loop the walk unrolls in a mediump shader (`fs_inf_break`: `kept_loop` misses its `if (c) break;` head) |
+| `GuardMediump` | `nir_fs.rs:select_highp` (`:9183-9185`) | `guarded16` with a lone fp16 `Fmul` (deadloop_* pins; not a dEQP shape) |
+| `LoopForm` | `nir_fs.rs:walk_passes` (`:3540-3542`) | pass 33 (`MAX_UNROLL_ITERATIONS`, `:69`): `fs_101` |
+| `LoopForm` | `nir_fs.rs:walk_loop` (`:3673`, `:3682-3684`) | a body with no instruction; an unrolled body over `LOOP_UNROLL_LIMIT * MAX_UNROLL_ITERATIONS` (`:70`) |
+| `LoopForm` | `nir_fs.rs:walk_guard` (`:3576-3578`) | a second run-time guard in one unrolled loop |
+| `LoopForm` | `nir_fs.rs:walk_if` (`:3293`) | `exit` and the sides' flows in no accepted combination |
+| `LoopForm` | `nir_fs.rs:walk_kept_loop` (`:3922, 3929, 3967, 3998, 4001, 4008, 4044, 4050, 4062`) | the kept loop's own forms (section 1 of this note lists them) |
+| `LoopForm` | `nir_fs.rs:walk_nodes` (`:4191, 4196, 4205`) | `if (c) { step; continue; }` not at the body's top, or a then side larger than the step |
+| `ControlFlow` | `nir_fs.rs:walk_if16` (`:3433`) | a mediump `if` whose side ends in `break`/`continue` (`fs_dowhile_if`'s pin) |
+| `ControlFlow` | `nir_fs.rs:walk_nodes` (`:4222`) | a bare `continue` or any node with no arm |
+
+Which refusal each reference pins today is `REFUSALS` in
+`tests/mali_deqp_loops.rs:180-207`. Four differ from section 2's "now"
+column; the map follows the test: `fs_uncond_break` and `fs_idx_dyn` are
+`LoopMediump` (`kept_loop` says kept for both; Mesa unrolls the first and
+deletes the second's loop), `fs_inf_break` is `GuardMediump`,
+`fs_dowhile_if` is `ControlFlow` (`:3433`), `fs_101` is `LoopForm`, and
+`vs_vector` is `UniformType` first (the unitype family's).
+
+The decision is `kept_loop` (`nir_fs.rs:3723-3733`): the body's first
+non-instruction node must be `if (c) {} else break;` with `c` not foldable
+(`ir_folds`, `:3737`). The vertex walk has no such decision, no loop
+`Step` and no block in `select.rs`.
+
+### 8.2 The split: the study's, with two changes
+
+Step 1 is (a) the vertex unroll and (b) the mediump fragment kept loop;
+step 2 is the kept vertex loop, the F2 forms and F10. Reason: (a) and (b)
+share nothing but the unroll limits (vertex walk against fragment walk), so
+lower-loops-1 may be two commits; the kept vertex loop (2a) needs (b)'s
+16-bit phi nodes and rows and a vertex block emitter, so it comes after.
+The references (section 7) force two changes to section 5:
+
+1. **Step 2b is smaller.** `fs_cond_break` and `fs_mixed` have no second
+   exit edge and `fs_cond_continue`/`fs_double_continue` no branch: the
+   `break` is OR-ed into the loop's one exit mask and a `continue` is
+   `MUX.v2i16` selects. So 2b is a fold of the guard into the mask in
+   `walk_if`/`walk_nodes`, not a new edge with phi copies.
+2. **`fs_uncond_break`, `fs_dowhile_if`, `fs_select`, `fs_101` stay in
+   step 1** (decision fixes in `kept_loop`/`walk_passes`), as the test's
+   `ignore` strings already say. `fs_inf_break` is also a `kept_loop`
+   decision but its words need 2b's guard fold, so it stays in step 2.
+
+### 8.3 Step 1 (lower-loops-1)
+
+**(a) Vertex unroll, `nir.rs:vs_steps`** (F9, F11; Fail 104, NS 76).
+
+*Raise sites:* `nir.rs:2770`; `:2745` stays (a loop in an `if` side).
+
+*Mesa's unroll to reproduce* (section 3.1): `simple_unroll` for an exact
+trip count of at most 32 passes with `instr_cost * trip <= 32 * 26`
+(`nir_opt_loop_unroll.c:899-931`); the do-while's test after the body; the
+`for` step before each `continue`. The fragment twin is
+`walk_loop`/`walk_passes` (`nir_fs.rs:3660, 3530`); share its limits
+(`:69-70`, `unroll_cost :3699`) by making them `pub(super)`.
+
+*Change:* replace the arm at `nir.rs:2770` by a pass walker: per pass push
+the body's `Step::Instr`s with the counter folded by `fold_int`
+(`nir.rs:816`: `iadd`, `ilt`, `ieq` of constants), take the head test on its
+folded side, end the chain on a `break`, and refuse `LoopVertex` past 32
+passes or the cost bound (those are step 2's kept loops). The main work: the
+vertex `build` is one straight list keyed by IR value id, so a body's
+second copy needs a per-pass rebinding of ids to `Val`s (the fragment
+walk's `vals`/`locals` do it); do it in the arena `scratch`. The mediump
+`yzwx` passes fold into the store order (`vs_for_const`: 11 words, no
+fp16), so no new emit row. `vs_idx_static` (30 words) uses the existing
+`V2F32_TO_V2F16`/`F16_TO_F32` forms (`nir.rs:2273-2277`) and constant
+subscripts of a local array: if the vertex walk does not fold an
+`IndexedLocal` with a constant index, that is lower-uniarray's, and
+`vs_idx_static` stays ignored with its pin moved.
+
+**(b) Fragment mediump kept loop** (F1, F3, F4, F6, F7, the F5 do-while;
+`nir_fs.rs`, `mod.rs`).
+
+*Raise sites:* `nir_fs.rs:3914-3916`, `:3540-3542` (`fs_101`), `:3433`
+(`fs_dowhile_if`), and `kept_loop`'s answer (`fs_uncond_break`).
+
+*Changes:*
+1. `kept_loop` (`:3723`): (i) a loop whose last node is `Break` returns
+   false (`wrapper_unroll`; `walk_passes` then unrolls it); (ii) a
+   constant trip count past `MAX_UNROLL_ITERATIONS`, or a cost past the
+   limit, returns true (`check_unrolling_restrictions`; today the head
+   test folds at pass 1 and the loop is unrolled to a `LoopForm`); this
+   needs a small pre-walk of the counter (constant start, step, bound),
+   restricted to the `for (int i = 0; i < N; i++)` forms; `loop_cap_limit`
+   (`:3884`) already reads the 101; (iii) a do-while whose tail test does
+   not fold is kept whatever the body holds: look at the last control node
+   as well as the first (the tail test, `lower.rs:2287-2298`).
+2. `walk_kept_loop` `:3914`: lift the `!prec.highp` return. Header phis
+   already take `bits: 16` for a mediump float local (`:3966` region); two
+   lanes of one local become one 16-bit two-lane `Phi` (Mesa's two `vec2`
+   phis for `res`), four scalars only when a lane is written alone,
+   through `vectorize16` (`:8796`).
+3. `mod.rs:1461`: add a kept-loop predicate (a `kept16` sibling over
+   `f.nir.nloops`) to the `select_highp` route, with the `fs16` layout
+   (`:1465-1470`).
+4. `branch_forms` and `ladder_forms` (`:8615, 8716`): accept a 16-bit
+   two-lane `Phi`, a `Vec2` (`MKVEC.v2i16`) and the 32-bit counter's
+   `Icmp`/`Iadd`.
+5. Emit rows: `(Phi, 16, 2)` copy as `MOV.i32`, `(Phi, 16, 1)` as
+   `U16_TO_U32`, `(Vec2, 16, 2)` of two halves as `MKVEC.v2i16`, and the
+   do-while's third `MKVEC.v2i16` after the loop (`fs_dowhile_uni`,
+   `fs_101`). Blocks, jumps and `end_block` (`:9987`) are unchanged.
+6. `fs_float_uni`: the fp16 counter phi (`FADD.v2f16`, `FCMP_OR.v2f16`)
+   and the cap's OR as a separate `LSHIFT_OR` (the cap code at `:3998-4010`
+   uses `ior` of an int compare).
+7. `fs_select`: `CSEL.u32.eq` of the bool uniform's word needs the
+   bool-uniform read in `Fs::int_lane` (`:1564`): study-intval's. Take it
+   from lower-intval-1 if merged, else add it here and tell that item.
+8. `fs_dowhile_if`: after 1(iii) the body's `if` reaches `walk_if16` with
+   no side ending in a jump, so `:3433` does not fire: `MUX.v2i16`
+   selects, 22 words.
+9. The hidden pass counter stays (`mali-loop-board-failures.md`);
+   kept-loop references compare in `src/shaderc/online/mali/tests.rs` with
+   `CapEdit`, as section 5 says.
+
+*Tests step 1 un-ignores*, in order, in `tests/mali_deqp_loops.rs` (each:
+its `#[ignore]` and its `REFUSALS` entry go; a kept-loop one asserts a
+compile there and is byte-compared in `tests.rs`):
+`vs_for_const`, `vs_while_const`, `vs_dowhile_const`, `vs_nested_const`,
+`vs_idx_static`, then `fs_uncond_break`, `fs_for_uni`, `fs_while_uni`,
+`fs_dowhile_uni`, `fs_101`, `fs_float_uni`, `fs_dowhile_if`, `fs_select`.
+
+*glmark2 verdicts that may move* (`tests/fixtures/mali_glmark2_verdicts.txt`
+`:92-97`): row 30 and 31 `vs 3cb0` (the constant-bound vertex loop, the
+`gm2_intloop_const_vs` shape, unrolled by (a)) go to `ok` or the next
+refusal; row 32 `vs 3cb0` (int-uniform bound) stays; row 32 `fs 3678` (the
+mediump kept loop, (b)) goes to `ok`; rows 30 and 31 `fs e016`/`c7ea` are
+the gl_FragCoord refusal of another family and stay. In
+`tools/mali/corpus-verdicts.txt`: `es100/loop_uniform.frag`,
+`loop_nested.frag`, `loop_nested.while.frag`, `loop_nested.dowhile.frag`,
+`discard_dynloop.frag`, `ret_dynloop_never.frag` leave `LoopMediump`
+(`ret_dynloop_never` to the return flag's refusal); `dynidx_loop.frag`
+waits for step 2c; `loop_nested.vert`, `loop_uniform.dowhile.vert` and
+`contloops.frag` stay. Regenerate with `corpus-verdicts.sh --write` and
+check each moved row against its reference where one exists.
+
+*Risks:*
+- (a)'s per-pass rebinding changes `build`, not a leaf; the position
+  program must stay the 24-word pass-through in every reference.
+- 1(i)-(iii) change decisions highp loops already take byte-equal
+  (`intloop_*`, `divnest`, `loop_exit`, `builtin_98`): gate them so those
+  references and the `ok` corpus rows pass; run those tests, not only the
+  new file.
+- 1(ii) needs a counter analysis that agrees with `nir_loop_analyze`;
+  refuse (leave the old `LoopForm`) any form but the plain counter.
+- `fs_select` depends on intval; do not duplicate the bool read.
+- The cap counter is in no reference.
+
+### 8.4 Step 2 (lower-loops-2)
+
+Prerequisites: step 1 (a) and (b); lower-unitype for `vs_vector`'s `ivec4`
+and the int uniform by value (`nir.rs:3050-3052`: a `GL_INT` uniform that
+is not `index_only` is `UniformType`, the first refusal after a vertex
+loop); lower-intval for the `ieq` of two run-time ints.
+
+**(a) Kept vertex loop** (F1-F3, F7, F8; NS 392). *Raise sites:*
+`nir.rs:2770`; `:2745` stays; `nir.rs:3050-3052` after it.
+*Change*, `mali-vs-loops.md` section 3 in its order: (1) the int uniform
+by value for a loop compare; (2) fp16 vector phis and `MKVEC.v2i16` in
+the vertex nodes (step 1(b)'s rows, shared); (3) `Step::LoopBegin`/`LoopEnd`
+in `vs_steps` filling a `LoopRegion` (`nir.rs:560-570`), header phis in
+`registration_order`; (4) blocks, branch and successors in `select.rs`
+(`bir::Prog::new_block`, `add_successor`, `bir.rs:1322, 1332`): the loop
+is in the varying program (`vs_for_uni`: 24 words, 1 loop) and the
+position program stays the 24-word pass-through; a loop feeding
+`gl_Position` is in the position program (`gm2_cf_loop_uni_vs`, 51 words),
+which is the reference for that case, not a new one; (5) the pass counter;
+(6) the do-while rotation (`vs_dowhile_uni`).
+
+**(b) Fragment `break`/`continue` forms** (F2, F5). *Raise sites:*
+`nir_fs.rs:3410-3412`, `:4191-4205`, `:3293`. *Change* (section 7): fold a
+`break` behind a run-time compare into the loop's one exit mask
+(`ICMP_OR.u32.eq.m1` of counter and uniform, `LSHIFT_OR` with the bound's
+mask: `fs_cond_break`, `fs_mixed`) through `Fs::int_lane`'s `ieq` of two
+run-time ints (`:1564`); a `continue` is four `MUX.v2i16` on the compare
+(`fs_cond_continue`); `fs_double_continue` has the same words, so the
+second `continue` joins the same selects instead of the not-at-top
+refusal (`:4185-4191`): move the rest of the body into the else side as
+`nir_lower_continue_constructs` does, then flatten by `walk_if16`'s select
+path. `fs_inf_break`: `kept_loop` also accepts the head `if (c) break;`
+(then side `break`, else empty).
+
+**(c) F10** (FS 85, VS 112 NS). Two shapes (section 7). *Arrays*
+(`fs_idx_dyn`, `vs_idx_dyn`): no loop and no read of `ui_four`: a
+`partial_unroll` transcription: a third answer of `kept_loop`, "unroll by
+the guess" (the subscripted array's length), `walk_loop` and the vertex
+pass walker take the guessed count and drop the guards, then the static
+subscripts of study-uniarray. The fragment raise is `:3914`, because
+`kept_loop` says kept today. *Vectors* (`fs_vec_dyn`): F1's kept loop with
+an `IndexedLocal` ladder inside: `stored_lanes` (`:3842-3880`) accepts an
+indexed store whose index is the counter; the ladder is `ICMP_OR.u32.eq`
+into `MUX.v2i16` (write) and `ICMP_OR.s32.lt` (read).
+
+*Tests step 2 un-ignores*, in order: `fs_idx_dyn`, `vs_idx_dyn` (no block
+code), `fs_cond_break`, `fs_mixed`, `fs_cond_continue`,
+`fs_double_continue`, `fs_inf_break`, `fs_vec_dyn`, then the kept vertex
+loops `vs_for_uni`, `vs_dowhile_uni`, `vs_float_uni`, `vs_select`,
+`vs_vector` (last: also needs unitype's `ivec4`; its pin is `UniformType`
+until that item moves).
+
+*glmark2 verdicts that may move:* rows 30-32 `vs 3cb0` (a kept vertex
+loop; row 32, and rows 30/31 if their bound is not constant). #367 owns
+that shape: whoever lands first moves the rows in
+`tests/fixtures/mali_glmark2_verdicts.txt` and the other rebases.
+`corpus-verdicts.txt`: `loop_nested.vert`, `loop_uniform.dowhile.vert`,
+`contloops.frag`, `dynidx_loop.frag`, `discard_dynloop.frag`.
+
+*Risks:* the vertex block emitter is the one large new piece (no highp
+precedent in `select.rs`), and #367's vertex loop item adds the same one
+(section 5, "Order against #367"); the position-program loop has one
+reference (`gm2_cf_loop_uni_vs`) and no dEQP shape; (b) must keep
+`contloops`' words (`MUX.v2i16` at 40-55) and `divnest`'s
+`if (c) { step; continue; }` branch form byte-equal; (c)'s loop-free
+expectation is drawn for `tmp_array` only, the matrix, uniform-array and
+varying-array cases are inferred; the cap is a deliberate deviation in no
+reference.
