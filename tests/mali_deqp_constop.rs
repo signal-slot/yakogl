@@ -58,7 +58,7 @@ fn constop_ce_fract_vec2_fs() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, lowered by lower-constop"]
+#[ignore = "compiles but differs: fs.fragment word 0 is FADD.f32.discard r0, u2.w1, u2.w0.neg, the reference has FMA.f32.discard r0, u2.w1, u2.w0.abs, u2.w1; lowered by lower-constop"]
 fn constop_ce_inversesqrt_vec4_fs() {
     mali_ref::assert_matches("deqp_constop_ce_inversesqrt_vec4_fs");
 }
@@ -183,7 +183,8 @@ fn constop_struct_param_out_vs() {
     mali_ref::assert_matches("deqp_constop_struct_param_out_vs");
 }
 
-/// Every ignored reference above and the refusal the compiler gives it now.
+/// Every ignored reference above that is refused, and the refusal the compiler
+/// gives it now (`constop_ce_inversesqrt_vec4_fs` compiles but differs).
 const REFUSED: &[(&str, &str)] = &[
     ("deqp_constop_ce_asin_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_ce_atan_separate_fs", "a constant operation on or to a value that is not a finite normal float"),
@@ -192,7 +193,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("deqp_constop_ce_floor_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_ce_floor_vs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_ce_fract_vec2_fs", "a constant operation on or to a value that is not a finite normal float"),
-    ("deqp_constop_ce_inversesqrt_vec4_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_ce_mod_vec2_float_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_ce_normalize_vec3_fs", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_constop_ce_sign_vec3_fs", "a constant operation on or to a value that is not a finite normal float"),
