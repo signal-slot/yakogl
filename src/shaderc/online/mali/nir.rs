@@ -255,6 +255,16 @@ pub enum Alu {
     Fsin,
     Fcos,
     Flog2,
+    /// `fexp2`: of a 16-bit lane as the three above (gm2_fsmisc_6's
+    /// `F16_TO_F32`, `bi_fexp_32`, `FADD.f32 .h0`); of a varying's lane at
+    /// fp32, its `f2fmp` gone at the link (`f2f32(f2fmp(a))` is `a`),
+    /// paired by its narrowing (gm2_fsmisc_5; nir_fs.rs [`exp2_rows`],
+    /// docs/notes/mali-fs-arith.md).
+    Fexp2,
+    /// `fpow(a, #b)` of a mediump fragment lane and a constant exponent, as
+    /// `bi_lower_bit_size` leaves it (`bi_fpow_32`: `bi_flog2_32` of `a`,
+    /// then `bi_fexp_32` of `b` scaled by that log; gm2_fsarith_1).
+    Fpow,
     /// `ddx` / `ddy` of one 16-bit lane of a mediump fragment shader (the
     /// fine form; `bi_emit_derivative`): `CLPER.i32.subgroup4.xor` of the
     /// lane's neighbour (lane ^ 1, lane ^ 2), `FADD.v2f16 n, a.neg`, then the
@@ -299,6 +309,7 @@ impl Alu {
             | Alu::Fsin
             | Alu::Fcos
             | Alu::Flog2
+            | Alu::Fexp2
             | Alu::Fddx
             | Alu::Fddy => 1,
             Alu::Ffma
@@ -2055,6 +2066,8 @@ impl<'s> Nir<'s> {
                 | Alu::Fsin
                 | Alu::Fcos
                 | Alu::Flog2
+                | Alu::Fexp2
+                | Alu::Fpow
                 | Alu::Fddx
                 | Alu::Fddy => return Err(MaliError::ConstantFold),
                 Alu::F2f16

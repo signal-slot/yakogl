@@ -482,6 +482,10 @@ pub enum Op {
     FexpF32,
     /// `F32_TO_S32.rtz` (`nir_op_f2i32`).
     F32ToS32,
+    /// `F32_TO_S32` with `round` 0 (printed bare): `bi_fexp_32`'s fixed
+    /// point (`fixed_pt->round = BI_ROUND_NONE`, bifrost_compile.c:2457;
+    /// gm2_fsmisc_5's `F32_TO_S32 r4, r3`, `0090c400000c0003`).
+    F32ToS32Rte,
     /// `S32_TO_F32` (`nir_op_i2f32`).
     S32ToF32,
     IaddS32,
@@ -893,7 +897,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::CubeSsel | Op::CubeTsel, 0..=1) => info(true, false, false, false, 32),
         (Op::CubeSsel | Op::CubeTsel, 2) => info(false, false, false, false, 32),
         (Op::MuxV2i16, 0..=2) => info(false, true, false, false, 16),
-        (Op::F32ToS32, 0) => info(true, false, false, false, 32),
+        (Op::F32ToS32 | Op::F32ToS32Rte, 0) => info(true, false, false, false, 32),
         (Op::S32ToF32, 0) => info(false, false, true, false, 32),
         (Op::U16ToU32 | Op::S16ToS32, 0) => info(false, false, false, true, 16),
         (Op::U16ToF32, 0) => info(false, false, false, true, 16),
@@ -1018,6 +1022,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         | Op::FroundF32 { .. }
         | Op::FroundV2f16 { .. }
         | Op::F32ToS32
+        | Op::F32ToS32Rte
         | Op::S32ToF32
         | Op::S16ToS32
         | Op::U16ToU32
