@@ -22,8 +22,8 @@
 //!   column * 4);
 //! - the queries: `UNIFORM_OFFSET`, `UNIFORM_MATRIX_STRIDE`,
 //!   `UNIFORM_IS_ROW_MAJOR`, `UNIFORM_ARRAY_STRIDE`, the block's data size;
-//! - the link: the same block plus one more vec4 (16400 bytes) must fail to
-//!   link; it links today (pinned, with the `#[ignore]`d expectation).
+//! - the link: the same block plus one more vec4 (16400 bytes) links today
+//!   (pinned; GL leaves an oversize block's link undefined).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d_ubo_std140_edge
@@ -429,22 +429,19 @@ fn std140_queries_of_the_tail_members() {
     }
 }
 
-/// Defect, pinned: the 16400-byte block compiles and links today.
+/// Pinned, today's behaviour: the 16400-byte block (one vec4 past
+/// `MAX_UNIFORM_BLOCK_SIZE`) compiles and links. GL leaves the link of an
+/// oversize block undefined and dEQP does not test it (glsUniformBlockCase.cpp
+/// and es3fUniformBlockTests.cpp never build one and check no LINK_STATUS
+/// against the limit), so no link check exists. tests/v3d_ubo_shared_packed.rs
+/// (`shared_16400_links_today`, `packed_16400_links_today`) pins the same.
 #[test]
 fn a_block_one_vec4_past_16384_bytes_links_today() {
     let _g = context();
-    let (_, linked) = link(1).expect("the shaders compile");
-    assert!(linked);
-}
-
-/// The ES 3.0 expectation (`MAX_UNIFORM_BLOCK_SIZE` is 16384): link failure.
-#[test]
-#[ignore = "defect: a 16400-byte std140 block links on the V3D build (see a_block_one_vec4_past_16384_bytes_links_today)"]
-fn a_block_one_vec4_past_16384_bytes_does_not_link() {
-    let _g = context();
-    // refused at compile or at link, never accepted
-    match link(1) {
-        None => {}
-        Some((_, linked)) => assert!(!linked, "a 16400-byte block must not link"),
-    }
+    let (p, linked) = link(1).expect("the shaders compile");
+    assert!(linked, "a 16400-byte block links today");
+    let mut size: GLint = 0;
+    // SAFETY: one block, one value.
+    unsafe { glGetActiveUniformBlockiv(p, 0, GL_UNIFORM_BLOCK_DATA_SIZE, &mut size) };
+    assert_eq!(size, 16400, "the block's data size");
 }
