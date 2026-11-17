@@ -18,7 +18,7 @@
 //! The walk covers every value the `u8` format can hold, not only the
 //! defined ones. Each format src/backend.rs names (`gles_surf_name` not
 //! "unknown": today the constants `GLES_SURF_RGBA8888` ..
-//! `GLES_SURF_RGB10_A2`, values 0..=26) has exactly one row pinning its
+//! `GLES_SURF_R11F_G11F_B10F`, values 0..=29) has exactly one row pinning its
 //! class and its layout (channels, bits a channel, signed, or `None`);
 //! every other value must answer the fallback the two functions have for
 //! it (the RGBA8 class, no integer layout, name "unknown"). A new colour
@@ -44,11 +44,12 @@
 
 use yakogl::backend::{
     gles_surf_int_layout, gles_surf_is_integer, gles_surf_is_srgb, gles_surf_name, gles_surf_rt_class, GlesIntLayout,
-    GLES_SURF_INT_FIRST, GLES_SURF_INT_LAST, GLES_SURF_R16F, GLES_SURF_R16I, GLES_SURF_R16UI, GLES_SURF_R32F,
-    GLES_SURF_R32I, GLES_SURF_R32UI, GLES_SURF_R8I, GLES_SURF_R8UI, GLES_SURF_RG16I, GLES_SURF_RG16UI, GLES_SURF_RG32I,
-    GLES_SURF_RG32UI, GLES_SURF_RG8I, GLES_SURF_RG8UI, GLES_SURF_RGB10_A2, GLES_SURF_RGB10_A2UI, GLES_SURF_RGB565,
-    GLES_SURF_RGBA16F, GLES_SURF_RGBA16I, GLES_SURF_RGBA16UI, GLES_SURF_RGBA32I, GLES_SURF_RGBA32UI,
-    GLES_SURF_RGBA8888, GLES_SURF_RGBA8I, GLES_SURF_RGBA8UI, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888,
+    GLES_SURF_INT_FIRST, GLES_SURF_INT_LAST, GLES_SURF_R11F_G11F_B10F, GLES_SURF_R16F, GLES_SURF_R16I, GLES_SURF_R16UI,
+    GLES_SURF_R32F, GLES_SURF_R32I, GLES_SURF_R32UI, GLES_SURF_R8I, GLES_SURF_R8UI, GLES_SURF_RG16I, GLES_SURF_RG16UI,
+    GLES_SURF_RG32F, GLES_SURF_RG32I, GLES_SURF_RG32UI, GLES_SURF_RG8I, GLES_SURF_RG8UI, GLES_SURF_RGB10_A2,
+    GLES_SURF_RGB10_A2UI, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA16I, GLES_SURF_RGBA16UI,
+    GLES_SURF_RGBA32F, GLES_SURF_RGBA32I, GLES_SURF_RGBA32UI, GLES_SURF_RGBA8888, GLES_SURF_RGBA8I, GLES_SURF_RGBA8UI,
+    GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888,
 };
 use yakogl::shaderc::{SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32, SHC_RT_RGBA8, SHC_RT_SRGB};
 
@@ -81,7 +82,10 @@ const fn layout(channels: u8, bits: u8, signed: bool) -> GlesIntLayout {
 /// - `GLES_SURF_SRGB8_A8` is a class of its own, refused in a mix (the
 ///   design 5), and no integer layout;
 /// - `GLES_SURF_RGB10_A2` is a unorm surface today: class RGBA8, no
-///   integer layout, although its word is the 10/10/10/2 one.
+///   integer layout, although its word is the 10/10/10/2 one;
+/// - the three extension float surfaces (RG32F, RGBA32F, R11F_G11F_B10F, plan
+///   #360) have no class of their own yet and no back end draws them: the
+///   fallback RGBA8 class, no integer layout.
 const PINS: &[Pin] = &[
     Pin { format: GLES_SURF_RGBA8888, rt_class: SHC_RT_RGBA8, int_layout: None },
     Pin { format: GLES_SURF_XRGB8888, rt_class: SHC_RT_RGBA8, int_layout: None },
@@ -110,6 +114,9 @@ const PINS: &[Pin] = &[
     Pin { format: GLES_SURF_RGB10_A2UI, rt_class: SHC_RT_RGBA8, int_layout: Some(layout(4, 10, false)) },
     Pin { format: GLES_SURF_SRGB8_A8, rt_class: SHC_RT_SRGB, int_layout: None },
     Pin { format: GLES_SURF_RGB10_A2, rt_class: SHC_RT_RGBA8, int_layout: None },
+    Pin { format: GLES_SURF_RG32F, rt_class: SHC_RT_RGBA8, int_layout: None },
+    Pin { format: GLES_SURF_RGBA32F, rt_class: SHC_RT_RGBA8, int_layout: None },
+    Pin { format: GLES_SURF_R11F_G11F_B10F, rt_class: SHC_RT_RGBA8, int_layout: None },
 ];
 
 /// Walk 0..=255: every value src/backend.rs names as a colour format is
