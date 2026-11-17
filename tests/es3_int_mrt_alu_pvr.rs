@@ -7,22 +7,20 @@
 //! (tests/es3_int_out_alu_pvr.rs). Shapes: an `int` at location 1 and 0, a
 //! `uint` at location 1 and 0, each beside a float output.
 //!
-//! Compiled under the default variant (key 0), the one a draw into a float
-//! attachment next to an integer one would use (`chain::compile_fragment_for`
-//! packs every output of an integer variant for one layout, so no variant
-//! holds a float and an integer output). The built USC bytes run through the
-//! host byte model (tests/usc_exec `run_binary`). HOST-ONLY: no GPU
-//! arithmetic and no GL read-back.
+//! Compiled under the mixed key of the draw (`yakogl::target_key::
+//! shc_blend_key_mixed` of RGBA8 and the integer target, in location
+//! order), the variant a draw into a float attachment next to an integer
+//! one uses since RC1's PowerVR row (docs/notes/pvr-int-mixed-targets.md):
+//! `chain::compile_fragment_for` decodes the key into the per-target list
+//! and packs each output for its own target. The built USC bytes run
+//! through the host byte model (tests/usc_exec `run_binary`). HOST-ONLY: no
+//! GPU arithmetic and no GL read-back.
 //!
-//! What holds today: every shape builds, writes pixel outputs 32 and 33
-//! once each, and the float output is packed (RGBA8). What does not: an
-//! integer output beside a float output under the default PowerVR variant
-//! is packed as RGBA8 too (unorm8, clamped to [0, 1]), so the integer reads
-//! 0. This is the known gap RC1 in docs/es3-cts-failures.md (mixed integer
-//! and float colour attachments). The fix needs back-end work in
-//! src/pvr/backend.rs (plan #325); the test is `#[ignore]`d until that
-//! lands, and the byte-model assertions (PACKED_F, pixel outputs [32, 33])
-//! will then need updating.
+//! What is checked: every shape builds, writes pixel outputs 32 and 33
+//! once each, the float output is packed (RGBA8), and the integer output
+//! holds the integer the body computes. Under the default variant (key 0)
+//! the integer output was packed as RGBA8 too (unorm8, clamped to [0, 1])
+//! and read 0 (RC1 in docs/es3-cts-failures.md).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_int_mrt_alu_pvr
@@ -34,6 +32,8 @@ use yakogl::shaderc::online::powervr::isa::ops_for;
 use yakogl::shaderc::online::powervr::operands::dsts;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
+use yakogl::shaderc::{shc_blend_key_int_rt, shc_blend_key_rt, ShcIntRt, SHC_RT_RGBA8};
+use yakogl::target_key::shc_blend_key_mixed;
 
 mod usc_exec;
 
@@ -110,12 +110,21 @@ fn fragment(vty: &str, ty: &str, int_loc: u32, body: &str) -> String {
 /// RGBA8 of (0.25, 0.5, 0.75, 1.0), one byte a channel, red lowest.
 const PACKED_F: u32 = 0xFFBF_8040;
 
-/// `src` under the default variant, run once with the varying's every
-/// coefficient `bits` (a flat varying is its value whichever plane it is
-/// read from): the dwords in the float output's and the integer output's
-/// pixel outputs.
-fn run(src: &str, int_loc: u32, bits: u32) -> (u32, u32) {
-    let rec = compile_for(src, 0).unwrap_or_else(|e| panic!("{src}: {e}"));
+/// The mixed key of an RGBA8 target and an R32I or R32UI one (`ty`), the
+/// integer at draw buffer `int_loc`.
+fn mixed_key(ty: &str, int_loc: u32) -> u32 {
+    let int = shc_blend_key_int_rt(ShcIntRt { channels: 1, bits: 32, signed: ty == "int" });
+    let rgba8 = shc_blend_key_rt(SHC_RT_RGBA8);
+    let targets = if int_loc == 1 { [rgba8, int] } else { [int, rgba8] };
+    shc_blend_key_mixed(&targets).expect("an integer beside RGBA8 is a mix")
+}
+
+/// `src` under the mixed key of its targets, run once with the varying's
+/// every coefficient `bits` (a flat varying is its value whichever plane it
+/// is read from): the dwords in the float output's and the integer
+/// output's pixel outputs.
+fn run(src: &str, ty: &str, int_loc: u32, bits: u32) -> (u32, u32) {
+    let rec = compile_for(src, mixed_key(ty, int_loc)).unwrap_or_else(|e| panic!("{src}: {e}"));
     assert_eq!(rec.num_outputs, 2, "{src}: a dword an output");
     assert_eq!(rec.num_varyings, 1, "{src}: the one varying");
     /* pixel output 0 is special register 32 (usc_exec: PIXOUT0) */
@@ -148,20 +157,18 @@ const SHAPES: [Shape; 7] = [
 fn int_alu_next_to_float_builds_and_float_lands() {
     for (vty, ty, loc, body, bits, _) in SHAPES {
         let src = fragment(vty, ty, loc, body);
-        let (f, _) = run(&src, loc, bits);
+        let (f, _) = run(&src, ty, loc, bits);
         assert_eq!(f, PACKED_F, "{src}: the float output");
     }
 }
 
-/// The integer output holds the integer. NOT TODAY: the default variant
-/// packs it as a colour, which is 0 for an integer under 2^23 read as a
-/// float.
+/// The integer output holds the integer: the mixed variant bit-inserts it
+/// into its R32I / R32UI dword with no conversion.
 #[test]
-#[ignore = "RC1: integer beside float output is packed as RGBA8, reads 0"]
 fn int_alu_next_to_float_lands() {
     for (vty, ty, loc, body, bits, want) in SHAPES {
         let src = fragment(vty, ty, loc, body);
-        let (_, i) = run(&src, loc, bits);
+        let (_, i) = run(&src, ty, loc, bits);
         assert_eq!(i, want, "{src}: the integer output");
     }
 }
