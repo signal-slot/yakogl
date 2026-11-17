@@ -251,7 +251,7 @@ cases), e27 4, e26 1 (the stop).
 | Done | GL core accepts the formats; the PowerVR writes all nineteen integer formats as a draw's one colour attachment; the V3D writes them, the float ones and the ES 2.0 formats among any attachments (host only); the GC7000UL draws 17 of the 19 (`0087345f`, `docs/es3/int-rt-gc.md`: RGBA16I/UI and RG32I/UI through the 64-bit tiled shadow, RGBA32I/UI refused by name), host only. Host tests: `tests/es3_int_rt.rs`, `tests/es3_int_rt_v3d.rs` |
 | Left on the PowerVR | an integer attachment beside other attachments (this is why `builtin_functions.common.modf` fails: dEQP's executor binds two integer attachments), colour masks that keep some of an integer target's channels, precompiled rows for the integer variants. Most of `fragment_out`'s 456 `int` / `uint` failures and part of `fbo.color` are here |
 | Left on the V3D | a board run (gl_test 200 on the Pi 4). Clears: the single-attachment integer quad is done (`e883be8f`, `CLEAR_FS_INT`, `docs/notes/v3d-int-clear.md`); a scissored or masked clear of several colour attachments is one quad from `src/v3d/clear_mrt.rs` since `7fa02269` (the fragment source `3c3e5470`, `docs/notes/v3d-mrt-clear.md` section 0; host tests `src/v3d/backend_tests.rs`, `tests/es3_mrt_clear_v3d.rs`, `tests/es3_mrt_ds_clear_v3d.rs`, `tests/es3_fragops_scissor_v3d.rs`, `tests/es3_four_rt_v3d.rs`, the GL core's hand-off `tests/es3_mrt_gl.rs` `f83041f6`). Left: the board pixel check that an attachment the quad leaves out keeps its bytes (`docs/notes/v3d-mrt-clear.md` section 5a), which is the Pi 4 rerun of FO6 and M1 |
-| Float targets | Not the `shaders.derivate` fails: those 15 rows are `texture.msaa4` (a 4-sample RGBA8 renderbuffer) and belong to RC8 and #339; the `fbo_float` cases render into RGBA32UI (`docs/notes/es3-float-targets.md`, plan #343, `fda14025`). `GL_EXT_color_buffer_float` is the work of plan #360. Today the ES 3.0 build claims `GL_EXT_color_buffer_half_float` (`src/gl/state.rs:112`, `:252`) and no 32-bit float extension, and R32F is wrongly complete (`src/gl/framebuffer.rs:650`; plan #325 board-mrt). Per-GPU decision (plan #360, `docs/notes/es3-float-targets.md` section 7, `docs/es3/sized-formats.md`, `docs/es3/backend-caps.md`): `GL_EXT_color_buffer_half_float` stays claimed on every GPU. `GL_EXT_color_buffer_float` is claimed only by the V3D 4.2 build, under the Cargo feature `color-buffer-float` (off by default), once the V3D arm draws and reads back R16F, RG16F, RGBA16F, R32F, RG32F, RGBA32F and R11F_G11F_B10F. PowerVR BXS-4-64 does not claim it (Mesa pco's R32F is not 32-bit precise; the arm is an issue draft, `docs/es3/pvr-formats.md`); GC7000UL does not claim it (the capability is false: RGBA32F needs two `G32R32` planes). Without the extension R32F stops being colour-renderable, as ES 3.0 requires, like RG32F, RGBA32F and R11F_G11F_B10F |
+| Float targets | Not the `shaders.derivate` fails: those 15 rows are `texture.msaa4` (a 4-sample RGBA8 renderbuffer) and belong to RC8 and #339; the `fbo_float` cases render into RGBA32UI (`docs/notes/es3-float-targets.md`, plan #343, `fda14025`). `GL_EXT_color_buffer_float` is the work of plan #360. Today the ES 3.0 build claims `GL_EXT_color_buffer_half_float` (`src/gl/state.rs:112`, `:252`) and no 32-bit float extension, and R32F is wrongly complete (`src/gl/framebuffer.rs:652`; plan #325 board-mrt). Per-GPU decision (plan #360, `docs/notes/es3-float-targets.md` section 7, `docs/es3/sized-formats.md`, `docs/es3/backend-caps.md`): `GL_EXT_color_buffer_half_float` stays claimed on every GPU. `GL_EXT_color_buffer_float` is claimed only by the V3D 4.2 build, under the Cargo feature `color-buffer-float` (off by default), once the V3D arm draws and reads back R16F, RG16F, RGBA16F, R32F, RG32F, RGBA32F and R11F_G11F_B10F. PowerVR BXS-4-64 does not claim it (Mesa pco's R32F is not 32-bit precise; the arm is an issue draft, `docs/es3/pvr-formats.md`); GC7000UL does not claim it (the capability is false: RGBA32F needs two `G32R32` planes). Without the extension R32F stops being colour-renderable, as ES 3.0 requires, like RG32F, RGBA32F and R11F_G11F_B10F |
 
 ### RC2. ES 3.0 sized texture formats; integer and packed-float textures
 
@@ -302,13 +302,13 @@ The PowerVR encodes on write and blends in linear space
 (`docs/es3/srgb.md`); `fragment_ops.blend.fbo_srgb` passes 1,152 / 1,152.
 The GC7000UL draws into an sRGB target, host only (no GPU result yet;
 `docs/es3/srgb.md` 6.1, 6.3): `SRGB_RT` includes `gpu-vivante`
-(`src/backend.rs:488`), so `rt_format_drawable` lets the draw through
-(`:498-505`); RT0 sets `PE_LOGIC_OP`'s SRGB bit with its write-enable and a
+(`src/backend.rs:569`), so `rt_format_drawable` lets the draw through
+(`:582-589`); RT0 sets `PE_LOGIC_OP`'s SRGB bit with its write-enable and a
 later linear draw writes the write-enable alone (`pe_logic_op_srgb`,
-`src/vivante/backend.rs:588-598`, written at `:1738-1745`), RT1..7 set
-`RT_CONFIG_SRGB` (`:1704-1705`), with the bits as Mesa's `state_3d.xml.h`
-gives them (`src/vivante/regs.rs:68-70,553-559`); the pixel shader saturates
-the output (`src/vivante/shader.rs:353-357`). Host tests: `tests/es3_srgb.rs`
+`src/vivante/backend.rs:827-842`, written at `:2035-2042`), RT1..7 set
+`RT_CONFIG_SRGB` (`:1995-1996`), with the bits as Mesa's `state_3d.xml.h`
+gives them (`src/vivante/regs.rs:68-70,559-564`); the pixel shader saturates
+the output (`src/vivante/shader.rs:217-221`). Host tests: `tests/es3_srgb.rs`
 `a_back_end_that_cannot_encode_refuses_the_draw` (the clear reaches the back
 end under `gpu-vivante`), `src/vivante/backend_tests.rs`
 `an_srgb_target_sets_the_pe_srgb_bits` and
