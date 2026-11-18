@@ -7,7 +7,8 @@
 # recipe below is tools/env/yakogl-gate.recipe.yaml. An image the pool keeps
 # generations of is built as its next generation (ubuntu+yakogl-gate@<now>)
 # and every server of the pool takes it from the store (orion-complex
-# docs/pools.md, "A rebuild retires the generations before it").
+# docs/pools.md, "A rebuild retires the generations before it"). The machine
+# also carries Claude Code, for connected's turns.
 name: ubuntu+yakogl-gate
 from: ubuntu+noble
 vcpus: 8
