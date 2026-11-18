@@ -127,6 +127,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// The compiler keeps its output in one arena that every compile resets, and

@@ -260,6 +260,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// The same stand-in with a back end that keeps its planes readable and
@@ -300,6 +301,7 @@ static BACKEND_RW: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: Some(rw_ds_write),
     stencil_resolve: Some(rw_stencil_resolve),
+    max_samples: 0,
 };
 
 /// One context for the whole file; the tests take turns on it.

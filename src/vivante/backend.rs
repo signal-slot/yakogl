@@ -4012,6 +4012,7 @@ pub static yakogl_backend_vivante: YakoglBackend = YakoglBackend {
     uniforms_host_only: true,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
     /* the array's own divisor in the stream's divisor state (0x14680 + 4i),
      * as Mesa etnaviv programs it on every HALTI2+ part (this GPU is HALTI5):
      * one DRAW_INSTANCED, gl_InstanceID 0..n-1. Whether this FE takes more

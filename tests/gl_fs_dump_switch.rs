@@ -109,6 +109,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
     compressed_blocks_in_rows: false,
     native_layered_textures: false,
     front_facing_shader_variant: false,

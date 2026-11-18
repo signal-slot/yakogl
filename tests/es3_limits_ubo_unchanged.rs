@@ -111,6 +111,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 static LIBRARY: Mutex<()> = Mutex::new(());

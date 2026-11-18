@@ -376,7 +376,7 @@ const _: () = assert!(offset_of!(crate::backend::GlesDraw, occlusion_query) == 3
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_cpu) == 3584);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, depth_texels) == 3592);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, depth_texels_pitch) == 3600);
-const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 232);
+const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 240);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, name) == 0);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, native_attrib_formats) == 8);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, rt_rgba8888_is_bgra) == 12);
@@ -412,6 +412,7 @@ const _: () = assert!(offset_of!(crate::backend::YakoglBackend, linear_row_align
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, uniforms_host_only) == 212);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, ds_write) == 216);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, stencil_resolve) == 224);
+const _: () = assert!(offset_of!(crate::backend::YakoglBackend, max_samples) == 232);
 const _: () = assert!(size_of::<crate::gl::context::GlBuffer>() == 104);
 const _: () = assert!(offset_of!(crate::gl::context::GlBuffer, used) == 0);
 const _: () = assert!(offset_of!(crate::gl::context::GlBuffer, target) == 4);

@@ -10289,6 +10289,7 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: Some(pvr_backend_ds_write),
     stencil_resolve: Some(pvr_backend_stencil_resolve),
+    max_samples: 0,
     /* the PDS fetches a per-instance array by the instance number: divisor 1 */
     max_instance_divisor: 1,
     /* the sync waits keep finish() until this backend waits for one kick */

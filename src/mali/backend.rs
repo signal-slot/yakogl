@@ -3762,6 +3762,7 @@ pub static yakogl_backend_mali: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 #[cfg(test)]
