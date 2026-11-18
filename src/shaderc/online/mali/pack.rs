@@ -14,17 +14,18 @@
 //! The values are `va_pack_instr`'s (va_pack.c:850-1087) for these ops.
 
 use super::bir::{flow, Idx, Ins, LodMode, Op, Prog, Special, Src, Swz, TexDim};
+use super::fau::{fau_page, select_fau_page, FAU_MAX_WORDS, FAU_PAGE_WORDS};
 use super::isa::{self, Instr, Op as IsaOp};
 use super::{Defect, MaliError};
 
 /// `va_pack_src` (va_pack.c:127-143) and `va_pack_fau_64` (:112-125): a
-/// register with its last-use bit, a uniform (`0x80 | word`), a table entry
-/// (`0xC0 | i`) or a special value (`0xC0 | (32 + 2 * entry + half)`,
-/// valhall/ISA.xml:87-111).
+/// register with its last-use bit, a uniform (`0x80 | word` within its FAU
+/// page, which [`tail`] names), a table entry (`0xC0 | i`) or a special
+/// value (`0xC0 | (32 + 2 * entry + half)`, valhall/ISA.xml:87-111).
 fn src_byte(s: &Src) -> Result<u32, MaliError> {
     Ok(match s.idx {
         Idx::Reg(r) if r < 64 => r as u32 | (s.discard as u32) << 6,
-        Idx::Uniform(w) if w < 64 => 0x80 | w as u32,
+        Idx::Uniform(w) if (w as usize) < FAU_MAX_WORDS => 0x80 | (w as usize % FAU_PAGE_WORDS) as u32,
         Idx::Lut(i) if i < 32 => 0xc0 | i as u32,
         Idx::Special(Special::AtestDatum, hi) => 0xc0 | (32 + 2 * 5 + hi as u32),
         Idx::Special(Special::BlendDescriptor(rt), hi) if rt < 8 => 0xc0 | (32 + 2 * (8 + rt as u32) + hi as u32),
@@ -180,13 +181,16 @@ impl Fill {
     }
 }
 
-/// The common tail: the FAU page (page 0, or page 3 for an instruction that
-/// reads `program_counter`, `VA_FAU_SPECIAL_PAGE_3_PROGRAM_COUNTER`,
-/// va_pack.c:95-96, or `lane_id`) and the flow.
+/// The common tail: the FAU page (`va_select_fau_page`, va_pack.c:855: the
+/// first FAU source's, page 1 for a uniform word past 63, page 3 for
+/// `program_counter`, `VA_FAU_SPECIAL_PAGE_3_PROGRAM_COUNTER`,
+/// va_pack.c:95-96, or `lane_id`; fau.rs `repair_fau` left no word of
+/// another page) and the flow.
 fn tail(f: &mut Fill, i: &Ins) -> Result<(), MaliError> {
-    let page3 =
-        |s: &Src| matches!(s.idx, Idx::Special(Special::ProgramCounter, false) | Idx::Special(Special::LaneId, _));
-    let page = if i.srcs().iter().any(page3) { 3 } else { 0 };
+    let page = select_fau_page(i);
+    if i.srcs().iter().any(|s| matches!(fau_page(s.idx), Some(p) if p != page && !matches!(s.idx, Idx::Lut(_)))) {
+        return Err(MaliError::Defect(Defect::Operand));
+    }
     f.put("fau_page_index", page)?.put("flow", i.flow as u32)?;
     Ok(())
 }
