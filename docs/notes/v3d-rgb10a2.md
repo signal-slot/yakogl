@@ -69,9 +69,15 @@ Steps 1 to 3 of (e) are on main; step 4 (the TFU) is not.
   `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE` answer `GL_RGBA`/
   `GL_UNSIGNED_INT_2_10_10_10_REV` for such a read buffer (Mesa's pair,
   ES 3.0 6.1.7; `implementation_color_read`), `RGBA`/`UNSIGNED_BYTE` where
-  the class falls back. Not
-  decoded yet: `glCopyTexImage2D`/`glCopyTexSubImage2D` from the surface.
-  Later items change both. The Pi 4 dEQP run is pending.
+  the class falls back. The Pi 4 dEQP run is pending.
+- **glCopyTexImage2D/glCopyTexSubImage2D** (host, `texture_copy_from_fb` in
+  `src/gl/texture.rs`): from an `RGB10_A2` read buffer (renderbuffer or
+  texture attachment) into a texture of the class, the copy reads the
+  surface as `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` and stores the word
+  unchanged; into an `RGBA8` texture it keeps the `GL_UNSIGNED_BYTE` decode
+  above. Tests `tests/es3_rgb10a2_copytex_v3d.rs` and
+  `gl::texture::tests::rgb10a2_copytex_*`; the fallback builds are pinned
+  by `tests/es3_rgb10a2_copytex_fallback.rs`. The Pi 4 dEQP run is pending.
 - **Not done**: step 4. `rt_texture` (`src/v3d/backend.rs`) still requires
   `GLES_TEXFMT_RGBA8`, the TFU has no 10/10/10/2 input type
   (`V3D_TFU_TTYPE_*` are R8, RG8, RGBA8, R16F, R32F), and the GL core offers
