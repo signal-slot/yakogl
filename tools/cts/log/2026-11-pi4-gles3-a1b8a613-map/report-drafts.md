@@ -6,7 +6,7 @@ Nothing here carries a board number: the board was not run (no `target:rpi4` lea
 
 ## #1261 comment (draft)
 
-> Plan #380, item "the Pi 4's remaining GLES3 images", host side at `a1b8a613`: `tools/cts/log/2026-11-pi4-gles3-a1b8a613-rerun/README.md` maps all 100 images of `pi4-gles3-tree.txt`. 38 are marked rerun (their failing groups sit behind commits of `b1b5b845..a1b8a613`: clears of several attachments `7fa02269`/`3c3e5470`, the incomplete-framebuffer clear `82dcceba`, msaa `f3ed1fea`/`2830b218`/`4bcb55c3`, limits `cb52fae8`/`6581f22b`, ETC2/EAC and shadow `455c3bb5`, 3D and 2D-array look-ups `8ae0a44b`/`31a4cf8d`, `b7c1484e` refusals as `GL_INVALID_OPERATION`); the rest are unchanged or belong to plan #376. No board record: not run (needs target:rpi4 and target:rpi4-console). No new host run either; the host column is the `26d1c4a2` record. Per-image before/after: the README's last column is "not run" until a board session fills it.
+> Plan #380, item "the Pi 4's remaining GLES3 images", host side at `a1b8a613`: `tools/cts/log/2026-11-pi4-gles3-a1b8a613-map/README.md` maps all 100 images of `pi4-gles3-tree.txt`. 38 are marked rerun (their failing groups sit behind commits of `b1b5b845..a1b8a613`: clears of several attachments `7fa02269`/`3c3e5470`, the incomplete-framebuffer clear `82dcceba`, msaa `f3ed1fea`/`2830b218`/`4bcb55c3`, limits `cb52fae8`/`6581f22b`, ETC2/EAC and shadow `455c3bb5`, 3D and 2D-array look-ups `8ae0a44b`/`31a4cf8d`, `b7c1484e` refusals as `GL_INVALID_OPERATION`); the rest are unchanged or belong to plan #376. No board record: not run (needs target:rpi4 and target:rpi4-console). No new host run either; the host column is the `26d1c4a2` record. Per-image before/after: the README's last column is "not run" until a board session fills it.
 
 ## Issue draft: S32a, 3D-sampler gradient look-ups refused
 
@@ -27,7 +27,7 @@ Not generated: it needs the board consoles. After the session, from the record d
 ## Draft lines
 
 `tools/cts/RESULTS.md` (row of the image, current results only):
-> Pi 4 dEQP-GLES3, images <rerun labels> at <sha8>: not run (needs target:rpi4); host map `tools/cts/log/2026-11-pi4-gles3-a1b8a613-rerun/README.md`.
+> Pi 4 dEQP-GLES3, images <rerun labels> at <sha8>: not run (needs target:rpi4); host map `tools/cts/log/2026-11-pi4-gles3-a1b8a613-map/README.md`.
 
 `tools/cts/STATUS.md` (Japanese):
 > Pi 4 dEQP-GLES3: b1b5b845 以降の修正で結果が変わりうる 38 イメージ (TREE_ROWS=0,6-7,16-17,19-20,30,52,54-58,61,63-70,72-85,89) の再実行表を a1b8a613 で作成。実機は未実施 (target:rpi4 が必要)。S32a の 32 件 (3D サンプラの textureGrad 系) は未修正で、イシュー案あり。
