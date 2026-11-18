@@ -39,9 +39,9 @@ Exit status is 0 unless --strict is given and there are findings
 (third-party-unlabelled, undecided and generated rows are information, not
 findings).  --fail-on CLASS[,CLASS] makes only those classes count (check 25
 of tools/cts/cts-selftest.sh uses missing-spdx,unknown-id,third-party-mismatch,
-generated-mismatch: unused-license stays information until the owner decides
-the LicenseRef texts).  `--fail-on undecided` fails while any file is parked
-as `undecided`, so a new file cannot be parked unnoticed.
+generated-mismatch,unused-license,undecided).  `--fail-on undecided` fails
+while any file is parked as `undecided`, so a new file cannot be parked
+unnoticed.
 
     tools/license_audit.py                 text report
     tools/license_audit.py --json          machine-readable
