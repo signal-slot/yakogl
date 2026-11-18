@@ -36,7 +36,7 @@
 use super::bir::{clamp, Cmpf, Dest, Idx, Ins, Op, Prog, Special, Src, Swz, VaryingName};
 use super::emit::{self, Row};
 use super::motion::{Moved, MAX_MOVED};
-use super::nir::{self, Alu, Kind, Nir, NirNode, Val, MAX_LOCALS, MAX_NODES, MAX_VALUES};
+use super::nir::{self, Alu, Kind, Nir, NirNode, Val, IDIV_RCP_SCALE, MAX_LOCALS, MAX_NODES, MAX_VALUES};
 use super::select::{
     alu, f16_exact, f16_rtne, generic_layout, preloads, split, UboLayout, VaryingAt, LOOP_CAP, MAX_VARYINGS,
 };
@@ -912,10 +912,6 @@ const F32_MINUS_ONE: u32 = 0xbf80_0000;
 const F32_NEG_ZERO: u32 = 0x8000_0000;
 const F32_TWO: u32 = 0x4000_0000;
 const F32_MINUS_TWO: u32 = 0xc000_0000;
-/// `nir_lower_idiv`'s scale of the divisor's reciprocal, 4294966784.0 (the
-/// largest float below 2^32: the estimate never overshoots;
-/// intbig_case79.stderr's `fmul %17, %18 (4.294967e+09)`).
-const IDIV_RCP_SCALE: u32 = 0x4f7f_fffe;
 /// 2.0 in both halves of an fp16 pair.
 const F16X2_TWO: u32 = 0x4000_4000;
 
@@ -1992,6 +1988,18 @@ impl<'s> Fs<'s> {
                 NirNode { kind: Kind::Uniform { dword, .. }, bits: 32, .. } if bool_dword(dword)),
             _ => false,
         };
+        /* an `int` / `ivec` uniform's word, a 32-bit integer and no mask
+         * (`caps->int16` is false: it stays 32 bits in a mediump shader),
+         * which [`Fs::mask_lane`] cannot tell from a bool's: dEQP's
+         * `isOk(float a, int b)` reads `float(b)` and `float(b + 1)` of the
+         * `ref_out0` word (deqp_intval_reslib_int_vs: `S32_TO_F32 r1,
+         * u2.w0`, `IADD_IMM.i32 r2, u2.w0, #0x1`) */
+        let int_word = |f: &Self, v: Val| match v {
+            Val::Lane(n, _) => matches!(f.nir.nodes[n as usize],
+                NirNode { kind: Kind::Uniform { dword, .. }, bits: 32, .. } if !bool_dword(dword)),
+            _ => false,
+        };
+        let int = |f: &Self, v: Val| !f.mask_lane(v) || int_word(f, v);
         match a {
             AluOp::F2i if self.is_f16(p) || self.uniform_dword(p).is_some() => self.int32(Alu::F2i32, [p, u, u], at),
             /* of an fp32 value (case 42's `int(uv.x * float(sz.x))`,
@@ -2082,20 +2090,20 @@ impl<'s> Fs<'s> {
             /* `a - b` is the front end's `iadd(a, ineg(b))`, Mesa's `isub`
              * (`has_isub`; deqp_intval_opfs_sub_assign_ivec2_lowp's `res -=
              * in1`, `ISUB.s32 r0, r0^, r3^`) */
-            AluOp::Iadd if !self.mask_lane(p) && matches!(self.alu_of(q), Some((Alu::Ineg, _))) => {
+            AluOp::Iadd if int(self, p) && matches!(self.alu_of(q), Some((Alu::Ineg, _))) => {
                 let Some((_, [b, ..])) = self.alu_of(q) else { return Err(MaliError::Defect(Defect::IrIndex)) };
                 self.int32(Alu::Isub, [p, b, u], at)
             }
-            AluOp::Iadd if !self.mask_lane(p) && !self.mask_lane(q) => self.int32(Alu::Iadd, [p, q, u], at),
+            AluOp::Iadd if int(self, p) && int(self, q) => self.int32(Alu::Iadd, [p, q, u], at),
             /* the arithmetic of the operator suite (deqp_intval_opfs_mul_
              * ivec4_highp: `IMUL.i32` per lane; a `-i` alone `ISUB.s32 0, a`) */
-            AluOp::Imul if !self.mask_lane(p) && !self.mask_lane(q) => self.int32(Alu::Imul, [p, q, u], at),
-            AluOp::Ineg if !self.mask_lane(p) => self.int32(Alu::Ineg, [p, u, u], at),
-            AluOp::I2f if !self.mask_lane(p) => self.op32(Alu::I2f, [p, u, u], at),
+            AluOp::Imul if int(self, p) && int(self, q) => self.int32(Alu::Imul, [p, q, u], at),
+            AluOp::Ineg if int(self, p) => self.int32(Alu::Ineg, [p, u, u], at),
+            AluOp::I2f if int(self, p) => self.op32(Alu::I2f, [p, u, u], at),
             /* `float(v_idx)` of a flat `uint` varying (case 89), fp32 as
              * `i2f32` is; motion.rs moves it into the vertex shader */
-            AluOp::U2f if !self.mask_lane(p) => self.op32(Alu::U2f, [p, u, u], at),
-            AluOp::Idiv if !self.mask_lane(p) && !self.mask_lane(q) => self.idiv(p, q, at),
+            AluOp::U2f if int(self, p) => self.op32(Alu::U2f, [p, u, u], at),
+            AluOp::Idiv if int(self, p) && int(self, q) => self.idiv(p, q, at),
             /* `!=` of run-time integers (tri_int's `ine`, whose fp16 operands
              * feed fp32 integer arithmetic, not lowered), the arithmetic,
              * and the mixes of a boolean and its negation (`iand(a,

@@ -721,6 +721,21 @@ pub fn vs_variant(
     let src = |lanes: &[[Src; 4]], v: nir::Val| -> Result<Src, MaliError> {
         match v {
             nir::Val::Const(c) => Ok(Src::of(Idx::Const(c))),
+            /* a 16-bit operation's lane: its half of the one value (the low
+             * one of a scalar, lane `c`'s of a vector of two), as nir_fs.rs
+             * `src32` reads it; a vector's user that reads it whole sets
+             * `.h01` below (a mediump local's fp16 arithmetic, nir.rs
+             * `vs_alu16`; deqp_intval_opvs_add_int_highp's `F16_TO_F32 r1,
+             * r0.h0` and `r0, r0^.h1`) */
+            nir::Val::Lane(n, c)
+                if matches!(vs.nodes[n as usize].kind, nir::Kind::Alu(_)) && vs.nodes[n as usize].bits == 16 =>
+            {
+                let s = lanes[n as usize][0];
+                if s.idx == Idx::Null {
+                    return Err(MaliError::Defect(super::Defect::IrIndex));
+                }
+                Ok(s.swz(if vs.nodes[n as usize].width == 2 && c == 1 { Swz::H11 } else { Swz::H00 }))
+            }
             nir::Val::Lane(n, c) => {
                 let s = lanes[n as usize][c as usize & 3];
                 if s.idx == Idx::Null {
@@ -790,7 +805,22 @@ pub fn vs_variant(
             nir::Kind::Alu(op) => {
                 let mut s = [Src::NULL; 3];
                 for (k, x) in s.iter_mut().enumerate().take(op.arity()) {
-                    *x = src(lanes, nd.src[k])?;
+                    let v = nd.src[k];
+                    *x = src(lanes, v)?;
+                    /* an fp16 operation's sources (nir.rs `vs_alu16`, as
+                     * nir_fs.rs `select_highp` reads them): a vector of two
+                     * read whole, a constant's half in both lanes
+                     * (`bi_alu_src_index`; `FMA.v2f16 r0, r0^, 0x2E660000.h11,
+                     * 0x38000000.h11`) */
+                    if nd.bits == 16 {
+                        let whole =
+                            matches!(v, nir::Val::Lane(m, _) if nd.width == 2 && vs.nodes[m as usize].width == 2);
+                        if whole {
+                            *x = x.swz(Swz::H01);
+                        } else if matches!(v, nir::Val::Const(_)) {
+                            *x = x.swz(Swz::H00);
+                        }
+                    }
                 }
                 lanes[id][0] = Src::ssa(emit::emit(p, emit::Row { op, bits: nd.bits, width: nd.width }, &s)?);
             }

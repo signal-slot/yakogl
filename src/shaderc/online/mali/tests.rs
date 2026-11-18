@@ -1228,10 +1228,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, include_str!("../../../../tools/mali/testdata/intloop_loop_nested.frag"), MaliError::LoopMediump),
         (FS, include_str!("../../../../tools/mali/testdata/intloop_contloops.frag"), MaliError::GuardMediump),
         (VS, include_str!("../../../../tools/mali/testdata/intloop_loop_nested_vs.vert"), MaliError::LoopVertex),
-        /* an integer product (the vertex stage takes the built-in inputs'
-         * `%`, `==`, `||` and selects, the conversions, shifts and
-         * differences of vs-int-convert, alone) */
-        (VS, "attribute vec4 p; void main(){ gl_Position = p * float(int(p.x) * 3); }", MaliError::IntValue),
+        /* an integer product compiles since plan #377's lower-intval-2
+         * (the vertex stage's `IMUL.i32`); the stage's IntValue is left to
+         * `%` by other than a power of two and the unsigned forms (ES 3.00,
+         * `the_builtin_lowering_keeps_its_gaps`) */
         (VS, "attribute vec4 p; void main(){ }", MaliError::NoPosition),
         (VS, "attribute vec4 p; varying vec4 v; void main(){ v = p; }", MaliError::NoPosition),
         (VS, "attribute vec4 p; void main(){ gl_Position = p; gl_PointSize = 2.3; }", MaliError::Fp16Inexact),

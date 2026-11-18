@@ -20,17 +20,21 @@ mod mali_ref;
 /// A mediump fragment shader uniform of a type outside the supported list.
 const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
 /// A gl_FragColor lane written from something else: where `fsmulti`'s
-/// colour stands once its uniforms are taken.
+/// colour stands once its uniforms are taken, and `fsivec4`'s
+/// `vec4(fTest).xy` (`i2f32` of the ivec uniform's words into a colour pair
+/// beside a texel, no shape of plan #377's lower-intval-1) since its vertex
+/// shader compiles (lower-intval-2).
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 /// An operand form the fragment walk has no reference for: `fsmat3_mediump`'s
 /// column sum, a lane alone first, since plan #377's constop lowering takes
 /// its colour lane beside 1.0.
 const FS_OPERAND: &str = "a fragment shader operand of a form or in a place no reference draws";
-/// An int or bool value the walks do not take yet: `vsbvec3`'s bvec `==` in
-/// the vertex shader (lower-intval's vertex step), and `fsivec4`, whose
-/// `vec4(fTest).xy` is `i2f32` of the ivec uniform's words read into a colour
-/// pair beside a texel (no shape of plan #377's lower-intval-1).
-const INT_VALUE: &str = "an integer or boolean value";
+/// The vertex walk's catch-all: `vsbvec3`'s `all` of the bvec3 `==`'s three
+/// `ieq` over the uniform's words (Mesa: `LSHIFT_OR.i32` of the words and
+/// one `CSEL.u32.eq` against 0), which `vs_reduce` does not take; its
+/// integer operands compile since plan #377's lower-intval-2 (the step's
+/// note, section 8, leaves the shape to its step 3).
+const VS_ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
 /// The `Light` array's loop stands before the array (lower-loops, then
 /// lower-uniarray).
 const VS_LOOP: &str = "a loop in a vertex shader";
@@ -68,10 +72,10 @@ const DIFFERS: &[&str] =
 /// prefix and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
     ("vsmat3_light", VS_LOOP),
-    ("vsbvec3", INT_VALUE),
+    ("vsbvec3", VS_ARITH),
     ("fsmat2_mediump", FS_MEDIUMP),
     ("fsmat3_mediump", FS_OPERAND),
-    ("fsivec4", INT_VALUE),
+    ("fsivec4", FRAGCOLOR_LANE),
     ("fsmulti", FRAGCOLOR_LANE),
 ];
 
@@ -174,7 +178,7 @@ fn vsapi_struct() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (the bvec ==), lowered by lower-intval"]
+#[ignore = "refused: arithmetic other than +, -, * ... (the all() of the bvec3 ==, over the uniform's words), lower-intval's step 3"]
 fn vsbvec3() {
     mali_ref::assert_matches("deqp_unitype_vsbvec3");
 }
@@ -213,7 +217,7 @@ fn fsmat4_mediump() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value (vec4(ivec4)), lowered by lower-intval"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (vec4(ivec4).xy beside a texel), lowered by lower-intval"]
 fn fsivec4() {
     mali_ref::assert_matches("deqp_unitype_fsivec4");
 }
