@@ -2147,6 +2147,20 @@ color_buffer_float_builds() {
   done
 }
 step "check   color-buffer-float on the four GPUs' host configurations" color_buffer_float_builds
+# The `pvr-instance-divisor` feature (no effect yet) builds with each GPU's
+# host configuration, so the P3 back-end item starts from a tree that
+# compiles. No test row with the feature here: with only the declaration in
+# the tree such a row selects 0 tests and warns, and a row fails on any
+# warning. The rows that run the feature's tests land with the back end that
+# reads it.
+pvr_instance_divisor_builds() {
+  local c
+  for c in "$V3D_CONFIG" host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
+    host-test,gpu-mali,shaderc-online,no-shader-table; do
+    cargo check --no-default-features --features "$c,pvr-instance-divisor" --lib || return 1
+  done
+}
+step "check   pvr-instance-divisor on the four GPUs' host configurations" pvr_instance_divisor_builds
 V3D_ES2_CONFIG="$V3D_CONFIG,report-es2"
 step "clippy  $V3D_ES2_CONFIG" cargo clippy --no-default-features --features "$V3D_ES2_CONFIG" --all-targets
 step "test    $V3D_ES2_CONFIG (--lib shaderc::online::v3d)" \

@@ -216,6 +216,12 @@ function(yakogl_add_capi_archive)
   if(YAKOGL_COLOR_BUFFER_FLOAT)
     list(APPEND _features "color-buffer-float")
   endif()
+  # The PowerVR back end's hardware instance divisors (the crate's
+  # `pvr-instance-divisor`), a global too: off unless a build tree asks for
+  # them (the Kconfig image switch YAKOGL_PVR_INSTANCE_DIVISOR).
+  if(YAKOGL_PVR_INSTANCE_DIVISOR)
+    list(APPEND _features "pvr-instance-divisor")
+  endif()
   # Any other crate feature, comma or semicolon separated (a global, empty by
   # default): tools/cts/host-deqp-run.sh's EXTRA_FEATURES for an opt-in feature
   # that has no option of its own yet.
