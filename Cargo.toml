@@ -130,6 +130,15 @@ msaa-fbo = []
 # extension is not listed. No code reads it yet except
 # tests/es3_color_buffer_float.rs.
 color-buffer-float = []
+# The PowerVR back end's hardware instance divisors (P3,
+# docs/notes/instanceid-per-draw.md, row "P3 (full path)"): with it the back
+# end reports `max_instance_divisor` 0xffff and divides per stream in the PDS
+# (a multiplier and a shift, as Mesa's pvr_pipeline_pds.c does), so an
+# instanced draw with a divisor above 1 is one draw; without it it takes
+# divisor 1 only and the GL core draws instance by instance. Off by default;
+# the board images turn it on with Kconfig YAKOGL_PVR_INSTANCE_DIVISOR. No
+# code reads it yet: the P3 back-end item lifts that.
+pvr-instance-divisor = []
 # Host tests only: links std so the test harness can unwind, and starts with a
 # null `g_backend` (the tests install mocks). Never enable it in a product:
 # it is a compile error on bare-metal targets and in the C archive.

@@ -161,6 +161,14 @@ if(CONFIG_YAKOGL)
   else()
     set(YAKOGL_GL_TEST_RUNNER OFF)
   endif()
+  # The PowerVR hardware instance divisors (the crate's
+  # `pvr-instance-divisor` feature), off unless the image selects them;
+  # yakogl_add_capi_archive() reads this variable too.
+  if(CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR)
+    set(YAKOGL_PVR_INSTANCE_DIVISOR ON)
+  else()
+    set(YAKOGL_PVR_INSTANCE_DIVISOR OFF)
+  endif()
 
   # ---- the C part: the Zephyr OSAL + the ABI/FFI layout pins ---------------------
   # The in-process compiler is lent its working region by a static this file
