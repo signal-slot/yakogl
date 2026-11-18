@@ -361,9 +361,12 @@ Copy rules (the cube's, with `p` -> `(pw, ph)`):
   unknown. It is a one-run board probe at most (set `cmp_mode`, put the
   reference in an unused data word), not a design basis.
 
-So Mesa's own Vulkan on this GPU compares after filtering, the same as Yakogl
-today. The 180 QualityWarnings are the expected result of that, not a bug in the
-selector.
+Mesa's own Vulkan on this GPU compares after filtering. Yakogl no longer does
+that: its shadow program compares per texel under every filter that blends,
+and weights the comparison results as the filter would have weighted the
+depths (`d7b2cf8b`, `919db72b`, `43af85d7`; `docs/notes/pvr-pcf.md`). The 180
+QualityWarnings are the expected result of the compare-after-filtering shape
+the `ad2b5ed` board run had, not a bug in the selector.
 
 ### 7.2 What dEQP wants, and the implementable PCF
 
@@ -376,8 +379,11 @@ what Mesa has for gather:
   (`pvr_common.h:198-202`), built at `pvr_arch_sampler.c:220-232`
   (`mipfilter = false`, `min/mag = LINEAR`, word 1 copied) and selected by
   `nir_load_smp_state_pco(.flags = tg4)` (`pco_nir_tex.c:515-521`,
-  `pco_trans_nir.c:1719-1723`: dwords 16..19 of ours). **Yakogl leaves dwords
-  16..19 zero today**: `tex_desc_sampler` (`backend.rs:3762`) fills 8, 9, 12 only.
+  `pco_trans_nir.c:1719-1723`: dwords 16..19 of ours). Yakogl leaves dwords
+  16..19 unused: `tex_desc_sampler_lod` (`src/pvr/backend.rs`) fills 8, 9, 12
+  and 13, and the PCF gathers read the sampler's own words 8..11, whose
+  address modes are the texture's — so the wrap of a gather's taps is the
+  TPU's (`docs/notes/pvr-pcf.md` section 4).
 - The sample: `tg4` is `smp` with `sb_mode = rawdata`
   (`pco_trans_nir.c:1793-1798`: `chans = enabled_channels`, destination
   `chans * 4`), `lodm = replace` with a level of 0 (`pco_nir_tex.c:645-649`) and
@@ -391,12 +397,14 @@ what Mesa has for gather:
   `mix(mix(c00, c10, fx), mix(c01, c11, fx), fy)` with
   `f = fract(coord * size - 0.5)`. `size` is `tex_size_2d`. Wrap and edge handling is the TPU's
   (the gather footprint), per layer for arrays.
-- The program has to know the filter at run time (a sampler object can change
-  it). Publish it in the sampler meta word the PowerVR leaves reserved:
-  dword 13 = `PCO_SAMPLER_META_RSVD0` (`pco_data.h:153`), bit 0 = "PCF". The
-  selector emits the existing one-sample compare and the gather arm and chooses
-  with `bcsel` / a predicated `if` (the machinery used for `shadow_compare`'s
-  bits, `select.rs:2368-2420`).
+- The program knows the filter at run time (a sampler object can change
+  it). The back end publishes it in the sampler meta word the PowerVR leaves
+  reserved: dword 13 = `PCO_SAMPLER_META_RSVD0` (`pco_data.h:153`), the bits
+  `shadow_filter_word` packs (`src/pvr/backend.rs`, pinned by the unit test
+  `the_shadow_filter_is_sampler_meta_word_1`). `shadow_compare` reads that
+  word and selects between the existing one-sample compare and the gather
+  arm with a `bcsel` on bit 0. The layout and both arms as built:
+  `docs/notes/pvr-pcf.md`.
 - Level: with `LINEAR` or `NEAREST` over one level the level is 0 (or
   `textureLod`'s). For the mipmap filters the footprint is at the level the TPU
   chose; the gather uses `lodm = replace`, so the level is the program's to
@@ -409,7 +417,9 @@ what Mesa has for gather:
   `tests/es3_pvr_pcf_cube.rs`). ETC2 arrays are pinned in `81bfac76`
   (`tests/es3_pvr_etc_array.rs`). Board pending: the dEQP
   `texture.shadow.{2d,2d_array,cube}` rows, and the TPU's first gather tap for a
-  cube direction.
+  cube direction. The implemented arm — sampler dword 13's layout, what the
+  program computes and what the TPU does, and the tests that pin it — is
+  `docs/notes/pvr-pcf.md`.
 - The five non-NEAREST filters times 18 cases times (2D, cube) is 180
   (`RESULTS.md:994`), and 108 for the array. `NEAREST_MIPMAP_NEAREST` needs no
   per-texel weighting (one texel), so its warnings may have another cause (level
