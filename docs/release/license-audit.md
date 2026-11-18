@@ -21,14 +21,16 @@ the sections that describe that pass.
 ## Gate (check 25)
 
 `tools/cts/cts-selftest.sh` check 25 runs
-`python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license`
-over the repository. It fails when a tracked file has no SPDX line, no
+`python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license,undecided`
+over the repository; the `tools   licence audit` row of `tools/check.sh` runs
+the same six classes. It fails when a tracked file has no SPDX line, no
 allowlist row and no `.license` sidecar, when an identifier has no text in
 `LICENSES/`, or when a third-party or generated file's licence disagrees with
-its upstream or generator, or when a text in `LICENSES/` is named by no file.
-A new source file takes the two SPDX lines (comment
+its upstream or generator, when a text in `LICENSES/` is named by no file,
+and when a file is `undecided` (open provenance), so no new file can be
+parked again. A new source file takes the two SPDX lines (comment
 syntax of its kind, as the neighbours do); a new data file takes a row in
-`tools/license_audit.allow`. `undecided` is printed, not a failure. Check 24 runs `--self-test`: the fixtures under
+`tools/license_audit.allow`. Check 24 runs `--self-test`: the fixtures under
 `tools/testdata/license_audit/` (`basic` has a headerless `nohdr.rs`; `clean`
 has headed files, an allowlisted file and an `undecided` patch) and the
 `--fail-on` exit status, including a new headerless `.rs` added to the clean
@@ -201,8 +203,10 @@ mix our code with Mesa-derived code (`pvr_pds_render_gen.h`,
 ## Follow-up
 
 1. Done (2026-10-26): items 2, 4-10, 14-16 of the table; `undecided: 0`.
-   Open for the owner: whether `undecided` becomes a `--fail-on` class of
-   check 25, so that no new file can be parked again.
+   Done (2026-11-18): `undecided` is a `--fail-on` class of the gate.
+   `97daa2f5` made it a tested class; the `tools   licence audit` row of
+   `tools/check.sh` and check 25 of `tools/cts/cts-selftest.sh` now both
+   pass it, so a file with open provenance fails the gate.
 2. Done: `unused-license` is a `--fail-on` class of check 25 (items 11 and
    12 decided).
 3. Not covered by the tool: copyright holders inside file headers (NOTICE is
