@@ -16,6 +16,7 @@ use crate::gpu::vivante::{self as gc, cmdbuf, hw, irq, mmu, power, GcCore, GcIde
 use crate::mmio::Hw;
 use core::ffi::c_void;
 use core::mem::{offset_of, size_of};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 fn hwio() -> Hw {
     // SAFETY: every address the entry points touch is a register of a block
@@ -78,7 +79,26 @@ pub unsafe extern "C" fn yd_gc_identify(regs: usize, env: *const YdEnv, id: *mut
     }
 }
 
-/// Reset the GPU at `regs` to idle (`gc_bringup_reset`).
+/// [`hw::HwOptions::ahb_reset_release`] for every later [`yd_gc_reset`]
+/// and [`yd_gc_hw_init`]; off until [`yd_gc_ahb_reset_release`] sets it.
+static AHB_RESET_RELEASE: AtomicBool = AtomicBool::new(false);
+
+fn hw_options() -> hw::HwOptions {
+    hw::HwOptions { ahb_reset_release: AHB_RESET_RELEASE.load(Ordering::Relaxed) }
+}
+
+/// Switch galcore's secure-AHB soft-reset release on (`true`) or off
+/// ([`hw::HwOptions::ahb_reset_release`]: the reset writes 0x3A8 = 0x0 after
+/// its 0x3A8 = 0x1, the init writes 0x3A8 = 0x2). Off by default. A board
+/// that wants it calls this before the device's reset, in its
+/// `gc_board_power_on` (the STM32MP257F-DK: `gc_power_mp2.c`).
+#[unsafe(no_mangle)]
+pub extern "C" fn yd_gc_ahb_reset_release(on: bool) {
+    AHB_RESET_RELEASE.store(on, Ordering::Relaxed);
+}
+
+/// Reset the GPU at `regs` to idle (`gc_bringup_reset`), with the opt-ins
+/// [`yd_gc_ahb_reset_release`] set.
 ///
 /// # Safety
 /// As [`yd_gc_identify`]; `id` points at an identity.
@@ -86,10 +106,10 @@ pub unsafe extern "C" fn yd_gc_identify(regs: usize, env: *const YdEnv, id: *mut
 pub unsafe extern "C" fn yd_gc_reset(regs: usize, env: *const YdEnv, id: *const GcIdentity) -> i32 {
     // SAFETY: the caller's contract.
     let (env, id) = unsafe { (&*env, &*id) };
-    rc(hw::reset(&hwio(), regs, env, id))
+    rc(hw::reset_with(&hwio(), regs, env, id, hw_options()))
 }
 
-/// `gc_hw_init`.
+/// `gc_hw_init`, with the opt-ins [`yd_gc_ahb_reset_release`] set.
 ///
 /// # Safety
 /// `core` is the shim's `struct gc_dev` with `regs` set; `env` valid.
@@ -97,7 +117,7 @@ pub unsafe extern "C" fn yd_gc_reset(regs: usize, env: *const YdEnv, id: *const 
 pub unsafe extern "C" fn yd_gc_hw_init(core: *mut GcCore, env: *const YdEnv) -> i32 {
     // SAFETY: the caller's contract.
     let (c, env) = unsafe { (&*core, &*env) };
-    hw::init(&hwio(), c.regs, env);
+    hw::init_with(&hwio(), c.regs, env, hw_options());
     0
 }
 
