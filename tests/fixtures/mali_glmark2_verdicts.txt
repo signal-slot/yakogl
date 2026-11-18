@@ -37,11 +37,11 @@
 16 desktop:windows=4:effect=shadow fs 9ce9: ok
 16 desktop:windows=4:effect=shadow vs 792b: ok
 17 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false fs 9fe6: ok
-17 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false vs 7234: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+17 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false vs 7234: ok
 18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false fs 9fe6: ok
-18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false vs 7234: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false vs 7234: ok
 19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true fs 9fe6: ok
-19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true vs 7234: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true vs 7234: ok
 20 ideas:speed=duration fs 1aca: Valhall: an integer or boolean value is not lowered yet
 20 ideas:speed=duration fs 23c8: ok
 20 ideas:speed=duration fs c565: Valhall: an integer or boolean value is not lowered yet
@@ -56,7 +56,7 @@
 20 ideas:speed=duration vs c265: ok
 21 jellyfish fs 22fc: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 21 jellyfish fs 8ee5: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
-21 jellyfish vs 08a2: Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet
+21 jellyfish vs 08a2: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 21 jellyfish vs 14ac: ok
 22 terrain fs 1637: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet
 22 terrain fs 4d26: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
