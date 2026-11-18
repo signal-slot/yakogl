@@ -1110,7 +1110,6 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::ConstantFold
         | E::FusedMultiplyAdd
         | E::Invariant
-        | E::FauPage
         | E::TexVertex
         | E::TexKind
         | E::TexCount
@@ -1343,7 +1342,6 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         MaliError::BlockTableFull,
     ));
     /* the references of the FAU's limits (tools/mali/testdata) */
-    v.push((VS, SEL_U_FAU65.to_string(), MaliError::FauPage));
     v.push((VS, SEL_U_FAU130.to_string(), MaliError::UboFallback));
     /* a mediump fragment shader's arrays, one block row an element, past
      * the layout's 256 rows (select.rs MAX_LAYOUT_ROWS) */
@@ -1445,7 +1443,7 @@ fn the_slice_s_programs_are_far_from_the_back_end_s_tables() {
         fau[k] = fau[k].max(s.info.fau.len());
     }
     assert_eq!((longest, fau), ([44, 17], [64, 7]), "(longest VS, FS program), (most VS, FS FAU words)");
-    assert!(longest[0] < super::bir::MAX_INSTRS && fau[0] == super::fau::FAU_PAGE0_WORDS);
+    assert!(longest[0] < super::bir::MAX_INSTRS && fau[0] == super::fau::FAU_PAGE_WORDS);
 }
 
 /// An invalid shader gets the front end's verdict, not a gap.
@@ -4219,13 +4217,16 @@ fn the_tables_high_water_marks_are_measured() {
 }
 
 /// FAU page 1: one word past sel_u_fau64's, and the reference reads it
-/// through page 1 (`va_select_fau_page`, not transcribed: refused).
+/// through page 1 (`va_select_fau_page`, fau.rs `select_fau_page`):
+/// byte-equal, its words and facts.
 #[test]
 fn a_push_word_past_page_0_is_mesa_s_page_1() {
-    let r = region(td!("sel_u_fau65.expect.json"), "vs.position").expect("the region");
+    let json = td!("sel_u_fau65.expect.json");
+    let r = region(json, "vs.position").expect("the region");
     let pages: Vec<u64> = r.words.iter().map(|w| (w >> 57) & 3).filter(|p| *p != 0).collect();
-    assert!(!pages.is_empty(), "the reference reads FAU page 1 or above");
-    assert_eq!(gap(SHC_STAGE_VERTEX, SEL_U_FAU65), MaliError::FauPage);
+    assert_eq!(pages, [1], "the reference reads FAU page 1 in one instruction");
+    let (v, _) = check_program(SEL_U_FAU65, TRI_FS, json);
+    assert_eq!(v.info.fau.len(), 65, "sel_u_fau65 pushes one word on page 1");
     /* one word less is byte-equal (the population above) and fills page 0 */
     let v = compile(SHC_STAGE_VERTEX, td!("sel_u_fau64.vert")).expect("compiles");
     assert_eq!(v.info.fau.len(), 64, "sel_u_fau64 fills FAU page 0");
