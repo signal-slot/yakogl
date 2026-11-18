@@ -1950,6 +1950,21 @@ step "test    $V3D_CONFIG (tests/es3_half_float_rt_v3d.rs)" \
 # to nothing under report-es2 (no row below).
 step "test    $V3D_CONFIG (tests/es3_formats_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_formats_v3d
+# ETC2/EAC on the V3D (plan #354, docs/notes/etc2-eac.md): the four block
+# classes in V3D_SAMPLED_TEXFMTS with Mesa's ETC2/EAC texture record, the six
+# names the GL core decodes at upload sampled in the class each lands in, and
+# the draw's sampler carrying its compare (tests/es3_etc2_v3d.rs); the store
+# of those classes and the TMU's read of them on the QPU interpreter, within
+# dEQP's ETC2/EAC thresholds (tests/es3_decoded_class_v3d.rs). Every 11-bit
+# EAC value survives the half-float store of that decode within them
+# (tests/eac_half_precision.rs; the PowerVR and GC7000 rows run it with the
+# rest of tests/). Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_etc2_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_etc2_v3d
+step "test    $V3D_CONFIG (tests/es3_decoded_class_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_decoded_class_v3d
+step "test    $V3D_CONFIG (tests/eac_half_precision.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test eac_half_precision
 # The V3D's float colour targets (v3d-cbf-test-draft): what the 16F targets
 # clear, draw and read back today; the claimed GL_EXT_color_buffer_float path
 # is #[ignore = "v3d-arm"] until the V3D arm lands.
@@ -2028,6 +2043,21 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_texsize.rs)" \
 # to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragdepth
+# The six ES 3.0 ETC2/EAC names the GL core decodes at upload (docs/notes/
+# etc2-eac.md): each name accepted by glCompressedTexImage* and stored as the
+# decoder's values in the class the design gives it, the compressed format
+# list of ETC1 and the ten, and the error rules of the sub-image, copy,
+# mipmap and FBO forms, through the GL API on a stand-in back end
+# (tests/es3_etc2_eac.rs, its header's two builds). The compressed-upload
+# error rules of the eleven stored names against ES 3.0.6 3.8.6 and dEQP's
+# negative_api expectations (tests/es3_etc2_negative.rs; the PowerVR build,
+# which stores every row). Compile to nothing under report-es2.
+step "test    host-test,gpu-powervr (tests/es3_etc2_eac.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr --test es3_etc2_eac
+step "test    host-test,gpu-vivante (tests/es3_etc2_eac.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante --test es3_etc2_eac
+step "test    host-test,gpu-powervr (tests/es3_etc2_negative.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr --test es3_etc2_negative
 # gl_FragDepth on the V3D (plan #340, docs/notes/gl-fragdepth.md): the TLB Z
 # write per pixel in place of the pass-through Z from the FEP, the
 # `writes_z`/`disable_ez` program data and the value each writer computes, run
@@ -2046,6 +2076,17 @@ step "test    $V3D_CONFIG (tests/es3_fragdepth_v3d_sim.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_fragdepth_v3d_sim
 step "test    $V3D_CONFIG (tests/es3_fragdepth_cases.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_fragdepth_cases
+# Shadow samplers on the V3D (docs/notes/v3d-shadow.md): every shadow look-up
+# form of GLSL ES 3.00 compiles through SHC_ONLINE and its compare (TMUDREF)
+# runs on the QPU interpreter against values computed from ES 3.0.6
+# 3.8.15.1 (tests/es3_shadow_v3d.rs); a draw's sampler record carries the
+# texture's GL_TEXTURE_COMPARE_FUNC, read back and run on the interpreter
+# (tests/es3_shadow_v3d_draw.rs; four forms also ride the ETC2 draw row
+# above). Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_shadow_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_shadow_v3d
+step "test    $V3D_CONFIG (tests/es3_shadow_v3d_draw.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_shadow_v3d_draw
 # ES 3.0 multisample renderbuffers, the pin files of docs/notes/es3-msaa-renderbuffers.md:
 # today's one-sample behaviour of the GL core and of each back end, and the
 # ignored tests of the expected result (not run). Compile to nothing under
@@ -2141,6 +2182,12 @@ step "test    $V3D_ES2_CONFIG (tests/es2_report_limits.rs)" \
 # (the ES 3.0 ten of plan #354 do not show under it).
 step "test    $V3D_ES2_CONFIG (tests/es2_compressed_list.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_compressed_list
+# The ES 2.0 answers of a report-es2 build, pinned against the specification
+# (item es2-guard-redo); the PowerVR report-es2 rows run it with the rest of
+# tests/. Named here for the compiler rows, which need the online compiler
+# (the offline table "compiles" any source and refuses it at link time).
+step "test    host-test,gpu-powervr,shaderc-online,report-es2 (tests/es2_report_guard.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test es2_report_guard
 # The report-es2 program binary answers the ES 3.0 program binary
 # (docs/notes/es3-program-binary.md, (f)) must keep; the file needs the
 # online compiler without the table, so only this row runs it.
