@@ -6426,14 +6426,16 @@ static TEST_RGBA32F_OWN_CLASS: core::sync::atomic::AtomicBool = core::sync::atom
 /// holds the class (`backend::GC_SAMPLED_TEXFMTS`, `8f019dae`): it
 /// samples the class as two G32R32 planes (docs/notes/gc-128bit-swizzle.md),
 /// and RG32F / RGB32F take the class there too (es3_formats `F32_ST`). The
-/// PowerVR and the V3D sample the class as well but keep GL_RGBA32F as
-/// halves, byte for byte as before; the Mali samples no class of its own
-/// yet. Never under `report-es2`, which keeps its answers.
+/// V3D does too (`V3D_SAMPLED_TEXFMTS`; its TMU reads it at the 32-bit
+/// output, dEQP texture.format.sized.*.rgba32f). The PowerVR samples the
+/// class as well but keeps GL_RGBA32F as halves, byte for byte as before;
+/// the Mali samples no class of its own yet. Never under `report-es2`, which keeps its answers.
 fn rgba32f_own_class() -> bool {
     #[cfg(not(test))]
-    let opted_in = cfg!(feature = "gpu-vivante");
+    let opted_in = cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d"));
     #[cfg(test)]
-    let opted_in = cfg!(feature = "gpu-vivante") || TEST_RGBA32F_OWN_CLASS.load(core::sync::atomic::Ordering::Relaxed);
+    let opted_in = cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d"))
+        || TEST_RGBA32F_OWN_CLASS.load(core::sync::atomic::Ordering::Relaxed);
     !crate::REPORT_ES2 && opted_in && backend::sampled_texfmts() & backend::gles_texfmt_bit(GLES_TEXFMT_RGBA32F) != 0
 }
 
@@ -12156,10 +12158,14 @@ mod tests {
             widened(&wide_floats(comps), comps).into_iter().flat_map(|f| half(f).to_ne_bytes()).collect()
         };
         /* this build as it is, on a back end other than the GC: GL_RGBA32F
-         * is halves (they do not opt in); then the GC's choice with the
+         * is halves (they do not opt in; the GC and the V3D do, so there
+         * only the second case runs); then the GC's choice with the
          * class out of the mask, where the three names are halves alike */
-        let cases: &[(bool, Option<bool>)] =
-            if cfg!(feature = "gpu-vivante") { &[(true, Some(false))] } else { &[(false, None), (true, Some(false))] };
+        let cases: &[(bool, Option<bool>)] = if cfg!(any(feature = "gpu-vivante", feature = "gpu-v3d")) {
+            &[(true, Some(false))]
+        } else {
+            &[(false, None), (true, Some(false))]
+        };
         for &(own, sampled) in cases {
             let _own = sampled.map(|s| OwnClass::set(own, s));
             let names: &[(GLenum, GLenum, usize)] = if sampled.is_some() {

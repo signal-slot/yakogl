@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! GL_RGBA32F is stored as RGBA16F halves on the V3D path (plan #380, issue
-//! #1261; images T05a and T06 of tools/cts/pi4-gles3-tree.txt). Eight dEQP-GLES3
-//! cases fail on that:
+//! GL_RGBA32F is stored in its own 32-bit class on the V3D path (plan #380,
+//! issue #1261; images T05a and T06 of tools/cts/pi4-gles3-tree.txt). It was
+//! stored as RGBA16F halves, and eight dEQP-GLES3 cases failed on that:
 //!
 //! * T05a `texture.format.sized.2d.rgba32f_pot`, `rgba32f_npot`;
 //! * T06 `texture.format.sized.2d_array.rgba32f_pot`, `rgba32f_npot`,
 //!   `texture.format.sized.3d.rgba32f_pot`, `rgba32f_npot`,
 //!   `texture.format.sized.cube.rgba32f_pot`, `rgba32f_npot`.
 //!
-//! The cause is `sized_format` in src/gl/texture.rs (the line
+//! The cause was `sized_format` in src/gl/texture.rs (the line
 //! `GL_RGBA32F => (GL_RGBA, GL_FLOAT, GLES_TEXFMT_RGBA16F), /* stored as
 //! halves */`): the sized name resolves to the half-float class, and
 //! `es3_formats.rs` has no row that gives GL_RGBA32F the 32-bit class
@@ -26,11 +26,10 @@
 //! end (the rig of tests/es3_tex_filtering.rs; the GL core's own store, the
 //! bind a draw hands the back end, and the texels in the back end's memory):
 //! the bind's format, the texels as stored, and what the V3D's own predicates
-//! say about that bind. The tests whose names end
-//! `_flip_when_rgba32f_is_32_bit` are what the fix flips: GL_RGBA32F stored as
-//! `GLES_TEXFMT_RGBA32F`, four 32-bit words a texel, the bits of the uploaded
-//! floats, `return_32` true. The controls (GL_RGBA16F, values a half holds)
-//! stay. What it does not show: the picture dEQP compares with its reference.
+//! say about that bind. The fix (`rgba32f_own_class` opts in `gpu-v3d`):
+//! GL_RGBA32F stored as `GLES_TEXFMT_RGBA32F`, four 32-bit words a texel, the
+//! bits of the uploaded floats, `return_32` true. The controls (GL_RGBA16F,
+//! values a half holds) stay. What it does not show: the picture dEQP compares with its reference.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_rgba32f_v3d
@@ -43,7 +42,8 @@ use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::*;
 use yakogl::gl::consts::*;
 use yakogl::gl::draw::*;
-use yakogl::gl::es3_formats::{f32_to_half, half_to_f32};
+use yakogl::gl::es3_formats::f32_to_half;
+use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
 use yakogl::gl::state::*;
@@ -245,10 +245,6 @@ fn draw_sampling(sampler: &str) {
 /// a third, and a tenth.
 const VALUES: [f32; 4] = [1.0e-8, 65520.0, 1.0 / 3.0, 0.1];
 
-/// What the GL core stores of `VALUES` as GL_RGBA32F: the upload clamps to the
-/// largest half (65520.0 is 0x7bff, not the infinity `f32_to_half` makes).
-const STORED: [u16; 4] = [0x0000, 0x7bff, 0x3555, 0x2e66];
-
 const SIDE: usize = 4;
 
 #[derive(Clone, Copy, Debug)]
@@ -328,6 +324,10 @@ fn halves(texel: &[u8]) -> [u16; 4] {
     core::array::from_fn(|i| u16::from_ne_bytes([texel[i * 2], texel[i * 2 + 1]]))
 }
 
+fn words(texel: &[u8]) -> [u32; 4] {
+    core::array::from_fn(|i| u32::from_ne_bytes([texel[i * 4], texel[i * 4 + 1], texel[i * 4 + 2], texel[i * 4 + 3]]))
+}
+
 const SHAPES: [Shape; 4] = [Shape::D2, Shape::Array, Shape::D3, Shape::Cube];
 
 /* ------------------------------------------------------------------------ */
@@ -341,40 +341,32 @@ fn the_v3d_samples_the_32_bit_class_the_core_does_not_pick() {
     assert!(texture::return_32(&GlesTextureBind { format: GLES_TEXFMT_RGBA32F, ..GlesTextureBind::ZERO }));
 }
 
-/// The bind of a GL_RGBA32F texture of every target is the RGBA16F class,
-/// which the V3D reads at the 16-bit output.
+/// The bind of a GL_RGBA32F texture of every target is the 32-bit class,
+/// which the V3D reads at the 32-bit output.
 #[test]
-fn rgba32f_is_bound_as_the_half_float_class_flip_when_rgba32f_is_32_bit() {
+fn rgba32f_is_bound_as_its_own_32_bit_class() {
     let _g = context();
     for shape in SHAPES {
         let (b, _) = drawn(shape, GL_RGBA32F, VALUES);
-        assert_eq!(b.format, GLES_TEXFMT_RGBA16F, "{shape:?}: flip to GLES_TEXFMT_RGBA32F");
-        assert!(!texture::return_32(&b), "{shape:?}: the 16-bit TMU output; flip to true");
+        assert_eq!(b.format, GLES_TEXFMT_RGBA32F, "{shape:?}");
+        assert!(texture::return_32(&b), "{shape:?}: the 32-bit TMU output");
         if !matches!(shape, Shape::Cube) {
             /* the stand-in's cube layout (faces stacked) is not the V3D's */
-            assert_eq!(texture::refusal_for(&b, false), None, "{shape:?}: the 16-bit key takes it");
+            assert_eq!(texture::refusal_for(&b, true), None, "{shape:?}: the 32-bit key takes it");
         }
         assert_eq!(b.incomplete, 0, "{shape:?}: complete");
     }
 }
 
-/// The texels as stored: each value rounded to half precision. 1.0e-8 is
-/// below the smallest half (it rounds to 0), 65520.0 is past the largest
-/// (65504: it saturates to 0x7bff), 1/3 is 0x3555, 0.1 is 0x2e66. The fix stores the
-/// floats' own bits (four 32-bit words a texel).
+/// The texels as stored: four 32-bit words a texel, the bits of the floats
+/// given (1.0e-8 and 65520.0 are kept, 1/3 is not rounded to a half).
 #[test]
-fn rgba32f_texels_are_stored_rounded_to_half_flip_when_rgba32f_is_32_bit() {
+fn rgba32f_texels_are_stored_as_the_uploaded_floats() {
     let _g = context();
-    let want = STORED;
-    assert_eq!(half_to_f32(want[2]), 0.333_251_95);
     for shape in SHAPES {
         let (b, texel) = drawn(shape, GL_RGBA32F, VALUES);
-        assert_eq!(b.format, GLES_TEXFMT_RGBA16F, "{shape:?}");
-        assert_eq!(halves(&texel), want, "{shape:?}: halves; flip to the f32 bit patterns of VALUES");
-        let back = halves(&texel).map(half_to_f32);
-        assert_eq!(back[0], 0.0, "{shape:?}: 1.0e-8 is lost");
-        assert_eq!(back[1], 65504.0, "{shape:?}: 65520.0 saturates to the largest half");
-        assert_ne!(back[2], VALUES[2], "{shape:?}: 1/3 is not itself any more");
+        assert_eq!(b.format, GLES_TEXFMT_RGBA32F, "{shape:?}");
+        assert_eq!(words(&texel), VALUES.map(f32::to_bits), "{shape:?}: the f32 bit patterns of VALUES");
     }
 }
 
@@ -392,13 +384,39 @@ fn rgba16f_is_the_same_class_and_bytes_control() {
     }
 }
 
-/// The narrowness: values a half holds are stored exactly, which is why only
-/// the cases whose reference values need more than a half fail. After the
-/// fix the same values are stored as 32-bit words; flip the texel read.
+/// The narrowness: values a half holds are stored exactly in either class,
+/// which is why only the cases whose reference values need more than a half
+/// failed; now as 32-bit words.
 #[test]
-fn values_a_half_holds_are_stored_exactly_flip_when_rgba32f_is_32_bit() {
+fn values_a_half_holds_are_stored_exactly() {
     let _g = context();
     let exact = [0.0f32, 0.5, 1.0, 2048.0];
     let (_, texel) = drawn(Shape::D2, GL_RGBA32F, exact);
-    assert_eq!(halves(&texel).map(half_to_f32), exact);
+    assert_eq!(words(&texel).map(f32::from_bits), exact);
+}
+
+/// A framebuffer attachment: the texture is still a GL_RGBA32F one, which is
+/// not colour-renderable without GL_EXT_color_buffer_float (ES 3.0 4.4.4.1),
+/// in its own class as it was as halves. GL_RGBA16F stays complete.
+#[test]
+fn rgba32f_attachment_stays_incomplete_and_rgba16f_complete() {
+    let _g = context();
+    for (internal, status) in
+        [(GL_RGBA32F, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT), (GL_RGBA16F, GL_FRAMEBUFFER_COMPLETE)]
+    {
+        let (mut fb, mut tex) = (0, 0);
+        // SAFETY: room for one name each.
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glTexStorage2D(GL_TEXTURE_2D, 1, internal, 4, 4);
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), status, "{internal:#x}");
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+            glDeleteTextures(1, &tex);
+        }
+    }
 }
