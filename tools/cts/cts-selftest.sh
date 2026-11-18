@@ -36,6 +36,9 @@
 # self-test): 53 pi4-console-scan.py, 54 pi4-session-readme.py, 55
 # pi4-gles3-preflight-selftest.sh, 56 pi4-session-tally-selftest.sh. None of
 # them reads DEQP_WORK, ZEPHYR_WS or the board environment.
+# Check 57 keeps the licence audit's --fail-on class list equal in its three
+# written copies (tools/check.sh's licence row, check 25 above, checklist
+# row 7's Evidence command) and requires undecided in it.
 set -u
 
 HERE=$(dirname "$0")
@@ -975,6 +978,49 @@ gl3check 55 pi4-gles3-preflight-selftest.sh "the Pi 4 session preflight on a fak
 # tallied with relative paths, an aborted image named, an unknown label
 # refused before any tally is written.
 gl3check 56 pi4-session-tally-selftest.sh "a Pi 4 session directory tallied, aborts named, unknown labels refused"
+
+# ---- 57: the licence audit's --fail-on list: three copies, one list -----------
+#
+# The audit's --fail-on classes are written down three times: the `scope
+# licence` row of tools/check.sh (the CI gate), check 25 above (the larep=
+# line -- the echo line and the bad message say --fail-on too, but they are
+# not commands, so they are not read), and the Evidence command of row 7 of
+# docs/release/checklist.md. undecided joined the list with c5295c1c; a copy
+# left behind says the gate fails on a class it does not pass, and the three
+# would then drift silently. This check runs neither the audit nor check.sh:
+# it pulls the comma list out of the three lines. Each place must yield
+# exactly one list (none or two names the place, so a moved or doubled line
+# fails loudly instead of passing as empty), the three lists must be
+# byte-equal, and the list must contain undecided. The two paths outside
+# this script are overridable so a doctored copy can show a drift failing;
+# the gate runs them unset, on the repository's own files.
+echo
+echo "== 57. licence audit --fail-on list: check.sh, check 25, checklist row 7"
+f57_chk=$(sed -n 's/.*license_audit\.py --fail-on \([a-z,-]\{1,\}\).*/\1/p' \
+    "${CTS_SELFTEST_CHECK_SH:-$ROOT/tools/check.sh}")
+f57_self=$(sed -n '/^larep=/s/.*--fail-on \([a-z,-]\{1,\}\).*/\1/p' "$HERE/cts-selftest.sh")
+f57_row7=$(sed -n 's/^| 7 |.*license_audit\.py --fail-on \([a-z,-]\{1,\}\).*/\1/p' \
+    "${CTS_SELFTEST_CHECKLIST:-$ROOT/docs/release/checklist.md}")
+# the number of lists one extraction yielded (0 for a moved line, 2+ for a
+# doubled one; the empty command substitution leaves nothing to count)
+f57_n() { printf '%s' "$1" | grep -c .; }
+# a list or list(s) as one line for the message, or `none` for no list
+f57_flat() { local f; f=$(printf '%s' "$1" | paste -sd';' -); printf '%s' "${f:-none}"; }
+f57_nchk=$(f57_n "$f57_chk")
+f57_nself=$(f57_n "$f57_self")
+f57_nrow7=$(f57_n "$f57_row7")
+if [ "$f57_nchk" -ne 1 ] || [ "$f57_nself" -ne 1 ] || [ "$f57_nrow7" -ne 1 ]; then
+    bad "licence audit --fail-on: not exactly one list per place (tools/check.sh $f57_nchk, cts-selftest.sh check 25 $f57_nself, docs/release/checklist.md row 7 $f57_nrow7)"
+    printf '        | tools/check.sh: %s\n' "$(f57_flat "$f57_chk")"
+    printf '        | cts-selftest.sh check 25: %s\n' "$(f57_flat "$f57_self")"
+    printf '        | docs/release/checklist.md row 7: %s\n' "$(f57_flat "$f57_row7")"
+elif [ "$f57_chk" != "$f57_self" ] || [ "$f57_self" != "$f57_row7" ]; then
+    bad "licence audit --fail-on lists differ (tools/check.sh [$(f57_flat "$f57_chk")], cts-selftest.sh check 25 [$(f57_flat "$f57_self")], docs/release/checklist.md row 7 [$(f57_flat "$f57_row7")])"
+elif case "$f57_chk" in *undecided*) true ;; *) false ;; esac; then
+    ok "licence audit --fail-on: one list per place, equal, with undecided ($f57_chk)"
+else
+    bad "licence audit --fail-on: the equal lists lack undecided ($f57_chk)"
+fi
 
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
