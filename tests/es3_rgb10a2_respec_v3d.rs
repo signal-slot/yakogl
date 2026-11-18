@@ -16,9 +16,9 @@
 //! bytes and sizes of 8 again. A glTexImage2D at a level *above* the attached
 //! one leaves the attached level's format and texels alone. The expected
 //! bytes are rounded as in es3_rgb10a2_readback_v3d (read-back) and as the
-//! CPU blit rounds (blit). The implementation read pair row is `#[ignore]`d
-//! pending readback; readback-pair-api runs it with the rows of
-//! es3_rgb10a2_readback_v3d. Builds where the class falls back to RGBA8 are
+//! CPU blit rounds (blit). The implementation read pair row runs since
+//! 654b0620, with the rows of es3_rgb10a2_readback_v3d. Builds where the
+//! class falls back to RGBA8 are
 //! pinned by es3_rgb10a2_fallback and its siblings; this file runs only on
 //! the build that stores the class.
 //!
@@ -458,7 +458,6 @@ fn respec_a_level_above_the_attached_one_leaves_it_alone() {
 
 /// (e): after (a), GL_IMPLEMENTATION_COLOR_READ_FORMAT/TYPE answer the word
 /// pair for the re-specified attachment.
-#[ignore = "readback: the read pair after a re-specification, run with es3_rgb10a2_readback_v3d (readback-pair-api)"]
 #[test]
 fn respec_to_rgb10a2_read_pair_is_the_word_pair() {
     let _g = context();
