@@ -120,6 +120,13 @@ impl PendingClear {
 /// consumers below hold the record across calls that take the context.
 static PENDING: Global<[PendingClear; MAX_CONTEXTS]> = Global::new([PendingClear::NONE; MAX_CONTEXTS]);
 
+/// The full clear of each context slot that waits on a framebuffer that is
+/// not bound ([`park_pending_clear`]). glmark2 clears the window, then binds
+/// an FBO: emitting the window's clear there was a clear-only kick a frame
+/// that the window's draw would have carried for nothing
+/// (docs/notes/pvr-extra-kick.md, 52 -> 51 kicks a terrain frame).
+static PARKED: Global<[PendingClear; MAX_CONTEXTS]> = Global::new([PendingClear::NONE; MAX_CONTEXTS]);
+
 /// `c`'s pending clear (glClear records it; the next draw fuses it in).
 pub fn pending_clear_of(c: &GlContext) -> &'static mut PendingClear {
     // SAFETY: single-threaded by contract; callers use the reference for a
@@ -127,16 +134,25 @@ pub fn pending_clear_of(c: &GlContext) -> &'static mut PendingClear {
     unsafe { &mut PENDING.get()[c.index as usize % MAX_CONTEXTS] }
 }
 
+/// `c`'s parked clear ([`PARKED`]).
+fn parked_clear_of(c: &GlContext) -> &'static mut PendingClear {
+    // SAFETY: as `pending_clear_of`.
+    unsafe { &mut PARKED.get()[c.index as usize % MAX_CONTEXTS] }
+}
+
 /// A context slot starts, or its context is destroyed: nothing is pending.
 pub(super) fn reset_pending_clear(index: u8) {
     // SAFETY: single-threaded by contract; no other reference is live.
-    unsafe { PENDING.get()[index as usize % MAX_CONTEXTS] = PendingClear::NONE };
+    unsafe {
+        PENDING.get()[index as usize % MAX_CONTEXTS] = PendingClear::NONE;
+        PARKED.get()[index as usize % MAX_CONTEXTS] = PendingClear::NONE;
+    }
 }
 
-/// Whether `c` has a clear pending (colour, depth or stencil).
+/// Whether `c` has a clear pending (colour, depth or stencil), parked or not.
 pub fn has_pending_clear(c: &GlContext) -> bool {
-    let pc = pending_clear_of(c);
-    pc.color || pc.depth || pc.stencil
+    let (pc, pk) = (pending_clear_of(c), parked_clear_of(c));
+    pc.color || pc.depth || pc.stencil || pk.color || pk.depth || pk.stencil
 }
 
 /// The current context's pending clear (tests).
@@ -3068,11 +3084,24 @@ fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, w
 /// merely incomplete still raises GL_INVALID_FRAMEBUFFER_OPERATION, as it
 /// did when the clear was fused into the next draw).
 /// (Within `c`: each context has its own pending clear.)
+///
+/// A full clear is the exception ([`park_pending_clear`]): it waits on its
+/// framebuffer instead, and goes out with that framebuffer's next draw.
 fn settle_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32) {
+    park_pending_clear(c, d, reported);
     let pc = pending_clear_of(c);
     if !(pc.color || pc.depth || pc.stencil) || pc.fb == c.bound_framebuffer {
         return;
     }
+    let now = c.bound_framebuffer;
+    emit_to_own_framebuffer(c, d, reported);
+    pending_clear_of(c).fb = now;
+}
+
+/// Emit the pending clear to the framebuffer it was recorded for, the
+/// binding switched for the emission and put back.
+fn emit_to_own_framebuffer(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32) {
+    let pc = pending_clear_of(c);
     let now = c.bound_framebuffer;
     let quiet = pc.fb != 0 && c.framebuffer_ref(pc.fb).is_none();
     c.bound_framebuffer = pc.fb;
@@ -3084,7 +3113,98 @@ fn settle_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32)
         pc.depth = false;
         pc.stencil = false;
     }
-    pc.fb = now;
+}
+
+/// A clear that may wait on its framebuffer while another is bound: the
+/// whole colour buffer (every draw buffer, every channel, no scissor; depth
+/// and stencil as glClear named them) of the window or of a framebuffer
+/// object whose attachments are renderbuffers of this library's own
+/// storage. Nothing samples such a framebuffer's pixels, so its clear only
+/// has to go out before it is next drawn, read, copied, blitted, swapped or
+/// changed ([`flush_parked_clear`]). A texture attachment could be sampled
+/// by the draws in between, and an EGLImage's storage seen elsewhere: those
+/// clears go out at the bind as before.
+fn parkable(c: &GlContext, pc: &PendingClear) -> bool {
+    pc.color
+        && pc.state == ClearState::CLEAR_ALL
+        && (pc.fb == 0 || framebuffer::attachments_private_renderbuffers(c, pc.fb))
+}
+
+/// Keep a full pending clear of a framebuffer that is not bound any more as
+/// `c`'s parked clear rather than emitting it as a clear-only kick; hand a
+/// parked clear back as the pending one when its framebuffer is bound again
+/// (a later glClear of it then merges into it, a draw fuses it); and emit a
+/// parked clear whose renderbuffers the framebuffers bound now share, or
+/// whose framebuffer could not be parked any more (a renderbuffer of it
+/// became an EGLImage's since). One clear is parked at a time: a second full
+/// clear goes out as before.
+fn park_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32) {
+    let bound = c.bound_framebuffer;
+    let (pc, pk) = (pending_clear_of(c), parked_clear_of(c));
+    let pending = pc.color || pc.depth || pc.stencil;
+    if pending && pc.fb != bound && !(pk.color || pk.depth || pk.stencil) && parkable(c, pc) {
+        *pk = core::mem::replace(pc, PendingClear::NONE);
+    }
+    let (pc, pk) = (pending_clear_of(c), parked_clear_of(c));
+    if !(pk.color || pk.depth || pk.stencil) {
+        return;
+    }
+    if pk.fb == bound {
+        if !(pc.color || pc.depth || pc.stencil) {
+            *pc = core::mem::replace(pk, PendingClear::NONE);
+        } else {
+            /* a clear pends already (of another framebuffer, one that could
+             * not be parked): the parked one goes out, so that no parked
+             * clear waits on the bound framebuffer, which the application
+             * can change from now on */
+            emit_parked_clear(c, d, reported);
+        }
+        return;
+    }
+    let read = framebuffer::read_framebuffer(c);
+    if framebuffer::share_attachment(c, pk.fb, bound)
+        || framebuffer::share_attachment(c, pk.fb, read)
+        || !parkable(c, pk)
+    {
+        emit_parked_clear(c, d, reported);
+    }
+}
+
+/// Emit `c`'s parked clear to its framebuffer now; the pending clear stays
+/// as it was. A clear the backend refused stays parked.
+fn emit_parked_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32) {
+    let pk = parked_clear_of(c);
+    if !(pk.color || pk.depth || pk.stencil) {
+        return;
+    }
+    let held = core::mem::replace(pending_clear_of(c), core::mem::replace(pk, PendingClear::NONE));
+    emit_to_own_framebuffer(c, d, reported);
+    let pc = pending_clear_of(c);
+    if pc.color || pc.depth || pc.stencil {
+        *parked_clear_of(c) = core::mem::replace(pc, held);
+    } else {
+        *pc = held;
+    }
+}
+
+/// A framebuffer or renderbuffer object is about to change (an attachment,
+/// storage, deletion) or be read as another binding: a parked clear goes
+/// out first, to the images it was recorded for.
+pub fn flush_parked_clear(c: &mut GlContext) {
+    // SAFETY: single-threaded by contract; the framebuffer entry points that
+    // call this hold no other reference to STATE.
+    let st = unsafe { STATE.get() };
+    emit_parked_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
+}
+
+/// glBindFramebuffer changed a binding: a full clear of the framebuffer left
+/// is parked, the one of the framebuffer bound is handed back
+/// ([`park_pending_clear`]). Nothing is emitted unless the framebuffers now
+/// bound share an image with the parked clear's.
+pub fn framebuffer_rebound(c: &mut GlContext) {
+    // SAFETY: as `flush_parked_clear`.
+    let st = unsafe { STATE.get() };
+    park_pending_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
 }
 
 /// The masks and scissor box a `glClear` issued now would be subject to.
@@ -3216,10 +3336,26 @@ pub fn pending_clear_for(c: &mut GlContext) -> &'static mut PendingClear {
 
 /// Emit a clear-only kick for a glClear with no following draw.
 pub fn flush_pending_clear(c: &mut GlContext) {
+    flush_clears(c, true);
+}
+
+/// [`flush_pending_clear`] for the bound framebuffer's images alone: a
+/// parked clear stays parked. For a CPU access of a texture attached to the
+/// bound framebuffer, which a parked clear (of the window or of
+/// renderbuffers, [`parkable`]) never reaches.
+pub fn flush_bound_clear(c: &mut GlContext) {
+    flush_clears(c, false);
+}
+
+fn flush_clears(c: &mut GlContext, parked: bool) {
     // SAFETY: single-threaded by contract; the draw entry points never call
     // this, so no other reference to STATE is live.
     let st = unsafe { STATE.get() };
     settle_pending_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
+    if parked {
+        /* a parked clear is a clear no draw followed as much as this one */
+        emit_parked_clear(c, &mut st.clear_draw, &mut st.draw_fail_reported);
+    }
     /* with_ds: a clear the application never drew behind still has to be
      * carried out here. `glClear(GL_DEPTH_BUFFER_BIT); glFinish();` is a
      * complete request, and gating this on the colour clear alone left it

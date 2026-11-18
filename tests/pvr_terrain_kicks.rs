@@ -15,8 +15,10 @@
 //! a platform written here (as tests/depth_resolve_pvr_backend.rs: GPU
 //! memory is host memory, every submit completes at once, the PowerVR's
 //! command generators are stand-ins). Each submitted `PvrRenderKick`'s size
-//! tells its kind. The host's 52 equals the note's `kicks.py` figure; the
-//! board's 52.7 also counts the setup's kicks.
+//! tells its kind. The host's count was 52 before fix 5 (the note's
+//! `kicks.py` figure; the board's 52.7 also counts the setup's kicks): the
+//! window's full clear now waits on the window while the FBO passes run
+//! (docs/notes/pvr-extra-kick.md), so it is 51.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr --test pvr_terrain_kicks
@@ -769,13 +771,15 @@ fn kinds(sizes: &[(u32, u32)]) -> Vec<Kind> {
         .collect()
 }
 
-/// glmark2 terrain's steady frame on the PowerVR backend: 52 kicks, by kind
-/// 43 mip levels, 8 passes and the window's clear
+/// glmark2 terrain's steady frame on the PowerVR backend: 51 kicks, by kind
+/// 43 mip levels and 8 passes. The window's clear-only kick of the note
+/// (52 before fix 5, docs/notes/pvr-extra-kick.md) is gone: the clear is
+/// parked on the window and fused into the window's draw
 /// (docs/notes/am62p-slow-terrain.md, "Kicks (`GM2_KICKS=1`): 52 a frame, and
 /// what each is": `kicks.py`'s `fb1+2 fb2+1 fb4+1 fb5+10 fb6+9 fb4+9 fb7+10
 /// fb0+10`). The stand-in platform here completes every kick at once, so
 /// nothing waits, but the backend submits the same kicks as on the board:
-/// the host count equals the note's 52 (the note's
+/// the host count equalled the note's 52 before fix 5 (the note's
 /// setup frame of 61 also makes the 512x512 specular map's chain, which this
 /// test leaves out). A kick's size is read from the submitted
 /// `PvrRenderKick`; the chains are 9 kicks for the 800x600 targets (levels
@@ -784,7 +788,7 @@ fn kinds(sizes: &[(u32, u32)]) -> Vec<Kind> {
 /// Each number is pinned so that the fix that moves it updates it on
 /// purpose, with the note's fix number in the message.
 #[test]
-fn terrain_frame_is_52_kicks_43_mip_levels_8_passes_and_a_window_clear() {
+fn terrain_frame_is_51_kicks_43_mip_levels_8_passes_and_no_window_clear() {
     let _g = rig();
     let t = terrain_targets();
     terrain_frame(&t); /* the first frame creates the targets' storage and programs */
@@ -812,15 +816,15 @@ fn terrain_frame_is_52_kicks_43_mip_levels_8_passes_and_a_window_clear() {
         );
         assert_eq!(
             count(Kind::WindowClear),
-            1,
-            "frame {i}: the window's dead clear kick. Fix 5 (keep a framebuffer's pending clear across a bind \
-             to another one) takes it away: then 51 kicks a frame; sizes {sizes:?}"
+            0,
+            "frame {i}: the window's dead clear kick. Fix 5 (a full pending clear stays on its framebuffer \
+             across a bind to another one, draw::park_pending_clear) took it away; sizes {sizes:?}"
         );
         assert_eq!(
             sizes.len(),
-            52,
-            "frame {i}: kicks a frame. Every candidate's expected total is in the note (fix 2: 29, fix 3: 20, \
-             fix 5: 51); sizes {sizes:?}"
+            51,
+            "frame {i}: kicks a frame (52 before fix 5). The note's totals were counted with the window's \
+             clear kick: one fewer now (fix 2: 28, fix 3: 19); sizes {sizes:?}"
         );
         /* the chains: 9 + 8 + 8 + 9 + 9 level kicks, each run ending at the next pass */
         let mut runs = Vec::new();

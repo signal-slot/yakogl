@@ -1427,6 +1427,31 @@ fn attachment_refs(c: &GlContext, type_: GLenum, name: GLuint) -> usize {
         .sum()
 }
 
+/// Framebuffer object `h` holds renderbuffers alone, each of this library's
+/// own storage (not an EGLImage's): nothing samples its pixels while another
+/// framebuffer is bound (`draw::parkable`).
+pub(super) fn attachments_private_renderbuffers(c: &GlContext, h: GLuint) -> bool {
+    c.framebuffer_ref(h).is_some_and(|fb| {
+        attachment_points(fb).all(|a| match a.type_ {
+            GL_NONE => true,
+            GL_RENDERBUFFER => c.renderbuffer_ref(a.name).is_some_and(|rb| !rb.external),
+            _ => false,
+        })
+    })
+}
+
+/// Framebuffer objects `a` and `b` are two and hold an image in common (the
+/// window shares none).
+pub(super) fn share_attachment(c: &GlContext, a: GLuint, b: GLuint) -> bool {
+    if a == 0 || b == 0 || a == b {
+        return false;
+    }
+    let (Some(fa), Some(fb)) = (c.framebuffer_ref(a), c.framebuffer_ref(b)) else { return false };
+    attachment_points(fa)
+        .filter(|x| x.type_ != GL_NONE)
+        .any(|x| attachment_points(fb).any(|y| y.type_ == x.type_ && y.name == x.name))
+}
+
 /* The orphan rule. Deleting an object detaches it from the framebuffer that
  * is bound and from no other (ES 2.0 3.7.13 / 4.4.3; `detach_from_bound`),
  * so a framebuffer that is not bound keeps reading the deleted object's
@@ -1520,6 +1545,7 @@ fn clear_target_mark(c: &GlContext, ti: usize) {
 /// Detach a deleted renderbuffer from the bound framebuffer (ES 2.0 4.4.3);
 /// true when another framebuffer still holds it (the orphan rule above).
 fn renderbuffer_deleted(c: &mut GlContext, renderbuffer: GLuint) -> bool {
+    super::draw::flush_parked_clear(c); /* it may be one of its images */
     detach_from_bound(c, GL_RENDERBUFFER, renderbuffer);
     attachment_refs(c, GL_RENDERBUFFER, renderbuffer) != 0
 }
@@ -1566,6 +1592,7 @@ fn held_by(fb: &mut GlFramebuffer, attachment: GLenum) -> [(GLenum, GLuint); 2] 
 
 /// `set_attachment` on the bound framebuffer, releasing what the point held.
 fn replace_attachment(c: &mut GlContext, attachment: GLenum, type_: GLenum, name: GLuint, level: GLint, layer: GLint) {
+    super::draw::flush_parked_clear(c); /* to the images it was recorded for */
     let bound = c.bound_framebuffer;
     let Some(fb) = c.framebuffer(bound) else { return };
     let old = held_by(fb, attachment);
@@ -1712,6 +1739,8 @@ pub unsafe extern "C" fn glDeleteFramebuffers(n: GLsizei, framebuffers: *const G
     if framebuffers.is_null() {
         return;
     }
+    /* a parked clear reaches its renderbuffers, which outlive the object */
+    super::draw::flush_parked_clear(c);
     for i in 0..n as usize {
         // SAFETY: the application passes `n` names (n >= 0 checked above),
         // not necessarily aligned.
@@ -1798,6 +1827,8 @@ pub unsafe extern "C" fn glBindFramebuffer(target: GLenum, framebuffer: GLuint) 
             c.bound_framebuffer = framebuffer;
         }
     }
+    /* a full clear of the framebuffer left waits on it (docs/notes/pvr-extra-kick.md) */
+    super::draw::framebuffer_rebound(c);
 }
 
 /// The READ framebuffer (ES 3.0 4.4.1): what glReadPixels and glCopyTex*
@@ -2717,6 +2748,7 @@ fn renderbuffer_storage(
         return;
     }
     let samples = if crate::REPORT_ES2 { 0 } else { samples };
+    super::draw::flush_parked_clear(c); /* into the storage it replaces */
 
     let bound = c.bound_renderbuffer;
     let Some(rb) = c.renderbuffer(bound) else {
@@ -3508,6 +3540,7 @@ pub fn renderbuffer_attach_external_pitched(c: &mut GlContext, mem: &OsalGpuMem,
     {
         return -1;
     }
+    super::draw::flush_parked_clear(c); /* into the storage it replaces */
     let bound = c.bound_renderbuffer;
     let Some(rb) = c.renderbuffer(bound) else {
         return -1;
@@ -3861,6 +3894,7 @@ pub unsafe extern "C" fn glBlitFramebuffer(
     }
     let Some(c) = context::current() else { return };
     let k = super::blit::Corners { src: [srcX0, srcY0, srcX1, srcY1], dst: [dstX0, dstY0, dstX1, dstY1] };
+    super::draw::flush_parked_clear(c); /* the source may be its framebuffer */
     super::blit::blit_framebuffer(c, k, mask, filter);
 }
 
