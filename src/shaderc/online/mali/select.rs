@@ -743,6 +743,17 @@ pub fn vs_variant(
                 }
                 Ok(s)
             }
+            /* a 16-bit node's first word through a swizzle: an fp16
+             * uniform's lanes 0 and 1 whole, or one lane in both halves
+             * (nir.rs `vs_pair16`; deqp_unitype_vsmat2_mediump's `FADD.v2f16
+             * r1, u5.w1, r0.h00`) */
+            nir::Val::Pair(n, swz) if vs.nodes[n as usize].bits == 16 => {
+                let s = lanes[n as usize][0];
+                if s.idx == Idx::Null {
+                    return Err(MaliError::Defect(super::Defect::IrIndex));
+                }
+                Ok(s.swz(swz))
+            }
             nir::Val::Undef | nir::Val::Pair(..) => Err(MaliError::Defect(super::Defect::IrIndex)),
         }
     };
@@ -804,7 +815,10 @@ pub fn vs_variant(
             nir::Kind::Preload { reg } => lanes[id][0] = Src::of(Idx::Reg(reg)),
             nir::Kind::Alu(op) => {
                 let mut s = [Src::NULL; 3];
-                for (k, x) in s.iter_mut().enumerate().take(op.arity()) {
+                /* an `f2f16` of two lanes reads both 32-bit words
+                 * (`V2F32_TO_V2F16`, nir.rs `vs_narrow_input`) */
+                let arity = if op == nir::Alu::F2f16 && nd.width == 2 { 2 } else { op.arity() };
+                for (k, x) in s.iter_mut().enumerate().take(arity) {
                     let v = nd.src[k];
                     *x = src(lanes, v)?;
                     /* an fp16 operation's sources (nir.rs `vs_alu16`, as
@@ -812,7 +826,7 @@ pub fn vs_variant(
                      * read whole, a constant's half in both lanes
                      * (`bi_alu_src_index`; `FMA.v2f16 r0, r0^, 0x2E660000.h11,
                      * 0x38000000.h11`) */
-                    if nd.bits == 16 {
+                    if nd.bits == 16 && op != nir::Alu::F2f16 {
                         let whole =
                             matches!(v, nir::Val::Lane(m, _) if nd.width == 2 && vs.nodes[m as usize].width == 2);
                         if whole {

@@ -49,11 +49,11 @@
 20 ideas:speed=duration fs e6a9: ok
 20 ideas:speed=duration vs 038e: ok
 20 ideas:speed=duration vs 4f27: ok
-20 ideas:speed=duration vs 51b2: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration vs 51b2: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
 20 ideas:speed=duration vs a09e: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
-20 ideas:speed=duration vs bf4b: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration vs bf4b: ok
 20 ideas:speed=duration vs c236: ok
-20 ideas:speed=duration vs c265: Valhall: an integer or boolean value is not lowered yet
+20 ideas:speed=duration vs c265: ok
 21 jellyfish fs 22fc: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 21 jellyfish fs 8ee5: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 21 jellyfish vs 08a2: Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet

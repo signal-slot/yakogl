@@ -17,8 +17,6 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// A mediump fragment shader uniform of a type outside the supported list.
-const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp";
 /// A gl_FragColor lane written from something else: where `fsmulti`'s
 /// colour stands once its uniforms are taken, and `fsivec4`'s
 /// `vec4(fTest).xy` (`i2f32` of the ivec uniform's words into a colour pair
@@ -27,14 +25,9 @@ const FS_MEDIUMP: &str = "a mediump fragment shader uniform other than a float, 
 const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 /// An operand form the fragment walk has no reference for: `fsmat3_mediump`'s
 /// column sum, a lane alone first, since plan #377's constop lowering takes
-/// its colour lane beside 1.0.
+/// its colour lane beside 1.0. Mesa's program is `vec16.rs`'s chunks of the
+/// columns plus `v_coords`, a varying that route does not read.
 const FS_OPERAND: &str = "a fragment shader operand of a form or in a place no reference draws";
-/// The vertex walk's catch-all: `vsbvec3`'s `all` of the bvec3 `==`'s three
-/// `ieq` over the uniform's words (Mesa: `LSHIFT_OR.i32` of the words and
-/// one `CSEL.u32.eq` against 0), which `vs_reduce` does not take; its
-/// integer operands compile since plan #377's lower-intval-2 (the step's
-/// note, section 8, leaves the shape to its step 3).
-const VS_ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
 /// The `Light` array's loop stands before the array (lower-loops, then
 /// lower-uniarray).
 const VS_LOOP: &str = "a loop in a vertex shader";
@@ -42,7 +35,12 @@ const VS_LOOP: &str = "a loop in a vertex shader";
 /// The references the lowering makes byte-equal (`vsstruct_partial` and
 /// `vsstruct_rip` since plan #377's lower-intval-1 took the `isOk` result in
 /// the fragment colour, `bool_colour`; `fsmat4_mediump` since its constop
-/// lowering took a `vec4(.., 1.0)` colour lane beside a computed one).
+/// lowering took a `vec4(.., 1.0)` colour lane beside a computed one;
+/// `fsmat2_mediump`, `vsbvec3`, `vsmat2_mediump` and `vsmat3_mediump` since
+/// lower-unitype: the mat2 columns' `vec16.rs` chunks, the bvec3 `all(==)`
+/// as `LSHIFT_OR.i32` of the words into one `CSEL.u32.eq`, and the vertex
+/// walk's fp16 arithmetic of fp16 uniform words and narrowed mediump
+/// attributes, nir.rs `vs_alu16u`).
 const MATCHED: &[&str] = &[
     "vsmat2_highp",
     "vsmat3_highp",
@@ -51,13 +49,23 @@ const MATCHED: &[&str] = &[
     "fsmat4_mediump",
     "vsstruct_partial",
     "vsstruct_rip",
+    "fsmat2_mediump",
+    "vsbvec3",
+    "vsmat2_mediump",
+    "vsmat3_mediump",
 ];
 
-/// The references that compile with other words than Mesa's: Mesa computes
-/// a mediump VS expression of fp16 uniforms at 16 bits (`FADD.v2f16`,
-/// `FMA.v2f16`, `FCMP_OR.v2f16`), the vertex walk widens each lane first
-/// (`F16_TO_F32`) and computes at 32; `vsmat2_mediump` and `vsmat3_*` also
-/// keep a constant varying lane Mesa stores (`v_color.w`, varylink's).
+/// The references that compile with other words than Mesa's.
+/// `vsmat3_lowp`'s fp16 sums are Mesa's words since lower-unitype; Mesa
+/// also stores its constant `v_color.w` in the flat `.v4` (the sums'
+/// `f2f32` hides it from the link), where the vertex walk propagates it
+/// (the kept lane of a vector from no attribute: varylink's link rule).
+/// `vsapi_mat2` and `vsapi_struct`: Mesa folds the products of the 0.05
+/// compares' `b2f` into one fp16 compare of the lanes' `fmax` (`FMAX.v2f16`
+/// of the `.abs` lanes, `FCMP_OR.v2f16.lt.m1`, `S16_TO_S32` into the
+/// `CSEL.u32.eq`), the vertex walk compares each lane at fp32 (the mediump
+/// compare in the vertex stage, lower-intval's step 3 and the mixprec
+/// family's vertex side).
 /// `vsstruct_add`'s `dummy` varying is computed from uniforms alone and
 /// cancels in the FS (`out0 + dummy - dummy`): Mesa's link drops it and the
 /// VS has no varying program, which `mali_ref` cannot reach (the unitype
@@ -65,15 +73,12 @@ const MATCHED: &[&str] = &[
 /// `depthrange_fs` since plan #377's constop lowering takes its colour:
 /// Mesa's `diff * 0.5 + 0.5` is an `FMA.f32` narrowed after, ours an
 /// `FMA.v2f16` of the narrowed `diff`.
-const DIFFERS: &[&str] =
-    &["vsmat2_mediump", "vsmat3_mediump", "vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add", "depthrange_fs"];
+const DIFFERS: &[&str] = &["vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruct_add", "depthrange_fs"];
 
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
     ("vsmat3_light", VS_LOOP),
-    ("vsbvec3", VS_ARITH),
-    ("fsmat2_mediump", FS_MEDIUMP),
     ("fsmat3_mediump", FS_OPERAND),
     ("fsivec4", FRAGCOLOR_LANE),
     ("fsmulti", FRAGCOLOR_LANE),
@@ -132,25 +137,23 @@ fn vsmat3_light() {
 }
 
 #[test]
-#[ignore = "differs: Mesa computes the mediump sum in VS fp16 (FADD.v2f16), the vertex walk at fp32"]
 fn vsmat2_mediump() {
     mali_ref::assert_matches("deqp_unitype_vsmat2_mediump");
 }
 
 #[test]
-#[ignore = "differs: Mesa computes the mediump product in VS fp16 (FMA.v2f16), the vertex walk at fp32"]
 fn vsmat3_mediump() {
     mali_ref::assert_matches("deqp_unitype_vsmat3_mediump");
 }
 
 #[test]
-#[ignore = "differs: Mesa computes the lowp difference in VS fp16 (FADD.v2f16), the vertex walk at fp32"]
+#[ignore = "differs: Mesa stores the constant v_color.w in the flat .v4 (the fp16 sums' f2f32 hides it), the vertex walk propagates it (varylink's kept lane from no attribute)"]
 fn vsmat3_lowp() {
     mali_ref::assert_matches("deqp_unitype_vsmat3_lowp");
 }
 
 #[test]
-#[ignore = "differs: Mesa computes the 0.05 compares in VS fp16 (FMAX.v2f16, FCMP_OR.v2f16), the vertex walk at fp32"]
+#[ignore = "differs: Mesa folds the 0.05 compares into one VS fp16 compare of the lanes' fmax (FMAX.v2f16, FCMP_OR.v2f16), the vertex walk compares each lane at fp32 (lower-intval step 3)"]
 fn vsapi_mat2() {
     mali_ref::assert_matches("deqp_unitype_vsapi_mat2");
 }
@@ -177,10 +180,11 @@ fn vsapi_struct() {
     mali_ref::assert_matches("deqp_unitype_vsapi_struct");
 }
 
+/// Drawn with its bool uniform unset (gl_ref.py's `--uniform-values` sets
+/// no bool): every uniform word 0.
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * ... (the all() of the bvec3 ==, over the uniform's words), lower-intval's step 3"]
 fn vsbvec3() {
-    mali_ref::assert_matches("deqp_unitype_vsbvec3");
+    mali_ref::assert_matches_unset("deqp_unitype_vsbvec3");
 }
 
 #[test]
@@ -200,13 +204,12 @@ fn depthrange_fs() {
 }
 
 #[test]
-#[ignore = "refused: a mediump fragment shader uniform other than ... (a column's lanes paired across columns), lowered by lower-unitype"]
 fn fsmat2_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat2_mediump");
 }
 
 #[test]
-#[ignore = "refused: a fragment shader operand of a form or in a place no reference draws (the column sum's lane alone first), lowered by lower-unitype"]
+#[ignore = "refused: a fragment shader operand of a form or in a place no reference draws (the column sum's lane alone first); Mesa's program is vec16.rs's column chunks with a varying, which that route does not read"]
 fn fsmat3_mediump() {
     mali_ref::assert_matches("deqp_unitype_fsmat3_mediump");
 }
