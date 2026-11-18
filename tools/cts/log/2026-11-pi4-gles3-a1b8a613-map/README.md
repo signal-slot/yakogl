@@ -2,6 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Pi 4 dEQP-GLES3 rerun map: b1b5b845 to a1b8a613
 
+Renamed from 2026-11-pi4-gles3-a1b8a613-rerun: a map with no board run, so that the board rerun directory is the only match of tools/cts/log/2026-11-pi4-gles3-*-rerun.
+
 commit a1b8a613962bbac4c56c7ad876a26e5413d51465
 
 Item "the Pi 4's remaining GLES3 images" of plan #380 (issue #1261). **Board: not run.** This worker held no `target:rpi4` / `target:rpi4-console` lease, so no image was built or booted and every board column below says "not run". Nothing here is a board result.
