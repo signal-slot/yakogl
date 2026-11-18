@@ -164,3 +164,13 @@ gm2_vsarith_2   gm2_vsarith_2.vert gm2_vsarith_2.frag  triangles  vs.position=di
 gm2_vsarith_3   gm2_vsarith_3.vert gm2_vsarith_3.frag  triangles  vs.position=differs:mat-order:38:7c0d48103274 fs.fragment=equal
 gm2_vsarith_4   gm2_vsarith_4.vert gm2_vsarith_4.frag  triangles  vs.position=differs:mat-order:38:15e5144046e8 fs.fragment=equal
 gm2_vsarith_6   gm2_vsarith_6.vert gm2_vsarith_6.frag  triangles  vs.position=differs:mat-order:38:d6c9cd59489d fs.fragment=equal
+# #367 lower-vs-arith: glmark2's vertex multiply-adds (docs/notes/mali-vs-fma.md, "glmark2's built-in multiply-adds"),
+# drawn without --uniform-values. Our compiler is byte-equal to each reference (tests/mali_vs_fma.rs); gm2_fma_3 and _6
+# (refused at the varying link) and _4 (FAU constants in statement order, not GLSL's tree-grafting order) are not listed.
+# pan_shc multiplies ideas' `projection * modelview * v` as written (a matrix times a matrix first, as gm2_arithconst_2),
+# and its SPIR-V path gives reflect's products the other operand order (`r3, u7.w0` for `u7.w0, r3`): `unanalysed`.
+gm2_fma_1       gm2_fma_1.vert     gm2_fma_1.frag      triangles  vs.position=differs:unanalysed:117:6b6c72c35da2 fs.fragment=equal
+gm2_fma_2       gm2_fma_2.vert     gm2_fma_2.frag      triangles  vs.position=differs:unanalysed:93:5de51992cb03 fs.fragment=equal
+gm2_fma_5       gm2_fma_5.vert     gm2_fma_5.frag      triangles  vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fma_7       gm2_fma_7.vert     gm2_fma_7.frag      triangles  vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fma_8       gm2_fma_8.vert     gm2_fma_8.frag      triangles  vs.position=equal vs.varying=differs:unanalysed:8:27162c4a98a0 fs.fragment=equal

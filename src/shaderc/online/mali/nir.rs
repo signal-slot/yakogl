@@ -788,6 +788,8 @@ const F32_NEG_ZERO: u32 = 0x8000_0000;
 const F32_ONE: u32 = 0x3f80_0000;
 const F32_MINUS_ONE: u32 = 0xbf80_0000;
 const F32_TWO: u32 = 0x4000_0000;
+const F32_MINUS_TWO: u32 = 0xc000_0000;
+const F32_THREE: u32 = 0x4040_0000;
 /// `MAX_W_RECIP_ABS` (nir_lower_viewport_transform.c:33): 2^15.
 const W_RECIP_MIN: u32 = 0xc700_0000;
 const W_RECIP_MAX: u32 = 0x4700_0000;
@@ -2402,11 +2404,12 @@ fn lane(w: &Walk<'_>, s: ir::Src, i: usize) -> Val {
     w.vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[i] as usize & 3])
 }
 
-/// A front-end `ffma` is GLSL's `mod(x, y)` of a constant `y`: the front
-/// end writes it `ffma(y, fneg(ffloor(fmul(x, frcp(y)))), x)`
+/// A front-end `ffma` is GLSL's `mod(x, y)`, of a constant `y` (gl_test
+/// case 221) or of a value (gm2_fma_6's `mod(k, t)`): the front end writes
+/// it `ffma(y, fneg(ffloor(fmul(x, frcp(y)))), x)`
 /// (builtin_call.rs, "mod"), `srcs` `[y, fneg(..), x]`, the same `x` and
 /// `y` (value and swizzle) inside as outside.
-fn is_fmod_const(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
+fn is_fmod(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     let alu = |src: ir::Src, op: AluOp| match m.def(src.val) {
         Some(IrOp::Alu(o, s)) if *o == op => Some(*s),
         _ => None,
@@ -2416,8 +2419,54 @@ fn is_fmod_const(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
     };
     let Some([x, r, _]) = alu(q, AluOp::Fmul) else { return false };
     let Some([y, ..]) = alu(r, AluOp::Frcp) else { return false };
-    let constant = matches!(m.def(srcs[0].val), Some(IrOp::ConstF32(_)));
-    constant && x == srcs[2] && y == srcs[0]
+    x == srcs[2] && y == srcs[0]
+}
+
+/// A front-end `ffma` is GLSL's `mix(a, b, t)`: the front end writes it
+/// `ffma(t, fadd(b, fneg(a)), a)` (builtin_call.rs, "mix"), `srcs` `[t,
+/// fadd(..), a]`, the same `a` (value and swizzle) inside as outside.
+fn is_mix(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
+    let alu = |src: ir::Src, op: AluOp| match m.def(src.val) {
+        Some(IrOp::Alu(o, s)) if *o == op => Some(*s),
+        _ => None,
+    };
+    let Some([_, n, _]) = alu(srcs[1], AluOp::Fadd) else { return false };
+    alu(n, AluOp::Fneg).is_some_and(|[a, ..]| a == srcs[2])
+}
+
+/// A front-end `ffma` is `smoothstep`'s `3.0 - 2.0 * t`: `ffma(-2.0, t,
+/// 3.0)` of two constant splats (builtin_call.rs, "smoothstep").
+fn is_smoothstep_inner(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
+    let splat = |s: ir::Src, c: u32| match m.def(s.val) {
+        Some(IrOp::ConstF32(v)) => s.swizzle.iter().all(|&k| v[k as usize & 3] == c),
+        _ => false,
+    };
+    splat(srcs[0], F32_MINUS_TWO) && splat(srcs[2], F32_THREE)
+}
+
+/// A front-end `ffma` is GLSL's `reflect(I, N)`: the front end writes it
+/// `ffma(fmul(dot(N, I), -2.0).xxxx, N, I)` (builtin_call.rs, "reflect"),
+/// `srcs` the first three, the dot product's first operand `N`. `N` and `I`
+/// are no constants (gm2_fma_8's uniform and attribute; a constant's dot
+/// folds, which no reference draws).
+fn is_reflect(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
+    let Some(IrOp::Alu(AluOp::Fmul, [d, k, _])) = m.def(srcs[0].val) else { return false };
+    if [srcs[1], srcs[2]].iter().any(|s| matches!(m.def(s.val), Some(IrOp::ConstF32(_)))) {
+        return false;
+    }
+    let minus_two = matches!(m.def(k.val), Some(IrOp::ConstF32(v)) if v[k.swizzle[0] as usize & 3] == F32_MINUS_TWO);
+    let dot = matches!(m.def(d.val),
+        Some(IrOp::Alu(AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4, [n, i, _])) if *n == srcs[1] && *i == srcs[2]);
+    minus_two && dot && srcs[0].swizzle.iter().all(|&c| c == srcs[0].swizzle[0])
+}
+
+/// `x * y` is `smoothstep`'s last product as the front end writes it
+/// (builtin_call.rs): `x` the product `t * t` and `y` `ffma(-2.0, t, 3.0)`
+/// of the same `t` ([`is_smoothstep_inner`]). Some(`t`).
+fn vs_smoothstep_tail(vs: &Nir<'_>, x: Val, y: Val) -> Option<Val> {
+    let (Alu::Fmul, [t, t2, _]) = vs_alu_of(vs, x)? else { return None };
+    let (Alu::Ffma, [Val::Const(F32_MINUS_TWO), t3, Val::Const(F32_THREE)]) = vs_alu_of(vs, y)? else { return None };
+    (t == t2 && t == t3).then_some(t)
 }
 
 /// A front-end `ffma` is GLSL's `cross(a, b)`: the front end writes it
@@ -2443,11 +2492,14 @@ fn is_cross(m: &Module<'_>, srcs: &[ir::Src; 3]) -> bool {
 /// GLSL's `mod(x, y)` as Mesa lowers `fmod` (`lower_fmod`,
 /// nir_opt_algebraic.py:2492): `fsub(x, fmul(y, ffloor(fdiv(x, y))))`, the
 /// `fsub` an `fadd` of the `fneg` (`lower_fsub`). `neg_floor` is the walked
-/// `fneg(ffloor(..))` of [`is_fmod_const`]'s shape, its `ffloor` the one
+/// `fneg(ffloor(..))` of [`is_fmod`]'s shape, its `ffloor` the one
 /// kept; the late fusion makes the sum `ffma(-y, floor, x)` ([`fuse`]).
 /// Measured: case 221's `mod(id, 2.0) - 0.5` is `FMA.f32 r0,
 /// 0x40000000.neg, r1, r0^` over `FADD_IMM.f32 r0, r0^, #0xBF000000`
-/// (vsfma_221_instmix.expect.json, with [`vs_fadd`]'s reassociation).
+/// (vsfma_221_instmix.expect.json, with [`vs_fadd`]'s reassociation); a
+/// `y` of two uniforms' `mod(k, t)` is `FRCP.f32 r0, u6.w0`, `FMA.f32 r0,
+/// u5.w1, r0^, 0x0.neg`, `FROUND.f32.rtn` and `FMA.f32 r0, u6.w0.neg, r0^,
+/// r1^` (gm2_fma_6's varying program).
 fn vs_fmod(vs: &mut Nir<'_>, x: Val, y: Val, neg_floor: Val) -> Result<Val, MaliError> {
     let floor = match vs_alu_of(vs, neg_floor) {
         Some((Alu::Fneg, [f, ..])) => f,
@@ -3890,6 +3942,16 @@ fn walk<'s>(
                          * `normalize`'s product of a vec3 and its `rsq` four
                          * lanes (builtin_call.rs), the last undefined */
                         AluOp::Fmul if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
+                        /* `smoothstep`'s last product: the front end's `(t *
+                         * t) * (3.0 - 2.0 * t)` is Mesa's `t * (t * (3.0 -
+                         * 2.0 * t))` (builtin_functions.cpp `_smoothstep`, as
+                         * nir_fs.rs; gm2_fma_3..5: `FMA.f32 r2, r1, r2^,
+                         * 0x0.neg`, then `FMA.f32 r1, r1^, r2^, 0x0.neg`) */
+                        AluOp::Fmul if vs_smoothstep_tail(&vs, x(0), x(1)).is_some() => {
+                            let t = vs_smoothstep_tail(&vs, x(0), x(1)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                            let ti = vs.alu(Alu::Fmul, t, x(1), Val::Undef)?;
+                            vs.alu(Alu::Fmul, t, ti, Val::Undef)?
+                        }
                         /* a constant over a product read once (:2393); not
                          * with a lane constant only the back end folds
                          * ([`split_const`]) */
@@ -3952,9 +4014,9 @@ fn walk<'s>(
                             vs.note(Prod::MatProduct);
                             vs.alu(Alu::Ffma, x(0), x(1), x(2))?
                         }
-                        /* the front end's `mod(x, y)` of a constant `y`
-                         * (gl_test case 221) */
-                        AluOp::Ffma if is_fmod_const(m, &s) => vs_fmod(&mut vs, x(2), x(0), x(1))?,
+                        /* the front end's `mod(x, y)`: `FMA.f32 r0,
+                         * y.neg, floor, x` (gl_test case 221, gm2_fma_6) */
+                        AluOp::Ffma if is_fmod(m, &s) => vs_fmod(&mut vs, x(2), x(0), x(1))?,
                         /* `cross(a, b)`: the front end's `ffma(a.yzx, b.zxy,
                          * fneg(fmul(a.zxy, b.yzx)))` is what Mesa's late
                          * fusion makes of GLSL's `a.yzx * b.zxy - a.zxy *
@@ -3962,6 +4024,32 @@ fn walk<'s>(
                          * addend's `.neg` (vsfma_cross.expect.json,
                          * docs/notes/mali-vs-fma.md) */
                         AluOp::Ffma if is_cross(m, &s) => vs.alu(Alu::Ffma, x(0), x(1), x(2))?,
+                        /* `mix(a, b, t)`: Mesa's `lower_flrp` makes `a + t
+                         * * (b - a)`, the front end's `ffma(t, b - a, a)`
+                         * (gm2_fma_7: every lane's `FADD.f32 d, b, a.neg`,
+                         * then `FMA.f32 r, t, d, a`); `smoothstep`'s `3.0 -
+                         * 2.0 * t`, `FMA.f32 r, 0x40000000.neg, t, 3.0`
+                         * (gm2_fma_3..5) */
+                        AluOp::Ffma if is_mix(m, &s) || is_smoothstep_inner(m, &s) => {
+                            vs.alu(Alu::Ffma, x(0), x(1), x(2))?
+                        }
+                        /* `reflect(I, N)`: `dot(N, I) * -2.0` is
+                         * `fneg(fadd(d, d))` (`fmul(a, 2.0)`, then the
+                         * `fneg` taken up the product), the `fneg` the
+                         * `.neg` of each lane's `FMA.f32 r, d.neg, N, I`
+                         * (gm2_fma_8: `FADD.f32 r4, r4^, r4^`); made once
+                         * at lane 0 (`held`) */
+                        AluOp::Ffma if is_reflect(m, &s) => {
+                            if l == 0 {
+                                let Some(IrOp::Alu(_, [d, ..])) = m.def(s[0].val) else {
+                                    return Err(MaliError::Defect(Defect::IrIndex));
+                                };
+                                let d = lane(w, *d, 0);
+                                let d2 = vs.alu(Alu::Fadd, d, d, Val::Undef)?;
+                                held[0] = vs.alu(Alu::Fneg, d2, Val::Undef, Val::Undef)?;
+                            }
+                            vs.alu(Alu::Ffma, held[0], x(1), x(2))?
+                        }
                         AluOp::Ffma => return Err(MaliError::FusedMultiplyAdd),
                         AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 if l == 0 => {
                             vs.note(Prod::Dot);

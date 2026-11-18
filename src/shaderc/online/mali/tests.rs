@@ -1184,9 +1184,6 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
-        /* mod(x, y) of a value y: no reference draws it (a constant y is
-         * case 221's, case_221_instmix_is_byte_equal_to_mesa_26_2_1) */
-        (VS, "attribute vec4 p; void main(){ gl_Position = vec4(mod(p.x, p.y)); }", MaliError::FusedMultiplyAdd),
         (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p; }", MaliError::Invariant),
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
