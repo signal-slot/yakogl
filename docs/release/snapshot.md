@@ -183,7 +183,6 @@ copies of the tools:
 python3 -I tools/release/redaction-scan.py HEAD
 YAKOGL_REDACTION_PRIVATE_FILE=<file outside the repo> \
   python3 -I tools/release/redaction-scan.py HEAD
-python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license
 python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license,undecided
 ```
 
