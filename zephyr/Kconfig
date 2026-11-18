@@ -162,6 +162,21 @@ config YAKOGL_PVR_POOL_OWNERS
 	  "unaccounted" (docs/notes/pvr-render-pool.md, the
 	  fixed ~36 MiB). Off by default; it walks every table once, at the end.
 
+config YAKOGL_PVR_INSTANCE_DIVISOR
+	bool "PowerVR: hardware instance divisors (the crate's pvr-instance-divisor feature)"
+	depends on YAKOGL_GPU_POWERVR
+	default n
+	help
+	  The crate's `pvr-instance-divisor` feature (P3,
+	  docs/notes/instanceid-per-draw.md, row "P3 (full path)"): the back
+	  end reports max_instance_divisor 0xffff and divides per stream in the
+	  PDS (a multiplier and a shift, as Mesa's pvr_pipeline_pds.c does), so
+	  an instanced draw with a divisor above 1 is one draw; without it the
+	  back end takes divisor 1 only and the GL core draws instance by
+	  instance. Off by default. No code reads it yet: the P3 back-end item
+	  lifts that. A dEQP-GLES3 or gl_test image that wants the hardware
+	  path selects it; a product image leaves it off.
+
 config YAKOGL_GC_POOL_NO_REUSE
 	bool "GC7000: never reuse freed GPU memory (a measurement; leaks)"
 	depends on YAKOGL_GPU_VIVANTE

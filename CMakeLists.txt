@@ -111,6 +111,11 @@ option(YAKOGL_MSAA_FBO "report GL_MAX_SAMPLES 4 and draw into 4x framebuffers (t
 # ES 3.0 float colour targets (the crate's `color-buffer-float` feature): claim
 # GL_EXT_color_buffer_float where the back end draws them. OFF by default.
 option(YAKOGL_COLOR_BUFFER_FLOAT "claim GL_EXT_color_buffer_float where the back end draws float colour targets (the crate's color-buffer-float feature)" OFF)
+# The PowerVR back end's hardware instance divisors (the crate's
+# `pvr-instance-divisor` feature): the PDS divides per stream (a multiplier
+# and a shift) instead of the GL core drawing instance by instance
+# (docs/notes/instanceid-per-draw.md, row "P3 (full path)"). OFF by default.
+option(YAKOGL_PVR_INSTANCE_DIVISOR "let the PowerVR back end take instance divisors above 1 in hardware (the crate's pvr-instance-divisor feature)" OFF)
 # The gl_test runner (the crate's `gl-test-runner` feature): the walker of
 # driver/tools/pvrlab/gl_test.c, which a build that links that file needs
 # (gl_test_run calls it). OFF in a product build.
