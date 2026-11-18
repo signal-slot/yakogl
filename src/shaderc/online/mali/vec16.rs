@@ -42,8 +42,10 @@
 //! The shape is narrow, the one case 142 draws: one `if` at the top of
 //! `main` on a compare of a uniform's component and a constant, its sides
 //! sums, products, negations and clamps of fp16 uniforms, constants and
-//! locals, the colour stored after it. Another program is not this route's
-//! ([`program`] answers None) and goes through the lane walk.
+//! locals, the colour stored after it; or the same arithmetic at the top of
+//! a `main` with no `if` that reads a mat2 or mat3 uniform (its columns'
+//! vectors, deqp_unitype_fsmat2_mediump; `flat`). Another program is not
+//! this route's ([`program`] answers None) and goes through the lane walk.
 
 use super::bir::{clamp, Cmpf, Idx, Op, Prog, Special, Src, Swz};
 use super::emit::Row;
@@ -179,6 +181,9 @@ struct Walk<'m, 'a, 's> {
     cond: Option<u8>,
     /// Inside a side of the `if`; an operation stands there.
     side: bool,
+    /// A program with no `if` that reads a mat2 or mat3 uniform: its
+    /// arithmetic stands at the top ([`program`]).
+    flat: bool,
     arith: bool,
 }
 
@@ -281,7 +286,7 @@ impl Walk<'_, '_, '_> {
                     _ if [x, y].iter().take(super::nir_fs::ir_arity(a)).all(|s| matches!(s.v, V::Konst(_))) => {
                         return Ok(false)
                     }
-                    AluOp::Fadd | AluOp::Fmul | AluOp::Fneg | AluOp::Fmax | AluOp::Fmin if !self.side => {
+                    AluOp::Fadd | AluOp::Fmul | AluOp::Fneg | AluOp::Fmax | AluOp::Fmin if !self.side && !self.flat => {
                         return Ok(false)
                     }
                     AluOp::Fadd => self.push(Alu::Fadd, [x, y, VSrc::NONE], w)?,
@@ -299,11 +304,15 @@ impl Walk<'_, '_, '_> {
                         self.push(Alu::Fclamp(clamp::ZERO_ONE), [mx.src[0], VSrc::NONE, VSrc::NONE], w)?
                     }
                     /* the `if`'s compare, GLSL's `<=` with its sources swapped */
-                    AluOp::Flt if w == 1 && !self.side => self.push(Alu::Fcmp(Cmpf::Lt), [x, y, VSrc::NONE], 1)?,
-                    AluOp::Fle if w == 1 && !self.side => self.push(Alu::Fcmp(Cmpf::Ge), [y, x, VSrc::NONE], 1)?,
+                    AluOp::Flt if w == 1 && !self.side && !self.flat => {
+                        self.push(Alu::Fcmp(Cmpf::Lt), [x, y, VSrc::NONE], 1)?
+                    }
+                    AluOp::Fle if w == 1 && !self.side && !self.flat => {
+                        self.push(Alu::Fcmp(Cmpf::Ge), [y, x, VSrc::NONE], 1)?
+                    }
                     _ => return Ok(false),
                 };
-                self.arith |= self.side;
+                self.arith |= self.side || self.flat;
                 V::Op(i)
             }
             _ => return Ok(false),
@@ -377,6 +386,29 @@ impl Walk<'_, '_, '_> {
     }
 }
 
+/// The program has no `if` and reads a mat2 or mat3 uniform: Mesa's
+/// column operations are vectors (a mat2 sum two `FADD.v2f16` of whole
+/// columns, then the colour's lanes `MKVEC`s of their halves,
+/// deqp_unitype_fsmat2_mediump), where the lane walk pairs the colour's
+/// lanes across columns. A mat4 stays the lane walk's (gm2_fsarith_1,
+/// deqp_unitype_fsmat4_mediump).
+fn flat(m: &Module<'_>) -> bool {
+    use crate::gl::consts::{GL_FLOAT_MAT2, GL_FLOAT_MAT3};
+    let body = m.nodes_of(m.body);
+    if body.iter().any(|n| !matches!(n, Node::Instr(_) | Node::Return)) {
+        return false;
+    }
+    m.instrs.iter().any(|op| {
+        let IrOp::LoadUniform { dword_off, .. } = *op else { return false };
+        m.uniforms.iter().any(|u| {
+            u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK
+                && matches!(u.gl_type as u32, GL_FLOAT_MAT2 | GL_FLOAT_MAT3)
+                && dword_off >= u.dword_off
+                && dword_off < u.dword_off + u.dwords.max(1)
+        })
+    })
+}
+
 /// The program of a shader this route takes, or None (the lane walk's).
 pub fn program<'s>(
     m: &Module<'_>,
@@ -396,12 +428,14 @@ pub fn program<'s>(
         colour: None,
         cond: None,
         side: false,
+        flat: flat(m),
         arith: false,
     };
-    if !w.nodes(m.nodes_of(m.body), true)? || w.cond.is_none() || !w.arith {
+    if !w.nodes(m.nodes_of(m.body), true)? || (w.cond.is_none() && !w.flat) || !w.arith {
         return Ok(None);
     }
     let Some(colour) = w.colour else { return Ok(None) };
+    let flat = w.flat;
     let mut p = Prog16 {
         ops: w.ops,
         nops: w.nops,
@@ -419,6 +453,11 @@ pub fn program<'s>(
             return Ok(None);
         }
         p.mark(a);
+    }
+    /* an `fmax` the clamp did not take has no reference here ([`Prog16::chunk`]
+     * refuses it): a program with no `if` keeps the lane walk */
+    if flat && p.ops[..p.nops].iter().any(|o| o.live != 0 && o.op == Alu::Fmax) {
+        return Ok(None);
     }
     /* the fp16 block: the uniforms the colour reads, as the lane walk's
      * nodes tell [`UboLayout::fs16`] */

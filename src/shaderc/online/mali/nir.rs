@@ -2880,6 +2880,212 @@ fn vs_alu16(
     Ok(())
 }
 
+/// The 16-bit form of an operand lane of a mediump operation over fp16
+/// uniforms ([`vs_uniform16`]): a 16-bit lane itself, an fp16 uniform's
+/// lane under the `f2f32` its load gave it (the lane read at 16 bits, the
+/// `f2f32` left to [`dce`]), or with `narrow` a 32-bit attribute lane,
+/// narrowed (`f2fmp`, `FADD.f32 r0.h0, r0^, 0x0.neg`). None for any other.
+fn vs_lane16(vs: &Nir<'_>, v: Val, narrow: bool) -> Option<Val> {
+    if vs_is_f16(vs, v) {
+        return Some(v);
+    }
+    let Val::Lane(n, c) = v else { return None };
+    match vs.nodes[n as usize] {
+        NirNode { kind: Kind::Alu(Alu::F2f32), src: [s, ..], .. } if vs_is_f16(vs, s) => Some(s),
+        NirNode { kind: Kind::Input { .. }, bits: 32, .. } if narrow => Some(Val::Lane(n, c)),
+        _ => None,
+    }
+}
+
+/// The lane is an fp16 uniform's ([`Kind::Uniform`] at 16 bits), read
+/// through its `f2f32` or not.
+fn vs_is_uniform16(vs: &Nir<'_>, v: Val) -> bool {
+    matches!(vs_lane16(vs, v, false), Some(Val::Lane(n, _))
+        if matches!(vs.nodes[n as usize], NirNode { kind: Kind::Uniform { .. }, bits: 16, .. }))
+}
+
+/// The lanes of an `fmul` / `fadd` / `ffma` that are computed: those up to
+/// the first one an operand leaves undefined (a mat3 or mat2 column in the
+/// front end's four-lane matrix product, deqp_unitype_vsmat3_mediump).
+fn vs_width16(w: &Walk<'_>, s: &[ir::Src; 3], n: usize, width: usize) -> usize {
+    (0..width).take_while(|&i| (0..n).all(|k| lane(w, s[k], i) != Val::Undef)).count()
+}
+
+/// A `fmul` / `fadd` / `ffma` / `fneg` the front end classed mediump whose
+/// operands are an fp16 uniform's lanes, mediump attributes' lanes, 16-bit
+/// lanes and constants, one at least an fp16 uniform's, or 16-bit lanes and
+/// constants alone at a width [`vs_pairs16`] does not take (an odd one):
+/// Mesa computes it at 16 bits (lower_precision with `fp16_const_buffers`
+/// keeps the uniform fp16 and narrows the attribute where the expression
+/// reads it), [`vs_alu16u`].
+fn vs_uniform16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: &[ir::Src; 3], width: usize) -> bool {
+    let n = super::nir_fs::ir_arity(a);
+    let wd = vs_width16(w, s, n, width);
+    let (mut uni, mut half, mut any) = (false, true, false);
+    for k in 0..n {
+        let narrow = m.prec_of(s[k].val) == Prec::Medium;
+        for i in 0..wd {
+            let v = lane(w, s[k], i);
+            match v {
+                Val::Const(_) => {}
+                v if vs_lane16(vs, v, narrow).is_some() => {
+                    uni |= vs_is_uniform16(vs, v);
+                    half &= vs_is_f16(vs, v);
+                    any = true;
+                }
+                _ => return false,
+            }
+        }
+        /* a pair of an fp16 uniform's lanes is its first word or one of
+         * its first two lanes twice ([`vs_pair16`]); a later word (a vec4's
+         * or a mat4 column's z and w) has no form here and keeps the fp32
+         * walk (deqp_misc_spill_*'s `u_in0 * u_in1` of two mat4) */
+        for c in (0..wd.saturating_sub(1)).step_by(2) {
+            let (p, q) = (lane(w, s[k], c), lane(w, s[k], c + 1));
+            if !vs_is_uniform16(vs, p) && !vs_is_uniform16(vs, q) {
+                continue;
+            }
+            let drawn = matches!((vs_lane16(vs, p, false), vs_lane16(vs, q, false)),
+                (Some(Val::Lane(a, i)), Some(Val::Lane(b, j))) if a == b && ((i, j) == (0, 1) || (i == j && i < 2)));
+            if !drawn {
+                return false;
+            }
+        }
+    }
+    wd > 0 && (uni || (half && any))
+}
+
+/// Lane `c` of attribute load `n` narrowed for a 16-bit reader: the
+/// `f2fmp` of the whole vector lower_precision makes at the first read,
+/// cut by `nir_lower_alu_width` into its aligned pairs and an odd lane
+/// alone, in lane order (deqp_unitype_vsmat3_mediump's `vec3`:
+/// `V2F32_TO_V2F16 r0, r0^, r1^` for x and y, then `FADD.f32 r1.h0, r2^,
+/// 0x0.neg` for z, both before the first product), CSE'd; the lanes no
+/// 16-bit operation reads are left to [`dce`].
+fn vs_narrow_input(vs: &mut Nir<'_>, n: u16, c: u8) -> Result<Val, MaliError> {
+    let u = Val::Undef;
+    let Kind::Input { comps, .. } = vs.nodes[n as usize].kind else {
+        return Err(MaliError::Defect(Defect::IrIndex));
+    };
+    let mut got = Val::Undef;
+    for lo in (0..comps).step_by(2) {
+        let (src, width) = if lo + 1 < comps {
+            ([Val::Lane(n, lo), Val::Lane(n, lo + 1), u], 2)
+        } else {
+            ([Val::Lane(n, lo), u, u], 1)
+        };
+        let nd = NirNode { kind: Kind::Alu(Alu::F2f16), src, bits: 16, width };
+        let f = match vs.nodes[..vs.n].iter().position(|y| *y == nd) {
+            Some(i) => i as u16,
+            None => vs.push_node(nd)?,
+        };
+        if c & !1 == lo {
+            got = Val::Lane(f, c - lo);
+        }
+    }
+    Ok(got)
+}
+
+/// [`vs_uniform16`]'s operation as Mesa's NIR holds it: the vector at 16
+/// bits cut into its aligned lane pairs and an odd lane alone
+/// (`nir_lower_alu_width` with `bi_vectorize_filter`), each pair's
+/// operand an fp16 uniform's word read whole (`u5.w1`), one 16-bit lane in
+/// both halves (`r0.h00`, the narrowed attribute of `u_in0 + a_coords`), a
+/// two-lane node read whole, a constant's half, or else the `vec2` of its
+/// two lanes; a lane alone reads its half (`r1.h11`, `u7.w0.h00`).
+/// deqp_unitype_vsmat2_mediump: `FADD.v2f16 r1, u5.w1, r0.h00` per column,
+/// `FADD.v2f16 r2, r1.h11, r0.h11` for `res[0][1] + res[1][1]`;
+/// deqp_unitype_vsmat3_mediump: the front end's `fmul` of column 1 and
+/// `ffma`s of columns 0 and 2, each `FMA.v2f16` of x, y then of z alone;
+/// deqp_unitype_vsmat3_lowp: the `fneg` of `u_in0 - u_in1`, the `.neg` of
+/// the sum's source.
+fn vs_alu16u(
+    vs: &mut Nir<'_>,
+    a: AluOp,
+    m: &Module<'_>,
+    w: &Walk<'_>,
+    s: &[ir::Src; 3],
+    width: usize,
+    out: &mut [Val; 4],
+) -> Result<(), MaliError> {
+    let u = Val::Undef;
+    let n = super::nir_fs::ir_arity(a);
+    let width = vs_width16(w, s, n, width);
+    let mut x = [[u; 4]; 3];
+    for k in 0..n {
+        let narrow = m.prec_of(s[k].val) == Prec::Medium;
+        for i in 0..width {
+            x[k][i] = match lane(w, s[k], i) {
+                c @ Val::Const(_) => c,
+                v => match vs_lane16(vs, v, narrow).ok_or(MaliError::Defect(Defect::IrIndex))? {
+                    l if vs_is_f16(vs, l) => l,
+                    Val::Lane(i, c) => vs_narrow_input(vs, i, c)?,
+                    _ => return Err(MaliError::Defect(Defect::IrIndex)),
+                },
+            };
+        }
+    }
+    let op = match a {
+        AluOp::Fmul => Alu::Fmul,
+        AluOp::Ffma => Alu::Ffma,
+        AluOp::Fneg => Alu::Fneg,
+        _ => Alu::Fadd,
+    };
+    let one = |v: Val| match v {
+        Val::Const(c) => half(c).map(Val::Const),
+        v => Ok(v),
+    };
+    for k in (0..width).step_by(2) {
+        if k + 1 == width {
+            let mut src = [u; 3];
+            for (j, sj) in src.iter_mut().enumerate().take(n) {
+                *sj = one(x[j][k])?;
+            }
+            let nd = NirNode { kind: Kind::Alu(op), src, bits: 16, width: 1 };
+            let id = match vs.nodes[..vs.n].iter().position(|y| *y == nd) {
+                Some(i) => i as u16,
+                None => vs.push_node(nd)?,
+            };
+            out[k] = Val::Lane(id, 0);
+            continue;
+        }
+        let mut src = [u; 3];
+        for (j, sj) in src.iter_mut().enumerate().take(n) {
+            *sj = vs_pair16(vs, x[j][k], x[j][k + 1])?;
+        }
+        if src[..n].iter().all(|v| matches!(v, Val::Const(_))) {
+            return Err(MaliError::Defect(Defect::IrIndex));
+        }
+        let n = vs_node16(vs, op, src)?;
+        out[k] = Val::Lane(n, 0);
+        out[k + 1] = Val::Lane(n, 1);
+    }
+    Ok(())
+}
+
+/// Two 16-bit lanes as one operand of a two-lane fp16 operation
+/// ([`vs_alu16u`]): an fp16 uniform's lanes 0 and 1 are its first word
+/// ([`Val::Pair`] `H01`), one lane twice its half in both
+/// ([`Val::Pair`] `H00` / `H11`), a constant twice its half; anything else
+/// [`vs_vec16`].
+fn vs_pair16(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
+    match (p, q) {
+        (Val::Const(a), Val::Const(b)) if a == b => Ok(Val::Const(half(a)?)),
+        (Val::Lane(n, c), Val::Lane(m, d)) if n == m => {
+            let nd = vs.nodes[n as usize];
+            let uniform = matches!(nd.kind, Kind::Uniform { .. });
+            match (c, d) {
+                (0, 1) if uniform => Ok(Val::Pair(n, Swz::H01)),
+                (c, d) if c == d && c < 2 && (uniform || nd.width <= 2) => {
+                    Ok(Val::Pair(n, if c == 0 { Swz::H00 } else { Swz::H11 }))
+                }
+                _ => vs_vec16(vs, p, q),
+            }
+        }
+        _ => vs_vec16(vs, p, q),
+    }
+}
+
 /// `n / d` of two 32-bit signed integers in the vertex stage: the
 /// `nir_lower_idiv` sequence node for node as nir_fs.rs `Fs::idiv` builds
 /// it (`emit_udiv` under `nir_lower_idiv_fast`'s absence: the reciprocal
@@ -3071,6 +3277,26 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
             v
         })
     };
+    /* `all(b == bvec3(false))` of booleans (a bool uniform's words, 0 /
+     * ~0): `inot(ior(ior(b.y, b.x), b.z))`, the `ball_iequal3` of `ieq(b,
+     * false)` lanes De Morgan's (nir_opt_algebraic.py), whose `bcsel` is
+     * the `CSEL.u32.eq` of the OR against 0 (deqp_unitype_vsbvec3:
+     * `LSHIFT_OR.i32 r0, u6.w0, 0x0.b00, r0^` of y and x, then of z,
+     * then `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`); a true of 1 or
+     * ~0 is the same bytes. Other widths have no reference */
+    if a == AluOp::Ball && op == AluOp::Ieq && n == 3 {
+        let mut b = [u; 3];
+        for (i, x) in b.iter_mut().enumerate() {
+            let j = s.swizzle[i] as usize;
+            *x = match (lane(w, cs[0], j), lane(w, cs[1], j)) {
+                (p, Val::Const(0)) | (Val::Const(0), p) if vs_is_bool(vs, p) && !matches!(p, Val::Const(_)) => p,
+                _ => return Err(MaliError::Arithmetic),
+            };
+        }
+        let yx = vs.alu(Alu::Ior, b[1], b[0], u)?;
+        let any = vs.alu(Alu::Ior, yx, b[2], u)?;
+        return vs.alu(Alu::Inot, any, u, u);
+    }
     match (a, op, n) {
         (AluOp::Ball, AluOp::Feq, 2) => {
             let v = side(0).or_else(|| side(1)).ok_or(MaliError::Arithmetic)?;
@@ -3536,7 +3762,10 @@ fn walk<'s>(
                  * computed lanes read no attribute is convergent whole, and
                  * the link's rule for it is the flat one below
                  * (deqp_misc_spill_*, deqp_unitype_vsmat3_lowp: uniforms
-                 * alone beside constants). Each 16-bit lane is its own
+                 * alone beside constants; Mesa keeps vsmat3_lowp's 1.0 in
+                 * its flat `.v4` too, the fp16 sums' `f2f32` hiding it,
+                 * which the link's refusal of a kept lane from no
+                 * attribute stands before). Each 16-bit lane is its own
                  * `f2f32` (`F16_TO_F32 r1, r0.h0`), in lane order at the
                  * store. */
                 let medium = m.prec_of(src.val) == Prec::Medium
@@ -3570,6 +3799,13 @@ fn walk<'s>(
                 if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_pairs16(&vs, w, &s, width) =>
             {
                 vs_alu16(&mut vs, a, w, &s, width, &mut out)?;
+            }
+            /* one over fp16 uniforms and mediump attributes: fp16 too, the
+             * uniform's words read whole ([`vs_alu16u`]) */
+            IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s)
+                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_uniform16(&vs, m, w, a, &s, width) =>
+            {
+                vs_alu16u(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             IrOp::Alu(a, s) => {
                 /* lanes an arm makes for every lane at once, at lane 0 */
@@ -4726,8 +4962,12 @@ fn shrink(vs: &mut Nir<'_>, m: &Module<'_>) -> Result<(), MaliError> {
         let id = vs.order[k];
         let mut top = 0u8;
         for (u, s) in vs.uses(id) {
-            if let Val::Lane(_, c) = vs.nodes[u as usize].src[s] {
-                top = top.max(c + 1);
+            match vs.nodes[u as usize].src[s] {
+                Val::Lane(_, c) => top = top.max(c + 1),
+                /* a 16-bit node's first word ([`vs_pair16`]) */
+                Val::Pair(_, Swz::H00) => top = top.max(1),
+                Val::Pair(..) => top = top.max(2),
+                _ => {}
             }
         }
         let nd = &mut vs.nodes[id as usize];

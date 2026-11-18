@@ -895,3 +895,77 @@ P4, F7) and the nested member of `uniform_precision`; `lower-mixprec` for F2
 (a highp matrix in the fp16 colour), which shares `fs16`'s highp arm and
 `mod.rs:1437-1449`. No frame change is needed by any step (M1);
 `frame-uniarray` (uniform arrays at fp16 strides) is a separate item.
+
+## Lowering result (lower-unitype)
+
+Plan #377 item `lower-unitype`. 11 of the 20 references are byte-equal to
+Mesa 26.2.1 (`tests/mali_deqp_unitype.rs`, `MATCHED`; 13 tests pass, 9 are
+ignored with their pin). The doc-m spike's patch (205547fa) was already on
+the tip when the item started: it took M3 (`gl_DepthRange` highp, a highp or
+struct-member uniform read at 32 bits and narrowed in a mediump fragment
+shader, `FsPrecision::fp32_uniforms`), M2 (fp32 `mat2`/`mat3` rows per
+column, `UboLayout::push_uniform`) and M5's fp32 struct members
+(`vsmat2_highp`, `vsmat3_highp`, `fshighp_color`, `depthrange_vs`,
+`vsstruct_partial`, `vsstruct_rip`; `fsmat4_mediump` came with constop).
+This item adds four, all in `src/shaderc/online/mali/`:
+
+- `fsmat2_mediump` (M7): `vec16.rs` takes a program with no `if` that reads
+  a mat2 or mat3 uniform (`flat`): Mesa's column operations are vectors, a
+  mat2 sum two `FADD.v2f16 r0, u2.w0, u2.w1` of whole columns, the colour's
+  lanes `MKVEC`s of their halves, where the lane walk pairs the colour's
+  lanes across columns (the `FsUniform` refusal). The arithmetic is allowed
+  at the top of `main` only there; compares stay the `if`'s. A mat4 stays the
+  lane walk's (`fsmat4_mediump`, gm2_fsarith_1).
+- `vsbvec3` (M6): `nir.rs` `vs_reduce` takes `all(b == bvec3(false))` of
+  booleans (the bvec uniform's words, `i2b` leaves them as they are) as
+  `inot(ior(ior(b.y, b.x), b.z))`: `LSHIFT_OR.i32` twice, then the
+  `bcsel(inot(a), ..)` arm's `CSEL.u32.eq r0, r0^, 0x0, 0x3F800000, 0x0`.
+  The y-before-x order of the first OR is measured; other widths have no
+  reference and stay refused. The reference was drawn with its bool uniform
+  unset, so the test is `assert_matches_unset` (every uniform word 0; a true
+  of 1 or `~0` gives the same words).
+- `vsmat2_mediump`, `vsmat3_mediump` (M4): the vertex walk computes a
+  mediump `fadd` / `fmul` / `ffma` / `fneg` over fp16 uniforms at 16 bits,
+  as lower_precision does with `fp16_const_buffers` (`vs_uniform16`,
+  `vs_alu16u`): an fp16 uniform's lane is read at 16 bits under the
+  `f2f32` its load made (left to `dce`); a mediump attribute's lanes are
+  narrowed where the expression reads them, the whole vector at once in
+  aligned pairs and an odd lane (`vs_narrow_input`: `V2F32_TO_V2F16 r0, r0^,
+  r1^`, then `FADD.f32 r1.h0, r2^, 0x0.neg`); the vector is cut into its
+  aligned pairs and an odd lane alone (`FMA.v2f16 r3, u7.w0.h00, r0.h11,
+  0x0.neg`); a pair's operand is the uniform's first word whole or one of
+  its first two lanes twice (`Val::Pair(n, H01 / H00 / H11)`, which
+  `select.rs` `vs_variant` reads as the node's first word through the
+  swizzle; `shrink` counts a `Pair`'s lanes), a 16-bit lane twice
+  (`r0.h00`), or the `vec2` of the lanes. The front end's matrix product is
+  already Mesa's `fmul` of column 1 then the `ffma`s of columns 0 and 2.
+  An operation whose lanes are 16-bit alone at an odd width now takes this
+  path too (`vs_pairs16` takes even widths). `vs_variant` gives an `f2f16`
+  of two lanes both its 32-bit sources.
+  An fp16 uniform's later word read as a pair (a vec4's or a mat4 column's
+  z and w) has no form here and keeps the fp32 walk: deqp_misc_spill_*'s
+  `u_in0 * u_in1` of two mat4 stays at its 32-register refusal.
+
+What moved with it: no `tools/shaders` verdict (`tools/mali/corpus-verdicts.txt`
+unchanged, `the_corpus_verdicts_are_pinned` passes); no other family's pin
+(`tests/mali_deqp_*.rs` all pass, none of their ignored references newly
+equal); `tools/mali/testdata/cases.txt` records no unitype shape (its rows
+are pan_shc's control cases). `tests/fixtures/mali_glmark2_verdicts.txt`
+moves forward on three lines that were already stale at the item's base
+(the same result with this change stashed): scene 20's `vs bf4b` and `vs
+c265` become `ok` and `vs 51b2` moves from the integer refusal to control
+flow, lower-intval-2's vertex `imul`/`iadd` (that note's "What moved with
+it" expected them); the corpus was generated with
+`tools/hostharness/glmark2/run.sh` (PowerVR, 69 shaders).
+
+Left, by owner:
+
+| reference | where it stands | owner |
+|---|---|---|
+| `vsmat3_lowp` | its fp16 sums are Mesa's words; Mesa also stores `v_color.w` (1.0) in the flat `.v4`, the sums' `f2f32` hiding it from the link, where the walk propagates it. Keeping it (the `kept` rule for a vector of 16-bit lanes) meets the link's "a varying lane computed from no attribute" refusal | lower-varylink |
+| `vsapi_mat2`, `vsapi_struct` | Mesa folds the products of the 0.05 compares' `b2f` into `b2f(iand(..))` and the `iand` of `flt(abs(x), 0.05)` into one `FCMP_OR.v2f16.lt.m1` of the lanes' `FMAX.v2f16` (`.abs` sources), `S16_TO_S32` into the `CSEL.u32.eq`; the walk compares each lane at fp32 | lower-intval step 3 / lower-mixprec (the mediump compare in the vertex stage) |
+| `fsmat3_mediump` | refused (`FsOperandForm`); Mesa's program is `vec16.rs`'s column chunks plus the `v_coords` varying narrowed once, which that route does not read (it has no varying layout) | a `vec16.rs` varying, or the lane walk's operand form |
+| `fsivec4`, `fsmulti` | refused (`FragColorLane`): `vec4(ivec4).xy` beside a texel; fsmulti's `ivec3`/`bvec2`/`mat3` compares into one colour | lower-intval |
+| `depthrange_fs` | differs: Mesa's `diff * 0.5 + 0.5` is an `FMA.f32` narrowed after | lower-mixprec |
+| `vsstruct_add` | differs: Mesa's link drops the `dummy` varying | the link (mali_ref cannot reach it) |
+| `vsmat3_light` | refused at its loop, then the `Light` array | lower-loops, lower-uniarray |
