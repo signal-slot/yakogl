@@ -246,8 +246,13 @@ endpoint goes to the DSI (`stm32mp257f-dk.dts:536-547`), the DSI's second
 port goes to an `adi,adv7535` bridge on an I2C bus with four DSI lanes
 (`:328-350`, `:428-433`), and the bridge's output goes to the `hdmi-connector`
 node (`:129-137`, `:452-460`). The LVDS bridge exists in the SoC tree
-(`stm32mp255.dtsi:137-145`, RIFSC entry 84) but the DK board file does not
-enable it. The controller addresses are mainline's and ST's alike: an LTDC at
+(`stm32mp255.dtsi:137-145`, RIFSC entry 84). An earlier draft of this
+pass said the DK board file does not enable it; that was wrong: in ST's r3.1
+tag `stm32mp257f-dk.dts:555-558` enables the bridge (with an EDT 1024x600
+panel and a PWM backlight, `:147-184`), and ST's U-Boot unbinds the LVDS
+side again when no panel answers (U-Boot `board/st/stm32mp2/stm32mp2.c:223-246`,
+`:329-352`; `docs/notes/stm32mp257f-dk-display.md:44-52`, `:411-421`).
+The HDMI path is unaffected. The controller addresses are mainline's and ST's alike: an LTDC at
 `display-controller@48010000` (mainline `stm32mp251.dtsi:1617`, ST
 `stm32mp251.dtsi:2150`) and a DSI at 0x48000000 (ST `stm32mp255.dtsi:123-133`,
 RIFSC entry 81). Zephyr's MP2 device trees describe only the M33's peripherals:
@@ -255,8 +260,14 @@ there is no display controller, LVDS or DSI node in `dts/arm/st/mp2/*.dtsi`,
 and Zephyr has `drivers/display/display_stm32_ltdc.c` for families whose
 device tree carries an `st,stm32-ltdc` node (`drivers/display/Kconfig.stm32_ltdc:9`),
 not for the MP2. The layers, formats, stride alignment, the DSI host and the
-ADV7535's configuration over its control bus remain Q7. No item of plan #322
-needs the display.
+ADV7535's configuration over its control bus remain Q7; the host-side
+study `docs/notes/stm32mp257f-dk-display.md` has the register bases (LTDC
+0x48010000, DSI 0x48000000, LVDS 0x48060000, unused), the pixel-clock mux
+(SYSCFG `DISPLAYCLKCR` at 0x44235000, 2 = `ck_ker_ltdc`), the plain `d1_pd`
+power domain and what U-Boot hands over. No item of plan #322 needs the
+display. **The HDMI under ST's Linux has not been observed:** the KVM was
+unreachable in both `kvm-hdmi-baseline` runs, so there is no baseline picture
+or EDID reading; the display is known only from the device trees and sources.
 
 ### Boot chain (read from the board, #1281; sources of the chain unread)
 
@@ -693,7 +704,10 @@ second-stage loader `driver/samples/zephyr/boot_stage2`, is a later item
 and needs the ST chain; its facts are now in section 1 (U-Boot's flow) and
 the return trial records the rest (Q8). Whether the image may start at the
 exception level and with the state U-Boot leaves, and whether U-Boot leaves
-the display on, are Q8 and Q13.
+the display on, are Q8 and Q13. The display note's reading, from the code
+and not from the board: nothing is lit on a stock DK and the LTDC and DSI
+are untouched, their clocks possibly on
+(`stm32mp257f-dk-display.md:407-432`, open question 4 there).
 
 ## 5. What can be done before the board arrives
 
@@ -816,7 +830,9 @@ First three things, in order:
    of section 4: performance level, power domain 0, `RCC_GPUCFGR` (offset
    unconfirmed from RM0457), then the identity registers. A result that
    looks like a hardware fault is first checked against the supply (the
-   USB-C cable is the only one). Alive if
+   USB-C cable is the only one; the discriminator is the BL2/U-Boot `Reset
+   reason` line of the boot nobody watched, see "When it looks like a
+   hardware fault: supply first" in `stm32mp257f-dk-bringup.md`). Alive if
    `CHIP_MODEL` and `CHIP_REV` read 0x8000 and 0x6205 (#1281), `HI_INTR_ENBL`
    (0x014, `driver/rust/src/gpu/vivante/regs.rs:53`) reads back the
    0xffffffff written to it (the i.MX8MP instrument,
@@ -853,7 +869,7 @@ answer it.
 | Q4 | Is the GPU (and its DMA master) in a resource-isolation compartment that a non-secure A35 image may use, or does the secure side have to set it? Does anything else have to be programmed by the secure side first? | **In part (#1281):** it depends on the image variant; the board runs the plain `stm32mp257f-dk` variant, where RIFSC entry 79 (the GPU's, `access-controllers = <&rifsc 79>`, `stm32mp255.dtsi:178`) is open; #1281 has the table of variants. OP-TEE's `ca35tdcid` configuration agrees: entry 79 is non-secure and nothing is needed for this variant (r-optee-tfa). **Folded in (prestudy-studies, OP-TEE `4.0.0-stm32mp-r3.1`):** the DK's OP-TEE device tree includes only the `ca35tdcid` files (`core/arch/arm/dts/stm32mp257f-dk.dts:16-18`); there the GPU's RIFSC entry is `STM32MP25_RIFSC_GPU_ID` = 79 (`core/include/dt-bindings/soc/stm32mp25-rifsc.h:84`), set non-secure, non-privileged, unlocked, CID filtering disabled (`stm32mp257f-dk-ca35tdcid-rif.dtsi:81`). The reserved area is a DDR RISAF region: region 10 for `gpu_reserved` is non-secure, readable and writable by CID0 and CID1, encryption off, enabled (`stm32mp257f-dk-ca35tdcid-rif.dtsi:984-986`, macro argument order `core/include/dt-bindings/soc/stm32mp25-risaf.h:62-69`; the RISAF instance lists it in its `memory-region` at `:1001`), and it is `no-map` in OP-TEE's own map (`stm32mp257f-dk-ca35tdcid-resmem.dtsi:127-130`), as in Linux's (`stm32mp257f-dk-resmem.dtsi:170-173` at r3.1). The RCC's RIF file names no GPU entry (`stm32mp257f-dk-ca35tdcid-rcc.dtsi`, only the PLL3 configs `:138-150`). Linux's node carries nothing else the secure side must set (`access-controllers = <&rifsc 79>`, `stm32mp255.dtsi:178`). Open: which CID the GPU's bus master presents to the RISAF (CID filtering is disabled on its RIFSC entry, so the sources do not say; the same configuration serves galcore under Linux, which suggests it is within CID0/CID1, an inference); the interconnect side: RM0457; the board (the fence's DMA read-back) |
 | Q5 | The GPU's base address and size, interrupt number, and power domain. | **Answered (#1281, confirmed by ST's tree `stm32mp255.dtsi:169-183`):** `vivante,gc` at 0x48280000, size 0x800; GIC SPI 183, level high; three power domains: SCMI performance 1, SCMI power domain 0 (`PD_SCMI_GPU`), and `power-domain-d1` |
 | Q6 | Interrupt controller version, how the GPU's interrupt is routed to the A35, and the arch timer rate. | **In part (#1281):** GIC-400 at 0x4ac00000 (ST `stm32mp251.dtsi:166-175`), the GPU's interrupt is SPI 183 (above). The arch timer node has no `clock-frequency` (`:261-268`); the rate is **40 MHz** (board-read, 2026-11-06) and `CNTFRQ_EL0` is expected to read the same (r-optee-tfa). The GIC is a GICv2 whose secure SGIs 8 to 15 and PPI 29 TF-A keeps. **Folded in (prestudy-studies, ST Linux r3.1 and OP-TEE r3.1):** the GIC node is `st,stm32mp2-cortex-a7-gic` / `arm,cortex-a7-gic` with four register windows, distributor 0x4ac10000, CPU interface 0x4ac20000, virtual-control 0x4ac40000, virtual CPU 0x4ac60000 (`stm32mp251.dtsi:167-175`), i.e. GICv2 at base 0x4ac00000 (OP-TEE: `GIC_BASE` 0x4ac00000, `GICD_OFFSET` 0x10000, `GICC_OFFSET` 0x20000, `core/arch/arm/plat-stm32mp2/platform_config.h:86`, `:104-105`). The GPU's SPI 183 is level high (`stm32mp255.dtsi:172`). **The group of SPI 183 is not set by OP-TEE:** with TF-A embedded (`CFG_WITH_ARM_TRUSTED_FW` is forced `y`, `plat-stm32mp2/conf.mk:134`) `gic_init_setup` writes no `GICD_IGROUPR` at all ("GIC configuration is initialized from TF-A when embedded", `core/drivers/gic.c:330-335`; the no-TF-A branch would mark every SPI non-secure with `0xffffffff`, `:343-347`); so the group comes from TF-A's GIC setup, which is not in these sources, and the board layer's `GICD_IGROUPR5` read-back (SPI 183 is bit 23 of register 5) answers it. The arch timer node has no `clock-frequency` (`:261-268`, PPIs 13, 14, 11, 10 at `:264-267`, `arm,no-tick-in-suspend`); OP-TEE's `CFG_SECONDARY_INIT_CNTFRQ` path only copies the primary CPU's `CNTFRQ_EL0` to the secondaries (`core/arch/arm/kernel/boot.c:85-86`, `:230-245`), so the value is whatever BL2 or TF-A set (not in these sources). Open (board): `CNTFRQ_EL0` read from a CPU (the return trial prints it); the group of SPI 183 and that its priority and target let it reach CPU 0 |
-| Q7 | The display path: controller, layers, formats and stride alignment, and the HDMI chain on the DK. | **In part (#1281, ST tree):** LTDC → DSI → ADV7535 → HDMI (`stm32mp257f-dk.dts:536-547`, `:328-350`, `:428-460`), not LVDS. Open: layers, formats, stride alignment, the DSI host and the ADV7535's setup, the backlight: UM3385, MB1605, RM0457's LTDC and DSI chapters. Not needed by plan #322 |
+| Q7 | The display path: controller, layers, formats and stride alignment, and the HDMI chain on the DK. | **In part (#1281, ST tree; `docs/notes/stm32mp257f-dk-display.md`):** LTDC → DSI → ADV7535 → HDMI (`stm32mp257f-dk.dts:536-547`, `:328-350`, `:428-460`), not LVDS; the board file does enable the LVDS bridge (`:555-558`) and U-Boot unbinds it when no panel answers. Settled from the sources there: LTDC 0x48010000, DSI 0x48000000, I2C2 0x40130000 for the ADV7535, pixel-clock mux SYSCFG `DISPLAYCLKCR` (0x44235000, 2 = `ck_ker_ltdc`), plain `d1_pd` power domain, no backlight on the HDMI path, and by the code U-Boot leaves the LTDC and DSI idle. Open: stride and base alignment (display note, open question 8), RM0457's LTDC, DSI and RIFSC chapters (unread), UM3385, MB1605, and everything the board must confirm (display note's open questions 1-4, 6). The HDMI under ST's Linux has not been observed (KVM unreachable in both baseline runs). Not needed by plan #322 |
 | Q8 | The exact boot chain and what state U-Boot hands over (exception level, MMU, caches, display on or off), and whether the SMC interface to OP-TEE stays open after U-Boot. | **In part (#1281):** TF-A v2.10 (BL2, BL31), OP-TEE 4.0, U-Boot 2023.10 (ST's), Linux 6.6.129 via extlinux from the microSD; PSCI 1.1 over SMC; Linux's watchdog is `arm,smc-wdt` (OP-TEE's), 32 s (`stm32mp251.dtsi:78-82`, `stm32mp257f-dk.dts:216-219`). **Folded in (r-optee-tfa, r-uboot, board-read, 2026-11-06):** BL2 starts the IWDG, so the watchdog is armed at hand-over and a hang resets in about 32 s; the image enters at EL2; U-Boot's distro loop reaches extlinux and leaves `boot.scr.uimg` alone while extlinux succeeds (section 1); the environment is a CRC32, a flag byte and strings at offset 0x7e000 of its partition. Open: the MMU and cache state and the DTB pointer actually handed over, and whether a key in the first second stops autoboot: the return trial's image records the hand-over |
 | Q9 | Does Linux etnaviv carry the MP25 ids, and does anything in ST's Linux depend on a vendor blob? | **Answered (#1281):** mainline (master) etnaviv's hwdb carries the exact row (`etnaviv_hwdb.c:199-204`); **ST's r3.1 etnaviv does not** (295 lines, rows up to 0x8000/0x8002, none for revision 0x6205; section 1, prestudy-studies), so under ST's own kernel an etnaviv load would take the register-read identity (`etnaviv_gpu.c:410-413`). ST's image does not use etnaviv: it runs **galcore 6.4.21** (out of tree) and its own OpenGL ES 3.1 user space. The kernel has etnaviv as an unloaded module; loading it reportedly panicked OP-TEE, so no etnaviv reference exists from the board and the host references are Mesa on the drm-shim |
 | Q10 | Is the GPU behind an IOMMU, and what physical address width reaches the GPU? | **Answered in part (#1281, confirmed by ST's tree):** no `iommus` on the GPU node (`stm32mp255.dtsi:169-183`), so our carveout stays identity-mapped in the GPU's own MMU v2 as on the i.MX8MP. The 64 MiB carveout at 0xfa800000 lies below 4 GiB and the GPU's MMU maps it flat, GPU address equal to physical address (gc-mem-mp2, r-galcore). The address width that reaches the GPU is not in any tree: RM0457 |
@@ -945,7 +961,7 @@ are smaller than they were then.
 | P5 | The SCMI codec, the OP-TEE message transport and the ST power module with model tests (5.6; section 4 for the order) | byte-exact host tests | M |
 | P6 | Board day one (section 6, items 1 and 2): identity under Linux (**done, #1281**), the return trial (banner, PSCI reset, back in Linux without a person), power and identity from our image | the board returns; the ids read; `HI_INTR_ENBL` read-back | S, board |
 | P7 | `gc_fence`, `gc_clear`, `gc_triangle`, `gc_gl_triangle` | read-backs | M, board |
-| P8 | The display: LTDC, DSI, ADV7535 to HDMI, backlight; scan-out of the GPU's buffer | picture on the panel, a record like `imx8mp-display-cold.md` | L |
+| P8 | The display: LTDC, DSI, ADV7535 to HDMI, backlight; scan-out of the GPU's buffer. Host study: `docs/notes/stm32mp257f-dk-display.md` (register blocks, clocks, the minimum order for one frame); no backlight is needed on the HDMI path | picture on the panel, a record like `imx8mp-display-cold.md` | L |
 | P9 | `gl_test` regression set, then the dEQP-GLES2 sweep, diffed against the i.MX8MP's failures; the line-width decision (Q11) | RESULTS rows | L, board |
 | P10 | Netboot or direct boot from the board's bootloader (`imx8mp-netboot.md` shape), sign-off from the bootloader; the one-shot off the microSD follows U-Boot's distro loop (section 1) | a run from U-Boot; `tools/board.sh` | M |
 
