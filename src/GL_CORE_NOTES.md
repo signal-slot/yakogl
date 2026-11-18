@@ -321,10 +321,11 @@ stored as (`read_pixels`, over `fb_target_format`'s answer):
 A known enum in a combination the read buffer does not take is
 `GL_INVALID_OPERATION`, an unknown one `GL_INVALID_ENUM`.
 `GL_IMPLEMENTATION_COLOR_READ_FORMAT` and `_TYPE` answer the integer pair for
-an integer read buffer and `GL_RGBA`/`GL_UNSIGNED_BYTE` for every other, the
-RGB10_A2 buffer among them (`implementation_color_read`); answering
-`GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for an RGB10_A2 buffer is open, as
-the ES 3.0 list below says. A read with pixels to write flushes and finishes
+an integer read buffer, `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for a
+buffer stored as the RGB10_A2 word (as Mesa's `_mesa_get_color_read_type`
+does; 654b0620), and `GL_RGBA`/`GL_UNSIGNED_BYTE` for every other, the
+RGB10_A2 buffer of the builds that keep the class as RGBA8888 among them
+(`implementation_color_read`). A read with pixels to write flushes and finishes
 first and brings the target into the CPU's view (`read_pixels_sync`); a read
 the arguments leave nothing to read does not stall the GPU.
 
@@ -425,7 +426,7 @@ context lacks, each checked in the code:
   `glReadPixels` with `GL_RGBA`/`GL_UNSIGNED_BYTE` decodes the little-endian
   word (R/G/B over 1023, A over 3; 8428875e). Where the class falls back to
   RGBA8 (`report-es2`, PowerVR, GC7000UL) nothing changes.
-  `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`TYPE` answer
+  `GL_IMPLEMENTATION_COLOR_READ_FORMAT`/`_TYPE` answer
   `GL_RGBA`/`GL_UNSIGNED_INT_2_10_10_10_REV` for this buffer (654b0620), and
   `glCopyTex*Image2D` into an RGB10_A2 destination copies the word
   unchanged (`texture_copy_from_fb`). The Pi 4 run of this is pending (host
