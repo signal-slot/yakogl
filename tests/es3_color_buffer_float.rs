@@ -22,7 +22,8 @@
 //!   the current tip are recorded as they are.
 //!
 //! The `color-buffer-float` feature is declared in Cargo.toml (off by
-//! default; no library code reads it yet): the "not claimed" assertions are
+//! default; `gl/state.rs` lists the extension only under it, on a back end
+//! where `backend::color_buffer_float_capable()` holds): the "not claimed" assertions are
 //! `cfg(not(feature = "color-buffer-float"))`.
 //!
 //! Feature sets (each with `--no-default-features`):
@@ -278,6 +279,29 @@ fn extension_not_claimed_by_default() {
     }
 }
 
+/// With the `color-buffer-float` feature on, the extension is still unlisted
+/// while the build's back end cannot draw the formats
+/// (`backend::color_buffer_float_capable()`, false on the PowerVR, the GC7000UL
+/// and, until item `v3d-arm`, the V3D): the feature alone claims nothing.
+#[test]
+fn feature_on_not_claimed_while_incapable() {
+    let _g = context();
+    assert_eq!(
+        in_extension_string("GL_EXT_color_buffer_float"),
+        cfg!(feature = "color-buffer-float") && backend::color_buffer_float_capable(),
+        "{GPU}: glGetString"
+    );
+    assert_eq!(
+        in_extension_list("GL_EXT_color_buffer_float"),
+        cfg!(feature = "color-buffer-float") && backend::color_buffer_float_capable(),
+        "{GPU}: glGetStringi"
+    );
+    #[cfg(not(feature = "gpu-v3d"))]
+    assert!(!backend::color_buffer_float_capable(), "{GPU}: capability");
+    #[cfg(feature = "gpu-v3d")] // until v3d-arm sets FLOAT_RT_FORMATS
+    assert!(!backend::color_buffer_float_capable() || backend::FLOAT_RT_FORMATS != 0, "{GPU}: capability");
+}
+
 /// Today's tip: `GL_EXT_color_buffer_half_float` is claimed, in both forms.
 #[test]
 fn half_float_extension_today() {
@@ -367,8 +391,11 @@ fn claimed_readpixels_rgba_float_accepted() {
 #[test]
 fn claimed_path() {
     let _g = context();
+    // The claimed path needs a back end that draws the formats (v3d-arm) and
+    // the completeness, RenderbufferStorage and ReadPixels work of core-surf;
+    // until then the build with the feature on is still unclaimed.
     #[cfg(feature = "color-buffer-float")]
-    {
+    if backend::color_buffer_float_capable() {
         claimed_all_seven_complete();
         claimed_readpixels_rgba_float_accepted();
     }

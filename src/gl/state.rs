@@ -130,6 +130,7 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * debug_marker group runs only when this is claimed
      * (es2fDebugMarkerTests.cpp:48). */
     b"GL_EXT_debug_marker\0",
+    b"GL_EXT_color_buffer_float\0",
     /* The last ES2_ONLY_NAMES entries: listed only on the ES 2.0 surface
      * (NPOT_EXTENSION and DEPTH_TEXTURE_EXTENSIONS), whose core lacks them.
      *
@@ -182,6 +183,14 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
     b"GL_OES_depth_texture\0",
     b"GL_OES_packed_depth_stencil\0",
 ];
+/// GL_EXT_color_buffer_float: R32F, RG32F, RGBA32F, R11F_G11F_B10F (and the
+/// 16F formats) colour-renderable. Listed only in an ES 3.0 build with the
+/// `color-buffer-float` feature on a back end that draws and reads back every
+/// one of them (`backend::color_buffer_float_capable`, false on every GPU
+/// today). Its name sits in [`ALL_EXTENSION_NAMES`] just before the ES 2.0-only
+/// tail; [`EXTENSION_NAMES`] leaves it out when unclaimed.
+pub(crate) const COLOR_BUFFER_FLOAT_EXTENSION: bool =
+    cfg!(feature = "color-buffer-float") && !crate::REPORT_ES2 && crate::backend::color_buffer_float_capable();
 /// How many names at the end of the list are the ES 2.0 surface's own:
 /// GL_OES_texture_npot and the depth-texture pair.
 const ES2_ONLY_NAMES: usize = 3;
@@ -210,13 +219,28 @@ pub(crate) const DEPTH_TEXTURE_EXTENSIONS: bool = crate::REPORT_ES2;
  * assert is where the tail has to be split so npot can be left out on its
  * own. */
 const _: () = assert!(NPOT_EXTENSION == DEPTH_TEXTURE_EXTENSIONS);
-/// The extension list of this build: [`ALL_EXTENSION_NAMES`] less the
-/// ES 2.0-only names where they are not claimed.
-pub(crate) static EXTENSION_NAMES: &[&[u8]] = if DEPTH_TEXTURE_EXTENSIONS {
-    ALL_EXTENSION_NAMES
-} else {
-    ALL_EXTENSION_NAMES.split_at(ALL_EXTENSION_NAMES.len() - ES2_ONLY_NAMES).0
+/// Names of [`ALL_EXTENSION_NAMES`] this build does not list.
+const UNLISTED_NAMES: usize =
+    (if DEPTH_TEXTURE_EXTENSIONS { 0 } else { ES2_ONLY_NAMES }) + (if COLOR_BUFFER_FLOAT_EXTENSION { 0 } else { 1 });
+const LISTED_COUNT: usize = ALL_EXTENSION_NAMES.len() - UNLISTED_NAMES;
+const LISTED_NAMES: [&[u8]; LISTED_COUNT] = {
+    let mut out: [&[u8]; LISTED_COUNT] = [b""; LISTED_COUNT];
+    let tail = ALL_EXTENSION_NAMES.len() - ES2_ONLY_NAMES;
+    let cbf = tail - 1;
+    let (mut i, mut n) = (0, 0);
+    while i < ALL_EXTENSION_NAMES.len() {
+        let skip = (i >= tail && !DEPTH_TEXTURE_EXTENSIONS) || (i == cbf && !COLOR_BUFFER_FLOAT_EXTENSION);
+        if !skip {
+            out[n] = ALL_EXTENSION_NAMES[i];
+            n += 1;
+        }
+        i += 1;
+    }
+    out
 };
+/// The extension list of this build: [`ALL_EXTENSION_NAMES`] less the
+/// ES 2.0-only names and GL_EXT_color_buffer_float where they are not claimed.
+pub(crate) static EXTENSION_NAMES: &[&[u8]] = &LISTED_NAMES;
 const EXTENSION_COUNT: usize = EXTENSION_NAMES.len();
 
 /// Does this implementation advertise `name`?
@@ -256,6 +280,8 @@ GL_EXT_debug_marker"
 const EXTENSION_STRING: &[u8] = if DEPTH_TEXTURE_EXTENSIONS {
     concat!(base_extension_string!(), " GL_OES_texture_npot GL_OES_depth_texture GL_OES_packed_depth_stencil\0")
         .as_bytes()
+} else if COLOR_BUFFER_FLOAT_EXTENSION {
+    concat!(base_extension_string!(), " GL_EXT_color_buffer_float\0").as_bytes()
 } else {
     concat!(base_extension_string!(), "\0").as_bytes()
 };
@@ -1627,7 +1653,7 @@ mod tests {
         for name in ["GL_OES_depth_texture", "GL_OES_packed_depth_stencil"] {
             assert_eq!(listed.contains(&name), want, "{name}");
         }
-        assert_eq!(listed.len() + if want { 0 } else { ES2_ONLY_NAMES }, ALL_EXTENSION_NAMES.len());
+        assert_eq!(listed.len() + UNLISTED_NAMES, ALL_EXTENSION_NAMES.len());
     }
 
     /// GL_OES_texture_npot is claimed on the ES 2.0 surface of every GPU

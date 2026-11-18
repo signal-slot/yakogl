@@ -583,6 +583,17 @@ pub static HOST_INTEGER_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::
 /// read back: bit `format - GLES_SURF_FLOAT_FIRST`. Zero for every GPU today.
 pub const FLOAT_RT_FORMATS: u32 = 0;
 
+/// Can this build's back end draw into and read back every colour surface
+/// `GL_EXT_color_buffer_float` makes renderable: R16F, RGBA16F (RG16F has no
+/// surface of its own), R32F and the three [`FLOAT_RT_FORMATS`] surfaces?
+/// False on every GPU today (the bits are zero); the GL core lists the
+/// extension only where this is true (`gl/state.rs`, under the
+/// `color-buffer-float` feature).
+pub const fn color_buffer_float_capable() -> bool {
+    const ALL: u32 = (1 << (GLES_SURF_FLOAT_LAST - GLES_SURF_FLOAT_FIRST + 1)) - 1;
+    FLOAT_RT_FORMATS & ALL == ALL
+}
+
 /// Host tests only: extension float surfaces a test back end claims to
 /// render, ORed into [`FLOAT_RT_FORMATS`] (the host back ends draw nothing).
 #[cfg(feature = "host-test")]
