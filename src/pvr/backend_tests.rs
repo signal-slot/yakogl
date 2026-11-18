@@ -3302,14 +3302,14 @@ fn the_pr_eot_words_carry_eot1s_doutu_and_the_given_pair() {
     let rig = Rig::new();
     rig.reset_records();
     let mut out = [0u32; PR_EOT_DATA_MAX_DW as usize];
-    let n = pr_eot_data_words(0x1001, [0xAAAA_0001, 0xBBBB_0002], &mut out).expect("words");
+    let n = pr_eot_data_words(0x1001, [0xAAAA_0001, 0xBBBB_0002], rig.b().eot_pairs, &mut out).expect("words");
     assert!(n > 0 && n <= PR_EOT_DATA_MAX_DW);
     assert_eq!(rig.eot_doutus(), vec![0x1001]);
     let e = rig.eot_emits().pop().expect("a generator call");
-    assert_eq!(e.len(), 2 * PVR_BACKEND_MAX_RT as usize);
+    assert_eq!(e.len(), 2 * rig.b().eot_pairs as usize, "the static program's pairs");
     assert_eq!(&e[..2], &[0xAAAA_0001, 0xBBBB_0002]);
     assert!(e[2..].iter().all(|&w| w == 0), "pairs 1 and 2 are zero");
-    assert_eq!(pr_eot_data_words(0, [0, 0], &mut out[..3]), Err(-EINVAL), "a short buffer is refused");
+    assert_eq!(pr_eot_data_words(0, [0, 0], 3, &mut out[..3]), Err(-EINVAL), "a short buffer is refused");
 }
 
 #[test]

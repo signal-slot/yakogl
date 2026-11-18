@@ -269,10 +269,50 @@ const HEAP_WINDOW: u64 = 0x4000_0000;
 /// resources each, about 5 MiB): the most a build can ask for, and the
 /// default ([`pvr_backend_set_frame_arenas`] may ask for fewer).
 const PVR_BACKEND_FRAME_SETS: usize = 4;
-/// Colour attachments one kick may write: three, the driver's default
-/// end-of-tile PDS program (`PVR_RENDER_EOT_PDS_PAIRS`), until the pvr-backend
-/// item takes four (`PVR_RENDER_MAX_RT`).
-const PVR_BACKEND_MAX_RT: u32 = PVR_RENDER_EOT_PDS_PAIRS as u32;
+/// Colour attachments one kick may write at most: the render layer's
+/// `PVR_RENDER_MAX_RT`, four. What a kick of this backend writes is the
+/// smaller [`Backend::eot_pairs`], the count the driver's static end-of-tile
+/// PDS program moves ([`eot_four_rt`]).
+const PVR_BACKEND_MAX_RT: u32 = PVR_RENDER_MAX_RT as u32;
+
+/// `pvr_render_eot_pds_pairs` (driver/src/pvr_render.h, a static inline the
+/// Rust side cannot link): the emit-word pairs the driver's static
+/// end-of-tile PDS program moves when `pvr_render_eot_four_rt` is `four_rt`.
+pub const fn eot_pds_pairs(four_rt: bool) -> u32 {
+    if four_rt {
+        PVR_RENDER_MAX_RT as u32
+    } else {
+        PVR_RENDER_EOT_PDS_PAIRS as u32
+    }
+}
+
+/// Whether this backend draws four colour targets, the one place that
+/// decides it: true when the GL core's draw-target count
+/// ([`crate::backend::draw_targets`], `GL_MAX_DRAW_BUFFERS`) is above the
+/// driver's default three end-of-tile pairs. The driver's
+/// `pvr_render_eot_four_rt` must be set to this before `pvr_render_init`
+/// (the Zephyr OSAL's init does it from [`pvr_backend_eot_four_rt`]), and
+/// [`pvr_backend_init`] latches [`eot_pds_pairs`] of it: every render's
+/// end-of-tile data is generated for that many pairs, so a draw-target knob
+/// only has to set the count before the display is initialised.
+pub fn eot_four_rt() -> bool {
+    crate::backend::draw_targets() > PVR_RENDER_EOT_PDS_PAIRS
+}
+
+/// [`eot_four_rt`] for the platform's C code: what to set
+/// `pvr_render_eot_four_rt` to before `pvr_render_init`.
+#[no_mangle]
+pub extern "C" fn pvr_backend_eot_four_rt() -> bool {
+    eot_four_rt()
+}
+
+/// The end-of-tile pairs the running backend generates every render's data
+/// for ([`eot_pds_pairs`] of [`eot_four_rt`] when it was initialised); 0
+/// before [`pvr_backend_init`].
+pub fn pvr_backend_eot_pairs() -> u32 {
+    // SAFETY: single-threaded by contract; a read of one field.
+    unsafe { PVR.get() }.b.eot_pairs
+}
 /// Primitives one kick may tile. The parameter buffer the firmware fills while
 /// tiling is finite (the driver grows it out of the GPU carveout, tens of
 /// MiB); a Quick 3D scene like simplefog draws 2000 instances of a sphere,
@@ -1599,8 +1639,19 @@ struct Backend {
     clear_fs3: OsalGpuMem,
     bg_kick3_off: u32,
     /// Clear FS USC for four colour dwords: an RGBA32I/UI target's clear
-    /// quad (no background kick: integer targets clear by quad).
+    /// quad, and four 8-bit attachments' background clear
+    /// ([`mrt_clear_dwords`]).
     clear_fs4: OsalGpuMem,
+    /// The kick-USC PDS program of that four-attachment background clear:
+    /// built only when the backend draws four targets ([`Backend::eot_pairs`]
+    /// 4), after the partial render's slot, so no three-target byte of the
+    /// page moves.
+    bg_kick4_off: u32,
+    /// The clear-attach programs ([`clear_program`], one, two and four
+    /// dwords) with their pixel output writes moved to register 1, 2 or 3
+    /// ([`clear_program_at`]): a clear of one attachment past the first.
+    /// Uploaded on first use.
+    clear_fs_at: [[OsalGpuMem; 3]; 3],
     /// bg kick program, bg colour DMA program, EOT data.
     pds_static: OsalGpuMem,
     /// CLEAR_ATTACH_DWORDS dwords.
@@ -1722,6 +1773,11 @@ struct Backend {
     /// one.
     targets: [GlesDrawTarget; PVR_BACKEND_MAX_RT as usize],
     num_targets: u8,
+    /// The end-of-tile pairs every render's data is generated for, and the
+    /// most colour attachments a frame keeps: [`eot_pds_pairs`] of
+    /// [`eot_four_rt`], latched by [`pvr_backend_init`] (three, or four with
+    /// the driver's `pvr_render_eot_four_rt`).
+    eot_pairs: u32,
     /// The frame's target sample count.
     samples: u32,
     clear_rgba: [f32; 4],
@@ -2032,20 +2088,22 @@ fn fragcoord_y_pair(d: &GlesDraw) -> [f32; 2] {
 
 /// The output dwords the background clear writes: one per attachment when
 /// the frame's attachments are several and all 8-bit (at most
-/// PVR_BACKEND_MAX_RT, three), else 0 (the single-target programs). Then the
-/// clear colour is uploaded once per attachment (shared registers 0..n) and
-/// the background object runs the n-dword clear program (two: the RGBA16F
-/// one, which is the same moves; three: PVR_USC_CLEAR_FS3), so every
+/// [`Backend::eot_pairs`], three or four), else 0 (the single-target
+/// programs). Then the clear colour is uploaded once per attachment (shared
+/// registers 0..n) and the background object runs the n-dword clear program
+/// (two: the RGBA16F one, which is the same moves; three:
+/// PVR_USC_CLEAR_FS3; four: the RGBA32UI one, `bg_kick4_off`), so every
 /// attachment starts from the clear colour; the one-dword program writes
 /// pixel output 0 alone, and the other attachments were emitted from output
 /// registers nothing wrote (gl_test 106 mrt3: the clear reached only draw
 /// buffer 0). Measured on the AM62P at cece5c23 (Linux path, online pair):
 /// 106 mask 0 with it, mask 6 without, 55 and the regression set 29/29 in
-/// both arms. A glClearBuffer of one draw buffer (`clear_target_mask`) is
-/// not honoured.
+/// both arms. A clear of some draw buffers only (`clear_target_mask`) never
+/// reaches the background object: [`pvr_backend_draw`] makes it per-target
+/// quads ([`clear_by_target_quads`]).
 fn mrt_clear_dwords(b: &Backend) -> u32 {
     let n = b.num_targets as usize;
-    if !(2..=PVR_BACKEND_MAX_RT as usize).contains(&n) {
+    if !(2..=b.eot_pairs as usize).contains(&n) {
         return 0;
     }
     let fmt = |i: usize| if i != 0 { b.targets[i].format } else { b.target_format };
@@ -2255,6 +2313,81 @@ fn fbload_program_at(b: &mut Backend, row: usize, reg: u32) -> Option<u64> {
     let (at, n) = pixel_output_bytes(words)?;
     if n as u32 != surf_dwords_of_row(row) || n as u32 + reg > PVR_BACKEND_MAX_OUT_REGS {
         return None;
+    }
+    if upload_words(mem, words) != 0 {
+        return None;
+    }
+    for &i in &at[..n] {
+        let moved = (words[i / 4] >> (i % 4 * 8)) as u8 + reg as u8;
+        mem_write(mem, i as u32, &[moved]);
+    }
+    cache_flush(mem, 0, (words.len() * 4) as u32);
+    Some(mem.gpu)
+}
+
+/// The byte offsets of the pixel output writes of a clear-attach program
+/// (`PVR_INTERNAL_CLEAR_ATTACH*`, `powervr::assemble::build_clear_attach`:
+/// shared register k copied to pixel output k), output register 0 first, and
+/// how many there are. Each is a main group (header `da` 3, `0x87` at byte
+/// 3) whose shared source is byte 4 (`0x80 | k`, byte 5 `0x08`) and whose
+/// `0x20 | k` destination is byte 9: the k-th copy of the four-dword program
+/// differs from the one-dword program's copy in those two bytes alone. The
+/// groups are walked by their headers' lengths as [`pixel_output_bytes`]
+/// walks them. None when the walk does not end on the last byte or the
+/// writes are not outputs 0, 1, ... in order.
+fn clear_output_bytes(words: &[u32]) -> Option<([usize; 4], usize)> {
+    let byte = |i: usize| (words[i / 4] >> (i % 4 * 8)) as u8;
+    let end = words.len() * 4;
+    let (mut at, mut n, mut off) = ([0usize; 4], 0usize, 0usize);
+    while off + 2 <= end {
+        let len = match byte(off) & 0xf {
+            0 => 32,
+            w => 2 * w as usize,
+        };
+        if off + len > end {
+            return None;
+        }
+        if len >= 10
+            && byte(off) >> 4 == 3
+            && byte(off + 3) == 0x87
+            && byte(off + 4) & 0xfc == 0x80
+            && byte(off + 5) == 0x08
+            && byte(off + 9) & 0xfc == 0x20
+        {
+            if n == at.len() || usize::from(byte(off + 9) & 3) != n {
+                return None;
+            }
+            at[n] = off + 9;
+            n += 1;
+        }
+        off += len;
+    }
+    (off == end && n != 0).then_some((at, n))
+}
+
+/// The GPU address of the clear-attach program of `dwords` colour dwords
+/// ([`clear_program`]: one, two or four) writing its pixel outputs from
+/// register `reg` on: the uploaded program for 0, else its copy with the
+/// output writes moved ([`clear_output_bytes`], as [`fbload_program_at`]
+/// moves a load), uploaded the first time a clear asks for it. None when the
+/// program's writes cannot be moved there or the upload fails.
+fn clear_program_at(b: &mut Backend, dwords: u32, reg: u32) -> Option<u64> {
+    let (base, words, i): (&OsalGpuMem, &[u32], usize) = match dwords {
+        2 => (&b.clear_fs2, &PVR_INTERNAL_CLEAR_ATTACH2, 1),
+        4 => (&b.clear_fs4, &PVR_INTERNAL_CLEAR_ATTACH4, 2),
+        _ => (&b.clear_fs, &PVR_INTERNAL_CLEAR_ATTACH1, 0),
+    };
+    if reg == 0 {
+        return Some(base.gpu);
+    }
+    let (at, n) = clear_output_bytes(words)?;
+    let want = if dwords == 2 || dwords == 4 { dwords } else { 1 };
+    if n as u32 != want || n as u32 + reg > PVR_BACKEND_MAX_OUT_REGS {
+        return None;
+    }
+    let mem = &mut b.clear_fs_at[i][reg as usize - 1];
+    if mem.gpu != 0 {
+        return Some(mem.gpu);
     }
     if upload_words(mem, words) != 0 {
         return None;
@@ -2927,6 +3060,40 @@ fn frame_set_static_init(b: &mut Backend) -> i32 {
     if b.eot_pr_data_local + PR_EOT_DATA_MAX_DW * 4 > PDS_STATIC_BYTES {
         return -ENOMEM;
     }
+    /* Four 8-bit attachments' background clear ([`mrt_clear_dwords`] 4):
+     * the four-dword clear-attach program's kick, after the partial
+     * render's slot (the page's last thing until now), and only when the
+     * backend draws four targets, so a three-target backend's page holds
+     * the bytes it held. */
+    if b.eot_pairs == 4 {
+        let mut ki = PvrPdsRenderKickUscInfo::default();
+        let mut kd = [0u32; 8];
+        let mut kc = [0u32; 1];
+
+        // SAFETY: kd/kc have the sizes the generator documents (8 / 1 dwords).
+        if unsafe {
+            pvr_pds_render_kick_usc_program(
+                heap_off_of(b.clear_fs4.gpu) as u64,
+                CLEAR_ATTACH_TEMPS,
+                0,
+                kd.as_mut_ptr(),
+                kc.as_mut_ptr(),
+                &mut ki,
+            )
+        } != 0
+        {
+            glog_once!("pvr_backend: the background kick program for the four-dword clear was refused");
+            return -EINVAL;
+        }
+        let (dn, cn) = (ki.data_size_dw.min(kd.len() as u32), ki.code_size_dw.min(kc.len() as u32));
+        off = b.eot_pr_data_local + PDS_ALIGN;
+        if off + (dn + cn) * 4 > PDS_STATIC_BYTES {
+            return -ENOMEM;
+        }
+        mem_write(&b.pds_static, off, &kd[..dn as usize]);
+        mem_write(&b.pds_static, off + dn * 4, &kc[..cn as usize]);
+        b.bg_kick4_off = heap_off_of(b.pds_static.gpu) + off;
+    }
     0
 }
 
@@ -2937,12 +3104,13 @@ const PR_EOT_DATA_MAX_DW: u32 = 3 * PVR_BACKEND_MAX_RT + 2;
 const _: () = assert!(PR_EOT_DATA_MAX_DW * 4 <= PDS_ALIGN);
 
 /// The partial render's end-of-tile PDS data words (docs/notes/pvr-pr-eot.md
-/// 3.4): the normal generator, PVR_BACKEND_MAX_RT targets, pair 0 the given
-/// PBE state pair and the rest zero. Returns the dword count written to `out`
-/// (at least [`PR_EOT_DATA_MAX_DW`] long). `doutu_src0` is the end-of-tile
-/// program's DOUTU (eot1's).
-fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], out: &mut [u32]) -> Result<u32, i32> {
-    if out.len() < PR_EOT_DATA_MAX_DW as usize {
+/// 3.4): the normal generator, `pairs` targets (the static program's,
+/// [`Backend::eot_pairs`]), pair 0 the given PBE state pair and the rest
+/// zero. Returns the dword count written to `out` (at least
+/// [`PR_EOT_DATA_MAX_DW`] long). `doutu_src0` is the end-of-tile program's
+/// DOUTU (eot1's).
+fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], pairs: u32, out: &mut [u32]) -> Result<u32, i32> {
+    if out.len() < PR_EOT_DATA_MAX_DW as usize || !(1..=PVR_BACKEND_MAX_RT).contains(&pairs) {
         return Err(-EINVAL);
     }
     let mut emit = [0u32; 2 * PVR_BACKEND_MAX_RT as usize];
@@ -2950,12 +3118,13 @@ fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], out: &mut [u32]) -> 
     let mut ec = [0u32; PVR_BACKEND_MAX_RT as usize + 1];
     let (mut dsz, mut csz) = (0u32, 0u32);
     // SAFETY: emit holds 2 * PVR_BACKEND_MAX_RT dwords, out/ec the documented
-    // 3N+1 / N+1 (out checked above to hold 3N+2).
+    // 3N+1 / N+1 (out checked above to hold 3N+2), and `pairs` is at most
+    // PVR_BACKEND_MAX_RT.
     let rc = unsafe {
         pvr_pds_generate_pixel_event_tq(
             doutu_src0,
             emit.as_ptr(),
-            PVR_BACKEND_MAX_RT,
+            pairs,
             0,
             out.as_mut_ptr(),
             ec.as_mut_ptr(),
@@ -2973,7 +3142,7 @@ fn pr_eot_data_words(doutu_src0: u64, state_pair: [u32; 2], out: &mut [u32]) -> 
 /// `pds_static`, then flush. Leaves the normal slot alone.
 fn pr_eot_data_write(b: &Backend, doutu_src0: u64, state_pair: [u32; 2]) -> Result<u32, i32> {
     let mut ed = [0u32; PR_EOT_DATA_MAX_DW as usize];
-    let n = pr_eot_data_words(doutu_src0, state_pair, &mut ed)?;
+    let n = pr_eot_data_words(doutu_src0, state_pair, b.eot_pairs, &mut ed)?;
     mem_write(&b.pds_static, b.eot_pr_data_local, &ed[..n as usize]);
     cache_flush(&b.pds_static, 0, PDS_STATIC_BYTES);
     Ok(n)
@@ -3496,6 +3665,10 @@ pub extern "C" fn pvr_backend_init() -> i32 {
         b.mrt_log_left = MRT_LOG_BUDGET;
         b.kick_log_left = KICK_LOG_BUDGET;
         b.draw_log_left = DRAW_LOG_BUDGET;
+        /* the count the driver's end-of-tile program was brought up for
+         * (`pvr_render_eot_four_rt`, set from the same decision before
+         * `pvr_render_init`) */
+        b.eot_pairs = eot_pds_pairs(eot_four_rt());
     }
 
     let queried = match ops.query {
@@ -3634,7 +3807,7 @@ pub extern "C" fn pvr_backend_shutdown() {
     for m in b.fbload_fs_rt.iter_mut().chain(b.fbload_fs_int.iter_mut()).chain(b.clear_mask_fs.iter_mut()) {
         osal::gpu_free(m);
     }
-    for m in b.fbload_fs_at.iter_mut().flatten() {
+    for m in b.fbload_fs_at.iter_mut().flatten().chain(b.clear_fs_at.iter_mut().flatten()) {
         osal::gpu_free(m);
     }
     for s in b.ds.iter_mut() {
@@ -4274,10 +4447,173 @@ fn record_attachment_loads(p: &mut Pvr) -> i32 {
 /// Measured on the AM62P (Zephyr, f9f4896f): dEQP color_clear 19/19 and the
 /// gl_test regression set plus 102, 103 and 107 32/32 masked, 30/32 with
 /// every channel cleared (am62p-board).
+///
+/// The colour goes to the frame's attachments `d.clear_target_mask` names
+/// (0: attachment 0 alone, the quad's colour as it always was): attachment 0
+/// by this quad, each later one by a quad of its own
+/// ([`record_slot_clear_quad`]).
 fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
+    let slots = if d.clear_target_mask == 0 { 1 } else { d.clear_target_mask };
+    let rc = record_clear_quad0(p, d, slots & 1 != 0);
+    if rc != 0 || !d.do_clear {
+        return rc;
+    }
+    for k in 1..(p.b.num_targets as usize).min(PVR_BACKEND_MAX_RT as usize) {
+        if slots & (1 << k) != 0 {
+            let rc = record_slot_clear_quad(p, d, k);
+            if rc != 0 {
+                return rc;
+            }
+        }
+    }
+    0
+}
+
+/// The frame slots (bit i: attachment i) a colour clear of `d` writes, and
+/// the slots `d` has (a slot with no target, a GL_NONE draw buffer, is not
+/// one), both within the `max_rt` attachments a frame keeps.
+/// `clear_target_mask` 0 is every slot; a bit past the slots is dropped.
+fn clear_slots(d: &GlesDraw, max_rt: u32) -> (u8, u8) {
+    let n = (u32::from(d.num_targets.max(1))).min(max_rt).min(PVR_BACKEND_MAX_RT) as usize;
+    let present =
+        (0..n).filter(|&i| if i == 0 { d.target_gpu != 0 } else { d.targets[i].gpu != 0 }).fold(0u8, |m, i| m | 1 << i);
+    let slots = if d.clear_target_mask == 0 { present } else { d.clear_target_mask & present };
+    (slots, present)
+}
+
+/// Whether the colour clear of `d` (a whole-target one, the background
+/// object's otherwise) is drawn as one quad per attachment instead: it
+/// clears some of several attachments and not the others (glClearBuffer of
+/// one draw buffer, `clear_target_mask`), which the background object
+/// cannot do -- it starts every attachment from the clear colour -- or the
+/// attachments are several and one is integer, which no background program
+/// clears. The frame then loads every attachment, as a frame without a
+/// colour clear does, and each attachment the clear names is drawn over by
+/// a quad that writes its own output registers alone
+/// ([`record_slot_clear_quad`]), so the others keep their pixels.
+fn clear_by_target_quads(b: &Backend, d: &GlesDraw) -> bool {
+    if !d.do_clear || d.clear_quad {
+        return false;
+    }
+    let (slots, present) = clear_slots(d, b.eot_pairs);
+    let several = present.count_ones() > 1;
+    let fmt = |i: usize| if i == 0 { d.target_format } else { d.targets[i].format };
+    let any_int = (0..PVR_BACKEND_MAX_RT as usize).any(|i| present & (1 << i) != 0 && gles_surf_is_integer(fmt(i)));
+    slots != present || (several && any_int)
+}
+
+/// The colour clear of the frame's attachment `k` (1..): the same
+/// full-screen quad as [`record_clear_quad0`]'s, under the clear's scissor,
+/// whose program is the clear-attach program of that attachment's dwords
+/// with its output writes moved to the registers the end-of-tile emit
+/// stores attachment `k` from ([`attachment_out_reg`],
+/// [`clear_program_at`]). It writes those registers alone, so the other
+/// attachments keep what the frame's load (or a draw) left in theirs. Colour
+/// only. An attachment the emit does not store from the output registers,
+/// or a colour mask that keeps some of its channels (the masked programs
+/// write pixel output 0), is not cleared, by name.
+fn record_slot_clear_quad(p: &mut Pvr, d: &GlesDraw, k: usize) -> i32 {
+    let t = p.b.targets[k];
+    if t.gpu == 0 {
+        return 0;
+    }
+    let mut mask = d.clear_color_mask & 0xf;
+    if pixel_class(t.format) >= 2 {
+        mask = if mask & 1 != 0 { 0xf } else { 0 };
+    }
+    if let Some(l) = gles_surf_int_layout(t.format) {
+        let own = (1u8 << l.channels) - 1;
+        mask = match mask & own {
+            0 => 0,
+            m if m == own => 0xf,
+            _ => mask,
+        };
+    }
+    if mask == 0 {
+        return 0;
+    }
+    if mask != 0xf {
+        glog_once!(
+            "yakogl/pvr: clear of colour attachment {} ({}) under a partial colour mask: not cleared (not built)",
+            k,
+            gles_surf_name(t.format)
+        );
+        return 0;
+    }
+    let b = &mut p.b;
+    let dwords = surf_out_dwords(t.format);
+    let Some((reg, gpu)) = attachment_out_reg(b, k).and_then(|reg| Some((reg, clear_program_at(b, dwords, reg)?)))
+    else {
+        glog_once!(
+            "yakogl/pvr: clear of colour attachment {} ({}): no output registers for it, not cleared",
+            k,
+            gles_surf_name(t.format)
+        );
+        return 0;
+    };
+    let fl = &mut p.fbload;
+    let (_, sh) = clear_program(b, fl, dwords);
+    fl.clear_pack = clear_uniform(t.format, &d.clear_rgba);
+    let clear_pack: *const c_void = fl.clear_pack.as_ptr() as *const c_void;
+    let vs_sh: *const ShcShader = &fl.vs_sh;
+    let ld = &mut fl.load_draw;
+
+    *ld = GlesDraw::ZERO;
+    ld.target_gpu = d.target_gpu;
+    ld.target_w = d.target_w;
+    ld.target_h = d.target_h;
+    ld.target_pitch = d.target_pitch;
+    ld.target_format = d.target_format;
+    ld.samples = d.samples;
+    ld.prim = GLES_PRIM_TRIANGLES;
+    ld.index_count = 6;
+    ld.vs = vs_sh;
+    ld.vs_usc_gpu = b.fbload_vs.gpu;
+    ld.attribs[0].vi_reg = 0;
+    ld.attribs[0].components = 4;
+    ld.attribs[0].stride = 16;
+    ld.attribs[0].buffer_gpu = b.fbload_quad.gpu;
+    ld.num_attribs = 1;
+    ld.vs_output_size_dwords = 4;
+    ld.viewport[2] = d.target_w as i32;
+    ld.viewport[3] = d.target_h as i32;
+    ld.flip_y = d.flip_y;
+    ld.line_width = 1.0;
+    ld.scissor = d.scissor;
+    ld.scissor_rect = d.scissor_rect;
+    ld.fs = sh;
+    ld.fs_usc_gpu = gpu;
+    ld.fs_uniform_cpu = clear_pack;
+    ld.fs_uniform_dwords = dwords as u16;
+    ld.color_write = true;
+    ld.color_mask = 0xf;
+    ld.depth_func = GLES_CMP_ALWAYS;
+    ld.depth_range[1] = 1.0;
+    if b.opt(PVR_BACKEND_OPT_DEBUG) != 0 && b.dbg_draws_left != 0 {
+        glog!(
+            "pvr_backend: clear of colour attachment {} ({}) from output register {}, program at 0x{:x}",
+            k,
+            gles_surf_name(t.format),
+            reg,
+            gpu
+        );
+    }
+    if record_draw_txn(b, &mut p.scratch, &fl.load_draw, 0, 6, None) != 0 {
+        if !b.warned_load {
+            glog!("pvr_backend: could not record the clear quad of colour attachment {}", k);
+        }
+        b.warned_load = true;
+        return -1;
+    }
+    0
+}
+
+/// [`record_clear_quad`]'s quad: attachment 0's colour (when `slot0`), the
+/// depth and the stencil.
+fn record_clear_quad0(p: &mut Pvr, d: &GlesDraw, slot0: bool) -> i32 {
     let has_ds = p.b.frame_ds.buf().is_some();
     let class = pixel_class(d.target_format);
-    let mut mask = if d.do_clear { d.clear_color_mask & 0xf } else { 0 };
+    let mut mask = if d.do_clear && slot0 { d.clear_color_mask & 0xf } else { 0 };
     /* A one-channel float target has only red: it is written or it is not. */
     if class >= 2 {
         mask = if mask & 1 != 0 { 0xf } else { 0 };
@@ -4300,7 +4636,7 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
             }
         };
     }
-    let color = d.do_clear && mask != 0;
+    let color = d.do_clear && slot0 && mask != 0;
     let depth = d.do_clear_depth && has_ds;
     let stencil = d.do_clear_stencil && has_ds;
 
@@ -5482,7 +5818,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.target_format = d.target_format;
     b.target_alpha_bits = d.target_alpha_bits;
     b.target_flip_y = d.flip_y;
-    b.num_targets = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(PVR_BACKEND_MAX_RT as u8);
+    b.num_targets = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(b.eot_pairs as u8);
     b.targets[0] =
         GlesDrawTarget { gpu: d.target_gpu, w: d.target_w, h: d.target_h, format: d.target_format, out_shift: 0 };
     for i in 1..b.num_targets as usize {
@@ -6063,7 +6399,7 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
         || b.target_h != d.target_h
         || b.target_pitch != crate::backend::draw_pitch(d)
         || b.samples != frame_samples(d.samples)
-        || b.num_targets != dtargets.min(PVR_BACKEND_MAX_RT as u8)
+        || b.num_targets != dtargets.min(b.eot_pairs as u8)
         /* the other attachments too: a frame stores the slots it began with,
          * so a draw into (A, none, C) after one into (A, B, C) -- or into
          * (A, D, C) -- is another frame, or its output 1 would land in B */
@@ -6145,9 +6481,13 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     /* An integer colour attachment beside another one: drawn only as
      * [`several_int_targets_drawn`] says (attachments of one layout, the
      * program that packs them all), else refused by name, never drawn with
-     * the wrong packing. */
+     * the wrong packing. A clear alone (no primitives) runs no program of
+     * the application's: the frame loads each attachment with its own
+     * program and the colour clear is a quad per attachment
+     * ([`clear_by_target_quads`]). */
     let ntargets = (d.num_targets as usize).min(d.targets.len());
     if ntargets > 1
+        && d.index_count != 0
         && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format))
         // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
         && !several_int_targets_drawn(d, unsafe { d.fs.as_ref() })
@@ -6215,13 +6555,24 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
      * the background clear, which writes every channel: the colour goes to
      * the masked clear quad (recorded before the draw, where GL put the
      * clear), and the frame keeps the pixels the mask leaves alone. Depth
-     * and stencil stay on the background path. */
+     * and stencil stay on the background path. So does a colour clear of
+     * some of several attachments, or of several where one is integer
+     * ([`clear_by_target_quads`]): the quad carries the attachments it
+     * clears, each drawn by a quad of its own over the frame's load. */
     let partial = |m: u8| (m & 0xf) != 0 && (m & 0xf) != 0xf;
-    if d.do_clear && !d.clear_quad && partial(d.clear_color_mask) {
+    let by_targets = clear_by_target_quads(&p.b, d);
+    if d.do_clear && !d.clear_quad && (partial(d.clear_color_mask) || by_targets) {
         let mut rest = *d;
         rest.do_clear = false;
         rest.clear_color_mask = 0;
         let mut quad = *d;
+        if by_targets {
+            /* the attachments by name (0x80, a slot no frame has: none) */
+            quad.clear_target_mask = match clear_slots(d, p.b.eot_pairs).0 {
+                0 => 0x80,
+                s => s,
+            };
+        }
         quad.clear_quad = true;
         quad.do_clear_depth = false;
         quad.do_clear_stencil = false;
@@ -8937,8 +9288,10 @@ fn flush(p: &mut Pvr) -> i32 {
         /* PBESTATE_STATE_WORD0/1 per colour attachment ([`pbe_emit_words`]:
          * the address, its source, its packing). The end-of-tile program reads attachment i's
          * pair from shared registers 2i, 2i+1; the PDS CODE that fills them
-         * is generated once for the largest count, so the data always carries
-         * that many pairs and the unused ones stay zero. */
+         * is generated once, by the driver, for `eot_pairs` (three, or four
+         * with `pvr_render_eot_four_rt`), so the data of every render, of
+         * one target or four, carries that many pairs and the unused ones
+         * stay zero. */
         let nrt_want = if b.num_targets != 0 { b.num_targets as u32 } else { 1 };
         let mut emit = [0u32; 2 * PVR_BACKEND_MAX_RT as usize];
         let mut out_regs = 0u32;
@@ -9053,13 +9406,16 @@ fn flush(p: &mut Pvr) -> i32 {
         } else {
             b.st.eot_doutu_src0
         };
-        // SAFETY: PVR_BACKEND_MAX_RT render targets: emit holds 2 * that
-        // dwords, ed/ec the documented 3N+1 / N+1.
+        /* the pairs the driver's static program moves, whatever this
+         * render emits (`eot_pairs`; the frame kept no more targets) */
+        let pairs = b.eot_pairs.min(PVR_BACKEND_MAX_RT);
+        // SAFETY: at most PVR_BACKEND_MAX_RT render targets: emit holds 2 *
+        // that dwords, ed/ec the documented 3N+1 / N+1.
         if unsafe {
             pvr_pds_generate_pixel_event_tq(
                 doutu,
                 emit.as_ptr(),
-                PVR_BACKEND_MAX_RT,
+                pairs,
                 0,
                 ed.as_mut_ptr(),
                 ec.as_mut_ptr(),
@@ -9267,6 +9623,7 @@ fn flush(p: &mut Pvr) -> i32 {
     let shader = match mrt_clear_dwords(b) {
         2 => b.bg_kick2_off,
         3 => b.bg_kick3_off,
+        4 => b.bg_kick4_off,
         _ if b.target_format == GLES_SURF_RGBA16F || gles_surf_is_srgb(b.target_format) => b.bg_kick2_off,
         _ => b.bg_kick_off,
     };
@@ -9726,7 +10083,7 @@ pub extern "C" fn pvr_backend_pool_owners() -> u64 {
     for m in b.fbload_fs_rt.iter().chain(b.fbload_fs_int.iter()).chain(b.clear_mask_fs.iter()) {
         statics.add(m);
     }
-    for m in b.fbload_fs_at.iter().flatten() {
+    for m in b.fbload_fs_at.iter().flatten().chain(b.clear_fs_at.iter().flatten()) {
         statics.add(m);
     }
     let mut ds = OwnerTally::default();

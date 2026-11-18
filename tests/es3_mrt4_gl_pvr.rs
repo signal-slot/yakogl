@@ -15,10 +15,10 @@
 //!   attachments is complete, glDrawBuffers takes four entries;
 //! - a glClear and a four-output draw on four RGBA8 attachments do not
 //!   panic and either reach the back end or end in a defined GL error. What
-//!   happens TODAY is the named assertion `FOUR_TARGET_DRAW_TODAY` (tests
-//!   `four_target_clear_today` and `four_target_draw_today`); item
-//!   pvr-backend (the back end draws four targets) is expected to change
-//!   that one assertion.
+//!   happens is the named assertion `FOUR_TARGET_DRAW_TODAY` (tests
+//!   `four_target_clear_today` and `four_target_draw_today`). Since item
+//!   pvr-backend (plan #368) the back end draws four targets under the
+//!   stand-in: both kick with `num_rt` 4.
 //!
 //! No GPU: the platform's submit counts the kick and the generators of
 //! driver/src/pvr are stood in for (as tests/depth_resolve_pvr_backend.rs).
@@ -79,6 +79,8 @@ struct Platform {
     allocs: BTreeMap<u64, Alloc>,
     /// Kicks submitted so far: the last fence.
     fence: i64,
+    /// The last kick's `frag.num_rt`: the colour attachments it emitted.
+    last_num_rt: u32,
     log: Vec<String>,
 }
 
@@ -130,11 +132,14 @@ unsafe extern "C" fn p_gpu_write(mem: *mut OsalGpuMem, off: usize, src: *const c
 unsafe extern "C" fn p_cache(_cpu: *mut c_void, _n: usize) {}
 
 /// The "GPU": a kick is counted and completes at once.
-unsafe extern "C" fn p_submit(_kick: *const c_void, len: usize) -> i64 {
+unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
     if len != size_of::<PvrRenderKick>() {
         return -22;
     }
+    // SAFETY: a PvrRenderKick (the length says so).
+    let num_rt = unsafe { (*(kick as *const PvrRenderKick)).frag.num_rt };
     with_platform(|p| {
+        p.last_num_rt = num_rt;
         p.fence += 1;
         p.fence
     })
@@ -600,7 +605,7 @@ fn the_limits_are_four_under_the_stand_in_and_three_without() {
     assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(4));
     assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(4));
     backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
-    assert_eq!(backend::DRAW_TARGETS, 3, "the PowerVR build draws three until item pvr-backend");
+    assert_eq!(backend::DRAW_TARGETS, 3, "the PowerVR build answers three until a board run flips it");
     assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(3));
     assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(3));
 }
@@ -645,22 +650,22 @@ fn attachment_3_and_four_draw_buffers_are_accepted() {
 /// What a clear or a four-output draw on four RGBA8 attachments does.
 #[derive(Debug, PartialEq)]
 enum Outcome {
-    /// It reached the back end: a kick was submitted.
-    Kicked,
+    /// It reached the back end: a kick was submitted, emitting `num_rt`
+    /// colour attachments.
+    Kicked { num_rt: u32 },
     /// It ended in this GL error and no kick.
     GlError(GLenum),
 }
 
-/// TODAY's outcome, for the clear and for the draw. Item pvr-backend (the
-/// PowerVR back end draws four targets) is expected to change THIS
-/// assertion: it updates it when it lands.
+/// TODAY's outcome, for the clear and for the draw.
 ///
-/// Today both reach the back end and kick: `pvr::backend` clamps the
-/// target list to PVR_BACKEND_MAX_RT (= PVR_RENDER_EOT_PDS_PAIRS, 3,
-/// src/pvr/backend.rs:5235) and drops attachment 3 without a GL error.
-/// There is no refusal from the back end; only a log line about the
-/// attachment/output count mismatch.
-const FOUR_TARGET_DRAW_TODAY: (Outcome, Outcome) = (Outcome::Kicked, Outcome::Kicked);
+/// Both reach the back end and kick with all four attachments: item
+/// pvr-backend (plan #368) made the back end keep as many targets as the
+/// driver's end-of-tile program moves (`pvr::backend::eot_four_rt`, four
+/// under the stand-in; `PVR_BACKEND_MAX_RT` = `PVR_RENDER_MAX_RT`). Before
+/// it, both kicked with `num_rt` 3: the target list was clamped to three and
+/// attachment 3 dropped without a GL error.
+const FOUR_TARGET_DRAW_TODAY: (Outcome, Outcome) = (Outcome::Kicked { num_rt: 4 }, Outcome::Kicked { num_rt: 4 });
 
 const FS4: &str = "#version 300 es\nprecision mediump float;\n\
     layout(location = 0) out vec4 o0;\nlayout(location = 1) out vec4 o1;\n\
@@ -724,7 +729,7 @@ fn outcome_of(f: impl FnOnce()) -> Outcome {
     let after = kicks();
     release(fb, &rbs);
     match (e, after > before) {
-        (GL_NO_ERROR, true) => Outcome::Kicked,
+        (GL_NO_ERROR, true) => Outcome::Kicked { num_rt: with_platform(|p| p.last_num_rt) },
         (GL_NO_ERROR, false) => panic!("no error and no kick: the work was dropped silently: {:?}", logs()),
         (e, false) => Outcome::GlError(e),
         (e, true) => panic!("error {e:#x} and a kick: {:?}", logs()),

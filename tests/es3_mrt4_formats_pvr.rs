@@ -735,7 +735,8 @@ fn clear_and_read(internal: GLenum) -> (GLenum, GLenum) {
 /// What a four-target draw (RGBA8 on 0-2, the format on 3) comes to today.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Outcome {
-    /// Complete and drawn, three PBE states (attachment 3 has none).
+    /// Complete and drawn: four PBE states when attachment 3 takes one
+    /// output register, three when it takes two (it does not fit).
     Draws,
     /// Complete; the back end refuses the draw by name: an integer
     /// attachment beside another one (`GL_INVALID_OPERATION`).
@@ -780,7 +781,8 @@ const ROWS: [(GLenum, &str, u8, Outcome, bool); 25] = [
     (GL_R11F_G11F_B10F, "R11F_G11F_B10F", GLES_SURF_RGBA8888, NotRenderable, true),
     /* RG16F is kept as four halves (the GL core hands RGBA16F over): two
      * registers, so it does NOT fit beside three RGBA8 targets in four
-     * (pvr-budget4-test's); drawn as three targets today like the rest */
+     * (pvr-budget4-test's): drawn as three targets, attachment 3 not
+     * emitted, where the one-register rows draw four */
     (GL_RG16F, "RG16F", GLES_SURF_RGBA16F, Draws, false),
     (GL_RGB565, "RGB565", GLES_SURF_RGBA8888, Draws, true),
     (GL_RGBA4, "RGBA4", GLES_SURF_RGBA8888, Draws, true),
@@ -846,23 +848,34 @@ fn completeness_and_surface_of_attachment_3() {
     }
 }
 
-/// A four-target draw today: the formats the back end draws reach the
-/// hardware as THREE targets. Attachment 3 has no PBE state pair (the render
-/// layer's `PVR_RENDER_MAX_RT` is 3 and `num_targets` is clamped to it), and
-/// the three RGBA8 targets are on registers 0-2 as RGBA8.
+/// A four-target draw: since item pvr-backend (plan #368) the formats the
+/// back end draws reach the hardware as FOUR targets when attachment 3 takes
+/// one output register (`attachment_3_gets_its_pbe_state_on_register_3`
+/// pins its state). The end-of-tile data always carries four pairs (the
+/// driver's four-pair program, `pvr::backend::eot_four_rt`). RG16F, kept as
+/// four halves, takes two registers and does not fit beside three RGBA8
+/// targets: it is not emitted (three PBE states, the fourth pair zero), as
+/// pvr-budget4-test's budget says. Before pvr-backend every row came to
+/// three states (`num_targets` clamped to three).
 #[test]
-fn three_pbe_states_reach_the_hardware_today() {
+fn four_pbe_states_reach_the_hardware() {
     let _g = rig();
     assert_eq!(PVR_RENDER_EOT_MAX_RT, 4);
-    for (internal, name, _, outcome, _) in ROWS {
+    for (internal, name, _, outcome, one_reg) in ROWS {
         if outcome != Draws {
             continue;
         }
         let f = Fbo::new(internal);
         assert_eq!(f.status, GL_FRAMEBUFFER_COMPLETE, "{name}");
         let frame = drawn(class_of(internal)).unwrap_or_else(|e| panic!("{name}: draw error {e:#x}: {:?}", logs()));
-        assert_eq!(frame.num_rt, 3, "{name}: kick num_rt");
-        assert_eq!(frame.emits, [rgba8_emit(0), rgba8_emit(1), rgba8_emit(2)], "{name}: PBE states");
+        assert_eq!(frame.emits.len(), 4, "{name}: four end-of-tile pairs");
+        assert_eq!(&frame.emits[..3], [rgba8_emit(0), rgba8_emit(1), rgba8_emit(2)], "{name}: PBE states 0-2");
+        if one_reg {
+            assert_eq!(frame.num_rt, 4, "{name}: kick num_rt");
+        } else {
+            assert_eq!(frame.num_rt, 3, "{name}: attachment 3 does not fit the output registers");
+            assert_eq!(frame.emits[3], decode(0), "{name}: the fourth pair is zero");
+        }
     }
 }
 
@@ -884,17 +897,21 @@ fn integer_and_srgb_attachment_3_are_refused_by_name_today() {
     }
 }
 
-/// Whether a read of attachment 3 beside RGBA8 targets is refused today: the
-/// integer formats and sRGB are (`GL_INVALID_OPERATION`, the format's own
-/// read pair), the rest read.
+/// Whether a read of attachment 3 beside RGBA8 targets is refused today:
+/// sRGB is (`GL_INVALID_OPERATION`): the clear before it is refused by the
+/// back end (an sRGB attachment beside another format) and the refusal
+/// surfaces at the read's flush. The rest read, the integer formats in their
+/// own read pair since item pvr-backend (plan #368) made their clear of
+/// attachment 3 a quad of its own (it was refused at the flush the same way
+/// before).
 fn read_is_refused(internal: GLenum) -> bool {
-    int_class(internal) || internal == GL_SRGB8_ALPHA8
+    internal == GL_SRGB8_ALPHA8
 }
 
 /// `glClearBuffer{f,i,ui}v` of attachment 3 raises no error for any complete
 /// format (the type must match the format's class), and a `glReadPixels` of
-/// it, in the read pair valid for the format, reads for every format but the
-/// integer ones and sRGB (see `read_of_integer_and_srgb_attachment_3`). The
+/// it, in the read pair valid for the format, reads for every format but
+/// sRGB (see `read_of_integer_and_srgb_attachment_3`). The
 /// host fills no pixels, so the values are not looked at.
 #[test]
 fn clear_buffer_and_read_of_attachment_3() {
@@ -928,7 +945,6 @@ fn clear_buffer_and_read_of_attachment_3() {
 /// register 3 (`source_pos` 3), `mrt_index` 3, packed as the format needs. The
 /// formats that take one register (RGBA8-class, R32F).
 #[test]
-#[ignore = "pvr-render/pvr-backend (plan #368): num_targets is clamped to PVR_RENDER_MAX_RT 3; attachment 3 gets no PBE state"]
 fn attachment_3_gets_its_pbe_state_on_register_3() {
     let _g = rig();
     for (internal, name, surf, outcome, one_reg) in ROWS {
@@ -952,7 +968,7 @@ fn attachment_3_gets_its_pbe_state_on_register_3() {
 /// An integer attachment 3 beside RGBA8 targets draws: one packed dword on
 /// register 3, not normalised, not sRGB-style F16.
 #[test]
-#[ignore = "pvr-backend (plan #368; docs/notes/pvr-int-mixed-targets.md): an integer attachment beside another colour attachment is refused (GL_INVALID_OPERATION)"]
+#[ignore = "pvr-backend (plan #368; docs/notes/pvr-int-mixed-targets.md): a draw with an integer attachment beside another colour attachment is refused (GL_INVALID_OPERATION); since pvr-backend only its clears are accepted"]
 fn integer_attachment_3_beside_rgba8_draws() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
@@ -982,7 +998,7 @@ fn srgb_attachment_3_beside_rgba8_draws() {
 /// RGBA_INTEGER with INT / UNSIGNED_INT; sRGB: RGBA / UNSIGNED_BYTE) is
 /// accepted, as the read of an RGBA8 one is.
 #[test]
-#[ignore = "gl-readback (plan #368; pvr-read4-test): glReadPixels of an integer or sRGB attachment 3 beside RGBA8 targets raises GL_INVALID_OPERATION"]
+#[ignore = "pvr-backend (plan #368): the integer rows read since pvr-backend; the sRGB row's clear of attachment 3 is refused by the back end (an SRGB8_ALPHA8 attachment beside one of another format) and the read's flush raises GL_INVALID_OPERATION"]
 fn read_of_integer_and_srgb_attachment_3() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
