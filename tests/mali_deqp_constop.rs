@@ -86,14 +86,15 @@ fn constop_cf_inf_fs() {
     mali_ref::assert_matches("deqp_constop_cf_inf_fs");
 }
 
+/// Byte-equal since lower-mixprec's rotated colour (`(w, x, y, 1.0)`: w
+/// alone, then the aligned pair (x, y) converted once).
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (past its constant operation since plan #367's lower-fs-arith), lowered by lower-constop"]
 fn constop_loops_for_basic_mediump_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_for_basic_mediump_float_fs");
 }
 
 #[test]
-#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (past its constant operation since plan #367's lower-fs-arith), lowered by lower-constop"]
+#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (past its conversions since lower-mixprec's rotated colour), lowered by lower-constop"]
 fn constop_loops_while_basic_highp_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_while_basic_highp_float_fs");
 }
@@ -163,17 +164,17 @@ fn constop_struct_param_out_vs() {
     mali_ref::assert_matches("deqp_constop_struct_param_out_vs");
 }
 
-/// Where the two loops references are refused since plan #367's
-/// lower-fs-arith lowered the fragment arithmetic in front of it: their
-/// constant operation is no longer the first refusal.
-const VARYING_LOAD: &str = "a fragment varying load or conversion of a form no reference draws";
+/// Where the highp loops reference is refused since plan #367's
+/// lower-fs-arith lowered the fragment arithmetic in front of it and
+/// lower-mixprec its rotated colour's conversions: its constant operation is
+/// no longer the first refusal.
+const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp float values";
 
 /// Every ignored reference above that is refused, and the refusal the compiler
 /// gives it now (`constop_nz_shared_vs` compiles but differs).
 const REFUSED: &[(&str, &str)] = &[
     ("deqp_constop_ce_atan_separate_fs", "a constant product in a shape Mesa's algebraic rules move or fold"),
-    ("deqp_constop_loops_for_basic_mediump_float_fs", VARYING_LOAD),
-    ("deqp_constop_loops_while_basic_highp_float_fs", VARYING_LOAD),
+    ("deqp_constop_loops_while_basic_highp_float_fs", MIXED),
     (
         "deqp_constop_mat3sub_vs",
         "a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly)",
