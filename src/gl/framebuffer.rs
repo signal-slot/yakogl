@@ -589,8 +589,14 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         }
         let pitch = t.level_pitch_at(a.level as u32);
         /* so is a level laid out at the backend's linear row pitch
-         * (`linear_row_align`: the chain's one pitch, level 0's aligned) */
-        let wider = (t.pot_chain || crate::backend::linear_row_align() != 0)
+         * (`linear_row_align`: the chain's one pitch, level 0's aligned),
+         * and a level of a chain held at level 0's pitch
+         * (`mip_level_align`, the GC7000UL's `chain_pitch`) that the
+         * texture defines: a level past its chain stays incomplete */
+        let one_pitch = crate::backend::mip_level_align() != 0
+            && t.chain_pitch != 0
+            && (u32::from(t.level_defined) >> a.level) & 1 != 0;
+        let wider = (t.pot_chain || crate::backend::linear_row_align() != 0 || one_pitch)
             && pitch > tex_pitch(lw)
             && pitch.is_multiple_of(2);
         if lh > 1 && pitch != tex_pitch(lw) && !wider {
@@ -1221,10 +1227,11 @@ fn attachment_loc(c: &GlContext, n: u8) -> Option<(MemLoc, u32, u32, u32)> {
 /// power-of-two one (`GlTexture::pot_chain`; the level a target `tw` wide
 /// can be, `attachment_storage`), a texture level or a renderbuffer laid
 /// out at the backend's linear row pitch (`YakoglBackend::linear_row_align`,
-/// [`context::linear_pitch`]), else the pair-padded `tex_pitch(tw)` every
-/// other GL-core storage uses.
+/// [`context::linear_pitch`]) or a texture level of a chain held at level
+/// 0's pitch (`YakoglBackend::mip_level_align`, `GlTexture::chain_pitch`),
+/// else the pair-padded `tex_pitch(tw)` every other GL-core storage uses.
 pub(super) fn loc_pitch(c: &GlContext, loc: MemLoc, tw: u32) -> u32 {
-    let aligned = crate::backend::linear_row_align() != 0;
+    let aligned = crate::backend::linear_row_align() != 0 || crate::backend::mip_level_align() != 0;
     match loc {
         MemLoc::DefaultSurface => c.default_pitch_px(),
         MemLoc::Texture(i) if c.objs_ref().textures[i].grid_cols > 1 => {
