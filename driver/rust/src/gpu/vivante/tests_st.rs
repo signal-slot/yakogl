@@ -40,7 +40,7 @@ struct Carveout(Vec<u64>);
 
 /// The ST row's identity registers on top of the i.MX8MP's scenario (the
 /// feature words and the build date are not part of the row).
-fn poke_st_identity(m: &Model) {
+pub(super) fn poke_st_identity(m: &Model) {
     for (off, v) in [
         (0x18, 0x8000_6205),
         (0x20, 0x8000),

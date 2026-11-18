@@ -308,8 +308,10 @@ pub const FSCALE_FULL: u32 = 64;
 ///   `gckHARDWARE_InitializeHardware` writes as 0x2 alone (no read first, so
 ///   bit 0 is cleared there too); bit 3 / bit 4 the cancel-job request
 ///   and its done flag (`gckHARDWARE_CancelJob`); bit 5 the VGPU reset done.
-///   [`reset`] does not write bit 0 back to 0 and [`init`] preserves it: a
-///   1 here is the state galcore clears that we do not.
+///   By default [`reset`] does not write bit 0 back to 0 and [`init`]
+///   preserves it: a 1 here is the state galcore clears that we do not.
+///   With [`HwOptions::ahb_reset_release`] on, both lines read back what
+///   galcore leaves: bit 0 clear.
 /// - 0x10C PM_PULSE_EATER (the "shader clock" of `_PmClockControl`):
 ///   `_ResetGPU` writes it three times, `gckHARDWARE_InitializeHardware`
 ///   writes it ("Disable internal DFS"); galcore reads no neighbouring
@@ -323,6 +325,36 @@ const _: () = {
         i += 1;
     }
 };
+
+/// Opt-ins of [`reset_with`] and [`init_with`] where galcore's sequence and
+/// the one every board has run differ. All off by default: [`reset`] and
+/// [`init`] are `reset_with` / `init_with` with `HwOptions::default()`, and
+/// write exactly what they wrote before the options existed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HwOptions {
+    /// galcore 6.4.21's secure-AHB soft reset (gcnano-driver-stm32mp,
+    /// hal/kernel/arch/gc_hal_kernel_hardware.c): `_ResetGPU` sets
+    /// MMUv2_AHB_CONTROL (0x3A8) = 0x1 ("Set soft reset") and writes it
+    /// straight back to 0x0 ("Release soft reset") before its "Wait for
+    /// reset" delay and the de-isolate; `gckHARDWARE_InitializeHardware`
+    /// writes 0x3A8 = 0x2 (the non-secure grant) with no read first, so bit
+    /// 0 is cleared there too. Both only on a part with the secure AHB in
+    /// "secure in normal" mode, which here is [`GcIdentity::secure_ahb`] for
+    /// the reset; [`init`] writes the grant on every part, and so does this.
+    ///
+    /// On: [`reset_with`] writes 0x3A8 = 0x0 right after its 0x3A8 = 0x1,
+    /// before the hold; [`init_with`] writes 0x3A8 = 0x2 in place of the
+    /// read value | 0x2 (the read and its absent-pattern warning stay).
+    /// Nothing else changes. Off: 0x3A8 bit 0 stays as the reset left it.
+    /// galcore-init-diff's suspect 1 for the STM32MP257F's first fence.
+    ///
+    /// From C: `yd_gc_ahb_reset_release(true)` (ffi/vivante.rs) before the
+    /// device's reset, i.e. in the board layer's `gc_board_power_on`
+    /// (driver/zephyr/lib/board/stm32mp2/gc_power_mp2.c) for the
+    /// STM32MP257F-DK alone. It holds for every later `yd_gc_reset` and
+    /// `yd_gc_hw_init`, recovery resets included.
+    pub ahb_reset_release: bool,
+}
 
 /// The `gc diag: after-reset` / `after-init` line (see [`DIAG_REGS`]).
 fn diag_readback(m: &impl Mmio, regs: usize, env: &impl Env, stage: &str) {
@@ -349,10 +381,21 @@ fn diag_readback(m: &impl Mmio, regs: usize, env: &impl Env, stage: &str) {
 /// and DISABLE_DEBUG_REGISTERS), every module must be idle (galcore checks
 /// FE only), one clean pass suffices (galcore wants two) and the waits are
 /// RESET_HOLD_US / RESET_RETRY_US. That is the sequence that has reset
-/// this GPU on every board run.
+/// this GPU on every board run. galcore also writes the secure-AHB soft
+/// reset back to 0 before its wait; that is the opt-in
+/// [`HwOptions::ahb_reset_release`] of [`reset_with`].
 pub fn reset(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity) -> Result<(), i32> {
+    reset_with(m, regs, env, id, HwOptions::default())
+}
+
+/// [`reset`] with the opt-ins of `opts` ([`HwOptions`]).
+pub fn reset_with(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity, opts: HwOptions) -> Result<(), i32> {
     let idle_mask = !VIVS_HI_IDLE_STATE_AXI_LP;
     let mmu_v2 = id.minor_features[1] & CHIP_MINOR_FEATURES1_MMU_VERSION != 0;
+    let ahb_release = opts.ahb_reset_release && id.secure_ahb;
+    if ahb_release {
+        ylog!(env, Inf, "reset: AHB soft reset released as galcore does (0x3a8 = 0x1 then 0x0; opt-in)");
+    }
     for attempt in 0..RESET_ATTEMPTS {
         // 1. clock gating off, pulse eater
         wr(m, regs, VIVS_PM_POWER_CONTROLS, 0);
@@ -373,6 +416,10 @@ pub fn reset(m: &impl Mmio, regs: usize, env: &impl Env, id: &GcIdentity) -> Res
         wr(m, regs, VIVS_HI_CLOCK_CONTROL, control);
         if id.secure_ahb {
             wr(m, regs, VIVS_MMUv2_AHB_CONTROL, VIVS_MMUv2_AHB_CONTROL_RESET);
+            if ahb_release {
+                // galcore's "Release soft reset", before its wait.
+                wr(m, regs, VIVS_MMUv2_AHB_CONTROL, 0);
+            }
         } else {
             control |= VIVS_HI_CLOCK_CONTROL_SOFT_RESET;
             wr(m, regs, VIVS_HI_CLOCK_CONTROL, control);
@@ -446,6 +493,11 @@ fn wr_sync(m: &impl Mmio, regs: usize, off: u32, v: u32) {
 /// (it clears bit 16 and sets bit 17 instead). This is the init every board
 /// run since 2026-09-20 has used.
 pub fn init(m: &impl Mmio, regs: usize, env: &impl Env) {
+    init_with(m, regs, env, HwOptions::default())
+}
+
+/// [`init`] with the opt-ins of `opts` ([`HwOptions`]).
+pub fn init_with(m: &impl Mmio, regs: usize, env: &impl Env, opts: HwOptions) {
     // Module-level clock gating on, the rasteriser's HZ and EZ gating
     // disabled.
     let ppc = rd(m, regs, VIVS_PM_POWER_CONTROLS) | VIVS_PM_POWER_CONTROLS_ENABLE_MODULE_CLOCK_GATING;
@@ -475,6 +527,10 @@ pub fn init(m: &impl Mmio, regs: usize, env: &impl Env) {
             VIVS_MMUv2_AHB_CONTROL,
             ahb
         );
+        ahb = 0;
+    }
+    if opts.ahb_reset_release {
+        // galcore writes the grant alone, which clears the soft reset bit.
         ahb = 0;
     }
     wr(m, regs, VIVS_MMUv2_AHB_CONTROL, ahb | VIVS_MMUv2_AHB_CONTROL_NONSEC_ACCESS);

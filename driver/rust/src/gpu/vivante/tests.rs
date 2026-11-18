@@ -916,3 +916,172 @@ fn the_pta_stream_is_one_load_state_and_an_end() {
     assert_eq!(co.word(OFF_MMU_CMD), 0x0801_006b);
     assert_eq!(co.word(OFF_MMU_CMD + 8), regs::VIV_FE_END_HEADER_OP_END);
 }
+
+/// The model with MMUv2_AHB_CONTROL (0x3A8) as a live register, which the
+/// STM32MP257F's is (the i.MX8MP's reads the absent pattern, as the model
+/// does): writes stick and reads return them. Every GC access is recorded
+/// with the busy wait so far, so a test can see where the hold falls.
+struct LiveAhb<'a> {
+    m: &'a Model,
+    e: &'a TestEnv,
+    ahb: core::cell::Cell<u32>,
+    log: core::cell::RefCell<Vec<(u8, u32, u32, u64)>>,
+}
+
+impl<'a> LiveAhb<'a> {
+    fn new(m: &'a Model, e: &'a TestEnv, ahb: u32) -> LiveAhb<'a> {
+        LiveAhb { m, e, ahb: core::cell::Cell::new(ahb), log: Default::default() }
+    }
+    fn off(&self, addr: usize) -> u32 {
+        (addr - self.m.base(GC)) as u32
+    }
+    /// The accesses without the waits, as `gc_trace` spells them.
+    fn trace(&self) -> Trace {
+        self.log.borrow().iter().map(|a| (a.0, a.1, a.2)).collect()
+    }
+    fn writes(&self) -> Trace {
+        self.trace().into_iter().filter(|a| a.0 == b'W').collect()
+    }
+    fn clear(&self) {
+        self.log.borrow_mut().clear();
+        self.e.lines.borrow_mut().clear();
+    }
+}
+
+impl crate::mmio::Mmio for LiveAhb<'_> {
+    fn read32(&self, addr: usize) -> u32 {
+        let off = self.off(addr);
+        let v = if off == regs::VIVS_MMUv2_AHB_CONTROL { self.ahb.get() } else { self.m.read32(addr) };
+        self.log.borrow_mut().push((b'R', off, v, *self.e.waited_us.borrow()));
+        v
+    }
+    fn write32(&self, addr: usize, val: u32) {
+        let off = self.off(addr);
+        if off == regs::VIVS_MMUv2_AHB_CONTROL {
+            self.ahb.set(val);
+        } else {
+            self.m.write32(addr, val);
+        }
+        self.log.borrow_mut().push((b'W', off, val, *self.e.waited_us.borrow()));
+    }
+    fn read8(&self, _addr: usize) -> u8 {
+        unreachable!("the GC block is read by words")
+    }
+    fn write8(&self, _addr: usize, _val: u8) {
+        unreachable!("the GC block is written by words")
+    }
+}
+
+/// The opt-in, off: `reset_with` / `init_with` with `HwOptions::default()`
+/// are `reset` / `init`, which the C's record pins, on the i.MX8MP's row and
+/// on the STM32MP257F's.
+#[test]
+fn with_the_ahb_release_off_reset_and_init_write_what_they_always_did() {
+    assert_eq!(hw::HwOptions::default(), hw::HwOptions { ahb_reset_release: false });
+    for st in [false, true] {
+        let m = Model::new();
+        let e = TestEnv::default();
+        if st {
+            super::tests_st::poke_st_identity(&m);
+        } else {
+            poke_identity(&m);
+        }
+        let regs = m.base(GC);
+        let id = hw::identify(&m, regs, &e).unwrap();
+        assert_eq!(id.model, if st { 0x8000 } else { 0x7000 });
+        assert!(id.secure_ahb && id.from_table);
+        m.clear_log();
+        hw::reset_with(&m, regs, &e, &id, hw::HwOptions::default()).unwrap();
+        assert_eq!(without_diag(&gc_trace(&m)), golden::RESET, "st {st}: the reset as the C");
+        m.clear_log();
+        hw::init_with(&m, regs, &e, hw::HwOptions::default());
+        assert_eq!(without_diag(&gc_trace(&m)), golden::HW_INIT, "st {st}: the init as the C");
+        assert!(!e.lines.borrow().iter().any(|l| l.1.contains("opt-in")));
+    }
+}
+
+/// The opt-in, on, with a live 0x3A8 (the ST row): galcore's
+/// `_ResetGPU` ("Set soft reset" 0x1, "Release soft reset" 0x0, then "Wait
+/// for reset", then the de-isolate) and `gckHARDWARE_InitializeHardware`
+/// (0x3A8 = 0x2). Every other write is the default's, in its order, and the
+/// diag lines read back bit 0 clear where the default leaves it set.
+#[test]
+fn with_the_ahb_release_on_0x3a8_is_released_in_galcore_order() {
+    let on = hw::HwOptions { ahb_reset_release: true };
+    let m = Model::new();
+    let e = TestEnv::default();
+    super::tests_st::poke_st_identity(&m);
+    let regs = m.base(GC);
+    let id = hw::identify(&m, regs, &e).unwrap();
+
+    // the default over the same live register: bit 0 stays set
+    let off = LiveAhb::new(&m, &e, 0);
+    off.clear();
+    hw::reset(&off, regs, &e, &id).unwrap();
+    let reset_off = off.writes();
+    hw::init(&off, regs, &e);
+    let init_off: Trace = off.writes()[reset_off.len()..].to_vec();
+    assert_eq!(
+        diag_lines(&e)[1..],
+        ["gc diag: after-reset 3a8=0x00000001 10c=0x015b0881", "gc diag: after-init 3a8=0x00000003 10c=0x015f0881"]
+    );
+
+    let live = LiveAhb::new(&m, &e, 0);
+    live.clear();
+    let w0 = *e.waited_us.borrow();
+    hw::reset_with(&live, regs, &e, &id, on).unwrap();
+    let mut want = reset_off.clone();
+    let set = want.iter().position(|a| *a == (b'W', 0x3a8, 0x1)).unwrap();
+    want.insert(set + 1, (b'W', 0x3a8, 0x0));
+    assert_eq!(live.writes(), want, "the release right after the set, nothing else");
+    // set and release with no wait between them; the hold comes after,
+    // before the soft-reset clear and the de-isolate of CLOCK_CONTROL
+    let log = live.log.borrow().clone();
+    let at = |i: usize| (log[i].0, log[i].1, log[i].2);
+    let set = log.iter().position(|a| (a.0, a.1, a.2) == (b'W', 0x3a8, 0x1)).unwrap();
+    assert_eq!(at(set + 1), (b'W', 0x3a8, 0x0));
+    assert_eq!((log[set].3, log[set + 1].3), (w0, w0));
+    assert_eq!(at(set + 2), (b'W', 0x000, 0x0008_0100));
+    assert_eq!(log[set + 2].3, w0 + u64::from(hw::RESET_HOLD_US));
+    assert_eq!(at(set + 3), (b'W', 0x000, 0x0000_0100));
+    assert!(log[set + 2..].iter().all(|a| a.0 == b'R' || a.1 != 0x3a8), "no other 0x3A8 write in the reset");
+    let lines = e.lines.borrow().clone();
+    assert!(lines.iter().any(|l| l.0 == Level::Inf && l.1.contains("0x3a8 = 0x1 then 0x0; opt-in")));
+    assert!(lines.iter().any(|l| l.1 == "gc diag: after-reset 3a8=0x00000000 10c=0x015b0881"), "{lines:?}");
+
+    live.clear();
+    hw::init_with(&live, regs, &e, on);
+    let want: Trace =
+        init_off.iter().map(|&a| if a.0 == b'W' && a.1 == 0x3a8 { (b'W', 0x3a8, 0x2) } else { a }).collect();
+    assert_eq!(init_off.iter().filter(|a| a.1 == 0x3a8).count(), 1);
+    assert_eq!(live.writes(), want, "0x3A8 = 0x2 where the grant was written, nothing else");
+    assert_eq!(diag_lines(&e), ["gc diag: after-init 3a8=0x00000002 10c=0x015f0881"], "bit 0 clear");
+    assert!(live.trace().iter().all(|a| a.1 < 0x800), "no access at 0x800 or above");
+}
+
+/// The opt-in on the i.MX8MP's row (0x3A8 absent): the reset gains the one
+/// release write after the set, and the init is unchanged, since it already
+/// writes the grant alone over the absent pattern. A part without the secure
+/// AHB never writes 0x3A8 in its reset, opt-in or not.
+#[test]
+fn with_the_ahb_release_on_the_imx8mp_row_gains_only_the_release() {
+    let on = hw::HwOptions { ahb_reset_release: true };
+    let m = Model::new();
+    let e = TestEnv::default();
+    poke_identity(&m);
+    let regs = m.base(GC);
+    let id = hw::identify(&m, regs, &e).unwrap();
+    m.clear_log();
+    hw::reset_with(&m, regs, &e, &id, on).unwrap();
+    let mut want = golden::RESET.to_vec();
+    let set = want.iter().position(|a| *a == (b'W', 0x3a8, 0x1)).unwrap();
+    want.insert(set + 1, (b'W', 0x3a8, 0x0));
+    assert_eq!(without_diag(&gc_trace(&m)), want);
+    m.clear_log();
+    hw::init_with(&m, regs, &e, on);
+    assert_eq!(without_diag(&gc_trace(&m)), golden::HW_INIT);
+
+    let m = Model::new();
+    hw::reset_with(&m, m.base(GC), &e, &GcIdentity::default(), on).unwrap();
+    assert!(!m.writes().iter().any(|x| x.1 == regs::VIVS_MMUv2_AHB_CONTROL));
+}
