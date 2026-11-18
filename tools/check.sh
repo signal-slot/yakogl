@@ -187,6 +187,10 @@ scope_of_path() {
   # the slices under tools/cts/log/; the row that compares the two (ctsdoc) is
   # reached by an edit of the document alone, and no other tools row is.
   docs/es2-cts-failures.md) echo "docs ctsdoc" ;;
+  # The i.MX8MP glmark2 by-eye note's verdict table (the 33 verdicts) is linted
+  # by tools/cts/imx8mp-glmark2-verdicts.py; the row that lints it (gmverdicts)
+  # is reached by an edit of the document alone, and no other tools row is.
+  docs/notes/imx8mp-glmark2-pictures-by-eye.md) echo "docs gmverdicts" ;;
   docs/* | */*.md | *.md | website/* | NOTICE | LICENSE* | .github/* | records/* | .gitignore | .ccfarm/*) echo docs ;;
   tools/precompile/* | tools/shaders/*) echo precompile ;;
   # a precompile fixture is read by the tables' rows and by the tests that name it
@@ -3258,6 +3262,21 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # the image .config check, the tallies, the GLES3 tables, and check 20:
   # images-selftest.sh, the image builders against a fake west). Host only.
   step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" no_board_env tools/cts/cts-selftest.sh
+  # tools/cts/imx8mp-glmark2-dumps.sh --self-test: the i.MX8MP glmark2 frame-
+  # dump image builder against stubs and fixture logs: the 33 scenes, selection
+  # by label, number and -b argument, the watchdog arm and frame-dump flags in
+  # the build line, the UART-console overlay, the escaped effect2d `;`, a board.sh
+  # run line with no address, and the dump decode (a damaged dump: exit 1 and a
+  # .damaged.png, never a PNG under the record's name). Host only.
+  step "tools   imx8mp-glmark2-dumps.sh --self-test (i.MX8MP glmark2 frame-dump image builder, dry run)" no_board_env bash tools/cts/imx8mp-glmark2-dumps.sh --self-test
+  # tools/cts/imx8mp-glmark2-verdicts.py lints the verdict table of the by-eye
+  # note (docs/notes/imx8mp-glmark2-pictures-by-eye.md): 33 scenes, record path,
+  # commit, verdict word, dump-versus-photograph shape; its self-test runs the
+  # checker on tools/cts/testdata/imx8mp-glmark2-verdicts/. An edit of the note
+  # alone reaches this row too (scope gmverdicts, scope_of_path). Host only.
+  scope tools gmverdicts
+  step "tools   imx8mp-glmark2-verdicts-selftest.sh (the i.MX8MP glmark2 by-eye verdict table lint)" no_board_env bash tools/cts/imx8mp-glmark2-verdicts-selftest.sh
+  scope tools
   # The NanoPC-T6's dEQP-GLES2 runner, tools/cts/mali-deqp-run.sh, against a
   # fake board (ssh, scp and deqp-gles2 stubs: a clean run, a crash with
   # resume, a hang, a panthor reset, lost ssh, --dry-run without ssh, the hold

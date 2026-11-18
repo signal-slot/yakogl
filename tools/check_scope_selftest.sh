@@ -138,6 +138,8 @@ want website/index.html docs
 want README.md docs
 want docs/notes/x.md docs
 want docs/es2-cts-failures.md "docs ctsdoc"
+# the i.MX8MP glmark2 by-eye note reaches the verdict-table lint and nothing else
+want docs/notes/imx8mp-glmark2-pictures-by-eye.md "docs gmverdicts"
 # the plan for a given change (YAKOGL_CHECK_PATHS stands in for the diff)
 # A stand-in west workspace, so the image rows are planned rather than gaps
 # (plan mode runs nothing, so the directory only has to exist).
