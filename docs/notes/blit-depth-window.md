@@ -48,7 +48,7 @@ is one D24S8 object for both planes, and the id changes with every back buffer
 a swap rebinds (three or four of them, `docs/notes/gc-tiled-window.md`). The
 colour blit already mirrors on the same fact: `Image::flip = !c.default_y_up`
 (`src/gl/blit.rs:154`). `ds_format(fb 0)` gives the window's depth image
-`target_w` x `target_h` (`blit.rs:340-349`).
+`target_w` x `target_h` (`blit.rs:339-349`).
 
 | Back end | The window's depth/stencil | Row 0 in memory | Evidence (read from the code, not measured) |
 | --- | --- | --- | --- |
@@ -86,14 +86,14 @@ No new handle is needed: the GL core builds the id itself. A helper beside
 ## Design: the window in `depth_source` and `copy_depth`
 
 1. `DepthSource::Window { id }` and `PlaneDst::Window { id, w, h }` beside the
-   renderbuffer variants (`src/gl/blit.rs:825-870`). `depth_source` returns the
+   renderbuffer variants (`src/gl/blit.rs:828-890`). `depth_source` returns the
    window variant for `r.att.type_ == GL_NONE` (the window's own `DsImage`), and
-   the destination match at `:1220-1228` does the same for `d`, gated like a
+   the destination match at `:1244-1260` does the same for `d`, gated like a
    renderbuffer by `backend::can_ds_write()`.
 2. The source plane is read as for a renderbuffer (`read_plane` into a zeroed
    scratch of `w * h` elements, pitch `w`), then, when `!c.default_y_up`, the
    rows of the scratch are reversed so that it is in GL order. The copy loop of
-   `copy_depth` (`:1024-1048`) then stays as it is: it indexes GL rows on both
+   `copy_depth` (`:1001-1080`) then stays as it is: it indexes GL rows on both
    sides.
 3. A window destination is read whole into its scratch, mirrored to GL order,
    written by the loop, mirrored back, and the cut rectangle written with
@@ -106,9 +106,9 @@ No new handle is needed: the GL core builds the id itself. A helper beside
    `REFUSED_DEPTH_SRC`; a plane that answers 1 ("holds nothing") is today's
    `rc == 1`: no error, the destination stays.
 5. Stencil through the window follows the same rules: the `rb_src`/`rb_dst`
-   helpers (`:1186-1197`) gain the window id, using `stencil_resolve` (the
+   helpers (`:1244-1258`) gain the window id, using `stencil_resolve` (the
    PowerVR today; the V3D and GC7000UL entries are the `v3d-ds-write` item and
-   its GC7000UL counterpart). The depth-format match at `:1170-1180` already
+   its GC7000UL counterpart). The depth-format match at `:1229-1236` already
    treats the window as D24S8.
 6. The mirror is the GL core's decision, not the back end's: all four back
    ends draw the window with `flip_y` and, as far as the code says, store it
@@ -224,11 +224,87 @@ belongs in the issue.
 
 ## Why this is not finished here
 
-Nothing above was run: the work had no board and the plan owns none. What
-remains: the four checks, then `DepthSource::Window` / `PlaneDst::Window` in
-`src/gl/blit.rs` with host tests in `tests/es3_blit_ds.rs` (its window case at
-`:855` asserts the refusal and changes with it), the `ds_write` and
-`stencil_resolve` entries of the V3D, GC7000UL and Mali, and a `YakoglBackend`
-flag only if a check disagrees with the design. The measurement counts of the
-dEQP-GLES3 cases that reach each refusal are added to this note by the
-`results` item.
+The window row order above is read from the code and no board has run the
+four checks (the work had no board and the plan owns none). What remains: the
+four checks, `DepthSource` from a cube face or an array layer and stencil
+to or from a texture (gl-ds-layers, behind gl-ds-layers-core), the
+`ds_write` and `stencil_resolve` entries of the GC7000UL and the Mali, and a
+`YakoglBackend` flag only if a check disagrees with the design. The window
+path (`DepthSource::Window`, `PlaneDst::Window`) and the V3D's `ds_write` and
+`stencil_resolve` are in the tree. How many dEQP-GLES3 cases reach each
+refusal is measured in the next section.
+
+## Which mustpass cases reach each refusal (HOST-ONLY, measured at `984a35e3`)
+
+HOST-ONLY: the library runs on the Linux OSAL, which keeps the command stream
+and never executes it, so this counts only the cases whose log carries a
+refusal line (an API verdict). It says nothing about a picture, a case's
+Pass or Fail, or whether a lifted blit would then match; a render verdict from
+this run must never be quoted (`tools/cts/README.md` 2b).
+
+**How.** `tools/cts/host-deqp-run.sh` (not edited), `MODULE=gles3 CHUNK=1`, so
+every chunk is one case and the refusal line in its own `c_NNN.out` belongs to
+that case, once per GPU (`GPU=powervr`, `GPU=v3d`, `GPU=vivante`). The CTS
+tree is VK-GL-CTS `93bca01` with `cts-yakogl-target.patch`'s three files and
+`external/fetch_sources.py`. Commit measured: `984a35e3`. The causes are the
+four log lines of `refuse_ds` (`src/gl/blit.rs:911-938`, said once per
+process), matched by their text: `REFUSED_STENCIL`, `REFUSED_DEPTH_DST`,
+`REFUSED_DEPTH_SRC`, `REFUSED_DS_UNHELD` (`:896-899`); the file defines no
+other `REFUSED_*`.
+
+**Case set run: 2,366 of the 42,810 mustpass cases**, every one began on every
+GPU. They are the groups the mustpass names reach `glBlitFramebuffer` in
+(`grep -i blit tools/cts/gles3-mustpass.txt`: `fbo.blit` 610, `fbo.color` 72,
+`fbo.invalidate` 16, `fragment_ops.scissor` 3, `negative_api.buffer` 2), taken
+whole: `dEQP-GLES3.functional.fbo.*` (2,028: api 20, blit 610, color 302,
+completeness 560, depth 15, invalidate 131, msaa 70, multiview 3, render 308,
+stencil 9), `negative_api.*` (312) and `fragment_ops.scissor*` (26). The
+other 40,444 cases were not run; none of their names mentions a blit. (The
+script's `split -a 3` allows 1,000 chunks, so `fbo.*` ran as ten sub-groups of
+at most 610 cases.)
+
+| Cause | PowerVR | V3D | GC7000UL (vivante) |
+| --- | ---: | ---: | ---: |
+| `REFUSED_DEPTH_SRC` (depth from a cube face, array layer, multisampled window, or a back end without `depth_resolve`) | 0 | 0 | **0** |
+| `REFUSED_DEPTH_DST` | 0 | 0 | 16 |
+| `REFUSED_STENCIL` | 0 | 0 | 12 |
+| `REFUSED_DS_UNHELD` | 0 | 0 | 0 |
+| distinct cases refused | 0 | 0 | 22 |
+
+Before (earlier agents' reports, not in the tree): GPU=vivante at `a1257a1d`:
+`REFUSED_DEPTH_DST` 16, `REFUSED_STENCIL` 12, `REFUSED_DEPTH_SRC` 0,
+`REFUSED_DS_UNHELD` 0, 22 distinct cases. GPU=powervr: only the six
+`fbo.invalidate.*.unbind_blit_*` cases, refused as window destinations. GPU=v3d
+after `v3d-ds-write`: 0 in `fbo.blit.*`, 6 in the invalidate window cases.
+
+**The difference, explained.** The GC7000UL is unchanged: 16, 12, 0, 0, the
+same 22 cases. The PowerVR and V3D went from 6 to 0: `gl-ds-window` lifted
+the window destination (`PlaneDst::Window`), and those six cases were exactly
+the window-destination ones, so no mustpass case reaches a refusal there now.
+Whether they pass the image compare is not known here (a host read-back is
+black).
+
+**GC7000UL, by name (22 distinct cases).**
+
+| Group | Cases | Causes |
+| --- | --- | --- |
+| `fbo.blit.depth_stencil`, renderbuffer to renderbuffer: `depth24_stencil8_{basic,scale}`, `depth32f_stencil8_{basic,scale}` | 4 | DEPTH_DST and STENCIL |
+| the same, `depth24_stencil8_depth_only`, `depth32f_stencil8_depth_only`, `depth_component{16,24,32f}_{basic,scale}` | 8 | DEPTH_DST |
+| the same, `depth24_stencil8_stencil_only`, `depth32f_stencil8_stencil_only`, `stencil_index8_{basic,scale}` | 4 | STENCIL |
+| `fbo.invalidate.{sub,whole}.unbind_blit_{color,depth,stencil}`, into the window | 6 | `_color`: DEPTH_DST and STENCIL; `_depth`: STENCIL; `_stencil`: DEPTH_DST |
+
+The first three rows are 16 renderbuffer-to-renderbuffer cases that lift with
+the GC7000UL's `ds_write` and `stencil_resolve` entries; the six window cases need them and
+the window path, which is in the tree. Of the 16 `REFUSED_DEPTH_DST` cases 4
+are window blits and 12 renderbuffer blits; of the 12 `REFUSED_STENCIL` cases
+4 are window blits and 8 renderbuffer blits.
+
+**What the counts say about the three source cases.** `REFUSED_DEPTH_SRC` is
+0 on all three back ends, and no case that ran blits depth out of a cube face,
+an array layer or a stencil into or out of a texture (no `REFUSED_*` line names
+them; the six `fbo.api` cube-face depth attachments only attach). The
+gl-ds-layers lift (depth from a cube face or array layer, stencil through a
+texture) is GL-completeness work the mustpass does not reach. The Mali has no
+host dEQP back end (`GPU=` takes vivante, powervr and v3d), so it has no
+count; its table has `depth_resolve` only, like the GC7000UL's, so the same
+blits would be refused there.
