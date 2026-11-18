@@ -22,19 +22,17 @@
 mod mali_ref;
 
 #[test]
-#[ignore = "refused: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it), lowered by lower-misc"]
 fn misc_cmp_fne_hp() {
     mali_ref::assert_matches("deqp_misc_cmp_fne_hp");
 }
 
 #[test]
-#[ignore = "refused: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it), lowered by lower-misc"]
 fn misc_cmp_ine0_hp() {
     mali_ref::assert_matches("deqp_misc_cmp_ine0_hp");
 }
 
 #[test]
-#[ignore = "refused: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it), lowered by lower-misc"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) (the bool uniform read as its own mask, not lowered)"]
 fn misc_cmp_notequal_vec2() {
     mali_ref::assert_matches("deqp_misc_cmp_notequal_vec2");
 }
@@ -89,9 +87,7 @@ fn misc_spill_mediump_mat4_mat4() {
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_misc_cmp_fne_hp", "a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it)"),
-    ("deqp_misc_cmp_ine0_hp", "a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it)"),
-    ("deqp_misc_cmp_notequal_vec2", "a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it)"),
+    ("deqp_misc_cmp_notequal_vec2", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("deqp_misc_constmat_mat2_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat2_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),

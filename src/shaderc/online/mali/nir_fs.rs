@@ -3080,9 +3080,11 @@ impl<'s> Fs<'s> {
                 }
                 _ => self.op32(Alu::Ffma, [x, y, z], at),
             },
-            /* `!=`: no reference that compiles draws it (intuni_sharedint's
-             * `mode != 0` waits for its `sin` and its vertex `if`) */
-            AluOp::Fne | AluOp::Ine => Err(MaliError::CompareForm),
+            /* `!=`: `fneu_pan`/`ine_pan`, the operands in order as `Feq`/`Ieq`,
+             * `FCMP_OR.f32.ne.m1` and `ICMP_OR.u32.ne.m1`
+             * (deqp_misc_cmp_fne_hp, deqp_misc_cmp_ine0_hp) */
+            AluOp::Fne => self.op32(Alu::Fcmp(Cmpf::Ne), [x, y, u], at),
+            AluOp::Ine => self.op32(Alu::Icmp(Cmpf::Ne), [x, y, u], at),
             /* `inot` of a compare used once is the inverse compare
              * (nir_opt_algebraic.py: `inot(flt(a, b))` is `fge(a, b)`):
              * `step(e, x)`'s `!(x < e)` is `fge_pan x, e`, `FCMP_OR.f32.ge.m1`
@@ -7386,6 +7388,10 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         f.sizes[k].index = (0..b).filter(|&x| read_sampler(f, x)).count() as u8;
     }
     let decls = m.inputs.iter().filter(|d| d.kind == IoKind::Varying && read.get(d.location as usize) > Some(&0));
+    /* a declared varying the colour reads no lane of: Mesa's link removes
+     * it from the vertex shader too (deqp_misc_cmp_ine0_hp keeps no
+     * varying program), so the vertex shader is built for the reads */
+    f.compacted |= m.inputs.iter().any(|d| d.kind == IoKind::Varying && read.get(d.location as usize) == Some(&0));
     for d in decls.clone() {
         /* a `flat` one is loaded `.src_flat32` (intbool_89_flatlast) */
         if d.interp != ir::INTERP_SMOOTH && d.interp != ir::INTERP_FLAT {
