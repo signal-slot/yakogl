@@ -220,7 +220,9 @@ vertex walk accepts, and each is accepted only against a Mesa reference:
    `fadd` of a constant (`mod(id, 2.0) - 0.5` is `ffma(-2.0, floor, id -
    0.5)`), byte-equal to `vsfma_221_instmix.expect.json` (`nir.rs`
    `vs_fmod`, `vs_fadd`). A `mod` of a value `y` stays refused (no
-   reference).
+   reference). *Since plan #367: `mod` of a value, `mix`, `smoothstep` and
+   `reflect` are lowered against the gm2_fma references; see "glmark2's
+   built-in multiply-adds" below.*
 3. **Order and the shared-product rule**: the late fusion only fuses a product
    `only_used_by_fadd` (`nir.rs`, see `mali-vs-alu-ops.md`: a product with
    four uses is a single `FMA.f32 .., 0x0.neg` and its users are separate).
@@ -284,3 +286,73 @@ After the `ffma` the next refusals of the same shaders are other families:
   not permitted), `docs/README.md`'s line for this note (outside the item).
 - `nir.rs` and `tests.rs` are owned by `vs-cmp-clamp` while it runs: start the
   lowering after it merges.
+
+## glmark2's built-in multiply-adds (plan #367, lower-vs-arith)
+
+The references `tools/mali/testdata/gm2_fma_1..8` (Mesa 26.2.1 on
+drm-shim, drawn without `--uniform-values`, each with a pass-through
+fragment shader) cut the vertex `ffma` shapes of glmark2's ideas and
+jellyfish 08a2; `tests/mali_vs_fma.rs` compares them byte for byte through
+glCompileShader and glLinkProgram (`tests/mali_ref/mod.rs`).
+
+| Reference | Shape | Ours |
+|---|---|---|
+| `gm2_fma_1` | ideas: `projection * modelview * vec4(vertex, 1.0)` | byte-equal (lowered before this item) |
+| `gm2_fma_2` | ideas text: the same of `vec4(vertex.xy, 0.0, 1.0)` | byte-equal (lowered before this item) |
+| `gm2_fma_3` | `vec4(smoothstep(0.0, 1.0, k))` of a uniform | the walk takes it; refused at the varying link (`two varying lanes of equal value`) |
+| `gm2_fma_4` | jellyfish's `offset` and `(1.0 - offset)` | compiles; differs in the order of two FAU constants only (below) |
+| `gm2_fma_5` | `smoothstep(e0, e1, x)` of uniform edges on a vec4 | byte-equal |
+| `gm2_fma_6` | `vec4(mod(k, t))` of two uniforms | the walk takes it; refused at the varying link, as case 3 |
+| `gm2_fma_7` | `mix(aP, aC, k)` | byte-equal |
+| `gm2_fma_8` | `reflect(aI, aN)` | byte-equal |
+
+The front end's forms (`builtin_call.rs`) and what the walk makes of them
+(`src/shaderc/online/mali/nir.rs`):
+
+- **`mix(a, b, t)`** is `ffma(t, fadd(b, fneg(a)), a)`, which is Mesa's
+  `lower_flrp` result after the late fusion: every lane's `FADD.f32 d, b,
+  a.neg`, then every lane's `FMA.f32 r, t, d, a` (`is_mix`).
+- **`smoothstep(e0, e1, x)`**: the front end's `3.0 - 2.0 * t` is
+  `ffma(-2.0, t, 3.0)`, `FMA.f32 r, 0x40000000.neg, t, 3.0` with 3.0 a FAU
+  word (`is_smoothstep_inner`); its last product `(t * t) * inner` is
+  Mesa's `t * (t * inner)` (Mesa's `_smoothstep` writes it so, as the
+  fragment walk does: `vs_smoothstep_tail`). The saturate rides on the
+  product (`FMA.f32.clamp_0_1`, or `FADD.f32.clamp_0_1 x, 0x0.neg` when the
+  edges are 0 and 1), from the existing clamp rules.
+- **`reflect(I, N)`** is `ffma(fmul(dot(N, I), -2.0), N, I)`: the dot from
+  the `w` lane down, `-2.0 * d` Mesa's `fneg(fadd(d, d))` (`FADD.f32 r4,
+  r4^, r4^`), the `fneg` the `.neg` of each lane's `FMA.f32 r, r4.neg, N,
+  I` (`is_reflect`). `N` and `I` must be no constants: `reflect(p,
+  vec4(0.0))`'s dot folds, which no reference draws, so it stays refused
+  (`tests.rs`' gap list keeps it as the `FusedMultiplyAdd` case).
+- **`mod(x, y)` of a value** is case 221's `vs_fmod` with any `y`
+  (`is_fmod`): `FRCP.f32`, the product, `FROUND.f32.rtn`, `FMA.f32 r,
+  y.neg, floor, x`.
+
+Cases 3 and 6 write `vec4(<one scalar of uniforms>)`: the four equal
+lanes of a uniform-only value are the varying-link family, which this item
+does not touch. Their vertex arithmetic was checked against pan_shc (Mesa's
+compiler; its regions equal the references in both cases) on two variants
+of attributes that the walk compiles, `mod(x, t)` of a vec4 attribute and
+`vec4(smoothstep(0.0, 1.0, x.x), mix(x.y, k, x.z), x.w, 1.0)`: every
+instruction of both varying programs equal (scratch files, not committed).
+
+**gm2_fma_4** differs from its reference in the FAU only: Mesa pushes
+`1.0 / 12.0` (`0x3daaaaab`) before `3.0`, ours `3.0` first, so the four
+instructions reading them name `u6.w1` and `u7.w0` the other way round.
+Mesa's GLSL front end grafts `offset` (assigned once, read once:
+`opt_tree_grafting`) into `pos = .. + aCol / 12.0 * k * (1.0 - offset)`,
+so its `t * (t * (3.0 - 2.0 * t))` comes after `aCol / 12.0` in NIR order;
+the constants are numbered in that order (`fau::lower_constants`, before
+the scheduler). The vertex walk takes the IR in statement order, as
+pan_shc's SPIR-V path does (pan_shc's FAU is ours). The test
+`gm2_fma_4_differs_only_in_the_grafted_constant_order` pins exactly that
+difference; it closes with a vertex model of the grafting order (the
+fragment walk has one, `nir_fs.rs` `order_keys`).
+
+The corpus effect (`tests/fixtures/mali_glmark2_verdicts.txt`): ideas'
+products were `ok` before; jellyfish `vs 08a2` moves past the FMA refusal to
+`a constant product in a shape Mesa's algebraic rules move or fold`
+(likely `uCurrentTime / 15.0 * 15.0`, the ARITH_CONST family). No scene
+changes; `tools/mali/corpus-verdicts.txt` does not move. `tests.rs`' gap
+list loses its `mod(p.x, p.y)` case, which compiles now.

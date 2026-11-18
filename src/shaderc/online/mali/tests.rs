@@ -1157,8 +1157,8 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (0..33).map(|i| format!("vec4 a{i} = {}; ", if i == 0 { "p".into() } else { format!("a{}", i - 1) })).collect();
     let varyings: String = (0..17).map(|i| format!("varying float v{i}; ")).collect();
     let mut v: Vec<(u32, String, MaliError)> = [
-        /* `abs` and `fract` are taken; `sqrt` is not */
-        (VS, "attribute vec4 p; void main(){ gl_Position = sqrt(p); }", MaliError::Arithmetic),
+        /* `abs`, `fract` and `sqrt` are taken; `exp2` is not */
+        (VS, "attribute vec4 p; void main(){ gl_Position = exp2(p); }", MaliError::Arithmetic),
         /* a constant times a product with a constant across a change of
          * width: GLSL's reassociate_constant moves it (glsl.rs), which is
          * not transcribed for a vector times a scalar product */
@@ -1184,9 +1184,6 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
-        /* mod(x, y) of a value y: no reference draws it (a constant y is
-         * case 221's, case_221_instmix_is_byte_equal_to_mesa_26_2_1) */
-        (VS, "attribute vec4 p; void main(){ gl_Position = vec4(mod(p.x, p.y)); }", MaliError::FusedMultiplyAdd),
         (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p; }", MaliError::Invariant),
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
@@ -2849,12 +2846,16 @@ fn a_vertex_fract_and_inversesqrt_are_byte_equal_to_mesa_26_2_1() {
     check_linked(td!("vsarith_vrcp.vert"), td!("vsarith_vrcp.frag"), td!("vsarith_vrcp.expect.json"));
 }
 
-/// `sqrt` stays refused: its reference, vsarith_length (`FRSQ.f32` then
-/// `FRCP.f32`), stores `vec4(length(a.xyz))`, four equal varying lanes
-/// that Mesa's link merges into one, which this walk refuses first.
+/// `sqrt` is `frcp(frsq(a))` (`lower_fsqrt`): vsarith_length's vertex
+/// programs, `FRSQ.f32` then `FRCP.f32` and the four equal varying lanes
+/// of `vec4(length(a.xyz))` one stored lane, are Mesa's. Its fragment
+/// program, which reads that one lane for all four, is not compared: its
+/// `ATEST` reads `r0.h1` where the reference reads `r0.h0`.
 #[test]
-fn a_vertex_sqrt_is_refused() {
-    assert_eq!(gap(SHC_STAGE_VERTEX, td!("vsarith_length.vert")), MaliError::Arithmetic);
+fn a_vertex_sqrt_is_byte_equal_to_mesa_26_2_1() {
+    let (vs, fs) = (td!("vsarith_length.vert"), td!("vsarith_length.frag"));
+    let (v, _) = compile_linked(vs, fs);
+    check_vs_stage(&v, vs, fs, td!("vsarith_length.expect.json"), VIEWPORT_64X64);
 }
 
 /* ---- the vertex fused multiply-add outside a uniform matrix's term
