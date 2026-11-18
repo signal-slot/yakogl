@@ -3283,7 +3283,7 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # meets it: every added or changed file is a tracked file the audit reads.
   scope licence
   step "tools   licence audit (SPDX header or allowlist row for every tracked file)" \
-    python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license
+    python3 -I tools/license_audit.py --fail-on missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license,undecided
   # The redaction scan (docs/release/checklist.md line 8): its self-test, then
   # the public classes over HEAD. Exit 3 (private classes not run) and 0 pass;
   # exit 1 (an H/M finding) and 2 (the scan could not run) fail the row.
