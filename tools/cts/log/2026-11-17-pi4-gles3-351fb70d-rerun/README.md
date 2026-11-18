@@ -69,6 +69,29 @@ refusals, no `yakogl` refusal line and no `GL_INVALID_*` in the logs. So
 **35 images to rerun** (9,107 mustpass cases), FB2 added with 16 fixed and 0
 still. The FB2 row below is the 351fb70d one.
 
+### Since dc740b98: main `e6d22172` (read from the commits, not host-run)
+
+No dEQP build was available on the worker that wrote this paragraph, so it is
+read from `git log dc740b98..e6d22172`, not measured. Re-run
+`host-deqp-run.sh --gpu=v3d --module=gles3` on the named filters before relying
+on it.
+
+- 080240bc (`src/v3d/backend.rs`): a unit only `textureSize` reads no longer takes
+  the RET16_OF_32 refusal. This is cause 2 below: S32c1-S32c4 and S32b's
+  `sampler2darrayshadow_{fragment,vertex}` should now draw, so S32c1-4 are rerun
+  images (pinned by `tests/es3_shadow_texsize_v3d.rs`). The S32c split can be
+  merged back once the board confirms it.
+- c558647b (`src/gl/framebuffer.rs`): RGB16F and RG16F are colour targets under
+  `GL_EXT_color_buffer_half_float`, R32F is incomplete without
+  `GL_EXT_color_buffer_float`. This moves framebuffer-completeness verdicts, so
+  FB3's `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` cases and the `fragment_out`
+  images are worth a host check before the board run.
+- 60569582 (`src/gl/blit.rs`): depth/stencil blits to and from the window; FB2's
+  `default_framebuffer` cases are the ones that can move.
+- The other V3D-reaching commits since (`tests/es3_rgb10a2_*_v3d.rs`,
+  `es3_depth_image_switch_v3d.rs`, `es3_v3d_out_of_scratch.rs`) are test pins, and
+  the Mali, PowerVR and GC7000 commits do not link into the Pi 4 image.
+
 ### Two causes the host still refuses (issue drafts in `drafts.md`)
 
 1. **The job builder writes no QUNIFORM_TEXTURE_DEPTH (46) or
