@@ -214,17 +214,71 @@ pub fn reads_frag_coord(m: &ir::Module<'_>) -> bool {
         && m.instrs.iter().any(|op| matches!(op, ir::Op::LoadInput { slot: ir::IoSlot::FragCoord, .. }))
 }
 
+/// A stage whose uniform-block members are read with `ld`
+/// (docs/notes/pvr-ubo-memory-load.md §2, §5, §8.4): which flat dwords are
+/// member rows, and the option with the address pair's place.
+///
+/// The shared registers hold the flat array's prefix `[0, loads.pair)`
+/// (the record's `uniform_sh_dwords`), and the address pair follows it. A
+/// read inside the prefix is a shared-register read; every other read is
+/// `ld` from the array's address: a member's, and a default row's past the
+/// prefix (the front end places rows in declaration order, so a default
+/// uniform declared after a block sits past the block's rows).
+///
+/// Every shared register selection names is relative to the start of the
+/// uniform data, and the chain adds the descriptors' size after selection
+/// (`chain::expand_samples`), so `loads.pair` is relative too. The
+/// `gl_FragCoord` pair, the control word and the front-face op follow the
+/// address pair ([`SharedLayout::top`]).
+#[derive(Clone, Copy)]
+pub struct SharedLayout<'a> {
+    pub rows: super::ubo_rows::UboRows<'a>,
+    pub loads: super::ubo_rows::MemberLoads,
+}
+
+impl SharedLayout<'_> {
+    /// Where the driver's words start: past the address pair.
+    pub fn top(&self) -> u16 {
+        self.loads.pair + 2
+    }
+}
+
+/// How selection serves a uniform read ([`Sel::uniform_read`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UniformRead {
+    /// From the shared registers.
+    Shared,
+    /// With `ld`: a member of `block`, or a default row past the prefix.
+    Memory { block: Option<u16> },
+}
+
+/// Where the driver's words start in a stage laid out by `layout`: past
+/// the whole uniform data when no member is read with `ld`.
+pub fn driver_top(m: &ir::Module<'_>, layout: Option<&SharedLayout<'_>>) -> u16 {
+    layout.map_or(m.uniform_dwords, SharedLayout::top)
+}
+
 /// Where the driver's `gl_FragCoord.y` pair (scale, offset) sits in the
 /// shared file, before the texture descriptors move it: straight after the
 /// uniforms, when the shader reads `gl_FragCoord`.
 pub fn ytf_dword(m: &ir::Module<'_>) -> Option<u16> {
-    reads_frag_coord(m).then_some(m.uniform_dwords)
+    ytf_dword_at(m, m.uniform_dwords)
+}
+
+/// [`ytf_dword`] with the driver's words from `top` ([`driver_top`]).
+pub fn ytf_dword_at(m: &ir::Module<'_>, top: u16) -> Option<u16> {
+    reads_frag_coord(m).then_some(top)
 }
 
 /// Where the per-draw control word sits, likewise: after the uniforms, and
 /// after the `gl_FragCoord` pair when there is one.
 pub fn meta_dword(m: &ir::Module<'_>) -> u16 {
-    m.uniform_dwords + if reads_frag_coord(m) { 2 } else { 0 }
+    meta_dword_at(m, m.uniform_dwords)
+}
+
+/// [`meta_dword`] with the driver's words from `top` ([`driver_top`]).
+pub fn meta_dword_at(m: &ir::Module<'_>, top: u16) -> u16 {
+    top + if reads_frag_coord(m) { 2 } else { 0 }
 }
 
 /// Does this fragment shader read `gl_FrontFacing`?
@@ -238,7 +292,12 @@ pub fn reads_front_facing(m: &ir::Module<'_>) -> bool {
 /// after the uniforms, the `gl_FragCoord` pair and the control word, each
 /// when the shader has one.
 pub fn ff_dword(m: &ir::Module<'_>) -> Option<u16> {
-    reads_front_facing(m).then(|| meta_dword(m) + u16::from(Sel::discards(m)))
+    ff_dword_at(m, m.uniform_dwords)
+}
+
+/// [`ff_dword`] with the driver's words from `top` ([`driver_top`]).
+pub fn ff_dword_at(m: &ir::Module<'_>, top: u16) -> Option<u16> {
+    reads_front_facing(m).then(|| meta_dword_at(m, top) + u16::from(Sel::discards(m)))
 }
 
 /// Why selection could not produce a program.
@@ -394,9 +453,79 @@ struct Sel<'a> {
     /// for the next look-up of the same coordinate to reuse (each read of a
     /// varying is a value of its own, so the key is the varying).
     grad_cache: [Option<(u8, [u8; 4], Gradients)>; 4],
+    /// Block members read with `ld` ([`SharedLayout`]); `None`, every
+    /// uniform dword is a shared register as before.
+    layout: Option<SharedLayout<'a>>,
 }
 
 impl<'a> Sel<'a> {
+    /// Where the driver's words start ([`driver_top`]).
+    fn top(&self) -> u16 {
+        driver_top(self.m, self.layout.as_ref())
+    }
+
+    /// How a read of `lanes` flat dwords from `d` is served
+    /// ([`SharedLayout`]): from the shared registers (a default row inside
+    /// the prefix), or with `ld` (one member row's, or a default row's past
+    /// the prefix). A read whose lanes leave one member's row or one block,
+    /// mix default and member dwords, or cross the prefix's end, is refused
+    /// by name: no one register read or `ld` serves it.
+    fn uniform_read(&self, d: u32, lanes: u32) -> Result<UniformRead, SelectError> {
+        use super::ubo_rows::{Refusal, Row};
+        let Some(l) = &self.layout else { return Ok(UniformRead::Shared) };
+        let lanes = lanes.max(1);
+        let row = l.rows.read(d, lanes).map_err(|r| {
+            SelectError::Unsupported(match r {
+                Refusal::DefaultAndBlock => "a uniform read across default and block-member dwords",
+                Refusal::LeavesRow => "a uniform read across two block members' rows",
+                Refusal::CrossesBlocks => "a uniform read across two uniform blocks",
+            })
+        })?;
+        let prefix = u32::from(l.loads.pair);
+        Ok(match row {
+            Row::Member { block, .. } => UniformRead::Memory { block: Some(block) },
+            Row::Default if d + lanes <= prefix => UniformRead::Shared,
+            Row::Default if d >= prefix => UniformRead::Memory { block: None },
+            Row::Default => {
+                return Err(SelectError::Unsupported("a uniform read across the end of the shared-register prefix"))
+            }
+        })
+    }
+
+    /// A read with `ld` (a member's, or a default row's past the shared
+    /// prefix) of `comps` dwords at `offset` into value `id`'s registers: the address sum, `ld` into a fresh run and its `wdf`
+    /// (docs/notes/pvr-ubo-memory-load.md §2), then a copy of each lane into
+    /// the value's register. `forward_copies` lets the readers read the run
+    /// itself; the copies keep the run out of the joins `if_convert` renames,
+    /// which rename one register, not a run.
+    fn load_member(
+        &mut self,
+        id: ir::InstrId,
+        offset: super::ubo_rows::MemberOffset,
+        comps: u32,
+    ) -> Result<(), SelectError> {
+        let loads = self.layout.map(|l| l.loads).unwrap_or_default();
+        let burst = comps.clamp(1, LANES) as u8;
+        let addr = VReg(self.next_vreg);
+        let run = VReg(self.next_vreg + 2);
+        self.next_vreg += 2 + u32::from(burst);
+        let groups = loads
+            .load(offset, burst, addr, run)
+            .ok_or(SelectError::Unsupported("a uniform-block member read without its address pair"))?;
+        for g in groups {
+            self.emit(g)?;
+        }
+        for lane in 0..u32::from(burst) {
+            self.emit(SelGroup {
+                op: SelOp::Copy,
+                ty: OpType::F32,
+                dst: Some(SelDst::Virtual(Self::reg(ir::ValueId(id.0), lane))),
+                srcs: [Some(SelSrc::Virtual { v: VReg(run.0 + lane), mods: Mods::default() }), None, None],
+            })?;
+        }
+        Ok(())
+    }
+
     /// The register a value's component lives in.
     ///
     /// Four per value whether the value uses four or one. Dense numbering
@@ -673,7 +802,12 @@ impl<'a> Sel<'a> {
              * first fetch. That makes this a convention nobody can currently
              * violate and therefore one worth writing down before the texture
              * path makes it violable. Asked of pvrgpu-platform. */
-            ir::Op::LoadUniform { dword_off, .. } => {
+            /* One read with `ld` where the load stands (`Sel::load_member`):
+             * its value's registers. */
+            ir::Op::LoadUniform { dword_off, comps } => {
+                if self.uniform_read(u32::from(dword_off), u32::from(comps))? != UniformRead::Shared {
+                    return Ok(SelSrc::Virtual { v: Self::reg(s.val, pick), mods });
+                }
                 Ok(SelSrc::Fixed { bank: Bank::Shared, reg: dword_off.wrapping_add(pick as u16), mods })
             }
             ir::Op::LoadInput { slot, .. } => self.input_src(slot, pick, mods),
@@ -967,6 +1101,16 @@ impl<'a> Sel<'a> {
     /// One IR operation, expanded across its components.
     fn instr(&mut self, id: ir::InstrId, op: &ir::Op) -> Result<(), SelectError> {
         match *op {
+            /* A uniform read with `ld` (a block member's, or a default
+             * row's past the shared prefix, `SharedLayout`) is the one
+             * uniform read that is a group of its own: `ld` from the array's
+             * address plus `4 * dword_off` (docs/notes/pvr-ubo-memory-load.md
+             * §2). */
+            ir::Op::LoadUniform { dword_off, comps }
+                if self.uniform_read(u32::from(dword_off), u32::from(comps))? != UniformRead::Shared =>
+            {
+                self.load_member(id, super::ubo_rows::MemberOffset::Dword(u32::from(dword_off)), u32::from(comps))
+            }
             /* Folded into their consumers by `src`, so they produce nothing
              * here. Reaching one of these as an instruction is not an error;
              * it means nothing needed it. */
@@ -1962,6 +2106,35 @@ impl<'a> Sel<'a> {
                 let last = u32::from(len - 1);
                 let above = self.fresh_group(SelOp::Alu(Ilt), [imm(last), Some(i), None])?;
                 let i = self.fresh_group(SelOp::Alu(Bcsel), [Some(above), imm(last), Some(i)])?;
+                /* An array read with `ld` (a block member's, or a default
+                 * array past the shared prefix): the clamped element's byte
+                 * offset added to the array's address, and `ld` (§2 of
+                 * docs/notes/pvr-ubo-memory-load.md). Each element's lanes
+                 * stay in one row; the elements may be rows of their own
+                 * (an array of structs) but of one block. */
+                let lanes = u32::from(comps);
+                let first = self.uniform_read(u32::from(base_dw), lanes)?;
+                let end = self.uniform_read(u32::from(base_dw) + last * u32::from(stride_dw), lanes)?;
+                match (first, end) {
+                    (UniformRead::Shared, UniformRead::Shared) => {}
+                    (UniformRead::Memory { block: a }, UniformRead::Memory { block: b }) if a == b => {
+                        let o = self.fresh_group(SelOp::Alu(Imul), [Some(i), imm(4 * u32::from(stride_dw)), None])?;
+                        let o = if base_dw == 0 {
+                            o
+                        } else {
+                            self.fresh_group(SelOp::Alu(Iadd), [Some(o), imm(4 * u32::from(base_dw)), None])?
+                        };
+                        return self.load_member(id, super::ubo_rows::MemberOffset::Bytes(o), lanes);
+                    }
+                    (UniformRead::Memory { block: Some(_) }, UniformRead::Memory { block: Some(_) }) => {
+                        return Err(SelectError::Unsupported("a dynamically indexed array across two uniform blocks"))
+                    }
+                    _ => {
+                        return Err(SelectError::Unsupported(
+                            "a dynamically indexed array partly in the shared registers and partly read with ld",
+                        ))
+                    }
+                }
                 let i = if stride_dw == 1 {
                     i
                 } else {
@@ -2849,7 +3022,7 @@ impl<'a> Sel<'a> {
         let Some(local) = self.discard_local() else { return Ok(()) };
         let plain = Mods::default();
         let flag = SelSrc::Virtual { v: self.local_reg(local, 0)?, mods: plain };
-        let meta = SelSrc::Fixed { bank: Bank::Shared, reg: meta_dword(self.m), mods: plain };
+        let meta = SelSrc::Fixed { bank: Bank::Shared, reg: meta_dword_at(self.m, self.top()), mods: plain };
         let alpha = self
             .outputs
             .as_slice()
@@ -3045,7 +3218,7 @@ impl<'a> Sel<'a> {
     /// window, and (1, 0) otherwise -- case 82 measured only y mirrored on
     /// the window, and GL counts y up from the bottom.
     fn frag_coord_prologue(&mut self) -> Result<(), SelectError> {
-        let Some(pair) = ytf_dword(self.m) else { return Ok(()) };
+        let Some(pair) = ytf_dword_at(self.m, self.top()) else { return Ok(()) };
         let plain = Mods::default();
         let imm = |x: u32| Some(SelSrc::Imm(x));
         let special = |r: u16| Some(SelSrc::Fixed { bank: Bank::Special, reg: r, mods: plain });
@@ -3085,7 +3258,7 @@ impl<'a> Sel<'a> {
     /// 0 keeps the ISP's sense, 1 swaps it, 2 is every point and line
     /// (src/pvr/backend.rs, which writes it per draw).
     fn front_face_prologue(&mut self) -> Result<(), SelectError> {
-        let Some(op) = ff_dword(self.m) else { return Ok(()) };
+        let Some(op) = ff_dword_at(self.m, self.top()) else { return Ok(()) };
         let plain = Mods::default();
         let imm = |x: u32| Some(SelSrc::Imm(x));
         let special = Some(SelSrc::Fixed { bank: Bank::Special, reg: SR_FACE_CCW, mods: plain });
@@ -4396,7 +4569,7 @@ impl<'a> Sel<'a> {
         let bcsel = SelOp::Alu(ir::AluOp::Bcsel);
         for (i, g) in self.groups.as_slice().iter().enumerate() {
             if let Some(SelDst::Virtual(v)) = g.dst {
-                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { g.op.dst_width() };
                 for r in v.0..v.0 + width {
                     if let (Some(d), Some(at)) = (defs.get_mut(r as usize), def_at.get_mut(r as usize)) {
                         *d = d.saturating_add(1);
@@ -4567,7 +4740,7 @@ impl<'a> Sel<'a> {
         let inexact = inexact_v.as_mut_slice();
         for (i, g) in self.groups.as_slice().iter().enumerate() {
             if let Some(SelDst::Virtual(v)) = g.dst {
-                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { g.op.dst_width() };
                 for r in v.0..v.0 + width {
                     if let (Some(d), Some(at)) = (defs.get_mut(r as usize), def_at.get_mut(r as usize)) {
                         *d = d.saturating_add(1);
@@ -4709,7 +4882,7 @@ impl<'a> Sel<'a> {
         };
         for g in self.groups.as_slice() {
             if let Some(SelDst::Virtual(v)) = g.dst {
-                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { g.op.dst_width() };
                 for k in 0..width {
                     bump(defs, VReg(v.0 + k), 1);
                 }
@@ -4941,6 +5114,19 @@ impl<'a> Sel<'a> {
                     continue;
                 }
             }
+            /* A block member's `wdf` (`Sel::load_member`, right after its
+             * `ld`) dies with the `ld`: nothing writes between them, so
+             * the run is live here exactly when it is after the `ld`. */
+            if g.op == SelOp::WaitData {
+                if let Some(SelGroup { op: op @ SelOp::Ld { .. }, dst: Some(SelDst::Virtual(run)), .. }) =
+                    i.checked_sub(1).map(|k| self.groups.as_slice()[k])
+                {
+                    if !(run.0..run.0 + op.dst_width()).any(|r| live.get(r as usize).copied().unwrap_or(false)) {
+                        dead[i] = true;
+                        continue;
+                    }
+                }
+            }
             /* The execution mask's groups decide which instances run what
              * follows: effects, whether or not a later one reads the emc
              * they write (the `cndend` closing a branched `if` is read by
@@ -4962,7 +5148,7 @@ impl<'a> Sel<'a> {
                  * reads none of lane 0, and judging the group by lane 0
                  * deleted the fetch and left `.w` read from nothing
                  * (8bittextmask_a.frag, caught by the survey). */
-                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { 1 };
+                let width = if matches!(g.op, SelOp::Sample { .. }) { 4 } else { g.op.dst_width() };
                 let regs = v0.0..v0.0 + width;
                 let used = regs.clone().any(|r| live.get(r as usize).copied().unwrap_or(false));
                 if !used {
@@ -5328,6 +5514,16 @@ fn filled_vec<'a, T: Copy>(a: &Arena<'a>, n: usize, v: T) -> Result<AVec<'a, T>,
 }
 
 pub fn select<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selected<'a>, SelectError> {
+    select_in(m, arena, None)
+}
+
+/// [`select`] with the stage's block members read with `ld` from the
+/// address pair `layout` places ([`SharedLayout`]); `None` is [`select`].
+pub fn select_in<'a>(
+    m: &'a ir::Module<'a>,
+    arena: &'a Arena<'a>,
+    layout: Option<SharedLayout<'a>>,
+) -> Result<Selected<'a>, SelectError> {
     if m.stage != SHC_STAGE_VERTEX && m.stage != SHC_STAGE_FRAGMENT {
         return Err(SelectError::Unsupported("a stage that is neither vertex nor fragment"));
     }
@@ -5382,6 +5578,7 @@ pub fn select<'a>(m: &'a ir::Module<'a>, arena: &'a Arena<'a>) -> Result<Selecte
         loop_depth: 0,
         grad_w: None,
         grad_cache: [None; 4],
+        layout,
     };
     s.declare_inputs()?;
     s.frag_coord_prologue()?;

@@ -20,19 +20,19 @@
 //! a `uint mk` marker first (dword 0); bool cases hold other values so the
 //! normalisation shows.
 //!
-//! Ignored cases (`ld_*`): the member is read by an `ld` followed by a `wdf`
-//! in the vertex listing. `ubo-chain` (chain.rs turns on ld member reads)
-//! un-ignores every `ld_*` case: delete the `#[ignore]` line in the
-//! `ld_case!` macro, and fill in the `TODO(ubo-chain)` address assertion in
-//! `ld_then_wdf` once `ShcShader::ubo_addr_off1` exists (item `shc-field`):
-//! the byte offset each case names (`Case::ld_offset`) is the std140 offset
-//! of the element it reads, from the block's address. `ubo-backend` retires
+//! `ld_*` cases: the member is read by an `ld` followed by a `wdf` in the
+//! vertex listing (since `ubo-chain`), from the address pair the record
+//! names (`ubo_addr_off1`, read with `backend::pvr_ubo_addr_off1` until
+//! `ShcShader` carries it) plus a constant whose `ld` window covers the
+//! element's place in the stage array: the `ld` reads the core's per-draw
+//! copy of that array, not the buffer, so the element is where the draw
+//! stages its value (`Case::ld_offset` is its std140 offset; the core
+//! packs arrays and transposes a row_major matrix). `ubo-backend` retires
 //! or moves in-crate the staged-dword cases only if the per-draw copy stops
 //! being the stage array the hook sees.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_ubo_std140_edge
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_ubo_std140_edge -- --ignored
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "gpu-powervr", feature = "shaderc-online", not(feature = "report-es2")))]
@@ -274,8 +274,10 @@ fn draw_block(vs: &str, data: &[u32]) -> Result<Vec<u32>, String> {
 }
 
 /// The online compiler's listing of the vertex stage (every group of the USC
-/// program, `listing::group_text`), or the compile log.
-fn listing(text: &str) -> Result<String, String> {
+/// program, `listing::group_text`) and the record's `ubo_addr_off1`
+/// (`backend::pvr_ubo_addr_off1`: the address pair's register plus one), or
+/// the compile log.
+fn listing(text: &str) -> Result<(String, u16), String> {
     let compile = yakogl::shaderc::online::SHC_ONLINE.compile.expect("the online back end compiles");
     yakogl::shaderc::online::backend::forget_compiled();
     let mut out = ShcShader::ZERO;
@@ -293,13 +295,63 @@ fn listing(text: &str) -> Result<String, String> {
         Ok(())
     })
     .map_err(|e| format!("the compiled program does not decode: {e:?}"))?;
-    Ok(t)
+    Ok((t, yakogl::shaderc::online::backend::pvr_ubo_addr_off1(&out)))
 }
 
 /// Whether a listing line is an instruction line (`phaseN ld|...`) of `op`.
 fn is_op(line: &str, op: &str) -> bool {
     let mut w = line.split_whitespace();
     w.next().is_some_and(|p| p.starts_with("phase")) && w.next().is_some_and(|o| o.split('|').any(|n| n == op))
+}
+
+/// The value of `key=` in `text`'s first field of that name.
+fn field(text: &str, key: &str) -> Option<String> {
+    text.split_whitespace().find_map(|w| w.strip_prefix(key)?.strip_prefix('=').map(str::to_owned))
+}
+
+/// The listing's groups, each as its text.
+fn groups(listing: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in listing.lines() {
+        if line.starts_with('[') || out.is_empty() {
+            out.push(String::new());
+        }
+        let g = out.last_mut().expect("one group");
+        g.push_str(line);
+        g.push('\n');
+    }
+    out
+}
+
+/// The `add64_32` reads the address pair's low dword from shared register
+/// `pair` (an operand below sh256 is named directly), and adds a constant
+/// `k` such that one `ld` window `[k, k + 4 * burst)` covers byte `off`:
+/// `k` an `imm32` the program loads into the sum's offset operand, or the
+/// value of the constant register it names (`prepare::const_reg`).
+fn assert_ld_window(l: &str, pair: u16, off: u32, case: &str) {
+    use yakogl::shaderc::online::powervr::prepare::const_reg;
+    let gs = groups(l);
+    let add = gs
+        .iter()
+        .find(|g| g.lines().any(|x| is_op(x, "add64_32")))
+        .unwrap_or_else(|| panic!("{case}: no add64_32:\n{l}"));
+    let lo = add.lines().find(|x| x.trim_start().starts_with("lower_src:")).expect("an add64_32 reads sources");
+    assert_eq!(
+        (field(lo, "sb0").as_deref(), field(lo, "s0")),
+        (Some("shared"), Some(pair.to_string())),
+        "{case}: the sum's low dword is not sh{pair}:\n{add}"
+    );
+    let special = (field(lo, "sb2").as_deref() == Some("special")).then(|| field(lo, "s2")).flatten();
+    let imms: Vec<u32> = gs.iter().filter_map(|g| field(g, "imm32")?.parse().ok()).collect();
+    let burst = gs.iter().filter_map(|g| field(g, "burstlen")?.parse::<u32>().ok()).max().unwrap_or(0);
+    let added = |k: u32| match &special {
+        Some(r) => const_reg(k).is_some_and(|c| c.to_string() == *r),
+        None => imms.contains(&k),
+    };
+    assert!(
+        (off.saturating_sub(4 * burst - 4)..=off).step_by(4).any(added),
+        "{case}: no ld window of {burst} dwords covers byte {off}:\n{l}"
+    );
 }
 
 /* ---- the cases -------------------------------------------------------------- */
@@ -512,28 +564,41 @@ fn the_stage_array_holds_the_rewritten_dwords() {
     }
 }
 
-/* ---- ignored: the member is read by ld --------------------------------------- */
+/* ---- the member is read by ld ------------------------------------------------- */
 
 /// The vertex listing has an `ld` followed by a `wdf` (the wait on the load's
-/// result, before the destination is read).
+/// result, before the destination is read). The `ld`'s address is the pair
+/// at the record's `ubo_addr_off1 - 1` plus a constant byte offset whose
+/// window covers the element's place in the stage array the `ld` reads:
+/// where the draw stages the element's pattern value (std140 dword
+/// `ld_offset / 4`; the core packs arrays and transposes a row_major
+/// matrix). A bool case's values are normalised, so it takes `ld_offset`,
+/// which its staged rows keep.
 fn ld_then_wdf(c: &Case) {
     let _g = context();
-    let l = listing(&vs(c.members, c.ld_expr)).unwrap_or_else(|e| panic!("{}: {e}", c.name));
+    let text = vs(c.members, c.ld_expr);
+    let off = if c.data.is_empty() {
+        let staged = draw_block(&text, &data_of(c)).unwrap_or_else(|e| panic!("{}: {e}", c.name));
+        let k = staged
+            .iter()
+            .position(|&w| w == pat(c.ld_offset as usize / 4))
+            .unwrap_or_else(|| panic!("{}: std140 dword {} not staged in {staged:x?}", c.name, c.ld_offset / 4));
+        4 * k as u32
+    } else {
+        c.ld_offset
+    };
+    let (l, off1) = listing(&text).unwrap_or_else(|e| panic!("{}: {e}", c.name));
     let at = |op| l.lines().position(|x| is_op(x, op));
     let ld = at("ld").unwrap_or_else(|| panic!("{}: no ld:\n{l}", c.name));
     let wdf = at("wdf").unwrap_or_else(|| panic!("{}: no wdf:\n{l}", c.name));
     assert!(ld < wdf, "{}: wdf before the ld:\n{l}", c.name);
-    // TODO(ubo-chain): once ShcShader::ubo_addr_off1 exists (item shc-field), have `listing`
-    // hand back the ShcShader beside its text and assert that the ld's address pair is the
-    // shared register pair at ubo_addr_off1 - 1 and that the byte offset added to it is
-    // `c.ld_offset`, the std140 offset of the element `ld_expr` reads.
-    let _ = c.ld_offset;
+    assert_ne!(off1, 0, "{}: the record names no address pair", c.name);
+    assert_ld_window(&l, off1 - 1, off, c.name);
 }
 
 macro_rules! ld_case {
     ($name:ident, $case:expr) => {
         #[test]
-        #[ignore = "until ubo-chain: block members are read by ld"]
         fn $name() {
             let c = cases().into_iter().find(|c| c.name == $case).expect("a known case");
             ld_then_wdf(&c);

@@ -196,6 +196,26 @@ pub fn backend_priv(sh: &ShcShader) -> *const c_void {
     }
 }
 
+/// The PowerVR online record's `ubo_addr_off1` (docs/notes/pvr-ubo-memory-load.md
+/// §8.4): the shared register of the stage's block-address pair plus one,
+/// absolute, which the back end writes per draw; 0 when the stage reads no
+/// uniform-block member with `ld` (and for a table row, or a record of
+/// another back end). The chain leaves it behind the record's `priv_`
+/// (`powervr::chain::UboRecord`) until `ShcShader` carries the field. A
+/// stage with a pair also reports `uniform_sh_dwords`: the prefix of its
+/// flat array the shared registers hold.
+#[cfg(all(feature = "gpu-powervr", not(feature = "gpu-mali")))]
+pub fn pvr_ubo_addr_off1(sh: &ShcShader) -> u16 {
+    let p = backend_priv(sh) as *const super::powervr::chain::UboRecord;
+    if p.is_null() {
+        return 0;
+    }
+    // SAFETY: on this build only the PowerVR chain leaves a code generator's
+    // record, a `UboRecord` in the record's keep extent (`backend_priv`
+    // checked the tag and the region), live while `sh`'s record is.
+    unsafe { (*p).ubo_addr_off1 }
+}
+
 /// How many compiled shaders the cache indexes.
 ///
 /// Overflow is not a failure: the compile still happens and the shader is

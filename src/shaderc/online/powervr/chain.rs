@@ -13,7 +13,7 @@ use super::alloc::{allocate, boundary_of, AllocError, Limits};
 use super::assemble::{build_shader, vertex_output_writes, BuildError, OutWrite};
 use super::prepare::{index_high_shared, prepare_fused, share_common, PrepareError, PrepareStats};
 use super::sel::{SelGroup, VReg};
-use super::select::{select, SelectError, Selected};
+use super::select::{select_in, SelectError, Selected, SharedLayout};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir;
 use crate::shaderc::SHC_STAGE_VERTEX;
@@ -66,6 +66,118 @@ pub struct Built<'a> {
     /// The record's `native_cube` byte ([`native_flags`]), read off the
     /// selected program before its samples expand.
     pub native_cube: u8,
+    /// Block members read with `ld`: the shared prefix and the address
+    /// pair ([`UboPlace`]).
+    pub ubo: Option<UboPlace>,
+}
+
+/// Where a stage that reads its uniform-block members with `ld` keeps what
+/// the back end writes (docs/notes/pvr-ubo-memory-load.md §8.4): the
+/// default-block prefix the shared registers hold, `[0, prefix)` of the
+/// stage's flat array from the first register past the descriptors (the
+/// record's `uniform_sh_dwords`), and the address pair's low register,
+/// absolute (the record's `ubo_addr_off1` less one), right after it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UboPlace {
+    pub prefix: u16,
+    pub pair: u16,
+}
+
+/// What a PowerVR online record carries beside its `ShcShader`, in the
+/// record's keep extent behind its `priv_` (`backend::codegen_priv`; read
+/// back with `backend::pvr_ubo_addr_off1`): `ubo_addr_off1`, the address
+/// pair's register plus one, 0 when the stage reads no block member with
+/// `ld`. `ShcShader::ubo_addr_off1` (docs/notes/pvr-ubo-memory-load.md
+/// §8.4) waits for `src/shaderc/mod.rs`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct UboRecord {
+    pub ubo_addr_off1: u16,
+}
+
+/// The shared layout of a stage whose block members are read with `ld`
+/// ([`SharedLayout`]), or `None` when it reads none: then every uniform
+/// dword is a shared register and the layout is today's.
+///
+/// The prefix the shared registers hold ends at the last default row before
+/// the first member row: the front end places rows in declaration order, so
+/// a default uniform declared after a block sits past the block's rows, and
+/// the prefix must not take the block with it (a 16384-byte block would not
+/// fit the shared registers). Selection reads a default row past the prefix
+/// with `ld` too. Two things are read from the shared registers by place,
+/// not through a uniform load: a stacked sampler's `pvr_layers_` count and,
+/// in a blend variant that reads them, the blend constants the GL core
+/// appends to the array (`blend_consts`, at `m.uniform_dwords`). When one
+/// of them lies past that prefix, the prefix takes every default row and
+/// those constants, the shared registers' extent before this layout.
+fn shared_layout<'a>(
+    m: &ir::Module<'_>,
+    reflection: &crate::shaderc::online::reflect::Reflection<'_>,
+    a: &'a Arena<'a>,
+    blend_consts: bool,
+) -> Result<Option<SharedLayout<'a>>, ChainError> {
+    use super::ubo_rows::{MemberLoads, Row, UboRows};
+    if reflection.block_members.is_empty() {
+        return Ok(None);
+    }
+    let rows = UboRows::build(a, reflection).map_err(|_| ChainError::OutOfScratch)?;
+    let member = |d: u16| rows.row(u32::from(d)) != Row::Default;
+    let reads = m.instrs.iter().any(|op| match *op {
+        ir::Op::LoadUniform { dword_off, .. } => member(dword_off),
+        ir::Op::LoadUniformIdx { base_dw, .. } => member(base_dw),
+        _ => false,
+    });
+    if !reads {
+        return Ok(None);
+    }
+    let first_member = reflection
+        .block_members
+        .iter()
+        .filter_map(|bm| reflection.uniforms.get(usize::from(bm.row)))
+        .map(|u| u32::from(u.dword_off))
+        .min()
+        .unwrap_or(u32::MAX);
+    let defaults = || {
+        m.uniforms
+            .iter()
+            .filter(|u| u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK && !member(u.dword_off))
+            .map(|u| (u, u32::from(u.dword_off) + u32::from(u.dwords)))
+    };
+    let mut prefix = defaults().map(|(_, end)| end).filter(|&end| end <= first_member).max().unwrap_or(0);
+    let by_place = defaults()
+        .filter(|(u, _)| u.name.starts_with("pvr_layers_"))
+        .map(|(_, end)| end)
+        .chain(blend_consts.then_some(u32::from(m.uniform_dwords) + 4))
+        .max()
+        .unwrap_or(0);
+    if by_place > prefix {
+        prefix = defaults().map(|(_, end)| end).chain([by_place]).max().unwrap_or(0);
+    }
+    let pair = u16::try_from(prefix).map_err(|_| ChainError::OutOfScratch)?;
+    Ok(Some(SharedLayout { rows, loads: MemberLoads { on: true, pair } }))
+}
+
+/// The address pair's absolute low register: an `add64_32`'s first source
+/// after `expand_samples` moved the shared reads past the descriptors, or,
+/// when no member read survived, `base` plus the relative pair.
+fn ubo_place(groups: &[SelGroup], layout: Option<&SharedLayout<'_>>, base: u16) -> Option<UboPlace> {
+    use super::sel::{Bank, SelOp, SelSrc};
+    let l = layout?;
+    let pair = groups
+        .iter()
+        .find_map(|g| match (g.op, g.srcs[0]) {
+            (SelOp::Add64, Some(SelSrc::Fixed { bank: Bank::Shared, reg, .. })) => Some(reg),
+            _ => None,
+        })
+        .unwrap_or(base + l.loads.pair);
+    Some(UboPlace { prefix: l.loads.pair, pair })
+}
+
+/// Every `ld` waits on its `wdf` before its run or address is touched
+/// (`verify::check_ld_waits`), before allocation and after.
+fn check_waits(groups: &[SelGroup]) -> Result<(), ChainError> {
+    super::verify::check_ld_waits(groups)
+        .map_err(|_| ChainError::Build(BuildError::Unsupported("an ld whose run is touched before its wdf")))
 }
 
 /// Build `m` into `buf`.
@@ -75,16 +187,28 @@ pub fn build_vertex<'a>(
     a: &'a Arena<'a>,
     buf: &mut [u8],
 ) -> Result<Built<'a>, ChainError> {
+    build_vertex_in(m, None, limits, a, buf)
+}
+
+/// [`build_vertex`] with the block members read with `ld` ([`SharedLayout`]).
+fn build_vertex_in<'a>(
+    m: &'a ir::Module<'a>,
+    layout: Option<SharedLayout<'a>>,
+    limits: Limits,
+    a: &'a Arena<'a>,
+    buf: &mut [u8],
+) -> Result<Built<'a>, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     if m.stage != SHC_STAGE_VERTEX {
         return Err(ChainError::WrongStage);
     }
-    let sel = select(m, a).map_err(ChainError::Select)?;
+    let sel = select_in(m, a, layout).map_err(ChainError::Select)?;
     /* Samples, as in a fragment shader: the data and result blocks in fixed
      * temporaries (from 0: a vertex shader pins no iterated input), the
      * uniform block moved past the descriptors. */
     let native_cube = native_flags(sel.groups);
     let (sel, sampled) = expand_samples(sel, 0, m.uniforms, a)?;
+    let ubo = ubo_place(sel.groups, layout.as_ref(), TEX_DESC_DWORDS * sampled.len() as u16);
     let invariant = invariant_slots(m, a)?;
     let (sel, prep): (Selected<'a>, PrepareStats) = prepare_fused(&sel, a, invariant).map_err(ChainError::Prepare)?;
     let sel = share_common(&sel, a).map_err(ChainError::Prepare)?;
@@ -95,6 +219,10 @@ pub fn build_vertex<'a>(
         a.alloc_filled(4 * (sel.inputs.len() + sel.outputs.len()), VReg(0)).map_err(|_| ChainError::OutOfScratch)?;
     let boundary = boundary_of(&sel, bbuf).map_err(ChainError::Alloc)?;
     let al = allocate(sel.groups, limits, [], boundary, a).map_err(ChainError::Alloc)?;
+    if ubo.is_some() {
+        check_waits(sel.groups)?;
+        check_waits(al.groups)?;
+    }
 
     let n_comp: usize = sel.outputs.iter().map(|(_, c)| c.iter().flatten().count()).sum();
     let wbuf = a
@@ -117,6 +245,7 @@ pub fn build_vertex<'a>(
         prep,
         sampled,
         native_cube,
+        ubo,
     })
 }
 
@@ -173,7 +302,8 @@ pub fn compile_vertex_with<'a>(
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     let image = a.alloc_filled(MAX_IMAGE_BYTES, 0u8).map_err(|_| ChainError::OutOfScratch)?;
-    let b = build_vertex(m, LIMITS, a, image)?;
+    let layout = shared_layout(m, reflection, a, false)?;
+    let b = build_vertex_in(m, layout, LIMITS, a, image)?;
     /* Whole dwords: the shader closes on an 8-byte boundary. */
     let words = a.alloc_filled(b.len / 4, 0u32).map_err(|_| ChainError::OutOfScratch)?;
     for (w, c) in words.iter_mut().zip(image[..b.len].as_chunks::<4>().0) {
@@ -198,8 +328,24 @@ pub fn compile_vertex_with<'a>(
         /* a vertex shader that samples a cube as the TPU's own, or a 2D
          * array by its layer address */
         sh.native_cube = b.native_cube;
+        record_ubo(&mut sh, b.ubo)?;
         Ok(sh)
     })
+}
+
+/// A stage that reads block members with `ld`: the record's
+/// `uniform_sh_dwords`, the prefix the back end DMAs to the shared
+/// registers, and its `ubo_addr_off1` ([`UboRecord`]). Every other record
+/// keeps both as they were (0: the whole array, and no pair).
+fn record_ubo(sh: &mut crate::shaderc::ShcShader, ubo: Option<UboPlace>) -> Result<(), ChainError> {
+    let Some(u) = ubo else { return Ok(()) };
+    sh.uniform_sh_dwords = u.prefix;
+    let keep = crate::shaderc::online::store::keep();
+    let rec = keep.alloc_copy(&[UboRecord { ubo_addr_off1: u.pair + 1 }]).map_err(|_| {
+        ChainError::Record(super::abi::UscAbiError::OutOfMemory { left: crate::shaderc::online::store::keep().left() })
+    })?;
+    sh.priv_ = crate::shaderc::online::backend::codegen_priv(rec.as_ptr().cast());
+    Ok(())
 }
 
 /// The record's `native_cube` byte for a program of `groups`: bit 0, it
@@ -352,6 +498,8 @@ pub struct BuiltFragment<'a> {
     /// buffer's address pair (the record's `num_tile_buffers` and
     /// `tile_buffer_sh`), when a per-target list spills.
     pub tile_buffers: Option<(u8, u16)>,
+    /// Block members read with `ld` ([`UboPlace`]).
+    pub ubo: Option<UboPlace>,
 }
 
 /// A fragment shader that writes one `gl_FragColor` and reads smooth
@@ -382,9 +530,9 @@ pub fn build_fragment_for<'a>(
     blend_key: u32,
 ) -> Result<BuiltFragment<'a>, ChainError> {
     if let Some((t, n)) = mixed_key_targets(blend_key) {
-        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]));
+        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]), None);
     }
-    build_fragment_with(m, limits, a, buf, blend_key, None)
+    build_fragment_with(m, limits, a, buf, blend_key, None, None)
 }
 
 /// The per-target list a mixed key (`crate::target_key`,
@@ -427,7 +575,7 @@ pub fn build_fragment_targets<'a>(
     buf: &mut [u8],
     targets: &[TargetPack],
 ) -> Result<BuiltFragment<'a>, ChainError> {
-    build_fragment_with(m, limits, a, buf, 0, Some(targets))
+    build_fragment_with(m, limits, a, buf, 0, Some(targets), None)
 }
 
 /// [`build_fragment_for`]'s body, and [`build_fragment_targets`]'s when
@@ -439,6 +587,7 @@ fn build_fragment_with<'a>(
     buf: &mut [u8],
     blend_key: u32,
     targets: Option<&[TargetPack]>,
+    layout: Option<SharedLayout<'a>>,
 ) -> Result<BuiltFragment<'a>, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     use super::fragment::{coefficient_offsets, IterMode, Iterated};
@@ -449,7 +598,11 @@ fn build_fragment_with<'a>(
     if m.stage != crate::shaderc::SHC_STAGE_FRAGMENT {
         return Err(ChainError::WrongStage);
     }
-    let sel = select(m, a).map_err(ChainError::Select)?;
+    let sel = select_in(m, a, layout).map_err(ChainError::Select)?;
+    /* Where the driver's words start: past the whole array, or past the
+     * shared prefix and the address pair when members are read with `ld`
+     * (docs/notes/pvr-ubo-memory-load.md §8.4). */
+    let top = super::select::driver_top(m, layout.as_ref());
     /* Attachments of different classes: each integer target's output packed
      * here, the float and normalised ones at the tail; a written depth is
      * clamped below and fed back before the writes, as for one target. A
@@ -658,6 +811,7 @@ fn build_fragment_with<'a>(
     let native_cube = native_flags(groups);
     let sel = Selected { groups, vregs: sel.vregs, outputs, inputs: &[], discard, alpha_to_one };
     let (sel, sampled) = expand_samples(sel, pinned_n, m.uniforms, a)?;
+    let ubo = ubo_place(sel.groups, layout.as_ref(), TEX_DESC_DWORDS * sampled.len() as u16);
 
     let invariant = invariant_slots(m, a)?;
     let sel: Selected<'a> = prepare_fused(&sel, a, invariant).map_err(ChainError::Prepare)?.0;
@@ -671,10 +825,10 @@ fn build_fragment_with<'a>(
             g.srcs.iter().flatten().any(|s| matches!(s, SelSrc::Fixed { bank: Bank::Shared, reg, .. } if *reg == at))
         })
     };
-    let ff_live = super::select::ff_dword(m).filter(|&d| read_at(d));
+    let ff_live = super::select::ff_dword_at(m, top).filter(|&d| read_at(d));
     /* gl_FragCoord's y pair likewise: a shader reading only .z or .w reads
      * no pair. */
-    let ytf_live = super::select::ytf_dword(m).filter(|&d| read_at(d));
+    let ytf_live = super::select::ytf_dword_at(m, top).filter(|&d| read_at(d));
     /* After the two scans above: they look for direct reads of those words. */
     let sel = index_high_shared(&sel, a).map_err(ChainError::Prepare)?;
     /* the default's branch-or-predicate, on the arms' final groups */
@@ -703,6 +857,7 @@ fn build_fragment_with<'a>(
             output_regs: None,
             int_dwords: None,
             tile_buffers: None,
+            ubo: None,
         });
     }
     /* One gl_FragColor, or several outputs (`layout(location = n) out`,
@@ -721,6 +876,10 @@ fn build_fragment_with<'a>(
     let boundary = boundary_of(&sel, bbuf).map_err(ChainError::Alloc)?;
     let al =
         allocate(sel.groups, limits, (0..pinned_n).map(|r| (Bank::Temp, r)), boundary, a).map_err(ChainError::Alloc)?;
+    if ubo.is_some() {
+        check_waits(sel.groups)?;
+        check_waits(al.groups)?;
+    }
     let resolve = |comps: &[Option<SelSrc>; 4]| -> Result<[(Bank, u16); 4], ChainError> {
         let mut colour = [(Bank::Temp, 0u16); 4];
         for (c, s) in colour.iter_mut().zip(comps.iter()) {
@@ -778,7 +937,7 @@ fn build_fragment_with<'a>(
      * `expand_samples` moved the block past the descriptors: the same sum
      * gives the absolute register the driver DMAs to. */
     let base = TEX_DESC_DWORDS * sampled.len() as u16;
-    let meta_off = discard.map(|_| base + super::select::meta_dword(m));
+    let meta_off = discard.map(|_| base + super::select::meta_dword_at(m, top));
     let ytf_off = ytf_live.map(|d| base + d);
     let ff_off = ff_live.map(|d| base + d);
     let free = al.temps.max(pinned_n);
@@ -826,7 +985,7 @@ fn build_fragment_with<'a>(
          * DMAs; the stores name them directly. */
         let sh = if lay.tile_buffers != 0 {
             let end = [
-                u32::from(base) + u32::from(m.uniform_dwords),
+                u32::from(base) + u32::from(top),
                 u32::from(al.shared),
                 meta_off.map_or(0, |o| u32::from(o) + 1),
                 ff_off.map_or(0, |o| u32::from(o) + 1),
@@ -989,6 +1148,7 @@ fn build_fragment_with<'a>(
         output_regs,
         int_dwords,
         tile_buffers,
+        ubo,
     })
 }
 
@@ -1845,7 +2005,11 @@ fn compile_fragment_with<'a>(
         output_regs,
         int_dwords,
         tile_buffers,
-    } = build_fragment_with(m, LIMITS, a, image, blend_key, targets)?;
+        ubo,
+    } = build_fragment_with(m, LIMITS, a, image, blend_key, targets, {
+        let consts = super::blend::Blend::from_key(blend_key).ok().flatten().is_some_and(|b| b.reads_constants());
+        shared_layout(m, reflection, a, consts)?
+    })?;
     let words = a.alloc_filled(len / 4, 0u32).map_err(|_| ChainError::OutOfScratch)?;
     for (w, c) in words.iter_mut().zip(image[..len].as_chunks::<4>().0) {
         *w = u32::from_le_bytes(*c);
@@ -1932,6 +2096,10 @@ fn compile_fragment_with<'a>(
             sh.uniform_dwords += 4;
         }
         sh
+    })
+    .and_then(|mut sh| {
+        record_ubo(&mut sh, ubo)?;
+        Ok(sh)
     })
 }
 
@@ -2274,7 +2442,7 @@ mod tests {
             let b = build_vertex(&l.module, LIMITS, a, &mut image).expect("builds");
             /* the outputs `prepared` is read from: the same steps, kept */
             let m = super::super::abi::with_matrix_varyings_split(&l.module, a).unwrap();
-            let sel = select(m, a).unwrap();
+            let sel = super::super::select::select(m, a).unwrap();
             let (sel, _) = expand_samples(sel, 0, m.uniforms, a).unwrap();
             let (sel, _) = prepare_fused(&sel, a, invariant_slots(m, a).unwrap()).unwrap();
             let sel = share_common(&sel, a).unwrap();
