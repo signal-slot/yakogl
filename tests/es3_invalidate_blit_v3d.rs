@@ -15,19 +15,15 @@
 //! tests/es3_blit_ds_window_v3d.rs pins the window blit without the
 //! invalidation, tests/es3_invalidate_v3d.rs the invalidation without the blit.
 //!
-//! Pinned today (not ignored): the invalidation raises no error, whole or as
-//! a sub-rectangle, for GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT and
-//! GL_DEPTH_STENCIL_ATTACHMENT, and the blit into the window that follows is
-//! GL_INVALID_OPERATION for depth, stencil and depth|stencil, with the window's
-//! planes unchanged (src/gl/blit.rs refuses the window until gl-ds-window).
-//!
-//! Twins `#[ignore = "needs gl-ds-window"]` state what the lift must deliver:
-//! the blit is GL_NO_ERROR. After a whole invalidation the contents are
-//! undefined (ES 3.0.6 4.5.1), so only the error is asserted. After a
-//! sub-rectangle invalidation the pixels outside the rectangle reach the
-//! window with the source values (no vertical mirror: `default_y_up`); the
-//! pixels inside it are not asserted, and a plane the mask does not name is
-//! unchanged.
+//! Pinned (the gl-ds-window lift is in src/gl/blit.rs): the invalidation
+//! raises no error, whole or as a sub-rectangle, for GL_DEPTH_ATTACHMENT,
+//! GL_STENCIL_ATTACHMENT and GL_DEPTH_STENCIL_ATTACHMENT, and the blit into
+//! the window that follows is GL_NO_ERROR for depth, stencil and
+//! depth|stencil. After a whole invalidation the contents are undefined
+//! (ES 3.0.6 4.5.1), so only the error is asserted. After a sub-rectangle
+//! invalidation the pixels outside the rectangle reach the window with the
+//! source values (no vertical mirror: `default_y_up`); the pixels inside it
+//! are not asserted, and a plane the mask does not name is unchanged.
 //!
 //! Left open: the renderbuffer is D24S8 and the window single-sampled; the
 //! GL core ignores the invalidation (tests/es3_invalidate_v3d.rs), so the
@@ -35,7 +31,7 @@
 //!
 //! Run: `cargo test --no-default-features --features
 //! host-test,gpu-v3d,shaderc-online,no-shader-table --test
-//! es3_invalidate_blit_v3d`, and the ignored twins with `-- --ignored`.
+//! es3_invalidate_blit_v3d`.
 
 #![cfg(all(
     feature = "host-test",
@@ -695,18 +691,6 @@ fn rb_stencil(x: u32, y: u32) -> f32 {
     (2 + (y * 7 + x * 3) % 250) as f32
 }
 
-fn assert_close(got: &[f32], want: &[f32], what: &str) {
-    assert_eq!(got.len(), want.len(), "{what}");
-    for (i, (g, w)) in got.iter().zip(want).enumerate() {
-        assert!(
-            (g - w).abs() <= 0.5 / UNORM,
-            "{what}: pixel {i} (x {}, row {}): {g} want {w}",
-            i as u32 % WW,
-            i as u32 / WW
-        );
-    }
-}
-
 /// The sub-rectangle the sub cases invalidate: x, y, width, height.
 const SUB: [i32; 4] = [8, 6, 16, 12];
 
@@ -777,16 +761,7 @@ fn run(mask: GLbitfield, sub: bool) -> Run {
     out
 }
 
-/// Refused today: GL_INVALID_OPERATION, and the window's planes as they were.
-fn refused(mask: GLbitfield, sub: bool) {
-    let r = run(mask, sub);
-    let what = format!("mask {mask:#x}, sub {sub}");
-    assert_eq!(r.blit_err, GL_INVALID_OPERATION, "{what}");
-    assert_close(&r.win_depth, &plane(WW, WH, win_depth), &format!("{what}: the window's depth"));
-    assert_eq!(r.win_stencil, plane(WW, WH, |x, r| win_stencil(x, r) as u8), "{what}: the window's stencil");
-}
-
-/// After the lift: no error; a whole invalidation leaves undefined contents,
+/// The case: no error; a whole invalidation leaves undefined contents,
 /// so nothing else is asserted; after a sub one the window's pixels outside
 /// `SUB` take the source values of the named planes (and the plane the mask
 /// does not name is unchanged).
@@ -812,72 +787,34 @@ fn lifted(mask: GLbitfield, sub: bool) {
     }
 }
 
-/* ---- today: the invalidation is legal, the blit into the window is refused ---- */
+/* ---- the lift: src/gl/blit.rs DepthSource::Window / PlaneDst::Window -------- */
 
 #[test]
-fn whole_invalidate_then_depth_blit_is_refused() {
-    refused(DEPTH, false);
-}
-
-#[test]
-fn whole_invalidate_then_stencil_blit_is_refused() {
-    refused(STENCIL, false);
-}
-
-#[test]
-fn whole_invalidate_then_depth_stencil_blit_is_refused() {
-    refused(DEPTH | STENCIL, false);
-}
-
-#[test]
-fn sub_invalidate_then_depth_blit_is_refused() {
-    refused(DEPTH, true);
-}
-
-#[test]
-fn sub_invalidate_then_stencil_blit_is_refused() {
-    refused(STENCIL, true);
-}
-
-#[test]
-fn sub_invalidate_then_depth_stencil_blit_is_refused() {
-    refused(DEPTH | STENCIL, true);
-}
-
-/* ---- after the lift ------------------------------------------------------------ */
-
-#[test]
-#[ignore = "needs gl-ds-window"]
 fn whole_invalidate_then_depth_blit_is_no_error() {
     lifted(DEPTH, false);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn whole_invalidate_then_stencil_blit_is_no_error() {
     lifted(STENCIL, false);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn whole_invalidate_then_depth_stencil_blit_is_no_error() {
     lifted(DEPTH | STENCIL, false);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn sub_invalidate_then_depth_blit_reaches_the_window_outside_the_rectangle() {
     lifted(DEPTH, true);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn sub_invalidate_then_stencil_blit_reaches_the_window_outside_the_rectangle() {
     lifted(STENCIL, true);
 }
 
 #[test]
-#[ignore = "needs gl-ds-window"]
 fn sub_invalidate_then_depth_stencil_blit_reaches_the_window_outside_the_rectangle() {
     lifted(DEPTH | STENCIL, true);
 }
