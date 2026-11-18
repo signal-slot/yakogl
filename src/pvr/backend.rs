@@ -2086,31 +2086,85 @@ fn fragcoord_y_pair(d: &GlesDraw) -> [f32; 2] {
     }
 }
 
-/// The output dwords the background clear writes: one per attachment when
-/// the frame's attachments are several and all 8-bit (at most
-/// [`Backend::eot_pairs`], three or four), else 0 (the single-target
-/// programs). Then the clear colour is uploaded once per attachment (shared
-/// registers 0..n) and the background object runs the n-dword clear program
-/// (two: the RGBA16F one, which is the same moves; three:
-/// PVR_USC_CLEAR_FS3; four: the RGBA32UI one, `bg_kick4_off`), so every
-/// attachment starts from the clear colour; the one-dword program writes
-/// pixel output 0 alone, and the other attachments were emitted from output
-/// registers nothing wrote (gl_test 106 mrt3: the clear reached only draw
-/// buffer 0). Measured on the AM62P at cece5c23 (Linux path, online pair):
-/// 106 mask 0 with it, mask 6 without, 55 and the regression set 29/29 in
-/// both arms. A clear of some draw buffers only (`clear_target_mask`) never
-/// reaches the background object: [`pvr_backend_draw`] makes it per-target
-/// quads ([`clear_by_target_quads`]).
+/// The output dwords the background clear writes when the frame's
+/// attachments are several (at most [`Backend::eot_pairs`], three or four)
+/// and each is 8-bit or integer: the register after the last attachment's,
+/// as the end-of-tile emit lays them out ([`attachment_out_reg`]: one
+/// register per 8-bit attachment, an integer attachment's packed dwords on
+/// an even register when two or more). Else 0 (the single-target programs).
+/// Then each attachment's packed clear colour is uploaded at its registers
+/// ([`mrt_clear_registers`]) and the background object runs the n-dword
+/// clear program (two: the RGBA16F one, which is the same moves; three:
+/// PVR_USC_CLEAR_FS3; four: the RGBA32UI one, `bg_kick4_off`, built only
+/// on a four-pair backend), so every attachment starts from the clear
+/// colour; the one-dword program writes pixel output 0 alone, and the other
+/// attachments were emitted from output registers nothing wrote (gl_test
+/// 106 mrt3: the clear reached only draw buffer 0). Measured on the AM62P
+/// at cece5c23 (Linux path, online pair) with 8-bit attachments: 106 mask 0
+/// with it, mask 6 without, 55 and the regression set 29/29 in both arms.
+/// Not with a float-class attachment among them (the background object
+/// leaves those pixels untouched on silicon, [`clears_by_quad`]), nor past
+/// the pixel's four registers, nor four on a three-pair backend. A clear of
+/// some draw buffers only (`clear_target_mask`), or of several that the
+/// background object cannot clear while one is integer, never reaches it:
+/// [`pvr_backend_draw`] makes it per-target quads
+/// ([`clear_by_target_quads`]).
 fn mrt_clear_dwords(b: &Backend) -> u32 {
-    let n = b.num_targets as usize;
-    if !(2..=b.eot_pairs as usize).contains(&n) {
-        return 0;
-    }
     let fmt = |i: usize| if i != 0 { b.targets[i].format } else { b.target_format };
-    if (0..n).any(|i| gles_surf_rt_class(fmt(i)) != 0 || gles_surf_is_integer(fmt(i))) {
+    mrt_clear_regs(b.num_targets as usize, b.eot_pairs, fmt)
+}
+
+/// [`mrt_clear_dwords`] for the frame a draw `d` would open: the same walk
+/// over the draw's targets ([`frame_begin_with`] keeps `eot_pairs` of them,
+/// attachment 0 the draw's own target).
+fn mrt_clear_dwords_of(d: &GlesDraw, eot_pairs: u32) -> u32 {
+    let n = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(eot_pairs as u8) as usize;
+    let fmt = |i: usize| if i != 0 { d.targets[i].format } else { d.target_format };
+    mrt_clear_regs(n, eot_pairs, fmt)
+}
+
+/// [`mrt_clear_dwords`]'s walk over `n` attachments of formats `fmt(i)` on
+/// an `eot_pairs`-pair backend.
+fn mrt_clear_regs(n: usize, eot_pairs: u32, fmt: impl Fn(usize) -> u8) -> u32 {
+    if !(2..=eot_pairs as usize).contains(&n) {
         return 0;
     }
-    n as u32
+    let mut out = 0u32;
+    for i in 0..n {
+        let f = fmt(i);
+        if gles_surf_rt_class(f) != 0 {
+            return 0;
+        }
+        let regs = surf_out_dwords(f);
+        if regs >= 2 && out & 1 != 0 {
+            out += 1;
+        }
+        out += regs;
+    }
+    /* a program for that many dwords: one, two and three always, four only
+     * where its kick was built (`bg_kick4_off`) */
+    if out > PVR_BACKEND_MAX_OUT_REGS || (out == 4 && eot_pairs != 4) {
+        return 0;
+    }
+    out
+}
+
+/// What the pixel's output registers start from under the background
+/// clear of several attachments ([`mrt_clear_dwords`] dwords of them): each
+/// attachment's clear colour packed for its format ([`clear_uniform`]: the
+/// RGBA8 bytes, an integer attachment's raw dwords) at the registers the
+/// end-of-tile emit stores it from ([`attachment_out_reg`]). A register no
+/// attachment takes (the odd one before a two-dword attachment) is 0.
+fn mrt_clear_registers(b: &Backend) -> [u32; PVR_BACKEND_MAX_OUT_REGS as usize] {
+    let mut regs = [0u32; PVR_BACKEND_MAX_OUT_REGS as usize];
+    for i in 0..(b.num_targets as usize).min(b.targets.len()) {
+        let fmt = if i != 0 { b.targets[i].format } else { b.target_format };
+        let Some(reg) = attachment_out_reg(b, i) else { break };
+        let packed = clear_uniform(fmt, &b.clear_rgba);
+        let n = surf_out_dwords(fmt) as usize;
+        regs[reg as usize..reg as usize + n].copy_from_slice(&packed[..n]);
+    }
+    regs
 }
 
 /// The TA object type of a point sprite on this target: SPRITE_10UV on a
@@ -4486,11 +4540,14 @@ fn clear_slots(d: &GlesDraw, max_rt: u32) -> (u8, u8) {
 /// clears some of several attachments and not the others (glClearBuffer of
 /// one draw buffer, `clear_target_mask`), which the background object
 /// cannot do -- it starts every attachment from the clear colour -- or the
-/// attachments are several and one is integer, which no background program
-/// clears. The frame then loads every attachment, as a frame without a
-/// colour clear does, and each attachment the clear names is drawn over by
-/// a quad that writes its own output registers alone
-/// ([`record_slot_clear_quad`]), so the others keep their pixels.
+/// attachments are several, one is integer, and the background clear of
+/// several attachments cannot carry them ([`mrt_clear_dwords_of`] 0: a
+/// float-class attachment among them, one past the pixel's four registers,
+/// four registers on a three-pair backend). The frame then loads every
+/// attachment, as a frame without a colour clear does, and each attachment
+/// the clear names is drawn over by a quad that writes its own output
+/// registers alone ([`record_slot_clear_quad`]), so the others keep their
+/// pixels.
 fn clear_by_target_quads(b: &Backend, d: &GlesDraw) -> bool {
     if !d.do_clear || d.clear_quad {
         return false;
@@ -4499,7 +4556,7 @@ fn clear_by_target_quads(b: &Backend, d: &GlesDraw) -> bool {
     let several = present.count_ones() > 1;
     let fmt = |i: usize| if i == 0 { d.target_format } else { d.targets[i].format };
     let any_int = (0..PVR_BACKEND_MAX_RT as usize).any(|i| present & (1 << i) != 0 && gles_surf_is_integer(fmt(i)));
-    slots != present || (several && any_int)
+    slots != present || (several && any_int && mrt_clear_dwords_of(d, b.eot_pairs) == 0)
 }
 
 /// The colour clear of the frame's attachment `k` (1..): the same
@@ -6425,14 +6482,17 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
 
 /// Whether a draw into several colour attachments, some integer, is drawn:
 /// every attachment is present and has the integer layout of attachment 0,
-/// the draw clears nothing, and `fs` is that layout's integer variant (no
-/// colour mask) writing every attachment's dwords. That program packs output
-/// `n` into the pixel's dwords from `n * d`, `d` the layout's dword count
-/// (`chain::pack_int_output`), which is where the end-of-tile emit reads
-/// attachment `n` from when every attachment takes `d` registers: dEQP's
-/// shader executor, two integer attachments of one layout (modf's `out0`
-/// and `out1`). Attachments of different layouts, or past the pixel's four
-/// output registers (two RGBA32UI), are not.
+/// the draw is no clear quad and clears nothing or clears every channel (the
+/// glClear fused into it: the frame's background clear, every attachment's
+/// packed colour at its registers, [`mrt_clear_dwords`]; a colour mask that
+/// keeps channels stays refused), and `fs` is that layout's integer variant
+/// (no colour mask) writing every attachment's dwords. That program packs
+/// output `n` into the pixel's dwords from `n * d`, `d` the layout's dword
+/// count (`chain::pack_int_output`), which is where the end-of-tile emit
+/// reads attachment `n` from when every attachment takes `d` registers:
+/// dEQP's shader executor, two integer attachments of one layout (modf's
+/// `out0` and `out1`). Attachments of different layouts, or past the
+/// pixel's four output registers (two RGBA32UI), are not.
 pub fn several_int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> bool {
     let n = (d.num_targets as usize).min(d.targets.len());
     let Some(l) = gles_surf_int_layout(d.target_format) else { return false };
@@ -6441,7 +6501,7 @@ pub fn several_int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> bool {
     d.target_gpu != 0
         && d.targets[1..n].iter().all(|t| t.gpu != 0 && t.format == d.target_format)
         && dwords <= PVR_BACKEND_MAX_OUT_REGS
-        && !d.do_clear
+        && (!d.do_clear || d.clear_color_mask & 0xf == 0xf)
         && !d.clear_quad
         && fs.is_some_and(|fs| fs.blend_key == shaderc::shc_blend_key_int_rt(rt) && u32::from(fs.num_outputs) == dwords)
 }
@@ -6482,9 +6542,11 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
      * [`several_int_targets_drawn`] says (attachments of one layout, the
      * program that packs them all), else refused by name, never drawn with
      * the wrong packing. A clear alone (no primitives) runs no program of
-     * the application's: the frame loads each attachment with its own
-     * program and the colour clear is a quad per attachment
-     * ([`clear_by_target_quads`]). */
+     * the application's: a full clear is the background object's, each
+     * attachment's packed colour at its registers ([`mrt_clear_dwords`]);
+     * one of some attachments, or one the background object cannot carry,
+     * loads each attachment with its own program and is a quad per
+     * attachment ([`clear_by_target_quads`]). */
     let ntargets = (d.num_targets as usize).min(d.targets.len());
     if ntargets > 1
         && d.index_count != 0
@@ -9277,10 +9339,11 @@ fn flush(p: &mut Pvr) -> i32 {
         /* the packed colour: one dword, RGBA16F's two, an integer target's
          * one to four (`clear_uniform`; zero past what the target takes) */
         col[..4].copy_from_slice(&packed);
-        /* several 8-bit attachments: the same packed colour for each (the
-         * PBE converts it to each attachment's format) */
-        for c in col.iter_mut().take(mrt_clear_dwords(b) as usize) {
-            *c = packed[0];
+        /* several 8-bit or integer attachments: each attachment's packed
+         * colour at its own registers (`mrt_clear_registers`; the PBE
+         * converts an 8-bit one's bytes to that attachment's format) */
+        if mrt_clear_dwords(b) != 0 {
+            col[..4].copy_from_slice(&mrt_clear_registers(b));
         }
         mem_write(&b.bg_color, 0, &col);
         cache_flush(&b.bg_color, 0, CLEAR_ATTACH_DWORDS * 4);
@@ -9456,16 +9519,18 @@ fn flush(p: &mut Pvr) -> i32 {
      * object only runs on empty tiles); a frame that keeps its colour drew
      * the load quad first, so the register value does not matter then. */
     b.kick.frag.usc_clear_register[0] = packed[0];
-    /* Several 8-bit attachments ([`mrt_clear_dwords`]): each output register
-     * starts from the colour too. A frame with any object on a tile starts
-     * that tile from these registers, not from the background object, and a
-     * clear-only frame always has one (the covering quad `flush` records):
-     * with register 0 alone, gl_test 106's clear left attachments 1 and 2 at
-     * 0x00000000 while the background program wrote all three (am62p-board,
-     * 5d194af8, both arms). */
+    /* Several 8-bit or integer attachments ([`mrt_clear_dwords`]): each
+     * output register starts from its attachment's packed colour too
+     * (`mrt_clear_registers`, what the background program uploads). A frame
+     * with any object on a tile starts that tile from these registers, not
+     * from the background object, and a clear-only frame always has one (the
+     * covering quad `flush` records): with register 0 alone, gl_test 106's
+     * clear left attachments 1 and 2 at 0x00000000 while the background
+     * program wrote all three (am62p-board, 5d194af8, both arms). */
     let n = mrt_clear_dwords(b) as usize;
-    for r in b.kick.frag.usc_clear_register.iter_mut().take(n).skip(1) {
-        *r = packed[0];
+    if n != 0 {
+        let regs = mrt_clear_registers(b);
+        b.kick.frag.usc_clear_register[..n].copy_from_slice(&regs[..n]);
     }
     /* The background object's depth is what the frame's depth buffer starts
      * from: the GL depth clear value (window space, 0..1), in the ZLS
