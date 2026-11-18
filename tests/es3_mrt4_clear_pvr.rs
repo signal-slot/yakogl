@@ -742,7 +742,7 @@ fn glclearbufferuiv_of_integer_attachment_three_is_kicked() {
 /// Four RGBA8UI attachments, a clear of attachment 3: no error, one kick
 /// with four targets and PBE state for render target 3 (item pvr-backend,
 /// plan #368). A DRAW into them still needs the integer targets drawn
-/// together (docs/notes/pvr-int-mixed-targets.md; `several_int_targets_drawn`).
+/// together (docs/notes/pvr-int-mixed-targets.md; `int_targets_drawn`).
 #[test]
 fn glclearbufferuiv_of_integer_attachment_three_reaches_the_fourth_target() {
     let _g = rig();
