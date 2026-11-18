@@ -5622,6 +5622,164 @@ fn an_integer_target_is_cleared_by_a_quad_of_its_packed_dwords() {
     }
 }
 
+/// A two-attachment frame of `formats` for [`Rig::draw`]'s draw, the
+/// second attachment 1 MiB past the first.
+fn two_targets(d: &mut GlesDraw, formats: [u8; 2]) {
+    int_target(d, formats[0]);
+    d.num_targets = 2;
+    d.targets[1] = GlesDrawTarget { gpu: d.target_gpu + 0x10_0000, w: 64, h: 64, format: formats[1], out_shift: 0 };
+}
+
+/// The background clear of the kick a frame was flushed as: the kick, the
+/// four dwords the background colour DMA uploads, and whether the kick
+/// program is the frame set's own one-dword one.
+fn background_clear(rig: &Rig) -> (PvrRenderKick, [u32; 4], bool) {
+    let (bg, one) = (rig.b().bg_color.gpu, rig.b().bg_kick_off);
+    assert_eq!(pvr_backend_flush(), 0);
+    let (k, _) = rig.kicks().last().cloned().expect("a kick");
+    let col = core::array::from_fn(|i| rig.gpu_u32(bg + 4 * i as u64));
+    let kick = (k.frag.pds_bgnd[0] & 0xffff_ffff) as u32;
+    (k, col, kick == one)
+}
+
+/// A full clear of two attachments, some or all integer, is the background
+/// object's ([`mrt_clear_dwords`]), not a load and a quad per attachment:
+/// the frame loads nothing, the background colour upload and the USC clear
+/// registers hold each attachment's own packed dwords ([`clear_uniform`] for
+/// its format) at the register the end-of-tile emit stores it from, the
+/// kick program is the two-dword one, and the emit reads attachment 1 from
+/// register 1 in its integer pack mode. Attachment 0 keeps its clear quad
+/// when it is integer ([`clears_by_quad`]); an RGBA8 attachment 0 beside an
+/// integer one has none.
+#[test]
+fn a_clear_of_two_integer_attachments_writes_each_ones_packed_dwords() {
+    let raw = [1u32, 2, 3, 4].map(f32::from_bits);
+    let rgba8 = pack_rgba8(&raw);
+    for (formats, regs, quads) in [
+        ([GLES_SURF_RGBA8UI, GLES_SURF_RGBA8UI], [0x0403_0201u32, 0x0403_0201, 0, 0], 1u32),
+        ([GLES_SURF_R32UI, GLES_SURF_RG16UI], [1, 0x0002_0001, 0, 0], 1),
+        ([GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI], [rgba8, 0x0403_0201, 0, 0], 0),
+    ] {
+        let name = format!("{} + {}", gles_surf_name(formats[0]), gles_surf_name(formats[1]));
+        let rig = Rig::new();
+        let mut d = rig.draw(0);
+        two_targets(&mut d, formats);
+        d.clear_rgba = raw;
+        assert_eq!(draw(&d), 0, "{name}");
+        let b = rig.b();
+        assert_eq!(mrt_clear_dwords(b), 2, "{name}: the two-dword background clear");
+        assert_eq!(mrt_clear_registers(b), regs, "{name}: each attachment's dwords at its register");
+        assert!(!b.frame_loads_color, "{name}: the frame loads nothing");
+        assert_eq!(b.frame_quads, quads, "{name}: attachment 0's clear quad alone");
+        assert!(rig.fbload().loads.iter().all(|l| l.tex.base_gpu == 0), "{name}: no attachment load");
+        let two = b.bg_kick2_off;
+        let (k, col, one) = background_clear(&rig);
+        assert_eq!(col, regs, "{name}: the background colour upload");
+        assert_eq!(k.frag.usc_clear_register, regs, "{name}: the USC clear registers");
+        assert!(!one, "{name}: not the one-dword program");
+        assert_eq!((k.frag.pds_bgnd[0] & 0xffff_ffff) as u32, two, "{name}: the two-dword kick program");
+        assert_eq!(k.frag.num_rt, 2, "{name}");
+        let emits = rig.eot_emits();
+        let e = emits.last().expect("an end-of-tile program");
+        assert_eq!(e[..2], pbe_emit_words(d.target_gpu, formats[0], 0, 0), "{name}: attachment 0's emit");
+        assert_eq!(e[2..4], pbe_emit_words(d.targets[1].gpu, formats[1], 1, 1), "{name}: attachment 1 from register 1");
+        assert_eq!((u64::from(e[3]) >> 13) & 1, 0, "{name}: attachment 1 not normalised");
+        assert!(
+            !rig.logs().iter().any(|l| l.contains("refused") || l.contains("not cleared")),
+            "{name}: {:?}",
+            rig.logs()
+        );
+    }
+}
+
+/// RGBA8UI beside RGBA16UI: the two-dword attachment starts on the even
+/// register after the one-dword one, as the emit lays them out, so the
+/// clear writes four registers with register 1 left 0. On a four-pair
+/// backend (the GL core's draw-target count 4, `backend_draws_targets`)
+/// that is the four-dword background program; a three-pair backend has no
+/// kick for it, so the clear is the per-attachment quads over the frame's
+/// load ([`clear_by_target_quads`]), attachment 1's quad writing registers
+/// 2 and 3.
+#[test]
+fn a_clear_of_an_aligned_integer_attachment_pair_fills_four_registers_or_falls_back() {
+    for four in [false, true] {
+        let rig = Rig::new();
+        if four {
+            rig.gl.backend_draws_targets(4);
+            restart_with_arenas(4, 1024, 768);
+        }
+        assert_eq!(rig.b().eot_pairs, if four { 4 } else { 3 }, "the backend's pairs");
+        let mut d = rig.draw(0);
+        two_targets(&mut d, [GLES_SURF_RGBA8UI, GLES_SURF_RGBA16UI]);
+        d.clear_rgba = [1u32, 2, 3, 4].map(f32::from_bits);
+        assert_eq!(draw(&d), 0, "four pairs {four}");
+        let b = rig.b();
+        let regs = [0x0403_0201u32, 0, 0x0002_0001, 0x0004_0003];
+        assert_eq!(attachment_out_reg(b, 1), Some(2), "attachment 1 on the even pair");
+        if four {
+            assert_eq!(mrt_clear_dwords(b), 4, "the four-dword background clear");
+            assert_eq!(mrt_clear_registers(b), regs);
+            assert!(!b.frame_loads_color && b.frame_quads == 1, "no load; attachment 0's clear quad");
+            let four_kick = b.bg_kick4_off;
+            assert_ne!(four_kick, 0, "the four-dword kick was built");
+            let (k, col, _) = background_clear(&rig);
+            assert_eq!(col, regs, "the background colour upload");
+            assert_eq!(k.frag.usc_clear_register, regs, "the USC clear registers");
+            assert_eq!((k.frag.pds_bgnd[0] & 0xffff_ffff) as u32, four_kick, "the four-dword kick program");
+        } else {
+            assert_eq!(mrt_clear_dwords(b), 0, "no four-dword kick on a three-pair backend");
+            assert!(b.frame_loads_color, "the frame loads every attachment");
+            let fl = rig.fbload();
+            assert_eq!(fl.loads[1].tex.base_gpu, d.targets[1].gpu, "attachment 1 loaded");
+            assert_eq!((b.frame_quads, b.ndraws), (2, 4), "two loads, then two clear quads");
+            assert_eq!(fl.clear_pack, [0x0002_0001, 0x0004_0003, 0, 0], "attachment 1's quad: its dwords");
+            assert_eq!(fl.load_draw.fs_usc_gpu, b.clear_fs_at[1][1].gpu, "the two-dword program moved to register 2");
+            assert!(!b.frame_cleared, "the quads carry the colour, not the background object");
+            let (_, _, one) = background_clear(&rig);
+            assert!(one, "the one-dword background program");
+        }
+        let emits = rig.eot_emits();
+        let e = emits.last().expect("an end-of-tile program");
+        assert_eq!(e[2..4], pbe_emit_words(d.targets[1].gpu, GLES_SURF_RGBA16UI, 2, 1), "attachment 1 from register 2");
+    }
+}
+
+/// A glClear fused into a draw of two integer attachments of one layout
+/// (dEQP's executor clears, then draws): the draw is drawn
+/// (`several_int_targets_drawn`) with the frame's background clear carrying
+/// both attachments' values, no load. A clear under a colour mask that keeps
+/// channels stays refused with the draw, by name.
+#[test]
+fn a_draw_fused_with_a_full_clear_of_two_integer_targets_is_drawn() {
+    let rig = Rig::new();
+    let mut d = rig.draw(3);
+    two_targets(&mut d, [GLES_SURF_R32UI, GLES_SURF_R32UI]);
+    d.clear_rgba = [7u32, 8, 9, 10].map(f32::from_bits);
+    let mut fs = ShcShader::ZERO;
+    fs.meta_off = SHC_NO_META;
+    fs.temps = 3;
+    fs.num_outputs = 2;
+    fs.blend_key = shaderc::shc_blend_key_int_rt(shaderc::ShcIntRt { channels: 1, bits: 32, signed: false });
+    d.fs = &fs;
+    assert!(d.do_clear && d.clear_color_mask == 0xf, "the rig's draw clears every channel");
+    assert!(several_int_targets_drawn(&d, Some(&fs)), "a full clear fused into the draw");
+    let masked = GlesDraw { clear_color_mask: 0b0011, ..d };
+    assert!(!several_int_targets_drawn(&masked, Some(&fs)), "a masked clear");
+    assert_eq!(draw(&masked), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
+
+    assert_eq!(draw(&d), 0);
+    let b = rig.b();
+    assert!(!b.frame_loads_color, "no load");
+    assert_eq!(b.frame_quads, 1, "attachment 0's clear quad");
+    assert_eq!(b.ndraws, 2, "the quad and the draw");
+    assert_eq!(mrt_clear_registers(b), [7, 7, 0, 0], "the red value for each attachment");
+    let (k, col, _) = background_clear(&rig);
+    assert_eq!(col, [7, 7, 0, 0]);
+    assert_eq!(k.frag.usc_clear_register, [7, 7, 0, 0]);
+    assert_eq!(k.frag.num_rt, 2);
+}
+
 /// A frame into an integer target that does not clear it first loads the
 /// pixels back raw: the integer load program for the target's dwords over
 /// the target bound as an unsigned texel of its size, NEAREST, one level,
@@ -5811,8 +5969,9 @@ fn a_frame_into_several_float_targets_loads_each_back() {
 }
 
 /// What the PowerVR cannot do with an integer target is refused by name:
-/// a clear whose colour mask keeps some of its channels, and an integer
-/// attachment beside another one.
+/// a clear whose colour mask keeps some of its channels (of one attachment,
+/// and of two integer ones, whose full clear the background object carries),
+/// and an integer attachment beside another one.
 #[test]
 fn integer_targets_refuse_partial_masks_and_company() {
     let rig = Rig::new();
@@ -5821,11 +5980,16 @@ fn integer_targets_refuse_partial_masks_and_company() {
     d.clear_quad = true;
     d.clear_color_mask = 0b0011;
     assert_eq!(draw(&d), -util::ENOTSUP);
-    assert!(
-        rig.logs().iter().any(|l| l.contains("colour mask that keeps some channels of a RGBA8UI")),
-        "{:?}",
-        rig.logs()
-    );
+    let masked = "colour mask that keeps some channels of a RGBA8UI";
+    assert!(rig.logs().iter().any(|l| l.contains(masked)), "{:?}", rig.logs());
+    /* the same mask over two integer attachments: the same refusal (logged
+     * once per cause), not the integer-beside-another one */
+    let mut pair = rig.draw(0);
+    two_targets(&mut pair, [GLES_SURF_RGBA8UI, GLES_SURF_RGBA8UI]);
+    pair.clear_quad = true;
+    pair.clear_color_mask = 0b0011;
+    assert_eq!(draw(&pair), -util::ENOTSUP);
+    assert!(!rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
     /* R8UI has only red: a mask leaving red on writes it whole */
     let mut r = rig.draw(0);
     int_target(&mut r, GLES_SURF_R8UI);
