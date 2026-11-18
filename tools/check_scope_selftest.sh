@@ -96,6 +96,13 @@ want tests/es3_fragdepth_cases.rs "vivante v3d"
 want src/mali/backend.rs mali
 want tests/mali_blend_states.rs mali
 want tests/mali_vcube_magswitch.rs mali
+# plan #377's dEQP byte-compare tests, their shared module, and the
+# deqp_<family>_* references they read
+want tests/mali_deqp_intval.rs mali
+want tests/mali_deqp_colourpair.rs mali
+want tests/mali_ref_selftest.rs mali
+want tests/mali_ref/mod.rs mali
+want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
 want src/mali/genxml/v10.rs mali
 want src/shaderc/online/mali/mod.rs mali
 want tools/mali/gen_pack_rs.py mali
@@ -211,6 +218,10 @@ expect "mali: its tests" '^plan  test    host-test,gpu-mali,shaderc-online,no-sh
 expect "mali: the generated packers" '^plan  gen     src/mali/genxml == tools/mali/gen_pack_rs.py' "$out"
 expect "mali: the generated ISA table" '^plan  gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py' "$out"
 expect "mali: no V3D row" '^skip  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
+# a dEQP byte-compare test: its row (and the rest of the mali scope), nothing else
+out=$(plan tests/mali_deqp_intval.rs)
+expect "mali: the deqp byte-compare row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
+expect "mali: a deqp test change, the mali rows only" '^check.sh: .*\(--changed HEAD, scopes: mali \)' "$out"
 # A harness script runs in the row that calls it: tools/hostharness/glmark2/run.sh
 # is run by the glmark2 corpus row (a change there once passed a gate that
 # skipped the only row able to fail on it).
