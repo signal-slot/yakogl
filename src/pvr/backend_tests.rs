@@ -778,6 +778,9 @@ impl Rig {
             ffs: Box::new(fs),
         };
         rig.reset_records();
+        /* what the last frame load bound outlives a shutdown: a test that
+         * checks a frame loads nothing must not see another test's loads */
+        rig.fbload().loads = [AttachmentLoad::ZERO; PVR_BACKEND_MAX_RT as usize];
         rig
     }
 
@@ -5746,7 +5749,7 @@ fn a_clear_of_an_aligned_integer_attachment_pair_fills_four_registers_or_falls_b
 
 /// A glClear fused into a draw of two integer attachments of one layout
 /// (dEQP's executor clears, then draws): the draw is drawn
-/// (`several_int_targets_drawn`) with the frame's background clear carrying
+/// (`int_targets_drawn`) with the frame's background clear carrying
 /// both attachments' values, no load. A clear under a colour mask that keeps
 /// channels stays refused with the draw, by name.
 #[test]
@@ -5762,9 +5765,9 @@ fn a_draw_fused_with_a_full_clear_of_two_integer_targets_is_drawn() {
     fs.blend_key = shaderc::shc_blend_key_int_rt(shaderc::ShcIntRt { channels: 1, bits: 32, signed: false });
     d.fs = &fs;
     assert!(d.do_clear && d.clear_color_mask == 0xf, "the rig's draw clears every channel");
-    assert!(several_int_targets_drawn(&d, Some(&fs)), "a full clear fused into the draw");
+    assert!(int_targets_drawn(&d, Some(&fs)).is_ok(), "a full clear fused into the draw");
     let masked = GlesDraw { clear_color_mask: 0b0011, ..d };
-    assert!(!several_int_targets_drawn(&masked, Some(&fs)), "a masked clear");
+    assert!(int_targets_drawn(&masked, Some(&fs)).is_err(), "a masked clear");
     assert_eq!(draw(&masked), -util::ENOTSUP);
     assert!(rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
 
@@ -5868,7 +5871,7 @@ fn the_frame_load_programs_pixel_output_writes_are_found_and_moved() {
 }
 
 /// Two integer attachments of one layout (dEQP's shader executor, drawn by
-/// `several_int_targets_drawn`, which never clears, so every such frame
+/// `int_targets_drawn`, which never clears, so every such frame
 /// loads): the frame load restores each attachment, not attachment 0 alone.
 /// One load object per attachment, each reading its own attachment raw
 /// through the R32UI layout's load program, and attachment 1's program
@@ -5889,7 +5892,7 @@ fn a_frame_into_several_integer_targets_loads_each_back_raw() {
     fs.num_outputs = 2;
     fs.blend_key = shaderc::shc_blend_key_int_rt(shaderc::ShcIntRt { channels: 1, bits: 32, signed: false });
     d.fs = &fs;
-    assert!(several_int_targets_drawn(&d, Some(&fs)));
+    assert!(int_targets_drawn(&d, Some(&fs)).is_ok());
     assert_eq!(draw(&d), 0);
     let (b, fl) = (rig.b(), rig.fbload());
     assert_eq!(b.frame_quads, 2, "one load per attachment");
@@ -6003,6 +6006,136 @@ fn integer_targets_refuse_partial_masks_and_company() {
         GlesDrawTarget { gpu: m.target_gpu + 0x10_0000, w: 64, h: 64, format: GLES_SURF_R32UI, out_shift: 0 };
     assert_eq!(draw(&m), -util::ENOTSUP);
     assert!(rig.logs().iter().any(|l| l.contains("integer colour attachment beside")), "{:?}", rig.logs());
+
+    /* the same RGBA8 + R32UI draw under the program of its mixed key is
+     * drawn; under blending or a colour mask that keeps some channels (the
+     * mixed key carries neither) it is refused by name, and so are layouts
+     * past the pixel's four registers and an sRGB attachment in the mix */
+    use super::super::target_keys::*;
+    let mut fs = ShcShader::ZERO;
+    fs.meta_off = SHC_NO_META;
+    fs.temps = 3;
+    fs.num_outputs = 2;
+    fs.blend_key = super::super::target_keys::draw_mixed_key(&m).expect("a mix");
+    m.fs = &fs;
+    m.do_clear = false;
+    assert_eq!(int_targets_drawn(&m, Some(&fs)), Ok(()));
+    for (why, d) in
+        [(REFUSE_MIX_BLEND, GlesDraw { blend: true, ..m }), (REFUSE_MIX_MASK, GlesDraw { color_mask: 0b0111, ..m })]
+    {
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Err(why));
+        assert_eq!(draw(&d), -util::ENOTSUP, "{why}");
+        assert!(rig.logs().iter().any(|l| l == why), "{why}: {:?}", rig.logs());
+    }
+    /* a clear under a mask that keeps channels, fused in: the line above,
+     * logged once */
+    let masked = GlesDraw { do_clear: true, clear_color_mask: 0b0011, ..m };
+    assert_eq!(int_targets_drawn(&masked, Some(&fs)), Err(REFUSE_NOT_A_MIX));
+    assert_eq!(draw(&masked), -util::ENOTSUP);
+    /* every channel off is the ISP's: nothing of the mask reaches the program */
+    let off = GlesDraw { color_write: false, color_mask: 0, ..m };
+    assert_eq!(int_targets_drawn(&off, Some(&fs)), Ok(()));
+    for (why, formats) in [
+        (REFUSE_FOUR_REGISTERS, [GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI]),
+        (REFUSE_ONE_LAYOUT_PAST_FOUR, [GLES_SURF_RGBA32UI, GLES_SURF_RGBA32UI]),
+        (REFUSE_SRGB, [GLES_SURF_SRGB8_A8, GLES_SURF_R32UI]),
+    ] {
+        let mut w = m;
+        two_targets(&mut w, formats);
+        assert_eq!(int_targets_drawn(&w, Some(&fs)), Err(why));
+        assert_eq!(draw(&w), -util::ENOTSUP, "{why}");
+        assert!(rig.logs().iter().any(|l| l == why), "{why}: {:?}", rig.logs());
+    }
+    /* an integer attachment 0: `blend` is off for it whatever GL_BLEND is
+     * (ES 3.0 4.1.8), so the factors decide; the replace is drawn */
+    let mut ib = m;
+    two_targets(&mut ib, [GLES_SURF_R32UI, GLES_SURF_RGBA8888]);
+    let ifs = ShcShader { blend_key: super::super::target_keys::draw_mixed_key(&ib).expect("a mix"), ..fs };
+    let (one, zero) = (shaderc::SHC_BF_ONE as u8, shaderc::SHC_BF_ZERO as u8);
+    let replace =
+        GlesDraw { blend_src_rgb: one, blend_dst_rgb: zero, blend_src_alpha: one, blend_dst_alpha: zero, ..ib };
+    assert_eq!(int_targets_drawn(&replace, Some(&ifs)), Ok(()));
+    let alpha = GlesDraw { blend_src_rgb: shaderc::SHC_BF_SRC_ALPHA as u8, ..replace };
+    assert_eq!(int_targets_drawn(&alpha, Some(&ifs)), Err(REFUSE_MIX_BLEND), "a factor");
+    let min = GlesDraw { blend_eq_alpha: shaderc::SHC_BLEND_MIN as u8, ..replace };
+    assert_eq!(int_targets_drawn(&min, Some(&ifs)), Err(REFUSE_MIX_BLEND), "an equation");
+    assert_eq!(draw(&m), 0, "the mix under its program");
+    assert_eq!(rig.b().num_targets, 2);
+}
+
+/// The registers a mix's per-target keys lay its outputs at
+/// (`shc_mixed_out_layout`, the compiler's walk) are the ones the
+/// end-of-tile emit and the frame load use for each attachment
+/// ([`attachment_out_reg`], [`surf_out_dwords`]): every colour format that
+/// has a per-target key takes as many registers either way.
+#[test]
+fn a_mixs_target_keys_take_the_emits_registers() {
+    use crate::target_key::{gles_surf_target_key, shc_target_key_dwords};
+    let mut keyed = 0;
+    for fmt in 0..=u8::MAX {
+        if let Some(k) = gles_surf_target_key(fmt) {
+            keyed += 1;
+            assert_eq!(shc_target_key_dwords(k), Some(surf_out_dwords(fmt)), "{}", gles_surf_name(fmt));
+        }
+    }
+    assert!(keyed > 20, "{keyed} keyed formats");
+}
+
+/// A frame of a mix (drawn under its mixed key, no clear, so it loads):
+/// each attachment is loaded by its own layout's program writing the
+/// registers the compiler wrote it at (`shc_mixed_out_layout`'s starts)
+/// and the end-of-tile emit stores it from: R32I + RG32I at 0 and 2 (1 is
+/// a hole), RGBA16F + R32UI + RGBA8 at 0, 2 and 3.
+#[test]
+fn a_frame_of_a_mix_loads_each_attachment_at_its_compiled_registers() {
+    use crate::target_key::{gles_surf_target_key, shc_mixed_out_layout};
+    let mixes: [(&[u8], &[u32]); 2] = [
+        (&[GLES_SURF_R32I, GLES_SURF_RG32I], &[0, 2]),
+        (&[GLES_SURF_RGBA16F, GLES_SURF_R32UI, GLES_SURF_RGBA8888], &[0, 2, 3]),
+    ];
+    for (formats, starts) in mixes {
+        let name = formats.iter().map(|&f| gles_surf_name(f)).collect::<Vec<_>>().join(" + ");
+        let rig = Rig::new();
+        let mut d = rig.draw(3);
+        d.do_clear = false;
+        int_target(&mut d, formats[0]);
+        d.num_targets = formats.len() as u8;
+        for (i, &f) in formats.iter().enumerate().skip(1) {
+            d.targets[i] =
+                GlesDrawTarget { gpu: d.target_gpu + 0x10_0000 * i as u64, w: 64, h: 64, format: f, out_shift: 0 };
+        }
+        let keys: Vec<u32> = formats.iter().map(|&f| gles_surf_target_key(f).unwrap()).collect();
+        let (compiled, span) = shc_mixed_out_layout(&keys).expect("a layout");
+        assert_eq!(compiled[..formats.len()].iter().map(|&s| u32::from(s)).collect::<Vec<_>>(), starts, "{name}");
+        let mut fs = ShcShader::ZERO;
+        fs.meta_off = SHC_NO_META;
+        fs.temps = 3;
+        fs.num_outputs = span;
+        fs.blend_key = super::super::target_keys::draw_mixed_key(&d).expect("a mix");
+        d.fs = &fs;
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()), "{name}");
+        assert_eq!(draw(&d), 0, "{name}");
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert_eq!(b.frame_quads, formats.len() as u32, "{name}: one load per attachment");
+        for (i, (&f, &reg)) in formats.iter().zip(starts).enumerate() {
+            assert_eq!(attachment_out_reg(b, i), Some(reg), "{name}: attachment {i}");
+            let l = fl.loads[i];
+            assert_eq!(l.tex.base_gpu, d.targets[i].gpu, "{name}: attachment {i}: its own texture");
+            assert_eq!((l.row, l.out_reg), (fbload_row(f), reg), "{name}: attachment {i}: its layout's load");
+            let moved = load_program(&rig, l.fs_usc_gpu, l.row);
+            let (at, n) = pixel_output_bytes(internal_words(internal(FBLOAD_ROWS[l.row]))).expect("its output writes");
+            let regs: Vec<u32> = at[..n].iter().map(|&k| (moved[k / 4] >> (k % 4 * 8) & 0xff) - 0x20).collect();
+            let want: Vec<u32> = (reg..reg + surf_out_dwords(f)).collect();
+            assert_eq!(regs, want, "{name}: attachment {i}: the registers its load writes");
+            #[cfg(feature = "shaderc-online")]
+            assert_eq!(decoded_pixel_outputs(&moved).iter().map(|&(_, r)| r).collect::<Vec<_>>(), want);
+        }
+        assert_eq!(pvr_backend_flush(), 0);
+        let e = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        for (i, &reg) in starts.iter().enumerate() {
+            assert_eq!((e[2 * i + 1] >> 14) & 3, reg, "{name}: attachment {i}: the emit's source_pos");
+        }
+    }
 }
 
 /* ---- sRGB render targets (docs/es3/srgb.md 4) ------------------------------ */

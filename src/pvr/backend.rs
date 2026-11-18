@@ -6480,30 +6480,78 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
         || (any_clear && d.do_clear && b.frame_loads_color)
 }
 
-/// Whether a draw into several colour attachments, some integer, is drawn:
-/// every attachment is present and has the integer layout of attachment 0,
-/// the draw is no clear quad and clears nothing or clears every channel (the
+/// Whether a draw into several colour attachments, some integer, is drawn
+/// (`Ok`), else the line it is refused with ([`super::target_keys`]). The
+/// draw is no clear quad and clears nothing or clears every channel (the
 /// glClear fused into it: the frame's background clear, every attachment's
-/// packed colour at its registers, [`mrt_clear_dwords`]; a colour mask that
-/// keeps channels stays refused), and `fs` is that layout's integer variant
-/// (no colour mask) writing every attachment's dwords. That program packs
-/// output `n` into the pixel's dwords from `n * d`, `d` the layout's dword
-/// count (`chain::pack_int_output`), which is where the end-of-tile emit
-/// reads attachment `n` from when every attachment takes `d` registers:
-/// dEQP's shader executor, two integer attachments of one layout (modf's
-/// `out0` and `out1`). Attachments of different layouts, or past the
-/// pixel's four output registers (two RGBA32UI), are not.
-pub fn several_int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> bool {
+/// packed colour at its registers, [`mrt_clear_dwords`], or the
+/// per-attachment quads, [`clear_by_target_quads`]; a clear under a colour
+/// mask that keeps channels stays refused), and the attachments are one of:
+///
+/// - One integer layout, every attachment present: `fs` is that layout's
+///   integer variant (no colour mask) writing every attachment's dwords. It
+///   packs output `n` into the pixel's dwords from `n * d`, `d` the layout's
+///   dword count (`chain::pack_int_output`), which is where the end-of-tile
+///   emit reads attachment `n` from when every attachment takes `d`
+///   registers: dEQP's shader executor (modf's `out0` and `out1`). Past the
+///   pixel's four output registers (two RGBA32UI) it is refused by name.
+/// - A mix (integer beside float, or integer layouts that differ, dense, at
+///   most `SHC_MIXED_MAX_TARGETS`, no sRGB): `fs` is the variant of the
+///   draw's mixed key ([`super::target_keys::draw_mixed_key`]) writing the
+///   registers the layout spans. The compiler puts target `i` at
+///   `shc_mixed_out_layout`'s start `i` (each after the one before, one of
+///   two or more dwords on an even register), the walk the end-of-tile emit
+///   and the frame load make ([`attachment_out_reg`]). The key carries no
+///   blend and no colour mask, so a draw with either is refused by name, as
+///   is a layout past the four registers (RGBA8 beside RGBA32UI).
+pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'static str> {
+    use super::target_keys::*;
     let n = (d.num_targets as usize).min(d.targets.len());
-    let Some(l) = gles_surf_int_layout(d.target_format) else { return false };
-    let rt = shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
-    let dwords = n as u32 * rt.dwords();
-    d.target_gpu != 0
-        && d.targets[1..n].iter().all(|t| t.gpu != 0 && t.format == d.target_format)
-        && dwords <= PVR_BACKEND_MAX_OUT_REGS
-        && (!d.do_clear || d.clear_color_mask & 0xf == 0xf)
-        && !d.clear_quad
-        && fs.is_some_and(|fs| fs.blend_key == shaderc::shc_blend_key_int_rt(rt) && u32::from(fs.num_outputs) == dwords)
+    if d.clear_quad || (d.do_clear && d.clear_color_mask & 0xf != 0xf) {
+        return Err(REFUSE_NOT_A_MIX);
+    }
+    if let Some(l) = gles_surf_int_layout(d.target_format) {
+        if d.targets[1..n].iter().all(|t| t.format == d.target_format) {
+            let rt = shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
+            let dwords = n as u32 * rt.dwords();
+            if dwords > PVR_BACKEND_MAX_OUT_REGS {
+                return Err(REFUSE_ONE_LAYOUT_PAST_FOUR);
+            }
+            let ok = d.target_gpu != 0
+                && d.targets[1..n].iter().all(|t| t.gpu != 0)
+                && fs.is_some_and(|fs| {
+                    fs.blend_key == shaderc::shc_blend_key_int_rt(rt) && u32::from(fs.num_outputs) == dwords
+                });
+            return if ok { Ok(()) } else { Err(REFUSE_NOT_A_MIX) };
+        }
+    }
+    let key = draw_mixed_key(d)?;
+    let (keys, k) = draw_target_keys(d)?;
+    let Some((_, span)) = crate::target_key::shc_mixed_out_layout(&keys[..k]) else {
+        return Err(REFUSE_FOUR_REGISTERS);
+    };
+    /* `d.blend` is attachment 0's (ES 3.0 4.1.8: off for an integer one),
+     * so an integer attachment 0 says nothing of the float ones beside it:
+     * then any state but the replace (ONE, ZERO, ADD; all 0 when nothing
+     * set it) is refused too, glBlendFunc under GL_BLEND off with it */
+    let replace = |src: u8, dst: u8| {
+        (src, dst) == (shaderc::SHC_BF_ONE as u8, shaderc::SHC_BF_ZERO as u8) || (src, dst) == (0, 0)
+    };
+    let replaces = replace(d.blend_src_rgb, d.blend_dst_rgb)
+        && replace(d.blend_src_alpha, d.blend_dst_alpha)
+        && u32::from(d.blend_eq_rgb) == shaderc::SHC_BLEND_ADD
+        && u32::from(d.blend_eq_alpha) == shaderc::SHC_BLEND_ADD;
+    if d.blend || (gles_surf_is_integer(d.target_format) && !replaces) {
+        return Err(REFUSE_MIX_BLEND);
+    }
+    if d.color_write && d.color_mask & 0xf != 0xf {
+        return Err(REFUSE_MIX_MASK);
+    }
+    if fs.is_some_and(|fs| fs.blend_key == key && fs.num_outputs == span) {
+        Ok(())
+    } else {
+        Err(REFUSE_NOT_A_MIX)
+    }
 }
 
 #[no_mangle]
@@ -6539,23 +6587,35 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
         return -util::ENOTSUP;
     }
     /* An integer colour attachment beside another one: drawn only as
-     * [`several_int_targets_drawn`] says (attachments of one layout, the
-     * program that packs them all), else refused by name, never drawn with
-     * the wrong packing. A clear alone (no primitives) runs no program of
-     * the application's: a full clear is the background object's, each
-     * attachment's packed colour at its registers ([`mrt_clear_dwords`]);
-     * one of some attachments, or one the background object cannot carry,
-     * loads each attachment with its own program and is a quad per
-     * attachment ([`clear_by_target_quads`]). */
+     * [`int_targets_drawn`] says (attachments of one layout, or a mix, with
+     * the program that packs them all where the emit reads them), else
+     * refused by name, never drawn with the wrong packing (one log site per
+     * line: `glog_once!` keys on the site). A clear alone (no primitives)
+     * runs no program of the application's: a full clear is the
+     * background object's, each attachment's packed colour at its registers
+     * ([`mrt_clear_dwords`]); one of some attachments, or one the
+     * background object cannot carry, loads each attachment with its own
+     * program and is a quad per attachment ([`clear_by_target_quads`]). */
     let ntargets = (d.num_targets as usize).min(d.targets.len());
     if ntargets > 1
         && d.index_count != 0
         && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format))
-        // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
-        && !several_int_targets_drawn(d, unsafe { d.fs.as_ref() })
     {
-        glog_once!("yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment");
-        return -util::ENOTSUP;
+        use super::target_keys::*;
+        // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
+        if let Err(why) = int_targets_drawn(d, unsafe { d.fs.as_ref() }) {
+            match why {
+                REFUSE_GL_NONE => glog_once!("{}", REFUSE_GL_NONE),
+                REFUSE_SRGB => glog_once!("{}", REFUSE_SRGB),
+                REFUSE_FOUR_REGISTERS => glog_once!("{}", REFUSE_FOUR_REGISTERS),
+                REFUSE_MIX_TARGETS => glog_once!("{}", REFUSE_MIX_TARGETS),
+                REFUSE_ONE_LAYOUT_PAST_FOUR => glog_once!("{}", REFUSE_ONE_LAYOUT_PAST_FOUR),
+                REFUSE_MIX_BLEND => glog_once!("{}", REFUSE_MIX_BLEND),
+                REFUSE_MIX_MASK => glog_once!("{}", REFUSE_MIX_MASK),
+                _ => glog_once!("{}", REFUSE_NOT_A_MIX),
+            }
+            return -util::ENOTSUP;
+        }
     }
     /* Several sRGB attachments are drawn as RGBA8 ones whose bytes are
      * already encoded ([`srgb_targets_as_rgba8`]): an sRGB attachment beside

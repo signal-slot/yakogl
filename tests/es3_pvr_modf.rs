@@ -18,9 +18,10 @@
 //! same two integer attachments. The back end refused every draw into an
 //! integer attachment beside another one; it now draws attachments of one
 //! integer layout with the program that packs them all
-//! (`several_int_targets_drawn`), which is the executor's draw for both
-//! stages. Two RGBA32UI attachments stay refused, in the compiler and in
-//! the back end.
+//! (`int_targets_drawn`), which is the executor's draw for both
+//! stages, and attachments of two integer layouts with the program of
+//! their mixed key (`target_key::shc_blend_key_mixed`). Two RGBA32UI
+//! attachments stay refused by name, in the compiler and in the back end.
 //!
 //! The sources follow dEQP's `glsShaderExecUtil.cpp` fragment executor and
 //! `es3fShaderCommonFunctionTests.cpp` (VK-GL-CTS, Apache-2.0, Copyright (c)
@@ -31,7 +32,8 @@
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr", not(feature = "report-es2")))]
 use yakogl::backend::{GlesDraw, GlesDrawTarget, GLES_SURF_R32UI, GLES_SURF_RG32UI, GLES_SURF_RGBA32UI};
-use yakogl::pvr::backend::several_int_targets_drawn;
+use yakogl::pvr::backend::int_targets_drawn;
+use yakogl::pvr::target_keys::{REFUSE_FOUR_REGISTERS, REFUSE_NOT_A_MIX, REFUSE_ONE_LAYOUT_PAST_FOUR};
 use yakogl::shaderc::online::powervr::chain::{compile_fragment_for, compile_vertex};
 use yakogl::shaderc::online::powervr::decode::decode_group;
 use yakogl::shaderc::online::powervr::isa::ops_for;
@@ -39,6 +41,7 @@ use yakogl::shaderc::online::powervr::operands::dsts;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
 use yakogl::shaderc::{shc_blend_key_int_rt, shc_blend_key_mask_off, ShcIntRt, ShcShader};
+use yakogl::target_key::shc_blend_key_mixed;
 
 /// The compiler keeps its output in one arena that every compile resets.
 static COMPILING: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -335,7 +338,7 @@ fn modf_vertex_executor_is_drawn_for_float_and_vec2() {
                 .unwrap_or_else(|e| panic!("{ty} {prec} passthrough: {e}"));
             assert_eq!(rec.num_outputs, 2 * channels, "{ty} {prec}");
             let fs = record(&rec);
-            assert!(several_int_targets_drawn(&executor_draw(format, 2, &fs), Some(&fs)), "{ty} {prec}: drawn");
+            assert!(int_targets_drawn(&executor_draw(format, 2, &fs), Some(&fs)).is_ok(), "{ty} {prec}: drawn");
         }
     }
 }
@@ -350,37 +353,78 @@ fn modf_vertex_vec3_and_vec4_stay_refused() {
         assert!(e.contains("integer colour outputs past the pixel's four output registers"), "{ty}: {e}");
     }
     let fs = ShcShader { blend_key: u32_key(4), num_outputs: 8, ..ShcShader::ZERO };
-    assert!(!several_int_targets_drawn(&executor_draw(GLES_SURF_RGBA32UI, 2, &fs), Some(&fs)));
+    assert_eq!(
+        int_targets_drawn(&executor_draw(GLES_SURF_RGBA32UI, 2, &fs), Some(&fs)),
+        Err(REFUSE_ONE_LAYOUT_PAST_FOUR)
+    );
 }
 
-/// What the back end still refuses beside an integer attachment: another
-/// layout, an attachment slot with no image, a program keyed for another
-/// layout or under a colour mask, one that writes fewer dwords than the
-/// attachments take, no program, a clear, and a non-integer attachment 0.
+/// What the back end still refuses beside an integer attachment: two
+/// layouts under one layout's program, an attachment slot with no image, a
+/// program keyed for another layout or under a colour mask, one that writes
+/// fewer dwords than the attachments take, no program, a clear, and RGBA8
+/// beside R32UI under R32UI's program (a mix needs its mixed key).
 #[test]
 fn several_int_targets_are_drawn_only_with_their_program() {
     let rec = compile_for(&passthrough_fragment("float", "highp"), u32_key(1)).expect("compiles");
     let fs = record(&rec);
     let ok = executor_draw(GLES_SURF_R32UI, 2, &fs);
-    assert!(several_int_targets_drawn(&ok, Some(&fs)));
+    assert!(int_targets_drawn(&ok, Some(&fs)).is_ok());
 
     let mut other = ok;
     other.targets[1].format = GLES_SURF_RG32UI;
-    assert!(!several_int_targets_drawn(&other, Some(&fs)), "two layouts");
+    assert!(int_targets_drawn(&other, Some(&fs)).is_err(), "two layouts");
     let mut none = ok;
     none.targets[1].gpu = 0;
-    assert!(!several_int_targets_drawn(&none, Some(&fs)), "a GL_NONE slot");
+    assert!(int_targets_drawn(&none, Some(&fs)).is_err(), "a GL_NONE slot");
     let wrong_key = ShcShader { blend_key: u32_key(2), ..fs };
-    assert!(!several_int_targets_drawn(&ok, Some(&wrong_key)), "another layout's variant");
+    assert!(int_targets_drawn(&ok, Some(&wrong_key)).is_err(), "another layout's variant");
     let masked = ShcShader { blend_key: fs.blend_key | shc_blend_key_mask_off(1), ..fs };
-    assert!(!several_int_targets_drawn(&ok, Some(&masked)), "a colour mask");
+    assert!(int_targets_drawn(&ok, Some(&masked)).is_err(), "a colour mask");
     let one = ShcShader { num_outputs: 1, ..fs };
-    assert!(!several_int_targets_drawn(&ok, Some(&one)), "attachment 1 from registers nothing wrote");
-    assert!(!several_int_targets_drawn(&ok, None), "no program");
+    assert!(int_targets_drawn(&ok, Some(&one)).is_err(), "attachment 1 from registers nothing wrote");
+    assert!(int_targets_drawn(&ok, None).is_err(), "no program");
     let clear = GlesDraw { do_clear: true, ..ok };
-    assert!(!several_int_targets_drawn(&clear, Some(&fs)), "a clear");
+    assert!(int_targets_drawn(&clear, Some(&fs)).is_err(), "a clear");
     let quad = GlesDraw { clear_quad: true, ..ok };
-    assert!(!several_int_targets_drawn(&quad, Some(&fs)), "a clear quad");
+    assert!(int_targets_drawn(&quad, Some(&fs)).is_err(), "a clear quad");
     let float = GlesDraw { target_format: 0, ..ok };
-    assert!(!several_int_targets_drawn(&float, Some(&fs)), "attachment 0 not integer");
+    assert_eq!(int_targets_drawn(&float, Some(&fs)), Err(REFUSE_NOT_A_MIX), "attachment 0 not integer");
+}
+
+/// Two integer layouts, the shape of `common.modf`'s `int` output beside an
+/// `ivec2` one: an R32UI attachment beside an RG32UI one under the mixed key
+/// of the two. The program writes register 0, then the pair 2-3 (a
+/// two-dword target on an even register, 1 a hole), spans four registers,
+/// and the back end draws it; under one layout's key it does not. RGBA8
+/// beside RGBA32UI passes the pixel's four registers and stays refused by
+/// name, whatever the program.
+#[test]
+fn two_integer_layouts_are_drawn_under_their_mixed_key() {
+    let src = "#version 300 es\n\
+               flat in highp float vtx_out_out0;\n\
+               flat in highp vec2 vtx_out_out1;\n\
+               layout(location = 0) out highp uint o_out0;\n\
+               layout(location = 1) out highp uvec2 o_out1;\n\
+               void main (void)\n{\n\
+               \to_out0 = floatBitsToUint(vtx_out_out0);\n\
+               \to_out1 = floatBitsToUint(vtx_out_out1);\n\
+               }\n";
+    let key = shc_blend_key_mixed(&[u32_key(1), u32_key(2)]).expect("a mix");
+    let rec = compile_for(src, key).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(rec.blend_key, key, "the variant's key in the record");
+    assert_eq!(rec.num_outputs, 4, "registers 0 and 2-3: the span");
+    assert_eq!(pixel_outputs(&rec.image), [32, 34, 35], "outputs 0, 2 and 3, once each");
+    let fs = record(&rec);
+    let mut d = executor_draw(GLES_SURF_R32UI, 2, &fs);
+    d.targets[1].format = GLES_SURF_RG32UI;
+    assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()));
+    let one = ShcShader { blend_key: u32_key(1), num_outputs: 2, ..fs };
+    assert_eq!(int_targets_drawn(&d, Some(&one)), Err(REFUSE_NOT_A_MIX), "one layout's program");
+    let short = ShcShader { num_outputs: 3, ..fs };
+    assert_eq!(int_targets_drawn(&d, Some(&short)), Err(REFUSE_NOT_A_MIX), "fewer registers than the span");
+
+    let mut wide = executor_draw(0, 2, &fs);
+    wide.targets[1].format = GLES_SURF_RGBA32UI;
+    assert_eq!(int_targets_drawn(&wide, Some(&fs)), Err(REFUSE_FOUR_REGISTERS));
 }

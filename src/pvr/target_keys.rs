@@ -14,21 +14,34 @@ pub const REFUSE_GL_NONE: &str =
 /// An SRGB8_ALPHA8 attachment in the list.
 pub const REFUSE_SRGB: &str =
     "yakogl/pvr: draw refused: an SRGB8_ALPHA8 colour attachment beside an integer one (not built)";
-/// More targets than a mixed key carries, or a layout past the pixel's four
-/// output registers.
+/// More targets than a mixed key carries (`SHC_MIXED_MAX_TARGETS`).
+pub const REFUSE_MIX_TARGETS: &str =
+    "yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment, past the three draw buffers a mixed key carries";
+/// A layout past the pixel's four output registers.
 pub const REFUSE_FOUR_REGISTERS: &str =
     "yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers";
 /// The list is not a mix (or a format has no per-target key): the line the
 /// back end already logs.
 pub const REFUSE_NOT_A_MIX: &str =
     "yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment";
+/// Several attachments of one integer layout whose packed dwords pass the
+/// pixel's four output registers (two RGBA32UI).
+pub const REFUSE_ONE_LAYOUT_PAST_FOUR: &str =
+    "yakogl/pvr: draw refused: integer colour attachments of one layout past the pixel's four output registers";
+/// Blending in a mix: the mixed key carries no blend.
+pub const REFUSE_MIX_BLEND: &str =
+    "yakogl/pvr: draw refused: blending with an integer colour attachment beside another (not built)";
+/// A colour mask that keeps some channels in a mix: the mixed key carries no
+/// colour mask.
+pub const REFUSE_MIX_MASK: &str =
+    "yakogl/pvr: draw refused: a colour mask that keeps some channels with an integer colour attachment beside another (not built)";
 
 /// The dense per-target keys of draw buffers 0.. and how many are present.
-/// `Err` is the refusal line: a GL_NONE gap, an sRGB target, or more than
-/// `SHC_MIXED_MAX_TARGETS` targets / a layout past four registers.
+/// `Err` is the refusal line: a GL_NONE gap, an sRGB target, more than
+/// `SHC_MIXED_MAX_TARGETS` targets, or a layout past four registers.
 pub fn draw_target_keys(d: &GlesDraw) -> Result<([u32; SHC_MIXED_MAX_TARGETS], usize), &'static str> {
     let n = (d.num_targets as usize).clamp(1, d.targets.len());
-    // Target 0 is the frame's own (`target_*`), as `several_int_targets_drawn` reads it.
+    // Target 0 is the frame's own (`target_*`), as `int_targets_drawn` reads it.
     let slot =
         |i: usize| if i == 0 { (d.target_gpu, d.target_format) } else { (d.targets[i].gpu, d.targets[i].format) };
     let Some(last) = (0..n).rev().find(|&i| slot(i).0 != 0) else {
@@ -41,7 +54,7 @@ pub fn draw_target_keys(d: &GlesDraw) -> Result<([u32; SHC_MIXED_MAX_TARGETS], u
         return Err(REFUSE_SRGB);
     }
     if last + 1 > SHC_MIXED_MAX_TARGETS {
-        return Err(REFUSE_FOUR_REGISTERS);
+        return Err(REFUSE_MIX_TARGETS);
     }
     let mut keys = [0u32; SHC_MIXED_MAX_TARGETS];
     for (i, k) in keys.iter_mut().enumerate().take(last + 1) {
@@ -129,6 +142,14 @@ mod tests {
         assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
         let d = draw(&[GLES_SURF_RGBA16F, GLES_SURF_RGBA16F, GLES_SURF_RGBA16F]);
         assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
+    }
+
+    #[test]
+    fn past_three_targets() {
+        // four one-register targets fit the registers, not the key
+        let d = draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA8888, GLES_SURF_RGBA8888, GLES_SURF_R8UI]);
+        assert_eq!(draw_target_keys(&d), Err(REFUSE_MIX_TARGETS));
+        assert!(REFUSE_MIX_TARGETS.starts_with(REFUSE_NOT_A_MIX));
     }
 
     #[test]

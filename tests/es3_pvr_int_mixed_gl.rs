@@ -29,9 +29,8 @@
 //!
 //! HOST-ONLY: no GPU runs and no pixel is read back. The draws are made
 //! without a colour clear (the clear of a mix is the item pvr-clear-load's).
-//! The three accepted cases are `#[ignore]`d: they pass only once the items
-//! pvr-accept and chain-pack have landed (un-ignore them there). The two
-//! refusals run now.
+//! The back end draws the three accepted cases (`pvr::backend::
+//! int_targets_drawn`) and refuses the two by name.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_int_mixed_gl
@@ -858,19 +857,16 @@ fn check(m: &Mix) {
 /* ---- the tests ----------------------------------------------------------------- */
 
 #[test]
-#[ignore = "needs the items pvr-accept and chain-pack (the back end refuses these draws until then)"]
 fn mix_a_rgba8_beside_r32ui_draws() {
     check(&MIX_A);
 }
 
 #[test]
-#[ignore = "needs the items pvr-accept and chain-pack (the back end refuses these draws until then)"]
 fn mix_b_r32i_beside_rg32i_draws() {
     check(&MIX_B);
 }
 
 #[test]
-#[ignore = "needs the items pvr-accept and chain-pack (the back end refuses these draws until then)"]
 fn mix_c_rgba16f_r32ui_rgba8_draws() {
     check(&MIX_C);
 }
