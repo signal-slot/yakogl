@@ -595,11 +595,16 @@ fn max_samples_is_four() {
 }
 
 /// The back end's per-kick render-target count is the render layer's
-/// `PVR_RENDER_MAX_RT`: three, so a four-target draw loses the fourth.
+/// `PVR_RENDER_MAX_RT`, four, when the draw-target count asks for four
+/// (`pvr::backend::eot_four_rt`, the stand-in here): the driver's end-of-tile
+/// program then moves four PBE states (item pvr-backend, plan #368; before
+/// it the back end clamped every kick to three).
 #[test]
-#[ignore = "PowerVR pvr-render, driver/src/pvr_render.h:57 and src/osal/render.rs:20: PVR_RENDER_MAX_RT is 3, and src/pvr/backend.rs:5235 clamps num_targets to it (PVR_BACKEND_MAX_RT, :274), so the fourth PBE state is not built"]
 fn the_render_layer_has_four_render_targets() {
+    let _g = context();
     assert_eq!(yakogl::osal::render::PVR_RENDER_MAX_RT, 4);
+    assert!(yakogl::pvr::backend::eot_four_rt(), "four draw targets stood in");
+    assert_eq!(yakogl::pvr::backend::eot_pds_pairs(true), 4);
 }
 
 /// Storage, completeness and the draw of a 4x framebuffer with four RGBA8
@@ -637,7 +642,7 @@ fn a_clear_of_four_4x_attachments_has_four_targets_and_samples_four() {
 /// covered edge, resolves by `glBlitFramebuffer`: the interior exact, the
 /// edge pixel half of every channel (two of four samples), the rest clear.
 #[test]
-#[ignore = "GL core gl-msaa-resolve (the blit, src/gl/msaa.rs:53 no 4x storage) and PowerVR pvr-msaa-fbo (PBE downscale store per render target, src/pvr/backend.rs:5235 clamps at three): no 4x four-target frame; the stand-in fills no pixels, run it against the PowerVR's own host path"]
+#[ignore = "GL core gl-msaa-resolve (the blit, src/gl/msaa.rs:53 no 4x storage) and PowerVR pvr-msaa-fbo (PBE downscale store per render target): no 4x four-target frame; the stand-in fills no pixels, run it against the PowerVR's own host path"]
 fn each_attachment_resolves_by_blit() {
     let _g = context();
     let fbo = framebuffer4(4).expect("4 samples are legal storage");

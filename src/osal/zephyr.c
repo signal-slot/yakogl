@@ -72,6 +72,10 @@ static int z_init(void *platform_arg)
 		printk("osal(zephyr): frame arenas %u x (general %u + pds %u KiB), not the default 4 x (1024 + 768)\n",
 		       CONFIG_YAKOGL_PVR_FRAME_SETS, CONFIG_YAKOGL_PVR_ARENA_GEN_KB, CONFIG_YAKOGL_PVR_ARENA_PDS_KB);
 #endif
+	/* the end-of-tile PDS program's pairs follow the backend's draw-target
+	 * count (src/pvr/backend.rs eot_four_rt): the backend generates every
+	 * render's end-of-tile data for that many, so the two must agree */
+	pvr_render_eot_four_rt = pvr_backend_eot_four_rt();
 	rc = pvr_render_init();
 	if (rc) {
 		LOG_ERR("osal(zephyr): render service init failed (%d)", rc);

@@ -33,6 +33,11 @@ extern "C" {
 /* The PowerVR implementation of the backend contract (backend.h). */
 extern const struct yakogl_backend yakogl_backend_pvr;
 
+/* Whether the backend draws four colour targets (GL_MAX_DRAW_BUFFERS above
+ * three): what the platform sets the driver's pvr_render_eot_four_rt to
+ * before pvr_render_init, so the static end-of-tile program moves as many
+ * PBE states as the backend's end-of-tile data carries. */
+bool pvr_backend_eot_four_rt(void);
 int  pvr_backend_init(void);
 void pvr_backend_shutdown(void);
 int  pvr_backend_draw(const struct gles_draw *draw);

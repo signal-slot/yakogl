@@ -29,9 +29,10 @@
 //! answers one of three ways, and the pinned `today` table holds all of
 //! them:
 //!
-//! - an RGBA8-class frame is drawn short: the back end clamps the target
-//!   list to PVR_RENDER_EOT_PDS_PAIRS (3) attachments and stops emitting
-//!   where the next target would pass register 3 (the tile-buffer spill is
+//! - an RGBA8-class frame is drawn short: the back end keeps four
+//!   attachments under the stand-in (item pvr-backend, plan #368; three
+//!   before it) and stops emitting where the next target would pass
+//!   register 3 (the tile-buffer spill is
 //!   not wired: `frame_tile_buffers` is only set from `fs.num_tile_buffers`,
 //!   and no variant spills yet) — GL_NO_ERROR, a short kick;
 //! - a frame of another class (RGBA16F, an integer, or the 16-dword
@@ -864,9 +865,8 @@ fn cleared(target: usize, class: Class) -> Obs {
 enum Today {
     /// Complete; the draw kicks, its targets are emitted at these output
     /// registers (`source_pos`; each as the next `mrt_index`), and the rest
-    /// of the frame is dropped: the back end clamps the target list to
-    /// `PVR_RENDER_EOT_PDS_PAIRS` (3) attachments and stops emitting where
-    /// the next target would pass register 3 (the glog_once line naming it
+    /// of the frame is dropped: the back end stops emitting where the next
+    /// target would pass register 3 (the glog_once line naming it
     /// fires once for the process, so it is not asserted per row).
     Emitted(&'static [u32]),
     /// Complete, but the draw is refused before the back end sees it: the
@@ -889,8 +889,9 @@ enum Today {
 /// the twelve RGBA8 + RGBA16F orders of six and eight registers, the
 /// RGBA32UI combinations (a target of four registers), and the RGBA32F ones.
 /// `Emitted` lists the `source_pos` of the targets the back end emits today;
-/// the PVR_RENDER_EOT_PDS_PAIRS (3) clamp drops a fourth target before the
-/// emit loop sees it.
+/// every row passes register 3 by its fourth target at the latest, so the
+/// lists are the same with the back end's four-target clamp (item
+/// pvr-backend) as they were with the three-target one before it.
 struct Over {
     label: &'static str,
     fmts: [GLenum; 4],
@@ -1060,10 +1061,12 @@ fn fitting_combinations_are_complete_today() {
 
 /// The two float fits that start on RGBA16F (RGBA16F x2 and RGBA16F + RGBA8
 /// x2): the frame is complete and every per-buffer clear reaches every
-/// target — the clear frame runs the back end's own program, needs no
-/// shader variant, and does not read `clear_target_mask`: it emits all the
-/// frame's targets, so each buffer takes the clear with the others, on the
-/// budget registers (`regs` of the row, each source numbered by emission).
+/// target — the clear frame runs the back end's own programs and needs no
+/// shader variant: it emits all the frame's targets on the budget registers
+/// (`regs` of the row, each source numbered by emission). Since item
+/// pvr-backend (plan #368) the clear of one buffer is a quad of that
+/// buffer's own over the frame's load of the others (`clear_target_mask`
+/// honoured); before it each buffer took the clear with the others.
 /// The draw with a GL program is refused: no variant packs more than one
 /// output under the RGBA16F frame class (the `NoVariant` rows above; fixed
 /// by pvr-shout4, pinned in `fitting_float_combinations_draw_every_target`).
@@ -1082,27 +1085,6 @@ fn fitting_float_combinations_clear_every_target_today() {
         let obs = drawn(row.fmts.len(), class_of(row.fmts));
         assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
         assert!(obs.kicks.is_empty(), "{}: no variant, no kick: {obs:?}", row.label);
-    }
-}
-
-/// Four RGBA8 targets today: complete, but the draw kicks THREE PBE states
-/// (registers 0-2; attachment 3 is dropped by the clamp, silently) and so
-/// does every per-buffer clear.
-#[test]
-fn four_rgba8_targets_come_to_three_today() {
-    let _g = rig();
-    let f = Fbo::new(&[A8, A8, A8, A8]);
-    assert_eq!(f.status, GL_FRAMEBUFFER_COMPLETE);
-    let obs = drawn(4, Class::Float);
-    assert_eq!(obs.err, GL_NO_ERROR, "{:?}", obs.log);
-    let (num_rt, emits) = obs.one("four RGBA8");
-    assert_eq!(num_rt, 3);
-    assert_eq!(emits, [rgba8_emit(0), rgba8_emit(1), rgba8_emit(2)]);
-    for k in 0..4 {
-        let c = cleared(k, Class::Float);
-        assert_eq!(c.err, GL_NO_ERROR, "clear {k}: {:?}", c.log);
-        let (num_rt, _) = c.one(&format!("four RGBA8, clear {k}"));
-        assert_eq!(num_rt, 3, "clear {k} still clears three of four targets");
     }
 }
 
@@ -1146,9 +1128,10 @@ fn over_budget_combinations_answer_framebuffer_unsupported() {
 }
 
 /// Four RGBA8 targets fit the budget: the draw gives attachment 3 its PBE
-/// state on register 3 and every per-buffer clear reaches all four targets.
+/// state on register 3 and every per-buffer clear reaches all four targets
+/// (item pvr-backend, plan #368; before it the draw and every clear kicked
+/// three PBE states, attachment 3 dropped by the clamp, silently).
 #[test]
-#[ignore = "defect: plan #368 pvr-budget4: the back end clamps num_targets to PVR_RENDER_EOT_PDS_PAIRS (3, src/pvr/backend.rs) and a clear frame does not read clear_target_mask; attachment 3 gets no PBE state and no clear. The fix is pvr-render switching on pvr_render_eot_four_rt and pvr-backend's PVR_BACKEND_MAX_RT clamp going away (docs/notes/mrt4-v3d-pvr.md sections 2.2, 2.3)"]
 fn four_rgba8_targets_reach_the_hardware() {
     let _g = rig();
     let f = Fbo::new(&[A8, A8, A8, A8]);

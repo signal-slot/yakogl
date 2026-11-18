@@ -7,21 +7,24 @@
 //!
 //! `backend::DRAW_TARGETS` is 3, so no build hands the back end a fourth
 //! target. The stand-in count makes the GL core accept four draw buffers and
-//! hand the back end four `GlesDraw::targets`; the back end then clamps to
-//! `PVR_BACKEND_MAX_RT` = `PVR_RENDER_MAX_RT` (src/pvr/backend.rs: the draw's
-//! `num_targets` is `.min(PVR_BACKEND_MAX_RT)`; `mrt_clear_dwords` returns 0
-//! beyond it). The platform is the one of tests/depth_resolve_pvr_backend.rs
-//! (host memory, the C command generators stood in for), and it keeps every
-//! kick: what the back end records for the clear is `PvrRenderKick`'s
-//! `frag.num_rt`, `frag.pbe_word[rt]` (the PBE state per render target; the
-//! EOT program is selected by `num_rt`) and `frag.usc_clear_register` (the
-//! colour words every tile starts its output registers from).
+//! hand the back end four `GlesDraw::targets`; the back end keeps as many
+//! as the driver's end-of-tile program moves (src/pvr/backend.rs
+//! `eot_four_rt`: four under the stand-in, set before the backend's init;
+//! `Backend::eot_pairs` clamps the draw's `num_targets`). The platform is the
+//! one of tests/depth_resolve_pvr_backend.rs (host memory, the C command
+//! generators stood in for), and it keeps every kick: what the back end
+//! records for the clear is `PvrRenderKick`'s `frag.num_rt`,
+//! `frag.pbe_word[rt]` (the PBE state per render target; the EOT program is
+//! selected by `num_rt`) and `frag.usc_clear_register` (the colour words
+//! every tile starts its output registers from).
 //!
-//! Pinned today (`PVR_RENDER_MAX_RT` = 3): the GL core's side (errors, the
-//! four-draw-buffer state) is final; the kick's side is the three-target one.
-//! The `#[ignore]`d cases state the four-target result for the day
-//! `PVR_RENDER_MAX_RT` is 4 (items pvr-render, then pvr-backend); run them
-//! with `-- --ignored` to see which still fail.
+//! Pinned since item pvr-backend (plan #368): a glClear of four RGBA8 draw
+//! buffers kicks four targets with the colour in all four output registers;
+//! a glClearBuffer of draw buffer 3, float or integer, kicks four targets
+//! with a PBE state for render target 3. Which objects such a clear records
+//! (the load of render targets 0-2, a quad that writes register 3 alone) is
+//! pinned by tests/pvr_backend_rt4.rs. Before pvr-backend the kick had three
+//! targets and an integer clear of attachment 3 was refused at the flush.
 //!
 //! Not measurable on the host: that the PBE stores render target 3 to memory
 //! (the board's: docs/notes/mrt4-v3d-pvr.md section 5).
@@ -621,14 +624,16 @@ fn a_drawbuffer_of_four_is_invalid_value_and_records_nothing() {
 
 /* ---- glClear of all four draw buffers ----------------------------------------- */
 
-/// Today: the back end clamps the frame to `PVR_BACKEND_MAX_RT` = 3. One kick,
-/// `num_rt` 3 (the EOT program of three), PBE state for render targets 0-2 and
-/// none for 3, and the USC clear registers hold the colour in 0-2 and nothing
-/// in the fourth (`mrt_clear_dwords` is 0 for four targets: the one-dword
-/// program with three-register colour upload). The fourth draw buffer is never
-/// cleared: the defect RC14 names for the clear.
+/// The four-target result (item pvr-backend, plan #368): `num_rt` 4, a PBE
+/// state for every render target, and all four 32-bit output registers
+/// started from the clear colour (four RGBA8 targets fit the four
+/// registers; docs/notes/mrt4-v3d-pvr.md section 2; the background object
+/// runs the four-dword clear, `mrt_clear_dwords` 4). Before pvr-backend the
+/// frame was clamped to three targets: `num_rt` 3, no state for render
+/// target 3 and registers `[PACKED, PACKED, PACKED, 0]`, the defect RC14
+/// names for the clear.
 #[test]
-fn glclear_of_four_draw_buffers_today_reaches_three() {
+fn glclear_of_four_draw_buffers_reaches_all_four() {
     let _g = rig();
     fbo4([GL_RGBA8; 4]);
     let k = kicks_of(|| {
@@ -641,51 +646,27 @@ fn glclear_of_four_draw_buffers_today_reaches_three() {
     });
     assert_eq!(k.len(), 1, "one frame, one kick: {:?}", logs());
     let k = &k[0];
-    assert_eq!(k.frag.num_rt, 3, "PVR_RENDER_MAX_RT clamps the frame to three targets");
-    for (rt, word) in k.frag.pbe_word.iter().enumerate().take(3) {
+    assert_eq!(k.frag.num_rt, 4, "the EOT program of four targets is selected");
+    for (rt, word) in k.frag.pbe_word.iter().enumerate() {
         assert_ne!(*word, [0, 0], "render target {rt} has its PBE state");
     }
-    assert_eq!(attach3(k), [0, 0], "render target 3 has no PBE state");
-    assert_eq!(
-        k.frag.usc_clear_register,
-        [PACKED, PACKED, PACKED, 0],
-        "output registers 0-2 start from the colour, 3 from nothing"
-    );
-}
-
-/// The four-target result: `num_rt` 4, a PBE state for render target 3, and
-/// all four 32-bit output registers started from the clear colour (four RGBA8
-/// targets fit the four registers; docs/notes/mrt4-v3d-pvr.md section 2).
-/// Needs `PVR_RENDER_MAX_RT` 4 (pvr-render) and the back end's knob
-/// (pvr-backend).
-#[test]
-#[ignore = "needs PVR_RENDER_MAX_RT 4 (driver/src/pvr_render.h) and pvr-backend"]
-fn glclear_of_four_draw_buffers_reaches_all_four() {
-    let _g = rig();
-    fbo4([GL_RGBA8; 4]);
-    let k = kicks_of(|| {
-        // SAFETY: plain GL calls.
-        unsafe {
-            glClearColor(C[0], C[1], C[2], C[3]);
-            glClear(GL_COLOR_BUFFER_BIT);
-        }
-    });
-    assert_eq!(k.len(), 1, "{:?}", logs());
-    let k = &k[0];
-    assert_eq!(k.frag.num_rt, 4, "the EOT program of four targets is selected");
-    assert_ne!(attach3(k), [0, 0], "render target 3 has PBE state");
     assert_eq!(k.frag.usc_clear_register, [PACKED; 4], "all four output registers start from the colour");
 }
 
 /* ---- glClearBufferfv(GL_COLOR, 3, ...) ---------------------------------------- */
 
-/// Today, two defects in one kick: the clear of draw buffer 3 alone is the
-/// frame's whole-attachment clear (`GlesDraw::clear_target_mask` is not
-/// honoured by the PowerVR back end, the note on `mrt_clear_dwords`), so
-/// render targets 0-2 take the colour, and render target 3, the one asked for,
-/// is not in the kick.
+/// The four-target result (item pvr-backend, plan #368): one kick with four
+/// targets and a PBE state for each, render target 3 included. The clear
+/// names draw buffer 3 alone (`GlesDraw::clear_target_mask` 8), so it is not
+/// the frame's background clear: the frame loads render targets 0-2 and a
+/// quad writes the colour into output register 3 alone (the objects are
+/// pinned by tests/pvr_backend_rt4.rs; the USC clear registers of such a
+/// load frame are not what the tiles keep). Before pvr-backend the kick had
+/// three targets and the clear was the whole-attachment one: render targets
+/// 0-2 took the colour and render target 3, the one asked for, was not in
+/// the kick.
 #[test]
-fn glclearbufferfv_of_buffer_three_today_clears_zero_to_two() {
+fn glclearbufferfv_of_buffer_three_reaches_the_fourth_target() {
     let _g = rig();
     fbo4([GL_RGBA8; 4]);
     let k = kicks_of(|| {
@@ -697,41 +678,24 @@ fn glclearbufferfv_of_buffer_three_today_clears_zero_to_two() {
     });
     assert_eq!(k.len(), 1, "{:?}", logs());
     let k = &k[0];
-    assert_eq!(k.frag.num_rt, 3);
-    assert_eq!(attach3(k), [0, 0], "render target 3 has no PBE state");
-    assert_eq!(k.frag.usc_clear_register, [PACKED, PACKED, PACKED, 0], "the colour lands in 0-2, the other way round");
-}
-
-/// The four-target result: render target 3 has PBE state and its output
-/// register holds the colour. (Render targets 0-2 must keep their pixels;
-/// the registers alone cannot say that, the load of the other targets is the
-/// back end's `clear_target_mask` work.)
-#[test]
-#[ignore = "needs PVR_RENDER_MAX_RT 4 (driver/src/pvr_render.h) and pvr-backend"]
-fn glclearbufferfv_of_buffer_three_reaches_the_fourth_target() {
-    let _g = rig();
-    fbo4([GL_RGBA8; 4]);
-    let k = kicks_of(|| {
-        // SAFETY: four floats.
-        unsafe { glClearBufferfv(GL_COLOR, 3, C.as_ptr()) };
-    });
-    assert_eq!(k.len(), 1, "{:?}", logs());
-    let k = &k[0];
     assert_eq!(k.frag.num_rt, 4);
-    assert_ne!(attach3(k), [0, 0], "render target 3 has PBE state");
-    assert_eq!(k.frag.usc_clear_register[3], PACKED, "output register 3 starts from the colour");
+    for (rt, word) in k.frag.pbe_word.iter().enumerate() {
+        assert_ne!(*word, [0, 0], "render target {rt} has its PBE state");
+    }
 }
 
 /* ---- glClearBufferuiv / iv on an integer attachment 3 ------------------------- */
 
-/// Today, attachment 3 as an integer buffer: the clear is accepted by the
-/// core (no error at the call), then refused by the back end when the frame
-/// is flushed (`draw refused: an integer colour attachment beside another
-/// colour attachment`, or draw buffer 0 GL_NONE before it), no kick is
-/// submitted and the core raises GL_INVALID_OPERATION at the flush. The
+/// Attachment 3 as an integer buffer: the clear is accepted by the core and
+/// by the back end (item pvr-backend, plan #368: a clear alone runs no
+/// program of the application's, so the integer-beside-another refusal is
+/// for draws only, and the clear is a quad of attachment 3's own), and the
+/// frame is kicked with four targets. Before pvr-backend the back end
+/// refused it at the flush (`draw refused: an integer colour attachment
+/// beside another colour attachment`), no kick, GL_INVALID_OPERATION. The
 /// control is the same clear of attachment 0 with it the only draw buffer.
 #[test]
-fn glclearbufferuiv_of_integer_attachment_three_today_is_refused_at_the_flush() {
+fn glclearbufferuiv_of_integer_attachment_three_is_kicked() {
     let _g = rig();
     let u = [1u32, 2, 3, 4];
     let i = [-1i32, -2, -3, -4];
@@ -753,8 +717,10 @@ fn glclearbufferuiv_of_integer_attachment_three_today_is_refused_at_the_flush() 
                 assert_eq!(glGetError(), GL_NO_ERROR, "{name}: the call itself is valid");
             }
         });
-        assert!(k.is_empty(), "{name}: the back end refuses the clear: {k:?}");
-        assert_eq!(error(), GL_INVALID_OPERATION, "{name}: the refusal surfaces at the flush");
+        assert_eq!(error(), GL_NO_ERROR, "{name}: nothing is refused at the flush: {:?}", logs());
+        assert_eq!(k.len(), 1, "{name}: one kick: {:?}", logs());
+        assert_eq!(k[0].frag.num_rt, 4, "{name}");
+        assert_ne!(attach3(&k[0]), [0, 0], "{name}: render target 3 has PBE state");
     }
 
     /* control: attachment 0 alone, an integer colour, is cleared and kicked */
@@ -773,12 +739,11 @@ fn glclearbufferuiv_of_integer_attachment_three_today_is_refused_at_the_flush() 
     assert_eq!(error(), GL_NO_ERROR);
 }
 
-/// The four-target result: four RGBA8UI attachments, a clear of attachment 3,
-/// no error, one kick with four targets and PBE state for render target 3.
-/// Beyond `PVR_RENDER_MAX_RT` it also needs the integer targets drawn together
-/// (docs/notes/pvr-int-mixed-targets.md; today `several_int_targets_drawn`).
+/// Four RGBA8UI attachments, a clear of attachment 3: no error, one kick
+/// with four targets and PBE state for render target 3 (item pvr-backend,
+/// plan #368). A DRAW into them still needs the integer targets drawn
+/// together (docs/notes/pvr-int-mixed-targets.md; `several_int_targets_drawn`).
 #[test]
-#[ignore = "needs PVR_RENDER_MAX_RT 4 (driver/src/pvr_render.h) and pvr-backend"]
 fn glclearbufferuiv_of_integer_attachment_three_reaches_the_fourth_target() {
     let _g = rig();
     fbo4([GL_RGBA8UI; 4]);
