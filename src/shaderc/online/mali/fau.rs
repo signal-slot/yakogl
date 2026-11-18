@@ -16,7 +16,7 @@
 //! contexts point at it; the varying variant, compiled second, finds the
 //! position variant's constants with `pan_lookup_pushed_imm`).
 
-use super::bir::{self, Dest, Idx, Ins, Op, Prog, Src, Swz, Sysval};
+use super::bir::{self, Dest, Idx, Ins, Op, Prog, Special, Src, Swz, Sysval};
 use super::MaliError;
 
 /// What a pushed FAU word holds.
@@ -47,9 +47,10 @@ pub enum FauWord {
 /// pages of 32 64-bit slots, the design page's "push uniforms").
 pub const FAU_MAX_WORDS: usize = 128;
 
-/// The FAU words this back end encodes: page 0 (32 slots). A word past it
-/// needs `va_select_fau_page`'s page choice, which is not transcribed.
-pub const FAU_PAGE0_WORDS: usize = 64;
+/// The 32-bit words of one FAU page (32 64-bit slots). A source names a
+/// word of the page its instruction selects (`fau_page_index`,
+/// [`select_fau_page`]); the layout's 128 words are pages 0 and 1.
+pub const FAU_PAGE_WORDS: usize = 64;
 
 /// `pan_fau_layout` (panfrost/compiler/pan_compiler.h).
 #[derive(Clone, Copy, Debug)]
@@ -810,16 +811,19 @@ impl FauState {
         self.buffer.iter().flatten().any(|b| matches!(b, Idx::Special(..)))
     }
 
-    /// `valid_src` (va_validate.c:105-128), with `fau_state_uniform`
-    /// (:62-83) and `fau_state_special` (:85-103; `bi_is_equiv` ignores the
-    /// half). Page 0 only: a uniform past it is refused before.
-    fn valid(&mut self, op: Op, idx: Idx) -> bool {
+    /// `valid_src` (va_validate.c:115-140), with `fau_state_uniform`
+    /// (:70-93) and `fau_state_special` (:95-113; `bi_is_equiv` ignores the
+    /// half). An immediate is not paged; a uniform or special word must be
+    /// on the instruction's `page` (the buffer takes it either way, as
+    /// Mesa's `valid &=` does).
+    fn valid(&mut self, op: Op, page: u32, idx: Idx) -> bool {
         let msg = bir::props(op).msg;
         let two = msg != bir::Msg::None && msg != bir::Msg::Atest && msg != bir::Msg::Blend;
+        let on_page = fau_page(idx) == Some(page);
         match idx {
             Idx::Lut(_) => two || self.buffer(idx),
             Idx::Uniform(w) => {
-                let mut ok = self.buffer(idx);
+                let mut ok = self.buffer(idx) && on_page;
                 let sl = w / 2;
                 if *self.slot.get_or_insert(sl) != sl {
                     ok = false;
@@ -830,7 +834,7 @@ impl FauState {
                 ok
             }
             Idx::Special(sp, _) => {
-                let mut ok = self.buffer(idx);
+                let mut ok = self.buffer(idx) && on_page;
                 if self.buffer.iter().flatten().any(|b| matches!(b, Idx::Special(o, _) if *o != sp)) {
                     ok = false;
                 }
@@ -841,22 +845,43 @@ impl FauState {
     }
 }
 
-/// `va_repair_fau` (va_validate.c:156-176) on the instruction at `at`: each
-/// source the FAU state cannot take is read through a `MOV.i32` inserted
-/// before it, and the state rolled back. Returns the moves inserted. A
-/// uniform word past FAU page 0 is refused first (`va_select_fau_page` is
-/// not transcribed).
+/// `va_fau_page` (va_compiler.h:30-57): the FAU page of a source, `None`
+/// for one that is no FAU word. A uniform word's page is its 64-bit slot's
+/// top bits (64 words a page); `lane_id` and `program_counter` are on
+/// special page 3; the other specials and the table's immediates are on
+/// page 0.
+pub(super) fn fau_page(idx: Idx) -> Option<u32> {
+    match idx {
+        Idx::Uniform(w) => Some((w as usize / FAU_PAGE_WORDS) as u32),
+        Idx::Special(Special::LaneId | Special::ProgramCounter, _) => Some(3),
+        Idx::Special(..) | Idx::Lut(_) => Some(0),
+        _ => None,
+    }
+}
+
+/// `va_select_fau_page` (va_compiler.h:59-68): the page of the first FAU
+/// source (an immediate's is page 0), page 0 for an instruction that reads
+/// none. [`repair_fau`] moves every uniform or special word of another
+/// page into a register, so this is the instruction's `fau_page_index`
+/// (bit 57, va_pack.c:855).
+pub(super) fn select_fau_page(i: &Ins) -> u32 {
+    i.srcs().iter().find_map(|s| fau_page(s.idx)).unwrap_or(0)
+}
+
+/// `va_repair_fau` (va_validate.c:156-175) on the instruction at `at`: the
+/// page is the first FAU source's ([`select_fau_page`]); each source the
+/// FAU state cannot take (a word of another page, a second uniform slot, a
+/// third word) is read through a `MOV.i32` inserted before it, and the
+/// state rolled back. Returns the moves inserted.
 fn repair_fau(p: &mut Prog<'_>, at: usize) -> Result<usize, MaliError> {
     let i = p.ins[at];
-    if i.srcs().iter().any(|s| matches!(s.idx, Idx::Uniform(w) if w as usize >= FAU_PAGE0_WORDS)) {
-        return Err(MaliError::FauPage);
-    }
+    let page = select_fau_page(&i);
     let mut st = FauState::default();
     let mut inserted = 0;
     for s in 0..i.ns as usize {
         let saved = st;
         let idx = i.src[s].idx;
-        if st.valid(i.op, idx) {
+        if st.valid(i.op, page, idx) {
             continue;
         }
         st = saved;

@@ -153,7 +153,7 @@ class PanRefDiff(unittest.TestCase):
         r = subprocess.run([sys.executable, os.path.join(HERE, "ref_cases.py"), "--lint"],
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("104 case(s), 300 region(s)", r.stdout)
+        self.assertIn("109 case(s), 314 region(s)", r.stdout)
 
     def test_ref_cases_lint_refuses_a_bare_differs(self):
         # `differs:<cause>` alone matched any difference (it was read by prefix)
