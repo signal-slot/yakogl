@@ -259,6 +259,7 @@ const fn backend_with(
         uniforms_host_only: false,
         ds_write,
         stencil_resolve,
+        max_samples: 0,
     }
 }
 

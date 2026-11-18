@@ -358,6 +358,7 @@ static V3D_SHAPE: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 unsafe extern "C" fn o_gpu_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {

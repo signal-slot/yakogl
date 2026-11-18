@@ -1733,6 +1733,11 @@ pub struct YakoglBackend {
     /// ([`stencil_resolve`]), as `depth_resolve` reads the depth. `None` on a
     /// backend that keeps none or cannot read it back.
     pub stencil_resolve: Option<unsafe extern "C" fn(id: u32, dst: *mut u8, w: u32, h: u32, pitch: u32) -> i32>,
+    /// The largest sample count the back end can draw into and resolve for an
+    /// FBO (a renderbuffer from `glRenderbufferStorageMultisample`). 0 means
+    /// multisample FBOs are off, and the GL core then keeps its
+    /// single-sample behaviour. Nothing reads it yet.
+    pub max_samples: u32,
 }
 
 // SAFETY: the table is immutable; `name` points at a static string.

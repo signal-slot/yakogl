@@ -159,6 +159,7 @@ const fn backend(name: &'static core::ffi::CStr, max_instance_divisor: u32) -> Y
         uniforms_host_only: false,
         ds_write: None,
         stencil_resolve: None,
+        max_samples: 0,
     }
 }
 

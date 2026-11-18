@@ -380,6 +380,7 @@ static GRID: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// The one GL context of this file, current, with [`GRID`] as the back end.

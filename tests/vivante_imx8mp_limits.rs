@@ -112,6 +112,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     return_mipmap_chain: None,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
     ..gc::yakogl_backend_vivante
 };
 

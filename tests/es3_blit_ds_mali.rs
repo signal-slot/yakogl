@@ -164,6 +164,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     /* the Mali's: none (src/mali/backend.rs:3731-3732) */
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// One context for the whole file; the tests take turns on it.

@@ -1465,6 +1465,7 @@ static MOCK_BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// [`MOCK_BACKEND`] with the capabilities of the GC7000: a vertex fetch that
@@ -1506,6 +1507,7 @@ static MOCK_BACKEND_GC7000: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// [`MOCK_BACKEND_GC7000`]'s chain layout (one row pitch, every level on
@@ -1548,6 +1550,7 @@ static MOCK_BACKEND_MALI_ROWS: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// [`MOCK_BACKEND`] whose texture unit has no ETC1, as the V3D's has none:
@@ -1590,6 +1593,7 @@ static MOCK_BACKEND_ETC1_DECODED: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// [`MOCK_BACKEND`] that takes an instanced draw's arrays with any divisor up

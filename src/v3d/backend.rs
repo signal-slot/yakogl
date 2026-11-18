@@ -7047,6 +7047,7 @@ pub static yakogl_backend_v3d: YakoglBackend = YakoglBackend {
      * glBlitFramebuffer's depth and stencil between renderbuffers */
     ds_write: Some(v3d_ds_write),
     stencil_resolve: Some(v3d_stencil_resolve),
+    max_samples: 0,
 };
 
 #[cfg(test)]

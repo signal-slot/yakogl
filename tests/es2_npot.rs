@@ -229,6 +229,7 @@ const fn backend(name: &'static CStr, caps: Caps) -> YakoglBackend {
         uniforms_host_only: false,
         ds_write: None,
         stencil_resolve: None,
+        max_samples: 0,
     }
 }
 

@@ -156,6 +156,7 @@ static PVR_SHAPE: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
+    max_samples: 0,
 };
 
 /// Pointer-valued device addresses: `base_gpu` is the CPU address of level 0.

@@ -136,6 +136,7 @@ const fn backend_table(name: &'static core::ffi::CStr, native_layered: bool, mip
         uniforms_host_only: false,
         ds_write: None,
         stencil_resolve: None,
+        max_samples: 0,
     }
 }
 

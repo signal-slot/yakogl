@@ -405,7 +405,7 @@ _Static_assert(offsetof(struct gles_draw, occlusion_query) == 3576, "struct gles
 _Static_assert(offsetof(struct gles_draw, target_cpu) == 3584, "struct gles_draw.target_cpu");
 _Static_assert(offsetof(struct gles_draw, depth_texels) == 3592, "struct gles_draw.depth_texels");
 _Static_assert(offsetof(struct gles_draw, depth_texels_pitch) == 3600, "struct gles_draw.depth_texels_pitch");
-_Static_assert(sizeof(struct yakogl_backend) == 232, "struct yakogl_backend");
+_Static_assert(sizeof(struct yakogl_backend) == 240, "struct yakogl_backend");
 _Static_assert(offsetof(struct yakogl_backend, name) == 0, "struct yakogl_backend.name");
 _Static_assert(offsetof(struct yakogl_backend, native_attrib_formats) == 8, "struct yakogl_backend.native_attrib_formats");
 _Static_assert(offsetof(struct yakogl_backend, rt_rgba8888_is_bgra) == 12, "struct yakogl_backend.rt_rgba8888_is_bgra");
@@ -441,6 +441,7 @@ _Static_assert(offsetof(struct yakogl_backend, linear_row_align) == 208, "struct
 _Static_assert(offsetof(struct yakogl_backend, uniforms_host_only) == 212, "struct yakogl_backend.uniforms_host_only");
 _Static_assert(offsetof(struct yakogl_backend, ds_write) == 216, "struct yakogl_backend.ds_write");
 _Static_assert(offsetof(struct yakogl_backend, stencil_resolve) == 224, "struct yakogl_backend.stencil_resolve");
+_Static_assert(offsetof(struct yakogl_backend, max_samples) == 232, "struct yakogl_backend.max_samples");
 _Static_assert(sizeof(struct gl_buffer) == 104, "struct gl_buffer");
 _Static_assert(offsetof(struct gl_buffer, used) == 0, "struct gl_buffer.used");
 _Static_assert(offsetof(struct gl_buffer, target) == 4, "struct gl_buffer.target");

@@ -697,9 +697,13 @@ struct yakogl_backend {
 	/* The stencil plane of GL object `id` as w x h bytes at `dst`, `pitch`
 	 * bytes a row; the return codes of depth_resolve. Optional. */
 	int (*stencil_resolve)(uint32_t id, uint8_t *dst, uint32_t w, uint32_t h, uint32_t pitch);
+	/* The largest sample count the back end can draw into and resolve for
+	 * an FBO. 0: multisample FBOs are off and the GL core keeps its
+	 * single-sample behaviour. */
+	uint32_t max_samples;
 };
 
-extern const struct yakogl_backend *g_backend;   /* the backend of this build (src/backend.rs) */
+extern const struct yakogl_backend *g_backend;  /* the backend of this build (src/backend.rs) */
 
 static inline int yakogl_backend_init(void) { return g_backend->init(); }
 static inline void yakogl_backend_shutdown(void) { if (g_backend->shutdown) g_backend->shutdown(); }
