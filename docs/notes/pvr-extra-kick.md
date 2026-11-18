@@ -18,6 +18,15 @@ is candidate 5 of `am62p-slow-terrain.md` (the window's dead clear kick),
 the one `pvr-dead-clear-kick` changes. It is the same kick, not a different
 one. No second removal design is needed.
 
+**Done on the host (`pvr-dead-clear-kick`).** A full clear (colour of every
+draw buffer and channel, no scissor; of the window, or of an FBO of private
+renderbuffers) now waits on its framebuffer when another one is bound
+(`draw::park_pending_clear`) and goes out with that framebuffer's next draw,
+or at a read, copy, blit, flush, swap or change of it. The host's terrain
+frame: 52 -> 51 PowerVR kicks (`tests/pvr_terrain_kicks.rs`) and 9 -> 8 V3D
+jobs with one CPU wait fewer (`tests/v3d_terrain_jobs.rs`); the cases are
+`tests/gl_pending_clear_rebind.rs`. No board run yet ("Confirms it").
+
 ## Reading the log
 
 `GM2_KICKS=1` prints, after each draw, `pvr_backend_kick_id()`, which is

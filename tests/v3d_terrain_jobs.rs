@@ -1048,8 +1048,9 @@ fn show(tag: &str, f: &Frame, settled_after: usize) {
 }
 
 /// Terrain alone. The values are the host's at the main tip (`pi4-glmark2-cpu.md`
-/// "5 TFU chains a frame", `pi4-slow-terrain.md` "9 render jobs a frame"),
-/// pinned as the code gives them.
+/// "5 TFU chains a frame"; `pi4-slow-terrain.md` "9 render jobs a frame" was
+/// the count before the window's full clear waited on the window,
+/// docs/notes/pvr-extra-kick.md), pinned as the code gives them.
 #[test]
 fn a_clean_terrain_frame() {
     let _g = rig();
@@ -1060,8 +1061,11 @@ fn a_clean_terrain_frame() {
     for n in 0..3 {
         assert_eq!(frame(&t), f, "frame +{n} differs from the settled one: {:?}", logs());
     }
-    /* the board's figure: 9 jobs a frame; 8 draws (the window's clear is the 9th job) */
-    assert_eq!((f.jobs, f.draws), (9, 8), "{f:?}");
+    /* 8 jobs a frame, one a draw. The board's figure was 9: the window's
+     * clear was a job of its own, emitted when the terrain FBO was bound.
+     * The full clear now waits on the window and rides in its draw
+     * (draw::park_pending_clear, docs/notes/pvr-extra-kick.md). */
+    assert_eq!((f.jobs, f.draws), (8, 8), "{f:?}");
     /* 5 glGenerateMipmap calls, all made by the TFU behind its render, none refused */
     assert_eq!((f.chains, f.tfu_queued, f.tfu_run), (5, 5, 0), "{f:?}");
     assert_eq!(f.refused, [], "{f:?}");
@@ -1071,10 +1075,10 @@ fn a_clean_terrain_frame() {
     /* The swap waits for the frame before it. `waits` counts every OSAL wait
      * of this double, whose GPU never finishes on its own (a job completes
      * only when waited for or when the next one is submitted), so it is an
-     * upper bound on the board's, which polls `completed`: 9 is one a job.
+     * upper bound on the board's, which polls `completed`: 8 is one a job.
      * The pins that carry to the board are `swap_waits` and the zero
      * `tfu_run`: no synchronous TFU tiling, no CPU wait to tile. */
-    assert_eq!((f.waits, f.backend_waits, f.swap_waits), (9, 9, 1), "{f:?}");
+    assert_eq!((f.waits, f.backend_waits, f.swap_waits), (8, 8, 1), "{f:?}");
 }
 
 /// Terrain after an FBO scene whose textures were rendered into and deleted
@@ -1086,7 +1090,7 @@ fn terrain_after_an_fbo_scene_that_deletes_its_textures() {
     let t = terrain_setup();
     let (f, after) = steady(&t, 8);
     show("stale", &f, after);
-    assert_eq!((f.jobs, f.draws), (9, 8), "{f:?}");
+    assert_eq!((f.jobs, f.draws), (8, 8), "{f:?}");
     /* CHANGES (pi4-target-mark-clear, v3d-rt-evict): the frame equals the
      * clean one. The slot's render-into mark is cleared when it is freed, and
      * the table of 16 images holds terrain's 9 targets even with stale marks:
@@ -1099,5 +1103,5 @@ fn terrain_after_an_fbo_scene_that_deletes_its_textures() {
     assert_eq!(f.copies, [("image-store", 7)], "{f:?}");
     /* CHANGES (the same two items): the clean frame's 1 swap wait; the total
      * stays the double's artifact (see the first test) */
-    assert_eq!((f.waits, f.backend_waits, f.swap_waits), (9, 9, 1), "{f:?}");
+    assert_eq!((f.waits, f.backend_waits, f.swap_waits), (8, 8, 1), "{f:?}");
 }

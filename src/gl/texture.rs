@@ -873,7 +873,7 @@ fn flush_clear_into(c: &mut GlContext, ti: usize) {
             [&fb.color, &fb.depth].into_iter().any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti)
         });
     if is_target {
-        draw::flush_pending_clear(c);
+        draw::flush_bound_clear(c); /* a parked clear holds no texture */
     }
 }
 
