@@ -281,7 +281,9 @@ pub fn emit(p: &mut Prog<'_>, row: Row, s: &[Src]) -> Result<u16, MaliError> {
             p.push(super::bir::Ins::new(Op::FaddF32, &[d], &[s[0], NEG_ZERO]))?;
             t
         }
-        (Alu::Fmax, 16, 1) => ins(p, Op::FmaxV2f16, &[s[0].swz(Swz::H00), s[1].swz(Swz::H00)])?,
+        /* a pair's high lane kept (deqp_mixprec_cmpv2's `FMAX.v2f16 r0,
+         * r0^.abs.h00, r0^.abs.h11` of the paired differences) */
+        (Alu::Fmax, 16, 1) => ins(p, Op::FmaxV2f16, &[lone(s[0]), lone(s[1])])?,
         (Alu::Fadd, 16, 1) => ins(p, Op::FaddV2f16, &[lone(s[0]), lone(s[1])])?,
         (Alu::F2f16, 16, 2) => ins(p, Op::V2f32ToV2f16, &s[..2])?,
         (Alu::Fadd, 16, 2) => ins(p, Op::FaddV2f16, &s[..2])?,
