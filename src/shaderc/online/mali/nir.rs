@@ -460,12 +460,16 @@ pub enum Kind {
     /// 0 (`ZERO_LOD`); four fp32 lanes, the texels
     /// (pan_nir_lower_tex.c:802-973). `sampler` is the GL sampler
     /// binding it reads, `index` its descriptor index in the vertex
-    /// tables, set after DCE ([`Nir::bound_samplers`]).
+    /// tables, set after DCE ([`Nir::bound_samplers`]). `medium`: the
+    /// sampler is lowp or mediump, so a mediump operation reads the texels
+    /// at 16 bits; a node of 16 bits ([`NirNode::bits`]) is the fp16
+    /// look-up (`TEX_SINGLE.16`), its lanes two a register in lane order.
     VsTex {
         explicit: bool,
         cube: bool,
         sampler: u8,
         index: u8,
+        medium: bool,
     },
     /// `load_pixel_coord` (nir_fs.rs): the pixel position the hardware
     /// preloads in r59 ([`super::ra::POSITION_XY`]), a 16-bit vec2, x in
@@ -2910,6 +2914,14 @@ fn vs_vec16(vs: &mut Nir<'_>, x: Val, y: Val) -> Result<Val, MaliError> {
             return Ok(Val::Lane(n, 0));
         }
     }
+    /* lanes c and c + 1 of an fp16 look-up are its register c / 2, read
+     * whole by a two-lane operation ([`vs_tex16_word`]; gm2_texvert_3's
+     * `FMA.v2f16 r0, r0^, ..` of the texels' x and y) */
+    if let (Val::Lane(n, c), Val::Lane(m, d)) = (x, y) {
+        if n == m && c % 2 == 0 && d == c + 1 && vs_is_tex16(vs, n) {
+            return Ok(Val::Lane(n, c));
+        }
+    }
     let h = |v: Val| match v {
         Val::Const(c) => half(c).map(Val::Const),
         v => Ok(v),
@@ -2977,10 +2989,26 @@ fn vs_alu16(
                 out[k + 1] = Val::Const(fold16(a, q, d)?);
                 vs.note_user(Prod::Folded);
             }
+            /* `fmul(a, 1.0)` is `a` (nir_opt_algebraic.py), on the pair
+             * `nir_lower_alu_width` cut (gm2_texvert_4: `t * vec4(0.5, 1.0,
+             * 1.0, 1.0)` leaves z and w the texels themselves) */
+            (Val::Lane(..), Val::Lane(..), Val::Const(a), Val::Const(b))
+                if a == F32_ONE && b == F32_ONE && op == Alu::Fmul =>
+            {
+                out[k] = p;
+                out[k + 1] = q;
+                vs.note_user(Prod::Identity);
+            }
             _ => {
                 let v = vs_vec16(vs, p, q)?;
                 let kk = match (c, d) {
                     (Val::Const(a), Val::Const(b)) if a == b => Val::Const(half(a)?),
+                    /* two constants: one word, the halves in lane order
+                     * (gm2_texvert_4's `FMA.v2f16 r0, r0^, u6.w0, 0x0.neg`,
+                     * u6.w0 = 0x3C003800 for (0.5, 1.0)); a high half of 0
+                     * would read as one half in both, which has no
+                     * reference */
+                    (Val::Const(a), Val::Const(b)) if half(b)? != 0 => Val::Const(half(a)? | (half(b)? << 16)),
                     (Val::Const(_), _) | (_, Val::Const(_)) => return Err(MaliError::Fp16Inexact),
                     _ => vs_vec16(vs, c, d)?,
                 };
@@ -3197,6 +3225,75 @@ fn vs_pair16(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
         }
         _ => vs_vec16(vs, p, q),
     }
+}
+
+/// Node `n` is an fp16 vertex look-up ([`Kind::VsTex`] at 16 bits).
+pub(super) fn vs_is_tex16(vs: &Nir<'_>, n: u16) -> bool {
+    matches!(vs.nodes[n as usize], NirNode { kind: Kind::VsTex { .. }, bits: 16, .. })
+}
+
+/// Source `v` of a two-lane fp16 operation `nd` is a whole register of an
+/// fp16 look-up: lane `c` (even) for its lanes `c` and `c + 1`
+/// ([`vs_vec16`]). A `vec2` reads its sources one half each.
+pub(super) fn vs_tex16_word(vs: &Nir<'_>, nd: &NirNode, v: Val) -> bool {
+    matches!(v, Val::Lane(n, c) if c % 2 == 0 && vs_is_tex16(vs, n))
+        && nd.bits == 16
+        && nd.width == 2
+        && nd.kind != Kind::Alu(Alu::Vec2)
+}
+
+/// The IR values `a` and `b` compute the same thing by their instructions
+/// (an input, a constant, a uniform, or the same operation over such),
+/// the shape `nir_opt_cse` merges; `depth` bounds the walk. Anything else
+/// (a local's read, an indexed uniform) is not compared: false.
+fn ir_same(m: &Module<'_>, a: ValueId, b: ValueId, depth: u8) -> bool {
+    if a == b {
+        return true;
+    }
+    let same = |x: ir::Src, y: ir::Src| x.swizzle == y.swizzle && ir_same(m, x.val, y.val, depth - 1);
+    match (m.def(a), m.def(b)) {
+        _ if depth == 0 => false,
+        (Some(x @ (IrOp::LoadInput { .. } | IrOp::ConstF32(_) | IrOp::LoadUniform { .. })), Some(y)) => x == y,
+        (Some(IrOp::Alu(p, s)), Some(IrOp::Alu(q, t))) => {
+            p == q && (0..super::nir_fs::ir_arity(*p)).all(|k| same(s[k], t[k]))
+        }
+        (
+            Some(&IrOp::Tex { dim, shadow, proj, ret, sampler, coord, lod, offset }),
+            Some(&IrOp::Tex {
+                dim: dim2,
+                shadow: shadow2,
+                proj: proj2,
+                ret: ret2,
+                sampler: sampler2,
+                coord: coord2,
+                lod: lod2,
+                offset: offset2,
+            }),
+        ) => {
+            (dim, shadow, proj, ret, sampler, offset) == (dim2, shadow2, proj2, ret2, sampler2, offset2)
+                && same(coord, coord2)
+                && match (lod, lod2) {
+                    (TexLod::Lod(x), TexLod::Lod(y)) => same(x, y),
+                    (x, y) => x == y,
+                }
+        }
+        _ => false,
+    }
+}
+
+/// The vertex look-up `id` of a lowp or mediump sampler is fp16 in
+/// Mesa's code ([`Kind::VsTex`]`::medium`): a mediump `fmul`, `fadd`,
+/// `ffma` or `fneg` reads it, or reads a look-up `nir_opt_cse` makes one
+/// with it ([`ir_same`]; gm2_texvert_4's `v_a` beside `v_b`).
+fn vs_tex_read16(m: &Module<'_>, id: ir::InstrId) -> bool {
+    let me = ValueId(id.0);
+    let tex = |v: ValueId| v == me || (matches!(m.def(v), Some(IrOp::Tex { .. })) && ir_same(m, v, me, 8));
+    m.instrs.iter().enumerate().any(|(i, op)| match op {
+        IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s) => {
+            m.prec_of(ValueId(i as u32)) == Prec::Medium && s[..super::nir_fs::ir_arity(*a)].iter().any(|x| tex(x.val))
+        }
+        _ => false,
+    })
 }
 
 /// `n / d` of two 32-bit signed integers in the vertex stage: the
@@ -3921,6 +4018,19 @@ fn walk<'s>(
                 vs_alu16u(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             IrOp::Alu(a, s) => {
+                /* a mediump operation of a lowp or mediump sampler's texels
+                 * other than the fp16 arms' is fp16 in Mesa too, a form
+                 * this fp32 walk does not build (mali-vs-lookups.md §7) */
+                if m.prec_of(ValueId(id.0)) == Prec::Medium
+                    && (0..super::nir_fs::ir_arity(a)).any(|k| {
+                        (0..width.max(1)).any(|i| {
+                            matches!(lane(w, s[k], i), Val::Lane(n, _)
+                                if matches!(vs.nodes[n as usize].kind, Kind::VsTex { medium: true, .. }))
+                        })
+                    })
+                {
+                    return Err(MaliError::TexVertex);
+                }
                 /* lanes an arm makes for every lane at once, at lane 0 */
                 let mut held = [Val::Undef; 4];
                 let split = if a == AluOp::Fmul { split_const(w, &s, width) } else { [false; 2] };
@@ -4408,25 +4518,37 @@ fn walk<'s>(
                     (lane(w, coord, 0), lane(w, coord, 1))
                 };
                 let level = lane(w, level, 0);
+                /* the texels' width (mali-vs-lookups.md §7): a look-up of
+                 * a lowp or mediump sampler is fp16 in Mesa's NIR
+                 * (lower_precision's builtin), and `pan_nir_fuse_io_cvt`
+                 * makes it fp32 again only when every reader converts it
+                 * up (`f2f32`). It stays fp16 when a mediump product or
+                 * sum reads it, the reader of [`vs_alu16u`]
+                 * (gm2_texvert_3's `texture2D(s, uv).xyz * 2.0 - 1.0`);
+                 * after `nir_opt_cse` that holds for each copy of one
+                 * look-up (gm2_texvert_4) */
+                let medium = m.prec_of(ValueId(id.0)) == Prec::Medium;
+                let half = medium && vs_tex_read16(m, id);
                 /* `nir_scalar_is_zero`: the bits 0 */
                 let (kind, src) = if level == Val::Const(F32_ZERO) {
-                    (Kind::VsTex { explicit: false, cube, sampler, index: 0 }, [s, t, Val::Undef])
+                    (Kind::VsTex { explicit: false, cube, sampler, index: 0, medium }, [s, t, Val::Undef])
                 } else {
                     let x = vs.sfixed_8_8(level)?;
-                    (Kind::VsTex { explicit: true, cube, sampler, index: 0 }, [s, t, x])
+                    (Kind::VsTex { explicit: true, cube, sampler, index: 0, medium }, [s, t, x])
                 };
                 /* a second look-up of one sampler at one coordinate and
-                 * level is one TEX_SINGLE in Mesa (`nir_opt_cse`), and the
-                 * products of it that follow are factored (`a*t + b*t` to
-                 * `(a + b)*t`, mali-vs-lookups.md §3.1): neither is built
-                 * here */
-                if vs.order[..vs.len]
+                 * level is the first's (`nir_opt_cse`; gm2_texvert_4: one
+                 * TEX_SINGLE, both varyings read it). One built fp32 that
+                 * a later copy wants fp16 has no form here */
+                let seen = vs.order[..vs.len]
                     .iter()
-                    .any(|&id| vs.nodes[id as usize].kind == kind && vs.nodes[id as usize].src == src)
-                {
-                    return Err(MaliError::TexVertex);
-                }
-                let n = vs.push(kind, src)?;
+                    .copied()
+                    .find(|&k| vs.nodes[k as usize].kind == kind && vs.nodes[k as usize].src == src);
+                let n = match seen {
+                    Some(k) if half && vs.nodes[k as usize].bits != 16 => return Err(MaliError::TexVertex),
+                    Some(k) => k,
+                    None => vs.push_sized(kind, src, if half { 16 } else { 32 })?,
+                };
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = Val::Lane(n, c as u8);
                 }

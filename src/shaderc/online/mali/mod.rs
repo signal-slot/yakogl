@@ -184,8 +184,9 @@ pub enum MaliError {
     /// An invariant output.
     Invariant,
     /// A vertex shader look-up other than 2D or cube look-ups at a level (a
-    /// size query, a second look-up of one sampler at one coordinate and
-    /// level, which Mesa's CSE makes one).
+    /// size query), or a lowp or mediump sampler's texels read by a
+    /// mediump operation other than a product or sum (fp16 in Mesa), or
+    /// by one where a copy of the look-up was built fp32 first.
     TexVertex,
     /// A fragment shader look-up other than `texture2D(sampler2D, vec2)`
     /// (a bias, a level, a projection, a cube map, a texture size).
@@ -453,7 +454,7 @@ impl MaliError {
                 "Valhall: an invariant output (Mesa keeps its arithmetic exact, unfused) is not lowered yet"
             }
             MaliError::TexVertex => {
-                "Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query, the same look-up twice) is not lowered yet"
+                "Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product or sum, is not lowered yet"
             }
             MaliError::TexKind => {
                 "Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet"
