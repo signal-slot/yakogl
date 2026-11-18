@@ -26,6 +26,9 @@ pub mod es3_formats;
 pub mod etc1;
 pub mod etc2;
 pub mod etc2_store;
+/// CPU decoding of the half-float and R11F_G11F_B10F colour buffers for
+/// glReadPixels (plan #360).
+pub mod float_pack;
 pub mod framebuffer;
 pub mod limits;
 pub(crate) mod msaa;

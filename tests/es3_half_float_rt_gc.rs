@@ -14,10 +14,10 @@
 //!   pixel (RGBA16F 8, R16F 2, R32F 4) and the pixel engine's output mode
 //!   (R32F `UIF32`, the halves `NORMAL`);
 //! - the whole PE_COLOR_FORMAT word of a draw and of a glClearBufferfv, and
-//!   PE_ALPHA_CONFIG with GL_BLEND on: the three float surfaces are blended
-//!   like the unorm ones, the 32-bit R32F included (the blend is not turned
-//!   off for a 32-bit float target; ES 3.0 has no such colour target without
-//!   GL_EXT_color_buffer_float, and a blend of it needs EXT_float_blend);
+//!   PE_ALPHA_CONFIG with GL_BLEND on: the two 16F surfaces are blended like
+//!   the unorm ones; a blended draw into the 32-bit R32F is
+//!   GL_INVALID_OPERATION in the GL core (EXT_color_buffer_float without
+//!   EXT_float_blend), so it never reaches the PE;
 //! - read-back: no resolve engine is involved for a float target (the clear
 //!   is the quad, no RS_CONFIG / RS_KICKER; `rs_clear::rs_format` has no
 //!   8-byte format and `rs_clear_of` takes A8R8G8B8 / X8R8G8B8 only), a
@@ -671,16 +671,22 @@ fn a_clear_of_each_is_the_quad_and_reads_back() {
 }
 
 /// A draw with GL_BLEND on and SRC_ALPHA / ONE_MINUS_SRC_ALPHA: the blender is
-/// enabled for each float target, the 32-bit R32F included, and the draw
-/// loses OVERWRITE. (ES 3.0 4.1.8 ignores blending for integer buffers only;
-/// blending a 32-bit float one is what EXT_float_blend allows, which this
-/// back end does not look at.)
+/// enabled for each 16F target and the draw loses OVERWRITE. (ES 3.0 4.1.8
+/// ignores blending for integer buffers only.) The 32-bit R32F is not
+/// blended: EXT_color_buffer_float makes such a draw GL_INVALID_OPERATION
+/// unless GL_EXT_float_blend is listed, which it is not (the GL core's
+/// rule, src/gl/draw.rs `blends_a_32f_draw_buffer`), so nothing reaches the PE.
 #[test]
 fn gl_blend_enables_the_blender_on_every_float_target_r32f_included() {
     for f in OWN {
         on_gc7000(|| {
             target(f, 16, 16);
             let (e, ws) = draw_colour(f, 16, 16, true);
+            if f.surf == GLES_SURF_R32F {
+                assert_eq!(e, GL_INVALID_OPERATION, "{}: a blended 32F draw buffer", f.name);
+                assert_eq!(last(&ws, GC_PE_ALPHA_CONFIG), None, "{}: no draw reached the PE", f.name);
+                return;
+            }
             assert_eq!(e, GL_NO_ERROR, "{}", f.name);
             let alpha = last(&ws, GC_PE_ALPHA_CONFIG).expect("PE_ALPHA_CONFIG");
             assert_ne!(alpha & GC_PE_ALPHA_BLEND_ENABLE_COLOR, 0, "{}: blender on ({alpha:#x})", f.name);

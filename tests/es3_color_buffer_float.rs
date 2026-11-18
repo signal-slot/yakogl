@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Plan #360, item `cbf-test-draft`: the `GL_EXT_color_buffer_float`
-//! contract. What holds today, with the extension unclaimed, is pinned by
-//! passing tests. What holds after the per-GPU claim (the `color-buffer-float`
-//! Cargo feature, item `core-claim`) is written as code compiled only under
-//! that feature, with the expected values. No test is `#[ignore]`d (the gate
-//! refuses an ignored test) and none is `#[cfg]`ed out (`tests_as_declared`
-//! reads it as "declared, did not run"): every `#[test]` exists in every
-//! build and the claim-dependent part of its body is `#[cfg]`ed.
+//! Plan #360, items `cbf-test-draft` and `core-surf`: the
+//! `GL_EXT_color_buffer_float` contract. What holds today, with the extension
+//! unclaimed, is pinned by passing tests. What the GL core does once the
+//! extension is listed (completeness, the two storage calls, glReadPixels'
+//! pairs and values, the getters, the 32F blend rule) runs in every build
+//! through the host knob (`framebuffer::HOST_R32F_RT` with
+//! `backend::HOST_FLOAT_RT_FORMATS`, the `Claimed` guard); the claim itself
+//! (the `color-buffer-float` Cargo feature on a back end that draws the
+//! formats, item `v3d-arm`) is checked by `claimed_path`. No test is
+//! `#[ignore]`d (the gate refuses an ignored test) and none is `#[cfg]`ed out
+//! (`tests_as_declared` reads it as "declared, did not run"): every `#[test]`
+//! exists in every build and the feature-dependent part of its body is
+//! `#[cfg]`ed.
 //!
 //! Rules (docs/notes/es3-float-targets.md; ES 3.0.6 table 3.13, 4.3.2, 4.4.2,
 //! 4.4.4.1; EXT_color_buffer_float):
@@ -17,7 +22,12 @@
 //!   `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`, `glRenderbufferStorage` is
 //!   `GL_INVALID_ENUM` (R32F was complete until plan #325's board-mrt).
 //! - With it, all seven formats (R16F, RG16F, RGBA16F, R32F, RG32F, RGBA32F,
-//!   R11F_G11F_B10F) are complete, and `glReadPixels` takes RGBA/FLOAT.
+//!   R11F_G11F_B10F) are complete, and `glReadPixels` takes RGBA/FLOAT and
+//!   the implementation pair, RGBA/UNSIGNED_BYTE for every float buffer.
+//!   RG32F, RGBA32F and R11F_G11F_B10F also need their surface drawable
+//!   (`backend::rt_format_drawable`), which the claim implies.
+//! - A draw with GL_BLEND on and an R32F, RG32F or RGBA32F draw buffer is
+//!   `GL_INVALID_OPERATION` (no `GL_EXT_float_blend`).
 //! - `GL_EXT_color_buffer_half_float` is claimed today; the 16F answers of
 //!   the current tip are recorded as they are.
 //!
@@ -40,10 +50,12 @@
 #![cfg(all(feature = "host-test", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void, CStr};
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard, Once};
 use yakogl::backend::{self, GlesDraw, GlesHeap, YakoglBackend};
 use yakogl::gl::consts::*;
 use yakogl::gl::context;
+use yakogl::gl::float_pack;
 use yakogl::gl::framebuffer::*;
 use yakogl::gl::state::{glGetError, glGetIntegerv, glGetString, glGetStringi, glPixelStorei};
 use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage2D};
@@ -150,8 +162,15 @@ fn context() -> MutexGuard<'static, ()> {
         ONCE.call_once(|| {
             osal_set_ops(&OSAL);
             backend::g_backend = &BACKEND;
+            #[cfg(feature = "shaderc-online")]
+            {
+                yakogl::shaderc::g_shaderc = &yakogl::shaderc::online::SHC_ONLINE;
+            }
             assert!(!context::gl_context_create(16, 16).is_null());
         });
+        /* the host knob is off unless a test's `Claimed` guard is alive */
+        HOST_R32F_RT.store(false, Ordering::Relaxed);
+        backend::HOST_FLOAT_RT_FORMATS.store(0, Ordering::Relaxed);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         while glGetError() != GL_NO_ERROR {}
@@ -329,6 +348,7 @@ fn r32f_rg32f_rgba32f_r11g11b10_incomplete() {
             "{GPU}: {} renderbuffer as colour 0",
             f.3
         );
+        assert_eq!(multisample_storage_error(f.0), GL_INVALID_ENUM, "{GPU}: {} multisample storage", f.3);
     }
 }
 
@@ -345,58 +365,412 @@ fn r16f_rg16f_rgba16f_complete() {
     }
 }
 
-/* ---- the claimed path (compiled with `color-buffer-float`) -------------- */
+/* ---- the claimed path, through the host knob ----------------------------- */
 
-/// With the claim (a build with `color-buffer-float`, on a GPU that draws
-/// the formats) both names are listed and all seven formats are complete.
-#[cfg(feature = "color-buffer-float")]
-fn claimed_all_seven_complete() {
-    assert!(in_extension_string("GL_EXT_color_buffer_float"), "{GPU}: glGetString");
-    assert!(in_extension_list("GL_EXT_color_buffer_float"), "{GPU}: glGetStringi");
-    for f in SEVEN {
-        assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {} texture", f.3);
-        assert_eq!(renderbuffer_target(f.0), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: {} renderbuffer", f.3);
+/// The GL core as a build that lists GL_EXT_color_buffer_float on a back end
+/// that draws every surface of it: `framebuffer::HOST_R32F_RT` (the
+/// extension's rule) and `backend::HOST_FLOAT_RT_FORMATS` (the RG32F, RGBA32F
+/// and R11F_G11F_B10F surfaces drawable), on while the guard lives. The
+/// extension string is not changed; the claim itself (item `v3d-arm`) is
+/// checked by [`claimed_path`].
+struct Claimed;
+
+impl Claimed {
+    fn on() -> Claimed {
+        HOST_R32F_RT.store(true, Ordering::Relaxed);
+        backend::HOST_FLOAT_RT_FORMATS.store(0b111, Ordering::Relaxed);
+        Claimed
     }
 }
 
-/// glReadPixels from a complete RGBA32F target takes RGBA/FLOAT (ES 3.0.6
-/// 4.3.2: a floating-point colour buffer reads as GL_RGBA / GL_FLOAT).
-#[cfg(feature = "color-buffer-float")]
-fn claimed_readpixels_rgba_float_accepted() {
-    let (mut fb, mut rb) = (0, 0);
-    let mut px = [0f32; 4];
-    // SAFETY: room for one name each and for one RGBA float pixel; plain GL calls.
+impl Drop for Claimed {
+    fn drop(&mut self) {
+        HOST_R32F_RT.store(false, Ordering::Relaxed);
+        backend::HOST_FLOAT_RT_FORMATS.store(0, Ordering::Relaxed);
+    }
+}
+
+/// glRenderbufferStorageMultisample of `internalformat` (0 samples) into a
+/// new bound renderbuffer: its error.
+fn multisample_storage_error(internalformat: GLenum) -> GLenum {
+    let mut rb = 0;
+    // SAFETY: room for one name; plain GL calls.
     unsafe {
         glGenRenderbuffers(1, &mut rb);
         glBindRenderbuffer(GL_RENDERBUFFER, rb);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA32F, 16, 16);
-        glGenFramebuffers(1, &mut fb);
-        glBindFramebuffer(GL_FRAMEBUFFER, fb);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
-        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{GPU}: RGBA32F");
-        assert_eq!(err(), GL_NO_ERROR, "{GPU}: setup");
-        glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, px.as_mut_ptr() as *mut c_void);
-        assert_eq!(err(), GL_NO_ERROR, "{GPU}: glReadPixels RGBA/FLOAT of RGBA32F");
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteFramebuffers(1, &fb);
+        glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, internalformat, 16, 16);
+        let e = err();
         glDeleteRenderbuffers(1, &rb);
+        e
     }
 }
 
-// Not written yet (core-claim, note item blend-32f-map): a draw with GL_BLEND
-// into an RGBA32F target is GL_INVALID_OPERATION without EXT_float_blend. The
-// stand-in back end has no program here, so it needs the draw path.
+/// With the extension's rule all seven formats are complete colour
+/// attachments, as textures and as renderbuffers (ES 3.0.6 4.4.4.1 with
+/// EXT_color_buffer_float), and both storage calls take them.
+#[test]
+fn claimed_all_seven_complete() {
+    let _g = context();
+    let _c = Claimed::on();
+    for f in SEVEN {
+        assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {} texture", f.3);
+        assert_eq!(renderbuffer_target(f.0), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: {} renderbuffer", f.3);
+        assert_eq!(multisample_storage_error(f.0), GL_NO_ERROR, "{GPU}: {} multisample storage", f.3);
+    }
+}
 
-/// The claimed path in one test; without the feature it has nothing to check.
+/// The rule needs the surface too: with the extension's rule but no RG32F,
+/// RGBA32F or R11F_G11F_B10F surface the back end draws, those three stay
+/// out (GL_INVALID_ENUM, incomplete) and R32F is in.
+#[test]
+fn claimed_rule_without_a_surface_keeps_the_three_out() {
+    let _g = context();
+    let _c = Claimed::on();
+    backend::HOST_FLOAT_RT_FORMATS.store(0, Ordering::Relaxed);
+    if backend::FLOAT_RT_FORMATS != 0 {
+        return; // a back end that draws them (v3d-arm): nothing to take out
+    }
+    assert_eq!(renderbuffer_target(GL_R32F), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: R32F");
+    for f in [SEVEN[4], SEVEN[5], SEVEN[6]] {
+        assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{GPU}: {} texture", f.3);
+        assert_eq!(
+            renderbuffer_target(f.0),
+            (GL_INVALID_ENUM, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT),
+            "{GPU}: {} renderbuffer",
+            f.3
+        );
+    }
+}
+
+/// A 4 x 4 texture of `f` filled with one pixel's bytes, attached as colour
+/// 0 of a new bound framebuffer: (framebuffer, texture).
+fn filled_texture_target(f: (GLenum, GLenum, GLenum, &str), pixel: &[u8]) -> (GLuint, GLuint) {
+    let (mut fb, mut t) = (0, 0);
+    let data: Vec<u8> = pixel.iter().copied().cycle().take(pixel.len() * 16).collect();
+    // SAFETY: room for one name each; `data` holds 16 pixels; plain GL calls.
+    unsafe {
+        glGenTextures(1, &mut t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexImage2D(GL_TEXTURE_2D, 0, f.0 as GLint, 4, 4, 0, f.1, f.2, data.as_ptr() as *const c_void);
+        assert_eq!(err(), GL_NO_ERROR, "{GPU}: {} texture", f.3);
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {}", f.3);
+    }
+    (fb, t)
+}
+
+fn drop_target(fb: GLuint, t: GLuint) {
+    // SAFETY: names made by `filled_texture_target`.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fb);
+        glDeleteTextures(1, &t);
+    }
+}
+
+fn halves(v: &[f32]) -> Vec<u8> {
+    v.iter().flat_map(|&x| float_pack::f32_to_half(x).to_le_bytes()).collect()
+}
+
+fn floats(v: &[f32]) -> Vec<u8> {
+    v.iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+
+/// glReadPixels of each of the seven, with the extension's rule: RGBA/FLOAT
+/// gives the stored values, the channels the format lacks 0, 0, 1 (ES 3.0.6
+/// 4.3.2; the 16F and R11F_G11F_B10F ones decoded by `gl/float_pack.rs`);
+/// GL_IMPLEMENTATION_COLOR_READ_FORMAT / _TYPE is RGBA / UNSIGNED_BYTE for
+/// every float buffer (`framebuffer::implementation_color_read`) and that
+/// pair reads the values clamped; a pair of neither kind is
+/// GL_INVALID_OPERATION.
+#[test]
+fn claimed_readpixels_float_pairs() {
+    let _g = context();
+    let _c = Claimed::on();
+    let r11 = float_pack::pack_r11g11b10f([0.5, 0.25, 0.75]).to_le_bytes().to_vec();
+    let cases: [(usize, Vec<u8>, [f32; 4]); 7] = [
+        (0, halves(&[0.5]), [0.5, 0.0, 0.0, 1.0]),
+        (1, halves(&[0.5, -0.25]), [0.5, -0.25, 0.0, 1.0]),
+        (2, halves(&[0.5, -0.25, 0.75, 0.125]), [0.5, -0.25, 0.75, 0.125]),
+        (3, floats(&[0.1]), [0.1, 0.0, 0.0, 1.0]),
+        (4, floats(&[0.1, -3.5]), [0.1, -3.5, 0.0, 1.0]),
+        (5, floats(&[0.1, -3.5, 1.0e5, 0.125]), [0.1, -3.5, 1.0e5, 0.125]),
+        (6, r11, [0.5, 0.25, 0.75, 1.0]),
+    ];
+    for (i, pixel, want) in cases {
+        let f = SEVEN[i];
+        let (fb, t) = filled_texture_target(f, &pixel);
+        let mut px = [f32::NAN; 4];
+        let mut bytes = [0u8; 4];
+        let (mut rf, mut rt) = (0, 0);
+        // SAFETY: room for one RGBA float pixel, one RGBA byte pixel and one
+        // integer each; plain GL calls.
+        unsafe {
+            glReadPixels(1, 2, 1, 1, GL_RGBA, GL_FLOAT, px.as_mut_ptr() as *mut c_void);
+            assert_eq!(err(), GL_NO_ERROR, "{GPU}: {} RGBA/FLOAT", f.3);
+            assert_eq!(px, want, "{GPU}: {} RGBA/FLOAT", f.3);
+            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &mut rf);
+            glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &mut rt);
+            assert_eq!((rf as GLenum, rt as GLenum), (GL_RGBA, GL_UNSIGNED_BYTE), "{GPU}: {} pair", f.3);
+            glReadPixels(1, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, bytes.as_mut_ptr() as *mut c_void);
+            assert_eq!(err(), GL_NO_ERROR, "{GPU}: {} RGBA/UNSIGNED_BYTE", f.3);
+            let clamped = want.map(|v| (v.clamp(0.0, 1.0) * 255.0 + 0.5) as u8);
+            assert_eq!(bytes, clamped, "{GPU}: {} RGBA/UNSIGNED_BYTE", f.3);
+            for (format, type_) in [(GL_RGBA_INTEGER, GL_INT), (GL_RGBA, GL_HALF_FLOAT), (GL_RGB, GL_FLOAT)] {
+                glReadPixels(1, 2, 1, 1, format, type_, px.as_mut_ptr() as *mut c_void);
+                assert_eq!(err(), GL_INVALID_OPERATION, "{GPU}: {} {format:#x}/{type_:#x}", f.3);
+            }
+        }
+        drop_target(fb, t);
+    }
+}
+
+/// glGetFramebufferAttachmentParameteriv of colour attachment 0.
+fn attachment_param(pname: GLenum) -> GLint {
+    let mut v = -1;
+    // SAFETY: one integer out.
+    unsafe { glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, pname, &mut v) };
+    assert_eq!(err(), GL_NO_ERROR, "{GPU}: {pname:#x}");
+    v
+}
+
+/// The four channel sizes of colour attachment 0.
+fn attachment_sizes() -> [GLint; 4] {
+    [
+        GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
+        GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
+        GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
+        GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE,
+    ]
+    .map(attachment_param)
+}
+
+/// glGetRenderbufferParameteriv of the bound renderbuffer.
+fn renderbuffer_param(pname: GLenum) -> GLint {
+    let mut v = -1;
+    // SAFETY: one integer out.
+    unsafe { glGetRenderbufferParameteriv(GL_RENDERBUFFER, pname, &mut v) };
+    v
+}
+
+/// The channel sizes and component type each of the seven reports, as a
+/// renderbuffer (glGetRenderbufferParameteriv and the attachment query) and
+/// as a texture attachment: GL_FLOAT, the format's own sizes.
+#[test]
+fn claimed_getters_match_the_formats() {
+    let _g = context();
+    let _c = Claimed::on();
+    let sizes: [[GLint; 4]; 7] = [
+        [16, 0, 0, 0],
+        [16, 16, 0, 0],
+        [16, 16, 16, 16],
+        [32, 0, 0, 0],
+        [32, 32, 0, 0],
+        [32, 32, 32, 32],
+        [11, 11, 10, 0],
+    ];
+    for (f, want) in SEVEN.into_iter().zip(sizes) {
+        let (mut fb, mut rb) = (0, 0);
+        // SAFETY: room for one name each; plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorage(GL_RENDERBUFFER, f.0, 4, 4);
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+        }
+        assert_eq!(err(), GL_NO_ERROR, "{GPU}: {} renderbuffer", f.3);
+        let rb_sizes = [
+            GL_RENDERBUFFER_RED_SIZE,
+            GL_RENDERBUFFER_GREEN_SIZE,
+            GL_RENDERBUFFER_BLUE_SIZE,
+            GL_RENDERBUFFER_ALPHA_SIZE,
+        ]
+        .map(renderbuffer_param);
+        assert_eq!(rb_sizes, want, "{GPU}: {} renderbuffer sizes", f.3);
+        assert_eq!(
+            renderbuffer_param(GL_RENDERBUFFER_INTERNAL_FORMAT) as GLenum,
+            f.0,
+            "{GPU}: {} internal format",
+            f.3
+        );
+        assert_eq!(attachment_sizes(), want, "{GPU}: {} renderbuffer attachment sizes", f.3);
+        let ct = attachment_param(GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE) as GLenum;
+        assert_eq!(ct, GL_FLOAT, "{GPU}: {} renderbuffer component type", f.3);
+        // SAFETY: names made above.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+            glDeleteRenderbuffers(1, &rb);
+        }
+        let (fb, t) = filled_texture_target(f, &[0u8; 16][..pixel_bytes(f)]);
+        assert_eq!(attachment_sizes(), want, "{GPU}: {} texture attachment sizes", f.3);
+        let ct = attachment_param(GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE) as GLenum;
+        assert_eq!(ct, GL_FLOAT, "{GPU}: {} texture component type", f.3);
+        drop_target(fb, t);
+    }
+}
+
+/// The bytes of one pixel of `f`'s (format, type) in [`SEVEN`].
+fn pixel_bytes(f: (GLenum, GLenum, GLenum, &str)) -> usize {
+    let channels = match f.1 {
+        GL_RED => 1,
+        GL_RG => 2,
+        _ => 4,
+    };
+    match f.2 {
+        GL_HALF_FLOAT => 2 * channels,
+        GL_FLOAT => 4 * channels,
+        _ => 4, /* the packed R11F_G11F_B10F word */
+    }
+}
+
+/// EXT_color_buffer_float: with GL_BLEND on and a draw buffer of R32F, RG32F
+/// or RGBA32F, a draw is GL_INVALID_OPERATION (no GL_EXT_float_blend); the
+/// 16F formats and R11F_G11F_B10F blend; a 32F image behind a GL_NONE draw
+/// buffer does not count. The draws have no vertices: the rule is checked
+/// before anything reaches the back end. The program needs the in-process
+/// compiler (`shaderc-online`, in every feature set of the header).
+#[test]
+fn claimed_blend_of_a_32f_draw_buffer_is_invalid_operation() {
+    let _g = context();
+    #[cfg(feature = "shaderc-online")]
+    {
+        let _c = Claimed::on();
+        assert!(!in_extension_string("GL_EXT_float_blend"), "{GPU}: GL_EXT_float_blend is not claimed");
+        draws::use_program();
+        for f in SEVEN {
+            let target = draws::bound_renderbuffer_target(&[f.0]);
+            let blended =
+                if matches!(f.0, GL_R32F | GL_RG32F | GL_RGBA32F) { GL_INVALID_OPERATION } else { GL_NO_ERROR };
+            assert_eq!(draws::draw_nothing(false), GL_NO_ERROR, "{GPU}: {} unblended", f.3);
+            assert_eq!(draws::draw_nothing(true), blended, "{GPU}: {} blended", f.3);
+            draws::drop_renderbuffer_target(target);
+        }
+        /* RGBA16F at 0, RGBA32F at 1: the second draw buffer counts, until
+         * glDrawBuffers takes it out */
+        let target = draws::bound_renderbuffer_target(&[GL_RGBA16F, GL_RGBA32F]);
+        // SAFETY: plain GL calls with two-element arrays.
+        unsafe { glDrawBuffers(2, [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1].as_ptr()) };
+        assert_eq!(draws::draw_nothing(true), GL_INVALID_OPERATION, "{GPU}: RGBA32F as draw buffer 1");
+        // SAFETY: as above.
+        unsafe { glDrawBuffers(2, [GL_COLOR_ATTACHMENT0, GL_NONE].as_ptr()) };
+        assert_eq!(draws::draw_nothing(true), GL_NO_ERROR, "{GPU}: RGBA32F behind GL_NONE");
+        draws::drop_renderbuffer_target(target);
+        // SAFETY: plain GL call.
+        unsafe { yakogl::gl::program::glUseProgram(0) };
+    }
+}
+
+/// What the blend test draws with.
+#[cfg(feature = "shaderc-online")]
+mod draws {
+    use super::*;
+    use yakogl::gl::draw::glDrawArrays;
+    use yakogl::gl::program::*;
+    use yakogl::gl::shader::*;
+    use yakogl::gl::state::{glDisable, glEnable};
+
+    const VS: &str = "#version 300 es\nin vec4 p;\nvoid main() { gl_Position = p; }\n";
+    const FS: &str = concat!(
+        "#version 300 es\nprecision highp float;\n",
+        "layout(location = 0) out vec4 o0;\nlayout(location = 1) out vec4 o1;\n",
+        "void main() { o0 = vec4(0.5); o1 = vec4(0.25); }\n"
+    );
+
+    fn shader(ty: GLenum, text: &str) -> GLuint {
+        let text = std::ffi::CString::new(text).unwrap();
+        // SAFETY: plain GL calls; one NUL-terminated source.
+        unsafe {
+            let s = glCreateShader(ty);
+            let p: [*const c_char; 1] = [text.as_ptr()];
+            glShaderSource(s, 1, p.as_ptr(), core::ptr::null());
+            glCompileShader(s);
+            let mut ok: GLint = 0;
+            glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+            assert_eq!(ok, 1, "{GPU}: shader did not compile");
+            s
+        }
+    }
+
+    pub fn use_program() {
+        let (v, f) = (shader(GL_VERTEX_SHADER, VS), shader(GL_FRAGMENT_SHADER, FS));
+        // SAFETY: plain GL calls.
+        unsafe {
+            let p = glCreateProgram();
+            glAttachShader(p, v);
+            glAttachShader(p, f);
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "{GPU}: link");
+            glUseProgram(p);
+        }
+    }
+
+    /// A new bound framebuffer whose colour attachments 0.. are new 4 x 4
+    /// renderbuffers of `formats`, complete: (framebuffer, renderbuffers).
+    pub fn bound_renderbuffer_target(formats: &[GLenum]) -> (GLuint, Vec<GLuint>) {
+        let mut fb = 0;
+        let mut rbs = vec![0; formats.len()];
+        // SAFETY: room for the names; plain GL calls.
+        unsafe {
+            glGenFramebuffers(1, &mut fb);
+            glBindFramebuffer(GL_FRAMEBUFFER, fb);
+            glGenRenderbuffers(rbs.len() as GLsizei, rbs.as_mut_ptr());
+            for (n, (&rb, &f)) in rbs.iter().zip(formats).enumerate() {
+                glBindRenderbuffer(GL_RENDERBUFFER, rb);
+                glRenderbufferStorage(GL_RENDERBUFFER, f, 4, 4);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + n as GLenum, GL_RENDERBUFFER, rb);
+            }
+            assert_eq!(err(), GL_NO_ERROR, "{GPU}: {formats:#x?}");
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {formats:#x?}");
+        }
+        (fb, rbs)
+    }
+
+    pub fn drop_renderbuffer_target((fb, rbs): (GLuint, Vec<GLuint>)) {
+        // SAFETY: names made by `bound_renderbuffer_target`.
+        unsafe {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+            glDeleteRenderbuffers(rbs.len() as GLsizei, rbs.as_ptr());
+        }
+    }
+
+    /// glDrawArrays of no vertices with GL_BLEND on or off: its error.
+    pub fn draw_nothing(blend: bool) -> GLenum {
+        // SAFETY: plain GL calls.
+        unsafe {
+            if blend {
+                glEnable(GL_BLEND);
+            } else {
+                glDisable(GL_BLEND);
+            }
+            glDrawArrays(GL_TRIANGLES, 0, 0);
+            let e = glGetError();
+            glDisable(GL_BLEND);
+            e
+        }
+    }
+}
+
+/// The claim itself, where a build makes it (the `color-buffer-float`
+/// feature on a back end that draws the formats, item `v3d-arm`): both names
+/// are listed and the seven formats are complete without the host knob.
 #[test]
 fn claimed_path() {
     let _g = context();
-    // The claimed path needs a back end that draws the formats (v3d-arm) and
-    // the completeness, RenderbufferStorage and ReadPixels work of core-surf;
-    // until then the build with the feature on is still unclaimed.
     #[cfg(feature = "color-buffer-float")]
     if backend::color_buffer_float_capable() {
-        claimed_all_seven_complete();
-        claimed_readpixels_rgba_float_accepted();
+        assert!(in_extension_string("GL_EXT_color_buffer_float"), "{GPU}: glGetString");
+        assert!(in_extension_list("GL_EXT_color_buffer_float"), "{GPU}: glGetStringi");
+        for f in SEVEN {
+            assert_eq!(texture_target_status(f), GL_FRAMEBUFFER_COMPLETE, "{GPU}: {} texture", f.3);
+            assert_eq!(renderbuffer_target(f.0), (GL_NO_ERROR, GL_FRAMEBUFFER_COMPLETE), "{GPU}: {} renderbuffer", f.3);
+        }
     }
 }

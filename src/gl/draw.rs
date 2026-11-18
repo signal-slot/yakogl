@@ -4997,8 +4997,26 @@ fn current_drawable_program(c: Option<&mut GlContext>) -> Option<(&mut GlContext
         c.set_error(GL_INVALID_OPERATION, FUNC);
         return None;
     }
+    if blends_a_32f_draw_buffer(c) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return None;
+    }
     let handle = c.cur_program;
     Some((c, handle))
+}
+
+/// EXT_color_buffer_float: "If any draw buffer [is] R32F, RG32F or RGBA32F
+/// and blending is enabled, draw commands generate INVALID_OPERATION", unless
+/// GL_EXT_float_blend is listed (it is not). The 16F formats and
+/// R11F_G11F_B10F blend. Only an ES 3.0 framebuffer object has such a buffer
+/// (the extension's rule makes it complete: `framebuffer::is_color_format`).
+fn blends_a_32f_draw_buffer(c: &GlContext) -> bool {
+    if crate::REPORT_ES2 || !c.blend || c.bound_framebuffer == 0 {
+        return false;
+    }
+    let any_32f = (0..context::max_draw_buffers())
+        .any(|i| matches!(framebuffer::draw_buffer_image_format(c, i), Some(GL_R32F | GL_RG32F | GL_RGBA32F)));
+    any_32f && !super::state::extension_listed("GL_EXT_float_blend")
 }
 
 /// glDrawArrays (traced here: the instanced draws enter it per instance, as

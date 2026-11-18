@@ -6,9 +6,9 @@
 //! R and G, 5-bit mantissa for B, no sign bit, bias 15, no negative values).
 //!
 //! Plan #360 (GL_EXT_color_buffer_float). The module is pure `no_std` code
-//! (no `alloc`, no `std`) and is **not yet in the module tree**: it is pulled
-//! into `tests/es3_float_pack.rs` with `#[path]`. The core-surf item adds
-//! `mod float_pack;` to `src/gl/mod.rs` and wires it into ReadPixels.
+//! (no `alloc`, no `std`): glReadPixels decodes the 16F and R11F_G11F_B10F
+//! colour buffers with it (`framebuffer::read_float_row`), and
+//! `tests/es3_float_pack.rs` pulls the file in with `#[path]`.
 //!
 //! The GL core already has two half-float helpers; this file mirrors them and
 //! differs where ReadPixels needs it:
