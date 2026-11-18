@@ -689,3 +689,40 @@ fn a_shared_renderbuffer_takes_the_kept_clear_out_first() {
     // SAFETY: plain GL calls: give B its own image back before the drop.
     unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, b.color) };
 }
+
+/// dEQP-GLES3 `lifetime.attach.deleted_name.texture_framebuffer` (and its
+/// three siblings, image LT of tools/cts/pi4-gles3-tree.txt): A's full clear
+/// pends (a texture attachment, so it is not kept), A is bound again and
+/// emptied, then left and deleted. The clear is not kept for an A with no
+/// attachment, an incomplete framebuffer no draw can take it into: it goes
+/// with A, and neither the bind nor the delete raises an error. Kept, it went
+/// out at the delete into an incomplete A: GL_INVALID_FRAMEBUFFER_OPERATION,
+/// which dEQP read at its next glBindFramebuffer.
+#[test]
+fn a_clear_of_a_framebuffer_emptied_since_is_not_kept() {
+    let g = rig();
+    let _rig = g.as_ref().unwrap();
+    let a = Fbo::new(true);
+    a.bind();
+    clear(RED);
+    // SAFETY: plain GL calls on names this test made.
+    unsafe {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        a.bind();
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT);
+        assert_eq!(err(), GL_NO_ERROR, "detach");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        assert_eq!(err(), GL_NO_ERROR, "glBindFramebuffer(0) after emptying A");
+        glDeleteFramebuffers(1, &a.fb);
+        assert_eq!(err(), GL_NO_ERROR, "glDeleteFramebuffers(A)");
+        let mut fresh = 0;
+        glGenFramebuffers(1, &mut fresh);
+        glBindFramebuffer(GL_FRAMEBUFFER, fresh);
+        assert_eq!(err(), GL_NO_ERROR, "glBindFramebuffer of a new framebuffer");
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &fresh);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+}

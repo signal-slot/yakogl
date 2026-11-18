@@ -1429,14 +1429,17 @@ fn attachment_refs(c: &GlContext, type_: GLenum, name: GLuint) -> usize {
 
 /// Framebuffer object `h` holds renderbuffers alone, each of this library's
 /// own storage (not an EGLImage's): nothing samples its pixels while another
-/// framebuffer is bound (`draw::parkable`).
+/// framebuffer is bound (`draw::parkable`). It must be complete too: one
+/// emptied while its clear pended (dEQP-GLES3 `lifetime.attach.deleted_name.*`)
+/// has nothing to take the clear, which would go out at a bind or a delete
+/// as GL_INVALID_FRAMEBUFFER_OPERATION.
 pub(super) fn attachments_private_renderbuffers(c: &GlContext, h: GLuint) -> bool {
     c.framebuffer_ref(h).is_some_and(|fb| {
         attachment_points(fb).all(|a| match a.type_ {
             GL_NONE => true,
             GL_RENDERBUFFER => c.renderbuffer_ref(a.name).is_some_and(|rb| !rb.external),
             _ => false,
-        })
+        }) && check_status(c, fb) == GL_FRAMEBUFFER_COMPLETE
     })
 }
 

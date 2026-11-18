@@ -29,6 +29,13 @@
 //! the arena; `random_25_links` (a 2.6 KB fragment-side case of the same
 //! group) is the control.
 //!
+//! Both refusals are at the scratch the compiler gets by default
+//! (`store::SCRATCH_BYTES`, 4 MiB, the Kconfig default). Since f2fb64c9 the
+//! Pi 4's dEQP images lend it 8 MiB (`driver/samples/zephyr/deqp/boards/rpi_4b.conf`),
+//! and at 8 MiB both programs link (`*_links_in_the_pi4_images_8_mib`), so
+//! S16 and UA1 are images of the Pi 4 rerun (plan #380). Each build lends
+//! its region under [`COMPILING`], so the two sizes never meet.
+//!
 //! The variant_3 shader text is dEQP-GLES3's: VK-GL-CTS 93bca01
 //! `external/graphicsfuzz/data/gles3/graphicsfuzz/` (`vertexShader.glsl`,
 //! `synthetic/recipient.frag`, `synthetic/variant_3.frag`), Apache-2.0,
@@ -574,9 +581,45 @@ fn compile(stage: u32, src: &str) -> Result<ShcShader, String> {
     }
 }
 
-/// glCompileShader on both stages, then glLinkProgram.
+/// The scratch the Pi 4's dEQP images lend the compiler, read from their board
+/// file so this follows it.
+fn pi4_image_scratch() -> usize {
+    let conf = include_str!("../driver/samples/zephyr/deqp/boards/rpi_4b.conf");
+    let line = conf
+        .lines()
+        .find_map(|l| l.strip_prefix("CONFIG_YAKOGL_SHADERC_SCRATCH_BYTES="))
+        .expect("rpi_4b.conf sets the compiler scratch");
+    line.trim().parse().expect("a byte count")
+}
+
+/// Lend the compiler a zeroed region of `bytes` (one leaked region a size).
+/// Called under [`COMPILING`], so no compile runs in a region another lent.
+fn lend(bytes: usize) {
+    static REGIONS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+    let mut regions = REGIONS.lock().unwrap_or_else(|e| e.into_inner());
+    let at = match regions.iter().find(|r| r.0 == bytes) {
+        Some(r) => r.1,
+        None => {
+            let at = Box::leak(vec![0u8; bytes].into_boxed_slice()).as_mut_ptr() as usize;
+            regions.push((bytes, at));
+            at
+        }
+    };
+    // SAFETY: a leaked region of `bytes` that only the compiler, serialized
+    // by COMPILING, ever touches.
+    let rc = unsafe { yakogl::shaderc::online::store::shc_online_lend_scratch(at as *mut u8, bytes) };
+    assert_eq!(rc, 0, "lend {bytes} bytes of scratch");
+}
+
+/// glCompileShader on both stages, then glLinkProgram, at the default scratch.
 fn build(vs: &str, fs: &str) -> Outcome {
+    build_in(yakogl::shaderc::online::store::SCRATCH_BYTES, vs, fs)
+}
+
+/// [`build`] with `scratch` bytes lent to the compiler.
+fn build_in(scratch: usize, vs: &str, fs: &str) -> Outcome {
     let _one = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
+    lend(scratch);
     yakogl::shaderc::online::backend::forget_compiled();
     let vso = match compile(SHC_STAGE_VERTEX, vs) {
         Ok(o) => o,
@@ -622,4 +665,23 @@ fn random_83_is_refused_with_select_out_of_scratch() {
 #[test]
 fn random_25_links() {
     assert_eq!(build(RANDOM_25_VERTEX, RANDOM_25_FRAGMENT), Outcome::Linked);
+}
+
+/// The Pi 4's dEQP images lend 8 MiB (f2fb64c9), twice the default.
+#[test]
+fn the_pi4_images_lend_8_mib() {
+    assert_eq!(pi4_image_scratch(), 8 << 20);
+    assert_eq!(yakogl::shaderc::online::store::SCRATCH_BYTES, 4 << 20);
+}
+
+/// S16 variant_3 links with the scratch of the Pi 4's images.
+#[test]
+fn variant_3_links_in_the_pi4_images_8_mib() {
+    assert_eq!(build_in(pi4_image_scratch(), VERTEX, VARIANT_3), Outcome::Linked);
+}
+
+/// UA1 `uniform_api.random.83` links with the scratch of the Pi 4's images.
+#[test]
+fn random_83_links_in_the_pi4_images_8_mib() {
+    assert_eq!(build_in(pi4_image_scratch(), RANDOM_83_VERTEX, RANDOM_83_FRAGMENT), Outcome::Linked);
 }
