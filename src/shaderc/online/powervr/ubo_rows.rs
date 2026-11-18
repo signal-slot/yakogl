@@ -59,6 +59,7 @@ struct Range {
     row: u16,
 }
 
+#[derive(Clone, Copy)]
 pub struct UboRows<'a> {
     ranges: &'a [Range],
 }
@@ -122,18 +123,21 @@ impl<'a> UboRows<'a> {
 /// Whether, and from where, a stage reads its uniform-block members with
 /// `ld` (docs/notes/pvr-ubo-memory-load.md §2, §3, §8.4).
 ///
-/// **Off by default, and nothing sets it yet.** Off, every uniform dword is
-/// a shared-register read as before and no [`SelOp::Ld`] or
-/// [`SelOp::Add64`] is ever made, so the compiler's output is unchanged.
-/// The chain turns it on (plan #378 item `ubo-chain`) once the record
-/// carries `ubo_addr_off1` and the back end writes the pair.
+/// **Off by default.** Off, every uniform dword is a shared-register read
+/// and no [`SelOp::Ld`] or [`SelOp::Add64`] is made. The online chain
+/// turns it on for a stage that reads a block member
+/// (`chain::shared_layout`, `select::SharedLayout`) and reports the
+/// pair in the record (`ubo_addr_off1`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MemberLoads {
     /// Read block members from memory.
     pub on: bool,
-    /// The absolute shared register of the address pair's low dword,
-    /// `ubo_addr_off1 - 1` (the high dword is the next one; no alignment,
-    /// §3): `base + uniform_sh_dwords` in the §8.4 layout.
+    /// The shared register of the address pair's low dword (the high dword
+    /// is the next one; no alignment, §3), as selection names shared
+    /// registers: from the start of the uniform data, so the shared prefix
+    /// `uniform_sh_dwords`. The chain adds the descriptors' size after
+    /// selection, which makes it the record's `ubo_addr_off1 - 1`
+    /// (`base + uniform_sh_dwords`, §8.4).
     pub pair: u16,
 }
 
@@ -189,8 +193,9 @@ mod load_tests {
     //! The member-read groups through the passes the chain runs them
     //! through -- `prepare`, `index_high_shared`, the allocator, the
     //! `ld`/`wdf` order check, the builder and the decode-back check --
-    //! with the emitted words pinned. Built directly: no selector routes a
-    //! read here yet. Feature set `host-test,gpu-powervr,shaderc-online`.
+    //! with the emitted words pinned. Built directly, apart from the
+    //! selector's routing (`select::SharedLayout`). Feature set
+    //! `host-test,gpu-powervr,shaderc-online`.
     use super::*;
     use crate::shaderc::online::powervr::alloc::{allocate, Boundary, Limits};
     use crate::shaderc::online::powervr::assemble::build_group;

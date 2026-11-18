@@ -18,18 +18,14 @@
 //! Live cases pin what holds today and after the raise: a 256-byte block
 //! compiles and links, and a shader with no block holds no `ld`.
 //!
-//! Today (before `ubo-chain`) the 16384-byte block does not compile as a
-//! whole: block members are shared registers, and the 4096 dwords of the
-//! block do not fit the 2048 shared registers (see the report of the item
-//! `ubo-mem-test-draft` for what each ignored case does today). That refusal
-//! is deliberately not pinned live; the ignored cases assert the post-raise
-//! behaviour.
-//!
-//! `ubo-chain` un-ignores the cases: delete the `#[ignore]` line of
-//! `block_16k_vertex_links`, `block_16k_fragment_links` and the eight
-//! `ld_then_wdf_{vertex,fragment}_{first,last}_{const,runtime}` cases, and
-//! fill in the `TODO(ubo-chain)` address assertion in `ld_then_wdf` once
-//! `ShcShader::ubo_addr_off1` exists (item `shc-field`).
+//! Since `ubo-chain` the online chain reads block members with `ld`, so the
+//! 16384-byte block compiles and links: its 4096 dwords stay in memory, and
+//! only the default prefix and the address pair are shared registers. The
+//! `ld` cases also check the record's `ubo_addr_off1`
+//! (`backend::pvr_ubo_addr_off1`, until `ShcShader` carries the field): the
+//! `add64_32` reads the pair's low dword there, and at a constant index one
+//! `ld` window covers the dword read. Whether the back end writes the pair
+//! is `ubo-backend`'s (tests/pvr_ubo_draw_16k.rs).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_ubo_memory_load
@@ -207,6 +203,12 @@ fn link(vs: &str, fs: &str) -> Result<(), String> {
 /// The online compiler's listing of one stage (every group of the USC
 /// program, `listing::group_text`), or the compile log.
 fn listing(stage: u32, text: &str) -> Result<String, String> {
+    compiled(stage, text).map(|(l, _, _)| l)
+}
+
+/// [`listing`], the record's `ubo_addr_off1` (`backend::pvr_ubo_addr_off1`:
+/// the address pair's register plus one) and its `uniform_sh_dwords`.
+fn compiled(stage: u32, text: &str) -> Result<(String, u16, u16), String> {
     let compile = yakogl::shaderc::online::SHC_ONLINE.compile.expect("the online back end compiles");
     yakogl::shaderc::online::backend::forget_compiled();
     let mut out = ShcShader::ZERO;
@@ -224,7 +226,7 @@ fn listing(stage: u32, text: &str) -> Result<String, String> {
         Ok(())
     })
     .map_err(|e| format!("the compiled program does not decode: {e:?}"))?;
-    Ok(t)
+    Ok((t, yakogl::shaderc::online::backend::pvr_ubo_addr_off1(&out), out.uniform_sh_dwords))
 }
 
 /// Whether a listing line is an instruction line (`phaseN ld|...`) of `op`.
@@ -235,6 +237,56 @@ fn is_op(line: &str, op: &str) -> bool {
 
 fn has_op(listing: &str, op: &str) -> bool {
     listing.lines().any(|l| is_op(l, op))
+}
+
+/// The value of `key=` in `text`'s first field of that name.
+fn field(text: &str, key: &str) -> Option<String> {
+    text.split_whitespace().find_map(|w| w.strip_prefix(key)?.strip_prefix('=').map(str::to_owned))
+}
+
+/// The listing's groups, each as its text.
+fn groups(listing: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in listing.lines() {
+        if line.starts_with('[') || out.is_empty() {
+            out.push(String::new());
+        }
+        let g = out.last_mut().expect("one group");
+        g.push_str(line);
+        g.push('\n');
+    }
+    out
+}
+
+/// The `add64_32` reads the address pair's low dword from shared register
+/// `pair` (an operand below sh256 is named directly), and adds a constant
+/// `k` such that one `ld` window `[k, k + 4 * burst)` covers byte `off`:
+/// `k` an `imm32` the program loads into the sum's offset operand, or the
+/// value of the constant register it names (`prepare::const_reg`).
+fn assert_ld_window(l: &str, pair: u16, off: u32, case: &str) {
+    use yakogl::shaderc::online::powervr::prepare::const_reg;
+    let gs = groups(l);
+    let add = gs
+        .iter()
+        .find(|g| g.lines().any(|x| is_op(x, "add64_32")))
+        .unwrap_or_else(|| panic!("{case}: no add64_32:\n{l}"));
+    let lo = add.lines().find(|x| x.trim_start().starts_with("lower_src:")).expect("an add64_32 reads sources");
+    assert_eq!(
+        (field(lo, "sb0").as_deref(), field(lo, "s0")),
+        (Some("shared"), Some(pair.to_string())),
+        "{case}: the sum's low dword is not sh{pair}:\n{add}"
+    );
+    let special = (field(lo, "sb2").as_deref() == Some("special")).then(|| field(lo, "s2")).flatten();
+    let imms: Vec<u32> = gs.iter().filter_map(|g| field(g, "imm32")?.parse().ok()).collect();
+    let burst = gs.iter().filter_map(|g| field(g, "burstlen")?.parse::<u32>().ok()).max().unwrap_or(0);
+    let added = |k: u32| match &special {
+        Some(r) => const_reg(k).is_some_and(|c| c.to_string() == *r),
+        None => imms.contains(&k),
+    };
+    assert!(
+        (off.saturating_sub(4 * burst - 4)..=off).step_by(4).any(added),
+        "{case}: no ld window of {burst} dwords covers byte {off}:\n{l}"
+    );
 }
 
 /* ---- the blocks ------------------------------------------------------------- */
@@ -289,7 +341,6 @@ fn shader_without_a_block_holds_no_ld() {
 /* ---- ignored: the 16384-byte block, read by ld -------------------------------- */
 
 #[test]
-#[ignore = "until ubo-chain: block members are read by ld"]
 fn block_16k_vertex_links() {
     let _g = context();
     for (name, expr, _) in READS {
@@ -298,7 +349,6 @@ fn block_16k_vertex_links() {
 }
 
 #[test]
-#[ignore = "until ubo-chain: block members are read by ld"]
 fn block_16k_fragment_links() {
     let _g = context();
     for (name, expr, _) in READS {
@@ -310,24 +360,29 @@ fn block_16k_fragment_links() {
 /// load's result, before the destination is read).
 fn ld_then_wdf(stage: u32, src: &str, case: &str, offset: Option<u32>) {
     let _g = context();
-    let l = listing(stage, src).unwrap_or_else(|e| panic!("{case}: {e}"));
+    let (l, off1, prefix) = compiled(stage, src).unwrap_or_else(|e| panic!("{case}: {e}"));
     let at = |op| l.lines().position(|x| is_op(x, op));
     let ld = at("ld").unwrap_or_else(|| panic!("{case}: no ld:\n{l}"));
     let wdf = at("wdf").unwrap_or_else(|| panic!("{case}: no wdf:\n{l}"));
     assert!(ld < wdf, "{case}: wdf before the ld:\n{l}");
+    assert_ne!(off1, 0, "{case}: the record names no address pair");
+    // The block's 4096 dwords stay in memory: the shared registers hold the
+    // default prefix (`uniform_sh_dwords`) and the pair right after it, no
+    // sampler descriptor before them. `i` is declared after the block, so its
+    // row is past the block's: the prefix is empty and `i` is read with ld
+    // too.
+    assert_eq!((prefix, off1 - 1), (0, 0), "{case}: the shared prefix and the pair");
     if let Some(off) = offset {
-        // TODO(ubo-chain): once ShcShader::ubo_addr_off1 exists (item shc-field), have `listing`
-        // hand back the ShcShader beside its text and assert that the ld's address pair is the
-        // shared register pair at ubo_addr_off1 - 1, and that the byte offset added to it is
-        // `off` (0 for the first dword, 16380 for the last: 4 * dword_off).
-        let _ = off;
+        // The ld's address is the pair at ubo_addr_off1 - 1 plus a constant
+        // byte offset; a vec4 member is one 4-dword burst from its start, so
+        // the window covers `off` (0 for the first dword, 16380 for the last).
+        assert_ld_window(&l, off1 - 1, off, case);
     }
 }
 
 macro_rules! read_case {
     ($name:ident, $stage:expr, $build:ident, $idx:expr) => {
         #[test]
-        #[ignore = "until ubo-chain: block members are read by ld"]
         fn $name() {
             let (case, expr, off) = READS[$idx];
             ld_then_wdf($stage, &$build(BLOCK_16K, expr), case, off);
