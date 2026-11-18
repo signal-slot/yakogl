@@ -3820,6 +3820,18 @@ step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/boa
 scope tools drivers
 step "tools   board_lock.sh: a refusal names the holder; nanopc-t6.sh never waits" \
   driver/tools/kexec-zephyr/board_lock_selftest.sh
+# tools/release/make-snapshot.py, the snapshot tool of the public repository
+# (#1606 step 7), against a throwaway fixture repository: the snapshot is one
+# root commit with no parent, the exclusions are out of its tree and of its
+# working tree, the kept paths equal the revision's byte for byte (paths,
+# modes and blob ids), author, date and hash come from the arguments or the
+# environment with no host identity in the commit, and the refusals: a dirty
+# source, a missing revision, a non-empty outdir, a malformed or stale list,
+# a kept gitlink. 39 checks, pinned in the script (about 1 s). It writes
+# nothing outside its temporary directory, so it runs beside the other rows.
+scope tools
+step "tools   make-snapshot.py: one root commit, exclusions, refusals" \
+  python3 -I tools/release/make-snapshot.py --self-test
 # The judge of a NanoPC-T6 record (driver/tools/kexec-zephyr/t6-verdict.sh,
 # what nanopc-t6.sh's record is read with), without a board: the predicted
 # records in testdata/ pass, and each altered record (a line missing, a value
