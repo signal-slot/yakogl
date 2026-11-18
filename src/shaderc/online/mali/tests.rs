@@ -1072,6 +1072,10 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
              front end refuses gl_FragData[n > 0] (the test pins its verdict), and a vertex shader writes none",
         ),
         E::Interpolation => Some("ES 1.00 has no interpolation qualifier: every varying is smooth"),
+        E::CompareForm => Some(
+            "no raiser left: the highp `!=` of floats and ints is FCMP_OR/ICMP_OR .ne (deqp_misc_cmp_fne_hp, \
+             deqp_misc_cmp_ine0_hp); a mediump `!=` refuses on its mediump arm before it",
+        ),
         E::ConvertWiden => Some(
             "no test or corpus shader gives U32_TO_F32 or S32_TO_F32 a constant source (the only way a narrowed \
              source reaches them: the constant lowering's table byte or half)",
@@ -1140,7 +1144,6 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::Fp16Inexact
         | E::TooManyLocals
         | E::TooManyValues
-        | E::CompareForm
         | E::AlgebraicForm
         | E::MovedTooLarge
         | E::AttributeNumbering
@@ -1311,7 +1314,6 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         /* the S4 rows no reference draws: `!=` on floats and on integers;
          * the clamp forms Mesa's late rules make; a negated float(bool) in
          * a product */
-        (FS, "precision highp float; varying vec4 v; void main(){ float r = float(v.x != v.y); gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::CompareForm),
         (FS, "precision highp float; varying vec4 v; void main(){ float r = clamp(v.x, -1.0, 1.0); gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::AlgebraicForm),
         (FS, "precision highp float; varying vec4 v; void main(){ float r = -float(v.x > 0.5) * v.y; gl_FragColor = vec4(r, 0.0, 0.0, 1.0); }", MaliError::AlgebraicForm),
         /* a chain of more than 8 operations that Mesa's link would move */

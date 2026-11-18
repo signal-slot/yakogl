@@ -277,8 +277,11 @@ pub fn word_diff(name: &str, ours: &[u64], theirs: &[u64]) -> Option<String> {
 
 /// The uniforms a program declares, in gl_ref.py's `uniforms()` order: the
 /// vertex shader's, then the fragment shader's not already declared.
-fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+/// Each uniform declared, by name in declaration order, and whether its
+/// type is an `int`/`ivecN` (gl_ref.py's `INT_UNIFORM_COMPONENTS`, set
+/// with glUniform*iv: the value is the integer, not its float's bits).
+fn uniform_names(vs: &str, fs: &str) -> Vec<(String, bool)> {
+    let mut out: Vec<(String, bool)> = Vec::new();
     for text in [vs, fs] {
         let mut t = String::new();
         let mut rest = text;
@@ -295,11 +298,12 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
                 continue;
             }
             let skip = if matches!(w.get(1), Some(&("lowp" | "mediump" | "highp"))) { 3 } else { 2 };
+            let int = matches!(w.get(skip - 1), Some(&("int" | "ivec2" | "ivec3" | "ivec4")));
             let names = w.get(skip..).unwrap_or(&[]).join(" ");
             for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
                 let name = name.to_string();
-                if !out.contains(&name) {
-                    out.push(name);
+                if !out.iter().any(|o| o.0 == name) {
+                    out.push((name, int));
                 }
             }
         }
@@ -310,7 +314,7 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
 /// The value gl_ref.py's `--uniform-values` gave uniform dword `d`
 /// (component c of uniform k: 16 (k + 1) + c), as fp32 bits; an array
 /// declarator gets none (its location lookup is -1), so 0.
-fn uniform_value(names: &[String], rows: &[(String, u16, u16)], d: u16) -> u32 {
+fn uniform_value(names: &[(String, bool)], rows: &[(String, u16, u16)], d: u16) -> u32 {
     let (name, first, _) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
     /* the built-in's state, glDepthRangef(0, 1) by default: near, far, diff */
     match name.as_str() {
@@ -318,14 +322,17 @@ fn uniform_value(names: &[String], rows: &[(String, u16, u16)], d: u16) -> u32 {
         "gl_DepthRange.far" | "gl_DepthRange.diff" => return 1f32.to_bits(),
         _ => {}
     }
-    if names.iter().any(|n| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
+    if names.iter().any(|(n, _)| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
         return 0;
     }
-    let k = names.iter().position(|n| n == name).expect("the uniform is declared");
+    let k = names.iter().position(|n| &n.0 == name).expect("the uniform is declared");
     /* gl_ref.py counts a matrix's components packed; the front end strides
      * a mat3's columns to 4 dwords (its 12 dwords, no array here) */
     let (_, _, count) = rows.iter().find(|r| &r.0 == name).expect("a uniform row holds the dword");
     let c = if *count == 12 { (d - first) / 4 * 3 + (d - first) % 4 } else { d - first };
+    if names[k].1 {
+        return 16 * (k as u32 + 1) + c as u32;
+    }
     (16.0 * (k as f32 + 1.0) + c as f32).to_bits()
 }
 

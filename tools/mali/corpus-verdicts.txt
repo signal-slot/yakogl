@@ -89,7 +89,7 @@ tools/shaders/es100/ret_dynloop_never.frag: Valhall: a loop Mesa keeps (a run-ti
 tools/shaders/es100/ret_nested.frag: ok
 tools/shaders/es100/ret_nested.vert: Valhall: a loop in a vertex shader is not lowered yet
 tools/shaders/es100/selects.frag: ok
-tools/shaders/es100/sharedint.frag: Valhall: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it) is not lowered yet
+tools/shaders/es100/sharedint.frag: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 tools/shaders/es100/sharedint.vert: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet
 tools/shaders/es100/swizzled_broadcast.frag: ok
 tools/shaders/es100/texbranch.frag: ok
