@@ -39,12 +39,13 @@ use super::context::{
 use super::msaa;
 use super::names::{self, Kind};
 use super::types::*;
-use super::{draw, texture};
+use super::{draw, float_pack, texture};
 use crate::backend::{
-    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_texfmt_bytes, GLES_SURF_R16F,
-    GLES_SURF_R32F, GLES_SURF_RGB10_A2, GLES_SURF_RGB565, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8,
-    GLES_SURF_XRGB8888, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGBA16F,
-    GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
+    self, gles_surf_bytes_per_pixel, gles_surf_int_layout, gles_surf_is_integer, gles_texfmt_bytes,
+    GLES_SURF_R11F_G11F_B10F, GLES_SURF_R16F, GLES_SURF_R32F, GLES_SURF_RG32F, GLES_SURF_RGB10_A2, GLES_SURF_RGB565,
+    GLES_SURF_RGBA16F, GLES_SURF_RGBA32F, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888,
+    GLES_TEXFMT_R11G11B10F, GLES_TEXFMT_R16F, GLES_TEXFMT_R32F, GLES_TEXFMT_RGB10A2, GLES_TEXFMT_RGBA16F,
+    GLES_TEXFMT_RGBA32F, GLES_TEXFMT_RGBA8, GLES_TEXFMT_SRGB8_A8,
 };
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
 use crate::util::Global;
@@ -524,6 +525,10 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         let rgb16f = !crate::REPORT_ES2
             && t.texfmt == GLES_TEXFMT_RGBA16F
             && super::es3_formats::by_index(t.es3_fmt).is_some_and(|e| e.internalformat == GL_RGB16F);
+        /* RG32F, RGBA32F, R11F_G11F_B10F under GL_EXT_color_buffer_float,
+         * in a class that holds the surface (keyed on the colour format: a
+         * depth texture never gets here) */
+        let ext_float = ext_float_texture(t);
 
         if t.mem.impl_.is_null()
             || t.width == 0
@@ -534,14 +539,20 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
                 t.texfmt,
                 GLES_TEXFMT_RGBA8 | GLES_TEXFMT_SRGB8_A8 | GLES_TEXFMT_RGBA16F | GLES_TEXFMT_R16F | GLES_TEXFMT_R32F
             ) || int_format.is_some()
-                || rgb10a2)
+                || rgb10a2
+                || ext_float.is_some())
             /* SRGB8 is a texture format only (ES 3.0.6 table 3.13: not
              * colour-renderable); SRGB8_ALPHA8 is both */
             || (t.texfmt == GLES_TEXFMT_SRGB8_A8 && t.format == GL_RGB)
             /* an ES 3.0 format of es3_formats is no render target, but
              * RGB10_A2 (ES 3.0 table 3.13): held as RGBA8, or in its own
              * class where the back end renders it */
-            || (t.es3_fmt != 0 && t.texfmt != GLES_TEXFMT_RGBA8 && int_format.is_none() && !rgb10a2 && !rgb16f)
+            || (t.es3_fmt != 0
+                && t.texfmt != GLES_TEXFMT_RGBA8
+                && int_format.is_none()
+                && !rgb10a2
+                && !rgb16f
+                && ext_float.is_none())
             || a.level < 0
             || a.level as u32 >= t.chain_levels as u32
             || a.level as usize >= CAP_MIP_LEVELS
@@ -550,12 +561,21 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
         {
             return None;
         }
+        /* GL_RGBA32F held as halves is never drawn as a 16F target: where
+         * the extension makes the name colour-renderable it is stored in its
+         * own class (`texture.rs` `rgba32f_own_class`), so one held as
+         * halves (made before the build followed the extension, a host test
+         * only) has no surface */
+        if t.rgba32f && t.texfmt == GLES_TEXFMT_RGBA16F && is_color_format(GL_RGBA32F) {
+            return None;
+        }
         /* the attached level of the attached face/layer: a sub-rectangle
          * of the stacked storage, at the level's pair-padded pitch */
         let lw = (t.width >> a.level).max(1);
         let lh = (t.height >> a.level).max(1);
         let internalformat = match t.texfmt {
             _ if int_format.is_some() => int_format.unwrap_or(GL_RGBA),
+            _ if ext_float.is_some() => ext_float.map_or(GL_RGBA, |(f, _)| f),
             /* GL_RGBA32F is stored as halves; the texture remembers the name
              * (`GlTexture::rgba32f`), and ES 3.0 4.4.4.1 judges the
              * attachment by its sized format: GL_RGBA32F is not
@@ -670,6 +690,9 @@ fn is_color_format(f: GLenum) -> bool {
          * docs/notes/es3-float-targets.md section 5). The ES 2.0 report keeps
          * its answer: it refuses the name before it gets here. */
         || (f == GL_R32F && (crate::REPORT_ES2 || r32f_color_renderable()))
+        /* RG32F, RGBA32F and R11F_G11F_B10F: the same extension, and a
+         * surface the back end draws and reads back */
+        || ext_float_color_renderable(f)
         /* ES 3.0 table 3.13: colour-renderable, so renderbuffer storage. In
          * its own 10/10/10/2 surface where the back end renders the class
          * (`rgb10a2_surface`), else held as RGBA8 (eight bits a channel,
@@ -680,8 +703,9 @@ fn is_color_format(f: GLenum) -> bool {
 
 /// Is GL_R32F colour-renderable in this ES 3.0 build: only where
 /// GL_EXT_color_buffer_float is listed (none lists it yet), or where a host
-/// test stands in for such a build ([`HOST_R32F_RT`]).
-fn r32f_color_renderable() -> bool {
+/// test stands in for such a build ([`HOST_R32F_RT`]). The rule of the
+/// extension's other formats too ([`ext_float_color_renderable`]).
+pub(super) fn r32f_color_renderable() -> bool {
     #[cfg(any(test, feature = "host-test"))]
     if HOST_R32F_RT.load(core::sync::atomic::Ordering::Relaxed) {
         return true;
@@ -689,12 +713,55 @@ fn r32f_color_renderable() -> bool {
     crate::gl::state::extension_listed("GL_EXT_color_buffer_float")
 }
 
-/// Host tests only: R32F is a colour target as GL_EXT_color_buffer_float
-/// makes it, for a test of the R32F surface the back ends render (the host
-/// back ends draw nothing, and the extension string is not changed). Off
-/// unless a test sets it; `reset_for_tests` turns it off again.
+/// Host tests only: the GL core follows GL_EXT_color_buffer_float's rules as
+/// if the extension were listed (the host back ends draw nothing, and the
+/// extension string is not changed): R32F is a colour target, and so are
+/// RG32F, RGBA32F and R11F_G11F_B10F where their surface is drawable too
+/// (`backend::HOST_FLOAT_RT_FORMATS` stands in for that). Off unless a test
+/// sets it; `reset_for_tests` turns it off again.
 #[cfg(any(test, feature = "host-test"))]
 pub static HOST_R32F_RT: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// The surface of a format GL_EXT_color_buffer_float makes colour-renderable
+/// beyond R32F and the 16F ones (`GLES_SURF_FLOAT_FIRST ..= _LAST`).
+pub(super) fn ext_float_surf_format(f: GLenum) -> Option<u8> {
+    match f {
+        GL_RG32F => Some(GLES_SURF_RG32F),
+        GL_RGBA32F => Some(GLES_SURF_RGBA32F),
+        GL_R11F_G11F_B10F => Some(GLES_SURF_R11F_G11F_B10F),
+        _ => None,
+    }
+}
+
+/// Is RG32F, RGBA32F or R11F_G11F_B10F colour-renderable (ES 3.0.6 table 3.13
+/// with EXT_color_buffer_float)? Only in an ES 3.0 build that follows the
+/// extension ([`r32f_color_renderable`]) on a back end that draws and reads
+/// back the format's surface ([`backend::rt_format_drawable`]); the claim
+/// itself needs all three (`backend::color_buffer_float_capable`).
+pub(super) fn ext_float_color_renderable(f: GLenum) -> bool {
+    !crate::REPORT_ES2
+        && ext_float_surf_format(f).is_some_and(|s| r32f_color_renderable() && backend::rt_format_drawable(s))
+}
+
+/// An RG32F, RGBA32F or R11F_G11F_B10F texture as a colour attachment: its
+/// sized format and the surface it is drawn as, where the texel class holds
+/// the surface's layout and the format is colour-renderable
+/// ([`ext_float_color_renderable`]); None for any other texture (a depth
+/// texture, whose class is R32F, never matches). RGBA32F needs its own
+/// 16-byte class (`texture.rs` `rgba32f_own_class`), not the halves it is
+/// otherwise held as; RG32F is held in that class too (es3_formats `F32_ST`)
+/// and is drawn as the RGBA32F surface with its two channels written
+/// ([`fb_target_channel_mask_n`]), the store's blue and alpha left at the 0
+/// and 1 the upload put there; R11F_G11F_B10F in its packed word.
+fn ext_float_texture(t: &context::GlTexture) -> Option<(GLenum, u8)> {
+    let f = super::es3_formats::by_index(t.es3_fmt)?.internalformat;
+    let surf = match (f, t.texfmt) {
+        (GL_RGBA32F | GL_RG32F, GLES_TEXFMT_RGBA32F) => GLES_SURF_RGBA32F,
+        (GL_R11F_G11F_B10F, GLES_TEXFMT_R11G11B10F) => GLES_SURF_R11F_G11F_B10F,
+        _ => return None,
+    };
+    (ext_float_color_renderable(f) && backend::rt_format_drawable(surf)).then_some((f, surf))
+}
 
 /// The surface (`GLES_SURF_*`) of an ES 3.0 integer colour format, by its GL
 /// name, in any build (the ES 2.0 report refuses the formats elsewhere).
@@ -791,6 +858,9 @@ pub(super) fn renderbuffer_surf_format(internalformat: GLenum) -> u8 {
          * bits of each colour lost, alpha widened) elsewhere */
         GL_RGB10_A2 if rgb10a2_surface() => GLES_SURF_RGB10_A2,
         f if is_integer_color_format(f) => integer_surf_format(f).unwrap_or(GLES_SURF_RGBA8888),
+        /* RG32F, RGBA32F and R11F_G11F_B10F in their own surfaces, only
+         * where GL_EXT_color_buffer_float makes them renderbuffer storage */
+        f if ext_float_color_renderable(f) => ext_float_surf_format(f).unwrap_or(GLES_SURF_RGBA8888),
         _ => GLES_SURF_RGBA8888,
     }
 }
@@ -1005,6 +1075,9 @@ pub fn fb_target_format_n(c: &GlContext, n: u8) -> u8 {
             }) {
                 return surf;
             }
+            if let Some((_, surf)) = c.texture_ref(a.name).and_then(ext_float_texture) {
+                return surf;
+            }
             match c.texture_ref(a.name).map(|t| (t.texfmt, t.bgra)) {
                 Some((GLES_TEXFMT_RGBA16F, _)) => return GLES_SURF_RGBA16F,
                 Some((GLES_TEXFMT_R16F, _)) => return GLES_SURF_R16F,
@@ -1038,6 +1111,10 @@ pub fn fb_target_channel_mask_n(c: &GlContext, n: u8) -> u8 {
     let Some(a) = c.framebuffer_ref(c.bound_framebuffer).and_then(|fb| color_attachment(fb, n)) else { return 0xf };
     if a.type_ != GL_TEXTURE {
         return 0xf;
+    }
+    /* an RG32F texture drawn as the RGBA32F surface of its store */
+    if c.texture_ref(a.name).and_then(ext_float_texture).is_some_and(|(f, _)| f == GL_RG32F) {
+        return 0x3;
     }
     c.texture_ref(a.name)
         .and_then(integer_texture_internalformat)
@@ -1091,8 +1168,16 @@ pub fn fb_target_alpha_bits_n(c: &GlContext, n: u8) -> u8 {
             _ => 8,
         },
         GL_RENDERBUFFER => match c.renderbuffer_ref(a.name).map(|rb| rb.internalformat) {
-            Some(GL_RGB565) | Some(GL_RGB8) | Some(GL_RGB16F) | Some(GL_RG16F) | Some(GL_R16F) | Some(GL_R32F)
-            | Some(GL_R8) | Some(GL_RG8) => 0,
+            Some(GL_RGB565)
+            | Some(GL_RGB8)
+            | Some(GL_RGB16F)
+            | Some(GL_RG16F)
+            | Some(GL_R16F)
+            | Some(GL_R32F)
+            | Some(GL_RG32F)
+            | Some(GL_R11F_G11F_B10F)
+            | Some(GL_R8)
+            | Some(GL_RG8) => 0,
             Some(GL_RGB5_A1) => 1,
             Some(GL_RGBA4) => 4,
             /* R and RG integer formats have no alpha (it reads 1) */
@@ -1325,6 +1410,13 @@ pub fn fb_target_n(c: &GlContext, n: u8) -> Option<(u64, u32, u32, u8)> {
         GL_RGBA16F | GL_RGB16F | GL_RG16F => GLES_SURF_RGBA16F,
         GL_R16F => GLES_SURF_R16F,
         GL_R32F => GLES_SURF_R32F,
+        /* a texture's own (RG32F in the RGBA32F surface of its store) */
+        f if ext_float_surf_format(f).is_some() => match loc {
+            MemLoc::Texture(i) => {
+                ext_float_texture(&c.objs_ref().textures[i]).map_or(GLES_SURF_RGBA8888, |(_, surf)| surf)
+            }
+            _ => renderbuffer_surf_format(f),
+        },
         f if is_integer_color_format(f) || f == GL_SRGB8_ALPHA8 || f == GL_RGB10_A2 => renderbuffer_surf_format(f),
         _ => GLES_SURF_RGBA8888,
     };
@@ -1858,6 +1950,14 @@ pub fn read_framebuffer(c: &GlContext) -> GLuint {
 /// UNSIGNED_INT_2_10_10_10_REV (as Mesa's `_mesa_get_color_read_type`, only
 /// where [`rgb10a2_surface`] stores the class) -- and RGBA/UNSIGNED_BYTE for
 /// every other.
+///
+/// A float buffer (the 16F ones under GL_EXT_color_buffer_half_float, R32F,
+/// RG32F, RGBA32F and R11F_G11F_B10F under GL_EXT_color_buffer_float) takes
+/// RGBA/FLOAT (EXT_color_buffer_float's addition to ES 3.0 4.3.2) and this
+/// pair, RGBA/UNSIGNED_BYTE (clamped to [0, 1]): one answer for every float
+/// buffer, the one the 16F buffers have always given
+/// (tests/es3_readpixels_half_float.rs), and a pair of table 3.2 that any
+/// colour buffer's bytes convert to.
 pub fn implementation_color_read(c: &GlContext) -> (GLenum, GLenum) {
     let read = read_framebuffer(c);
     let (kind, packed) = c
@@ -2209,6 +2309,11 @@ pub(super) fn renderbuffer_bits(internalformat: GLenum) -> AttachmentBits {
         GL_R16F => AttachmentBits::color([16, 0, 0, 0], GL_FLOAT),
         GL_RG16F => AttachmentBits::color([16, 16, 0, 0], GL_FLOAT),
         GL_R32F => AttachmentBits::color([32, 0, 0, 0], GL_FLOAT),
+        /* GL_EXT_color_buffer_float's, in their own surfaces (no
+         * renderbuffer has them unless the extension's rule holds) */
+        GL_RG32F if !crate::REPORT_ES2 => AttachmentBits::color([32, 32, 0, 0], GL_FLOAT),
+        GL_RGBA32F if !crate::REPORT_ES2 => AttachmentBits::color([32, 32, 32, 32], GL_FLOAT),
+        GL_R11F_G11F_B10F if !crate::REPORT_ES2 => AttachmentBits::color([11, 11, 10, 0], GL_FLOAT),
         GL_DEPTH_COMPONENT16 => AttachmentBits { depth: 16, component_type: un, ..AttachmentBits::NONE },
         GL_DEPTH_COMPONENT24 => AttachmentBits { depth: 24, component_type: un, ..AttachmentBits::NONE },
         GL_DEPTH_COMPONENT32F => AttachmentBits { depth: 32, component_type: GL_FLOAT, ..AttachmentBits::NONE },
@@ -3158,7 +3263,9 @@ pub unsafe fn read_pixels(
      * RGBA/UNSIGNED_BYTE (clamped) or as RGBA/FLOAT (ES 3.0's read type for
      * float colour buffers) */
     let fmt = fb_target_format(c);
-    let float_target = backend::gles_surf_is_float(fmt);
+    /* ...the extension surfaces (RG32F, RGBA32F, R11F_G11F_B10F) too, which a
+     * framebuffer has only where GL_EXT_color_buffer_float's rule holds */
+    let float_target = backend::gles_surf_is_float(fmt) || backend::gles_surf_is_ext_float(fmt);
     /* ES 3.0 4.3.2: an integer read buffer is read as GL_RGBA_INTEGER with
      * GL_INT (signed) or GL_UNSIGNED_INT (unsigned), and only so; every other
      * read buffer refuses GL_RGBA_INTEGER */
@@ -3393,10 +3500,12 @@ pub(crate) fn half_to_float(h: u16) -> f32 {
     f32::from_bits(bits)
 }
 
-/// One row of a float colour target (RGBA16F / R16F / R32F texels) as RGBA
-/// floats or clamped RGBA8, 32 pixels at a time from GPU memory. `o` has room
-/// for `npix` output pixels (16 bytes for FLOAT, else 4). False when the
-/// platform failed a read (those pixels come back as zero texels).
+/// One row of a float colour target (RGBA16F / R16F / R32F texels, and the
+/// RG32F / RGBA32F floats and R11F_G11F_B10F words of
+/// GL_EXT_color_buffer_float) as RGBA floats or clamped RGBA8, 32 pixels at a
+/// time from GPU memory, decoded by `float_pack`. `o` has room for `npix`
+/// output pixels (16 bytes for FLOAT, else 4). False when the platform failed
+/// a read (those pixels come back as zero texels).
 #[allow(clippy::too_many_arguments)]
 fn read_float_row(
     ops: &osal::OsalOps,
@@ -3409,7 +3518,9 @@ fn read_float_row(
     type_: GLenum,
 ) -> bool {
     let bpp = gles_surf_bytes_per_pixel(fmt) as usize;
-    let mut stage = [0u8; 32 * 8];
+    /* room for 32 pixels of the widest float surface (RGBA32F, 16 bytes) */
+    let mut stage = [0u8; 32 * 16];
+    let mut rgba = [0.0f32; 32 * 4];
     let mut oi = 0;
     let mut ok = true;
 
@@ -3430,19 +3541,31 @@ fn read_float_row(
             stage[..n].fill(0);
             ok = false;
         }
-        for px in stage[..n].chunks_exact(bpp) {
-            let mut c = [0.0f32, 0.0, 0.0, 1.0];
-            let half = |i: usize| half_to_float(u16::from_le_bytes([px[i], px[i + 1]]));
-
-            if fmt == GLES_SURF_RGBA16F {
-                for (ch, v) in c.iter_mut().enumerate() {
-                    *v = half(ch * 2);
-                }
-            } else if fmt == GLES_SURF_R16F {
-                c[0] = half(0);
-            } else {
-                c[0] = f32::from_le_bytes([px[0], px[1], px[2], px[3]]);
+        let px_rgba = &mut rgba[..k * 4];
+        match fmt {
+            GLES_SURF_RGBA16F => {
+                float_pack::half_row_to_rgba_f32(&stage[..n], 4, px_rgba);
             }
+            GLES_SURF_R16F => {
+                float_pack::half_row_to_rgba_f32(&stage[..n], 1, px_rgba);
+            }
+            GLES_SURF_R11F_G11F_B10F => {
+                float_pack::r11g11b10f_row_to_rgba_f32(&stage[..n], px_rgba);
+            }
+            _ => {
+                /* R32F, RG32F, RGBA32F: the floats as stored, the channels
+                 * the surface lacks 0, 0, 1 */
+                let chans = bpp / 4;
+                for (src, dst) in stage[..n].chunks_exact(bpp).zip(px_rgba.as_chunks_mut::<4>().0) {
+                    let mut c = [0.0f32, 0.0, 0.0, 1.0];
+                    for (ch, v) in c.iter_mut().enumerate().take(chans) {
+                        *v = f32::from_le_bytes([src[ch * 4], src[ch * 4 + 1], src[ch * 4 + 2], src[ch * 4 + 3]]);
+                    }
+                    *dst = c;
+                }
+            }
+        }
+        for c in px_rgba.as_chunks::<4>().0 {
             if type_ == GL_FLOAT {
                 for (ch, v) in c.iter().enumerate() {
                     o[oi + ch * 4..oi + ch * 4 + 4].copy_from_slice(&v.to_ne_bytes());

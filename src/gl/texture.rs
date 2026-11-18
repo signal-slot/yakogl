@@ -6357,10 +6357,9 @@ fn es3_image_check(c: &mut GlContext, internalformat: GLenum, format: GLenum, ty
 /// is never a copy target, a float image needs a float buffer, and
 /// RGB10_A2 (unsigned normalised) a fixed-point one.
 fn es3_copy_compatible(c: &GlContext, e: &es3_formats::Es3Format) -> bool {
-    let float_buffer = matches!(
-        framebuffer::fb_target_format(c),
-        backend::GLES_SURF_RGBA16F | backend::GLES_SURF_R16F | backend::GLES_SURF_R32F
-    );
+    let fmt = framebuffer::fb_target_format(c);
+    /* the extension surfaces (RG32F, RGBA32F, R11F_G11F_B10F) are float too */
+    let float_buffer = backend::gles_surf_is_float(fmt) || backend::gles_surf_is_ext_float(fmt);
     match e.class {
         es3_formats::Class::Int | es3_formats::Class::Uint | es3_formats::Class::Snorm => false,
         es3_formats::Class::Float => float_buffer,
@@ -6427,13 +6426,19 @@ static TEST_RGBA32F_OWN_CLASS: core::sync::atomic::AtomicBool = core::sync::atom
 /// samples the class as two G32R32 planes (docs/notes/gc-128bit-swizzle.md),
 /// and RG32F / RGB32F take the class there too (es3_formats `F32_ST`). The
 /// PowerVR and the V3D sample the class as well but keep GL_RGBA32F as
-/// halves, byte for byte as before; the Mali samples no class of its own
-/// yet. Never under `report-es2`, which keeps its answers.
+/// halves, byte for byte as before, except where GL_EXT_color_buffer_float
+/// makes GL_RGBA32F colour-renderable (`framebuffer::ext_float_color_renderable`):
+/// a render target of the name holds 32-bit floats, so the texture is
+/// stored as the RGBA32F surface it is drawn as. The Mali samples no class
+/// of its own yet. Never under `report-es2`, which keeps its answers.
 fn rgba32f_own_class() -> bool {
+    let renderable = framebuffer::ext_float_color_renderable(GL_RGBA32F);
     #[cfg(not(test))]
-    let opted_in = cfg!(feature = "gpu-vivante");
+    let opted_in = cfg!(feature = "gpu-vivante") || renderable;
     #[cfg(test)]
-    let opted_in = cfg!(feature = "gpu-vivante") || TEST_RGBA32F_OWN_CLASS.load(core::sync::atomic::Ordering::Relaxed);
+    let opted_in = cfg!(feature = "gpu-vivante")
+        || renderable
+        || TEST_RGBA32F_OWN_CLASS.load(core::sync::atomic::Ordering::Relaxed);
     !crate::REPORT_ES2 && opted_in && backend::sampled_texfmts() & backend::gles_texfmt_bit(GLES_TEXFMT_RGBA32F) != 0
 }
 

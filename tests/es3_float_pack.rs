@@ -8,10 +8,10 @@
 //! Feature set: the file needs none, but the package must build, so any one
 //! host GPU set works:
 //! `cargo test --no-default-features --features host-test,gpu-powervr --test es3_float_pack`.
-//! The file under test is not in the module tree yet, so it is included by path.
+//! The file is included by path, so the test needs nothing else of the crate
+//! (it is `yakogl::gl::float_pack` in the module tree, used by glReadPixels).
 
 #[path = "../src/gl/float_pack.rs"]
-#[allow(dead_code)]
 mod float_pack;
 
 use float_pack::*;
