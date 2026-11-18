@@ -37,11 +37,11 @@
 16 desktop:windows=4:effect=shadow fs 9ce9: ok
 16 desktop:windows=4:effect=shadow vs 792b: ok
 17 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false fs 9fe6: ok
-17 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false vs 7234: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+17 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=false vs 7234: ok
 18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false fs 9fe6: ok
-18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false vs 7234: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+18 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=subdata:interleave=false vs 7234: ok
 19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true fs 9fe6: ok
-19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true vs 7234: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+19 buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=map:interleave=true vs 7234: ok
 20 ideas:speed=duration fs 1aca: Valhall: an integer or boolean value is not lowered yet
 20 ideas:speed=duration fs 23c8: ok
 20 ideas:speed=duration fs c565: Valhall: an integer or boolean value is not lowered yet

@@ -168,3 +168,56 @@ item 4.
 6. **vs-frsq and dead varying write**: `Frsq` as `FRSQ.f32` (`vsarith_vrcp`),
    and the removal of a conditional write of a varying lane the vertex shader
    leaves partly undefined (`vsarith_partial_varying`). No sweep case.
+
+## glmark2's vertex steps (plan #367, lower-vs-arith)
+
+The vertex shaders of glmark2's conditionals, function and loop scenes are
+one base, `d = fract(position.x)` and `position.y + 0.1 * d *
+fract(position.x)` under `mvp`, with steps on `d` between. The references
+`tools/mali/testdata/gm2_vsarith_1..6` (Mesa 26.2.1 on drm-shim, drawn
+without `--uniform-values`, each with a pass-through fragment shader) cut
+one step each; `tests/mali_vs_arith.rs` compares them byte for byte through
+glCompileShader and glLinkProgram (`tests/mali_ref/mod.rs`).
+
+| Reference | Step (scene) | Ours |
+|---|---|---|
+| `gm2_vsarith_1` | the base: one `fract` after CSE | byte-equal (the `fract` of `vsarith_fract`, already lowered) |
+| `gm2_vsarith_2` | `if (d >= 0.5) fract(2d) else fract(3d)` (conditionals, step-conditional) | byte-equal (the vertex `if` as selects, `notes/mali-vs-abs-if.md`) |
+| `gm2_vsarith_3` | five `fract(3d)` in a row (conditionals, step-simple) | byte-equal |
+| `gm2_vsarith_4` | `process(d)`: `fract(3d)`, then `fract(3d) * fract(3d)` (function) | byte-equal, with rule 2 below |
+| `gm2_vsarith_5` | `for (int i = 0; i < 5; i++) d = fract(3d)` (loop) | refused at the loop (`a loop in a vertex shader`: the int-loop family) |
+| `gm2_vsarith_6` | `fract(sqrt(d))` (function, step-medium) | byte-equal, with rule 1 below |
+
+At the integration tip (`f1079c2b`) cases 1 to 3 were byte-equal already;
+case 4 differed in two words, case 6 was refused (`sqrt`) and case 5 at the
+loop. Two rules close them (`src/shaderc/online/mali/nir.rs`):
+
+1. **`sqrt` is `frcp(frsq(a))`** (`lower_fsqrt`, nir_opt_algebraic.py:1908,
+   as `nir_fs.rs` does): `FRSQ.f32 r4, r3` then `FRCP.f32 r4, r4^`
+   (`gm2_vsarith_6`). The older reference `vsarith_length`
+   (`vec4(length(a.xyz))`) is byte-equal in both vertex programs too, the four
+   equal lanes one stored lane (`tests.rs`
+   `a_vertex_sqrt_is_byte_equal_to_mesa_26_2_1`). Its fragment program is not:
+   the fragment walk's `ATEST` reads `r0.h1` where Mesa's reads `r0.h0` (a
+   fragment-side finding, left to that family).
+2. **"Propagate constants up multiplication chains"**
+   (nir_opt_algebraic.py:2393): `fmul(fmul(a, b), #c)`, the inner product
+   read once and of no constant, is `fmul(fmul(a, c), b)`. In case 4 `g =
+   fract(3d)` (the two calls are one after CSE), `d = g * g` and `0.1 * d`
+   is Mesa's `FMA.f32 r5, r4, 0x3DCCCCCD, 0x0.neg` then `FMA.f32 r4, r5^,
+   r4^, 0x0.neg` (`(g * 0.1) * g`), where the plain walk made `g * g` first.
+   `is_used_once` is Mesa's on the SSA value; our IR reads the local `d`
+   by a load each time, and `d` is loaded before (`process(d)`) and after its
+   store, so the walk takes a load as read once when the load has one user,
+   stands at top level, and the next top-level node that touches the local is
+   a store over the lanes it reads (or the end), with no `if` or loop between
+   (`ir_last_load`); the vertex node itself must have no earlier user. A lane
+   constant only the back end folds (`split_const`) keeps the plain product.
+
+The corpus effect (`tests/fixtures/mali_glmark2_verdicts.txt`): the step
+shaders of conditionals and function were `ok` before; loop's `vs 3cb0`
+stays at the loop. `sqrt` makes buffer's `vs 7234` (`length(cross(..)) /
+length(..)`) `ok`, so scenes 17 to 19 (buffer) are compile-clean: 8 of 33,
+from 5. `tools/mali/corpus-verdicts.txt` does not move (no source under
+`tools/shaders` changes verdict). In `tests.rs`'s gap list the vertex
+`Arithmetic` case is now `exp2(p)` (`sqrt(p)` compiles).

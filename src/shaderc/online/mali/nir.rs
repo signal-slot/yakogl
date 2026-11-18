@@ -2519,6 +2519,36 @@ fn vs_fmul(vs: &mut Nir<'_>, split: [bool; 2], a: Val, b: Val) -> Result<Val, Ma
     vs.alu(Alu::Fmul, a, b, Val::Undef)
 }
 
+/// "Propagate constants up multiplication chains" (nir_opt_algebraic.py:2393):
+/// `fmul(fmul(a, b), #c)`, the inner product read once and of no constant,
+/// is `fmul(fmul(a, c), b)`, the commutative operands tried in nir_search's
+/// order (the outer `fmul` as written first, then the inner). Measured:
+/// gm2_vsarith_4's `0.1 * (g * g)` (glmark2 function's `fract(3d) *
+/// fract(3d)`, one `fract` after CSE) is `FMA.f32 r5, r4, 0x3DCCCCCD,
+/// 0x0.neg` then `FMA.f32 r4, r5^, r4^, 0x0.neg`. None: not that shape.
+fn vs_fmul_const_up(
+    vs: &mut Nir<'_>,
+    m: &Module<'_>,
+    srcs: &[ir::Src; 3],
+    x: Val,
+    y: Val,
+) -> Result<Option<Val>, MaliError> {
+    for (k, inner, c) in [(0, x, y), (1, y, x)] {
+        let Val::Const(_) = c else { continue };
+        let Val::Lane(id, 0) = inner else { continue };
+        let Some((Alu::Fmul, [a, b, _])) = vs_alu_of(vs, inner) else { continue };
+        if matches!(a, Val::Const(_)) || matches!(b, Val::Const(_)) {
+            continue;
+        }
+        if vs.uses(id).count() != 0 || !(ir_once(m, srcs[k].val) || ir_last_load(m, srcs[k])) {
+            continue;
+        }
+        let ac = vs.alu(Alu::Fmul, a, c, Val::Undef)?;
+        return vs.alu(Alu::Fmul, ac, b, Val::Undef).map(Some);
+    }
+    Ok(None)
+}
+
 /// `is_fmul` (nir_search_helpers.h:402-416): a product, or the `fneg` of
 /// one.
 fn vs_is_fmul(vs: &Nir<'_>, v: Val) -> bool {
@@ -2601,6 +2631,37 @@ fn ir_once(m: &Module<'_>, v: ir::ValueId) -> bool {
         }
         _ => super::nir_fs::ir_uses(m, v) == 1,
     }
+}
+
+/// IR source `s` is a top-level load of a local read once, and no later
+/// node reads the value it loads: the next top-level node that touches the
+/// local is a store over every lane `s` reads (or there is none), with no
+/// `if` or loop between (copy propagation hands Mesa's `is_used_once` the
+/// value stored, which an earlier load of the local does not read:
+/// gm2_vsarith_4's `d = process(d)` then `0.1 * d`). The walk's own count
+/// of the value's earlier users is the caller's.
+fn ir_last_load(m: &Module<'_>, s: ir::Src) -> bool {
+    let Some(IrOp::LoadLocal { local, index: None, comps }) = m.def(s.val) else { return false };
+    if super::nir_fs::ir_uses(m, s.val) != 1 {
+        return false;
+    }
+    let read = s.swizzle[..usize::from((*comps).clamp(1, 4))].iter().fold(0u8, |a, &c| a | 1 << (c & 3));
+    let top = m.nodes_of(m.body);
+    let Some(at) = top.iter().position(|n| matches!(n, IrNode::Instr(id) if id.0 == s.val.0)) else { return false };
+    for n in &top[at + 1..] {
+        match *n {
+            IrNode::Instr(id) => match m.instr(id) {
+                Some(IrOp::LoadLocal { local: l, .. }) if l == local => return false,
+                Some(IrOp::StoreLocal { local: l, index, write_mask, .. }) if l == local => {
+                    return index.is_none() && write_mask & read == read
+                }
+                _ => {}
+            },
+            IrNode::Return => return true,
+            _ => return false,
+        }
+    }
+    true
 }
 
 /// A dot product of a vector `v * r` (`r` one value for every lane, as
@@ -3829,6 +3890,13 @@ fn walk<'s>(
                          * `normalize`'s product of a vec3 and its `rsq` four
                          * lanes (builtin_call.rs), the last undefined */
                         AluOp::Fmul if x(0) == Val::Undef || x(1) == Val::Undef => Val::Undef,
+                        /* a constant over a product read once (:2393); not
+                         * with a lane constant only the back end folds
+                         * ([`split_const`]) */
+                        AluOp::Fmul if split == [false; 2] => match vs_fmul_const_up(&mut vs, m, &s, x(0), x(1))? {
+                            Some(v) => v,
+                            None => vs_fmul(&mut vs, split, x(0), x(1))?,
+                        },
                         AluOp::Fmul => vs_fmul(&mut vs, split, x(0), x(1))?,
                         /* a matrix product's last term by a `w` of 1.0
                          * (`M * vec4(p, 1.0)`): `fmul(c3, 1.0)` is `c3`
@@ -3992,11 +4060,17 @@ fn walk<'s>(
                             vs.alu(Alu::Fadd, x(0), n, Val::Undef)?
                         }
                         /* `inversesqrt` is one `FRSQ.f32`
-                         * (vsarith_vrcp.expect.json). `sqrt` stays at the
-                         * catch-all: its reference (vsarith_length) also
-                         * merges equal varying lanes, which this walk
-                         * refuses */
+                         * (vsarith_vrcp.expect.json); `sqrt` is
+                         * `frcp(frsq(a))` (`lower_fsqrt`,
+                         * nir_opt_algebraic.py:1908, as nir_fs.rs):
+                         * `FRSQ.f32` then `FRCP.f32` (gm2_vsarith_6,
+                         * glmark2 function's `fract(sqrt(d))`) */
                         AluOp::Frsq => vs.alu(Alu::Frsq, x(0), Val::Undef, Val::Undef)?,
+                        AluOp::Fsqrt if x(0) == Val::Undef => Val::Undef,
+                        AluOp::Fsqrt => {
+                            let r = vs.alu(Alu::Frsq, x(0), Val::Undef, Val::Undef)?;
+                            vs.alu(Alu::Frcp, r, Val::Undef, Val::Undef)?
+                        }
                         /* a lane past the compared vector's (a vec2 or vec3
                          * compared as the front end's four lanes) */
                         AluOp::Feq | AluOp::Fne | AluOp::Flt | AluOp::Fle

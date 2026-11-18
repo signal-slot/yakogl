@@ -155,3 +155,12 @@ gm2_faupage_1   gm2_faupage_1.vert gm2_faupage_1.frag  triangles  vs.position=di
 gm2_faupage_2   gm2_faupage_2.vert gm2_faupage_2.frag  triangles  vs.position=differs:mat-order:38:5e3aae929c53 vs.varying=differs:mat-order:53:5ded0bfe70f5 fs.fragment=differs:mediump:21:49cc91cc16a7
 gm2_faupage_3   gm2_faupage_3.vert gm2_faupage_3.frag  triangles  vs.position=differs:mat-order:79:4bca91b0682e vs.varying=differs:mat-order:138:4d4b98b9f0b4 fs.fragment=differs:mediump:29:6b16b59f86c4
 gm2_faupage_4   gm2_faupage_4.vert gm2_faupage_4.frag  triangles  vs.position=differs:mat-order:33:5275eb17adf2 vs.varying=differs:mat-order:33:fedbacd943e5 fs.fragment=equal
+# #367 lower-vs-arith: the vertex steps of glmark2's conditionals, function and loop scenes (docs/notes/mali-vs-alu-ops.md,
+# "glmark2's vertex steps"), drawn without --uniform-values. Our compiler is byte-equal to each reference
+# (tests/mali_vs_arith.rs); gm2_vsarith_5 (the loop) is refused at its loop and not listed. pan_shc sums `mvp * pos` from
+# the last column (`mat-order`).
+gm2_vsarith_1   gm2_vsarith_1.vert gm2_vsarith_1.frag  triangles  vs.position=differs:mat-order:38:26ba63564b33 fs.fragment=equal
+gm2_vsarith_2   gm2_vsarith_2.vert gm2_vsarith_2.frag  triangles  vs.position=differs:mat-order:38:354f6375f4a7 fs.fragment=equal
+gm2_vsarith_3   gm2_vsarith_3.vert gm2_vsarith_3.frag  triangles  vs.position=differs:mat-order:38:7c0d48103274 fs.fragment=equal
+gm2_vsarith_4   gm2_vsarith_4.vert gm2_vsarith_4.frag  triangles  vs.position=differs:mat-order:38:15e5144046e8 fs.fragment=equal
+gm2_vsarith_6   gm2_vsarith_6.vert gm2_vsarith_6.frag  triangles  vs.position=differs:mat-order:38:d6c9cd59489d fs.fragment=equal
