@@ -26,14 +26,15 @@
 //! and write for the texture side (host memory, 4-byte R32F texels). The
 //! stencil of a D24S8 texture is the plane under the texture's own id
 //! (`ds_object_id(serial, true)`), written and read by the entries with any
-//! id; the GL core refuses it today.
+//! id; the GL core copies it through those entries (item gl-ds-layers), and
+//! `stencil_goes_through_a_texture_and_back` pins that.
 //!
-//! Each shape is a pair. `..._is_refused_today` pins the answer of today's
-//! code (src/gl/blit.rs REFUSED_DEPTH_SRC / REFUSED_DEPTH_DST /
-//! REFUSED_STENCIL: `depth_texels` and `texture::resolve_depth` take
-//! GL_TEXTURE_2D only, and no entry reaches a texture's stencil): exactly one
-//! GL_INVALID_OPERATION, the destination (texels and planes) unchanged, the
-//! context usable afterwards. Its `#[ignore = "needs gl-ds-layers"]` twin
+//! Each depth shape is a pair. `..._is_refused_today` pins the answer of
+//! today's code (src/gl/blit.rs REFUSED_DEPTH_SRC / REFUSED_DEPTH_DST:
+//! `depth_texels` and `texture::resolve_depth` take GL_TEXTURE_2D only):
+//! exactly one GL_INVALID_OPERATION, the destination (texels and planes)
+//! unchanged, the context usable afterwards. Its
+//! `#[ignore = "needs gl-ds-layers-core"]` twin
 //! holds what a working blit leaves, from the nearest-sample model of
 //! tests/es3_blit_ds_layers.rs (written apart from the code); it fails today
 //! and is the target of the item that lifts the refusal. Depth is a 24-bit
@@ -48,7 +49,7 @@
 //! ```
 //!
 //! (the feature set of tests/es3_blit_ds_window_pvr.rs; add `-- --ignored`
-//! for the cases that need gl-ds-layers). Not built with `report-es2`
+//! for the cases that need gl-ds-layers-core). Not built with `report-es2`
 //! (glBlitFramebuffer is an ES 3.0 call).
 
 #![cfg(all(
@@ -1083,7 +1084,7 @@ fn depth_from_a_cube_face_is_refused_today() {
 /// and a flipped sub-rectangle (expected: the nearest-sample model of the
 /// face's own ramp, `layer_depth(face, x, y)`).
 #[test]
-#[ignore = "needs gl-ds-layers"]
+#[ignore = "needs gl-ds-layers-core"]
 fn depth_from_a_cube_face_copies_that_face() {
     let _g = rig();
     for fmt in [D24, D32F] {
@@ -1113,7 +1114,7 @@ fn depth_from_an_array_layer_is_refused_today() {
 /// As the cube twin, for layers 0 and 2 (expected: `layer_depth(layer, x, y)`
 /// through the model).
 #[test]
-#[ignore = "needs gl-ds-layers"]
+#[ignore = "needs gl-ds-layers-core"]
 fn depth_from_an_array_layer_copies_that_layer() {
     let _g = rig();
     for fmt in [D24, D32F] {
@@ -1170,7 +1171,7 @@ fn depth_into_a_cube_face_is_refused_today() {
 /// Face +X takes the whole 8 x 8 renderbuffer, face -Z the 4 x 4 one scaled
 /// up, face +Y a 2..6 sub-rectangle; the other five faces keep their ramps.
 #[test]
-#[ignore = "needs gl-ds-layers"]
+#[ignore = "needs gl-ds-layers-core"]
 fn depth_into_a_cube_face_changes_only_that_face() {
     let _g = rig();
     for fmt in [D24, D32F] {
@@ -1192,7 +1193,7 @@ fn depth_into_an_array_layer_is_refused_today() {
 
 /// As the cube twin, for layers 0, 2 and 1 of a 3-layer array.
 #[test]
-#[ignore = "needs gl-ds-layers"]
+#[ignore = "needs gl-ds-layers-core"]
 fn depth_into_an_array_layer_changes_only_that_layer() {
     let _g = rig();
     for fmt in [D24, D32F] {
@@ -1261,36 +1262,14 @@ impl StencilRig {
 
 const R: [i32; 4] = [0, 0, 4, 4];
 
-/// Stencil from a renderbuffer into a D24S8 texture, and from the texture
-/// into a renderbuffer (also with the depth bit): GL_INVALID_OPERATION each,
-/// the texture's stencil plane and texels and the renderbuffer's planes as
-/// they were.
-#[test]
-fn stencil_to_and_from_a_texture_is_refused_today() {
-    let _g = rig();
-    let r = stencil_rig();
-    let texels = r.texels();
-    bind(r.src_fb, r.tex_fb);
-    refused(R, R, STENCIL, "stencil into a texture");
-    bind(r.tex_fb, r.out_fb);
-    refused(R, R, STENCIL, "stencil from a texture");
-    refused(R, R, DEPTH | STENCIL, "depth and stencil from a texture");
-    assert_eq!(read_plane(r.out_id, S, 4, 4), vec![200.0; 16], "the renderbuffer's stencil is unchanged");
-    assert_eq!(read_plane(r.out_id, D, 4, 4), filled(&rb_depth, 4, 4), "the renderbuffer's depth is unchanged");
-    assert_eq!(read_plane(r.tex_id, S, 4, 4), filled(&tex_stencil, 4, 4), "the texture's stencil is unchanged");
-    assert_eq!(r.texels(), texels, "the texture's depth texels are unchanged");
-    r.release();
-    still_usable();
-}
-
 /// Renderbuffer -> texture -> second renderbuffer, flipped in x on the second
 /// hop. Expected: the texture's stencil plane (read by `stencil_resolve` under
 /// the texture's id) holds `stencil_of(x, y)` after the first hop; the second
 /// renderbuffer's holds `stencil_of(3 - x, y)` after the second; every depth
 /// (the texture's texels, both renderbuffers' planes) is untouched, as the
-/// mask names only stencil.
+/// mask names only stencil. (Its refused-today pair went with the lift of
+/// gl-ds-layers; the shapes still refused are in tests/es3_blit_ds_layers.rs.)
 #[test]
-#[ignore = "needs gl-ds-layers"]
 fn stencil_goes_through_a_texture_and_back() {
     let _g = rig();
     let r = stencil_rig();

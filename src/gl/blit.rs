@@ -45,7 +45,9 @@
 //! is copied on the CPU where the destination is a plane the GL core holds
 //! itself (the R32F texels of a depth texture, `texture::resolve_depth`) or
 //! a renderbuffer of a back end with `ds_write` (and, for stencil, a
-//! renderbuffer source of one with `stencil_resolve`): read from a depth
+//! renderbuffer source of one with `stencil_resolve`; stencil also to and
+//! from level 0 of a 2D depth-stencil texture, through the plane the back
+//! end keeps for it): read from a depth
 //! texture's texels or a renderbuffer's plane, with the colour path's
 //! rectangles, flips, cut and scissor, NEAREST only, the value copied as it
 //! is (the formats match). Such texels are what a sampler reads, and the
@@ -53,8 +55,8 @@
 //! back end, which writes them into its buffer before that draw tests
 //! against it (`GlesDraw::depth_texels`), as after a glTexSubImage2D of
 //! depth. Every other
-//! copy -- into the window, any stencil into or out of a texture or the
-//! window, depth from the window or from a cube or array depth texture, a
+//! copy -- into the window, stencil into or out of a cube face, an array
+//! layer or another level of a texture, depth from the window or from a cube or array depth texture, a
 //! renderbuffer plane on a back end without the entries, or into a
 //! renderbuffer the back end holds no buffer for (`ds_write` of an empty
 //! rectangle answers other than 0: no frame has drawn into it yet) -- is
@@ -836,6 +838,26 @@ enum DepthSource {
     /// window's id ([`window_ds_id`]), stored top-down unless
     /// `GlContext::default_y_up` (docs/notes/blit-depth-window.md).
     Window { id: u32 },
+    /// The stencil of a 2D depth-stencil texture's level 0: the plane the
+    /// back end keeps for it, read like a renderbuffer's under its id
+    /// ([`texture_plane_id`]).
+    TexturePlane { id: u32 },
+}
+
+/// The id the back ends keep the plane of the depth-stencil texture
+/// attached at `a` under, for a stencil copy: `ds_object_id(serial, true)`,
+/// the owner id every back end looks its plane up by. Only for level 0 of a
+/// GL_TEXTURE_2D whose plane holds level 0 (`framebuffer::depth_target`:
+/// the back end keeps one plane per texture, not per level). A cube face,
+/// an array layer or another level is None: the plane names no face, layer
+/// or level (docs/notes/blit-depth-layers.md).
+fn texture_plane_id(c: &GlContext, a: &GlAttachment) -> Option<u32> {
+    if a.type_ != GL_TEXTURE || a.level != 0 {
+        return None;
+    }
+    let t = c.texture_ref(a.name)?;
+    let held = framebuffer::depth_target(c, a.name as usize).level == 0;
+    (t.target == GL_TEXTURE_2D && t.format == GL_DEPTH_STENCIL && held).then(|| ds_object_id(t.serial, true))
 }
 
 /// The id the back ends keep the window's D24S8 under: the formula of
@@ -877,6 +899,9 @@ enum PlaneDst {
     /// `backend::ds_write` at its memory rows (top-down unless
     /// `GlContext::default_y_up`).
     Window { id: u32, w: u32, h: u32 },
+    /// The stencil of a 2D depth-stencil texture's level 0, written through
+    /// `backend::ds_write` under its id ([`texture_plane_id`]).
+    TexturePlane { id: u32, w: u32, h: u32 },
 }
 
 /// A depth or stencil plane copy the call makes: from `src` (`w` x `h`)
@@ -917,8 +942,8 @@ fn refuse_ds(c: &mut GlContext, cause: u8) {
         *warned |= cause;
         let why = match cause {
             REFUSED_STENCIL => {
-                "a stencil blit other than between renderbuffers and a single-sampled window of a back end with \
-                 the ds_write and stencil_resolve entries"
+                "a stencil blit other than between renderbuffers, level 0 of 2D depth-stencil textures and a \
+                 single-sampled window of a back end with the ds_write and stencil_resolve entries"
             }
             REFUSED_DEPTH_DST => {
                 "a depth blit into the window or into a renderbuffer of a back end without the ds_write entry, \
@@ -986,7 +1011,7 @@ fn mirror_rows(m: &OsalGpuMem, w: u32, h: u32, esz: usize) {
 fn dst_writable(job: &DepthCopy) -> bool {
     match job.dst {
         PlaneDst::Texels(_) => true,
-        PlaneDst::Renderbuffer { id, .. } | PlaneDst::Window { id, .. } => {
+        PlaneDst::Renderbuffer { id, .. } | PlaneDst::Window { id, .. } | PlaneDst::TexturePlane { id, .. } => {
             let probe = 0u32;
             // SAFETY: an empty rectangle reads no element of `src`.
             unsafe { backend::ds_write(id, job.plane, &probe as *const u32 as *const c_void, 0, 0, 0, 0, 0) == 0 }
@@ -1009,7 +1034,9 @@ fn copy_depth(
     let esz: usize = if job.plane == backend::DS_PLANE_STENCIL { 1 } else { 4 };
     let (dw, dh) = match job.dst {
         PlaneDst::Texels(d) => (d.w, d.h),
-        PlaneDst::Renderbuffer { w, h, .. } | PlaneDst::Window { w, h, .. } => (w, h),
+        PlaneDst::Renderbuffer { w, h, .. } | PlaneDst::Window { w, h, .. } | PlaneDst::TexturePlane { w, h, .. } => {
+            (w, h)
+        }
     };
     /* the window's planes are kept top-down: mirrored to GL's row order for
      * the copy (and the destination's back) */
@@ -1035,7 +1062,7 @@ fn copy_depth(
             let t = &c.objs_ref().textures[s.ti];
             ((t.mem.cpu as *const u8).wrapping_add(s.off), s.pitch)
         }
-        DepthSource::Renderbuffer { id } | DepthSource::Window { id } => {
+        DepthSource::Renderbuffer { id } | DepthSource::Window { id } | DepthSource::TexturePlane { id } => {
             let Some(m) = scratch_zeroed(job.w as usize * job.h as usize * esz) else { return false };
             scratch = m;
             let rc = read_plane(job.plane, id, &scratch, job.w, job.h);
@@ -1057,7 +1084,7 @@ fn copy_depth(
     let mut dst_mem = OsalGpuMem::default();
     let (to, to_pitch): (*mut u8, usize) = match job.dst {
         PlaneDst::Texels(d) => ((c.objs_ref().textures[d.ti].mem.cpu as *mut u8).wrapping_add(d.off), d.pitch),
-        PlaneDst::Renderbuffer { id, w, h } | PlaneDst::Window { id, w, h } => {
+        PlaneDst::Renderbuffer { id, w, h } | PlaneDst::Window { id, w, h } | PlaneDst::TexturePlane { id, w, h } => {
             let Some(m) = scratch_zeroed(w as usize * h as usize * esz) else {
                 osal::gpu_free(&mut scratch);
                 return false;
@@ -1109,7 +1136,9 @@ fn copy_depth(
             unsafe { osal::cache_flush(to as *mut c_void, bytes) };
             super::texture::note_blit_written(c, d.ti, d.level);
         }
-        PlaneDst::Renderbuffer { id, h, .. } | PlaneDst::Window { id, h, .. } => {
+        PlaneDst::Renderbuffer { id, h, .. }
+        | PlaneDst::Window { id, h, .. }
+        | PlaneDst::TexturePlane { id, h, .. } => {
             /* the cut rectangle's first memory row: GL rows y .. y + h of a
              * top-down window are its memory rows h - (y + h) .. h - y */
             let mut y = dst_cut.y as u32;
@@ -1259,7 +1288,17 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
             _ => None,
         };
         if stencil {
-            match (rb_src(c), rb_dst(c)) {
+            /* and a 2D depth-stencil texture's level 0 through the plane
+             * the back end keeps for it, as a renderbuffer's */
+            let src = rb_src(c).or_else(|| texture_plane_id(c, &r.att).map(|id| DepthSource::TexturePlane { id }));
+            let dst = rb_dst(c).or_else(|| {
+                texture_plane_id(c, &d.att).filter(|_| backend::can_ds_write()).map(|id| PlaneDst::TexturePlane {
+                    id,
+                    w: d.w,
+                    h: d.h,
+                })
+            });
+            match (src, dst) {
                 (Some(src), Some(dst)) if backend::can_stencil_resolve() => {
                     copies[1] = Some(DepthCopy { plane: backend::DS_PLANE_STENCIL, src, w: r.w, h: r.h, dst });
                 }

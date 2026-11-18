@@ -2,11 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Depth blits from a cube face or an array layer of a depth texture, depth
 //! blits into one, and stencil blits to and from a texture (plan item
-//! gl-ds-layers-tests; ES 3.0.6 4.3.3). All of them are GL_INVALID_OPERATION
-//! today (src/gl/blit.rs REFUSED_DEPTH_SRC / REFUSED_DEPTH_DST /
-//! REFUSED_STENCIL: `depth_texels` and `texture::resolve_depth` take
+//! gl-ds-layers-tests; ES 3.0.6 4.3.3). The depth ones are
+//! GL_INVALID_OPERATION today (src/gl/blit.rs REFUSED_DEPTH_SRC /
+//! REFUSED_DEPTH_DST: `depth_texels` and `texture::resolve_depth` take
 //! GL_TEXTURE_2D only, and `GlesDraw::depth_id` names a texture, not a face
-//! or layer; no back end entry reaches a texture's stencil).
+//! or layer). Stencil goes to and from level 0 of a 2D depth-stencil texture
+//! through the plane the back end keeps for it (item gl-ds-layers); a cube
+//! face, an array layer or another level stays REFUSED_STENCIL.
 //!
 //! Each shape is a pair. `..._is_refused_today` pins the answer of today's
 //! code: exactly one GL_INVALID_OPERATION, the destination unchanged, the
@@ -722,15 +724,29 @@ fn stencil_of(x: u32, y: u32) -> u32 {
 }
 
 /// A D24S8 renderbuffer whose stencil plane the stand-in keeps as
-/// `stencil_of`, a D24S8 2D texture, and a second renderbuffer holding 200s.
+/// `stencil_of`, a D24S8 2D texture whose plane the stand-in keeps (0s),
+/// and a second renderbuffer holding 200s.
+///
+/// The texture's plane stands for the buffer a draw into it leaves on a
+/// real back end: the stand-in draws nothing, and a texture whose plane the
+/// back end does not hold cannot be written (`ds_write` answers 1, the blit
+/// is refused as REFUSED_DS_UNHELD).
 struct Stencil {
     src_fb: GLuint,
     src_rb: GLuint,
     tex: GLuint,
     tex_fb: GLuint,
+    tex_id: u32,
     out_fb: GLuint,
     out_rb: GLuint,
     out_id: u32,
+}
+
+/// The id the back ends keep texture `tex`'s depth/stencil plane under.
+fn texture_ds_id(tex: GLuint) -> u32 {
+    let c = context::current().expect("a current context");
+    let slot = names::slot_of(c, Kind::Texture, tex).expect("a texture name");
+    context::ds_object_id(c.texture_object(slot).expect("a texture").serial, true)
 }
 
 fn stencil_rig() -> Stencil {
@@ -741,7 +757,9 @@ fn stencil_rig() -> Stencil {
     keep_plane(out_id, STENCIL, 4, 4, |_, _| 200);
     let tex = depth_texture(D24S8, 4, 4, dst_depth);
     let tex_fb = texture_fbo(tex, true);
-    Stencil { src_fb, src_rb, tex, tex_fb, out_fb, out_rb, out_id }
+    let tex_id = texture_ds_id(tex);
+    keep_plane(tex_id, STENCIL, 4, 4, |_, _| 0);
+    Stencil { src_fb, src_rb, tex, tex_fb, tex_id, out_fb, out_rb, out_id }
 }
 
 impl Stencil {
@@ -752,20 +770,63 @@ impl Stencil {
 
 const R: [i32; 4] = [0, 0, 4, 4];
 
-/// Stencil from a renderbuffer into a D24S8 texture, and from a D24S8
-/// texture into a renderbuffer.
+/// A framebuffer with an image of D24S8 texture `tex` at
+/// GL_DEPTH_STENCIL_ATTACHMENT, checked complete: level `level` of face
+/// target `target` (glFramebufferTexture2D), or with `layer` that layer of
+/// level `level` (glFramebufferTextureLayer).
+fn ds_image_fbo(target: GLenum, tex: GLuint, level: i32, layer: Option<i32>) -> GLuint {
+    let mut fb = 0;
+    // SAFETY: room for one name; plain GL calls.
+    unsafe {
+        glGenFramebuffers(1, &mut fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        match layer {
+            Some(l) => glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, tex, level, l),
+            None => glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, target, tex, level),
+        }
+        assert_eq!(err(), GL_NO_ERROR, "a depth-stencil image at the attachment");
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+    }
+    fb
+}
+
+/// Stencil to and from what the plane the back end keeps for a texture
+/// does not name stays refused: a face of a D24S8 cube, a layer of a D24S8
+/// array, level 1 of a D24S8 2D texture (each with a plane the stand-in
+/// keeps, so the refusal is not REFUSED_DS_UNHELD).
 #[test]
-fn stencil_to_and_from_a_texture_is_refused_today() {
+fn stencil_to_and_from_a_face_a_layer_or_a_level_is_refused() {
     let _g = context();
     let r = stencil_rig();
-    bind(r.src_fb, r.tex_fb);
-    refused(R, R, GL_STENCIL_BUFFER_BIT, "stencil into a texture");
-    bind(r.tex_fb, r.out_fb);
-    refused(R, R, GL_STENCIL_BUFFER_BIT, "stencil from a texture");
-    refused(R, R, GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, "depth and stencil from a texture");
+    let cube = layered_texture(Layered::Cube, D24S8, 4, 6, layer_depth);
+    let array = layered_texture(Layered::Array, D24S8, 4, 3, layer_depth);
+    let mut mip = 0;
+    // SAFETY: room for one name; no pixels.
+    unsafe {
+        glGenTextures(1, &mut mip);
+        glBindTexture(GL_TEXTURE_2D, mip);
+        for (level, side) in [(0, 4), (1, 2), (2, 1)] {
+            glTexImage2D(GL_TEXTURE_2D, level, D24S8.0 as GLint, side, side, 0, D24S8.1, D24S8.2, core::ptr::null());
+        }
+    }
+    assert_eq!(err(), GL_NO_ERROR, "a D24S8 texture of three levels");
+    let shapes = [
+        (cube, ds_image_fbo(FACES[FACE_NZ], cube, 0, None), "a cube face"),
+        (array, ds_image_fbo(GL_NONE, array, 0, Some(2)), "an array layer"),
+        (mip, ds_image_fbo(GL_TEXTURE_2D, mip, 1, None), "level 1"),
+    ];
+    for &(tex, fb, what) in &shapes {
+        keep_plane(texture_ds_id(tex), STENCIL, 4, 4, |_, _| 7);
+        bind(r.src_fb, fb);
+        refused(R, R, GL_STENCIL_BUFFER_BIT, &format!("stencil into {what}"));
+        bind(fb, r.out_fb);
+        refused(R, R, GL_STENCIL_BUFFER_BIT, &format!("stencil from {what}"));
+        assert_eq!(kept_plane(texture_ds_id(tex), STENCIL), vec![7; 16], "{what}: its plane is unchanged");
+    }
     assert_eq!(kept_plane(r.out_id, STENCIL), vec![200; 16], "the destination is unchanged");
     assert!(WRITES.lock().unwrap().is_empty(), "a refused call writes nothing");
-    assert_eq!(picture(r.tex, 4, 4), (0..16).map(|i| dst_depth(i % 4, i / 4)).collect::<Vec<_>>());
+    let fbs: Vec<GLuint> = shapes.iter().map(|s| s.1).collect();
+    release(&fbs, &[cube, array, mip], &[]);
     r.release();
     still_usable();
 }
@@ -775,7 +836,6 @@ fn stencil_to_and_from_a_texture_is_refused_today() {
 /// stencil can be seen, holds the source's stencil mirrored, and the
 /// texture's depth is not what the stencil blit wrote.
 #[test]
-#[ignore = "refused today: src/gl/blit.rs REFUSED_STENCIL (stencil into and out of a texture)"]
 fn stencil_goes_through_a_texture_and_back() {
     let _g = context();
     let r = stencil_rig();
@@ -783,6 +843,8 @@ fn stencil_goes_through_a_texture_and_back() {
     blit(R, R, GL_STENCIL_BUFFER_BIT, GL_NEAREST);
     assert_eq!(err(), GL_NO_ERROR, "stencil into a texture");
     assert_eq!(picture(r.tex, 4, 4), (0..16).map(|i| dst_depth(i % 4, i / 4)).collect::<Vec<_>>(), "depth untouched");
+    assert_eq!(kept_plane(r.tex_id, STENCIL), (0..16).map(|i| stencil_of(i % 4, i / 4)).collect::<Vec<_>>());
+    assert!(WRITES.lock().unwrap().iter().all(|w| w.0 == r.tex_id && w.1 == STENCIL), "the texture's stencil");
     bind(r.tex_fb, r.out_fb);
     blit(R, [4, 0, 0, 4], GL_STENCIL_BUFFER_BIT, GL_NEAREST);
     assert_eq!(err(), GL_NO_ERROR, "stencil from a texture");
