@@ -743,11 +743,14 @@ fn depth_and_stencil_together_and_a_plane_not_held() {
     release(&[sfb, dfb], &[], &[srb, drb]);
 }
 
-/// What the entries do not reach stays GL_INVALID_OPERATION: stencil in or
-/// out of a texture (until gl-ds-layers). The window is
-/// tests/es3_blit_ds_window.rs.
+/// What the entries do not reach stays GL_INVALID_OPERATION: stencil into
+/// a 2D depth-stencil texture whose plane the back end does not hold (no
+/// draw made it: `ds_write` answers 1), and stencil into or out of a level
+/// other than 0 (the back end keeps one plane per texture, not per level).
+/// Level 0 of a held texture copies, and faces and layers stay refused
+/// (tests/es3_blit_ds_layers.rs); the window is tests/es3_blit_ds_window.rs.
 #[test]
-fn stencil_in_a_texture_stays_refused_with_the_entries() {
+fn stencil_in_a_texture_stays_refused_where_the_plane_is_not_its() {
     let _g = context_rw();
     let (rfb, rrb) = renderbuffer_fbo(GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT, 4, 4);
     let tex = depth_texture(D24S8, 4, 4, dst_depth);
@@ -755,17 +758,40 @@ fn stencil_in_a_texture_stays_refused_with_the_entries() {
     let id = renderbuffer_ds_id(rrb);
     keep_plane(id, backend::DS_PLANE_DEPTH, 4, 4, bits(src_depth));
     keep_plane(id, backend::DS_PLANE_STENCIL, 4, 4, |_, _| 1);
+    let (mut mip, mut mfb) = (0, 0);
+    // SAFETY: room for one name each; no pixels; plain GL calls.
+    unsafe {
+        glGenTextures(1, &mut mip);
+        glBindTexture(GL_TEXTURE_2D, mip);
+        for (level, side) in [(0, 4), (1, 2), (2, 1)] {
+            glTexImage2D(GL_TEXTURE_2D, level, D24S8.0 as GLint, side, side, 0, D24S8.1, D24S8.2, core::ptr::null());
+        }
+        glGenFramebuffers(1, &mut mfb);
+        glBindFramebuffer(GL_FRAMEBUFFER, mfb);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, mip, 1);
+        assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+    }
+    let mip_id = {
+        let c = context::current().expect("a current context");
+        let slot = names::slot_of(c, Kind::Texture, mip).expect("a texture name");
+        context::ds_object_id(c.texture_object(slot).expect("a texture").serial, true)
+    };
+    /* the plane exists, so level 1's refusal is not that of an unheld plane */
+    keep_plane(mip_id, backend::DS_PLANE_STENCIL, 4, 4, |_, _| 2);
     let cases = [
-        (rfb, tfb, GL_STENCIL_BUFFER_BIT, "stencil into a texture"),
-        (tfb, rfb, GL_STENCIL_BUFFER_BIT, "stencil from a texture"),
+        (rfb, tfb, "stencil into a texture whose plane is not held"),
+        (rfb, mfb, "stencil into level 1"),
+        (mfb, rfb, "stencil from level 1"),
     ];
-    for (read, draw, mask, what) in cases {
+    for (read, draw, what) in cases {
         bind(read, draw);
-        blit([0, 0, 4, 4], [0, 0, 4, 4], mask, GL_NEAREST);
+        blit([0, 0, 4, 4], [0, 0, 4, 4], GL_STENCIL_BUFFER_BIT, GL_NEAREST);
         assert_eq!(err(), GL_INVALID_OPERATION, "{what}");
+        assert_eq!(err(), GL_NO_ERROR, "{what}: exactly one error");
     }
     assert!(WRITES.lock().unwrap().is_empty(), "a refused call writes nothing");
-    release(&[rfb, tfb], &[tex], &[rrb]);
+    assert_eq!(kept_plane(id, backend::DS_PLANE_STENCIL), vec![1; 16]);
+    release(&[rfb, tfb, mfb], &[tex, mip], &[rrb]);
 }
 
 /// A renderbuffer the back end keeps nothing for has undefined depth: the
