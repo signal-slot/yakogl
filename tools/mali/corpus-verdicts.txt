@@ -87,7 +87,7 @@ tools/shaders/es100/rasterization.frag: ok
 tools/shaders/es100/rasterization.vert: ok
 tools/shaders/es100/ret_dynloop_never.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/ret_nested.frag: ok
-tools/shaders/es100/ret_nested.vert: Valhall: an integer or boolean value is not lowered yet
+tools/shaders/es100/ret_nested.vert: Valhall: a loop in a vertex shader is not lowered yet
 tools/shaders/es100/selects.frag: ok
 tools/shaders/es100/sharedint.frag: Valhall: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it) is not lowered yet
 tools/shaders/es100/sharedint.vert: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet

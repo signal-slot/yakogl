@@ -8,13 +8,20 @@
 //! reference pins: section 10 and section 16 of
 //! `docs/notes/mali-deqp-families.md` and `docs/notes/mali-deqp-colourpair.md`.
 //!
-//! Every reference is refused at this tip (`ref-crosscheck`), so each test
-//! is `#[ignore]`d with its reference's pinned first refusal and only
-//! `refusals_pinned` runs now. It asserts each ignored reference's exact
-//! refusal text today — `MaliError::message` without its `Valhall: ` prefix
-//! and its ` is not lowered yet` suffix — so `lower-colourpair` starts from
-//! these pins and a refusal that moves breaks its pin. An ignored test that
-//! would compile now fails the pin, and its test is what starts running.
+//! `ck_lane` and `lane_zero_load` are byte-equal since plan #377's
+//! lower-intval-2: Mesa keeps the constant lanes of a mediump `color` beside
+//! a computed one in the vertex shader (the vertex walk's `kept` lanes,
+//! `docs/notes/mali-deqp-intval.md` section 8), so their fragment shaders
+//! have no colour pair at all. `ck_lane_mediump` and `rnd_vs_mediump_kept`
+//! compile since then too and differ in the vertex program alone ([`DIFFERS`]:
+//! Mesa adds the mediump attributes' lanes at fp16, the vertex walk at fp32).
+//! Every other reference is refused, so its test is `#[ignore]`d with its
+//! reference's pinned first refusal. `refusals_pinned` asserts each ignored
+//! reference's exact refusal text today — `MaliError::message` without its
+//! `Valhall: ` prefix and its ` is not lowered yet` suffix — so
+//! `lower-colourpair` starts from these pins and a refusal that moves breaks
+//! its pin. An ignored test that would compile now fails the pin, and its
+//! test is what starts running.
 //!
 //! What each byte-compare covers once lowered: the base references compare
 //! every region (their lowering is a link rule, the vertex varying program
@@ -46,11 +53,8 @@ const PV: &str = "online shaderc: a Mali link whose fragment shader reads part o
 /// the same text and the item that owns it: `lower-colourpair` for the two
 /// colour-pair texts, the family that owns the text otherwise.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_colourpair_ck_lane", CP),
-    ("deqp_colourpair_ck_lane_mediump", CP),
     ("deqp_colourpair_ck_lane_highpcolour", CP),
     ("deqp_colourpair_default_attrib", LZ),
-    ("deqp_colourpair_lane_zero_load", LZ),
     ("deqp_colourpair_rnd_fs_ck_dup", CP),
     ("deqp_colourpair_rnd_fs_ck_lz", CP),
     ("deqp_colourpair_rnd_fs_ck_madd", CP),
@@ -60,12 +64,18 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_colourpair_rnd_fs_zk_tree", CP),
     ("deqp_colourpair_rnd_fs_zword_zk", CP),
     ("deqp_colourpair_rnd_vs_ck_lz", CP),
-    ("deqp_colourpair_rnd_vs_mediump_kept", LZ),
     ("deqp_colourpair_rnd_vs_uniform_flat", CP),
     ("deqp_colourpair_rnd_vs_vecop_fs_uniform", CP),
     ("deqp_colourpair_rnd_vs_vecop_kept", PV),
     ("deqp_colourpair_rnd_vs_zk_lz", CP),
 ];
+
+/// The references that compile with other words than Mesa's, in the vertex
+/// program alone: the mediump attributes' lanes are added at fp16 in Mesa
+/// (`FADD.v2f16`, `F16_TO_F32`), at fp32 in the vertex walk (the mixprec
+/// family's vertex side). Their constant colour lanes are stored as Mesa
+/// stores them, and their fragment programs are Mesa's.
+const DIFFERS: &[&str] = &["deqp_colourpair_ck_lane_mediump", "deqp_colourpair_rnd_vs_mediump_kept"];
 
 /// Byte-compares `fs.fragment` of a reference, leaving the vertex regions
 /// out: the vertex program of a `rnd_fs_*` reference is a plain attribute
@@ -80,13 +90,12 @@ fn assert_fs_matches(name: &str) {
 /* ---- the base references: every region --------------------------------- */
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn ck_lane() {
     mali_ref::assert_matches("deqp_colourpair_ck_lane");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
+#[ignore = "differs: Mesa adds the mediump attributes' lanes at fp16, the vertex walk at fp32 (mixprec's vertex side); pinned by refusals_pinned"]
 fn ck_lane_mediump() {
     mali_ref::assert_matches("deqp_colourpair_ck_lane_mediump");
 }
@@ -104,7 +113,6 @@ fn default_attrib() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32), lowered by lower-colourpair"]
 fn lane_zero_load() {
     mali_ref::assert_matches("deqp_colourpair_lane_zero_load");
 }
@@ -168,7 +176,7 @@ fn rnd_vs_ck_lz() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32), lowered by lower-colourpair"]
+#[ignore = "differs: Mesa computes the mediump expression at fp16, the vertex walk at fp32 (mixprec's vertex side); pinned by refusals_pinned"]
 fn rnd_vs_mediump_kept() {
     mali_ref::assert_matches("deqp_colourpair_rnd_vs_mediump_kept");
 }
@@ -217,6 +225,20 @@ fn refusals_pinned() {
                     moved.push(format!("{name}: refusal {e:?}, pinned {pin:?}"));
                 }
             }
+        }
+    }
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(name);
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(pair) => {
+                let d = mali_ref::differences(&r, &pair);
+                if d.is_empty() {
+                    moved.push(format!("{name}: now byte-equal; un-ignore its test"));
+                } else if d.iter().any(|m| m.starts_with("fs")) {
+                    moved.push(format!("{name}: its fragment program differs now:\n{}", d.join("\n")));
+                }
+            }
+            Err(e) => moved.push(format!("{name}: now refused: {e}")),
         }
     }
     assert!(moved.is_empty(), "the pinned refusals moved:\n{}", moved.join("\n"));

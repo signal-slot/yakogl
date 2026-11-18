@@ -735,3 +735,210 @@ Mesa 26.2.1 built by `drm_shim_ref.sh build` into `$CONNECTED_DEPS_DIR/mesa-shim
   fp32 arithmetic on one: an early try with every fp32 lane caught the
   mediump gl_FragCoord's narrowed lanes (`fadd(u2f32(px), 0.5)`) and sent
   prec_84, deriv and tri_fragcoord through `alu16`.
+
+## 8. Step 2 (lower-intval-2): the vertex walk, done for nine of thirteen
+
+Plan #377, item lower-intval-2. Nine step-2 references of section 5 compile
+and are byte-equal to Mesa 26.2.1 (`tests/mali_deqp_intval.rs`, `LOWERED`):
+`opvs_add_int_highp`, `opvs_post_increment_int`, `opvs_mul_ivec3_mediump`,
+`opvs_div_ivec2_highp` (the 144-word varying program, the `nir_lower_idiv`
+sequence twice), `opvs_less_ivec4`, `rsg_conv_vs`, `rsg_constbool_vs` (its
+constant varying goes through the link's constant lanes after all: `mali_ref`
+reaches it), `uniapi_bool_vs` and `uniapi_bool_initial_vs`. With step 1 that
+is 21 of the 25. The four others:
+
+- `opvs_logical_and` compiles and differs (`DIFFERS`): Mesa compares the
+  `mediump vec4` attributes' lanes at fp16 (`FADD.f32 r0.h0, r2^, 0x0.neg`
+  narrows each lane read, `FMIN.v2f16` is the `iand(flt(0, a), flt(0, b))`
+  -> `flt(0, fmin(a, b))` rule, one `FCMP_OR.v2f16.lt.m1`, `S16_TO_S32` of
+  the 16-bit mask into the colour's `CSEL.u32.eq`); the vertex walk compares
+  at fp32. Its constant colour lanes y, z, w are already stored as Mesa
+  stores them (below).
+- `opvs_not_equal_bvec3` is refused (`Arithmetic`): `bvec3 != bvec3` is
+  `any` of the lanes' `ine` of two fp16 compares' masks
+  (`ICMP_OR.v2u16.ne.m1`, `LSHIFT_OR.v2i16`), which `vs_reduce` does not
+  take, over the same fp16 attribute compares.
+- `reslib_int_vs`: its vertex shader compiles (`FROUND.f32.rtz`); its
+  fragment shader, dEQP's `genFragmentShader` for every `_vertex` case with
+  an int output, is refused with this family's text at `Fs::int_lane`'s
+  `iand`: `isOk(float a, int b)` compares the mediump `atemp` widened
+  (`F16_TO_F32`) with `float(b)` and `float(b + 1)` at fp32
+  (`FCMP_OR.f32.ge.m1`) and `&&`s the two 32-bit masks into
+  `FCMP_AND.f32.ge.m1`, a form `bir.rs`/`pack.rs` have no op for
+  (`fuse_cmp`: "the float AND form is not drawn"), and `Fs::mask_lane` counts
+  no 32-bit `Fcmp` as a boolean. `int_lane` now takes an `int` uniform's word
+  as an integer (`S32_TO_F32 r1, u2.w0`, `IADD_IMM.i32 r2, u2.w0, #0x1`),
+  which is as far as the pair gets.
+- `rsg_cond_fs`: its vertex shader compiles since step 2 (the literals);
+  its fragment shader is refused with the colour-lane text, since Mesa's
+  link removes the dead varyings, which `mali_ref` cannot reach (section 6e).
+
+The first two are one shape, the mediump attribute compare in the vertex
+stage (dEQP's `bool_compare`, `float_compare` and `logical_*` `_vertex`
+cases, the `bvec` `equal`/`not_equal` ones): the fp16 narrowing of an
+attribute's lane where a mediump compare reads it (the fragment walk's
+`convert_inputs16` rule in the vertex stage), the `fmin` rule, and the
+16-bit mask widened (`i2i32`) for the fp32 select. It is the vertex side of
+the mixprec family's work and a step 3 of this one.
+
+### What was lowered, and where (all in `src/shaderc/online/mali/`)
+
+The vertex walk (`nir.rs` `build`):
+
+- Site 1: `IrOp::ConstBool` is NIR's 0 / ~0 per lane, so the rsg programs'
+  `true`, `bool(1)`, `int(true)` fold through `fold_int` and the `bcsel`
+  arm (`rsg_conv_vs`: only `FMA.f32`/`FADD.f32` of the attributes are left,
+  the constants in the FAU; `rsg_constbool_vs`: no instruction).
+- Site 3: a general `iadd` is `Alu::Iadd` (`IADD.s32`, or `IADD_IMM.i32`
+  once opt.rs fuses the constant: `opvs_add_int_highp`,
+  `opvs_post_increment_int`).
+- Site 4, split: `imul` (`IMUL.i32`), `iand`/`ixor` (`LSHIFT_*.i32`),
+  `ilt`/`ine` (`ICMP_OR.s32.lt.m1`, `.u32.ne`), `ile` as `ige` with swapped
+  sources, `ult`/`ule` (`Ucmp`), `imin`/`imax` (`CSEL.s32`), `b2i32`
+  (`MUX.i32`), `inot` of a run-time boolean (folded into a `bcsel` user as
+  `bcsel(inot(a), b, c)` -> `bcsel(a, c, b)`, or `LSHIFT_OR.i32 #0, ~a`),
+  `i2b` of a bool uniform's word as the word itself (`vs_is_uniform_word`;
+  `uniapi_bool_vs`: `CSEL.u32.eq r0, u5.w1, 0x0, 0x0, r0^`) and `ine(a, 0)`
+  of another integer, `idiv` as the `nir_lower_idiv` sequence (`vs_idiv`,
+  node for node as `Fs::idiv`; `IDIV_RCP_SCALE` is shared). `udiv`, `umod`,
+  `umin`, `umax` and `imod` by other than a power of two stay refused (ES
+  3.00, no reference).
+- `ieq(b, true)` is `b` and `ieq(b, false)` is `inot(b)` (`vs_is_bool`: a
+  compare, a logic operation of booleans, a bool uniform's word, a 0 / ~0
+  constant); `b2f` is `bcsel_pan(b, 1.0, 0.0)` and `b2f(inot(a))` is
+  `bcsel_pan(a, 0.0, 1.0)` (`uniapi_bool_initial_vs`: the `CSEL.u32.eq`
+  with its arms swapped); `f2b` is `fneu(a, 0.0)`; `fne` is `Fcmp(Ne)`.
+- `nir_move_comparisons` runs on every vertex shader, not only a flattened
+  `if`'s (bifrost_nir.c:375-381's `move_all`, every stage): each compare
+  right before its first user (`opvs_less_ivec4`: `ICMP_OR.s32.lt.m1` then
+  `CSEL.u32.eq` per lane). `Ucmp` is a comparison too (`nir.c:3292-3314`,
+  `opvs_div`'s two `ICMP_OR.u32.ge` each before its `CSEL`), and
+  `nir_move_copies` moves a `vec2` of fp16 halves before the operation that
+  reads it (`opvs_mul`: each `MKVEC.v2i16` before its `FMA.v2f16`).
+- The convergent lane's exact `ffma(x, 0.0, x)` (`build_convert_inf_to_nan`)
+  folds into a select of two constants only when the select is an `if`'s
+  phi (`opt_split_alu_of_phi`; vsarith_188_predif); GLSL's own
+  `c ? 1.0 : 0.0` keeps the `FMA.f32 r0, r0^, 0x0, r0^`
+  (`uniapi_bool_initial_vs`).
+- `mod.rs`: a `bool`/`bvec` uniform has no precision (GLSL ES 1.00 4.5.2)
+  and is a 32-bit word in Mesa's block: the vertex uniform-precision gate
+  leaves it alone (`nir::bool_type`).
+
+**A mediump local's fp16 arithmetic in the vertex stage** (the operator
+suite's `mediump vec4 color`, `color.x = float(res)`, `color = color * 0.10
++ 0.50`, `v_color = color`), measured on the four `opvs_*` references:
+
+- `StoreLocal` into a local the front end classed `Prec::Medium`
+  (`Module::local_prec_of`) narrows an integer's float (`i2f32`, `u2f32`)
+  right after the conversion in the order (`vs_narrow_stored`, the
+  `i2fmp` of nir_fs.rs `narrow_stored`: `S32_TO_F32 r2` then `FADD.f32
+  r2.h0` per lane). A boolean's float (`b2f`, no precision) and a constant
+  (fp32 bits in every `Val::Const` of the walk; its fp16 half where a
+  16-bit operation reads it) stay as they are. A highp local widens a
+  16-bit lane (`vs_widen`, `F16_TO_F32 a.hN`), as does any 32-bit
+  operation, output or position that reads one (no reference draws this;
+  the walk's fp32 arithmetic is otherwise unchanged: the path is entered
+  only through an integer's float stored to a mediump local).
+- A `fmul`/`fadd` the front end classed `Prec::Medium`
+  (`Module::prec_of`) whose operand lanes are all constants or 16-bit lanes
+  (`vs_pairs16`) is fp16 in aligned lane pairs (`vs_alu16`:
+  `nir_lower_alu_width` with `bi_vectorize_filter`'s width two): a pair of
+  two lanes of one two-lane node is that node read whole, a lane and a
+  constant or two lanes of two values their `vec2` (`MKVEC.v2i16`, or
+  `U16_TO_U32 r0, r0^.h0` for `vec2(x, 0.0)`), the constant side one fp16 in
+  both halves (`0x2E660000.h11`), a pair of four constants folded at fp16
+  (`fold16`: `opvs_add`'s lanes z and w, 0.5 and 0x38cd). The late
+  `fadd(fmul(a, b), c)` fusion is `fuse` (width-agnostic): `FMA.v2f16`.
+  Two different constants against a pair have no reference (refused
+  `Fp16Inexact`).
+- `StoreOutput` of a `Prec::Medium` vector (or a `LoadLocal` of a Medium
+  local) with a computed lane widens each 16-bit lane in lane order
+  (`F16_TO_F32 r1, r0.h0`, `r0, r0^.h1`) and **keeps every constant lane in
+  the vertex shader** as the fp16 value it holds (`kept`;
+  `IADD_IMM.i32 r2, 0x0, #0x3F19A000` for the 0.6 rounded to fp16): Mesa's
+  link sees the vector's `f2f32` computed (`nir_scalar_is_const` does not
+  see through the conversion, and `nir_lower_alu_width` cuts the vector
+  only after the link), so such a lane is neither propagated into the
+  fragment shader nor made flat, and the fragment shader reads the whole
+  vector interpolated (`LD_VAR_BUF_IMM.f32 .v4`). `opvs_logical_and`'s
+  `vec4(0.0, 0.0, 0.0, 1.0)` with `color.x = float(res)` and no arithmetic
+  stores its three constants the same way; a vector of constants alone
+  folds whole and is propagated as before (`rsg_constbool_vs`). The three
+  places that read the constant lanes (`konst` for the shader's own
+  layout, `vs.consts.push` for the link, the store loop) skip a kept lane
+  as they skip a late fold's.
+- `select.rs` `vs_variant`: a 16-bit operation's lane is its half of the
+  one value (`.h0` of a scalar, `.h0`/`.h1` of a two-lane node, as
+  nir_fs.rs `src32`), a two-lane reader of a two-lane node reads it whole
+  (`.h01`) and a constant's half in both lanes (`.h00`), as `select_highp`
+  does.
+
+### What moved with it
+
+- `tests/mali_deqp_colourpair.rs`: `ck_lane` and `lane_zero_load` compile
+  and are byte-equal (every region) through the kept lanes alone: their
+  fragment shaders have no colour pair, as the colourpair study's table
+  already said of Mesa's program ("no colour pair: Mesa keeps all four
+  lanes of `v_color` as varyings, the constants included"). `ck_lane_mediump`
+  and `rnd_vs_mediump_kept` compile too and differ in the vertex program
+  alone (the mediump attributes' sums at fp16): pinned in that file's new
+  `DIFFERS`, their fragment programs asserted equal. `ck_lane_highpcolour`
+  (a highp `color`) is still the colour pair the link folds, as the study
+  says: the rule is the mediump vector's `f2f32`.
+- `tests/mali_deqp_unitype.rs`: `vsbvec3`'s pin moves from this refusal to
+  the vertex walk's `Arithmetic` (its `all` of the bvec3 `==`'s three `ieq`
+  over the `bvec3` uniform's words, Mesa's `LSHIFT_OR.i32` of the words into
+  one `CSEL.u32.eq` against 0: the `vs_reduce` arm and the fused compare of
+  a GLSL `?:`, left to step 3 with the `uniform_api` bvec cases), and
+  `fsivec4`'s to the colour-lane text (its vertex shader compiles now; the
+  fragment `vec4(fTest).xy` beside a texel is section 7's). Its `DIFFERS`
+  rows (`vsmat*_mediump`, `vsapi_*`, `vsstruct_add`) still differ: the kept
+  rule needs a lane that reads an attribute, and their vectors are uniforms
+  alone beside constants (convergent, Mesa's flat rule).
+- `tools/mali/corpus-verdicts.txt`: `tools/shaders/es100/ret_nested.vert`
+  moves from this refusal to `a loop in a vertex shader` (lower-loops).
+  No other verdict moves (`corpus-verdicts.sh --write`, 324 verdicts).
+- `src/shaderc/online/mali/tests.rs`: the vertex IntValue probe of
+  `every_reachable_gap_is_reached_by_an_es100_source` (`float(int(p.x) * 3)`)
+  compiles now and is removed; the fragment probe (`i != j` of run-time
+  ints) and the ES 3.00 `%` probe (`the_builtin_lowering_keeps_its_gaps`)
+  keep the gap reached.
+- `tests/fixtures/mali_glmark2_verdicts.txt` is not touched: the corpus
+  could not be generated in this session (`tools/hostharness/glmark2/run.sh`
+  was not permitted to run), so `tests/mali_glmark2_corpus` ran as its SKIP.
+  Section 6d's `20 ideas vs bf4b` and `vs c265` (this refusal in a vertex
+  shader) are expected to move with the vertex `imul`/`iadd` arms; the item
+  that regenerates the fixture (step 1's note, "What moved") measures it.
+- `tools/mali/testdata/cases.txt` gets no rows for the nine references:
+  the pan_shc rows' `differs:mediump:<n>:<digest>` results need a pan_shc
+  build against the shim (`MESA_PAN_TREE`), which this host has not. The
+  `opvs_*` vertex programs would be `differs:mediump` rows (pan_shc's
+  SPIR-V path has no lower_precision), `rsg_*`/`uniapi_*` likely `equal`.
+
+### Left to step 3 and the other families
+
+- The mediump attribute compare in the vertex stage (`opvs_logical_and`,
+  `opvs_not_equal_bvec3`; dEQP's `bool_compare`, `float_compare`,
+  `logical_*`, bvec `equal`/`not_equal` `_vertex` cases, about 100 Fail):
+  the narrowing of an attribute's lane where a mediump float operation
+  reads it (`FADD.f32 rN.h0` of one lane, `V2F32_TO_V2F16` of an aligned
+  pair, the fragment walk's `convert_inputs16` in the vertex stage), the
+  fp16 compare (`FCMP_OR.v2f16`), `iand(flt(0, a), flt(0, b))` ->
+  `flt(0, fmin(a, b))`, `any`/`all` over 16-bit masks (`ICMP_OR.v2u16`,
+  `LSHIFT_OR.v2i16`) and the mask widened (`S16_TO_S32`) into the colour's
+  `CSEL.u32.eq`. The same path takes `ck_lane_mediump`,
+  `rnd_vs_mediump_kept` (colourpair) and the unitype `DIFFERS` rows
+  (`vsmat*_mediump`, `vsapi_*`): the mixprec family's vertex side.
+- `reslib_int_vs`'s fragment shader (every `_vertex` shader-library case
+  with an int output, 103 VS cases of shape R): an fp32 compare of a widened
+  mediump lane with an integer's float, two 32-bit `Fcmp` as booleans in
+  `Fs::mask_lane`, and `FCMP_AND.f32` (a new op in `bir.rs`/`pack.rs`,
+  `fuse_cmp`'s float AND form).
+- `rsg_cond_fs`: the link's removal of dead varyings (`mali_ref` cannot
+  reach it; section 6e).
+- `Fs::mask_op`'s 16/32 mix, `imin`/`imax` and `inot` of a non-mask in the
+  fragment walk, `ine` of two run-time ints (the gap probe): no reference
+  (section 7).
+- The vertex walk's `udiv`/`umod`/`umin`/`umax` and `imod` by other than a
+  power of two: ES 3.00, no reference.
+

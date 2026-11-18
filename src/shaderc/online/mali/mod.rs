@@ -1317,7 +1317,13 @@ fn compile_stage<'s>(
          * reference */
         for u in m.uniforms.iter().filter(|u| ubo.word(u.dword_off).is_some()) {
             let member = u.name.contains('.') && prec(u.name).is_some();
-            if !member && !matches!(prec(u.name), Some(Precision::High)) && ubo.half(u.dword_off).is_none() {
+            /* a bool has no precision (GLSL ES 1.00 section 4.5.2: the
+             * qualifier applies to floats and ints) and is a 32-bit word
+             * of 0 / ~0 in Mesa (`UniformBooleanTrue`), whatever the
+             * stage: deqp_intval_uniapi_bool_vs's `u_var` (plan #377
+             * lower-intval-2) */
+            let bool = nir::bool_type(u.gl_type as u32);
+            if !member && !bool && !matches!(prec(u.name), Some(Precision::High)) && ubo.half(u.dword_off).is_none() {
                 return Err(MaliError::UniformPrecision);
             }
         }
