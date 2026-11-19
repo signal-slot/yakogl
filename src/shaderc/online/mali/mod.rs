@@ -533,7 +533,7 @@ impl MaliError {
             MaliError::Spill => {
                 "Valhall: a program needing more than the split file's 32 work registers (the full file, spilling) is not lowered yet"
             }
-            MaliError::TooManyLocals => "Valhall: a shader with more than 32 local variables is not lowered yet",
+            MaliError::TooManyLocals => "Valhall: a shader with more than 256 local variables is not lowered yet",
             MaliError::TooManyValues => {
                 "Valhall: a shader of more than 2048 IR values (or 1536 instructions before selection) is not lowered yet"
             }

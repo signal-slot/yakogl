@@ -26,7 +26,7 @@
 11 bump:bump-render=height vs 270a: ok
 12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; vs 4623: ok
-13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; fs ba8e: Valhall: a shader with more than 32 local variables is not lowered yet
+13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; fs ba8e: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; vs 4623: ok
 14 pulsar:quads=5:texture=false:light=false fs 4748: ok
 14 pulsar:quads=5:texture=false:light=false vs 9d75: ok
