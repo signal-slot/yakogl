@@ -202,5 +202,16 @@ driver. Per `tools/cts/RESULTS.md`, "Mali":
   `gl_test`'s regression set 50 of 50 at main `9ad07f55f`, 2026-11-16 02:54
   JST (`c8b6f065`).
 
+Raspberry Pi 5 (BCM2712 D0, V3D 7.1.10; issue #7): the bring-up
+under Zephyr, booted by the Pi firmware's tryboot through `tools/board.sh
+pi5` (`tools/cts/RESULTS.md`, "V3D 7.1: Raspberry Pi 5 on Zephyr"). On
+2026-11-19 the PM watchdog reset the board and tryboot brought Linux back;
+D1 (`rpi5_dtb`) read the start state (loaded at 0x200000, EL2, x0 = the
+DTB); D2 (`rpi5_ident`) read the V3D identity with no setup, equal to
+Linux's debugfs (`tools/v3d/pi5/`); and the first clear (M1 to M4,
+`rpi5_clear`, build `8eb2b3cf`) printed `v3d_clear: PASS`, 0 of 8,192
+pixels wrong. The first triangle (M5), `gl_test`, dEQP-GLES2, the display
+and the benchmarks have not run on the board.
+
 The other candidate boards (#321, #322, #327, #332, #336, #341) are issues
 only; the tree holds no board record for them.

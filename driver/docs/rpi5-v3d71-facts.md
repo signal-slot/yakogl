@@ -5,8 +5,9 @@
 The hardware facts the Pi 5 port needs, each with the Linux file and line it
 was read from. It is the Pi 5 counterpart of `driver/docs/rpi4-v3d.md`, and it
 replaces the page-summariser reading of `docs/notes/pre-study-rpi5.md`
-(item H1). Nothing here was run on a board. Where the source does not say,
-the item is marked **open**; nothing is guessed.
+(item H1). Sections 1 to 13 are read from sources, not run on a board;
+section 14 is what the bench board measured (2026-11-19). Where neither
+says, the item is marked **open**; nothing is guessed.
 
 ## Sources and rules
 
@@ -156,8 +157,8 @@ control lists and starts them by register (section 7).
 | `MMUC_CONTROL` = `ENABLE`, then flush: write `FLUSH` and `ENABLE`, poll `FLUSHING` clear (100 ms), set `MMU_CTL.TLB_CLEAR`, poll `TLB_CLEARING` clear (100 ms) | `linux:v3d_mmu.c:38-61,78-80` |
 | No 7.1 branch in `v3d_mmu.c`; the only 7.1 difference is the `MMUC_CONTROL` clear bit (not used by this file) | `linux:v3d_mmu.c` (whole file), `linux:v3d_regs.h:155` |
 
-The real physical-address width is **open** until `MMU_DEBUG_INFO.PA_WIDTH` is
-read on a board (`linux:v3d_drv.c:374-376` is where Linux reads it).
+The real physical-address width (`MMU_DEBUG_INFO.PA_WIDTH`, which Linux reads at
+`linux:v3d_drv.c:374-376`) is 36 bits on the board (section 14).
 
 ## 6. Caches and reset
 
@@ -281,8 +282,9 @@ Mainline `v6.18` has none of this: its `bcm2835-power.c` has only `PM_GRAFX`
 
 So the Pi 5 equivalent of the Pi 4 power-on is a **single register**: the
 V3D reset bit in `pm` offset 0x304, plus the firmware clock. Whether the
-firmware has already released that reset when it starts our image is **open**
-(U5).
+firmware has already released that reset when it starts our image: it has
+(board, section 14: `PM_GRAFX_2712` reads 0x00001040, bit 6 set, before any
+write; U5).
 
 ### The firmware clock and the property mailbox
 
@@ -426,7 +428,8 @@ and an arm64 kernel image; it says nothing about the Raspberry Pi firmware.
 | `CNTHCTL_EL2.EL1PCTEN` must be set when entering at EL1 | `:197` |
 
 What the Pi 5 firmware actually passes, and at which address and exception level
-it starts a `kernel=` image, is **open** (needs the board, D1). The Raspberry
+it starts a `kernel=` image, was measured by D1 (section 14: 0x200000, EL2,
+x0 = the DTB). The Raspberry
 Pi documentation states (docs commit above): the firmware loads
 `kernel_2712.img` and falls back to `kernel8.img` (`docs:config_txt/boot.adoc:24`);
 on the Pi 5 "instead of loading `start.elf`, the firmware loads the Linux
@@ -458,9 +461,11 @@ If the PCIe start ever hangs or faults on the board, the way out is
 `&pcie1`, `&pcie2` and `&gpio0_0` in its overlay; nothing of the GPU path
 needs PCIe or RP1. No image does this today.
 
-Still **open** for the board (D1's record, `rpi5_dtb`): the exception level
-at entry, the value of x0, and the load address (U6); and the GPU and DMA
-side of U10 (whether the V3D sees the image's RAM coherently).
+D1 (`rpi5_dtb`) measured the exception level at entry, x0 and the load
+address (U6, section 14). The GPU and DMA side of U10 is answered for the
+first clear only: the V3D read and wrote the image's `sram0` buffers (ARM
+physical addresses below 34 MiB, cleaned and invalidated by the CPU) with
+0 wrong pixels (section 14); larger or higher buffers are not measured.
 
 ## 12. Differences from the Pi 4 (BCM2711, V3D 4.2)
 
@@ -486,10 +491,10 @@ side of U10 (whether the V3D sees the image's RAM coherently).
 |---|---|
 | **U1** BCM2712 register manual | **Open.** A `grep -rl BCM2712` over the documentation repository at the commit above finds 16 files: product pages (Compute Module, keyboard computers, Industrial, single-board computers), revision codes and OTP bits, the security architecture and the secure-boot provisioner, boot pages (EEPROM, network boot), `configuration/reference.adoc`, `legacy_config_txt/memory.adoc`, `linux_kernel/building.adoc`, `io-controllers/rp1.adoc`, and the processor page `computers/processors/bcm2712.adoc` — an overview with a "Vulnerabilities and mitigations" section. None of the 16 is a register manual. Whether one is published elsewhere is not answered. |
 | **U3** Display | **Answered in part.** The path (HVS, pixel valve, HDMI) and every address, interrupt and clock Linux uses are in section 10; the PHY sequence is in section 10 as well. The firmware can leave a scanout running and Linux has code to adopt or stop it (`vc4_drv.c:397-400`, `vc4_hdmi.c:3391-3399`). **Open:** whether a Zephyr image started with `kernel=` finds a running scanout, its address, and whether the property mailbox still hands out a framebuffer. All display nodes are `disabled` in the base device tree. |
-| **U4** Real PA width; line-exact citations | **Answered in part.** Line-exact citations: this file. The PA width is read from `MMU_DEBUG_INFO.PA_WIDTH` at run time (`linux:v3d_drv.c:374-376`) and stays **open** until a board is read. The PFN limit gives at most 36 physical bits through the page table (`linux:v3d_mmu.c:101`). |
-| **U5** Clock, power, reset | **Answered in part.** The clock is firmware clock 5 through the property mailbox; the power-domain and reset is one bit in `pm` 0x304 (section 9). The misspelt `clocks-names` has no effect because Linux requests the clock without a name (`linux:v3d_drv.c:362`). **Open:** whether the GPU is already clocked and out of reset when the image starts. |
-| **U6** Start state of the image | **Answered in part, from the generic protocol only** (section 11). What the firmware does for this board — exception level and register state — is **open**. The default load addresses are documented (legacy page): 32-bit images at `0x8000`, 64-bit at `0x200000` (`docs:legacy_config_txt/boot.adoc:38-40`); `config_txt/boot.adoc` does not name `kernel_address`. |
-| **U7** `tryboot` on the Pi 5 | **Answered in part.** The documentation says "all Raspberry Pi models support `tryboot`", with a caveat only for Pi 4 Model B revisions 1.0 and 1.1 (`docs:raspberry-pi/bootflow-eeprom.adoc:91`); the flag is one-shot and loads `tryboot.txt` (`:82`); with secure boot it loads `tryboot.img` (`:93`); the `[tryboot]` filter is in `config_txt/conditional.adoc:255-261`. The "`TRYBOOT` property table" the note named is **not** in `raspberry-pi/eeprom-bootloader.adoc` at this commit (`grep TRYBOOT` finds none). Whether it works with the EEPROM a given board ships is **open** (a board trial). |
+| **U4** Real PA width; line-exact citations | **Answered** (board, section 14). Line-exact citations: this file. `MMU_DEBUG_INFO` reads 0x20804664 on the board: PA 36 bits, VA 36 bits, MMU version 4, the same from Linux and from Zephyr; the PFN limit gives 36 physical bits through the page table (`linux:v3d_mmu.c:101`). |
+| **U5** Clock, power, reset | **Answered** (board, section 14). The clock is firmware clock 5 through the property mailbox; the power-domain and reset is one bit in `pm` 0x304 (section 9). The misspelt `clocks-names` has no effect because Linux requests the clock without a name (`linux:v3d_drv.c:362`). On the board the firmware hands over the V3D powered, clocked (500 MHz) and out of reset: `rpi5_ident` reads every identity word with no setup, and `PM_GRAFX_2712` reads 0x00001040 (bit 6 set) before any write. |
+| **U6** Start state of the image | **Answered** (board, D1, section 14): a `kernel=` image is loaded at 0x200000 and entered at EL2 from the firmware's TF-A BL31, with x0 = the DTB's address; no key beyond the three `tryboot.txt` lines. The generic protocol is section 11; the legacy page documents 64-bit images at `0x200000` (`docs:legacy_config_txt/boot.adoc:38-40`). |
+| **U7** `tryboot` on the Pi 5 | **Answered** (board, section 14): `reboot '0 tryboot'` boots `tryboot.txt` once with the boot loader of 2025-06-13 and the next reset boots `config.txt`; no EEPROM update was needed. The documentation says "all Raspberry Pi models support `tryboot`", with a caveat only for Pi 4 Model B revisions 1.0 and 1.1 (`docs:raspberry-pi/bootflow-eeprom.adoc:91`); the flag is one-shot and loads `tryboot.txt` (`:82`); with secure boot it loads `tryboot.img` (`:93`); the `[tryboot]` filter is in `config_txt/conditional.adoc:255-261`. The "`TRYBOOT` property table" the note named is **not** in `raspberry-pi/eeprom-bootloader.adoc` at this commit (`grep TRYBOOT` finds none). |
 
 ### New findings
 
@@ -516,3 +521,33 @@ side of U10 (whether the V3D sees the image's RAM coherently).
   `vc4-kms-v3d` overlay to be `okay` in a Linux DTB; the DTB the firmware
   hands to `kernel=` has the node `disabled`, but its `reg`, `interrupts`
   and `clocks` are still readable (D1).
+
+## 14. Measured on the board (2026-11-19)
+
+The bench Pi 5 (Model B Rev 1.1, 8 GB, BCM2712 D0, boot loader of
+2025-06-13, Raspberry Pi OS trixie with kernel 6.18 and 16 KiB pages).
+`vcgencmd get_throttled` read 0x0 before and after every record below.
+Under Linux (D3) the files are in `tools/v3d/pi5/` (its README says how each
+was taken); the Zephyr runs went through `tools/board.sh pi5` (tryboot), and
+their console lines are quoted in the probes' READMEs
+(`tools/probes/rpi_5/rpi5_ident/README.md`, `.../rpi5_clear/README.md`).
+
+| Fact | Value | Record |
+|---|---|---|
+| Identity words | `HUB_IDENT0..3` 0x42554856 0x00081117 0x00001900 0x00020a10, `CTL_IDENT0..2` 0x07443356 0x81001431 0xc0078101 | `tools/v3d/pi5/v3d_regs.txt` (Linux debugfs); `rpi5_ident` and `rpi5_clear` read the same words from Zephyr (`tools/v3d/ident71.py --compare`: 43 fields, 0 differ) |
+| Revision (U2) | V3D 7.1, IPREV 10, IPIDX 16, compat_rev 2: Mesa's `7.1.10.2`, debugfs prints `7.1.10.16` (its fourth number is IPIDX). Mesa's consequences: no accumulators, the D0 "draw index" shader record, unpack sat and max0, 8 render targets, framebuffer 7680, clipper granularity 64, CLE readahead 1024 | `tools/v3d/pi5/v3d_ident.txt`, `v3d_regs.txt`, `README.md` ("The GPU, decoded") |
+| Shape | 1 core, 3 slices, 12 QPUs, 1 TMU a slice, no semaphores, VPM 65536 bytes, MMU yes, no TFU, MSO yes, no L3C | the same |
+| `MMU_DEBUG_INFO` (U4) | 0x20804664: PA 36 bits, VA 36 bits, MMU version 4 | the same, from Linux and from Zephyr |
+| V3D clock | `fw-clk-v3d` 500 MHz at idle; about 960 to 978 MHz under load (`v3d_freq=960`, `v3d_freq_min=500`); the firmware's `GET_CLOCK_RATE` for clock 5 returns 500000000 Hz to a Zephyr image | `tools/v3d/pi5/clocks.txt`; `rpi5_clear`'s `M1 V3D clock` line |
+| Power and reset at hand-over (U5) | The V3D is powered, clocked and out of reset when the firmware starts a `kernel=` image: `rpi5_ident` reads every identity word with no setup (no fault), and `PM_GRAFX_2712` (`pm` + 0x304) reads 0x00001040 (bit 6, `PM_V3DRSTN`, set) before any write. After `v3d_power_on` it still reads 0x00001040; SMS `REE_CS` 0x00000000, `TEE_CS` 0x00000050 | `rpi5_ident` and `rpi5_clear` consoles |
+| Load address and entry (U6) | `kernel=` loaded at 0x200000 (Zephyr's `sram0`); the firmware's TF-A BL31 v2.6 (no `armstub8-2712.bin` on the card) enters it at EL2 on MPIDR 0x81000000; x0 = 0x2efec600 = the DTB's address (the boot loader's `Device tree loaded to 0x2efec600`), the same on every boot of the session; no `config.txt` key beyond `kernel=`, `enable_uart=1`, `uart_2ndstage=1` | `rpi5_dtb` (D1); `docs/standalone-boot.md`, "Raspberry Pi 5", "Measured on the board" |
+| tryboot (U7) | `sudo reboot '0 tryboot'` boots `tryboot.txt` once (the boot loader logs `TRYBOOT` and `Read /tryboot.txt`) and the next reset boots `config.txt`; no EEPROM update needed | every `board.sh pi5` run of the session |
+| PM watchdog | resets the BCM2712 (`PM_RSTS 00000020` at the next boot) after feeding stops, and tryboot then boots Linux with nobody at the board | `rpi5_wdog`; every later run ends the same way |
+| Return to Linux | `back_after` 213 to 221 s after the tryboot reboot for an image the watchdog resets ~40 s after boot | `board.sh pi5` meta.txt of each run |
+| First clear (M1 to M4) | `v3d_clear: PASS`: the 7.1 clear-only frame (lists 19 / 99 / 27 bytes, tile 64x64, 2x1 tiles, tile alloc 12288) bins and renders under our MMU (page table at PA 0x23e000, VA 0x100000..0x12c000), `FLDONE`/`FRDONE` within the 1 s polls, 0 of 8192 pixels wrong, guard row 0 of 128 changed | `rpi5_clear` console; `tools/cts/RESULTS.md`, "V3D 7.1: Raspberry Pi 5 on Zephyr" |
+| Mesa's clear and triangle | The clear's 36 packets equal the shim's apart from buffer addresses and the 16 KiB tile allocation size (16384 against 12288); the triangle uses the D0 shader record | `tools/v3d/pi5/clear.clif`, `triangle.clif`, `README.md` ("Differences") |
+
+Not measured: the GIC-400's line count (`GICD_TYPER`, section 8), the V3D's
+interrupts (the first clear polls), whether the board's 16 KiB Linux pages
+matter to anything of ours (our MMU maps 4 KiB pages and the first clear
+passed), and buffers above 34 MiB or 4 GiB (U10).

@@ -707,6 +707,24 @@ run by `tools/board.sh nanopc-t6 run` and judged by their own summary lines.
   GL_TRUE" 3, 1 without a text. The picture on the screen was not checked:
   the images draw to their own surface and read it back.
 
+## V3D 7.1: Raspberry Pi 5 on Zephyr
+
+The Pi 5 bring-up (BCM2712 D0, V3D 7.1.10; ROADMAP stage 5, issue #7):
+probe images of `tools/probes/rpi_5/`, booted once by the Pi firmware's
+tryboot and run with `tools/board.sh pi5 run` (a row: the boot loader
+starts the image). Each image arms the BCM2712 PM watchdog first, whose
+reset brings Linux back. `get_throttled` read 0x0 before and after every
+run. The steps and what each answers are in `docs/notes/pre-study-rpi5.md`
+(section 6) and `driver/docs/rpi5-v3d71-facts.md` (section 14); each
+probe's README quotes its console.
+
+| Step | Image | Result | Build | Run | Record |
+|---|---|---|---|---|---|
+| The PM watchdog resets the board | `rpi5_wdog` | **reset**, `verdict=no_end_line` (its pass is the reset: `PM_RSTS 00000020` at the next boot, then Linux) | board-d1's build (`8eb2b3cf`) | 2026-11-19 | commit `8eb2b3cf` (its message; the run directories were not kept) |
+| D1: start state and the DTB's GPU nodes | `rpi5_dtb` | **done**: loaded at 0x200000, EL2, x0 = the DTB (0x2efec600); the V3D, SMS, HVS, clock and `pm` nodes printed | `8eb2b3cf` | 2026-11-19 | commit `8eb2b3cf` (its message; the run directories were not kept) |
+| D2: V3D identity, no setup | `rpi5_ident` | **done**, `rc=0 verdict=done result=legacy:rpi5_ident_done back_after=213s`: every word equal to Linux's debugfs (`tools/v3d/pi5/v3d_regs.txt`; `ident71.py --compare`: 43 fields, 0 differ) | `8eb2b3cf` (image `dbad2cae`) | 2026-11-20 01:28 JST | `tools/probes/rpi_5/rpi5_ident/README.md`, "On the board" (run directory `20261119-1628-rpi5_ident-dbad2cae`, not kept) |
+| M1 to M4: the first clear | `rpi5_clear` | **PASS**, `rc=0 verdict=done result=legacy:v3d_clear_pass back_after=213s`: `v3d_clear: PASS (M1 to M4, 128x64 cleared; 46 pages used incl. page table and scratch, ...)`, `M4: 0 of 8192 target pixels wrong, guard row 0 of 128 changed` | `8eb2b3cf` (image `457d1c7c`) | 2026-11-20 01:37 JST | `tools/probes/rpi_5/rpi5_clear/README.md`, "On the board" (run directory `20261119-1637-rpi5_clear-457d1c7c`, not kept) |
+
 ## ES 3.0: dEQP-GLES3 (stage 4)
 
 Mustpass list: 42,810 cases. Images report ES 3.0 (`REPORT_ES2` off).
