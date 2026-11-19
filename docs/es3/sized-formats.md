@@ -216,13 +216,15 @@ R11, 8x for the others.
   format swizzle with `GlesTextureBind::swizzle` and SAMP_CTRL0's W wrap comes
   from `wrap_r` (`840ea7ec`, `tests/es3_tex_swizzle_gc.rs`,
   `docs/notes/gc-texture-swizzle-wrap.md`). `RGBA32F/UI/I` are in the mask
-  since gc-wide128-flip, sampled as two G32R32 planes (a second sampler slot,
+  since `8f019dae`, sampled as two G32R32 planes (a second sampler slot,
   a per-draw shader key and the compiler's join;
   `docs/notes/gc-128bit-texture-sampling.md`, `gc-128bit-swizzle.md`,
   `tests/es3_wide128_gc.rs`), so RGB32UI/I and RGBA32UI/I are no longer
   refused and RG32F/RGB32F/RGBA32F are stored there (GL_RGBA32F through
-  `sized_format`'s `rgba32f_own_class`). Host only: the board has not sampled
-  them.
+  `sized_format`'s `rgba32f_own_class`, `681b728b`); RGB32F/I/UI store alpha 1
+  there (`tests/es3_rgb32_alpha.rs`), and a texture swizzle the planes cannot
+  express is refused by name at the draw. Host only: the board has not sampled
+  them (the i.MX8MP run is pending).
   `R32I/UI` and `RG32I/UI` are in the mask (descriptor rows `e40e9418`, flip
   `b5e04b14`): sampled natively, `EXT_R32I` / `EXT_G32R32I`, so the GL core
   stores them natively and no longer refuses them on this back end. The PowerVR's integer cube, 3D and 2D-array samplers

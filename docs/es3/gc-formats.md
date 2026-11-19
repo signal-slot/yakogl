@@ -48,8 +48,9 @@ with L8, and DXT1_RGB patch it). This back end composes the same way:
 applies `GlesTextureBind::swizzle` (`swizzle_source`) on top; the wrap in
 the W direction (`SAMP_CTRL0`) is `wrap_r` for a 3D texture. Both are in
 the tree (`840ea7ec`; `tests/es3_tex_swizzle_gc.rs`,
-`docs/notes/gc-texture-swizzle-wrap.md`). A 128-bit class keeps the identity
-swizzle (below, section 3). A pure signed-integer format with
+`docs/notes/gc-texture-swizzle-wrap.md`). A 128-bit class takes no GL swizzle: a
+binding whose swizzle the two planes cannot express is refused by name
+(below, section 3). A pure signed-integer format with
 8- or 16-bit channels also sets `CONFIG2.SIGNED_INT8` / `SIGNED_INT16`
 (`D:187-189`; `X:165-166`). `SAMP_CTRL0.INT_FILTER` is set for a unorm,
 non-sRGB format that is not R10G10B10A2 or ETC2 R11/RG11, outside 3D, without
@@ -76,7 +77,7 @@ core's `no_alpha` (a GL_RGB / GL_LUMINANCE base) turns the alpha swizzle into
 `1`, and `depth_luminance` the green and blue into `R`, for every class
 (`texture.rs` `format_words`); the column is the swizzle without them, and without the GL
 swizzle of the binding (section 1), which is composed on top for every class
-but the 128-bit ones.
+but the 128-bit ones (refused when not identity, section 3).
 
 | class | TE format | swizzle | CONFIG2 | INT_FILTER | GC7000UL samples it | in mask | integer sampler | sRGB, border | Mesa's fallback | Mesa |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -102,9 +103,9 @@ but the 128-bit ones.
 | `GLES_TEXFMT_RGBA8I` | `TEXTURE_FORMAT_EXT_A8B8G8R8I` | RGBA | `SIGNED_INT8` | no | yes (HALTI2: integer) | yes | `isampler*`: the bytes, sign-extended by CONFIG2 | linear; none | - | `F:160`; `D:187-189`; `X:87,165` |
 | `GLES_TEXFMT_RGBA16UI` | `TEXTURE_FORMAT_EXT_A16B16G16R16I` | RGBA | - | no | yes (HALTI2: integer) | yes | `usampler*`: the halves, zero-extended | linear; none | - (R16/RG16 have EXT_R16I/EXT_G16R16I, `F:102-103,147-148`) | `F:201`; `D:187-189`; `X:90` |
 | `GLES_TEXFMT_RGBA16I` | `TEXTURE_FORMAT_EXT_A16B16G16R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer) | yes | `isampler*`: the halves, sign-extended by CONFIG2 | linear; none | - | `F:202`; `D:187-189`; `X:90,166` |
-| `GLES_TEXFMT_RGBA32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes, as two planes (HALTI5): the format of each plane; in the mask (gc-wide128-flip) | yes | `usampler*`/`isampler*`: the planes' R,G halves joined (section 3) | linear; none | two G32R32I planes (R,G then B,A), a companion sampler slot and the shader's two look-ups joined (`etnaviv_nir_lower_128bit.c:89-170`; `etnaviv_texture_state.c:286-296,516-557`); R32UI and RG32UI are EXT_R32I / EXT_G32R32I on HALTI5 (`F:286-291`) | `F:229`; `S:423-429`; `X:96` |
-| `GLES_TEXFMT_RGBA32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes, as two planes (HALTI5): the format of each plane, no CONFIG2 sign bit for 32-bit channels (`D:187-189`); in the mask (gc-wide128-flip) | yes | `isampler*`: as RGBA32UI (section 3) | linear; none | as RGBA32UI | `F:230`; `S:423-429`; `X:96` |
-| `GLES_TEXFMT_RGBA32F` | `TEXTURE_FORMAT_EXT_G32R32F` | RGBA | - | no | yes, as two planes (HALF_FLOAT): the format of each plane; in the mask (gc-wide128-flip) | yes | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGBA32F / RGB32F / RG32F here (GL_RGBA32F through `sized_format`'s `rgba32f_own_class`, `src/gl/texture.rs`; `docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
+| `GLES_TEXFMT_RGBA32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes, as two planes (HALTI5): the format of each plane; in the mask (`8f019dae`) | yes | `usampler*`/`isampler*`: the planes' R,G halves joined (section 3); GL_RGB32UI stores alpha 1 (`tests/es3_rgb32_alpha.rs`) | linear; none | two G32R32I planes (R,G then B,A), a companion sampler slot and the shader's two look-ups joined (`etnaviv_nir_lower_128bit.c:89-170`; `etnaviv_texture_state.c:286-296,516-557`); R32UI and RG32UI are EXT_R32I / EXT_G32R32I on HALTI5 (`F:286-291`) | `F:229`; `S:423-429`; `X:96` |
+| `GLES_TEXFMT_RGBA32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes, as two planes (HALTI5): the format of each plane, no CONFIG2 sign bit for 32-bit channels (`D:187-189`); in the mask (`8f019dae`) | yes | `isampler*`: the planes' R,G halves joined, as RGBA32UI (section 3); GL_RGB32I stores alpha 1 (`tests/es3_rgb32_alpha.rs`) | linear; none | as RGBA32UI | `F:230`; `S:423-429`; `X:96` |
+| `GLES_TEXFMT_RGBA32F` | `TEXTURE_FORMAT_EXT_G32R32F` | RGBA | - | no | yes, as two planes (HALF_FLOAT): the format of each plane; in the mask (`8f019dae`) | yes | - | linear; none | two G32R32F planes, as RGBA32UI; the GL core stores RGBA32F / RGB32F / RG32F here, RGB32F with alpha 1 (GL_RGBA32F through `sized_format`'s `rgba32f_own_class`, `681b728b`, `src/gl/texture.rs`; `docs/es3/sized-formats.md`) | `F:233`; `S:423-429`; `X:77` |
 | `GLES_TEXFMT_SRGB8_A8` | `TEXTURE_FORMAT_A8B8G8R8` | RGBA | - | no | yes (HALTI0) | yes | - | `SAMP_CTRL1.SRGB`; none | - (the RGBA8 row of the linear twin, `F:278`; no INT_FILTER for sRGB, `F:317-318`) | `D:246-247`; `S:406-407` |
 | `GLES_TEXFMT_R32UI` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (own class since gc-r32-flip, `b5e04b14`; before it GL_R32UI was stored in RGBA32UI, which this back end refuses. One format for both signs, no CONFIG2 bit for 32-bit channels, `D:187-189`) | `F:137,286-291`; `X:95` |
 | `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; before the flip it was stored in RGBA32I) | `F:136,286-291`; `X:95` |
@@ -165,19 +166,26 @@ reads one); a binding without a companion slot or a plane copy samples the
 back end's black texel, with a log line naming the class (`emit_slot`), not
 texels read as another format.
 
-Mesa's design is in and offered (gc-wide128-flip: RGBA32F/UI/I are in
-`GC_SAMPLED_TEXFMTS`, so the GL core stores them here): the tiled copy
+Mesa's design is in and offered (`8f019dae`: RGBA32F/UI/I are in
+`GC_SAMPLED_TEXFMTS`, and `681b728b` stores GL_RGBA32F in the class, so the
+GL core stores them here): the tiled copy
 de-interleaves 16-byte texels into two page-aligned G32R32 planes, and
 `emit_slot` emits the descriptor pair (`EXT_G32R32F` / `EXT_G32R32I`, the
 row's TE format) at the unit's slot and at a companion packed after the
 stage's own slots (`tests/es3_wide128_gc.rs`, `es3_wide128_planes_gc.rs`,
 `es3_wide128_slots_gc.rs`); the compiler joins the two look-ups. Host only:
-the board has not sampled them. A `textureGather` on a keyed unit stays
+the board has not sampled them (the i.MX8MP run is pending, issue #24;
+`docs/es3/board-recipe-imx8mp.md`). A GL texture swizzle the planes cannot
+express (a channel moved across the planes, or ZERO/ONE on a lane; ONE on
+alpha of a GL_RGB32* texture is fine, its stored alpha is 1) is refused by
+name (`its texture swizzle is not joined by the 128-bit planes`,
+`src/gl/draw.rs`, `wide128_swizzle_refusal`): the draw is dropped with
+GL_NO_ERROR, not drawn with the swizzle ignored. A `textureGather` on a keyed unit stays
 refused by name, and RGBA32I/UI as a render target stays refused
 (`GC_INT_RT_128BPP`). The design
 and the companion-slot policy are in
 `docs/notes/gc-128bit-texture-sampling.md`; the GL texture swizzle on these
-classes (ignored until the join learns it) in `docs/notes/gc-128bit-swizzle.md`.
+classes (refused by name unless identity, until the join learns it) in `docs/notes/gc-128bit-swizzle.md`.
 
 ## 4. Status and what is left
 
@@ -196,7 +204,7 @@ Built (host only; nothing here has run on the GPU):
 R32UI, R32I, RG32UI, RG32I (`b5e04b14`) are in the mask, so the GL core
 stores them natively on this back end; `GLES_TEXFMT_RGB10A2` stays out for
 the reason `PVR_SAMPLED_TEXFMTS` gives. RGBA32F, RGBA32UI and RGBA32I are
-in the mask as two planes (gc-wide128-flip, section 3), and so are the ten
+in the mask as two planes (`8f019dae`, section 3), and so are the ten
 narrow classes, R8/RG8 snorm, R8/RG8 and R16/RG16 integer (classes 30-39,
 `gc-narrow-flip`; the words are those of `F:89-91,102-103,119-121,147-148`,
 unchanged by the flip). The test fails when

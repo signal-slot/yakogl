@@ -3,8 +3,14 @@
 # GC7000UL: GL texture swizzle, no_alpha and wrap R on two-plane RGBA32 textures
 
 Design note for the flip of RGBA32F/UI/I into `GC_SAMPLED_TEXFMTS`
-(item gc-wide128-flip) and for a compiler change after it. **No code changes
-with it and nothing here ran on a board.** Cites: Mesa 26.2.1 etnaviv, read
+(item gc-wide128-flip) and for a compiler change after it. **Status: the flip
+is done on the host (`8f019dae`, with `681b728b` storing GL_RGBA32F in the
+class); the interim guard of 5.1 is in the tree (`src/gl/draw.rs`
+`wide128_swizzle_refusal`: a non-identity swizzle is refused by name),
+RGB32F/I/UI store alpha 1 (`tests/es3_rgb32_alpha.rs`), and
+`tests/es3_wide128_gc.rs` pins it. The i.MX8MP board run is pending. The
+compiler swizzle key (5.2) is not the flip. The text below is the design as
+written, before the flip.** Nothing here ran on a board. Cites: Mesa 26.2.1 etnaviv, read
 only (`src/gallium/drivers/etnaviv/`; not vendored, `third_party/mesa-26.2.1/UPSTREAM`
 names the tag), and our tree at `17e91019`. Siblings:
 `gc-128bit-texture-sampling.md` (the planes, "What is left" caveats),
