@@ -5,8 +5,9 @@
 Date 2026-11-16, tip `cb2f0ffb`. Written 2026-11-13 as plan #359 item
 `ubo-design-note` (from the read-only study `design-ubo-limits`); brought to
 the tree's state by plan #375 item `ubo-note-update`: **the V3D raise is
-implemented (`cb52fae8`)**, see sections 8 and 9. Sections 1-7 are the design
-as written; 4-6 (PowerVR, GC7000UL, Mali) are still the plan. Docs only:
+implemented (`cb52fae8`)**, see sections 8 and 9, and by plan #378: **the
+PowerVR raise is implemented**, see section 4. Sections 1-7 are the design
+as written; 5-6 (GC7000UL, Mali) are still the plan. Docs only:
 nothing was run. Mesa is the 26.2.1 tree
 (`$CONNECTED_DEPS_DIR/mesa-pan/mesa-26.2.1`, MIT; facts only quoted).
 `[M]` = measured by reading, `[U]` = unknown, not measured.
@@ -134,8 +135,18 @@ measures the compiler/sim side.
 
 ## 4. PowerVR (AM62P, BXS-4-64)
 
-**Read path today.** The USC reads uniforms from **shared registers**: a
-uniform's dword `k` is shared register `dword_off + k`
+Study: `docs/notes/pvr-ubo-memory-load.md` (Mesa pco's `ld` encoding, the
+two `load_ubo` sequences, the per-stage address pair, the wait, the default
+rows kept in shared registers, the per-draw back-end contract and the built
+shape in its sections 8.4-8.5). **The raise is implemented** (plan #378):
+`b85960c2` (selection reads members with `ld`), `fad0558a` (back end),
+`f0b02eda` (a stage that declares a block but reads none), `c26a46e9` (the
+`context.rs` arms). The paragraphs below keep the design-time analysis: the
+old block-in-shared-registers path that the raise replaced and the bounds it
+hit, and Mesa's memory path.
+
+**Read path (design time, block in shared registers).** The USC reads
+uniforms from **shared registers**: a uniform's dword `k` is shared register `dword_off + k`
 (`src/shaderc/online/powervr/abi.rs:100-102`). At draw the back end DMAs the
 block through the PDS into the common store: `src/pvr/backend.rs:7775-7809`
 (`PvrPdsDmaKick { address, dwords: uni_dw, dest_offset: shared_dw }`), after
@@ -166,13 +177,34 @@ load) and the Vulkan driver advertises `maxUniformBufferRange = 16 KiB` and
 hardware reads UBOs from memory at 16384 bytes and Mesa's ES driver stack
 therefore meets ES 3.0 here.
 
-**What the PowerVR can honestly report.** 16384 is reachable only by a
-memory-load path in the USC selector (read a user block with a global load of
-the buffer address, the Mesa shape) with the 6144-byte shared-register path
-kept for default uniforms. As built (block in shared registers), the honest
-value stays near 6144; the register bound above caps it below 8192 bytes
-once descriptors are counted. **Not for this plan to edit**: `src/pvr/**` is
-#350/#325's. See the issue text in the item report.
+**What the PowerVR can honestly report -- and now does (plan #378).**
+16384 by the memory-load path above: block members are read with `ld` from
+the device address in a shared-register pair naming the per-draw copy of the
+stage's flat array, the default rows stay shared registers (a prefix
+`[0, prefix)` of that array; a stage that declares a block but reads none is
+laid out the same), and the back end writes that copy's address into the
+pair and DMAs only the prefix (`select.rs`, `chain.rs`; `src/pvr/backend.rs`
+and its pair kick). The GENERAL-arena snapshot of the stage array is now
+also what the `ld` reads, so it must hold the whole array:
+`GEN_PER_DRAW_MAX` is headroom, not a bound, and an over-large snapshot
+retries the part on a fresh frame (note 8.2). The `context.rs` arms report
+16384 and the formula's 50688 on `gpu-powervr` without `report-es2` (the
+same two consts as the V3D, section 9); `MAX_UNIFORM_DWORDS` and
+`MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay 1536 and the ES 2.0 report
+is unchanged (`tests/es2_report_guard.rs`). Tests:
+`tests/pvr_ubo_memory_load.rs` (the `ld` encodings against Mesa pco where
+PCO_SHC exists), `tests/pvr_ubo_select_exec.rs` and
+`tests/usc_exec_ubo_seq.rs` (selection, execution over shared registers),
+`tests/pvr_ubo_draw_16k.rs` (a 16384-byte block's first and last dword at a
+constant and at a run-time index through the back end's host draw, the
+50688-dword stage array, the never-read block), `tests/es3_limits_pvr_ubo.rs`
+and the `state.rs` pin.
+
+**What is left.** Host dEQP `functional.ubo` and the
+`implementation_limits` uniform-block rows on the PowerVR build (HOST-ONLY)
+and the AM62P board rows (a 16384-byte block read at its first and last
+dword, the same two dEQP families); the boards are held by plan #347. The
+`tests/es3_caps.rs` `known_gaps()` PowerVR rows are their own item.
 
 ## 5. GC7000UL (i.MX8MP, `src/vivante`)
 
@@ -210,8 +242,8 @@ Mesa shape) is a later option, not a need
 
 **Why the report is still 6144 / 1536.** Only the GL core's constants. The
 cap `MAX_UNIFORM_BLOCK_SIZE` is `MAX_UNIFORM_DWORDS * 4` for every GPU but
-the V3D (`src/gl/context.rs:109-112`) and `MAX_STAGE_UNIFORM_DWORDS` is
-`MAX_UNIFORM_DWORDS` (`context.rs:124-131`). `block_dwords`
+the V3D and the PowerVR (`src/gl/context.rs:113-116`) and
+`MAX_STAGE_UNIFORM_DWORDS` is `MAX_UNIFORM_DWORDS` (`context.rs:133-140`). `block_dwords`
 (`src/gl/program.rs:1878`) and the draw's staging size (`src/gl/draw.rs:2531`)
 follow `MAX_STAGE_UNIFORM_DWORDS`. The comment at `context.rs:104-108`
 ("the GC7000 holds the blocks in its constant file") is stale.
@@ -226,7 +258,7 @@ follow `MAX_STAGE_UNIFORM_DWORDS`. The comment at `context.rs:104-108`
    64 KiB (`gc-ubo-block-raise.md` §8). If an offset above 64 KiB fails, the
    fix is the per-block address. Boards are held by plan #347.
 2. **The `context.rs` arm.** Add `gpu-vivante` to the two `cfg` arms under
-   `not(report-es2)` (`context.rs:109`, `:124`): `MAX_UNIFORM_BLOCK_SIZE`
+   `not(report-es2)` (`context.rs:113`, `:133`): `MAX_UNIFORM_BLOCK_SIZE`
    16384 and `MAX_STAGE_UNIFORM_DWORDS` from `combined_uniform_components`
    (`src/gl/limits.rs:40`) = 1536 + 12 * 4096 = 50688.
    `MAX_UNIFORM_DWORDS` and `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay
@@ -287,7 +319,8 @@ Order matters: each step keeps the tree green.
    `MAX_UNIFORM_DWORDS`.
 4. **Done** (`cb52fae8`). `state.rs:1283-1290` answers
    `MAX_UNIFORM_BLOCK_SIZE` and the combined components from the consts (V3D
-   16384 / 50688 under `!report-es2`, the others 6144 / 1536);
+   16384 / 50688 under `!report-es2`, the others 6144 / 1536; the PowerVR
+   joined the raised arm with plan #378, section 4);
    `MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` stay 1536.
 5. **Done.** `cb52fae8`: `tests/es3_limits_v3d.rs` (16384 / 50688),
    `tests/es3_caps.rs` `known_gaps()` lists the family for the other GPUs
@@ -307,16 +340,16 @@ Order matters: each step keeps the tree green.
 ## 9. As implemented (`cb52fae8`, plan #359)
 
 **The capability is two consts, not a `YakoglBackend` field** (the deviation
-from section 7 item 2 and section 8 step 2). `src/gl/context.rs:94-131`:
+from section 7 item 2 and section 8 step 2). `src/gl/context.rs:94-144`:
 
 - `MAX_UNIFORM_BLOCK_SIZE` (bytes): `ES3_MIN_MAX_UNIFORM_BLOCK_SIZE` = 16384
-  under `gpu-v3d` without `report-es2`, `MAX_UNIFORM_DWORDS * 4` = 6144
-  otherwise;
+  under `gpu-v3d` or `gpu-powervr` without `report-es2`,
+  `MAX_UNIFORM_DWORDS * 4` = 6144 otherwise;
 - `MAX_STAGE_UNIFORM_DWORDS`, the per-stage block storage capacity:
   `limits::combined_uniform_components(MAX_UNIFORM_DWORDS,
   MAX_STAGE_UNIFORM_BLOCKS, MAX_UNIFORM_BLOCK_SIZE)` = 1536 + 12 * 4096 =
   50688 on the same cfg arm, `MAX_UNIFORM_DWORDS` otherwise; asserted to fit
-  the `u16` dword counts (`context.rs:134`).
+  the `u16` dword counts (`context.rs:143`).
 
 Why: a struct field adds a member to every `YakoglBackend` literal in `src/`
 and `tests/` (CLAUDE.md, the 2026-10-14 breakage) for a value that is a
@@ -325,7 +358,9 @@ compile-time property of the GPU feature, and the consts give `state.rs`,
 disagree. The cost: a build carries one GPU's limits, as the rest of
 `context.rs` already does. **Raising the PowerVR or GC7000UL later means
 editing the cfg arms of these two consts** (and the back end's own bounds);
-sections 4 and 5 stay the plan for them. The Mali is unchanged.
+the PowerVR did exactly that with plan #378 (section 4: the arms take
+`gpu-powervr`, the USC reads blocks by `ld` from memory), section 5 stays
+the plan for the GC7000UL. The Mali is unchanged.
 
 **Matrix layout in a block: implemented, no compiler defect** [M]. A study
 traced the earlier claim that the V3D compiler or the host sim reads
