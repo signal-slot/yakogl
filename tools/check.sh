@@ -201,15 +201,18 @@ scope_of_path() {
   # *_71*) and by the shared V3D files 7.1 builds from; all of them are
   # under the three directories below, and the 4.2 rows are reached as before.
   src/shaderc/online/v3d/* | driver/src/v3d/* | tools/v3d/*) echo "v3d v3d71" ;;
-  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
+  # plan #360's float colour render-target tests: a GPU's own file reaches
+  # that GPU's rows (es3_half_float_rt_v3d*, es3_half_float_rt_pvr*,
+  # es3_half_float_rt_gc*), as tests/es3_fragdepth_gc* does
+  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/es3_v3d_f32_rt_key* | tests/es3_v3d_clear_float_words* | tests/es3_color_buffer_float_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/* | tests/mali_*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
-  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc*) echo vivante ;;
+  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_rt_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
   # gl_FragDepth's shape test (tests/es3_fragdepth_cases.rs) pins its verdicts
   # on both GPUs: a change there reaches both fragdepth rows, and nothing else
   tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
-  src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
+  src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | tests/es3_half_float_rt_pvr* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
   driver/tools/pvrlab/*) echo gltest ;;
   # the DK's U-Boot one-shot (scripts, mkimage step, runner, QEMU test): the
   # tools rows that run its self-tests
@@ -1950,6 +1953,29 @@ step "test    $V3D_CONFIG (tests/es3_int_rt_v3d.rs)" \
 # float, vec2 and vec4 output. Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_half_float_rt_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_rt_v3d
+# The V3D compiler's f32 render-target key (v3d-f32-key): the key of a float
+# output and the 32-bit TLB write it selects, against the integer keys. And
+# the clear-colour words of the float, 128-bpp and R11F_G11F_B10F render
+# targets (v3d-clear-words), in clear_mrt.rs against Mesa's. Compiles to
+# nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_v3d_f32_rt_key.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_f32_rt_key
+step "test    $V3D_CONFIG (tests/es3_v3d_clear_float_words.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_v3d_clear_float_words
+# The same float render targets on the GC7000UL and the PowerVR as they are
+# today (test-gc-half, gc-mrt16f-test, test-pvr-half): the render-target
+# state, the RGBA16F-beside-another-draw-buffer path, and the PowerVR's 16F
+# and R32F target words. The GC7000UL's RG16F row is #[ignore]d with its
+# reason (the GC arm). Compiles to nothing under report-es2.
+scope vivante
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_rt_gc.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_half_float_rt_gc
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_mrt_gc.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_half_float_mrt_gc
+scope pvr
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_rt_pvr.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_rt_pvr
+scope v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)
 # and C table row against Mesa's format table, the 32-bit return classes,
@@ -1972,11 +1998,14 @@ step "test    $V3D_CONFIG (tests/es3_decoded_class_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_decoded_class_v3d
 step "test    $V3D_CONFIG (tests/eac_half_precision.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test eac_half_precision
-# The V3D's float colour targets (v3d-cbf-test-draft): what the 16F targets
-# clear, draw and read back today; the claimed GL_EXT_color_buffer_float path
-# is #[ignore = "v3d-arm"] until the V3D arm lands.
+# The V3D's float colour targets (v3d-cbf-test-draft, v3d-arm): what the 16F
+# targets clear, draw and read back today; with `color-buffer-float` on the
+# same file runs the claimed GL_EXT_color_buffer_float path (the V3D's alone
+# today, docs/notes/es3-float-targets.md).
 step "test    $V3D_CONFIG (tests/es3_color_buffer_float_v3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_color_buffer_float_v3d
+step "test    $V3D_CONFIG,color-buffer-float (tests/es3_color_buffer_float_v3d.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG,color-buffer-float" --test es3_color_buffer_float_v3d
 # The V3D shader back end's GLSL ES 3.00 gaps the dEQP corpus found
 # (matrix vertex attributes, integer shifts, trunc), built and run on the
 # interpreter. Compiles to nothing under report-es2.
@@ -2010,6 +2039,73 @@ step "test    $V3D_CONFIG (tests/es3_float32_rt_off.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float32_rt_off
 step "test    $V3D_CONFIG (tests/es3_color_buffer_float.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_color_buffer_float
+# The same default-off contract in the PowerVR and the GC7000UL build
+# (cbf-test-draft), and with `color-buffer-float` on in all three host
+# configurations (core-claim, cbf-feature, v3d-arm): the extension is listed
+# only where the build's back end is `color_buffer_float_capable`
+# (src/backend.rs), which is the V3D with the feature alone, so the PowerVR
+# and GC7000UL rows pass with the feature on unchanged. Compiles to nothing
+# under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_color_buffer_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_color_buffer_float
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_color_buffer_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_color_buffer_float
+step "test    $V3D_CONFIG,color-buffer-float (tests/es3_color_buffer_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG,color-buffer-float" --test es3_color_buffer_float
+step "test    host-test,gpu-powervr,shaderc-online,color-buffer-float (tests/es3_color_buffer_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "host-test,gpu-powervr,shaderc-online,color-buffer-float" --test es3_color_buffer_float
+step "test    host-test,gpu-vivante,shaderc-online,color-buffer-float (tests/es3_color_buffer_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "host-test,gpu-vivante,shaderc-online,color-buffer-float" --test es3_color_buffer_float
+# ReadPixels' format/type pairs and values of the 16F colour targets as they
+# are today (test-rp-half), the attachment and renderbuffer getters of the
+# same targets (test-get-half; the 6.1.13 draw-framebuffer *_BITS test is
+# #[ignore]d with its reason), and glBlendFunc on the 16F targets, accepted
+# today with no GL_EXT_float_blend claim (blend16f-test). Each runs in the
+# three GPUs' host build. Compiles to nothing under report-es2.
+step "test    $V3D_CONFIG (tests/es3_readpixels_half_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_readpixels_half_float
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_readpixels_half_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_readpixels_half_float
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_readpixels_half_float.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_readpixels_half_float
+step "test    $V3D_CONFIG (tests/es3_half_float_getters.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_getters
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_getters.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_getters
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_getters.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_half_float_getters
+step "test    $V3D_CONFIG (tests/es3_half_float_blend.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_blend
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_blend.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_blend
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_blend.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_half_float_blend
+# The float colour surface classes of the back-end ABI (surf-abi):
+# GLES_SURF_RG32F, GLES_SURF_RGBA32F and GLES_SURF_R11F_G11F_B10F as
+# constants, undrawable on a back end that has not claimed the formats. In
+# every GPU host build.
+step "test    $V3D_CONFIG (tests/es3_float_surf_abi.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_float_surf_abi
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_float_surf_abi.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_float_surf_abi
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_float_surf_abi.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_float_surf_abi
+# The CPU half-float and R11F_G11F_B10F pack helpers of src/gl/float_pack.rs
+# (float-pack): the file needs no GPU feature, so the PowerVR host
+# configuration runs it (the bulk suite runs it in every configuration).
+step "test    host-test,gpu-powervr (tests/es3_float_pack.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr --test es3_float_pack
+# glBlitFramebuffer's colour-format errors (ES 3.0.6 4.3.3) with RGBA16F in
+# place of the old R32F image (blit-int-r32f): a float image no longer makes
+# those blits valid-by-format-change that the integer rules refuse. The three
+# GPU host configurations; no GPU draws (the stand-in back end draws
+# nothing), and not in a report-es2 build.
+step "test    $V3D_CONFIG (tests/es3_blit_int_err.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_blit_int_err
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_blit_int_err.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_blit_int_err
+step "test    host-test,gpu-vivante,shaderc-online (tests/es3_blit_int_err.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_blit_int_err
 # glClear and glClearBuffer on the 16F colour targets (the PowerVR and GC7000 rows run it with the rest of tests/). Compiles to nothing under report-es2.
 step "test    $V3D_CONFIG (tests/es3_half_float_clearbuffer.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_half_float_clearbuffer
@@ -2138,10 +2234,10 @@ msaa_fbo_builds() {
   done
 }
 step "check   msaa-fbo on the four GPUs' host configurations" msaa_fbo_builds
-# The `color-buffer-float` feature (no effect yet) builds with each GPU's host
-# configuration. The default-off contract of tests/es3_color_buffer_float.rs
-# runs on the V3D build here (the PowerVR and GC7000 rows run it with the
-# rest of tests/); its claimed-path half is not run until the claim lands.
+# The `color-buffer-float` feature builds with each GPU's host
+# configuration. Its test rows are the `color-buffer-float` rows above
+# (tests/es3_color_buffer_float.rs and tests/es3_color_buffer_float_v3d.rs
+# with the feature on): the claim lands on the V3D alone.
 color_buffer_float_builds() {
   local c
   for c in "$V3D_CONFIG" host-test,gpu-powervr,shaderc-online host-test,gpu-vivante,shaderc-online \
@@ -2203,6 +2299,20 @@ step "test    $V3D_ES2_CONFIG (tests/es2_report_limits.rs)" \
 # (the ES 3.0 ten of plan #354 do not show under it).
 step "test    $V3D_ES2_CONFIG (tests/es2_compressed_list.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_compressed_list
+# Plan #360's ES 2.0 answers of the float colour targets (cbf-es2-test): the
+# extensions and the storage refusals a report-es2 build must keep. Two of
+# its tests are #[ignore]d with their reason: GL_EXT_color_buffer_half_float
+# is claimed by every build today and pinned by tests/es2_report_guard.rs
+# (plan #351's call, not this file's). The PowerVR's two report-es2
+# configurations and the GC7000UL's online one run the file in their bulk
+# test rows (CONFIGS); a GC7000UL build without the compiler and the V3D
+# build (V3D_ES2_CONFIG) have no bulk row, so they run here.
+scope vivante
+step "test    host-test,gpu-vivante,report-es2 (tests/es3_cbf_report_es2.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,report-es2 --test es3_cbf_report_es2
+scope v3d
+step "test    $V3D_ES2_CONFIG (tests/es3_cbf_report_es2.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es3_cbf_report_es2
 # The ES 2.0 answers of a report-es2 build, pinned against the specification
 # (item es2-guard-redo); the PowerVR report-es2 rows run it with the rest of
 # tests/. Named here for the compiler rows, which need the online compiler

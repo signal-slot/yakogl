@@ -93,6 +93,20 @@ want tests/es3_fragdepth_v3d_state.rs v3d
 want tests/es3_fragdepth_v3d_sim.rs v3d
 want tests/es3_fragdepth_gc.rs vivante
 want tests/es3_fragdepth_cases.rs "vivante v3d"
+# plan #360's float colour render-target tests: a GPU's own file reaches that
+# GPU's rows (as the fragdepth files do); the shared float tests (es3_color_
+# buffer_float, es3_half_float_getters, es3_readpixels_half_float,
+# es3_half_float_blend, es3_float_surf_abi, es3_blit_int_err,
+# es3_half_float_clearbuffer, es3_float32_rt_off, es3_float_target,
+# es3_cbf_report_es2, es3_float_pack) map to `tests` and run in every GPU's
+# suite row, like every other tests/ file
+want tests/es3_half_float_rt_v3d.rs v3d
+want tests/es3_v3d_f32_rt_key.rs v3d
+want tests/es3_v3d_clear_float_words.rs v3d
+want tests/es3_color_buffer_float_v3d.rs v3d
+want tests/es3_half_float_rt_pvr.rs pvr
+want tests/es3_half_float_rt_gc.rs vivante
+want tests/es3_half_float_mrt_gc.rs vivante
 want src/mali/backend.rs mali
 want tests/mali_blend_states.rs mali
 want tests/mali_vcube_magswitch.rs mali
@@ -364,6 +378,26 @@ expect "fragdepth: the GC7000UL test reaches its row" '^plan  test    host-test,
 expect "fragdepth: a GC7000UL change skips the V3D writer row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_fragdepth_v3d.rs\)$' "$out"
 out=$(plan tests/es3_fragdepth_cases.rs)
 count "fragdepth: the cases file reaches its two rows" '^plan  test    .*es3_fragdepth_cases.rs\)$' 2 "$out"
+# plan #360's float render-target rows: each GPU-named file reaches its own
+# GPU's float rows, and its change skips the other GPUs' float rows.
+out=$(plan tests/es3_half_float_rt_gc.rs)
+expect "float rt: the GC7000UL test reaches its row" '^plan  test    host-test,gpu-vivante,shaderc-online \(tests/es3_half_float_rt_gc.rs\)$' "$out"
+expect "float rt: it reaches the MRT pin too" '^plan  test    host-test,gpu-vivante,shaderc-online \(tests/es3_half_float_mrt_gc.rs\)$' "$out"
+expect "float rt: a GC7000UL change skips the V3D float rows" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_half_float_rt_v3d.rs\)$' "$out"
+out=$(plan tests/es3_half_float_rt_pvr.rs)
+expect "float rt: the PowerVR test reaches its row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/es3_half_float_rt_pvr.rs\)$' "$out"
+out=$(plan tests/es3_v3d_clear_float_words.rs)
+expect "float clear: the V3D test reaches its row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_v3d_clear_float_words.rs\)$' "$out"
+out=$(plan tests/es3_color_buffer_float_v3d.rs)
+expect "cbf v3d: the test reaches its two rows" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,color-buffer-float \(tests/es3_color_buffer_float_v3d.rs\)$' "$out"
+# the shared float contract: every GPU build's row, feature off and on
+out=$(plan tests/es3_color_buffer_float.rs)
+expect "cbf: the PowerVR row" '^plan  test    host-test,gpu-powervr,shaderc-online \(tests/es3_color_buffer_float.rs\)$' "$out"
+expect "cbf: the GC7000UL row" '^plan  test    host-test,gpu-vivante,shaderc-online \(tests/es3_color_buffer_float.rs\)$' "$out"
+expect "cbf: the feature-on row of the PowerVR build" '^plan  test    host-test,gpu-powervr,shaderc-online,color-buffer-float \(tests/es3_color_buffer_float.rs\)$' "$out"
+out=$(plan tests/es3_cbf_report_es2.rs)
+expect "cbf es2: the GC7000UL build without the compiler" '^plan  test    host-test,gpu-vivante,report-es2 \(tests/es3_cbf_report_es2.rs\)$' "$out"
+expect "cbf es2: the V3D report row" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 \(tests/es3_cbf_report_es2.rs\)$' "$out"
 # A change confined to tests/ (scope tests): the test rows of the targets it
 # reaches, and what every change reaches; no image, driver, sample, aarch64,
 # table or tool row (tools/check_tests_reach.py names the targets).
