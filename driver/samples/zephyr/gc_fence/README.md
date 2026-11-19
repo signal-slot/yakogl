@@ -39,6 +39,12 @@ with a `gc_power: REFUSED ...` line and a PSCI reset. The GPU's memory is
 the 64 MiB `gpu-reserved` area at 0xfa800000; the run ends with PSCI
 SYSTEM_RESET back into ST's Linux.
 
+The 0x3A8 secure-AHB soft-reset release (as ST's galcore does) is off by
+default, so that the first run measures the unchanged path; it logs
+`gc_power: ahb-reset-release off`. When the `gc diag` lines show 3a8 bit 0 = 1
+after reset or init, build with `-- -DCONFIG_YAKOGL_STM32MP2_GC_AHB_RESET_RELEASE=y`
+(Kconfig `YAKOGL_STM32MP2_GC_AHB_RESET_RELEASE`).
+
 The result line and the record:
 
 ```
