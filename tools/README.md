@@ -709,7 +709,14 @@ the end): nothing is armed in the stored U-Boot environment, `bootcmd` is
 never written, everything the line sets is `mp2z_*` and RAM-only, and BL2's
 IWDG bounds a hang at ~32 s (`docs/notes/stm32mp257f-dk-uboot-boot.md`,
 #1281; the scripts and their mkimage step: `driver/tools/uboot-mp2/`).
-`tools/board.sh stm32mp257f-dk` dispatches to it: `run`, `probe`, `status`
+`tools/board.sh [--dry-run] stm32mp257f-dk status|install|uninstall|default <image> <1-9|forever>|nodefault`
+is `exec`'d to `tools/board-stm32mp2-standalone.sh` (the standalone boot;
+`--dry-run` and the runner's exit code pass through, the runner owns the
+person gate and the locking); every other board.sh verb for the DK is refused
+with exit 2, naming `board-stm32mp2.sh` and `board-stm32mp2-uboot.sh`, which
+are the DK's one-shot runners (the older text below on board.sh's mapping
+of `run`, `probe` and `disarm` no longer applies; call the runners directly).
+`tools/board.sh stm32mp257f-dk` used to dispatch to it: `run`, `probe`, `status`
 and `disarm` map to the runner's verbs (board.sh adds the image check
 against the DK's 0xa0000000..0xb0000000 window and the board lease, takes
 no board lock — the runner's board lock would refuse one already held —

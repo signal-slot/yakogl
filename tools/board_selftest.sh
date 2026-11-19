@@ -119,7 +119,7 @@ unset BOARD_HOST BOARD_UART BOARD_BOOT PI4_HOST PI4_UART PI5_HOST PI5_UART UART_
     NETBOOT_TFTP_LOG NETBOOT_ROUTE NETBOOT_NO_WATCHDOG SEL TREE_IMAGE TREE_IMAGE_DIR TREE_TAG TREE_ROWS \
     TREE_PREV LOCK BOARD_LOCK RUN_BOUND RETURN_BOUND BOARD_END_RE PI4_END_RE PI4_HDMI_TIMINGS BOARD_HDMI_TIMINGS \
     DEQP_CASELIST T6_UART T6_HAND T6_CRASH T6_RUNNER T6_RECORD_DIR T6_POOL_PA T6_BACKING_PA \
-    MP2_SUDO MP2_KNOWN_HOSTS MP2_NO_WATCHDOG MP2_REBOOT_GRACE MP2U_CONSOLE MP2U_POLL MP2_RUNNER
+    MP2_SUDO MP2_KNOWN_HOSTS MP2_NO_WATCHDOG MP2_REBOOT_GRACE MP2U_CONSOLE MP2U_POLL MP2_RUNNER MP2S_STANDALONE_RUNNER
 
 # ---- fake images: the AArch64 Image header, image_size, a marker ------------
 mkimg() { # mkimg FILE FOOTPRINT MARKER
@@ -282,58 +282,52 @@ out=$(dry nanopc-t6 status 2>&1)
 check "nanopc-t6 status: kexec_loaded, watchdog0 and the runner's staging directory" \
     eval 'grep -q "kexec_loaded /sys/class/watchdog/watchdog0/state" <<<"$out" && grep -q "/tmp/yakogl-kexec" <<<"$out"'
 check "nanopc-t6 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
-# The STM32MP257F-DK (ST's U-Boot 2023.10 after TF-A v2.10 and OP-TEE 4.0):
-# its run is its own runner's (tools/board-stm32mp2-uboot.sh, mp2_uboot),
-# and the runner's verbs, guards, records and verdict are checked by
-# tools/board_stm32mp2_uboot_selftest.sh. These check the board.sh entry: the
-# dispatch, the lease, and the refusals board.sh owes the DK. (Not in the
-# COMBOS loop above: its greps read board.sh's own lock, record and bootcmd
-# lines, which the thin DK dispatch prints none of.)
-out=$(dry stm32mp257f-dk status 2>&1); rc=$?
-check "stm32mp257f-dk status: rc 0, the runner's reads as DRY board lines (fw_printenv, the staged files), its rule about the stored environment stated, no stub ran" \
-    eval '[ "$rc" = 0 ] && grep -q "^DRY board" <<<"$out" && grep -q "fw_printenv" <<<"$out" &&
-          grep -q "mp2z-" <<<"$out" && grep -q "the stored environment and bootcmd are never written by this runner" <<<"$out" && untouched'
-out=$(dry stm32mp257f-dk probe "$S/logs" 2>&1); rc=$?
-check "stm32mp257f-dk probe: rc 0, the status read, no image, no reboot, nothing made, no stub ran" \
-    eval '[ "$rc" = 0 ] && grep -q "^DRY board" <<<"$out" && grep -q "fw_printenv" <<<"$out" &&
-          ! grep -q "systemctl reboot" <<<"$out" && [ ! -e "$S/logs" ] && untouched'
-out=$(BOARD_UART=/dev/ttyFAKE9 dry stm32mp257f-dk run "$S/img/stm32mp257f-dk.bin" "$S/logs" 2>&1); rc=$?
-check "stm32mp257f-dk run: rc 0, uboot-mmc the default route (a row), the image checked, board.sh's board lease taken" \
-    eval '[ "$rc" = 0 ] && grep -q "image sha256 $(sha256sum "$S/img/stm32mp257f-dk.bin" | cut -c1-16)" <<<"$out" &&
-          grep -q "boot uboot-mmc (row)" <<<"$out" && grep -q "DRY board$ take /var/tmp/yakogl-board.lease" <<<"$out"'
-check "stm32mp257f-dk run: the runner's console probe and typed line, its reboot, its board lock and scan — and board.sh took no board lock of its own (its take_lock would show HOLD_MAX=2100)" \
-    eval 'grep -q "mp2_uboot_console.py probe" <<<"$out" && grep -q "mp2_uboot_console.py typed" <<<"$out" &&
-          grep -q "sync; systemctl reboot" <<<"$out" && grep -q "mp2_uboot_console.py scan" <<<"$out" &&
-          grep -q "one lock per BOARD_HOST" <<<"$out" && ! grep -q "HOLD_MAX=2100" <<<"$out"'
-check "stm32mp257f-dk run: no run directory of its own, nothing written, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
-out=$(BOARD_BOOT=uboot-tftp NETBOOT_SERVER=192.0.2.77 NETBOOT_TFTP_ROOT=$S/tftp-dry BOARD_UART=/dev/ttyFAKE9 dry stm32mp257f-dk run "$S/img/stm32mp257f-dk.bin" "$S/logs" 2>&1); rc=$?
-check "stm32mp257f-dk uboot-tftp run: rc 0, boot uboot-tftp (a row), the canary on UDP port 69 and the staging into the TFTP root as DRY lines, the root left unwritten, nothing made, no stub ran" \
-    eval '[ "$rc" = 0 ] && grep -q "boot uboot-tftp (row)" <<<"$out" &&
-          grep -q "curl -s --max-time 5 tftp://<NETBOOT_SERVER>/yakogl/canary-" <<<"$out" &&
-          grep -q "cp .* $S/tftp-dry/yakogl/mp2z-stm32mp257f-dk-.*\.bin" <<<"$out" &&
-          [ ! -e "$S/tftp-dry" ] && [ ! -e "$S/logs" ] && untouched'
-out=$(dry stm32mp257f-dk install 2>&1); rc=$?
-check "stm32mp257f-dk install: rc 0 with the pointer (the typed route arms nothing in the stored environment)" \
-    eval '[ "$rc" = 0 ] && grep -q "nothing to install" <<<"$out" && untouched'
-out=$(dry stm32mp257f-dk uninstall 2>&1); rc=$?
-check "stm32mp257f-dk uninstall: rc 0 with the same pointer" \
-    eval '[ "$rc" = 0 ] && grep -q "nothing to uninstall" <<<"$out" && untouched'
-out=$(dry stm32mp257f-dk disarm 2>&1); rc=$?
-check "stm32mp257f-dk disarm: rc 0, the runner's staged-file removal as a DRY line, its own board lock, no stub ran" \
-    eval '[ "$rc" = 0 ] && grep -q "rm -f /boot/yakogl/mp2z-" <<<"$out" && grep -q "one lock per BOARD_HOST" <<<"$out" && untouched'
-out=$(dry stm32mp257f-dk default "$S/img/stm32mp257f-dk.bin" 1 2>&1); rc=$?
-check "stm32mp257f-dk default: rc 2, no fw_setenv run, the standalone pointer stated, nothing done" \
-    eval '[ "$rc" = 2 ] && grep -q "no fw_setenv" <<<"$out" && grep -q "board-stm32mp2.sh" <<<"$out" && ! grep -q "^DRY" <<<"$out" && untouched'
-printf 'one\timage\n' > "$S/mp2-table.txt"
-out=$(dry stm32mp257f-dk tree "$S/mp2-table.txt" "$S/logs" 2>&1); rc=$?
-check "stm32mp257f-dk tree: rc 2 with the pointer to the runner, nothing written" \
-    eval '[ "$rc" = 2 ] && grep -q "no tree for the STM32MP257F-DK" <<<"$out" && ! grep -q "^DRY" <<<"$out" && [ ! -e "$S/logs" ]'
-out=$(BOARD_BOOT=uboot-sd dry stm32mp257f-dk status 2>&1); rc=$?
-check "stm32mp257f-dk with a BOARD_BOOT it does not have: rc 2 naming both routes" \
-    eval '[ "$rc" = 2 ] && grep -q "uboot-mmc uboot-tftp" <<<"$out" && untouched'
-out=$(dry stm32mp257f-dk stage "$S/img/stm32mp257f-dk.bin" "$S/logs" 2>&1); rc=$?
-check "stm32mp257f-dk stage: rc 2 (board.sh stage is the x2's; the runner has its own stage verb)" \
-    eval '[ "$rc" = 2 ] && grep -q "stage is for the Armadillo-X2" <<<"$out" && ! grep -q "^DRY" <<<"$out"'
+# The STM32MP257F-DK: board.sh knows only its standalone verbs, which it
+# exec's to tools/board-stm32mp2-standalone.sh (MP2S_STANDALONE_RUNNER names a
+# stub here); every other verb is refused with rc 2. The runner's own verbs
+# are checked by its selftest; the stub records its argv and exits with
+# MP2S_STUB_RC.
+cat > "$S/mp2s-stub.sh" <<'STUB'
+#!/bin/bash
+printf 'ARGV:' >> "$MP2S_STUB_LOG"
+printf ' [%s]' "$@" >> "$MP2S_STUB_LOG"
+echo >> "$MP2S_STUB_LOG"
+echo "stub runner ran"
+exit "${MP2S_STUB_RC:-0}"
+STUB
+export MP2S_STANDALONE_RUNNER=$S/mp2s-stub.sh MP2S_STUB_LOG=$S/mp2s-stub.log
+dkimg=$S/img/stm32mp257f-dk.bin
+mp2s_case() { # mp2s_case "expected argv line" board.sh-args...
+    : > "$MP2S_STUB_LOG"
+    "$B" "${@:2}" > "$S/mp2s.out" 2>&1
+    MP2S_RC=$?
+    [ "$(cat "$MP2S_STUB_LOG")" = "ARGV:$1" ]
+}
+check "stm32mp257f-dk status reaches the runner as 'status', rc 0" \
+    eval 'mp2s_case " [status]" stm32mp257f-dk status && [ "$MP2S_RC" = 0 ]'
+check "stm32mp257f-dk install and uninstall reach the runner" \
+    eval 'mp2s_case " [install]" stm32mp257f-dk install && mp2s_case " [uninstall]" stm32mp257f-dk uninstall'
+check "stm32mp257f-dk default <image> 2 and forever reach the runner with their arguments" \
+    eval 'mp2s_case " [default] [$dkimg] [2]" stm32mp257f-dk default "$dkimg" 2 && mp2s_case " [default] [$dkimg] [forever]" stm32mp257f-dk default "$dkimg" forever'
+check "stm32mp257f-dk nodefault reaches the runner" \
+    eval 'mp2s_case " [nodefault]" stm32mp257f-dk nodefault'
+check "--dry-run is passed through to the runner for each of the five verbs (before the verb)" \
+    eval 'mp2s_case " [--dry-run] [status]" --dry-run stm32mp257f-dk status &&
+          mp2s_case " [--dry-run] [install]" --dry-run stm32mp257f-dk install &&
+          mp2s_case " [--dry-run] [uninstall]" --dry-run stm32mp257f-dk uninstall &&
+          mp2s_case " [--dry-run] [default] [$dkimg] [3]" --dry-run stm32mp257f-dk default "$dkimg" 3 &&
+          mp2s_case " [--dry-run] [nodefault]" stm32mp257f-dk --dry-run nodefault'
+check "the runner's exit code passes through (2 and 3 kept)" \
+    eval 'MP2S_STUB_RC=3 mp2s_case " [nodefault]" stm32mp257f-dk nodefault && [ "$MP2S_RC" = 3 ] &&
+          MP2S_STUB_RC=2 mp2s_case " [status]" stm32mp257f-dk status && [ "$MP2S_RC" = 2 ]'
+check "stm32mp257f-dk run, probe, tree, disarm, stage, gm, tally, an unknown verb: rc 2, the runner not run, the one-shot runners named" \
+    eval 'ok=1; for v in run probe tree disarm stage gm gm-lines tally diff bogus; do
+              : > "$MP2S_STUB_LOG"; "$B" stm32mp257f-dk $v x y > "$S/mp2s.out" 2>&1; rc=$?
+              [ "$rc" = 2 ] && [ ! -s "$MP2S_STUB_LOG" ] && grep -q "board-stm32mp2.sh" "$S/mp2s.out" && grep -q "board-stm32mp2-uboot.sh" "$S/mp2s.out" || ok=0; done; [ "$ok" = 1 ]'
+unset MP2S_STANDALONE_RUNNER
+out=$(env -u BOARD_PERSON_PRESENT "$B" --dry-run stm32mp257f-dk default "$dkimg" forever 2>&1); rc=$?
+check "the real runner, --dry-run default <img> forever without BOARD_PERSON_PRESENT: non-zero naming BOARD_PERSON_PRESENT" \
+    eval '[ "$rc" != 0 ] && grep -q BOARD_PERSON_PRESENT <<<"$out"'
 out=$(dry pi4 run "$S/img/pi4.bin" "$S/logs" 2>&1)
 check "pi4: /boot/firmware free space read, tryboot.txt written and put back" \
     eval 'grep -q "df -B1 --output=avail /boot/firmware" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ]'

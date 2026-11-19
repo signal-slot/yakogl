@@ -13,6 +13,9 @@
 #   tools/board.sh <board> gm-lines <outdir>
 #   tools/board.sh [--dry-run] <board> default <image> <boots|forever> | nodefault
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
+#   tools/board.sh [--dry-run] stm32mp257f-dk status | install | uninstall | nodefault
+#   tools/board.sh [--dry-run] stm32mp257f-dk default <image> <1-9|forever>
+#      (the DK's verbs: exec'd to tools/board-stm32mp2-standalone.sh; nothing else for the DK)
 #      board = pi4 | pi5 | am62p | imx8mp | x2 | nanopc-t6 | stm32mp257f-dk
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
@@ -260,10 +263,30 @@ done
 set -- "${args[@]+"${args[@]}"}"
 DRYFLAG=()
 [ "$DRY" = 1 ] && DRYFLAG=(--dry-run)
-usage() { sed -n '7,16p' "$SELF" >&2; exit 2; }
+usage() { sed -n '7,19p' "$SELF" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 BOARD=$1 VERB=$2
 shift 2
+
+# ---- the STM32MP257F-DK's standalone verbs: the runner's, before anything else
+# status, install, uninstall, default <image> <1-9|forever> and nodefault are
+# exec'd to tools/board-stm32mp2-standalone.sh (--dry-run passed through, its
+# exit code kept: 0 done, 2 usage, 3 refused). None of the Verdin/Pi machinery
+# below (yako_default, the U-Boot env code, take_lock) runs for them: the
+# runner owns the person gate for "forever" and its own board locking. Every
+# other verb is refused: the DK's one-shot runners are
+# tools/board-stm32mp2.sh and tools/board-stm32mp2-uboot.sh.
+if [ "$BOARD" = stm32mp257f-dk ]; then
+    case "$VERB" in
+    status | install | uninstall | default | nodefault)
+        exec bash "${MP2S_STANDALONE_RUNNER:-$HERE/board-stm32mp2-standalone.sh}" "${DRYFLAG[@]+"${DRYFLAG[@]}"}" "$VERB" "$@"
+        ;;
+    *)
+        echo "board.sh stm32mp257f-dk: '$VERB' is not a board.sh verb for the DK (only status, install, uninstall, default, nodefault: the standalone boot, tools/board-stm32mp2-standalone.sh). Its one-shot runs are tools/board-stm32mp2.sh and tools/board-stm32mp2-uboot.sh" >&2
+        exit 2
+        ;;
+    esac
+fi
 
 # ---- the board facts: everything that differs per board is here ----------
 NEW_MARKER='board: watchdog armed'   # the board layer's literal (one-method.md section 4, step 1)
