@@ -9,7 +9,9 @@
 //! glRenderbufferStorageMultisample [`stored_samples`] and [`oom`],
 //! glGetInternalformativ [`internalformat_sample_counts`] and the framebuffer
 //! completeness check [`attachments_complete`] (framebuffer.rs), all with
-//! [`backend_max_samples`]; `gl-msaa-cap` makes that read the back end.
+//! [`backend_max_samples`], the current back end table's `max_samples`.
+//! [`draw_samples`] is what a draw into a framebuffer object hands the back
+//! end (`GlesDraw::samples`).
 
 use super::consts::*;
 use super::framebuffer::renderbuffer_surf_format;
@@ -23,11 +25,23 @@ pub(crate) const MS_SAMPLES: u32 = 4;
 /// times the surface per attachment (64 MiB at RGBA8), note (b)3.
 pub(crate) const MS_MAX_PIXELS: u64 = 2048 * 2048;
 
-/// The samples the back end keeps for a multisampled renderbuffer: 0 (only
-/// single-sampled storage) on every back end today. gl-msaa-cap makes it
-/// return the back end's `YakoglBackend.max_samples` field (0 or 4).
+/// The samples the back end keeps for a multisampled renderbuffer: the
+/// current table's `YakoglBackend.max_samples` (0 = only single-sampled
+/// storage, 4), 0 with no table installed. Every real back end says 0 until
+/// its own item turns the capability on; host tests swap in a table that
+/// says 4.
 pub(crate) fn backend_max_samples() -> u32 {
-    0
+    // SAFETY: g_backend is null or points at a static table (a back end's,
+    // or a host test's, swapped in while the tests are serialised).
+    unsafe { backend::g_backend.as_ref() }.map_or(0, |t| t.max_samples)
+}
+
+/// `GlesDraw::samples` of a draw into a framebuffer object whose attachments
+/// share `attached` samples ([`attachments_complete`]): at least 1, so a
+/// single-sample object (0) and the 1 a back end without the capability
+/// stores both draw one sample, and a 4x object draws 4.
+pub(crate) fn draw_samples(attached: u8) -> u8 {
+    attached.max(1)
 }
 
 /// GL_MAX_SAMPLES: never below 1, whatever the back end keeps.
@@ -223,6 +237,13 @@ mod tests {
         assert_eq!(internalformat_sample_counts(GL_RGBA8, 0, false), &[1]);
         assert_eq!(internalformat_sample_counts(GL_R32F, 0, false), &[1]);
         assert!(internalformat_sample_counts(GL_RGBA8UI, 0, true).is_empty());
+    }
+
+    #[test]
+    fn draw_samples_is_at_least_one() {
+        assert_eq!(draw_samples(0), 1);
+        assert_eq!(draw_samples(1), 1);
+        assert_eq!(draw_samples(4), 4);
     }
 
     #[test]
