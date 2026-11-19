@@ -436,7 +436,15 @@ context lacks, each checked in the code:
   least 64 / 4 / 4; `gl/tf.rs`) outside
   `report-es2`, where they stay 0; the capture runs the vertex shader on the
   CPU and refuses one that samples a texture ("Transform feedback" below).
-- `GL_MAX_SAMPLES` is 1; ES 3.0 table 6.35 asks for at least 4.
+- `GL_MAX_SAMPLES` is the back end's `YakoglBackend.max_samples`, at least
+  1 (`gl/msaa.rs`). Every back end says 0 today, so it is 1; ES 3.0 table
+  6.35 asks for at least 4. With a back end that says 4 (the host tests'
+  stand-in), glRenderbufferStorageMultisample stores 4 for a request of
+  1..=4, glGetInternalformativ lists {4}, completeness compares the stored
+  counts of all attachments (a texture counts 0), and a draw into such a
+  framebuffer object hands the back end `GlesDraw::samples` 4
+  (`framebuffer::draw_samples`). The resolve blit is not there yet
+  (docs/notes/es3-msaa-renderbuffers.md (b)).
 - A depth or stencil attachment of another size than the colour ones is
   `GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS` in both builds (`check_status`);
   ES 3.0 4.4.4.2 says that token cannot be generated. Only the colour

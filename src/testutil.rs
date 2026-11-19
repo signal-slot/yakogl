@@ -1621,6 +1621,11 @@ static MOCK_BACKEND_QUERIES: YakoglBackend = YakoglBackend {
     ..MOCK_BACKEND
 };
 
+/// [`MOCK_BACKEND`] that keeps 4 samples for a multisampled renderbuffer
+/// (`max_samples`), the stand-in of a back end with the capability on:
+/// GL_MAX_SAMPLES 4, renderbuffers stored with 4, FBO draws of 4 samples.
+static MOCK_BACKEND_MS4: YakoglBackend = YakoglBackend { max_samples: 4, ..MOCK_BACKEND };
+
 /* ---- the guard ------------------------------------------------------------- */
 
 /// Put every process-global the library keeps back to its initial value, so
@@ -2073,6 +2078,14 @@ impl TestGl {
     /// first shader is compiled; the guard puts the build's own count back.
     pub fn backend_draws_targets(&self, n: u8) {
         crate::backend::HOST_DRAW_TARGETS.store(n, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Install the mock backend variant that keeps 4 samples for a
+    /// multisampled renderbuffer ([`MOCK_BACKEND_MS4`]).
+    pub fn backend_keeps_four_samples(&self) {
+        // SAFETY: tests are serialised by SERIAL; the table is a static
+        // that outlives the test.
+        unsafe { crate::backend::g_backend = &MOCK_BACKEND_MS4 };
     }
 
     /// Install the mock backend variant that counts occlusion samples

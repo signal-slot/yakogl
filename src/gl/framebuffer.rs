@@ -1020,6 +1020,20 @@ pub fn framebuffer_samples(c: &GlContext) -> u8 {
         .unwrap_or(0)
 }
 
+/// `GlesDraw::samples` of a draw into the bound (draw) framebuffer: the
+/// window's `default_samples`, or for a framebuffer object the count its
+/// attachments share ([`attached_samples`], the GL_RENDERBUFFER_SAMPLES
+/// stored for a renderbuffer, 0 for a texture), at least 1
+/// ([`msaa::draw_samples`]). A draw only reaches the back end through a
+/// complete framebuffer, so the counts agree; mixed ones draw 1.
+pub(super) fn draw_samples(c: &GlContext) -> u8 {
+    if c.bound_framebuffer == 0 {
+        return c.default_samples;
+    }
+    let attached = c.framebuffer_ref(c.bound_framebuffer).and_then(|fb| attached_samples(c, fb)).unwrap_or(0);
+    msaa::draw_samples(attached)
+}
+
 /// No colour attachment at all, and a depth or stencil one.
 fn is_depth_stencil_only(fb: &GlFramebuffer) -> bool {
     fb.color.type_ == GL_NONE
@@ -2846,8 +2860,9 @@ fn renderbuffer_storage_args_ok(
     true
 }
 
-/// `samples` is the count glRenderbufferStorageMultisample was given (0 or
-/// 1, checked there; 0 from glRenderbufferStorage), kept as
+/// `samples` is the count glRenderbufferStorageMultisample stores
+/// ([`msaa::stored_samples`]: 0, 1, or 4 on a back end that keeps samples;
+/// 0 from glRenderbufferStorage), kept as
 /// GL_RENDERBUFFER_SAMPLES by an ES 3.0 build only: ES 2.0 has neither the
 /// query nor the multisample completeness rule.
 fn renderbuffer_storage(
@@ -3720,7 +3735,10 @@ fn log_available() -> bool {
 }
 
 /// The stored count is [`msaa::stored_samples`] of the back end's maximum
-/// ([`msaa::backend_max_samples`], 0 on every back end today): with 0,
+/// ([`msaa::backend_max_samples`], the back end table's `max_samples`; 0 on
+/// every real back end today, 4 in the host tests' stand-in): with 4, a
+/// request of 1..=4 stores 4 and a framebuffer of it draws 4 samples
+/// ([`draw_samples`]). With 0,
 /// multisampled renderbuffers are single-sampled, GL_MAX_SAMPLES is 1, so a
 /// conformant caller never asks for more (one that does gets
 /// GL_INVALID_OPERATION). One sample is kept as GL_RENDERBUFFER_SAMPLES 1
