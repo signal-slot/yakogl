@@ -382,15 +382,20 @@ cases of the two families move Fail to Pass (7 `implementation_limits`, 8
 forms with their limit, and no `shaders.linkage` or `functional.ubo` case is
 refused at compile or link on any of the three GPUs. **The PowerVR's
 uniform-block family is closed on the host too** (plan #378: `b85960c2`,
-`fad0558a`, `f0b02eda`, `c26a46e9`): `MAX_UNIFORM_BLOCK_SIZE` 16384 and the
+`fad0558a`, `560dfa49`, `5e6b27ef`): `MAX_UNIFORM_BLOCK_SIZE` 16384 and the
 combined uniform components 50688 (the same formula), the USC reads a
 stage's block members with `ld` from the per-draw copy of the stage array in
 memory and shared registers keep the default block (`gl/context.rs`
 `MAX_UNIFORM_BLOCK_SIZE`, `MAX_STAGE_UNIFORM_DWORDS`, the two consts shared
 with the V3D; `docs/notes/pvr-ubo-memory-load.md`, `docs/notes/ubo-limits.md`
-section 4; `tests/es3_limits_pvr_ubo.rs`, `tests/pvr_ubo_draw_16k.rs`; host
-dEQP `functional.ubo` and `implementation_limits` and the AM62P board rows
-to run). Left: the uniform-block size and the
+section 4; `tests/es3_limits_pvr_ubo.rs`, `tests/pvr_ubo_draw_16k.rs`). Host
+dEQP at `e6c58ad0` against `e55bcfd5` (HOST-ONLY): on the PowerVR
+`implementation_limits` goes from 43 Pass / 6 Fail to 46 Pass / 3 Fail
+(`max_uniform_block_size` and the two `max_combined_*_uniform_components`),
+and no `functional.ubo` case changes verdict or is refused at compile or link
+(`ubo-limits.md` section 4). The AM62P board run (`functional.ubo`,
+`implementation_limits`, a 16384-byte block read at its first and last dword)
+is pending. Left: the uniform-block size and the
 combined uniform components on the GC7000UL (6144 / 1536, `gl/context.rs:116,140`:
 the compiler path is done, the i.MX8MP board proof and the cfg arm are left,
 `docs/notes/ubo-limits.md` section 5),
