@@ -878,6 +878,13 @@ pub const ADMITTED: u128 = {
          * r2^` */
         | prod(Tex, NegSrc)
         | prod(Tex, FmaC)
+        /* dEQP's `res += u_arr[k]` over a mediump vec2, vec3 or vec4 array
+         * (deqp_uniarray_vec4_const_fs): the running sum first, `FADD.v2f16
+         * r0, r0^, u4.w0` */
+        | prod(Op, AddA)
+        /* deqp_uniarray_dyn_vec4_fs's first sum of two loaded elements,
+         * `FADD.v2f16 r1, r4^, r2^` */
+        | prod(Ubo, AddB)
 };
 
 /// One load of the fragment shader: a 16-byte slot of the compacted
@@ -971,6 +978,10 @@ pub struct Fs<'s> {
     pub(super) inputs16: bool,
     /// Each node's IR instruction (its place in NIR's order, [`keys`]).
     origin: &'s mut [u16],
+    /// Each node's pass of the unrolled loop that made it (0 outside a
+    /// loop; the outer loop's for a nested one, [`walk_passes`]): the order
+    /// of a loop's nodes, which share their [`Fs::origin`] ([`Fs::key`]).
+    pass: &'s mut [u8],
     /// Each IR instruction's place in NIR's order.
     keys: &'s mut [u32],
     /// Each IR instruction's width (`Module::lanes_of`): a node whose
@@ -1139,8 +1150,14 @@ impl<'s> Fs<'s> {
     }
 
     fn key(&self, v: Val) -> u32 {
+        /* an unrolled loop's nodes stand at the loop's last instruction
+         * ([`walk_loop`]), pass after pass, as Mesa's unrolled body
+         * (deqp_uniarray_loop_vec4_fs: each pass's two `FADD.v2f16`, xy then
+         * zw, before the next pass's) */
         match v {
-            Val::Lane(n, _) | Val::Pair(n, _) => self.keys[self.origin[n as usize] as usize],
+            Val::Lane(n, _) | Val::Pair(n, _) => {
+                self.keys[self.origin[n as usize] as usize].saturating_add(u32::from(self.pass[n as usize]))
+            }
             _ => u32::MAX,
         }
     }
@@ -3689,6 +3706,32 @@ impl<'s> Fs<'s> {
         }
     }
 
+    /// Word `h` of a vec2, vec3 or vec4 array read `k` that a shader reads
+    /// more than once ([`Leaf::UboWord`]), if lanes `a` and `b` are its two
+    /// lanes in order, or `a` alone a vec3's z (`b` None).
+    fn ubo_word(&self, a: Val, b: Option<Val>) -> Option<(u8, u8)> {
+        let Val::Lane(n, c) = a else { return None };
+        let comps = self.ubo_comps(n);
+        if comps < 2 || c % 2 != 0 || (self.nubo == 1 && comps == 4) {
+            return None;
+        }
+        let k = self.ubo_idx[..self.nubo].iter().position(|&t| t == n)? as u8;
+        match b {
+            Some(b) if b == Val::Lane(n, c + 1) => Some((k, c / 2)),
+            None if c + 1 == comps => Some((k, c / 2)),
+            _ => None,
+        }
+    }
+
+    /// Lane `v` is fadds of a vec3 array's z lanes ([`Fs::ubo_word`]) alone.
+    fn ubo_word_tree(&self, v: Val) -> bool {
+        match self.alu_of(v) {
+            Some((Alu::Fadd, s)) => s[..2].iter().all(|&x| self.ubo_word_tree(x)),
+            Some(_) => false,
+            None => self.ubo_word(v, None).is_some(),
+        }
+    }
+
     fn ubo_comps(&self, n: u16) -> u8 {
         match self.nir.nodes[n as usize].kind {
             Kind::UniformIdx { comps, .. } => comps,
@@ -3738,6 +3781,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         mixed: prec.mixed,
         inputs16: false,
         origin: scratch.alloc_filled(MAX_NODES, 0u16).map_err(oom)?,
+        pass: scratch.alloc_filled(MAX_NODES, 0u8).map_err(oom)?,
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
         ir_comps: scratch.alloc_filled(MAX_VALUES, 0u8).map_err(oom)?,
         ir_vals: &[],
@@ -4257,7 +4301,15 @@ fn walk_passes(
         }
         pass += 1;
         let next = Unroll { pass, ..lp };
-        if walk_nodes(f, m, lp.nodes, vals, locals, prec, false, lp.last, Some(next))? == Flow::Break {
+        let first = f.nir.n;
+        let flow = walk_nodes(f, m, lp.nodes, vals, locals, prec, false, lp.last, Some(next))?;
+        /* a later pass a guard nests in this one ([`walk_guard`]) keeps its own */
+        for id in first..f.nir.n {
+            if f.pass[id] == 0 {
+                f.pass[id] = pass as u8;
+            }
+        }
+        if flow == Flow::Break {
             return Ok(());
         }
     }
@@ -4942,6 +4994,23 @@ fn walk_nodes(
         };
         let at = id.0 as usize;
         let mut out = [Val::Undef; 4];
+        /* a uniform array read at an index the walk folded to a constant
+         * (an unrolled loop's counter): Mesa's unrolling makes the deref's
+         * index a constant before `nir_lower_uniforms_to_ubo`, so the read
+         * is the constant-index one (deqp_uniarray_loop_*_fs, byte-equal
+         * to their `*_const_fs`); the index clamped as the IR reads it */
+        let folded;
+        let op = match *op {
+            ir::Op::LoadUniformIdx { base_dw, stride_dw, len, index, comps } if len > 0 => match lane(vals, index, 0) {
+                Val::Const(k) => {
+                    let k = (k as i32).clamp(0, i32::from(len) - 1) as u16;
+                    folded = ir::Op::LoadUniform { dword_off: base_dw + k * stride_dw, comps };
+                    &folded
+                }
+                _ => op,
+            },
+            _ => op,
+        };
         match *op {
             ir::Op::ConstF32(bits) => out = bits.map(Val::Const),
             /* a 32-bit integer constant is its bits (NIR's `load_const`
@@ -5861,11 +5930,6 @@ fn walk_nodes(
                             | GL_BOOL_VEC4
                     ) && u.array_len <= 1
                 });
-                /* a float array's element at a constant index: no reference
-                 * draws it (case108_uniidx reads at run-time indices only) */
-                if decl.is_some_and(|u| u.gl_type as u32 == GL_FLOAT && u.array_len > 1) {
-                    return Err(MaliError::UniformArray);
-                }
                 /* a float uniform Mesa keeps fp32 (`FsPrecision::fp32_uniforms`):
                  * each lane a 32-bit word narrowed by its own `f2fmp`
                  * (fshighp_color: `V2F32_TO_V2F16 r0, u2.w0, u2.w1`) */
@@ -5880,10 +5944,13 @@ fn walk_nodes(
                     *o = f.uniform_lane(dword_off + c as u16, if int { 32 } else { 16 }, at)?;
                     if let (Val::Lane(n, _), Some(u), false) = (*o, decl, int) {
                         /* a matrix's load is its column's */
-                        f.nir.uniform_load[n as usize] = match nir::matrix_cols(u.gl_type) {
-                            Some((_, _, stride)) => u.dword_off + (dword_off - u.dword_off) / stride * stride,
-                            None => u.dword_off,
-                        };
+                        /* an array's load is its element's */
+                        f.nir.uniform_load[n as usize] =
+                            match (nir::matrix_cols(u.gl_type), nir::element_load(u, dword_off)) {
+                                (Some((_, _, stride)), _) => u.dword_off + (dword_off - u.dword_off) / stride * stride,
+                                (None, Some((base, _))) => base,
+                                (None, None) => u.dword_off,
+                            };
                     }
                 }
             }
@@ -5916,9 +5983,16 @@ fn walk_nodes(
                 let int_word = matches!(idx, Val::Lane(n, 0)
                     if matches!(f.nir.nodes[n as usize], NirNode { kind: Kind::Uniform { .. }, bits: 32, .. }));
                 let vec4 = f.ubo_idx[..f.nubo].iter().any(|&n| f.ubo_comps(n) == 4);
+                /* a vec2, vec3 or vec4 array's element read more than once,
+                 * every read of one array type (deqp_uniarray_dyn_vec*_fs:
+                 * each read's offset and `LD_PKA.i32` / `.i48` / `.i64`, as
+                 * case108_uniidx's float reads, [`ubo_fetch`]) */
+                let same = f.ubo_idx[..f.nubo].iter().all(|&n| f.ubo_comps(n) == comps);
                 let shape = match u.gl_type as u32 {
                     GL_FLOAT => comps == 1 && !vec4,
-                    _ => comps == 4 && f.nubo == 0,
+                    crate::gl::consts::GL_FLOAT_VEC2 => comps == 2 && same,
+                    crate::gl::consts::GL_FLOAT_VEC3 => comps == 3 && same,
+                    _ => comps == 4 && same,
                 };
                 if f.nubo >= MAX_UBO_READS || u.dword_off != base_dw || !shape || !int_word {
                     return Err(MaliError::UniformIndexed);
@@ -6869,33 +6943,12 @@ impl MatSum {
 /// The uniform of the block that holds front-end dword `dword`, and the
 /// components it takes in Mesa's packed block (`PackedDriverUniformStorage`,
 /// select.rs [`UboLayout`]): a float, vec2, vec3, vec4 or mat4 as the
-/// vertex stage reads it (`nir::uniform_of`), an array of vec4 (femtovg's
-/// `frag[14]`: `array_len` elements of 4 dwords each), or an array of float
-/// (case108_uniidx's `u_arr[4]`: one dword an element, Mesa's packed
-/// stride). Any other array has no reference yet
-/// ([`MaliError::UniformArray`]).
+/// vertex stage reads it (`nir::uniform_of`), or an array of float, vec2,
+/// vec3 or vec4 (femtovg's `frag[14]`, case108_uniidx's `u_arr[4]`,
+/// deqp_uniarray_*: the front end's `dwords`, each element's place in
+/// Mesa's block is [`nir::array_element`]'s). Any other array has no
+/// reference yet ([`MaliError::UniformArray`]).
 pub fn uniform_extent<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl<'m>, u16), MaliError> {
-    let u = m
-        .uniforms
-        .iter()
-        .find(|u| {
-            u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK
-                && dword >= u.dword_off
-                && dword < u.dword_off + u.dwords.max(1)
-        })
-        .ok_or(MaliError::Defect(Defect::IrIndex))?;
-    if u.array_len > 1 {
-        let n = u16::from(u.array_len);
-        let fits = match u.gl_type as u32 {
-            crate::gl::consts::GL_FLOAT_VEC4 => u.dwords == 4 * n,
-            GL_FLOAT => u.dwords == n,
-            _ => false,
-        };
-        if !fits {
-            return Err(MaliError::UniformArray);
-        }
-        return Ok((u, u.dwords));
-    }
     nir::uniform_of(m, dword)
 }
 
@@ -6907,15 +6960,11 @@ pub fn uniform_extent<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::Uniform
 /// NIR shrinks away are taken off at the selection ([`shrink_uniforms`]).
 fn uniform_load(m: &Module<'_>, dword: u16) -> Result<(u16, u16), MaliError> {
     let (u, total) = uniform_extent(m, dword)?;
-    /* a highp float array: no reference (its element is one dword) */
-    if u.array_len > 1 && u.gl_type as u32 == GL_FLOAT {
-        return Err(MaliError::UniformArray);
+    /* an array's element ([`nir::element_load`]) */
+    if let Some(load) = nir::element_load(u, dword) {
+        return Ok(load);
     }
-    Ok(if total == 16 || u.array_len > 1 {
-        (u.dword_off + (dword - u.dword_off) / 4 * 4, 4)
-    } else {
-        (u.dword_off, total)
-    })
+    Ok(if total == 16 { (u.dword_off + (dword - u.dword_off) / 4 * 4, 4) } else { (u.dword_off, total) })
 }
 
 /// `nir_opt_shrink_vectors` for the uniform loads of a highp shader: each
@@ -7675,6 +7724,10 @@ enum Leaf {
     /// Read `k` of a float array at a run-time index ([`Fs::ubo_idx`]):
     /// `LD_PKA.i16`'s half, one lane ([`Pairs::scalar`]).
     UboHalf(u8),
+    /// Word `h` of read `k` of a vec2, vec3 or vec4 array read more than once
+    /// ([`Fs::ubo_word`]): the loaded register, a lane pair (or a vec3's z
+    /// alone, [`Pairs::scalar`]).
+    UboWord(u8, u8),
     /// One 16-bit lane and 0.0 as a word: `MKVEC.v2i16 x, #0`, which
     /// bi_lower_mkvec_swz makes `U16_TO_U32 x` (case108_uniidx's red and
     /// green): node `x` a lane alone ([`Pairs::scalar`]).
@@ -7786,7 +7839,7 @@ impl Pairs {
             P::Leaf(Leaf::Mk { .. } | Leaf::Lanes { .. }) => Form::Mk,
             P::Leaf(Leaf::Uniform { .. }) => Form::Uniform,
             P::Leaf(Leaf::Tex(..) | Leaf::TexLane(..) | Leaf::TexSwapped(..)) => Form::Tex,
-            P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_)) => Form::Ubo,
+            P::Leaf(Leaf::Ubo(_) | Leaf::UboLane(_) | Leaf::UboHalf(_) | Leaf::UboWord(..)) => Form::Ubo,
             /* `MKVEC.v2i16 x, #0`: a lane and a constant half */
             P::Leaf(Leaf::Zext(_) | Leaf::Lane { .. } | Leaf::Pack { .. }) => Form::Mk,
             /* `MKVEC.v2i16 x, y` of the position's two halves, or one of
@@ -7849,6 +7902,20 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
          * `vec2(x, 0.0)` (case108_uniidx, uniarray_b) */
         (Some((Alu::Fadd, _)) | None, _) if b == Val::Const(0) && sum_of_reads(f, a) => {
             P::Leaf(Leaf::Zext(scalar(f, pr, a, pair)?))
+        }
+        /* the same of a vec3 array's z and another constant: the constant's
+         * half packed (deqp_uniarray_dyn_vec3_fs: `FADD.v2f16 r2, r5^.h00,
+         * r3^.h00` per read, then `MKVEC.v2i16 r1, r1^.h0, u4.w0.h0`) */
+        (Some((Alu::Fadd, _)) | None, _) if matches!(b, Val::Const(_)) && f.ubo_word_tree(a) => {
+            let Val::Const(c) = b else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let x = scalar(f, pr, a, pair)?;
+            P::Leaf(Leaf::Lane { x, half: f16(c)? })
+        }
+        /* a vec2, vec3 or vec4 array element's word read at a run-time
+         * index more than once ([`Leaf::UboWord`]) */
+        _ if f.ubo_word(a, Some(b)).is_some() => {
+            let (k, h) = f.ubo_word(a, Some(b)).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            P::Leaf(Leaf::UboWord(k, h))
         }
         /* a lane computed by `sin`, `cos` or `log2` (or read by a product
          * of one) and another computed lane: each lane alone, the word
@@ -8430,7 +8497,7 @@ fn sum_of_reads(f: &Fs<'_>, v: Val) -> bool {
     match f.alu_of(v) {
         Some((Alu::Fadd, s)) => s[..2].iter().all(|&x| sum_of_reads(f, x)),
         Some(_) => false,
-        None => f.ubo_read(v).is_some(),
+        None => f.ubo_read(v).is_some() || f.ubo_word(v, None).is_some(),
     }
 }
 
@@ -8445,6 +8512,10 @@ fn scalar(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8) -> Result<u8, MaliError>
             P::Op(Alu::Fadd, [x, y, 0])
         }
         (None, Some(k)) => P::Leaf(Leaf::UboHalf(k)),
+        (None, None) => match f.ubo_word(v, None) {
+            Some((k, h)) => P::Leaf(Leaf::UboWord(k, h)),
+            None => return Err(MaliError::ColourForm),
+        },
         _ => return Err(MaliError::ColourForm),
     };
     let x = pr.push(p, place)?;
@@ -8546,13 +8617,24 @@ fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
     /* `vec2(x, 0.0)` is `U16_TO_U32 x` ([`Leaf::Zext`]): drawn for a tree
      * of [`vec_tree`]'s forms (fsvec_length_mediump's `U16_TO_U32 r0,
      * r0^.h0` of the length), for no other */
-    if half == 0 && !vec_tree(f, a) {
+    if half == 0 && !vec_tree(f, a) && !uniform_sum(f, a) {
         return Err(MaliError::ColourZeroHalf);
     }
     pr.hint = Some(2 * pair as usize);
     let x = lane_tree(f, pr, a, pair, ubo)?;
     let leaf = if half == 0 { Leaf::Zext(x) } else { Leaf::Lane { x, half } };
     pr.push(P::Leaf(leaf), (f.key(a), pair)).map(Some)
+}
+
+/// Lane `v` is a sum of uniform components with no constant
+/// (deqp_uniarray_float_const_fs's `u_arr[0] + .. + u_arr[3]`, then
+/// `U16_TO_U32 r0, r0^.h0` beside the colour's 0.0).
+fn uniform_sum(f: &Fs<'_>, v: Val) -> bool {
+    match f.alu_of(v) {
+        Some((Alu::Fadd, s)) => uniform_sum(f, s[0]) && uniform_sum(f, s[1]),
+        Some(_) => false,
+        None => f.uniform_dword(v).is_some(),
+    }
 }
 
 /// Lane `v` is sums and products of fp16 texels and constants, with a
@@ -9499,7 +9581,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * reader (`nir_opt_move` of `load_ubo`, bifrost_nir.c; case108_uniidx:
      * the offsets of the first two reads, then both loads, then their sum) */
     for k in 0..f.nubo.min(MAX_UBO_READS) {
-        let read = |i: usize| pr.nodes[i] == P::Leaf(Leaf::UboHalf(k as u8));
+        let read = |i: usize| match pr.nodes[i] {
+            P::Leaf(Leaf::UboHalf(r) | Leaf::UboWord(r, _)) => r == k as u8,
+            _ => false,
+        };
         if vec4 || !(0..pr.n).any(|i| live[i] && read(i)) {
             continue;
         }
@@ -9671,7 +9756,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             }
             UBO if vec4 => ubo_load(p, f, &mut lv, &mut rows)?,
             OFFSET => ubo_offset(p, f, x as usize, &mut lv, &mut rows)?,
-            UBO => ubo_fetch(p, x as usize, &mut lv)?,
+            UBO => ubo_fetch(p, f, x as usize, &mut lv)?,
             /* `demote_if`: `DISCARD.b32` of the 16-bit mask's low half
              * (bifrost_compile.c:1979-1987), fused by opt.rs */
             DISCARD => {
@@ -9754,7 +9839,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                  * `ATEST`, then `LD_PKA.i16`, then `U16_TO_U32`) */
                 if let P::Leaf(Leaf::UboHalf(r)) = pr.nodes[x as usize] {
                     if lv.ubo_half.get(r as usize).copied().flatten().is_none() {
-                        ubo_fetch(p, r as usize, &mut lv)?;
+                        ubo_fetch(p, f, r as usize, &mut lv)?;
                     }
                 }
                 let s = [operand(&pr, x, &lv, &val)?];
@@ -12177,8 +12262,11 @@ fn ubo_offset(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves, rows: &mu
     let defect = MaliError::Defect(Defect::IrIndex);
     let n = *f.ubo_idx.get(k).ok_or(defect)?;
     let nd = f.nir.nodes[n as usize];
-    let Kind::UniformIdx { dword, comps: 1 } = nd.kind else { return Err(defect) };
+    let Kind::UniformIdx { dword, comps } = nd.kind else { return Err(defect) };
     let base = lv.ubo.word(dword).ok_or(defect)?;
+    /* an fp16 element of one or two lanes is a word, of three or four two
+     * (`LSHIFT_OR.i32 r1, u2.w0, r0.b33, 0x0`, deqp_uniarray_dyn_vec4_fs) */
+    let shift = if comps <= 2 { 2 } else { 3 };
     let idx = match nd.src[0] {
         Val::Lane(i, 0) => match f.nir.nodes[i as usize].kind {
             Kind::Uniform { dword: d, .. } => Src::of(Idx::Ubo { base: lv.ubo.word(d).ok_or(defect)?, comp: 0 }),
@@ -12186,7 +12274,7 @@ fn ubo_offset(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves, rows: &mu
         },
         _ => return Err(MaliError::UniformIndexed),
     };
-    let mut off = row(p, rows, Row { op: Alu::Ishl, bits: 32, width: 1 }, &[idx, Src::of(Idx::Const(2))])?;
+    let mut off = row(p, rows, Row { op: Alu::Ishl, bits: 32, width: 1 }, &[idx, Src::of(Idx::Const(shift))])?;
     if base > 0 {
         let s = [Src::of(Idx::Const(4 * u32::from(base))), Src::ssa(off)];
         off = row(p, rows, Row { op: Alu::Iadd, bits: 32, width: 1 }, &s)?;
@@ -12197,9 +12285,24 @@ fn ubo_offset(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves, rows: &mu
 
 /// Float array read `k`'s load at its offset ([`ubo_offset`]): `LD_PKA.i16`
 /// of UBO 0, the element's fp16 half into the low half of a register.
-fn ubo_fetch(p: &mut Prog<'_>, k: usize, lv: &mut Leaves) -> Result<(), MaliError> {
+fn ubo_fetch(p: &mut Prog<'_>, f: &Fs<'_>, k: usize, lv: &mut Leaves) -> Result<(), MaliError> {
     let off = lv.ubo_off.get(k).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?;
-    lv.ubo_half[k] = Some(alu(p, Op::LdPka { words: 1, half: true }, &[Src::ssa(off), Src::of(Idx::Const(0))])?);
+    let comps = f.ubo_idx.get(k).map_or(1, |&n| f.ubo_comps(n));
+    let s = [Src::ssa(off), Src::of(Idx::Const(0))];
+    match comps {
+        1 => lv.ubo_half[k] = Some(alu(p, Op::LdPka { words: 1, half: true }, &s)?),
+        /* a vec2's fp16 pair, `LD_PKA.i32`; a vec3's six bytes, `LD_PKA.i48`
+         * (two registers, the z in the second's low half); a vec4's eight,
+         * `LD_PKA.i64` (deqp_uniarray_dyn_vec{2,3,4}_fs) */
+        2 => lv.ubo_lanes[k][0] = Some(alu(p, Op::LdPka { words: 1, half: false }, &s)?),
+        3 | 4 => {
+            let ld = alu(p, Op::LdPka { words: 2, half: comps == 3 }, &s)?;
+            let w = split(p, ld, 2)?;
+            lv.ubo_lanes[k][0] = Some(w[0]);
+            lv.ubo_lanes[k][1] = Some(w[1]);
+        }
+        _ => return Err(MaliError::Defect(Defect::IrIndex)),
+    }
     Ok(())
 }
 
@@ -12500,6 +12603,10 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
         }
         P::Leaf(Leaf::UboHalf(k)) => {
             Src::ssa(lv.ubo_half.get(k as usize).copied().flatten().ok_or(MaliError::Defect(Defect::IrIndex))?)
+        }
+        P::Leaf(Leaf::UboWord(k, h)) => {
+            let w = lv.ubo_lanes.get(k as usize).and_then(|w| w.get(h as usize)).copied().flatten();
+            Src::ssa(w.ok_or(MaliError::Defect(Defect::IrIndex))?)
         }
         P::Leaf(Leaf::TexLane(j, c)) => {
             let w = lv.tex.get(j as usize).and_then(|w| w[(c as usize / 2) & 3]);

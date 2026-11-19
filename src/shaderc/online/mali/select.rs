@@ -386,10 +386,20 @@ impl UboLayout {
         comps: u16,
         halves: bool,
     ) -> Result<(), MaliError> {
-        match nir::matrix_cols(u.gl_type) {
-            Some((cols, rows, stride)) if stride != rows => {
+        match (nir::matrix_cols(u.gl_type), nir::array_element(u)) {
+            (Some((cols, rows, stride)), _) if stride != rows => {
                 for c in 0..cols {
                     self.push(u.dword_off + c * stride, rows, halves)?;
+                    self.split_last();
+                }
+            }
+            /* an array whose element does not follow the last one's word:
+             * fp16 (each element from a word of its own, deqp_uniarray_*_const_vs)
+             * or a vec3 the front end pads (an fp32 struct member's, packed
+             * in Mesa's block, deqp_uniarray_struct) */
+            (_, Some((stride, comps))) if halves || stride != comps => {
+                for e in 0..u16::from(u.array_len) {
+                    self.push(u.dword_off + e * stride, comps, halves)?;
                     self.split_last();
                 }
             }
@@ -593,8 +603,10 @@ impl UboLayout {
                 GL_BOOL_VEC3 | GL_INT_VEC3 if u.array_len <= 1 => (3, false),
                 GL_BOOL_VEC4 | GL_INT_VEC4 if u.array_len <= 1 => (4, false),
                 GL_FLOAT => (1, true),
-                GL_FLOAT_VEC2 if u.array_len <= 1 => (2, true),
-                GL_FLOAT_VEC3 if u.array_len <= 1 => (3, true),
+                /* an array of them too, one element from a word of its own
+                 * (deqp_uniarray_vec2_const_fs, vec3_const_fs) */
+                GL_FLOAT_VEC2 => (2, true),
+                GL_FLOAT_VEC3 => (3, true),
                 GL_FLOAT_VEC4 => (4, true),
                 /* a mat4: its columns in order as halves, each column a
                  * load of its own (gm2_fsarith_1's `nm`: `FMA.v2f16 r2,
@@ -614,19 +626,27 @@ impl UboLayout {
              * fshighp_color's `V2F32_TO_V2F16 r0, u2.w0, u2.w1`); an array
              * of one has no reference */
             let halves = if halves && highp(u.name) {
-                if u.array_len > 1 {
+                /* a struct member's array is fp32 ([`UboLayout::push_uniform`],
+                 * deqp_uniarray_struct_member_fs); a highp one has no reference */
+                if u.array_len > 1 && !u.name.contains('.') {
                     return Err(MaliError::FsUniform);
                 }
                 false
             } else {
                 halves
             };
-            if is_matrix(u.gl_type) {
-                l.push_uniform(u, comps, halves)?;
+            if is_matrix(u.gl_type) || (u.array_len > 1 && !halves) {
+                l.push_uniform(
+                    u,
+                    if halves { comps } else { super::nir_fs::uniform_extent(m, u.dword_off)?.1 },
+                    halves,
+                )?;
                 continue;
             }
+            /* the element's front-end stride: a vec3's is 4 */
+            let stride = nir::array_element(u).map_or(comps, |(s, _)| s);
             for e in 0..u16::from(u.array_len.max(1)) {
-                l.push(u.dword_off + e * comps, comps, halves)?;
+                l.push(u.dword_off + e * stride, comps, halves)?;
                 /* as the other two layouts mark them */
                 if u.array_len > 1 || is_matrix(u.gl_type) {
                     l.split_last();

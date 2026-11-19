@@ -24,7 +24,7 @@
 10 bump:bump-render=normals vs 51d0: ok
 11 bump:bump-render=height fs 77c5: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
 11 bump:bump-render=height vs 270a: ok
-12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
+12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; fs 3c3d: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 12 effect2d:kernel=0,1,0;1,-4,1;0,1,0; vs 4623: ok
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; fs ba8e: Valhall: a shader with more than 32 local variables is not lowered yet
 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; vs 4623: ok
@@ -59,7 +59,7 @@
 21 jellyfish vs 08a2: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 21 jellyfish vs 14ac: ok
 22 terrain fs 1637: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet
-22 terrain fs 4d26: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lowered yet
+22 terrain fs 4d26: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 22 terrain fs 895a: ok
 22 terrain fs 8c86: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
 22 terrain fs bbba: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet

@@ -1180,10 +1180,15 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; varying vec2 a2; void main() { const vec2 z = vec2(-0.0); gl_FragColor = vec4(z.x == a2.x ? 1.0 : 0.25, a2.y == z.y ? 1.0 : 0.5, 0.0, 1.0); }", MaliError::NegZeroShared),
         /* an int uniform read as a value (a mat2 is deqp_unitype_vsmat2_highp's) */
         (VS, "uniform int i; attribute vec4 p; void main(){ gl_Position = p * float(i); }", MaliError::UniformType),
-        (VS, "uniform vec3 u[2]; void main(){ gl_Position = vec4(u[1], 1.0); }", MaliError::UniformArray),
-        /* an fp16 uniform that is an array (a plain one is case 19's,
-         * the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1) */
-        (VS, "uniform mediump vec4 u[2]; void main(){ gl_Position = u[1]; }", MaliError::UniformPrecision),
+        (VS, "uniform mat2 u[2]; void main(){ gl_Position = vec4(u[1][0], 0.0, 1.0); }", MaliError::UniformArray),
+        /* an fp16 uniform array read at a run-time index (a plain one is
+         * case 19's, the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1;
+         * one at constant indices deqp_uniarray_*_const_vs's) */
+        (
+            VS,
+            "uniform mediump vec4 u[2]; uniform highp int i; void main(){ gl_Position = u[i]; }",
+            MaliError::UniformPrecision,
+        ),
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
@@ -1197,9 +1202,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
          * (a uniform first in a product is case 166's, unitype_166a) */
         (FS, "precision mediump float; varying vec4 v; varying vec4 w; void main(){ gl_FragColor = v + abs(w); }", MaliError::FsOperandForm),
         /* a run-time index into an array that does not start the block
-         * (its byte offset would add the base), and a second such read */
+         * (its byte offset would add the base), and reads of two array
+         * types (several reads of one are deqp_uniarray_dyn_*_fs's) */
         (FS, "precision mediump float; uniform int i; uniform vec4 u[2]; void main(){ gl_FragColor = u[i]; }", MaliError::UniformIndexed),
-        (FS, "precision mediump float; uniform vec4 u[2]; uniform int i; uniform int j; void main(){ gl_FragColor = u[i] + u[j]; }", MaliError::UniformIndexed),
+        (FS, "precision mediump float; uniform vec4 u[2]; uniform vec2 w[2]; uniform int i; void main(){ gl_FragColor = u[i] + w[i].xyxy; }", MaliError::UniformIndexed),
         /* a mediump varying of a highp shader is an fp16 load; a highp
          * varying's sum in a mediump shader is fp32; a mediump local of a
          * highp shader is fp16 */
@@ -4789,6 +4795,10 @@ fn the_fragment_productions_are_the_references() {
      * (`Mk` at `FmaA`), and `vec2(fneg(x), 0.0)`'s product by (-1.0, 1.0)
      * (plan #377, constop) */
     fs.extend([td!("deqp_constop_op_abs_mediump_float_fs.frag"), td!("deqp_constop_op_minus_lowp_float_fs.frag")]);
+    /* dEQP's `res += u_arr[k]` over a mediump vec4 array: the running sum
+     * first (`Op` at `AddA`), and two elements read at run-time indices
+     * summed (`Ubo` at `AddB`) (plan #377, uniarray) */
+    fs.extend([td!("deqp_uniarray_vec4_const_fs.frag"), td!("deqp_uniarray_dyn_vec4_fs.frag")]);
     /* built for their vertex shaders' link constants and equal lanes: one
      * lane in both halves of an output word (gm2_arithconst_3's three
      * equal colour lanes) */
