@@ -738,20 +738,12 @@ fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: u32, s: [i32; 4], d: [i32; 4]
     release(&[sfb, dfb], &[tex], &[rb]);
 }
 
+/// Depth into a texture's face or layer needs only `depth_resolve` (the GL
+/// core writes the texels), so the Mali's own table copies it: lifted by
+/// item layers-unignore-backends.
 #[test]
-fn depth_into_a_cube_face_is_refused_today() {
-    let _g = context_mali();
-    for fmt in [D24, D32F] {
-        into_layer(Layered::Cube, fmt, FACE_PX, 8, WHOLE, WHOLE, true);
-        into_layer(Layered::Cube, fmt, FACE_NZ, 4, [0, 0, 4, 4], WHOLE, true);
-    }
-    still_usable();
-}
-
-#[test]
-#[ignore = "needs gl-ds-layers and Mali ds_write/stencil_resolve"]
 fn depth_into_a_cube_face_changes_only_that_face() {
-    let _g = context_lifted();
+    let _g = context_mali();
     for fmt in [D24, D32F] {
         into_layer(Layered::Cube, fmt, FACE_PX, 8, WHOLE, WHOLE, false);
         into_layer(Layered::Cube, fmt, FACE_NZ, 4, [0, 0, 4, 4], WHOLE, false);
@@ -760,19 +752,8 @@ fn depth_into_a_cube_face_changes_only_that_face() {
 }
 
 #[test]
-fn depth_into_an_array_layer_is_refused_today() {
-    let _g = context_mali();
-    for fmt in [D24, D32F] {
-        into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE, true);
-        into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE, true);
-    }
-    still_usable();
-}
-
-#[test]
-#[ignore = "needs gl-ds-layers and Mali ds_write/stencil_resolve"]
 fn depth_into_an_array_layer_changes_only_that_layer() {
-    let _g = context_lifted();
+    let _g = context_mali();
     for fmt in [D24, D32F] {
         into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE, false);
         into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE, false);

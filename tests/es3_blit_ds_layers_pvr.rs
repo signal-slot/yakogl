@@ -29,15 +29,11 @@
 //! id; the GL core copies it through those entries (item gl-ds-layers), and
 //! `stencil_goes_through_a_texture_and_back` pins that.
 //!
-//! Each depth shape is a pair. `..._is_refused_today` pins the answer of
-//! today's code (src/gl/blit.rs REFUSED_DEPTH_SRC / REFUSED_DEPTH_DST:
-//! `depth_texels` and `texture::resolve_depth` take GL_TEXTURE_2D only):
-//! exactly one GL_INVALID_OPERATION, the destination (texels and planes)
-//! unchanged, the context usable afterwards. Its
-//! `#[ignore = "needs gl-ds-layers-core"]` twin
-//! holds what a working blit leaves, from the nearest-sample model of
-//! tests/es3_blit_ds_layers.rs (written apart from the code); it fails today
-//! and is the target of the item that lifts the refusal. Depth is a 24-bit
+//! The GL core copies depth from and into a face or layer through those
+//! texels (src/gl/blit.rs `depth_texels` with `texture::image_off`, item
+//! layers-unignore-backends). Each depth shape is compared with what a
+//! working blit leaves, from the nearest-sample model of
+//! tests/es3_blit_ds_layers.rs (written apart from the code). Depth is a 24-bit
 //! word `n / 16777215` on the PowerVR (also for DEPTH_COMPONENT32F, one D24S8
 //! buffer); the model works in the integer `n`, exact in f32, and every
 //! compare is on that integer.
@@ -48,9 +44,8 @@
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_blit_ds_layers_pvr
 //! ```
 //!
-//! (the feature set of tests/es3_blit_ds_window_pvr.rs; add `-- --ignored`
-//! for the cases that need gl-ds-layers-core). Not built with `report-es2`
-//! (glBlitFramebuffer is an ES 3.0 call).
+//! (the feature set of tests/es3_blit_ds_window_pvr.rs). Not built with
+//! `report-es2` (glBlitFramebuffer is an ES 3.0 call).
 
 #![cfg(all(
     feature = "host-test",
@@ -1003,14 +998,6 @@ fn src_depth(x: u32, y: u32) -> f32 {
     (700_000 + (y * 16 + x) * 811) as f32
 }
 
-/// Blit once and require today's answer: exactly one GL_INVALID_OPERATION.
-fn refused(s: [i32; 4], d: [i32; 4], mask: GLbitfield, what: &str) {
-    // SAFETY: plain GL call.
-    unsafe { glBlitFramebuffer(s[0], s[1], s[2], s[3], d[0], d[1], d[2], d[3], mask, GL_NEAREST) };
-    assert_eq!(err(), GL_INVALID_OPERATION, "{what}: {:?}", logs());
-    assert_eq!(err(), GL_NO_ERROR, "{what}: exactly one error");
-}
-
 fn blit_ok(s: [i32; 4], d: [i32; 4], mask: GLbitfield, what: &str) {
     // SAFETY: plain GL call.
     unsafe { glBlitFramebuffer(s[0], s[1], s[2], s[3], d[0], d[1], d[2], d[3], mask, GL_NEAREST) };
@@ -1019,30 +1006,15 @@ fn blit_ok(s: [i32; 4], d: [i32; 4], mask: GLbitfield, what: &str) {
     unsafe { glFinish() };
 }
 
-/// The context still blits after a refusal: depth between two D24S8
-/// renderbuffers (the case of tests/es3_blit_ds_pvr.rs) copies.
-fn still_usable() {
-    let (fa, ra) = rb_fbo(GL_DEPTH24_STENCIL8, 4, 4);
-    let (fb, rb) = rb_fbo(GL_DEPTH24_STENCIL8, 4, 4);
-    let (ia, ib) = (ds_id(ra), ds_id(rb));
-    write_plane(ia, D, 4, 4, &src_depth);
-    write_plane(ib, D, 4, 4, &rb_depth);
-    bind(fa, fb);
-    blit_ok([0, 0, 4, 4], [0, 0, 4, 4], DEPTH, "the context after a refusal");
-    assert_eq!(read_plane(ib, D, 4, 4), filled(&src_depth, 4, 4));
-    release(&[fa, fb], &[ra, rb]);
-}
-
 /* ---- (1)/(2) depth from a cube face or an array layer ------------------------------- */
 
 const SIDE: u32 = 8;
 const WHOLE: [i32; 4] = [0, 0, SIDE as i32, SIDE as i32];
 
 /// Layer/face `k` of a `kind` depth texture of `fmt`, blitted `s` -> `d` into
-/// a `dz` x `dz` renderbuffer of the same format. `refused_today` pins the
-/// refusal and the renderbuffer's plane as it was; otherwise it is compared
-/// with the model. The texture is read only either way.
-fn from_layer(kind: Layered, fmt: Fmt, k: u32, dz: u32, s: [i32; 4], d: [i32; 4], refused_today: bool) {
+/// a `dz` x `dz` renderbuffer of the same format, whose plane is compared
+/// with the model. The texture is read only.
+fn from_layer(kind: Layered, fmt: Fmt, k: u32, dz: u32, s: [i32; 4], d: [i32; 4]) {
     let (dfb, rb) = rb_fbo(fmt.0, dz, dz);
     let rid = ds_id(rb);
     write_plane(rid, D, dz, dz, &rb_depth);
@@ -1050,15 +1022,10 @@ fn from_layer(kind: Layered, fmt: Fmt, k: u32, dz: u32, s: [i32; 4], d: [i32; 4]
     let sfb = layer_attachment_fbo(kind, tex, k);
     bind(sfb, dfb);
     let what = format!("{kind:?} {:#x} layer {k}: {s:?} -> {d:?}", fmt.0);
-    if refused_today {
-        refused(s, d, DEPTH, &what);
-        assert_eq!(read_plane(rid, D, dz, dz), filled(&rb_depth, dz, dz), "{what}: the destination is unchanged");
-    } else {
-        blit_ok(s, d, DEPTH, &what);
-        let src = |x, y| layer_depth(k, x, y);
-        let want = model(&src, (SIDE, SIDE), &rb_depth, (dz, dz), s, d);
-        assert_eq!(read_plane(rid, D, dz, dz), want, "{what}");
-    }
+    blit_ok(s, d, DEPTH, &what);
+    let src = |x, y| layer_depth(k, x, y);
+    let want = model(&src, (SIDE, SIDE), &rb_depth, (dz, dz), s, d);
+    assert_eq!(read_plane(rid, D, dz, dz), want, "{what}");
     for l in 0..layers_of(kind) {
         let want = filled(&|x, y| layer_depth(l, x, y), SIDE, SIDE);
         assert_eq!(layer_picture(tex, l, SIDE), want, "{what}: layer {l} of the source is untouched");
@@ -1066,63 +1033,33 @@ fn from_layer(kind: Layered, fmt: Fmt, k: u32, dz: u32, s: [i32; 4], d: [i32; 4]
     release_all(&[sfb, dfb], &[tex], &[rb]);
 }
 
-/// Faces +X and -Z of a D24 and a D32F cube, 1:1 and scaled up and down.
-#[test]
-fn depth_from_a_cube_face_is_refused_today() {
-    let _g = rig();
-    for fmt in [D24, D32F] {
-        for face in [FACE_PX, FACE_NZ] {
-            from_layer(Layered::Cube, fmt, face, 8, WHOLE, WHOLE, true);
-            from_layer(Layered::Cube, fmt, face, 16, WHOLE, [0, 0, 16, 16], true);
-            from_layer(Layered::Cube, fmt, face, 4, WHOLE, [0, 0, 4, 4], true);
-        }
-    }
-    still_usable();
-}
-
 /// The face's depth lands in the renderbuffer: 1:1, scaled up, scaled down
 /// and a flipped sub-rectangle (expected: the nearest-sample model of the
 /// face's own ramp, `layer_depth(face, x, y)`).
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn depth_from_a_cube_face_copies_that_face() {
     let _g = rig();
     for fmt in [D24, D32F] {
         for face in [FACE_PX, FACE_NZ] {
-            from_layer(Layered::Cube, fmt, face, 8, WHOLE, WHOLE, false);
-            from_layer(Layered::Cube, fmt, face, 16, WHOLE, [0, 0, 16, 16], false);
-            from_layer(Layered::Cube, fmt, face, 4, WHOLE, [0, 0, 4, 4], false);
-            from_layer(Layered::Cube, fmt, face, 8, [1, 2, 6, 7], [2, 1, 7, 6], false);
+            from_layer(Layered::Cube, fmt, face, 8, WHOLE, WHOLE);
+            from_layer(Layered::Cube, fmt, face, 16, WHOLE, [0, 0, 16, 16]);
+            from_layer(Layered::Cube, fmt, face, 4, WHOLE, [0, 0, 4, 4]);
+            from_layer(Layered::Cube, fmt, face, 8, [1, 2, 6, 7], [2, 1, 7, 6]);
         }
     }
-}
-
-/// Layers 0 and 2 of a depth array, 1:1 and scaled.
-#[test]
-fn depth_from_an_array_layer_is_refused_today() {
-    let _g = rig();
-    for fmt in [D24, D32F] {
-        for layer in [0, 2] {
-            from_layer(Layered::Array, fmt, layer, 8, WHOLE, WHOLE, true);
-            from_layer(Layered::Array, fmt, layer, 16, WHOLE, [0, 0, 16, 16], true);
-            from_layer(Layered::Array, fmt, layer, 4, WHOLE, [0, 0, 4, 4], true);
-        }
-    }
-    still_usable();
 }
 
 /// As the cube twin, for layers 0 and 2 (expected: `layer_depth(layer, x, y)`
 /// through the model).
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn depth_from_an_array_layer_copies_that_layer() {
     let _g = rig();
     for fmt in [D24, D32F] {
         for layer in [0, 2] {
-            from_layer(Layered::Array, fmt, layer, 8, WHOLE, WHOLE, false);
-            from_layer(Layered::Array, fmt, layer, 16, WHOLE, [0, 0, 16, 16], false);
-            from_layer(Layered::Array, fmt, layer, 4, WHOLE, [0, 0, 4, 4], false);
-            from_layer(Layered::Array, fmt, layer, 8, [1, 2, 6, 7], [2, 1, 7, 6], false);
+            from_layer(Layered::Array, fmt, layer, 8, WHOLE, WHOLE);
+            from_layer(Layered::Array, fmt, layer, 16, WHOLE, [0, 0, 16, 16]);
+            from_layer(Layered::Array, fmt, layer, 4, WHOLE, [0, 0, 4, 4]);
+            from_layer(Layered::Array, fmt, layer, 8, [1, 2, 6, 7], [2, 1, 7, 6]);
         }
     }
 }
@@ -1131,9 +1068,9 @@ fn depth_from_an_array_layer_copies_that_layer() {
 
 /// A `sz` x `sz` renderbuffer of `fmt` (depth `src_depth`) blitted `s` -> `d`
 /// into layer/face `k` of a `kind` texture. The layer takes the model's
-/// picture when the blit works and stays as it was when it is refused; every
-/// other layer stays either way, and so does the source's plane.
-fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: u32, s: [i32; 4], d: [i32; 4], refused_today: bool) {
+/// picture; every other layer stays as it was, and so does the source's
+/// plane.
+fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: u32, s: [i32; 4], d: [i32; 4]) {
     let (sfb, rb) = rb_fbo(fmt.0, sz, sz);
     let rid = ds_id(rb);
     write_plane(rid, D, sz, sz, &src_depth);
@@ -1142,13 +1079,8 @@ fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: u32, s: [i32; 4], d: [i32; 4]
     bind(sfb, dfb);
     let what = format!("{kind:?} {:#x} into layer {k}: {s:?} -> {d:?}", fmt.0);
     let keep = |x, y| layer_depth(k, x, y);
-    let want_k = if refused_today {
-        refused(s, d, DEPTH, &what);
-        filled(&keep, SIDE, SIDE)
-    } else {
-        blit_ok(s, d, DEPTH, &what);
-        model(&src_depth, (sz, sz), &keep, (SIDE, SIDE), s, d)
-    };
+    blit_ok(s, d, DEPTH, &what);
+    let want_k = model(&src_depth, (sz, sz), &keep, (SIDE, SIDE), s, d);
     assert_eq!(layer_picture(tex, k, SIDE), want_k, "{what}: the layer");
     for l in (0..layers_of(kind)).filter(|&l| l != k) {
         let want = filled(&|x, y| layer_depth(l, x, y), SIDE, SIDE);
@@ -1158,48 +1090,26 @@ fn into_layer(kind: Layered, fmt: Fmt, k: u32, sz: u32, s: [i32; 4], d: [i32; 4]
     release_all(&[sfb, dfb], &[tex], &[rb]);
 }
 
-#[test]
-fn depth_into_a_cube_face_is_refused_today() {
-    let _g = rig();
-    for fmt in [D24, D32F] {
-        into_layer(Layered::Cube, fmt, FACE_PX, 8, WHOLE, WHOLE, true);
-        into_layer(Layered::Cube, fmt, FACE_NZ, 4, [0, 0, 4, 4], WHOLE, true);
-    }
-    still_usable();
-}
-
 /// Face +X takes the whole 8 x 8 renderbuffer, face -Z the 4 x 4 one scaled
 /// up, face +Y a 2..6 sub-rectangle; the other five faces keep their ramps.
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn depth_into_a_cube_face_changes_only_that_face() {
     let _g = rig();
     for fmt in [D24, D32F] {
-        into_layer(Layered::Cube, fmt, FACE_PX, 8, WHOLE, WHOLE, false);
-        into_layer(Layered::Cube, fmt, FACE_NZ, 4, [0, 0, 4, 4], WHOLE, false);
-        into_layer(Layered::Cube, fmt, 2, 8, [0, 0, 8, 8], [2, 2, 6, 6], false);
+        into_layer(Layered::Cube, fmt, FACE_PX, 8, WHOLE, WHOLE);
+        into_layer(Layered::Cube, fmt, FACE_NZ, 4, [0, 0, 4, 4], WHOLE);
+        into_layer(Layered::Cube, fmt, 2, 8, [0, 0, 8, 8], [2, 2, 6, 6]);
     }
-}
-
-#[test]
-fn depth_into_an_array_layer_is_refused_today() {
-    let _g = rig();
-    for fmt in [D24, D32F] {
-        into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE, true);
-        into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE, true);
-    }
-    still_usable();
 }
 
 /// As the cube twin, for layers 0, 2 and 1 of a 3-layer array.
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn depth_into_an_array_layer_changes_only_that_layer() {
     let _g = rig();
     for fmt in [D24, D32F] {
-        into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE, false);
-        into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE, false);
-        into_layer(Layered::Array, fmt, 1, 8, [0, 0, 8, 8], [2, 2, 6, 6], false);
+        into_layer(Layered::Array, fmt, 0, 8, WHOLE, WHOLE);
+        into_layer(Layered::Array, fmt, 2, 4, [0, 0, 4, 4], WHOLE);
+        into_layer(Layered::Array, fmt, 1, 8, [0, 0, 8, 8], [2, 2, 6, 6]);
     }
 }
 
