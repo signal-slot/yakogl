@@ -4,23 +4,22 @@
 //! or layers (plan item depth-switch-tests; docs/notes/blit-depth-layers.md,
 //! "What this means today" 1 and 2, and design (b)).
 //!
-//! Today every back end keeps one depth plane per depth texture:
-//! `texture::resolve_depth` writes it into face/layer 0 of the level, and
-//! `texture::depth_seed` seeds only from face/layer 0. Design (b) records the
-//! (level, layer) the plane holds (`depth_image_switch`): a draw into another
-//! face first resolves the old face into its own rows, then seeds the new
-//! face from its rows.
+//! Every back end keeps one depth plane per depth texture. Design (b) (item
+//! gl-ds-layers-core) records the (level, layer) the plane holds
+//! (`texture::depth_image_switch`): a draw into another face first resolves
+//! the old face into its own rows (`texture::resolve_depth` at
+//! `texture::image_off`), then seeds the new face from its rows
+//! (`texture::depth_seed`).
 //!
 //! Two kinds of test:
 //! - plain tests pin what must not change: 2D depth textures resolve and seed
 //!   as before, face/layer 0 of a layered texture resolves into its own rows,
 //!   and a whole-depth clear skips the seed;
-//! - `#[ignore = "needs gl-ds-layers-core"]` tests hold the design (the item
-//!   gl-ds-layers-core removes the ignores): draw face 0 then face 1 (array
-//!   layers 0 then 2) and face 0 gets the back end's depth, the new image is
-//!   seeded from its own rows, a later read sees each image's own depth, and
-//!   a whole-plane clear on the switch draw hands no seed. Run them with
-//!   `-- --ignored`; they fail today.
+//! - the design tests (ignored until gl-ds-layers-core landed it): draw face
+//!   0 then face 1 (array layers 0 then 2) and face 0 gets the back end's
+//!   depth, the new image is seeded from its own rows, a later read sees each
+//!   image's own depth, and a whole-plane clear on the switch draw hands no
+//!   seed.
 //!
 //! The stand-in back end draws nothing. Its `depth_resolve` answers a ramp
 //! that depends on the object id and on how many resolves it has answered
@@ -34,8 +33,7 @@
 //! changes nothing the tests look at.
 //!
 //! Run: `cargo test --features host-test,gpu-powervr --test es3_depth_image_switch`
-//! (a GPU feature is needed to build the crate; add `-- --ignored` for the
-//! design tests).
+//! (a GPU feature is needed to build the crate).
 //!
 //! Not in a `report-es2` build: cube/array depth and glBlitFramebuffer are
 //! ES 3.0 only.
@@ -627,14 +625,12 @@ fn switch_case(kind: Layered, a: u32, b: u32, clear: bool) {
 /// Cube face +X drawn, then -X: +X's rows get the back end's depth, -X's
 /// seed comes from -X's rows, and later each face reads its own depth.
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn drawing_face_1_after_face_0_resolves_face_0_and_seeds_face_1() {
     switch_case(Layered::Cube, 0, 1, false);
 }
 
 /// The same for array layers 0 and 2 (layer 1 between them is not touched).
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn drawing_layer_2_after_layer_0_resolves_layer_0_and_seeds_layer_2() {
     switch_case(Layered::Array, 0, 2, false);
 }
@@ -642,7 +638,6 @@ fn drawing_layer_2_after_layer_0_resolves_layer_0_and_seeds_layer_2() {
 /// A switch draw that clears the whole plane resolves the old image but
 /// hands no seed (the new image's rows are overwritten anyway).
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn a_whole_plane_clear_on_the_switch_draw_hands_no_seed() {
     switch_case(Layered::Cube, 0, 1, true);
     switch_case(Layered::Array, 0, 2, true);
@@ -651,7 +646,6 @@ fn a_whole_plane_clear_on_the_switch_draw_hands_no_seed() {
 /// Switching between faces other than 0 (+Y, then -Z): the plane goes to the
 /// face drawn, never to face 0.
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn a_switch_between_faces_other_than_0_leaves_face_0_alone() {
     switch_case(Layered::Cube, 2, 5, false);
 }
@@ -660,7 +654,6 @@ fn a_switch_between_faces_other_than_0_leaves_face_0_alone() {
 /// the plane into face 1's rows and seeds face 0 from face 0's rows, which
 /// hold the first resolve.
 #[test]
-#[ignore = "needs gl-ds-layers-core"]
 fn switching_back_seeds_from_the_rows_the_first_resolve_wrote() {
     let kind = Layered::Cube;
     let _g = context();

@@ -17,7 +17,7 @@ use core::ffi::c_void;
 use super::consts::*;
 use super::context::{
     self, gl_trace, heap_data, one_wide_level_pitch, pot_level_side, tex_pitch, GlAttachment, GlContext, GlTexture,
-    CAP_COMBINED_TEXTURE_UNITS, CAP_MIP_LEVELS, MAX_TEXTURES, RGBA8_BPP, TEXTURE_SLOTS,
+    CAP_COMBINED_TEXTURE_UNITS, CAP_MIP_LEVELS, MAX_CONTEXTS, MAX_TEXTURES, RGBA8_BPP, TEXTURE_SLOTS,
 };
 use super::es3_formats;
 use super::names::{self, Kind};
@@ -696,6 +696,11 @@ fn stamp_texels(t: &mut GlTexture) {
 /// The other way round, depth the CPU writes into the texels
 /// ([`note_depth_texels_written`]) goes into the backend's buffer with the
 /// next draw that has the texture at its depth attachment ([`depth_seed`]).
+///
+/// The plane holds one image of a cube or array texture: the face or layer
+/// [`DEPTH_LAYER`] recorded for the level drawn, and the resolve writes that
+/// image's rows ([`image_off`]). A draw into another image resolves first
+/// ([`depth_image_switch`]).
 pub(crate) fn resolve_depth(c: &mut GlContext, ti: usize) {
     let kick = framebuffer::texture_target_use(c, ti);
     let target = framebuffer::depth_target(c, ti);
@@ -707,6 +712,7 @@ pub(crate) fn resolve_depth(c: &mut GlContext, ti: usize) {
     if !depth_texture_rendered(t) || level >= t.chain_levels as usize || level >= CAP_MIP_LEVELS {
         return;
     }
+    let layer = depth_layer(c, ti);
     /* that kick alone where the backend can wait for one (the later kicks
      * keep running); a backend without that wait finishes */
     let wait =
@@ -723,14 +729,12 @@ pub(crate) fn resolve_depth(c: &mut GlContext, ti: usize) {
     }
     let (w, h) = ((t.width >> level).max(1), (t.height >> level).max(1));
     let pitch = t.level_pitch_at(level as u32);
-    let off = t.level_off[level] as usize;
-    let bytes = (h as usize - 1) * pitch as usize * 4 + w as usize * 4;
-    if off + bytes > t.mem.size {
-        return;
-    }
+    let bytes = image_bytes(t, level as u32);
+    let Some(off) = image_off(t, level as u32, layer) else { return };
     let dst = (t.mem.cpu as *mut u8).wrapping_add(off);
-    // SAFETY: `dst` is the level's storage, `h` rows of `pitch` floats
-    // (checked against the allocation above); the kicks using it completed.
+    // SAFETY: `dst` is the image's storage, `h` rows of `pitch` floats
+    // (`image_off` checked them against the allocation); the kicks using it
+    // completed.
     let rc = unsafe { backend::depth_resolve(context::ds_object_id(t.serial, true), dst as *mut f32, w, h, pitch) };
     if rc == 0 {
         // SAFETY: the bytes just written, inside the allocation.
@@ -966,8 +970,9 @@ fn note_depth_texels_written(t: &mut GlTexture) {
 /// What a draw whose depth attachment is `a` hands its backend as
 /// `GlesDraw::depth_texels` / `depth_texels_pitch`: the attached level's
 /// texels of a depth texture the CPU wrote since the backend's plane
-/// matched them ([`note_depth_texels_written`]), or (null, 0). The level's
-/// rows are `ds_w` x `ds_h` (draw.rs `ds_identity` sizes the draw by the
+/// matched them ([`note_depth_texels_written`]), or (null, 0). The rows are
+/// those of the attached face or layer of the level (`a.layer`, image 0 of a
+/// 2D texture), `ds_w` x `ds_h` (draw.rs `ds_identity` sizes the draw by the
 /// same level).
 pub(crate) fn depth_seed(c: &GlContext, a: &GlAttachment) -> (*const f32, u32) {
     const NONE: (*const f32, u32) = (core::ptr::null(), 0);
@@ -977,18 +982,129 @@ pub(crate) fn depth_seed(c: &GlContext, a: &GlAttachment) -> (*const f32, u32) {
     let Some(t) = c.texture_ref(a.name).filter(|t| t.depth_texels_newer && depth_texture_rendered(t)) else {
         return NONE;
     };
-    let level = a.level.max(0) as usize;
-    if level >= t.chain_levels as usize || level >= CAP_MIP_LEVELS || t.mem.cpu.is_null() {
+    let level = a.level.max(0) as u32;
+    if t.mem.cpu.is_null() {
         return NONE;
     }
-    let (w, h) = ((t.width >> level).max(1), (t.height >> level).max(1));
-    let pitch = t.level_pitch_at(level as u32);
-    let off = t.level_off[level] as usize;
-    let bytes = (h as usize - 1) * pitch as usize * 4 + w as usize * 4;
-    if pitch < w || off + bytes > t.mem.size {
+    let Some(off) = image_off(t, level, a.layer.max(0) as u32) else { return NONE };
+    let pitch = t.level_pitch_at(level);
+    if pitch < (t.width >> level).max(1) {
         return NONE;
     }
     ((t.mem.cpu as *const u8).wrapping_add(off) as *const f32, pitch)
+}
+
+/// The bytes one image (a face or layer, or the whole level of a 2D texture)
+/// of level `level` of R32F texture `t` spans: `lh` rows of
+/// `level_pitch_at(level)` texels, the last one only as wide as the level.
+fn image_bytes(t: &GlTexture, level: u32) -> usize {
+    let (w, h) = ((t.width >> level).max(1) as usize, (t.height >> level).max(1) as usize);
+    (h - 1) * t.level_pitch_at(level) as usize * 4 + w * 4
+}
+
+/// The byte offset of image `layer` (cube face or array layer; 0 for a 2D
+/// texture) of level `level` of R32F texture `t`: images are stacked inside
+/// the level, image k starting `k * lh` rows below `level_off[level]` (the
+/// layout of the colour path, framebuffer.rs `attachment_storage`, with
+/// 4-byte texels). None when the level or layer is not the texture's, or the
+/// image does not fit the allocation.
+pub(crate) fn image_off(t: &GlTexture, level: u32, layer: u32) -> Option<usize> {
+    let l = level as usize;
+    if l >= t.chain_levels as usize || l >= CAP_MIP_LEVELS || layer >= u32::from(t.layers.max(1)) {
+        return None;
+    }
+    let lh = (t.height >> level).max(1) as usize;
+    let off = t.level_off[l] as usize + layer as usize * lh * t.level_pitch_at(level) as usize * 4;
+    (off.checked_add(image_bytes(t, level))? <= t.mem.size).then_some(off)
+}
+
+/// Per context slot and texture name, for a depth texture a draw renders
+/// depth into: the face or layer of the level [`framebuffer::depth_target`]
+/// records whose depth the backend's plane holds (the backend keeps one
+/// plane per texture, docs/notes/blit-depth-layers.md (b)), with the
+/// storage generation it was recorded for. An entry of another generation
+/// (the storage was specified again) reads as 0, as does a freed texture's
+/// ([`free_texture`]). A table here rather than a field of `DepthTarget`
+/// keeps framebuffer.rs as it is.
+#[derive(Clone, Copy)]
+struct DepthLayer {
+    layer: u16,
+    gen: u32,
+}
+static DEPTH_LAYER: Global<[[DepthLayer; MAX_TEXTURES]; MAX_CONTEXTS]> = Global::zeroed();
+
+fn depth_layer_row(c: &GlContext) -> &'static mut [DepthLayer; MAX_TEXTURES] {
+    // SAFETY: single-threaded by contract; no other reference is live.
+    let rows = unsafe { DEPTH_LAYER.get() };
+    &mut rows[c.index as usize % MAX_CONTEXTS]
+}
+
+/// The face or layer the backend's plane of depth texture `ti` holds.
+fn depth_layer(c: &GlContext, ti: usize) -> u32 {
+    let gen = c.objs_ref().textures.get(ti).map_or(0, |t| t.storage_gen);
+    depth_layer_row(c).get(ti).filter(|e| e.gen == gen).map_or(0, |e| u32::from(e.layer))
+}
+
+/// Forget the face or layer recorded for texture slot `ti` (freed).
+fn forget_depth_layer(c: &GlContext, ti: usize) {
+    if let Some(e) = depth_layer_row(c).get_mut(ti) {
+        *e = DepthLayer { layer: 0, gen: 0 };
+    }
+}
+
+/// The orphan in texture slot `from` moved to slot `to` (glBindTexture of
+/// its name): its recorded face or layer follows it, as its `DepthTarget`
+/// does (framebuffer.rs `orphan_moved`).
+fn depth_layer_moved(c: &GlContext, from: usize, to: usize) {
+    let row = depth_layer_row(c);
+    if from < MAX_TEXTURES && to < MAX_TEXTURES {
+        row[to] = row[from];
+        row[from] = DepthLayer { layer: 0, gen: 0 };
+    }
+}
+
+/// A draw is being recorded with `a`, a depth texture, at its depth
+/// attachment: the backend's plane holds `a`'s face or layer from now on.
+/// Called with `framebuffer::stamp_depth_target`, which records the level.
+pub(crate) fn stamp_depth_layer(c: &GlContext, a: &GlAttachment) {
+    let ti = a.name as usize;
+    if a.type_ != GL_TEXTURE {
+        return;
+    }
+    let gen = c.objs_ref().textures.get(ti).map_or(0, |t| t.storage_gen);
+    if let Some(e) = depth_layer_row(c).get_mut(ti) {
+        *e = DepthLayer { layer: a.layer.clamp(0, u16::MAX as GLint) as u16, gen };
+    }
+}
+
+/// A draw is about to render into image `a` (level, face or layer) of a
+/// depth texture, whose backend plane holds another image of it (the one
+/// [`framebuffer::depth_target`] and [`DEPTH_LAYER`] record): the plane is
+/// resolved into that image's rows first ([`resolve_depth`], which waits
+/// for the kick that drew it, and does nothing when the texels already hold
+/// it), then the texels count as newer than the plane, so the draw seeds the
+/// plane from `a`'s rows ([`depth_seed`]). A draw that clears the whole plane
+/// (`whole_clear`) needs no seed, and none is asked for. Nothing for the
+/// image the plane holds (a 2D texture drawn at one level, as before), for a
+/// texture no draw rendered into yet (its plane holds nothing), or for any
+/// other attachment.
+pub(crate) fn depth_image_switch(c: &mut GlContext, a: &GlAttachment, whole_clear: bool) {
+    let ti = a.name as usize;
+    if a.type_ != GL_TEXTURE || framebuffer::texture_target_use(c, ti) == 0 {
+        return;
+    }
+    if !c.objs_ref().textures.get(ti).is_some_and(depth_texture_rendered) {
+        return;
+    }
+    let held = (u32::from(framebuffer::depth_target(c, ti).level), depth_layer(c, ti));
+    let want = (a.level.clamp(0, u8::MAX as GLint) as u32, a.layer.clamp(0, u16::MAX as GLint) as u32);
+    if held == want {
+        return;
+    }
+    resolve_depth(c, ti);
+    if !whole_clear {
+        note_depth_texels_written(&mut c.objs().textures[ti]);
+    }
 }
 
 /// The backend recorded a draw that carried the texels of the bound draw
@@ -1138,6 +1254,7 @@ pub unsafe extern "C" fn glBindTexture(target: GLenum, texture: GLuint) {
                 let moved = core::mem::replace(&mut objs.textures[texture as usize], unsafe { core::mem::zeroed() });
                 objs.textures[to] = moved;
                 framebuffer::texture_orphan_moved(c, texture, to as GLuint);
+                depth_layer_moved(c, texture as usize, to);
             } else {
                 glog!("texture {}: no free slot for its orphan; the framebuffers follow the name", texture);
                 free_texture(c, texture);
@@ -5502,6 +5619,7 @@ pub(super) fn free_texture(c: &mut GlContext, h: GLuint) {
     context::release_storage(&mut t.mem, &mut t.external);
     zero_texture(t);
     t.max_level = MAX_LEVEL_DEFAULT; /* GL's default is "no clamp" */
+    forget_depth_layer(c, h as usize);
 }
 
 /// glTexImage3D's record of level `level` of a 3D texture, and its storage:
@@ -6698,11 +6816,14 @@ pub unsafe extern "C" fn glTexStorage3D(
     t.level_faces = [0x3f; CAP_MIP_LEVELS];
 }
 
-/// Unit tests: nothing process-global is left here to re-arm (the ES 3.0
-/// "not available" log went with the last entry point that used it);
-/// testutil::TestGl still calls this when it is created and dropped.
+/// Unit tests: forget the faces and layers [`DEPTH_LAYER`] recorded, as
+/// framebuffer.rs forgets its `DepthTarget`s (testutil::TestGl calls this
+/// when it is created and dropped).
 #[cfg(test)]
-pub(crate) fn reset_for_tests() {}
+pub(crate) fn reset_for_tests() {
+    // SAFETY: tests holding a TestGl are serialised.
+    unsafe { *DEPTH_LAYER.get() = [[DepthLayer { layer: 0, gen: 0 }; MAX_TEXTURES]; MAX_CONTEXTS] };
+}
 
 #[cfg(test)]
 mod tests {
@@ -7160,6 +7281,50 @@ mod tests {
         assert_eq!(level_size(&t, 2), (2, 1));
         assert_eq!(level_size(&t, 3), (1, 1));
         assert_eq!(level_size(&t, 12), (1, 1));
+    }
+
+    /// A 4x4 R32F texture of `layers` images and two levels, with exactly
+    /// `size` bytes of storage: level 1 starts after level 0's images.
+    fn stacked_depth(layers: u16, size: usize) -> GlTexture {
+        // SAFETY: GlTexture is valid all-zero (see zero_texture).
+        let mut t: GlTexture = unsafe { core::mem::zeroed() };
+        (t.width, t.height, t.layers, t.chain_levels) = (4, 4, layers, 2);
+        let p0 = t.level_pitch_at(0) as usize;
+        t.level_off[1] = (p0 * 4 * 4 * layers.max(1) as usize) as u32;
+        t.mem.size = size;
+        t
+    }
+
+    #[test]
+    fn image_off_stacks_the_images_of_a_level() {
+        let t = stacked_depth(6, 4096);
+        let (p0, p1) = (t.level_pitch_at(0) as usize, t.level_pitch_at(1) as usize);
+        assert_eq!(image_off(&t, 0, 0), Some(0));
+        assert_eq!(image_off(&t, 0, 5), Some(5 * 4 * p0 * 4), "face 5: five 4-row faces in");
+        let l1 = t.level_off[1] as usize;
+        assert_eq!(image_off(&t, 1, 0), Some(l1));
+        assert_eq!(image_off(&t, 1, 3), Some(l1 + 3 * 2 * p1 * 4), "level 1's faces are 2 rows");
+        /* a 2D texture (layers 0) has image 0 alone */
+        let t = stacked_depth(0, 4096);
+        assert_eq!(image_off(&t, 0, 0), Some(0));
+        assert_eq!(image_off(&t, 0, 1), None);
+    }
+
+    #[test]
+    fn image_off_refuses_what_is_not_the_textures_or_does_not_fit() {
+        let t = stacked_depth(3, 4096);
+        assert_eq!(image_off(&t, 0, 3), None, "layer past the last");
+        assert_eq!(image_off(&t, 2, 0), None, "level past the chain");
+        assert_eq!(image_off(&t, CAP_MIP_LEVELS as u32, 0), None, "level past the store's levels");
+        /* the last layer of level 0 ends (3 rows of pitch, then 4 texels)
+         * after two whole layers: exactly that much storage fits it, one
+         * byte less does not */
+        let p0 = t.level_pitch_at(0) as usize;
+        let end = 2 * 4 * p0 * 4 + 3 * p0 * 4 + 4 * 4;
+        assert_eq!(image_off(&stacked_depth(3, end), 0, 2), Some(2 * 4 * p0 * 4));
+        assert_eq!(image_off(&stacked_depth(3, end - 1), 0, 2), None);
+        assert_eq!(image_off(&stacked_depth(3, end - 1), 0, 1), Some(4 * p0 * 4), "layer 1 still fits");
+        assert_eq!(image_off(&stacked_depth(3, 0), 0, 0), None, "no storage");
     }
 
     #[test]
