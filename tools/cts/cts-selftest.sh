@@ -944,6 +944,26 @@ malicheck 51 mali-deqp-build-selftest.sh 29
 # 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
 malicheck 52 mali-family-tree-selftest.sh 16
 
+# 58: es2-tree-gate.py on synthetic whole-tree records (plan #351): a Pi 4 and
+# an i.MX8MP record that pass, and the Fail, crash, no-result, unaccepted
+# NotSupported, early-end, disagreeing results.tsv and no-console records and
+# a non-record directory that must not. Run isolated like check 41; its
+# "ok" lines are counted, so a case dropped from it turns this red.
+es2gate() { # number, script, ok-line count
+    local out n
+    echo
+    echo "== $1. $2"
+    if out=$(cd "$gl3tmp" && TMPDIR="$gl3tmp" bash "$ROOT/tools/cts/$2" 2>&1) \
+       && ! printf '%s\n' "$out" | grep -Eq '^ *FAIL' \
+       && n=$(printf '%s\n' "$out" | grep -c '^ *ok ') && [ "$n" = "$3" ]; then
+        ok "$2: $3 cases passed, no FAIL"
+    else
+        bad "$2 failed or did not pass $3 cases (ok lines: $(printf '%s\n' "$out" | grep -c '^ *ok '))"
+        printf '%s\n' "$out" | tail -4 | sed 's/^/        | /'
+    fi
+}
+es2gate 58 es2-tree-gate-selftest.sh 11
+
 # 53-54: the Pi 4 GLES3 session tools' Python self-tests, run isolated like
 # check 41 and judged by their exit status: pi4-console-scan.py on the
 # consoles of testdata/pi4-console-scan/ (GPU recoveries, hangs, resets and run
