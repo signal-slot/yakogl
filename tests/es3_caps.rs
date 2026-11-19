@@ -262,8 +262,9 @@ fn limits() -> Vec<Limit> {
 fn known_gaps() -> Vec<(&'static str, &'static str)> {
     let mut v: Vec<(&'static str, &'static str)> =
         vec![("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)")];
-    if !cfg!(feature = "gpu-mali") {
-        // the Mali reports 4 (gl/context.rs CAP_COLOR_ATTACHMENTS)
+    if !cfg!(any(feature = "gpu-mali", feature = "gpu-powervr")) {
+        // the Mali and the PowerVR report 4 (backend.rs DRAW_TARGETS; the PowerVR in the
+        // ES 3.0 report, RC14 plan #325)
         v.extend_from_slice(&[
             ("MAX_COLOR_ATTACHMENTS", "3, not 4: gl/context.rs CAP_COLOR_ATTACHMENTS; the mrt4 item"),
             ("MAX_DRAW_BUFFERS", "3, not 4: gl/context.rs MAX_DRAW_BUFFERS = CAP_COLOR_ATTACHMENTS; the mrt4 item"),

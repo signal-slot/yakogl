@@ -5707,10 +5707,10 @@ fn a_clear_of_two_integer_attachments_writes_each_ones_packed_dwords() {
 fn a_clear_of_an_aligned_integer_attachment_pair_fills_four_registers_or_falls_back() {
     for four in [false, true] {
         let rig = Rig::new();
-        if four {
-            rig.gl.backend_draws_targets(4);
-            restart_with_arenas(4, 1024, 768);
-        }
+        /* both arms set the count: the product build's is 4 in the ES 3.0
+         * report (`backend::DRAW_TARGETS`) */
+        rig.gl.backend_draws_targets(if four { 4 } else { 3 });
+        restart_with_arenas(4, 1024, 768);
         assert_eq!(rig.b().eot_pairs, if four { 4 } else { 3 }, "the backend's pairs");
         let mut d = rig.draw(0);
         two_targets(&mut d, [GLES_SURF_RGBA8UI, GLES_SURF_RGBA16UI]);
