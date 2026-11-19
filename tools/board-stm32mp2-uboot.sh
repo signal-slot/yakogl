@@ -168,6 +168,9 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 TOOLS="$REPO/tools"
+# Which of the board's `who` sessions are this run's own (prechecks).
+# shellcheck source=tools/board-session-lib.sh
+. "$TOOLS/board-session-lib.sh"
 SELF="$HERE/board-stm32mp2-uboot.sh"
 NAME_TOOL=board-stm32mp2-uboot.sh
 CMD=tools/board-stm32mp2-uboot.sh
@@ -502,14 +505,16 @@ on_exit() {
 # ---- the pre-checks --------------------------------------------------------------------
 BOOT_DEV= BOOT_PART= CARD_DISK=
 prechecks() {
-    local who mine others junk m fstype dtype label
+    local who seen mine others junk m fstype dtype label
     bget junk "${SU}true" || die "the board does not answer (ssh key login${SU:+ and $SU}; the host key must be known)"
     bget BHOSTNAME 'uname -n' DRY-HOSTNAME || die "cannot read the board's host name"
     bget who 'who' '' || die "cannot run who on the board"
+    # A remote session is ours when it comes from one of this host's addresses,
+    # or from the address the board sees for our own ssh (a forwarding address);
+    # without SU, as who: sudo would drop SSH_CONNECTION. tools/board-session-lib.sh.
+    bget seen "$(board_session_seen_cmd)" '' || die "cannot read the address the board sees for our ssh"
     mine=$(ip -o addr 2>/dev/null | awk '{sub(/\/.*/, "", $4); print $4}')
-    # shellcheck disable=SC2086
-    others=$(awk '/\(.*\)/ { a = $NF; gsub(/[()]/, "", a); print a }' <<<"$who" | sort -u |
-        grep -vxF -f <(printf '%s\n' $mine) || true)
+    others=$(board_session_others "$who" "$mine" "$seen")
     [ -z "$others" ] || die "the board has sessions from other machines; ask before taking it"
     # /boot: ext4 on a partition labelled bootfs of the SD card the board booted from
     bget m 'set -- $(findmnt -n -v -o SOURCE,FSTYPE -T /boot); d=$1; p=${d%p*}; echo "$d $2 $p $(cat /sys/block/${p##*/}/device/type 2>/dev/null) $(lsblk -rno PARTLABEL "$d" 2>/dev/null)"' \

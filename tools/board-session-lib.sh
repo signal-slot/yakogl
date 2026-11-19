@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # board-session-lib.sh - which of a board's `who` sessions are this run's own,
-# for tools/board.sh common_prechecks. SOURCE it, do not run it: it defines
+# for tools/board.sh common_prechecks (and the same pre-check of the
+# STM32MP2 runners: tools/board-stm32mp2.sh, tools/board-stm32mp2-uboot.sh,
+# driver/tools/uboot-mp2/oneshot.sh). SOURCE it, do not run it: it defines
 # two functions and nothing else (no variable, no command, no trap), so it is
 # safe under set -u and set -e. tools/board_session_selftest.sh checks it
 # without a board.
