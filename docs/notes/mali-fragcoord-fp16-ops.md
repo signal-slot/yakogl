@@ -356,3 +356,65 @@ read two FAU slots).
   `DEPTH_COMPONENT32F` texture's storage (the GL core keeps depth textures
   as R32F, which the Mali back end stores). Those are `src/mali` (plan
   #336's board-sweep item or a new frame item), not this item's.
+
+## 7. glmark2's head: the ops and their encodings (lower-fragcoord16)
+
+**Plan #367, lower-fragcoord16** (issues #32, #33). The design is
+mali-fragcoord-fp16.md; this section lists the words. All measured on the
+drm-shim references named per row (`tools/mali/testdata/*.expect.json`,
+Mesa 26.2.1), each byte-equal to ours (`tests/mali_fragcoord16.rs`) unless
+the row says otherwise.
+
+### 7.1 The highp copy (gm2_cf_call_fs, gm2_cf_loop_const_fs)
+
+`highp vec2 p = gl_FragCoord.xy; float t = fract(p.x * p.y * 0.0001);` then
+five `t = fract(3.0 * t)`. FAU: `u2` the `gl_FbWposYTransform` pair, `u3` =
+`(0x38d1b717, 0x42004200)` (0.0001 fp32, 3.0h in both halves), `u4.w0` =
+`0x3c003c00` (the alpha's 1.0h).
+
+| Words | NIR (rule) | Ours |
+|---|---|---|
+| `U16_TO_F32.discard r0, r59.h0`, `U16_TO_F32 r1, r59^.h1`, `FADD_IMM.f32` x2 `#0x3F000000`, `FMA.f32 r1, r1^, u2.w0, u2.w1` | the fp32 position (mali-highp-fragcoord.md 2.1) | `Fs::frag_coord` (the read `highp_copy` gives the highp local) |
+| `FMA.f32 r0, r0^, u3.w0, 0x0.neg` then `FMA.f32 r0, r0^, r1^, 0x0.neg` | `fmul(fmul(x, y), #c)` -> `fmul(fmul(x, c), y)` (N/nir_opt_algebraic.py:2394) | `lane32`'s `Fmul` arm, `plain` (island only) |
+| `FROUND.f32.rtn r1, r0`, `FADD.f32 r0, r0^, r1^.neg` | `ffract` -> `fadd(a, fneg(ffloor(a)))` (`lower_ffract`, :546) | `alu32` / `lane32` |
+| `FADD.f32 r0.h0, r0^, 0x0.neg` | `f2f16` at the mediump `t`'s assignment (`f2fmp`) | the `StoreLocal` arm's `narrow_stored` (the highp local skipped) |
+| `FMA.v2f16 r0, u3.w1, r0^.h00, 0x0.neg` | `fmul@16(3.0h, t)`, one lane, sources as written; the constant a FAU word of two equal halves read whole | `alu16`'s `w == 1` `Fmul` arm (`lone16`), `select_highp`'s constant `.h00` |
+| `FROUND.v2f16.rtn r1, r0.h00`, `FADD.v2f16 r0, r0^.h00, r1^.neg.h00` | `ffract@16`, one lane | `alu16`'s `w == 1` `Ffract` arm |
+| `IADD.v2u16 r1, r0.h00, 0x0`, `MKVEC.v2i16 r2, r0^.h0, u4.w0.h0`, `BLEND.v4.f16` | `vec4(t, t, t, 1.0h)`, `blend_pan` | case 218's colour (section 3.3) |
+
+33 words, `work_reg_count` 32, preload `0x3800000000000000`.
+
+### 7.2 The mediump read (gm2_fcoord16_1..6)
+
+The same head written on gl_FragCoord (or a mediump copy): the read is
+narrowed per lane, the head is fp16. FAU `u3.w0` = `0x068e068e` (0.0001h in
+both halves).
+
+| Words | NIR (rule) | Ours |
+|---|---|---|
+| `FADD.f32 r0.h0, r0^, 0x0.neg`, `FADD.f32 r1.h0, r1^, 0x0.neg` | `f2fmp` of each lane of the mediump read | `frag16_lanes` (`Leaf::FragLane`) |
+| `FMA.v2f16 r0, r0^.h00, r1^.h00, 0x0.neg` (gm2_fcoord16_1) | `fmul@16(x, y)`, one lane | `lane_tree`'s `FragLane` arm |
+| `FMA.v2f16 r0, r0^.h00, u3.w0, 0x0.neg` then `FMA.v2f16 r0, r0^.h00, r1^.h00, 0x0.neg` (_2.._6) | :2394 at fp16 | `Fs::op`, `position_product` |
+| `FROUND.v2f16.rtn r1, r0.h00`, `FADD.v2f16 r0, r0^.h00, r1^.neg.h00` (_3.._6) | `ffract@16` | the walk's mediump `fract` |
+| `FADD.v2f16 r1, r0.h00, u3.w1` (`0x3400b800`: -0.5h low, 0.25h high), `FCMP_OR.v2f16.lt.m1 r0, 0x38000000.h11, r0^.h00, 0x0`, `MUX.v2i16 r0, r1^.h11, r1^.h00, r0^.h00` (_5) | the `if`'s two arms paired by `nir_opt_vectorize`, `bcsel` of the flattened `if` | `mates` and `vectorise`, the colour word `Leaf::Lane` of the select (`lone_select`) |
+| `FMA.v2f16 r0, r0^.h00, 0x38000000.h11, 0x2E660000.h11` (_6: `d * 0.5 + 0.1`), then four `FMA.v2f16 r0, r0^.h00, u3.w1, 0x0.neg` / `FROUND` / `FADD` (`d * 1.7`, `u3.w1` = `0x3ecd3ecd`) | the call inlined and fused, the counted loop unrolled | the walk; a loop node's origin store counts one lane (`ir_comps`) |
+
+### 7.3 Not yet Mesa's: gm2_cf_ifelse_fs (a5b5)
+
+Mesa (45 words): after the narrowing, each of the five `if (t >= 0.5) t =
+fract(2.0 * t); else t = fract(3.0 * t);` is
+
+```
+FMA.v2f16 r1, u3.w0, r0.h00, 0x0.neg        ; (2.0h, 3.0h) * t, u3.w0 = 0x42004000
+FROUND.v2f16.rtn r2, r1
+FADD.v2f16 r1, r1^, r2^.neg                  ; both arms' fract, one pair
+FCMP_OR.v2f16.ge.m1 r0, r0^.h00, 0x38000000.h11, 0x0
+MUX.v2i16 r0, r1^.h11, r1^.h00, r0^.h00      ; else (3t) low source, then (2t)
+```
+
+and `0.0001` and the alpha's `0x3C003C00` are `IADD_IMM.i32` moves, not FAU
+words (FAU `u0`..`u3` only). Ours (58 words) computes each arm alone (`FMA.v2f16
+r1, 0x40000000.h11, r0.h00` and `FMA.v2f16 r2, u3.w1, r0.h00`, each with
+its `FROUND`/`FADD`), then the same compare and `MUX`. The values are the
+same; the pairing of the arms on `select_highp`'s route and the constants'
+moves are the open work (mali-fragcoord-fp16.md section 5).

@@ -58,7 +58,7 @@
 21 jellyfish fs 8ee5: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 21 jellyfish vs 08a2: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 21 jellyfish vs 14ac: ok
-22 terrain fs 1637: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet
+22 terrain fs 1637: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 22 terrain fs 4d26: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
 22 terrain fs 895a: ok
 22 terrain fs 8c86: Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet
@@ -79,19 +79,19 @@
 24 refract fs 928e: ok
 24 refract vs 37f4: ok
 24 refract vs 7215: ok
-25 conditionals:vertex-steps=0:fragment-steps=0 fs 6c61: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+25 conditionals:vertex-steps=0:fragment-steps=0 fs 6c61: ok
 25 conditionals:vertex-steps=0:fragment-steps=0 vs 3107: ok
-26 conditionals:vertex-steps=0:fragment-steps=5 fs a5b5: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+26 conditionals:vertex-steps=0:fragment-steps=5 fs a5b5: ok
 26 conditionals:vertex-steps=0:fragment-steps=5 vs 3107: ok
-27 conditionals:vertex-steps=5:fragment-steps=0 fs 6c61: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+27 conditionals:vertex-steps=5:fragment-steps=0 fs 6c61: ok
 27 conditionals:vertex-steps=5:fragment-steps=0 vs a21c: ok
-28 function:fragment-steps=5:fragment-complexity=low fs c8ce: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+28 function:fragment-steps=5:fragment-complexity=low fs c8ce: ok
 28 function:fragment-steps=5:fragment-complexity=low vs 0162: ok
-29 function:fragment-steps=5:fragment-complexity=medium fs 849c: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+29 function:fragment-steps=5:fragment-complexity=medium fs 849c: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet
 29 function:fragment-steps=5:fragment-complexity=medium vs 0162: ok
-30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false fs e016: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false fs e016: ok
 30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false vs 3cb0: ok
-31 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false fs c7ea: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
+31 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false fs c7ea: ok
 31 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false vs 3cb0: ok
 32 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true fs 3678: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 32 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true vs 3cb0: ok

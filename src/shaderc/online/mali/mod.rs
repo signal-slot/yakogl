@@ -1038,6 +1038,14 @@ pub struct FsPrecision {
     /// (builtin_variables.cpp:1333-1335, `frag_coord_precision`;
     /// docs/notes/mali-fragcoord-mediump.md 1).
     pub frag_coord_highp: bool,
+    /// The locals a mediump ES 1.00 shader declares highp, by the FNV-1a
+    /// hash of their names ([`name_hash`]; at most four): not [`mixed`]
+    /// yet, for the walk keeps a highp local that only copies gl_FragCoord
+    /// (glmark2's `highp vec2 FragCoord = gl_FragCoord.xy`, nir_fs.rs
+    /// `highp_copy`) and marks any other mixed.
+    ///
+    /// [`mixed`]: FsPrecision::mixed
+    pub highp_locals: [u64; 4],
     /// The vertex shader's constant varying lanes Mesa's link propagates
     /// into this shader, at this shader's varying locations
     /// ([`link::FsConsts`]; none for a shader compiled alone).
@@ -1117,8 +1125,23 @@ impl FsPrecision {
         }
         /* every other declaration, at any scope: the varyings are above, a
          * uniform is FsUniform's, an ES 3.00 output the colour's */
+        let mut nhighp = 0;
         for (i, d) in ast.decls.iter().enumerate() {
             f.mixed |= match *d {
+                /* a highp local of a mediump ES 1.00 shader: the walk's to
+                 * judge ([`FsPrecision::highp_locals`]) */
+                Decl::Var { storage: StorageQualifier::None, ty, name, .. }
+                    if float(&ty.base)
+                        && ty.precision == Precision::High
+                        && !highp
+                        && pre.version < 300
+                        && nhighp < f.highp_locals.len()
+                        && !ast.top.contains(&DeclId(i as u32)) =>
+                {
+                    f.highp_locals[nhighp] = name_hash(name);
+                    nhighp += 1;
+                    false
+                }
                 Decl::Var { storage: StorageQualifier::None | StorageQualifier::Const, ty, .. } => {
                     float(&ty.base) && other(ty.precision)
                 }
@@ -1132,6 +1155,13 @@ impl FsPrecision {
         f.mixed |= ast.params.iter().any(|p| float(&p.ty.base) && other(p.ty.precision));
         Ok(f)
     }
+}
+
+/// The FNV-1a hash of a local's name ([`FsPrecision::highp_locals`]); never
+/// 0, the table's empty entry.
+pub fn name_hash(name: &str) -> u64 {
+    let h = name.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3));
+    h.max(1)
 }
 
 /// Compile one stage's IR (the code and the facts; the record is made by
