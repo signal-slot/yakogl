@@ -2324,6 +2324,49 @@ step "test    host-test,gpu-powervr,shaderc-online,report-es2 (tests/es2_report_
 # online compiler without the table, so only this row runs it.
 step "test    $V3D_ES2_CONFIG (tests/es2_program_binary_report.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test es2_program_binary_report
+# The ES 2.0-context guards of plan #351 (items gc-es2ctx-*, gl-es2ctx-*,
+# v3d-es2ctx-more-clears): what a report-es2 client of each GPU sees after the
+# GL-core, GC7000 and V3D changes made since the old whole dEQP-GLES2 trees.
+# Each row names the feature set its test's header names. tests/gc_* reach the
+# vivante rows, tests/v3d_* the v3d rows, tests/gl_* every row through `--test`
+# (and src/gl reaches all).
+scope vivante
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_clears.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_more_clears
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_mipmap.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_more_mipmap
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_random3.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_random3
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_rt_switch.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_rt_switch
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_sampler_slots.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_sampler_slots
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_tiled_ts.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_tiled_ts
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_buffer_rename.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_buffer_rename
+step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_current_attrib.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,report-es2 --test gl_es2ctx_sweep_current_attrib
+step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_program_hint.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,report-es2 --test gl_es2ctx_sweep_program_hint
+step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_texslot_mark.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,report-es2 --test gl_es2ctx_sweep_texslot_mark
+scope pvr
+step "test    host-test,gpu-powervr,shaderc-online,report-es2 (tests/gl_es2ctx_buffer_rename.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test gl_es2ctx_buffer_rename
+step "test    host-test,gpu-powervr,shaderc-online,report-es2 (tests/gl_es2ctx_es3_only.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online,report-es2 --test gl_es2ctx_es3_only
+step "test    host-test,gpu-powervr,report-es2 (tests/gl_es2ctx_sweep_current_attrib.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,report-es2 --test gl_es2ctx_sweep_current_attrib
+step "test    host-test,gpu-powervr,report-es2 (tests/gl_es2ctx_sweep_program_hint.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,report-es2 --test gl_es2ctx_sweep_program_hint
+step "test    host-test,gpu-powervr,report-es2 (tests/gl_es2ctx_sweep_texslot_mark.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,report-es2 --test gl_es2ctx_sweep_texslot_mark
+scope v3d
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_more_clears.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_more_clears
+step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_buffer_rename.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_buffer_rename
 # The NanoPC-T6's Mali-G610 (`gpu-mali`): its backend builds each frame in
 # the OSAL's buffers and submits it through the Mali OSAL interface
 # (src/osal/mali.rs; on the host, a mock of it), and its shader back end
@@ -3389,6 +3432,10 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # the image .config check, the tallies, the GLES3 tables, and check 20:
   # images-selftest.sh, the image builders against a fake west). Host only.
   step "tools   cts-selftest.sh (the CTS tools' checks, images-selftest included)" no_board_env tools/cts/cts-selftest.sh
+  # tools/cts/es2-tree-gate-selftest.sh: es2-tree-gate.py (the five stage-1
+  # fields of a whole dEQP-GLES2 tree record) on synthetic records. Host only.
+  # cts-selftest.sh runs it as its check 58 as well, with the count pinned.
+  step "tools   es2-tree-gate-selftest.sh (the ES 2.0 tree record gate, synthetic records)" no_board_env bash tools/cts/es2-tree-gate-selftest.sh
   # tools/cts/imx8mp-glmark2-dumps.sh --self-test: the i.MX8MP glmark2 frame-
   # dump image builder against stubs and fixture logs: the 33 scenes, selection
   # by label, number and -b argument, the watchdog arm and frame-dump flags in
