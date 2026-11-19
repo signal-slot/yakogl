@@ -410,8 +410,9 @@ const COMPILER_REFUSED: &[&str] = &[
     "conditionals_attribute_select",
     // a varying lane left unwritten
     "random_declared_not_written",
-    // a loop in a vertex shader
-    "random_constant_varying_through_loop",
+    // (`random_constant_varying_through_loop` was refused as "a loop in a
+    // vertex shader" until plan #367 lower-int-loops unrolled a counted
+    // vertex loop: its `c` folds to 0.75, a constant varying, and it draws)
 ];
 
 #[test]

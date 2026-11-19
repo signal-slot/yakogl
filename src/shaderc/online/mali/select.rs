@@ -815,7 +815,31 @@ pub fn vs_variant(
     ubo: &UboLayout,
     scratch: &Arena<'_>,
 ) -> Result<(), MaliError> {
-    nir::dce(vs, Some(out));
+    /* a kept loop the variant needs: its blocks, as the fragment's
+     * (nir_fs.rs `select_highp`, the edges in `emit_if`'s and `emit_loop`'s
+     * order, bifrost_compile.c:3697-3770); a variant that does not need it
+     * is one block ([`nir::variant_dce`]) */
+    let blocks = nir::variant_dce(vs, out)?;
+    if blocks {
+        for _ in 1..vs.nblocks {
+            p.new_block()?;
+        }
+        for seq in 0..vs.nseq {
+            if let Some(r) = vs.ifs[..vs.nifs].iter().find(|r| r.live && r.seq == seq) {
+                match r.brk {
+                    Some(lp) => p.add_successor(r.then_last, vs.loops[lp as usize].exit)?,
+                    None => p.add_successor(r.then_last, r.after)?,
+                }
+                p.add_successor(r.else_last, r.after)?;
+                p.add_successor(r.before, r.else_first)?;
+                p.add_successor(r.before, r.then_first)?;
+            }
+            if let Some(r) = vs.loops[..vs.nloops].iter().find(|r| r.seq == seq) {
+                p.add_successor(r.pre, r.header)?;
+                p.add_successor(r.latch, r.header)?;
+            }
+        }
+    }
     let lanes = scratch.alloc_filled(nir::MAX_NODES, [Src::NULL; 4]).map_err(|_| MaliError::OutOfScratch)?;
     let mut outs = [None::<Out>; 3];
     let src = |lanes: &[[Src; 4]], v: nir::Val| -> Result<Src, MaliError> {
@@ -862,10 +886,39 @@ pub fn vs_variant(
      * unitype_100.expect.json's varying program: the offset, the look-up,
      * then `LD_PKA.i64`) */
     let pending = scratch.alloc_filled(nir::MAX_NODES, None::<u16>).map_err(|_| MaliError::OutOfScratch)?;
-    for k in 0..vs.len {
-        let id = vs.order[k] as usize;
+    /* the nodes block by block, each block's in the program's order (a
+     * pass that moved a node before a user of another block leaves it in
+     * its own block) */
+    let order = scratch.alloc_filled(vs.len, 0u16).map_err(|_| MaliError::OutOfScratch)?;
+    order.copy_from_slice(&vs.order[..vs.len]);
+    if blocks {
+        /* stable, in place: `sort_by_key` needs `alloc`, which the image's
+         * no_std build lacks (an insertion sort; a program is at most
+         * MAX_NODES nodes) */
+        for i in 1..order.len() {
+            let id = order[i];
+            let mut j = i;
+            while j > 0 && vs.block[order[j - 1] as usize] > vs.block[id as usize] {
+                order[j] = order[j - 1];
+                j -= 1;
+            }
+            order[j] = id;
+        }
+    }
+    /* a loop header's phis read the body's last values, made later:
+     * filled once the body is selected */
+    let mut late = [(0u16, nir::Val::Undef); nir::MAX_LOCALS + 1];
+    let mut nlate = 0;
+    let mut block = 0u8;
+    for &id in order.iter() {
+        let id = id as usize;
         if !vs.live[id] {
             continue;
+        }
+        while blocks && block < vs.block[id] {
+            vs_end_block(p, vs, lanes, block)?;
+            block += 1;
+            p.cur = block;
         }
         let nd = vs.nodes[id];
         for v in nd.src {
@@ -1029,6 +1082,19 @@ pub fn vs_variant(
                 let off = vec4_offset(p, ubo, dword, src(lanes, nd.src[0])?, &mut 0)?;
                 pending[id] = Some(off);
             }
+            /* a kept loop's phi (nir_fs.rs `select_highp`'s): a header's
+             * second source is the body's, filled at the end (`late`) */
+            nir::Kind::Phi if blocks => {
+                let header = vs.loops[..vs.nloops].iter().any(|r| r.header == vs.block[id]);
+                let s0 = src(lanes, nd.src[0])?.swz(Swz::H01);
+                let s1 = if header { Src::NULL } else { src(lanes, nd.src[1])?.swz(Swz::H01) };
+                let r = alu(p, Op::Phi, &[s0, s1])?;
+                lanes[id][0] = Src::ssa(r);
+                if header {
+                    *late.get_mut(nlate).ok_or(MaliError::TooManyValues)? = (r, nd.src[1]);
+                    nlate += 1;
+                }
+            }
             nir::Kind::Tex
             | nir::Kind::TexDesc { .. }
             | nir::Kind::PixelCoord
@@ -1054,7 +1120,56 @@ pub fn vs_variant(
             }
         }
     }
+    if blocks {
+        while block + 1 < vs.nblocks {
+            vs_end_block(p, vs, lanes, block)?;
+            block += 1;
+            p.cur = block;
+        }
+        for &(r, v) in &late[..nlate] {
+            let s = src(lanes, v)?.swz(Swz::H01);
+            let k = p
+                .as_slice()
+                .iter()
+                .position(|i| i.op == Op::Phi && i.dest[0].idx == Idx::Ssa(r, 0))
+                .ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+            p.ins[k].src[1] = s;
+        }
+    }
     preloads(p)
+}
+
+/// What ends block `b` of a vertex variant with a kept loop (nir_fs.rs
+/// `end_block`, `emit_if` and `emit_loop`, bifrost_compile.c:3697-3770):
+/// before the head test's `if`, `BRANCHZ.i16.eq cond.h0` to the else side
+/// (taken when the mask is zero); the then side's `break` jumps to the
+/// loop's exit (`bi_emit_jump`, the `BRANCHZ.i16.eq` of the zero constant);
+/// the latch jumps back to the header. `bi_opt_control_flow` (opt.rs)
+/// inverts and removes the empty blocks afterwards.
+fn vs_end_block(p: &mut Prog<'_>, vs: &nir::Nir<'_>, lanes: &[[Src; 4]], b: u8) -> Result<(), MaliError> {
+    let jump = |p: &mut Prog<'_>, target: u8| -> Result<(), MaliError> {
+        p.push(Ins::new(Op::Branchz { target, eq: true }, &[], &[Src::of(Idx::Const(0))]))?;
+        Ok(())
+    };
+    for r in vs.live_ifs() {
+        if r.before == b {
+            let nir::Val::Lane(c, 0) = r.cond else { return Err(MaliError::Defect(super::Defect::IrIndex)) };
+            let cond = lanes[c as usize][0];
+            if cond.idx == Idx::Null {
+                return Err(MaliError::Defect(super::Defect::IrIndex));
+            }
+            p.push(Ins::new(Op::Branchz { target: r.else_first, eq: true }, &[], &[cond.swz(Swz::H00)]))?;
+        } else if r.then_last == b {
+            match r.brk {
+                Some(lp) => jump(p, vs.loops[lp as usize].exit)?,
+                None => jump(p, r.after)?,
+            }
+        }
+    }
+    for r in vs.loops[..vs.nloops].iter().filter(|r| r.latch == b) {
+        jump(p, r.header)?;
+    }
+    Ok(())
 }
 
 /// The byte offset of an fp32 float array element at a run-time index

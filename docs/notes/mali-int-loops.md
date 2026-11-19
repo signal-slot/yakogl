@@ -38,6 +38,86 @@ value, so it stays the int refusal. Loops of
 a mediump shader with a run-time bound are now the `LoopForm` refusal
 (`uniloop.frag`, `divloop.frag`; loops-rt).
 
+## glmark2's vertex loops (plan #367 lower-int-loops)
+
+**State.** The vertex walk (`src/shaderc/online/mali/nir.rs`) takes a
+top-level `for` whose body is instructions and one head test `if (c) {}
+else break;` (`Lower::break_unless`) as its first control-flow node
+(`vs_loop_shape`). Two forms, decided at the loop by whether the test folds
+on the walk's constants (`nir_fs::ir_folds`):
+
+| form | Mesa | ours | reference (tests/mali_int_loops.rs) |
+|---|---|---|---|
+| counted (`i < 5`) | `simple_unroll`: the passes in a row, no int left | the body's steps walked pass after pass, the counter folded (`VsLoop::Unroll`); more than `MAX_UNROLL_ITERATIONS` (32) passes, or more than 26 * 32 nodes, stays `LoopVertex` | `gm2_intloop_const_vs`: byte-equal; `gm2_vsarith_5`, dEQP `vs_for_const`, `vs_while_const`, `vs_dowhile_const` too |
+| run-time bound (`i < VertexLoops`, an `int` uniform) | kept: `emit_loop`'s blocks | `vs_kept_begin`/`vs_kept_head`/`vs_kept_end` build the fragment walk's `LoopRegion` and the head test's `IfRegion` (its then side the `break`); `select.rs` `vs_variant` emits the blocks, the phis and the branches (`vs_end_block`), the back end inverts them as for the fragment | `gm2_intloop_uniform_vs`, `gm2_cf_loop_uni_vs`: Mesa's words with the loop cap's edits (below) |
+
+`gm2_intloop_cond_vs` (the same steps as three flattened `if`s) is byte-equal
+before and after; it is the control.
+
+The kept loop, as Mesa lays it out (`gm2_cf_loop_uni_vs`, 51 words, the loop
+in the **position** program because it feeds `gl_Position`; the open point
+of `mali-vs-loops.md` section 6 is settled: the same words as the
+fragment's):
+
+```
+IADD_IMM.i32.reconverge r4, 0x0, #0x0        ; k = 0 (pre-header)
+ICMP_OR.s32.ge.m1 r5, r4, u11.w0, 0x0        ; k >= u_n: the int uniform's FAU word, read in place
+BRANCHZ.reconverge r5^.h0, offset:5          ; to the exit
+FMA.f32 r3, u11.w1, r3^, 0x0.neg             ; t = fract(3.0 * t)
+FROUND.f32.rtn r5, r3 ; FADD.f32 r3, r3^, r5^.neg
+IADD_IMM.i32 r4, r4^, #0x1                   ; k++
+BRANCHZ.eq.reconverge 0x0, offset:-7         ; back edge
+```
+
+* **The int uniform** is a 32-bit word the compare reads (`int_compare_only`):
+  accepted only where every read is a signed integer compare that is a
+  loop's head test. Any other read (arithmetic, an `if`'s compare:
+  `sharedint.vert`) keeps `UniformType`, as no reference draws it.
+* **Phis** stand in the header, one per local lane the body stores, in the
+  reverse of the locals' registration order, then the pass counter's; a
+  16-bit (mediump) carried lane, an output stored in the body, a load or
+  look-up first made in the body, a float or unsigned head test, a nested
+  loop, an `if` or a `continue` in the body stay `LoopVertex` (no reference).
+* **The variants.** A variant whose stores need no node of the loop drops it
+  whole (`nir::variant_dce`; `gm2_intloop_uniform_vs`'s varying program,
+  whose `v_dummy` is a constant the link propagates); a variant that needs one
+  of two loops and not the other is refused.
+* **The loop cap.** Every kept loop of this back end has the hidden pass
+  counter of `mali-loop-board-failures.md` (4096 passes, a DELIBERATE
+  deviation from Mesa), the vertex's too: a large `VertexLoops` cannot run a
+  vertex job past the GPU's timeout. The tests compare Mesa's words with the
+  counter's edits, as `intloop_loop_exit_is_mesa_26_2_1_with_the_loop_cap`
+  does: the pre-header's `IADD_IMM.i32 rc, 0x0, #0x1000` (which takes the
+  `.reconverge`), the header's `IADD_IMM.i32 rc, rc^, #0xFFFFFFFF` and
+  `ICMP_OR.s32.lt.m1 rs, rc, 0x0, 0x0`, the head test's third source `rs^`,
+  the registers the counter moves by one and the back edge's `offset:-9`.
+  With the counter's three words taken out, every word lines up with Mesa's.
+  The board has not run a kept vertex loop yet.
+
+**What moved.** glmark2: `vs 3cb0` is `ok` in all three loop scenes (30, 31,
+32), each now blocked by its fragment shader alone (`e016`, `c7ea`:
+FRAGCOORD_FP16; `3678`: the fragment kept loop). Corpus:
+`light_amount_0_16.vert`, `light_amount_2_2.vert` (unrolled, then a constant
+fold) and `loop_uniform.dowhile.vert` (its `mediump int` bound, the fp16
+uniform refusal) move to their next refusals. dEQP references:
+`deqp_loops_vs_{for,while,dowhile}_const` byte-equal; `vs_for_uni`,
+`vs_dowhile_uni` (a mediump `int` uniform), `vs_idx_static` (a constant
+fold), `vs_select` (the bool uniform), `deqp_uniarray_loop_float_vs` (a
+uniform array at the counter) and `deqp_unitype_vsmat3_light` (an fp16
+uniform) move to their next refusals.
+
+**Still open: the fragment half.** glmark2 loop's fragment shader 3678
+(scene 32, `fragment-uniform=true`) keeps a mediump loop of a uniform bound:
+its fp16 `d` carried across the back edge. It is refused at the top of
+`walk_kept_loop` (`nir_fs.rs:4630`, `MaliError::LoopMediump`), reference
+`gm2_intloop_uniform_fs` / `gm2_cf_loop_uni_fs`. It needs the 16-bit header
+phi and the mediump selection's blocks (`mali-deqp-loops.md` section 8.3,
+step 1(b)); not this item's. INT_VALUE of ideas `fs c565` (reference
+`gm2_cf_earlyret_fs`) is a fragment shape too: the `&&` of two fp16 compares,
+then three early returns, an fp16 divide and the lit arithmetic, each its own
+family in `nir_fs.rs`; the vertex INT_VALUE rows of the forecast (`vs bf4b`,
+`vs c265`) are `ok` at this tip.
+
 ## References
 
 Mesa 26.2.1, panfrost on drm-shim (GPU_ID 0xa867), one draw per pair with
