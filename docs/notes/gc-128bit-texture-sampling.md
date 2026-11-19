@@ -15,7 +15,9 @@ stores those classes for this back end, and `emit_slot`
 (`src/vivante/texture.rs`) samples a complete binding of one as its two
 G32R32 planes. It falls back to the black texel, by name, only for a
 binding with no companion slot or no plane copy (below). Host only: the
-board has not sampled them.
+board has not sampled them (the i.MX8MP run is pending, issue #24). GL_RGBA32F is stored
+in the class since `681b728b`; RGB32F/I/UI store alpha 1; a texture swizzle
+the planes cannot express is refused by name at the draw.
 
 ## Mesa's design
 
