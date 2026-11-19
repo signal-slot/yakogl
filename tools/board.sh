@@ -447,6 +447,9 @@ NB_TAG="board.sh $BOARD"
 NB_RECORDS="records/$BOARD/netboot"
 # shellcheck source=tools/uboot-netboot-lib.sh
 . "$HERE/uboot-netboot-lib.sh"
+# Which of the board's `who` sessions are this run's own (common_prechecks).
+# shellcheck source=tools/board-session-lib.sh
+. "$HERE/board-session-lib.sh"
 
 note() {
     if [ "$BOARD" = pi5 ]; then echo "board.sh $BOARD: $*" | scrub; else echo "board.sh $BOARD: $*"; fi
@@ -1108,16 +1111,17 @@ boot_build() {
 
 # ---- the pre-checks every board makes (step 2) ---------------------------------
 common_prechecks() {
-    local who mine others junk holders
+    local who seen mine others junk holders
     bget junk "${SU}true" || die "$BOARD_HOST does not answer (ssh key login${SU:+ and sudo -n})"
     bget BOOT0 'cat /proc/sys/kernel/random/boot_id' DRY-BOOT-ID || die "cannot read the board's boot_id"
     bget BHOSTNAME 'uname -n' DRY-HOSTNAME || die "cannot read the board's host name"
     bget who 'who' '' || die "cannot run who on the board"
-    # A remote session is ours only when it comes from one of this host's addresses.
+    # A remote session is ours when it comes from one of this host's addresses,
+    # or from the address the board sees for our own ssh (a forwarding address);
+    # without SU, as who: sudo would drop SSH_CONNECTION. tools/board-session-lib.sh.
+    bget seen "$(board_session_seen_cmd)" '' || die "cannot read the address the board sees for our ssh"
     mine=$(ip -o addr 2>/dev/null | awk '{sub(/\/.*/, "", $4); print $4}')
-    # shellcheck disable=SC2086  # one address per word
-    others=$(awk '/\(.*\)/ { a = $NF; gsub(/[()]/, "", a); print a }' <<<"$who" | sort -u |
-        grep -vxF -f <(printf '%s\n' $mine) || true)
+    others=$(board_session_others "$who" "$mine" "$seen")
     [ -z "$others" ] || die "the board has sessions from other machines ($others); ask before taking it:
 $who"
     meta who_sessions "$(grep -c . <<<"$who")"

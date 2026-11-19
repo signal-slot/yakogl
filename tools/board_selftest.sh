@@ -618,6 +618,55 @@ check "pi4 record redaction as before: host names and addresses, the UART path k
     eval '[ "$(head -3 "$S/redact4/console.txt" | tr "\n" "|")" = "12:00:00 console /dev/ttyFAKE5 by-id /dev/serial/by-id/usb-fake-if00|12:00:00 <board-host> login: <board-host>|12:00:00 eth0: 192.0.2.1 up|" ]'
 BOARD=pi4
 
+# the board's sessions (common_prechecks): a session is ours when it comes from
+# one of this host's addresses or from the address the board sees for our ssh
+# (a task machine reaches the board through a forwarding address, which is none
+# of its own). The function as board.sh has it, against a board that answers
+# who with $1 and the seen command with $2; this host's addresses are 127.0.0.1
+# and 192.0.2.10 (a stub ip). Every address here is a documentation one.
+eval "$(sed -n '/^common_prechecks() {/,/^}/p' "$B")"
+# shellcheck source=tools/board-session-lib.sh
+. "$HERE/board-session-lib.sh"
+fk_prechecks() { # fk_prechecks WHO SEEN: common_prechecks' output, then "rc=N"
+    (
+        fk_who=$1 fk_seen=$2 SU= GPU_DEV= BOARD_HOST=fake-board
+        bget() {
+            case $2 in
+            who) printf -v "$1" '%s' "$fk_who" ;;
+            "$(board_session_seen_cmd)") printf -v "$1" '%s' "$fk_seen" ;;
+            *) printf -v "$1" '%s' "${3:-}" ;;
+            esac
+        }
+        ip() { printf '1: lo    inet 127.0.0.1/8 scope host lo\n2: eth0    inet 192.0.2.10/24 scope global eth0\n'; }
+        meta() { :; }
+        die() { echo "die: $1"; exit 3; }
+        common_prechecks
+        echo "ok"
+    ) 2>&1
+    echo "rc=$?"
+}
+fk_fwd="pi       pts/0        2026-11-19 10:00 (198.51.100.7)"
+fk_third="pi       pts/1        2026-11-19 10:01 (203.0.113.9)"
+fk_own="pi       pts/2        2026-11-19 10:02 (192.0.2.10)"
+out=$(fk_prechecks "$fk_fwd" 198.51.100.7)
+check "sessions: our own ssh through a forwarding address (who's address = the address the board sees for us) is ours: rc 0" \
+    eval 'grep -qx "ok" <<<"$out" && grep -qx "rc=0" <<<"$out"'
+out=$(fk_prechecks "$fk_fwd
+$fk_third" 198.51.100.7)
+check "sessions: a session from a third address is still refused: rc 3, the same message with that address" \
+    eval 'grep -qxF "die: the board has sessions from other machines (203.0.113.9); ask before taking it:" <<<"$out" && grep -qx "rc=3" <<<"$out"'
+out=$(fk_prechecks "$fk_fwd
+$fk_own" '')
+check "sessions: an empty seen address keeps the old rule: this host's address is ours, the forwarding one is refused" \
+    eval 'grep -qxF "die: the board has sessions from other machines (198.51.100.7); ask before taking it:" <<<"$out" && grep -qx "rc=3" <<<"$out"'
+out=$(fk_prechecks "$fk_own" '')
+check "sessions: an empty seen address and only this host's address: rc 0" \
+    eval 'grep -qx "ok" <<<"$out" && grep -qx "rc=0" <<<"$out"'
+out=$(dry pi4 probe "$S/logs" 2>&1)
+rc=$?
+check "sessions: the pi4 dry run reads the address the board sees for our ssh, without sudo, right after who: rc 0" \
+    eval '[ "$rc" = 0 ] && grep -A1 -x "DRY board\\$ who" <<<"$out" | grep -qxF "DRY board\$ $(board_session_seen_cmd)"'
+
 # tree: the three table forms
 mkdir -p "$S/pi4img/AA/zephyr" "$S/pi4img/BB/zephyr" "$S/amimg/img1-t/zephyr" "$S/amimg/img2-t/zephyr"
 cp "$S/img/pi4.bin" "$S/pi4img/AA/zephyr/zephyr.bin"
