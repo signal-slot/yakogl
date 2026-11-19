@@ -103,6 +103,11 @@ pub const PVR_PDS_VERTEX_MAX_STREAMS: u32 = 16;
 pub const PVR_PDS_DOUTU_MAX_TEMPS: u32 = 252;
 /// `pvr_pds_render_vertex_program_ids_base`: no vertex / instance id register.
 pub const PVR_PDS_NO_ID_REG: u32 = 0xff;
+/// OR'd into `instance_id_reg` of `pvr_pds_render_vertex_program_ids_base`:
+/// the base is added to the instance number even without a gl_InstanceID
+/// register, so the per-instance streams fetch element (base + instance) /
+/// divisor (P3; passed only under the cargo feature `pvr-instance-divisor`).
+pub const PVR_PDS_ID_BASE_TO_STREAMS: u32 = 0x100;
 
 /* enum pvr_pds_coeff_interp */
 /// Perspective-correct (GOURAUD, perspective=1).
@@ -547,7 +552,8 @@ extern "C" {
     /// of a shader that reads gl_VertexID / gl_InstanceID
     /// (`PVR_PDS_NO_ID_REG`: not written), gl_InstanceID starting at
     /// `instance_id_base` (Mesa's instance_id_modifier; ignored without an
-    /// instance id register, and base 0 gives the words of the generator
+    /// instance id register unless `PVR_PDS_ID_BASE_TO_STREAMS` is OR'd into
+    /// `instance_id_reg`, and base 0 gives the words of the generator
     /// without a base): `data_out` >= 8 * streams (+ 8 with an id, + 2 with a
     /// base) dwords, `code_out` >= streams + 2 (+ 2 with an id, + 1 with a
     /// base).

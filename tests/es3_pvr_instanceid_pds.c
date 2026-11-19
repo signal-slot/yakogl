@@ -5,7 +5,10 @@
  * (pvr_pds_render_vertex_program_ids_base, Mesa's instance_id_modifier,
  * docs/notes/instanceid-per-draw.md fix P1); built and run by
  * tests/es3_pvr_instanceid_pds.rs. Prints
- * "base0_same=1 modifier_in_data=1 grow=<data>,<code> no_reg_ignored=1".
+ * "base0_same=1 modifier_in_data=1 grow=<data>,<code> no_reg_ignored=1
+ * streams_base=1". The last: with PVR_PDS_ID_BASE_TO_STREAMS (P3) and no
+ * instance register the base is still added (the constant and one ADD32),
+ * base 0 gives the old words, and with a register the bit changes nothing.
  */
 #include <stdio.h>
 #include <string.h>
@@ -44,11 +47,11 @@ int main(void)
       { .address = 0x100000, .stride = 16, .dma_size = 16, .dst_reg = 0 },
       { .address = 0x200000, .stride = 8, .dma_size = 8, .dst_reg = 4, .per_instance = 1 },
    };
-   struct prog old, b0, bn, noreg_old, noreg_bn;
+   struct prog old, b0, bn, noreg_old, noreg_bn, fl_bn, fl_b0, fl_reg;
    int ok = 1;
 
    memset(&old, 0, sizeof(old));
-   b0 = bn = noreg_old = noreg_bn = old;
+   b0 = bn = noreg_old = noreg_bn = fl_bn = fl_b0 = fl_reg = old;
    ok &= !pvr_pds_render_vertex_program_ids(0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG, 6, old.data,
                                             old.code, &old.info);
    ok &= !pvr_pds_render_vertex_program_ids_base(0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG, 6, 0,
@@ -61,13 +64,25 @@ int main(void)
    ok &= !pvr_pds_render_vertex_program_ids_base(0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG,
                                                  PVR_PDS_NO_ID_REG, BASE, noreg_bn.data,
                                                  noreg_bn.code, &noreg_bn.info);
+   ok &= !pvr_pds_render_vertex_program_ids_base(
+      0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG, PVR_PDS_NO_ID_REG | PVR_PDS_ID_BASE_TO_STREAMS, BASE,
+      fl_bn.data, fl_bn.code, &fl_bn.info);
+   ok &= !pvr_pds_render_vertex_program_ids_base(
+      0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG, PVR_PDS_NO_ID_REG | PVR_PDS_ID_BASE_TO_STREAMS, 0,
+      fl_b0.data, fl_b0.code, &fl_b0.info);
+   ok &= !pvr_pds_render_vertex_program_ids_base(0x400, 2, st, 2, 0, PVR_PDS_NO_ID_REG,
+                                                 6u | PVR_PDS_ID_BASE_TO_STREAMS, BASE,
+                                                 fl_reg.data, fl_reg.code, &fl_reg.info);
    if (!ok) {
       printf("generator failed\n");
       return 1;
    }
-   printf("base0_same=%d modifier_in_data=%d grow=%u,%u no_reg_ignored=%d\n", same(&old, &b0),
-          has(&bn, BASE) && !has(&old, BASE),
+   printf("base0_same=%d modifier_in_data=%d grow=%u,%u no_reg_ignored=%d streams_base=%d\n",
+          same(&old, &b0), has(&bn, BASE) && !has(&old, BASE),
           bn.info.data_size_dw - old.info.data_size_dw,
-          bn.info.code_size_dw - old.info.code_size_dw, same(&noreg_old, &noreg_bn));
+          bn.info.code_size_dw - old.info.code_size_dw, same(&noreg_old, &noreg_bn),
+          has(&fl_bn, BASE) && !has(&noreg_old, BASE) &&
+             fl_bn.info.code_size_dw == noreg_old.info.code_size_dw + 1 &&
+             same(&fl_b0, &noreg_old) && same(&fl_reg, &bn));
    return 0;
 }

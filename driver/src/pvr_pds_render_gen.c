@@ -65,8 +65,14 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
 {
    uint32_t vtxin_dw = 0;
    const struct pvr_device_info *dev_info = pvr_mesa_dev_info(has_slc_mcu_cache_controls);
+   /* PVR_PDS_ID_BASE_TO_STREAMS: the base goes to the instance number even
+    * when gl_InstanceID is not written (P3). Without it, exactly the old
+    * path. */
+   const bool base_to_streams = (instance_id_reg & PVR_PDS_ID_BASE_TO_STREAMS) != 0;
    _Alignas(16) uint32_t staging[PDS_STAGING_DW];
    struct pvr_pds_vertex_shader_program program;
+
+   instance_id_reg &= ~PVR_PDS_ID_BASE_TO_STREAMS;
 
    if (num_streams > PVR_PDS_VERTEX_MAX_STREAMS || vs_temps > PVR_PDS_DOUTU_MAX_TEMPS)
       return -1;
@@ -122,6 +128,12 @@ static int vertex_program(uint64_t vs_usc_exec_offset, uint32_t vs_temps,
       program.instance_id_modifier = instance_id_base;
       if (instance_id_reg + 1 > vtxin_dw)
          vtxin_dw = instance_id_reg + 1;
+   } else if (base_to_streams) {
+      /* No gl_InstanceID write: Mesa's ADD32 still adds the modifier to IR1
+       * before the per-instance DMAs (pvr_pds.c pvr_pds_vertex_shader takes
+       * instance_id_modifier without iterate_instance_id), so a chunk of a
+       * split draw fetches element (first + i) / divisor with no base move. */
+      program.instance_id_modifier = instance_id_base;
    }
 
    pvr_pds_vertex_shader(&program, NULL, PDS_GENERATE_SIZES, dev_info);

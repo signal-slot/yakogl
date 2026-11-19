@@ -21,7 +21,9 @@
 //! stream, behind the cargo feature `pvr-instance-divisor`): then (2) becomes
 //! one instanced draw for every divisor <= 0xffff, and only (3) stays a
 //! split, as tests/es3_instanced_divisor_cap.rs pins on the Vivante table.
-//! That P3 change updates the cases of (2) here.
+//! So the cases of (2) and the divisor-1 table pin run without that feature
+//! only; with it, tests/es3_pvr_divisor.rs checks the one instanced draw,
+//! and (1) and (3) here hold either way.
 //!
 //! The draws are seen twice: at the table (a recorder with the PowerVR
 //! table's own `max_instance_divisor`, forwarding every draw to the real
@@ -822,9 +824,19 @@ fn assert_split(divs: [GLuint; 3], n: usize, draws: &[TableRec], hw: &[Hw]) {
 
 /// The table these tests stand on: the PowerVR takes divisor 1 only. P3
 /// moves this to 0xffff (feature `pvr-instance-divisor`).
+#[cfg(not(feature = "pvr-instance-divisor"))]
 #[test]
 fn the_pvr_table_takes_divisor_1_only() {
     assert_eq!(yakogl_backend_pvr.max_instance_divisor, 1);
+    assert_eq!(PVR_RECORDED.max_instance_divisor, yakogl_backend_pvr.max_instance_divisor);
+}
+
+/// The table with P3: every divisor a GlesAttrib holds; the cases of (2)
+/// are then one instanced draw (tests/es3_pvr_divisor.rs).
+#[cfg(feature = "pvr-instance-divisor")]
+#[test]
+fn the_pvr_table_takes_divisors_up_to_0xffff() {
+    assert_eq!(yakogl_backend_pvr.max_instance_divisor, 0xffff);
     assert_eq!(PVR_RECORDED.max_instance_divisor, yakogl_backend_pvr.max_instance_divisor);
 }
 
@@ -861,6 +873,7 @@ fn divisors_0_and_1_are_one_instanced_draw() {
 /// (2) Divisors 2, 3 and 4 in one draw: above the PowerVR's 1, so the core
 /// draws the 9 instances one by one (instance i reads element i / divisor
 /// of each array as a constant). After P3: one instanced draw.
+#[cfg(not(feature = "pvr-instance-divisor"))]
 #[test]
 fn divisors_2_3_4_split_into_one_draw_per_instance() {
     let divs = [2, 3, 4];
@@ -871,6 +884,7 @@ fn divisors_2_3_4_split_into_one_draw_per_instance() {
 /// (2) A mixed 1/2 draw (and a divisor-0 array): the one divisor 2 splits
 /// the whole draw, the divisor-1 array becomes a constant too, the divisor-0
 /// array stays fetched per vertex. After P3: one instanced draw.
+#[cfg(not(feature = "pvr-instance-divisor"))]
 #[test]
 fn a_mixed_1_2_draw_splits_into_one_draw_per_instance() {
     let divs = [1, 2, 0];

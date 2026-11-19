@@ -281,7 +281,16 @@ int pvr_pds_render_vertex_program_ids(uint64_t vs_usc_exec_offset,
  * A base != 0 needs, beyond the _ids sizes, 1 more code dword (the ADD32) and
  * 0 to 2 more data dwords (the modifier constant, which Mesa's constant bank
  * may pad): size data_out by the _ids need + 2 and code_out by the _ids need
- * + 1; info reports the exact sizes. */
+ * + 1; info reports the exact sizes.
+ *
+ * instance_id_reg | PVR_PDS_ID_BASE_TO_STREAMS: the base is added to the
+ * instance number even when gl_InstanceID is not written (low eight bits
+ * PVR_PDS_NO_ID_REG), so the per-instance streams fetch element
+ * (base + instance) / divisor: a chunk of a draw split by instances starts
+ * at its first instance without moving any stream's base (P3, hardware
+ * instance divisors; the back end passes it only under the cargo feature
+ * pvr-instance-divisor). Without the bit, the base is ignored as above. */
+#define PVR_PDS_ID_BASE_TO_STREAMS 0x100u
 int pvr_pds_render_vertex_program_ids_base(uint64_t vs_usc_exec_offset,
                                            uint32_t vs_temps,
                                            const struct pvr_pds_render_stream *streams,

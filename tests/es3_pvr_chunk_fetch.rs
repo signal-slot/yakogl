@@ -11,7 +11,9 @@
 //! element F + i of a divisor-1 attribute: the base move and P1's
 //! `instance_id_modifier` (which adds a per-draw constant to the instance
 //! number, `pvr_pds_render_vertex_program_ids_base`) together must add F
-//! once. Both adding F fetches element 2F + i.
+//! once. Both adding F fetches element 2F + i. With the feature
+//! pvr-instance-divisor (P3) no base moves at all: every chunk's vertex
+//! program adds F (`PVR_PDS_ID_BASE_TO_STREAMS`), and the sum is the same.
 //!
 //! The draw goes through the GL core into the REAL PowerVR back end, on a
 //! platform written here, with stand-ins for the C generators that record
@@ -100,9 +102,13 @@ struct VertexRec {
 
 impl VertexRec {
     /// What the program adds to the instance number before the fetch: the
-    /// base, which the generator ignores without an instance register.
+    /// base, which the generator ignores without an instance register unless
+    /// the back end sets `PVR_PDS_ID_BASE_TO_STREAMS` (feature
+    /// pvr-instance-divisor: every chunk with a per-instance stream).
     fn modifier(&self) -> u64 {
-        if self.instance_id_reg != PVR_PDS_NO_ID_REG {
+        if self.instance_id_reg & !PVR_PDS_ID_BASE_TO_STREAMS != PVR_PDS_NO_ID_REG
+            || self.instance_id_reg & PVR_PDS_ID_BASE_TO_STREAMS != 0
+        {
             self.instance_id_base as u64
         } else {
             0
