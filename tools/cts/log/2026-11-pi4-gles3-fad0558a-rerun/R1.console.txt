@@ -1,0 +1,2364 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at fad0558a, 2026-11-19, image R1: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.06 [sdcard] pieeprom.upd not found
+  5.06 [sdcard] recover4.elf not found
+  5.07 [sdcard] recovery.elf not found
+  5.95 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.01 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.03 0x00d03114 0x00000000 0x00001fff
+  5.06 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.43 Starting start4.elf @ 0xfec00200 partition 1
+  5.24 XHCI-STOP
+  5.24 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.25 USBSTS 18
+  5.25 PCI0 reset
+  5.26 +
+
+MESS:00:00:05.277490:0: arasan: arasan_emmc_open
+MESS:00:00:05.279149:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.399379:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.412249:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.446527:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.447939:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.452323:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.617618:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.620450:0: brfs: File read: 162 bytes
+MESS:00:00:05.713575:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.718083:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.735138:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.234212:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.239759:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.248792:0: *** Restart logging
+MESS:00:00:06.250567:0: brfs: File read: 162 bytes
+MESS:00:00:06.329406:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.334438:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.352229:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.357301:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.362899:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.371657:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.377160:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.393908:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.408944:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.412234:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.452928:0: brfs: File read: 56249 bytes
+MESS:00:00:06.472751:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.537676:0: brfs: File read: 5971 bytes
+MESS:00:00:06.544500:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.585631:0: brfs: File read: 162 bytes
+MESS:00:00:06.589680:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.592791:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.598641:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.755842:0: brfs: File read: 145 bytes
+MESS:00:00:08.167470:0: brfs: File read: /mfs/sd/yakogl-R1.bin
+MESS:00:00:08.170203:0: Loaded 'yakogl-R1.bin' to 0x200000 size 0xffdf50
+MESS:00:00:08.176642:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.185421:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.191943:0: uart: Baud rate change done...
+MESS:00:00:08.193965:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build fad0558a
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.rasterization.*,dEQP-GLES3.functional.rasterizer_discard.*,dEQP-GLES3.functional.read_pixels.*,dEQP-GLES3.functional.samplers.*,dEQP-GLES3.functional.shader_api.*,dEQP-GLES3.functional.vertex_array_objects.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.back_triangle_fan'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x20107c ca 0x20107c ra 0x0 qba 0x201000 qea 0x20107c ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.back_triangle_fan
+v3d_deqp: case #0 P 164ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.back_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.back_triangle_fan_reverse'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.back_triangle_fan_reverse
+v3d_deqp: case #1 P 54ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.back_triangle_fan_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.back_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.back_triangle_strip
+v3d_deqp: case #2 P 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.back_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.back_triangle_strip_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.back_triangle_strip_reverse
+v3d_deqp: case #3 P 38ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.back_triangle_strip_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.back_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.back_triangles
+v3d_deqp: case #4 P 35ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.back_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.back_triangles_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.back_triangles_reverse
+v3d_deqp: case #5 P 34ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.back_triangles_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.both_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.both_triangle_fan
+v3d_deqp: case #6 P 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.both_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.both_triangle_fan_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.both_triangle_fan_reverse
+v3d_deqp: case #7 P 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.both_triangle_fan_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.both_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.both_triangle_strip
+v3d_deqp: case #8 P 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.both_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.both_triangle_strip_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.both_triangle_strip_reverse
+v3d_deqp: case #9 P 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.both_triangle_strip_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.both_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.both_triangles
+v3d_deqp: case #10 P 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.both_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.both_triangles_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.both_triangles_reverse
+v3d_deqp: case #11 P 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.both_triangles_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.front_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.front_triangle_fan
+v3d_deqp: case #12 P 39ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.front_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.front_triangle_fan_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.front_triangle_fan_reverse
+v3d_deqp: case #13 P 37ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.front_triangle_fan_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.front_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.front_triangle_strip
+v3d_deqp: case #14 P 38ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.front_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.front_triangle_strip_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.front_triangle_strip_reverse
+v3d_deqp: case #15 P 35ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.front_triangle_strip_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.front_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.front_triangles
+v3d_deqp: case #16 P 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.front_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.culling.front_triangles_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.culling.front_triangles_reverse
+v3d_deqp: case #17 P 35ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.culling.front_triangles_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad
+v3d_deqp: case #18 N 29ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad_reverse'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad_reverse
+v3d_deqp: case #19 N 34ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.basic_quad_reverse
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_full'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_full
+v3d_deqp: case #20 N 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_full
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_partly'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_partly
+v3d_deqp: case #21 N 34ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.clipped_partly
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.projected'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.projected
+v3d_deqp: case #22 N 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.fill_rules.projected
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines
+v3d_deqp: case #23 N 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines_wide'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines_wide
+v3d_deqp: case #24 N 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.lines_wide
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.triangles'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.triangles
+v3d_deqp: case #25 N 33ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.interpolation.triangles
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines
+v3d_deqp: case #26 N 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines_wide'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines_wide
+v3d_deqp: case #27 N 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.lines_wide
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.points'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.points
+v3d_deqp: case #28 N 31ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.points
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.triangles'..
+deqp: NotSupported dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.triangles
+v3d_deqp: case #29 N 32ms k2/8 c20141/20153 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.primitives.triangles
+  NotSupported (Test requires 4x msaa rbo)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.basic_quad'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.basic_quad
+v3d_deqp: case #30 P 79ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.basic_quad
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.basic_quad_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.basic_quad_reverse
+v3d_deqp: case #31 P 78ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.basic_quad_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.clipped_full'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.clipped_full
+v3d_deqp: case #32 P 52ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.clipped_full
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.clipped_partly'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.clipped_partly
+v3d_deqp: case #33 P 51ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.clipped_partly
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.projected'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.projected
+v3d_deqp: case #34 P 77ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.fill_rules.projected
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines
+v3d_deqp: case #35 P 149ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines_wide'..
+deqp: Fail dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines_wide
+v3d_deqp: case #36 F 161ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.lines_wide
+  Fail (Found invalid pixel values)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.triangles
+v3d_deqp: case #37 P 153ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.interpolation.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines
+v3d_deqp: case #38 P 130ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines_wide'..
+deqp: Fail dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines_wide
+v3d_deqp: case #39 F 136ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.lines_wide
+  Fail (Incorrect rasterization)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.points'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.points
+v3d_deqp: case #40 P 176ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.triangles
+v3d_deqp: case #41 P 123ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.primitives.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.basic_quad'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.basic_quad
+v3d_deqp: case #42 P 34ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.basic_quad
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.basic_quad_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.basic_quad_reverse
+v3d_deqp: case #43 P 34ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.basic_quad_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.clipped_full'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.clipped_full
+v3d_deqp: case #44 P 34ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.clipped_full
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.clipped_partly'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.clipped_partly
+v3d_deqp: case #45 P 34ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.clipped_partly
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.projected'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.projected
+v3d_deqp: case #46 P 33ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.fill_rules.projected
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines'..
+deqp: QualityWarning dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines
+v3d_deqp: case #47 Q 195ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines_wide
+v3d_deqp: case #48 P 177ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.triangles
+v3d_deqp: case #49 P 83ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.interpolation.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.lines'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.lines
+v3d_deqp: case #50 P 64ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.lines_wide
+v3d_deqp: case #51 P 78ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.points'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.points
+v3d_deqp: case #52 P 107ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.triangles
+v3d_deqp: case #53 P 56ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.rbo_singlesample.primitives.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.basic_quad'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.basic_quad
+v3d_deqp: case #54 P 33ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.basic_quad
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.basic_quad_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.basic_quad_reverse
+v3d_deqp: case #55 P 32ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.basic_quad_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.clipped_full'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.clipped_full
+v3d_deqp: case #56 P 33ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.clipped_full
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.clipped_partly'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.clipped_partly
+v3d_deqp: case #57 P 32ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.clipped_partly
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.projected'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.projected
+v3d_deqp: case #58 P 31ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.fill_rules.projected
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines'..
+deqp: QualityWarning dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines
+v3d_deqp: case #59 Q 192ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines_wide
+v3d_deqp: case #60 P 174ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.triangles
+v3d_deqp: case #61 P 81ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.interpolation.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.lines'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.lines
+v3d_deqp: case #62 P 63ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.lines_wide
+v3d_deqp: case #63 P 77ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.points'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.points
+v3d_deqp: case #64 P 105ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.triangles
+v3d_deqp: case #65 P 55ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fbo.texture_2d.primitives.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fill_rules.basic_quad'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fill_rules.basic_quad
+v3d_deqp: case #66 P 29ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fill_rules.basic_quad
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fill_rules.basic_quad_reverse'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fill_rules.basic_quad_reverse
+v3d_deqp: case #67 P 29ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fill_rules.basic_quad_reverse
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fill_rules.clipped_full'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fill_rules.clipped_full
+v3d_deqp: case #68 P 29ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fill_rules.clipped_full
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fill_rules.clipped_partly'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fill_rules.clipped_partly
+v3d_deqp: case #69 P 28ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fill_rules.clipped_partly
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.fill_rules.projected'..
+deqp: Pass dEQP-GLES3.functional.rasterization.fill_rules.projected
+v3d_deqp: case #70 P 28ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.fill_rules.projected
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.line_loop
+v3d_deqp: case #71 P 150ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.line_loop_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.line_loop_wide
+v3d_deqp: case #72 P 199ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.line_loop_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.line_strip
+v3d_deqp: case #73 P 155ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.line_strip_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.line_strip_wide
+v3d_deqp: case #74 P 186ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.line_strip_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.lines'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.lines
+v3d_deqp: case #75 P 147ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.lines_wide
+v3d_deqp: case #76 P 164ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.triangle_fan
+v3d_deqp: case #77 P 98ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.triangle_strip
+v3d_deqp: case #78 P 97ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.flatshading.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.flatshading.triangles
+v3d_deqp: case #79 P 76ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.flatshading.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop
+v3d_deqp: case #80 P 155ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop_wide
+v3d_deqp: case #81 P 206ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.line_loop_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip
+v3d_deqp: case #82 P 153ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip_wide
+v3d_deqp: case #83 P 191ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.line_strip_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.lines'..
+deqp: QualityWarning dEQP-GLES3.functional.rasterization.interpolation.basic.lines
+v3d_deqp: case #84 Q 191ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.lines
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.lines_wide
+v3d_deqp: case #85 P 172ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.triangle_fan
+v3d_deqp: case #86 P 100ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.triangle_strip
+v3d_deqp: case #87 P 99ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.basic.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.basic.triangles
+v3d_deqp: case #88 P 79ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.basic.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop
+v3d_deqp: case #89 P 154ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop_wide
+v3d_deqp: case #90 P 203ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.line_loop_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip
+v3d_deqp: case #91 P 155ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip_wide
+v3d_deqp: case #92 P 192ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.line_strip_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.lines'..
+deqp: QualityWarning dEQP-GLES3.functional.rasterization.interpolation.projected.lines
+v3d_deqp: case #93 Q 197ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.lines
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide'..
+deqp: QualityWarning dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide
+v3d_deqp: case #94 Q 268ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.lines_wide
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.triangle_fan
+v3d_deqp: case #95 P 120ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.triangle_strip
+v3d_deqp: case #96 P 109ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.interpolation.projected.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.interpolation.projected.triangles
+v3d_deqp: case #97 P 97ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.interpolation.projected.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.line_loop
+v3d_deqp: case #98 P 59ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.line_loop_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.line_loop_wide
+v3d_deqp: case #99 P 74ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.line_loop_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.line_strip
+v3d_deqp: case #100 P 58ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.line_strip_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.line_strip_wide
+v3d_deqp: case #101 P 69ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.line_strip_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.lines'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.lines
+v3d_deqp: case #102 P 59ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.lines_wide'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.lines_wide
+v3d_deqp: case #103 P 73ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.lines_wide
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.points'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.points
+v3d_deqp: case #104 P 102ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.triangle_fan
+v3d_deqp: case #105 P 59ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.triangle_strip
+v3d_deqp: case #106 P 60ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterization.primitives.triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterization.primitives.triangles
+v3d_deqp: case #107 P 51ms k2/8 c20143/20668 r0 dEQP-GLES3.functional.rasterization.primitives.triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.clear_color'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.clear_color
+v3d_deqp: case #108 P 26ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.clear_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.clear_depth'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.clear_depth
+v3d_deqp: case #109 P 26ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.clear_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.clear_stencil'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.clear_stencil
+v3d_deqp: case #110 P 27ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.clear_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_line_loop
+v3d_deqp: case #111 P 28ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_line_strip
+v3d_deqp: case #112 P 29ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_lines'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_lines
+v3d_deqp: case #113 P 28ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_points'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_points
+v3d_deqp: case #114 P 28ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangle_fan
+v3d_deqp: case #115 P 28ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangle_strip
+v3d_deqp: case #116 P 30ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangles
+v3d_deqp: case #117 P 29ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_depth_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_line_loop
+v3d_deqp: case #118 P 29ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_line_strip
+v3d_deqp: case #119 P 30ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_lines'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_lines
+v3d_deqp: case #120 P 29ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_points'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_points
+v3d_deqp: case #121 P 28ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangle_fan
+v3d_deqp: case #122 P 30ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangle_strip
+v3d_deqp: case #123 P 30ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangles
+v3d_deqp: case #124 P 30ms k2/9 c20143/20668 r0 dEQP-GLES3.functional.rasterizer_discard.basic.write_stencil_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.clear_color'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.clear_color
+v3d_deqp: case #125 P 27ms k2/9 c20143/20745 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.clear_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.clear_depth'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.clear_depth
+v3d_deqp: case #126 P 26ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.clear_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.clear_stencil'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.clear_stencil
+v3d_deqp: case #127 P 26ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.clear_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_line_loop
+v3d_deqp: case #128 P 27ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_line_strip
+v3d_deqp: case #129 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_lines'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_lines
+v3d_deqp: case #130 P 28ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_points'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_points
+v3d_deqp: case #131 P 27ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangle_fan
+v3d_deqp: case #132 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangle_strip
+v3d_deqp: case #133 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangles
+v3d_deqp: case #134 P 28ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_depth_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_line_loop
+v3d_deqp: case #135 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_line_strip
+v3d_deqp: case #136 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_lines'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_lines
+v3d_deqp: case #137 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_points'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_points
+v3d_deqp: case #138 P 28ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangle_fan
+v3d_deqp: case #139 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangle_strip
+v3d_deqp: case #140 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangles
+v3d_deqp: case #141 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.fbo.write_stencil_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.clear_color'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.clear_color
+v3d_deqp: case #142 P 27ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.clear_color
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.clear_depth'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.clear_depth
+v3d_deqp: case #143 P 27ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.clear_depth
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.clear_stencil'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.clear_stencil
+v3d_deqp: case #144 P 27ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.clear_stencil
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_line_loop
+v3d_deqp: case #145 P 28ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_line_strip
+v3d_deqp: case #146 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_lines'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_lines
+v3d_deqp: case #147 P 28ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_points'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_points
+v3d_deqp: case #148 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangle_fan
+v3d_deqp: case #149 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangle_strip
+v3d_deqp: case #150 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangles
+v3d_deqp: case #151 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_depth_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_line_loop'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_line_loop
+v3d_deqp: case #152 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_line_loop
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_line_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_line_strip
+v3d_deqp: case #153 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_line_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_lines'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_lines
+v3d_deqp: case #154 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_lines
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_points'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_points
+v3d_deqp: case #155 P 29ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_points
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangle_fan'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangle_fan
+v3d_deqp: case #156 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangle_fan
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangle_strip'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangle_strip
+v3d_deqp: case #157 P 31ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangle_strip
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangles'..
+deqp: Pass dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangles
+v3d_deqp: case #158 P 30ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.rasterizer_discard.scissor.write_stencil_triangles
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.choose_1'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.choose_1
+v3d_deqp: case #159 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.choose_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.choose_2'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.choose_2
+v3d_deqp: case #160 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.choose_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.choose_4'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.choose_4
+v3d_deqp: case #161 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.choose_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.choose_8'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.choose_8
+v3d_deqp: case #162 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.choose_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_int_1'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_int_1
+v3d_deqp: case #163 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_int_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_int_2'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_int_2
+v3d_deqp: case #164 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_int_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_int_4'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_int_4
+v3d_deqp: case #165 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_int_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_int_8'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_int_8
+v3d_deqp: case #166 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_int_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_1'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_1
+v3d_deqp: case #167 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_2'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_2
+v3d_deqp: case #168 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_4'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_4
+v3d_deqp: case #169 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_8'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_8
+v3d_deqp: case #170 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_ubyte_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_1'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_1
+v3d_deqp: case #171 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_1
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_2'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_2
+v3d_deqp: case #172 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_2
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_4'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_4
+v3d_deqp: case #173 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_4
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_8'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_8
+v3d_deqp: case #174 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.alignment.rgba_uint_8
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.choose_17'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.choose_17
+v3d_deqp: case #175 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.choose_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.choose_19'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.choose_19
+v3d_deqp: case #176 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.choose_19
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.choose_23'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.choose_23
+v3d_deqp: case #177 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.choose_23
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.choose_29'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.choose_29
+v3d_deqp: case #178 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.choose_29
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_17'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_17
+v3d_deqp: case #179 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_19'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_19
+v3d_deqp: case #180 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_19
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_23'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_23
+v3d_deqp: case #181 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_23
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_29'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_29
+v3d_deqp: case #182 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_int_29
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_17'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_17
+v3d_deqp: case #183 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_19'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_19
+v3d_deqp: case #184 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_19
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_23'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_23
+v3d_deqp: case #185 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_23
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_29'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_29
+v3d_deqp: case #186 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_ubyte_29
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_17'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_17
+v3d_deqp: case #187 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_17
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_19'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_19
+v3d_deqp: case #188 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_19
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_23'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_23
+v3d_deqp: case #189 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_23
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_29'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_29
+v3d_deqp: case #190 P 25ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.rowlength.rgba_uint_29
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.choose_0_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.choose_0_3
+v3d_deqp: case #191 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.choose_0_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.choose_3_0'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.choose_3_0
+v3d_deqp: case #192 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.choose_3_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.choose_3_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.choose_3_3
+v3d_deqp: case #193 P 22ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.choose_3_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.choose_3_5'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.choose_3_5
+v3d_deqp: case #194 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.choose_3_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_int_0_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_int_0_3
+v3d_deqp: case #195 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_int_0_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_0'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_0
+v3d_deqp: case #196 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_3
+v3d_deqp: case #197 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_5'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_5
+v3d_deqp: case #198 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_int_3_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_0_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_0_3
+v3d_deqp: case #199 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_0_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_0'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_0
+v3d_deqp: case #200 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_3
+v3d_deqp: case #201 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_5'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_5
+v3d_deqp: case #202 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_ubyte_3_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_uint_0_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_uint_0_3
+v3d_deqp: case #203 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_uint_0_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_0'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_0
+v3d_deqp: case #204 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_0
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_3'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_3
+v3d_deqp: case #205 P 24ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_3
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_5'..
+deqp: Pass dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_5
+v3d_deqp: case #206 P 23ms k2/9 c20143/20757 r0 dEQP-GLES3.functional.read_pixels.skip.rgba_uint_3_5
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_mag_filter'..
+  cube-bind: 0x1531000 unit 0 kick 477 (draw)
+  cube(draw) @0x1531000 32x32 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1539000 unit 1 kick 477 (draw)
+  cube(draw) @0x1539000 32x32 x6: fmt 0, cpu 0x1e638000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 477 (draw)
+  cube(draw) @0x1531000 32x32 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1539000 unit 1 kick 477 (draw)
+  cube(draw) @0x1539000 32x32 x6: fmt 0, cpu 0x1e638000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 478 (draw)
+  cube(draw) @0x1531000 32x32 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1539000 unit 1 kick 478 (draw)
+  cube(draw) @0x1539000 32x32 x6: fmt 0, cpu 0x1e638000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 478 (draw)
+  cube(draw) @0x1531000 32x32 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1539000 unit 1 kick 478 (draw)
+  cube(draw) @0x1539000 32x32 x6: fmt 0, cpu 0x1e638000 - not dumped
+  cube-bind: 0x154f000 unit 0 kick 479 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 479 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+  cube-bind: 0x154f000 unit 0 kick 479 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 479 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+  cube-bind: 0x154f000 unit 0 kick 480 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 480 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+  cube-bind: 0x154f000 unit 0 kick 480 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 480 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_mag_filter
+v3d_deqp: case #207 P 198ms k2/10 c20263/20757 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_mag_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_max_lod'..
+  cube-bind: 0x154f000 unit 0 kick 481 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 481 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+yakogl/v3d: tiled copies high-water 163840 of 16777216 bytes
+  cube-bind: 0x154f000 unit 0 kick 481 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 481 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+  cube-bind: 0x154f000 unit 0 kick 482 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 482 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+  cube-bind: 0x154f000 unit 0 kick 482 (draw)
+  cube(draw) @0x154f000 32x32 x6: fmt 0, cpu 0x1e64e000 - not dumped
+  cube-bind: 0x1557000 unit 1 kick 482 (draw)
+  cube(draw) @0x1557000 32x32 x6: fmt 0, cpu 0x1e656000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 483 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 483 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 483 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 483 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 484 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 484 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 484 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 484 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_max_lod
+v3d_deqp: case #208 P 203ms k2/10 c20431/20757 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_max_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_min_filter'..
+  cube-bind: 0x1579000 unit 0 kick 485 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 485 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 485 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 485 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 486 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 486 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1579000 unit 0 kick 486 (draw)
+  cube(draw) @0x1579000 32x32 x6: fmt 0, cpu 0x1e678000 - not dumped
+  cube-bind: 0x1581000 unit 1 kick 486 (draw)
+  cube(draw) @0x1581000 32x32 x6: fmt 0, cpu 0x1e680000 - not dumped
+  cube-bind: 0x1597000 unit 0 kick 487 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 487 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+  cube-bind: 0x1597000 unit 0 kick 487 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 487 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+  cube-bind: 0x1597000 unit 0 kick 488 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 488 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+  cube-bind: 0x1597000 unit 0 kick 488 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 488 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_min_filter
+v3d_deqp: case #209 P 198ms k2/10 c20551/20757 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_min_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_min_lod'..
+  cube-bind: 0x1597000 unit 0 kick 489 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 489 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+yakogl/v3d: tiled copies high-water 327680 of 16777216 bytes
+  cube-bind: 0x1597000 unit 0 kick 489 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 489 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+  cube-bind: 0x1597000 unit 0 kick 490 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 490 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+  cube-bind: 0x1597000 unit 0 kick 490 (draw)
+  cube(draw) @0x1597000 32x32 x6: fmt 0, cpu 0x1e696000 - not dumped
+  cube-bind: 0x159f000 unit 1 kick 490 (draw)
+  cube(draw) @0x159f000 32x32 x6: fmt 0, cpu 0x1e69e000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 491 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 491 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 491 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 491 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 492 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 492 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 492 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 492 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_min_lod
+v3d_deqp: case #210 P 204ms k2/10 c20719/20900 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_min_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_r'..
+  cube-bind: 0x15c1000 unit 0 kick 493 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 493 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 493 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 493 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 494 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 494 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15c1000 unit 0 kick 494 (draw)
+  cube(draw) @0x15c1000 32x32 x6: fmt 0, cpu 0x1e6c0000 - not dumped
+  cube-bind: 0x15c9000 unit 1 kick 494 (draw)
+  cube(draw) @0x15c9000 32x32 x6: fmt 0, cpu 0x1e6c8000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 495 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 495 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 495 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 495 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 496 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 496 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 496 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 496 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_r
+v3d_deqp: case #211 P 197ms k2/10 c20839/20972 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_r
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_s'..
+  cube-bind: 0x15df000 unit 0 kick 497 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 497 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 497 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 497 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 498 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 498 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15df000 unit 0 kick 498 (draw)
+  cube(draw) @0x15df000 32x32 x6: fmt 0, cpu 0x1e6de000 - not dumped
+  cube-bind: 0x15e7000 unit 1 kick 498 (draw)
+  cube(draw) @0x15e7000 32x32 x6: fmt 0, cpu 0x1e6e6000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 499 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 499 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 499 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 499 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 500 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 500 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 500 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 500 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_s
+v3d_deqp: case #212 P 197ms k2/10 c20959/21092 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_s
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_t'..
+  cube-bind: 0x15fd000 unit 0 kick 501 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 501 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 501 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 501 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 502 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 502 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x15fd000 unit 0 kick 502 (draw)
+  cube(draw) @0x15fd000 32x32 x6: fmt 0, cpu 0x1e6fc000 - not dumped
+  cube-bind: 0x1605000 unit 1 kick 502 (draw)
+  cube(draw) @0x1605000 32x32 x6: fmt 0, cpu 0x1e704000 - not dumped
+  cube-bind: 0x161b000 unit 0 kick 503 (draw)
+  cube(draw) @0x161b000 32x32 x6: fmt 0, cpu 0x1e71a000 - not dumped
+  cube-bind: 0x1623000 unit 1 kick 503 (draw)
+  cube(draw) @0x1623000 32x32 x6: fmt 0, cpu 0x1e722000 - not dumped
+  cube-bind: 0x161b000 unit 0 kick 503 (draw)
+  cube(draw) @0x161b000 32x32 x6: fmt 0, cpu 0x1e71a000 - not dumped
+  cube-bind: 0x1623000 unit 1 kick 503 (draw)
+  cube(draw) @0x1623000 32x32 x6: fmt 0, cpu 0x1e722000 - not dumped
+  cube-bind: 0x161b000 unit 0 kick 504 (draw)
+  cube(draw) @0x161b000 32x32 x6: fmt 0, cpu 0x1e71a000 - not dumped
+  cube-bind: 0x1623000 unit 1 kick 504 (draw)
+  cube(draw) @0x1623000 32x32 x6: fmt 0, cpu 0x1e722000 - not dumped
+  cube-bind: 0x161b000 unit 0 kick 504 (draw)
+  cube(draw) @0x161b000 32x32 x6: fmt 0, cpu 0x1e71a000 - not dumped
+  cube-bind: 0x1623000 unit 1 kick 504 (draw)
+  cube(draw) @0x1623000 32x32 x6: fmt 0, cpu 0x1e722000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_t
+v3d_deqp: case #213 P 198ms k2/10 c21079/21212 r0 dEQP-GLES3.functional.samplers.multi_cubemap.diff_wrap_t
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_mag_filter'..
+yakogl/v3d: a stale tiled copy of 8192 bytes given back before the job opened (the first; later ones are counted)
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_mag_filter
+v3d_deqp: case #214 P 40ms k2/10 c21106/21212 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_mag_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_max_lod'..
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_max_lod
+v3d_deqp: case #215 P 30ms k2/10 c21141/21212 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_max_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_min_filter'..
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_min_filter
+v3d_deqp: case #216 P 31ms k2/10 c21168/21212 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_min_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_min_lod'..
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_min_lod
+v3d_deqp: case #217 P 30ms k2/10 c21203/21251 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_min_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_r'..
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_r
+v3d_deqp: case #218 P 30ms k2/10 c21230/21270 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_r
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_s'..
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_s
+v3d_deqp: case #219 P 30ms k2/10 c21257/21297 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_s
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_t'..
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_t
+v3d_deqp: case #220 P 30ms k2/10 c21284/21324 r0 dEQP-GLES3.functional.samplers.multi_tex_2d.diff_wrap_t
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_mag_filter'..
+  cube-bind: 0x1655000 unit 0 kick 533 (draw)
+  cube(draw) @0x1655000 32x32 x32: fmt 0, cpu 0x1e754000 - not dumped
+  cube-bind: 0x1680000 unit 1 kick 533 (draw)
+  cube(draw) @0x1680000 32x32 x32: fmt 0, cpu 0x1e77f000 - not dumped
+yakogl/v3d: tiled copies high-water 765952 of 16777216 bytes
+  cube-bind: 0x1655000 unit 0 kick 533 (draw)
+  cube(draw) @0x1655000 32x32 x32: fmt 0, cpu 0x1e754000 - not dumped
+  cube-bind: 0x1680000 unit 1 kick 533 (draw)
+  cube(draw) @0x1680000 32x32 x32: fmt 0, cpu 0x1e77f000 - not dumped
+  cube-bind: 0x1655000 unit 0 kick 534 (draw)
+  cube(draw) @0x1655000 32x32 x32: fmt 0, cpu 0x1e754000 - not dumped
+  cube-bind: 0x1680000 unit 1 kick 534 (draw)
+  cube(draw) @0x1680000 32x32 x32: fmt 0, cpu 0x1e77f000 - not dumped
+  cube-bind: 0x1655000 unit 0 kick 534 (draw)
+  cube(draw) @0x1655000 32x32 x32: fmt 0, cpu 0x1e754000 - not dumped
+  cube-bind: 0x1680000 unit 1 kick 534 (draw)
+  cube(draw) @0x1680000 32x32 x32: fmt 0, cpu 0x1e77f000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 535 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 535 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 535 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 535 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 536 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 536 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 536 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 536 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_mag_filter
+v3d_deqp: case #221 P 225ms k2/10 c21890/22508 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_mag_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_max_lod'..
+  cube-bind: 0x16f1000 unit 0 kick 537 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 537 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 537 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 537 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 538 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 538 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x16f1000 unit 0 kick 538 (draw)
+  cube(draw) @0x16f1000 32x32 x32: fmt 0, cpu 0x1e7f0000 - not dumped
+  cube-bind: 0x171c000 unit 1 kick 538 (draw)
+  cube(draw) @0x171c000 32x32 x32: fmt 0, cpu 0x1e81b000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 539 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 539 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 539 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 539 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 540 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 540 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 540 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 540 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_max_lod
+v3d_deqp: case #222 P 220ms k2/10 c22535/23194 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_max_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_min_filter'..
+  cube-bind: 0x1793000 unit 0 kick 541 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 541 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 541 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 541 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 542 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 542 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x1793000 unit 0 kick 542 (draw)
+  cube(draw) @0x1793000 32x32 x32: fmt 0, cpu 0x1e892000 - not dumped
+  cube-bind: 0x17be000 unit 1 kick 542 (draw)
+  cube(draw) @0x17be000 32x32 x32: fmt 0, cpu 0x1e8bd000 - not dumped
+  cube-bind: 0x182b000 unit 0 kick 543 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 543 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+yakogl/v3d: tiled copies high-water 1617920 of 16777216 bytes
+  cube-bind: 0x182b000 unit 0 kick 543 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 543 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+  cube-bind: 0x182b000 unit 0 kick 544 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 544 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+  cube-bind: 0x182b000 unit 0 kick 544 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 544 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_min_filter
+v3d_deqp: case #223 P 225ms k2/10 c23141/23759 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_min_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_min_lod'..
+  cube-bind: 0x182b000 unit 0 kick 545 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 545 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+  cube-bind: 0x182b000 unit 0 kick 545 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 545 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+  cube-bind: 0x182b000 unit 0 kick 546 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 546 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+  cube-bind: 0x182b000 unit 0 kick 546 (draw)
+  cube(draw) @0x182b000 32x32 x32: fmt 0, cpu 0x1e92a000 - not dumped
+  cube-bind: 0x1856000 unit 1 kick 546 (draw)
+  cube(draw) @0x1856000 32x32 x32: fmt 0, cpu 0x1e955000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 547 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 547 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 547 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 547 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 548 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 548 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 548 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 548 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_min_lod
+v3d_deqp: case #224 P 220ms k2/10 c23786/24445 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_min_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_r'..
+  cube-bind: 0x18cd000 unit 0 kick 549 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 549 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 549 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 549 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 550 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 550 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x18cd000 unit 0 kick 550 (draw)
+  cube(draw) @0x18cd000 32x32 x32: fmt 0, cpu 0x1e9cc000 - not dumped
+  cube-bind: 0x18f8000 unit 1 kick 550 (draw)
+  cube(draw) @0x18f8000 32x32 x32: fmt 0, cpu 0x1e9f7000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 551 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 551 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 551 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 551 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 552 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 552 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 552 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 552 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_r
+v3d_deqp: case #225 P 219ms k2/10 c24392/25010 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_r
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_s'..
+  cube-bind: 0x1965000 unit 0 kick 553 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 553 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 553 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 553 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 554 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 554 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x1965000 unit 0 kick 554 (draw)
+  cube(draw) @0x1965000 32x32 x32: fmt 0, cpu 0x1ea64000 - not dumped
+  cube-bind: 0x1990000 unit 1 kick 554 (draw)
+  cube(draw) @0x1990000 32x32 x32: fmt 0, cpu 0x1ea8f000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 555 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 555 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 555 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 555 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 556 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 556 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 556 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 556 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_s
+v3d_deqp: case #226 P 219ms k2/10 c24997/25616 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_s
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_t'..
+  cube-bind: 0x19fd000 unit 0 kick 557 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 557 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 557 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 557 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 558 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 558 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x19fd000 unit 0 kick 558 (draw)
+  cube(draw) @0x19fd000 32x32 x32: fmt 0, cpu 0x1eafc000 - not dumped
+  cube-bind: 0x1a28000 unit 1 kick 558 (draw)
+  cube(draw) @0x1a28000 32x32 x32: fmt 0, cpu 0x1eb27000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 559 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1ac0000 unit 1 kick 559 (draw)
+  cube(draw) @0x1ac0000 32x32 x32: fmt 0, cpu 0x1ebbf000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 559 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1ac0000 unit 1 kick 559 (draw)
+  cube(draw) @0x1ac0000 32x32 x32: fmt 0, cpu 0x1ebbf000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 560 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1ac0000 unit 1 kick 560 (draw)
+  cube(draw) @0x1ac0000 32x32 x32: fmt 0, cpu 0x1ebbf000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 560 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1ac0000 unit 1 kick 560 (draw)
+  cube(draw) @0x1ac0000 32x32 x32: fmt 0, cpu 0x1ebbf000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_t
+v3d_deqp: case #227 P 219ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.multi_tex_3d.diff_wrap_t
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_mag_filter'..
+  cube-bind: 0x1a95000 unit 0 kick 561 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 561 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 562 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 562 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 563 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 563 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 564 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 564 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_mag_filter
+v3d_deqp: case #228 P 113ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_mag_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_max_lod'..
+  cube-bind: 0x1a95000 unit 0 kick 565 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 565 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 566 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 566 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 567 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 567 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 568 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 568 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_max_lod
+v3d_deqp: case #229 P 113ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_max_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_min_filter'..
+  cube-bind: 0x1a95000 unit 0 kick 569 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 569 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 570 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 570 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 571 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 571 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 572 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 572 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_min_filter
+v3d_deqp: case #230 P 113ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_min_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_min_lod'..
+  cube-bind: 0x1a95000 unit 0 kick 573 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 573 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 574 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 574 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 575 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 575 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 576 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 576 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_min_lod
+v3d_deqp: case #231 P 113ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_min_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_r'..
+  cube-bind: 0x1a95000 unit 0 kick 577 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 577 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 578 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 578 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 579 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 579 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 580 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 580 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_r
+v3d_deqp: case #232 P 113ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_r
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_s'..
+  cube-bind: 0x1a95000 unit 0 kick 581 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 581 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 582 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 582 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 583 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 583 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 584 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 584 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_s
+v3d_deqp: case #233 P 112ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_s
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_t'..
+  cube-bind: 0x1a95000 unit 0 kick 585 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 585 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 586 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 586 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 587 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 587 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 588 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 588 (draw)
+  cube(draw) @0x1a95000 32x32 x6: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_t
+v3d_deqp: case #234 P 113ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_cubemap.diff_wrap_t
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_mag_filter'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_mag_filter
+v3d_deqp: case #235 P 30ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_mag_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_max_lod'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_max_lod
+v3d_deqp: case #236 P 30ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_max_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_min_filter'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_min_filter
+v3d_deqp: case #237 P 30ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_min_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_min_lod'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_min_lod
+v3d_deqp: case #238 P 30ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_min_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_r'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_r
+v3d_deqp: case #239 P 30ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_r
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_s'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_s
+v3d_deqp: case #240 P 29ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_s
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_t'..
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_t
+v3d_deqp: case #241 P 29ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_2d.diff_wrap_t
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_mag_filter'..
+  cube-bind: 0x1a95000 unit 0 kick 617 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 617 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 618 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 618 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 619 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 619 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 620 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 620 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_mag_filter
+v3d_deqp: case #242 P 124ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_mag_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_max_lod'..
+  cube-bind: 0x1a95000 unit 0 kick 621 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 621 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 622 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 622 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 623 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 623 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 624 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 624 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_max_lod
+v3d_deqp: case #243 P 123ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_max_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_min_filter'..
+  cube-bind: 0x1a95000 unit 0 kick 625 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 625 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 626 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 626 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 627 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 627 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 628 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 628 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_min_filter
+v3d_deqp: case #244 P 124ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_min_filter
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_min_lod'..
+  cube-bind: 0x1a95000 unit 0 kick 629 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 629 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 630 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 630 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 631 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 631 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 632 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 632 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_min_lod
+v3d_deqp: case #245 P 123ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_min_lod
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_r'..
+  cube-bind: 0x1a95000 unit 0 kick 633 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 633 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 634 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 634 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 635 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 635 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 636 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 636 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_r
+v3d_deqp: case #246 P 123ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_r
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_s'..
+  cube-bind: 0x1a95000 unit 0 kick 637 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 637 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 638 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 638 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 639 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 639 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 640 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 640 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_s
+v3d_deqp: case #247 P 122ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_s
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_t'..
+  cube-bind: 0x1a95000 unit 0 kick 641 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 641 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 642 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 642 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 643 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 643 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 644 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+  cube-bind: 0x1a95000 unit 0 kick 644 (draw)
+  cube(draw) @0x1a95000 32x32 x32: fmt 0, cpu 0x1eb94000 - not dumped
+deqp: Pass dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_t
+v3d_deqp: case #248 P 123ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.samplers.single_tex_3d.diff_wrap_t
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.compile_link.compile_fragment_shader'..
+deqp: Pass dEQP-GLES3.functional.shader_api.compile_link.compile_fragment_shader
+v3d_deqp: case #249 P 26ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.compile_link.compile_fragment_shader
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.compile_link.compile_vertex_shader'..
+deqp: Pass dEQP-GLES3.functional.shader_api.compile_link.compile_vertex_shader
+v3d_deqp: case #250 P 26ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.compile_link.compile_vertex_shader
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.compile_link.link_vertex_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.compile_link.link_vertex_fragment
+v3d_deqp: case #251 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.compile_link.link_vertex_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.create_delete.create_fragment_shader'..
+deqp: Pass dEQP-GLES3.functional.shader_api.create_delete.create_fragment_shader
+v3d_deqp: case #252 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.create_delete.create_fragment_shader
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.create_delete.create_vertex_shader'..
+deqp: Pass dEQP-GLES3.functional.shader_api.create_delete.create_vertex_shader
+v3d_deqp: case #253 P 26ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.create_delete.create_vertex_shader
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.create_delete.delete_vertex_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.create_delete.delete_vertex_fragment
+v3d_deqp: case #254 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.create_delete.delete_vertex_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_fragment
+v3d_deqp: case #255 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_vertex
+v3d_deqp: case #256 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.delete_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_fragment
+v3d_deqp: case #257 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_vertex
+v3d_deqp: case #258 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.detach_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_fragment
+v3d_deqp: case #259 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_vertex
+v3d_deqp: case #260 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.reattach_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_fragment
+v3d_deqp: case #261 P 34ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_vertex
+v3d_deqp: case #262 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_fragment
+v3d_deqp: case #263 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_vertex
+v3d_deqp: case #264 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_fragment
+v3d_deqp: case #265 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_vertex
+v3d_deqp: case #266 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.simple.get_program_binary_vertex_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.simple.get_program_binary_vertex_fragment
+v3d_deqp: case #267 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.simple.get_program_binary_vertex_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_binary.simple.uniform_reset_on_binary_load'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_binary.simple.uniform_reset_on_binary_load
+v3d_deqp: case #268 P 34ms k2/10 c25616/26221 r0 dEQP-GLES3.functional.shader_api.program_binary.simple.uniform_reset_on_binary_load
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.delete_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.delete_shader_fragment
+v3d_deqp: case #269 P 29ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.delete_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.delete_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.delete_shader_vertex
+v3d_deqp: case #270 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.delete_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.detach_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.detach_shader_fragment
+v3d_deqp: case #271 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.detach_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.detach_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.detach_shader_vertex
+v3d_deqp: case #272 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.detach_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.reattach_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.reattach_shader_fragment
+v3d_deqp: case #273 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.reattach_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.reattach_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.reattach_shader_vertex
+v3d_deqp: case #274 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.reattach_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.recompile_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.recompile_shader_fragment
+v3d_deqp: case #275 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.recompile_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.recompile_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.recompile_shader_vertex
+v3d_deqp: case #276 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.recompile_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.replace_shader_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.replace_shader_fragment
+v3d_deqp: case #277 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.replace_shader_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.replace_shader_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.replace_shader_vertex
+v3d_deqp: case #278 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.replace_shader_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.replace_source_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.replace_source_fragment
+v3d_deqp: case #279 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.replace_source_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.program_state.replace_source_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.program_state.replace_source_vertex
+v3d_deqp: case #280 P 28ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.program_state.replace_source_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.replace_source_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.replace_source_fragment
+v3d_deqp: case #281 P 27ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.replace_source_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.replace_source_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.replace_source_vertex
+v3d_deqp: case #282 P 26ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.replace_source_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_2_null_terminated_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_2_null_terminated_fragment
+v3d_deqp: case #283 P 31ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_2_null_terminated_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_2_null_terminated_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_2_null_terminated_vertex
+v3d_deqp: case #284 P 31ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_2_null_terminated_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_2_random_negative_length_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_2_random_negative_length_fragment
+v3d_deqp: case #285 P 34ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_2_random_negative_length_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_2_random_negative_length_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_2_random_negative_length_vertex
+v3d_deqp: case #286 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_2_random_negative_length_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_2_specify_lengths_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_2_specify_lengths_fragment
+v3d_deqp: case #287 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_2_specify_lengths_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_2_specify_lengths_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_2_specify_lengths_vertex
+v3d_deqp: case #288 P 31ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_2_specify_lengths_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_4_null_terminated_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_4_null_terminated_fragment
+v3d_deqp: case #289 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_4_null_terminated_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_4_null_terminated_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_4_null_terminated_vertex
+v3d_deqp: case #290 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_4_null_terminated_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_4_random_negative_length_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_4_random_negative_length_fragment
+v3d_deqp: case #291 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_4_random_negative_length_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_4_random_negative_length_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_4_random_negative_length_vertex
+v3d_deqp: case #292 P 34ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_4_random_negative_length_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_4_specify_lengths_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_4_specify_lengths_fragment
+v3d_deqp: case #293 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_4_specify_lengths_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_4_specify_lengths_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_4_specify_lengths_vertex
+v3d_deqp: case #294 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_4_specify_lengths_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_8_null_terminated_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_8_null_terminated_fragment
+v3d_deqp: case #295 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_8_null_terminated_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_8_null_terminated_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_8_null_terminated_vertex
+v3d_deqp: case #296 P 31ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_8_null_terminated_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_8_random_negative_length_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_8_random_negative_length_fragment
+v3d_deqp: case #297 P 33ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_8_random_negative_length_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_8_random_negative_length_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_8_random_negative_length_vertex
+v3d_deqp: case #298 P 34ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_8_random_negative_length_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_8_specify_lengths_fragment'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_8_specify_lengths_fragment
+v3d_deqp: case #299 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_8_specify_lengths_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shader_api.shader_source.split_source_8_specify_lengths_vertex'..
+deqp: Pass dEQP-GLES3.functional.shader_api.shader_source.split_source_8_specify_lengths_vertex
+v3d_deqp: case #300 P 32ms k2/10 c25603/26221 r0 dEQP-GLES3.functional.shader_api.shader_source.split_source_8_specify_lengths_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.all_attributes'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.all_attributes
+v3d_deqp: case #301 P 56ms k2/17 c25620/26221 r0 dEQP-GLES3.functional.vertex_array_objects.all_attributes
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_buffer'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_buffer
+v3d_deqp: case #302 P 38ms k2/17 c25621/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_buffer
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_divisor'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_divisor
+v3d_deqp: case #303 P 38ms k2/17 c25621/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_divisor
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_indices'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_indices
+v3d_deqp: case #304 P 38ms k2/17 c25622/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_indices
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_integer'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_integer
+v3d_deqp: case #305 P 39ms k2/17 c25622/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_integer
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_normalize'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_normalize
+v3d_deqp: case #306 P 39ms k2/17 c25623/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_normalize
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_offset'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_offset
+v3d_deqp: case #307 P 38ms k2/17 c25623/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_offset
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_size'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_size
+v3d_deqp: case #308 P 37ms k2/17 c25623/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_size
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_stride'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_stride
+v3d_deqp: case #309 P 37ms k2/17 c25624/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_stride
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.vertex_array_objects.diff_type'..
+deqp: Pass dEQP-GLES3.functional.vertex_array_objects.diff_type
+v3d_deqp: case #310 P 37ms k2/17 c25624/26221 r0 dEQP-GLES3.functional.vertex_array_objects.diff_type
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        292/311 (93.9%)
+  Failed:        2/311 (0.6%)
+  Not supported: 12/311 (3.9%)
+  Warnings:      5/311 (1.6%)
+  Waived:        0/311 (0.0%)
+deqp: done: 292 passed, 2 failed, 12 not supported, 5 warnings, complete=1
+deqp: summary: 311 cases begun, 311 with a result, 0 without
+v3d_deqp DONE: build fad0558a, filter 'dEQP-GLES3.functional.rasterization.*,dEQP-GLES3.functional.rasterizer_discard.*,dEQP-GLES3.functional.read_pixels.*,...
+  311 cases in 18893 ms, record at 18 s after boot, reset at ~250 s
+  totals: P 292 F 2 N 12 Q 5  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 292 passed, 2 failed, 12 not supported, 5 warnings, complete=1
+  summary: 311 cases begun, 311 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 17, before #18 (first not passed) 2; slowest #94 268 ms
+  carve-out (KiB, of 48636): after #0 20141, last 25624, high-water 26221
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x20107c ca 0x20107c ra 0x0 qba 0x201000 qea 0x20107c ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 736 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20104192 bytes used now, 26850816 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 2/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 924 calls, 165413 map reads (179 a call, at most 1153 in one); free runs 9, longest 28152064 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 736 jobs ended; emitted 13128, skipped 2688; groups compared 1512, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPNNNNNNNNNNNNPPPPPPFPPFPPPPPPPQPPPPPPPPPPPQPPPPPPPPPPPPPPPPPPPPPPPPQPPPPPPPPQQPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+driver: ... 11 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  rasterization.fbo.rbo_multisample_4.fill_rules              5 N5                      5x Test requires 4x msaa rbo
+  rasterization.fbo.rbo_multisample_4.interpolation           3 N3                      3x Test requires 4x msaa rbo
+  rasterization.fbo.rbo_multisample_4.primitives              4 N4                      4x Test requires 4x msaa rbo
+  rasterization.fbo.rbo_multisample_max.interpolation         1 F1                      1x Found invalid pixel values
+  rasterization.fbo.rbo_multisample_max.primitives            1 F1                      1x Incorrect rasterization
+  rasterization.fbo.rbo_singlesample.interpolation            1 Q1                      1x Interpolation was calculated using projected coordinateds
+  rasterization.fbo.texture_2d.interpolation                  1 Q1                      1x Interpolation was calculated using projected coordinateds
+  rasterization.interpolation.basic                           1 Q1                      1x Interpolation was calculated using projected coordinateds
+  rasterization.interpolation.projected                       2 Q2                      2x Interpolation was calculated using projected coordinateds
+   18 N ~ion.fbo.rbo_multisample_4.fill_rules.basic_quad 29ms k2/8 c20141/20153          Test requires 4x msaa rbo
+   19 N ~rbo_multisample_4.fill_rules.basic_quad_reverse 34ms k2/8 c20141/20153          Test requires 4x msaa rbo
+  ... 17 more not passed (the UART has every line)
+v3d_deqp: build fad0558a DONE: 311 cases, P 292 F 2 R 0 N 12 other 5
