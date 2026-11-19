@@ -334,9 +334,10 @@ pi5)
     RESET_RE='GPU reset (recovery'
     # the Pi 4 samples' end lines and every tools/probes/rpi_5 probe's (its
     # README's table): rpi5_hello's count, rpi5_dtb's and rpi5_ident's done or
-    # FAIL, rpi5_clear's v3d_clear verdict, rpi5_wdog's FAIL (its pass is the
-    # reset itself: the console goes quiet, so that run ends at RUN_BOUND)
-    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_wdog: FAIL)'
+    # FAIL, rpi5_clear's and rpi5_triangle's v3d_clear / v3d_triangle verdict,
+    # rpi5_wdog's FAIL (its pass is the reset itself: the console goes quiet,
+    # so that run ends at RUN_BOUND)
+    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|v3d_triangle: (PASS|FAIL)|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_wdog: FAIL)'
     LEGACY_RE=$END_RE_DEFAULT
     BOARD_HOST=${BOARD_HOST:-${PI5_HOST:-}}
     BOARD_UART=${BOARD_UART:-${PI5_UART:-}}
@@ -740,6 +741,8 @@ legacy_result() {
     # _fail is the verdict failed (verdict_line)
     "v3d_clear: PASS"*) echo v3d_clear_pass ;;
     "v3d_clear: FAIL"*) echo v3d_clear_fail ;;
+    "v3d_triangle: PASS"*) echo v3d_triangle_pass ;;
+    "v3d_triangle: FAIL"*) echo v3d_triangle_fail ;;
     "rpi5_hello: counted "*) echo rpi5_hello_counted ;;
     rpi5_dtb:\ done* | rpi5_ident:\ done*) echo "${l%%:*}_done" ;;
     rpi5_dtb:\ FAIL* | rpi5_ident:\ FAIL* | rpi5_wdog:\ FAIL*) echo "${l%%:*}_fail" ;;
