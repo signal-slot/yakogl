@@ -1022,9 +1022,10 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
         })
         .ok_or(MaliError::Defect(Defect::IrIndex))?;
     if u.array_len > 1 {
-        /* a vec4 array, read element by element at constant indices
-         * (gl_test cases 149 and 150's shape, uniarray_vsconst) */
-        if u.gl_type as u32 == GL_FLOAT_VEC4 && u.dwords == 4 * u16::from(u.array_len) {
+        /* a float, vec2, vec3 or vec4 array, read element by element
+         * ([`array_element`]; gl_test cases 149 and 150's shape,
+         * uniarray_vsconst, deqp_uniarray_*_const_vs) */
+        if array_element(u).is_some() {
             return Ok((u, u.dwords));
         }
         return Err(MaliError::UniformArray);
@@ -1057,6 +1058,36 @@ pub fn uniform_of<'m>(m: &Module<'m>, dword: u16) -> Result<(&'m ir::UniformDecl
     Ok((u, comps))
 }
 
+/// The element of a float, vec2, vec3 or vec4 array uniform `u`: (its
+/// front-end dword stride, its components). The front end strides an
+/// element to the alignment of its vector (reflect.rs `type_layout`: a vec3
+/// takes 4 dwords); Mesa's block does not, and a mediump array is fp16
+/// there, each element from a word of its own (docs/notes/mali-deqp-uniarray.md
+/// sections 3 and 7: `u_arr[k]` of a `mediump float` at byte 4k, of a vec2
+/// at 4k, of a vec3 and a vec4 at 8k; a struct member's array fp32, one word
+/// a component, nothing aligned). None: not an array of those.
+pub(super) fn array_element(u: &ir::UniformDecl<'_>) -> Option<(u16, u16)> {
+    if u.array_len <= 1 {
+        return None;
+    }
+    let (stride, comps) = match u.gl_type as u32 {
+        GL_FLOAT => (1, 1),
+        GL_FLOAT_VEC2 => (2, 2),
+        GL_FLOAT_VEC3 => (4, 3),
+        GL_FLOAT_VEC4 => (4, 4),
+        _ => return None,
+    };
+    let n = u16::from(u.array_len);
+    (u.dwords == stride * n || u.dwords == stride * (n - 1) + comps).then_some((stride, comps))
+}
+
+/// The load Mesa makes of front-end dword `dword` of array `u`
+/// ([`array_element`]): its element's first dword and its components.
+pub(super) fn element_load(u: &ir::UniformDecl<'_>, dword: u16) -> Option<(u16, u16)> {
+    let (stride, comps) = array_element(u)?;
+    Some((u.dword_off + (dword - u.dword_off) / stride * stride, comps))
+}
+
 /// A square float matrix's (columns, rows, front-end column stride): the
 /// front end strides a column to the alignment of a vector of its rows
 /// (reflect.rs `type_layout`: a mat2 column 2 dwords, a mat3's 4), Mesa's
@@ -1085,7 +1116,9 @@ pub(super) fn fp16_uniform(u: &ir::UniformDecl<'_>, fp16: &dyn Fn(&str) -> bool)
         u.gl_type as u32,
         GL_FLOAT | GL_FLOAT_VEC2 | GL_FLOAT_VEC3 | GL_FLOAT_VEC4 | GL_FLOAT_MAT2 | GL_FLOAT_MAT3 | GL_FLOAT_MAT4
     );
-    float && u.array_len <= 1 && fp16(u.name)
+    /* a float, vec2, vec3 or vec4 array too: each element fp16 from a word
+     * of its own (deqp_uniarray_*_const_vs, [`array_element`]) */
+    float && (u.array_len <= 1 || array_element(u).is_some()) && fp16(u.name)
 }
 
 /// Every read of IR value `v` is the index of a uniform array read
@@ -2930,6 +2963,40 @@ fn vs_vec16(vs: &mut Nir<'_>, x: Val, y: Val) -> Result<Val, MaliError> {
     Ok(Val::Lane(vs_node16(vs, Alu::Vec2, [x, y, Val::Undef])?, 0))
 }
 
+/// The source (0 or 1) of an fp16 `fadd` whose every lane is 0.0: the
+/// operation is its other source (`fadd(a, 0.0)`, nir_opt_algebraic.py,
+/// which GLSL IR's `ir_algebraic` already folds in `res = vec4(0.0); res
+/// += u_arr[0]`: deqp_uniarray_*_const_vs's first sum is `u_arr[0] +
+/// u_arr[1]`, `FADD.v2f16 r0, u5.w1, r0^`). None for any other.
+fn vs_identity16(op: Alu, x: &[[Val; 4]], width: usize) -> Option<usize> {
+    if op != Alu::Fadd || width == 0 {
+        return None;
+    }
+    (0..2).find(|&k| {
+        x[k][..width].iter().all(|&v| v == Val::Const(F32_ZERO))
+            && x[1 - k][..width].iter().all(|&v| !matches!(v, Val::Const(_)))
+    })
+}
+
+/// Node `n` is an fp16 sum of fp16 uniform loads alone (a mediump array's
+/// `res += u_arr[k]`, deqp_uniarray_*_const_vs): its `f2f32` at the store
+/// hides the constant lanes beside it from Mesa's link (`kept`, the
+/// `StoreOutput` arm of [`walk`]).
+fn uniform_sum16(vs: &Nir<'_>, n: u16) -> bool {
+    let nd = vs.nodes[n as usize];
+    if nd.bits != 16 {
+        return false;
+    }
+    match nd.kind {
+        Kind::Uniform { .. } => true,
+        Kind::Alu(Alu::Fadd) => nd.src[..2].iter().all(|v| match *v {
+            Val::Lane(x, _) | Val::Pair(x, _) => uniform_sum16(vs, x),
+            _ => false,
+        }),
+        _ => false,
+    }
+}
+
 /// The lanes of a `fmul` / `fadd` the front end classed mediump are all
 /// constants or 16-bit lanes, one at least a lane: the operation is fp16
 /// ([`vs_alu16`]). Another operand (an fp32 lane: a highp value, a boolean's
@@ -2980,6 +3047,11 @@ fn vs_alu16(
         x.swap(0, 1);
     }
     let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
+    if let Some(k) = vs_identity16(op, &x, width) {
+        out[..width].copy_from_slice(&x[1 - k][..width]);
+        vs.note_user(Prod::Identity);
+        return Ok(());
+    }
     for k in (0..width).step_by(2) {
         let (p, q) = (x[0][k], x[0][k + 1]);
         let (c, d) = (x[1][k], x[1][k + 1]);
@@ -3176,6 +3248,11 @@ fn vs_alu16u(
         Val::Const(c) => half(c).map(Val::Const),
         v => Ok(v),
     };
+    if let Some(k) = vs_identity16(op, &x, width) {
+        out[..width].copy_from_slice(&x[1 - k][..width]);
+        vs.note_user(Prod::Identity);
+        return Ok(());
+    }
     for k in (0..width).step_by(2) {
         if k + 1 == width {
             let mut src = [u; 3];
@@ -3860,6 +3937,8 @@ fn walk<'s>(
     /* the constant lanes of a mediump vector stored beside computed ones,
      * which the vertex shader stores (the `StoreOutput` arm below) */
     let mut kept = 0u64;
+    /* those beside fp16 uniform sums alone: flat ([`uniform_sum16`]) */
+    let mut kept_uniform = 0u64;
     let mut joined = false;
     /* where Mesa's link resolves each lane (`nir_scalar_resolved`, through
      * `mov` and `vec`): 0 a scalar of its own (the lane's value names it),
@@ -3939,8 +4018,8 @@ fn walk<'s>(
                  * one element of a vec4 array */
                 let (base, size) = if let Some((_, rows, stride)) = matrix_cols(u.gl_type) {
                     (u.dword_off + (dword_off - u.dword_off) / stride * stride, rows)
-                } else if u.array_len > 1 {
-                    (u.dword_off + (dword_off - u.dword_off) / 4 * 4, 4)
+                } else if let Some(load) = element_load(u, dword_off) {
+                    load
                 } else {
                     (u.dword_off, total)
                 };
@@ -3948,7 +4027,21 @@ fn walk<'s>(
                 if first + comps as u16 > size {
                     return Err(MaliError::Defect(Defect::IrIndex));
                 }
-                if fp16_uniform(u, fp16) {
+                if fp16_uniform(u, fp16) && array_element(u).is_some() {
+                    /* an fp16 array element: each word its own load (its
+                     * offset is no constant to `nir_lower_uniforms_to_ubo`,
+                     * so the alignment is 4 and the load is cut a word a
+                     * piece, select.rs `UboLayout::load_of`), a node of two
+                     * lanes a word, each lane widened by its own `f2f32`
+                     * where an fp32 operation reads it (deqp_uniarray_vec4_const_vs:
+                     * `FADD.v2f16 r0, u6.w1, r0` of the zw words) */
+                    for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                        let k = first as usize + c;
+                        let word = (k / 2 * 2) as u16;
+                        let n = vs.load16(Kind::Uniform { dword: base + word, comps: (size - word).min(2) as u8 })?;
+                        *o = vs.alu(Alu::F2f32, Val::Lane(n, (k % 2) as u8), Val::Undef, Val::Undef)?;
+                    }
+                } else if fp16_uniform(u, fp16) {
                     /* a mediump float uniform is fp16 in the block
                      * (lower_precision.cpp:1023-1060 with
                      * `fp16_const_buffers`), each lane read widened by its
@@ -4036,12 +4129,21 @@ fn walk<'s>(
                  * store. */
                 let medium = m.prec_of(src.val) == Prec::Medium
                     || matches!(m.def(src.val), Some(IrOp::LoadLocal { local, .. }) if m.local_prec_of(*local) == Prec::Medium);
-                let computed = lanes.iter().any(|l| matches!(l, Val::Lane(n, _) if vs.reads_attribute(*n)));
+                /* or of fp16 uniforms alone (deqp_uniarray_*_const_vs's
+                 * `vec4(res, 0.0, 1.0)` of a mediump array's sum: the
+                 * constants stored in the flat `.v4` beside it, `IADD_IMM.i32
+                 * r4, 0x0, #0x0`, `kept_flat` below) */
+                let attr = lanes.iter().any(|l| matches!(l, Val::Lane(n, _) if vs.reads_attribute(*n)));
+                let usum = lanes.iter().any(|l| matches!(l, Val::Lane(n, _) if uniform_sum16(&vs, *n)));
+                let computed = attr || usum;
                 for (i, t) in lanes.iter_mut().enumerate() {
                     match (*t, slot) {
                         (Val::Const(c), IoSlot::Varying(loc)) if medium && computed => {
                             *t = Val::Const(as_f16(c)?);
                             kept |= 1 << (loc as usize * 4 + i);
+                            if !attr {
+                                kept_uniform |= 1 << (loc as usize * 4 + i);
+                            }
                         }
                         _ => *t = vs_widen(&mut vs, *t)?,
                     }
@@ -4697,7 +4799,7 @@ fn walk<'s>(
      * lanes, in both of its walks ([`build`]: the constants the numbering
      * walk does not have are taken back, and a lane the attribute numbering
      * depends on is refused) */
-    let mut kept_flat = 0u64;
+    let mut kept_flat = kept_uniform;
     let late = vs.late_fold || numbering;
     for (l, lanes) in varyings.iter().enumerate().filter(|_| !late) {
         for (c, v) in lanes.iter().flatten().enumerate() {

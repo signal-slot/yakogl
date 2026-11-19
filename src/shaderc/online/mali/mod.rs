@@ -1219,7 +1219,9 @@ fn uniform_precision(decls: &[super::reflect::UniformDecl<'_>], name: &str) -> O
     if body.contains('{') {
         return None;
     }
-    let m = body.split(';').find(|m| m.split_whitespace().last() == Some(member))?;
+    /* an array member is declared `m2[3]` (deqp_uniarray_struct) */
+    let named = |m: &str| m.split_whitespace().last().and_then(|t| t.split('[').next()) == Some(member);
+    let m = body.split(';').find(|m| named(m))?;
     match m.split_whitespace().next()? {
         "highp" => Some(Precision::High),
         "mediump" => Some(Precision::Medium),

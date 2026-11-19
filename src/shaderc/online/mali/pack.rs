@@ -814,6 +814,9 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f = Fill::new(match (words, half) {
                 (1, true) => IsaOp::LdPkaI16,
                 (1, false) => IsaOp::LdPkaI32,
+                /* six bytes (a mediump vec3 array element,
+                 * deqp_uniarray_dyn_vec3_fs) */
+                (2, true) => IsaOp::LdPkaI48,
                 (2, false) => IsaOp::LdPkaI64,
                 (3, false) => IsaOp::LdPkaI96,
                 (4, false) => IsaOp::LdPkaI128,

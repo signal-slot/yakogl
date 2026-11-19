@@ -303,6 +303,67 @@ array as fp16 (`src/mali/`, plan #373), must follow the same rule. In step 3,
 6-byte `.i48` at an 8-byte stride (vec3) and the 8-byte `.i64` (vec4). Each
 index is shifted, and the array is not first in the block (`#0x10`).
 
+## 8. Lowering (`lower-uniarray` spike, on `af043255`)
+
+Byte-equal (`tests/mali_deqp_uniarray.rs`, `assert_matches_unset`: every
+reference was drawn without `--uniform-values`): `float_const_{vs,fs}`,
+`vec2_const_{vs,fs}`, `vec3_const_{vs,fs}`, `vec4_const_{vs,fs}`,
+`loop_{float,vec2,vec3,vec4}_fs`, `dyn_vec{2,3,4}_fs` (15 of 23).
+
+- **One element rule.** `nir::array_element` gives a float, vec2, vec3 or
+  vec4 array's element as (front-end stride, components): (1, 1), (2, 2),
+  (4, 3), (4, 4); the front end pads a vec3 to 4 dwords (reflect.rs
+  `type_layout`), Mesa's block does not. `nir::uniform_of` (and with it
+  `nir_fs::uniform_extent`) admits every such array; `nir::element_load` is
+  the element's load (its first dword, its components) for the vertex walk,
+  the highp fragment walk (`uniform_load`) and the mediump walk's
+  `uniform_load` bookkeeping. Int, bool and matrix arrays still refuse
+  `UniformArray`.
+- **Layout.** `UboLayout::push_uniform` lays an array whose element does not
+  follow the last one's word as one row an element, each split (each word its
+  own load): an fp16 array (any of the four) and an fp32 vec3 array (a struct
+  member's). An fp32 float, vec2 or vec4 array stays one split row, as
+  before (the same words, and `MAX_UBO_ROWS` is not spent). `fs16` admits
+  vec2 and vec3 arrays (one fp16 row an element at the front-end stride),
+  and a struct member's array as fp32 rows. So a mediump array is fp16 at a
+  word (float, vec2) or two (vec3, vec4) an element in the vertex shader as
+  in the fragment shader, as section 7 pinned.
+- **Vertex shader.** `nir::fp16_uniform` takes a mediump float, vec2, vec3
+  or vec4 array; the walk loads each 32-bit word of an fp16 element as its
+  own 16-bit uniform node of at most two lanes (Mesa splits the element's
+  load a word a piece), so the existing fp16 pair forms (`vs_pair16`'s
+  `.h01` of a node's lanes 0 and 1) cover a vec4's zw. `fadd(a, 0.0)` over
+  every lane is `a` in the fp16 paths (`vs_identity16`; GLSL IR already
+  folds `res = vec4(0.0); res += u[0]`). A varying stored as `vec4(res,
+  0.0, 1.0)` where `res` is an fp16 sum of fp16 uniforms alone keeps its
+  constant lanes, flat (`uniform_sum16`, `kept_uniform`): the `f2f32` of
+  the mediump constructor hides them from the link, which then promotes
+  the whole slot to flat (`.v4.src_flat32`, `IADD_IMM.i32 r4, 0x0, #0x0`).
+- **Fragment shader.** The constant-index refusal of a float array is
+  gone. `prod(Op, AddA)` (the running sum first) is admitted, and a sum of
+  fp16 uniform lanes beside 0.0 is a `U16_TO_U32` word (`uniform_sum`).
+  A `LoadUniformIdx` whose index the walk folded to a constant (an unrolled
+  loop's counter) is the constant-index read, clamped as the IR clamps it.
+  An unrolled loop's nodes keep their pass (`Fs::pass`), which `Fs::key`
+  adds to the loop's shared key: pass after pass, as Mesa's unrolled body
+  (`loop_vec4_fs`: each pass's xy and zw `FADD.v2f16` before the next's).
+- **Run-time index, fragment shader.** A vec2, vec3 or vec4 array read more
+  than once (every read of one element width) takes case108's float path:
+  per read `LSHIFT_OR` by 2 (float, vec2) or 3 (vec3, vec4), `IADD_IMM`
+  of the base, the load sunk to its first reader, now `LD_PKA.i32`, `.i48`
+  (`Op::LdPka { words: 2, half: true }`, pack.rs `LdPkaI48`) or `.i64`.
+  `Leaf::UboWord(k, h)` is word `h` of read `k`; a vec3's z is a lane
+  alone (`.h00`) and its word with a constant `MKVEC.v2i16`.
+  `prod(Ubo, AddB)` is admitted. The single vec4 read at the block's start
+  (uniidx_i) keeps its own path.
+
+Left: `dyn_vec{2,3,4}_vs` (the vertex walk has no fp16 `LD_PKA` read; its
+indexed lanes would also need the flat link rule of `kept_uniform`),
+`loop_float_vs` (a vertex loop, `lower-loops-1`), `struct_member_{vs,fs}`
+(the int member `s.c` as a value, `intval`), `struct` and `api_float`
+(`compare_float`'s `abs` and `?:`, Mesa's FMAX of the abs values and one
+FCMP; `constop`).
+
 ## Open
 
 - ~~The exact generated GLSL of A-F is not read~~. The `indexing` and

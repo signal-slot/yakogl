@@ -646,7 +646,8 @@ pub enum Op {
     /// it (va_insert_flow.c `bi_is_memory_access`, bi_pressure_schedule.c).
     /// `half`: `LD_PKA.i16`, one 16-bit value into the low half of one
     /// register (`words` 1; a mediump float array's element,
-    /// case108_uniidx).
+    /// case108_uniidx), or `LD_PKA.i48`, three into two (`words` 2; a
+    /// mediump vec3 array's, deqp_uniarray_dyn_vec3_fs).
     LdPka {
         words: u8,
         half: bool,
