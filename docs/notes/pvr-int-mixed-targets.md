@@ -485,7 +485,7 @@ The refused cases and their exact log lines, in check order:
 | a slot with no target (`gpu` 0) before the last target | `yakogl/pvr: draw refused: a GL_NONE draw buffer between an integer colour attachment and another (not built)` |
 | an SRGB8_ALPHA8 attachment in the mix | `yakogl/pvr: draw refused: an SRGB8_ALPHA8 colour attachment beside an integer one (not built)` |
 | the layout passes four registers (section 3; any RGBA32I/UI in a mix) | `yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers` |
-| a colour clear (`do_clear` or `clear_quad`), as `several_int_targets_drawn` already excludes | `yakogl/pvr: clear refused: a colour clear of an integer colour attachment beside another (not built)` |
+| a colour clear (`do_clear`, alone, a quad or fused into the draw) under a mask that keeps some channels of an attachment past the first, or of an integer attachment 0 (`mix_clear_refused`; a float attachment 0 takes the masked clear program and is drawn; checked before the draw's other refusals) | `yakogl/pvr: clear refused: a colour mask that keeps some channels of a colour attachment beside an integer one (not built)` (`REFUSE_MIX_CLEAR_MASK`) |
 | blending enabled (`d.blend`) | `yakogl/pvr: draw refused: blending with an integer colour attachment beside another (not built)` |
 | a colour mask that keeps some channels (`d.color_mask & 0xf` neither 0 nor `0xf`), which covers every mask that keeps only some of an integer target's channels | `yakogl/pvr: draw refused: a colour mask that keeps some channels, with an integer colour attachment beside another (not built)` |
 | the program is not the mix's: `fs.blend_key != shc_blend_key_mixed(&per_target_keys(d))` or `fs.num_outputs != span` (a missing variant, the stencil-only KEEP key, a program compiled for another list) | `yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment` (the line that exists) |
@@ -501,10 +501,14 @@ Why refuse rather than build, for now:
 - **Blending.** ES 3.0 4.1.7 blends the float and unorm targets and skips
   the integer ones; the blend tail (`blend.rs`) blends one colour of one
   class. Not built; refused.
-- **Clears.** A clear of a mixed framebuffer needs the packed clear colour
-  per target in its own registers (`clear_uniform`, `backend.rs:3676-3685`,
-  packs for one format; `mrt_clear_dwords`, `backend.rs:2036-2046`, only
-  for 8-bit attachments). A separate item if dEQP needs it (section 7).
+- **Clears.** A clear of a mix is drawn, each attachment in its own class
+  at its registers (`pvr-clear-load`): the background object's
+  (`mrt_clear_dwords`, `mrt_clear_registers`), or, past what it carries,
+  a quad per attachment over the frame's load of every attachment
+  (`clear_by_target_quads`, `record_clear_quad`, also for a scissored
+  glClear). Under a mask that keeps some channels the per-attachment clear
+  programs cannot keep the others (they write every channel), and an
+  integer attachment 0 has no masked program: refused, as above.
 
 The per-target keys of a draw come from the formats with the same mapping
 as the GL core (section 4); a helper next to `surf_out_dwords` gives them,

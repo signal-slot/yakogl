@@ -6027,11 +6027,19 @@ fn integer_targets_refuse_partial_masks_and_company() {
         assert_eq!(draw(&d), -util::ENOTSUP, "{why}");
         assert!(rig.logs().iter().any(|l| l == why), "{why}: {:?}", rig.logs());
     }
-    /* a clear under a mask that keeps channels, fused in: the line above,
-     * logged once */
+    /* a clear under a mask that keeps channels, fused in: refused by its
+     * own line where the mask keeps some channels of an attachment past
+     * the first (here RGBA8 beside an integer attachment 0); RGBA8's red
+     * and green over its masked program, R32UI's red whole, is drawn
+     * (a_mix_cleared_then_drawn_clears_each_attachment_in_its_class) */
     let masked = GlesDraw { do_clear: true, clear_color_mask: 0b0011, ..m };
-    assert_eq!(int_targets_drawn(&masked, Some(&fs)), Err(REFUSE_NOT_A_MIX));
-    assert_eq!(draw(&masked), -util::ENOTSUP);
+    assert_eq!(int_targets_drawn(&masked, Some(&fs)), Ok(()));
+    let mut im = masked;
+    two_targets(&mut im, [GLES_SURF_R32UI, GLES_SURF_RGBA8888]);
+    let ifs_masked = ShcShader { blend_key: super::super::target_keys::draw_mixed_key(&im).expect("a mix"), ..fs };
+    assert_eq!(int_targets_drawn(&im, Some(&ifs_masked)), Err(REFUSE_MIX_CLEAR_MASK));
+    assert_eq!(draw(&im), -util::ENOTSUP);
+    assert!(rig.logs().iter().any(|l| l == REFUSE_MIX_CLEAR_MASK), "{:?}", rig.logs());
     /* every channel off is the ISP's: nothing of the mask reaches the program */
     let off = GlesDraw { color_write: false, color_mask: 0, ..m };
     assert_eq!(int_targets_drawn(&off, Some(&fs)), Ok(()));
@@ -6191,6 +6199,328 @@ fn a_mixs_pbe_words_follow_its_layout() {
             assert_eq!((w1 >> 16) & 7, i as u32, "mix {name}: attachment {i}: mrt_index");
             assert_eq!(w1 & !0x3f, word, "mix {name}: attachment {i}: STATE_WORD1 {w1:#010x}");
         }
+    }
+}
+
+/// A 64x64 draw of `count` vertices into the attachments `formats` (each
+/// past the first 1 MiB after the one before) under the program of their
+/// mixed key, `fs` (as the GL core links it: `shc_mixed_out_layout`'s span
+/// of outputs); a glClear of every channel fused in, as [`Rig::draw`] gives.
+fn mix_draw(rig: &Rig, formats: &[u8], fs: &mut ShcShader, count: u32) -> GlesDraw {
+    use crate::target_key::{gles_surf_target_key, shc_mixed_out_layout};
+    let mut d = rig.draw(count);
+    int_target(&mut d, formats[0]);
+    d.num_targets = formats.len() as u8;
+    for (i, &f) in formats.iter().enumerate().skip(1) {
+        d.targets[i] =
+            GlesDrawTarget { gpu: d.target_gpu + 0x10_0000 * i as u64, w: 64, h: 64, format: f, out_shift: 0 };
+    }
+    let keys: Vec<u32> = formats.iter().map(|&f| gles_surf_target_key(f).unwrap()).collect();
+    *fs = ShcShader::ZERO;
+    fs.meta_off = SHC_NO_META;
+    fs.temps = 3;
+    fs.num_outputs = shc_mixed_out_layout(&keys).expect("a layout").1;
+    fs.blend_key = super::super::target_keys::draw_mixed_key(&d).expect("a mix");
+    d.fs = fs;
+    d
+}
+
+/// The USC offsets of the fragment programs the frame's objects ran, in
+/// order, from the kick programs built since the last
+/// [`forget_frame_programs`] (each object of a frame builds its own: the
+/// programs differ).
+fn frame_programs() -> Vec<u64> {
+    with_platform(|p| p.kick_usc_rates.iter().map(|r| r.0).collect())
+}
+
+fn forget_frame_programs() {
+    with_platform(|p| p.kick_usc_rates.clear());
+    with_gen(|g| {
+        g.dma_kicks.clear();
+        g.dma_words.clear();
+    });
+}
+
+/// The uniform blocks of the clear quads recorded since the last
+/// [`forget_frame_programs`], in order: the common-store DMA programs of one
+/// kick at shared register 0 (a frame load's carries its texture descriptor
+/// and its `u_flip` too).
+fn clear_uniforms() -> Vec<Vec<u32>> {
+    with_gen(|g| {
+        g.dma_kicks
+            .iter()
+            .zip(&g.dma_words)
+            .filter(|(k, _)| k.len() == 1 && k[0].2 == 0)
+            .map(|(_, w)| w[0].clone())
+            .collect()
+    })
+}
+
+/// A glClear then a draw into a mix (the dEQP fragment_out / fbo.color
+/// order: clear, then draw), each attachment cleared in its own class at the
+/// registers the end-of-tile emit stores it from:
+///
+/// - RGBA8 + R32UI, the clear fused into the draw: the background object
+///   carries both (`mrt_clear_dwords` 2), RGBA8's packed bytes at register 0
+///   and the clear's red bits, raw, at register 1; no load, no quad.
+/// - RGBA16F + R32UI + RGBA8, fused: past what the background object
+///   carries (a float-class attachment), so the frame loads every
+///   attachment and a quad per attachment clears it -- RGBA16F's halves
+///   through the two-dword program at 0, R32UI's bits through the one-dword
+///   program moved to register 2, RGBA8's bytes moved to register 3 -- then
+///   the draw.
+/// - RGBA8 + R32UI under a scissor (a clear quad, alone, before the draw):
+///   both attachments, attachment 1 by a quad of its own at register 1
+///   within the box; the quad wrote attachment 0 alone before.
+/// - RGBA8 + R32UI under a mask of red and green: RGBA8 through its masked
+///   program, R32UI's one channel whole.
+///
+/// None logs a refusal or an attachment left uncleared.
+#[test]
+fn a_mix_cleared_then_drawn_clears_each_attachment_in_its_class() {
+    let c = [1.0f32, 0.5, 0.25, 1.0];
+    let (rgba8, bits) = (pack_rgba8(&c), 1.0f32.to_bits());
+    assert_eq!((rgba8, bits), (0xff40_80ff, 0x3f80_0000));
+    let quiet = |rig: &Rig, what: &str| {
+        let logs = rig.logs();
+        assert!(
+            !logs.iter().any(|l| l.contains("refused") || l.contains("not cleared") || l.contains("not restored")),
+            "{what}: {logs:?}"
+        );
+    };
+
+    /* RGBA8 + R32UI, fused: the background object */
+    {
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let mut d = mix_draw(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_R32UI], &mut fs, 3);
+        d.clear_rgba = c;
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()));
+        forget_frame_programs();
+        assert_eq!(draw(&d), 0);
+        let b = rig.b();
+        assert!(b.frame_cleared && !b.frame_loads_color, "the background clear, no load");
+        assert_eq!((b.frame_quads, b.ndraws), (0, 1), "the draw alone");
+        assert_eq!(mrt_clear_dwords(b), 2);
+        let regs = [rgba8, bits, 0, 0];
+        assert_eq!(mrt_clear_registers(b), regs, "RGBA8's bytes at 0, R32UI's bits at 1");
+        assert_eq!(frame_programs(), [heap_off_of(d.fs_usc_gpu) as u64], "the draw's program alone");
+        let (k, col, _) = background_clear(&rig);
+        assert_eq!((col, k.frag.usc_clear_register), (regs, regs));
+        assert_eq!(k.frag.num_rt, 2);
+        let e = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        assert_eq!(((e[1] >> 14) & 3, (e[3] >> 14) & 3), (0, 1), "the emit reads them there");
+        quiet(&rig, "RGBA8 + R32UI");
+    }
+
+    /* RGBA16F + R32UI + RGBA8, fused: a load and a quad per attachment */
+    {
+        let formats = [GLES_SURF_RGBA16F, GLES_SURF_R32UI, GLES_SURF_RGBA8888];
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let mut d = mix_draw(&rig, &formats, &mut fs, 3);
+        d.clear_rgba = c;
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()));
+        assert!(clear_by_target_quads(rig.b(), &d), "past the background object");
+        forget_frame_programs();
+        assert_eq!(draw(&d), 0);
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert!(b.frame_loads_color && !b.frame_cleared, "the frame loads; the quads clear");
+        assert_eq!((b.frame_quads, b.ndraws), (3, 7), "three loads, three clear quads, the draw");
+        for (i, (&f, reg)) in formats.iter().zip([0u32, 2, 3]).enumerate() {
+            assert_eq!(attachment_out_reg(b, i), Some(reg));
+            assert_eq!((fl.loads[i].tex.base_gpu, fl.loads[i].out_reg), (d.targets[i].gpu, reg), "load {i}");
+            assert_eq!(fl.loads[i].row, fbload_row(f), "load {i}: its class's program");
+        }
+        let off = |g: u64| heap_off_of(g) as u64;
+        let loads: Vec<u64> = (0..3).map(|i| off(fl.loads[i].fs_usc_gpu)).collect();
+        let clears = [off(b.clear_fs2.gpu), off(b.clear_fs_at[0][1].gpu), off(b.clear_fs_at[0][2].gpu)];
+        let want: Vec<u64> = loads.iter().chain(&clears).copied().chain([off(d.fs_usc_gpu)]).collect();
+        assert_eq!(frame_programs(), want, "loads, the clear quads at 0, 2 and 3, then the draw");
+        let halves = clear_uniform(GLES_SURF_RGBA16F, &c);
+        assert_eq!(halves[..2], [0x3800_3c00, 0x3c00_3400], "RGBA16F: (1, .5) and (.25, 1) as halves");
+        assert_eq!(clear_uniforms(), [halves[..2].to_vec(), vec![bits], vec![rgba8]], "each in its own class");
+        /* the moved one-dword clear writes the register it was moved to,
+         * and differs from the program in that byte alone */
+        let (at, cnt) = clear_output_bytes(&PVR_INTERNAL_CLEAR_ATTACH1).expect("its output write");
+        assert_eq!(cnt, 1);
+        for (k, reg) in [(1usize, 2u32), (2, 3)] {
+            let gpu = b.clear_fs_at[0][k].gpu;
+            let n = PVR_INTERNAL_CLEAR_ATTACH1.len();
+            let words: Vec<u32> = (0..n as u64).map(|j| rig.gpu_u32(gpu + 4 * j)).collect();
+            let byte = |w: &[u32], i: usize| w[i / 4] >> (i % 4 * 8) & 0xff;
+            let diff: Vec<usize> =
+                (0..n * 4).filter(|&i| byte(&words, i) != byte(&PVR_INTERNAL_CLEAR_ATTACH1, i)).collect();
+            assert_eq!(diff, [at[0]], "only the output write's destination differs");
+            assert_eq!(byte(&words, at[0]), 0x20 | reg, "pixel output {reg}");
+        }
+        assert_eq!(pvr_backend_flush(), 0);
+        let e = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        for (i, reg) in [0u32, 2, 3].into_iter().enumerate() {
+            assert_eq!((e[2 * i + 1] >> 14) & 3, reg, "attachment {i}: the emit's source_pos");
+        }
+        quiet(&rig, "RGBA16F + R32UI + RGBA8");
+    }
+
+    /* RGBA8 + R32UI, a scissored clear (a quad of its own), then the draw */
+    {
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let d = mix_draw(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_R32UI], &mut fs, 3);
+        let clear = GlesDraw {
+            index_count: 0,
+            clear_quad: true,
+            clear_rgba: c,
+            scissor: true,
+            scissor_rect: [8, 8, 16, 16],
+            ..d
+        };
+        forget_frame_programs();
+        assert_eq!(draw(&clear), 0);
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert_eq!(frame_int_beside_another(b), 0b11);
+        assert!(b.frame_loads_color, "the frame loads both");
+        assert_eq!((b.frame_quads, b.ndraws), (2, 4), "two loads, two clear quads");
+        let ld = &fl.load_draw;
+        assert!(ld.scissor && ld.scissor_rect == [8, 8, 16, 16], "attachment 1's quad keeps the box");
+        assert_eq!(draw(&GlesDraw { do_clear: false, ..d }), 0);
+        let off = |g: u64| heap_off_of(g) as u64;
+        let want =
+            [fl.loads[0].fs_usc_gpu, fl.loads[1].fs_usc_gpu, b.clear_fs.gpu, b.clear_fs_at[0][0].gpu, d.fs_usc_gpu]
+                .map(off);
+        assert_eq!(frame_programs(), want, "loads, RGBA8's quad, R32UI's at register 1, the draw");
+        assert_eq!(clear_uniforms(), [vec![rgba8], vec![bits]]);
+        quiet(&rig, "scissored RGBA8 + R32UI");
+    }
+
+    /* RGBA8 + R32UI under a red-and-green mask, fused */
+    {
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let mut d = mix_draw(&rig, &[GLES_SURF_RGBA8888, GLES_SURF_R32UI], &mut fs, 3);
+        d.clear_rgba = c;
+        d.clear_color_mask = 0b0011;
+        assert!(!mix_clear_refused(&d, PVR_BACKEND_MAX_RT));
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()));
+        forget_frame_programs();
+        assert_eq!(draw(&d), 0);
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert_eq!((b.frame_quads, b.ndraws), (2, 5), "two loads, two clear quads, the draw");
+        let masked = clear_masked_index(0, 0b0011).expect("RGBA8's masked program");
+        let off = |g: u64| heap_off_of(g) as u64;
+        let want = [
+            fl.loads[0].fs_usc_gpu,
+            fl.loads[1].fs_usc_gpu,
+            b.clear_mask_fs[masked].gpu,
+            b.clear_fs_at[0][0].gpu,
+            d.fs_usc_gpu,
+        ]
+        .map(off);
+        assert_eq!(frame_programs(), want, "loads, RGBA8's masked quad, R32UI's whole, the draw");
+        assert_eq!(clear_uniforms().last().cloned(), Some(vec![bits]), "R32UI's bits");
+        quiet(&rig, "masked RGBA8 + R32UI");
+    }
+}
+
+/// What a clear of a mix cannot do stays refused by name
+/// ([`REFUSE_MIX_CLEAR_MASK`]), the clear alone, as a quad or fused into a
+/// draw, before anything of it is recorded: a colour mask that keeps some
+/// channels of an attachment past the first (RGBA8 beside an integer
+/// attachment 0, RGBA8UI beside RGBA8), or of an integer attachment 0.
+/// The same mask over attachments of one integer layout keeps its own line.
+#[test]
+fn a_mix_clear_that_keeps_some_channels_of_an_attachment_is_refused_by_name() {
+    for formats in [
+        [GLES_SURF_R32UI, GLES_SURF_RGBA8888],
+        [GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI],
+        [GLES_SURF_RGBA8UI, GLES_SURF_RGBA8888],
+    ] {
+        let name = format!("{} + {}", gles_surf_name(formats[0]), gles_surf_name(formats[1]));
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let mut d = mix_draw(&rig, &formats, &mut fs, 3);
+        d.clear_color_mask = 0b0011;
+        assert!(mix_clear_refused(&d, PVR_BACKEND_MAX_RT), "{name}");
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Err(REFUSE_MIX_CLEAR_MASK), "{name}");
+        for (what, x) in [
+            ("fused", d),
+            ("alone", GlesDraw { index_count: 0, ..d }),
+            ("a quad", GlesDraw { index_count: 0, clear_quad: true, scissor: true, scissor_rect: [0, 0, 8, 8], ..d }),
+        ] {
+            assert_eq!(draw(&x), -util::ENOTSUP, "{name}: {what}");
+            assert!(!rig.b().frame_open, "{name}: {what}: nothing recorded");
+        }
+        assert!(rig.logs().iter().any(|l| l == REFUSE_MIX_CLEAR_MASK), "{name}: {:?}", rig.logs());
+        /* the full mask is drawn */
+        assert_eq!(draw(&GlesDraw { clear_color_mask: 0xf, ..d }), 0, "{name}: the full mask");
+    }
+    let rig = Rig::new();
+    let mut pair = rig.draw(0);
+    two_targets(&mut pair, [GLES_SURF_RGBA8UI, GLES_SURF_RGBA8UI]);
+    pair.clear_color_mask = 0b0011;
+    assert!(!mix_clear_refused(&pair, PVR_BACKEND_MAX_RT), "one integer layout is not a mix");
+}
+
+/// A mix drawn into a frame that loads its colour (a frame after the one
+/// that cleared it, as dEQP's next draw into the same framebuffer): every
+/// attachment is loaded back in its own class at the registers the emit
+/// stores it from -- RGBA8 through the RGBA8 load at 0, R32UI read raw
+/// (`PVR_TEXFMT_RAW32`, the bits as they are) through the integer load moved
+/// to register 1; RGBA16F + R32UI + RGBA8 at 0, 2 and 3 -- each from its own
+/// attachment's memory. A glClear after that frame's draw opens the next
+/// frame rather than joining one that began by loading.
+#[test]
+fn a_mix_drawn_into_a_frame_that_loads_reloads_every_attachment_in_its_class() {
+    type Mix = (&'static [u8], &'static [u32]);
+    let mixes: [Mix; 2] = [
+        (&[GLES_SURF_RGBA8888, GLES_SURF_R32UI], &[0, 1]),
+        (&[GLES_SURF_RGBA16F, GLES_SURF_R32UI, GLES_SURF_RGBA8888], &[0, 2, 3]),
+    ];
+    for (formats, regs) in mixes {
+        let name = formats.iter().map(|&f| gles_surf_name(f)).collect::<Vec<_>>().join(" + ");
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let d = mix_draw(&rig, formats, &mut fs, 3);
+        assert_eq!(draw(&d), 0, "{name}: the clearing frame");
+        assert_eq!(pvr_backend_flush(), 0);
+        let kicks = rig.kicks().len();
+        forget_frame_programs();
+        let next = GlesDraw { do_clear: false, ..d };
+        assert_eq!(draw(&next), 0, "{name}: the loading frame");
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert!(b.frame_loads_color && !b.frame_cleared, "{name}");
+        assert_eq!(b.frame_quads, formats.len() as u32, "{name}: one load per attachment");
+        for (i, (&f, &reg)) in formats.iter().zip(regs).enumerate() {
+            let l = fl.loads[i];
+            let texfmt = if gles_surf_is_integer(f) { int_load_texfmt(f) } else { gles_surf_texfmt(f) };
+            assert_eq!(l.tex.base_gpu, d.targets[i].gpu, "{name}: attachment {i}: its own memory");
+            assert_eq!(l.tex.format, texfmt, "{name}: attachment {i}: its class's texel");
+            assert_eq!((l.row, l.out_reg), (fbload_row(f), reg), "{name}: attachment {i}");
+            let moved = load_program(&rig, l.fs_usc_gpu, l.row);
+            let (at, n) = pixel_output_bytes(internal_words(internal(FBLOAD_ROWS[l.row]))).expect("its output writes");
+            let wrote: Vec<u32> = at[..n].iter().map(|&k| (moved[k / 4] >> (k % 4 * 8) & 0xff) - 0x20).collect();
+            assert_eq!(wrote, (reg..reg + surf_out_dwords(f)).collect::<Vec<_>>(), "{name}: attachment {i}");
+        }
+        assert_eq!(fl.loads[1].tex.format, PVR_TEXFMT_RAW32, "{name}: R32UI read raw");
+        let off = |g: u64| heap_off_of(g) as u64;
+        let mut want: Vec<u64> = (0..formats.len()).map(|i| off(fl.loads[i].fs_usc_gpu)).collect();
+        want.push(off(d.fs_usc_gpu));
+        assert_eq!(frame_programs(), want, "{name}: the loads, then the draw");
+        assert_eq!(clear_uniforms(), Vec::<Vec<u32>>::new(), "{name}: no clear quad");
+        /* a glClear now: the background clear opens the next frame (the
+         * load would paint over it); the per-attachment quads join this one,
+         * drawn over its loads */
+        let ndraws = rig.b().ndraws;
+        assert_eq!(draw(&d), 0, "{name}: clear and draw again");
+        if formats.len() == 2 {
+            assert_eq!(rig.kicks().len(), kicks + 1, "{name}: the loading frame went out");
+            assert!(rig.b().frame_cleared && !rig.b().frame_loads_color, "{name}");
+        } else {
+            assert_eq!(rig.kicks().len(), kicks, "{name}: the same frame");
+            assert_eq!(rig.b().ndraws, ndraws + 4, "{name}: three clear quads and the draw");
+        }
+        let logs = rig.logs();
+        assert!(!logs.iter().any(|l| l.contains("refused") || l.contains("not restored")), "{name}: {logs:?}");
     }
 }
 

@@ -4506,8 +4506,22 @@ fn record_attachment_loads(p: &mut Pvr) -> i32 {
 /// (0: attachment 0 alone, the quad's colour as it always was): attachment 0
 /// by this quad, each later one by a quad of its own
 /// ([`record_slot_clear_quad`]).
+///
+/// A glClear (`clear_target_mask` 0) of a frame whose attachments are
+/// several with an integer one among them clears every attachment the frame
+/// has ([`frame_int_beside_another`]): each in its own class, attachment 0
+/// by this quad and each later one at its own registers. A clear quad that
+/// wrote attachment 0 alone left the others to whatever the frame's load put
+/// in their registers, so a scissored glClear of RGBA8 + R32UI left R32UI
+/// uncleared.
 fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
-    let slots = if d.clear_target_mask == 0 { 1 } else { d.clear_target_mask };
+    let slots = match d.clear_target_mask {
+        0 => match frame_int_beside_another(&p.b) {
+            0 => 1,
+            present => present,
+        },
+        m => m,
+    };
     let rc = record_clear_quad0(p, d, slots & 1 != 0);
     if rc != 0 || !d.do_clear {
         return rc;
@@ -4521,6 +4535,74 @@ fn record_clear_quad(p: &mut Pvr, d: &GlesDraw) -> i32 {
         }
     }
     0
+}
+
+/// The frame's present attachments (bit i: attachment i) when they are
+/// several and one of them is integer, else 0.
+fn frame_int_beside_another(b: &Backend) -> u8 {
+    let n = (b.num_targets as usize).min(b.targets.len());
+    let slot =
+        |i: usize| if i == 0 { (b.target_gpu, b.target_format) } else { (b.targets[i].gpu, b.targets[i].format) };
+    let present = (0..n).filter(|&i| slot(i).0 != 0).fold(0u8, |m, i| m | 1 << i);
+    let int = (0..n).any(|i| present & (1 << i) != 0 && gles_surf_is_integer(slot(i).1));
+    if present.count_ones() > 1 && int {
+        present
+    } else {
+        0
+    }
+}
+
+/// The channels a colour clear under `mask` (bit 0 R .. 3 A) writes in an
+/// attachment of `fmt`, as the clear quads take it: a one-channel float
+/// target has red alone, written or not; an integer one its own channels,
+/// all (0xf) or none, else the mask as it is (keeps some of its channels).
+fn clear_mask_of(fmt: u8, mask: u8) -> u8 {
+    let mut mask = mask & 0xf;
+    if pixel_class(fmt) >= 2 {
+        mask = if mask & 1 != 0 { 0xf } else { 0 };
+    }
+    if let Some(l) = gles_surf_int_layout(fmt) {
+        let own = (1u8 << l.channels) - 1;
+        mask = match mask & own {
+            0 => 0,
+            m if m == own => 0xf,
+            _ => mask,
+        };
+    }
+    mask
+}
+
+/// A colour clear under a colour mask that keeps some channels, of a mix: an
+/// integer attachment beside one of another format.
+pub const REFUSE_MIX_CLEAR_MASK: &str =
+    "yakogl/pvr: clear refused: a colour mask that keeps some channels of a colour attachment beside an integer one (not built)";
+
+/// Whether the colour clear of `d` is refused ([`REFUSE_MIX_CLEAR_MASK`]):
+/// the attachments (within `max_rt`) are several, one is integer and they
+/// are not all of one format, and the clear names an attachment whose
+/// channels the mask keeps only some of ([`clear_mask_of`]) where no clear
+/// program can keep the others -- attachment 0 when it is integer, any
+/// later one (the per-attachment clear programs write every channel). A
+/// float attachment 0 under such a mask takes the masked clear program, as
+/// a single target does, and is drawn.
+fn mix_clear_refused(d: &GlesDraw, max_rt: u32) -> bool {
+    if !d.do_clear {
+        return false;
+    }
+    let (slots, present) = clear_slots(d, max_rt);
+    let fmt = |i: usize| if i == 0 { d.target_format } else { d.targets[i].format };
+    let has = |i: usize| present & (1 << i) != 0;
+    let n = PVR_BACKEND_MAX_RT as usize;
+    let int = (0..n).any(|i| has(i) && gles_surf_is_integer(fmt(i)));
+    let first = (0..n).find(|&i| has(i)).map(fmt);
+    let one_format = (0..n).all(|i| !has(i) || Some(fmt(i)) == first);
+    if present.count_ones() < 2 || !int || one_format {
+        return false;
+    }
+    (0..n).any(|i| {
+        let m = clear_mask_of(fmt(i), d.clear_color_mask);
+        slots & (1 << i) != 0 && m != 0 && m != 0xf && (i != 0 || gles_surf_is_integer(fmt(i)))
+    })
 }
 
 /// The frame slots (bit i: attachment i) a colour clear of `d` writes, and
@@ -4574,18 +4656,7 @@ fn record_slot_clear_quad(p: &mut Pvr, d: &GlesDraw, k: usize) -> i32 {
     if t.gpu == 0 {
         return 0;
     }
-    let mut mask = d.clear_color_mask & 0xf;
-    if pixel_class(t.format) >= 2 {
-        mask = if mask & 1 != 0 { 0xf } else { 0 };
-    }
-    if let Some(l) = gles_surf_int_layout(t.format) {
-        let own = (1u8 << l.channels) - 1;
-        mask = match mask & own {
-            0 => 0,
-            m if m == own => 0xf,
-            _ => mask,
-        };
-    }
+    let mask = clear_mask_of(t.format, d.clear_color_mask);
     if mask == 0 {
         return 0;
     }
@@ -6482,11 +6553,16 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
 
 /// Whether a draw into several colour attachments, some integer, is drawn
 /// (`Ok`), else the line it is refused with ([`super::target_keys`]). The
-/// draw is no clear quad and clears nothing or clears every channel (the
-/// glClear fused into it: the frame's background clear, every attachment's
-/// packed colour at its registers, [`mrt_clear_dwords`], or the
-/// per-attachment quads, [`clear_by_target_quads`]; a clear under a colour
-/// mask that keeps channels stays refused), and the attachments are one of:
+/// draw is no clear quad, and the glClear fused into it, if any, is carried
+/// out in each attachment's own class (the frame's background clear, every
+/// attachment's packed colour at its registers, [`mrt_clear_dwords`], or
+/// the per-attachment quads over the frame's load of every attachment,
+/// [`clear_by_target_quads`], [`record_clear_quad`]). A clear under a colour
+/// mask that keeps some channels is refused for one integer layout, and for
+/// a mix where an attachment would keep some of its channels other than a
+/// float attachment 0, which takes the masked clear program
+/// ([`mix_clear_refused`], [`REFUSE_MIX_CLEAR_MASK`]). The attachments are
+/// one of:
 ///
 /// - One integer layout, every attachment present: `fs` is that layout's
 ///   integer variant (no colour mask) writing every attachment's dwords. It
@@ -6507,11 +6583,14 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
 pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'static str> {
     use super::target_keys::*;
     let n = (d.num_targets as usize).min(d.targets.len());
-    if d.clear_quad || (d.do_clear && d.clear_color_mask & 0xf != 0xf) {
+    if d.clear_quad {
         return Err(REFUSE_NOT_A_MIX);
     }
     if let Some(l) = gles_surf_int_layout(d.target_format) {
         if d.targets[1..n].iter().all(|t| t.format == d.target_format) {
+            if d.do_clear && d.clear_color_mask & 0xf != 0xf {
+                return Err(REFUSE_NOT_A_MIX);
+            }
             let rt = shaderc::ShcIntRt { channels: l.channels, bits: l.bits, signed: l.signed };
             let dwords = n as u32 * rt.dwords();
             if dwords > PVR_BACKEND_MAX_OUT_REGS {
@@ -6526,6 +6605,9 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
         }
     }
     let key = draw_mixed_key(d)?;
+    if mix_clear_refused(d, PVR_BACKEND_MAX_RT) {
+        return Err(REFUSE_MIX_CLEAR_MASK);
+    }
     let (keys, k) = draw_target_keys(d)?;
     let Some((_, span)) = crate::target_key::shc_mixed_out_layout(&keys[..k]) else {
         return Err(REFUSE_FOUR_REGISTERS);
@@ -6597,6 +6679,13 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
      * background object cannot carry, loads each attachment with its own
      * program and is a quad per attachment ([`clear_by_target_quads`]). */
     let ntargets = (d.num_targets as usize).min(d.targets.len());
+    /* A colour clear of a mix under a mask that keeps some channels of an
+     * attachment no clear program can keep them in: refused by name, the
+     * clear alone or fused into a draw, before any part of it is recorded. */
+    if mix_clear_refused(d, p.b.eot_pairs) {
+        glog_once!("{}", REFUSE_MIX_CLEAR_MASK);
+        return -util::ENOTSUP;
+    }
     if ntargets > 1
         && d.index_count != 0
         && d.targets[..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_is_integer(t.format))
@@ -6612,6 +6701,7 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
                 REFUSE_ONE_LAYOUT_PAST_FOUR => glog_once!("{}", REFUSE_ONE_LAYOUT_PAST_FOUR),
                 REFUSE_MIX_BLEND => glog_once!("{}", REFUSE_MIX_BLEND),
                 REFUSE_MIX_MASK => glog_once!("{}", REFUSE_MIX_MASK),
+                REFUSE_MIX_CLEAR_MASK => glog_once!("{}", REFUSE_MIX_CLEAR_MASK),
                 _ => glog_once!("{}", REFUSE_NOT_A_MIX),
             }
             return -util::ENOTSUP;
