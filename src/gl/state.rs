@@ -1303,7 +1303,8 @@ fn get_integerv(c: &mut GlContext, pname: GLenum, out: &mut [GLint; STATE_VALUES
          * (program.rs): a stage takes ES 3.0's twelve, a program
          * PROG_MAX_BLOCKS. One block's size and the combined components are
          * the GPU's (context.rs MAX_UNIFORM_BLOCK_SIZE,
-         * MAX_STAGE_UNIFORM_DWORDS): the V3D 16384 bytes and ES 3.0's
+         * MAX_STAGE_UNIFORM_DWORDS): the V3D and the PowerVR
+         * (blocks read by ld from memory) 16384 bytes and ES 3.0's
          * formula, 50688; the others the default block, 6144 bytes and 1536
          * (RESULTS.md gap list). */
         GL_MAX_VERTEX_UNIFORM_BLOCKS | GL_MAX_FRAGMENT_UNIFORM_BLOCKS => context::MAX_STAGE_UNIFORM_BLOCKS as GLint,
@@ -3256,9 +3257,11 @@ mod tests {
         assert_eq!(geti1(GL_MAX_COLOR_ATTACHMENTS), targets);
         /* Uniform blocks (flattened into each stage's array behind the
          * default block): twelve a stage, 24 a program, 24 binding points on
-         * every GPU. V3D: one block of ES 3.0's 16384 bytes (the uniform
-         * stream reads the whole array) and ES 3.0's formula for the
-         * combined components, 1536 + 12 * 4096 = 50688. The others: one
+         * every GPU. V3D and PowerVR: one block of ES 3.0's 16384 bytes and
+         * ES 3.0's formula for the combined components, 1536 + 12 * 4096 =
+         * 50688: the V3D reads the whole array through the uniform stream,
+         * the PowerVR reads block members with ld from it in memory
+         * (context.rs, docs/notes/pvr-ubo-memory-load.md). The others: one
          * block no larger than a stage's default block (6144 bytes, below
          * ES 3.0's 16384), and the default block's 1536 combined, which the
          * blocks share -- below ES 3.0's formula minimum. */
@@ -3266,7 +3269,8 @@ mod tests {
         assert_eq!(geti1(GL_MAX_FRAGMENT_UNIFORM_BLOCKS), 12);
         assert_eq!(geti1(GL_MAX_COMBINED_UNIFORM_BLOCKS), 24);
         assert_eq!(geti1(GL_MAX_UNIFORM_BUFFER_BINDINGS), 24);
-        let (block, combined) = if cfg!(feature = "gpu-v3d") { (16384, 50688) } else { (6144, 1536) };
+        let (block, combined) =
+            if cfg!(any(feature = "gpu-v3d", feature = "gpu-powervr")) { (16384, 50688) } else { (6144, 1536) };
         assert_eq!(geti1(GL_MAX_UNIFORM_BLOCK_SIZE), block);
         assert_eq!(geti1(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS), combined);
         assert_eq!(geti1(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS), combined);

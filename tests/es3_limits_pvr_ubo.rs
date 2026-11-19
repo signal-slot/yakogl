@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! The PowerVR (AM62P, BXS-4-64) ES 3.0 uniform limits: what they read today
-//! and what they read once the uniform-block raise lands (plan #378,
+//! The PowerVR (AM62P, BXS-4-64) ES 3.0 uniform limits after the
+//! uniform-block raise (plan #378,
 //! `docs/notes/ubo-limits.md` section 4, `docs/notes/pvr-ubo-memory-load.md`).
 //!
-//! Today `GL_MAX_UNIFORM_BLOCK_SIZE` is 6144 and
-//! `GL_MAX_COMBINED_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` is 1536. After the
-//! raise they are 16384 and 50688 (`MAX_UNIFORM_BLOCKS * 16384 / 4 + 1536`,
+//! `GL_MAX_UNIFORM_BLOCK_SIZE` was 6144 and
+//! `GL_MAX_COMBINED_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` 1536; they are now
+//! 16384 and 50688 (`MAX_UNIFORM_BLOCKS * 16384 / 4 + 1536`,
 //! `combined_uniform_components` in `src/gl/limits.rs`). The default-block
 //! limits `GL_MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` (1536) and the
 //! `..._UNIFORM_VECTORS` do not move. Each pname is read through
 //! `glGetIntegerv`, `glGetFloatv` and `glGetInteger64v`, which must agree.
 //!
-//! The `today_*` cases are live; the `raised_*` cases are `#[ignore]`d. The
-//! ctx-limits item (the PowerVR arm in `src/gl/context.rs`) un-ignores the
-//! raised cases and deletes the today cases in the same commit.
+//! The PowerVR arm in `src/gl/context.rs` reports the raised values; the
+//! default-block limits stay.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_limits_pvr_ubo
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_limits_pvr_ubo -- --ignored
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "gpu-powervr", not(feature = "report-es2")))]
@@ -168,16 +166,6 @@ const COMBINED_VERTEX: (&str, GLenum) =
 const COMBINED_FRAGMENT: (&str, GLenum) =
     ("MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS", GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS);
 
-/* ---- today (live; ctx-limits deletes these) ------------------------------- */
-
-#[test]
-fn today_block_size_and_combined_components() {
-    let _g = context();
-    assert_eq!(read("MAX_UNIFORM_BLOCK_SIZE", GL_MAX_UNIFORM_BLOCK_SIZE), 6144);
-    assert_eq!(read(COMBINED_VERTEX.0, COMBINED_VERTEX.1), 1536);
-    assert_eq!(read(COMBINED_FRAGMENT.0, COMBINED_FRAGMENT.1), 1536);
-}
-
 /* ---- unchanged by the raise (live, stays) --------------------------------- */
 
 #[test]
@@ -189,13 +177,12 @@ fn per_stage_uniform_limits_stay() {
     assert_eq!(read("MAX_FRAGMENT_UNIFORM_VECTORS", GL_MAX_FRAGMENT_UNIFORM_VECTORS), VECTORS);
 }
 
-/* ---- raised (ignored until ctx-limits) ------------------------------------ */
+/* ---- raised --------------------------------------------------------------- */
 
 const ES3_MIN_COMBINED_VERTEX: i64 = 50176;
 const ES3_MIN_COMBINED_FRAGMENT: i64 = 50048;
 
 #[test]
-#[ignore = "until ctx-limits: PowerVR reports 16384/50688"]
 fn raised_block_size() {
     let _g = context();
     // read() checks the int, float and 64-bit reads agree.
@@ -203,7 +190,6 @@ fn raised_block_size() {
 }
 
 #[test]
-#[ignore = "until ctx-limits: PowerVR reports 16384/50688"]
 fn raised_combined_components() {
     let _g = context();
     let size = read("MAX_UNIFORM_BLOCK_SIZE", GL_MAX_UNIFORM_BLOCK_SIZE);

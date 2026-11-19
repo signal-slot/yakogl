@@ -101,14 +101,18 @@ pub const MAX_STAGE_UNIFORM_BLOCKS: usize = 12;
 /// array is not bounded by the default block; tests/v3d_ubo_large_sim.rs
 /// reads dword 4095 of a 16384-byte block by constant and by uniform index.
 ///
-/// The other GPUs, and the V3D under `report-es2`: one block at most the
+/// PowerVR: 16384 as well. The USC reads block members with `ld` from the
+/// per-draw copy of the stage array in memory, not from shared registers
+/// (docs/notes/pvr-ubo-memory-load.md).
+///
+/// The other GPUs, and the V3D and PowerVR under `report-es2`: one block at most the
 /// stage's default block, MAX_UNIFORM_DWORDS * 4 = 6144 bytes: the GL core
 /// stages at most MAX_UNIFORM_DWORDS dwords a stage for their back ends
 /// (draw.rs), and the GC7000 holds the blocks in its constant file
 /// (docs/notes/gc-ubo-const-limit.md).
-#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]
 pub const MAX_UNIFORM_BLOCK_SIZE: usize = crate::gl::limits::ES3_MIN_MAX_UNIFORM_BLOCK_SIZE;
-#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+#[cfg(not(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2"))))]
 pub const MAX_UNIFORM_BLOCK_SIZE: usize = MAX_UNIFORM_DWORDS * 4;
 /// GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS and
 /// GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, and the dwords one stage's
@@ -120,14 +124,19 @@ pub const MAX_UNIFORM_BLOCK_SIZE: usize = MAX_UNIFORM_DWORDS * 4;
 /// above both minimums (50176 and 50048). A program's array is sized by what
 /// its stages lay out, not by this.
 ///
-/// The other GPUs: MAX_UNIFORM_DWORDS, the blocks share the default block.
-#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+/// PowerVR: the same formula and value; the blocks are read by `ld` from
+/// memory (docs/notes/pvr-ubo-memory-load.md), the default block stays in
+/// shared registers.
+///
+/// The other GPUs, and both under `report-es2`: MAX_UNIFORM_DWORDS, the
+/// blocks share the default block.
+#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]
 pub const MAX_STAGE_UNIFORM_DWORDS: usize = crate::gl::limits::combined_uniform_components(
     MAX_UNIFORM_DWORDS,
     MAX_STAGE_UNIFORM_BLOCKS,
     MAX_UNIFORM_BLOCK_SIZE,
 );
-#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+#[cfg(not(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2"))))]
 pub const MAX_STAGE_UNIFORM_DWORDS: usize = MAX_UNIFORM_DWORDS;
 /* the draw carries a stage's dwords in a u16 (GlesDraw::*_uniform_dwords,
  * GlProgram::*_uniform_cap) */
