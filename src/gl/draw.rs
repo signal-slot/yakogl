@@ -2920,7 +2920,7 @@ fn take_pending_ds_clears(d: &mut GlesDraw, pc: &mut PendingClear, (has_depth, h
 /// window surfaces must not share one depth/stencil between them); an FBO has
 /// one when a depth or stencil renderbuffer is attached (named by those
 /// renderbuffers, so FBOs sharing them share it).
-fn resolve_ds_storage(c: &GlContext, d: &mut GlesDraw) {
+fn resolve_ds_storage(c: &mut GlContext, d: &mut GlesDraw) {
     d.ds_persist = false;
     d.ds_id = 0;
     (d.depth_id, d.depth_gen, d.stencil_id, d.stencil_gen, d.ds_w, d.ds_h) = (0, 0, 0, 0, 0, 0);
@@ -2942,20 +2942,25 @@ fn resolve_ds_storage(c: &GlContext, d: &mut GlesDraw) {
         (d.ds_w, d.ds_h) = size;
     }
     let (has_depth, has_stencil) = framebuffer::fb_target_depth_stencil(c);
-    if let Some(fb) = c.framebuffer_ref(c.bound_framebuffer) {
+    if let Some((depth, stencil)) = c.framebuffer_ref(c.bound_framebuffer).map(|fb| (fb.depth, fb.stencil)) {
         if has_depth || has_stencil {
             d.ds_persist = true;
-            d.ds_id = ds_pair_id(&fb.depth, &fb.stencil);
+            d.ds_id = ds_pair_id(&depth, &stencil);
         }
         /* a depth texture's depth reaches its texels only when it is next
          * read (texture::resolve_depth), from this stamp */
         if has_depth {
-            framebuffer::stamp_depth_target(c, &fb.depth);
+            /* the plane holds one image of the texture: another face, layer
+             * or level drawn before goes into its own rows first, and this
+             * one is seeded from its rows (docs/notes/blit-depth-layers.md (b)) */
+            super::texture::depth_image_switch(c, &depth, whole_depth_clear(d));
+            framebuffer::stamp_depth_target(c, &depth);
+            super::texture::stamp_depth_layer(c, &depth);
             /* depth the CPU wrote into a depth texture since its plane
              * matched it goes into the plane before this draw, unless the
              * draw clears the whole plane first (`submit_draw`) */
             if !whole_depth_clear(d) {
-                (d.depth_texels, d.depth_texels_pitch) = super::texture::depth_seed(c, &fb.depth);
+                (d.depth_texels, d.depth_texels_pitch) = super::texture::depth_seed(c, &depth);
             }
         }
     }
