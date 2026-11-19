@@ -109,6 +109,29 @@ fn model_layout(t: &[Class]) -> Option<(Vec<u8>, u8)> {
     Some((start, next))
 }
 
+/// Condition 5 of section 2.2 since plan #325 item mrt-frameload: the
+/// targets lay out by layout B (each at the next free register; the first
+/// that does not fit and every one after it spilled to a tile buffer), and
+/// the spill is one an end-of-tile program was captured for -- not two
+/// targets with the second spilled, nor three with the last two. The span
+/// of the registers and the targets spilled, or `None`.
+fn model_spans(t: &[Class]) -> Option<(u8, u8)> {
+    let (mut next, mut spilled) = (0u8, 0u8);
+    for &c in t {
+        let d = dwords(c);
+        let s = if d >= 2 { (next + 1) & !1 } else { next };
+        if spilled == 0 && s + d <= 4 {
+            next = s + d;
+        } else {
+            spilled += 1;
+        }
+    }
+    match (t.len(), spilled) {
+        (2, 1) | (3, 2) => None,
+        _ => Some((next, spilled)),
+    }
+}
+
 /// Section 2.2's mixed key, or `None` when the list is not a mix
 /// (conditions 3-5 of the note).
 fn encode(t: &[Class]) -> Option<u32> {
@@ -118,7 +141,7 @@ fn encode(t: &[Class]) -> Option<u32> {
     if t.iter().all(|&c| c == t[0]) {
         return None; // one layout everywhere keeps today's key (2.4)
     }
-    model_layout(t)?;
+    model_spans(t)?;
     let mut key = 1u32 << 25;
     for (i, &c) in t.iter().enumerate() {
         key |= slot_code(c) << (10 + 5 * i);
@@ -339,6 +362,7 @@ fn production_agrees_with_the_model_for_every_list() {
             }
             None => assert_eq!(shc_mixed_out_layout(&k), None, "{t:?}"),
         }
+        assert_eq!(shc_mixed_spans(&k), model_spans(&t), "{t:?}");
         let want = encode(&t);
         assert_eq!(shc_blend_key_mixed(&k), want, "{t:?}");
         if let Some(key) = want {
