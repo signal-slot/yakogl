@@ -752,7 +752,9 @@ was given. What the part itself does with a wider line is a board question.
 comparison against `testdata/hwdb-compare-st-6205.txt`, and the signature of
 modes 1, 8 and 15 on the two shim rows. Exit 0 pass, 1 mismatch, 2 gap (no
 tree: the check was not run), 64 usage. `gate_st_selftest.sh` checks the
-script without a tree.
+script without a tree. The gate (`tools/check.sh`, Vivante scope) runs the
+self-test only: the dependency layout carries no etnaviv Mesa tree, so the
+two checks would be a gap on every runner, and they are run by hand.
 
 ### A tile-status fast clear: mode 29 and `testdata/ts-clear.golden`
 

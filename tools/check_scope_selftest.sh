@@ -132,6 +132,14 @@ want tools/mali/panthor/src/dev.rs mali
 want tools/osal/linux_heap_check.c osal
 want driver/samples/zephyr/gl_test/src/main_rpi4.c samples
 want tools/probes/nanopc_t6/t6_hello/src/main.c samples
+# the STM32MP257F-DK's Zephyr board, SoC, board layer and probes reach its
+# image rows; its GPU row's host checks are the Vivante scope's
+want driver/boards/st/stm32mp257f_dk/board.yml drivers
+want driver/soc/st/stm32mp2x_a35/soc.yml drivers
+want driver/zephyr/lib/board/stm32mp2/stm32mp2_wdog.c drivers
+want tools/probes/stm32mp257f_dk/mp2_hello/src/main.c samples
+want tools/vivante/gate_st.sh vivante
+want tools/vivante/gate_st_selftest.sh vivante
 want tools/host-replay/common.sh samples
 want driver/rust/src/lib.rs drivers
 want driver/CMakeLists.txt drivers
@@ -264,6 +272,31 @@ expect "nanopc_t6 glue: the drivers crate tests" '^plan  test    yakogl-drivers'
 # the Mali firmware row (a plan row here; on a run, `needs` makes it a gap
 # naming the file where MALI_CSFFW or deps-env.sh's place has none)
 expect "nanopc_t6 glue: the firmware row" '^plan  test    yakogl-drivers gpu::mali on the board.s mali_csffw.bin' "$out"
+# the STM32MP257F-DK: each of its paths plans the board's five image rows
+for p in driver/boards/st/stm32mp257f_dk/board.yml driver/soc/st/stm32mp2x_a35/soc.yml \
+  driver/zephyr/lib/board/stm32mp2/stm32mp2_wdog.c tools/probes/stm32mp257f_dk/mp2_gpu/src/main.c; do
+  out=$(plan "$p")
+  for img in "mp2_hello image \(the return trial, the watchdog marker\)" "mp2_identify image" "mp2_gpu image" \
+    "gc_fence image" "gc_clear image"; do
+    expect "stm32mp257f_dk $p: the $img row" "^plan  zephyr  stm32mp257f_dk $img" "$out"
+  done
+done
+# without a west workspace its image rows are the zephyr rows' one gap, never a pass
+out=$(env -u ZEPHYR_WS YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS=tools/probes/stm32mp257f_dk/mp2_hello/src/main.c \
+  tools/check.sh --changed HEAD 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+expect "stm32mp257f_dk without ZEPHYR_WS: the zephyr images gap" "^gap   zephyr images: no west workspace at ZEPHYR_WS=''" "$out"
+checks=$((checks + 1))
+! printf '%s\n' "$out" | grep -qE '^(plan|ok) +zephyr  stm32mp257f_dk' ||
+  { echo "FAIL stm32mp257f_dk without ZEPHYR_WS: an image row is planned"; fails=$((fails + 1)); }
+# its GPU row's host check: the gate_st.sh self-test (no Mesa tree), planned
+# on a change of the script; the script's hwdb and golden checks need
+# MESA_ETNA_TREE, which no runner's layout has, so they are no rows
+out=$(plan tools/vivante/gate_st.sh)
+checks=$((checks + 1))
+! printf '%s\n' "$out" | grep -qE 'gate_st\.sh (hwdb|golden)' ||
+  { echo "FAIL gate_st: a row runs a check that needs MESA_ETNA_TREE"; fails=$((fails + 1)); }
+expect "gate_st: the self-test row" '^plan  tools   tools/vivante/gate_st_selftest.sh \(no Mesa tree\)$' "$out"
+expect "gate_st: the Vivante scope only" '^check.sh: .*\(--changed HEAD, scopes: vivante \)' "$out"
 out=$(plan tools/probes/rpi_5/rpi5_hello/src/main.c)
 expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
 expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"

@@ -3309,6 +3309,15 @@ if command -v python3 >/dev/null 2>&1; then
   # regenerating the table is a miss at draw time on the board (gl_test
   # case 63, matattr), not a build error.
   step "tools   gl_test shader sources have table rows" python3 -I tools/vivante/check_gl_test_blobs.py
+  # The STM32MP257F's GPU row (0x8000/0x6205, issues #7, #1281): the self-test
+  # of tools/vivante/gate_st.sh, which needs no Mesa tree. The script's own
+  # two checks (hwdb, golden) need a Mesa 26.2.1 tree with the etnaviv
+  # drm-shim build (MESA_ETNA_TREE), which the dependency layout
+  # (tools/cts/deps-env.sh) does not carry; as rows they would be a gap on
+  # every runner, so they are run by hand (tools/vivante/README.md) until the
+  # layout carries the tree.
+  scope vivante
+  step "tools   tools/vivante/gate_st_selftest.sh (no Mesa tree)" selftest_row tools/vivante/gate_st_selftest.sh
   # The source list's gl_test programs (tools/shaders/precompiled.list, apps
   # gl_test and gl_test_es100) are what gl_test.c links, read out of its text
   # by glsl2v3d.py's reader: a case that links a new program and a list that
@@ -4502,6 +4511,20 @@ zephyr_nanopc_t6_gltest_image() {
     return 1
   }
 }
+# The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
+# with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
+# the runner's MP2_NO_WATCHDOG=1 step): it builds, and it carries the layer's
+# watchdog marker once (driver/zephyr/lib/board/stm32mp2/stm32mp2_wdog.c, the
+# "gc_wdog_arm: armed" line tools/board-stm32mp2.sh refuses an image
+# without). That the layer's early code is what the image runs is checked
+# after every stm32mp2 image's link (stm32mp2/check_early_hooks.cmake).
+zephyr_stm32mp2_hello_image() {
+  local dir=build/zephyr-werror/stm32mp257f_dk-mp2_hello marker
+  zephyr_werror_image stm32mp257f_dk/stm32mp257fxx/a35 tools/probes/stm32mp257f_dk/mp2_hello \
+    stm32mp257f_dk-mp2_hello -DCONFIG_YAKOGL_STM32MP2_WDOG=y || return 1
+  marker=$(strings -n 20 "$dir/zephyr/zephyr.bin" | grep -c '^gc_wdog_arm: armed OP-TEE arm,smc-wdt ') || true
+  [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
+}
 # No input key: an image's inputs include the west workspace and the Zephyr
 # SDK, thousands of files outside the checkout, and a module edited in place
 # moves no revision check.sh could read; so the images are built every time.
@@ -4541,6 +4564,20 @@ if [ "$QUICK" -eq 0 ]; then
       stm32mp257f_dk/stm32mp257fxx/a35 gc_triangle stm32mp257f-dk-gc_triangle
     step "zephyr  stm32mp257f-dk gl_test image, -Werror on our C files" zephyr_werror_image \
       stm32mp257f_dk/stm32mp257fxx/a35 gl_test stm32mp257f-dk-gl_test -DCONFIG_GL_TEST_MP2_SET_HEAD=y
+    # The DK's board-session images (issues #7, #1281): the return trial
+    # (mp2_hello, with the watchdog marker), the identity and the GPU power
+    # probes, and the fence and clear samples (no GL call, as gc_triangle:
+    # no present hook to check).
+    step "zephyr  stm32mp257f_dk mp2_hello image (the return trial, the watchdog marker), -Werror on our C files" \
+      zephyr_stm32mp2_hello_image
+    step "zephyr  stm32mp257f_dk mp2_identify image, -Werror on our C files" zephyr_werror_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 tools/probes/stm32mp257f_dk/mp2_identify stm32mp257f_dk-mp2_identify
+    step "zephyr  stm32mp257f_dk mp2_gpu image (GPU power and identity), -Werror on our C files" zephyr_werror_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 tools/probes/stm32mp257f_dk/mp2_gpu stm32mp257f_dk-mp2_gpu
+    step "zephyr  stm32mp257f_dk gc_fence image, -Werror on our C files" zephyr_triangle_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 gc_fence stm32mp257f_dk-gc_fence
+    step "zephyr  stm32mp257f_dk gc_clear image, -Werror on our C files" zephyr_triangle_image \
+      stm32mp257f_dk/stm32mp257fxx/a35 gc_clear stm32mp257f_dk-gc_clear
     scope v3d gltest drivers samples
     step "zephyr  rpi4 gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b gl_test rpi4
     # The examples (examples/README.md): each one built for the three boards,
