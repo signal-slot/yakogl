@@ -182,3 +182,18 @@ gm2_fma_8       gm2_fma_8.vert     gm2_fma_8.frag      triangles  vs.position=eq
 gm2_texvert_1   gm2_texvert_1.vert gm2_texvert_1.frag  triangles  vs.position=equal vs.varying=equal fs.fragment=differs:mediump:16:84cc244be957
 gm2_texvert_2   gm2_texvert_2.vert gm2_texvert_2.frag  triangles  vs.position=equal vs.varying=equal fs.fragment=differs:mediump:16:84cc244be957
 gm2_texvert_3   gm2_texvert_3.vert gm2_texvert_3.frag  triangles  vs.position=equal vs.varying=differs:mediump:16:a506a81254e5 fs.fragment=equal
+# #367 lower-texcoord-lane: texture coordinates (TEX_COORD, ideas df64 and jellyfish 22fc's caustics) and gl_FragColor lanes
+# (FRAGCOLOR_LANE, jellyfish 22fc's tail; docs/notes/mali-tex-coords.md, mali-varying-constants.md), drawn without
+# --uniform-values. Our compiler is byte-equal to gm2_texcoord_3/4 and gm2_fclane_1..4 (tests/mali_texcoord_lane.rs);
+# gm2_texcoord_1 is refused at its fp16 gl_FragCoord arithmetic (FRAGCOORD_FP16). pan_shc's SPIR-V path has no
+# lower_precision: the mediump gl_FragCoord of _1 and the lowp texel sum of _4 differ (`mediump`); for gm2_fclane_2/3 it
+# compacts the five varyings in another slot order and pushes the look-up handles in source order, where GLSL's
+# tree grafting puts `c`'s look-up after `m`'s (`unanalysed`). gm2_texcoord_2 is not listed: pan_shc's programs have the
+# reference's words but its FAU constants stand in another order, a result the list has no form for.
+gm2_texcoord_1  gm2_texcoord_1.vert gm2_texcoord_1.frag triangles vs.position=equal fs.fragment=differs:mediump:17:74ab863e58cd
+gm2_texcoord_3  gm2_texcoord_3.vert gm2_texcoord_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_texcoord_4  gm2_texcoord_4.vert gm2_texcoord_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:20:517f2660c368
+gm2_fclane_1    gm2_fclane_1.vert   gm2_fclane_1.frag   triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_fclane_2    gm2_fclane_2.vert   gm2_fclane_2.frag   triangles vs.position=equal vs.varying=differs:unanalysed:31:b109a7e72a78 fs.fragment=differs:unanalysed:30:2e6a4ec0368b
+gm2_fclane_3    gm2_fclane_3.vert   gm2_fclane_3.frag   triangles vs.position=equal vs.varying=differs:unanalysed:31:b109a7e72a78 fs.fragment=differs:unanalysed:30:2e6a4ec0368b
+gm2_fclane_4    gm2_fclane_4.vert   gm2_fclane_4.frag   triangles vs.position=equal vs.varying=equal fs.fragment=equal

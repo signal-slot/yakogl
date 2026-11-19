@@ -571,3 +571,43 @@ Measured through the product's entry points against main, 18,367 reference
 programs: no program that was byte-equal changed, no refused program became
 "compiled, not Mesa's", 21 programs became byte-equal (14 that differed,
 7 that were refused).
+
+## glmark2's colour lanes (plan #367 lower-texcoord-lane, FRAGCOLOR_LANE)
+
+jellyfish's fragment shader (glmark2 22c527cb, `22fc`; the forecast note's
+"jellyfish 8ee5" label is the scene's other shader, which `mix`es two
+uniforms) ends `gl_FragColor = vec4((vAmbient + vDiffuse + caustics.rgb) *
+colorMap.rgb, colorMap.a + pow(vFresnel.r, 2.0) - 0.3)`. Its references are
+`tools/mali/testdata/gm2_fclane_1..4` (Mesa 26.2.1 on drm-shim, drawn with
+`--uniform-values`); `tests/mali_texcoord_lane.rs` pins all four byte-equal.
+What the lowering added (`src/shaderc/online/mali/nir_fs.rs`):
+
+- **A swapped aligned pair of a varying's load** (`word_of`, gm2_fclane_1's
+  `vec4(vd.g, vd.r, vd.b, va.r)`: the link packs the four lanes in one slot):
+  `nir_opt_vectorize` pairs the two `f2f16`s whatever their order, one
+  `V2F32_TO_V2F16.discard r0, r1^, r0^` with the sources in the colour's
+  order. It is a `Word::Pair` like the in-order one. A uniform's pair the
+  other way round has no reference and stays `ColourForm`.
+- **`pow(a, 2.0)` is `a * a`** (`lane32`'s `Fexp2` arm; nir_opt_algebraic.py
+  `fpow(a, 2.0) -> fmul(a, a)`): gm2_fclane_2's `pow(vd.r, 2.0)` and
+  gm2_fclane_3's `vd.r * vd.r` are the same 32 words, the product fused
+  with the sum it is read by (`FADD_IMM.f32 r4, r7^, #0xBE99999A` of
+  `m.a - 0.3`, then `FMA.f32 r0, r0^, r0^, r4^`). The exponents 1.0, 3.0 and
+  4.0 have no reference and stay `Arithmetic`.
+- **A vec2 varying in lanes 2 and 3 of a slot as a coordinate** (`layout`,
+  `TexLookup::load_lane`): the link compacts `t0` and `t1` into one slot,
+  `LD_VAR_BUF_IMM ... .v4 @r4:r5:r6:r7`, and the look-up of `t1` stages
+  `@r6:r7` in place (`TEX_SINGLE ... @r6:r7:r8, @r6:r7`), with no copy.
+- **A 2D look-up read once is grafted where it is read** (`grafted_locals`,
+  GLSL's `opt_tree_grafting`): `vec4 c = texture2D(s1, t1)` is read once (in
+  the colour), `vec4 m = texture2D(s0, t0)` twice, so NIR has `m`'s look-up
+  first and `va_lower_constants` (bifrost_compile.c:4517, before the
+  pressure schedule at :4575) pushes `m`'s handle first, FAU `20001800,
+  20011801`, though the schedule issues `c`'s look-up first. pan_shc's
+  SPIR-V path does not graft and pushes them the other way round
+  (cases.txt).
+
+What is left on jellyfish: its vertex shader `08a2` (FMA, plan #367
+lower-fma) and its other fragment shader `8ee5` (`FsOperandForm`: a uniform
+first in `mix(color1, color2, uv.x * uv.y)`, no item yet). The caustics
+coordinate is the next section's (mali-tex-coords.md).
