@@ -4211,6 +4211,21 @@ fn id_reg_of(reg1: u8) -> u32 {
     }
 }
 
+/// `PVR_PDS_ID_BASE_TO_STREAMS` when the vertex program has to add the
+/// draw's base instance (GlesDraw::instance_id) to the instance number its
+/// per-instance streams are fetched by, with or without a gl_InstanceID
+/// register: under the feature pvr-instance-divisor, whenever a stream is per
+/// instance (a chunk of a split draw starts at its first instance without a
+/// base move). 0 otherwise, and always without the feature (the base then
+/// goes only with a gl_InstanceID register, as before).
+fn base_to_streams(streams: &[PvrPdsVertexStream]) -> u32 {
+    if cfg!(feature = "pvr-instance-divisor") && streams.iter().any(|s| s.per_instance != 0) {
+        PVR_PDS_ID_BASE_TO_STREAMS
+    } else {
+        0
+    }
+}
+
 fn pack_rgba8(c: &[f32; 4]) -> u32 {
     let mut v = 0u32;
 
@@ -7445,9 +7460,15 @@ fn draw_sized(p: &mut Pvr, d: &GlesDraw) -> i32 {
      * the vertex fetch's base (GlesDraw::instance_id, Mesa's
      * instance_id_modifier): the PDS adds it to the instance number before
      * the per-instance DMAs too, so its per-instance arrays are not advanced
-     * here as well. */
+     * here as well. With hardware divisors (feature pvr-instance-divisor)
+     * every chunk goes that way: the vertex program adds the base whenever a
+     * stream is per instance (PVR_PDS_ID_BASE_TO_STREAMS), and a base move
+     * would be wrong for a divisor stream unless first % divisor == 0. */
+    #[cfg(not(feature = "pvr-instance-divisor"))]
     // SAFETY: checked non-null by pvr_backend_draw; the core's linked program.
     let reads_instance_id = !d.vs.is_null() && unsafe { (*d.vs).vs_instance_id_reg1 } != 0;
+    #[cfg(feature = "pvr-instance-divisor")]
+    let reads_instance_id = true;
     if inst == 1 || per >= budget {
         p.b.prims = p.b.prims.saturating_add(total); /* cannot be split any finer */
         return draw_dispatch(p, &cont);
@@ -8326,7 +8347,7 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             nstreams as u32,
             0,
             id_reg_of(vs.vs_vertex_id_reg1),
-            id_reg_of(vs.vs_instance_id_reg1),
+            id_reg_of(vs.vs_instance_id_reg1) | base_to_streams(&s.streams[..nstreams]),
             d.instance_id,
             s.vdata.as_mut_ptr(),
             s.vcode.as_mut_ptr(),
@@ -10484,7 +10505,13 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     stencil_resolve: Some(pvr_backend_stencil_resolve),
     max_samples: 0,
     /* the PDS fetches a per-instance array by the instance number: divisor 1 */
+    #[cfg(not(feature = "pvr-instance-divisor"))]
     max_instance_divisor: 1,
+    /* the PDS divides the instance number by each stream's divisor (Mesa's
+     * multiplier and shift, pvr_pipeline_pds.c:846-864); GlesAttrib::divisor
+     * is a u16, so the GL core draws larger divisors instance by instance */
+    #[cfg(feature = "pvr-instance-divisor")]
+    max_instance_divisor: 0xffff,
     /* the sync waits keep finish() until this backend waits for one kick */
     wait_kick: None,
     /* the texture unit reads the storage */
@@ -10505,6 +10532,7 @@ fn add_stream(streams: &mut [PvrPdsVertexStream], n: usize, a: &GlesAttrib, base
         let prev = &mut streams[n - 1];
 
         if prev.per_instance == a.per_instance as u32
+            && prev.divisor == stream_divisor(a)
             && prev.stride == a.stride
             && prev.address.wrapping_add(prev.dma_size as u64) == base
             && prev.dst_reg + prev.dma_size / 4 == a.vi_reg as u32
@@ -10519,9 +10547,22 @@ fn add_stream(streams: &mut [PvrPdsVertexStream], n: usize, a: &GlesAttrib, base
         dma_size: a.components as u32 * 4,
         dst_reg: a.vi_reg as u32,
         per_instance: (a.per_instance != 0) as u32,
-        divisor: 0,
+        divisor: stream_divisor(a),
     };
     n + 1
+}
+
+/// The divisor a stream of attribute `a` is fetched with: 0 for a
+/// per-vertex attribute; for a per-instance one its GL divisor (0 read as 1)
+/// under the feature pvr-instance-divisor, which the PDS divides the instance
+/// number by, and 0 (no divide) without it, where the GL core hands over
+/// divisor 1 only.
+fn stream_divisor(a: &GlesAttrib) -> u32 {
+    if cfg!(feature = "pvr-instance-divisor") && a.per_instance != 0 {
+        u32::from(a.divisor.max(1))
+    } else {
+        0
+    }
 }
 
 /* ---- the words before csbgen (tests only) --------------------------------

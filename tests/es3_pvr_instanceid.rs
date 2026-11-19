@@ -559,8 +559,13 @@ fn shader(type_: GLenum, src: &str) -> GLuint {
 static POS: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, -0.5, -1.0, 0.0, 1.0, -1.0, -0.5, 0.0, 1.0];
 static GREEN: [f32; 4] = [0.0, 0.25, 0.5, 0.75];
 static BLUE: [f32; 2] = [0.5, 1.0];
+/// The blue array's divisor: above the PowerVR table's `max_instance_divisor`
+/// so the GL core splits the draw (1 without the feature
+/// pvr-instance-divisor; 0xffff with it, so 0x10000 there).
+const DIVISOR_B: GLuint = if cfg!(feature = "pvr-instance-divisor") { 0x10000 } else { 2 };
 
-/// The mixed draw, four instances, a divisor-2 array: drawn instance by
+/// The mixed draw, four instances, a divisor-2 array (0x10000 with the
+/// feature pvr-instance-divisor, whose table takes 2): drawn instance by
 /// instance with no GL error and no refusal, and the vertex-fetch PDS data
 /// of instance i carries base i for the shader's instance id register.
 /// Revert check: with the old refusal instances 1..3 are refused and logged.
@@ -573,7 +578,7 @@ fn a_split_instanced_draw_passes_each_instance_as_the_vertex_fetch_base() {
         yakogl::backend::g_backend = &yakogl_backend_pvr;
         yakogl::shaderc::g_shaderc = &yakogl::shaderc::online::SHC_ONLINE;
         assert_eq!(yakogl::backend::init(), 0, "{:?}", logs());
-        assert_eq!(yakogl::backend::max_instance_divisor(), 1, "the GL core splits a divisor-2 draw");
+        assert!(yakogl::backend::max_instance_divisor() < DIVISOR_B, "the GL core splits a divisor-{DIVISOR_B} draw");
         let ctx = context::gl_context_create(64, 48);
         assert!(!ctx.is_null(), "{:?}", logs());
         context::gl_context_set_current(ctx);
@@ -602,7 +607,7 @@ fn a_split_instanced_draw_passes_each_instance_as_the_vertex_fetch_base() {
         glVertexAttribDivisor(g, 1);
         glVertexAttribPointer(b, 1, GL_FLOAT, 0, 0, BLUE.as_ptr() as *const c_void);
         glEnableVertexAttribArray(b);
-        glVertexAttribDivisor(b, 2);
+        glVertexAttribDivisor(b, DIVISOR_B);
 
         glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT);

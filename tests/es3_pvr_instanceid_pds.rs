@@ -5,7 +5,10 @@
 //! `pvr_pds_render_vertex_program_ids_base` (driver/src/pvr_pds_render_gen.c)
 //! sets Mesa's `instance_id_modifier`. tests/es3_pvr_instanceid_pds.c checks
 //! that base 0 gives the old words, that a base emits the constant and grows
-//! the program, and that the base is ignored without an instance register.
+//! the program, and that the base is ignored without an instance register
+//! unless the back end asks for it with `PVR_PDS_ID_BASE_TO_STREAMS` (P3:
+//! the base then goes to the instance number the per-instance streams are
+//! fetched by, with no gl_InstanceID write).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_instanceid_pds
@@ -59,7 +62,7 @@ fn the_vertex_program_adds_the_per_draw_instance_base() {
     let (head, tail) = line.split_once(" grow=").expect(&line);
     assert_eq!(head, "base0_same=1 modifier_in_data=1", "{line}");
     let (grow, rest) = tail.split_once(' ').expect(&line);
-    assert_eq!(rest, "no_reg_ignored=1", "{line}");
+    assert_eq!(rest, "no_reg_ignored=1 streams_base=1", "{line}");
     let (data, code) = grow.split_once(',').expect(&line);
     let (data, code): (u32, u32) = (data.parse().unwrap(), code.parse().unwrap());
     assert!((0..=2).contains(&data), "data grows by {data}");

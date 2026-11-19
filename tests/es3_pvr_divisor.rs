@@ -10,16 +10,22 @@
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online,pvr-instance-divisor --test es3_pvr_divisor
 //! ```
 //!
-//! This is the WITHOUT-feature arm: every case is under
-//! `cfg(not(feature = "pvr-instance-divisor"))` and pins what main does now:
-//! the PowerVR table's `max_instance_divisor` is 1, an instanced draw with
-//! divisors 2, 3 and 4 reaches the back end as one draw per instance (each
-//! reading element instance / divisor of every per-instance array), and every
-//! `PvrPdsVertexStream` the back end hands the PDS generator has `divisor` 0.
-//! The FEATURE arm (one instanced draw, the divisor carried into the stream,
-//! chunking through the instance-id modifier and no base move) comes with the
-//! P3 back-end item that adds the feature; until then the feature is not
-//! declared, hence the `unexpected_cfgs` allow below.
+//! The WITHOUT-feature arm (`cfg(not(feature = "pvr-instance-divisor"))`)
+//! pins the split path: the PowerVR table's `max_instance_divisor` is 1, an
+//! instanced draw with divisors 2, 3 and 4 reaches the back end as one draw
+//! per instance (each reading element instance / divisor of every
+//! per-instance array), and every `PvrPdsVertexStream` the back end hands the
+//! PDS generator has `divisor` 0.
+//!
+//! The FEATURE arm (`cfg(feature = "pvr-instance-divisor")`, P3) pins the
+//! hardware divisors: the table reports 0xffff; divisors 2, 3 and 4 reach the
+//! back end as ONE instanced draw whose per-instance streams carry their
+//! divisors; attributes of different divisors are never coalesced into one
+//! stream; a draw the back end splits by instances puts each chunk's first
+//! instance in the vertex program's instance base (Mesa's
+//! instance_id_modifier, `PVR_PDS_ID_BASE_TO_STREAMS` without a
+//! gl_InstanceID register) and leaves every stream's base at element 0; and
+//! a divisor above 0xffff still splits per instance.
 //!
 //! The harness is that of tests/es3_pvr_divisor_split.rs (the real PowerVR
 //! table with its `draw` recorded, stand-ins for the C command generators).
@@ -34,8 +40,6 @@
     target_os = "linux",
     any(target_arch = "x86_64", target_arch = "aarch64")
 ))]
-/* the feature `pvr-instance-divisor` arrives with the P3 back-end item */
-#![allow(unexpected_cfgs)]
 /* the stand-ins take the C generators' parameter lists as they are */
 #![allow(clippy::too_many_arguments)]
 
@@ -76,6 +80,7 @@ struct Alloc {
 /// with its first element's words read back from the arena.
 #[derive(Debug, Clone, PartialEq)]
 struct Stream {
+    address: u64,
     dst_reg: u32,
     stride: u32,
     dma_size: u32,
@@ -92,6 +97,28 @@ struct Stream {
 struct Hw {
     lists: Vec<(u32, u32)>,
     streams: Vec<Stream>,
+    /// Each index list with the vertex program generated last before it
+    /// (the one it runs).
+    chunks: Vec<Chunk>,
+}
+
+/// One vertex program as the generator was asked for it (read by the
+/// feature arm).
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(not(feature = "pvr-instance-divisor"), allow(dead_code))]
+struct VertexRec {
+    streams: Vec<Stream>,
+    instance_id_reg: u32,
+    instance_id_base: u32,
+}
+
+/// One index list: its vertex and instance counts and its vertex program.
+#[derive(Debug, Clone)]
+#[cfg_attr(not(feature = "pvr-instance-divisor"), allow(dead_code))]
+struct Chunk {
+    vertices: u32,
+    instances: u32,
+    vertex: VertexRec,
 }
 
 impl Hw {
@@ -111,6 +138,8 @@ struct Platform {
     /// outside a draw (a flush's own blocks).
     current: Option<usize>,
     hw: Vec<Hw>,
+    /// The vertex program generated last.
+    vertex: VertexRec,
     log: Vec<String>,
 }
 
@@ -363,8 +392,10 @@ unsafe extern "C" fn pvr_vdm_emit_index_list_instanced(
     _why: *mut PvrVdmFieldRefusal,
 ) -> i32 {
     with_platform(|p| {
+        let vertex = p.vertex.clone();
         if let Some(hw) = hw_of(p) {
             hw.lists.push((count, instance_count.max(1)));
+            hw.chunks.push(Chunk { vertices: count, instances: instance_count.max(1), vertex });
         }
     });
     let mut w = vec![0xC000_0000 | topology];
@@ -426,7 +457,7 @@ unsafe extern "C" fn pvr_pds_render_color_upload_program(
 }
 
 /// Records the draw's vertex streams, each with its first element read back
-/// from the arena (up to four words).
+/// from the arena (up to four words), and the instance register and base.
 #[no_mangle]
 unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
     _vs_usc_exec_offset: u64,
@@ -435,8 +466,8 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
     num_streams: u32,
     _has_slc_mcu_cache_controls: i32,
     _vertex_id_reg: u32,
-    _instance_id_reg: u32,
-    _instance_id_base: u32,
+    instance_id_reg: u32,
+    instance_id_base: u32,
     data_out: *mut u32,
     code_out: *mut u32,
     info: *mut PvrPdsRenderVertexInfo,
@@ -448,6 +479,7 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
         let rec: Vec<Stream> = st
             .iter()
             .map(|s| Stream {
+                address: s.address,
                 dst_reg: s.dst_reg,
                 stride: s.stride,
                 dma_size: s.dma_size,
@@ -459,6 +491,7 @@ unsafe extern "C" fn pvr_pds_render_vertex_program_ids_base(
                     .collect(),
             })
             .collect();
+        p.vertex = VertexRec { streams: rec.clone(), instance_id_reg, instance_id_base };
         if let Some(hw) = hw_of(p) {
             hw.streams = rec;
         }
@@ -700,6 +733,7 @@ fn rig() -> (MutexGuard<'static, ()>, GLuint) {
     with_platform(|p| {
         p.hw.clear();
         p.current = None;
+        p.vertex = VertexRec::default();
     });
     (g, prog)
 }
@@ -732,24 +766,42 @@ fn element(k: usize, e: usize) -> [f32; 4] {
 /// arrays 1..=3 (buffer objects) have the divisors `divs`; array 0, the
 /// position, has divisor 0. Returns what the table and the back end saw.
 fn run(divs: [GLuint; 3], instances: usize) -> (Vec<TableRec>, Vec<Hw>) {
+    run_mesh(divs, instances, 1, false)
+}
+
+/// As [`run`], with `tris` triangles an instance (`3 * tris` vertices), and
+/// with `interleaved` arrays 1..=3 in one buffer object, one vec4 of each an
+/// element (stride 48), so the back end may coalesce them into one stream.
+fn run_mesh(divs: [GLuint; 3], instances: usize, tris: usize, interleaved: bool) -> (Vec<TableRec>, Vec<Hw>) {
     let (_g, prog) = rig();
     let elems = instances.max(3) + 1;
+    let mesh: Vec<f32> = (0..tris).flat_map(|_| TRI).collect();
     // SAFETY: plain GL calls; every pointer outlives its call.
     unsafe {
         glUseProgram(prog);
-        let mut bufs = vec![buffer(bytes_of(&TRI))];
-        for k in 1..=3 {
-            let data: Vec<f32> = (0..elems).flat_map(|e| element(k, e)).collect();
+        let mut bufs = vec![buffer(bytes_of(&mesh))];
+        if interleaved {
+            let data: Vec<f32> = (0..elems).flat_map(|e| (1..=3).flat_map(move |k| element(k, e))).collect();
             bufs.push(buffer(bytes_of(&data)));
+        } else {
+            for k in 1..=3 {
+                let data: Vec<f32> = (0..elems).flat_map(|e| element(k, e)).collect();
+                bufs.push(buffer(bytes_of(&data)));
+            }
         }
-        for (loc, b) in bufs.iter().enumerate() {
-            glBindBuffer(GL_ARRAY_BUFFER, *b);
-            glVertexAttribPointer(loc as GLuint, 4, GL_FLOAT, 0, 0, core::ptr::null());
+        for loc in 0..4usize {
+            let (b, stride, offset) = match (loc, interleaved) {
+                (0, _) => (bufs[0], 0, 0),
+                (_, true) => (bufs[1], 48, 16 * (loc - 1)),
+                (_, false) => (bufs[loc], 0, 0),
+            };
+            glBindBuffer(GL_ARRAY_BUFFER, b);
+            glVertexAttribPointer(loc as GLuint, 4, GL_FLOAT, 0, stride, offset as *const c_void);
             glEnableVertexAttribArray(loc as GLuint);
             glVertexAttribDivisor(loc as GLuint, if loc == 0 { 0 } else { divs[loc - 1] });
         }
         glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 3, instances as GLsizei);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 3 * tris as GLsizei, instances as GLsizei);
         assert_eq!(glGetError(), GL_NO_ERROR, "{divs:?} x{instances}: {:?}", logs());
         glFlush();
         for loc in 0..4 {
@@ -851,4 +903,159 @@ fn every_pds_vertex_stream_has_divisor_0() {
         }
     }
     assert!(seen_per_instance, "the divisor-1 draw must have made a per-instance stream");
+}
+
+/* ---- the tests: with the feature (P3, hardware divisors) --------------------- */
+
+/// The stream that loads vtxin register `reg..reg + 4`.
+#[cfg(feature = "pvr-instance-divisor")]
+fn stream_at(streams: &[Stream], reg: u32) -> &Stream {
+    streams
+        .iter()
+        .find(|s| s.dst_reg <= reg && reg + 4 <= s.dst_reg + s.dma_size / 4)
+        .unwrap_or_else(|| panic!("no stream loads vtxin {reg}: {streams:?}"))
+}
+
+/// The words `stream` loads into vtxin register `reg..reg + 4` for its
+/// first element.
+#[cfg(feature = "pvr-instance-divisor")]
+fn words_of(stream: &Stream, reg: u8) -> Vec<f32> {
+    let at = (reg as u32 - stream.dst_reg) as usize;
+    stream.first[at..at + 4].to_vec()
+}
+
+/// The vtxin register and divisor of arrays 1..=3, from the table's record
+/// of a draw that fetches all three per instance.
+#[cfg(feature = "pvr-instance-divisor")]
+fn fetched_regs(d: &TableRec) -> Vec<(u8, u16)> {
+    d.arrays
+        .iter()
+        .map(|a| match a {
+            Arr::Fetched { vi_reg, divisor } => (*vi_reg, *divisor),
+            Arr::Constant { .. } => panic!("a constant in the instanced draw: {d:?}"),
+        })
+        .collect()
+}
+
+/// (1) The table: the PowerVR takes every divisor a GlesAttrib holds.
+#[cfg(feature = "pvr-instance-divisor")]
+#[test]
+fn the_pvr_table_reports_max_instance_divisor_0xffff() {
+    let _g = rig();
+    assert_eq!(yakogl_backend_pvr.max_instance_divisor, 0xffff);
+    assert_eq!(PVR_RECORDED.max_instance_divisor, 0xffff);
+    assert_eq!(yakogl::backend::max_instance_divisor(), 0xffff, "the GL core reads the table's 0xffff");
+}
+
+/// (2) Divisors 2, 3 and 4 on different attributes: ONE table draw of nine
+/// instances, one index list of nine instances, and a per-instance stream
+/// for each array that starts at its element 0 and carries its divisor (the
+/// position's stream: divisor 0). The vertex program adds the base instance
+/// 0 to the instance number (`PVR_PDS_ID_BASE_TO_STREAMS`, no gl_InstanceID
+/// register: the shader does not read it).
+#[cfg(feature = "pvr-instance-divisor")]
+#[test]
+fn divisors_2_3_4_reach_the_back_end_as_one_instanced_draw() {
+    let divs = [2, 3, 4];
+    let (draws, hw) = run(divs, 9);
+    assert_eq!(draws.len(), 1, "one draw: {draws:?}");
+    let d = &draws[0];
+    assert_eq!((d.instance_count, d.instance_id), (9, 0), "{d:?}");
+    let regs = fetched_regs(d);
+    assert_eq!(regs.iter().map(|r| r.1).collect::<Vec<_>>(), [2, 3, 4], "{d:?}");
+    assert_eq!(hw[0].own(), [(3, 9)], "one index list of 9 instances: {:?}", hw[0].lists);
+    for (k, &(reg, _)) in (1..=3).zip(&regs) {
+        let s = stream_at(&hw[0].streams, reg as u32);
+        assert_eq!((s.per_instance, s.stride, s.divisor), (1, 16, divs[k - 1]), "array {k}: {s:?}");
+        assert_eq!(words_of(s, reg), element(k, 0), "array {k}: the stream starts at element 0");
+    }
+    let pos = stream_at(&hw[0].streams, 0);
+    assert_eq!((pos.per_instance, pos.divisor), (0, 0), "the position: per vertex, no divisor: {pos:?}");
+    let own: Vec<&Chunk> = hw[0].chunks.iter().filter(|c| c.vertices == 3).collect();
+    assert_eq!(own.len(), 1, "{:?}", hw[0].chunks);
+    let v = &own[0].vertex;
+    assert_eq!(v.instance_id_reg, PVR_PDS_NO_ID_REG | PVR_PDS_ID_BASE_TO_STREAMS, "{v:?}");
+    assert_eq!(v.instance_id_base, 0, "{v:?}");
+}
+
+/// (3) Arrays 1..=3 interleaved in one buffer, in register order: with one
+/// divisor they are one stream (the coalescing this guards), with different
+/// divisors never: a stream is fetched with one divisor.
+#[cfg(feature = "pvr-instance-divisor")]
+#[test]
+fn attribs_of_different_divisors_are_not_coalesced() {
+    for (divs, want) in [
+        ([2, 2, 2], vec![(48, 2)]),
+        ([2, 2, 3], vec![(32, 2), (16, 3)]),
+        ([2, 3, 3], vec![(16, 2), (32, 3)]),
+        ([1, 2, 1], vec![(16, 1), (16, 2), (16, 1)]),
+        ([2, 3, 4], vec![(16, 2), (16, 3), (16, 4)]),
+    ] {
+        let (draws, hw) = run_mesh(divs, 12, 1, true);
+        assert_eq!(draws.len(), 1, "{divs:?}: one draw: {draws:?}");
+        assert_eq!(draws[0].instance_count, 12, "{divs:?}: {:?}", draws[0]);
+        let mut per: Vec<&Stream> = hw[0].streams.iter().filter(|s| s.per_instance == 1).collect();
+        per.sort_by_key(|s| s.dst_reg);
+        let got: Vec<(u32, u32)> = per.iter().map(|s| (s.dma_size, s.divisor)).collect();
+        assert_eq!(got, want, "{divs:?}: the per-instance streams (bytes, divisor): {per:?}");
+        assert!(per.iter().all(|s| s.stride == 48), "{divs:?}: {per:?}");
+        /* the first stream starts at element 0 of array 1 */
+        assert_eq!(per[0].first[..4], element(1, 0), "{divs:?}: {per:?}");
+    }
+}
+
+/// (4) A draw the back end splits by instances (1000 triangles an instance,
+/// 4000 instances: 4M primitives against the 1.5M a kick takes, so chunks
+/// of 1500, 1500 and 1000). Each chunk at first instance F runs a vertex
+/// program whose instance base is F (added to the instance number before
+/// each stream's divide, `PVR_PDS_ID_BASE_TO_STREAMS` since the shader has
+/// no gl_InstanceID register), and every per-instance stream still starts
+/// at its array's element 0: instance i of the chunk fetches element
+/// (F + i) / divisor. A base move would be wrong for divisor 7 (1500 % 7 =
+/// 2) and, with the base, would add F twice.
+#[cfg(feature = "pvr-instance-divisor")]
+#[test]
+fn a_chunked_draw_moves_the_instance_base_not_the_stream_base() {
+    let divs = [1, 4, 7];
+    let (tris, instances) = (1000usize, 4000u32);
+    let (draws, hw) = run_mesh(divs, instances as usize, tris, false);
+    assert_eq!(draws.len(), 1, "one table draw: {draws:?}");
+    assert_eq!((draws[0].instance_count, draws[0].instance_id), (instances, 0), "{:?}", draws[0]);
+    let regs = fetched_regs(&draws[0]);
+    let chunks: Vec<&Chunk> = hw[0].chunks.iter().filter(|c| c.vertices == 3 * tris as u32).collect();
+    let sizes: Vec<u32> = chunks.iter().map(|c| c.instances).collect();
+    assert_eq!(sizes, [1500, 1500, 1000], "{:?}", hw[0].lists);
+    let mut first = 0u32;
+    for c in chunks {
+        let v = &c.vertex;
+        assert_eq!(v.instance_id_reg, PVR_PDS_NO_ID_REG | PVR_PDS_ID_BASE_TO_STREAMS, "chunk at {first}: {v:?}");
+        assert_eq!(v.instance_id_base, first, "chunk at {first}: the base is its first instance: {v:?}");
+        for (k, &(reg, _)) in (1..=3).zip(&regs) {
+            let s = stream_at(&v.streams, reg as u32);
+            assert_eq!((s.per_instance, s.divisor), (1, divs[k - 1]), "chunk at {first}, array {k}: {s:?}");
+            assert_eq!(
+                words_of(s, reg),
+                element(k, 0),
+                "chunk at {first}, array {k}: the stream's base stays at element 0 (no base move)"
+            );
+        }
+        first += c.instances;
+    }
+    assert_eq!(first, instances, "the chunks draw every instance once");
+}
+
+/// (5) A divisor of 0x10000, above what a GlesAttrib holds: the GL core
+/// still draws instance by instance, every per-instance array a constant,
+/// and with no per-instance stream the vertex program adds no base.
+#[cfg(feature = "pvr-instance-divisor")]
+#[test]
+fn a_divisor_above_0xffff_still_splits() {
+    let divs = [1, 2, 0x10000];
+    let (draws, hw) = run(divs, 4);
+    assert_split(divs, 4, &draws, &hw);
+    for (i, h) in hw.iter().enumerate() {
+        for c in h.chunks.iter().filter(|c| c.vertices == 3) {
+            assert_eq!(c.vertex.instance_id_reg & PVR_PDS_ID_BASE_TO_STREAMS, 0, "instance {i}: {:?}", c.vertex);
+        }
+    }
 }
