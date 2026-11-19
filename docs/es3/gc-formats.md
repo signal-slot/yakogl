@@ -250,19 +250,25 @@ RG32I/UI classes (`b5e04b14`), the GL texture swizzle (`840ea7ec`) and the
 `integer_texture_surface` rows (`6c5b004f`); it was not repeated here.
 Whether those cases then pass is the board's to say (verdin-imx8mp; no GPU result exists for any of this).
 
-Run for `gc-narrow-flip` (classes 30-39 in the mask): **not measured.** The
-worker had no full VK-GL-CTS checkout (the deps cache holds only a data
-subtree of `93bca01`) and could not fetch one, so no host dEQP row exists for
-this commit and no count is claimed: the expected 0 upload and 0 compile
-refusals for `texture.format` and `texture.specification` are final-host-run's
-to record by running `tools/cts/host-deqp-run.sh --gpu=vivante --module=gles3`
-on a host with the checkout. The host tests (`tests/es3_formats_gc.rs`,
-`tests/es3_sized_formats.rs`) pin the classes, and `refused()` in
-`the_formats_a_back_end_refuses_to_upload_are_listed` is empty for the
-GC7000UL (no ES 3.0 format is refused at upload).
+Run 2026-11-19 for `gc-narrow-flip` (`ed77c9ab`: classes 30-39, the 32-bit
+integer classes, RGBA32F/UI/I as two planes and the compressed sRGB ETC2 classes
+all in the mask), VK-GL-CTS `93bca01`, HOST-ONLY:
 
-The compressed sRGB ETC2 classes in the mask (etc2-srgb-gc) were not
-measured with the 2026-10-22 run: the host that made the change had no VK-GL-CTS
-checkout. They reach the compressed sRGB ETC2 cases of these groups, whose
-glCompressedTexImage* was GL_INVALID_ENUM before (a refusal outside the
-"upload" column above, which counts GL_INVALID_OPERATION); the counts are still to be recorded here by the run named above.
+| run | `texture.format` (546) | `texture.specification` (1,163) |
+|---|---|---|
+| `ed77c9ab` (mask: every ES 3.0 sampled class) | 530 fail, 16 n/s; upload 0, compile 0, image 530 | 9 pass, 1,154 fail; upload 0, compile 0, image 1,154 |
+
+No case ends in a refusal: every failure is "Image comparison failed" (the
+host reads black), so the 205 upload refusals of the 2026-10-22 baseline (64 + 141)
+are gone, and so are the compile refusals. The 16 `texture.format`
+not-supported cases are dEQP's own (formats the context does not report). This
+includes the compressed sRGB ETC2 cases, whose glCompressedTexImage* was
+GL_INVALID_ENUM before: none refuses now. Whether they render is the board's
+to say (no GPU result exists). The same commit's `functional.fbo` (2,028: 563
+pass, 1,210 fail, 255 n/s) and `functional.fragment_out` (940: 825 fail, 115
+n/s) groups carry upload-free failures too, but also GL_INVALID_OPERATION at the
+draw in 124 fragment_out cases (96 integer-format cases: 48 RGBA32I/UI, the by-name refusals, and 48
+RG32I/UI and RGBA16I/UI, not traced, since `int-rt-gc.md` has those drawn;
+and 28 `random`) and GL_INVALID_ENUM at framebuffer
+setup in 26: these belong to the render-target work (`docs/es3/int-rt-gc.md`),
+not to sampling, and were not traced here.
