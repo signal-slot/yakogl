@@ -1,24 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The uniform answers of the GPUs whose uniform-block limits the V3D raise
-//! did not move: PowerVR, Mali and GC7000UL (Vivante) keep, under ES 3.0,
+//! did not move: Mali and GC7000UL (Vivante) keep, under ES 3.0,
 //! `GL_MAX_UNIFORM_BLOCK_SIZE` = `MAX_UNIFORM_DWORDS * 4` = 6144,
 //! `GL_MAX_COMBINED_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` = 1536 and
 //! `GL_MAX_{VERTEX,FRAGMENT}_UNIFORM_COMPONENTS` = 1536. Each pname is read
 //! through `glGetIntegerv`, `glGetFloatv` and `glGetInteger64v`, which must
-//! agree. The V3D values are pinned in `tests/es3_limits_v3d.rs`.
+//! agree. The V3D values are pinned in `tests/es3_limits_v3d.rs`, the
+//! PowerVR's (raised too) in `tests/es3_limits_pvr_ubo.rs`.
 //!
 //! ```text
-//! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_limits_ubo_unchanged
 //! cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online --test es3_limits_ubo_unchanged
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test es3_limits_ubo_unchanged
 //! ```
 
-#![cfg(all(
-    feature = "host-test",
-    any(feature = "gpu-powervr", feature = "gpu-mali", feature = "gpu-vivante"),
-    not(feature = "report-es2")
-))]
+#![cfg(all(feature = "host-test", any(feature = "gpu-mali", feature = "gpu-vivante"), not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
 use std::sync::Mutex;
