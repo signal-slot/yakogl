@@ -130,6 +130,11 @@ want tools/board_stm32mp2_selftest.sh tools
 want tools/board-stm32mp2-standalone.sh tools
 want tools/board_stm32mp2_standalone_selftest.sh tools
 want tools/uboot_env.py tools
+want tools/mp2_uboot_console.py tools
+want tools/uboot_env_mp2_selftest.py tools
+want driver/tools/uboot-mp2/selftest.sh tools
+want driver/tools/uboot-mp2/oneshot_selftest.sh tools
+want driver/tools/uboot-mp2/qemu/run.sh tools
 want tools/env/build-gate-image.sh tools
 want tools/hostharness/glmark2/run.sh tools
 want tools/testdata/pi4-tryboot-F1rerun2-a27d69c0.console.txt tools
