@@ -10,7 +10,7 @@ and `interp_color.frag`, triangles). It is the input of the probe's "ours"
 option (M5, `docs/notes/pre-study-rpi5.md` section 8, P6) and of the
 board's second run.
 
-Read at commit `2a621965d2fe4b50a624fce4d50c7bc7a0979aa3` (host only,
+Read at commit `235eaab8fe93` (the files it reads are unchanged since `2a621965`; host only,
 nothing here was run on the board). "Ours" values were printed by a
 throwaway test calling `chain71::compile_program71(.., Prim::Triangles,
 TARGET71, ..)` on that pair (feature set
