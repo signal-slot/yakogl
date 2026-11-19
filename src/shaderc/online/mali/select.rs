@@ -827,9 +827,13 @@ pub fn vs_variant(
                      * (`bi_alu_src_index`; `FMA.v2f16 r0, r0^, 0x2E660000.h11,
                      * 0x38000000.h11`) */
                     if nd.bits == 16 && op != nir::Alu::F2f16 {
-                        let whole =
-                            matches!(v, nir::Val::Lane(m, _) if nd.width == 2 && vs.nodes[m as usize].width == 2);
+                        let whole = matches!(v, nir::Val::Lane(m, _) if nd.width == 2 && vs.nodes[m as usize].width == 2)
+                            || nir::vs_tex16_word(vs, &nd, v);
                         if whole {
+                            *x = x.swz(Swz::H01);
+                        } else if matches!(v, nir::Val::Const(c) if c > 0xffff) {
+                            /* two different halves, one word (nir.rs
+                             * `vs_alu16`; gm2_texvert_4's `u6.w0`) */
                             *x = x.swz(Swz::H01);
                         } else if matches!(v, nir::Val::Const(_)) {
                             *x = x.swz(Swz::H00);
@@ -883,8 +887,25 @@ pub fn vs_variant(
                     0 => 0xf,
                     m => m,
                 };
-                let op = Op::TexSingle { sr_count: n as u8, mask, f16: false, skip: false, lod, dim, shadow: false };
                 let handle = Src::of(Idx::Const(super::nir_fs::tex_handle(u32::from(index))));
+                if nd.bits == 16 {
+                    /* the fp16 texels (nir.rs `vs_tex_read16`): the lanes
+                     * up to the last one read, two a register in lane order
+                     * (`TEX_SINGLE.slot1.reserved.16.rgb.2d.zero @r0:r1`,
+                     * gm2_texvert_3), each lane its half of its register;
+                     * a two-lane reader of lanes c and c + 1 reads the
+                     * register whole (`vs_tex16_word`) */
+                    let mask = tex16_mask(vs, id as u16);
+                    let op = Op::TexSingle { sr_count: n as u8, mask, f16: true, skip: false, lod, dim, shadow: false };
+                    let r = alu(p, op, &[Src::ssa(c), handle, Src::of(Idx::Const(0))])?;
+                    let regs = (8 - mask.leading_zeros() as usize).div_ceil(2);
+                    let w = if regs == 1 { [r; 4] } else { split(p, r, regs)? };
+                    for (c, x) in lanes[id].iter_mut().enumerate().take(2 * regs) {
+                        *x = Src::ssa(w[c / 2]).swz(if c % 2 == 0 { Swz::H00 } else { Swz::H11 });
+                    }
+                    continue;
+                }
+                let op = Op::TexSingle { sr_count: n as u8, mask, f16: false, skip: false, lod, dim, shadow: false };
                 let r = alu(p, op, &[Src::ssa(c), handle, Src::of(Idx::Const(0))])?;
                 let w = match mask.count_ones() {
                     1 => [r; 4],
@@ -995,6 +1016,25 @@ pub(super) fn read_mask(g: &nir::Nir<'_>, id: u16) -> u8 {
         }
     }
     mask
+}
+
+/// The write mask of the fp16 vertex look-up `id` (nir.rs `vs_is_tex16`):
+/// its lanes 0 up to the last one a live user reads, a register read whole
+/// counting both its lanes, a half read through a swizzle its lane.
+fn tex16_mask(g: &nir::Nir<'_>, id: u16) -> u8 {
+    let mut last = 0u8;
+    for (u, s) in g.uses(id).filter(|&(u, _)| g.live[u as usize]) {
+        let nd = g.nodes[u as usize];
+        let top = match nd.src[s] {
+            v @ nir::Val::Lane(_, c) if nir::vs_tex16_word(g, &nd, v) => c + 1,
+            nir::Val::Lane(_, c) => c,
+            nir::Val::Pair(_, Swz::H00) => 0,
+            nir::Val::Pair(..) => 1,
+            _ => 0,
+        };
+        last = last.max(top & 3);
+    }
+    ((1u16 << (last + 1)) - 1) as u8
 }
 
 /// The fp32 read of a vec4 array element at a run-time index
