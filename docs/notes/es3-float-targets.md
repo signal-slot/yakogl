@@ -361,7 +361,17 @@ and vivante `after` cells were measured by item `after-v3d` at commit
 `467add49` (core-surf merged, `color-buffer-float` off: neither GPU claims
 `GL_EXT_color_buffer_float`), with the same CTS commit, `MODULE=gles3`,
 `MESA_V3D_TREE` unset, no `EXTRA_FEATURES` and one `OUT=` per run. The v3d
-`after` cells (feature off and on, after `v3d-arm`) stay pending here.
+`after` cells were measured by item `docs` at commit `f025c639` (`core-surf`
+and `v3d-arm` merged), same CTS commit, `MODULE=gles3`, `GPU=v3d`,
+`MESA_V3D_TREE` unset, one `OUT=` per run (`build/host-deqp/cbf-<group>-{off,on}`),
+twice per glob: `off` with no extra feature, `on` with the feature
+`color-buffer-float`. The `on` library was built through
+`--lib-cmake-arg=-DYAKOGL_EXTRA_FEATURES=yakogl/color-buffer-float`, because
+`capi/Cargo.toml` has no `color-buffer-float` feature to forward (cargo refuses
+plain `EXTRA_FEATURES=color-buffer-float` and `-DYAKOGL_COLOR_BUFFER_FLOAT=ON`
+with "the package 'yakogl-capi' does not contain this feature"; `msaa-fbo` has
+no entry there either). The README 2b recipe needs the `yakogl/` prefix until
+`capi/Cargo.toml` forwards the feature.
 
 Group globs (all under `dEQP-GLES3.functional.`):
 
@@ -374,11 +384,11 @@ Group globs (all under `dEQP-GLES3.functional.`):
 
 | GPU | `shaders.derivate.*` | `fbo.completeness.*` | `fbo.color.*` | `pbo.renderbuffer.*` (float) |
 |---|---|---|---|---|
-| v3d | before: 115/167/0; after: pending | before: 539/14/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
+| v3d | before: 115/167/0; after: off: 115/167/0; on: 115/167/0 | before: 539/14/7; after: off: 541/12/7; on: 541/12/7 | before: 0/269/33; after: off: 0/269/33; on: 0/302/0 | before: 4/0/4; after: off: 4/0/4; on: 8/0/0 |
 | powervr | before: 115/167/0; after: 115/167/0 | before: 551/2/7; after: 553/0/7 | before: 0/269/33; after: 0/269/33 | before: 4/0/4; after: 4/0/4 |
 | vivante | before: 54/228/0; after: 54/228/0 | before: 531/22/7; after: 543/10/7 | before: 0/269/33; after: 0/269/33 | before: 4/0/4; after: 4/0/4 |
 
-Expected (for v3d not measured yet), and on powervr and vivante measured as
+Expected, and measured on all three GPUs:
 expected: the 15 derivate `texture.msaa4` rows do not move (multisample,
 section 1); `fbo.completeness.renderable.*.color0.r32f` moves from Fail to
 Pass on every GPU; the 32-bit rows stay NotSupported on PowerVR and vivante
@@ -392,3 +402,27 @@ classes on the GC7000UL) that the wide-128 integer-texture work (`8f019dae`,
 `467add49` — not float, not this plan. The ten integer Fails that remain
 (`renderable.texture.color0.{r8i,r8ui,r16i,r16ui,rg8i,rg8ui,rg16i,rg16ui,rgba32i,rgba32ui}`)
 were failing at `ab924857` too.
+
+v3d `after` facts, measured (HOST-ONLY, commit `f025c639`):
+
+- `shaders.derivate.*`: identical with the feature off and on, case for case
+  (0 changed). No derivate case fails on a float framebuffer: the 15
+  incomplete-FBO Fails are `texture.msaa4`
+  (`es3fShaderDerivateTests.cpp:757`, RC8, #339), and the other 152 Fails are
+  image compares (black read-back, meaningless on the host).
+- `fbo.completeness.*`: off and on are identical (0 changed). Against the
+  `before` run the two `renderable.*.color0.r32f` rows moved Fail to Pass (the
+  off rule of section 7). dEQP appears to accept either verdict (inferred from the identical runs) for a format whose
+  extension is not claimed, so these rows do not show the claim. The 12
+  remaining Fails are the integer `renderable.texture.color0.*` rows of
+  section 8 above (not float); the 7 NotSupported are `samples.*`.
+- `fbo.color.*`: 33 rows move NotSupported to Fail, none to Pass: the
+  `r32f`, `rg32f`, `rgba32f` and `r11f_g11f_b10f` rows of `clear`, `tex2d`,
+  `tex2darray`, `tex3d`, `texcube`, `repeated_clear.*` and
+  `blend.r11f_g11f_b10f_src_over`. All 33 are image compares (none is an
+  incomplete FBO), so with the
+  feature on dEQP runs the cases instead of excusing them. The 72
+  `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` Fails are the same off and on.
+- `pbo.renderbuffer.*` float rows: `rg32f_{clears,triangles}` and
+  `rgba32f_{clears,triangles}` move NotSupported to Pass (API and
+  read-back-format verdicts); the 16F rows Pass in both.
