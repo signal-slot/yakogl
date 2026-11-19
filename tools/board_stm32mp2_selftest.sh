@@ -26,10 +26,14 @@
 #    the number).
 # 3. The environment edits on a synthetic redundant image (built here from
 #    the format, as tools/testdata/uboot-env/test_uboot_env.py does: no byte
-#    from a board): hook writes the hook's variables and keeps bootcmd as it
-#    is in yako_bootcmd_prev, is idempotent, upgrades another version's strings, refuses a foreign hook,
-#    never writes bootcmd; unhook gives the variables of the input back once
-#    bootcmd is ST's again; arm and disarm; a bad CRC
+#    from a board): hook writes preboot=run yako_hook with the hook's
+#    variables in one edit and keeps bootcmd as it is in yako_bootcmd_prev,
+#    is idempotent, upgrades another version's strings, refuses a foreign
+#    hook, refuses a preboot of the environment's own (rc 7, nothing
+#    written) and writes no preboot where a person put the bootcmd fallback
+#    prefix (that other preboot untouched), never writes bootcmd; unhook
+#    gives the variables of the input back (preboot deleted) once bootcmd is
+#    ST's again; arm and disarm; a bad CRC
 #    and a single-copy layout; the hook strings themselves are pinned; the
 #    stock card's shape (copy 1 valid, copy 2 all zero) accepted, the edit in
 #    copy 1, a non-zero copy 2 with a bad CRC still refused.
@@ -48,9 +52,10 @@
 #    hook does, with U-Boot's saveenv (the other copy, flags + 1), and starts
 #    a new "uptime"),
 #    the console a file with the layer's lines. Through it the live paths run
-#    without --dry-run: install (the hook's variables in the partition,
-#    bootcmd left to a person, who is simulated by editing the partition
-#    file; the pristine image kept, the stock boot files hashed), status, a run that comes back (the
+#    without --dry-run: install (preboot=run yako_hook and the hook's
+#    variables in the partition in one write, bootcmd untouched; the
+#    pristine image kept, the stock boot files hashed), status reading the
+#    hook from preboot, a run that comes back (the
 #    verdict line byte for byte, the record, the staged image removed, the
 #    one-shot gone), a run whose board never answers again (not_back, rc 5,
 #    the NEEDS A PERSON line, one reboot and no retry), the eMMC refused
@@ -61,7 +66,9 @@
 #    the u-boot-env partition alone. The stock card's shape (copy 2 all zero)
 #    installs and runs: the edits land in copy 1, U-Boot's saveenv then makes
 #    copy 2 valid and active, and the next arm writes copy 1 with flags 0x04.
-#    An SD card numbered mmcblk1 is accepted (status reads it).
+#    An SD card numbered mmcblk1 is accepted (status reads it). A card whose
+#    environment has a preboot of its own: install stops with rc 7 before
+#    any write or backup.
 # 7. The expected-watchdog run (run --expect-watchdog, the hang option of
 #    mp2_hello): the dry run waits WDOG_BOUND, replays of consoles with the
 #    hang line give watchdog_reset only when the banner and the hang line
@@ -72,10 +79,10 @@
 #    shows, records hold_s and the extended wait_bound, keeps the verdict
 #    line; without it no "hold:" line and no hold_s (cases in 1/2 and 6).
 # 9. The runner-safety-audit gaps (the G numbers in the checks' names):
-#    bootcmd is ST's and never written (G4: install writes the yako_*
-#    variables and stops with NEEDS A PERSON, rc 7, until a person puts the
-#    hook in front of bootcmd at U-Boot's prompt; uninstall the same the other
-#    way round; run refuses meanwhile); the card is the SD card /boot is on by
+#    bootcmd is ST's and never written (G4: install reaches the hook through
+#    the runner-owned preboot instead; the bootcmd prefix is the fallback a
+#    person types, and uninstall stops with NEEDS A PERSON, rc 7, while
+#    bootcmd carries it); the card is the SD card /boot is on by
 #    its sysfs type, whatever its number (G1); ssh is strict
 #    about the host key and records none (G7); a reboot that did not happen
 #    is disarmed and reported not_rebooted, not NEEDS A PERSON (G10); the
@@ -99,7 +106,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=201
+WANT_CHECKS=205
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -185,12 +192,17 @@ check "install: the pristine image is kept on the host and on the card, the stoc
 check "install: the env write covers only the two copies (seek 0x7c000/512 = 992, 16 KiB), read back by dd and compared and decoded on the host" \
     eval 'grep -q "head -c 16384 | ssh BOARD .*dd of=/dev/mmcblk0p7 bs=512 seek=992 conv=fsync" <<<"$out" &&
           grep -q "^DRY board\$ dd if=/dev/mmcblk0p7 bs=64k status=none   # > host <env.back>: must equal the host image byte for byte" <<<"$out" &&
-          grep -q "^DRY host\$ python3 tools/uboot_env.py ... print <env.back> yako_addr yako_part   # must show the edit (install)" <<<"$out"'
+          grep -q "^DRY host\$ python3 tools/uboot_env.py ... print <env.back> preboot yako_addr yako_part   # must show the edit (install)" <<<"$out"'
 check "dry runs: no verb sends fw_printenv or fw_setenv to the board (ST's envtools cannot start)" \
     eval 'a=$(for v in status install uninstall disarm; do BOARD_HOST=$FAKE_HOST dry "$v" 2>&1; done; BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry run "$S/img/mp2.bin" "$S/logs" 2>&1);
           grep -q "^DRY board\$ dd if=" <<<"$a" && ! grep "^DRY board" <<<"$a" | grep -q "fw_printenv\|fw_setenv"'
 check "install: the hook's variables: yako_addr 0xa0000000 and yako_part from /boot's partition (8)" \
     eval 'grep -q "yako_addr=0xa0000000 yako_part=8" <<<"$out"'
+check "install (preboot): the one env write sets preboot=run yako_hook with the yako_* variables, the UNDO naming preboot first, no NEEDS A PERSON stop" \
+    eval 'l=$(grep -n "uboot_env.py .* set <env.bin> <env.new> '"'"'preboot=run yako_hook'"'"' '"'"'yako_hook=" <<<"$out" | cut -d: -f1);
+          u=$(grep -n "UNDO, should anything" <<<"$out" | cut -d: -f1); w=$(grep -n "^DRY host\$ tail .* ssh BOARD .*dd of=/dev/mmcblk0p7" <<<"$out" | head -1 | cut -d: -f1);
+          [ -n "$l" ] && [ -n "$u" ] && [ -n "$w" ] && [ "$u" -lt "$l" ] && [ "$l" -lt "$w" ] &&
+          grep -q "uninstall, which deletes preboot and the yako_\* variables" <<<"$out" && grep -q "preboot only where the environment has none" <<<"$out" && ! grep -q "NEEDS A PERSON" <<<"$out"'
 check "install: the lock is taken, the sessions read (who), the mount of /boot and the card's labels read" \
     eval 'grep -q "board_lock.sh" <<<"$out" && grep -q "^DRY board\$ who" <<<"$out" && grep -q "findmnt -n -v -o SOURCE,FSTYPE -T /boot" <<<"$out" && grep -q "lsblk -rno PATH,PARTLABEL" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST MP2_SUDO="sudo -n " dry install 2>&1)
@@ -201,8 +213,8 @@ check "install (G4): the edit never names bootcmd (ST's variable); yako_bootcmd_
 check "install (G1): the card is the disk /boot is on, and its sysfs type is read" \
     eval 'grep -q "/sys/block/\${p##\*/}/device/type" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST dry uninstall 2>&1)
-check "uninstall: the variables unset (bootcmd never written), the UNDO first, the stock files checked, then the staging directory removed" \
-    eval 'grep -q "unset <env.bin> <env.new> yako_hook yako_mmc yako_addr yako_part yako_bootcmd_prev yako_once yako_file   # bootcmd is ST.s: never written" <<<"$out" &&
+check "uninstall: preboot and the variables unset (bootcmd never written), the UNDO first, the stock files checked, then the staging directory removed" \
+    eval 'grep -q "unset <env.bin> <env.new> preboot yako_hook yako_mmc yako_addr yako_part yako_bootcmd_prev yako_once yako_file   # preboot only when it is .run yako_hook. (another is never touched); bootcmd is ST.s: never written" <<<"$out" &&
           u=$(grep -n "UNDO, should the uninstall" <<<"$out" | cut -d: -f1); w=$(grep -n "dd of=" <<<"$out" | head -1 | cut -d: -f1);
           c=$(grep -n "sha256sum -c /boot/yakogl/backup/boot-sha256.txt" <<<"$out" | cut -d: -f1); r=$(grep -n "rm -rf /boot/yakogl" <<<"$out" | cut -d: -f1);
           [ -n "$u" ] && [ -n "$w" ] && [ -n "$c" ] && [ -n "$r" ] && [ "$u" -lt "$w" ] && [ "$c" -lt "$r" ] && ! grep -q "bootcmd=<" <<<"$out"'
@@ -212,8 +224,10 @@ check "disarm: yako_once and yako_file unset, the staged once-*.bin and a cut-of
           grep -q "ls /boot/yakogl/once-\* 2>/dev/null   # must print nothing" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST dry status 2>&1)
 check "status: the partition read by dd, bootcmd and the yako_* variables decoded on the host, the install state, the stock boot files checked" \
-    eval 'grep -q "^DRY board\$ dd if=/dev/mmcblk0p7 bs=64k status=none" <<<"$out" && grep -q "print <env.bin> bootcmd bootdelay boot_targets yako_hook" <<<"$out" &&
+    eval 'grep -q "^DRY board\$ dd if=/dev/mmcblk0p7 bs=64k status=none" <<<"$out" && grep -q "print <env.bin> bootcmd bootdelay boot_targets preboot yako_hook" <<<"$out" &&
           grep -q "^install: ok" <<<"$out" && grep -q "sha256sum -c /boot/yakogl/backup/boot-sha256.txt" <<<"$out"'
+check "status (preboot): the hook state read from preboot (decoded with bootcmd), 'install: ok' with bootcmd as ST has it, no line for a person" \
+    eval 'grep -q "decoded there: uboot_env.py print bootcmd preboot yako_hook" <<<"$out" && grep -q "^install: ok" <<<"$out" && ! grep -q "a person types" <<<"$out"'
 
 out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry probe "$S/logs" 2>&1)
 rc=$?
@@ -228,7 +242,7 @@ check "run: the order is stage, read back, capture, arm, reboot, wait, one-shot 
     eval 'o=$(grep -nE "cat > /boot/yakogl/once-trial-|drop_caches|am62p_netboot_uart.py capture|set <env.bin> <env.new> yako_once=trial-|dd of=/dev/mmcblk0p7|systemctl reboot|wait until ssh answers from a new boot|yako_once must be unset|rm -f /boot/yakogl/once-trial-" <<<"$out" | cut -d: -f1 | paste -sd" " -);
           [ "$(wc -w <<<"$o")" = 9 ] && [ "$(tr " " "\n" <<<"$o" | sort -n | paste -sd" " -)" = "$o" ]'
 check "run: the hook must be installed, no one-shot pending, no leftover image, the free space of /boot read" \
-    eval 'grep -q "decoded there: uboot_env.py print bootcmd yako_hook" <<<"$out" && grep -q "decoded there: uboot_env.py print yako_once$" <<<"$out" && grep -q "ls /boot/yakogl/once-\* " <<<"$out" && grep -q "df -B1 --output=avail /boot" <<<"$out"'
+    eval 'grep -q "decoded there: uboot_env.py print bootcmd preboot yako_hook" <<<"$out" && grep -q "decoded there: uboot_env.py print yako_once$" <<<"$out" && grep -q "ls /boot/yakogl/once-\* " <<<"$out" && grep -q "df -B1 --output=avail /boot" <<<"$out"'
 check "run: the UNDO ('disarm') is printed before the image is staged, and names the cut-off copy" \
     eval 'u=$(grep -n "UNDO, should this run be cut off" <<<"$out" | cut -d: -f1); s=$(grep -n "cat > /boot/yakogl/once-trial-" <<<"$out" | cut -d: -f1);
           [ -n "$u" ] && [ -n "$s" ] && [ "$u" -lt "$s" ] && grep -q "tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-\*.bin and once-\*.bin.part" <<<"$out"'
@@ -450,8 +464,11 @@ valsb() { local img=$1 v; shift; for v in "$@"; do ENVTB print "$img" -n "$v" 2>
 flags() { od -A n -t u1 -j $(($2 + 4)) -N 1 "$1" | tr -d ' '; }
 out=$("$B" env-edit hook "$S/env.bin" "$S/vars.bin" 8 2>&1)
 rc=$?
-check "hook (G4): rc 0, 'installed', bootcmd not hooked: the line a person types is named; the output checks (both CRCs), copy 2 written and active" \
-    eval '[ "$rc" = 0 ] && [ "$out" = "installed; bootcmd not hooked: setenv bootcmd '"'"'run yako_hook; run bootcmd_stm32mp'"'"'; saveenv" ] && ENVT check "$S/vars.bin" | grep -q "^active: copy 2"'
+check "hook (G4, preboot): rc 0, 'installed (preboot)'; the output checks (both CRCs), copy 2 written and active" \
+    eval '[ "$rc" = 0 ] && [ "$out" = "installed (preboot)" ] && ENVT check "$S/vars.bin" | grep -q "^active: copy 2"'
+check "hook (preboot): preboot=run yako_hook added with the yako_* variables in the same edit, nothing else added or changed" \
+    eval '[ "$(ENVT diff "$S/env.bin" "$S/vars.bin" | sed "s/=.*//" | sort | paste -sd"|" -)" = "added   preboot|added   yako_addr|added   yako_bootcmd_prev|added   yako_hook|added   yako_mmc|added   yako_part" ] &&
+          [ "$(ENVT print "$S/vars.bin" -n preboot)" = "run yako_hook" ]'
 check "hook (G4): bootcmd is NOT written (ST's variable), yako_bootcmd_prev keeps it, bootdelay and the rest untouched" \
     eval '[ "$(ENVT print "$S/vars.bin" -n bootcmd)" = "run bootcmd_stm32mp" ] &&
           [ "$(ENVT print "$S/vars.bin" -n yako_bootcmd_prev)" = "run bootcmd_stm32mp" ] &&
@@ -459,9 +476,9 @@ check "hook (G4): bootcmd is NOT written (ST's variable), yako_bootcmd_prev keep
 # the person's edit at U-Boot's prompt, as the line above says it (not the runner's)
 ENVT set "$S/vars.bin" "$S/hooked.bin" "bootcmd=run yako_hook; run bootcmd_stm32mp" >/dev/null
 out=$("$B" env-edit hook "$S/hooked.bin" "$S/hooked1.bin" 8 2>&1)
-check "hook after a person put the hook in bootcmd: 'unchanged', the image byte for byte" eval '[ "$out" = unchanged ] && cmp -s "$S/hooked.bin" "$S/hooked1.bin"'
-check "hook: yako_hook clears and saves the one-shot BEFORE the load, then runs yako_mmc; a failed saveenv boots Linux" \
-    eval 'h=$(ENVT print "$S/hooked.bin" -n yako_hook); [ "$h" = "if test -n \"\${yako_once}\"; then echo yakogl-mp2: once=\${yako_once}; setenv yako_once; if saveenv; then echo yakogl-mp2: cleared; run yako_mmc; else echo yakogl-mp2: saveenv failed, booting Linux; fi; fi" ]'
+check "hook after a person also put the fallback prefix on bootcmd: 'unchanged (bootcmd)', the image byte for byte" eval '[ "$out" = "unchanged (bootcmd)" ] && cmp -s "$S/hooked.bin" "$S/hooked1.bin"'
+check "hook: yako_hook echoes its marker first, clears and saves the one-shot BEFORE the load, then runs yako_mmc; a failed saveenv boots Linux" \
+    eval 'h=$(ENVT print "$S/hooked.bin" -n yako_hook); [ "$h" = "echo yakogl-mp2: hook; if test -n \"\${yako_once}\"; then echo yakogl-mp2: once=\${yako_once}; setenv yako_once; if saveenv; then echo yakogl-mp2: cleared; run yako_mmc; else echo yakogl-mp2: saveenv failed, booting Linux; fi; fi" ]'
 check "hook: yako_mmc loads from mmc \${boot_instance}:\${yako_part} (no device number hard-coded), caches off, go; a failed load boots Linux" \
     eval 'm=$(ENVT print "$S/hooked.bin" -n yako_mmc); [ "$m" = "if ext4load mmc \${boot_instance}:\${yako_part} \${yako_addr} \${yako_file}; then echo yakogl-mp2: go \${yako_addr}; dcache off; icache off; go \${yako_addr}; fi; echo yakogl-mp2: mmc load failed, booting Linux" ]'
 check "hook: yako_addr 0xa0000000 (the link address), yako_part 8, no yako_once or yako_file" \
@@ -469,17 +486,17 @@ check "hook: yako_addr 0xa0000000 (the link address), yako_part 8, no yako_once 
 check "hook: the bytes outside the two copies are untouched" \
     eval 'cmp -s <(head -c $((0x7c000)) "$S/env.bin") <(head -c $((0x7c000)) "$S/vars.bin")'
 "$B" env-edit hook "$S/vars.bin" "$S/vars2.bin" 8 >/dev/null 2>&1
-check "hook twice without the person's edit: the image byte for byte (still not hooked)" cmp -s "$S/vars.bin" "$S/vars2.bin"
+check "hook twice (preboot): the image byte for byte" cmp -s "$S/vars.bin" "$S/vars2.bin"
 out=$("$B" env-edit hook "$S/hooked.bin" "$S/hooked9.bin" 9 2>&1)
 check "hook with another partition number: 'upgraded', bootcmd as the person left it, yako_part 9" \
-    eval '[ "$out" = upgraded ] && [ "$(ENVT print "$S/hooked9.bin" -n bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && [ "$(ENVT print "$S/hooked9.bin" -n yako_part)" = 9 ]'
+    eval '[ "$out" = "upgraded (bootcmd)" ] && [ "$(ENVT print "$S/hooked9.bin" -n bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && [ "$(ENVT print "$S/hooked9.bin" -n yako_part)" = 9 ]'
 out=$("$B" env-edit unhook "$S/hooked.bin" "$S/unhooked-h.bin" 2>&1)
 rc=$?
 check "unhook while bootcmd still begins with the hook (G4): 'bootcmd still hooked', bootcmd not written, the hook kept, the one-shot gone" \
-    eval '[ "$rc" = 0 ] && [ "$out" = "bootcmd still hooked" ] && [ "$(vals "$S/unhooked-h.bin" bootcmd yako_hook yako_once | sed "s/^if test.*/HOOK/" | paste -sd"|" -)" = "run yako_hook; run bootcmd_stm32mp|HOOK|-" ]'
+    eval '[ "$rc" = 0 ] && [ "$out" = "bootcmd still hooked" ] && [ "$(vals "$S/unhooked-h.bin" bootcmd yako_hook yako_once | sed "s/^echo yakogl-mp2: hook; if test.*/HOOK/" | paste -sd"|" -)" = "run yako_hook; run bootcmd_stm32mp|HOOK|-" ]'
 out=$("$B" env-edit unhook "$S/vars.bin" "$S/unhooked.bin" 2>&1)
 rc=$?
-check "unhook once bootcmd is ST's again: rc 0, 'unhooked', the variables of the input back (no yako_*), both CRCs check" \
+check "unhook once bootcmd is ST's again (preboot): rc 0, 'unhooked', the variables of the input back (no preboot, no yako_*), both CRCs check" \
     eval '[ "$rc" = 0 ] && [ "$out" = unhooked ] && [ -z "$(ENVT diff "$S/env.bin" "$S/unhooked.bin")" ] && ENVT check "$S/unhooked.bin" >/dev/null'
 out=$("$B" env-edit unhook "$S/env.bin" "$S/unhooked0.bin" 2>&1)
 check "unhook of an image without the hook: 'unhooked', the variables unchanged" \
@@ -492,6 +509,20 @@ check "arm: yako_once and yako_file set, everything else as hooked" \
     eval '[ "$out" = armed ] && [ "$(ENVT diff "$S/hooked.bin" "$S/armed.bin" | sort | paste -sd"|" -)" = "added   yako_file=/yakogl/once-trial-0123456789abcdef-1.bin|added   yako_once=trial-0123456789abcdef-1" ]'
 out=$("$B" env-edit disarm "$S/armed.bin" "$S/disarmed.bin" 2>&1)
 check "disarm: the variables of the hooked image back" eval '[ "$out" = disarmed ] && [ -z "$(ENVT diff "$S/hooked.bin" "$S/disarmed.bin")" ]'
+# an environment with a preboot of its own: never overwritten or wrapped
+ENVT set "$S/env.bin" "$S/env-preboot.bin" "preboot=usb start" >/dev/null
+out=$("$B" env-edit hook "$S/env-preboot.bin" "$S/xp.bin" 8 2>&1)
+rc=$?
+check "hook over a preboot of the environment's own: rc 7, NEEDS A PERSON naming it and the bootcmd fallback, no output file" \
+    eval '[ "$rc" = 7 ] && grep -q "NEEDS A PERSON: the environment already has a preboot (.usb start.)" <<<"$out" && grep -q "never overwrites or wraps a preboot" <<<"$out" &&
+          grep -qF "setenv bootcmd '"'"'run yako_hook; run bootcmd_stm32mp'"'"'; saveenv" <<<"$out" && [ ! -e "$S/xp.bin" ]'
+ENVT set "$S/env-preboot.bin" "$S/env-preboot-p.bin" "bootcmd=run yako_hook; run bootcmd_stm32mp" >/dev/null
+out=$("$B" env-edit hook "$S/env-preboot-p.bin" "$S/xp1.bin" 8 2>&1)
+rc=$?
+"$B" env-edit unhook "$S/xp1.bin" "$S/xp2.bin" >/dev/null 2>&1
+check "the bootcmd fallback over another preboot: 'installed (bootcmd)', that preboot untouched by hook and by unhook" \
+    eval '[ "$rc" = 0 ] && [ "$out" = "installed (bootcmd)" ] && [ "$(ENVT print "$S/xp1.bin" -n preboot)" = "usb start" ] && [ "$(ENVT print "$S/xp2.bin" -n preboot)" = "usb start" ] &&
+          [ "$(ENVT diff "$S/env-preboot-p.bin" "$S/xp1.bin" | grep -c preboot)" = 0 ]'
 out=$("$B" env-edit hook "$S/env-foreign.bin" "$S/x.bin" 8 2>&1)
 rc=$?
 check "hook over a foreign hook (yako_hook of another origin, no yako_bootcmd_prev): rc 3, 'not ours to touch', no output file" \
@@ -503,7 +534,7 @@ check "hook over an image whose active copy has a bad CRC: rc 2, 'does not check
 out=$(MP2_ENV_OFFSET2=none "$B" env-edit hook "$S/env-single.bin" "$S/hooked-single.bin" 8 2>&1)
 rc=$?
 check "MP2_ENV_OFFSET2=none: a single-copy layout at 0x7e000 gets the hook's variables in place, bootcmd untouched" \
-    eval '[ "$rc" = 0 ] && [ "${out%%;*}" = installed ] && [ "$(python3 -I "$HERE/uboot_env.py" --size 0x2000 --offset 0x7e000 print "$S/hooked-single.bin" -n bootcmd)" = "run bootcmd_stm32mp" ] &&
+    eval '[ "$rc" = 0 ] && [ "$out" = "installed (preboot)" ] && [ "$(python3 -I "$HERE/uboot_env.py" --size 0x2000 --offset 0x7e000 print "$S/hooked-single.bin" -n bootcmd)" = "run bootcmd_stm32mp" ] &&
           [ "$(python3 -I "$HERE/uboot_env.py" --size 0x2000 --offset 0x7e000 print "$S/hooked-single.bin" -n yako_addr)" = 0xa0000000 ]'
 out=$(MP2_ENV_OFFSET2=none "$B" env-edit unhook "$S/hooked-single.bin" "$S/unhooked-single.bin" 2>&1)
 same "single copy: hook then unhook gives the input back byte for byte" "$S/env-single.bin" "$S/unhooked-single.bin"
@@ -516,7 +547,7 @@ check "a missing image: rc 2" [ $? = 2 ]
 out=$("$B" env-edit hook "$S/env-blank2.bin" "$S/blank-hooked.bin" 8 2>&1)
 rc=$?
 check "blank copy 2 (the stock card): hook accepted, rc 0, 'installed'; copy 1 rewritten in place (flags 0x02), copy 2 still all zero, no byte outside copy 1 changed" \
-    eval '[ "$rc" = 0 ] && [ "${out%%;*}" = installed ] && [ "$(flags "$S/blank-hooked.bin" $((0x7e000)))" = 2 ] &&
+    eval '[ "$rc" = 0 ] && [ "$out" = "installed (preboot)" ] && [ "$(flags "$S/blank-hooked.bin" $((0x7e000)))" = 2 ] &&
           cmp -s <(head -c $((0x7e000)) "$S/env-blank2.bin") <(head -c $((0x7e000)) "$S/blank-hooked.bin") &&
           [ "$(valsb "$S/blank-hooked.bin" yako_addr bootcmd | paste -sd"|" -)" = "0xa0000000|run bootcmd_stm32mp" ] &&
           ENVTB check "$S/blank-hooked.bin" | grep -q "^BLANK copy 2" && ! ENVT check "$S/blank-hooked.bin" >/dev/null 2>&1'
@@ -859,11 +890,12 @@ PART="$F/dev/mmcblk0p7"
 
 out=$(live install 2>&1)
 rc=$?
-check "live install (G4): rc 7, NEEDS A PERSON naming the line for U-Boot's prompt, the UNDO printed, no host or console path in the output" \
-    eval '[ "$rc" = 7 ] && grep -q "NEEDS A PERSON: U-Boot runs the one-shot only if bootcmd begins with" <<<"$out" &&
-          grep -qF "setenv bootcmd '"'"'run yako_hook; run bootcmd_stm32mp'"'"'; saveenv" <<<"$out" && grep -q "UNDO, should anything" <<<"$out" && ! leaks_live "$out"'
-check "live install (G4): bootcmd is NOT written; the hook's variables are (yako_part 8, yako_addr 0xa0000000, yako_bootcmd_prev), both copies check" \
-    eval '[ "$(vals "$PART" bootcmd yako_bootcmd_prev yako_part yako_addr | paste -sd"|" -)" = "run bootcmd_stm32mp|run bootcmd_stm32mp|8|0xa0000000" ] && ENVT check "$PART" >/dev/null'
+check "live install (preboot): rc 0, no NEEDS A PERSON, the UNDO naming preboot printed, one dd of=, 'installed' from preboot, no host or console path in the output" \
+    eval '[ "$rc" = 0 ] && ! grep -q "NEEDS A PERSON" <<<"$out" && grep -q "UNDO, should anything" <<<"$out" && [ "$(grep -c "dd of=" "$F/ssh.log")" = 1 ] &&
+          grep -q "deletes preboot and the yako_\* variables" <<<"$out" &&
+          grep -q "installed: U-Boot runs yako_hook from preboot=run yako_hook, before .run bootcmd_stm32mp." <<<"$out" && ! leaks_live "$out"'
+check "live install (G4, preboot): bootcmd is NOT written; preboot=run yako_hook and the hook's variables are (yako_part 8, yako_addr 0xa0000000, yako_bootcmd_prev), both copies check" \
+    eval '[ "$(vals "$PART" bootcmd preboot yako_bootcmd_prev yako_part yako_addr | paste -sd"|" -)" = "run bootcmd_stm32mp|run yako_hook|run bootcmd_stm32mp|8|0xa0000000" ] && ENVT check "$PART" >/dev/null'
 check "live install: the pristine image is kept on the host (mode 600) and on the card, byte for byte" \
     eval 'p=$(ls "$S"/backup/*-u-boot-env.bin 2>/dev/null | head -1); [ -n "$p" ] && cmp -s "$p" "$S/env.bin" && [ "$(stat -c %a "$p")" = 600 ] && cmp -s "$F/boot/yakogl/backup/u-boot-env.bin" "$S/env.bin"'
 check "live install: boot-sha256.txt lists the five stock files and checks" \
@@ -871,21 +903,13 @@ check "live install: boot-sha256.txt lists the five stock files and checks" \
 check "live install: the bytes outside the two copies of the partition are untouched" \
     eval 'cmp -s <(head -c $((0x7c000)) "$S/env.bin") <(head -c $((0x7c000)) "$PART")'
 : > "$F/ssh.log"
-out=$(live run "$S/img/mp2.bin" "$S/live-logs" nohook 2>&1)
-rc=$?
-check "live run before the person's bootcmd edit (G4): rc 7, NEEDS A PERSON, nothing staged, no reboot" \
-    eval '[ "$rc" = 7 ] && grep -q "NEEDS A PERSON" <<<"$out" && ! grep -q "cat > /boot" "$F/ssh.log" && ! grep -q "systemctl reboot" "$F/ssh.log" && ! grep -q "dd of=" "$F/ssh.log"'
-out=$(live status 2>&1)
-check "live status before the person's edit: 'install: needs a person' and the line to type" \
-    eval 'grep -q "^install: needs a person: bootcmd does not begin with" <<<"$out" && grep -qF "a person types at U-Boot'"'"'s prompt: setenv bootcmd" <<<"$out"'
-person_bootcmd "run yako_hook; run bootcmd_stm32mp"
 out=$(live install 2>&1)
-check "live install after the person's edit: 'installed already, byte for byte; nothing to do', no second pristine image" \
-    eval 'grep -q "installed already, byte for byte" <<<"$out" && [ "$(ls "$S"/backup/*-u-boot-env.bin | wc -l)" = 1 ]'
+check "live install again: 'installed already, byte for byte; nothing to do', no write, no second pristine image" \
+    eval 'grep -q "installed already, byte for byte" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log" && [ "$(ls "$S"/backup/*-u-boot-env.bin | wc -l)" = 1 ]'
 out=$(live status 2>&1)
 rc=$?
-check "live status: rc 0, 'install: ok', the env and bootfs devices on the SD card, 'stock boot files: unchanged since install', nothing left" \
-    eval '[ "$rc" = 0 ] && grep -q "^install: ok" <<<"$out" && grep -q "^env partition: /dev/mmcblk0p7 .*bootfs: /dev/mmcblk0p8 (U-Boot part 8, card /dev/mmcblk0)" <<<"$out" &&
+check "live status (preboot): rc 0, 'install: ok' read from preboot=run yako_hook with bootcmd as ST has it, the env and bootfs devices on the SD card, 'stock boot files: unchanged since install', nothing left" \
+    eval '[ "$rc" = 0 ] && grep -q "^install: ok" <<<"$out" && grep -qx "preboot=run yako_hook" <<<"$out" && grep -qx "bootcmd=run bootcmd_stm32mp" <<<"$out" && grep -q "^env partition: /dev/mmcblk0p7 .*bootfs: /dev/mmcblk0p8 (U-Boot part 8, card /dev/mmcblk0)" <<<"$out" &&
           grep -q "stock boot files: unchanged since install" <<<"$out" && grep -q "^left behind: nothing recorded" <<<"$out"'
 
 : > "$F/ssh.log"
@@ -903,7 +927,7 @@ check "live run: the record (meta.txt, console.txt, INDEX.txt), the console reda
     eval '[ -n "$rd" ] && [ -s "$rd/meta.txt" ] && [ -s "$rd/console.txt" ] && [ -s "$rd/INDEX.txt" ] && grep -q "^verdict: board-stm32mp2.sh stm32mp257f-dk trial rc=0 verdict=done" "$rd/INDEX.txt" &&
           grep -q "mp2_identify: PASS" "$rd/console.txt" && ! grep -rq "mp2board\|$F/console.txt" "$rd"'
 check "live run: the one-shot was armed with the staged file, cleared by the boot, the staged image removed, the hook still installed" \
-    eval 'grep -q "^token=trial-" "$rd/meta.txt" && grep -q "dd if=/dev/mmcblk0p7 bs=64k status=none$" "$F/ssh.log" && [ "$(vals "$PART" yako_once | head -1)" = - ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ] && [ "$(vals "$PART" bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && grep -q "^staged=.*read back equal" "$rd/meta.txt"'
+    eval 'grep -q "^token=trial-" "$rd/meta.txt" && grep -q "dd if=/dev/mmcblk0p7 bs=64k status=none$" "$F/ssh.log" && [ "$(vals "$PART" yako_once | head -1)" = - ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ] && [ "$(vals "$PART" bootcmd preboot | paste -sd"|" -)" = "run bootcmd_stm32mp|run yako_hook" ] && grep -q "^staged=.*read back equal" "$rd/meta.txt"'
 check "live run: one reboot, after the arm's write (dd of=) and its read-back (dd if=, compared and decoded on the host)" \
     eval '[ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && w=$(grep -n "dd of=/dev/mmcblk0p7" "$F/ssh.log" | tail -1 | cut -d: -f1); r=$(grep -n "systemctl reboot" "$F/ssh.log" | cut -d: -f1);
           [ -n "$w" ] && [ "$w" -lt "$r" ] && [ "$(awk -v w="$w" -v r="$r" "NR > w && NR < r" "$F/ssh.log" | grep -c "^dd if=/dev/mmcblk0p7 bs=64k status=none$")" -ge 1 ]'
@@ -1103,12 +1127,14 @@ rc=$?
 check "live run when the card has no u-boot-env label: rc 3, no write" eval '[ "$rc" = 3 ] && grep -q "no partition labelled u-boot-env" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log"'
 printf '%s\n' "$CARD_TABLE" > "$F/state/lsblk"
 
+person_bootcmd "run yako_hook; run bootcmd_stm32mp"   # the fallback, as a person would put it
 out=$(live uninstall 2>&1)
 rc=$?
 check "live uninstall while bootcmd begins with the hook (G4): rc 7, NEEDS A PERSON with the line to type, the UNDO printed first, bootcmd and the hook kept, /boot/yakogl kept" \
     eval '[ "$rc" = 7 ] && grep -q "NEEDS A PERSON: bootcmd still begins with" <<<"$out" && grep -qF "setenv bootcmd '"'"'run bootcmd_stm32mp'"'"'; saveenv" <<<"$out" &&
-          grep -q "UNDO, should the uninstall go wrong" <<<"$out" && [ "$(vals "$PART" bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && [ "$(vals "$PART" yako_hook | cut -c1-7)" = "if test" ] && [ -d "$F/boot/yakogl/backup" ]'
+          grep -q "UNDO, should the uninstall go wrong" <<<"$out" && [ "$(vals "$PART" bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && [ "$(vals "$PART" yako_hook | cut -c1-21)" = "echo yakogl-mp2: hook" ] && [ -d "$F/boot/yakogl/backup" ]'
 person_bootcmd "run bootcmd_stm32mp"
+cp "$PART" "$S/pre-uninstall.bin"
 printf 'changed Image.gz\n' > "$F/boot/Image.gz"
 out=$(live uninstall 2>&1)
 rc=$?
@@ -1118,10 +1144,11 @@ printf 'stock Image.gz\n' > "$F/boot/Image.gz"
 out=$(live uninstall 2>&1)
 rc=$?
 check "live uninstall after the person put bootcmd back: rc 0, 'unhooked', the stock files checked, /boot/yakogl removed, the image before the uninstall kept" \
-    eval '[ "$rc" = 0 ] && grep -q "unhooked: no yako_\* variable, bootcmd .run bootcmd_stm32mp. (not written)" <<<"$out" && grep -q "stock boot files: unchanged since install" <<<"$out" &&
+    eval '[ "$rc" = 0 ] && grep -q "unhooked: no preboot of ours, no yako_\* variable, bootcmd .run bootcmd_stm32mp. (not written)" <<<"$out" && grep -q "stock boot files: unchanged since install" <<<"$out" &&
           [ ! -e "$F/boot/yakogl" ] && [ -n "$(ls "$S"/backup/*-u-boot-env.before-uninstall.bin 2>/dev/null)" ]'
-check "live uninstall: the environment's variables are the input's (no yako_*, bootcmd as it was), both copies check" \
-    eval '[ -z "$(ENVT diff "$S/env.bin" "$PART")" ] && ENVT check "$PART" >/dev/null'
+check "live uninstall (preboot): preboot=run yako_hook was there before and is deleted; the environment's variables are the input's (no preboot, no yako_*, bootcmd as it was), both copies check" \
+    eval '[ "$(vals "$S/pre-uninstall.bin" preboot)" = "run yako_hook" ] && [ "$(vals "$PART" preboot)" = - ] &&
+          [ -z "$(ENVT diff "$S/env.bin" "$PART")" ] && ENVT check "$PART" >/dev/null'
 manifest > "$S/boot-after.txt"
 same "live uninstall: the stock boot files are byte for byte what they were before install (boot.scr.uimg, the extlinux files, Image.gz, the dtb)" "$S/boot-before.txt" "$S/boot-after.txt"
 check "live: the whole command log never names the eMMC (mmcblk1), by-partlabel, fw_printenv, fw_setenv, a module, tailscale, sshd or a partition tool" \
@@ -1138,16 +1165,15 @@ check "live: nothing of the fake board or its host leaked into the host's record
 cp "$S/env-blank2.bin" "$PART"
 out=$(live install 2>&1)
 rc=$?
-check "live install on the stock card (copy 2 blank): rc 7 (bootcmd left to a person), the hook's variables in copy 1 (flags 0x02), copy 2 still all zero" \
-    eval '[ "$rc" = 7 ] && [ "$(valsb "$PART" yako_addr bootcmd | paste -sd"|" -)" = "0xa0000000|run bootcmd_stm32mp" ] && [ "$(flags "$PART" $((0x7e000)))" = 2 ] &&
+check "live install on the stock card (copy 2 blank, no preboot): rc 0, preboot and the hook's variables in copy 1 (flags 0x02), copy 2 still all zero" \
+    eval '[ "$rc" = 0 ] && [ "$(valsb "$PART" yako_addr bootcmd preboot | paste -sd"|" -)" = "0xa0000000|run bootcmd_stm32mp|run yako_hook" ] && [ "$(flags "$PART" $((0x7e000)))" = 2 ] &&
           cmp -s <(head -c $((0x7e000)) "$S/env-blank2.bin") <(head -c $((0x7e000)) "$PART") && ! grep -q "does not check" <<<"$out"'
-ENVTB set "$PART" "$PART.p" "bootcmd=run yako_hook; run bootcmd_stm32mp" >/dev/null && mv "$PART.p" "$PART"
 : > "$F/ssh.log"
 out=$(live run "$S/img/mp2.bin" "$S/live-logs" blank 2>&1)
 rc=$?
 check "live run on the stock card: rc 0, done; U-Boot's saveenv wrote copy 2 (flags 0x03), both copies valid now and copy 2 active, the one-shot gone" \
     eval '[ "$rc" = 0 ] && grep -q " verdict=done " <<<"$out" && [ "$(flags "$PART" $((0x7c000)))" = 3 ] && ENVT check "$PART" | grep -q "^active: copy 2" &&
-          [ "$(vals "$PART" yako_once bootcmd | paste -sd"|" -)" = "-|run yako_hook; run bootcmd_stm32mp" ]'
+          [ "$(vals "$PART" yako_once bootcmd preboot | paste -sd"|" -)" = "-|run bootcmd_stm32mp|run yako_hook" ]'
 out=$(live run "$S/img/mp2.bin" "$S/live-logs" blank2 2>&1)
 rc=$?
 check "the next run after U-Boot's first saveenv: rc 0; its arm wrote copy 1 with flags 0x04 (the inactive one), U-Boot's saveenv copy 2 with 0x05" \
@@ -1168,6 +1194,18 @@ printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
 printf '%s\n' "$CARD_TABLE" > "$F/state/lsblk"
 rm -f "$F/dev/mmcblk1p7"
 cp "$S/ssh.all.keep" "$F/ssh.all.log"
+
+# a card whose environment has a preboot of its own: install refuses with
+# rc 7 before any change (no write, no pristine image, nothing to undo)
+ENVTB set "$S/env-blank2.bin" "$PART" "preboot=usb start" >/dev/null
+cp "$PART" "$S/preboot-before.bin"
+: > "$F/ssh.log"
+nb=$(ls "$S"/backup/*-u-boot-env.bin | wc -l)
+out=$(live install 2>&1)
+rc=$?
+check "live install over a stock preboot: rc 7, NEEDS A PERSON naming it, the partition byte for byte, no dd of=, no new pristine image, no UNDO" \
+    eval '[ "$rc" = 7 ] && grep -q "NEEDS A PERSON: the environment already has a preboot (.usb start.)" <<<"$out" && cmp -s "$S/preboot-before.bin" "$PART" &&
+          ! grep -q "dd of=" "$F/ssh.log" && [ "$(ls "$S"/backup/*-u-boot-env.bin | wc -l)" = "$nb" ] && ! grep -q "UNDO" <<<"$out" && ! leaks_live "$out"'
 
 echo "== 10. the board's sessions (common_prechecks)"
 # A session is ours when it comes from one of this host's addresses or from

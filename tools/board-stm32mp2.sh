@@ -37,19 +37,38 @@
 # config would: the layout is the one board-read found, below.)
 #
 # The U-Boot side is the standalone-boot design (docs/standalone-boot.md): a
-# hook in front of the saved bootcmd, a one-shot variable U-Boot deletes and
+# hook U-Boot runs before ST's bootcmd, a one-shot variable U-Boot deletes and
 # saves BEFORE it loads anything, the image loaded from the boot medium:
-#   bootcmd      = "run yako_hook; <bootcmd as it was>"   (yako_bootcmd_prev keeps it)
-#                  bootcmd is ST's variable, not the runner's: the runner never
-#                  writes it. "install" writes the yako_* variables alone and,
-#                  while bootcmd does not begin with "run yako_hook; ", stops
-#                  with NEEDS A PERSON (rc 7) and the exact line a person who
-#                  allows it types at U-Boot's prompt; "run" refuses until
-#                  then. "uninstall" likewise asks the person to put bootcmd
-#                  back before it removes the hook's variables.
-#   yako_hook    : when yako_once is set, clear it, saveenv, run yako_mmc;
-#                  a failed load or saveenv falls through to the saved bootcmd
-#                  (ST's distro boot: extlinux, Linux)
+#   preboot      = "run yako_hook"   (the runner's own variable)
+#                  ST's r3.1 U-Boot has CONFIG_USE_PREBOOT (implied by
+#                  ARCH_STM32MP, not unset in configs/stm32mp25_defconfig), so
+#                  main_loop runs preboot before the autoboot countdown and
+#                  bootcmd; the DK's stock environment has no preboot
+#                  (dk-linux-baseline: 73 variables, none named preboot).
+#                  "install" writes preboot together with the yako_* variables
+#                  in its one environment write, the undo printed first
+#                  (uninstall deletes preboot and the yako_* variables), and
+#                  only when the environment has no preboot: a preboot of
+#                  another value is never overwritten or wrapped; install
+#                  stops with NEEDS A PERSON (rc 7) and writes nothing, and
+#                  "run" refuses. "uninstall" deletes preboot when it is
+#                  exactly "run yako_hook", never another one.
+#   bootcmd      : ST's variable, never written by the runner. The fallback,
+#                  for a U-Boot without USE_PREBOOT (no "yakogl-mp2: hook" line
+#                  on the console before ST's boot) or an environment with a
+#                  preboot of its own: a person stops autoboot and types
+#                  "setenv bootcmd 'run yako_hook; <bootcmd as it was>'; saveenv"
+#                  (the line install, status and the rc 7 stop print;
+#                  yako_bootcmd_prev keeps bootcmd as it was). Install,
+#                  status and run count that prefix as hooked too, and install
+#                  then writes no preboot. A bootcmd that names yako without
+#                  the exact prefix is refused, not touched. "uninstall"
+#                  stops with NEEDS A PERSON (rc 7) while bootcmd carries the
+#                  prefix, until the person puts it back.
+#   yako_hook    : echo "yakogl-mp2: hook" (every boot, so the console shows it
+#                  ran before ST's boot); when yako_once is set, clear it,
+#                  saveenv, run yako_mmc; a failed load or saveenv, and every
+#                  boot without yako_once, falls through to ST's bootcmd
 #   yako_mmc     : ext4load mmc ${boot_instance}:${yako_part} ${yako_addr}
 #                  ${yako_file}; dcache off; icache off; go ${yako_addr}
 #   yako_addr    = 0xa0000000, the A35 image's link address
@@ -97,8 +116,8 @@
 # the device trees are never written: the one-shot is a variable, not a
 # label). With an image, "install" checks it first, as "run" does, and
 # refuses before anything changes. "uninstall" checks the stock boot files
-# against boot-sha256.txt and removes the yako_* variables once bootcmd no
-# longer names the hook; "disarm" clears a pending one-shot and staged images
+# against boot-sha256.txt and removes preboot and the yako_* variables once
+# bootcmd no longer carries the fallback prefix; "disarm" clears a pending one-shot and staged images
 # (once-*.bin and a cut-off copy's once-*.bin.part), whatever is left of a run
 # that did not finish, and is safe to repeat.
 #
@@ -203,8 +222,9 @@
 # Exit codes: 0 done or returned; 2 usage; 3 refused before the board was
 # changed; 4 the verdict is not done; 5 the board did not come back, or an
 # environment write did not read back; 6 the one-shot was still set after
-# the cycle (cleared); 7 NEEDS A PERSON for bootcmd (install, uninstall,
-# run: bootcmd is ST's and the runner never changes it); 129, 130, 143 ended
+# the cycle (cleared); 7 NEEDS A PERSON (install and run: the environment
+# has a preboot of its own, which the runner never overwrites; uninstall:
+# bootcmd carries the fallback prefix, and bootcmd is ST's, never written); 129, 130, 143 ended
 # by HUP, INT, TERM (after the undo; the state file says what is left).
 #
 # Environment (no default for a machine or an address; none is ever written
@@ -308,9 +328,10 @@ HOLD_MAX=${HOLD_MAX:-$((WAIT_BOUND + STAGE_TIMEOUT + 300))}
 
 # The U-Boot side, exactly as installed (uboot_env.py print shows them byte
 # for byte; U-Boot's shell expands ${...} when the variable runs).
-YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-mp2: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-mp2: cleared; run yako_mmc; else echo yakogl-mp2: saveenv failed, booting Linux; fi; fi'
+YAKO_HOOK='echo yakogl-mp2: hook; if test -n "${yako_once}"; then echo yakogl-mp2: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-mp2: cleared; run yako_mmc; else echo yakogl-mp2: saveenv failed, booting Linux; fi; fi'
 YAKO_MMC='if ext4load mmc ${boot_instance}:${yako_part} ${yako_addr} ${yako_file}; then echo yakogl-mp2: go ${yako_addr}; dcache off; icache off; go ${yako_addr}; fi; echo yakogl-mp2: mmc load failed, booting Linux'
-HOOK_PREFIX='run yako_hook; '
+HOOK_PREFIX='run yako_hook; '    # the bootcmd fallback a person types (a U-Boot without USE_PREBOOT)
+PREBOOT='run yako_hook'           # preboot: the runner's own, written only where the environment has none
 OUR_VARS="yako_hook yako_mmc yako_addr yako_part yako_bootcmd_prev yako_once yako_file"
 
 TMP=$(mktemp -d)
@@ -427,26 +448,39 @@ env_range() {
     ENV_LO=$lo; ENV_HI=$hi
 }
 env_get() { env_tool print "$1" -n "$2" 2>/dev/null; }
-# env_hook IN OUT PART: the hook's own variables installed into IN as OUT;
-# bootcmd is ST's and is never written (an installed hook of another version
-# is brought to these strings). yako_bootcmd_prev keeps bootcmd as it is
-# without the hook, for the person who puts it back. EDIT_HOW says what it
-# did: installed | upgraded | unchanged; HOOKED is 1 when bootcmd already
-# begins with the hook (a person put it there), else 0: the one-shot cannot
-# run until a person does (bootcmd_line prints what they type).
+# env_hook IN OUT PART: the hook installed into IN as OUT, in one edit:
+# preboot=run yako_hook (U-Boot's CONFIG_USE_PREBOOT runs it before the
+# autoboot, hence before ST's bootcmd) and the hook's own variables. preboot
+# is written only where IN has none (or has exactly ours): a preboot of
+# another value is never overwritten or wrapped, the install stops with rc 7
+# and nothing written (needs_person_hook). bootcmd is ST's and is never
+# written; where a person has put the fallback prefix in front of it (a
+# U-Boot without USE_PREBOOT), that is the hook and no preboot is added. An
+# installed hook of another version is brought to these strings.
+# yako_bootcmd_prev keeps bootcmd as it is without the prefix. EDIT_HOW says
+# what it did: installed | upgraded | unchanged; HOOK_VIA how U-Boot reaches
+# the hook (preboot | bootcmd); HOOKED is 1 whenever it returns.
 # (Not called in a $(...): a refusal must end the script, not a subshell.)
 EDIT_HOW=
 HOOKED=0
+HOOK_VIA=
 BOOTCMD_BARE=
+PREBOOT_OTHER=
 env_hook() {
-    local in=$1 out=$2 part=$3 bc prev
+    local in=$1 out=$2 part=$3 bc prev pb
     bc=$(env_get "$in" bootcmd) || die "the environment has no bootcmd"
     if [ "${bc#"$HOOK_PREFIX"}" != "$bc" ]; then
-        HOOKED=1; BOOTCMD_BARE=${bc#"$HOOK_PREFIX"}
+        BOOTCMD_BARE=${bc#"$HOOK_PREFIX"}; HOOK_VIA=bootcmd
     else
         case "$bc" in *yako*) die "bootcmd '$bc' names yako but does not start with '$HOOK_PREFIX': not ours to touch" ;; esac
-        HOOKED=0; BOOTCMD_BARE=$bc
+        BOOTCMD_BARE=$bc; HOOK_VIA=preboot
     fi
+    pb=$(env_get "$in" preboot) || pb=
+    if [ "$HOOK_VIA" = preboot ] && [ -n "$pb" ] && [ "$pb" != "$PREBOOT" ]; then
+        PREBOOT_OTHER=$pb
+        needs_person_hook
+    fi
+    HOOKED=1
     prev=$(env_get "$in" yako_bootcmd_prev) || prev=
     # this runner always writes yako_bootcmd_prev with its hook: a hook without it is someone else's
     if [ -z "$prev" ] && env_get "$in" yako_hook >/dev/null; then
@@ -455,8 +489,10 @@ env_hook() {
     [ -z "$prev" ] || [ "$prev" = "$BOOTCMD_BARE" ] ||
         die "yako_bootcmd_prev ('$prev') is not bootcmd without the hook ('$BOOTCMD_BARE'): not ours to touch"
     local vars=("yako_hook=$YAKO_HOOK" "yako_mmc=$YAKO_MMC" "yako_addr=$YAKO_ADDR" "yako_part=$part" "yako_bootcmd_prev=$BOOTCMD_BARE")
+    [ "$HOOK_VIA" = bootcmd ] || vars=("preboot=$PREBOOT" "${vars[@]}")
     if [ "$(env_get "$in" yako_hook)" = "$YAKO_HOOK" ] && [ "$(env_get "$in" yako_mmc)" = "$YAKO_MMC" ] &&
-        [ "$(env_get "$in" yako_addr)" = "$YAKO_ADDR" ] && [ "$(env_get "$in" yako_part)" = "$part" ] && [ "$prev" = "$BOOTCMD_BARE" ]; then
+        [ "$(env_get "$in" yako_addr)" = "$YAKO_ADDR" ] && [ "$(env_get "$in" yako_part)" = "$part" ] && [ "$prev" = "$BOOTCMD_BARE" ] &&
+        { [ "$HOOK_VIA" = bootcmd ] || [ "$pb" = "$PREBOOT" ]; }; then
         cp "$in" "$out"; EDIT_HOW=unchanged; return 0
     fi
     if env_get "$in" yako_hook >/dev/null; then EDIT_HOW=upgraded; else EDIT_HOW=installed; fi
@@ -470,12 +506,14 @@ bootcmd_line() {
     unhook) echo "setenv bootcmd '$BOOTCMD_BARE'; saveenv" ;;
     esac
 }
-# env_unhook IN OUT: every yako_* variable gone, once bootcmd no longer names
-# the hook; while it does (HOOKED=1), only the one-shot (yako_once,
-# yako_file) goes and the hook stays, inert without yako_once, until a person
-# puts bootcmd back (bootcmd_line unhook). bootcmd is never written.
+# env_unhook IN OUT: preboot (when it is exactly ours, preboot=run yako_hook;
+# any other preboot is never touched) and every yako_* variable gone, once
+# bootcmd does not carry the fallback prefix; while it does (HOOKED=1), only
+# the one-shot (yako_once, yako_file) goes and the hook stays, inert without
+# yako_once, until a person puts bootcmd back (bootcmd_line unhook). bootcmd
+# is never written.
 env_unhook() {
-    local in=$1 out=$2 bc
+    local in=$1 out=$2 bc names=$OUR_VARS
     bc=$(env_get "$in" bootcmd) || die "the environment has no bootcmd"
     if [ "${bc#"$HOOK_PREFIX"}" != "$bc" ]; then
         HOOKED=1; BOOTCMD_BARE=${bc#"$HOOK_PREFIX"}
@@ -483,8 +521,9 @@ env_unhook() {
         EDIT_HOW="bootcmd still hooked"; return 0
     fi
     HOOKED=0; BOOTCMD_BARE=$bc
+    [ "$(env_get "$in" preboot)" != "$PREBOOT" ] || names="preboot $names"
     # shellcheck disable=SC2086  # the names, one per word
-    env_tool unset "$in" "$out" $OUR_VARS >/dev/null || die "uboot_env.py refused the edit" 2
+    env_tool unset "$in" "$out" $names >/dev/null || die "uboot_env.py refused the edit" 2
     EDIT_HOW=unhooked
 }
 env_arm() { env_tool set "$1" "$2" "yako_once=$3" "yako_file=$4" >/dev/null || die "uboot_env.py refused the edit" 2; }
@@ -642,9 +681,10 @@ env_restore() {
 # hook; its DRY line goes to stderr so a caller's capture sees the word alone)
 INSTALLED=
 installed() {
-    local out bc
-    env_board_vars out "bootcmd $OUR_VARS" \
-        "bootcmd=${HOOK_PREFIX}run bootcmd_stm32mp
+    local out bc pb
+    env_board_vars out "bootcmd preboot $OUR_VARS" \
+        "bootcmd=run bootcmd_stm32mp
+preboot=$PREBOOT
 yako_hook=$YAKO_HOOK
 yako_mmc=$YAKO_MMC
 yako_addr=$YAKO_ADDR
@@ -652,29 +692,40 @@ yako_part=8
 yako_bootcmd_prev=run bootcmd_stm32mp" 1>&2 ||
         die "cannot read the environment of $ENV_DEV (dd over ssh, decoded by uboot_env.py): the hook's state is unknown, not taken as absent"
     bc=$(sed -n 's/^bootcmd=//p' <<<"$out")
+    pb=$(sed -n 's/^preboot=//p' <<<"$out")
+    BOOTCMD_BARE=${bc#"$HOOK_PREFIX"}
     if ! grep -q '^yako_' <<<"$out"; then
         INSTALLED=absent
         [ "${bc#"$HOOK_PREFIX"}" = "$bc" ] || INSTALLED="stale: bootcmd begins with the hook but no yako_* variable is set"
+        [ "$pb" != "$PREBOOT" ] || INSTALLED="stale: preboot is '$PREBOOT' but no yako_* variable is set"
         return 0
     fi
     [ "$(sed -n 's/^yako_hook=//p' <<<"$out")" = "$YAKO_HOOK" ] || { INSTALLED="stale: yako_hook is another version's"; return 0; }
     [ "$(sed -n 's/^yako_mmc=//p' <<<"$out")" = "$YAKO_MMC" ] || { INSTALLED="stale: yako_mmc is another version's"; return 0; }
     [ "$(sed -n 's/^yako_addr=//p' <<<"$out")" = "$YAKO_ADDR" ] || { INSTALLED="stale: yako_addr is not $YAKO_ADDR"; return 0; }
     [ -n "$(sed -n 's/^yako_part=//p' <<<"$out")" ] || { INSTALLED="stale: yako_part is absent"; return 0; }
-    if [ "${bc#"$HOOK_PREFIX"}" = "$bc" ]; then
-        BOOTCMD_BARE=$bc
-        INSTALLED="needs a person: bootcmd does not begin with '$HOOK_PREFIX' (ST's variable; this runner never changes it)"
-        return 0
+    # hooked: preboot=run yako_hook (the runner's), or the fallback prefix a person put on bootcmd
+    if [ "$pb" = "$PREBOOT" ] || [ "${bc#"$HOOK_PREFIX"}" != "$bc" ]; then
+        INSTALLED=ok
+    elif [ -n "$pb" ]; then
+        PREBOOT_OTHER=$pb
+        INSTALLED="needs a person: preboot is the environment's own ('$pb'), which this runner never overwrites or wraps, and bootcmd does not begin with '$HOOK_PREFIX'"
+    else
+        INSTALLED="stale: neither preboot nor bootcmd runs yako_hook"
     fi
-    INSTALLED=ok
 }
-# needs_person_bootcmd hook|unhook: the stop when only bootcmd is in the way (rc 7)
+# needs_person_hook: the stop when a preboot of the environment's own is in
+# the way (rc 7); nothing was written
+needs_person_hook() {
+    echo "$TAG: NEEDS A PERSON: the environment already has a preboot ('$PREBOOT_OTHER'). U-Boot reaches the one-shot through preboot=$PREBOOT, and this runner never overwrites or wraps a preboot it did not write. Nothing was changed. The fallback, for a person who allows it: stop autoboot and type at U-Boot's prompt
+    $(bootcmd_line hook)
+(bootcmd is ST's variable, which this runner never writes); then 'install' again installs the hook's variables without preboot. Until then 'run' refuses." | scrub >&2
+    exit 7
+}
+# needs_person_bootcmd unhook: the stop when the fallback prefix on bootcmd is in the way (rc 7)
 needs_person_bootcmd() {
     local why
     case "$1" in
-    hook) why="U-Boot runs the one-shot only if bootcmd begins with '$HOOK_PREFIX', and bootcmd is ST's variable, which this runner never changes. The hook's own variables are in place and nothing else was changed. A person who allows the change stops autoboot and types at U-Boot's prompt:
-    $(bootcmd_line hook)
-then 'install' again shows it; until then 'run' refuses." ;;
     unhook) why="bootcmd still begins with '$HOOK_PREFIX', and bootcmd is ST's variable, which this runner never changes. The one-shot is cleared; the hook's variables stay (inert without yako_once) so bootcmd still runs what it names. A person stops autoboot and types at U-Boot's prompt:
     $(bootcmd_line unhook)
 then 'uninstall' again removes the rest." ;;
@@ -1008,11 +1059,11 @@ cmd_status() {
     # copies' state first (both ok, or one BLANK as the stock card has it)
     env_read "$TMP/env.status"
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ python3 tools/uboot_env.py ... check <env.bin>; ... print <env.bin> bootcmd bootdelay boot_targets $OUR_VARS"
+        echo "DRY host\$ python3 tools/uboot_env.py ... check <env.bin>; ... print <env.bin> bootcmd bootdelay boot_targets preboot $OUR_VARS"
     else
         cat "$TMP/env.check"
         # shellcheck disable=SC2086  # the names, one per word
-        env_tool print "$TMP/env.status" bootcmd bootdelay boot_targets $OUR_VARS 2>&1
+        env_tool print "$TMP/env.status" bootcmd bootdelay boot_targets preboot $OUR_VARS 2>&1
         echo
     fi
     b "ls -l $STAGE_DIR $STAGE_DIR/$BACKUP_SUB 2>/dev/null; df -B1 --output=avail /boot | tail -1; cut -d' ' -f1 /proc/uptime"
@@ -1046,23 +1097,24 @@ cmd_install() {
     bdir=$(backup_dir)
     PRISTINE="$bdir/$STAMP-u-boot-env.bin"
     env_read "$TMP/env.bin"
+    # the edit is made on the host first: a preboot of the environment's own
+    # stops here (rc 7), before the undo is printed and before any change
+    [ "$DRY" = 1 ] || env_hook "$TMP/env.bin" "$TMP/env.new" "$BOOT_PART"
     # the undo, before anything changes
     echo "$TAG: UNDO, should anything below go wrong (the pristine environment image is kept as $PRISTINE and on the card as $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin):"
     echo "  host\$ tail -c +$((ENV_LO + 1)) $PRISTINE | head -c $((ENV_HI - ENV_LO)) | ssh <BOARD_HOST> '${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync'"
     echo "  board\$ ${SU}rm -rf $STAGE_DIR"
-    echo "  (or: tools/board-stm32mp2.sh uninstall)"
+    echo "  (or: tools/board-stm32mp2.sh uninstall, which deletes preboot and the yako_* variables)"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ mkdir -p $bdir && cp <env.bin> $PRISTINE"
-        echo "DRY host\$ python3 tools/uboot_env.py ... set <env.bin> <env.new> 'yako_hook=$YAKO_HOOK' 'yako_mmc=$YAKO_MMC' yako_addr=$YAKO_ADDR yako_part=$BOOT_PART 'yako_bootcmd_prev=<bootcmd without the hook>'   # bootcmd is ST's: never written"
-        printf 'yako_addr=%s\nyako_part=%s\n' "$YAKO_ADDR" "$BOOT_PART" > "$TMP/expect"
+        echo "DRY host\$ python3 tools/uboot_env.py ... set <env.bin> <env.new> 'preboot=$PREBOOT' 'yako_hook=$YAKO_HOOK' 'yako_mmc=$YAKO_MMC' yako_addr=$YAKO_ADDR yako_part=$BOOT_PART 'yako_bootcmd_prev=<bootcmd without the hook>'   # bootcmd is ST's: never written; preboot only where the environment has none (another preboot: rc 7, nothing written)"
+        printf 'preboot=%s\nyako_addr=%s\nyako_part=%s\n' "$PREBOOT" "$YAKO_ADDR" "$BOOT_PART" > "$TMP/expect"
         b "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && ${SU}cp <env.bin> $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && cd /boot && find . -path ./yakogl -prune -o -type f -print0 | sort -z | xargs -0 ${SU}sha256sum > $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt"
         env_write "<env.new>" "install"
         note "install (dry run): hook state read as '$st'; nothing was changed"
         return 0
     fi
-    env_hook "$TMP/env.bin" "$TMP/env.new" "$BOOT_PART"
     if [ "$EDIT_HOW" = unchanged ]; then
-        [ "$HOOKED" = 1 ] || needs_person_bootcmd hook
         note "installed already, byte for byte; nothing to do"
         return 0
     fi
@@ -1080,10 +1132,11 @@ cmd_install() {
     else
         note "the card keeps the first install's pristine image and stock-file record ($STAGE_DIR/$BACKUP_SUB)"
     fi
-    printf 'yako_hook=%s\nyako_mmc=%s\nyako_addr=%s\nyako_part=%s\nyako_bootcmd_prev=%s\n' "$YAKO_HOOK" "$YAKO_MMC" "$YAKO_ADDR" "$BOOT_PART" "$BOOTCMD_BARE" > "$TMP/expect"
+    : > "$TMP/expect"
+    [ "$HOOK_VIA" = bootcmd ] || printf 'preboot=%s\n' "$PREBOOT" > "$TMP/expect"
+    printf 'yako_hook=%s\nyako_mmc=%s\nyako_addr=%s\nyako_part=%s\nyako_bootcmd_prev=%s\n' "$YAKO_HOOK" "$YAKO_MMC" "$YAKO_ADDR" "$BOOT_PART" "$BOOTCMD_BARE" >> "$TMP/expect"
     env_write "$TMP/env.new" "install"
-    [ "$HOOKED" = 1 ] || needs_person_bootcmd hook
-    note "$EDIT_HOW: U-Boot runs yako_hook before '$BOOTCMD_BARE'; the one-shot loads from mmc \${boot_instance}:$BOOT_PART. bootcmd was not written. Nothing was rebooted. Pristine image: $PRISTINE"
+    note "$EDIT_HOW: U-Boot runs yako_hook from $([ "$HOOK_VIA" = bootcmd ] && echo "the fallback prefix a person put on bootcmd" || echo "preboot=$PREBOOT"), before '$BOOTCMD_BARE'; the one-shot loads from mmc \${boot_instance}:$BOOT_PART. bootcmd was not written. Nothing was rebooted. Pristine image: $PRISTINE"
 }
 cmd_uninstall() {
     need_board
@@ -1101,7 +1154,7 @@ cmd_uninstall() {
     echo "  (or: tools/board-stm32mp2.sh install)"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ mkdir -p $bdir && cp <env.bin> $PRISTINE"
-        echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> $OUR_VARS   # bootcmd is ST's: never written; while it begins with the hook, only yako_once yako_file"
+        echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> preboot $OUR_VARS   # preboot only when it is '$PREBOOT' (another is never touched); bootcmd is ST's: never written; while it begins with the hook, only yako_once yako_file"
         : > "$TMP/expect"
         env_write "<env.new>" "uninstall"
         b "cd /boot && ${SU}sha256sum -c $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt --quiet   # the stock boot files as install found them, before the record goes"
@@ -1123,6 +1176,8 @@ cmd_uninstall() {
     local left
     env_board_get left yako_hook
     [ -z "$left" ] || die "yako_hook is still set after the uninstall" 5
+    env_board_get left preboot
+    [ "$left" != "$PREBOOT" ] || die "preboot is still '$PREBOOT' after the uninstall" 5
     # the stock boot files as install recorded them, before the record goes
     local chk
     bget chk "if test -f $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt; then cd /boot && ${SU}sha256sum -c $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt --quiet 2>&1 && echo unchanged; else echo norecord; fi" || true
@@ -1132,7 +1187,7 @@ cmd_uninstall() {
     *) die "the stock boot files differ from install's record: $STAGE_DIR is kept for a person to look at ($(tr '\n' ';' <<<"$chk"))" 5 ;;
     esac
     b "${SU}rm -rf $STAGE_DIR"
-    note "$EDIT_HOW: no yako_* variable, bootcmd '$BOOTCMD_BARE' (not written), $STAGE_DIR removed. Nothing was rebooted."
+    note "$EDIT_HOW: no preboot of ours, no yako_* variable, bootcmd '$BOOTCMD_BARE' (not written), $STAGE_DIR removed. Nothing was rebooted."
 }
 # disarm: the undo of whatever a run left (yako_once, yako_file, staged
 # images, a cut-off copy), from the board's own state; safe to repeat
@@ -1266,7 +1321,7 @@ cmd_run() {
     where_env
     installed
     st=$INSTALLED
-    [ "${st#needs a person}" = "$st" ] || needs_person_bootcmd hook
+    [ "${st#needs a person}" = "$st" ] || needs_person_hook
     [ "$st" = ok ] || die "the U-Boot hook is not installed as this script writes it ($st): 'install' first"
     env_board_get once yako_once
     [ -z "$once" ] || die "a one-shot is already pending (yako_once=$once); find its owner, or 'disarm'"
@@ -1425,7 +1480,7 @@ cmd_env_edit() {
     case "$what" in
     hook)
         env_hook "$in" "$out" "${4:-8}"
-        if [ "$HOOKED" = 1 ]; then echo "$EDIT_HOW"; else echo "$EDIT_HOW; bootcmd not hooked: $(bootcmd_line hook)"; fi ;;
+        echo "$EDIT_HOW ($HOOK_VIA)" ;;
     unhook) env_unhook "$in" "$out"; echo "$EDIT_HOW" ;;
     arm) [ $# -ge 5 ] || usage; env_arm "$in" "$out" "$4" "$5"; echo armed ;;
     disarm) env_disarm "$in" "$out"; echo disarmed ;;
