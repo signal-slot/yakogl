@@ -17,16 +17,22 @@
 #    (to run and to install), one too big for the 256 MiB window, no AArch64
 #    header, a bad run name, a run without BOARD_UART (and the blind run
 #    MP2_NO_CONSOLE=1 allows) or without BOARD_HOST, an unknown verb; and the
-#    device guard on its own: the eMMC and every never-written label refused,
-#    the card's u-boot-env and bootfs accepted, a partition with the wrong
-#    label refused.
+#    device guard on its own, on the DK's real layout (the card mmcblk0, type
+#    SD; the eMMC mmcblk1, type MMC, with the same labels): the eMMC's
+#    same-label partition, a /boot on a disk of type MMC, a by-partlabel path,
+#    a whole disk and every never-written label refused, the card's
+#    u-boot-env and bootfs accepted, a partition with the wrong label
+#    refused, and an SD card numbered mmcblk1 accepted (the type decides, not
+#    the number).
 # 3. The environment edits on a synthetic redundant image (built here from
 #    the format, as tools/testdata/uboot-env/test_uboot_env.py does: no byte
 #    from a board): hook writes the hook's variables and keeps bootcmd as it
 #    is in yako_bootcmd_prev, is idempotent, upgrades another version's strings, refuses a foreign hook,
 #    never writes bootcmd; unhook gives the variables of the input back once
 #    bootcmd is ST's again; arm and disarm; a bad CRC
-#    and a single-copy layout; the hook strings themselves are pinned.
+#    and a single-copy layout; the hook strings themselves are pinned; the
+#    stock card's shape (copy 1 valid, copy 2 all zero) accepted, the edit in
+#    copy 1, a non-zero copy 2 with a bad CRC still refused.
 # 4. Replays of synthetic consoles through the verdict (tally): the
 #    mp2_identify PASS run is done (rc 0), a FAIL line failed (rc 4), no end
 #    line no_end_line with the boot_verdict naming how far it got, PSCI
@@ -36,8 +42,11 @@
 #    path or bridge become placeholders in the copies.
 # 6. A fake board: ssh is a script that logs every command and runs it in a
 #    scratch tree (/boot, the u-boot-env partition as a file, /proc/uptime
-#    rewritten there; fw_printenv is tools/uboot_env.py on that file; the
-#    reboot clears yako_once as U-Boot's hook does and starts a new "uptime"),
+#    rewritten there; fw_printenv and fw_setenv fail as ST's envtools do
+#    without /etc/fw_env.config, so every read of a variable must be the dd
+#    read-back decoded on the host; the reboot clears yako_once as U-Boot's
+#    hook does, with U-Boot's saveenv (the other copy, flags + 1), and starts
+#    a new "uptime"),
 #    the console a file with the layer's lines. Through it the live paths run
 #    without --dry-run: install (the hook's variables in the partition,
 #    bootcmd left to a person, who is simulated by editing the partition
@@ -47,8 +56,12 @@
 #    the NEEDS A PERSON line, one reboot and no retry), the eMMC refused
 #    before any write, disarm, and uninstall after which the stock files are
 #    byte for byte what they were and the environment's variables the input's.
-#    The command log never names mmcblk0, a module, tailscale or sshd, and
-#    every dd writes the u-boot-env partition alone.
+#    The command log never names the eMMC (mmcblk1), by-partlabel,
+#    fw_printenv, fw_setenv, a module, tailscale or sshd, and every dd writes
+#    the u-boot-env partition alone. The stock card's shape (copy 2 all zero)
+#    installs and runs: the edits land in copy 1, U-Boot's saveenv then makes
+#    copy 2 valid and active, and the next arm writes copy 1 with flags 0x04.
+#    An SD card numbered mmcblk1 is accepted (status reads it).
 # 7. The expected-watchdog run (run --expect-watchdog, the hang option of
 #    mp2_hello): the dry run waits WDOG_BOUND, replays of consoles with the
 #    hang line give watchdog_reset only when the banner and the hang line
@@ -63,7 +76,7 @@
 #    variables and stops with NEEDS A PERSON, rc 7, until a person puts the
 #    hook in front of bootcmd at U-Boot's prompt; uninstall the same the other
 #    way round; run refuses meanwhile); the card is the SD card /boot is on by
-#    its sysfs type, an eMMC numbered other than 0 refused (G1); ssh is strict
+#    its sysfs type, whatever its number (G1); ssh is strict
 #    about the host key and records none (G7); a reboot that did not happen
 #    is disarmed and reported not_rebooted, not NEEDS A PERSON (G10); the
 #    lock's watchdog TERM during the reboot's ssh ends the run at once
@@ -86,7 +99,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=190
+WANT_CHECKS=201
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -165,19 +178,23 @@ for verb in status install uninstall disarm; do
 done
 out=$(BOARD_HOST=$FAKE_HOST dry install 2>&1)
 check "install: the UNDO (the dd of the pristine image back) is printed before the env write" \
-    eval 'u=$(grep -n "UNDO, should anything" <<<"$out" | cut -d: -f1); w=$(grep -n "dd of=/dev/mmcblkDp7" <<<"$out" | head -1 | cut -d: -f1);
+    eval 'u=$(grep -n "UNDO, should anything" <<<"$out" | cut -d: -f1); w=$(grep -n "dd of=/dev/mmcblk0p7" <<<"$out" | head -1 | cut -d: -f1);
           [ -n "$u" ] && [ -n "$w" ] && [ "$u" -lt "$w" ]'
 check "install: the pristine image is kept on the host and on the card, the stock boot files hashed" \
     eval 'grep -q "u-boot-env.bin" <<<"$out" && grep -q "boot-sha256.txt" <<<"$out" && grep -q "cp <env.bin> .*/records/stm32mp257f-dk/uboot-env/" <<<"$out"'
-check "install: the env write covers only the two copies (seek 0x7c000/512 = 992, 16 KiB), read back by sha256 and fw_printenv" \
-    eval 'grep -q "head -c 16384 | ssh BOARD .*dd of=/dev/mmcblkDp7 bs=512 seek=992 conv=fsync" <<<"$out" &&
-          grep -q "sha256sum   # must equal the host image" <<<"$out" && grep -q "fw_printenv yako_addr yako_part   # must show the edit (install)" <<<"$out"'
+check "install: the env write covers only the two copies (seek 0x7c000/512 = 992, 16 KiB), read back by dd and compared and decoded on the host" \
+    eval 'grep -q "head -c 16384 | ssh BOARD .*dd of=/dev/mmcblk0p7 bs=512 seek=992 conv=fsync" <<<"$out" &&
+          grep -q "^DRY board\$ dd if=/dev/mmcblk0p7 bs=64k status=none   # > host <env.back>: must equal the host image byte for byte" <<<"$out" &&
+          grep -q "^DRY host\$ python3 tools/uboot_env.py ... print <env.back> yako_addr yako_part   # must show the edit (install)" <<<"$out"'
+check "dry runs: no verb sends fw_printenv or fw_setenv to the board (ST's envtools cannot start)" \
+    eval 'a=$(for v in status install uninstall disarm; do BOARD_HOST=$FAKE_HOST dry "$v" 2>&1; done; BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry run "$S/img/mp2.bin" "$S/logs" 2>&1);
+          grep -q "^DRY board\$ dd if=" <<<"$a" && ! grep "^DRY board" <<<"$a" | grep -q "fw_printenv\|fw_setenv"'
 check "install: the hook's variables: yako_addr 0xa0000000 and yako_part from /boot's partition (8)" \
     eval 'grep -q "yako_addr=0xa0000000 yako_part=8" <<<"$out"'
 check "install: the lock is taken, the sessions read (who), the mount of /boot and the card's labels read" \
     eval 'grep -q "board_lock.sh" <<<"$out" && grep -q "^DRY board\$ who" <<<"$out" && grep -q "findmnt -n -v -o SOURCE,FSTYPE -T /boot" <<<"$out" && grep -q "lsblk -rno PATH,PARTLABEL" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST MP2_SUDO="sudo -n " dry install 2>&1)
-check "install with MP2_SUDO: the board commands carry the prefix" eval 'grep -q "sudo -n dd if=/dev/mmcblkDp7" <<<"$out"'
+check "install with MP2_SUDO: the board commands carry the prefix" eval 'grep -q "sudo -n dd if=/dev/mmcblk0p7" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST dry install 2>&1)
 check "install (G4): the edit never names bootcmd (ST's variable); yako_bootcmd_prev is recorded" \
     eval 'l=$(grep "uboot_env.py .* set <env.bin>" <<<"$out"); [ -n "$l" ] && ! grep -q "'"'"'bootcmd=" <<<"$l" && grep -q "yako_bootcmd_prev=" <<<"$l" && grep -q "bootcmd is ST.s: never written" <<<"$l"'
@@ -194,8 +211,9 @@ check "disarm: yako_once and yako_file unset, the staged once-*.bin and a cut-of
     eval 'grep -q "unset <env.bin> <env.new> yako_once yako_file" <<<"$out" && grep -q "rm -f /boot/yakogl/once-\*.bin /boot/yakogl/once-\*.bin.part" <<<"$out" &&
           grep -q "ls /boot/yakogl/once-\* 2>/dev/null   # must print nothing" <<<"$out"'
 out=$(BOARD_HOST=$FAKE_HOST dry status 2>&1)
-check "status: fw_printenv of bootcmd and the yako_* variables, the install state, the stock boot files checked" \
-    eval 'grep -q "fw_printenv bootcmd bootdelay boot_targets yako_hook" <<<"$out" && grep -q "^install: ok" <<<"$out" && grep -q "sha256sum -c /boot/yakogl/backup/boot-sha256.txt" <<<"$out"'
+check "status: the partition read by dd, bootcmd and the yako_* variables decoded on the host, the install state, the stock boot files checked" \
+    eval 'grep -q "^DRY board\$ dd if=/dev/mmcblk0p7 bs=64k status=none" <<<"$out" && grep -q "print <env.bin> bootcmd bootdelay boot_targets yako_hook" <<<"$out" &&
+          grep -q "^install: ok" <<<"$out" && grep -q "sha256sum -c /boot/yakogl/backup/boot-sha256.txt" <<<"$out"'
 
 out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry probe "$S/logs" 2>&1)
 rc=$?
@@ -207,10 +225,10 @@ rc=$?
 check "run (bridge): rc 0, the image checked (sha256, footprint), the boot command 'sync; systemctl reboot'" \
     eval '[ "$rc" = 0 ] && grep -q "image sha256 $(sha256sum "$S/img/mp2.bin" | cut -c1-16) footprint 4194304" <<<"$out" && grep -q "^DRY board\$ sync; systemctl reboot" <<<"$out"'
 check "run: the order is stage, read back, capture, arm, reboot, wait, one-shot gone, staged image removed" \
-    eval 'o=$(grep -nE "cat > /boot/yakogl/once-trial-|drop_caches|am62p_netboot_uart.py capture|set <env.bin> <env.new> yako_once=trial-|dd of=/dev/mmcblkDp7|systemctl reboot|wait until ssh answers from a new boot|fw_printenv -n yako_once   # must print nothing|rm -f /boot/yakogl/once-trial-" <<<"$out" | cut -d: -f1 | paste -sd" " -);
+    eval 'o=$(grep -nE "cat > /boot/yakogl/once-trial-|drop_caches|am62p_netboot_uart.py capture|set <env.bin> <env.new> yako_once=trial-|dd of=/dev/mmcblk0p7|systemctl reboot|wait until ssh answers from a new boot|yako_once must be unset|rm -f /boot/yakogl/once-trial-" <<<"$out" | cut -d: -f1 | paste -sd" " -);
           [ "$(wc -w <<<"$o")" = 9 ] && [ "$(tr " " "\n" <<<"$o" | sort -n | paste -sd" " -)" = "$o" ]'
 check "run: the hook must be installed, no one-shot pending, no leftover image, the free space of /boot read" \
-    eval 'grep -q "fw_printenv bootcmd yako_hook" <<<"$out" && grep -q "fw_printenv -n yako_once" <<<"$out" &&grep -q "ls /boot/yakogl/once-\* " <<<"$out" && grep -q "df -B1 --output=avail /boot" <<<"$out"'
+    eval 'grep -q "decoded there: uboot_env.py print bootcmd yako_hook" <<<"$out" && grep -q "decoded there: uboot_env.py print yako_once$" <<<"$out" && grep -q "ls /boot/yakogl/once-\* " <<<"$out" && grep -q "df -B1 --output=avail /boot" <<<"$out"'
 check "run: the UNDO ('disarm') is printed before the image is staged, and names the cut-off copy" \
     eval 'u=$(grep -n "UNDO, should this run be cut off" <<<"$out" | cut -d: -f1); s=$(grep -n "cat > /boot/yakogl/once-trial-" <<<"$out" | cut -d: -f1);
           [ -n "$u" ] && [ -n "$s" ] && [ "$u" -lt "$s" ] && grep -q "tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes /boot/yakogl/once-\*.bin and once-\*.bin.part" <<<"$out"'
@@ -302,57 +320,86 @@ check "no arguments: rc 2" [ $? = 2 ]
 check "the refusals touched no stub and wrote nothing" eval '[ ! -e "$S/logs" ] && untouched'
 
 # the device guard alone (dev_guard, its constants and die, extracted by
-# name as section 5 does): the card's layout as #1281 lists it
-CARD_TABLE='/dev/mmcblk1
-/dev/mmcblk1p1 fsbla1
-/dev/mmcblk1p2 fsbla2
-/dev/mmcblk1p3 metadata1
-/dev/mmcblk1p4 metadata2
-/dev/mmcblk1p5 fip-a
-/dev/mmcblk1p6 fip-b
-/dev/mmcblk1p7 u-boot-env
-/dev/mmcblk1p8 bootfs
-/dev/mmcblk1p9 vendorfs
-/dev/mmcblk1p10 rootfs
-/dev/mmcblk1p11 userfs'
-guard() { # guard DEV WANT-LABEL [TABLE [CARD]]: the guard's rc and message
+# name as section 5 does), on the DK's layout as dk-linux-baseline read it
+# under ST's Linux: the microSD is mmcblk0 (sysfs type SD, /boot = p8,
+# u-boot-env = p7, the card's labels as #1281 lists them); the eMMC is
+# mmcblk1 (type MMC, not booted) with the same labels, its u-boot-env p5
+# (the rest of EMMC_TABLE's numbering is this fixture's, not read)
+CARD_TABLE='/dev/mmcblk0
+/dev/mmcblk0p1 fsbla1
+/dev/mmcblk0p2 fsbla2
+/dev/mmcblk0p3 metadata1
+/dev/mmcblk0p4 metadata2
+/dev/mmcblk0p5 fip-a
+/dev/mmcblk0p6 fip-b
+/dev/mmcblk0p7 u-boot-env
+/dev/mmcblk0p8 bootfs
+/dev/mmcblk0p9 vendorfs
+/dev/mmcblk0p10 rootfs
+/dev/mmcblk0p11 userfs'
+EMMC_TABLE='/dev/mmcblk1
+/dev/mmcblk1p1 metadata1
+/dev/mmcblk1p2 metadata2
+/dev/mmcblk1p3 fip-a
+/dev/mmcblk1p4 fip-b
+/dev/mmcblk1p5 u-boot-env
+/dev/mmcblk1p6 bootfs
+/dev/mmcblk1p7 vendorfs
+/dev/mmcblk1p8 rootfs
+/dev/mmcblk1p9 userfs'
+guard() { # guard DEV WANT-LABEL [TABLE [CARD [TYPE]]]: the guard's rc and message
     bash -c '
 set -uo pipefail
-B=$1; dev=$2; want=$3; PART_TABLE=$4; CARD_DISK=$5; TAG=guard
-eval "$(sed -n "/^NEVER_LABELS=/p; /^EMMC_RE=/p; /^PART_RE=/p; /^scrub() {/,/^}/p; /^die() /p; /^dev_guard() {/,/^}/p" "$B")"
+B=$1; dev=$2; want=$3; PART_TABLE=$4; CARD_DISK=$5; CARD_TYPE=$6; TAG=guard
+eval "$(sed -n "/^NEVER_LABELS=/p; /^PART_RE=/p; /^scrub() {/,/^}/p; /^die() /p; /^dev_guard() {/,/^}/p" "$B")"
 dev_guard "$dev" "$want" && echo ok
-' _ "$B" "$1" "$2" "${3:-$CARD_TABLE}" "${4-/dev/mmcblk1}" 2>&1
+' _ "$B" "$1" "$2" "${3:-$CARD_TABLE}" "${4-/dev/mmcblk0}" "${5-SD}" 2>&1
 }
 for p in 1:fsbla1 2:fsbla2 3:metadata1 4:metadata2 5:fip-a 6:fip-b 9:vendorfs 10:rootfs 11:userfs; do
-    out=$(guard "/dev/mmcblk1p${p%%:*}" "${p#*:}")
+    out=$(guard "/dev/mmcblk0p${p%%:*}" "${p#*:}")
     rc=$?
-    check "guard: /dev/mmcblk1p${p%%:*} (${p#*:}) refused even when asked for by its own label, rc 3" \
-        eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/mmcblk1p${p%%:*} is labelled ${p#*:}: never written" <<<"$out"'
+    check "guard: /dev/mmcblk0p${p%%:*} (${p#*:}) refused even when asked for by its own label, rc 3" \
+        eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/mmcblk0p${p%%:*} is labelled ${p#*:}: never written" <<<"$out"'
 done
-out=$(guard /dev/mmcblk0p7 u-boot-env "$(sed 's/mmcblk1/mmcblk0/' <<<"$CARD_TABLE")")
+out=$(guard /dev/mmcblk1p5 u-boot-env "$CARD_TABLE
+$EMMC_TABLE")
 rc=$?
-check "guard: the eMMC's u-boot-env (/dev/mmcblk0p7, the same label) refused as the eMMC, rc 3" \
-    eval '[ "$rc" = 3 ] && grep -q "is the eMMC (mmcblk0)" <<<"$out"'
+check "guard: the eMMC's same-label u-boot-env (/dev/mmcblk1p5) refused even when its label is in the table: not a partition of the SD card (/dev/mmcblk0), rc 3" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/mmcblk1p5 is not a partition of the SD card /boot is on (/dev/mmcblk0)" <<<"$out"'
+out=$(guard /dev/mmcblk1p5 u-boot-env "$EMMC_TABLE" /dev/mmcblk1 MMC)
+rc=$?
+check "guard: /boot on a disk of type MMC (the eMMC mmcblk1): its own u-boot-env refused, rc 3" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/mmcblk1, the disk /boot is on, has device type .MMC., not SD" <<<"$out"'
+out=$(guard /dev/mmcblk0p7 u-boot-env "$CARD_TABLE" /dev/mmcblk0 "")
+rc=$?
+check "guard: a disk whose type was not read is refused, rc 3" eval '[ "$rc" = 3 ] && grep -q "device type .unread., not SD" <<<"$out"'
+out=$(guard /dev/disk/by-partlabel/u-boot-env u-boot-env "$CARD_TABLE
+/dev/disk/by-partlabel/u-boot-env u-boot-env")
+rc=$?
+check "guard: a /dev/disk/by-partlabel path refused (it resolves to the eMMC on the DK), rc 3" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/disk/by-partlabel/u-boot-env is a /dev/disk/ link" <<<"$out"'
 out=$(guard /dev/mmcblk0 u-boot-env)
 rc=$?
-check "guard: /dev/mmcblk0 itself refused" eval '[ "$rc" = 3 ] && grep -q "is the eMMC" <<<"$out"'
+check "guard: a whole card (/dev/mmcblk0) is not a partition: refused" eval '[ "$rc" = 3 ] && grep -q "not a partition" <<<"$out"'
 out=$(guard /dev/mmcblk1 u-boot-env)
 rc=$?
-check "guard: a whole card (/dev/mmcblk1) is not a partition: refused" eval '[ "$rc" = 3 ] && grep -q "not a partition" <<<"$out"'
-out=$(guard /dev/mmcblk1p8 u-boot-env)
+check "guard: the whole eMMC (/dev/mmcblk1) refused" eval '[ "$rc" = 3 ] && grep -q "not a partition" <<<"$out"'
+out=$(guard /dev/mmcblk0p8 u-boot-env)
 rc=$?
 check "guard: bootfs asked for as u-boot-env: refused (wrong label)" eval '[ "$rc" = 3 ] && grep -q "labelled .bootfs., not u-boot-env" <<<"$out"'
-out=$(guard /dev/mmcblk1p12 u-boot-env)
+out=$(guard /dev/mmcblk0p12 u-boot-env)
 rc=$?
 check "guard: a partition absent from the table: refused ('nothing')" eval '[ "$rc" = 3 ] && grep -q "labelled .nothing." <<<"$out"'
-check "guard: the card's u-boot-env (p7) and bootfs (p8) pass" \
-    eval '[ "$(guard /dev/mmcblk1p7 u-boot-env)" = ok ] && [ "$(guard /dev/mmcblk1p8 bootfs)" = ok ]'
+check "guard: the card's u-boot-env (mmcblk0p7) and bootfs (mmcblk0p8) pass" \
+    eval '[ "$(guard /dev/mmcblk0p7 u-boot-env)" = ok ] && [ "$(guard /dev/mmcblk0p8 bootfs)" = ok ]'
+check "guard: an SD card numbered mmcblk1 (type SD) passes: the type decides, not the number" \
+    eval '[ "$(guard /dev/mmcblk1p7 u-boot-env "$(sed s/mmcblk0/mmcblk1/ <<<"$CARD_TABLE")" /dev/mmcblk1 SD)" = ok ]'
 out=$(guard /dev/mmcblk2p7 u-boot-env "$CARD_TABLE
 /dev/mmcblk2p7 u-boot-env")
 rc=$?
-check "guard (G1): a u-boot-env partition of another mmc device (an eMMC numbered 2) refused: not the SD card /boot is on" \
-    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/mmcblk2p7 is not a partition of the SD card /boot is on (/dev/mmcblk1)" <<<"$out"'
-out=$(guard /dev/mmcblk1p7 u-boot-env "$CARD_TABLE" "")
+check "guard (G1): a u-boot-env partition of another mmc device (numbered 2) refused: not the SD card /boot is on" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /dev/mmcblk2p7 is not a partition of the SD card /boot is on (/dev/mmcblk0)" <<<"$out"'
+out=$(guard /dev/mmcblk0p7 u-boot-env "$CARD_TABLE" "")
 rc=$?
 check "guard (G1): no SD card found (CARD_DISK empty): every device refused" \
     eval '[ "$rc" = 3 ] && grep -q "(none found)" <<<"$out"'
@@ -361,7 +408,7 @@ echo "== 3. the environment edits on a synthetic image"
 # A 512 KiB u-boot-env partition image with U-Boot's env/mmc.c layout: copy 1
 # at 0x7e000 (the top), copy 2 at 0x7c000, 8 KiB each, a flag byte; the rest
 # 0xff. Copy 1 is the active one (higher flags). No byte is from a board.
-python3 -I - "$S/env.bin" "$S/env-single.bin" "$S/env-badcrc.bin" "$S/env-foreign.bin" <<'EOF'
+python3 -I - "$S/env.bin" "$S/env-single.bin" "$S/env-badcrc.bin" "$S/env-foreign.bin" "$S/env-blank2.bin" "$S/env-nzbad2.bin" <<'EOF'
 import sys, zlib
 def copy(entries, size, pad=0xff, flags=None):
     hdr = 4 if flags is None else 5
@@ -383,10 +430,24 @@ foreign = bytearray(b"\xff" * 0x80000)
 foreign[0x7c000:0x7e000] = copy(V[:3], 0x2000, flags=1)
 foreign[0x7e000:0x80000] = copy([b"bootdelay=1", b"bootcmd=run yako_hook; run bootcmd_stm32mp", b"yako_hook=echo other"], 0x2000, flags=2)
 open(sys.argv[4], "wb").write(foreign)
+# the stock card's shape (dk-linux-baseline): copy 1 valid with flags 0x02,
+# copy 2 all zero (its CRC invalid); and copy 2 with one non-zero byte
+blank2 = bytearray(b"\xff" * 0x80000)
+blank2[0x7c000:0x7e000] = bytes(0x2000)
+blank2[0x7e000:0x80000] = copy(V, 0x2000, pad=0, flags=2)
+open(sys.argv[5], "wb").write(blank2)
+nz = bytearray(blank2)
+nz[0x7c100] = 1
+open(sys.argv[6], "wb").write(nz)
 EOF
 ENVT() { python3 -I "$HERE/uboot_env.py" --redundant --size 0x2000 --offset 0x7e000 --offset2 0x7c000 "$@"; }
 # vals IMAGE NAME...: the values, one per line ("-" when a name is not set)
 vals() { local img=$1 v; shift; for v in "$@"; do ENVT print "$img" -n "$v" 2>/dev/null || echo -; done; }
+# ENVTB, valsb: the same with the blank-copy opt-in the runner passes
+ENVTB() { ENVT --allow-blank-copy "$@"; }
+valsb() { local img=$1 v; shift; for v in "$@"; do ENVTB print "$img" -n "$v" 2>/dev/null || echo -; done; }
+# flags IMAGE OFFSET: the flag byte of the copy at OFFSET
+flags() { od -A n -t u1 -j $(($2 + 4)) -N 1 "$1" | tr -d ' '; }
 out=$("$B" env-edit hook "$S/env.bin" "$S/vars.bin" 8 2>&1)
 rc=$?
 check "hook (G4): rc 0, 'installed', bootcmd not hooked: the line a person types is named; the output checks (both CRCs), copy 2 written and active" \
@@ -451,6 +512,25 @@ rc=$?
 check "an offset that is not a sector multiple: rc 2 before any read" eval '[ "$rc" = 2 ] && grep -q "multiple of 512" <<<"$out"'
 out=$("$B" env-edit hook "$S/nonexistent.bin" "$S/x.bin" 2>&1)
 check "a missing image: rc 2" [ $? = 2 ]
+# the stock card's shape: copy 1 valid (flags 0x02), copy 2 all zero
+out=$("$B" env-edit hook "$S/env-blank2.bin" "$S/blank-hooked.bin" 8 2>&1)
+rc=$?
+check "blank copy 2 (the stock card): hook accepted, rc 0, 'installed'; copy 1 rewritten in place (flags 0x02), copy 2 still all zero, no byte outside copy 1 changed" \
+    eval '[ "$rc" = 0 ] && [ "${out%%;*}" = installed ] && [ "$(flags "$S/blank-hooked.bin" $((0x7e000)))" = 2 ] &&
+          cmp -s <(head -c $((0x7e000)) "$S/env-blank2.bin") <(head -c $((0x7e000)) "$S/blank-hooked.bin") &&
+          [ "$(valsb "$S/blank-hooked.bin" yako_addr bootcmd | paste -sd"|" -)" = "0xa0000000|run bootcmd_stm32mp" ] &&
+          ENVTB check "$S/blank-hooked.bin" | grep -q "^BLANK copy 2" && ! ENVT check "$S/blank-hooked.bin" >/dev/null 2>&1'
+ENVTB set "$S/blank-hooked.bin" "$S/blank-person.bin" "bootcmd=run yako_hook; run bootcmd_stm32mp" >/dev/null
+out=$("$B" env-edit arm "$S/blank-person.bin" "$S/blank-armed.bin" trial-1 /yakogl/once-trial-1.bin 2>&1)
+check "blank copy 2: arm writes yako_once into copy 1 (flags 0x02), copy 2 still blank" \
+    eval '[ "$out" = armed ] && [ "$(valsb "$S/blank-armed.bin" yako_once)" = trial-1 ] && [ "$(flags "$S/blank-armed.bin" $((0x7e000)))" = 2 ] &&
+          cmp -s <(head -c $((0x7e000)) "$S/env-blank2.bin") <(head -c $((0x7e000)) "$S/blank-armed.bin")'
+"$B" env-edit unhook "$S/blank-hooked.bin" "$S/blank-unhooked.bin" >/dev/null 2>&1
+same "blank copy 2: hook then unhook gives the stock image back byte for byte (copy 2 still blank)" "$S/env-blank2.bin" "$S/blank-unhooked.bin"
+out=$("$B" env-edit hook "$S/env-nzbad2.bin" "$S/x.bin" 8 2>&1)
+rc=$?
+check "copy 2 zero but for one byte (a bad CRC, not blank): rc 2, 'does not check', no output file" \
+    eval '[ "$rc" = 2 ] && grep -q "does not check" <<<"$out" && grep -q "BAD copy 2" <<<"$out" && [ ! -e "$S/x.bin" ]'
 
 echo "== 4. replays of synthetic consoles through the verdict (tally)"
 mkrun() { # mkrun DIR KEY=VALUE...
@@ -658,12 +738,12 @@ check "redaction: meta.txt untouched when it names nothing" grep -qx "meta=1" "$
 echo "== 6. the live paths against a fake board (a fake ssh, a fake console)"
 F="$S/fake"
 mkdir -p "$F/dev" "$F/boot/mmc0_extlinux" "$F/boot/mmc1_extlinux" "$F/proc" "$F/state" "$F/bin" "$S/fakebin" \
-    "$F/sys/block/mmcblk1/device" "$F/sys/block/mmcblk2/device"
-# the MMC core's word for each disk: the card is an SD card, mmcblk2 an eMMC
-# that is not numbered 0 (G1)
-echo SD > "$F/sys/block/mmcblk1/device/type"
-echo MMC > "$F/sys/block/mmcblk2/device/type"
-cp "$S/env.bin" "$F/dev/mmcblk1p7"
+    "$F/sys/block/mmcblk0/device" "$F/sys/block/mmcblk1/device"
+# the MMC core's word for each disk, as on the DK: the card mmcblk0 is an SD
+# card, mmcblk1 the eMMC (G1)
+echo SD > "$F/sys/block/mmcblk0/device/type"
+echo MMC > "$F/sys/block/mmcblk1/device/type"
+cp "$S/env.bin" "$F/dev/mmcblk0p7"
 # the stock boot files of the card (names as #1281 lists them; contents fake)
 printf 'stock Image.gz\n' > "$F/boot/Image.gz"
 printf 'stock boot.scr.uimg\n' > "$F/boot/boot.scr.uimg"
@@ -671,20 +751,44 @@ printf 'stock stm32mp257f-dk.dtb\n' > "$F/boot/stm32mp257f-dk.dtb"
 printf 'label stm32mp257f-dk\n  kernel /Image.gz\n' > "$F/boot/mmc0_extlinux/extlinux.conf"
 printf 'label stm32mp257f-dk\n  kernel /Image.gz\n' > "$F/boot/mmc1_extlinux/extlinux.conf"
 printf '100.00 300.00\n' > "$F/proc/uptime"
-printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
+printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
 printf '%s\n' "$CARD_TABLE" > "$F/state/lsblk"
 # the console as the layer and mp2_identify would print it (section 4's lines, no stamps)
 printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$PASS_END" | sed 's/^[0-9:]\{8\} //' > "$F/console.txt"
 manifest() { (cd "$F/boot" && find . -path ./yakogl -prune -o -type f -print0 | sort -z | xargs -0 sha256sum); }
 manifest > "$S/boot-before.txt"
-# the commands the fake ssh runs: fw_printenv is uboot_env.py on the
-# partition file; the reboot clears yako_once (U-Boot's hook: setenv, saveenv)
-# unless state/mode says otherwise, and starts a new boot (uptime 1 s) or,
-# in mode "die", never answers again; "noreboot" does nothing (the old boot
-# goes on answering), "hang" holds the ssh session 20 s and does nothing
-cat > "$F/bin/fw_printenv" <<EOF
-#!/bin/sh
-exec python3 -I "$HERE/uboot_env.py" --redundant --size 0x2000 --offset 0x7e000 --offset2 0x7c000 print "$F/dev/mmcblk1p7" "\$@"
+# the commands the fake ssh runs: fw_printenv (and fw_setenv, a symlink to
+# it) fail as ST's envtools 0.3.5 does without /etc/fw_env.config; the reboot
+# clears yako_once as U-Boot's hook does (setenv, saveenv: U-Boot writes the
+# copy it did not load, with its flags + 1, uboot_saveenv below) unless
+# state/mode says otherwise, and starts a new boot (uptime 1 s) or, in mode
+# "die", never answers again; "noreboot" does nothing (the old boot goes on
+# answering), "hang" holds the ssh session 20 s and does nothing
+printf '#!/bin/sh\necho "Cannot initialize environment" >&2\nexit 1\n' > "$F/bin/fw_printenv"
+ln -s fw_printenv "$F/bin/fw_setenv"
+cat > "$F/bin/uboot_saveenv" <<EOF
+#!/usr/bin/env python3
+# uboot_saveenv PARTITION NAME...: U-Boot's setenv NAME (unset) and saveenv:
+# the environment env_import_redund loads (one valid copy next to a blank
+# one, or the copy the flags pick), NAME removed, written to the OTHER copy
+# with the loaded copy's flags + 1 (env/mmc.c env_mmc_save)
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ue", "$HERE/uboot_env.py")
+ue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ue)
+class A:
+    size, offset, offset2, redundant, second, allow_blank_copy = 0x2000, 0x7e000, 0x7c000, True, None, True
+path = sys.argv[1]
+img = ue.Image(path, A)
+src = img.copies[img.active()]
+dst = img.copies[1 - img.active()]
+entries = ue.apply_unset(src.entries, [n.encode() for n in sys.argv[2:]])
+data = b"".join(e + b"\\0" for e in entries) + b"\\0"
+area = data + bytes(len(src.area) - len(data))
+new = ue.header(area, (src.flags + 1) & 0xff) + area
+buf = bytearray(open(path, "rb").read())
+buf[dst.offset:dst.offset + len(new)] = new
+open(path + ".new", "wb").write(buf)
 EOF
 cat > "$F/bin/findmnt" <<EOF
 #!/bin/sh
@@ -709,8 +813,8 @@ reboot)
     noreboot) ;;
     hang) sleep 20 ;;
     *)
-        python3 -I "$HERE/uboot_env.py" --redundant --size 0x2000 --offset 0x7e000 --offset2 0x7c000 unset "$F/dev/mmcblk1p7" "$F/dev/mmcblk1p7.new" yako_once >/dev/null &&
-            mv "$F/dev/mmcblk1p7.new" "$F/dev/mmcblk1p7"
+        python3 -I "$F/bin/uboot_saveenv" "$F/dev/mmcblk0p7" yako_once &&
+            mv "$F/dev/mmcblk0p7.new" "$F/dev/mmcblk0p7"
         printf '1.00 1.00\n' > "$F/proc/uptime" ;;
     esac ;;
 *) echo "fake systemctl: \$*" >&2; exit 1 ;;
@@ -730,11 +834,11 @@ printf '%s\n' "\$cmd" >> "\$F/ssh.log"
 printf '%s\n' "\$cmd" >> "\$F/ssh.all.log"
 printf '%s\n' "\${opts# }" >> "\$F/ssh.opts"
 [ -e "\$F/state/dead" ] && exit 255
-# state/fwfail: a read of one variable fails as an ssh that drops would
-[ -e "\$F/state/fwfail" ] && case "\$cmd" in *"fw_printenv -n"*) exit 255 ;; esac
+# state/ddfail: a read of the partition fails as an ssh that drops would
+[ -e "\$F/state/ddfail" ] && case "\$cmd" in *"dd if="*) exit 255 ;; esac
 # state/slowdd: a write of the partition takes 3 s (a signal arrives in it)
 [ -e "\$F/state/slowdd" ] && case "\$cmd" in *"dd of="*) sleep 3 ;; esac
-cmd=\$(printf '%s' "\$cmd" | sed -E -e "s#/boot(/|[ );']|\$)#\$F/boot\\1#g" -e "s#/dev/mmcblk1p7#\$F/dev/mmcblk1p7#g" \\
+cmd=\$(printf '%s' "\$cmd" | sed -E -e "s#/boot(/|[ );']|\$)#\$F/boot\\1#g" -e "s#/dev/(mmcblk[0-9]+p[0-9]+)#\$F/dev/\\1#g" \\
     -e "s#/proc/uptime#\$F/proc/uptime#g" -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/drop_caches#g" -e "s#conv=fsync#conv=fsync,notrunc#g")
 PATH="\$F/bin:\$PATH" exec sh -c "\$cmd"
 EOF
@@ -751,7 +855,7 @@ wait_for() { local i=0; while [ "$i" -lt $(($3 * 5)) ]; do grep -q "$2" "$1" 2>/
 # person_bootcmd VALUE: what a person does at U-Boot's prompt (setenv bootcmd; saveenv), never the runner
 person_bootcmd() { ENVT set "$PART" "$PART.p" "bootcmd=$1" >/dev/null && mv "$PART.p" "$PART"; }
 leaks_live() { leaks "$1" || grep -q "$F/console.txt" <<<"$1"; }
-PART="$F/dev/mmcblk1p7"
+PART="$F/dev/mmcblk0p7"
 
 out=$(live install 2>&1)
 rc=$?
@@ -781,7 +885,7 @@ check "live install after the person's edit: 'installed already, byte for byte; 
 out=$(live status 2>&1)
 rc=$?
 check "live status: rc 0, 'install: ok', the env and bootfs devices on the SD card, 'stock boot files: unchanged since install', nothing left" \
-    eval '[ "$rc" = 0 ] && grep -q "^install: ok" <<<"$out" && grep -q "^env partition: /dev/mmcblk1p7 .*bootfs: /dev/mmcblk1p8 (U-Boot part 8, card /dev/mmcblk1)" <<<"$out" &&
+    eval '[ "$rc" = 0 ] && grep -q "^install: ok" <<<"$out" && grep -q "^env partition: /dev/mmcblk0p7 .*bootfs: /dev/mmcblk0p8 (U-Boot part 8, card /dev/mmcblk0)" <<<"$out" &&
           grep -q "stock boot files: unchanged since install" <<<"$out" && grep -q "^left behind: nothing recorded" <<<"$out"'
 
 : > "$F/ssh.log"
@@ -799,10 +903,10 @@ check "live run: the record (meta.txt, console.txt, INDEX.txt), the console reda
     eval '[ -n "$rd" ] && [ -s "$rd/meta.txt" ] && [ -s "$rd/console.txt" ] && [ -s "$rd/INDEX.txt" ] && grep -q "^verdict: board-stm32mp2.sh stm32mp257f-dk trial rc=0 verdict=done" "$rd/INDEX.txt" &&
           grep -q "mp2_identify: PASS" "$rd/console.txt" && ! grep -rq "mp2board\|$F/console.txt" "$rd"'
 check "live run: the one-shot was armed with the staged file, cleared by the boot, the staged image removed, the hook still installed" \
-    eval 'grep -q "^token=trial-" "$rd/meta.txt" && grep -q "fw_printenv yako_once yako_file" "$F/ssh.log" && [ "$(vals "$PART" yako_once | head -1)" = - ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ] && [ "$(vals "$PART" bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && grep -q "^staged=.*read back equal" "$rd/meta.txt"'
-check "live run: one reboot, after the arm's write and its read-back (dd of=, sha256sum, fw_printenv yako_once yako_file)" \
-    eval '[ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && o=$(grep -nE "dd of=/dev/mmcblk1p7|dd if=/dev/mmcblk1p7 bs=64k status=none \| sha256sum|fw_printenv yako_once yako_file|systemctl reboot" "$F/ssh.log" | cut -d: -f1 | paste -sd" " -);
-          [ "$(wc -w <<<"$o")" = 4 ] && [ "$(tr " " "\n" <<<"$o" | sort -n | paste -sd" " -)" = "$o" ]'
+    eval 'grep -q "^token=trial-" "$rd/meta.txt" && grep -q "dd if=/dev/mmcblk0p7 bs=64k status=none$" "$F/ssh.log" && [ "$(vals "$PART" yako_once | head -1)" = - ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ] && [ "$(vals "$PART" bootcmd)" = "run yako_hook; run bootcmd_stm32mp" ] && grep -q "^staged=.*read back equal" "$rd/meta.txt"'
+check "live run: one reboot, after the arm's write (dd of=) and its read-back (dd if=, compared and decoded on the host)" \
+    eval '[ "$(grep -c "systemctl reboot" "$F/ssh.log")" = 1 ] && w=$(grep -n "dd of=/dev/mmcblk0p7" "$F/ssh.log" | tail -1 | cut -d: -f1); r=$(grep -n "systemctl reboot" "$F/ssh.log" | cut -d: -f1);
+          [ -n "$w" ] && [ "$w" -lt "$r" ] && [ "$(awk -v w="$w" -v r="$r" "NR > w && NR < r" "$F/ssh.log" | grep -c "^dd if=/dev/mmcblk0p7 bs=64k status=none$")" -ge 1 ]'
 check "live run: the wait is written in the record (wait_bound=2) and back_after is at least the 5 s poll" \
     eval 'grep -qx "wait_bound=2" "$rd/meta.txt" && [ "$(( $(sed -n "s/^t_back=//p" "$rd/meta.txt") - $(sed -n "s/^t_reboot=//p" "$rd/meta.txt") ))" -ge 5 ]'
 check "live run (G7): every ssh checks the host key and records none (StrictHostKeyChecking=yes, UpdateHostKeys=no), never StrictHostKeyChecking=no" \
@@ -931,12 +1035,12 @@ rc=$?
 check "a run with a cut-off copy (once-*.bin.part) on the card: rc 3, refused before any change, names disarm" \
     eval '[ "$rc" = 3 ] && grep -q "or a cut-off copy" <<<"$out" && grep -q "disarm" <<<"$out"'
 rm -f "$F/boot/yakogl/once-cut-0-1.bin.part"
-touch "$F/state/fwfail"
+touch "$F/state/ddfail"
 out=$(live disarm 2>&1)
 rc=$?
 check "disarm when the board's variable read fails: rc 5, 'not taken as unset', not 'disarmed'" \
     eval '[ "$rc" = 5 ] && grep -q "cannot read yako_once from the board .*not taken as unset" <<<"$out" && ! grep -q "disarmed:" <<<"$out"'
-rm -f "$F/state/fwfail"
+rm -f "$F/state/ddfail"
 # a TERM while an environment write is in flight: the write finishes (never
 # cut in half), then the script ends
 ENVT set "$PART" "$PART.a" yako_once=cut-1 yako_file=/yakogl/once-cut-1.bin >/dev/null && mv "$PART.a" "$PART"
@@ -976,26 +1080,23 @@ rc=$?
 check "live disarm (after the board is back by hand): rc 0, yako_once and yako_file gone, the staged image removed, the state file cleared" \
     eval '[ "$rc" = 0 ] && grep -q "disarmed: no one-shot pending" <<<"$out" && [ "$(vals "$PART" yako_once yako_file | paste -sd"|" -)" = "-|-" ] && [ -z "$(ls "$F"/boot/yakogl/once-*.bin 2>/dev/null)" ] && [ ! -e "$LEFTF" ]'
 
-printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
+# the eMMC as the DK has it: mmcblk1, sysfs type MMC, the same labels
+printf '/dev/mmcblk1p6 ext4\n' > "$F/state/findmnt"
+printf '%s\n' "$EMMC_TABLE" > "$F/state/lsblk"
+cp "$PART" "$F/dev/mmcblk1p5"
+cp "$PART" "$S/emmc-before.bin"
 : > "$F/ssh.log"
 out=$(live run "$S/img/mp2.bin" "$S/live-logs" emmc 2>&1)
 rc=$?
-check "live run with /boot on the eMMC: rc 3, REFUSED naming mmcblk0, no dd of=, no staging, no reboot (the record holds no t_reboot)" \
-    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /boot is on /dev/mmcblk0p8 of the eMMC (mmcblk0)" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log" && ! grep -q "cat > /boot" "$F/ssh.log" &&
+check "live run with /boot on the eMMC (mmcblk1, type MMC, the card's labels): rc 3, REFUSED 'not SD', no dd of=, no staging, no reboot (the record holds no t_reboot)" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /boot is on /dev/mmcblk1, whose /sys/block/mmcblk1/device/type is .MMC., not SD" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log" && ! grep -q "cat > /boot" "$F/ssh.log" &&
           ! grep -q "systemctl reboot" "$F/ssh.log" && ! grep -q "^t_reboot=" "$S"/live-logs/*-emmc-*/meta.txt'
 out=$(live install 2>&1)
 rc=$?
-check "live install with /boot on the eMMC: rc 3, no write" eval '[ "$rc" = 3 ] && ! grep -q "dd of=" "$F/ssh.log"'
-printf '/dev/mmcblk2p8 ext4\n' > "$F/state/findmnt"
-sed 's/mmcblk1/mmcblk2/' <<<"$CARD_TABLE" > "$F/state/lsblk"
-out=$(live run "$S/img/mp2.bin" "$S/live-logs" emmc2 2>&1)
-rc=$?
-check "live run with /boot on an eMMC numbered mmcblk2 (sysfs type MMC, the card's labels) (G1): rc 3, REFUSED 'not SD', no write, no reboot" \
-    eval '[ "$rc" = 3 ] && grep -q "REFUSED: /boot is on /dev/mmcblk2, whose /sys/block/mmcblk2/device/type is .MMC., not SD" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log" && ! grep -q "systemctl reboot" "$F/ssh.log"'
-out=$(live install 2>&1)
-rc=$?
-check "live install with /boot on an eMMC numbered mmcblk2 (G1): rc 3, no write" eval '[ "$rc" = 3 ] && grep -q "not SD" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log"'
-printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
+check "live install with /boot on the eMMC (G1): rc 3, 'not SD', no write, the eMMC's u-boot-env byte for byte" \
+    eval '[ "$rc" = 3 ] && grep -q "not SD" <<<"$out" && ! grep -q "dd of=" "$F/ssh.log" && cmp -s "$S/emmc-before.bin" "$F/dev/mmcblk1p5"'
+rm -f "$F/dev/mmcblk1p5"
+printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
 grep -v u-boot-env <<<"$CARD_TABLE" > "$F/state/lsblk"
 out=$(live run "$S/img/mp2.bin" "$S/live-logs" nolabel 2>&1)
 rc=$?
@@ -1023,13 +1124,50 @@ check "live uninstall: the environment's variables are the input's (no yako_*, b
     eval '[ -z "$(ENVT diff "$S/env.bin" "$PART")" ] && ENVT check "$PART" >/dev/null'
 manifest > "$S/boot-after.txt"
 same "live uninstall: the stock boot files are byte for byte what they were before install (boot.scr.uimg, the extlinux files, Image.gz, the dtb)" "$S/boot-before.txt" "$S/boot-after.txt"
-check "live: the whole command log never names mmcblk0, a module, tailscale, sshd, a partition tool or fw_setenv" \
-    eval '[ -s "$F/ssh.all.log" ] && ! grep -qE "mmcblk0|modprobe|insmod|rmmod|tailscale|sshd|sfdisk|fdisk|parted|mkfs|fw_setenv" "$F/ssh.all.log"'
+check "live: the whole command log never names the eMMC (mmcblk1), by-partlabel, fw_printenv, fw_setenv, a module, tailscale, sshd or a partition tool" \
+    eval '[ -s "$F/ssh.all.log" ] && grep -q "dd if=/dev/mmcblk0p7" "$F/ssh.all.log" && ! grep -qE "mmcblk1|by-partlabel|fw_printenv|fw_setenv|modprobe|insmod|rmmod|tailscale|sshd|sfdisk|fdisk|parted|mkfs" "$F/ssh.all.log"'
 check "live: every dd that writes names the u-boot-env partition and the copies' sectors alone (seek=992), every rm is under /boot/yakogl" \
-    eval '[ "$(grep -c "dd of=" "$F/ssh.all.log")" -ge 4 ] && ! grep "dd of=" "$F/ssh.all.log" | grep -vq "dd of=/dev/mmcblk1p7 bs=512 seek=992 conv=fsync status=none" &&
+    eval '[ "$(grep -c "dd of=" "$F/ssh.all.log")" -ge 4 ] && ! grep "dd of=" "$F/ssh.all.log" | grep -vq "dd of=/dev/mmcblk0p7 bs=512 seek=992 conv=fsync status=none" &&
           ! grep -E "(^| )rm " "$F/ssh.all.log" | grep -vqE "rm -(f|rf) /boot/yakogl"'
 check "live: nothing of the fake board or its host leaked into the host's record directory names or the outputs" \
     eval '! grep -rq "mp2board" "$S/live-logs" && ! ls "$S/live-logs" | grep -q "mp2board"'
+
+# the stock card's environment (dk-linux-baseline): copy 1 valid with flags
+# 0x02, copy 2 at 0x7c000 all zero. install and the one-shot work on it; the
+# edits land in copy 1, U-Boot's saveenv (the hook's) then writes copy 2
+cp "$S/env-blank2.bin" "$PART"
+out=$(live install 2>&1)
+rc=$?
+check "live install on the stock card (copy 2 blank): rc 7 (bootcmd left to a person), the hook's variables in copy 1 (flags 0x02), copy 2 still all zero" \
+    eval '[ "$rc" = 7 ] && [ "$(valsb "$PART" yako_addr bootcmd | paste -sd"|" -)" = "0xa0000000|run bootcmd_stm32mp" ] && [ "$(flags "$PART" $((0x7e000)))" = 2 ] &&
+          cmp -s <(head -c $((0x7e000)) "$S/env-blank2.bin") <(head -c $((0x7e000)) "$PART") && ! grep -q "does not check" <<<"$out"'
+ENVTB set "$PART" "$PART.p" "bootcmd=run yako_hook; run bootcmd_stm32mp" >/dev/null && mv "$PART.p" "$PART"
+: > "$F/ssh.log"
+out=$(live run "$S/img/mp2.bin" "$S/live-logs" blank 2>&1)
+rc=$?
+check "live run on the stock card: rc 0, done; U-Boot's saveenv wrote copy 2 (flags 0x03), both copies valid now and copy 2 active, the one-shot gone" \
+    eval '[ "$rc" = 0 ] && grep -q " verdict=done " <<<"$out" && [ "$(flags "$PART" $((0x7c000)))" = 3 ] && ENVT check "$PART" | grep -q "^active: copy 2" &&
+          [ "$(vals "$PART" yako_once bootcmd | paste -sd"|" -)" = "-|run yako_hook; run bootcmd_stm32mp" ]'
+out=$(live run "$S/img/mp2.bin" "$S/live-logs" blank2 2>&1)
+rc=$?
+check "the next run after U-Boot's first saveenv: rc 0; its arm wrote copy 1 with flags 0x04 (the inactive one), U-Boot's saveenv copy 2 with 0x05" \
+    eval '[ "$rc" = 0 ] && grep -q " verdict=done " <<<"$out" && [ "$(flags "$PART" $((0x7e000)))" = 4 ] && [ "$(flags "$PART" $((0x7c000)))" = 5 ] && [ "$(vals "$PART" yako_once)" = - ]'
+# an SD card numbered mmcblk1 (sysfs type SD): accepted, the type decides
+# (its commands go to their own log: the log above never names mmcblk1)
+cp "$F/ssh.all.log" "$S/ssh.all.keep"
+echo SD > "$F/sys/block/mmcblk1/device/type"
+printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
+sed s/mmcblk0/mmcblk1/ <<<"$CARD_TABLE" > "$F/state/lsblk"
+cp "$PART" "$F/dev/mmcblk1p7"
+out=$(live status 2>&1)
+rc=$?
+check "live status with the SD card numbered mmcblk1 (type SD): rc 0, its u-boot-env and bootfs read, 'install: ok'" \
+    eval '[ "$rc" = 0 ] && grep -q "^install: ok" <<<"$out" && grep -q "^env partition: /dev/mmcblk1p7 .*bootfs: /dev/mmcblk1p8 (U-Boot part 8, card /dev/mmcblk1)" <<<"$out"'
+echo MMC > "$F/sys/block/mmcblk1/device/type"
+printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
+printf '%s\n' "$CARD_TABLE" > "$F/state/lsblk"
+rm -f "$F/dev/mmcblk1p7"
+cp "$S/ssh.all.keep" "$F/ssh.all.log"
 
 echo "== 10. the board's sessions (common_prechecks)"
 # A session is ours when it comes from one of this host's addresses or from

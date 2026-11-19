@@ -18,11 +18,16 @@
     --second FILE   copy 2 is in FILE at --offset2 (default 0; implies
                     --redundant); set and unset then write it to
                     --second-out, diff reads IMAGE_B's from --second-b
+    --allow-blank-copy  opt-in, default off (a redundant layout only): one
+                    copy whose bytes are all zero next to a valid one is
+                    accepted, not refused (see "A blank copy" below)
   N is decimal or 0x hex.
 
-Why: the STM32MP257F-DK's ST Linux has fw_printenv but no fw_setenv and no
-/etc/fw_env.config (#1281), so the board runner cannot arm a one-shot the way
-tools/board.sh's uboot-mmc boards do. It reads the `u-boot-env` partition with
+Why: the STM32MP257F-DK's ST Linux has no /etc/fw_env.config, so its
+fw_printenv (envtools 0.3.5) stops with "Cannot initialize environment", and
+its fw_setenv is a symlink to the same program (#1281); the board runner
+cannot arm a one-shot the way tools/board.sh's uboot-mmc boards do and never
+calls either. It reads the `u-boot-env` partition with
 dd instead, edits it with this tool on the host and writes it back. The
 format is U-Boot's (include/env.h, env/common.c, tools/env/fw_env.c):
 
@@ -52,6 +57,19 @@ is empty (U-Boot reads "name=" as a deletion: use unset), a layout that does
 not fit the file. print of a name that is not set exits 1, as fw_printenv
 does; diff exits 1 when the images differ. check prints each copy's state
 and exits 0 only when every copy's CRC is valid.
+
+A blank copy (--allow-blank-copy, off unless asked for): the DK's stock
+u-boot-env partition has a valid copy 1 and a copy 2 of all zero bytes, as
+the image was flashed. U-Boot's env_import_redund loads the one valid copy
+in that case, and its next saveenv writes the other one (flags + 1). With the
+option exactly that shape is accepted: one copy valid, the other zero in
+every byte of the copy (header included). The valid copy is the active one;
+check prints it as "BLANK" and exits 0; set and unset rewrite the valid copy
+in place with its flags unchanged and leave the blank copy blank, so U-Boot
+still selects the copy that was written. Any other bad copy (a non-zero byte
+anywhere in it, or both copies bad) is refused as before. Once U-Boot has
+saved, both copies are valid and the flags pick the active one, as above.
+Without the option a blank copy is a bad CRC like any other.
 """
 import argparse
 import os
@@ -229,6 +247,7 @@ class Image:
             if hi < lo + size:
                 raise Refused("the copies at 0x%x and 0x%x overlap (size 0x%x)" % (lo, hi, size))
         self.size = size
+        self.blank = None   # the index of an accepted all-zero copy (--allow-blank-copy)
         self.copies = []
         for i, (p, off) in enumerate(places):
             buf = self.files[p]
@@ -237,9 +256,15 @@ class Image:
                               % (i + 1, off, size, p, len(buf)))
             self.copies.append(Copy("copy %d" % (i + 1), p, off, buf[off:off + size],
                                     self.redundant))
+        if getattr(a, "allow_blank_copy", False) and self.redundant:
+            for i, c in enumerate(self.copies):
+                other = self.copies[1 - i]
+                if not any(c.raw) and other.problem() is None:
+                    self.blank = i
 
     def problems(self):
-        return [m for m in (c.problem() for c in self.copies) if m]
+        return [c.problem() for i, c in enumerate(self.copies)
+                if i != self.blank and c.problem()]
 
     def active(self):
         bad = self.problems()
@@ -247,6 +272,8 @@ class Image:
             raise Refused(bad[0])
         if not self.redundant:
             return 0
+        if self.blank is not None:
+            return 1 - self.blank
         return active_index(*self.copies)
 
 
@@ -273,7 +300,11 @@ def edit(img, entries_of, outs):
     src = img.copies[act]
     entries = entries_of(src.entries)
     area = rewrite(src, entries)
-    if img.redundant:
+    if img.blank is not None:
+        # the other copy is blank: U-Boot loads this one alone, so it is
+        # rewritten in place with its own flags (still the only valid copy)
+        dst, flags = src, src.flags
+    elif img.redundant:
         dst = img.copies[1 - act]
         flags = (src.flags + 1) & 0xff
     else:
@@ -283,7 +314,11 @@ def edit(img, entries_of, outs):
     files[dst.path][dst.offset:dst.offset + len(new)] = new
     out_path = outs[dst.path]
     r = changed_range(dst.raw, new)
-    if img.redundant:
+    if img.blank is not None:
+        msg = ("%s: wrote %s in place with flags 0x%02x (%s is blank, all zero, left "
+               "alone; %s stays the only valid copy)" % (out_path, dst.where(out_path), flags,
+                                                         img.copies[img.blank].label, dst.label))
+    elif img.redundant:
         msg = ("%s: wrote %s with flags 0x%02x (%s, flags 0x%02x, was active and is "
                "left alone; %s is active now)" % (out_path, dst.where(out_path), flags,
                                                   src.label, src.flags, dst.label))
@@ -336,6 +371,7 @@ def layout_args(p, suppress):
     p.add_argument("--offset2", type=number, default=d)
     p.add_argument("--redundant", action="store_true", default=d if suppress else False)
     p.add_argument("--second", default=d)
+    p.add_argument("--allow-blank-copy", action="store_true", default=d if suppress else False)
 
 
 def main(argv=None):
@@ -370,6 +406,8 @@ def main(argv=None):
         return 2
     if a.second and a.cmd == "diff" and not a.second_b:
         ap.error("diff with --second needs --second-b for IMAGE_B")
+    if a.allow_blank_copy and not (a.redundant or a.offset2 is not None or a.second):
+        ap.error("--allow-blank-copy needs a redundant layout")
     if a.cmd in ("set", "unset") and bool(a.second) != bool(a.second_out):
         ap.error("--second and --second-out go together")
     raw = lambda xs: [os.fsencode(x) for x in xs]
@@ -396,9 +434,12 @@ def main(argv=None):
         if a.cmd == "check":
             img = Image(a.image, a, a.second)
             bad = img.problems()
-            for c in img.copies:
+            for i, c in enumerate(img.copies):
                 m = c.problem()
-                if m:
+                if i == img.blank:
+                    print("BLANK %s: all zero, accepted with --allow-blank-copy: U-Boot "
+                          "loads the other copy, its next saveenv writes this one" % c.where())
+                elif m:
                     print("BAD %s" % m)
                 else:
                     print("ok  %s: CRC 0x%08x%s, %d variables, %d of %d data bytes used"

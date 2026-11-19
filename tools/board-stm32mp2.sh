@@ -19,13 +19,22 @@
 #   tools/board-stm32mp2.sh selftest          (tools/board_stm32mp2_selftest.sh, no board)
 #
 # Why not tools/board.sh's uboot-mmc backend: that backend arms the one-shot
-# with fw_setenv on the board, and this board's Linux has fw_printenv but no
-# fw_setenv and no /etc/fw_env.config (#1281). The environment is edited on
-# the host instead: the runner reads the card's `u-boot-env` partition with
-# dd, edits the image byte for byte with tools/uboot_env.py and writes it
-# back with dd, then proves the write with the board's own fw_printenv (it
-# reads the partition with U-Boot's compiled-in layout: if it does not show
-# the edit, U-Boot would not see it either, and the backup goes back at once).
+# with fw_setenv on the board, and this board's Linux cannot run the envtools:
+# ST's envtools 0.3.5 has no /etc/fw_env.config, so a bare fw_printenv stops
+# with "Cannot initialize environment"; a config handed over a file
+# descriptor is rejected, and writing /etc would be a write to the rootfs
+# (dk-linux-baseline, 2026-11-19; #1281). /usr/bin/fw_setenv exists, as a
+# symlink to fw_printenv; this runner never calls either. The environment is
+# edited on the host instead: the runner reads the card's `u-boot-env`
+# partition with dd, edits the image byte for byte with tools/uboot_env.py and
+# writes it back with dd. The proof of a write needs no write either: the
+# partition is read back with dd over ssh, compared byte for byte on the host
+# with the image just written, and decoded there by tools/uboot_env.py, whose
+# active copy must show the edit; on any difference the pristine image goes
+# back at once. Every later read of a variable (installed, status, the
+# one-shot's checks) is the same dd and decode, never a tool on the board.
+# (The proof no longer reads with U-Boot's compiled-in layout as an envtools
+# config would: the layout is the one board-read found, below.)
 #
 # The U-Boot side is the standalone-boot design (docs/standalone-boot.md): a
 # hook in front of the saved bootcmd, a one-shot variable U-Boot deletes and
@@ -63,7 +72,21 @@
 # u-boot-env partition that is 0x7e000 and 0x7c000, and 0x7e000 is where
 # board-read found the CRC, flag byte and strings (the note, section 1).
 # MP2_ENV_OFFSET, MP2_ENV_OFFSET2 and MP2_ENV_SIZE override; both copies'
-# CRCs must check before any write, else the runner refuses.
+# CRCs must check before any write, else the runner refuses, with exactly one
+# exception (uboot_env.py --allow-blank-copy, which env_tool passes): one copy
+# valid and the other entirely zero bytes. That is the stock card as ST's
+# image flashed it (dk-linux-baseline: copy 1 at 0x7e000 valid, flags 0x02,
+# 73 variables; copy 2 at 0x7c000 all zero, so its CRC is invalid). U-Boot's
+# env/mmc.c loads the one valid copy then, and its next saveenv writes the
+# other. The runner's edits rewrite the valid copy in place with its flags
+# unchanged and leave the blank one blank, so U-Boot still selects the copy
+# that was written. After U-Boot's first saveenv (the hook's own, when it
+# clears yako_once) both copies are valid, copy 2 with flags 0x03: from then
+# on the flags pick the active copy and an edit writes the other one with
+# flags + 1, as U-Boot's saveenv does (uboot_env.py's ordinary rule; the
+# opt-in has nothing left to accept). A copy with a bad CRC and any non-zero
+# byte, or two bad copies, is refused as before. The pristine image and the
+# byte-for-byte undo are the same in both states.
 #
 # "install" prints the exact undo before it changes anything, keeps the
 # pristine environment image on the host (MP2_BACKUP_DIR, default
@@ -95,13 +118,17 @@
 # What the runner may write, enforced before every write (dev_guard): the
 # card's u-boot-env partition (the two copies' bytes, nothing else of it, and
 # of the variables only its own yako_*) and files under /boot/yakogl on the
-# card's bootfs. The card is the disk /boot is mounted from, and it must say
-# it is an SD card (/sys/block/<disk>/device/type "SD"): an eMMC says "MMC"
-# whatever its number. It refuses any device of mmcblk0 as well, any device
-# that is not a partition of that card, and any partition labelled fsbla1,
-# fsbla2, metadata1, metadata2, fip-a, fip-b, vendorfs, rootfs or userfs, and
-# the partition it writes must carry the label it expects (u-boot-env,
-# bootfs). It never repartitions, loads or unloads a module, or touches
+# card's bootfs. A write is refused unless all of these hold: the target is a
+# partition (never a whole-disk node) of the disk /boot is mounted from; that
+# disk's /sys/block/<disk>/device/type is "SD" (an eMMC says "MMC"); the
+# partition's PARTLABEL, read from that disk alone, is the one expected
+# (u-boot-env, bootfs); and it is none of fsbla1, fsbla2, metadata1,
+# metadata2, fip-a, fip-b, vendorfs, rootfs or userfs. The eMMC is known by
+# its type, never by its number: on the DK the microSD is mmcblk0 (type SD,
+# /boot = mmcblk0p8, u-boot-env = mmcblk0p7, 512 KiB) and the eMMC is mmcblk1
+# (type MMC, not booted, the same labels: its u-boot-env is mmcblk1p5,
+# 1 MiB). Nothing is resolved through /dev/disk/by-partlabel (on the DK it
+# names the eMMC's partitions); a /dev/disk/ path is refused. It never repartitions, loads or unloads a module, or touches
 # tailscale or sshd: every command it sends is in this file, and the
 # self-test's fake board logs them. ssh checks the board's host key and
 # never records one (StrictHostKeyChecking=yes, UpdateHostKeys=no): the key
@@ -124,7 +151,7 @@
 #      by sha256 after dropping the page cache;
 #   4. starts the console capture;
 #   5. arms: yako_once and yako_file in one environment write, read back with
-#      fw_printenv; from here any exit disarms (the pre-arm image written
+#      dd and decoded on the host; from here any exit disarms (the pre-arm image written
 #      back) until the board is seen to leave its Linux;
 #   6. reboots; waits for a NEW boot to answer ssh (uptime shorter than the
 #      time since the reboot), <= RUN_BOUND + RETURN_BOUND s (defaults 120
@@ -256,8 +283,7 @@ BOOT_LABEL=bootfs
 # never written, whatever the arguments: the boot chain's partitions and the
 # file systems of ST's image (the card's layout, #1281), and the eMMC as a whole
 NEVER_LABELS="fsbla1 fsbla2 metadata1 metadata2 fip-a fip-b vendorfs rootfs userfs"
-EMMC_RE='^/dev/mmcblk0(p[0-9]+)?$'
-PART_RE='^/dev/mmcblk[^/ ]+p[0-9]+$'   # a partition of an mmcblk device (the dry run's is mmcblkD)
+PART_RE='^/dev/mmcblk[0-9]+p[0-9]+$'   # a partition node of an mmcblk device (not a whole disk)
 ENV_OFF=${MP2_ENV_OFFSET:-0x7e000}
 ENV_OFF2=${MP2_ENV_OFFSET2:-0x7c000}
 ENV_SIZE=${MP2_ENV_SIZE:-0x2000}
@@ -280,8 +306,8 @@ STAGE_TIMEOUT=900                 # the image's copy to the card
 # the wait (with a hold) and 300 s for the checks around them
 HOLD_MAX=${HOLD_MAX:-$((WAIT_BOUND + STAGE_TIMEOUT + 300))}
 
-# The U-Boot side, exactly as installed (fw_printenv shows them byte for
-# byte; U-Boot's shell expands ${...} when the variable runs).
+# The U-Boot side, exactly as installed (uboot_env.py print shows them byte
+# for byte; U-Boot's shell expands ${...} when the variable runs).
 YAKO_HOOK='if test -n "${yako_once}"; then echo yakogl-mp2: once=${yako_once}; setenv yako_once; if saveenv; then echo yakogl-mp2: cleared; run yako_mmc; else echo yakogl-mp2: saveenv failed, booting Linux; fi; fi'
 YAKO_MMC='if ext4load mmc ${boot_instance}:${yako_part} ${yako_addr} ${yako_file}; then echo yakogl-mp2: go ${yako_addr}; dcache off; icache off; go ${yako_addr}; fi; echo yakogl-mp2: mmc load failed, booting Linux'
 HOOK_PREFIX='run yako_hook; '
@@ -386,7 +412,7 @@ env_tool() {
     if [ "$ENV_OFF2" = none ]; then
         python3 -I "$HERE/uboot_env.py" --size "$ENV_SIZE" --offset "$ENV_OFF" "$@"
     else
-        python3 -I "$HERE/uboot_env.py" --redundant --size "$ENV_SIZE" --offset "$ENV_OFF" --offset2 "$ENV_OFF2" "$@"
+        python3 -I "$HERE/uboot_env.py" --redundant --allow-blank-copy --size "$ENV_SIZE" --offset "$ENV_OFF" --offset2 "$ENV_OFF2" "$@"
     fi
 }
 # the byte range of the partition the copies occupy: ENV_LO..ENV_HI (dd writes only it)
@@ -468,20 +494,27 @@ env_disarm() { env_tool unset "$1" "$2" yako_once yako_file >/dev/null || die "u
 # where_env: ENV_DEV (the u-boot-env partition of the card Linux booted from)
 # and BOOT_DEV, BOOT_PART (the bootfs partition and its number), from the
 # mount of /boot. The eMMC carries the same partition labels (#1281), so the
-# label is looked up on the booted card only, never system-wide.
+# label is looked up on the booted card only, never system-wide and never
+# through /dev/disk/by-partlabel (on the DK that names the eMMC's partitions).
 PART_TABLE=   # "PATH PARTLABEL" lines of the booted card (lsblk), for dev_guard
-CARD_DISK=    # the booted card (/dev/mmcblkN), an SD card by its sysfs type
-# dev_guard DEV LABEL: DEV may be written only if it is not the eMMC, is a
-# partition of CARD_DISK, is not one of NEVER_LABELS, and carries LABEL in
-# PART_TABLE. Called where a device is chosen and again in front of every dd
-# that writes one; it is pure (the table, the card and the patterns), so the
-# self-test runs it on its own.
+CARD_DISK=    # the disk /boot is mounted from (/dev/mmcblkN)
+CARD_TYPE=    # its /sys/block/<disk>/device/type, which must be SD
+# dev_guard DEV LABEL: DEV may be written only if it is a partition node of
+# CARD_DISK, CARD_TYPE is SD, DEV is not one of NEVER_LABELS, and it carries
+# LABEL in PART_TABLE; a /dev/disk/ link and a whole disk are refused. Called
+# where a device is chosen and again in front of every dd that writes one; it
+# is pure (the table, the card, its type and the patterns), so the self-test
+# runs it on its own.
 dev_guard() {
     local dev=$1 want=$2 label l
-    [[ $dev =~ $EMMC_RE ]] && die "REFUSED: $dev is the eMMC (mmcblk0): never written, its partitions carry the card's labels (#1281)"
+    case "$dev" in /dev/disk/*)
+        die "REFUSED: $dev is a /dev/disk/ link: this runner names a partition of the card /boot is on, never by-partlabel (on the DK it names the eMMC's partitions, #1281)" ;;
+    esac
     [[ $dev =~ $PART_RE ]] || die "REFUSED: $dev is not a partition of an mmcblk device"
     { [ -n "$CARD_DISK" ] && [ "${dev%p*}" = "$CARD_DISK" ]; } ||
         die "REFUSED: $dev is not a partition of the SD card /boot is on (${CARD_DISK:-none found})"
+    [ "$CARD_TYPE" = SD ] ||
+        die "REFUSED: $CARD_DISK, the disk /boot is on, has device type '${CARD_TYPE:-unread}', not SD: this runner writes the microSD the board booted from, never the eMMC"
     label=$(awk -v d="$dev" '$1 == d { print $2 }' <<<"$PART_TABLE" | head -1)
     for l in $NEVER_LABELS; do
         [ "$label" != "$l" ] || die "REFUSED: $dev is labelled $label: never written"
@@ -491,17 +524,18 @@ dev_guard() {
 where_env() {
     local m disk dtype
     bget m 'set -- $(findmnt -n -v -o SOURCE,FSTYPE -T /boot); d=$1; p=${d%p*}; echo "$d $2 $p $(cat /sys/block/${p##*/}/device/type 2>/dev/null)"; lsblk -rno PATH,PARTLABEL "$p"' \
-        $'/dev/mmcblkDp8 ext4 /dev/mmcblkD SD\n/dev/mmcblkD \n/dev/mmcblkDp7 u-boot-env\n/dev/mmcblkDp8 bootfs' ||
+        $'/dev/mmcblk0p8 ext4 /dev/mmcblk0 SD\n/dev/mmcblk0 \n/dev/mmcblk0p7 u-boot-env\n/dev/mmcblk0p8 bootfs' ||
         die "cannot read the mount of /boot and the card's partitions"
     read -r BOOT_DEV fstype disk dtype <<<"$(head -1 <<<"$m")"
     PART_TABLE=$(tail -n +2 <<<"$m")
     [ "$fstype" = ext4 ] || die "/boot is '$fstype' on $BOOT_DEV, not ext4 (U-Boot's ext4load reads bootfs)"
-    [[ $disk =~ $EMMC_RE ]] && die "REFUSED: /boot is on $BOOT_DEV of the eMMC (mmcblk0): this runner writes the microSD the board booted from, never the eMMC"
-    # the number alone does not name the eMMC (probe order can change it):
-    # the MMC core's own word does, "SD" for a card, "MMC" for an eMMC
+    # the number does not name the eMMC (on the DK the card is mmcblk0 and
+    # the eMMC mmcblk1; probe order can change that): the MMC core's own word
+    # does, "SD" for a card, "MMC" for an eMMC
     [ "$dtype" = SD ] ||
         die "REFUSED: /boot is on $disk, whose /sys/block/${disk##*/}/device/type is '${dtype:-unreadable}', not SD: this runner writes the microSD the board booted from, never the eMMC"
     CARD_DISK=$disk
+    CARD_TYPE=$dtype
     [[ $BOOT_DEV =~ p([0-9]+)$ ]] || die "/boot's source '$BOOT_DEV' is not a partition"
     BOOT_PART=${BASH_REMATCH[1]}
     dev_guard "$BOOT_DEV" "$BOOT_LABEL"
@@ -511,7 +545,14 @@ where_env() {
     [ "${ENV_DEV%p*}" = "${BOOT_DEV%p*}" ] || die "REFUSED: $ENV_DEV is not on $disk, the card /boot is on"
     dev_guard "$ENV_DEV" "$ENV_LABEL"
 }
+# env_pull FILE: the whole partition into FILE on the host (dd over ssh; the
+# board's envtools cannot start, see the header), at least ENV_HI bytes
+env_pull() {
+    mp2_ssh 120 "${SU}dd if=$ENV_DEV bs=64k status=none" > "$1" 2> "$TMP/env.pull.err" || return 1
+    [ "$(stat -c %s "$1")" -ge "$ENV_HI" ]
+}
 # env_read FILE: the whole partition into FILE (the host), both copies checked
+# (or one valid and one blank, the stock card's shape)
 env_read() {
     local sz
     if [ "$DRY" = 1 ]; then
@@ -525,37 +566,62 @@ env_read() {
     env_tool check "$1" > "$TMP/env.check" 2>&1 ||
         die "the environment at $ENV_OFF/$ENV_OFF2 (size $ENV_SIZE) of $ENV_DEV does not check: $(tr '\n' ';' < "$TMP/env.check")"
 }
+# env_board_vars VAR "NAMES" [DRY-VALUE]: VAR gets the NAME=VALUE lines of
+# those of NAMES that are set, in the environment as U-Boot would load it
+# from the partition now: read with dd over ssh, decoded on the host by
+# uboot_env.py (the active copy). Returns 1 when the read or the decode fails
+# (never taken as "not set"). In --dry-run VAR gets DRY-VALUE.
+env_board_vars() {
+    local __v=$1 __n=$2 __r=0
+    if [ "$DRY" = 1 ]; then
+        echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host, decoded there: uboot_env.py print $__n"
+        printf -v "$__v" '%s' "${3:-}"
+        return 0
+    fi
+    env_pull "$TMP/env.now" || return 1
+    # shellcheck disable=SC2086  # the names, one per word
+    env_tool print "$TMP/env.now" $__n > "$TMP/env.vars" 2>/dev/null || __r=$?
+    [ "$__r" -le 1 ] || return 1   # 1: a name is not set; 2: refused (the copies do not check)
+    printf -v "$__v" '%s' "$(cat "$TMP/env.vars")"
+}
 # env_push FILE: the copies' range of FILE onto the partition (every write of
 # it goes through here, run by fgw)
 env_push() {
     tail -c +$((ENV_LO + 1)) "$1" | head -c $((ENV_HI - ENV_LO)) |
         timeout 120 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync status=none"
 }
-# env_write FILE WHAT: the copies' range of FILE onto the partition, read back
-# equal, then WHAT's variables shown by the board's fw_printenv (NAME=VALUE
-# lines in $TMP/expect); on any mismatch the pristine image goes back.
+# env_write FILE WHAT: the copies' range of FILE onto the partition, the
+# partition read back with dd and equal to FILE byte for byte on the host,
+# then WHAT's variables (NAME=VALUE lines in $TMP/expect) shown by
+# uboot_env.py's decode of what was read back; on any mismatch the pristine
+# image goes back at once.
 env_write() {
-    local file=$1 what=$2 got want
+    local file=$1 what=$2 got want names
+    names=$(sed 's/=.*//' "$TMP/expect" | paste -sd' ' -)
     dev_guard "$ENV_DEV" "$ENV_LABEL"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ tail -c +$((ENV_LO + 1)) $file | head -c $((ENV_HI - ENV_LO)) | ssh BOARD '${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync status=none'"
-        echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none | sha256sum   # must equal the host image"
-        echo "DRY board\$ fw_printenv $(sed 's/=.*//' "$TMP/expect" | paste -sd' ' -)   # must show the edit ($what)"
+        echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host <env.back>: must equal the host image byte for byte"
+        echo "DRY host\$ python3 tools/uboot_env.py ... print <env.back> $names   # must show the edit ($what)"
         return 0
     fi
     ENV_PUSHING=1
     fgw env_push "$file" ||
         { ENV_PUSHING=0; env_restore; die "writing $ENV_DEV failed; the pristine image was written back" 5; }
     ENV_PUSHING=0
-    bget got "${SU}dd if=$ENV_DEV bs=64k status=none | sha256sum" || got=
-    got=${got%% *}
-    want=$(sha256sum "$file" | cut -d' ' -f1)
-    [ "$got" = "$want" ] || { env_restore; die "$ENV_DEV reads back as '$got', not $want; the pristine image was written back" 5; }
-    bget got "${SU}fw_printenv $(sed 's/=.*//' "$TMP/expect" | paste -sd' ' -) 2>&1" || true
+    env_pull "$TMP/env.back" ||
+        { env_restore; die "reading $ENV_DEV back after the write ($what) failed; the pristine image was written back" 5; }
+    cmp -s "$file" "$TMP/env.back" ||
+        { env_restore; die "$ENV_DEV reads back as sha256 $(sha256sum < "$TMP/env.back" | cut -d' ' -f1), not $(sha256sum < "$file" | cut -d' ' -f1) ($what); the pristine image was written back" 5; }
+    got=
+    if [ -n "$names" ]; then
+        # shellcheck disable=SC2086  # the names, one per word
+        got=$(env_tool print "$TMP/env.back" $names 2>&1)
+    fi
     while IFS= read -r want; do
         grep -qxF -- "$want" <<<"$got" || {
             env_restore
-            die "fw_printenv on the board does not show '$want' after the write ($what): U-Boot's layout is not $ENV_OFF/$ENV_OFF2/$ENV_SIZE; the pristine image was written back (fw_printenv said: $(tr '\n' ';' <<<"$got"))" 5
+            die "the read-back of $ENV_DEV does not show '$want' after the write ($what) in the copy U-Boot would load ($ENV_OFF/$ENV_OFF2/$ENV_SIZE); the pristine image was written back (uboot_env.py said: $(tr '\n' ';' <<<"$got"))" 5
         }
     done < "$TMP/expect"
 }
@@ -570,19 +636,21 @@ env_restore() {
     [ "$r" = 0 ] ||
         echo "$TAG: WARNING: writing the pristine environment back failed; the backup is $PRISTINE" | scrub >&2
 }
-# installed: INSTALLED = ok | absent | stale: <why>, from fw_printenv on the
-# board (a dry run reads an installed hook; its DRY line goes to stderr so a
-# caller's capture sees the word alone)
+# installed: INSTALLED = ok | absent | stale: <why>, from the partition read
+# back and decoded on the host (env_board_vars); an environment that cannot
+# be read is refused, never taken as "absent" (a dry run reads an installed
+# hook; its DRY line goes to stderr so a caller's capture sees the word alone)
 INSTALLED=
 installed() {
     local out bc
-    bget out "${SU}fw_printenv bootcmd $OUR_VARS 2>/dev/null" \
+    env_board_vars out "bootcmd $OUR_VARS" \
         "bootcmd=${HOOK_PREFIX}run bootcmd_stm32mp
 yako_hook=$YAKO_HOOK
 yako_mmc=$YAKO_MMC
 yako_addr=$YAKO_ADDR
 yako_part=8
-yako_bootcmd_prev=run bootcmd_stm32mp" 1>&2 || true
+yako_bootcmd_prev=run bootcmd_stm32mp" 1>&2 ||
+        die "cannot read the environment of $ENV_DEV (dd over ssh, decoded by uboot_env.py): the hook's state is unknown, not taken as absent"
     bc=$(sed -n 's/^bootcmd=//p' <<<"$out")
     if ! grep -q '^yako_' <<<"$out"; then
         INSTALLED=absent
@@ -614,16 +682,15 @@ then 'uninstall' again removes the rest." ;;
     echo "$TAG: NEEDS A PERSON: $why" | scrub >&2
     exit 7
 }
-# fw_get VAR NAME [DRY]: the variable's value, "" when it is not set; a board
-# that does not answer is not "not set" (rc 5)
-fw_get() {
+# env_board_get VAR NAME [DRY]: the variable's value in the partition as it
+# is now (env_board_vars), "" when it is not set; a board that does not
+# answer, or copies that do not check, are not "not set" (rc 5)
+env_board_get() {
     local __g
-    bget __g "${SU}fw_printenv -n $2 2>/dev/null; echo \"fw_get:ok\"" "${3:-}
-fw_get:ok" || true
-    [ "${__g##*fw_get:ok}" = "" ] && [ "$__g" != "${__g%fw_get:ok}" ] ||
-        die "cannot read $2 from the board (fw_printenv over ssh failed): not taken as unset" 5
-    __g=${__g%fw_get:ok}
-    printf -v "$1" '%s' "${__g%$'\n'}"
+    env_board_vars __g "$2" "${3:+$2=$3}" ||
+        die "cannot read $2 from the board (dd of $ENV_DEV over ssh, or its copies do not check): not taken as unset" 5
+    __g=$(sed -n "s/^$2=//p" <<<"$__g")
+    printf -v "$1" '%s' "$__g"
 }
 
 # ---- the image (step 1) ----------------------------------------------------------
@@ -937,7 +1004,18 @@ cmd_status() {
     need_board
     env_range
     where_env
-    b "${SU}fw_printenv bootcmd bootdelay boot_targets $OUR_VARS 2>&1; echo; ls -l $STAGE_DIR $STAGE_DIR/$BACKUP_SUB 2>/dev/null; df -B1 --output=avail /boot | tail -1; cut -d' ' -f1 /proc/uptime"
+    # the variables from the partition itself (dd, decoded on the host), the
+    # copies' state first (both ok, or one BLANK as the stock card has it)
+    env_read "$TMP/env.status"
+    if [ "$DRY" = 1 ]; then
+        echo "DRY host\$ python3 tools/uboot_env.py ... check <env.bin>; ... print <env.bin> bootcmd bootdelay boot_targets $OUR_VARS"
+    else
+        cat "$TMP/env.check"
+        # shellcheck disable=SC2086  # the names, one per word
+        env_tool print "$TMP/env.status" bootcmd bootdelay boot_targets $OUR_VARS 2>&1
+        echo
+    fi
+    b "ls -l $STAGE_DIR $STAGE_DIR/$BACKUP_SUB 2>/dev/null; df -B1 --output=avail /boot | tail -1; cut -d' ' -f1 /proc/uptime"
     installed
     echo "install: $INSTALLED"
     [ "${INSTALLED#needs a person}" = "$INSTALLED" ] || echo "  a person types at U-Boot's prompt: $(bootcmd_line hook)"
@@ -1043,7 +1121,7 @@ cmd_uninstall() {
         needs_person_bootcmd unhook
     fi
     local left
-    fw_get left yako_hook
+    env_board_get left yako_hook
     [ -z "$left" ] || die "yako_hook is still set after the uninstall" 5
     # the stock boot files as install recorded them, before the record goes
     local chk
@@ -1065,8 +1143,8 @@ cmd_disarm() {
     where_env
     left_show
     local once file rest
-    fw_get once yako_once
-    fw_get file yako_file
+    env_board_get once yako_once
+    env_board_get file yako_file
     if [ -n "$once$file" ] || [ "$DRY" = 1 ]; then
         echo "$TAG: disarming: yako_once='$once' yako_file='$file' (the runner's own variables; nothing else is written)"
         env_read "$TMP/env.bin"
@@ -1078,7 +1156,7 @@ cmd_disarm() {
             env_disarm "$TMP/env.bin" "$TMP/env.new"
             : > "$TMP/expect"
             env_write "$TMP/env.new" "disarm"
-            fw_get once yako_once
+            env_board_get once yako_once
             [ -z "$once" ] || die "yako_once is still '$once'" 5
         fi
     fi
@@ -1104,7 +1182,7 @@ undo_arm() {
     : > "$TMP/expect"
     env_write "$TMP/env.prearm" "disarm"
     local o
-    fw_get o yako_once
+    env_board_get o yako_once
     [ -z "$o" ]
 }
 # remove_staged: the staged image (and a cut-off copy) off the card, read back
@@ -1190,7 +1268,7 @@ cmd_run() {
     st=$INSTALLED
     [ "${st#needs a person}" = "$st" ] || needs_person_bootcmd hook
     [ "$st" = ok ] || die "the U-Boot hook is not installed as this script writes it ($st): 'install' first"
-    fw_get once yako_once
+    env_board_get once yako_once
     [ -z "$once" ] || die "a one-shot is already pending (yako_once=$once); find its owner, or 'disarm'"
     bget left "ls $STAGE_DIR/once-* 2>/dev/null; true   # must print nothing" '' || die "cannot list $STAGE_DIR on the board"
     [ -z "$left" ] || die "$STAGE_DIR holds a one-shot image (or a cut-off copy) of a run that did not clean up ($left): look at it, or 'disarm'"
@@ -1233,7 +1311,7 @@ cmd_run() {
     # 4. the capture, before anything can print
     if [ "$BLIND" = 0 ]; then capture_start || die "the console capture ended at once (bridge busy or unreachable; no reboot)"; fi
 
-    # 5. arm: one environment write, read back by fw_printenv; the image read
+    # 5. arm: one environment write, read back with dd and decoded; the image read
     # just before is the undo (on_exit writes it back while ARMED is 1)
     env_read "$TMP/env.bin"
     if [ "$DRY" = 1 ]; then
@@ -1258,7 +1336,7 @@ cmd_run() {
     meta t_reboot "$T_REBOOT"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ wait until ssh answers from a new boot (uptime < time since the reboot), <= $WAIT_BOUND s; the old boot still answering after min($REBOOT_GRACE, $WAIT_BOUND) s: not_rebooted, disarmed"
-        b "${SU}fw_printenv -n yako_once   # must print nothing"
+        echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host, decoded there: yako_once must be unset (U-Boot's hook cleared it)"
         b "${SU}rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory"
         exit 0
@@ -1307,7 +1385,7 @@ cmd_run() {
         BACK=1
         meta back 1
         local once_left=
-        if ( fw_get once_left yako_once; printf '%s' "$once_left" > "$TMP/once.left" ); then
+        if ( env_board_get once_left yako_once; printf '%s' "$once_left" > "$TMP/once.left" ); then
             once_left=$(cat "$TMP/once.left")
         else
             once_left="unreadable"
