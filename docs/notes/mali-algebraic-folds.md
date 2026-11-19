@@ -9,7 +9,8 @@ item can lower them byte-equal. Nothing here changes the compiler.
 ## 1. The refusal
 
 (Sections 1-7 are the study, with its line numbers; section 8 is the state
-after plan #154's chains item lowered most of it.)
+after plan #154's chains item lowered most of it; section 9 is glmark2's
+CONST_FOLD and NEG_ZERO shapes, plan #367.)
 
 `MaliError::ArithConstant` (`src/shaderc/online/mali/mod.rs:152`, message at
 `:361`): "Valhall: a constant product in a shape Mesa's algebraic rules move or
@@ -256,4 +257,109 @@ product by a constant vector (a scale of `-1.0`, or `1.0` beside scales
 that are not constants in a shape other than femtovg's), a sum that keeps a
 constant term in `MatSum` (the constant reassociations :2398-2412 are not
 transcribed), and `nir_fs.rs`'s `ffma` chain under a constant scale.
+
+## 9. CONST_FOLD and NEG_ZERO in glmark2 (plan #367 lower-const-fold)
+
+### Where the family stands at 74308a71
+
+Measured on the host (glmark2 22c527cb, `tests/mali_glmark2_corpus.rs`, the
+pinned fixture equal to the tip): none of the three targets the forecast
+named stops at `CONST_FOLD` (`ConstantFold`) any more. Shadow's vertex
+shader `6964` compiles; desktop blur's `7f17`/`68af` and the effect2d
+Laplace kernel `3c3d` stop at `TEX_MULTI` (`TexCount`: a look-up beside
+another at a mediump computed coordinate, plan #367 lower-fma). The
+message is still the first refusal of the lit fragment shaders `994f`,
+`fea0`, `d442`, `487d` and `77c5` (shading and bump, 5 scenes), whose Mesa
+references come with plan #367's redefined study-vs-arith; this item does
+not reach them.
+
+The Mesa 26.2.1 references of the blur and Laplace shapes
+(`tools/mali/testdata/gm2_constfold_1..6`, 516cc7b1) show why: Mesa folds
+nothing on 0.0 in them that the compiler refuses. `TextureCoord + vec2(c,
+0.0)` stays one `FADD_IMM.v2f16 r0, r0^, #0x0000951F` (the varying's fp16
+pair plus the packed `(c, 0.0)`, both lanes; the `+ 0.0` lane is kept, a
+vector add with one zero lane matches no `fadd(a, 0.0)` rule), then two
+`F16_TO_F32` for the look-up; a weight of `0.0` drops its look-up (`_2`
+has 5 of 9), `-4.0` is `FMA.v2f16 .., 0x44000000.neg.h11, ..` and the
+`-0.0` weight of `_3` drops it too. Each stops at that two-lane mediump
+computed coordinate: `TEX_MULTI` beside another look-up (`_1`..`_4`) and
+`TEX_COORD` for a lone tap (`_5`, `_6`: `coord_lane` takes only case 121's
+one-lane form). Both are lowered with the look-ups (lower-fma), not here:
+`tests/mali_const_fold.rs` pins the six at those refusals.
+
+### NEG_ZERO of terrain fs 1637: the walk was cut, not a rule
+
+`1637`'s first refusal was `NEG_ZERO` (`NegZeroShared`, `glsl.rs:1945`
+then): the -0.0 compare rules (`Tree::neg_zero_compares`, section 4's
+`:771-776` sibling) ask `Tree::fold` what NIR's constant folding can make of
+each operand of every compare. `step(h, vec4(0.0))` reads `h = 1.0 -
+abs(x) - abs(y)` of the simplex noise, some 60 operations and 20 locals
+above `vUv`, and the walk stopped at a depth of 12 (and at 8 locals folded
+at once) with "may be a constant, may be -0.0": refused. Nothing in `h`
+folds; Mesa compares it as written. So this is the walk's reach, not a
+missing -0.0 rule (study-negzero-cmp's case is in this family's scope).
+
+The walk now returns, besides the lanes, what it read of the loop
+assumptions (`Assumed`, a bit per slot) and whether it was cut (`Reach`).
+`Tree::fill_folds` folds every value of the stage in order before the
+first compare that varies, keeping each value's lanes when its walk was
+whole and read no assumption: exactly what the uncut walk gives, so a
+later walk stops at a kept value. A local whose later stores were not
+folded yet is cut and folded again in the next round (four at most). The
+table is 32 bytes per IR value in the scratch arena, for a stage with a
+compare only; it is filled again after a compare is rewritten. The stack
+is unchanged (`tests/mali_locals.rs`'s tripwire, 200 KiB, passes). A
+value that may still fold to -0.0 under a deep chain (`(t * 0.0) * -1.0`
+of a 20-deep `t`) is refused as before.
+
+### The compare of a sum with a constant (:866-871)
+
+Past the cut, the references of the deep compare
+(`gm2_negzero_deep_1..3`, original reductions, Mesa 26.2.1 drm-shim, no
+`--uniform-values`) meet one more rule, which applies at any depth:
+
+```
+(('flt', ('~fadd(is_used_once)', a, '#b(is_finite)'), '#c(is_finite)'), ('flt', a, ('fadd', c, ('fneg', b)))),
+... fge, feq, fneu; and flt/fge(#c, fadd(a, #b)) -> flt/fge(c - b, a)
+```
+
+| reference | shape | Mesa's compare |
+|---|---|---|
+| `gm2_negzero_deep_1` | `step(h, 0.0)`, `h` 7 multiply-adds of a texel, the last `* 2.5 + -0.5` | `FMA.f32 r0, r0^, u2.w0, 0x0.neg` (the product), `FCMP_OR.f32.ge.m1 r0, 0x38000000.h1, r0^` (0.5 >= it) |
+| `gm2_negzero_deep_2` | `if (h < 0.0) discard;`, 11 multiply-adds, the last `* 0.75 + 0.125` | `IADD_IMM.i32 r1, 0x0, #0xBE000000`, `DISCARD.f32.lt r0^, r1^` (against -0.125) |
+| `gm2_negzero_deep_3` | `step(vec4(h, h * 2.0, h + 1.0, h - 1.0), vec4(0.0))` | lanes 0, 1 against `0x0`; `h + 1.0` and `h - 1.0` are `h` against `0x3F800000` and `0x3F800000.neg`; `h` itself is read 4 times, so its last sum stays |
+
+`Tree::sum_compares` (glsl.rs, after the -0.0 rules) transcribes it per
+lane: the sum is the compare's operand, or the one store of that lane of
+a local the compare alone loads (through whole copies of locals loaded
+once: `vec4 hh = vec4(..)` copies the constructor's local), and the sum is
+read by that operand or store alone. `a - b` is `fadd(a, fneg(b))` in the
+IR, so `#b` is a literal or a negated literal. `c - b` is folded in fp32;
+the dead sum's instruction becomes the compare's constant (`c` may have
+other readers: `step`'s `0.0` is also its select's arm). Feq and Fne come
+out `a` first. Only fp32 compares (the vertex stage, a highp fragment
+shader): a mediump fragment shader's sum is fp16 when NIR folds it, and no
+reference draws that.
+
+Results (`tests/mali_const_fold.rs`): `gm2_negzero_deep_1..3` byte-equal in
+every region; the chain compiles at 4 to 20 multiply-adds in five forms
+(select, discard, `step`, `h - step(h, 0.0)`, vector `step`), where 8 or
+more were `NEG_ZERO`; every other reference of `src/shaderc/online/mali`
+and `tests/mali_*` is unchanged; `tools/mali/corpus-verdicts.txt` does not
+move (256 ok); glmark2: `1637` moves from `NEG_ZERO` to `ARITH` (its
+`floor`/`mod`/`abs` of highp values), terrain keeps other refusals, the
+clean scenes stay 8 of 33.
+
+pan_shc (`cases.txt`): the gm2_constfold fragment programs differ
+(`mediump`, its SPIR-V path has no lower_precision); `gm2_negzero_deep_2`
+is equal; `_1` and `_3` differ because spirv_to_nir lowers GLSL.std.450
+`Step` as `flt(x, edge) ? 0.0 : 1.0` (`FCMP_OR.f32.lt` with the select's
+arms swapped) where the GLSL path's is `b2f(fge(x, edge))` (`unanalysed`).
+
+Left: the two-lane mediump computed coordinate (lower-fma) before any
+gm2_constfold reference can be byte-compared; `CONST_FOLD` of the lit
+fragment shaders (`994f`, `fea0`, `d442`, `487d`, `77c5`); the rule on a
+mediump compare (fp16 folding, no reference); `h < 0.0 ? 1.0 : 0.25` of a
+highp texel chain, and a chain of distinct scalar locals into a select, hit
+a back-end defect (`IrIndex`, at 74308a71 too), a new cause.
 

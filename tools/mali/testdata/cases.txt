@@ -217,3 +217,20 @@ gm2_locals_scalar gm2_locals_scalar.vert gm2_locals_scalar.frag triangles vs.pos
 gm2_locals_box    gm2_locals_box.vert    gm2_locals_box.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:148:7bede96630e9
 gm2_locals_noise  gm2_locals_noise.vert  gm2_locals_noise.frag  triangles vs.position=equal vs.varying=equal fs.fragment=equal
 gm2_locals_vsum   gm2_locals_vsum.vert   gm2_locals_vsum.frag   triangles vs.position=equal fs.fragment=differs:mediump:7:7d09cf669aec
+# #367 lower-const-fold: the CONST_FOLD shapes of desktop blur and the effect2d Laplace kernel (gm2_constfold_*, 516cc7b1)
+# and NEG_ZERO's compare of a deep value (terrain fs 1637's `step(h, vec4(0.0))`; gm2_negzero_deep_*), drawn without
+# --uniform-values (docs/notes/mali-algebraic-folds.md section 9). Our compiler is byte-equal to gm2_negzero_deep_1..3
+# (tests/mali_const_fold.rs); gm2_constfold_1..6 are refused at their look-ups' two-lane mediump computed coordinates
+# (TEX_MULTI, TEX_COORD). pan_shc's SPIR-V path has no lower_precision: the mediump fragment programs of gm2_constfold_*
+# differ (`mediump`). For gm2_negzero_deep_1 and _3 spirv_to_nir lowers GLSL.std.450 Step as `flt(x, edge) ? 0.0 : 1.0`,
+# where the GLSL path's is `b2f(fge(x, edge))` (`FCMP_OR.f32.lt` and the select's arms swapped), and _3's sums meet the
+# compare rules (nir_opt_algebraic.py:866-871) in another order (`unanalysed`).
+gm2_constfold_1    gm2_constfold_1.vert    gm2_constfold_1.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:48:ec0950a507f7
+gm2_constfold_2    gm2_constfold_2.vert    gm2_constfold_2.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:43:384e6f15f611
+gm2_constfold_3    gm2_constfold_3.vert    gm2_constfold_3.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:41:86a8fdfb6748
+gm2_constfold_4    gm2_constfold_4.vert    gm2_constfold_4.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:84:60e8725ce7b9
+gm2_constfold_5    gm2_constfold_5.vert    gm2_constfold_5.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:13:f447af61503d
+gm2_constfold_6    gm2_constfold_6.vert    gm2_constfold_6.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:13:855eb337749f
+gm2_negzero_deep_1 gm2_negzero_deep_1.vert gm2_negzero_deep_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:unanalysed:2:914c7bbec270
+gm2_negzero_deep_2 gm2_negzero_deep_2.vert gm2_negzero_deep_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_negzero_deep_3 gm2_negzero_deep_3.vert gm2_negzero_deep_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:unanalysed:26:834565be32c5

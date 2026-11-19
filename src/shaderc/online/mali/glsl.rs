@@ -56,6 +56,7 @@ use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
     AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Range, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
 };
+use core::cell::Cell;
 
 /// A value's uses, by kind.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -84,6 +85,9 @@ struct Tree<'m, 'a> {
     /// The stage is a fragment shader whose float default is highp
     /// (mod.rs `FsPrecision::highp`).
     highp_fragment: bool,
+    /// What [`Tree::fold`] makes of each value, its lanes unswizzled, once
+    /// [`Tree::fill_folds`] has run (empty for a stage with no compare).
+    folds: &'a [Cell<Option<[Lane; 4]>>],
 }
 
 /// A child of an expression record in [`dsw`]: an expression or a leaf.
@@ -167,7 +171,13 @@ pub(super) fn passes<'s>(
     let uses = scratch.alloc_filled(n, Use::None).map_err(oom)?;
     let locals = scratch.alloc_filled(m.locals.len(), (0u16, 0u16, 0u16)).map_err(oom)?;
     let pos = scratch.alloc_filled(n, u32::MAX).map_err(oom)?;
-    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment };
+    /* the folds of the -0.0 compare rules ([`Tree::neg_zero_compares`]),
+     * for a stage with a compare */
+    let compares =
+        instrs.iter().any(|op| matches!(op, IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, _)));
+    let folds = scratch.alloc_filled(if compares { n } else { 0 }, None).map_err(oom)?;
+    let folds = Cell::from_mut(folds).as_slice_of_cells();
+    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds };
     t.count();
     t.rebalance()?;
     t.reassociate()?;
@@ -175,6 +185,7 @@ pub(super) fn passes<'s>(
     t.neg_products()?;
     t.neg_compares()?;
     t.neg_zero_compares()?;
+    t.sum_compares();
     if !t.changed && trees.is_none() {
         return Ok(None);
     }
@@ -1813,6 +1824,7 @@ impl Tree<'_, '_> {
     fn neg_zero_compares(&mut self) -> Result<(), MaliError> {
         let n = self.instrs.len();
         let mut any = false;
+        let mut folded = false;
         /* each compare decides on the constants as written; a constant
          * whose -0.0 lanes the compares turn into 0.0 is rewritten after
          * all of them (a `feq(-0.0, a)` after another compare of the same
@@ -1827,6 +1839,10 @@ impl Tree<'_, '_> {
              * operand is encoded, and -0.0 and 0.0 compare the same */
             if !self.varies(s[0], 0, 0) && !self.varies(s[1], 0, 0) {
                 continue;
+            }
+            if !folded {
+                self.fill_folds();
+                folded = true;
             }
             let orig = s;
             let mut zero = [false; 2];
@@ -1845,7 +1861,7 @@ impl Tree<'_, '_> {
              * Mesa's (an `FCMP_AND` of the select's compare), none
              * transcribed: refused */
             for k in 0..2 {
-                let other = self.fold(orig[1 - k], 0, &Assumed::NONE);
+                let other = self.folded(orig[1 - k]);
                 if zero[k] && other[..w].iter().any(|l| l.maybe_const()) {
                     return Err(MaliError::NegZeroShared);
                 }
@@ -1860,6 +1876,8 @@ impl Tree<'_, '_> {
             }
             self.instrs[i] = IrOp::Alu(op, s);
             any = true;
+            /* the compare reads other operands now: fold again */
+            folded = false;
         }
         for c in 0..n {
             let IrOp::ConstF32(v) = self.instrs[c] else { continue };
@@ -1872,6 +1890,184 @@ impl Tree<'_, '_> {
             self.count();
         }
         Ok(())
+    }
+
+    /// The rules of nir_opt_algebraic.py on a compare of a sum with a
+    /// constant against a constant (:866-871): `flt(fadd(a, #b), #c)` is
+    /// `flt(a, c - b)`, the same for `fge`, `feq` and `fneu`, and
+    /// `flt(#c, fadd(a, #b))` is `flt(c - b, a)`, the same for `fge`; the
+    /// sum read by the compare alone (`is_used_once`), both constants
+    /// finite, `c - b` folded in fp32 (`fadd(c, fneg(b))`). Each lane on its
+    /// own, as NIR's are once scalar: a lane whose operand is no such sum
+    /// stays. The sum is the compare's operand, or what a local the
+    /// compare alone loads holds in that lane (a local's one store there,
+    /// which copy propagation hands to the rule): the store then writes
+    /// `a`. The sum is no one's after that, and its instruction becomes
+    /// the compare's constant, `c - b` in the lanes of a sum and `c` in the
+    /// others (`c` itself stays for its other readers: the `0.0` of
+    /// `step(h, 0.0)` is also the select's). Measured
+    /// (tools/mali/testdata/gm2_negzero_deep_*): `step(h, 0.0)` of `h = x *
+    /// 2.5 + -0.5` is `FCMP_OR.f32.ge.m1 r0, 0x38000000.h1, r0^` of the
+    /// product, `if (h < 0.0) discard;` of `x * 0.75 + 0.125` is
+    /// `DISCARD.f32.lt r0^, r1^` against `-0.125`, `step(vec4(.., h + 1.0,
+    /// h - 1.0), vec4(0.0))` compares `h` with `-1.0` and `1.0`. The fp32
+    /// compares only: a mediump fragment shader's sum and constants are
+    /// fp16 when the rule folds them, which no reference draws.
+    fn sum_compares(&mut self) {
+        if self.m.stage == crate::shaderc::SHC_STAGE_FRAGMENT && !self.highp_fragment {
+            return;
+        }
+        for i in 0..self.instrs.len() {
+            let IrOp::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne), s) = self.instrs[i] else {
+                continue;
+            };
+            let w = usize::from(self.comps[i]).clamp(1, 4);
+            if (0..2).any(|k| self.sum_compare(i, op, s, k, w)) {
+                self.changed = true;
+                self.count();
+            }
+        }
+    }
+
+    /// The `a` and the constant `b` of a sum `fadd(p, q)` (either way
+    /// round, `b` a literal or a negated literal): `b`'s bits per lane of
+    /// the sum.
+    fn sum_parts(&self, p: Src, q: Src) -> Option<(Src, [u32; 4])> {
+        let konst = |x: Src| -> Option<[u32; 4]> {
+            match self.instrs.get(x.val.0 as usize) {
+                Some(&IrOp::ConstF32(v)) => Some(core::array::from_fn(|t| v[x.swizzle[t] as usize & 3])),
+                Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => match self.instrs.get(c.val.0 as usize) {
+                    Some(&IrOp::ConstF32(v)) => Some(core::array::from_fn(|t| {
+                        v[c.swizzle[x.swizzle[t] as usize & 3] as usize & 3] ^ F32_NEG_ZERO
+                    })),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        match (konst(p), konst(q)) {
+            (None, Some(b)) => Some((p, b)),
+            (Some(b), None) => Some((q, b)),
+            _ => None,
+        }
+    }
+
+    /// The one store that writes lane `l` of `local`, a local loaded once,
+    /// its value read by that store alone: the store, what it writes and
+    /// the lane of the local. Through whole copies of another local loaded
+    /// once (`vec4 hh = vec4(h, .., h + 1.0, ..)` stores the constructor's
+    /// local whole), as copy propagation reads them, to the store of a
+    /// value that is no load.
+    fn lane_store(&self, mut local: crate::shaderc::online::ir::LocalId, mut l: usize) -> Option<(usize, Src, usize)> {
+        for _ in 0..4 {
+            if self.locals.get(local.0 as usize).map(|x| x.2) != Some(1) {
+                return None;
+            }
+            let mut writers = self.instrs.iter().enumerate().filter_map(|(si, st)| match *st {
+                IrOp::StoreLocal { local: to, index, src, write_mask } if to == local && write_mask & (1 << l) != 0 => {
+                    Some((si, index, src))
+                }
+                _ => None,
+            });
+            let (Some((si, None, src)), None) = (writers.next(), writers.next()) else { return None };
+            let vi = src.val.0 as usize;
+            if self.uses.get(vi) != Some(&Use::Store(si as u32)) {
+                return None;
+            }
+            match self.instrs[vi] {
+                IrOp::LoadLocal { local: from, index: None, .. } => {
+                    local = from;
+                    l = src.swizzle[l] as usize & 3;
+                }
+                _ => return Some((si, src, l)),
+            }
+        }
+        None
+    }
+
+    /// [`Tree::sum_compares`] on compare `i` (`op` of `s`, `w` lanes) with
+    /// its constant on side `k`: whether it was rewritten.
+    fn sum_compare(&mut self, i: usize, op: AluOp, s: [Src; 3], k: usize, w: usize) -> bool {
+        let (cs, xs) = (s[k], s[1 - k]);
+        let (ci, xi) = (cs.val.0 as usize, xs.val.0 as usize);
+        let Some(&IrOp::ConstF32(cv)) = self.instrs.get(ci) else { return false };
+        if self.uses.get(xi) != Some(&Use::Alu(i as u32)) {
+            return false;
+        }
+        /* per compare lane, the `b` its sum takes off the constant */
+        let mut b = [None::<u32>; 4];
+        /* the compare's new operand, or the stores that write `a` now;
+         * and a sum no one reads then, whose slot takes `c - b` */
+        let mut operand = None;
+        let mut stores = [(usize::MAX, xs); 4];
+        let mut nstores = 0;
+        let mut slot = usize::MAX;
+        match self.instrs[xi] {
+            IrOp::Alu(AluOp::Fadd, [p, q, _]) => {
+                let Some((a, bv)) = self.sum_parts(p, q) else { return false };
+                for (j, l) in b.iter_mut().enumerate().take(w) {
+                    *l = Some(bv[xs.swizzle[j] as usize & 3]);
+                }
+                operand =
+                    Some(Src { val: a.val, swizzle: core::array::from_fn(|j| a.swizzle[xs.swizzle[j] as usize & 3]) });
+                slot = xi;
+            }
+            IrOp::LoadLocal { local, index: None, .. } => {
+                for (j, lb) in b.iter_mut().enumerate().take(w) {
+                    let Some((si, src, l)) = self.lane_store(local, xs.swizzle[j] as usize & 3) else { continue };
+                    let vi = src.val.0 as usize;
+                    let IrOp::Alu(AluOp::Fadd, [p, q, _]) = self.instrs[vi] else { continue };
+                    let Some((a, bv)) = self.sum_parts(p, q) else { continue };
+                    *lb = Some(bv[src.swizzle[l] as usize & 3]);
+                    if !stores[..nstores].iter().any(|&(x, _)| x == si) {
+                        let to = Src {
+                            val: a.val,
+                            swizzle: core::array::from_fn(|m| a.swizzle[src.swizzle[m] as usize & 3]),
+                        };
+                        stores[nstores] = (si, to);
+                        nstores += 1;
+                    }
+                    slot = slot.min(vi);
+                }
+            }
+            _ => return false,
+        }
+        if slot == usize::MAX {
+            return false;
+        }
+        /* `c - b` per lane of the compare, both finite; a lane of no sum
+         * reads `c` as it was */
+        let finite = |x: u32| f32::from_bits(x).is_finite();
+        let mut nc = [0u32; 4];
+        for (j, x) in nc.iter_mut().enumerate().take(w) {
+            let c = cv[cs.swizzle[j] as usize & 3];
+            *x = match b[j] {
+                Some(bj) if bj & !F32_NEG_ZERO != 0 && finite(bj) && finite(c) => {
+                    (f32::from_bits(c) + -f32::from_bits(bj)).to_bits()
+                }
+                Some(_) => return false,
+                None => c,
+            };
+        }
+        /* the sum's instruction is no one's now: it is the constant, as
+         * wide as the compare (`c` may be read by others: it stays) */
+        self.instrs[slot] = IrOp::ConstF32(nc);
+        self.comps[slot] = w as u8;
+        for &(si, to) in &stores[..nstores] {
+            if let IrOp::StoreLocal { src, .. } = &mut self.instrs[si] {
+                *src = to;
+            }
+        }
+        let x = operand.unwrap_or(xs);
+        let c = Src { val: ValueId(slot as u32), swizzle: SWIZZLE_IDENTITY };
+        /* `feq` and `fneu` come out `a` first (both commutative) */
+        let srcs = match op {
+            AluOp::Feq | AluOp::Fne => [x, c],
+            _ if k == 0 => [c, x],
+            _ => [x, c],
+        };
+        self.instrs[i] = IrOp::Alu(op, [srcs[0], srcs[1], srcs[1]]);
+        true
     }
 
     /// `s`'s `w` lanes read as `+0.0` where they are `-0.0`, for a compare:
@@ -1896,7 +2092,7 @@ impl Tree<'_, '_> {
             Some(&IrOp::Alu(AluOp::Fneg, [c, ..])) => {
                 let swizzle = core::array::from_fn(|i| c.swizzle[s.swizzle[i] as usize & 3]);
                 let inner = Src { val: c.val, swizzle };
-                let v = self.fold(inner, 0, &Assumed::NONE);
+                let v = self.folded(inner);
                 if v[..w].iter().all(|l| *l == Lane::K(0)) {
                     return Ok(Some(inner));
                 }
@@ -1924,7 +2120,7 @@ impl Tree<'_, '_> {
              * negzero_const_vector: the compares stand otherwise than
              * Mesa's) */
             _ => {
-                let v = self.fold(s, 0, &Assumed::NONE);
+                let v = self.folded(s);
                 let local = |x: ValueId| match self.instrs.get(x.0 as usize) {
                     Some(&IrOp::LoadLocal { local, .. }) => Some(local),
                     _ => None,
@@ -1963,16 +2159,61 @@ impl Tree<'_, '_> {
     /// constant; a select only through the operand it picks). A
     /// local is the union of its stores, a loop's run to a fixed point
     /// ([`Assumed`]).
-    fn fold(&self, s: Src, depth: usize, assumed: &Assumed) -> [Lane; 4] {
+    ///
+    /// The walk is cut at a depth of 12 and at 8 locals folded at once
+    /// (the lanes then may be anything); [`Tree::fill_folds`] keeps every
+    /// value's lanes the walk found whole, so that a chain deeper than that
+    /// (terrain fs 1637's noise, inlined four times: its `step(h,
+    /// vec4(0.0))` reads `h` through some 60 operations and 20 locals) is
+    /// folded to its end.
+    fn fold(&self, s: Src, depth: usize, assumed: &Assumed) -> ([Lane; 4], Reach) {
+        let (v, r) = self.fold_value(s.val.0 as usize, depth, assumed);
+        (core::array::from_fn(|i| v[s.swizzle[i] as usize & 3]), r)
+    }
+
+    /// [`Tree::fold`] of `s` from the top, with the lanes
+    /// [`Tree::fill_folds`] kept.
+    fn folded(&self, s: Src) -> [Lane; 4] {
+        self.fold(s, 0, &Assumed::NONE).0
+    }
+
+    /// Fold every value from the first, each one's operands mostly folded
+    /// before it, and keep the lanes of each whose walk was whole and read
+    /// no [`Assumed`] local: what [`Tree::fold`] makes of it with no cut.
+    /// A value cut on the way (a local whose later stores were not folded
+    /// yet) is folded again in the next round, at most four.
+    fn fill_folds(&self) {
+        for f in self.folds {
+            f.set(None);
+        }
+        for _ in 0..4 {
+            let mut cut = false;
+            for id in 0..self.folds.len() {
+                if self.folds[id].get().is_none() {
+                    cut |= self.fold_value(id, 0, &Assumed::NONE).1.cut;
+                }
+            }
+            if !cut {
+                break;
+            }
+        }
+    }
+
+    /// The lanes of value `id` ([`Tree::fold`]), unswizzled, and what the
+    /// walk under it read.
+    fn fold_value(&self, id: usize, depth: usize, assumed: &Assumed) -> ([Lane; 4], Reach) {
         const UNKNOWN: [Lane; 4] = [Lane::Var { konst: true, neg0: true }; 4];
         const NONE: [Lane; 4] = [Lane::Var { konst: false, neg0: false }; 4];
-        if depth > 12 {
-            return UNKNOWN;
+        if let Some(v) = self.folds.get(id).and_then(Cell::get) {
+            return (v, Reach::WHOLE);
         }
-        let at = |v: [Lane; 4]| core::array::from_fn(|i| v[s.swizzle[i] as usize & 3]);
-        let Some(op) = self.instrs.get(s.val.0 as usize) else { return UNKNOWN };
-        match *op {
-            IrOp::ConstF32(v) => at(v.map(Lane::K)),
+        if depth > 12 {
+            return (UNKNOWN, Reach::CUT);
+        }
+        let Some(op) = self.instrs.get(id) else { return (UNKNOWN, Reach::WHOLE) };
+        let mut reach = Reach::WHOLE;
+        let v = match *op {
+            IrOp::ConstF32(v) => v.map(Lane::K),
             /* an int or a bool constant: a constant, never -0.0 (its
              * conversion to float is +0.0 at most) */
             IrOp::ConstI32(_) | IrOp::ConstBool(_) => [Lane::Var { konst: true, neg0: false }; 4],
@@ -1982,23 +2223,29 @@ impl Tree<'_, '_> {
             | IrOp::Tex { .. }
             | IrOp::TexSize { .. } => NONE,
             /* a negated zero is -0.0 */
-            IrOp::Alu(AluOp::Fneg, [a, ..]) => at(self.fold(a, depth + 1, assumed).map(|l| match l {
-                Lane::K(x) => Lane::K(x ^ F32_NEG_ZERO),
-                Lane::Var { konst, .. } => Lane::Var { konst, neg0: konst },
-                Lane::Bot => Lane::Bot,
-            })),
+            IrOp::Alu(AluOp::Fneg, [a, ..]) => {
+                let (v, r) = self.fold(a, depth + 1, assumed);
+                reach = reach.and(r);
+                v.map(|l| match l {
+                    Lane::K(x) => Lane::K(x ^ F32_NEG_ZERO),
+                    Lane::Var { konst, .. } => Lane::Var { konst, neg0: konst },
+                    Lane::Bot => Lane::Bot,
+                })
+            }
             IrOp::Alu(op, srcs) => {
                 let n = op.arity();
                 let mut lanes = [UNKNOWN; 3];
                 for (k, l) in lanes.iter_mut().enumerate().take(n) {
-                    *l = self.fold(srcs[k], depth + 1, assumed);
+                    let (v, r) = self.fold(srcs[k], depth + 1, assumed);
+                    reach = reach.and(r);
+                    *l = v;
                 }
                 /* `a + -a` (nir_opt_algebraic.py's `fadd(a, fneg(a))` is 0.0) */
                 let neg_of = |q: Src, of: Src| matches!(self.instrs.get(q.val.0 as usize), Some(&IrOp::Alu(AluOp::Fneg, [t, ..])) if t.val == of.val);
                 let cancel = op == AluOp::Fadd && (neg_of(srcs[0], srcs[1]) || neg_of(srcs[1], srcs[0]));
                 let product =
                     matches!(op, AluOp::Fmul | AluOp::Ffma | AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 | AluOp::Bcsel);
-                at(core::array::from_fn(|i| {
+                core::array::from_fn(|i| {
                     let l: [Lane; 3] = core::array::from_fn(|k| lanes[k][i]);
                     let l = &l[..n];
                     /* a value a loop has not made yet ([`Assumed`]) */
@@ -2030,7 +2277,7 @@ impl Tree<'_, '_> {
                             _ => l.iter().any(sign),
                         };
                     Lane::Var { konst, neg0 }
-                }))
+                })
             }
             /* a local is the union of its stores. A store that reads the
              * local itself (a loop's `z = -z;`) reads what the stores make
@@ -2039,23 +2286,38 @@ impl Tree<'_, '_> {
              * the stores' in turn. One that does not settle, or a local
              * past the assumption table, is unknown */
             IrOp::LoadLocal { local, .. } => {
-                if let Some(v) = assumed.get(local.0) {
-                    return at(v);
+                if let Some((k, v)) = assumed.get(local.0) {
+                    return (v, Reach { assumed: 1 << k, cut: false });
                 }
+                /* the slot this local takes in the table: what the walk
+                 * read of it is the fixed point's own */
+                let own = !(1u8 << assumed.n.min(7));
                 let mut v = [Lane::Bot; 4];
+                let mut settled = None;
                 for _ in 0..8 {
-                    let Some(inner) = assumed.with(local.0, v) else { return UNKNOWN };
-                    let next = self.stores_of(local, depth, &inner);
+                    let Some(inner) = assumed.with(local.0, v) else { return (UNKNOWN, Reach::CUT) };
+                    let (next, r) = self.stores_of(local, depth, &inner);
+                    reach = reach.and(Reach { assumed: r.assumed & own, cut: r.cut });
                     if next == v {
-                        /* a lane no store writes has no value */
-                        return at(v.map(|l| if l == Lane::Bot { Lane::Var { konst: false, neg0: false } } else { l }));
+                        settled = Some(v);
+                        break;
                     }
                     v = next;
                 }
-                UNKNOWN
+                match settled {
+                    /* a lane no store writes has no value */
+                    Some(v) => v.map(|l| if l == Lane::Bot { Lane::Var { konst: false, neg0: false } } else { l }),
+                    None => return (UNKNOWN, Reach::CUT),
+                }
             }
             _ => UNKNOWN,
+        };
+        if reach == Reach::WHOLE {
+            if let Some(f) = self.folds.get(id) {
+                f.set(Some(v));
+            }
         }
+        (v, reach)
     }
 
     /// Value `s` reads an input, a uniform or a texel somewhere under it
@@ -2097,8 +2359,14 @@ impl Tree<'_, '_> {
 
     /// The union of what the stores of `local` write in each lane, with
     /// the locals of `assumed` read as it holds them ([`Tree::fold`]).
-    fn stores_of(&self, local: crate::shaderc::online::ir::LocalId, depth: usize, assumed: &Assumed) -> [Lane; 4] {
-        core::array::from_fn(|l| {
+    fn stores_of(
+        &self,
+        local: crate::shaderc::online::ir::LocalId,
+        depth: usize,
+        assumed: &Assumed,
+    ) -> ([Lane; 4], Reach) {
+        let mut reach = Reach::WHOLE;
+        let v = core::array::from_fn(|l| {
             let mut seen = Lane::Bot;
             for st in self.instrs.iter() {
                 let IrOp::StoreLocal { local: to, src, write_mask, .. } = *st else { continue };
@@ -2106,7 +2374,9 @@ impl Tree<'_, '_> {
                     continue;
                 }
                 let lane = Src { val: src.val, swizzle: [src.swizzle[l]; 4] };
-                let x = self.fold(lane, depth + 1, assumed)[0];
+                let (x, r) = self.fold(lane, depth + 1, assumed);
+                reach = reach.and(r);
+                let x = x[0];
                 seen = match (seen, x) {
                     (Lane::Bot, x) | (x, Lane::Bot) => x,
                     (Lane::K(a), Lane::K(b)) if a == b => Lane::K(a),
@@ -2117,7 +2387,8 @@ impl Tree<'_, '_> {
                 };
             }
             seen
-        })
+        });
+        (v, reach)
     }
 
     /// Constant `c` is read by compares alone, each of which reads only
@@ -2183,8 +2454,9 @@ struct Assumed {
 impl Assumed {
     const NONE: Assumed = Assumed { ids: [0; 8], lanes: [[Lane::Bot; 4]; 8], n: 0 };
 
-    fn get(&self, id: u32) -> Option<[Lane; 4]> {
-        self.ids[..self.n].iter().position(|&x| x == id).map(|k| self.lanes[k])
+    /// The slot of local `id` and what it holds.
+    fn get(&self, id: u32) -> Option<(usize, [Lane; 4])> {
+        self.ids[..self.n].iter().position(|&x| x == id).map(|k| (k, self.lanes[k]))
     }
 
     /// This table and local `id` holding `v`; `None` when it is full.
@@ -2197,6 +2469,26 @@ impl Assumed {
         a.lanes[a.n] = v;
         a.n += 1;
         Some(a)
+    }
+}
+
+/// What a walk of [`Tree::fold`] read besides lanes: the slots of
+/// [`Assumed`] it read (a bit each), and whether it was cut short (too
+/// deep, too many locals at once, a loop that did not settle). Only a
+/// whole walk that read no slot is what the value is, and is kept
+/// ([`Tree::fill_folds`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Reach {
+    assumed: u8,
+    cut: bool,
+}
+
+impl Reach {
+    const WHOLE: Reach = Reach { assumed: 0, cut: false };
+    const CUT: Reach = Reach { assumed: 0, cut: true };
+
+    fn and(self, o: Reach) -> Reach {
+        Reach { assumed: self.assumed | o.assumed, cut: self.cut || o.cut }
     }
 }
 
