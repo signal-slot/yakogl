@@ -67,6 +67,27 @@ expect 1 "addresses ignored, field changed" "$ref" "$dir/field.clif" --ignore-ad
 expect 0 "triangle against itself" "$tri" "$tri"
 expect 1 "clear against triangle" "$ref" "$tri"
 
+# shader-record sections (one pseudo-packet per @format shadrec_*)
+pi5=tools/v3d/pi5/triangle.clif
+sed '/Number of varyings in Fragment Shader: \*\/ 4$/s/ 4$/ 5/' "$pi5" >"$dir/rec_main.clif"
+sed '/Maximum Index: \*\/ 16777215$/s/ 16777215$/ 16777214/' "$pi5" >"$dir/rec_attr.clif"
+sed '/\/\*  Fragment shader does Z writes: \*\/ 0/s/ 0 \/\* false \*\/$/ 1 \/* true *\//' "$pi5" >"$dir/rec_blank.clif"
+for f in rec_main rec_attr rec_blank; do
+  if cmp -s "$pi5" "$dir/$f.clif"; then
+    echo "FAIL: $f.clif was not changed"
+    fails=$((fails + 1))
+  fi
+done
+expect 0 "pi5 triangle against itself" "$pi5" "$pi5"
+expect 1 "record field found" "$pi5" "$dir/rec_main.clif"
+names "record field" 'shadrec_gl_main0 #0 SHADREC_GL_MAIN.Number of varyings in Fragment Shader: 4 != 5'
+expect 0 "record field ignored" "$pi5" "$dir/rec_main.clif" --ignore 'SHADREC_GL_MAIN.Number of varyings*'
+expect 1 "record field, other ignored" "$pi5" "$dir/rec_main.clif" --ignore 'SHADREC_GL_ATTR.*'
+expect 1 "attribute record field found" "$pi5" "$dir/rec_attr.clif"
+names "attribute record field" 'SHADREC_GL_ATTR.Maximum Index: 16777215 != 16777214'
+expect 1 "record field with leading blanks found" "$pi5" "$dir/rec_blank.clif"
+names "blank-led record field" 'SHADREC_GL_MAIN.Fragment shader does Z writes: 0 /* false */ != 1 /* true */'
+
 if [ "$fails" -ne 0 ]; then
   echo "$name: $fails of $n cases did not behave"
   exit 1
