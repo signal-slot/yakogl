@@ -6524,6 +6524,136 @@ fn a_mix_drawn_into_a_frame_that_loads_reloads_every_attachment_in_its_class() {
     }
 }
 
+/// The STATE_WORD1 (`& !0x3f`) the end-of-tile emit gives an attachment:
+/// the source format bit (19), `mrt_index` (16), `source_pos` (14), `norm`
+/// (13) and the pack mode (7), pbestate.xml's fields.
+fn pbe_word1(source_8: bool, mrt: u32, pos: u32, norm: bool, packmode: u32) -> u32 {
+    u32::from(source_8) << 19 | mrt << 16 | pos << 14 | u32::from(norm) << 13 | packmode << 7
+}
+
+/// A mixed integer + unorm framebuffer, drawn and continued (RC1, plan #325
+/// item mrt-backend): the words of each attachment pinned at both ends of
+/// the frame.
+///
+/// - RGBA8 + RGBA16I: RGBA8 at register 0, RGBA16I (two dwords) on the even
+///   pair 2, 3 (register 1 a hole); R32I + RGBA8: the integer attachment
+///   first, at 0, RGBA8 at 1.
+/// - The end-of-tile emit: each attachment's own pack mode and `norm`
+///   (U8U8U8U8 normalised; S16S16S16S16 and S32 raw), `source_pos` at its
+///   register, `mrt_index` its slot.
+/// - The frame that continues it (no clear): each attachment loaded from its
+///   own memory by its own class's program (the integer one read raw, the
+///   two-dword row for RGBA16I), writing the registers the emit stores it
+///   from, then the draw.
+#[test]
+fn a_mixed_integer_and_unorm_framebuffer_pins_its_emit_and_load_words() {
+    use csb::{
+        ROGUE_PBESTATE_PACKMODE_S16S16S16S16 as S16X4, ROGUE_PBESTATE_PACKMODE_S32 as S32,
+        ROGUE_PBESTATE_PACKMODE_U8U8U8U8 as U8X4,
+    };
+    /// (formats, register starts, STATE_WORD1 & !0x3f per attachment)
+    type Mix = (&'static [u8], &'static [u32], [u32; 2]);
+    let mixes: [Mix; 2] = [
+        (
+            &[GLES_SURF_RGBA8888, GLES_SURF_RGBA16I],
+            &[0, 2],
+            [pbe_word1(true, 0, 0, true, U8X4), pbe_word1(true, 1, 2, false, S16X4)],
+        ),
+        (
+            &[GLES_SURF_R32I, GLES_SURF_RGBA8888],
+            &[0, 1],
+            [pbe_word1(true, 0, 0, false, S32), pbe_word1(true, 1, 1, true, U8X4)],
+        ),
+    ];
+    /* the literal words, so a change of the helper cannot move both sides */
+    assert_eq!(mixes[0].2, [0x0008_2000, 0x0009_8480]);
+    assert_eq!(mixes[1].2, [0x0008_1A80, 0x0009_6000]);
+    for (formats, regs, words) in mixes {
+        let name = formats.iter().map(|&f| gles_surf_name(f)).collect::<Vec<_>>().join(" + ");
+        let rig = Rig::new();
+        let mut fs = ShcShader::ZERO;
+        let d = GlesDraw { do_clear: false, ..mix_draw(&rig, formats, &mut fs, 3) };
+        assert_eq!(int_targets_drawn(&d, Some(&fs)), Ok(()), "{name}");
+        assert_eq!(draw(&d), 0, "{name}: the first frame");
+        assert_eq!(pvr_backend_flush(), 0);
+        let e = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        assert_eq!(rig.kicks().last().expect("a kick").0.frag.num_rt, 2, "{name}");
+        for (i, (&reg, &word)) in regs.iter().zip(&words).enumerate() {
+            assert_eq!(e[2 * i + 1] & !0x3f, word, "{name}: attachment {i}: STATE_WORD1 {:#010x}", e[2 * i + 1]);
+            assert_eq!(attachment_out_reg(rig.b(), i), Some(reg), "{name}: attachment {i}");
+        }
+        /* the frame that continues it */
+        forget_frame_programs();
+        assert_eq!(draw(&d), 0, "{name}: the continued frame");
+        let (b, fl) = (rig.b(), rig.fbload());
+        assert!(b.frame_loads_color && !b.frame_cleared, "{name}");
+        assert_eq!(b.frame_quads, 2, "{name}: one load per attachment");
+        for (i, (&f, &reg)) in formats.iter().zip(regs).enumerate() {
+            let l = fl.loads[i];
+            let texfmt = if gles_surf_is_integer(f) { int_load_texfmt(f) } else { gles_surf_texfmt(f) };
+            assert_eq!(l.tex.base_gpu, d.targets[i].gpu, "{name}: attachment {i}: its own memory");
+            assert_eq!(l.tex.format, texfmt, "{name}: attachment {i}: its class's texel");
+            assert_eq!((l.row, l.out_reg), (fbload_row(f), reg), "{name}: attachment {i}");
+            let moved = load_program(&rig, l.fs_usc_gpu, l.row);
+            let (at, n) = pixel_output_bytes(internal_words(internal(FBLOAD_ROWS[l.row]))).expect("its output writes");
+            let wrote: Vec<u32> = at[..n].iter().map(|&k| (moved[k / 4] >> (k % 4 * 8) & 0xff) - 0x20).collect();
+            assert_eq!(wrote, (reg..reg + surf_out_dwords(f)).collect::<Vec<_>>(), "{name}: attachment {i}");
+        }
+        let int_slot = formats.iter().position(|&f| gles_surf_is_integer(f)).unwrap();
+        assert_ne!(fl.loads[int_slot].tex.format, gles_surf_texfmt(formats[int_slot]), "{name}: read raw");
+        let off = |g: u64| heap_off_of(g) as u64;
+        assert_eq!(
+            frame_programs(),
+            [off(fl.loads[0].fs_usc_gpu), off(fl.loads[1].fs_usc_gpu), off(d.fs_usc_gpu)],
+            "{name}: the loads, then the draw"
+        );
+        assert_eq!(pvr_backend_flush(), 0);
+        let e2 = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        assert_eq!(
+            e2[..4].iter().map(|w| w & !0x3f).collect::<Vec<_>>(),
+            e[..4].iter().map(|w| w & !0x3f).collect::<Vec<_>>()
+        );
+        let logs = rig.logs();
+        assert!(!logs.iter().any(|l| l.contains("refused") || l.contains("not restored")), "{name}: {logs:?}");
+    }
+}
+
+/// A frame of a mix split mid-way (the draw table full: the next draw opens
+/// a new kick, `draw_part`) continues in the next kick, which reloads every
+/// attachment -- not attachment 0 alone -- each in its class at its
+/// registers, before the draw that did not fit.
+#[test]
+fn a_mix_frame_split_mid_way_reloads_every_attachment() {
+    let formats = [GLES_SURF_RGBA8888, GLES_SURF_R32UI];
+    let rig = Rig::new();
+    let mut fs = ShcShader::ZERO;
+    let d = GlesDraw { do_clear: false, ..mix_draw(&rig, &formats, &mut fs, 3) };
+    let mut drawn = 0;
+    while rig.kicks().is_empty() {
+        assert_eq!(draw(&d), 0, "draw {drawn}");
+        drawn += 1;
+        assert!(drawn <= MAX_DRAWS_PER_FRAME + 1, "no split after {drawn} draws");
+    }
+    assert_eq!(rig.kicks().len(), 1, "the split's kick");
+    assert_eq!(rig.kicks()[0].0.frag.num_rt, 2);
+    let (b, fl) = (rig.b(), rig.fbload());
+    assert!(b.frame_loads_color && !b.frame_cleared, "the continued frame loads");
+    assert_eq!(b.ndraws, 3, "two loads, then the draw that did not fit");
+    assert_eq!(b.frame_quads, 2, "one load per attachment");
+    for (i, (&f, reg)) in formats.iter().zip([0, 1]).enumerate() {
+        let l = fl.loads[i];
+        assert_eq!(l.tex.base_gpu, d.targets[i].gpu, "attachment {i}: its own memory");
+        assert_eq!((l.row, l.out_reg), (fbload_row(f), reg), "attachment {i}");
+    }
+    assert_eq!(fl.loads[1].tex.format, PVR_TEXFMT_RAW32, "R32UI read raw");
+    assert_eq!(pvr_backend_flush(), 0);
+    let k = rig.kicks();
+    assert_eq!(k.len(), 2);
+    assert_eq!(k[1].0.frag.num_rt, 2, "the continued kick stores both attachments");
+    let logs = rig.logs();
+    assert!(!logs.iter().any(|l| l.contains("refused") || l.contains("not restored")), "{logs:?}");
+}
+
 /// `surf_out_dwords`, the registers the emit reads an attachment from, holds
 /// the per-format counts tests/target_key_dwords_pin.rs pins for the
 /// compiler's side (`shc_target_key_dwords`), row for row.
