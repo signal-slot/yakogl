@@ -6,7 +6,12 @@
 Reads the text Mesa's V3D_DEBUG=clif writes (src/broadcom/clif/clif_dump.c and
 the cle packet printer v3d_print_group), e.g. tools/v3d/shim71/*.clif. Every
 `@format <kind>` section that holds packets (a control list, a shader record)
-is a list, named <kind><ordinal of that kind>; `@add_bin`/`@add_render` job
+is a list, named <kind><ordinal of that kind>. A shader record section
+(kind `shadrec*`) has field lines but no packet-name line: its fields are one
+pseudo-packet named after the kind in upper case (SHADREC_GL_MAIN,
+SHADREC_GL_ATTR), compared, ignored (--ignore 'SHADREC_GL_MAIN.*address*') and
+counted as any packet. Field names are matched with their leading blanks
+dropped. `@add_bin`/`@add_render` job
 submissions are packets of a list `submit`, their argument lines being the
 fields arg0, arg1, ... Binary and blank sections are not compared.
 
@@ -48,12 +53,14 @@ def parse(path):
     cur = None
     pkt = None
     sub = None
+    kind = ""
     with open(path, encoding="utf-8", errors="replace") as f:
         for raw in f:
             line = PREFIX.sub("", raw.rstrip("\n"))
             m = FORMAT.match(line)
             if m or line.startswith("@buffer"):
                 cur = pkt = None
+                kind = m.group(1) if m else ""
                 if m and m.group(1) not in ("blank", "binary"):
                     k = m.group(1)
                     n = kinds.get(k, 0)
@@ -75,6 +82,11 @@ def parse(path):
             if cur is sub:
                 if pkt is not None:
                     pkt.fields.append(("arg%d" % len(pkt.fields), line.strip()))
+            elif pkt is None and kind.startswith("shadrec") and FIELD.match(line):
+                pkt = Packet(kind.upper())
+                cur.append(pkt)
+                m = FIELD.match(line)
+                pkt.fields.append((m.group(1), m.group(2)))
             elif PACKET.match(line):
                 pkt = Packet(line)
                 cur.append(pkt)
