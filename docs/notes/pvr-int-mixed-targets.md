@@ -300,6 +300,23 @@ least. dEQP's `common.modf` `vec3` / `vec4` cases (two
 RGBA32UI) stay refused for the same reason in the one-layout path; this
 design does not change that (tile buffers would).
 
+**Since plan #325 item mrt-frameload: the third target may spill.** The
+compiler's per-target path places a list by layout B (`chain::target_layout`,
+`src/pvr/mrt_layout.rs` `layout`: the first target that does not fit, and
+every one after it, stored to tile buffer 0, 1, ..), and the emit takes the
+last of three attachments from tile buffer 0 with the captured `eot3_tb`
+program. Condition 5 of section 2.2 is now `shc_mixed_spans`
+(`src/target_key.rs`): layout B, minus the two shapes no end-of-tile program
+was captured for (two targets with the second spilled, three with the last
+two). So RGBA8, R32I, RGBA32I (r0, r1, tile buffer 0) and R16UI, RGBA16UI,
+RGBA8 (r0, r2-r3, tile buffer 0) are mixes; RGBA8, RGBA32UI and R32UI,
+RGBA32UI, RG16UI stay refused (`REFUSE_FOUR_REGISTERS`, whose line now names
+the missing program). The record's `num_tile_buffers` must be the layout's
+spill count for the back end to draw it (`int_targets_drawn`). The frame load
+and the per-attachment clear quads write output registers only, so a frame
+that loads or quad-clears the spilled attachment names it ("is not
+restored", "not cleared") and leaves it to what the draws store.
+
 ### 3.1 What each target's dwords hold
 
 The compiler packs the colour output at location `i` for target `i`
@@ -484,7 +501,7 @@ The refused cases and their exact log lines, in check order:
 |---|---|
 | a slot with no target (`gpu` 0) before the last target | `yakogl/pvr: draw refused: a GL_NONE draw buffer between an integer colour attachment and another (not built)` |
 | an SRGB8_ALPHA8 attachment in the mix | `yakogl/pvr: draw refused: an SRGB8_ALPHA8 colour attachment beside an integer one (not built)` |
-| the layout passes four registers (section 3; any RGBA32I/UI in a mix) | `yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers` |
+| the layout passes four registers with a spill no end-of-tile program emits (section 3: two targets with the second spilled, three with the last two; the third of three spilled is drawn since plan #325) | `yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers, spilled where no end-of-tile program was captured (two targets with the second spilled, or three with the last two)` |
 | a colour clear (`do_clear`, alone, a quad or fused into the draw) under a mask that keeps some channels of an attachment past the first, or of an integer attachment 0 (`mix_clear_refused`; a float attachment 0 takes the masked clear program and is drawn; checked before the draw's other refusals) | `yakogl/pvr: clear refused: a colour mask that keeps some channels of a colour attachment beside an integer one (not built)` (`REFUSE_MIX_CLEAR_MASK`) |
 | blending enabled (`d.blend`) | `yakogl/pvr: draw refused: blending with an integer colour attachment beside another (not built)` |
 | a colour mask that keeps some channels (`d.color_mask & 0xf` neither 0 nor `0xf`), which covers every mask that keeps only some of an integer target's channels | `yakogl/pvr: draw refused: a colour mask that keeps some channels, with an integer colour attachment beside another (not built)` |
