@@ -487,7 +487,12 @@ impl CoeffOnce {
  * (each PDS_ALIGN-padded), PPP block + terminate + descriptors + index copy,
  * and the VDM blocks (PDS state 3 + PPP 2 + VDM 5 + 2 index lists 6 + 3) */
 const PDS_PER_DRAW_MAX: u32 = 8 * 1024;
-/// Two 1536-dword uniform snapshots + staged attributes.
+/// Two 1536-dword uniform snapshots + staged attributes: the headroom
+/// draw_part asks of a frame that already has draws, not a bound on a draw.
+/// A stage array with uniform blocks (up to MAX_STAGE_UNIFORM_DWORDS, its
+/// blocks read by `ld` from the snapshot) that then does not fit gets
+/// -EFRAME_FULL and is retried on a fresh frame
+/// (docs/notes/pvr-ubo-memory-load.md §8.2).
 const GEN_PER_DRAW_MAX: u32 = 16 * 1024;
 const VDM_PER_DRAW_MAX: u32 = 24;
 /// How long a kick may take before the wait gives up. A heavy Quick 3D frame
@@ -2762,6 +2767,76 @@ fn dma_push(kicks: &mut [PvrPdsDmaKick], n: &mut usize, k: PvrPdsDmaKick) -> boo
         }
         None => false,
     }
+}
+
+/// The record's `ubo_addr_off1` (docs/notes/pvr-ubo-memory-load.md §8.4):
+/// the shared register of the stage's block-address pair plus one, absolute;
+/// 0 when the stage reads no uniform-block member with `ld` (every table
+/// shader, and every build without the online compiler).
+fn ubo_addr_off1(sh: &ShcShader) -> u16 {
+    #[cfg(all(feature = "shaderc-online", not(feature = "gpu-mali")))]
+    {
+        crate::shaderc::online::backend::pvr_ubo_addr_off1(sh)
+    }
+    #[cfg(not(all(feature = "shaderc-online", not(feature = "gpu-mali"))))]
+    {
+        let _ = sh;
+        0
+    }
+}
+
+/// How much of a stage's `dwords`-dword uniform array a draw snapshots into
+/// the GENERAL arena and how much of it the PDS DMAs to the shared registers:
+/// `(snapshot, dma)`. A stage that reads its uniform-block members with `ld`
+/// (`ubo_off1 != 0`) snapshots the whole array, which the `ld` reads at the
+/// pair's address, and DMAs only the default prefix the compiler reports
+/// (`uniform_sh_dwords`; the blocks never reach the shared registers).
+/// Every other stage is as before: the DMA takes the whole array, or the
+/// reported prefix under PVR_BACKEND_UNIFORM_PREFIX, and the snapshot is
+/// what the DMA reads.
+fn uniform_split(sh: &ShcShader, ubo_off1: u16, dwords: u16) -> (u32, u32) {
+    let n = dwords as u32;
+    if ubo_off1 != 0 {
+        return (n, (sh.uniform_sh_dwords as u32).min(n));
+    }
+    let dma = if PVR_BACKEND_UNIFORM_PREFIX && sh.uniform_sh_dwords != 0 && (sh.uniform_sh_dwords as u32) < n {
+        sh.uniform_sh_dwords as u32 /* the prefix the shader reads */
+    } else {
+        n
+    };
+    (dma, dma)
+}
+
+/// The block-address pair of a stage that reads uniform-block members with
+/// `ld` (docs/notes/pvr-ubo-memory-load.md §8.5): `snap_gpu`, the device
+/// address of this draw's snapshot of the stage's array, low dword first, to
+/// `sh[ubo_off1 - 1]` and `sh[ubo_off1]`, by one more common-store DMA kick.
+/// Raises `shared_dw` to cover the pair. -EINVAL when there is no snapshot
+/// to point at (the shader would read whatever the pair held) or it is not
+/// dword-aligned (`ld` reads dwords, §8.3).
+fn ubo_pair_kick(
+    b: &mut Backend,
+    snap_gpu: u64,
+    ubo_off1: u16,
+    kicks: &mut [PvrPdsDmaKick],
+    nkicks: &mut usize,
+    shared_dw: &mut u32,
+) -> i32 {
+    if snap_gpu == 0 || snap_gpu & 3 != 0 {
+        glog_once!("yakogl/pvr: draw refused: a uniform-block read has no dword-aligned array (0x{:x})", snap_gpu);
+        return -EINVAL;
+    }
+    let lo = ubo_off1 as u32 - 1;
+    let mut pair_gpu = 0u64;
+    let rc = arena_put_words(&mut b.gen, &[snap_gpu as u32, (snap_gpu >> 32) as u32], 8, None, Some(&mut pair_gpu));
+    if rc != 0 {
+        return rc;
+    }
+    if !dma_push(kicks, nkicks, PvrPdsDmaKick { address: pair_gpu, dwords: 2, dest_offset: lo }) {
+        return dma_kicks_full(b);
+    }
+    *shared_dw = (*shared_dw).max(lo + 2);
+    0
 }
 
 /// Copy `bytes` into the arena at the next `align`-aligned offset (`align` a
@@ -8630,36 +8705,47 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             shared_dw += desc_dw;
         }
     }
+    let fs_ubo_off1 = ubo_addr_off1(fs);
     if d.fs_uniform_dwords != 0 {
         /* Snapshot per draw (see the VS uniform note below): pg->uniforms
          * is shared per program, so several draws sharing a program in one
          * kick would otherwise all read the last draw's block.
          * With PVR_BACKEND_UNIFORM_PREFIX only the prefix the shader reads
-         * goes to the shared registers (uniform_sh_dwords). */
+         * goes to the shared registers (uniform_sh_dwords). A stage that
+         * reads its uniform-block members with `ld` (ubo_addr_off1) keeps
+         * the whole array in the snapshot, the `ld` target, and DMAs only
+         * its default prefix (docs/notes/pvr-ubo-memory-load.md §8.5). */
         let mut fs_uni_gpu = d.fs_uniform_gpu;
-        let mut uni_dw = d.fs_uniform_dwords as u32;
+        let (snap_dw, uni_dw) = uniform_split(fs, fs_ubo_off1, d.fs_uniform_dwords);
 
-        if PVR_BACKEND_UNIFORM_PREFIX && fs.uniform_sh_dwords != 0 && (fs.uniform_sh_dwords as u32) < uni_dw {
-            uni_dw = fs.uniform_sh_dwords as u32;
-        }
-        if !d.fs_uniform_cpu.is_null()
+        if !d.fs_uniform_cpu.is_null() {
             // SAFETY: the core's uniform block holds fs_uniform_dwords dwords,
-            // and uni_dw is at most that.
-            && unsafe {
-                arena_put(&mut b.gen, d.fs_uniform_cpu as *const u8, uni_dw * 4, 16, None, Some(&mut fs_uni_gpu))
-            } != 0
-        {
-            return -ENOMEM;
+            // and snap_dw is at most that.
+            rc = unsafe {
+                arena_put(&mut b.gen, d.fs_uniform_cpu as *const u8, snap_dw * 4, 16, None, Some(&mut fs_uni_gpu))
+            };
+            if rc != 0 {
+                /* -EFRAME_FULL: draw_part retries on a fresh frame (§8.2) */
+                return rc;
+            }
         }
         /* sh0.. (sh20.. after a texture) */
-        if !dma_push(
-            &mut s.kicks,
-            &mut nkicks,
-            PvrPdsDmaKick { address: fs_uni_gpu, dwords: uni_dw, dest_offset: shared_dw },
-        ) {
-            return dma_kicks_full(b);
+        if uni_dw != 0 {
+            if !dma_push(
+                &mut s.kicks,
+                &mut nkicks,
+                PvrPdsDmaKick { address: fs_uni_gpu, dwords: uni_dw, dest_offset: shared_dw },
+            ) {
+                return dma_kicks_full(b);
+            }
+            shared_dw += uni_dw;
         }
-        shared_dw += uni_dw;
+        if fs_ubo_off1 != 0 {
+            rc = ubo_pair_kick(b, fs_uni_gpu, fs_ubo_off1, &mut s.kicks, &mut nkicks, &mut shared_dw);
+            if rc != 0 {
+                return rc;
+            }
+        }
         if b.opt(PVR_BACKEND_OPT_DEBUG) != 0 && b.dbg_draws_left != 0 && !d.fs_uniform_cpu.is_null() {
             /* The block as the shader will read it. A loop whose bound is a
              * uniform (Quick 3D's environment prefilter runs
@@ -8677,6 +8763,9 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
                 glog!("  fs_uniform[{}] = 0x{:08x}  int {}  float {}", i, u, u as i32, f);
             }
         }
+    } else if fs_ubo_off1 != 0 {
+        /* a block read with no array to read it from: refused (-EINVAL) */
+        return ubo_pair_kick(b, 0, fs_ubo_off1, &mut s.kicks, &mut nkicks, &mut shared_dw);
     }
     /* A fragment shader that uses discard is compiled in FULL mode: the USC
      * reads a per-draw ISP-feedback control word from a shared register the
@@ -9210,7 +9299,11 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
 
     let vs_textures = &d.vs_textures[..(d.num_vs_textures as usize).min(d.vs_textures.len())];
 
-    if d.vs_uniform_dwords != 0 || d.num_vs_textures != 0 || stage_sampler_count(Some(vs)) != 0 {
+    if d.vs_uniform_dwords != 0
+        || d.num_vs_textures != 0
+        || stage_sampler_count(Some(vs)) != 0
+        || ubo_addr_off1(vs) != 0
+    {
         /* The vertex stage's shared registers, in the order the compiler laid
          * them out: its texture descriptors first, then the uniform block. A
          * vertex shader that samples (Qt Quick 3D's bone and morph-target
@@ -9235,16 +9328,17 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
          * by the next draw, so a kick with several draws sharing a program
          * would otherwise read the last draw's block. */
         let mut vs_uni_gpu = d.vs_uniform_gpu;
-        let mut vs_uni_dw = d.vs_uniform_dwords as u32;
+        /* a stage that reads its block members with `ld`: the whole array
+         * in the snapshot, its default prefix in the shared registers, and
+         * the snapshot's address in the pair (uniform_split, ubo_pair_kick) */
+        let vs_ubo_off1 = ubo_addr_off1(vs);
+        let (vs_snap_dw, vs_uni_dw) = uniform_split(vs, vs_ubo_off1, d.vs_uniform_dwords);
 
-        if PVR_BACKEND_UNIFORM_PREFIX && vs.uniform_sh_dwords != 0 && (vs.uniform_sh_dwords as u32) < vs_uni_dw {
-            vs_uni_dw = vs.uniform_sh_dwords as u32; /* the prefix the shader reads */
-        }
-        if vs_uni_dw != 0 && !d.vs_uniform_cpu.is_null() {
+        if vs_snap_dw != 0 && !d.vs_uniform_cpu.is_null() {
             // SAFETY: the core's uniform block holds vs_uniform_dwords dwords,
-            // and vs_uni_dw is at most that.
+            // and vs_snap_dw is at most that.
             rc = unsafe {
-                arena_put(&mut b.gen, d.vs_uniform_cpu as *const u8, vs_uni_dw * 4, 16, None, Some(&mut vs_uni_gpu))
+                arena_put(&mut b.gen, d.vs_uniform_cpu as *const u8, vs_snap_dw * 4, 16, None, Some(&mut vs_uni_gpu))
             };
             if rc != 0 {
                 return rc;
@@ -9254,6 +9348,15 @@ fn record_draw(b: &mut Backend, s: &mut Scratch, d: &GlesDraw, first: u32, count
             vk[nvk] = PvrPdsDmaKick { address: vs_uni_gpu, dwords: vs_uni_dw, dest_offset: vs_shared_dw };
             nvk += 1;
             vs_shared_dw += vs_uni_dw;
+        }
+        if vs_ubo_off1 != 0 {
+            /* three kicks at most (descriptors, prefix, pair): vk holds
+             * PVR_PDS_DMA_MAX_KICKS */
+            let snap = if d.vs_uniform_dwords != 0 { vs_uni_gpu } else { 0 };
+            rc = ubo_pair_kick(b, snap, vs_ubo_off1, &mut vk, &mut nvk, &mut vs_shared_dw);
+            if rc != 0 {
+                return rc;
+            }
         }
         let mut ui = PvrPdsRenderColorUploadInfo::default();
         let mut ud = [0u32; 3 * PVR_PDS_DMA_MAX_KICKS as usize];
