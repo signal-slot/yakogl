@@ -68,8 +68,9 @@ classes are read by `isampler2D`/`usampler2D`), so there each format is
 stored in its own class except `RGB10_A2`, which stays in `RGBA8` because a
 texture of the `RGB10A2` class is no render target and has no
 glGenerateMipmap here. The GC7000 and the V3D masks list only the classes
-their samplers already read (the GC7000UL's also lists the 8/16-bit and R32/RG32 integer
-classes and `RGB10_A2UI`, its descriptor decodes them): there the other integer
+their samplers already read (the GC7000UL's also lists the 8/16-bit, the R32/RG32 and the narrow R8/RG8/R16/RG16
+and snorm classes and `RGB10_A2UI`, its descriptor decodes them, so it refuses
+no format of ES 3.0): on the V3D and the PowerVR the other integer
 formats are **refused by name** (a log line `glTexImage2D: GL_RGBA16UI is not supported:
 this back end samples none of its storage classes` and GL_INVALID_OPERATION,
 in glTexImage2D/3D, glTexStorage2D/3D and glCopyTexImage2D); the float,
@@ -210,8 +211,8 @@ R11, 8x for the others.
 * Native (block) sampling of the six decoded ETC2/EAC formats, which would
   give back the 4x/8x memory (`docs/notes/etc2-eac.md` section 6).
 * Sampling the new classes and isampler/usampler on the V3D (#1232, #1233).
-  The GC7000UL (`src/vivante/**`) takes the 8/16-bit and the R32/RG32 integer
-  classes and `RGB10_A2UI` (`GC_SAMPLED_TEXFMTS`); its texture descriptor composes the
+  The GC7000UL (`src/vivante/**`) takes the 8/16-bit, the R32/RG32 and the narrow
+  R8/RG8/R16/RG16 integer classes, the R8/RG8 snorm ones and `RGB10_A2UI` (`GC_SAMPLED_TEXFMTS`); its texture descriptor composes the
   format swizzle with `GlesTextureBind::swizzle` and SAMP_CTRL0's W wrap comes
   from `wrap_r` (`840ea7ec`, `tests/es3_tex_swizzle_gc.rs`,
   `docs/notes/gc-texture-swizzle-wrap.md`). `RGBA32F/UI/I` are in the mask

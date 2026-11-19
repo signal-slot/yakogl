@@ -152,7 +152,7 @@ pub const GLES_TEXFMT_RG32I: u8 = 29;
 /// packed (1, 2 or 4 bytes a texel). A back end whose sampled set lacks one
 /// stores the format in the matching RGBA class instead
 /// (docs/notes/gl-texture-classes-es3.md section 2.7). No back end offers
-/// them yet.
+/// them (the GC7000UL does, `GC_SAMPLED_TEXFMTS`).
 pub const GLES_TEXFMT_R8_SNORM: u8 = 30;
 pub const GLES_TEXFMT_RG8_SNORM: u8 = 31;
 pub const GLES_TEXFMT_R8UI: u8 = 32;
@@ -238,7 +238,10 @@ pub const PVR_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
 /// EXT_R32I, RG32UI, RG32I as EXT_G32R32I; `gc-r32-flip`), and the three
 /// 128-bit classes (RGBA32F, RGBA32UI, RGBA32I), sampled as two G32R32
 /// planes the program joins (docs/es3/gc-formats.md section 3,
-/// `gc-wide128-flip`). Not RGB10A2.
+/// `gc-wide128-flip`), and the ten narrow classes (R8/RG8 snorm, R8/RG8 and
+/// R16/RG16 integer, classes 30-39: EXT_R8_SNORM, EXT_G8R8_SNORM, EXT_R8I,
+/// EXT_G8R8I, EXT_R16I, EXT_G16R16I, etnaviv_format.c:89-91, 102-103,
+/// 119-121, 147-148; `gc-narrow-flip`). Not RGB10A2.
 pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
     | texfmts(&[
         GLES_TEXFMT_SRGB8_A8,
@@ -259,6 +262,16 @@ pub const GC_SAMPLED_TEXFMTS: u64 = BASE_SAMPLED_TEXFMTS
         GLES_TEXFMT_RGBA32F,
         GLES_TEXFMT_RGBA32UI,
         GLES_TEXFMT_RGBA32I,
+        GLES_TEXFMT_R8_SNORM,
+        GLES_TEXFMT_RG8_SNORM,
+        GLES_TEXFMT_R8UI,
+        GLES_TEXFMT_R8I,
+        GLES_TEXFMT_RG8UI,
+        GLES_TEXFMT_RG8I,
+        GLES_TEXFMT_R16UI,
+        GLES_TEXFMT_R16I,
+        GLES_TEXFMT_RG16UI,
+        GLES_TEXFMT_RG16I,
     ]);
 /// The V3D TMU binding's (`v3d/texture.rs` `tmu_format`, each class Mesa's
 /// V3D 4.2 row of the same memory layout, v3dx_format_table.c): the base set,
