@@ -450,7 +450,7 @@ FAMILIES = [
     ('367:ARITH', False, 'a fragment shader operand of a form or in a place no reference draws'),
     ('367:CONST_FOLD', False, "a constant product in a shape Mesa's algebraic rules move or fold"),
     ('367:FMA', False, 'a fused multiply-add other than'),
-    ('367:LOCALS', False, 'more than 32 local variables'),
+    ('367:LOCALS', False, 'local variables is not lowered yet'),
     ('367:FRAGCOLOR_LANE', False, "a gl_FragColor lane other than the varying's own lane"),
     ('367:TEX_COORD', False, 'a texture coordinate other than'),
     ('367:TEX_VERTEX', False, 'a texture look-up other than'),

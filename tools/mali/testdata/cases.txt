@@ -208,3 +208,12 @@ gm2_intloop_const_vs    gm2_intloop_const_vs.vert   gm2_intloop_const_vs.frag   
 gm2_intloop_cond_vs     gm2_intloop_cond_vs.vert    gm2_intloop_cond_vs.frag    triangles vs.position=differs:mat-order:38:0ae9442813a8 fs.fragment=equal
 gm2_intloop_uniform_vs  gm2_intloop_uniform_vs.vert gm2_intloop_uniform_vs.frag triangles vs.position=differs:unanalysed:46:f1da507d6747 fs.fragment=equal
 gm2_cf_loop_uni_vs      gm2_cf_loop_uni_vs.vert     gm2_cf_loop_uni_vs.frag     triangles vs.position=differs:mat-order:38:c99e0a6f078b fs.fragment=equal
+# #367 lower-locals: more than 32 locals (LOCALS, effect2d fs ba8e's box kernel and terrain fs 1637's noise; docs/notes/
+# mali-local-arrays.md section 7), drawn without --uniform-values. Our compiler is byte-equal to gm2_locals_scalar and
+# gm2_locals_noise (tests/mali_locals.rs); gm2_locals_box is refused at its look-ups (TEX_MULTI) and gm2_locals_vsum at its
+# 144 uniform words (a uniform past the FAU's 128 words). pan_shc's SPIR-V path has no lower_precision: the mediump
+# fragment arithmetic of _box and _vsum differs (`mediump`).
+gm2_locals_scalar gm2_locals_scalar.vert gm2_locals_scalar.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_locals_box    gm2_locals_box.vert    gm2_locals_box.frag    triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:148:7bede96630e9
+gm2_locals_noise  gm2_locals_noise.vert  gm2_locals_noise.frag  triangles vs.position=equal vs.varying=equal fs.fragment=equal
+gm2_locals_vsum   gm2_locals_vsum.vert   gm2_locals_vsum.frag   triangles vs.position=equal fs.fragment=differs:mediump:7:7d09cf669aec
