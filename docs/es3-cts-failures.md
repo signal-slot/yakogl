@@ -364,7 +364,7 @@ answers (`tests/es3_limits_v3d.rs`, `tests/es3_v3d_varyings.rs`), so a
 minimum. **Fixed on the V3D (host, ES 3.0 report):** the varying family
 (`6581f22b`, `d17f4362`, `201e03be`): `MAX_VARYING_VECTORS` 15,
 `MAX_VARYING_COMPONENTS` 60, `MAX_FRAGMENT_INPUT_COMPONENTS` 60,
-`MAX_VERTEX_OUTPUT_COMPONENTS` 64 (15 / 60 / 60 / 64; `gl/context.rs:204,251`;
+`MAX_VERTEX_OUTPUT_COMPONENTS` 64 (15 / 60 / 60 / 64; `gl/context.rs:213,260`;
 `tests/es3_v3d_varyings.rs`; the job builder writes three varying flag words);
 the V3D's varying family is closed on the host (board rows to re-run, a Pi 4
 step for #320). The V3D's uniform-block family is closed on the
@@ -380,10 +380,21 @@ cases of `tests/es3_ubo_v3d.rs` run (`773be1b1`), `UniformRow::array_len` is
 cases of the two families move Fail to Pass (7 `implementation_limits`, 8
 `state_query.integers`, 6 `integers64`), the `_getfloat` / `_getinteger64`
 forms with their limit, and no `shaders.linkage` or `functional.ubo` case is
-refused at compile or link on any of the three GPUs. Left: the uniform-block size and the
-combined uniform components on the PowerVR and GC7000UL (6144 / 1536, `gl/context.rs:112,131`:
-the blocks must be read from memory, plan #378 and `docs/notes/ubo-limits.md`),
-`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the same two (`gl/context.rs:253`; 64 is
+refused at compile or link on any of the three GPUs. **The PowerVR's
+uniform-block family is closed on the host too** (plan #378: `b85960c2`,
+`fad0558a`, `f0b02eda`, `c26a46e9`): `MAX_UNIFORM_BLOCK_SIZE` 16384 and the
+combined uniform components 50688 (the same formula), the USC reads a
+stage's block members with `ld` from the per-draw copy of the stage array in
+memory and shared registers keep the default block (`gl/context.rs`
+`MAX_UNIFORM_BLOCK_SIZE`, `MAX_STAGE_UNIFORM_DWORDS`, the two consts shared
+with the V3D; `docs/notes/pvr-ubo-memory-load.md`, `docs/notes/ubo-limits.md`
+section 4; `tests/es3_limits_pvr_ubo.rs`, `tests/pvr_ubo_draw_16k.rs`; host
+dEQP `functional.ubo` and `implementation_limits` and the AM62P board rows
+to run). Left: the uniform-block size and the
+combined uniform components on the GC7000UL (6144 / 1536, `gl/context.rs:116,140`:
+the compiler path is done, the i.MX8MP board proof and the cfg arm are left,
+`docs/notes/ubo-limits.md` section 5),
+`MAX_VERTEX_OUTPUT_COMPONENTS` 60 on the PowerVR and the GC7000UL (`gl/context.rs:262`; 64 is
 reachable on paper, issue open; host dEQP: 4 `implementation_limits` and 8
 `state_query` rows on each), the V3D's run-time index into a uniform array
 past 64 vec4 (`ldunifa`, `shaderc/online/v3d/prepare.rs:1407`; two ignored
