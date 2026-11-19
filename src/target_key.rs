@@ -113,8 +113,49 @@ pub const fn shc_mixed_out_layout(targets: &[u32]) -> Option<([u8; SHC_MIXED_MAX
     Some((start, next as u8))
 }
 
+/// The pixel output registers a list of per-target keys spans and the
+/// targets it spills to tile buffers, by the rule the compiler places the
+/// outputs by and the back end emits them by ("layout B",
+/// `src/pvr/mrt_layout.rs` `layout`, the compiler's `chain::target_layout`):
+/// each target at the next free register, one of two or more dwords on an
+/// even one, never back-filled; the first target that does not fit and
+/// every one after it spilled, the k-th to tile buffer k. `None` when
+/// `targets` is empty or longer than SHC_MIXED_MAX_TARGETS, a per-target
+/// key is not valid, or the layout is one no end-of-tile program was
+/// captured for: two targets with the second spilled, three with the last
+/// two (`LayoutError::NoProgram`). Within three targets the spills it
+/// gives are none (`eot1`..`eot3`) or the third target alone (`eot3_tb`).
+/// Where nothing spills the registers are [`shc_mixed_out_layout`]'s.
+pub const fn shc_mixed_spans(targets: &[u32]) -> Option<(u8, u8)> {
+    if targets.is_empty() || targets.len() > SHC_MIXED_MAX_TARGETS {
+        return None;
+    }
+    let mut next = 0u32;
+    let mut spilled = 0u32;
+    let mut i = 0;
+    while i < targets.len() {
+        let d = match shc_target_key_dwords(targets[i]) {
+            Some(d) => d,
+            None => return None,
+        };
+        let s = if d >= 2 { (next + 1) & !1 } else { next };
+        if spilled == 0 && s + d <= MAX_OUT_REGS {
+            next = s + d;
+        } else {
+            spilled += 1;
+        }
+        i += 1;
+    }
+    match (targets.len(), spilled) {
+        (2, 1) | (3, 2) => None,
+        _ => Some((next as u8, spilled as u8)),
+    }
+}
+
 /// The mixed key of draw buffers 0.. (one per-target key each, dense), or
-/// `None` when the list is not a mix (section 2.2, conditions 2-5).
+/// `None` when the list is not a mix (section 2.2, conditions 2-5;
+/// condition 5 is [`shc_mixed_spans`]: the third of three targets may spill
+/// to a tile buffer).
 pub const fn shc_blend_key_mixed(targets: &[u32]) -> Option<u32> {
     if targets.len() < 2 || targets.len() > SHC_MIXED_MAX_TARGETS {
         return None;
@@ -137,7 +178,7 @@ pub const fn shc_blend_key_mixed(targets: &[u32]) -> Option<u32> {
         key |= code << (10 + 5 * i);
         i += 1;
     }
-    if !any_int || all_same_int || shc_mixed_out_layout(targets).is_none() {
+    if !any_int || all_same_int || shc_mixed_spans(targets).is_none() {
         return None;
     }
     Some(key)
@@ -312,6 +353,44 @@ mod tests {
         assert_eq!(l(&[]), None);
         assert_eq!(l(&[RGBA8; 4]), None);
         assert_eq!(l(&[1]), None);
+    }
+
+    /// Layout B over per-target keys: the registers spanned and the targets
+    /// spilled. The third of three targets spills where an end-of-tile
+    /// program was captured for it (`eot3_tb`); two targets with the second
+    /// spilled and three with the last two have none and are `None` (the
+    /// fragment_out.random lists of plan #325 item mrt-frameload).
+    #[test]
+    fn spans() {
+        let s = shc_mixed_spans;
+        let t = |f| tk(f);
+        let u = tk(GLES_SURF_R32UI);
+        /* nothing spilled: the registers shc_mixed_out_layout gives */
+        assert_eq!(s(&[RGBA8, u]), Some((2, 0)));
+        assert_eq!(s(&[F16X4, u, RGBA8]), Some((4, 0)));
+        assert_eq!(s(&[RGBA8, tk(GLES_SURF_RG32UI)]), Some((4, 0)));
+        /* the third spilled: random.50, .85, .97, .62, .9 */
+        assert_eq!(s(&[t(GLES_SURF_R16UI), t(GLES_SURF_RGBA16UI), RGBA8]), Some((4, 1)));
+        assert_eq!(s(&[t(GLES_SURF_RGBA8UI), t(GLES_SURF_RGBA16UI), t(GLES_SURF_RG8UI)]), Some((4, 1)));
+        assert_eq!(s(&[t(GLES_SURF_RG8I), t(GLES_SURF_RG32I), t(GLES_SURF_RGBA8UI)]), Some((4, 1)));
+        assert_eq!(s(&[t(GLES_SURF_R16I), t(GLES_SURF_RG8I), t(GLES_SURF_RGBA32I)]), Some((2, 1)));
+        assert_eq!(s(&[t(GLES_SURF_R32I), t(GLES_SURF_R16I), t(GLES_SURF_RGBA32UI)]), Some((2, 1)));
+        /* no end-of-tile program: random.11, .18, .53, .92 (two, the second
+         * spilled) and .31, .89 (three, the last two spilled) */
+        assert_eq!(s(&[t(GLES_SURF_RG32I), t(GLES_SURF_RGBA32I)]), None);
+        assert_eq!(s(&[u, t(GLES_SURF_RGBA32I)]), None);
+        assert_eq!(s(&[t(GLES_SURF_RG8I), t(GLES_SURF_RGBA32UI)]), None);
+        assert_eq!(s(&[t(GLES_SURF_RGBA16I), t(GLES_SURF_RGBA32I)]), None);
+        assert_eq!(s(&[t(GLES_SURF_RG8UI), t(GLES_SURF_RGBA32UI), t(GLES_SURF_RG32I)]), None);
+        assert_eq!(s(&[u, t(GLES_SURF_RGBA32UI), t(GLES_SURF_RG16UI)]), None);
+        assert_eq!(s(&[RGBA8, tk(GLES_SURF_RGBA32UI)]), None);
+        assert_eq!(s(&[]), None);
+        assert_eq!(s(&[RGBA8; 4]), None);
+        assert_eq!(s(&[RGBA8, 1]), None);
+        /* the mixed key follows: a spilled third target is keyed */
+        let k = shc_blend_key_mixed(&[t(GLES_SURF_R16UI), t(GLES_SURF_RGBA16UI), RGBA8]).expect("a mix");
+        assert_eq!(shc_blend_key_mixed_targets(k), Some(([t(GLES_SURF_R16UI), t(GLES_SURF_RGBA16UI), RGBA8], 3)));
+        assert_eq!(shc_blend_key_mixed(&[t(GLES_SURF_RG32I), t(GLES_SURF_RGBA32I)]), None);
     }
 
     #[test]

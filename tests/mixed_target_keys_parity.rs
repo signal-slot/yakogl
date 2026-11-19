@@ -17,10 +17,13 @@
 //! exercised, only the functions it calls.
 //!
 //! One difference is pinned, not resolved: `gl::target_keys::draw_target_keys`
-//! does not check the four-register layout, so for a list that fits no layout
-//! (RGBA8 + RGBA32UI) the GL list is `Some` while the back end refuses with
-//! `REFUSE_FOUR_REGISTERS`. The GL mixed key is `None` there
-//! (`shc_blend_key_mixed` rejects the list), which agrees with the refusal.
+//! does not check the layout, so for a list no end-of-tile program emits
+//! (RGBA8 + RGBA32UI: two targets, the second spilled) the GL list is `Some`
+//! while the back end refuses with `REFUSE_FOUR_REGISTERS`. The GL mixed key
+//! is `None` there (`shc_blend_key_mixed` rejects the list), which agrees with
+//! the refusal. A list whose third target spills to a tile buffer
+//! (`target_key::shc_mixed_spans`, plan #325 item mrt-frameload) is a mix both
+//! sides agree on.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test mixed_target_keys_parity
@@ -157,6 +160,8 @@ fn surf(f: u32) -> u8 {
         GL_R32I => GLES_SURF_R32I,
         GL_RG32UI => GLES_SURF_RG32UI,
         GL_RGBA32UI => GLES_SURF_RGBA32UI,
+        GL_R16UI => GLES_SURF_R16UI,
+        GL_RGBA16UI => GLES_SURF_RGBA16UI,
         GL_SRGB8_ALPHA8 => GLES_SURF_SRGB8_A8,
         _ => panic!("no surface format for {f:#x}"),
     }
@@ -294,8 +299,18 @@ fn past_four_registers_is_refused_by_name() {
     assert_eq!(gl_list.map(|l| l.1), Some(2));
     assert_eq!(gl_mixed, None);
     assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)), Err(pvr_keys::REFUSE_FOUR_REGISTERS));
-    // three RGBA16F: two registers each
+    // three RGBA16F: two registers each, the third spilled to a tile
+    // buffer; listed, but no mix (no integer target)
     let f = [GL_RGBA16F, GL_RGBA16F, GL_RGBA16F];
     assert_eq!(gl_side(&f).1, None);
-    assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)), Err(pvr_keys::REFUSE_FOUR_REGISTERS));
+    assert_eq!(pvr_keys::draw_target_keys(&draw_of(&f)).map(|l| l.1), Ok(3));
+    assert_eq!(pvr_keys::draw_mixed_key(&draw_of(&f)), Err(pvr_keys::REFUSE_NOT_A_MIX));
+}
+
+#[test]
+fn a_spilled_third_target_is_a_mix_both_sides_agree_on() {
+    // R16UI (r0) + RGBA16UI (r2-r3) + RGBA8 (tile buffer 0):
+    // fragment_out.random.50's list
+    agree(&[GL_R16UI, GL_RGBA16UI, GL_RGBA8]);
+    agree(&[GL_RGBA8, GL_R32UI, GL_RGBA32UI]);
 }

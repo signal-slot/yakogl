@@ -6667,9 +6667,15 @@ fn frame_ends_here(b: &Backend, d: &GlesDraw, any_clear: bool) -> bool {
 ///   registers the layout spans. The compiler puts target `i` at
 ///   `shc_mixed_out_layout`'s start `i` (each after the one before, one of
 ///   two or more dwords on an even register), the walk the end-of-tile emit
-///   and the frame load make ([`attachment_out_reg`]). The key carries no
-///   blend and no colour mask, so a draw with either is refused by name, as
-///   is a layout past the four registers (RGBA8 beside RGBA32UI).
+///   and the frame load make ([`attachment_out_reg`]). The third of three
+///   targets that does not fit the four registers is stored to tile buffer
+///   0 (`target_key::shc_mixed_spans`, the compiler's `target_layout`; the
+///   record's `num_tile_buffers` 1), and the end-of-tile program of three
+///   emits with the last from the tile buffer (`eot3_tb`) emits it, as for
+///   three RGBA16F attachments. The key carries no blend and no colour
+///   mask, so a draw with either is refused by name, as is a layout past
+///   the four registers whose spill no end-of-tile program was captured for
+///   (RGBA8 beside RGBA32UI: two targets, the second spilled).
 pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'static str> {
     use super::target_keys::*;
     let n = (d.num_targets as usize).min(d.targets.len());
@@ -6699,7 +6705,9 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
         return Err(REFUSE_MIX_CLEAR_MASK);
     }
     let (keys, k) = draw_target_keys(d)?;
-    let Some((_, span)) = crate::target_key::shc_mixed_out_layout(&keys[..k]) else {
+    /* the registers the outputs span and the targets spilled to tile
+     * buffers (layout B: the third of three, `eot3_tb`) */
+    let Some((span, spilled)) = crate::target_key::shc_mixed_spans(&keys[..k]) else {
         return Err(REFUSE_FOUR_REGISTERS);
     };
     /* `d.blend` is attachment 0's (ES 3.0 4.1.8: off for an integer one),
@@ -6719,7 +6727,7 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
     if d.color_write && d.color_mask & 0xf != 0xf {
         return Err(REFUSE_MIX_MASK);
     }
-    if fs.is_some_and(|fs| fs.blend_key == key && fs.num_outputs == span) {
+    if fs.is_some_and(|fs| fs.blend_key == key && fs.num_outputs == span && fs.num_tile_buffers == spilled) {
         Ok(())
     } else {
         Err(REFUSE_NOT_A_MIX)
