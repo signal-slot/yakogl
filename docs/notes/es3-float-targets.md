@@ -308,12 +308,12 @@ Incomplete-FBO cases of a whole-group host run (282 mustpass names), HOST-ONLY.
 | GPU | run | incomplete-FBO cases (float / msaa) |
 |---|---|---|
 | v3d | `f62bcfe1`, vendored V3D reference build, item `deriv-host-v3d`: 115 Pass, 167 Fail, 0 NotSupported, 0 Crash | 0 / 15 |
-| powervr | pending (deriv-host-powervr2) | pending |
-| vivante | pending (rerun-vivante) | pending |
+| powervr | `467add49`, item `after-v3d` (HOST-ONLY): 115 Pass, 167 Fail, 0 NotSupported; of the Fails, 152 are image compares (black read-back) and the 15 `texture.msaa4` rows are the incomplete FBOs | 0 / 15 (`:757`, all `texture.msaa4`) |
+| vivante | `467add49`, item `after-v3d` (HOST-ONLY): 54 Pass, 228 Fail, 0 NotSupported; of the Fails, 15 are the incomplete `texture.msaa4` rows, 88 are `Draw` GL_INVALID_OPERATION refusals on RGBA32F-sampled or RGBA32UI-target cases (the GC7000UL limit of section 1) and the rest image compares (black read-back) | 0 / 15 (`:757`, all `texture.msaa4`) |
 
-Expected, to be confirmed by the runs: 0 / 15 on every GPU, because the
-cause is `glRenderbufferStorageMultisample` in the GL core (section 1), not
-the back end. Board lists agree: AM62P 0 float / 15 msaa, Pi 4 0 / 15.
+Expected and now measured (0 float / 15 msaa on all three GPUs): the cause is
+`glRenderbufferStorageMultisample` in the GL core (section 1), not the back
+end. Board lists agree: AM62P 0 float / 15 msaa, Pi 4 0 / 15.
 c4 holds on the host once `msaa-fbo` is on for the GPU.
 
 ## 7. Plan #360 decision
@@ -356,9 +356,12 @@ commit `ab924857` (the tree before any commit that claims
 `93bca01861b0e3ef3c387027a9791e6d065f900c`. Every `Fail` of a picture case
 here is the linux OSAL's black read-back and means nothing; the cells count
 verdicts, they do not claim the GPU renders. No other status (QualityWarning,
-InternalError, Crash, Timeout, Incomplete) occurred in any run. The
-`after` cells come from items `after-v3d` (feature off and on) and
-`after-gc` (powervr and vivante); they stay pending here.
+InternalError, Crash, Timeout, Incomplete) occurred in any run. The powervr
+and vivante `after` cells were measured by item `after-v3d` at commit
+`467add49` (core-surf merged, `color-buffer-float` off: neither GPU claims
+`GL_EXT_color_buffer_float`), with the same CTS commit, `MODULE=gles3`,
+`MESA_V3D_TREE` unset, no `EXTRA_FEATURES` and one `OUT=` per run. The v3d
+`after` cells (feature off and on, after `v3d-arm`) stay pending here.
 
 Group globs (all under `dEQP-GLES3.functional.`):
 
@@ -372,10 +375,20 @@ Group globs (all under `dEQP-GLES3.functional.`):
 | GPU | `shaders.derivate.*` | `fbo.completeness.*` | `fbo.color.*` | `pbo.renderbuffer.*` (float) |
 |---|---|---|---|---|
 | v3d | before: 115/167/0; after: pending | before: 539/14/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
-| powervr | before: 115/167/0; after: pending | before: 551/2/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
-| vivante | before: 54/228/0; after: pending | before: 531/22/7; after: pending | before: 0/269/33; after: pending | before: 4/0/4; after: pending |
+| powervr | before: 115/167/0; after: 115/167/0 | before: 551/2/7; after: 553/0/7 | before: 0/269/33; after: 0/269/33 | before: 4/0/4; after: 4/0/4 |
+| vivante | before: 54/228/0; after: 54/228/0 | before: 531/22/7; after: 543/10/7 | before: 0/269/33; after: 0/269/33 | before: 4/0/4; after: 4/0/4 |
 
-Expected, not measured: the 15 derivate `texture.msaa4` rows do not move
-(multisample, section 1); `fbo.completeness.renderable.*.color0.r32f` moves
-from Fail to Pass on every GPU; the 32-bit rows stay NotSupported on
-PowerVR and vivante and become real tests on v3d with the feature on.
+Expected (for v3d not measured yet), and on powervr and vivante measured as
+expected: the 15 derivate `texture.msaa4` rows do not move (multisample,
+section 1); `fbo.completeness.renderable.*.color0.r32f` moves from Fail to
+Pass on every GPU; the 32-bit rows stay NotSupported on PowerVR and vivante
+and become real tests on v3d with the feature on. The powervr completeness
+after cell moved by exactly the two r32f rows; the vivante one by those two
+plus ten integer rows (`renderable.texture.{depth,stencil}.{rgb32i,rgb32ui,rgba32i,rgba32ui}`
+and `renderable.texture.color0.{rgb32i,rgb32ui}`: "Expected no error but got
+GL_INVALID_OPERATION" at `ab924857`, where `glTexImage2D` refused those
+classes on the GC7000UL) that the wide-128 integer-texture work (`8f019dae`,
+`docs/notes/gc-128bit-texture-sampling.md`) fixed between `ab924857` and
+`467add49` — not float, not this plan. The ten integer Fails that remain
+(`renderable.texture.color0.{r8i,r8ui,r16i,r16ui,rg8i,rg8ui,rg16i,rg16ui,rgba32i,rgba32ui}`)
+were failing at `ab924857` too.
