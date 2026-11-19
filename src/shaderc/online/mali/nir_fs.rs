@@ -1108,6 +1108,18 @@ pub struct Fs<'s> {
     /// The `break`s of the kept loops walked so far ([`BreakEdge`]).
     breaks: [BreakEdge; MAX_BREAKS],
     nbreaks: usize,
+    /// The locals the module has (`Module::locals`, at most [`MAX_LOCALS`]):
+    /// the entries of every copy of the locals' lanes ([`Fs::pool`]).
+    nl: usize,
+    /// The copies of the locals' lanes the walk keeps, `nl` entries each, in
+    /// the scratch arena rather than on the stack (the walk nests a frame per
+    /// `if` and per guarded pass, and a copy of every local in each would put
+    /// [`MAX_LOCALS`] lanes on the stack per level; docs/notes/
+    /// mali-local-arrays.md section 7): the first [`MAX_BREAKS`] are the
+    /// `break`s' ([`BreakEdge`]), the rest a stack of the `if`s' saved and
+    /// then-side lanes ([`walk_if`], [`walk_if16`]) from `ptop` up.
+    pool: &'s mut [[Val; 4]],
+    ptop: usize,
     /// Each local's place in `nir_lower_vars_to_ssa`'s registration
     /// ([`nir::registration_order`]): the order of a loop header's phis.
     reg: [u16; MAX_LOCALS],
@@ -1130,16 +1142,53 @@ struct LoopCap {
 /// A `break` of a kept loop: the block whose jump enters the loop's exit,
 /// and the locals and the colour as they stand there (the exit's phis
 /// take one source from each, in the order the jumps were emitted).
+/// The locals' lanes of break `k` are [`Fs::pool`]'s table `k`.
 #[derive(Clone, Copy)]
 struct BreakEdge {
     lp: u8,
     block: u8,
-    locals: [[Val; 4]; MAX_LOCALS],
+    /// Its table in [`Fs::pool`].
+    slot: u8,
     colour: Option<[Val; 4]>,
 }
 
 impl BreakEdge {
-    const NONE: BreakEdge = BreakEdge { lp: 0, block: 0, locals: [[Val::Undef; 4]; MAX_LOCALS], colour: None };
+    const NONE: BreakEdge = BreakEdge { lp: 0, block: 0, slot: 0, colour: None };
+}
+
+/// The `if`s' tables [`Fs::pool`] holds past the `break`s': a saved and a
+/// then-side table per nesting level of [`walk_if`] and [`walk_if16`]. An
+/// `if` region is at most [`nir::MAX_IFS`] deep; a deeper nesting of
+/// flattened mediump `if`s is [`MaliError::BlockTableFull`].
+const POOL_IF_TABLES: usize = 2 * (nir::MAX_IFS + 2);
+
+impl<'s> Fs<'s> {
+    /// Table `t` of the pool.
+    fn table(&self, t: usize) -> &[[Val; 4]] {
+        &self.pool[t * self.nl..(t + 1) * self.nl]
+    }
+
+    fn table_mut(&mut self, t: usize) -> &mut [[Val; 4]] {
+        let nl = self.nl;
+        &mut self.pool[t * nl..(t + 1) * nl]
+    }
+
+    /// `locals` copied into the pool's next free table; its index.
+    fn push_locals(&mut self, locals: &[[Val; 4]; MAX_LOCALS]) -> Result<usize, MaliError> {
+        let t = self.ptop;
+        if (t + 1) * self.nl > self.pool.len() {
+            return Err(MaliError::BlockTableFull);
+        }
+        let nl = self.nl;
+        self.table_mut(t).copy_from_slice(&locals[..nl]);
+        self.ptop += 1;
+        Ok(t)
+    }
+
+    /// Table `t` copied back into `locals`.
+    fn load_locals(&self, t: usize, locals: &mut [[Val; 4]; MAX_LOCALS]) {
+        locals[..self.nl].copy_from_slice(self.table(t));
+    }
 }
 
 impl<'s> Fs<'s> {
@@ -3829,6 +3878,9 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         cap: None,
         breaks: [BreakEdge::NONE; MAX_BREAKS],
         nbreaks: 0,
+        nl: m.locals.len(),
+        pool: scratch.alloc_filled((MAX_BREAKS + POOL_IF_TABLES) * m.locals.len(), [Val::Undef; 4]).map_err(oom)?,
+        ptop: MAX_BREAKS,
         reg: nir::registration_order(m),
     };
     let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(oom)?;
@@ -3942,9 +3994,30 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
 /// ([`Fs::phi`]). The condition is a comparison's mask (its low half is
 /// what the branch tests, `emit_if`). A mediump shader's `if` has no
 /// reference (the pair path, [`select`]). `exit` is what the sides may end
-/// in ([`IfExit`]); the `if`'s own end is returned.
+/// in ([`IfExit`]); the `if`'s own end is returned. The tables of the
+/// locals' lanes it keeps ([`Fs::pool`]) are free again when it returns.
 #[allow(clippy::too_many_arguments)]
 fn walk_if(
+    f: &mut Fs<'_>,
+    m: &Module<'_>,
+    cond: Val,
+    then_: &[Node],
+    else_: &[Node],
+    exit: IfExit<'_>,
+    vals: &mut [[Val; 4]],
+    locals: &mut [[Val; 4]; MAX_LOCALS],
+    prec: FsPrecision,
+    join: usize,
+) -> Result<Flow, MaliError> {
+    let top = f.ptop;
+    let r = walk_if_sides(f, m, cond, then_, else_, exit, vals, locals, prec, join);
+    f.ptop = top;
+    r
+}
+
+/// [`walk_if`]'s work.
+#[allow(clippy::too_many_arguments)]
+fn walk_if_sides(
     f: &mut Fs<'_>,
     m: &Module<'_>,
     cond: Val,
@@ -3991,7 +4064,7 @@ fn walk_if(
         return Err(MaliError::BlockTableFull);
     }
     let before = f.nir.cur;
-    let (saved_locals, saved_colour) = (*locals, f.colour);
+    let (saved_locals, saved_colour) = (f.push_locals(locals)?, f.colour);
     /* a nested `if` that ends a side joins where the side's successor
      * begins: the else side's first instruction after a then side, this
      * `if`'s own join after the else side (its phis stand before the
@@ -4008,8 +4081,8 @@ fn walk_if(
     let then_flow = walk_nodes(f, m, then_, vals, locals, prec, false, first_instr(else_).unwrap_or(join), None)?;
     let then_end = f.nir.n;
     let then_last = f.nir.cur;
-    let (then_locals, then_colour) = (*locals, f.colour);
-    *locals = saved_locals;
+    let (then_locals, then_colour) = (f.push_locals(locals)?, f.colour);
+    f.load_locals(saved_locals, locals);
     f.colour = saved_colour;
     let else_first = f.nir.new_block(before)?;
     f.nir.cur = else_first;
@@ -4041,7 +4114,10 @@ fn walk_if(
         if f.nbreaks == MAX_BREAKS {
             return Err(MaliError::BlockTableFull);
         }
-        f.breaks[f.nbreaks] = BreakEdge { lp, block: then_last, locals: then_locals, colour: then_colour };
+        let slot = f.nbreaks;
+        let nl = f.nl;
+        f.pool.copy_within(then_locals * nl..(then_locals + 1) * nl, slot * nl);
+        f.breaks[slot] = BreakEdge { lp, block: then_last, slot: slot as u8, colour: then_colour };
         f.nbreaks += 1;
     }
     let flow = match exit {
@@ -4076,25 +4152,27 @@ fn walk_if(
      * it unwritten leaves it undefined, so the written side's value is the
      * join's (`nir_opt_undef`) */
     let at = join;
-    let mut vars = [(u32::MAX, usize::MAX); MAX_LOCALS + 1];
-    let mut nvars = 0;
-    for (l, lanes) in locals.iter().enumerate() {
-        if brk.is_none() && (0..4).any(|c| then_locals[l][c] != lanes[c]) {
-            vars[nvars] = (f.rank[l], l);
-            nvars += 1;
-        }
-    }
     let colour = match (then_colour, f.colour) {
         _ if brk.is_some() => None,
-        (Some(a), Some(b)) if a != b => {
-            vars[nvars] = (f.colour_rank, MAX_LOCALS);
-            nvars += 1;
-            Some((a, b))
-        }
+        (Some(a), Some(b)) if a != b => Some((a, b)),
         _ => None,
     };
-    vars[..nvars].sort_unstable_by(|x, y| y.cmp(x));
-    for &(_, l) in &vars[..nvars] {
+    /* the variables a side changed and the colour (`MAX_LOCALS`), by
+     * (rank, local) from the largest down: a scan per phi set, not a table
+     * of every local on this frame ([`Fs::pool`]) */
+    let mut prev = None;
+    loop {
+        let changed = |l: usize| brk.is_none() && f.table(then_locals)[l] != locals[l];
+        let colour_key = colour.map(|_| (f.colour_rank, MAX_LOCALS));
+        let next = (0..f.nl)
+            .filter(|&l| changed(l))
+            .map(|l| (f.rank[l], l))
+            .chain(colour_key)
+            .filter(|k| prev.is_none_or(|p| *k < p))
+            .max();
+        let Some(key) = next else { break };
+        prev = Some(key);
+        let l = key.1;
         if l == MAX_LOCALS {
             let Some((a, b)) = colour else { continue };
             let mut c = [Val::Undef; 4];
@@ -4105,7 +4183,7 @@ fn walk_if(
             continue;
         }
         for c in 0..4 {
-            let (a, b) = (then_locals[l][c], locals[l][c]);
+            let (a, b) = (f.table(then_locals)[l][c], locals[l][c]);
             if a == b || a == Val::Undef || b == Val::Undef {
                 locals[l][c] = f.phi(a, b, at)?;
                 continue;
@@ -4179,12 +4257,12 @@ fn walk_if16(
     if !f.mask_lane(cond) && !cmp16 {
         return Err(MaliError::ControlFlow);
     }
-    let (saved_locals, saved_colour) = (*locals, f.colour);
+    let (saved_locals, saved_colour) = (f.push_locals(locals)?, f.colour);
     let (looks, discards) = (f.nlook, f.discards);
     let then_start = f.nir.n;
     let then_flow = walk_nodes(f, m, then_, vals, locals, prec, false, join, None)?;
-    let then_locals = *locals;
-    *locals = saved_locals;
+    let then_locals = f.push_locals(locals)?;
+    f.load_locals(saved_locals, locals);
     let then_colour = core::mem::replace(&mut f.colour, saved_colour);
     let else_start = f.nir.n;
     let else_flow = walk_nodes(f, m, else_, vals, locals, prec, false, join, None)?;
@@ -4223,9 +4301,9 @@ fn walk_if16(
         }
         _ => Err(MaliError::ControlFlow),
     };
-    for (l, lanes) in locals.iter_mut().enumerate() {
+    for (l, lanes) in locals.iter_mut().enumerate().take(f.nl) {
         for (c, e) in lanes.iter_mut().enumerate() {
-            let t = then_locals[l][c];
+            let t = f.table(then_locals)[l][c];
             *e = match (t, *e) {
                 _ if t == *e => t,
                 /* a side that leaves it undefined (`nir_opt_undef`) */
@@ -4705,18 +4783,20 @@ fn walk_kept_loop(
      * `nir_lower_vars_to_ssa` registers them ([`nir::registration_order`]:
      * the constant-initialised ones first, so they come last), each one's
      * lanes in order */
-    let mut order = [(u32::MAX, 0usize); MAX_LOCALS];
+    /* compact entries: this frame nests in the walk ([`Fs::pool`]) */
+    let mut order = [(u32::MAX, 0u16); MAX_LOCALS];
     let mut nl = 0;
     for (l, &mask) in masks.iter().enumerate() {
         if mask != 0 {
-            order[nl] = (u32::MAX - u32::from(f.reg[l]), l);
+            order[nl] = (u32::MAX - u32::from(f.reg[l]), l as u16);
             nl += 1;
         }
     }
     order[..nl].sort_unstable();
-    let mut phis = [(0u16, 0usize, 0usize); MAX_LOCALS * 4];
+    let mut phis = [(0u16, 0u16, 0u8); MAX_LOCALS * 4];
     let mut nphi = 0;
     for &(_, l) in &order[..nl] {
+        let l = usize::from(l);
         /* a mediump shader's float local is fp16 (lower_precision), its
          * int or bool 32-bit; a highp shader's lanes are their nodes' */
         let float = m.locals.get(l).is_some_and(|d| d.ty.scalar == ir::ScalarType::F32);
@@ -4743,7 +4823,7 @@ fn walk_kept_loop(
             let id = f.nir.push_node(NirNode { kind: Kind::Phi, src: [v, Val::Undef, Val::Undef], bits, width: 1 })?;
             f.origin[id as usize] = last as u16;
             locals[l][c] = Val::Lane(id, 0);
-            phis[nphi] = (id, l, c);
+            phis[nphi] = (id, l as u16, c as u8);
             nphi += 1;
         }
     }
@@ -4769,7 +4849,7 @@ fn walk_kept_loop(
     f.nir.nodes[cap_phi as usize].src[1] = next;
     let latch = f.nir.cur;
     for &(id, l, c) in &phis[..nphi] {
-        let v = locals[l][c];
+        let v = locals[usize::from(l)][usize::from(c)];
         /* a lane the body leaves as it found it (`nir_opt_remove_phis`) */
         if v == Val::Lane(id, 0) {
             return Err(MaliError::LoopForm);
@@ -4795,8 +4875,9 @@ fn walk_kept_loop(
         for v in locals.iter_mut().flatten().filter(|v| **v == from) {
             *v = to;
         }
-        for b in f.breaks[first_break..f.nbreaks].iter_mut() {
-            for v in b.locals.iter_mut().flatten().filter(|v| **v == from) {
+        for k in first_break..f.nbreaks {
+            let slot = usize::from(f.breaks[k].slot);
+            for v in f.table_mut(slot).iter_mut().flatten().filter(|v| **v == from) {
                 *v = to;
             }
         }
@@ -4818,7 +4899,8 @@ fn walk_kept_loop(
     f.nbreaks = first_break;
     let exit = f.nir.new_block(dom)?;
     f.nir.cur = exit;
-    *locals = edges[0].locals;
+    let (e0, e1) = (usize::from(edges[0].slot), usize::from(edges[1].slot));
+    f.load_locals(e0, locals);
     f.colour = edges[0].colour;
     if nedges == 2 {
         /* the exit's phis, a lane the edges leave different, in the order
@@ -4828,18 +4910,21 @@ fn walk_kept_loop(
         if edges[1].colour != f.colour {
             return Err(MaliError::LoopForm);
         }
-        let mut vars = [(u32::MAX, usize::MAX); MAX_LOCALS];
-        let mut nvars = 0;
-        for l in 0..MAX_LOCALS {
-            if edges[0].locals[l] != edges[1].locals[l] {
-                vars[nvars] = (f.rank[l], l);
-                nvars += 1;
-            }
-        }
-        vars[..nvars].sort_unstable();
-        for &(_, l) in &vars[..nvars] {
+        /* the lanes the edges leave different, by (rank, local) from the
+         * smallest up: a scan, not a table on this frame */
+        let mut prev = None;
+        loop {
+            let next = (0..f.nl)
+                .filter(|&l| f.table(e0)[l] != f.table(e1)[l])
+                .map(|l| (f.rank[l], l))
+                .filter(|k| prev.is_none_or(|p| *k > p))
+                .min();
+            let Some(key) = next else { break };
+            prev = Some(key);
+            let l = key.1;
             for c in 0..4 {
-                locals[l][c] = f.phi(edges[0].locals[l][c], edges[1].locals[l][c], last)?;
+                let (a, b) = (f.table(e0)[l][c], f.table(e1)[l][c]);
+                locals[l][c] = f.phi(a, b, last)?;
             }
         }
     }
@@ -11185,6 +11270,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
         return Err(MaliError::GuardMediump);
     }
     nir::fuse(&mut f.nir);
+    nir::dot_addend(&mut f.nir)?;
     nir::late_rules(&mut f.nir);
     if pairs16 {
         late_rules16(f);

@@ -2,8 +2,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): a local array of more than 8 elements, the `TooManyLocals` refusal (row 13 of `mali-corpus-families.md`)
 
-**Status: design, nothing implemented** (plan #336, item ana-locals-loops;
-issue #33). Row 13 of `mali-corpus-families.md` names two sources,
+**Status: the count is lifted (plan #367 lower-locals, section 7): up to 256
+locals compile and the copies of their lanes no longer sit on the stack. The
+scratch array of sections 2-6 is still design, nothing of it implemented**
+(plan #336, item ana-locals-loops; issue #33). Sections 1-6 are the study as
+it was made at f5bc25f4, with its line numbers and its cap of 32. Row 13 of
+`mali-corpus-families.md` names two sources,
 `tools/shaders/es100/tmparr_const.vert` and `.frag` (dEQP
 `shaders.indexing.tmp_array.vec4_const_write_dynamic_read_vertex` and
 `_fragment`, `es2fShaderIndexingTests.cpp`, as their file headers say). Neither
@@ -263,3 +267,94 @@ cannot be byte-equal; do not take it.
   table by Mesa when it is read-only (`nir_opt_large_constants`): not
   here (Mesa wrote 40 stores), but `bifrost_nir.c` has an option for it at a
   size threshold; **inferred**, the stores are measured.
+
+## 7. glmark2's locals: the count lifted (plan #367 lower-locals)
+
+glmark2's two shaders behind this refusal are not arrays: effect2d fs `ba8e`
+(the 5x3 box kernel) declares 34 locals, terrain fs `1637` (the simplex noise)
+195 once the front end has inlined its calls (each call's parameters and
+return are locals; counted with `codegen::lower_source` on the shader of the
+glmark2 22c527cb corpus). Mesa has no count: `nir_lower_vars_to_ssa` makes them
+SSA values before the back end sees them. The references are
+`tools/mali/testdata/gm2_locals_{scalar,box,noise,vsum}` (plan #367
+ref-locals, drawn without `--uniform-values`), tested in
+`tests/mali_locals.rs`.
+
+### What changed
+
+- `nir.rs` `MAX_LOCALS` is 256 (it was 32), and so is the refusal's text
+  ("more than 256 local variables"). 256 covers `1637`'s 195.
+- The cap could not just be raised: the fragment walk kept a copy of every
+  local's lanes (`[[Val; 4]; MAX_LOCALS]`, 32 bytes a local) in each
+  `walk_if` frame (the saved table, the then-side table, a sort table), in
+  each `break` (`BreakEdge`, eight in `Fs`) and in the kept loop's exit. The
+  walk nests a frame per `if` and per guarded pass (the else side walks the
+  rest of the pass), so the stack grew by about 4 KiB per local at the worst.
+  Measured with a painted stack over every testdata pair
+  (`the_stack_of_a_compile_does_not_grow_with_the_cap`; HOST-ONLY, x86_64,
+  the test profile), the worst being `fvg_filter_image` (24 guarded passes):
+
+  | walk | cap 32 | cap 64 | cap 256 |
+  |---|---|---|---|
+  | copies on the stack (before) | 282 KiB | 411 KiB | 1187 KiB |
+  | copies in the arena (now) | | | 172 KiB |
+
+  Now `nir_fs.rs` `Fs::pool` holds the copies in the scratch arena, each
+  `nl = Module::locals.len()` entries wide (not `MAX_LOCALS`): tables 0-7 are
+  the `break`s' (`BreakEdge::slot`), the rest a stack of the `if`s' saved and
+  then-side tables (`POOL_IF_TABLES`, two per level for `nir::MAX_IFS + 2`
+  levels; a deeper nesting is `BlockTableFull`). `walk_if` restores the
+  pool's top on every return. The join's phi order and the kept loop's exit
+  order are scans by (rank, local), not tables. The kept loop's own order and
+  phi lists use `u16`/`u8` entries. The arena use is 76 tables of `nl`
+  entries: 24 KiB for 10 locals, 463 KiB for `1637`'s 195.
+- One live table of all `MAX_LOCALS` lanes stays on the stack in each walk
+  (8 KiB at 256), and so does the vertex walk's kept-loop copy
+  (`KeptLoop::brk_locals`). The vertex loop references are now the second
+  deepest pairs (162 KiB, `gm2_intloop_uniform_vs`); moving that copy too is
+  left open.
+
+### The references, byte for byte
+
+| case | shape | locals | ours | pan_shc (cases.txt) |
+|---|---|---|---|---|
+| `gm2_locals_scalar` | VS: 40 scalar products and a sum | 41 | **equal** (24 + 123 words, FS 8) | equal |
+| `gm2_locals_noise` | FS: terrain's noise reduced, highp | 36 | **equal** (157 words), with the two rules below | equal |
+| `gm2_locals_box` | FS: 15 look-ups, mediump coordinates | 34 | refused: TEX_MULTI (a look-up beside another with a mediump computed coordinate), plan #367 lower-fma | FS `mediump` |
+| `gm2_locals_vsum` | VS: 36 `vec4` products of `k[36]` | 37 | refused: 144 uniform words past the FAU's 128 (Mesa loads them from the UBO), no item yet | FS `mediump` |
+
+Past the count, `gm2_locals_noise` met two of Mesa's algebraic rules that the
+compiler did not have:
+
+1. `fadd(fneg(a), fadd(a, b))` and `fadd(a, fadd(fneg(a), b))` are `b`
+   (nir_opt_algebraic.py:271-272, `~fadd`; GLSL ES 1.00 has no `precise`),
+   a commutative match on both sums: `x3 = abs(x2 - x1)` of `x2 = x1 + x0` is
+   `abs(x0)` (Mesa's `FMAX.f32 r5, r4, r2.abs`). `nir.rs` `cancelled_sum`,
+   in `alu_sized` (both stages).
+2. `fadd(fneg(ffma(a, b, ffma(c, d, fmul(e, f)))), g)` is `ffma(fneg(a), b,
+   ffma(fneg(c), d, ffma(fneg(e), f, g)))` (:4004-4005, a late rule for
+   every stage but the vertex one): `max(m - vec4(dot(x0, x0), ..), 0.0)`
+   becomes `FMA.f32 r4, r4^.neg, r4^, u3.w0` twice and a third with
+   `.clamp_0_inf`. `nir.rs` `dot_addend`, after `fuse` in the fragment
+   selection. The three rules before it in Mesa's list (:3998-4003, the same
+   sums without the fneg) are not taken: no testdata reference, corpus
+   source or glmark2 shader reaches them (each one was made to refuse, and
+   nothing refused). None of them matches an fneg, so rule 2's matches are
+   Mesa's whatever the order.
+
+### What moved
+
+- `tools/mali/corpus-verdicts.txt`: `tmparr_const.frag` now stops at ARITH,
+  `tmparr_const.vert` at UNIFORM_TYPE (40 locals pass the count; the scratch
+  array of sections 2-6 is still not built, and the refusals after the count
+  keep the 40-slot ladder from being compiled). 256 ok -> 256 ok, 0
+  regressions.
+- glmark2 (`tests/mali_glmark2_corpus.rs` on the 22c527cb corpus): `ba8e`
+  moves to TEX_MULTI, and the clean scenes stay at 8 of 33.
+  `1637` still stops at NEG_ZERO (`glsl.rs` `NegZeroShared`), which the
+  passes raise before the walk counts locals. Plan #367 lower-const-fold owns
+  it, and past it the 195 locals now fit. So the forecast note's "LOCALS is
+  gone, 1637 moved to NEG_ZERO" read the order wrong: until this change
+  `1637` had both.
+- `tools/mali/deqp-host-measure.sh`'s LOCALS family matches the refusal's
+  words without the count.

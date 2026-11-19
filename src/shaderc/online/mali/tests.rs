@@ -1156,8 +1156,9 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
 fn gap_cases() -> Vec<(u32, String, MaliError)> {
     const FS: u32 = SHC_STAGE_FRAGMENT;
     const VS: u32 = SHC_STAGE_VERTEX;
-    let locals: String =
-        (0..33).map(|i| format!("vec4 a{i} = {}; ", if i == 0 { "p".into() } else { format!("a{}", i - 1) })).collect();
+    let locals: String = (0..257)
+        .map(|i| format!("vec4 a{i} = {}; ", if i == 0 { "p".into() } else { format!("a{}", i - 1) }))
+        .collect();
     let varyings: String = (0..17).map(|i| format!("varying float v{i}; ")).collect();
     let mut v: Vec<(u32, String, MaliError)> = [
         /* `abs`, `fract` and `sqrt` are taken; `exp2` is not */
@@ -1332,7 +1333,7 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     .into_iter()
     .map(|(st, src, e)| (st, src.to_string(), e))
     .collect();
-    v.push((VS, format!("attribute vec4 p; void main(){{ {locals} gl_Position = a32; }}"), MaliError::TooManyLocals));
+    v.push((VS, format!("attribute vec4 p; void main(){{ {locals} gl_Position = a256; }}"), MaliError::TooManyLocals));
     v.push((
         VS,
         format!("attribute vec4 p; void main(){{ vec4 a = p; {} gl_Position = a; }}", "a = a; ".repeat(1100)),
@@ -4216,7 +4217,7 @@ fn the_tables_high_water_marks_are_measured() {
         got,
         [
             ("IR values", 118, 2048),
-            ("locals", 2, 32),
+            ("locals", 2, 256),
             ("NIR instructions", 156, 1536),
             ("BIR instructions", 183, 1536),
             ("BIR values", 102, 1536),

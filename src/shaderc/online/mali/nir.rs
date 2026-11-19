@@ -64,7 +64,14 @@ pub const MAX_NODES: usize = 1536;
 /// offarm256 takes 1658, about six per arm.
 pub const MAX_VALUES: usize = 2048;
 /// The local variables the walk keeps lanes for (the fragment walk's too).
-pub const MAX_LOCALS: usize = 32;
+/// Mesa has no such count (a local is SSA values by then); 256 holds
+/// glmark2's terrain noise (fs 1637: 195 locals out of the front end, its
+/// inlined calls' parameters among them) and dEQP tmp_array's 40-element
+/// arrays (docs/notes/mali-local-arrays.md section 7). One table of every
+/// local's lanes is on the walk's stack (8 KiB at 256); the copies the walk
+/// nests are `nir_fs.rs` `Fs::pool`'s, in the scratch arena and as wide as
+/// the module's own count.
+pub const MAX_LOCALS: usize = 256;
 /// The `if`s one shader may hold ([`IfRegion`]): gl_test's databreak (case
 /// 87) has nine, the eight guarded passes of its unrolled loop and the
 /// `continue` of one of them; femtovg's filter_image 27, the 24 guards of
@@ -2253,6 +2260,21 @@ impl<'s> Nir<'s> {
                 self.note_user(Prod::Identity);
                 return Ok(if is_zero(a) { b } else { a });
             }
+            /* `fadd(fneg(a), fadd(a, b))` and `fadd(a, fadd(fneg(a), b))`
+             * are `fcanonicalize(b)`, which is `b` (nir_opt_algebraic.py:271-272,
+             * inexact `~fadd`: GLSL ES 1.00 has no `precise`; a commutative
+             * match on both sums): the terrain noise's `abs(x2 - x1)` of
+             * `x2 = x1 + x0` is `abs(x0)` (gm2_locals_noise,
+             * docs/notes/mali-local-arrays.md section 7) */
+            Alu::Fadd if bits == 32 => {
+                if let Some(r) = self.cancelled_sum(a, b).or_else(|| self.cancelled_sum(b, a)) {
+                    self.note_user(Prod::Identity);
+                    return Ok(r);
+                }
+            }
+            _ => {}
+        }
+        match op {
             Alu::Fmul if uniform && (is_zero(a) || is_zero(b)) => {
                 self.note_user(Prod::Identity);
                 return Ok(Val::Const(F32_ZERO));
@@ -2417,6 +2439,28 @@ impl<'s> Nir<'s> {
         let id = self.push_sized(kind, srcs, bits)?;
         self.nonuniform[id as usize] = self.nonuniform_const;
         Ok(Val::Lane(id, 0))
+    }
+
+    /// The `b` of `x + s` when `s` is the fp32 sum `fneg(x) + b` or `b +
+    /// fneg(x)`, or when `x` is `fneg(a)` and `s` is `a + b` or `b + a`
+    /// (nir_opt_algebraic.py:271-272).
+    fn cancelled_sum(&self, x: Val, s: Val) -> Option<Val> {
+        let Val::Lane(n, 0) = s else { return None };
+        let NirNode { kind: Kind::Alu(Alu::Fadd), src, bits: 32, width: 1 } = self.nodes[n as usize] else {
+            return None;
+        };
+        let neg_of = |v: Val| match v {
+            Val::Lane(id, 0) if self.is_alu(v, Alu::Fneg) && self.nodes[id as usize].bits == 32 => {
+                Some(self.nodes[id as usize].src[0])
+            }
+            _ => None,
+        };
+        for (p, q) in [(src[0], src[1]), (src[1], src[0])] {
+            if neg_of(x) == Some(p) || neg_of(p) == Some(x) {
+                return Some(q);
+            }
+        }
+        None
     }
 
     /// `v` is a lane of an ALU operation `op`.
@@ -5812,7 +5856,91 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
     }
 }
 
+/// The late reassociation of a sum into a negated fused dot product
+/// (nir_opt_algebraic.py:4004-4005, "Things that look like DPH"; the
+/// fragment stage only: Mesa's condition leaves out the vertex stage), after
+/// [`fuse`], on fp32 lanes: `fadd(fneg(ffma(a, b, ffma(c, d, fmul(e, f)))),
+/// g)` is `ffma(fneg(a), b, ffma(fneg(c), d, ffma(fneg(e), f, g)))`, a
+/// commutative match on the fadd; the outer `ffma` and the `fmul` used once,
+/// `g` not a constant, `e` and `f` neither a constant nor an `fsign`. The
+/// terrain noise's `m - vec4(dot(x0, x0), ..)` (gm2_locals_noise,
+/// docs/notes/mali-local-arrays.md section 7). The three rules before it in
+/// Mesa's list (the sums without the fneg, :3998-4003) match no reference,
+/// glmark2 or corpus shader and are not taken; none of them matches an fneg,
+/// so this one's matches are Mesa's whatever the order.
+pub(super) fn dot_addend(vs: &mut Nir<'_>) -> Result<(), MaliError> {
+    let mut k = 0;
+    while k < vs.len {
+        let x = vs.order[k] as usize;
+        let nd = vs.nodes[x];
+        let matched = match nd {
+            NirNode { kind: Kind::Alu(Alu::Fadd), bits: 32, width: 1, src } => (0..2).find_map(|s| {
+                let g = src[1 - s];
+                let chain = vs.negated_dot(src[s])?;
+                (!matches!(g, Val::Const(_))).then_some((chain, g))
+            }),
+            _ => None,
+        };
+        let Some((chain, g)) = matched else {
+            k += 1;
+            continue;
+        };
+        /* the new chain, innermost first, before the fadd; each first factor
+         * negated (a constant's sign flipped, as [`fuse`] does) */
+        let mut acc = g;
+        let mut at = k;
+        for (j, &f) in chain.iter().rev().enumerate() {
+            let fd = vs.nodes[f as usize];
+            let a = match fd.src[0] {
+                Val::Const(c) => Val::Const(c ^ F32_NEG_ZERO),
+                a => {
+                    let neg =
+                        NirNode { kind: Kind::Alu(Alu::Fneg), src: [a, Val::Undef, Val::Undef], bits: 32, width: 1 };
+                    let n = vs.insert_before(at, neg)?;
+                    at += 1;
+                    Val::Lane(n, 0)
+                }
+            };
+            let node = NirNode { kind: Kind::Alu(Alu::Ffma), src: [a, fd.src[1], acc], bits: 32, width: 1 };
+            if j + 1 == chain.len() {
+                vs.nodes[x] = node;
+            } else {
+                acc = Val::Lane(vs.insert_before(at, node)?, 0);
+                at += 1;
+            }
+        }
+        if x < vs.user_end {
+            vs.note(Prod::FusedNegated);
+        }
+        k = at + 1;
+    }
+    Ok(())
+}
+
 impl Nir<'_> {
+    /// The `ffma`, `ffma` and `fmul` of [`dot_addend`]'s `fneg(ffma(a, b,
+    /// ffma(c, d, fmul(e, f))))`, outermost first, when `p` is one.
+    fn negated_dot(&self, p: Val) -> Option<[u16; 3]> {
+        let fp32 = |v: Val, op: Alu| match v {
+            Val::Lane(n, 0) => match self.nodes[n as usize] {
+                NirNode { kind, bits: 32, width: 1, .. } if kind == Kind::Alu(op) && self.live_in_order(n) => Some(n),
+                _ => None,
+            },
+            _ => None,
+        };
+        let once = |n: u16| self.uses(n).count() == 1;
+        let neg = fp32(p, Alu::Fneg)?;
+        let outer = fp32(self.nodes[neg as usize].src[0], Alu::Ffma).filter(|&n| once(n))?;
+        let inner = fp32(self.nodes[outer as usize].src[2], Alu::Ffma)?;
+        let mul = fp32(self.nodes[inner as usize].src[2], Alu::Fmul).filter(|&n| once(n))?;
+        /* `is_not_const_and_not_fsign`: no `fsign` reaches this graph (the
+         * GLSL front end's `sign` is a select) */
+        if self.nodes[mul as usize].src[..2].iter().any(|s| matches!(s, Val::Const(_))) {
+            return None;
+        }
+        Some([outer, inner, mul])
+    }
+
     /// `is_only_used_by_fadd` (nir_search_helpers.h:594-613): every use an
     /// fadd, or an fneg whose own uses are.
     pub(super) fn only_used_by_fadd(&self, id: u16) -> bool {
