@@ -812,7 +812,8 @@ mod tests {
         assert!(conf.contains("MaxVaryingVectors 8"), "src/gl/state.rs GL_MAX_VARYING_VECTORS: {conf}");
         /* this crate builds yakogl with `gpu-powervr`: the PowerVR's 16 */
         assert!(conf.contains("MaxVertexTextureImageUnits 16"), "src/backend.rs GLES_VS_TEX_UNITS: {conf}");
-        assert!(conf.contains("MaxDrawBuffers 3"), "src/gl/state.rs GL_MAX_DRAW_BUFFERS: {conf}");
+        /* and its ES 3.0 report (no report-es2): DRAW_TARGETS 4 (src/backend.rs) */
+        assert!(conf.contains("MaxDrawBuffers 4"), "src/gl/state.rs GL_MAX_DRAW_BUFFERS: {conf}");
         assert!(
             conf.contains("MaxDualSourceDrawBuffersEXT"),
             "and glslang's other defaults survive: a config file replaces the whole table"

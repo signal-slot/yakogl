@@ -244,9 +244,10 @@ fn context() -> MutexGuard<'static, ()> {
     g
 }
 
-/// The build as it is: `DRAW_TARGETS` (3).
-fn as_built() {
-    backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
+/// A three-target back end (the stand-in at 3; the PowerVR build itself
+/// draws four since plan #325 item mrt-frameload, `DRAW_TARGETS`).
+fn three_targets() {
+    backend::HOST_DRAW_TARGETS.store(3, Ordering::Relaxed);
 }
 
 fn err() -> GLenum {
@@ -650,7 +651,7 @@ fn invalidate_colour_attachment_3_is_accepted() {
 }
 
 /// m = GL_MAX_COLOR_ATTACHMENTS (4) is GL_INVALID_OPERATION (ES 3.0 4.5.1),
-/// alone or after legal names; with the stand-in off (three) point 3 is.
+/// alone or after legal names; with a three-target stand-in point 3 is.
 #[test]
 fn invalidate_colour_attachment_4_is_invalid_operation() {
     let _g = context();
@@ -661,7 +662,7 @@ fn invalidate_colour_attachment_4_is_invalid_operation() {
         assert_eq!(inv_sub(t, &[GL_COLOR_ATTACHMENT4], 0, 0, 4, 4), GL_INVALID_OPERATION, "sub 0x{t:x}");
         assert_eq!(inv(t, &[GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4]), GL_INVALID_OPERATION);
     }
-    as_built();
+    three_targets();
     assert_eq!(get(GL_MAX_COLOR_ATTACHMENTS), 3);
     let r =
         (inv(GL_FRAMEBUFFER, &[GL_COLOR_ATTACHMENT3]), inv_sub(GL_FRAMEBUFFER, &[GL_COLOR_ATTACHMENT3], 0, 0, 4, 4));
