@@ -21,10 +21,9 @@
 //! without the capability through one-sample storage, which every ES 3.0
 //! context keeps (GL_RENDERBUFFER_SAMPLES 1, GL_SAMPLE_BUFFERS 1).
 //!
-//! The stand-in table below cannot say 4 yet: `YakoglBackend` has no
-//! `max_samples` field until plan #339's `gl-msaa-cap` adds it to every
-//! literal (TODO(gl-msaa-cap) at the table), and the one `#[ignore]`d test
-//! names that item.
+//! The stand-in table below says `max_samples` 4 (plan #339, `gl-msaa-cap`:
+//! the GL core reads the table's count), so the 4-sample test runs dEQP's
+//! whole sequence here.
 //!
 //! No GPU runs: the stand-in back end draws nothing.
 //!
@@ -102,9 +101,8 @@ static OSAL: OsalOps = OsalOps {
     display_busy: None,
 };
 
-/// TODO(gl-msaa-cap): give this table `max_samples: 4` when plan #339 adds
-/// the field, and un-ignore `stand_in_keeps_four_samples`; the 4-sample test
-/// then runs dEQP's whole sequence here.
+/// A back end that keeps 4 samples (`max_samples` 4): GL_MAX_SAMPLES 4, so
+/// the 4-sample test runs dEQP's whole sequence here.
 static BACKEND: YakoglBackend = YakoglBackend {
     name: c"es3-negapi-readpixels".as_ptr() as *const c_char,
     native_attrib_formats: 0,
@@ -141,7 +139,7 @@ static BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
-    max_samples: 0,
+    max_samples: 4,
 };
 
 /// One context for the whole file; the tests take turns on it.
@@ -362,7 +360,6 @@ fn four_sample_renderbuffer_read_is_invalid_operation() {
 /// The stand-in back end keeps 4 samples, so the test above runs dEQP's
 /// whole sequence on the host.
 #[test]
-#[ignore = "plan #339 gl-msaa-cap: YakoglBackend has no max_samples field, so the stand-in cannot say 4 (GL_MAX_SAMPLES is 1)"]
 fn stand_in_keeps_four_samples() {
     let _g = context();
     assert_eq!(geti(GL_MAX_SAMPLES), 4);

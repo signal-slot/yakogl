@@ -1556,11 +1556,12 @@ fn culls_everything(c: &GlContext, prim: GlesPrim) -> bool {
         || covers_no_sample(c)
 }
 
-/// A draw into a multisampled default framebuffer whose sample coverage
-/// mask is empty (glSampleCoverage(0, FALSE) or (1, TRUE)) changes no
+/// A draw into a multisampled framebuffer (the window's samples, or a 4x
+/// framebuffer object's, [`super::framebuffer::draw_samples`]) whose sample
+/// coverage mask is empty (glSampleCoverage(0, FALSE) or (1, TRUE)) changes no
 /// sample, of colour, depth or stencil (ES 2.0 4.1.3): nothing to draw.
 fn covers_no_sample(c: &GlContext) -> bool {
-    let samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
+    let samples = super::framebuffer::draw_samples(c);
     samples > 1 && c.sample_coverage && sample_coverage_mask(c, samples) == 0
 }
 
@@ -3025,7 +3026,7 @@ fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, w
         return;
     }
     set_target_format(c, d);
-    d.samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
+    d.samples = super::framebuffer::draw_samples(c);
     set_sample_state(c, d);
     resolve_targets(c, d); /* a clear opens the frame: it decides its attachments */
     if pc.color {
@@ -4067,7 +4068,7 @@ fn build_common(
     clock.lap(Step::GlTextures);
     resolve_target(c, d)?;
     set_target_format(c, d);
-    d.samples = if c.bound_framebuffer == 0 { c.default_samples } else { 1 };
+    d.samples = super::framebuffer::draw_samples(c);
     set_sample_state(c, d);
     resolve_targets(c, d);
     refuse_undrawable_targets(d, 0)?;
@@ -7640,6 +7641,33 @@ mod tests {
         assert_eq!(d.target_format, GLES_SURF_RGBA8888);
         assert_eq!(d.samples, 1);
         assert!(!d.flip_y, "FBO textures are in texel order");
+    }
+
+    /// A back end with `max_samples` 4: a draw into a framebuffer object
+    /// whose colour renderbuffer stored 4 samples hands the back end
+    /// `samples` 4, whatever the window has (note (b)4). ES 3.0 only: an
+    /// ES 2.0 build keeps no GL_RENDERBUFFER_SAMPLES, its FBO draws are 1.
+    #[cfg(not(feature = "report-es2"))]
+    #[test]
+    fn fbo_draw_carries_the_renderbuffer_samples() {
+        use crate::gl::framebuffer::{glFramebufferRenderbuffer, glGenRenderbuffers, glRenderbufferStorageMultisample};
+        let gl = Gl::new(16, 16);
+        gl.backend_keeps_four_samples();
+        basic(&gl);
+        gl.ctx().default_samples = 1; /* must not leak into the FBO */
+        let (mut fbo, mut rb): (GLuint, GLuint) = (0, 0);
+        // SAFETY: valid out pointers, plain GL calls.
+        unsafe {
+            glGenRenderbuffers(1, &mut rb);
+            glBindRenderbuffer(GL_RENDERBUFFER, rb);
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, 8, 8);
+            assert_eq!(glGetError(), GL_NO_ERROR);
+            glGenFramebuffers(1, &mut fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+            assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
+        }
+        assert_eq!(draw_tri(&gl).draw.samples, 4);
     }
 
     #[test]

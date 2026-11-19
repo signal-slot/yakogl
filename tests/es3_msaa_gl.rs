@@ -9,12 +9,11 @@
 //! GL_INVALID_OPERATION and stores 1 as plain storage, `GlesDraw::samples` of
 //! an FBO draw is 1. The passing tests pin that (the capability off).
 //!
-//! The `#[ignore]`d tests are the capability-on half: a back end with
-//! `max_samples` 4 (the `YakoglBackend` field `gl-msaa-cap` adds; it does not
-//! exist yet, so the stand-in here cannot say 4 and the lines that need it are
-//! marked TODO(gl-msaa-cap)). Each ignore reason names the item that lands it,
-//! `gl-msaa-cap` or `gl-msaa-resolve`, and the note's (b) item. Those items
-//! build the 4x stand-in table and un-ignore them.
+//! The capability-on half runs on a second stand-in table that says
+//! `max_samples` 4 (`context_ms4`): GL_MAX_SAMPLES 4, renderbuffers stored
+//! with 4, completeness on the real counts, FBO draws of 4 samples
+//! (gl-msaa-cap). The `#[ignore]`d tests are the resolve blit; each ignore
+//! reason names `gl-msaa-resolve` and the note's (b) item.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_msaa_gl
@@ -143,12 +142,21 @@ static BACKEND: YakoglBackend = YakoglBackend {
     max_samples: 0,
 };
 
+/// [`BACKEND`] with the multisample capability on: it keeps 4 samples.
+static BACKEND_MS4: YakoglBackend = YakoglBackend { max_samples: 4, ..BACKEND };
+
 /// One context for the whole file; the tests take turns on it.
 static LOCK: Mutex<()> = Mutex::new(());
 static ONCE: Once = Once::new();
 
 /// The context with the stand-in back end of today: no multisample capability.
 fn context() -> MutexGuard<'static, ()> {
+    context_on(&BACKEND)
+}
+
+/// The context with `table` as the back end (a test that swapped in the 4x
+/// one does not leak it into the next).
+fn context_on(table: &'static YakoglBackend) -> MutexGuard<'static, ()> {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     backend::HOST_DRAW_TARGETS.store(4, Ordering::Relaxed);
     ONCE.call_once(|| {
@@ -160,8 +168,9 @@ fn context() -> MutexGuard<'static, ()> {
             assert!(!yakogl::gl::context::gl_context_create(8, 8).is_null());
         }
     });
-    // SAFETY: plain GL calls.
+    // SAFETY: a static table; the lock above serialises the tests. Plain GL calls.
     unsafe {
+        backend::g_backend = table;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glFinish();
     }
@@ -172,12 +181,8 @@ fn context() -> MutexGuard<'static, ()> {
 }
 
 /// The context with a stand-in back end that says `max_samples` 4.
-///
-/// TODO(gl-msaa-cap): switch the table to a second `YakoglBackend` with
-/// `max_samples: 4` once the field exists; until then this is `context()` and
-/// every test that calls it is `#[ignore]`d.
 fn context_ms4() -> MutexGuard<'static, ()> {
-    context()
+    context_on(&BACKEND_MS4)
 }
 
 fn err() -> GLenum {
@@ -473,11 +478,10 @@ fn read_pixels_from_a_one_sample_fbo_today() {
     assert_eq!(read(&mut px), GL_NO_ERROR);
 }
 
-/* ---- the capability on: ignored until gl-msaa-cap / gl-msaa-resolve ---------- */
+/* ---- the capability on (gl-msaa-cap); the resolve ignored until gl-msaa-resolve */
 
 /// Note (b)1: GL_MAX_SAMPLES is the back end's `max_samples`, 4.
 #[test]
-#[ignore = "gl-msaa-cap, note (b)1: GL_MAX_SAMPLES is max(max_samples, 1) once the capability is wired"]
 fn max_samples_is_four() {
     let _g = context_ms4();
     assert_eq!(geti(GL_MAX_SAMPLES), 4);
@@ -486,7 +490,6 @@ fn max_samples_is_four() {
 /// Note (b)1: one sample count, 4, for the multisample-renderable formats;
 /// none for the integer ones.
 #[test]
-#[ignore = "gl-msaa-cap, note (b)1: glGetInternalformativ answers NUM_SAMPLE_COUNTS 1 and SAMPLES {4}"]
 fn internalformat_counts_four() {
     let _g = context_ms4();
     for f in [GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGB10_A2, GL_RGB8, GL_RGB565, GL_RGBA4, GL_RGB5_A1, GL_R8, GL_RG8] {
@@ -501,7 +504,6 @@ fn internalformat_counts_four() {
 /// Note (b)1/(b)2: any request 1..=4 stores 4, 0 stores 0, 5 and more stay
 /// GL_INVALID_OPERATION, integer formats stay refused.
 #[test]
-#[ignore = "gl-msaa-cap, note (b)1/(b)2: glRenderbufferStorageMultisample keeps the real count, 4 for 1..=4"]
 fn storage_keeps_four() {
     let _g = context_ms4();
     for n in 1..=4 {
@@ -520,7 +522,6 @@ fn storage_keeps_four() {
 
 /// Note (b)3: a 4x renderbuffer over 2048x2048 pixels is GL_OUT_OF_MEMORY.
 #[test]
-#[ignore = "gl-msaa-cap, note (b)3: the 64 MiB sample cap is GL_OUT_OF_MEMORY"]
 fn storage_over_the_cap_is_out_of_memory() {
     let _g = context_ms4();
     assert_eq!(storage_sized(4, GL_RGBA8, 2049, 2048).0, GL_OUT_OF_MEMORY);
@@ -531,7 +532,6 @@ fn storage_over_the_cap_is_out_of_memory() {
 /// a texture or a renderbuffer of another count is INCOMPLETE_MULTISAMPLE; the
 /// same counts are complete.
 #[test]
-#[ignore = "gl-msaa-cap, note (b)10: check_status compares the real sample counts of all attachments"]
 fn incomplete_multisample_with_real_counts() {
     let _g = context_ms4();
     let fbo = framebuffer(4, &[GL_RGBA8, GL_RGBA8]).unwrap();
@@ -559,13 +559,12 @@ fn incomplete_multisample_with_real_counts() {
 
 /// Note (b)4/(b)5: an FBO draw hands the back end samples 4.
 #[test]
-#[ignore = "gl-msaa-cap, note (b)4: GlesDraw.samples is framebuffer_samples for an FBO"]
 fn fbo_draw_is_four_samples() {
     let _g = context_ms4();
     let _fbo = framebuffer(4, &[GL_RGBA8]).unwrap();
     program();
     assert_eq!(draw().samples, 4);
-    // TODO(gl-msaa-cap): the draw also carries target_id (ds_object_id(rb.serial,
+    // TODO(gl-msaa-resolve): the draw also carries target_id (ds_object_id(rb.serial,
     // false)) and target_gen (storage_gen) of the renderbuffer, 0 for the window;
     // record them in Seen once GlesDraw has them and assert: non-zero id, the gen
     // changes when the renderbuffer is respecified, the id does not.
