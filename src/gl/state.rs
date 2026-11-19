@@ -118,7 +118,7 @@ const ALL_EXTENSION_NAMES: &[&[u8]] = &[
      * GL_NV_draw_buffers, not claimed (the registry text: "Rendering to color
      * attachments COLOR_ATTACHMENT[1..15]_NV can be activated through the
      * GL_NV_draw_buffers extension"). True on all three GPUs: each has
-     * context::max_color_attachments() points (3 today). dEQP-GLES2's completeness tests run their
+     * context::max_color_attachments() points (3 in the ES 2.0 report of all three). dEQP-GLES2's completeness tests run their
      * multi-attachment cases only when this is claimed
      * (es2fFboCompletenessTests.cpp:354): 54 were not supported on the Pi 4
      * (records/pi4/record_SW28_FB1_2c87c2e4.txt). */
@@ -3248,9 +3248,11 @@ mod tests {
         let outputs = if cfg!(feature = "gpu-v3d") { 64 } else { vectors * 4 };
         assert_eq!(geti1(GL_MAX_VERTEX_OUTPUT_COMPONENTS), outputs);
         /* every colour attachment: three, and four on the Mali, whose draw
-         * writes four targets (`mali::backend::DRAW_TARGETS`); the query
+         * writes four targets (`mali::backend::DRAW_TARGETS`), and on the
+         * PowerVR in the ES 3.0 report (`backend::DRAW_TARGETS`); the query
          * itself is ES 3.0's (see es2_has_no_draw_buffer_queries) */
-        let targets = if cfg!(feature = "gpu-mali") { 4 } else { 3 };
+        let four = cfg!(feature = "gpu-mali") || (cfg!(feature = "gpu-powervr") && !crate::REPORT_ES2);
+        let targets = if four { 4 } else { 3 };
         if !crate::REPORT_ES2 {
             assert_eq!(geti1(GL_MAX_DRAW_BUFFERS), targets);
         }

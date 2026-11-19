@@ -1,23 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! RC14 (docs/es3-cts-failures.md): a product build answers THREE draw
-//! targets, on every GPU. Raising the answer is a later item's `test-knobs`
-//! knob (`backend::HOST_DRAW_TARGETS`, the stand-in a host test sets); this
-//! file runs with that knob left UNSET and pins, through the GL API, that
-//! nothing in a product build reaches four:
+//! RC14 (docs/es3-cts-failures.md): what a product build answers for its
+//! draw targets, on every GPU: THREE, except the PowerVR's ES 3.0 report,
+//! which answers FOUR since its four-target half landed (plan #325, item
+//! mrt-frameload; `backend::DRAW_TARGETS`). Raising the answer of the
+//! others is a later item's `test-knobs` knob (`backend::HOST_DRAW_TARGETS`,
+//! the stand-in a host test sets); this file runs with that knob left UNSET
+//! and pins, through the GL API, that a product build reaches no further
+//! than its count (`PRODUCT` below, 3 or 4):
 //!
-//! - `backend::DRAW_TARGETS` and `backend::draw_targets()` are 3;
-//! - GL_MAX_COLOR_ATTACHMENTS is 3 in every build, and GL_MAX_DRAW_BUFFERS
-//!   is 3 in the ES 3.0 report. The ES 2.0 report (`report-es2`) does not
-//!   claim GL_EXT_draw_buffers, so its GL_MAX_DRAW_BUFFERS_EXT — the same
-//!   token, 0x8824 — is answered as GL_INVALID_ENUM: a refusal, never a 4;
-//! - a fourth colour attachment is refused with the error the GL core gives
-//!   today (GL_COLOR_ATTACHMENT3 is no attachment point this GL names:
-//!   GL_INVALID_ENUM), and a glDrawBuffers of four on a framebuffer object
-//!   is GL_INVALID_VALUE (ES 3.0 report, where the draw-buffer state is
-//!   public at all);
-//! - GLSL ES 3.00's `gl_MaxDrawBuffers` compiles to 3 (`shaderc-online`,
-//!   ES 3.0 report).
+//! - `backend::DRAW_TARGETS` and `backend::draw_targets()` are `PRODUCT`;
+//! - GL_MAX_COLOR_ATTACHMENTS is `PRODUCT` in every build (3 in every ES 2.0
+//!   report, the PowerVR's included), and GL_MAX_DRAW_BUFFERS is `PRODUCT`
+//!   in the ES 3.0 report. The ES 2.0 report (`report-es2`) does not claim
+//!   GL_EXT_draw_buffers, so its GL_MAX_DRAW_BUFFERS_EXT — the same token,
+//!   0x8824 — is answered as GL_INVALID_ENUM: a refusal, never a 4;
+//! - the colour attachment past `PRODUCT` is refused with the error the GL
+//!   core gives (no attachment point this GL names: GL_INVALID_ENUM), and a
+//!   glDrawBuffers of `PRODUCT + 1` on a framebuffer object is
+//!   GL_INVALID_VALUE (ES 3.0 report, where the draw-buffer state is public
+//!   at all);
+//! - GLSL ES 3.00's `gl_MaxDrawBuffers` compiles to `PRODUCT`
+//!   (`shaderc-online`, ES 3.0 report).
 //!
 //! The gate runs this binary in the powervr and vivante CONFIGS rows of
 //! tools/check.sh (with and without `shaderc-online` and `report-es2`); the
@@ -173,20 +177,25 @@ fn geti(pname: GLenum) -> Result<GLint, GLenum> {
     }
 }
 
+/// The draw targets of a product build: four in the PowerVR's ES 3.0
+/// report, three everywhere else (until each back end's four-target half
+/// lands).
+const PRODUCT: GLint = if cfg!(all(feature = "gpu-powervr", not(feature = "report-es2"))) { 4 } else { 3 };
+
 #[test]
-fn the_product_build_answers_three() {
+fn the_product_build_answers_its_count() {
     let _g = context();
-    assert_eq!(backend::DRAW_TARGETS, 3, "every back end draws three until its own four-target half lands");
-    assert_eq!(backend::draw_targets(), 3);
+    assert_eq!(backend::DRAW_TARGETS as GLint, PRODUCT, "the back end's own count");
+    assert_eq!(backend::draw_targets() as GLint, PRODUCT);
     assert_eq!(backend::HOST_DRAW_TARGETS.load(Ordering::Relaxed), 0);
-    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(3));
+    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(PRODUCT));
     /* the ES 3.0 report answers the query with the back end's count, and
      * GL_DRAW_BUFFERi stops with it (ES 3.0 6.1.14: i below
      * GL_MAX_DRAW_BUFFERS, past that GL_INVALID_ENUM) */
     #[cfg(not(feature = "report-es2"))]
     {
-        assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(3));
-        assert_eq!(geti(GL_DRAW_BUFFER0 + 3), Err(GL_INVALID_ENUM), "past GL_MAX_DRAW_BUFFERS");
+        assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(PRODUCT));
+        assert_eq!(geti(GL_DRAW_BUFFER0 + PRODUCT as GLenum), Err(GL_INVALID_ENUM), "past GL_MAX_DRAW_BUFFERS");
     }
     /* GL_EXT_draw_buffers is not claimed in an ES 2.0 report, so its token
      * — GL_MAX_DRAW_BUFFERS_EXT, GL_MAX_DRAW_BUFFERS, 0x8824 — is refused,
@@ -200,10 +209,11 @@ fn the_product_build_answers_three() {
     }
 }
 
-/// A fourth colour attachment is no attachment point this GL names, and
-/// four draw buffers are past the answer of GL_MAX_DRAW_BUFFERS.
+/// The colour attachment past `PRODUCT` is no attachment point this GL
+/// names, and `PRODUCT + 1` draw buffers are past the answer of
+/// GL_MAX_DRAW_BUFFERS.
 #[test]
-fn a_fourth_target_is_refused() {
+fn the_target_past_the_count_is_refused() {
     let _g = context();
     // SAFETY: plain GL calls; names made here.
     unsafe {
@@ -214,25 +224,25 @@ fn a_fourth_target_is_refused() {
         glBindRenderbuffer(GL_RENDERBUFFER, rb);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, 8, 8);
         while glGetError() != GL_NO_ERROR {}
-        for i in 0..3 {
+        let n = PRODUCT as GLenum;
+        for i in 0..n {
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_RENDERBUFFER, rb);
             assert_eq!(glGetError(), GL_NO_ERROR, "GL_COLOR_ATTACHMENT{i}");
         }
-        // the three points the build advertises complete the framebuffer
+        // the points the build advertises complete the framebuffer
         assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 3, GL_RENDERBUFFER, rb);
-        assert_eq!(glGetError(), GL_INVALID_ENUM, "GL_COLOR_ATTACHMENT3");
-        /* the draw-buffer state is public in the ES 3.0 report only; four
-         * of them on a framebuffer object are past GL_MAX_DRAW_BUFFERS
-         * (ES 3.0 4.2.1, checked before the enums) */
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + n, GL_RENDERBUFFER, rb);
+        assert_eq!(glGetError(), GL_INVALID_ENUM, "GL_COLOR_ATTACHMENT{n}");
+        /* the draw-buffer state is public in the ES 3.0 report only; one
+         * more than the count on a framebuffer object is past
+         * GL_MAX_DRAW_BUFFERS (ES 3.0 4.2.1, checked before the enums) */
         #[cfg(not(feature = "report-es2"))]
         {
-            let bufs: [GLenum; 4] = core::array::from_fn(|i| GL_COLOR_ATTACHMENT0 + i as GLenum);
-            glDrawBuffers(4, bufs.as_ptr());
-            assert_eq!(glGetError(), GL_INVALID_VALUE, "glDrawBuffers(4)");
-            let three: [GLenum; 3] = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2];
-            glDrawBuffers(3, three.as_ptr());
-            assert_eq!(glGetError(), GL_NO_ERROR, "glDrawBuffers(3)");
+            let bufs: [GLenum; 5] = core::array::from_fn(|i| GL_COLOR_ATTACHMENT0 + i as GLenum);
+            glDrawBuffers(PRODUCT + 1, bufs.as_ptr());
+            assert_eq!(glGetError(), GL_INVALID_VALUE, "glDrawBuffers(PRODUCT + 1)");
+            glDrawBuffers(PRODUCT, bufs.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "glDrawBuffers(PRODUCT)");
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &fb);
@@ -240,14 +250,14 @@ fn a_fourth_target_is_refused() {
     }
 }
 
-/// `gl_MaxDrawBuffers` is the query's 3: an array of `4 -
-/// gl_MaxDrawBuffers` elements has a positive size, one of
-/// `gl_MaxDrawBuffers - 3` does not (GLSL ES 3.00 4.1.9: an array size is a
-/// positive constant expression). The same shape tests/es3_mrt_gl.rs uses
+/// `gl_MaxDrawBuffers` is the query's `PRODUCT`: an array of
+/// `PRODUCT + 1 - gl_MaxDrawBuffers` elements has a positive size, one of
+/// `gl_MaxDrawBuffers - PRODUCT` does not (GLSL ES 3.00 4.1.9: an array
+/// size is a positive constant expression). The same shape tests/es3_mrt_gl.rs uses
 /// to pin the other side, the stand-in's 4.
 #[cfg(all(feature = "shaderc-online", not(feature = "report-es2")))]
 #[test]
-fn gl_max_draw_buffers_is_three() {
+fn gl_max_draw_buffers_is_the_count() {
     use yakogl::gl::shader::*;
     let _g = context();
     let compiles = |decl: &str| {
@@ -267,9 +277,8 @@ fn gl_max_draw_buffers_is_three() {
             ok == 1
         }
     };
-    assert!(compiles("const float a[4 - gl_MaxDrawBuffers] = float[1](1.0);"), "gl_MaxDrawBuffers is not 3");
-    assert!(
-        !compiles("const float a[gl_MaxDrawBuffers - 3] = float[1](1.0);"),
-        "gl_MaxDrawBuffers - 3 is an array size"
-    );
+    let one = format!("const float a[{} - gl_MaxDrawBuffers] = float[1](1.0);", PRODUCT + 1);
+    assert!(compiles(&one), "gl_MaxDrawBuffers is not {PRODUCT}");
+    let none = format!("const float a[gl_MaxDrawBuffers - {PRODUCT}] = float[1](1.0);");
+    assert!(!compiles(&none), "gl_MaxDrawBuffers - {PRODUCT} is an array size");
 }
