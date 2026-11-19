@@ -49,6 +49,9 @@ tools/v3d/qpu_corpus_71.txt | Apache-2.0 | QPU words Mesa's v3d_shc emits (--dev
 tools/v3d/qpu_counts_*.tsv | Apache-2.0 | instruction counts per program, written by tools/v3d/qpu_corpus.py at 7bd8a8e94
 tools/v3d/shim71/*.clif | Apache-2.0 AND MIT | CLIF dump Mesa 26.2.1 v3d writes under drm-shim for our gl_ref.py (V3D_DEBUG=clif; packet and field names from its v3d_packet.xml, MIT, NOTICE 1b); written by tools/v3d/drm_shim_ref.sh
 tools/v3d/shim71/*.stdout | Apache-2.0 | output of our gl_ref.py under drm-shim, written by tools/v3d/drm_shim_ref.sh
+tools/v3d/pi5/*.clif | Apache-2.0 AND MIT | CLIF dump the Pi 5's Mesa v3d writes on the board for our gl_ref.py (V3D_DEBUG=clif; packet and field names from its v3d_packet.xml, MIT, NOTICE 1b); tools/v3d/pi5/README.md
+tools/v3d/pi5/*.stdout | Apache-2.0 | output of our gl_ref.py on the Pi 5; tools/v3d/pi5/README.md
+tools/v3d/pi5/*.txt | Apache-2.0 | board readings of our D3 record (debugfs, vcgencmd values); tools/v3d/pi5/README.md
 third_party/mesa-26.2.1/src/util/softfloat.c | BSD-3-Clause | Berkeley SoftFloat 3e: the file header is the BSD 3-clause text
 third_party/mesa-26.2.1/src/util/softfloat.h | BSD-3-Clause | Berkeley SoftFloat 3e: the file header is the BSD 3-clause text
 third_party/mesa-26.2.1/src/util/xxhash.h | BSD-2-Clause | xxHash: the file header says "BSD 2-Clause License"

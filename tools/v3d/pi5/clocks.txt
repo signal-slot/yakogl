@@ -1,0 +1,25 @@
+# clk_summary row of the V3D clock at idle (name, enable, prepare, protect counts, rate in Hz)
+fw-clk-v3d 0 0 0 500000000
+# debugfs measure_clock (the kernel runs the V3D for a moment to time it)
+cycles: 977617354 (977.6 Mhz)
+# vcgencmd measure_clock, right after
+arm: frequency(0)=1500016128
+core: frequency(0)=500007584
+v3d: frequency(0)=960009536
+isp: frequency(0)=500007584
+hevc: frequency(0)=500004288
+# vcgencmd get_config int (frequency keys)
+arm_freq=2400
+arm_freq_min=1500
+core_freq=910
+core_freq_min=500
+gpu_freq_min=500
+hevc_freq=910
+hevc_freq_min=500
+isp_freq=910
+isp_freq_min=500
+v3d_freq=960
+v3d_freq_min=500
+# vcgencmd measure_volts core / get_throttled
+volt=0.7500V
+throttled=0x0

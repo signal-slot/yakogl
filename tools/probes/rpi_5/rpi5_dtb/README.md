@@ -3,8 +3,12 @@
 # rpi5_dtb
 
 Prints the device tree the Raspberry Pi 5 firmware hands to a `kernel=` image
-in x0, and the nodes of it whose compatible names `v3d`, `2712-pm` or `vc4`
-(path, compatible, reg). Part of ROADMAP stage 5 (issue #7); see
+in x0, and the nodes of it whose compatible names `v3d`, `2712-pm`, `vc4`,
+`hvs`, `vc6` or `firmware-clocks` (path, compatible, reg, and `reg-names`,
+`interrupts`, `clocks`, `resets`, `power-domains` where the node has them).
+The BCM2712's display and clock nodes are `brcm,bcm2712-hvs`,
+`brcm,bcm2712-vc6` and `raspberrypi,firmware-clocks`: the first board run
+matched only the `pm` and V3D nodes, so the last three were added. Part of ROADMAP stage 5 (issue #7); see
 `docs/notes/pre-study-rpi5.md`.
 
 ```
@@ -27,5 +31,8 @@ range, the walk result, then one `node`/`compatible`/`reg` group per match and
   string functions make unaligned accesses) and prints the mapped range.
   `CONFIG_MAX_XLAT_TABLES=16` leaves tables for it.
 - A node with child nodes is not reported (GPU nodes are leaves).
-- Built, not run on the board; the first run also shows whether the
-  watchdog (`CONFIG_YAKOGL_RPI5_WDOG`, as `rpi5_wdog`) works.
+- Run on the board on 2026-11-19 through `tools/board.sh pi5` (verdict
+  `done`, Linux back by itself): the firmware loaded the image at 0x200000
+  and entered it at EL2 through TF-A's BL31 with x0 = 0x2efec600, the DTB
+  (80201 bytes, 322 nodes); the nodes it printed are in
+  `docs/standalone-boot.md` ("Raspberry Pi 5", measured).

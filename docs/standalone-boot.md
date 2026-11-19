@@ -421,7 +421,10 @@ prints; the board-side steps in order:
    a bridge that writes at about 0.4 MB/s, so the wait is long. `RUN_BOUND`
    and `RETURN_BOUND` override the two limits.
 7. When Linux is back: `get_throttled` again (`throttled_after`), remove the
-   staged image, put the previous `tryboot.txt` back and read both back.
+   staged image, put the previous `tryboot.txt` back and read both back. A
+   card that had no `tryboot.txt` before the run (the stock Pi OS card) has
+   none after it: step 3 records whether one existed, and the undo removes
+   the run's file instead of writing an empty one.
 
 `tryboot.txt` (the same lines `board.sh` would write to `config.txt` for a
 `default`; `config.txt` itself is never touched by a run):
@@ -456,8 +459,15 @@ Pi 4, with a person at the board.
 environment, never from a file; `PI5_HOST` and `PI5_UART` are read as well.
 `BOARD_UART` is a serial character device wired to the Pi's debug connector,
 or `host:port` of a serial bridge to it. The board has no remote power or
-reset; the console is read only (input to the board has never been seen to
-work).
+reset; `board.sh` only reads the console. Since 2026-11-19 the console is a
+TCP serial bridge that also takes input (not needed by any run). Under a farm
+console lease the lease's serial MCP server holds that bridge's one client
+slot, so `board.sh`'s probe gets `busy`: run it beside the feed bridge of
+`tools/cts/README.md` ("The console under a farm console lease"), with
+`BOARD_UART` naming the feed and the MCP console's output appended to the
+feed's file, as the first Pi 5 session did. `console.ts` times are then the
+relay's, not the board's; `back_after` is measured over ssh and is not
+affected.
 
 ### The first image arms the watchdog
 
@@ -469,14 +479,21 @@ line `board.sh` checks the image for), and tryboot then boots Linux, because
 of the reboot, `board.sh` stops, retries nothing, and says that a person must
 power-cycle the board; no other run takes it until the owner says it is back.
 
-### Known and not measured
+### Measured on the board
+
+The first Pi 5 session (2026-11-19, Pi 5 Model B Rev 1.1 8 GB, BCM2712 D0,
+boot loader of 2025-06-13, `get_throttled` 0x0 before and after every run)
+ran `rpi5_wdog` and `rpi5_dtb` through `tools/board.sh pi5`:
 
 | fact | state |
 |---|---|
-| tryboot works with the boot loader of 2025-06-13 | known: `reboot '0 tryboot'` booted from `tryboot.txt` (`/proc/device-tree/chosen/bootloader/tryboot` read 1) and the next plain reboot read 0 (owner's check, 2026-11-06; U7) |
-| the address the firmware loads a `kernel=` image at (Zephyr's `rpi_5` links `sram0` at 0x200000) | not measured yet (board-d1; U6) |
-| the BCM2712 PM watchdog resets the board | not measured yet (board-d1) |
-| the time from the reboot to Linux after an image | not measured yet (board-d1); only a plain Linux reboot is measured (about 150 s) |
+| tryboot works with the boot loader of 2025-06-13 | known: `reboot '0 tryboot'` booted from `tryboot.txt` (`/proc/device-tree/chosen/bootloader/tryboot` read 1) and the next plain reboot read 0 (owner's check, 2026-11-06; U7). Confirmed by every run of the session: the boot loader logs `TRYBOOT` and `Read /tryboot.txt`, boots our file, and the reset after it reads `config.txt` and boots Linux |
+| where the firmware loads a `kernel=` image (U6) | at 0x200000, where Zephyr's `rpi_5` links `sram0`: the boot loader logs `Loading 'yakogl-<name>.bin' to 0x00000000 offset 0x200000`, with no `kernel_address` or other key beyond the three `tryboot.txt` lines above. There is no `armstub8-2712.bin` on the card: the firmware's own TF-A BL31 (v2.6) runs first and enters the image at EL2 (CurrentEL read by `rpi5_dtb`), on the core with MPIDR 0x81000000, at Zephyr's entry 0x2011bc |
+| what the firmware passes in x0 | the DTB's address: x0 = 0x2efec600, where the boot loader logs `Device tree loaded to 0x2efec600 (size 0x13949)` (80201 bytes, 322 nodes; the `bcm2712d0` overlay applied, no `vc4-kms-v3d`, since `tryboot.txt` names no overlay). The same address on all three boots |
+| the DTB's GPU nodes (D1) | `/axi/v3d@2000000` `brcm,2712-v3d`: reg `hub` 0x10_02000000 + 0x4000, `core0` 0x10_02008000 + 0x6000, `sms` 0x10_02030800 + 0x700; interrupts GIC SPI 250 and 249 (level high); clocks: firmware clock 5; resets and power-domains: the `pm` node, reset 0, domain 1. `/soc@107c000000/watchdog@7d200000` `brcm,bcm2712-pm` (reg 0x7d200000 + 0x308, the `pm` block; its phandle is the V3D's reset and power domain provider). `/soc@107c000000/firmware/clocks` `raspberrypi,firmware-clocks`. `/hvs@107c580000` `brcm,bcm2712-hvs` (reg 0x10_7c580000 + 0x1a000, firmware clocks 4 and 16). `/axi/gpu` `brcm,bcm2712-vc6` |
+| the BCM2712 PM watchdog resets the board | yes: `rpi5_wdog` stopped feeding 30 s after boot, the boot loader restarted within 10 s with `PM_RSTS 00000020` and booted Linux from `config.txt` with nobody at the board. `board.sh` reports such a run as `verdict=no_end_line` (rc 4): the probe's pass is the reset, it prints no end line |
+| the time from the tryboot reboot to Linux | about 3 min to the login prompt after `rpi5_wdog` (30 s fed, then the reset); `board.sh` reads `back_after` 218 s and 221 s after `rpi5_dtb` (the watchdog resets ~40 s after boot) and 446 s after `rpi5_wdog`, whose run waits out the 420 s bound first |
+| staging | copying the 45 KB image, writing `tryboot.txt` and reading both back took 3 to 6 min of the run (the card's slow writes and `sync`) |
 
 ## NanoPC-T6
 

@@ -3,8 +3,10 @@
 /*
  * rpi5_dtb: prints the device tree the Raspberry Pi 5 firmware handed to the
  * image in x0 (saved by boot_x0.S) and the nodes of it that matter to the GPU
- * port: path, compatible and reg of every node whose compatible names V3D, the
- * PM block or the VC4 display side.
+ * port: path, compatible, reg and the GPU-side properties (reg-names,
+ * interrupts, clocks, resets, power-domains) of every node whose compatible
+ * names V3D, the PM block, the display side (VC4, the BCM2712's VC6 and HVS)
+ * or the firmware clocks.
  *
  * The DTB lies above the image RAM, which is all Zephyr's rpi_5 MMU map
  * covers, so it is mapped here with device_map() (normal cacheable memory:
@@ -27,7 +29,17 @@
 /* The Pi 5 firmware's DTB is some 60 KiB; refuse anything absurd. */
 #define MAX_DTB (4UL * 1024 * 1024)
 
-static const char *const wanted[] = { "v3d", "2712-pm", "vc4" };
+/*
+ * The BCM2712's display nodes are "brcm,bcm2712-hvs" and "brcm,bcm2712-vc6"
+ * (no "vc4"), its clocks "raspberrypi,firmware-clocks" (the board's DT,
+ * 2026-11-19): without the last three only the PM and V3D nodes matched.
+ */
+static const char *const wanted[] = { "v3d", "2712-pm", "vc4", "hvs", "vc6", "firmware-clocks" };
+
+/* The properties printed after reg: a string list, then cell lists. */
+static const char *const extra[] = { "reg-names", "interrupts", "clocks", "resets",
+				     "power-domains" };
+#define N_EXTRA ARRAY_SIZE(extra)
 
 static uint32_t be32(const uint8_t *p)
 {
@@ -85,6 +97,8 @@ static unsigned int scan(const uint8_t *b)
 	size_t reg_len = 0;
 	const uint8_t *compat = NULL;
 	size_t compat_len = 0;
+	const uint8_t *xv[N_EXTRA] = { NULL };
+	size_t xl[N_EXTRA] = { 0 };
 
 	path[0] = '\0';
 	while (p + 4 <= end) {
@@ -112,6 +126,7 @@ static unsigned int scan(const uint8_t *b)
 			match = 0;
 			have_reg = 0;
 			compat = NULL;
+			memset(xv, 0, sizeof(xv));
 			p += (n + 1 + 3) & ~(size_t)3;
 		} else if (tok == 2) { /* END_NODE */
 			if (match) {
@@ -127,9 +142,24 @@ static unsigned int scan(const uint8_t *b)
 					}
 					printk("\n");
 				}
+				for (size_t x = 0; x < N_EXTRA; x++) {
+					if (!xv[x]) {
+						continue;
+					}
+					printk("rpi5_dtb:   %s ", extra[x]);
+					if (x == 0) {
+						print_strlist(xv[x], xl[x]);
+					} else {
+						for (size_t i = 0; i + 4 <= xl[x]; i += 4) {
+							printk("%s%08x", i ? " " : "", be32(xv[x] + i));
+						}
+					}
+					printk("\n");
+				}
 			}
 			match = 0;
 			have_reg = 0;
+			memset(xv, 0, sizeof(xv));
 			depth--;
 		} else if (tok == 3) { /* PROP */
 			size_t len = be32(st + p);
@@ -144,6 +174,13 @@ static unsigned int scan(const uint8_t *b)
 				reg = val;
 				reg_len = len;
 				have_reg = 1;
+			} else {
+				for (size_t x = 0; x < N_EXTRA; x++) {
+					if (!strcmp(nm, extra[x])) {
+						xv[x] = val;
+						xl[x] = len;
+					}
+				}
 			}
 			p += 8 + ((len + 3) & ~(size_t)3);
 		} else if (tok == 9) {
