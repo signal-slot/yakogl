@@ -146,7 +146,7 @@ static uint32_t job_rts(const struct v3d_job_target *t)
  * 16I/16UI :272-291, 32I/32UI :293-317, 32F :319-330) and
  * clamp_for_format_and_type (v3dx_rcl.c:396-407, V3D 4.2: NORM for an sRGB
  * format, INT for a pure integer one, NONE otherwise). False for a format
- * the table has no row for here (R11F_G11F_B10F, RG16F, the depth
+ * the table has no row for here (RG16F, the depth
  * formats). */
 static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *clamp)
 {
@@ -189,6 +189,10 @@ static bool rt_internal(uint32_t fmt, uint32_t *type, uint32_t *bpp, uint32_t *c
 		return true;
 	case V3D_OUTPUT_IMAGE_FORMAT_RGBA16F:
 	case V3D_OUTPUT_IMAGE_FORMAT_R16F:
+	case V3D_OUTPUT_IMAGE_FORMAT_R11F_G11F_B10F:
+		/* R11F_G11F_B10F: the 16F tile buffer at 64 bpp like RGBA16F
+		 * (v3dx_format_table.c:253-262), packed to the 11/11/10 word at
+		 * the store */
 		*type = V3D_INTERNAL_TYPE_16F;
 		*bpp = V3D_INTERNAL_BPP_64;
 		return true;

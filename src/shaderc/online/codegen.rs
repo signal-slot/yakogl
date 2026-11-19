@@ -1017,7 +1017,7 @@ pub fn compile_program(
     scratch: &Arena<'_>,
     keep: &'static Arena<'static>,
 ) -> Result<ShcShader, CompileError> {
-    use super::v3d::chain::{compile_program_keyed as chain_program, Prim, Target};
+    use super::v3d::chain::{compile_program_rt as chain_program, Prim, Target};
     /* the TLB blends: no blend variant exists on this GPU */
     if key.blend_key != 0 {
         return Err(CompileError::NotImplemented(Stage::CodeGen));
@@ -1037,6 +1037,9 @@ pub fn compile_program(
         Target { vpm_size: V3D_VPM_BYTES },
         key.vs_lod,
         crate::shaderc::compile_lod_key(),
+        /* the 32-bit float targets of a draw-time variant
+         * (`backend::v3d_f32_rt_variant`); 0 at glLinkProgram */
+        crate::shaderc::compile_rt_f32(),
         scratch,
     )?;
     Ok(super::v3d_abi::program_shader(fs_stage, &prog, keep)?)

@@ -301,8 +301,10 @@ fn extension_not_claimed_by_default() {
 
 /// With the `color-buffer-float` feature on, the extension is still unlisted
 /// while the build's back end cannot draw the formats
-/// (`backend::color_buffer_float_capable()`, false on the PowerVR, the GC7000UL
-/// and, until item `v3d-arm`, the V3D): the feature alone claims nothing.
+/// (`backend::color_buffer_float_capable()`, false on the PowerVR and the
+/// GC7000UL): the feature alone claims nothing. The V3D draws them (item
+/// `v3d-arm`): its build is capable with the feature, and only with it, so
+/// the V3D build without the feature answers as before.
 #[test]
 fn feature_on_not_claimed_while_incapable() {
     let _g = context();
@@ -318,8 +320,11 @@ fn feature_on_not_claimed_while_incapable() {
     );
     #[cfg(not(feature = "gpu-v3d"))]
     assert!(!backend::color_buffer_float_capable(), "{GPU}: capability");
-    #[cfg(feature = "gpu-v3d")] // until v3d-arm sets FLOAT_RT_FORMATS
-    assert!(!backend::color_buffer_float_capable() || backend::FLOAT_RT_FORMATS != 0, "{GPU}: capability");
+    #[cfg(feature = "gpu-v3d")]
+    {
+        assert_eq!(backend::color_buffer_float_capable(), cfg!(feature = "color-buffer-float"), "{GPU}: capability");
+        assert_eq!(backend::FLOAT_RT_FORMATS, if cfg!(feature = "color-buffer-float") { 0b111 } else { 0 }, "{GPU}");
+    }
 }
 
 /// Today's tip: `GL_EXT_color_buffer_half_float` is claimed, in both forms.

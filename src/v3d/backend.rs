@@ -1211,6 +1211,11 @@ struct V3dState {
     /// is the slot given up next when every one is taken.
     clear_program_mrt: [MrtClearProgram; MRT_CLEAR_PROGRAMS],
     clear_program_mrt_next: usize,
+    /// The programs built again for 32-bit float colour targets
+    /// (`f32_rt_program`), each built on first use; `f32_rt_programs_next`
+    /// is the slot given up next when every one is taken.
+    f32_rt_programs: [F32RtProgram; F32_RT_PROGRAMS],
+    f32_rt_programs_next: usize,
     zs: [ZsEntry; ZS_TARGETS],
     nzs: usize,
     /// The depth/stencil buffers kept between jobs, the slot given up next
@@ -1440,6 +1445,8 @@ impl V3dState {
         clear_program_int: ClearProgram::NOT_BUILT,
         clear_program_mrt: [MrtClearProgram::NOT_BUILT; MRT_CLEAR_PROGRAMS],
         clear_program_mrt_next: 0,
+        f32_rt_programs: [F32RtProgram::NOT_BUILT; F32_RT_PROGRAMS],
+        f32_rt_programs_next: 0,
         zs: [ZsEntry { target: 0, z: ZsKnown::Untouched, s: ZsKnown::Untouched }; ZS_TARGETS],
         nzs: 0,
         zsbufs: [ZsBuf::NONE; ZS_BUFS],
@@ -4040,6 +4047,155 @@ fn release_clear_program(p: &mut ClearProgram) {
     *p = ClearProgram::NOT_BUILT;
 }
 
+/* ---- programs for 32-bit float colour targets ------------------------------- */
+
+/// Does a float output to a 32-bit float colour target (R32F, RG32F,
+/// RGBA32F: the 32F tile buffer) take the 32-bit TLB write, in the draw's
+/// program ([`f32_rt_program`]) and in the clear quad's ([`clear_class`])?
+/// In the build that can claim GL_EXT_color_buffer_float, the only one
+/// whose GL core hands the back end such a target (without the extension a
+/// 32F attachment is incomplete). Elsewhere every float output stays the
+/// f16 pairs it always was (tests/es3_half_float_rt_v3d.rs).
+const F32_RT_WRITES: bool = cfg!(feature = "color-buffer-float") && !crate::REPORT_ES2;
+
+/// How many programs for 32-bit float targets the backend keeps at once: a
+/// (program, targets) pair each, built the first time it is drawn. When the
+/// table is full the oldest slot is given up, as the several-attachment
+/// clear programs' is ([`mrt_clear_program`]).
+const F32_RT_PROGRAMS: usize = 8;
+
+/// A program built again for 32-bit float targets
+/// (`shaderc::online::backend::v3d_f32_rt_variant`): the GL core's program
+/// it was built from and the targets (`mask`), which name the slot; the
+/// variant's record; and its code where the V3D fetches it. The slot holds
+/// a reference to both records: while it does, the plain program's code
+/// address names that program and no other, so a draw finds its variant by
+/// the address without asking the compiler.
+#[derive(Clone, Copy)]
+struct F32RtProgram {
+    built: bool,
+    base: ShcShader,
+    mask: u8,
+    fs: ShcShader,
+    code: OsalGpuMem,
+}
+
+impl F32RtProgram {
+    const NOT_BUILT: F32RtProgram =
+        F32RtProgram { built: false, base: ShcShader::ZERO, mask: 0, fs: ShcShader::ZERO, code: OsalGpuMem::ZERO };
+}
+
+/// Bit n: render target n of `target` is a 32-bit float one (the row's
+/// internal type `V3D_INTERNAL_TYPE_32F`: R32F, RG32F, RGBA32F). Mesa's
+/// `f32_color_rb` for a float format (v3d_program.c:683-686: channel 0 a
+/// 32-bit float); the pure integer targets, which Mesa keys the same way,
+/// are written by their `ivec4`/`uvec4` outputs here (select.rs `rt_int`).
+fn f32_rt_mask(target: &Target) -> u8 {
+    let rts = usize::from(target.rts.max(1)).min(GLES_MAX_TARGETS);
+    target.formats()[..rts].iter().enumerate().fold(0, |m, (n, &f)| {
+        if state::rt_row(f).internal_type == V3D_INTERNAL_TYPE_32F {
+            m | 1 << n
+        } else {
+            m
+        }
+    })
+}
+
+/// Give a slot's records and code back; the slot is `NOT_BUILT`.
+fn release_f32_rt_program(p: &mut F32RtProgram) {
+    if p.built {
+        crate::shaderc::release_shader(&p.fs);
+        crate::shaderc::release_shader(&p.base);
+        osal::gpu_free(&mut p.code);
+    }
+    *p = F32RtProgram::NOT_BUILT;
+}
+
+/// The draw's program `fs` built for the 32-bit float targets in `mask`
+/// (bit n: RT n, only targets the program writes), and the address of its
+/// code: the fragment shader writes those targets as 32-bit TLB words
+/// (Mesa's `f32_color_rb` key; the plain program's f16 pairs would reach a
+/// 32F tile buffer as garbage). The first draw of a (program, targets) pair
+/// asks the compiler and uploads the code; the draws after it find the slot
+/// by the plain program's code address, which the slot's reference keeps
+/// that program's. A program the application deleted stays in the compiler's
+/// keep region until its slot is given up (at most [`F32_RT_PROGRAMS`]
+/// pairs). A slot given up frees its code through the OSAL, which holds a
+/// freed block until every job that may fetch it has completed (as a clear
+/// program's, [`mrt_clear_program`]); the job builder copied the record's
+/// streams when the draw was recorded. `Err` refuses the draw by name; the
+/// compiler's reason is logged once.
+fn f32_rt_program(
+    g: &mut V3dState,
+    d: &GlesDraw,
+    fs: &ShcShader,
+    mask: u8,
+) -> Result<(&'static ShcShader, u64), state::Refusal> {
+    use core::ffi::c_char;
+    const NO_VARIANT: state::Refusal = "a variant of the program for 32-bit float colour targets could not be built";
+    let held = |e: &F32RtProgram| e.built && e.mask == mask && e.base.usc == fs.usc && e.base.usc_dw == fs.usc_dw;
+    let slot = match g.f32_rt_programs.iter().position(held) {
+        Some(i) => i,
+        None => {
+            // SAFETY: the GL core's vertex shader of the draw's program, live for the draw, or null.
+            let vs = unsafe { d.vs.as_ref() }.ok_or(NO_VARIANT)?;
+            let mut log = [0 as c_char; 192];
+            let mut v = ShcShader::ZERO;
+            let rc = crate::shaderc::online::backend::v3d_f32_rt_variant(vs, fs, mask, &mut v, &mut log);
+            if rc != 0 {
+                glog_once!(
+                    "yakogl/v3d: no program for 32-bit float targets {:#x} ({}): {}; its draws are refused",
+                    mask,
+                    rc,
+                    log_text(&log)
+                );
+                return Err(NO_VARIANT);
+            }
+            let bytes = v.usc_dw as usize * 4;
+            let mut code = OsalGpuMem::ZERO;
+            if bytes == 0
+                || v.usc.is_null()
+                || osal::gpu_alloc(V3D_HEAP_SHADER, bytes, OSAL_MEM_DATA, &mut code) != 0
+                || code.cpu.is_null()
+                || gpu32(code.gpu).is_none()
+            {
+                if !code.impl_.is_null() {
+                    osal::gpu_free(&mut code);
+                }
+                crate::shaderc::release_shader(&v);
+                glog_once!("yakogl/v3d: no GPU memory for the code of a program for 32-bit float targets");
+                return Err(NO_VARIANT);
+            }
+            // SAFETY: the allocation is `bytes` long, and the program's code
+            // is `usc_dw` dwords.
+            unsafe {
+                core::ptr::copy_nonoverlapping(v.usc as *const u8, code.cpu as *mut u8, bytes);
+                osal::cache_flush(code.cpu, bytes);
+            }
+            let i = match g.f32_rt_programs.iter().position(|e| !e.built) {
+                Some(i) => i,
+                None => {
+                    /* the oldest slot */
+                    let i = g.f32_rt_programs_next;
+                    g.f32_rt_programs_next = (i + 1) % F32_RT_PROGRAMS;
+                    release_f32_rt_program(&mut g.f32_rt_programs[i]);
+                    i
+                }
+            };
+            /* the slot's reference to the plain program: its code address
+             * stays its own while the slot names it */
+            crate::shaderc::retain_shader(fs);
+            g.f32_rt_programs[i] = F32RtProgram { built: true, base: *fs, mask, fs: v, code };
+            i
+        }
+    };
+    let p = &g.f32_rt_programs[slot];
+    // SAFETY: the record lives in the backend's static state until the slot
+    // is given up, which no draw being recorded outlives.
+    let fs: &'static ShcShader = unsafe { &*(&p.fs as *const ShcShader) };
+    Ok((fs, p.code.gpu))
+}
+
 /// The text of a compiler log (NUL-terminated in `log`).
 fn log_text(log: &[core::ffi::c_char]) -> &str {
     // SAFETY: c_char and u8 have the same size and alignment.
@@ -6092,9 +6248,16 @@ fn draw_clear_quad(g: &mut V3dState, target: Target, d: &GlesDraw, b: state::Qua
             dwords = 4 * cleared;
             p
         }
-        /* an integer RT 0 takes the integer program's four raw words; a
-         * quad that writes no colour keeps the float one (its mask is 0) */
-        None => match clear_program(g, b.colour && gles_surf_is_integer(target.format)) {
+        /* an integer RT 0 takes the integer program's four raw words, and
+         * so does a 32-bit float one where its writes are 32-bit
+         * (`F32_RT_WRITES`): the float's own bits as the words, as on
+         * several attachments (`clear_class`); a quad that writes no colour
+         * keeps the float one (its mask is 0) */
+        None => match clear_program(
+            g,
+            b.colour
+                && (gles_surf_is_integer(target.format) || (F32_RT_WRITES && clear_class(target.format).is_integer())),
+        ) {
             Ok(p) => p,
             Err(why) => return refuse(g, why),
         },
@@ -6299,6 +6462,10 @@ pub extern "C" fn v3d_shutdown() {
         release_clear_program(&mut e.prog);
     }
     g.clear_program_mrt_next = 0;
+    for p in g.f32_rt_programs.iter_mut() {
+        release_f32_rt_program(p);
+    }
+    g.f32_rt_programs_next = 0;
     glog!(
         "yakogl/v3d: tiled copies high-water {} of {} bytes ({} tilings, {} of them at upload, {} bytes tiled; \
          {} draws tried again after the open job ran for want of memory, {} of them drawn)",
@@ -6653,6 +6820,29 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
             return refuse_unsupported(g, "a colour output with no attachment slot");
         }
     }
+    /* A colour output into a 32-bit float target (R32F, RG32F, RGBA32F):
+     * the program built for those targets, whose fragment shader writes
+     * them as 32-bit TLB words (`f32_rt_program`, Mesa's `f32_color_rb`).
+     * The key is the back end's: the formats of the targets the job
+     * configures, of which the GL core's program knows nothing. The draw
+     * goes on with that program and its code in place of the GL core's;
+     * the uniform block, the bindings and the attributes are the same
+     * (one source, one reflection). Before anything is recorded, like the
+     * refusals above. */
+    let f32_draw;
+    let (d, fs) = match fs.filter(|_| F32_RT_WRITES && d.index_count != 0) {
+        Some(plain) if f32_rt_mask(&target) & plain.v3d.fs.rt_mask != 0 => {
+            let mask = f32_rt_mask(&target) & plain.v3d.fs.rt_mask;
+            match f32_rt_program(g, d, plain, mask) {
+                Ok((variant, code_gpu)) => {
+                    f32_draw = GlesDraw { fs: variant, fs_usc_gpu: code_gpu, ..*d };
+                    (&f32_draw, Some(variant))
+                }
+                Err(why) => return refuse_unsupported(g, why),
+            }
+        }
+        _ => (d, fs),
+    };
 
     if g.j.open && g.j.target != target {
         let rc = flush_job(g);

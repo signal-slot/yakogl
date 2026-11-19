@@ -329,8 +329,9 @@ fn cache_clear() {
 /// The record starts with one reference, the caller's. `None` when the arena
 /// is full (the transaction is dropped, so the compile keeps nothing); the
 /// caller turns that into the log line that names the constant to raise.
-/* only the V3D's program record and the tests publish without saying */
-#[cfg(any(test, feature = "gpu-v3d"))]
+/* only the tests publish without saying (the V3D's program record says its
+ * fragment stage's sampler-state key, `link_program`) */
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn publish(
     txn: store::KeepTxn,
@@ -1907,7 +1908,17 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
     /* `vr.sha` of a vertex shader compiled with the link's attribute
      * locations covers the map too (compile_and_publish_linked chains
      * map_key into it), so two layouts of one source are two programs. */
-    let sha = sha256(&key);
+    let mut sha = sha256(&key);
+    /* a draw-time variant for 32-bit float render targets
+     * (`v3d_f32_rt_variant`): the plain program's key chained with the
+     * targets, so the plain program keeps the key it always had */
+    let rt_f32 = crate::shaderc::compile_rt_f32();
+    if rt_f32 != 0 {
+        let mut both = [0u8; 64];
+        both[..32].copy_from_slice(&sha);
+        both[32..].copy_from_slice(&sha256(&[b'f', b'3', b'2', b'-', b'r', b't', rt_f32]));
+        sha = sha256(&both);
+    }
 
     let rec = if let Some(hit) = cache_find(&sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY) {
         retain(&hit.shader);
@@ -1953,7 +1964,11 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
             Some(Err(e)) => return report(log, SHC_STAGE_FRAGMENT, e),
             None => return report(log, SHC_STAGE_FRAGMENT, CompileError::Reentered),
         };
-        match publish(txn, sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY, fr.source, None, shader, kept) {
+        /* the record keeps the fragment stage's sampler-state key: a
+         * draw-time variant of this program (`v3d_f32_rt_variant`) is
+         * compiled with the same one */
+        let facts = Facts { lod_key: fr.lod_key, ..Facts::plain() };
+        match publish_as(txn, sha, SHC_STAGE_FRAGMENT, V3D_PROGRAM_KEY, fr.source, None, facts, shader, kept) {
             Ok(rec) => rec,
             Err(left) => {
                 return report(log, SHC_STAGE_FRAGMENT, CompileError::OutOfMemory { which: Which::Keep, left });
@@ -1963,6 +1978,79 @@ fn link_program(vr: &Base, fr: &Base, zero: &ZeroList, fs: &mut ShcShader, log: 
     let old = *fs;
     *fs = rec.shader;
     release(&old);
+    0
+}
+
+/// The V3D program `prog` (a linked program's record, `vs` its vertex
+/// shader) built again for a draw whose colour attachments in `rt_f32` (bit
+/// n: render target n) are 32-bit float targets: R32F, RG32F, RGBA32F. Its
+/// fragment shader writes a float output to those targets as 32-bit TLB
+/// words, where the plain program writes f16 pairs (Mesa keys the fragment
+/// shader the same way: `f32_color_rb`, v3d_program.c:683-686, read in
+/// nir_to_vir.c:1953-2037). Everything else is as `prog` was linked: the
+/// two sources, the vertex shader's attribute map and key, the fragment
+/// stage's sampler-state key (kept in the record), the varyings read as 0.
+///
+/// The V3D back end asks for it at draw time, from the formats of the
+/// draw's targets (src/v3d/backend.rs `f32_rt_program`); the GL core does
+/// not know of it. 0 and `*out` a reference the caller releases
+/// (`shaderc::release_shader`); cached like any program record, so asking
+/// again while a holder is alive compiles nothing. < 0 and the log
+/// otherwise.
+#[cfg(feature = "gpu-v3d")]
+pub fn v3d_f32_rt_variant(
+    vs: &ShcShader,
+    prog: &ShcShader,
+    rt_f32: u8,
+    out: &mut ShcShader,
+    log: &mut [c_char],
+) -> i32 {
+    #[cfg(test)]
+    let _serial = store::test_lock();
+    // SAFETY: a live buffer of the length given.
+    let mut log = unsafe { CStrWriter::new(log.as_mut_ptr(), log.len()) };
+    let (Some(vr), Some(pr)) = (base_of(vs), base_of(prog)) else {
+        let _ = log.write_str("online shaderc: a 32-bit float target variant of a program this back end did not link");
+        return -EINVAL;
+    };
+    if pr.blend_key != V3D_PROGRAM_KEY || pr.stage != SHC_STAGE_FRAGMENT || vr.stage != SHC_STAGE_VERTEX {
+        let _ = log.write_str("online shaderc: a 32-bit float target variant of something that is not a V3D program");
+        return -EINVAL;
+    }
+    /* The fragment stage as the program's link had it: the same source, key
+     * and `if` lowering, so the stage's own record when it is still held (a
+     * cache hit), and its reflection compiled again otherwise. */
+    let facts = Facts {
+        w_constant: false,
+        lod_key: pr.lod_key,
+        if_lowering: pr.if_lowering,
+        fs_reads: FsReads::NONE,
+        consts: LinkConsts::NONE,
+    };
+    let mut fs = match variant_of(SHC_STAGE_FRAGMENT, pr.source, 0, None, facts, &mut log) {
+        Ok(sh) => sh,
+        Err(rc) => return rc,
+    };
+    let Some(fr) = base_of(&fs) else {
+        release(&fs);
+        return -EINVAL;
+    };
+    /* The link's source-level rules again (the varyings read as 0), then the
+     * program with the key set: `link_program` chains it into the record's
+     * key and `codegen::compile_program` hands it to the chain. */
+    struct Restore(u8);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            crate::shaderc::set_compile_rt_f32(self.0);
+        }
+    }
+    let _restore = Restore(crate::shaderc::set_compile_rt_f32(rt_f32));
+    let rc = link_by_sources(vs, &vr, &fr, &mut fs, &mut log);
+    if rc != 0 || fs.v3d.linked != 1 {
+        release(&fs);
+        return if rc != 0 { rc } else { -EINVAL };
+    }
+    *out = fs;
     0
 }
 
