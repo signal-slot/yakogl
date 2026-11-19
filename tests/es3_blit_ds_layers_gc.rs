@@ -758,24 +758,14 @@ fn into_layers(refused_today: bool) {
     }
 }
 
+/// Depth into a texture's face or layer needs only `depth_resolve` (the GL
+/// core writes the texels): lifted by item layers-unignore-backends.
 #[test]
-fn depth_into_a_cube_face_is_refused_today() {
-    into_faces(true);
-}
-
-#[test]
-#[ignore = "needs gl-ds-layers and GC7000UL ds_write/stencil_resolve"]
 fn depth_from_a_renderbuffer_into_a_cube_face_changes_only_that_face() {
     into_faces(false);
 }
 
 #[test]
-fn depth_into_an_array_layer_is_refused_today() {
-    into_layers(true);
-}
-
-#[test]
-#[ignore = "needs gl-ds-layers and GC7000UL ds_write/stencil_resolve"]
 fn depth_from_a_renderbuffer_into_an_array_layer_changes_only_that_layer() {
     into_layers(false);
 }

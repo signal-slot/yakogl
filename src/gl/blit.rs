@@ -43,7 +43,8 @@
 //! (`backend::stencil_resolve`) and writes a rectangle of either
 //! (`backend::ds_write`), each entry optional. So a depth or stencil plane
 //! is copied on the CPU where the destination is a plane the GL core holds
-//! itself (the R32F texels of a depth texture, `texture::resolve_depth`) or
+//! itself (the R32F texels of a depth texture's image -- a level of a 2D
+//! texture, a cube face or an array layer -- `texture::resolve_depth`) or
 //! a renderbuffer of a back end with `ds_write` (and, for stencil, a
 //! renderbuffer source of one with `stencil_resolve`; stencil also to and
 //! from level 0 of a 2D depth-stencil texture, through the plane the back
@@ -55,14 +56,13 @@
 //! back end, which writes them into its buffer before that draw tests
 //! against it (`GlesDraw::depth_texels`), as after a glTexSubImage2D of
 //! depth. Every other
-//! copy -- into the window, stencil into or out of a cube face, an array
-//! layer or another level of a texture, depth from the window or from a cube or array depth texture, a
-//! renderbuffer plane on a back end without the entries, or into a
-//! renderbuffer the back end holds no buffer for (`ds_write` of an empty
+//! copy -- stencil into or out of a cube face, an array layer or another
+//! level of a texture, a multisampled window, the window's or a
+//! renderbuffer's plane on a back end without the entries, or into a
+//! renderbuffer or window the back end holds no buffer for (`ds_write` of an empty
 //! rectangle answers other than 0: no frame has drawn into it yet) -- is
-//! refused with GL_INVALID_OPERATION, said once in the log per cause. The
-//! window and cube/array cases wait for a measurement of which way up each
-//! back end keeps the window's depth (docs/notes/blit-depth-window.md).
+//! refused with GL_INVALID_OPERATION, said once in the log per cause
+//! (docs/notes/blit-depth-window.md, docs/notes/blit-depth-layers.md).
 
 use core::ffi::c_void;
 
@@ -370,16 +370,17 @@ fn ds_format(c: &GlContext, fb: GLuint, stencil: bool) -> Option<DsImage> {
     })
 }
 
-/// The R32F texels of the level of a depth texture attached at `a`: the
-/// depth plane the GL core holds itself (`texture::resolve_depth`). None
-/// for anything else, and for a texture whose level is not where a 2D
-/// texture's is (a cube face, an array layer: `attachment_storage` keeps no
-/// face or layer for a depth texture).
+/// The R32F texels of the image (level, and cube face or array layer) of a
+/// depth texture attached at `a`: the depth plane the GL core holds itself
+/// (`texture::resolve_depth`, which writes the back end's plane into the
+/// image that plane holds, docs/notes/blit-depth-layers.md (b)). None for
+/// anything else.
 #[derive(Clone, Copy, Debug)]
 struct DepthTexels {
     ti: usize,
     level: GLint,
-    /// Byte offset of the level in the texture's memory.
+    /// Byte offset of the image in the texture's memory
+    /// (`texture::image_off`).
     off: usize,
     w: u32,
     h: u32,
@@ -393,8 +394,11 @@ fn depth_texels(c: &GlContext, a: &GlAttachment) -> Option<DepthTexels> {
     }
     let t = c.texture_ref(a.name)?;
     let level = usize::try_from(a.level).ok()?;
+    /* a 2D texture has image 0 only; a cube face or an array layer is the
+     * attachment's layer (image_off checks it against the texture's) */
+    let layer = if t.target == GL_TEXTURE_2D { 0 } else { u32::try_from(a.layer).ok()? };
     if !matches!(t.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL)
-        || t.target != GL_TEXTURE_2D
+        || !matches!(t.target, GL_TEXTURE_2D | GL_TEXTURE_CUBE_MAP | GL_TEXTURE_2D_ARRAY)
         || t.texfmt != GLES_TEXFMT_R32F
         || t.mem.cpu.is_null()
         || level >= t.chain_levels as usize
@@ -404,11 +408,10 @@ fn depth_texels(c: &GlContext, a: &GlAttachment) -> Option<DepthTexels> {
     }
     let (w, h) = ((t.width >> level).max(1), (t.height >> level).max(1));
     let pitch = t.level_pitch_at(level as u32) as usize;
-    let off = t.level_off[level] as usize;
-    let bytes = ((h as usize - 1) * pitch + w as usize) * 4;
-    if pitch < w as usize || off + bytes > t.mem.size {
+    if pitch < w as usize {
         return None;
     }
+    let off = super::texture::image_off(t, level as u32, layer)?;
     Some(DepthTexels { ti: a.name as usize, level: a.level, off, w, h, pitch })
 }
 
@@ -947,7 +950,7 @@ fn refuse_ds(c: &mut GlContext, cause: u8) {
             }
             REFUSED_DEPTH_DST => {
                 "a depth blit into the window or into a renderbuffer of a back end without the ds_write entry, \
-                 or into a depth texture that is not a 2D texture"
+                 or into a depth texture that is not a 2D, cube map or 2D array texture"
             }
             REFUSED_DS_UNHELD => {
                 "a depth or stencil blit into a renderbuffer or the window the back end holds no buffer for (no \
@@ -955,7 +958,7 @@ fn refuse_ds(c: &mut GlContext, cause: u8) {
             }
             _ => {
                 "a depth blit from a multisampled window, from the window of a back end without the depth_resolve \
-                 entry, or from a depth texture that is not a 2D texture"
+                 entry, or from a depth texture that is not a 2D, cube map or 2D array texture"
             }
         };
         glog!("glBlitFramebuffer: {} is not implemented (GL_INVALID_OPERATION)", why);
@@ -1051,7 +1054,11 @@ fn copy_depth(
     }
     /* The destination's texels first take what was rendered into the level
      * (the pixels outside the copy keep it), which also marks them resolved:
-     * a later sampling does not resolve over the copy. */
+     * a later sampling does not resolve over the copy. The resolve writes
+     * the image the back end's plane holds (texture::resolve_depth), which
+     * may be another face or layer than the one copied: that one's texels
+     * then hold its depth already (texture::depth_image_switch resolved it
+     * when a draw moved to another image). */
     if let PlaneDst::Texels(d) = job.dst {
         super::texture::resolve_depth(c, d.ti);
     }
@@ -1118,7 +1125,8 @@ fn copy_depth(
             let (col_in, col_out) = ((src_cut.x + floor(sx)) as usize, (dst_cut.x + xo) as usize);
             // SAFETY: both pixels lie inside their cut images, whose rows
             // the two mappings hold (`depth_texels`, the scratches' sizes);
-            // a source and destination in one texture are different levels.
+            // a source and destination in one texture are different images
+            // (level, face or layer): disjoint row ranges.
             unsafe {
                 core::ptr::copy_nonoverlapping(
                     from.add((row_in * pitch + col_in) * esz),
