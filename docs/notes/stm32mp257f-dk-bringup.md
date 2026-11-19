@@ -49,15 +49,28 @@ marker `:191` = `driver/zephyr/lib/board/stm32mp2/stm32mp2_wdog.c:130`). BL2's
 IWDG is what resets those runs (pre-study `:255-259`). Steps 3-8 images carry
 the marker on their own (`app.conf` `CONFIG_YAKOGL_STM32MP2_WDOG=y`).
 
-Setup once: `tools/board-stm32mp2.sh status`, then `install` (it prints the
-exact undo before changing anything, `tools/board-stm32mp2.sh:61-70,712-715`);
-`probe` runs the pre-checks without booting anything (`:15,875-877`). Every
-boot is a one-shot that U-Boot clears before loading (`:30-51`): a boot that
-does not return to ST's Linux cuts the board off until a person is there. The
-U-Boot hook the runner installs touches only its own `yako_*` variables and
-wraps `bootcmd` (`:31-39,214-217`); it never edits ST's `bootcmd` contents.
-The start line is `go` after `dcache off; icache off` (`:215`), which is what
-step 1's hand-over record reads (below). Before the return trial the
+Setup once, with no person at U-Boot's prompt: `tools/board-stm32mp2.sh
+status`, then `install`. Install writes `preboot=run yako_hook` together with
+the `yako_*` variables in one environment write, after printing the exact undo
+(the pristine image's `dd` back, or `uninstall`, which deletes `preboot` and
+the `yako_*` variables; `tools/board-stm32mp2.sh:1104-1107`). ST's r3.1 U-Boot
+has `CONFIG_USE_PREBOOT` (implied by `ARCH_STM32MP`, not unset in
+`configs/stm32mp25_defconfig`), so it runs `preboot` before the autoboot and
+ST's `bootcmd`; the DK's stock environment has no `preboot`
+(dk-linux-baseline: 73 variables, none named `preboot`), so the runner owns
+it (`:39-71`). It writes `preboot` only when the environment has none: a
+`preboot` of another value is never overwritten or wrapped, and install stops
+with `NEEDS A PERSON` (rc 7) before any write (`:717-723`). `bootcmd` stays
+ST's and is never written; a `run yako_hook; ` prefix on it is only the
+documented fallback a person types for a U-Boot without `USE_PREBOOT`
+(`:56-67`). `status` and `run` count either as hooked. `probe` runs the
+pre-checks without booting anything (`:15,1339`). Every boot is a one-shot
+that U-Boot clears and saves before loading (`:68-71,331`): a boot that does
+not return to ST's Linux cuts the board off until a person is there. `yako_hook`
+first prints `yakogl-mp2: hook` on every boot, so the console shows it ran
+before ST's boot; a boot of the DK that lacks that line means `preboot` did not
+run. The start line is `go` after `dcache off; icache off` (`:332`), which is
+what step 1's hand-over record reads (below). Before the return trial the
 runner-safety-audit gaps are closed by `runner-fixes` (signal-safe undo,
 first-use fixes); the board items run after it.
 
