@@ -4,9 +4,11 @@
 //! 26.2.1 words of the dEQP-GLES2 loop shapes, `docs/notes/mali-deqp-loops.md`
 //! section 5) against the Mali online compiler, through `tests/mali_ref`.
 //!
-//! Every reference is refused at the tip, so each test is ignored with its
-//! refusal and the step (lower-loops-1 or lower-loops-2) that lowers it; the
-//! lowering removes the `ignore` and the shape's entry in `REFUSALS`.
+//! A reference still refused is ignored with its refusal and the step
+//! (lower-loops-1 or lower-loops-2) that lowers it; the lowering removes
+//! the `ignore` and the shape's entry in `REFUSALS`. The counted vertex
+//! loops (`vs_for_const`, `vs_while_const`, `vs_dowhile_const`) are
+//! byte-equal since plan #367 lower-int-loops' vertex unroll.
 //! `refusals_pinned` runs now: it asserts each reference's exact current
 //! refusal (the vertex shader's when it refuses, else the fragment shader's).
 //! A kept-loop reference carries the pass counter in its words, which the
@@ -110,14 +112,15 @@ fn fs_while_uni() {
     mali_ref::assert_matches("deqp_loops_fs_while_uni");
 }
 
+/// Unrolled as Mesa unrolls it (plan #367 lower-int-loops: the vertex
+/// walk unrolls a counted loop, nir.rs `walk`).
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-1"]
 fn vs_dowhile_const() {
     mali_ref::assert_matches("deqp_loops_vs_dowhile_const");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-2"]
+#[ignore = "refused: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, the mediump int uniform of the loop's bound (the kept vertex loop of plan #367 lower-int-loops reads a highp one), then lower-loops-2"]
 fn vs_dowhile_uni() {
     mali_ref::assert_matches("deqp_loops_vs_dowhile_uni");
 }
@@ -128,14 +131,15 @@ fn vs_float_uni() {
     mali_ref::assert_matches("deqp_loops_vs_float_uni");
 }
 
+/// Unrolled as Mesa unrolls it (plan #367 lower-int-loops: the vertex
+/// walk unrolls a counted loop, nir.rs `walk`).
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-1"]
 fn vs_for_const() {
     mali_ref::assert_matches("deqp_loops_vs_for_const");
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-2"]
+#[ignore = "refused: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, the mediump int uniform of the loop's bound (the kept vertex loop of plan #367 lower-int-loops reads a highp one), then lower-loops-2"]
 fn vs_for_uni() {
     mali_ref::assert_matches("deqp_loops_vs_for_uni");
 }
@@ -147,7 +151,7 @@ fn vs_idx_dyn() {
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-1"]
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, after the vertex unroll of plan #367 lower-int-loops, then lower-loops-1"]
 fn vs_idx_static() {
     mali_ref::assert_matches("deqp_loops_vs_idx_static");
 }
@@ -159,7 +163,7 @@ fn vs_nested_const() {
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-2"]
+#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (the bool uniform of the bound's select), then lower-loops-2"]
 fn vs_select() {
     mali_ref::assert_matches("deqp_loops_vs_select");
 }
@@ -170,8 +174,9 @@ fn vs_vector() {
     mali_ref::assert_matches("deqp_loops_vs_vector");
 }
 
+/// Unrolled as Mesa unrolls it (plan #367 lower-int-loops: the vertex
+/// walk unrolls a counted loop, nir.rs `walk`).
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-1"]
 fn vs_while_const() {
     mali_ref::assert_matches("deqp_loops_vs_while_const");
 }
@@ -194,17 +199,14 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_loops_fs_uncond_break", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
     ("deqp_loops_fs_vec_dyn", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
     ("deqp_loops_fs_while_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_vs_dowhile_const", "a loop in a vertex shader"),
-    ("deqp_loops_vs_dowhile_uni", "a loop in a vertex shader"),
+    ("deqp_loops_vs_dowhile_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
     ("deqp_loops_vs_float_uni", "a loop in a vertex shader"),
-    ("deqp_loops_vs_for_const", "a loop in a vertex shader"),
-    ("deqp_loops_vs_for_uni", "a loop in a vertex shader"),
+    ("deqp_loops_vs_for_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
     ("deqp_loops_vs_idx_dyn", "a loop in a vertex shader"),
-    ("deqp_loops_vs_idx_static", "a loop in a vertex shader"),
+    ("deqp_loops_vs_idx_static", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_loops_vs_nested_const", "a loop in a vertex shader"),
-    ("deqp_loops_vs_select", "a loop in a vertex shader"),
+    ("deqp_loops_vs_select", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
     ("deqp_loops_vs_vector", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
-    ("deqp_loops_vs_while_const", "a loop in a vertex shader"),
 ];
 
 #[test]

@@ -55,11 +55,11 @@ fn gm2_vsarith_6_sqrt_matches_its_reference() {
     mali_ref::assert_matches_unset("gm2_vsarith_6");
 }
 
-/// loop's `for (int i = 0; i < 5; i++) d = fract(3.0 * d);` stays refused
-/// at the loop (the int-loop family, not this one): its body is case 3's.
+/// loop's `for (int i = 0; i < 5; i++) d = fract(3.0 * d);`: unrolled as
+/// Mesa unrolls it (plan #367 lower-int-loops), its passes case 3's steps.
 #[test]
-fn gm2_vsarith_5_the_loop_stays_refused_at_the_loop() {
-    mali_ref::assert_refused_ref("gm2_vsarith_5", "a loop in a vertex shader");
+fn gm2_vsarith_5_the_loop_unrolls_as_mesa() {
+    mali_ref::assert_matches_unset("gm2_vsarith_5");
 }
 
 /// The constant moves up only over a product read once: a product a later

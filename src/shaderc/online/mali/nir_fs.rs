@@ -4448,7 +4448,7 @@ fn kept_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MA
 
 /// IR value `v` folds to a constant from the constants and the locals'
 /// constant lanes alone.
-fn ir_folds(m: &Module<'_>, v: ir::ValueId, locals: &[[Val; 4]; MAX_LOCALS], depth: u32) -> bool {
+pub(super) fn ir_folds(m: &Module<'_>, v: ir::ValueId, locals: &[[Val; 4]; MAX_LOCALS], depth: u32) -> bool {
     if depth > 32 {
         return false;
     }
@@ -4465,7 +4465,7 @@ fn ir_folds(m: &Module<'_>, v: ir::ValueId, locals: &[[Val; 4]; MAX_LOCALS], dep
 /// Lane `c` of local `l` is stored by an instruction of run `nodes` itself
 /// before anything in the run reads the local: each pass sets it before
 /// use, so no value of it is carried around a loop whose body is `nodes`.
-fn declared_in(m: &Module<'_>, nodes: &[Node], l: usize, c: usize) -> bool {
+pub(super) fn declared_in(m: &Module<'_>, nodes: &[Node], l: usize, c: usize) -> bool {
     for n in nodes {
         match *n {
             Node::Instr(id) => match m.instr(id) {

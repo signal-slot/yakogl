@@ -197,3 +197,14 @@ gm2_fclane_1    gm2_fclane_1.vert   gm2_fclane_1.frag   triangles vs.position=eq
 gm2_fclane_2    gm2_fclane_2.vert   gm2_fclane_2.frag   triangles vs.position=equal vs.varying=differs:unanalysed:31:b109a7e72a78 fs.fragment=differs:unanalysed:30:2e6a4ec0368b
 gm2_fclane_3    gm2_fclane_3.vert   gm2_fclane_3.frag   triangles vs.position=equal vs.varying=differs:unanalysed:31:b109a7e72a78 fs.fragment=differs:unanalysed:30:2e6a4ec0368b
 gm2_fclane_4    gm2_fclane_4.vert   gm2_fclane_4.frag   triangles vs.position=equal vs.varying=equal fs.fragment=equal
+# #367 lower-int-loops: glmark2's vertex loops (loop's vs 3cb0; docs/notes/mali-int-loops.md, "glmark2's vertex
+# loops"), drawn without --uniform-values but gm2_cf_loop_uni_vs (with them). Our compiler is byte-equal to
+# gm2_intloop_const_vs (the counted loop unrolled) and gm2_intloop_cond_vs, and to gm2_intloop_uniform_vs and
+# gm2_cf_loop_uni_vs (the kept loop) with the loop cap's edits (tests/mali_int_loops.rs). pan_shc's loop words are
+# Mesa's; its matrix product is summed from the last column (`mat-order`). For gm2_intloop_uniform_vs it also
+# copies `d`'s value before the loop after the counter's start, not before it (spirv_to_nir's variable order;
+# `unanalysed`).
+gm2_intloop_const_vs    gm2_intloop_const_vs.vert   gm2_intloop_const_vs.frag   triangles vs.position=differs:mat-order:38:94084091d431 fs.fragment=equal
+gm2_intloop_cond_vs     gm2_intloop_cond_vs.vert    gm2_intloop_cond_vs.frag    triangles vs.position=differs:mat-order:38:0ae9442813a8 fs.fragment=equal
+gm2_intloop_uniform_vs  gm2_intloop_uniform_vs.vert gm2_intloop_uniform_vs.frag triangles vs.position=differs:unanalysed:46:f1da507d6747 fs.fragment=equal
+gm2_cf_loop_uni_vs      gm2_cf_loop_uni_vs.vert     gm2_cf_loop_uni_vs.frag     triangles vs.position=differs:mat-order:38:c99e0a6f078b fs.fragment=equal

@@ -1105,6 +1105,44 @@ pub(super) fn index_only(m: &Module<'_>, v: ValueId) -> bool {
     uses > 0 && !other
 }
 
+/// Every read of IR value `v` is an operand of a signed integer compare
+/// (`<`, `<=`, `==`, `!=`) that is a loop's head test (`if (c) {} else
+/// break;`, `Lower::break_unless`): an `int` uniform a vertex loop's bound
+/// reads as it is, its word an FAU word the compare reads in place
+/// (gm2_cf_loop_uni_vs's `ICMP_OR.s32.ge.m1 r5, r4, u11.w0, 0x0`, glmark2
+/// loop's `i < VertexLoops`; docs/notes/mali-int-uniforms.md section 2: an
+/// int is one 32-bit word a component). Any other read (arithmetic, a
+/// compare an `if` or a select reads) has no reference and keeps
+/// [`MaliError::UniformType`] at the uniform.
+pub(super) fn int_compare_only(m: &Module<'_>, v: ValueId) -> bool {
+    /* the head tests of the loops of `nodes`, nested ones too */
+    fn head(m: &Module<'_>, nodes: &[IrNode], c: ValueId) -> bool {
+        nodes.iter().any(|n| match *n {
+            IrNode::Loop { body } => {
+                let first = m.nodes_of(body).iter().find(|n| !matches!(n, IrNode::Instr(_)));
+                matches!(first, Some(&IrNode::If { cond, then_, else_ })
+                    if cond.val == c && then_.is_empty() && m.nodes_of(else_) == [IrNode::Break])
+                    || head(m, m.nodes_of(body), c)
+            }
+            IrNode::If { then_, else_, .. } => head(m, m.nodes_of(then_), c) || head(m, m.nodes_of(else_), c),
+            _ => false,
+        })
+    }
+    let mut uses = 0;
+    let mut other = false;
+    for (i, op) in m.instrs.iter().enumerate() {
+        match op {
+            IrOp::Alu(AluOp::Ilt | AluOp::Ile | AluOp::Ieq | AluOp::Ine, s)
+                if s[..2].iter().any(|x| x.val == v) && head(m, m.nodes_of(m.body), ValueId(i as u32)) =>
+            {
+                uses += 1
+            }
+            _ => op.for_each_src(|s| other |= s.val == v),
+        }
+    }
+    uses > 0 && !other
+}
+
 /// An fp32 read of a float array's element at an int uniform's index (the
 /// vertex stage and a highp fragment shader; uniarray_vs, uniarray_highp):
 /// Mesa's 32-bit `load_ubo(0, base + (index << 2))`, one dword an element
@@ -3539,6 +3577,35 @@ enum Step {
     EndIf,
     /* a node the walk refuses, where it stands */
     Refuse(MaliError),
+    /// A top-level loop of [`vs_loop_shape`]'s form: its body, and the index
+    /// of its [`Step::LoopEnd`]. The body's steps follow: its instructions
+    /// and its head test ([`Step::Head`]).
+    LoopBegin(ir::Range, u32),
+    /// The loop's head test, `if (c) {} else break;` (`Lower::break_unless`).
+    Head(ir::Src),
+    /// The end of a loop's body: the index of its [`Step::LoopBegin`].
+    LoopEnd(u32),
+}
+
+/// A loop body the vertex walk takes (plan #367 lower-int-loops,
+/// docs/notes/mali-int-loops.md): instructions and one head test `if (c)
+/// {} else break;` (`Lower::break_unless`), the first control-flow node,
+/// nothing else. A `for` of a constant bound is unrolled ([`walk`]), one of
+/// a run-time bound kept (gm2_cf_loop_uni_vs, glmark2 loop's vs 3cb0); a
+/// nested loop, an `if`, a `continue` or a second `break` has no vertex
+/// reference (`intloop_loop_nested_vs` keeps the refusal).
+fn vs_loop_shape(m: &Module<'_>, body: ir::Range) -> bool {
+    let mut head = false;
+    for nd in m.nodes_of(body) {
+        match *nd {
+            IrNode::Instr(_) => {}
+            IrNode::If { then_, else_, .. } if !head && then_.is_empty() && m.nodes_of(else_) == [IrNode::Break] => {
+                head = true
+            }
+            _ => return false,
+        }
+    }
+    head
 }
 
 /// The vertex shader's body as [`Step`]s. An `if` is flattened when each
@@ -3574,40 +3641,56 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
     for nd in nodes {
         n += match *nd {
             IrNode::If { then_, else_, .. } => flat(then_, else_).map_or(1, |k| k + 3),
+            IrNode::Loop { body } if vs_loop_shape(m, body) => body.len as usize + 2,
             _ => 1,
         };
     }
     let steps = scratch.alloc_filled(n, Step::Else).map_err(|_| MaliError::OutOfScratch)?;
     let mut k = 0;
-    let mut put = |s: Step| {
-        steps[k] = s;
-        k += 1;
-    };
+    macro_rules! put {
+        ($s:expr) => {{
+            steps[k] = $s;
+            k += 1;
+        }};
+    }
     for (j, nd) in nodes.iter().enumerate() {
         match *nd {
-            IrNode::Instr(id) => put(Step::Instr(id)),
+            IrNode::Instr(id) => put!(Step::Instr(id)),
             IrNode::Return if j + 1 == nodes.len() => {}
+            /* a counted or uniform-bounded `for` ([`vs_loop_shape`]) */
+            IrNode::Loop { body } if vs_loop_shape(m, body) => {
+                let begin = k as u32;
+                put!(Step::LoopBegin(body, begin + 1 + body.len));
+                for nd in m.nodes_of(body) {
+                    match *nd {
+                        IrNode::Instr(id) => put!(Step::Instr(id)),
+                        IrNode::If { cond, .. } => put!(Step::Head(cond)),
+                        _ => put!(Step::Refuse(MaliError::LoopVertex)),
+                    }
+                }
+                put!(Step::LoopEnd(begin));
+            }
             /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
-            IrNode::Loop { .. } => put(Step::Refuse(MaliError::LoopVertex)),
+            IrNode::Loop { .. } => put!(Step::Refuse(MaliError::LoopVertex)),
             IrNode::If { then_, else_, .. } if flat(then_, else_).is_err() => {
-                put(Step::Refuse(flat(then_, else_).err().unwrap_or(MaliError::ControlFlow)))
+                put!(Step::Refuse(flat(then_, else_).err().unwrap_or(MaliError::ControlFlow)))
             }
             IrNode::If { cond, then_, else_ } => {
-                put(Step::If(cond));
+                put!(Step::If(cond));
                 for nd in m.nodes_of(then_) {
                     if let IrNode::Instr(id) = *nd {
-                        put(Step::Instr(id));
+                        put!(Step::Instr(id));
                     }
                 }
-                put(Step::Else);
+                put!(Step::Else);
                 for nd in m.nodes_of(else_) {
                     if let IrNode::Instr(id) = *nd {
-                        put(Step::Instr(id));
+                        put!(Step::Instr(id));
                     }
                 }
-                put(Step::EndIf);
+                put!(Step::EndIf);
             }
-            _ => put(Step::Refuse(MaliError::ControlFlow)),
+            _ => put!(Step::Refuse(MaliError::ControlFlow)),
         }
     }
     Ok(&steps[..k])
@@ -3829,6 +3912,229 @@ fn vec_origins(
     made
 }
 
+/// The loop the vertex walk is in ([`Step::LoopBegin`]).
+#[derive(Clone, Copy)]
+enum VsLoop {
+    None,
+    /// A counted loop, unrolled: its [`Step::LoopEnd`]'s index, the passes
+    /// walked and the first node of the
+    /// first pass (the cost bound, nir_opt_loop_unroll.c:924-925).
+    Unroll {
+        end: usize,
+        pass: usize,
+        first: usize,
+    },
+    /// A loop Mesa keeps: its state is the walk's `kept` ([`KeptLoop`]).
+    Kept,
+}
+
+/// A vertex loop Mesa keeps ([`vs_kept_begin`]).
+#[derive(Clone, Copy)]
+struct KeptLoop {
+    lp: u8,
+    pre: u8,
+    header: u8,
+    /// The header's phis: (node, local, lane).
+    phis: [(u16, u8, u8); MAX_LOCALS],
+    nphi: usize,
+    /// The pass counter's phi and its next value, set by the head test
+    /// ([`vs_kept_head`]).
+    cap_phi: u16,
+    next: Val,
+    /// The head test's `break` block and the locals there, which the
+    /// exit takes.
+    brk: u8,
+    brk_locals: [[Val; 4]; MAX_LOCALS],
+    /// The nodes of the loop start here ([`vs_kept_end`]).
+    first: usize,
+}
+
+/// A loop of [`vs_loop_shape`]'s form whose head test reads a run-time
+/// value (an `int` uniform's word: gm2_cf_loop_uni_vs, glmark2 loop's vs
+/// 3cb0): Mesa keeps it (no limiting terminator, nir_opt_loop_unroll.c:
+/// 1112-1114) and `emit_loop` lays it out (bifrost_compile.c:3738-3770), as
+/// the fragment walk's kept loop ([`super::nir_fs`] `walk_kept_loop`, whose
+/// blocks and regions this makes the same): the header holds one phi per
+/// local lane the body stores, in the reverse of the locals' registration
+/// order ([`registration_order`]), each taking the value before the loop
+/// and the body's last one, then the pass counter's phi. The counter is
+/// the DELIBERATE deviation from Mesa of every kept loop of this back end
+/// (docs/notes/mali-loop-board-failures.md: `LOOP_CAP` passes at most, so
+/// a large bound cannot run a vertex job past the GPU's timeout). The body
+/// stores no output (no reference).
+fn vs_kept_begin(
+    vs: &mut Nir<'_>,
+    m: &Module<'_>,
+    body: ir::Range,
+    locals: &mut [[Val; 4]; MAX_LOCALS],
+) -> Result<KeptLoop, MaliError> {
+    if vs.nloops >= MAX_LOOPS || vs.nifs >= MAX_IFS {
+        return Err(MaliError::BlockTableFull);
+    }
+    let nodes = m.nodes_of(body);
+    let mut masks = [0u8; MAX_LOCALS];
+    for nd in nodes {
+        let IrNode::Instr(id) = *nd else { continue };
+        match m.instr(id) {
+            Some(&IrOp::StoreLocal { local, index: None, write_mask, .. }) => {
+                *masks.get_mut(local.0 as usize).ok_or(MaliError::Defect(Defect::IrIndex))? |= write_mask;
+            }
+            Some(IrOp::StoreLocal { .. }) => return Err(MaliError::IndexedLocal),
+            Some(IrOp::StoreOutput { .. }) => return Err(MaliError::LoopVertex),
+            _ => {}
+        }
+    }
+    let init = |l: ir::LocalId, _float: bool| match locals.get(l.0 as usize).map(|v| v[0]) {
+        Some(Val::Const(bits)) => Some(bits),
+        _ => None,
+    };
+    let limit =
+        crate::shaderc::online::loop_count::constant_loop_entries(m, body, &init).unwrap_or(super::select::LOOP_CAP);
+    let lp = vs.nloops as u8;
+    vs.nloops += 1;
+    let pre = vs.cur;
+    let header = vs.new_block(pre)?;
+    vs.cur = header;
+    let reg = registration_order(m);
+    let mut order = [(0u16, 0usize); MAX_LOCALS];
+    let mut nl = 0;
+    for (l, &mask) in masks.iter().enumerate() {
+        if mask != 0 {
+            order[nl] = (u16::MAX - reg[l], l);
+            nl += 1;
+        }
+    }
+    order[..nl].sort_unstable();
+    let mut s = KeptLoop {
+        lp,
+        pre,
+        header,
+        phis: [(0, 0, 0); MAX_LOCALS],
+        nphi: 0,
+        cap_phi: 0,
+        next: Val::Undef,
+        brk: 0,
+        brk_locals: *locals,
+        first: vs.n,
+    };
+    for &(_, l) in &order[..nl] {
+        for c in 0..4 {
+            if masks[l] & (1 << c) == 0 {
+                continue;
+            }
+            let v = locals[l][c];
+            /* a local the body sets before it reads it: no phi */
+            if v == Val::Undef {
+                if !super::nir_fs::declared_in(m, nodes, l, c) {
+                    return Err(MaliError::LoopVertex);
+                }
+                continue;
+            }
+            let bits = match v {
+                Val::Lane(n, _) => vs.nodes[n as usize].bits,
+                _ => 32,
+            };
+            /* a 16-bit (mediump) carried lane has no vertex reference */
+            if bits != 32 || s.nphi == s.phis.len() {
+                return Err(MaliError::LoopVertex);
+            }
+            let id = vs.push_node(NirNode { kind: Kind::Phi, src: [v, Val::Undef, Val::Undef], bits, width: 1 })?;
+            locals[l][c] = Val::Lane(id, 0);
+            s.phis[s.nphi] = (id, l as u8, c as u8);
+            s.nphi += 1;
+        }
+    }
+    let nd = NirNode { kind: Kind::Phi, src: [Val::Const(limit), Val::Undef, Val::Undef], bits: 32, width: 1 };
+    s.cap_phi = vs.push_node(nd)?;
+    Ok(s)
+}
+
+/// The head test of kept loop `s` on mask `c` (`if (c) {} else break;`):
+/// `opt_if_simplification` swaps the sides under `inot(c)`, the inverse
+/// compare (nir_opt_algebraic.py: `inot(ilt(a, b))` is `ige(a, b)`), and
+/// the pass counter's `count - 1`, its compare with 0, is OR-ed into it
+/// ([`vs_kept_begin`]). The `if`'s then side is the `break`, its else side
+/// empty; the rest of the body follows in the join, as the fragment walk's
+/// `walk_if` builds the head of a kept loop.
+fn vs_kept_head(vs: &mut Nir<'_>, s: &mut KeptLoop, c: Val, locals: &[[Val; 4]; MAX_LOCALS]) -> Result<(), MaliError> {
+    let Val::Lane(n, 0) = c else { return Err(MaliError::LoopVertex) };
+    let nd = vs.nodes[n as usize];
+    let inv = match nd.kind {
+        Kind::Alu(Alu::Icmp(Cmpf::Lt)) => Cmpf::Ge,
+        Kind::Alu(Alu::Icmp(Cmpf::Ge)) => Cmpf::Lt,
+        Kind::Alu(Alu::Icmp(Cmpf::Eq)) => Cmpf::Ne,
+        Kind::Alu(Alu::Icmp(Cmpf::Ne)) => Cmpf::Eq,
+        /* a float or unsigned test has no vertex reference */
+        _ => return Err(MaliError::LoopVertex),
+    };
+    let test = vs.alu(Alu::Icmp(inv), nd.src[0], nd.src[1], Val::Undef)?;
+    let next = vs.alu(Alu::Iadd, Val::Lane(s.cap_phi, 0), Val::Const(u32::MAX), Val::Undef)?;
+    let stop = vs.alu(Alu::Icmp(Cmpf::Lt), next, Val::Const(0), Val::Undef)?;
+    let cond = vs.alu(Alu::Ior, test, stop, Val::Undef)?;
+    s.next = next;
+    let before = vs.cur;
+    let then_first = vs.new_block(before)?;
+    let else_first = vs.new_block(before)?;
+    let after = vs.new_block(before)?;
+    vs.cur = after;
+    s.brk = then_first;
+    s.brk_locals = *locals;
+    let seq = vs.nseq;
+    vs.nseq += 1;
+    vs.ifs[vs.nifs] = IfRegion {
+        cond,
+        before,
+        then_first,
+        then_last: then_first,
+        else_first,
+        else_last: else_first,
+        after,
+        live: true,
+        guard: false,
+        brk: Some(s.lp),
+        seq,
+        single: false,
+        inot: false,
+    };
+    vs.nifs += 1;
+    Ok(())
+}
+
+/// The end of kept loop `s`'s body: the header's phis take the body's last
+/// values (the latch's), the exit block follows, entered by the head
+/// test's `break` alone, with the locals there. A load or look-up first
+/// made in the loop (its node would stand in a block the exit does not
+/// follow) has no reference.
+fn vs_kept_end(vs: &mut Nir<'_>, s: &KeptLoop, locals: &mut [[Val; 4]; MAX_LOCALS]) -> Result<(), MaliError> {
+    if s.next == Val::Undef {
+        return Err(MaliError::LoopVertex);
+    }
+    for id in s.first..vs.n {
+        if matches!(vs.nodes[id].kind, Kind::Input { .. } | Kind::VsTex { .. } | Kind::UniformIdx { .. })
+            && vs.block[id] != s.pre
+        {
+            return Err(MaliError::LoopVertex);
+        }
+    }
+    let latch = vs.cur;
+    for &(id, l, c) in &s.phis[..s.nphi] {
+        let v = locals[l as usize][c as usize];
+        /* a lane the body leaves as it found it (`nir_opt_remove_phis`) */
+        if v == Val::Lane(id, 0) || v == Val::Undef {
+            return Err(MaliError::LoopVertex);
+        }
+        vs.nodes[id as usize].src[1] = v;
+    }
+    vs.nodes[s.cap_phi as usize].src[1] = s.next;
+    let exit = vs.new_block(s.brk)?;
+    vs.cur = exit;
+    *locals = s.brk_locals;
+    let seq = vs.nseq;
+    vs.nseq += 1;
+    vs.loops[s.lp as usize] = LoopRegion { pre: s.pre, header: s.header, latch, exit, seq };
+    Ok(())
+}
+
 /// The vertex walk of [`build`]; `numbering` models Mesa's IR where it
 /// numbers the attribute locations ([`Nir::numbering_walk`]).
 fn walk<'s>(
@@ -3868,10 +4174,77 @@ fn walk<'s>(
     let origins = scratch.alloc_filled(MAX_VALUES, [0u16; 4]).map_err(|_| MaliError::OutOfScratch)?;
     let mut local_origins = [[0u16; 4]; MAX_LOCALS];
     let mut varying_origins = [[0u16; 4]; MAX_VARYINGS];
-    for step in vs_steps(m, scratch)? {
-        let id = match *step {
+    /* the loop being walked ([`Step::LoopBegin`]) */
+    let mut lp = VsLoop::None;
+    let mut kept_loop: Option<KeptLoop> = None;
+    let steps = vs_steps(m, scratch)?;
+    let mut k = 0;
+    while k < steps.len() {
+        let step = steps[k];
+        k += 1;
+        let id = match step {
             Step::Instr(id) => id,
             Step::Refuse(e) => return Err(e),
+            /* a counted loop (its head test folds on the counter's
+             * constants) is unrolled, pass after pass, as `simple_unroll`
+             * does (nir_opt_loop_unroll.c:105; gm2_intloop_const_vs); one
+             * whose test reads a run-time value is kept ([`vs_kept_begin`];
+             * gm2_cf_loop_uni_vs) */
+            Step::LoopBegin(body, end) => {
+                let Some(head) = m.nodes_of(body).iter().find_map(|n| match *n {
+                    IrNode::If { cond, .. } => Some(cond),
+                    _ => None,
+                }) else {
+                    return Err(MaliError::Defect(Defect::IrIndex));
+                };
+                lp = if super::nir_fs::ir_folds(m, head.val, &w.locals, 0) {
+                    VsLoop::Unroll { end: end as usize, pass: 0, first: vs.n }
+                } else {
+                    kept_loop = Some(vs_kept_begin(&mut vs, m, body, &mut w.locals)?);
+                    VsLoop::Kept
+                };
+                continue;
+            }
+            Step::Head(c) => {
+                let c = lane(w, c, 0);
+                match (lp, kept_loop.as_mut()) {
+                    /* the counter's test, folded: past the last pass the
+                     * loop is left, the rest of that pass dead */
+                    (VsLoop::Unroll { end, first, .. }, _) if c == Val::Const(0) => {
+                        if vs.n - first > super::nir_fs::LOOP_UNROLL_LIMIT * super::nir_fs::MAX_UNROLL_ITERATIONS {
+                            return Err(MaliError::LoopVertex);
+                        }
+                        lp = VsLoop::None;
+                        k = end + 1;
+                    }
+                    (VsLoop::Unroll { .. }, _) if matches!(c, Val::Const(_)) => {}
+                    (VsLoop::Kept, Some(s)) if s.next == Val::Undef => vs_kept_head(&mut vs, s, c, &w.locals)?,
+                    /* a test that does not fold in a pass of an unrolled
+                     * loop (`complex_unroll`) has no vertex reference */
+                    _ => return Err(MaliError::LoopVertex),
+                }
+                continue;
+            }
+            Step::LoopEnd(begin) => {
+                match lp {
+                    /* `simple_unroll` takes a trip count of at most
+                     * `max_unroll_iterations` (bifrost_compile.h:140) */
+                    VsLoop::Unroll { ref mut pass, .. } => {
+                        *pass += 1;
+                        if *pass > super::nir_fs::MAX_UNROLL_ITERATIONS {
+                            return Err(MaliError::LoopVertex);
+                        }
+                        k = begin as usize + 1;
+                    }
+                    VsLoop::Kept => {
+                        let s = kept_loop.take().ok_or(MaliError::Defect(Defect::IrIndex))?;
+                        vs_kept_end(&mut vs, &s, &mut w.locals)?;
+                        lp = VsLoop::None;
+                    }
+                    VsLoop::None => return Err(MaliError::Defect(Defect::IrIndex)),
+                }
+                continue;
+            }
             Step::If(c) => {
                 cond = lane(w, c, 0);
                 pre = Some(VsState { locals: w.locals, position, point_size, varyings });
@@ -3932,7 +4305,7 @@ fn walk<'s>(
             IrOp::LoadInput { .. } => return Err(MaliError::SpecialInput),
             IrOp::LoadUniform { dword_off, comps } => {
                 let (u, total) = uniform_of(m, dword_off)?;
-                if u.gl_type as u32 == GL_INT && !index_only(m, ValueId(id.0)) {
+                if u.gl_type as u32 == GL_INT && !index_only(m, ValueId(id.0)) && !int_compare_only(m, ValueId(id.0)) {
                     return Err(MaliError::UniformType);
                 }
                 /* the load Mesa makes: the whole vector, or one column, or
@@ -5424,6 +5797,41 @@ pub fn dce(vs: &mut Nir<'_>, only: Option<u8>) {
         }
         vs.len = j;
     }
+}
+
+/// [`dce`] of IDVS variant `out` of a vertex shader with kept loops
+/// ([`vs_kept_begin`]): whether the variant keeps them. A loop none of the
+/// variant's stores needs (no node of its body, header phi included, is
+/// live without the head test's `if`) is dead whole, its `if` with it
+/// (`nir_opt_dead_cf`): the variant is one block (gm2_intloop_uniform_vs's
+/// varying program, where the loop feeds only the position). A variant
+/// that needs one loop and not another has no reference.
+pub fn variant_dce(vs: &mut Nir<'_>, out: u8) -> Result<bool, MaliError> {
+    if vs.nloops == 0 {
+        dce(vs, Some(out));
+        return Ok(false);
+    }
+    let saved = vs.ifs;
+    for r in vs.ifs[..vs.nifs].iter_mut() {
+        r.live = false;
+    }
+    dce(vs, Some(out));
+    vs.ifs = saved;
+    let mut kept = 0;
+    for r in &vs.loops[..vs.nloops] {
+        let inside = |b: u8| b >= r.header && b <= r.latch;
+        if vs.order[..vs.len].iter().any(|&id| vs.live[id as usize] && inside(vs.block[id as usize])) {
+            kept += 1;
+        }
+    }
+    if kept == 0 {
+        return Ok(false);
+    }
+    if kept != vs.nloops {
+        return Err(MaliError::LoopVertex);
+    }
+    dce(vs, Some(out));
+    Ok(true)
 }
 
 /// `nir_opt_shrink_vectors` for the loads: the lanes up to the highest one
