@@ -140,7 +140,7 @@ two `load_ubo` sequences, the per-stage address pair, the wait, the default
 rows kept in shared registers, the per-draw back-end contract and the built
 shape in its sections 8.4-8.5). **The raise is implemented** (plan #378):
 `b85960c2` (selection reads members with `ld`), `fad0558a` (back end),
-`f0b02eda` (a stage that declares a block but reads none), `c26a46e9` (the
+`560dfa49` (a stage that declares a block but reads none), `5e6b27ef` (the
 `context.rs` arms). The paragraphs below keep the design-time analysis: the
 old block-in-shared-registers path that the raise replaced and the bounds it
 hit, and Mesa's memory path.
@@ -200,11 +200,25 @@ constant and at a run-time index through the back end's host draw, the
 50688-dword stage array, the never-read block), `tests/es3_limits_pvr_ubo.rs`
 and the `state.rs` pin.
 
-**What is left.** Host dEQP `functional.ubo` and the
-`implementation_limits` uniform-block rows on the PowerVR build (HOST-ONLY)
-and the AM62P board rows (a 16384-byte block read at its first and last
-dword, the same two dEQP families); the boards are held by plan #347. The
-`tests/es3_caps.rs` `known_gaps()` PowerVR rows are their own item.
+**Host dEQP-GLES3 (HOST-ONLY, `tools/cts/host-deqp-run.sh`, `GPU=powervr`
+`MODULE=gles3`, VK-GL-CTS `93bca01`), the tip against `e55bcfd5` (the parent
+of `b85960c2`).** `implementation_limits` (49 cases): 43 Pass / 6 Fail before,
+46 Pass / 3 Fail after, 0 NotSupported, 0 crash; `max_uniform_block_size`,
+`max_combined_vertex_uniform_components` and
+`max_combined_fragment_uniform_components` move Fail to Pass, and nothing else
+changes verdict (the 3 left are `max_color_attachments`, `max_draw_buffers`
+and `max_vertex_output_components`, other limits). `functional.ubo` (2355
+cases): 2355 Fail before and after, every one `Image compare failed` (the
+Linux OSAL keeps the command stream, so every render reads black and the
+verdict carries no information); no case is refused at compile or link and no
+case changes verdict, which is the host proof that the 16384-byte blocks
+compile and link on the `ld` path. The `state_query` rows of the same limits
+are outside this run.
+
+**What is left.** The AM62P board rows (`functional.ubo`,
+`implementation_limits`, and a 16384-byte block read at its first and last
+dword), held by plan #347. The `tests/es3_caps.rs` `known_gaps()` PowerVR rows
+are their own item.
 
 ## 5. GC7000UL (i.MX8MP, `src/vivante`)
 
