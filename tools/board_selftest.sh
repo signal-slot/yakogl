@@ -1549,7 +1549,11 @@ echo "== 3h. Pi 5 probes: the end line of each tools/probes/rpi_5 probe ends the
 # each probe's last line as its source prints it (rpi5_ident's from its branch,
 # 87694ec8); a FAIL line is the verdict failed, not done. rpi5_wdog's pass is the
 # reset (the console goes quiet), and a read that faulted cuts rpi5_ident's line
-# after "= ": neither is an end. The pi4 reads none of them.
+# after "= ": neither is an end. The pi4 reads none of them. The v3d_triangle
+# pair is the form docs/notes/pre-study-rpi5.md M5 states (inside/outside/edge
+# read back to the tolerance of 3, its P6 done-when 'v3d_triangle: PASS'); the
+# probe itself is its own item — fix these two lines when it lands, as its
+# README's table names the end line.
 p5=0
 while IFS='|' read -r board line want; do
     p5=$((p5 + 1))
@@ -1565,9 +1569,12 @@ pi5|rpi5_ident: done|rc=0 verdict=done boot=tryboot row boot_verdict=complete re
 pi5|rpi5_ident: CORE_IDENT0 @0x1002008000 = |rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi5|v3d_clear: PASS (128x64 read back 0xff336699; 9 pages used incl. page table and scratch, cache: 1 sys_cache_data_flush_and_invd_range)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_clear_pass
 pi5|v3d_clear: FAIL (render: no frame done in 1000 ms; 9 pages used incl. page table and scratch, cache: 1 sys_cache_data_flush_and_invd_range)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_clear_fail
+pi5|v3d_triangle: PASS (64x64 read back 0 of 4096 px wrong: 1440 inside, 2512 outside, edge within tol 3)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_triangle_pass
+pi5|v3d_triangle: FAIL (17 of 4096 px differ by more than 3: 12 inside, 5 edge)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_triangle_fail
 pi5|rpi5_wdog: FAIL no reset|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_wdog_fail
 pi5|rpi5_wdog: feeding stopped, reset expected within 10 s|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi4|v3d_clear: FAIL (render: no frame done in 1000 ms)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+pi4|v3d_triangle: FAIL (17 of 4096 px differ by more than 3: 12 inside, 5 edge)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 EOF
 
