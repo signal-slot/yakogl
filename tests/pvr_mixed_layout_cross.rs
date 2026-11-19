@@ -21,7 +21,10 @@
 //!   compiler never refuses a list the emit places in registers;
 //! - (d) `shc_blend_key_mixed` is `Some` exactly when the list has two or
 //!   more targets, an integer target, is not one integer layout repeated, and
-//!   has a register layout.
+//!   `layout` places it (in registers, or with the third of three spilled to
+//!   a tile buffer: plan #325 item mrt-frameload);
+//! - (e) `shc_mixed_spans(t)` is `layout`'s register span and tile-buffer
+//!   count where `layout` places the list, and `None` where it errors.
 //!
 //! HOST-ONLY: pure arithmetic, no GPU.
 //!
@@ -33,7 +36,7 @@ use yakogl::pvr::mrt_layout::{layout, Place};
 use yakogl::shaderc::ShcIntRt;
 use yakogl::target_key::{
     gles_surf_target_key, shc_blend_key_is_mixed, shc_blend_key_mixed, shc_blend_key_mixed_targets,
-    shc_mixed_out_layout, shc_target_key_dwords, SHC_MIXED_MAX_TARGETS,
+    shc_mixed_out_layout, shc_mixed_spans, shc_target_key_dwords, SHC_MIXED_MAX_TARGETS,
 };
 
 #[derive(Default)]
@@ -87,8 +90,12 @@ fn check(fmts: &[u8], keys: &[u32], seen: &mut Seen) {
     }
 
     // (d)
-    let expect = keys.len() >= 2 && any_int && !same_int && shc.is_some();
+    let expect = keys.len() >= 2 && any_int && !same_int && lay.is_ok();
     assert_eq!(mixed.is_some(), expect, "{ctx}: mixed key presence");
+
+    // (e)
+    let spans = lay.ok().map(|l| (l.output_regs, l.tile_buffers));
+    assert_eq!(shc_mixed_spans(keys), spans, "{ctx}: spans");
 }
 
 fn walk(formats: &[(u8, u32)], fmts: &mut Vec<u8>, keys: &mut Vec<u32>, seen: &mut Seen) {

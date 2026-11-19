@@ -6,7 +6,7 @@
 //! end logs.
 
 use crate::backend::{gles_surf_is_srgb, GlesDraw};
-use crate::target_key::{gles_surf_target_key, shc_blend_key_mixed, shc_mixed_out_layout, SHC_MIXED_MAX_TARGETS};
+use crate::target_key::{gles_surf_target_key, shc_blend_key_mixed, shc_mixed_spans, SHC_MIXED_MAX_TARGETS};
 
 /// A slot with no target (`gpu` 0) before the last present one.
 pub const REFUSE_GL_NONE: &str =
@@ -17,9 +17,13 @@ pub const REFUSE_SRGB: &str =
 /// More targets than a mixed key carries (`SHC_MIXED_MAX_TARGETS`).
 pub const REFUSE_MIX_TARGETS: &str =
     "yakogl/pvr: draw refused: an integer colour attachment beside another colour attachment, past the three draw buffers a mixed key carries";
-/// A layout past the pixel's four output registers.
+/// A layout past the pixel's four output registers whose spill no
+/// end-of-tile program was captured for (`target_key::shc_mixed_spans`: two
+/// targets with the second spilled, three with the last two). The third of
+/// three targets spilled to a tile buffer is drawn (`eot3_tb`).
 pub const REFUSE_FOUR_REGISTERS: &str =
-    "yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers";
+    "yakogl/pvr: draw refused: integer and other colour attachments past the pixel's four output registers, \
+     spilled where no end-of-tile program was captured (two targets with the second spilled, or three with the last two)";
 /// The list is not a mix (or a format has no per-target key): the line the
 /// back end already logs.
 pub const REFUSE_NOT_A_MIX: &str =
@@ -38,7 +42,8 @@ pub const REFUSE_MIX_MASK: &str =
 
 /// The dense per-target keys of draw buffers 0.. and how many are present.
 /// `Err` is the refusal line: a GL_NONE gap, an sRGB target, more than
-/// `SHC_MIXED_MAX_TARGETS` targets, or a layout past four registers.
+/// `SHC_MIXED_MAX_TARGETS` targets, or a layout past four registers that
+/// no end-of-tile program emits ([`shc_mixed_spans`]).
 pub fn draw_target_keys(d: &GlesDraw) -> Result<([u32; SHC_MIXED_MAX_TARGETS], usize), &'static str> {
     let n = (d.num_targets as usize).clamp(1, d.targets.len());
     // Target 0 is the frame's own (`target_*`), as `int_targets_drawn` reads it.
@@ -63,7 +68,7 @@ pub fn draw_target_keys(d: &GlesDraw) -> Result<([u32; SHC_MIXED_MAX_TARGETS], u
         };
         *k = t;
     }
-    if shc_mixed_out_layout(&keys[..=last]).is_none() {
+    if shc_mixed_spans(&keys[..=last]).is_none() {
         return Err(REFUSE_FOUR_REGISTERS);
     }
     Ok((keys, last + 1))
@@ -138,10 +143,23 @@ mod tests {
 
     #[test]
     fn past_four_registers() {
+        /* two targets with the second spilled, three with the last two: no
+         * end-of-tile program (fragment_out.random.11, .31) */
         let d = draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI]);
         assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
-        let d = draw(&[GLES_SURF_RGBA16F, GLES_SURF_RGBA16F, GLES_SURF_RGBA16F]);
+        let d = draw(&[GLES_SURF_RG32I, GLES_SURF_RGBA32I]);
         assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
+        let d = draw(&[GLES_SURF_RG8UI, GLES_SURF_RGBA32UI, GLES_SURF_RG32I]);
+        assert_eq!(draw_target_keys(&d), Err(REFUSE_FOUR_REGISTERS));
+        /* the third of three spilled (`eot3_tb`): keyed; three RGBA16F are
+         * no mix (no integer target), so they keep their own path */
+        let d = draw(&[GLES_SURF_R16UI, GLES_SURF_RGBA16UI, GLES_SURF_RGBA8888]);
+        assert_eq!(draw_target_keys(&d).map(|(_, n)| n), Ok(3));
+        assert!(shc_blend_key_is_mixed(draw_mixed_key(&d).unwrap()));
+        let d = draw(&[GLES_SURF_R16I, GLES_SURF_RG8I, GLES_SURF_RGBA32I]);
+        assert!(shc_blend_key_is_mixed(draw_mixed_key(&d).unwrap()));
+        let d = draw(&[GLES_SURF_RGBA16F, GLES_SURF_RGBA16F, GLES_SURF_RGBA16F]);
+        assert_eq!(draw_mixed_key(&d), Err(REFUSE_NOT_A_MIX));
     }
 
     #[test]
