@@ -29,8 +29,23 @@ instance as the base (its per-instance streams are not advanced: the PDS adds
 the base before the per-instance DMAs). Host tests:
 `tests/es3_pvr_instanceid.rs`, `tests/es3_pvr_chunk_fetch.rs` and the two rig
 tests in `src/pvr/backend_tests.rs`. The AM62P picture of the six cases is not
-measured yet. Sections 1 and 4 below describe the code before this change. P3
-is still open.
+measured yet. Sections 1 and 4 below describe the code before this change.
+
+**Update (2026-11-19): P3 has landed as `4f4310a6`, opt-in behind the cargo
+feature `pvr-instance-divisor`.** With the feature the PowerVR back end
+reports `max_instance_divisor` 0xffff; without it, 1 as before. Per stream it
+uses Mesa's multiplier and shift (`pvr_pipeline_pds.c:846-864`): one SFTLP32
+for a power of two, otherwise a multiply and shift. The `divisor` field is in
+`struct pvr_pds_render_stream` and `PvrPdsVertexStream` (offset 24, layout
+asserts in `src/pvr/ffi.rs` and `ffi_layout_check.c`). `add_stream` coalesces
+only streams of equal divisor. A chunk of a split draw starts at its first
+instance through P1's modifier (`PVR_PDS_ID_BASE_TO_STREAMS` = 0x100, set
+when a stream is per instance), never a base move. A divisor above 0xffff
+still takes the GL core's per-instance split. Pieces: the generator and its C
+test `0fbc924d`, the feature declaration `02e6fdfb`, gl_test case 243
+`divmix` (`driver/tools/pvrlab/gl_test_es3_divmix.inc`, wired in `8b6b05ff`,
+built not run). Host results, HOST-ONLY, in sections 3 and 5. Not measured on
+a board.
 
 ## Summary
 
@@ -241,6 +256,38 @@ So plan #19 (`src/gl/draw.rs`) is not needed for any option.
 | P2 | Per-draw uniform: the compiler reads `gl_InstanceID` from a shared register that the driver writes, like `fs_front_face_off1` | A new `ShcShader` field (ABI change), PowerVR selection of `IoSlot::InstanceId` as a shared-register load, and a per-draw shared-register write in the back end. | ~200 lines | `src/shaderc/online/powervr/{select,chain,abi}.rs`, `src/shaderc/mod.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `src/pvr/backend.rs` | #19 (compiler) + #18. **Not recommended**: the PDS does the same in one instruction (P1). |
 | **P3** (full path) | Hardware divisors: stream `multiplier`/`shift` | Add a `divisor` field to `struct pvr_pds_render_stream` and `PvrPdsVertexStream` (layout asserts at `ffi.rs:711-717`, `ffi_layout_check.c:177-183`). Compute multiplier/shift as in `pvr_pipeline_pds.c:846-864`. `add_stream` (`backend.rs:9780-9801`) must also compare the divisor before it coalesces. Chunking must use P1's modifier, not a base move (a base move is wrong unless `first % divisor == 0`). Set `max_instance_divisor: 0xffff` (`backend.rs:9764`). Then the mixed cases are one draw, and the emulation is used only for divisors > 0xffff. Tests: the PDS data words for divisors 2, 3 and 4, and a coalescing test. | ~60 C + ~60 Rust + ~100 test lines | `driver/src/pvr_pds_render_gen.{c,h}`, `src/pvr/ffi.rs`, `src/pvr/ffi_layout_check.c`, `src/pvr/backend.rs`, `src/pvr/backend_tests.rs` | #18 |
 
+**P3, as built (`4f4310a6`, 2026-11-19; the row above is the design).**
+Landed, opt-in: the cargo feature `pvr-instance-divisor` (Zephyr
+`CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR`, CMake `YAKOGL_PVR_INSTANCE_DIVISOR`).
+Everything in the row is done as written, with these details: the generator's
+`divisor` field and its C test of the PDS data words for divisors 2, 3, 4 and
+0xffff (`0fbc924d`); `max_instance_divisor` 0xffff only with the feature; the
+chunk base rides in P1's modifier, and the modifier is applied also without a
+`gl_InstanceID` register when a stream is per instance
+(`PVR_PDS_ID_BASE_TO_STREAMS`), so no per-instance stream is advanced twice
+(`tests/es3_pvr_chunk_fetch.rs`). Tests with the feature
+(`host-test,gpu-powervr,shaderc-online,pvr-instance-divisor`):
+`tests/es3_pvr_divisor.rs` 5 of 5 pass (one instanced draw for divisors 2, 3
+and 4, the 0xffff table, no coalescing across divisors, a divisor above 0xffff
+still splits, a chunked draw moves the instance base and not the stream base);
+without the feature the same file has 3 tests, 3 pass (table 1, per-instance
+split, every stream divisor 0). The split-pin tests of
+`tests/es3_pvr_divisor_split.rs` that pin divisor 2 and above as N draws are
+compiled out under the feature by design; `es3_pvr_divisor.rs` is their
+replacement.
+
+Two lib tests in `src/pvr/backend_tests.rs` encode the **feature-off**
+chunking and fail under `test-knobs,pvr-instance-divisor` by design:
+`a_draw_that_reads_gl_instance_id_is_split_with_each_chunk_as_the_base`
+(expects `instance_id_reg` 2; with the feature it is 2 | 0x100 = 258 when a
+per-instance stream exists) and
+`an_instanced_draw_past_the_budget_is_split_by_instances` (expects the second
+chunk's per-instance stream at element 2; with the feature each chunk's first
+instance is in the base and the stream stays at element 0). Both are
+`test-knobs` tests, so the usual `--lib` rows, which run without the feature,
+are unaffected (213 of 213 pass without it). Do not add a
+`test-knobs,pvr-instance-divisor` lib row before they have feature arms.
+
 P1 alone fixes the six cases: instance i gets `gl_InstanceID = i`, and the
 divisor values are already constants. P3 removes the 2/4/20 separate draws
 (and the 20 frame objects) for divisor > 1. It also moves the
@@ -435,9 +482,52 @@ Expected verdicts:
 |---|---|---|---|
 | today (`e0eb883d`) | Fail. Each case logs `yakogl/pvr: draw refused: an instance drawn on its own ...` once per boot. | Fail (predicted; no GLES3 board run of this group yet). The image is wrong, with no refusal and `gc_refused_draws` unchanged. | Pass (AM62P measured, `docs/es3-cts-failures.md` Appendix A). i.MX8MP not measured. |
 | PowerVR P1 | **Pass** | (unchanged) | Pass |
-| PowerVR P1 + P3 | **Pass**, one draw per case | (unchanged) | Pass. The `attrib_divisor` cases (divisor 3/2/1) now use the PDS divide: a failure there points at P3's multiplier/shift. |
+| PowerVR P1 + P3 (`4f4310a6`, build with `pvr-instance-divisor`; without it the P1 row applies) | **Pass**, one draw per case (expected, unmeasured: no AM62P run yet) | (unchanged) | Pass. The `attrib_divisor` cases (divisor 3/2/1) now use the PDS divide: a failure there points at P3's multiplier/shift. |
 | GC7000UL V0 only | (unchanged) | Fail, now refused and counted (`gc_refused_draws` > 0) | Pass |
 | GC7000UL V0 + V1 | (unchanged) | **Pass** if the FE takes divisors > 1. If the six still fail **and** some `attrib_divisor` cases also fail, the FE ignores divisor > 1: go back to `max_instance_divisor: 1` and use V2. | Pass |
+
+#### P3 host results (`4f4310a6`, HOST-ONLY, `GPU=powervr`)
+
+`tools/cts/host-deqp-run.sh` with the feature built in through
+`--lib-cmake-arg=-DYAKOGL_EXTRA_FEATURES=yakogl/pvr-instance-divisor` (the bare
+name `pvr-instance-divisor` fails: `capi/Cargo.toml` has no forwarding
+feature), the patched VK-GL-CTS at `93bca01`:
+
+- Before P3 (`03a923ed`): `dEQP-GLES3.functional.instanced.*` is 111 cases,
+  0 Pass / 111 Fail / 0 NotSupported. Every picture verdict is Fail on the
+  host, because the host back end renders no real picture (the same on v3d
+  and Vivante). The one `draw refused` line of the P1-less tip is gone since
+  P1's wiring (`db633936`): state "0 refusals" only against tips from
+  `db633936` on.
+- At `4f4310a6` with and without the feature: `host-deqp-run.sh --compare`
+  shows 0 case changes in the instanced groups, reproduced twice. The 1,100
+  non-instanced stream cases are
+  case-for-case identical with and without the feature.
+- PowerVR host-test sweep at `4f4310a6`: 213 of 213 rows pass without the
+  feature. With it the only failures are the two `test-knobs` lib tests named
+  under the P3 row of section 3, which encode the feature-off chunking.
+- `tests/es3_pvr_divisor.rs`: 3 of 3 without the feature, 5 of 5 with it;
+  `es3_pvr_divisor_split`, `es3_pvr_chunk_fetch`, `es3_pvr_instanceid` and
+  `es3_pvr_instanceid_pds` pass with it.
+
+What the host can show: the draw count (one instanced draw per case, not one
+per instance), no crash, no `draw refused` line, the PDS data words and the
+chunk/base arithmetic in the tests above. What it cannot show: any pixel. A
+wrong multiplier or shift, or a wrong element fetched, is invisible to the
+host dEQP (0 changes is the expected, uninformative result). The six cases
+going Fail to Pass, and the `attrib_divisor` cases staying Pass on the PDS
+divide, are unmeasured until an AM62P run (#313 holds the board).
+
+AM62P check of P3: build the image with the feature (the env arm
+`DEQP_PVR_INSTANCE_DIVISOR` of `tools/cts`, when it has landed; at
+`4f4310a6` only `CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR` / CMake
+`YAKOGL_PVR_INSTANCE_DIVISOR` exist), run **gl_test case 243 `divmix`**
+(`gl_test_es3_divmix.inc`; opt-in, by number, e.g.
+`tools/cts/common-images.sh --cases 141,221,243 am62p ...`): 12 instances,
+divisors 2, 3 and 4, 24 checks, expected `divmix: 24 of 24 instances ok`.
+Without the feature the case fails all 24 checks (every instance in cell 0):
+that is the control. Then run `dEQP-GLES3.functional.instanced.*` with and
+without the arm. Built, not run.
 
 The `mixed.1_instances` cases pass on every build: one instance takes the
 GPU path (`draw_instanced`, `instancecount == 1`). The Pi 4 (V3D,
