@@ -724,6 +724,50 @@ fn kept_local(m: &Module<'_>, s: ir::Src) -> bool {
     }
 }
 
+/// IR value `id` (an ES 1.00 gl_FragCoord read) is read only by stores to
+/// locals the precision table holds highp ([`Module::local_prec_of`]):
+/// glmark2's `highp vec2 FragCoord = gl_FragCoord.xy` of the conditionals,
+/// function and loop scenes. GLSL's lower_precision narrows no bare
+/// dereference (`handle_rvalue`, lower_precision.cpp:835-843), so Mesa's
+/// local takes the fp32 read. A read any other instruction takes stays the
+/// mediump one ([`Fs::frag_coord16`]); a module without precision tables
+/// has no highp local.
+fn highp_copy(m: &Module<'_>, id: u32) -> bool {
+    let mut users = 0usize;
+    let mut highp = true;
+    for op in m.instrs.iter() {
+        let mut reads = false;
+        op.for_each_src(|s| reads |= s.val.0 == id);
+        if !reads {
+            continue;
+        }
+        users += 1;
+        highp &=
+            matches!(op, ir::Op::StoreLocal { local, index: None, .. } if m.local_prec_of(*local) == ir::Prec::High);
+    }
+    users > 0 && highp
+}
+
+/// Every local the mediump ES 1.00 shader declares highp
+/// ([`FsPrecision::highp_locals`]) is a copy of gl_FragCoord: each store to
+/// it stores a read [`highp_copy`] gives to highp locals alone. Any other
+/// highp local has no reference (the shader is mixed).
+fn highp_locals_copy(m: &Module<'_>, prec: &FsPrecision) -> bool {
+    let named = |h: u64| prec.highp_locals.contains(&h) && h != 0;
+    m.locals.iter().enumerate().filter(|(_, d)| named(super::name_hash(d.name))).all(|(l, _)| {
+        let mut stores = 0usize;
+        let all = m.instrs.iter().all(|op| match *op {
+            ir::Op::StoreLocal { local, src, .. } if local.0 as usize == l => {
+                stores += 1;
+                matches!(m.def(src.val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }))
+                    && highp_copy(m, src.val.0)
+            }
+            _ => true,
+        });
+        all && stores > 0
+    })
+}
+
 /// What a node of the colour is, as an operand or as an output word.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
@@ -1076,6 +1120,12 @@ pub struct Fs<'s> {
     /// gl_FragCoord's x and y narrowed to fp16, the mediump read of an ES
     /// 1.00 shader ([`Fs::frag_coord16`]).
     frag16: Option<[Val; 2]>,
+    /// The mediump ES 1.00 shader's gl_FragCoord read is taken whole by a
+    /// highp local (glmark2's `highp vec2 FragCoord = gl_FragCoord.xy`,
+    /// [`highp_copy`]): the read is the fp32 lanes ([`Fs::frag_coord`]), an
+    /// island of fp32 as a mediump ES 3.00 shader's ([`Fs::fc32`];
+    /// docs/notes/mali-fragcoord-fp16.md).
+    fc_copy: bool,
     /// Each local's rank by its first load or store in the walk, and the
     /// colour's by its first store (`u32::MAX`: none yet): the order
     /// `nir_lower_vars_to_ssa` registers the variables in
@@ -1348,6 +1398,19 @@ impl<'s> Fs<'s> {
                     _ => self.node(Alu::Fmul, [b, Val::Const(r), Val::Undef], at),
                 }
             }
+            /* `fmul(fmul(a, b), #c)` of no other constant is `fmul(fmul(a,
+             * c), b)` (nir_opt_algebraic.py:2394), here of the narrowed
+             * position's two lanes alone (an ES 1.00 mediump shader's
+             * `gl_FragCoord.x * gl_FragCoord.y * 0.0001`: gm2_fcoord16_2
+             * .expect.json, `FMA.v2f16 r0, r0^.h00, u3.w0, 0x0.neg` then
+             * `FMA.v2f16 r0, r0^.h00, r1^.h00, 0x0.neg`). The walk cannot
+             * see the inner product's other readers yet (the rule's
+             * `is_used_once`): no reference reads it twice */
+            (AluOp::Fmul, _) if self.position_product(x, y).is_some() => {
+                let (p, q, c) = self.position_product(x, y).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let pc = self.node(Alu::Fmul, [p, c, Val::Undef], at)?;
+                self.node(Alu::Fmul, [pc, q, Val::Undef], at)
+            }
             (AluOp::Fmul, _) => self.node(Alu::Fmul, [x, y, Val::Undef], at),
             (AluOp::Fadd, _) if cx && cy && pair.is_some() => self.node(Alu::Fadd, [x, y, Val::Undef], at),
             (AluOp::Fadd, _) if cx && cy => Err(MaliError::ConstantFold),
@@ -1432,6 +1495,19 @@ impl<'s> Fs<'s> {
             _ => lanes[..w].iter().position(|&x| x == v)?,
         };
         Some((lanes, i, w))
+    }
+
+    /// `fmul(x, y)` is a product of the narrowed position's two lanes
+    /// ([`Fs::frag16_lane`]) and a constant, in either order: (the first
+    /// lane, the second, the constant).
+    fn position_product(&self, x: Val, y: Val) -> Option<(Val, Val, Val)> {
+        let (o, c) = match (x, y) {
+            (o, Val::Const(_)) => (o, y),
+            (Val::Const(_), o) => (o, x),
+            _ => return None,
+        };
+        let (Alu::Fmul, [p, q, _]) = self.alu_of(o)? else { return None };
+        (self.frag16_lane(p).is_some() && self.frag16_lane(q).is_some()).then_some((p, q, c))
     }
 
     /// Lane `v` has one reader among the live nodes and the colour's lanes
@@ -2304,7 +2380,7 @@ impl<'s> Fs<'s> {
     fn fc32(&self, v: Val) -> bool {
         /* an ES 1.00 mediump shader's read is the narrowed one
          * ([`Fs::frag_coord16`]): no island */
-        if self.prec.highp || !self.prec.frag_coord_highp {
+        if self.prec.highp || !(self.prec.frag_coord_highp || self.fc_copy) {
             return false;
         }
         let Some(xy) = self.frag_xy else { return false };
@@ -2371,6 +2447,36 @@ impl<'s> Fs<'s> {
             NirNode { kind: Kind::Alu(_), bits: 16, width: 2, .. } => !self.prec.highp,
             _ => false,
         }
+    }
+
+    /// `v` is one lane computed from the island's narrowed value in a
+    /// mediump shader: the `f2f16` of an island float ([`Fs::fc32_float`]
+    /// at a mediump local's store), or an fp16 operation of one lane on
+    /// such values (`fract(3.0 * d)`, a select of two of them).
+    fn island16(&self, v: Val, depth: u8) -> bool {
+        /* no island, nothing to search (the walk asks of every operand of
+         * a mediump shader) */
+        if self.prec.highp || !(self.prec.frag_coord_highp || self.fc_copy) || self.frag_xy.is_none() {
+            return false;
+        }
+        let Val::Lane(n, _) = v else { return false };
+        let nd = self.nir.nodes[n as usize];
+        match nd.kind {
+            Kind::Alu(Alu::F2f16) if nd.width == 1 => self.fc32_float(nd.src[0]),
+            Kind::Alu(op) if nd.bits == 16 && nd.width == 1 && depth < 32 => {
+                nd.src[..op.arity()].iter().any(|&s| self.island16(s, depth + 1))
+            }
+            _ => false,
+        }
+    }
+
+    /// The operands `p` and `q` (`Undef` for a unary operation) of a
+    /// one-lane fp16 operation [`Fs::alu16`] takes in a mediump shader:
+    /// each a constant (already an fp16 half) or a one-lane value of the
+    /// island ([`Fs::island16`]), not both constants.
+    fn lone16(&self, p: Val, q: Val) -> bool {
+        let one = |v: Val| matches!(v, Val::Const(_)) || self.island16(v, 0);
+        !self.prec.highp && (self.island16(p, 0) || self.island16(q, 0)) && one(p) && (q == Val::Undef || one(q))
     }
 
     /// `v` is an integer's float (`i2f32`, `u2f32`) of a mediump shader,
@@ -2703,6 +2809,31 @@ impl<'s> Fs<'s> {
                     out[k + 1] = Val::Lane(n, 1);
                 }
             }
+            /* one lane of fp16 arithmetic on the island's narrowed value in a
+             * mediump shader (glmark2's `d = fract(3.0 * d)` after `float d =
+             * fract(FragCoord.x * FragCoord.y * 0.0001)` of the highp copy):
+             * an operation of one lane, its sources in the order written
+             * (gm2_cf_call_fs.expect.json: `FMA.v2f16 r0, u3.w1, r0^.h00,
+             * 0x0.neg`, the constant 3.0h in both halves of a FAU word;
+             * `ffract` as `lower_ffract`'s `fadd(a, fneg(ffloor(a)))`,
+             * `FROUND.v2f16.rtn r1, r0.h00`, `FADD.v2f16 r0, r0^.h00,
+             * r1^.neg.h00`) */
+            AluOp::Fmul | AluOp::Fadd if w == 1 && self.lone16(x[0][0], x[1][0]) => {
+                let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
+                out[0] = self.node16(op, [x[0][0], x[1][0], u], 1, at)?;
+            }
+            AluOp::Ffloor | AluOp::Ffract | AluOp::Fneg if w == 1 && self.lone16(x[0][0], Val::Undef) => {
+                let v = x[0][0];
+                out[0] = match a {
+                    AluOp::Ffloor => self.node16(Alu::Ffloor, [v, u, u], 1, at)?,
+                    AluOp::Fneg => self.node16(Alu::Fneg, [v, u, u], 1, at)?,
+                    _ => {
+                        let fl = self.node16(Alu::Ffloor, [v, u, u], 1, at)?;
+                        let ng = self.node16(Alu::Fneg, [fl, u, u], 1, at)?;
+                        self.node16(Alu::Fadd, [v, ng, u], 1, at)?
+                    }
+                };
+            }
             /* one texel by a constant, an operation of one lane (gm2_texswz_2's
              * `t.a * 0.5`: `FMA.v2f16 r0, r0^.h00, 0x38000000.h11, 0x0.neg`
              * of the texel the write mask packs alone) */
@@ -2982,8 +3113,30 @@ impl<'s> Fs<'s> {
                     ) => Some((c2, c1, b, n)),
                     _ => None,
                 });
-                match inner {
-                    Some((c2, c1, b, n)) => {
+                /* `fmul(fmul(a, b), #c)`, the inner product used once and of
+                 * no constant, is `fmul(fmul(a, c), b)` (nir_opt_algebraic.py:
+                 * 2394, "Reassociate constants"): glmark2's `FragCoord.x *
+                 * FragCoord.y * 0.0001` of the island, `FMA.f32 r0, r0^,
+                 * u3.w0, 0x0.neg` then `FMA.f32 r0, r0^, r1^, 0x0.neg`
+                 * (gm2_cf_call_fs.expect.json). Only on the island
+                 * ([`Fs::fc32`]): the highp shaders' products no reference
+                 * of this rule draws keep their order */
+                let plain =
+                    outer.filter(|_| inner.is_none() && matches!(y, Val::Const(_))).and_then(|(c, o)| {
+                        match self.alu_of(o) {
+                            Some((Alu::Fmul, [p, q, _]))
+                                if ir_uses(m, srcs[0].val) == 1
+                                    && !matches!(p, Val::Const(_))
+                                    && !matches!(q, Val::Const(_))
+                                    && self.fc32(o) =>
+                            {
+                                Some((c, p, q))
+                            }
+                            _ => None,
+                        }
+                    });
+                match (inner, plain) {
+                    (Some((c2, c1, b, n)), _) => {
                         let saved = self.nir.nonuniform_const;
                         self.nir.nonuniform_const |= self.nir.nonuniform[n as usize];
                         let folded = self.op32(Alu::Fmul, [Val::Const(c2), Val::Const(c1), u], at);
@@ -2991,7 +3144,11 @@ impl<'s> Fs<'s> {
                         self.nir.nonuniform_const = saved;
                         r
                     }
-                    None => self.op32(Alu::Fmul, [x, y, u], at),
+                    (None, Some((c, p, q))) => {
+                        let pc = self.op32(Alu::Fmul, [p, Val::Const(c), u], at)?;
+                        self.op32(Alu::Fmul, [pc, q, u], at)
+                    }
+                    (None, None) => self.op32(Alu::Fmul, [x, y, u], at),
                 }
             }
             AluOp::Fmul => self.op32(Alu::Fmul, [x, y, u], at),
@@ -3867,6 +4024,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         frag_xy: None,
         frag_zw: None,
         frag16: None,
+        fc_copy: false,
         rank: [u32::MAX; MAX_LOCALS],
         colour_rank: u32::MAX,
         next_rank: 0,
@@ -3890,6 +4048,10 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     if walk_nodes(&mut f, m, m.nodes_of(m.body), vals, &mut locals, prec, true, end, None)? != Flow::Next {
         return Err(MaliError::ControlFlow);
     }
+    /* the highp locals copy gl_FragCoord alone; a read beside the copy
+     * that the walk narrowed ([`Fs::frag_coord16`]) may meet the fp32 copy
+     * in a highp tree, where Mesa reads it at fp32: no reference */
+    f.mixed |= !highp_locals_copy(m, &prec) || (f.fc_copy && f.frag16.is_some());
     f.ir_vals = vals;
     f.mark_live();
     /* a highp `log2` read by anything but a `pow` ([`Fs::lane32`]'s
@@ -3940,8 +4102,16 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
             f.origin[c] = o;
         }
     }
+    /* a store makes no vector: an unrolled loop's nodes take the loop's
+     * last instruction for their origin ([`walk_loop`]), often the
+     * counter's store, which is no operation of several lanes
+     * ([`Fs::wide`]; gm2_fcoord16_6's `d = fract(d * 1.7)` passes, one
+     * lane each) */
     for (i, c) in f.ir_comps.iter_mut().enumerate().take(m.instrs.len()) {
-        *c = width_of(m, ir::ValueId(i as u32)) as u8;
+        *c = match m.instrs[i] {
+            ir::Op::StoreLocal { .. } | ir::Op::StoreOutput { .. } | ir::Op::Discard => 1,
+            _ => width_of(m, ir::ValueId(i as u32)) as u8,
+        };
     }
     /* a 2D array look-up's coordinate conversion CSE'd with one a later
      * statement made first (`nir_opt_cse` keeps the first in program
@@ -5143,6 +5313,17 @@ fn walk_nodes(
                 out = f.frag_coord(at)?;
                 out[2] = Val::Lane(f.input(FRAG_Z, at)?, 0);
             }
+            /* an ES 1.00 read a highp local takes whole ([`highp_copy`]):
+             * lower_precision narrows no bare dereference
+             * (lower_precision.cpp:835-843), so the local holds the fp32
+             * lanes and every operation on them is fp32 until a mediump
+             * variable takes the result (gm2_cf_ifelse_fs.expect.json:
+             * `FMA.f32` x2, `FROUND.f32.rtn`, `FADD.f32`, then `FADD.f32
+             * r0.h0, r0^, 0x0.neg`) */
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp && highp_copy(m, id.0) => {
+                f.fc_copy = true;
+                out = f.frag_coord(at)?;
+            }
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp => out = f.frag_coord16(at)?,
             ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } => out = f.frag_coord(at)?,
             /* `load_front_face`: `ICMP_OR.u32.eq.m1` of the primitive
@@ -5202,7 +5383,10 @@ fn walk_nodes(
                  * `S32_TO_F32 r0, r0^` then `FADD.f32 r0.h0, r0^, 0x0.neg`;
                  * [`Fs::narrowed`], [`int_colour16`]) */
                 let temporary = m.locals.get(local.0 as usize).is_some_and(|d| d.name.is_empty());
-                if !prec.highp && !temporary {
+                /* a local declared highp keeps the fp32 lanes (glmark2's
+                 * `highp vec2 FragCoord`, [`highp_copy`]) */
+                let highp_local = m.local_prec_of(local) == ir::Prec::High;
+                if !prec.highp && !temporary && !highp_local {
                     for (i, t) in lanes.iter_mut().enumerate() {
                         if write_mask & (1 << i) != 0 && (f.fc32_float(*t) || f.int_float(*t)) {
                             *t = f.narrow_stored(*t, at)?;
@@ -5349,9 +5533,16 @@ fn walk_nodes(
              * operation one of two lanes as a highp shader's fp16 island
              * ([`Fs::alu16`]: `FADD_IMM.v2f16 r1, r0, #0x38003800`, `FMA.v2f16
              * r1, r1^, 0x34000000.h11, 0x0.neg`) */
+            /* and on fp16 results of one lane of those (glmark2's `d =
+             * fract(3.0 * d)` steps after the narrowed head, [`Fs::island16`]) */
             ir::Op::Alu(a, s)
                 if !prec.highp
-                    && (0..ir_arity(a)).any(|k| (0..4).any(|i| f.narrowed(lane(vals, s[k], i))))
+                    && (0..ir_arity(a)).any(|k| {
+                        (0..4).any(|i| {
+                            let v = lane(vals, s[k], i);
+                            f.narrowed(v) || f.island16(v, 0)
+                        })
+                    })
                     && (0..ir_arity(a)).all(|k| {
                         (0..4).all(|i| {
                             let v = lane(vals, s[k], i);
@@ -7973,6 +8164,41 @@ impl Pairs {
     }
 }
 
+/// `v` is a 16-bit select of one lane on its own fp16 compare whose sides
+/// are computed (the form [`lane_tree`]'s `Bcsel` arm takes), all of it
+/// computed from the narrowed position ([`reaches_frag16`]): not a select
+/// of constants (cflow_74_ifoutput's, [`select_lane`]). Another select
+/// beside a constant in the colour has no reference here.
+fn lone_select(f: &Fs<'_>, v: Val) -> bool {
+    let Val::Lane(n, _) = v else { return false };
+    let nd = f.nir.nodes[n as usize];
+    match f.alu_of(v) {
+        Some((Alu::Bcsel, [m, t, e])) => {
+            nd.bits == 16
+                && f.mask16(m)
+                && matches!(f.alu_of(m), Some((Alu::Fcmp(_), _)))
+                && !(matches!(t, Val::Const(_)) && matches!(e, Val::Const(_)))
+                && reaches_frag16(f, v, 0)
+        }
+        _ => false,
+    }
+}
+
+/// `v` is the narrowed position's lane ([`Fs::frag16_lane`]) or a 16-bit
+/// operation reading one, through any depth.
+fn reaches_frag16(f: &Fs<'_>, v: Val, depth: u8) -> bool {
+    if f.frag16.is_none() {
+        return false;
+    }
+    if f.frag16_lane(v).is_some() {
+        return true;
+    }
+    let Val::Lane(n, _) = v else { return false };
+    let nd = f.nir.nodes[n as usize];
+    let Kind::Alu(op) = nd.kind else { return false };
+    nd.bits == 16 && depth < 32 && nd.src[..op.arity()].iter().any(|&s| reaches_frag16(f, s, depth + 1))
+}
+
 /// `nir_opt_vectorize` of lanes `a` and `b` (one pair's low and high
 /// lane): the two trees match operation for operation, their leaves pair
 /// up as [`Leaf`] names them; the late fusion where an fadd stands.
@@ -8074,7 +8300,16 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
          * another lane alone and the constant's half packed, `U16_TO_U32`
          * of 0.0 (deqp_constop_op_abs: `FADD.v2f16 r0, r0^.abs.h00, 0x0.neg`
          * then `U16_TO_U32 r0, r0^.h0`) */
-        (Some((op, _)), None) if matches!(b, Val::Const(_)) && op != Alu::Bcsel && !is_transc(op) && !is_deriv(op) => {
+        /* also a select of a lane's own fp16 compare ([`lane_tree`]'s
+         * `Bcsel` arm; gm2_fcoord16_5's `vec4(d, d, d, 1.0)` of `d = d > 0.5
+         * ? d - 0.5 : d + 0.25`: `MUX.v2i16 r0, r1^.h11, r1^.h00, r0^.h00`,
+         * then `MKVEC.v2i16 r2, r0^.h0, u4.w0.h0`) */
+        (Some((op, _)), None)
+            if matches!(b, Val::Const(_))
+                && (op != Alu::Bcsel || lone_select(f, a))
+                && !is_transc(op)
+                && !is_deriv(op) =>
+        {
             let Val::Const(c) = b else { return Err(MaliError::Defect(Defect::IrIndex)) };
             let half = f16(c)?;
             match f.alu_of(a) {
@@ -8936,6 +9171,12 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         }
     }
     let p = match (f.alu_of(v), f.texel(v), v) {
+        /* the narrowed position's lane alone ([`Leaf::FragLane`]), the
+         * operand of a one-lane operation in its own register (an ES 1.00
+         * mediump shader's `gl_FragCoord.x * gl_FragCoord.y`:
+         * gm2_fcoord16_1.expect.json's `FADD.f32 r0.h0`, `FADD.f32 r1.h0`,
+         * then `FMA.v2f16 r0, r0^.h00, r1^.h00, 0x0.neg`) */
+        _ if f.frag16_lane(v).is_some() => P::Leaf(Leaf::FragLane(f.frag16_lane(v).unwrap_or(0))),
         /* an fp32 uniform's word narrowed alone ([`Leaf::WideLane`]) */
         _ if f.wide_uniform(v).is_some() => {
             let d = f.wide_uniform(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
@@ -10385,7 +10626,7 @@ pub fn guarded16(f: &Fs<'_>) -> bool {
 /// so the program is [`select_highp`]'s (case 218 shadowcmp,
 /// fsarith_218_shadowcmp.expect.json; docs/notes/mali-fragcoord-fp16-ops.md).
 pub fn frag32(f: &Fs<'_>) -> bool {
-    !f.prec.highp && f.prec.frag_coord_highp && f.frag_xy.is_some()
+    !f.prec.highp && (f.prec.frag_coord_highp || f.fc_copy) && f.frag_xy.is_some()
 }
 
 /// The mediump shader `f` keeps an `if` as blocks with a branch: a look-up

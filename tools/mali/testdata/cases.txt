@@ -234,3 +234,13 @@ gm2_constfold_6    gm2_constfold_6.vert    gm2_constfold_6.frag    triangles vs.
 gm2_negzero_deep_1 gm2_negzero_deep_1.vert gm2_negzero_deep_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:unanalysed:2:914c7bbec270
 gm2_negzero_deep_2 gm2_negzero_deep_2.vert gm2_negzero_deep_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=equal
 gm2_negzero_deep_3 gm2_negzero_deep_3.vert gm2_negzero_deep_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:unanalysed:26:834565be32c5
+# #367 lower-fragcoord16: fp16 arithmetic on gl_FragCoord (FRAGCOORD_FP16, the head `fract(x * y * 0.0001)` of glmark2's
+# conditionals, function and loop fragment shaders written on the mediump ES 1.00 read; docs/notes/mali-fragcoord-fp16.md),
+# drawn without --uniform-values. Our compiler is byte-equal to gm2_fcoord16_1..6 (tests/mali_fragcoord16.rs). pan_shc's
+# SPIR-V path has no lower_precision: every fragment program computes the position's arithmetic at fp32 (`mediump`).
+gm2_fcoord16_1  gm2_fcoord16_1.vert gm2_fcoord16_1.frag triangles vs.position=equal fs.fragment=differs:mediump:11:27ffa8fbd538
+gm2_fcoord16_2  gm2_fcoord16_2.vert gm2_fcoord16_2.frag triangles vs.position=equal fs.fragment=differs:mediump:12:7d695f137e6e
+gm2_fcoord16_3  gm2_fcoord16_3.vert gm2_fcoord16_3.frag triangles vs.position=equal fs.fragment=differs:mediump:14:557146fc58ec
+gm2_fcoord16_4  gm2_fcoord16_4.vert gm2_fcoord16_4.frag triangles vs.position=equal fs.fragment=differs:mediump:14:557146fc58ec
+gm2_fcoord16_5  gm2_fcoord16_5.vert gm2_fcoord16_5.frag triangles vs.position=equal fs.fragment=differs:mediump:10:e0cfa62d1b00
+gm2_fcoord16_6  gm2_fcoord16_6.vert gm2_fcoord16_6.frag triangles vs.position=equal fs.fragment=differs:mediump:27:abc604931c71
