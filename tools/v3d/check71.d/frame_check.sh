@@ -20,8 +20,9 @@
 #  (d) each board clear dump of D3 (tools/v3d/pi5/*clear*.clif, Mesa's
 #      V3D_DEBUG=clif of a GL clear under the Pi 5's Linux) equals our frame
 #      for its size and clear colour, with the address fields
-#      (ADDRESS_FIELDS) and FORMAT_FIELDS ignored; any other difference
-#      fails. While there is no such dump, (d) is one line naming it and the
+#      (ADDRESS_FIELDS) and FORMAT_FIELDS ignored and the tile allocation's
+#      size equal to ours rounded up to the board's 16 KiB buffers; any
+#      other difference fails. While there is no such dump, (d) is one line naming it and the
 #      summary says so. That is not a gap: a gap names an input the host can
 #      be given (MESA_V3D_TREE), and the gate is green only with none, so a
 #      board record not made yet would hold every pull request red.
@@ -253,12 +254,23 @@ for ref_clif in "${d3[@]}"; do
     fail "(d) $ref_clif: frame_check ${w}x$h: $out"
     continue
   }
+  # The tile allocation's size (ADD_BIN.arg3, the submit's qms) is the size of
+  # the buffer Mesa allocated: the board's Mesa (Pi OS 26.2.2 on kernel_2712,
+  # 16 KiB pages) rounds every BO to 16 KiB, so its 64x64 clear has 16384
+  # where our builder (and Mesa 26.2.1's v3d_bufmgr.c, 4 KiB) has 12288
+  # (tools/v3d/pi5/README.md). It is compared apart: the board's must be ours
+  # rounded up to 16 KiB. Every other field is compared as before.
   python3 -I tools/v3d/clif_cmp.py "$dir/d3_$base.clif" "$ref_clif" "${FORMAT_FIELDS[@]}" \
-    "${ADDRESS_FIELDS[@]}" >"$dir/d3_$base.cmp" 2>&1 || {
+    "${ADDRESS_FIELDS[@]}" --ignore 'ADD_BIN.arg3' >"$dir/d3_$base.cmp" 2>&1 || {
     fail "(d) ${w}x$h clear $c differs from $ref_clif:"
     sed 's/^/  /' "$dir/d3_$base.cmp"
   }
-  echo "(d) $ref_clif: ${w}x$h clear $c, $(tail -n 1 "$dir/d3_$base.cmp")"
+  qms() { sed 's/^MESA: info: \{0,1\}//' "$1" | awk '/^@add_bin/ { n = 4; next } n && --n == 0 { print $1; exit }'; }
+  ours=$(qms "$dir/d3_$base.clif") board=$(qms "$ref_clif")
+  if ! [[ $ours =~ ^[0-9]+$ && $board =~ ^[0-9]+$ ]] || [ "$board" -ne $(((ours + 16383) / 16384 * 16384)) ]; then
+    fail "(d) ${w}x$h: tile allocation size: ours '$ours', the board's '$board' (want ours rounded up to 16 KiB)"
+  fi
+  echo "(d) $ref_clif: ${w}x$h clear $c, $(tail -n 1 "$dir/d3_$base.cmp"), tile allocation $ours (board $board, 16 KiB BOs)"
 done
 
 summary="(a) $na sizes, (b) shim71 ${shim_line#clif_cmp: }, (c) $probe_line, (d) $nd D3 dump(s)"

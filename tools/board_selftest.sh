@@ -485,7 +485,8 @@ out=$(BOARD_UART=/dev/ttyACM9 BOARD_HDMI_TIMINGS="1920 1 50 44 50 720 1 10 20 50
 rc=$?
 check "pi5 run: rc 0, tryboot.txt written and put back, the reboot is '0 tryboot', a default set refuses, config.txt not written" \
     eval '[ "$rc" = 0 ] && grep -qF "sudo reboot \"0 tryboot\"" <<<"$out" && [ "$(grep -c "tee /boot/firmware/tryboot.txt" <<<"$out")" = 2 ] &&
-          grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out" && ! grep -q "tee /boot/firmware/config.txt" <<<"$out"'
+          grep -q "test ! -e /boot/firmware/config-linux.txt" <<<"$out" && ! grep -q "tee /boot/firmware/config.txt" <<<"$out" &&
+          grep -qF "test -e /boot/firmware/tryboot.txt && echo 1 || echo 0" <<<"$out"'
 check "pi5 run: the console is only read (stty and the fd scan, no write to the device), printed as <BOARD_UART>" \
     eval 'grep -qF "stty -F <BOARD_UART> 115200 cs8 -cstopb -parenb raw -echo" <<<"$out" && grep -q "scan every /proc/<pid>/fd for <BOARD_UART>" <<<"$out" &&
           ! grep -q "> <BOARD_UART>" <<<"$out" && ! grep -q "ttyACM9" <<<"$out"'
@@ -528,7 +529,21 @@ check "pi5 nodefault: config-linux.txt put back as config.txt" eval '[ "$rc" = 0
 BOARD=pi5
 check "pi5_config: [all], kernel= the staged file, no arm_64bit, the UART lines, no hdmi lines (BOARD_HDMI_TIMINGS unset for pi5)" \
     eval '[ "$(BOARD_HDMI_TIMINGS= pi4_config k.bin | tr "\n" "|")" = "[all]|kernel=k.bin|enable_uart=1|uart_2ndstage=1|" ]'
+# the undo (board.sh's own pi4_undo, read from its source, b a stub that prints
+# the command): a pi5 card with no tryboot.txt before the run gets none after it
+eval "$(sed -n '/^pi4_undo() {/,/^}/p' "$B")"
+b() { echo "b: $*"; }
+out=$(STAGED=s.bin PREV= TRY_HAD=0 pi4_undo)
+check "pi5 undo, no tryboot.txt before: image removed, tryboot.txt removed, nothing written" \
+    eval 'grep -qF "b: sudo rm -f /boot/firmware/s.bin" <<<"$out" && grep -qF "b: sudo rm -f /boot/firmware/tryboot.txt" <<<"$out" && ! grep -q tee <<<"$out"'
+out=$(STAGED=s.bin PREV=x TRY_HAD=1 pi4_undo)
+check "pi5 undo, a tryboot.txt before: it is put back (tee), not removed" \
+    eval 'grep -q "tee /boot/firmware/tryboot.txt" <<<"$out" && ! grep -qF "rm -f /boot/firmware/tryboot.txt" <<<"$out"'
 BOARD=pi4
+out=$(STAGED=s.bin PREV= TRY_HAD=0 pi4_undo)
+check "pi4 undo: tryboot.txt put back as before, whatever TRY_HAD says" \
+    eval 'grep -q "tee /boot/firmware/tryboot.txt" <<<"$out" && ! grep -qF "rm -f /boot/firmware/tryboot.txt" <<<"$out"'
+unset -f b pi4_undo
 
 # pi5 with a fake board (pi5-fake): the dry run prints the tryboot.txt it would
 # write, and nothing the pi5 prints names its host, an address or the UART
