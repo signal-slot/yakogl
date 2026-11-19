@@ -6138,6 +6138,102 @@ fn a_frame_of_a_mix_loads_each_attachment_at_its_compiled_registers() {
     }
 }
 
+/// The end-of-tile emit of a drawn mix (docs/notes/pvr-int-mixed-targets.md
+/// sections 3 and 6.2): per attachment, PBE STATE_WORD1 (`& !0x3f`, the low
+/// bits are the address) is the word tests/pvr_pbe_mixed_words.rs derives
+/// from Mesa -- `source_pos` at `shc_mixed_out_layout`'s start, `mrt_index`
+/// the attachment, the attachment's own pack mode, `norm` and source format.
+/// A: RGBA8 + R32UI at 0, 1; B: two integer layouts, R32UI + RG32UI (dEQP
+/// modf's uint beside uvec2) at 0, 2; C: RGBA16F + R32UI + RGBA8 at 0, 2, 3.
+#[test]
+fn a_mixs_pbe_words_follow_its_layout() {
+    use crate::target_key::{gles_surf_target_key, shc_mixed_out_layout};
+    /// (name, formats, register starts, STATE_WORD1 & !0x3f per attachment)
+    type Mix = (&'static str, &'static [u8], &'static [u32], &'static [u32]);
+    let mixes: [Mix; 3] = [
+        ("A", &[GLES_SURF_RGBA8888, GLES_SURF_R32UI], &[0, 1], &[0x0008_2000, 0x0009_5A00]),
+        /* R32UI: 1<<19 | 0x34<<7, at 0 */
+        ("B", &[GLES_SURF_R32UI, GLES_SURF_RG32UI], &[0, 2], &[0x0008_1A00, 0x0009_9400]),
+        (
+            "C",
+            &[GLES_SURF_RGBA16F, GLES_SURF_R32UI, GLES_SURF_RGBA8888],
+            &[0, 2, 3],
+            &[0x0000_0500, 0x0009_9A00, 0x000A_E000],
+        ),
+    ];
+    for (name, formats, starts, words) in mixes {
+        let rig = Rig::new();
+        let mut d = rig.draw(3);
+        d.do_clear = false;
+        int_target(&mut d, formats[0]);
+        d.num_targets = formats.len() as u8;
+        for (i, &f) in formats.iter().enumerate().skip(1) {
+            d.targets[i] =
+                GlesDrawTarget { gpu: d.target_gpu + 0x10_0000 * i as u64, w: 64, h: 64, format: f, out_shift: 0 };
+        }
+        let keys: Vec<u32> = formats.iter().map(|&f| gles_surf_target_key(f).unwrap()).collect();
+        let (compiled, span) = shc_mixed_out_layout(&keys).expect("a layout");
+        assert_eq!(compiled[..formats.len()].iter().map(|&s| u32::from(s)).collect::<Vec<_>>(), starts, "{name}");
+        let mut fs = ShcShader::ZERO;
+        fs.meta_off = SHC_NO_META;
+        fs.temps = 3;
+        fs.num_outputs = span;
+        fs.blend_key = super::super::target_keys::draw_mixed_key(&d).expect("a mix");
+        d.fs = &fs;
+        assert_eq!(draw(&d), 0, "mix {name}");
+        assert!(!rig.logs().iter().any(|l| l.contains("draw refused")), "mix {name}: {:?}", rig.logs());
+        assert_eq!(rig.b().num_targets, formats.len() as u8, "mix {name}");
+        assert_eq!(pvr_backend_flush(), 0);
+        let e = rig.eot_emits().last().expect("an end-of-tile program").clone();
+        for (i, (&reg, &word)) in starts.iter().zip(words).enumerate() {
+            let w1 = e[2 * i + 1];
+            assert_eq!((w1 >> 14) & 3, reg, "mix {name}: attachment {i}: source_pos");
+            assert_eq!((w1 >> 16) & 7, i as u32, "mix {name}: attachment {i}: mrt_index");
+            assert_eq!(w1 & !0x3f, word, "mix {name}: attachment {i}: STATE_WORD1 {w1:#010x}");
+        }
+    }
+}
+
+/// `surf_out_dwords`, the registers the emit reads an attachment from, holds
+/// the per-format counts tests/target_key_dwords_pin.rs pins for the
+/// compiler's side (`shc_target_key_dwords`), row for row.
+#[test]
+fn surf_out_dwords_holds_the_pinned_target_key_counts() {
+    const PINNED: &[(u8, u32)] = &[
+        (GLES_SURF_RGBA8888, 1),
+        (GLES_SURF_XRGB8888, 1),
+        (GLES_SURF_RGB565, 1),
+        (GLES_SURF_RGBA16F, 2),
+        (GLES_SURF_R16F, 1),
+        (GLES_SURF_R32F, 1),
+        (GLES_SURF_R8I, 1),
+        (GLES_SURF_R8UI, 1),
+        (GLES_SURF_R16I, 1),
+        (GLES_SURF_R16UI, 1),
+        (GLES_SURF_R32I, 1),
+        (GLES_SURF_R32UI, 1),
+        (GLES_SURF_RG8I, 1),
+        (GLES_SURF_RG8UI, 1),
+        (GLES_SURF_RG16I, 1),
+        (GLES_SURF_RG16UI, 1),
+        (GLES_SURF_RG32I, 2),
+        (GLES_SURF_RG32UI, 2),
+        (GLES_SURF_RGBA8I, 1),
+        (GLES_SURF_RGBA8UI, 1),
+        (GLES_SURF_RGBA16I, 2),
+        (GLES_SURF_RGBA16UI, 2),
+        (GLES_SURF_RGBA32I, 4),
+        (GLES_SURF_RGBA32UI, 4),
+        (GLES_SURF_RGB10_A2UI, 1),
+        (GLES_SURF_RGB10_A2, 1),
+    ];
+    for &(fmt, dwords) in PINNED {
+        assert_eq!(surf_out_dwords(fmt), dwords, "{}", gles_surf_name(fmt));
+    }
+    let keyed = (0..=u8::MAX).filter(|&f| crate::target_key::gles_surf_target_key(f).is_some()).count();
+    assert_eq!(keyed, PINNED.len(), "every keyed format has a pinned row");
+}
+
 /* ---- sRGB render targets (docs/es3/srgb.md 4) ------------------------------ */
 
 /// A 64x64 sRGB target for [`Rig::draw`]'s draw: one attachment.

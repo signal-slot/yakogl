@@ -968,7 +968,7 @@ fn attachment_3_gets_its_pbe_state_on_register_3() {
 /// An integer attachment 3 beside RGBA8 targets draws: one packed dword on
 /// register 3, not normalised, not sRGB-style F16.
 #[test]
-#[ignore = "pvr-backend (plan #368; docs/notes/pvr-int-mixed-targets.md): a draw with an integer attachment beside another colour attachment is refused (GL_INVALID_OPERATION); since pvr-backend only its clears are accepted"]
+#[ignore = "plan #361 (docs/notes/pvr-int-mixed-targets.md): an integer attachment beside other classes draws up to three draw buffers; past the three draw buffers a mixed key carries the draw is refused by name (GL_INVALID_OPERATION), only its clears are accepted"]
 fn integer_attachment_3_beside_rgba8_draws() {
     let _g = rig();
     for (internal, name, _, outcome, _) in ROWS {
