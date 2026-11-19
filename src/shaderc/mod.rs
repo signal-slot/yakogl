@@ -741,6 +741,29 @@ pub fn compile_lod_key() -> LodKey {
     }
 }
 
+/// The V3D's render-target key of the program compile in progress: bit n,
+/// render target n is a 32-bit float target (R32F, RG32F, RGBA32F), and the
+/// fragment shader writes its float output there as 32-bit TLB words (Mesa's
+/// `f32_color_rb` key, gallium/drivers/v3d/v3d_program.c:683-686; the
+/// compiler's `rt_f32`, `online::v3d::chain::compile_program_rt`). Set by
+/// the online back end around the link of a draw-time variant
+/// (`online::backend::v3d_f32_rt_variant`), like the [`LodKey`] above; 0
+/// everywhere else, and then the program is the plain link's, word for word.
+/// Not a user switch, and not part of [`LodKey::bits`]: the V3D back end
+/// asks for the variant itself, from the formats of the draw's targets.
+static COMPILE_RT_F32: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// Set the compile's 32-bit float render-target key ([`COMPILE_RT_F32`]);
+/// returns the old one for the caller to put back.
+pub fn set_compile_rt_f32(mask: u8) -> u8 {
+    COMPILE_RT_F32.swap(mask, core::sync::atomic::Ordering::Relaxed)
+}
+
+/// The compile's 32-bit float render-target key ([`COMPILE_RT_F32`]).
+pub fn compile_rt_f32() -> u8 {
+    COMPILE_RT_F32.load(core::sync::atomic::Ordering::Relaxed)
+}
+
 pub const SHC_NO_PSIZE: u8 = 0xff;
 pub const SHC_NO_BLEND_CONSTS: u8 = 0xff;
 /// The glBlendColor rgba dwords glsl2usc appends to a CONSTANT_\* variant's

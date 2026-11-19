@@ -23,8 +23,15 @@
 //! and the layer whose step is missing (src/gl, src/shaderc, src/v3d). They
 //! are the acceptance tests of those steps.
 //!
+//! The G1-G3 formats are done under the `color-buffer-float` Cargo feature
+//! (plan #360): their expected-result tests are `#[cfg(feature =
+//! "color-buffer-float")]`, and the three tests that pin the refusal are the
+//! default build's, `#[cfg(not(...))]`. Still `#[ignore]`d: the 32F blend
+//! refusal (design piece 2) and four draw buffers (G5).
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_fragment_out_v3d
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,color-buffer-float --test es3_fragment_out_v3d
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
@@ -477,7 +484,10 @@ fn rg16f_past_the_first_attachment_is_rgba16f() {
 /// format is not a colour-renderable one, so the GL core stops the setup at
 /// the storage call and no draw reaches the V3D. dEQP reads the extension
 /// string and answers NotSupported before it gets this far; the GL error
-/// here is what an application that tries anyway sees.
+/// here is what an application that tries anyway sees. The default build:
+/// with the `color-buffer-float` feature the V3D claims the extension and
+/// the tests of section (2) below run instead.
+#[cfg(not(feature = "color-buffer-float"))]
 #[test]
 fn rg32f_rgba32f_r11f_renderbuffers_are_refused_by_the_gl_core() {
     let _g = context(0);
@@ -489,6 +499,7 @@ fn rg32f_rgba32f_r11f_renderbuffers_are_refused_by_the_gl_core() {
 }
 
 /// The extension is not in the string: the NotSupported of G1/G2/G3.
+#[cfg(not(feature = "color-buffer-float"))]
 #[test]
 fn color_buffer_float_is_not_claimed() {
     let _g = context(0);
@@ -502,6 +513,7 @@ fn color_buffer_float_is_not_claimed() {
 /// Mixed with the formats that do render, the setup of an array case with a
 /// 32F attachment stops at that attachment too (G3: a `random` seed with
 /// one of the four formats).
+#[cfg(not(feature = "color-buffer-float"))]
 #[test]
 fn a_32f_attachment_among_rendering_ones_stops_the_setup() {
     let _g = context(0);
@@ -537,6 +549,7 @@ fn three_draw_buffers_of_mixed_classes_are_the_cap() {
 /// Set up `f` as the one attachment, draw `out`, and hand back the draw.
 /// The format class is whatever the GL core numbers it; the assertions go
 /// through `state::rt_format` of it, so they hold in any numbering.
+#[cfg(feature = "color-buffer-float")]
 fn drawn_expected(f: GLenum, out: &str) -> Seen {
     let s = drawn(&[f], &[out]);
     assert_eq!(s.refused, None);
@@ -546,14 +559,15 @@ fn drawn_expected(f: GLenum, out: &str) -> Seen {
 
 /// RG32F renders: the row is `V3D_OUTPUT_IMAGE_FORMAT_RG32F` (10) 32F, 64 bpp,
 /// clamp NONE, 8 bytes (`v3dx_format_table.c:96`, bpp `:323-326`); a clear
-/// hands the words as they are.
+/// hands the two words of its pixel as they are and 0 past them (Mesa
+/// copies the tile buffer's pixel size, v3dx_draw.c:1704).
 ///
-/// Owners: src/gl (claim `GL_EXT_color_buffer_float`, `is_color_format`, a
-/// surface class and `fb_target_n` arm: note "What is not a src/v3d change",
-/// order step 3) and src/v3d (`state::rt_format`, `ffi.rs` constants: "Design
-/// for the src/v3d part" piece 1).
+/// Done by plan #360: src/gl (the claim of `GL_EXT_color_buffer_float`, the
+/// surface classes: items core-claim and core-surf) and src/v3d
+/// (`state::rt_format`, `ffi.rs` constants: item v3d-arm), under the
+/// `color-buffer-float` feature.
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "note design piece 1 / order step 3: src/gl (extension, surface class, is_color_format) then src/v3d (rt_format row RG32F = 10/32F/64/NONE/8)"]
 fn rg32f_renders_with_the_32f_64bpp_row() {
     let _g = context(0);
     let s = drawn_expected(GL_RG32F, "vec4");
@@ -562,16 +576,16 @@ fn rg32f_renders_with_the_32f_64bpp_row() {
         (out, ty, bpp, clamp, bytes),
         (10, V3D_INTERNAL_TYPE_32F, V3D_INTERNAL_BPP_64, V3D_RENDER_TARGET_CLAMP_NONE, 8)
     );
-    let c = [1.5f32, -2.0, 1e30, 0.0];
-    assert_eq!(state::clear_words(s.targets[0].1, c), c.map(f32::to_bits));
+    let c = [1.5f32, -2.0, 1e30, 0.25];
+    assert_eq!(state::clear_words(s.targets[0].1, c), [c[0].to_bits(), c[1].to_bits(), 0, 0]);
 }
 
 /// RGBA32F renders: format 9, 32F, 128 bpp, clamp NONE, 16 bytes
 /// (`v3dx_format_table.c:101`, `:319-322`).
 ///
-/// Owners: as RG32F (src/gl then src/v3d rows, note piece 1).
+/// Done as RG32F (plan #360).
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "note design piece 1 / order step 3: src/gl (extension, surface class) then src/v3d (rt_format row RGBA32F = 9/32F/128/NONE/16)"]
 fn rgba32f_renders_with_the_32f_128bpp_row() {
     let _g = context(0);
     let s = drawn_expected(GL_RGBA32F, "vec4");
@@ -588,9 +602,9 @@ fn rgba32f_renders_with_the_32f_128bpp_row() {
 /// (`v3dx_format_table.c:146`, `:253`); it clears as halves, like RGBA16F,
 /// and the TLB packs at the store.
 ///
-/// Owners: as RG32F (src/gl then src/v3d rows, note piece 1).
+/// Done as RG32F (plan #360).
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "note design piece 1 / order step 3: src/gl (extension, surface class) then src/v3d (rt_format row R11F_G11F_B10F = 8/16F/64/NONE/4)"]
 fn r11f_g11f_b10f_renders_with_the_16f_64bpp_row() {
     let _g = context(0);
     let s = drawn_expected(GL_R11F_G11F_B10F, "vec4");
@@ -607,12 +621,13 @@ fn r11f_g11f_b10f_renders_with_the_16f_64bpp_row() {
 /// three taken, three RTs, the common config at 128 bpp (tile 16x16 for three
 /// RTs at 128 bpp, `v3d_frame.c:85`).
 ///
-/// Owners: src/gl then src/v3d rows. The fragment program's TLB words (`f32_rt`
-/// mask 0b011: `TLB_TYPE_F32_COLOR` for RT 0 and 1, `VFPACK` for RT 2) are
-/// src/shaderc (`src/shaderc/online/v3d`, design piece 3) and are not visible
-/// to this stand-in; the compiler's own tests own them.
+/// Done by plan #360 (src/gl then src/v3d rows). The fragment program's TLB
+/// words (`f32_rt` mask 0b011: `TLB_TYPE_F32_COLOR` for RT 0 and 1, `VFPACK`
+/// for RT 2) are not visible to this stand-in: the compiler's tests
+/// (tests/es3_v3d_f32_rt_key.rs) and the real back end's
+/// (tests/es3_color_buffer_float_v3d.rs) own them.
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "note design pieces 1 and 3 / order steps 3-4: src/gl (claim, surfaces), src/v3d (rows, f32_rt mask), src/shaderc (f32 write arm)"]
 fn rgba32f_rg32f_r11f_draw_is_taken_at_128bpp() {
     let _g = context(0);
     let s = drawn(&[GL_RGBA32F, GL_RG32F, GL_R11F_G11F_B10F], &["vec4", "vec4", "vec4"]);
@@ -627,9 +642,9 @@ fn rgba32f_rg32f_r11f_draw_is_taken_at_128bpp() {
 /// A 32F float next to an `ivec4` and an RGBA8 target: all three classes in
 /// one program (the note's host test 3).
 ///
-/// Owners: as above; the 32F write is src/shaderc (piece 3).
+/// Done as above (plan #360).
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "note design piece 3 / order steps 3-4: src/gl (RGBA32F renderbuffer), src/shaderc (f32 write keyed by target), src/v3d (rows, f32_rt mask)"]
 fn rgba32f_next_to_ivec4_and_rgba8_is_taken() {
     let _g = context(0);
     let s = drawn(&[GL_RGBA32F, GL_RGBA8I, GL_RGBA8], &["vec4", "ivec4", "vec4"]);

@@ -474,6 +474,15 @@ pub const fn rt_format(surf: u8) -> Option<RtFormat> {
         GLES_SURF_RGBA16F => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA16F, V3D_INTERNAL_TYPE_16F, B64, NONE, 8),
         GLES_SURF_R16F => row(V3D_OUTPUT_IMAGE_FORMAT_R16F, V3D_INTERNAL_TYPE_16F, B64, NONE, 2),
         GLES_SURF_R32F => row(V3D_OUTPUT_IMAGE_FORMAT_R32F, V3D_INTERNAL_TYPE_32F, B32, NONE, 4),
+        /* GL_EXT_color_buffer_float's surfaces (plan #360): RG32F and
+         * RGBA32F are the 32F tile buffer at 64 and 128 bpp (the rows :96
+         * and :101, the type and bpp :319-326); R11F_G11F_B10F (:146) is
+         * the 16F tile buffer at 64 bpp like RGBA16F (:253-262), the TLB
+         * packing the halves to the 11/11/10 word at the store. None is an
+         * integer or sRGB format: clamp NONE. */
+        GLES_SURF_RG32F => row(V3D_OUTPUT_IMAGE_FORMAT_RG32F, V3D_INTERNAL_TYPE_32F, B64, NONE, 8),
+        GLES_SURF_RGBA32F => row(V3D_OUTPUT_IMAGE_FORMAT_RGBA32F, V3D_INTERNAL_TYPE_32F, B128, NONE, 16),
+        GLES_SURF_R11F_G11F_B10F => row(V3D_OUTPUT_IMAGE_FORMAT_R11F_G11F_B10F, V3D_INTERNAL_TYPE_16F, B64, NONE, 4),
         GLES_SURF_R8I => row(V3D_OUTPUT_IMAGE_FORMAT_R8I, V3D_INTERNAL_TYPE_8I, B32, INT, 1),
         GLES_SURF_R8UI => row(V3D_OUTPUT_IMAGE_FORMAT_R8UI, V3D_INTERNAL_TYPE_8UI, B32, INT, 1),
         GLES_SURF_R16I => row(V3D_OUTPUT_IMAGE_FORMAT_R16I, V3D_INTERNAL_TYPE_16I, B32, INT, 2),
@@ -520,14 +529,25 @@ pub const fn typed(surf: u8) -> bool {
 /// an RGB565 target is cleared through the same 8-bit tile buffer); 8I and
 /// 8UI the low byte of each of the four raw words in one word; 16F each
 /// channel as a half, two a word; 16I and 16UI the low 16 bits of each raw
-/// word, two a word; 32I, 32UI and 32F the four words as they are. For an
+/// word, two a word; 32I and 32UI the four words as they are; 32F the
+/// floats' bits, in a `color-buffer-float` build ([`F32_CLEAR_AS_MESA`])
+/// with the words past the pixel's 0 as Mesa leaves them. For an
 /// integer surface `c` holds the raw integers glClearBuffer{i,ui}v gave as
 /// bit patterns (`GlesDraw::clear_rgba`). Word 0 alone reaches a 32-bpp
 /// tile buffer, two words a 64-bpp one, four a 128-bpp one (v3d_job.c, the
 /// CLEAR_COLORS packets). A surface without a row packs as RGBA8.
+/// Are a 32F surface's clear words Mesa's, the words past the tile buffer's
+/// pixel 0 (`clear_mrt::clear_color_words`)? In the build that draws the
+/// 32F targets of GL_EXT_color_buffer_float. Elsewhere R32F, the one 32F
+/// surface there, keeps the four raw words it always had (only word 0
+/// reaches its 32-bpp tile buffer either way; tests/es3_half_float_rt_v3d.rs
+/// and tests/es3_int_rt_v3d.rs pin them).
+pub const F32_CLEAR_AS_MESA: bool = cfg!(feature = "color-buffer-float");
+
 pub fn clear_words(surf: u8, c: [f32; 4]) -> [u32; 4] {
     let u = c.map(f32::to_bits);
-    match rt_format(surf).map(|f| f.internal_type) {
+    let row = rt_format(surf);
+    match row.map(|f| f.internal_type) {
         Some(V3D_INTERNAL_TYPE_8I) | Some(V3D_INTERNAL_TYPE_8UI) => {
             [(u[0] & 0xff) | (u[1] & 0xff) << 8 | (u[2] & 0xff) << 16 | (u[3] & 0xff) << 24, 0, 0, 0]
         }
@@ -536,16 +556,26 @@ pub fn clear_words(surf: u8, c: [f32; 4]) -> [u32; 4] {
              * clear (v3dx_draw.c:1705-1710); the clear of a fixed-point
              * surface over the 16F tile buffer (sRGB, RGB10_A2) is clamped
              * to [0, 1] here (NaN to 0), as ES 3.0 4.2.3 clamps the clear
-             * colour of a fixed-point buffer and as the PowerVR's is */
+             * colour of a fixed-point buffer and as the PowerVR's is. A
+             * float surface's (R16F, RGBA16F, R11F_G11F_B10F) is not. */
             let fixed = surf == GLES_SURF_SRGB8_A8 || surf == GLES_SURF_RGB10_A2;
             let c = if fixed { c.map(|x| if x > 0.0 { x.min(1.0) } else { 0.0 }) } else { c };
-            let h = c.map(|x| u32::from(f32_to_f16(x)));
-            [h[0] | h[1] << 16, h[2] | h[3] << 16, 0, 0]
+            super::clear_mrt::clear_color_words(V3D_INTERNAL_TYPE_16F, V3D_INTERNAL_BPP_64, c)
         }
         Some(V3D_INTERNAL_TYPE_16I) | Some(V3D_INTERNAL_TYPE_16UI) => {
             [(u[0] & 0xffff) | u[1] << 16, (u[2] & 0xffff) | u[3] << 16, 0, 0]
         }
-        Some(V3D_INTERNAL_TYPE_32I) | Some(V3D_INTERNAL_TYPE_32UI) | Some(V3D_INTERNAL_TYPE_32F) => u,
+        Some(V3D_INTERNAL_TYPE_32I) | Some(V3D_INTERNAL_TYPE_32UI) => u,
+        /* the floats' bits, as many words as the tile buffer's pixel has
+         * (R32F one, RG32F two, RGBA32F four) and 0 past them, as Mesa
+         * copies `internal_size` bytes into a zeroed job
+         * (`clear_mrt::clear_color_words`) */
+        Some(V3D_INTERNAL_TYPE_32F) if F32_CLEAR_AS_MESA => super::clear_mrt::clear_color_words(
+            V3D_INTERNAL_TYPE_32F,
+            row.map_or(V3D_INTERNAL_BPP_32, |f| f.internal_bpp),
+            c,
+        ),
+        Some(V3D_INTERNAL_TYPE_32F) => u,
         _ => [pack_rgba8(c), 0, 0, 0],
     }
 }
@@ -1049,7 +1079,7 @@ mod tests {
     #[test]
     fn every_colour_surface_has_mesas_row() {
         /* (surface, output image format, internal type, bpp, clamp) */
-        let rows: [(u8, u32, u32, u32, u32); 27] = [
+        let rows: [(u8, u32, u32, u32, u32); 30] = [
             (GLES_SURF_RGBA8888, 27, 2, 0, 0),
             (GLES_SURF_XRGB8888, 27, 2, 0, 0),
             (GLES_SURF_RGB565, 7, 2, 0, 0),
@@ -1077,6 +1107,10 @@ mod tests {
             (GLES_SURF_RGB10_A2UI, 2, 5, 1, 3),
             (GLES_SURF_SRGB8_A8, 0, 6, 1, 1),
             (GLES_SURF_RGB10_A2, 3, 6, 1, 0),
+            /* v3dx_format_table.c:96, :101, :146; the type and bpp :253-262, :319-326 */
+            (GLES_SURF_RG32F, 10, 10, 1, 0),
+            (GLES_SURF_RGBA32F, 9, 10, 2, 0),
+            (GLES_SURF_R11F_G11F_B10F, 8, 6, 1, 0),
         ];
         for (surf, output, ty, bpp, clamp) in rows {
             let name = gles_surf_name(surf);
@@ -1126,7 +1160,19 @@ mod tests {
         );
         assert_eq!(clear_words(GLES_SURF_RGB10_A2, [0.0, 0.5, 1.0, 1.0]), [0x3800_0000, 0x3c00_3c00, 0, 0]);
         assert_eq!(clear_words(GLES_SURF_R16F, f), [0x3800_3c00, 0x0000_c000, 0, 0]);
-        assert_eq!(clear_words(GLES_SURF_R32F, f), f.map(f32::to_bits));
+        /* 32F: the floats' bits; in a color-buffer-float build one word a
+         * channel the pixel has, elsewhere the four raw words */
+        let b = f.map(f32::to_bits);
+        if F32_CLEAR_AS_MESA {
+            assert_eq!(clear_words(GLES_SURF_R32F, f), [b[0], 0, 0, 0]);
+            assert_eq!(clear_words(GLES_SURF_RG32F, f), [b[0], b[1], 0, 0]);
+        } else {
+            assert_eq!(clear_words(GLES_SURF_R32F, f), b);
+            assert_eq!(clear_words(GLES_SURF_RG32F, f), b);
+        }
+        assert_eq!(clear_words(GLES_SURF_RGBA32F, f), b);
+        /* R11F_G11F_B10F: four halves like RGBA16F, not clamped; the store packs them */
+        assert_eq!(clear_words(GLES_SURF_R11F_G11F_B10F, f), [0x3800_3c00, 0x0000_c000, 0, 0]);
         let rgba = [1.0f32, 0.0, 0.0, 1.0];
         assert_eq!(clear_words(GLES_SURF_RGBA8888, rgba), [0xff00_00ff, 0, 0, 0], "the ES 2.0 word");
         assert_eq!(clear_words(GLES_SURF_RGB565, rgba), [0xff00_00ff, 0, 0, 0]);

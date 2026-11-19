@@ -440,9 +440,9 @@ pub const GLES_SURF_RGB10_A2: u8 = 26;
 /* The ES 3.0 colour surfaces GL_EXT_color_buffer_float adds beyond R16F,
  * RGBA16F and R32F: RG32F (8 bytes a pixel), RGBA32F (16) and the packed
  * R11F_G11F_B10F word (4). A back end that can draw and read them back sets
- * the bit `format - GLES_SURF_FLOAT_FIRST` in [`FLOAT_RT_FORMATS`]; no back
- * end does yet, so [`rt_format_drawable`] is false for all three and the GL
- * core does not produce them (plan #360). */
+ * the bit `format - GLES_SURF_FLOAT_FIRST` in [`FLOAT_RT_FORMATS`]: the V3D
+ * does under the `color-buffer-float` feature; elsewhere [`rt_format_drawable`] is false for all three and the
+ * GL core does not produce them (plan #360). */
 pub const GLES_SURF_RG32F: u8 = 27;
 pub const GLES_SURF_RGBA32F: u8 = 28;
 pub const GLES_SURF_R11F_G11F_B10F: u8 = 29;
@@ -580,15 +580,29 @@ pub static HOST_INTEGER_RT_FORMATS: core::sync::atomic::AtomicU32 = core::sync::
 
 /// The extension float surfaces ([`GLES_SURF_RG32F`], [`GLES_SURF_RGBA32F`],
 /// [`GLES_SURF_R11F_G11F_B10F`]) this build's back end can render into and
-/// read back: bit `format - GLES_SURF_FLOAT_FIRST`. Zero for every GPU today.
-pub const FLOAT_RT_FORMATS: u32 = 0;
+/// read back: bit `format - GLES_SURF_FLOAT_FIRST`. The V3D draws all three
+/// (src/v3d/state.rs `rt_format`: the 32F tile buffer at 64 and 128 bpp,
+/// the 16F one packed to 11/11/10 at the store; a float output to a 32F
+/// target is a 32-bit TLB write, src/v3d/backend.rs `f32_rt_program`) in a
+/// build with the `color-buffer-float` feature, the one that can claim
+/// GL_EXT_color_buffer_float; without the feature the bits stay 0 and the GL
+/// core produces none of the three, as before. Zero for every other GPU.
+pub const FLOAT_RT_FORMATS: u32 = {
+    #[cfg(all(feature = "gpu-v3d", feature = "color-buffer-float"))]
+    {
+        (1 << (GLES_SURF_FLOAT_LAST - GLES_SURF_FLOAT_FIRST + 1)) - 1
+    }
+    #[cfg(not(all(feature = "gpu-v3d", feature = "color-buffer-float")))]
+    {
+        0
+    }
+};
 
 /// Can this build's back end draw into and read back every colour surface
 /// `GL_EXT_color_buffer_float` makes renderable: R16F, RGBA16F (RG16F has no
 /// surface of its own), R32F and the three [`FLOAT_RT_FORMATS`] surfaces?
-/// False on every GPU today (the bits are zero); the GL core lists the
-/// extension only where this is true (`gl/state.rs`, under the
-/// `color-buffer-float` feature).
+/// True on the V3D with the `color-buffer-float` feature alone; the GL core lists the extension only where this
+/// is true (`gl/state.rs`, under the `color-buffer-float` feature).
 pub const fn color_buffer_float_capable() -> bool {
     const ALL: u32 = (1 << (GLES_SURF_FLOAT_LAST - GLES_SURF_FLOAT_FIRST + 1)) - 1;
     FLOAT_RT_FORMATS & ALL == ALL

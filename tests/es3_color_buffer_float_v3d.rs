@@ -17,16 +17,29 @@
 //! read back through glReadPixels. Host: API, state and words count, pictures
 //! do not.
 //!
-//! The plain tests pass today in the build without the feature. The
-//! `#[ignore = "v3d-arm"]` ones state the claimed path (run with
-//! `--features color-buffer-float` once `cbf-feature` has declared it) with
+//! The plain tests pass in both builds. The `#[cfg(feature =
+//! "color-buffer-float")]` ones are the claimed path (item `v3d-arm`), with
 //! the expectations taken from Mesa 26.2.1 (read only), the file:line of each
-//! in its comment:
+//! in its comment; the `#[cfg(not(...))]` ones are the default build's
+//! answers. No test is `#[ignore]`d (the gate refuses one):
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_color_buffer_float_v3d
-//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,color-buffer-float --test es3_color_buffer_float_v3d -- --ignored
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,color-buffer-float --test es3_color_buffer_float_v3d
 //! ```
+//!
+//! RG16F has no surface of its own: the GL core holds it (and RGB16F) in
+//! the RGBA16F surface, four halves a pixel, and reads the channels it
+//! lacks as 0, 0, 1. So the claimed path draws RG16F through the RGBA16F
+//! row (`Fmt::row`), not Mesa's RG16F output format 19.
+//!
+//! A float output into a 32F target (R32F, RG32F, RGBA32F) is written to
+//! the TLB as 32-bit words, not f16 pairs: Mesa's `f32_color_rb` key
+//! (gallium/drivers/v3d/v3d_program.c:683-686; nir_to_vir.c:1974-1977). The
+//! V3D back end asks the compiler for that program at the draw, from the
+//! formats of the job's targets (`f32_rt_program`); the last tests read the
+//! TLB config words in the fragment uniform stream the job builder was
+//! handed.
 //!
 //! Mesa evidence, `third_party/mesa-26.2.1/src` (the tile buffer a format
 //! uses is `v3dX(get_internal_type_bpp_for_output_format)`,
@@ -55,8 +68,6 @@
     any(target_arch = "x86_64", target_arch = "aarch64")
 ))]
 #![allow(dead_code)]
-// `color-buffer-float` joins Cargo.toml with item `cbf-feature`.
-#![allow(unexpected_cfgs)]
 
 use core::ffi::{c_char, c_int, c_void, CStr};
 use std::ffi::CString;
@@ -118,9 +129,13 @@ mod gl_rig {
     use std::sync::{MutexGuard, Once};
     use yakogl::gl::consts::*;
     use yakogl::gl::context::{self, GlContext};
+    use yakogl::gl::draw::glDrawArrays;
     use yakogl::gl::framebuffer::*;
+    use yakogl::gl::program::*;
+    use yakogl::gl::shader::*;
     use yakogl::gl::state::*;
     use yakogl::gl::types::*;
+    use yakogl::gl::vertex::*;
     use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps, OsalV3dCpuOf};
     use yakogl::v3d::backend::*;
     use yakogl::v3d::kick::V3dKick;
@@ -180,6 +195,9 @@ mod trampolines {
         pub target: V3dJobTarget,
         pub clear: Option<V3dJobClear>,
         pub draws: u32,
+        /// The fragment uniform stream of each draw, in order (the TLB
+        /// config words of its colour writes are constants in it).
+        pub fs_uniforms: Vec<Vec<V3dUniform>>,
     }
 
     static JOBS: Mutex<Vec<SeenJob>> = Mutex::new(Vec::new());
@@ -204,19 +222,29 @@ mod trampolines {
             (*bcl).used = 16;
             (*ind).used = 256;
         }
-        jobs().push(SeenJob { target: t, clear: None, draws: 0 });
+        jobs().push(SeenJob { target: t, clear: None, draws: 0, fs_uniforms: Vec::new() });
         t.width != 0 && t.height != 0
     }
 
     #[no_mangle]
-    unsafe extern "C" fn v3d_job_draw(j: *mut V3dJob, _d: *const V3dJobDraw, _layout: *mut c_void) -> i32 {
-        // SAFETY: the backend passes its live job.
-        let j = unsafe { &mut *j };
+    unsafe extern "C" fn v3d_job_draw(j: *mut V3dJob, d: *const V3dJobDraw, _layout: *mut c_void) -> i32 {
+        // SAFETY: the backend passes its live job and a draw whose pointers live for the call.
+        let (j, d) = unsafe { (&mut *j, &*d) };
         j.draws += 1;
         // SAFETY: the job's BCL is live.
         unsafe { (*j.bcl).used += 120 };
+        // SAFETY: the draw's fragment program and its stream, as long as it says.
+        let stream = unsafe {
+            let fs = &*d.fs;
+            if fs.uniforms.is_null() || fs.num_uniforms == 0 {
+                Vec::new()
+            } else {
+                core::slice::from_raw_parts(fs.uniforms, fs.num_uniforms as usize).to_vec()
+            }
+        };
         if let Some(job) = jobs().last_mut() {
             job.draws += 1;
+            job.fs_uniforms.push(stream);
         }
         V3D_JOB_OK
     }
@@ -712,6 +740,16 @@ mod trampolines {
     }
 
     impl Fmt {
+        /// The row the format is drawn through: Mesa's, but for RG16F, which
+        /// the GL core holds in the RGBA16F surface (no surface of its own).
+        pub fn row(&self) -> Tlb {
+            if self.gl == GL_RG16F {
+                RGB16F.mesa
+            } else {
+                self.mesa
+            }
+        }
+
         /// Four exact halves and floats; R11F_G11F_B10F has no sign bit, so
         /// its colour is positive.
         pub fn clear_color(&self) -> [f32; 4] {
@@ -749,12 +787,12 @@ mod trampolines {
         /// (4 words at 128 bpp, 2 at 64, 1 at 32; the rest 0).
         pub fn mesa_clear_words(&self) -> [u32; 4] {
             let c = self.job_color();
-            if self.mesa.internal_type == T16 {
+            if self.row().internal_type == T16 {
                 let h = c.map(half);
                 [h[0] | h[1] << 16, h[2] | h[3] << 16, 0, 0]
             } else {
                 let w = c.map(f32::to_bits);
-                match self.mesa.bpp {
+                match self.row().bpp {
                     B128 => w,
                     B64 => [w[0], w[1], 0, 0],
                     _ => [w[0], 0, 0, 0],
@@ -889,6 +927,99 @@ mod trampolines {
         (fmt as GLenum, ty as GLenum)
     }
 
+    /* ---- programs and draws ---------------------------------------------------- */
+
+    fn shader(ty: GLenum, src: &str) -> GLuint {
+        let c = CString::new(src).unwrap();
+        // SAFETY: plain GL calls; the string lives for the call.
+        unsafe {
+            let s = glCreateShader(ty);
+            let srcs = [c.as_ptr()];
+            glShaderSource(s, 1, srcs.as_ptr(), core::ptr::null());
+            glCompileShader(s);
+            let mut ok: GLint = 0;
+            glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
+            assert_eq!(ok, 1, "compile {ty:#x}: {src}\n{:?}", logs());
+            s
+        }
+    }
+
+    /// The current program: `a_position` at attribute 0 and one `out` per
+    /// entry of `outs` (a GLSL float type: "vec4", "vec2", "float"), each
+    /// written a constant.
+    pub fn program(outs: &[&str]) -> GLuint {
+        let mut fs = String::from("#version 300 es\nprecision highp float;\n");
+        for (i, t) in outs.iter().enumerate() {
+            fs += &format!("layout(location = {i}) out {t} o{i};\n");
+        }
+        fs += "void main() {\n";
+        for (i, t) in outs.iter().enumerate() {
+            fs += &format!("  o{i} = {t}(0.5);\n");
+        }
+        fs += "}\n";
+        let v = shader(
+            GL_VERTEX_SHADER,
+            "#version 300 es\nin vec4 a_position;\nvoid main() { gl_Position = a_position; }\n",
+        );
+        let f = shader(GL_FRAGMENT_SHADER, &fs);
+        let name = CString::new("a_position").unwrap();
+        // SAFETY: plain GL calls on handles just made.
+        unsafe {
+            let p = glCreateProgram();
+            glAttachShader(p, v);
+            glAttachShader(p, f);
+            glBindAttribLocation(p, 0, name.as_ptr());
+            glLinkProgram(p);
+            let mut ok: GLint = 0;
+            glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+            assert_eq!(ok, 1, "link: {:?}", logs());
+            glUseProgram(p);
+            glDeleteShader(v);
+            glDeleteShader(f);
+            p
+        }
+    }
+
+    /// One triangle over the whole target.
+    static TRI: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 3.0, -1.0, 0.0, 1.0, -1.0, 3.0, 0.0, 1.0];
+
+    /// Draw the triangle with the current program into the bound
+    /// framebuffer and finish; the fragment uniform stream the job builder
+    /// was handed for that draw (the last draw of the last job that drew).
+    pub fn draw_triangle() -> Vec<V3dUniform> {
+        // SAFETY: plain GL calls; TRI is static.
+        unsafe {
+            glDisable(GL_BLEND);
+            glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, TRI.as_ptr() as *const c_void);
+            glEnableVertexAttribArray(0);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            assert_eq!(glGetError(), GL_NO_ERROR, "the draw: {:?}", logs());
+            glFinish();
+        }
+        let job = jobs().iter().rev().find(|j| j.draws > 0).cloned();
+        let job = job.unwrap_or_else(|| panic!("no job drew: {:?}", logs()));
+        job.fs_uniforms.last().cloned().expect("the draw's stream")
+    }
+
+    /// The constants of a fragment uniform stream (`QUNIFORM_CONSTANT`, 0:
+    /// the TLB config words among them).
+    pub fn constants(stream: &[V3dUniform]) -> Vec<u32> {
+        stream.iter().filter(|u| u.contents == 0).map(|u| u.data).collect()
+    }
+
+    pub fn use_program(p: GLuint) {
+        // SAFETY: a program this file made, or 0.
+        unsafe { glUseProgram(p) };
+    }
+
+    pub fn delete_program(p: GLuint) {
+        // SAFETY: a program this file made.
+        unsafe {
+            glUseProgram(0);
+            glDeleteProgram(p);
+        }
+    }
+
     /// Nothing the sequence did was refused by the back end by name, and no
     /// GL_OUT_OF_MEMORY (the error that aborts a dEQP session) was raised.
     pub fn nothing_refused(what: &str) {
@@ -941,8 +1072,8 @@ fn the_default_build_claims_half_float_and_not_float() {
 
 /// With the feature the build lists both, and the V3D really draws the
 /// formats behind the claim (the tests below).
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "v3d-arm: needs --features color-buffer-float; GL_EXT_color_buffer_float is not claimed yet"]
 fn the_feature_claims_float_beside_half_float() {
     let _g = gl_rig::rig();
     let ext = extensions();
@@ -1062,9 +1193,9 @@ fn the_mesa_rows_of_the_tables_are_self_consistent() {
 /// tile buffer (two halves a word for 16F and R11F_G11F_B10F, the floats'
 /// bits for 32F at 1, 2 or 4 words) and the render-target row Mesa names
 /// (v3dx_format_table.c:253-269, :319-330; the output format values
-/// v3d_packet.xml:235-247).
+/// v3d_packet.xml:235-247); RG16F through the RGBA16F surface's (`Fmt::row`).
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "v3d-arm: needs --features color-buffer-float; no RG32F, RGBA32F or R11F_G11F_B10F target yet, RG16F is the RGBA16F surface"]
 fn every_float_format_clears_through_its_mesa_row() {
     let _g = gl_rig::rig();
     for f in FLOATS {
@@ -1075,8 +1206,8 @@ fn every_float_format_clears_through_its_mesa_row() {
         assert_eq!(e, GL_NO_ERROR, "{}", f.name);
         let job = last_job();
         assert!(job.target.typed, "{}: a typed job", f.name);
-        assert_eq!(job.target.rt_format[0], f.mesa.output, "{}: the output image format", f.name);
-        assert_eq!(tlb_of(&job), Some(f.mesa), "{}: the internal type, bpp and bytes", f.name);
+        assert_eq!(job.target.rt_format[0], f.row().output, "{}: the output image format", f.name);
+        assert_eq!(tlb_of(&job), Some(f.row()), "{}: the internal type, bpp and bytes", f.name);
         let c = job.clear.expect("the job ended");
         assert_eq!(c.clear_rt[0], f.mesa_clear_words(), "{}: the clear words", f.name);
         nothing_refused(f.name);
@@ -1087,8 +1218,8 @@ fn every_float_format_clears_through_its_mesa_row() {
 /// the format has and 0, 0, 1 in the ones it lacks (ES 3.0 4.3.1), exact for
 /// the 16F, 32F and R11F_G11F_B10F values the clear uses; the memory past a
 /// window hanging over the edge is left alone.
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "v3d-arm: needs --features color-buffer-float; the 32F pair and R11F_G11F_B10F are no colour surface yet (core-surf), RG16F's blue reads the storage's"]
 fn every_float_format_reads_its_clear_back() {
     let _g = gl_rig::rig();
     for f in FLOATS {
@@ -1113,8 +1244,8 @@ fn every_float_format_reads_its_clear_back() {
 /// A scissored clear into each format is a draw job in the format's row; the
 /// RGBA32F job is the 128-bpp tile buffer (v3d_job.h's max_bpp, as
 /// `v3d_frame_tiling_bpp` takes it).
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "v3d-arm: needs --features color-buffer-float; the 32F pair and R11F_G11F_B10F draw nothing yet"]
 fn every_float_format_draws_through_its_mesa_row() {
     let _g = gl_rig::rig();
     for f in FLOATS {
@@ -1126,15 +1257,15 @@ fn every_float_format_draws_through_its_mesa_row() {
         assert_eq!(e, GL_NO_ERROR, "{}", f.name);
         let draw = jobs().iter().rev().find(|j| j.draws > 0).cloned();
         let draw = draw.unwrap_or_else(|| panic!("{}: no job drew: {:?}", f.name, logs()));
-        assert_eq!(tlb_of(&draw), Some(f.mesa), "{}: the draw's render-target row", f.name);
+        assert_eq!(tlb_of(&draw), Some(f.row()), "{}: the draw's render-target row", f.name);
         nothing_refused(f.name);
     }
 }
 
 /// RGBA32F beside RGBA16F as two draw buffers: each keeps its own output
 /// format (RT 0 and RT 1) and its own clear words.
+#[cfg(feature = "color-buffer-float")]
 #[test]
-#[ignore = "v3d-arm: needs --features color-buffer-float; RGBA32F is not a colour surface yet"]
 fn rgba32f_and_rgba16f_draw_buffers_keep_their_rows() {
     let _g = gl_rig::rig();
     let _fb = Fb::new(&[FLOATS[5], FLOATS[2]]);
@@ -1153,4 +1284,100 @@ fn rgba32f_and_rgba16f_draw_buffers_keep_their_rows() {
     assert_eq!(c.clear_rt[0], FLOATS[5].mesa_clear_words());
     assert_eq!(c.clear_rt[1], FLOATS[2].mesa_clear_words());
     nothing_refused("RGBA32F and RGBA16F");
+}
+
+/* ---- the fragment shader's TLB writes ------------------------------------------- */
+
+use yakogl::shaderc::online::v3d::select::tlb_config_32b;
+#[cfg(feature = "color-buffer-float")]
+use yakogl::shaderc::online::v3d::select::tlb_config_f16;
+
+/// A `vec4` output drawn into each 32F target is written as four 32-bit TLB
+/// words: the draw's fragment stream carries the 32-bit config of RT 0
+/// (`tlb_config_32b(0, 4)`, Mesa's TLB_TYPE_F32_COLOR, nir_to_vir.c:1974-1977)
+/// because the back end drew the program built for the job's targets
+/// (Mesa's `f32_color_rb`, v3d_program.c:683-686). The same program into a
+/// 16F target (RGBA16F, R16F, R11F_G11F_B10F: the 16F tile buffer) keeps
+/// its f16 pairs, RT 0's default config, and carries no 32-bit config.
+#[cfg(feature = "color-buffer-float")]
+#[test]
+fn a_float_output_into_a_32f_target_is_32_bit_tlb_words() {
+    let _g = gl_rig::rig();
+    let cfg32 = tlb_config_32b(0, 4);
+    for f in FLOATS {
+        let _fb = Fb::new(&[f]);
+        let p = program(&["vec4"]);
+        let first = draw_triangle();
+        let consts = constants(&first);
+        let is32 = f.row().internal_type == V3D_INTERNAL_TYPE_32F;
+        assert_eq!(consts.contains(&cfg32), is32, "{}: the 32-bit TLB config in {consts:#x?}", f.name);
+        /* the next draw of the pair is the same program (the back end's own slot) */
+        assert_eq!(draw_triangle(), first, "{}: the second draw", f.name);
+        nothing_refused(f.name);
+        delete_program(p);
+    }
+}
+
+/// The key is per render target: RGBA32F at RT 0 beside RGBA16F at RT 1
+/// writes RT 0 as 32-bit words and RT 1 as f16 pairs (its explicit f16
+/// config naming the RT), and the other way round with the targets swapped.
+/// The same GL program serves both framebuffers: the back end picks the
+/// variant per draw.
+#[cfg(feature = "color-buffer-float")]
+#[test]
+fn the_32_bit_write_follows_each_draw_buffers_format() {
+    let _g = gl_rig::rig();
+    let fb = Fb::new(&[FLOATS[5], FLOATS[2]]);
+    let p = program(&["vec4", "vec4"]);
+    let consts = constants(&draw_triangle());
+    assert!(consts.contains(&tlb_config_32b(0, 4)), "RT 0 (RGBA32F) 32-bit: {consts:#x?}");
+    assert!(consts.contains(&tlb_config_f16(1, 4)), "RT 1 (RGBA16F) f16: {consts:#x?}");
+    assert!(!consts.contains(&tlb_config_32b(1, 4)), "RT 1 is not 32-bit: {consts:#x?}");
+    nothing_refused("RGBA32F + RGBA16F");
+    drop(fb);
+    let fb = Fb::new(&[FLOATS[2], FLOATS[5]]);
+    use_program(p);
+    let consts = constants(&draw_triangle());
+    assert!(consts.contains(&tlb_config_32b(1, 4)), "RT 1 (RGBA32F) 32-bit: {consts:#x?}");
+    assert!(!consts.contains(&tlb_config_32b(0, 4)), "RT 0 (RGBA16F) is not 32-bit: {consts:#x?}");
+    nothing_refused("RGBA16F + RGBA32F");
+    drop(fb);
+    delete_program(p);
+}
+
+/// A scissored clear of a 32F target is a quad whose program writes the
+/// clear colour's own bits as 32-bit TLB words (the integer clear program,
+/// `uvec4`), so the value is stored whole, not rounded through halves.
+#[cfg(feature = "color-buffer-float")]
+#[test]
+fn a_scissored_clear_of_a_32f_target_writes_32_bit_words() {
+    let _g = gl_rig::rig();
+    for f in [FLOATS[3], FLOATS[4], FLOATS[5]] {
+        let _fb = Fb::new(&[f]);
+        f.clear();
+        scissored_clear(&f);
+        let (e, _) = read(GL_RGBA, GL_FLOAT);
+        assert_eq!(e, GL_NO_ERROR, "{}", f.name);
+        let draw = jobs().iter().rev().find(|j| j.draws > 0).cloned();
+        let draw = draw.unwrap_or_else(|| panic!("{}: no job drew: {:?}", f.name, logs()));
+        let consts = constants(draw.fs_uniforms.last().expect("the quad's stream"));
+        assert!(consts.contains(&tlb_config_32b(0, 4)), "{}: {consts:#x?}", f.name);
+        nothing_refused(f.name);
+    }
+}
+
+/// Without the feature no draw takes the 32-bit write for a float output:
+/// a `vec4` output into each 16F target is f16 pairs, as it always was.
+#[cfg(not(feature = "color-buffer-float"))]
+#[test]
+fn a_float_output_is_f16_pairs_without_the_feature() {
+    let _g = gl_rig::rig();
+    for f in half_formats() {
+        let _fb = Fb::new(&[f]);
+        let p = program(&["vec4"]);
+        let consts = constants(&draw_triangle());
+        assert!(!consts.contains(&tlb_config_32b(0, 4)), "{}: {consts:#x?}", f.name);
+        nothing_refused(f.name);
+        delete_program(p);
+    }
 }
