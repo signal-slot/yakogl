@@ -15,13 +15,25 @@
 //! have no colour pair at all. `ck_lane_mediump` and `rnd_vs_mediump_kept`
 //! compile since then too and differ in the vertex program alone ([`DIFFERS`]:
 //! Mesa adds the mediump attributes' lanes at fp16, the vertex walk at fp32).
+//!
+//! Ten more are byte-equal since plan #377's lower-varylink
+//! (`docs/notes/mali-deqp-colourpair.md`, "Lowering"): the pairs that are a
+//! word of the colour, `MKVEC.v2i16 <constant>, lane` (`ck_lane_highpcolour`,
+//! `rnd_fs_ck_dup`, `rnd_fs_ck_lz`, `rnd_fs_kword_ck`, `rnd_fs_zword_zk`,
+//! `rnd_vs_ck_lz`, `rnd_vs_zk_lz`) and `U16_TO_U32` of a lane and 0.0
+//! (`default_attrib`), and the two whose vertex shader's lanes the link
+//! keeps as components of a vector operation (`rnd_vs_uniform_flat`,
+//! `rnd_vs_vecop_fs_uniform`).
+//!
 //! Every other reference is refused, so its test is `#[ignore]`d with its
-//! reference's pinned first refusal. `refusals_pinned` asserts each ignored
+//! reference's pinned first refusal: the pair as an operand of an
+//! operation (`rnd_fs_ck_madd`, `rnd_fs_ck_product`, `rnd_fs_zk_tree`), a
+//! computed lane and 0.0 (`rnd_fs_uniform_tz_ck`) and the partial-varying
+//! link (`rnd_vs_vecop_kept`). `refusals_pinned` asserts each ignored
 //! reference's exact refusal text today — `MaliError::message` without its
-//! `Valhall: ` prefix and its ` is not lowered yet` suffix — so
-//! `lower-colourpair` starts from these pins and a refusal that moves breaks
-//! its pin. An ignored test that would compile now fails the pin, and its
-//! test is what starts running.
+//! `Valhall: ` prefix and its ` is not lowered yet` suffix — so a refusal
+//! that moves breaks its pin. An ignored test that would compile now fails
+//! the pin, and its test is what starts running.
 //!
 //! What each byte-compare covers once lowered: the base references compare
 //! every region (their lowering is a link rule, the vertex varying program
@@ -50,24 +62,13 @@ const PV: &str = "online shaderc: a Mali link whose fragment shader reads part o
 
 /// Every reference and its pinned first refusal at this tip, the table
 /// behind [`refusals_pinned`]. Each ignored test's `#[ignore]` reason names
-/// the same text and the item that owns it: `lower-colourpair` for the two
-/// colour-pair texts, the family that owns the text otherwise.
+/// the same text.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_colourpair_ck_lane_highpcolour", CP),
-    ("deqp_colourpair_default_attrib", LZ),
-    ("deqp_colourpair_rnd_fs_ck_dup", CP),
-    ("deqp_colourpair_rnd_fs_ck_lz", CP),
     ("deqp_colourpair_rnd_fs_ck_madd", CP),
     ("deqp_colourpair_rnd_fs_ck_product", CP),
-    ("deqp_colourpair_rnd_fs_kword_ck", CP),
     ("deqp_colourpair_rnd_fs_uniform_tz_ck", LZ),
     ("deqp_colourpair_rnd_fs_zk_tree", CP),
-    ("deqp_colourpair_rnd_fs_zword_zk", CP),
-    ("deqp_colourpair_rnd_vs_ck_lz", CP),
-    ("deqp_colourpair_rnd_vs_uniform_flat", CP),
-    ("deqp_colourpair_rnd_vs_vecop_fs_uniform", CP),
     ("deqp_colourpair_rnd_vs_vecop_kept", PV),
-    ("deqp_colourpair_rnd_vs_zk_lz", CP),
 ];
 
 /// The references that compile with other words than Mesa's, in the vertex
@@ -101,13 +102,11 @@ fn ck_lane_mediump() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn ck_lane_highpcolour() {
     mali_ref::assert_matches("deqp_colourpair_ck_lane_highpcolour");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32), lowered by lower-colourpair"]
 fn default_attrib() {
     mali_ref::assert_matches("deqp_colourpair_default_attrib");
 }
@@ -120,49 +119,45 @@ fn lane_zero_load() {
 /* ---- the rnd_fs_* references: fs.fragment only ------------------------- */
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_fs_ck_dup() {
     assert_fs_matches("deqp_colourpair_rnd_fs_ck_dup");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_fs_ck_lz() {
     assert_fs_matches("deqp_colourpair_rnd_fs_ck_lz");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
+#[ignore = "refused: a colour pair of a constant then a varying lane, left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_ck_madd() {
     assert_fs_matches("deqp_colourpair_rnd_fs_ck_madd");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
+#[ignore = "refused: a colour pair of a constant then a varying lane, left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_ck_product() {
     assert_fs_matches("deqp_colourpair_rnd_fs_ck_product");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_fs_kword_ck() {
     assert_fs_matches("deqp_colourpair_rnd_fs_kword_ck");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32), lowered by lower-colourpair"]
+#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32), left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_uniform_tz_ck() {
     assert_fs_matches("deqp_colourpair_rnd_fs_uniform_tz_ck");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
+#[ignore = "refused: a colour pair of a constant then a varying lane, left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_zk_tree() {
     assert_fs_matches("deqp_colourpair_rnd_fs_zk_tree");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_fs_zword_zk() {
     assert_fs_matches("deqp_colourpair_rnd_fs_zword_zk");
 }
@@ -170,7 +165,6 @@ fn rnd_fs_zword_zk() {
 /* ---- the rnd_vs_* references: the vertex program as well --------------- */
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_vs_ck_lz() {
     mali_ref::assert_matches("deqp_colourpair_rnd_vs_ck_lz");
 }
@@ -182,13 +176,11 @@ fn rnd_vs_mediump_kept() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_vs_uniform_flat() {
     mali_ref::assert_matches("deqp_colourpair_rnd_vs_uniform_flat");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_vs_vecop_fs_uniform() {
     mali_ref::assert_matches("deqp_colourpair_rnd_vs_vecop_fs_uniform");
 }
@@ -200,7 +192,6 @@ fn rnd_vs_vecop_kept() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, lowered by lower-colourpair"]
 fn rnd_vs_zk_lz() {
     mali_ref::assert_matches("deqp_colourpair_rnd_vs_zk_lz");
 }

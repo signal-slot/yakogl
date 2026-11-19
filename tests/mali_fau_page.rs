@@ -10,11 +10,14 @@
 //! uniform layouts of glmark2 refract vs 7215 and terrain vs 18bc), compared
 //! through `tests/mali_ref`.
 //!
-//! sel_u_fau65 is byte-equal. The four gm2_faupage pairs read their page-1
-//! words as Mesa does (the page rule below holds on both sides, and
-//! gm2_faupage_1 reads the same page-1 word as its reference), but their
-//! whole programs are not byte-equal yet, for causes that are not the
-//! page's ([`CAUSES`]): their byte-compares stay `#[ignore]`d and
+//! sel_u_fau65 is byte-equal, and so is gm2_faupage_4 since the vertex
+//! layout joins the loads Mesa's `nir_opt_load_store_vectorize` joins
+//! (select.rs `UboLayout::join_loads`, plan #377 lower-varylink). The other
+//! three gm2_faupage pairs read their page-1 words as Mesa does (the page
+//! rule below holds on both sides, and gm2_faupage_1 reads the same page-1
+//! word as its reference), but their whole programs are not byte-equal
+//! yet, for causes that are not the page's ([`CAUSES`]): their
+//! byte-compares stay `#[ignore]`d and
 //! `causes_pinned` pins each cause. The item that lifts a cause removes the
 //! `#[ignore]` and the pin in the same commit.
 //!
@@ -54,10 +57,6 @@ const CAUSES: &[(&str, Option<&str>)] = &[
         "gm2_faupage_3",
         Some("Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet"),
     ),
-    /* IDVS_PUSH_RANGE: Mesa's position program pushes `u_near` with the
-     * three words after it (the shared NIR's vectorized load of u_near and
-     * u_v.xyz), so every later word sits three words further on */
-    ("gm2_faupage_4", None),
 ];
 
 fn describe(w: u64) -> String {
@@ -165,7 +164,7 @@ fn gm2_faupage_1_reads_word_64_on_page_1() {
 /// The FMA keeps the page of its first FAU source, page 0, and the page-1
 /// word is read by a `MOV.i32` on page 1 just before it, as the reference's
 /// `MOV.i32 r1, u41.w1` / `FMA.f32 r0, r0^, u19.w0, r1^` (Mesa's
-/// `va_repair_fau`); ours reads u40.w0, the word IDVS_PUSH_RANGE moves.
+/// `va_repair_fau`).
 #[test]
 fn gm2_faupage_4_mixed_pages_in_one_instruction() {
     let r = mali_ref::Reference::load("gm2_faupage_4");
@@ -219,8 +218,9 @@ fn gm2_faupage_3_matches_its_reference() {
     mali_ref::assert_matches("gm2_faupage_3");
 }
 
+/// IDVS_PUSH_RANGE: Mesa's position program pushes `u_near` with the three
+/// words after it (the shared NIR's vectorized load of u_near and u_v.xyz).
 #[test]
-#[ignore = "IDVS_PUSH_RANGE (CAUSES)"]
 fn gm2_faupage_4_matches_its_reference() {
     mali_ref::assert_matches("gm2_faupage_4");
 }

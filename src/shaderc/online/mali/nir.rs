@@ -3780,6 +3780,55 @@ pub fn build<'s>(
     Ok(vs)
 }
 
+/// Where Mesa's link resolves each lane of the IR operation `id` of `width`
+/// lanes, `out` its lanes as the walk made them (`nir_scalar_resolved`,
+/// nir_opt_varyings.c `deduplicate_outputs` and
+/// `propagate_uniform_expressions`): 0 for a lane that is a scalar of its
+/// own, or 1 + 4 * `id` + lane for a component of a vector operation, which
+/// the link neither folds nor looks through. The link's NIR is vectors
+/// (`nir_lower_alu_width` runs in the back end, after it), so:
+///
+/// * an operation of one lane is its own scalar;
+/// * one whose lanes are all constants is folded (`nir_opt_constant_folding`);
+/// * `a * 1.0` and `a + 0.0`, the constant the same in every lane, are `a`
+///   (nir_opt_algebraic matches a vector constant lane by lane): the lanes
+///   are `a`'s (`of`; varymerge_equal's `u * vec3(1.0)`, gm2_arithconst_3's
+///   `diffuse * Albedo.rgb` of ones: merged);
+/// * any other is kept: each lane a component of it, a constant lane too
+///   (gm2_arithconst_4's `diffuse * vec3(0.0, 0.0, 1.0)`: both zeroes
+///   stored; deqp_varylink_draw_single).
+fn vec_origins(
+    w: &Walk<'_>,
+    id: u32,
+    a: AluOp,
+    s: &[ir::Src; 3],
+    width: usize,
+    out: &[Val; 4],
+    of: impl Fn(ir::Src, usize) -> u16,
+) -> [u16; 4] {
+    let width = width.min(4);
+    let lanes = &out[..width];
+    if lanes.iter().filter(|v| **v != Val::Undef).count() <= 1 || lanes.iter().all(|v| matches!(v, Val::Const(_))) {
+        return [0; 4];
+    }
+    let unit = match a {
+        AluOp::Fmul => Some(F32_ONE),
+        AluOp::Fadd => Some(F32_ZERO),
+        _ => None,
+    };
+    let mut made = [0u16; 4];
+    if let Some(k) = unit.and_then(|u| (0..2).find(|&k| (0..width).all(|i| lane(w, s[k], i) == Val::Const(u)))) {
+        for (i, t) in made.iter_mut().enumerate().take(width) {
+            *t = of(s[1 - k], i);
+        }
+        return made;
+    }
+    for (i, t) in made.iter_mut().enumerate().take(width) {
+        *t = (1 + 4 * id as usize + i).min(u16::MAX as usize) as u16;
+    }
+    made
+}
+
 /// The vertex walk of [`build`]; `numbering` models Mesa's IR where it
 /// numbers the attribute locations ([`Nir::numbering_walk`]).
 fn walk<'s>(
@@ -3812,6 +3861,13 @@ fn walk<'s>(
      * which the vertex shader stores (the `StoreOutput` arm below) */
     let mut kept = 0u64;
     let mut joined = false;
+    /* where Mesa's link resolves each lane (`nir_scalar_resolved`, through
+     * `mov` and `vec`): 0 a scalar of its own (the lane's value names it),
+     * or 1 + 4 * value + lane, a component of the vector operation `value`
+     * ([`vec_origins`]); per IR value, per local and per varying lane */
+    let origins = scratch.alloc_filled(MAX_VALUES, [0u16; 4]).map_err(|_| MaliError::OutOfScratch)?;
+    let mut local_origins = [[0u16; 4]; MAX_LOCALS];
+    let mut varying_origins = [[0u16; 4]; MAX_VARYINGS];
     for step in vs_steps(m, scratch)? {
         let id = match *step {
             Step::Instr(id) => id,
@@ -4043,6 +4099,18 @@ fn walk<'s>(
                 }
                 for (l, o) in out.iter_mut().enumerate().take(width) {
                     let x = |k: usize| xs[k][l];
+                    /* a lane past an operand's: the front end gives a
+                     * built-in or a `++` of a narrower local the width of
+                     * its result (`abs` of a `vec2` local, four lanes), and
+                     * Mesa's operation has the operand's width, so nothing
+                     * is computed for the lane (deqp_varylink_op_abs_vec2:
+                     * the `abs` of two lanes only). A reduction reads its
+                     * operands whole at lane 0 */
+                    let reduces = matches!(a, AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 | AluOp::Bany | AluOp::Ball);
+                    if !reduces && (0..super::nir_fs::ir_arity(a)).any(|k| x(k) == Val::Undef) {
+                        *o = Val::Undef;
+                        continue;
+                    }
                     *o = match a {
                         AluOp::Fadd => vs_fadd(&mut vs, m, &s, x(0), x(1))?,
                         AluOp::Fneg => vs.alu(Alu::Fneg, x(0), Val::Undef, Val::Undef)?,
@@ -4063,12 +4131,19 @@ fn walk<'s>(
                             vs.alu(Alu::Fmul, t, ti, Val::Undef)?
                         }
                         /* a constant over a product read once (:2393); not
-                         * with a lane constant only the back end folds
-                         * ([`split_const`]) */
-                        AluOp::Fmul if split == [false; 2] => match vs_fmul_const_up(&mut vs, m, &s, x(0), x(1))? {
-                            Some(v) => v,
-                            None => vs_fmul(&mut vs, split, x(0), x(1))?,
-                        },
+                         * a lane whose zero only the back end folds
+                         * ([`split_const`], [`vs_fmul`]). The other lanes of
+                         * such a vector take the rule once the back end has
+                         * scalarised them (deqp_varylink_draw_multi's
+                         * `vec4(u * color, 1.0) * 0.5`: `u * 0.5` first,
+                         * `FMA.f32 r0, u3.w1, 0x38000000.h1, r0^.neg`, then
+                         * each lane's `FMA.f32 r, r0, a, 0.5`) */
+                        AluOp::Fmul if split == [false; 2] || !(is_zero(x(0)) || is_zero(x(1))) => {
+                            match vs_fmul_const_up(&mut vs, m, &s, x(0), x(1))? {
+                                Some(v) => v,
+                                None => vs_fmul(&mut vs, split, x(0), x(1))?,
+                            }
+                        }
                         AluOp::Fmul => vs_fmul(&mut vs, split, x(0), x(1))?,
                         /* a matrix product's last term by a `w` of 1.0
                          * (`M * vec4(p, 1.0)`): `fmul(c3, 1.0)` is `c3`
@@ -4557,8 +4632,82 @@ fn walk<'s>(
             /* fragment only (the front end refuses it in a vertex shader) */
             IrOp::Discard => return Err(MaliError::DiscardForm),
         }
+        let origin = |origins: &[[u16; 4]], s: ir::Src, i: usize| {
+            origins.get(s.val.0 as usize).map_or(0, |o| o[s.swizzle[i] as usize & 3])
+        };
+        let mut made = [0u16; 4];
+        match *op {
+            IrOp::LoadLocal { local, index: None, .. } => {
+                made = local_origins.get(local.0 as usize).copied().unwrap_or([0; 4]);
+            }
+            IrOp::StoreLocal { local, index: None, src, write_mask } => {
+                if let Some(t) = local_origins.get_mut(local.0 as usize) {
+                    for (i, t) in t.iter_mut().enumerate() {
+                        if write_mask & (1 << i) != 0 {
+                            *t = origin(origins, src, i);
+                        }
+                    }
+                }
+            }
+            IrOp::StoreOutput { slot: IoSlot::Varying(loc), src } => {
+                if let Some(t) = varying_origins.get_mut(loc as usize) {
+                    for (i, t) in t.iter_mut().enumerate() {
+                        *t = origin(origins, src, i);
+                    }
+                }
+            }
+            IrOp::Alu(a, s) => made = vec_origins(w, id.0, a, &s, width, &out, |s, i| origin(origins, s, i)),
+            _ => {}
+        }
+        if let Some(o) = origins.get_mut(id.0 as usize) {
+            *o = made;
+        }
         if let Some(v) = w.vals.get_mut(id.0 as usize) {
             *v = out;
+        }
+    }
+    /* a lane that is a component of a vector operation is as divergent as
+     * the operation (`nir_vertex_divergence_analysis` marks a definition,
+     * not its components): beside a lane that reads an attribute, a lane of
+     * uniforms alone or a constant is interpolated like it, stored as it is
+     * (deqp_varylink_va_multi3's `u_colorScale * color`, whose `z` is the
+     * uniform: a `MOV` in the smooth `.v3`; deqp_varylink_draw_multi's
+     * `.. * 0.5 + 0.5`, whose `w` is 1.0: stored in the smooth `.v4`).
+     * `divergent`: those lanes; `apart`: every lane of a vector operation */
+    let (mut divergent, mut apart) = (0u64, 0u64);
+    for (l, tags) in varying_origins.iter().enumerate() {
+        for (c, &t) in tags.iter().enumerate() {
+            if t == 0 {
+                continue;
+            }
+            apart |= 1 << (l * 4 + c);
+            let of = w.vals.get((t as usize - 1) / 4).copied().unwrap_or([Val::Undef; 4]);
+            if of.iter().any(|v| matches!(*v, Val::Lane(n, _) if !vs.convergent(n))) {
+                divergent |= 1 << (l * 4 + c);
+            }
+        }
+    }
+    /* a constant lane of a vector operation the link does not fold (it folds
+     * an operation of constants alone, and the back end scalarises after the
+     * link) is no constant to the link: the vertex shader stores it (`kept`),
+     * flat with the operation's other lanes when no lane of it reads an
+     * attribute (`kept_flat`; deqp_varylink_draw_single's `vec4(u * color,
+     * 1.0) * 0.5 + 0.5`: four flat lanes, the 1.0 an `IADD_IMM.i32`). A
+     * shader with a late fold ([`vs_fmul`]) keeps its own rule for these
+     * lanes, in both of its walks ([`build`]: the constants the numbering
+     * walk does not have are taken back, and a lane the attribute numbering
+     * depends on is refused) */
+    let mut kept_flat = 0u64;
+    let late = vs.late_fold || numbering;
+    for (l, lanes) in varyings.iter().enumerate().filter(|_| !late) {
+        for (c, v) in lanes.iter().flatten().enumerate() {
+            let bit = 1u64 << (l * 4 + c);
+            if matches!(v, Val::Const(_)) && apart & bit != 0 && (phis | kept) & bit == 0 {
+                kept |= bit;
+                if divergent & bit == 0 {
+                    kept_flat |= bit;
+                }
+            }
         }
     }
     /* an invariant output keeps its arithmetic exact in Mesa (no
@@ -4599,8 +4748,14 @@ fn walk<'s>(
                 Val::Const(_) if phi => vs.consts.push_flat(o.location, c as u8),
                 /* a constant lane of a mediump vector the link sees computed:
                  * stored by this stage, read interpolated (`kept`) */
+                Val::Const(_) if kept_flat & (1 << (o.location as usize * 4 + c)) != 0 => {
+                    vs.consts.push_flat(o.location, c as u8)
+                }
                 Val::Const(_) if kept & (1 << (o.location as usize * 4 + c)) != 0 => {}
                 Val::Const(bits) => vs.consts.push(o.location, c as u8, bits),
+                /* a lane of a vector operation that reads an attribute in
+                 * another lane: interpolated (`divergent`) */
+                Val::Lane(..) if divergent & (1 << (o.location as usize * 4 + c)) != 0 => {}
                 /* a lane of uniforms alone, which the link promotes to
                  * flat ([`super::link::VaryingConsts::push_flat`]) */
                 Val::Lane(n, _) if vs.convergent(n) => vs.consts.push_flat(o.location, c as u8),
@@ -4629,7 +4784,13 @@ fn walk<'s>(
         match l[c & 3] {
             Val::Lane(n, _) if phi && matches!(vs.nodes[n as usize].kind, Kind::Phi | Kind::Alu(Alu::Bcsel)) => None,
             Val::Lane(n, _) if vs.nodes[n as usize].kind == Kind::Phi => None,
-            Val::Lane(n, _) if !vs.convergent(n) => Some(l[c & 3]),
+            /* the key is where the link resolves the lane, not divergence
+             * (`deduplicate_outputs`' `nir_scalar_resolved`): two lanes of
+             * one uniform value merge (varymerge_equal's `vec4(u *
+             * vec3(1.0), 1.0)`: one flat lane), two components of one vector
+             * operation do not, equal or not (deqp_varylink_draw_single:
+             * three lanes of `ffma(u, 0.5, 0.5)`, each stored) */
+            Val::Lane(..) => Some((varying_origins[o.location as usize & (MAX_VARYINGS - 1)][c & 3], l[c & 3])),
             _ => None,
         }
     };
@@ -4697,7 +4858,7 @@ fn walk<'s>(
         r => r,
     };
     compact_layout(&mut vs, reads);
-    let mut seen = [Val::Undef; 4 * MAX_VARYINGS];
+    let mut seen = [(0u16, Val::Undef); 4 * MAX_VARYINGS];
     let mut nseen = 0;
     /* (a lane of uniforms alone stored, an interpolated lane stored): the
      * link packs flat lanes in slots of their own, a layout no reference
@@ -4727,6 +4888,13 @@ fn walk<'s>(
             match l {
                 Val::Undef => return Err(MaliError::VaryingForm),
                 Val::Const(_) if phis & (1 << (v.location as usize * 4 + c)) != 0 => flat = true,
+                /* a constant lane of a vector operation of uniforms: stored
+                 * flat beside them (`kept_flat`) */
+                Val::Const(_) if kept_flat & (1 << (v.location as usize * 4 + c)) != 0 => {
+                    flat = true;
+                    vs.prods |= 1 << Prod::VaryingComputed as u32;
+                    continue;
+                }
                 /* a lane the back end's fold made a constant, which the
                  * link saw computed ([`build`]) and the fragment shader
                  * reads: stored as it is, each store its own constant
@@ -4747,6 +4915,7 @@ fn walk<'s>(
                  * varying program), or uniforms alone (117, 181, 191, 199:
                  * the link neither propagates nor moves them, the
                  * fragment shader loads them flat, varyconst_*.expect.json) */
+                Val::Lane(..) if divergent & (1 << (v.location as usize * 4 + c)) != 0 => smooth = true,
                 Val::Lane(n, _) if vs.uniform_only(n) => flat = true,
                 /* no attribute behind it, and no reference of its form
                  * (a phi of uniforms) */
@@ -4756,10 +4925,11 @@ fn walk<'s>(
                 Val::Lane(..) => smooth = true,
                 Val::Pair(..) => return Err(MaliError::Defect(Defect::IrIndex)),
             }
-            if seen[..nseen].contains(&l) {
+            let key = (varying_origins[v.location as usize & (MAX_VARYINGS - 1)][c], l);
+            if seen[..nseen].contains(&key) {
                 return Err(MaliError::VaryingDuplicate);
             }
-            seen[nseen] = l;
+            seen[nseen] = key;
             nseen += 1;
             if !whole {
                 let p = if attr(l).is_some() { Prod::VaryingSwizzle } else { Prod::VaryingComputed };
@@ -4830,12 +5000,25 @@ fn walk<'s>(
          * measured (tools/mali/testdata/cube_vs), so the conversion is
          * made for every convergent lane. Exact: no algebraic rule folds
          * the `ffma` (the node is pushed, not built by [`Nir::alu`]). */
+        /* one conversion of a value, whichever lanes store it
+         * (`nir_opt_cse`; deqp_varylink_draw_single: one `FMA.f32 r0, r0^,
+         * 0x0, r0^`, stored three times) */
+        let mut converted = [(Val::Undef, Val::Undef); 4 * MAX_VARYINGS];
+        let mut nconverted = 0;
         for k in 0..vs.nvar {
             let v = vs.varyings[k];
             let Some(lanes) = varyings.get_mut(v.location as usize).and_then(|l| l.as_mut()) else { continue };
             for (c, l) in lanes.iter_mut().enumerate().take(v.comps as usize) {
                 let Val::Lane(n, _) = *l else { continue };
                 if vs.masks[k] & (1 << c) == 0 || vs.reads_attribute(n) {
+                    continue;
+                }
+                /* interpolated with its vector's other lanes (`divergent`) */
+                if divergent & (1 << (v.location as usize * 4 + c)) != 0 {
+                    continue;
+                }
+                if let Some(&(_, y)) = converted[..nconverted].iter().find(|x| x.0 == *l) {
+                    *l = y;
                     continue;
                 }
                 /* a select of two constants that is an `if`'s phi
@@ -4858,6 +5041,10 @@ fn walk<'s>(
                 let x = *l;
                 let f = NirNode { kind: Kind::Alu(Alu::Ffma), src: [x, Val::Const(F32_ZERO), x], bits: 32, width: 1 };
                 *l = Val::Lane(vs.push_node(f)?, 0);
+                if let Some(e) = converted.get_mut(nconverted) {
+                    *e = (x, *l);
+                    nconverted += 1;
+                }
             }
         }
         let lea = vs.push(Kind::Lea { out: 1 }, [Val::Undef; 3])?;

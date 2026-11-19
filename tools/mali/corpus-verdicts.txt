@@ -122,7 +122,7 @@ tools/shaders/es100/uniidx_j.frag: Valhall: a fragment varying load or conversio
 tools/shaders/es100/utri.frag: ok
 tools/shaders/es100/utri.vert: ok
 tools/shaders/es100/va.frag: ok
-tools/shaders/es100/va_vec2.vert: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet
+tools/shaders/es100/va_vec2.vert: ok
 tools/shaders/es100/va_vec4x2.vert: ok
 tools/shaders/es100/varyings15.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/varyings15.vert: ok

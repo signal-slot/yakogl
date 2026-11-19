@@ -298,7 +298,16 @@ pub struct UboLayout {
     /// ([`UboLayout::load_of`]): the row is an array's (an element) or a
     /// matrix (a column).
     split: [u32; MAX_LAYOUT_ROWS / 32],
+    /// The loads of a vertex shader `nir_opt_load_store_vectorize` joins
+    /// ([`UboLayout::vectorized`]): (first word, words).
+    joined: [(u16, u16); MAX_JOINED],
+    njoined: usize,
 }
+
+/// The joined loads a vertex shader's layout names
+/// ([`UboLayout::vectorized`]); one past them is left apart, as before
+/// the pass was modelled.
+const MAX_JOINED: usize = 8;
 
 /// The rows one stage's layout holds: a mediump fragment shader's array
 /// takes one row an element ([`UboLayout::fs16`]) and the front end's
@@ -313,8 +322,14 @@ pub const MAX_LAYOUT_ROWS: usize = 256;
 pub const MAX_UBO_ROWS: usize = 32;
 
 impl UboLayout {
-    pub const NONE: UboLayout =
-        UboLayout { rows: [UboRow::NONE; MAX_LAYOUT_ROWS], n: 0, words: 0, split: [0; MAX_LAYOUT_ROWS / 32] };
+    pub const NONE: UboLayout = UboLayout {
+        rows: [UboRow::NONE; MAX_LAYOUT_ROWS],
+        n: 0,
+        words: 0,
+        split: [0; MAX_LAYOUT_ROWS / 32],
+        joined: [(0, 0); MAX_JOINED],
+        njoined: 0,
+    };
 
     /// The rows the layout holds, one per uniform or array element (its
     /// use of [`MAX_LAYOUT_ROWS`]).
@@ -416,7 +431,92 @@ impl UboLayout {
             });
             l.push_uniform(u, comps, halves)?;
         }
+        l.join_loads(vs);
         Ok(l)
+    }
+
+    /// `nir_opt_load_store_vectorize` on the uniform block's loads
+    /// (bifrost_nir.c:298-310, in `bi_optimize_late`, which runs on the
+    /// whole vertex shader before its IDVS variants are cut, :1277 then
+    /// :1302-1305): two loads of constant offsets with no hole between
+    /// them become one when the result is at most four components and its
+    /// bytes at most the low load's alignment (`mem_vectorize_cb`,
+    /// :182-199), the lowest first, each result tried with the next
+    /// (nir_opt_load_store_vectorize.c `vectorize_sorted_entries`). The
+    /// loads are those [`UboLayout::load_of`] names, each cut after its
+    /// last word the shader reads (`nir_opt_shrink_vectors` runs before,
+    /// bifrost_nir.c:286, and not again). An element's or a column's load
+    /// is aligned to 4 bytes and joins nothing; an fp16 row has no
+    /// reference and is left apart.
+    ///
+    /// What it changes is the push of a variant that reads part of a
+    /// joined load: the whole of it ([`super::fau::push_ubo`]). Measured:
+    /// deqp_varylink_va_multi3 and draw_multi, `u_coordScale` (word 0,
+    /// read by the position program) and `u_colorScale` (word 1, by the
+    /// varying program): the FAU is the viewport's six words, then both
+    /// words, then the position program's constants, and the varying
+    /// program reads `u3.w1`.
+    fn join_loads(&mut self, vs: &nir::Nir<'_>) {
+        const WORDS: usize = 512;
+        let mut read = [false; WORDS];
+        for &id in &vs.order[..vs.len] {
+            for v in vs.nodes[id as usize].src {
+                let nir::Val::Lane(n, c) = v else { continue };
+                let nd = vs.nodes[n as usize];
+                let nir::Kind::Uniform { dword, .. } = nd.kind else { continue };
+                if nd.bits != 32 {
+                    continue;
+                }
+                if let Some(r) = self.word(dword + u16::from(c)).and_then(|w| read.get_mut(usize::from(w))) {
+                    *r = true;
+                }
+            }
+        }
+        /* the loads in word order: (first word, words), None once joined
+         * into an earlier one */
+        let mut loads = [None::<(u16, u16)>; 64];
+        let mut nloads = 0;
+        let mut w = 0u16;
+        while usize::from(w) < WORDS.min(usize::from(self.words)) {
+            let Some((first, n)) = self.load_of(w) else { break };
+            let row = self.rows[..self.n].iter().position(|r| w >= r.word && w < r.word + r.words());
+            let apart = row.is_none_or(|k| self.rows[k].halves || self.split[k / 32] & (1 << (k % 32)) != 0);
+            let last = (first..first + n).rev().find(|&x| read.get(usize::from(x)) == Some(&true));
+            if let (false, Some(last), Some(l)) = (apart, last, loads.get_mut(nloads)) {
+                *l = Some((first, last + 1 - first));
+                nloads += 1;
+            }
+            w = (first + n).max(w + 1);
+        }
+        for i in 0..nloads {
+            let Some(mut low) = loads[i] else { continue };
+            let start = low;
+            for high in loads[i + 1..nloads].iter_mut() {
+                let Some(h) = *high else { continue };
+                if h.0 != low.0 + low.1 {
+                    break;
+                }
+                let words = low.1 + h.1;
+                let align = if low.0 == 0 { u32::MAX } else { 4 << low.0.trailing_zeros() };
+                if words > 4 || 4 * u32::from(words) > align {
+                    continue;
+                }
+                low.1 = words;
+                *high = None;
+            }
+            if low != start && self.njoined < MAX_JOINED {
+                self.joined[self.njoined] = low;
+                self.njoined += 1;
+            }
+        }
+    }
+
+    /// The load `nir_opt_load_store_vectorize` made of the loads around
+    /// Mesa's word `w` ([`UboLayout::join_loads`]): its first word and its
+    /// words, pushed whole. None: the word's load is its own
+    /// ([`UboLayout::load_of`]).
+    pub fn vectorized(&self, w: u16) -> Option<(u16, u16)> {
+        self.joined[..self.njoined].iter().copied().find(|j| w >= j.0 && w < j.0 + j.1)
     }
 
     /// The program reads the block from memory (a [`nir::Kind::UniformIdx`]

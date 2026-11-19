@@ -34,6 +34,19 @@ fn a_changed_shader_is_reported_with_a_word_diff() {
     assert!(d.iter().all(|m| !m.starts_with("vs.")), "{d:?}");
 }
 
+/// A vertex shader that writes gl_PointSize is compared by its position
+/// program without the store (the reference's draw is of triangles), with
+/// the secondary offset counted from that program and Mesa's FAU table.
+#[test]
+fn a_point_size_shader_is_compared_by_its_no_psiz_program() {
+    let r = mali_ref::Reference::load("deqp_varylink_va_multi3");
+    assert!(r.vs.contains("gl_PointSize"));
+    let pair = mali_ref::compile_pair(&r.vs, &r.fs).expect("the pair compiles");
+    assert!(pair.vs.no_psiz.is_some_and(|off| off > 0), "a no_psiz copy after the position program");
+    let d = mali_ref::differences(&r, &pair);
+    assert!(d.is_empty(), "{}", d.join("\n"));
+}
+
 #[test]
 fn a_refused_shape_stays_refused() {
     let vs = "attribute vec2 pos; uniform int n; void main(){ gl_Position = vec4(pos, float(n), 1.0); }";
