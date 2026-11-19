@@ -304,7 +304,7 @@ const TH: usize = 6;
 /// A TW x TH RGB10_A2 texture of `BASE` words, default unpack state.
 fn base_tex() -> Tex {
     let (mut tex, mut fb, mut pbo) = (0, 0, 0);
-    let words = vec![BASE; TW * TH];
+    let words = [BASE; TW * TH];
     // SAFETY: room for one name each; `words` holds TW x TH texels.
     unsafe {
         glGenTextures(1, &mut tex);
@@ -500,7 +500,7 @@ fn unpack_buffer_ending_at_the_last_texel() {
 #[test]
 fn unpack_buffer_too_small_is_invalid_and_leaves_the_texture() {
     let _g = context();
-    let base = want_bytes(&vec![BASE; TW * TH]);
+    let base = want_bytes(&[BASE; TW * TH]);
     for c in [
         PLAIN,
         Case { offset: 8, ..PLAIN },
