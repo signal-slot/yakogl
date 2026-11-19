@@ -211,6 +211,9 @@ scope_of_path() {
   tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
   src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
   driver/tools/pvrlab/*) echo gltest ;;
+  # the DK's U-Boot one-shot (scripts, mkimage step, runner, QEMU test): the
+  # tools rows that run its self-tests
+  driver/tools/uboot-mp2/*) echo tools ;;
   tools/yakogl-tools/*) echo toolscrate ;;
   tools/release/redaction-scan.allow) echo tests ;;
   tools/mali/*) echo mali ;;
@@ -3904,6 +3907,43 @@ step "tools   board.sh dry-run matrix and replays" no_board_env tools/board_self
 # No input key: it runs the runner on fake images every time, as the row above.
 scope tools
 step "tools   board-stm32mp2.sh dry-run matrix, env edits and replays" tools/board_stm32mp2_selftest.sh
+# The STM32MP257F-DK's U-Boot one-shot (driver/tools/uboot-mp2, docs/notes/
+# stm32mp257f-dk-uboot-boot.md), without a board: the scripts and their
+# mkimage step (selftest.sh; without U-Boot's mkimage on PATH it counts the
+# comparison as skipped, MP2_REQUIRE_MKIMAGE=1 fails it), the runner
+# (oneshot.sh) through oneshot_selftest.sh with its tools stubbed, the typed
+# console helper's and the environment editor's host self-tests. No input key:
+# each runs on synthetic input every time.
+scope tools
+step "tools   uboot-mp2 selftest.sh: one-shot scripts and mkimage step" driver/tools/uboot-mp2/selftest.sh
+scope tools
+step "tools   uboot-mp2 oneshot.sh dry-run matrix and replays" driver/tools/uboot-mp2/oneshot_selftest.sh
+scope tools
+step "tools   mp2_uboot_console.py: typed one-shot and phase scan" python3 -I tools/mp2_uboot_console.py --self-test
+scope tools
+step "tools   uboot_env.py on the DK's environment layout" python3 -I tools/uboot_env_mp2_selftest.py
+# The DK one-shot scripts in real U-Boot v2023.10 on QEMU (driver/tools/
+# uboot-mp2/qemu/run.sh). Optional: without qemu-system-aarch64, an aarch64
+# cross compiler or a host tool it prints "run.sh: skip: <why>" and exits 0;
+# the row turns that into a gap (a skip is not a pass), and a run that did not
+# print "run.sh: N ok, 0 failed" fails.
+mp2_qemu_row() {
+  local out status
+  out=$(driver/tools/uboot-mp2/qemu/run.sh 2>&1)
+  status=$?
+  printf '%s\n' "$out"
+  [ "$status" -eq 0 ] || return "$status"
+  if printf '%s\n' "$out" | grep -q '^run.sh: skip:'; then
+    : > "$ROWS/$ROW_SEQ.gap"
+    return 0
+  fi
+  printf '%s\n' "$out" | grep -Eq '^run.sh: [0-9]+ ok, 0 failed' || {
+    echo "uboot-mp2 qemu: no 'run.sh: N ok, 0 failed' line"
+    return 1
+  }
+}
+scope tools
+step "tools   uboot-mp2 qemu: DK one-shot scripts in U-Boot v2023.10 (skip is a gap)" mp2_qemu_row
 # The board lock every board runner takes (driver/tools/kexec-zephyr/
 # board_lock.sh), without a board: a second taker refuses at once and names
 # the holder's pid and script, and nanopc-t6.sh sources it with LOCK_WAIT 0
