@@ -76,12 +76,20 @@ fn refuse_srgb() {
 
 #[test]
 fn refuse_four_registers() {
-    // RGBA32UI takes four registers, the RGBA8 one more
+    // RGBA32UI takes four registers, the RGBA8 one more: two targets, the
+    // second spilled, which no end-of-tile program emits
     assert_eq!(draw_target_keys(&draw(&[GLES_SURF_RGBA8888, GLES_SURF_RGBA32UI])), Err(REFUSE_FOUR_REGISTERS));
-    // three two-register targets
+    // three targets, the last two spilled: none either
+    assert_eq!(
+        draw_mixed_key(&draw(&[GLES_SURF_R32UI, GLES_SURF_RGBA32UI, GLES_SURF_RG16UI])),
+        Err(REFUSE_FOUR_REGISTERS)
+    );
+    // three two-register targets: the third spills to a tile buffer
+    // (`eot3_tb`), so the list is kept, and with no integer target it is
+    // no mix (plan #325 item mrt-frameload)
     assert_eq!(
         draw_mixed_key(&draw(&[GLES_SURF_RGBA16F, GLES_SURF_RGBA16F, GLES_SURF_RGBA16F])),
-        Err(REFUSE_FOUR_REGISTERS)
+        Err(REFUSE_NOT_A_MIX)
     );
 }
 
