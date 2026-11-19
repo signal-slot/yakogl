@@ -25,6 +25,8 @@
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/printk.h>
 
+#include <stdbool.h>
+
 #include "stm32mp2.h"
 #include "stm32mp2_gpu.h"
 
@@ -58,6 +60,10 @@ static FUNC_NORETURN void refuse(const char *what, int32_t rc, const struct yd_m
 	       (unsigned int)e->b);
 	mp2_reset_to_linux("gc_power refused the GPU");
 }
+
+/* ffi/vivante.rs: the opt-in that releases the 0x3A8 secure-AHB soft reset in
+ * every later yd_gc_reset and yd_gc_hw_init, as ST's galcore 6.4.21 does. */
+void yd_gc_ahb_reset_release(bool on);
 
 int gc_board_power_on(mm_reg_t regs);
 int gc_board_power_on(mm_reg_t regs)
@@ -103,6 +109,14 @@ int gc_board_power_on(mm_reg_t regs)
 		       (unsigned int)id.model, (unsigned int)id.revision, MP2_GPU_MODEL,
 		       MP2_GPU_REV);
 		refuse("identity", -1, &none);
+	}
+
+	/* Before the driver's first reset (this runs from its init). */
+	yd_gc_ahb_reset_release(IS_ENABLED(CONFIG_YAKOGL_STM32MP2_GC_AHB_RESET_RELEASE));
+	if (IS_ENABLED(CONFIG_YAKOGL_STM32MP2_GC_AHB_RESET_RELEASE)) {
+		printk("gc_power: ahb-reset-release on\n");
+	} else {
+		printk("gc_power: ahb-reset-release off\n");
 	}
 	return 0;
 }

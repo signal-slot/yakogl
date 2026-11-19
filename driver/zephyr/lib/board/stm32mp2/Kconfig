@@ -56,6 +56,20 @@ config YAKOGL_STM32MP2_GPU
 	  the GPU's interrupt, SPI 183, once the driver has connected it (the
 	  "gc_irq: ..." line).
 
+config YAKOGL_STM32MP2_GC_AHB_RESET_RELEASE
+	bool "STM32MP257F-DK A35: release the GPU's 0x3A8 secure-AHB soft reset in reset and init"
+	default n
+	depends on YAKOGL_STM32MP2_GPU
+	help
+	  gc_board_power_on calls yd_gc_ahb_reset_release(true): every later
+	  yd_gc_reset and yd_gc_hw_init releases the secure-AHB soft reset at
+	  0x3A8, as ST's galcore 6.4.21 does. Off by default so that the first
+	  fence measures the unchanged path. Switch it on when the "gc diag"
+	  lines show 3a8 bit 0 = 1 after reset or init (a held bit 0 is the
+	  galcore-init-diff study's suspect 1 for a fence that does not
+	  retire). The line "gc_power: ahb-reset-release on|off" says which
+	  way the image is built.
+
 config YAKOGL_BOARD_STM32MP2
 	def_bool YAKOGL_BOARD && YAKOGL_STM32MP2
 	help
