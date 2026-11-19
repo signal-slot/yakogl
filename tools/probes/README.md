@@ -59,6 +59,12 @@ Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
   `nanopc_t6/t6_submit`. It is a gap without `ZEPHYR_WS` or the CSF firmware
   header (`driver/src/fw/mali_csffw_blob.h`, made by `driver/tools/mkmalifw.sh`,
   never committed).
+- `zephyr  stm32mp257f_dk <image> ...`: `stm32mp257f_dk/mp2_hello`,
+  `mp2_identify`, `mp2_gpu` and the samples `gc_fence` and `gc_clear`, each
+  `west build -b stm32mp257f_dk/stm32mp257fxx/a35` with `-DYAKOGL_WERROR=ON`.
+  `mp2_hello` is built with `CONFIG_YAKOGL_STM32MP2_WDOG=y` and must carry the
+  watchdog marker `gc_wdog_arm: armed` once. Without `ZEPHYR_WS` they are the
+  one gap naming it.
 - `test    rpi_5 fdt_walk host test`: `rpi_5/common/fdt/test/run.sh` (host cc,
   ASan/UBSan, no Zephyr). Ok only with `dtc` on PATH and `fdt_walk: N checks,
   0 failed` without a SKIPPED line; without `dtc` it is a gap naming it. If it
