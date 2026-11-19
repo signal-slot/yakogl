@@ -20,12 +20,13 @@
 //! so "the first and last dword reads resolve to the right bytes" is what
 //! the compiled program computes, not an address formula of the test's.
 //!
-//! The GL core still refuses a block over 6144 bytes on this build (the
-//! raise is item `ctx-limits`), so the 16384-byte cases compile the stage
-//! with the online compiler directly and a wrapper back end puts it, and a
-//! stage array of the compiled layout, into an ordinary GL draw before the
-//! PowerVR back end records it. The 256-byte case goes through GL alone
-//! (glBindBufferRange, the core's own flattened array).
+//! The 16384-byte cases compile the stage with the online compiler
+//! directly and a wrapper back end puts it, and a stage array of the
+//! compiled layout, into an ordinary GL draw before the PowerVR back end
+//! records it, so the draw carries the test's own stage array (a block of
+//! the raised limit is in range on this build since item `ctx-limits`). The
+//! 256-byte case goes through GL alone (glBindBufferRange, the core's own
+//! flattened array).
 //!
 //! The block is `vec4 a[255]; b[255]; c[255]; d[255]; e[4];` (4096 dwords;
 //! reflect.rs `fit_u8` caps an array at 255 elements). Block dword k holds
