@@ -171,10 +171,19 @@ pub fn push_ubo(
             w += 1;
             continue;
         }
-        let (first, n) = ubo.load_of(w as u16).ok_or(MaliError::Defect(super::Defect::FauOverflow))?;
+        /* a load the vectorizer joined is pushed whole, whichever of its
+         * words this variant reads (select.rs `UboLayout::join_loads`) */
+        let joined = ubo.vectorized(w as u16);
+        let (first, n) = match joined {
+            Some(j) => j,
+            None => ubo.load_of(w as u16).ok_or(MaliError::Defect(super::Defect::FauOverflow))?,
+        };
         let (first, n) = (usize::from(first), usize::from(n));
         let end = (first + n).min(WORDS);
-        let last = (w..end).rev().find(|&x| read[x]).unwrap_or(w);
+        let last = match joined {
+            Some(_) => end - 1,
+            None => (w..end).rev().find(|&x| read[x]).unwrap_or(w),
+        };
         if fau.available() < last + 1 - first {
             break;
         }

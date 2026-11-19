@@ -1301,7 +1301,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; void main(){ gl_FragColor = vec4(1.0e-6, 0.0, 0.0, 1.0); }", MaliError::Fp16Inexact),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.xzyw; }", MaliError::ColourForm),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.yxzw; }", MaliError::FsOperandForm),
-        (FS, "precision mediump float; varying vec2 v; void main(){ gl_FragColor = vec4(1.0, v, 1.0); }", MaliError::ColourPair),
+        /* a constant then a lane as an operand (as a word of the colour it
+         * is the `MKVEC`, deqp_colourpair_ck_lane_highpcolour) */
+        (FS, "precision mediump float; varying vec4 c; varying float d; void main(){ gl_FragColor = c * vec4(0.25, d, 0.5, d); }", MaliError::ColourPair),
         /* a pair Mesa makes of a discard's lane and a colour lane, y low
          * (fsload_disc_col.expect.json) */
         (
@@ -1310,7 +1312,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
              void main(){ if (a.y > 0.5) discard; gl_FragColor = vec4(a.x, 0.5, 0.0, 1.0); }",
             MaliError::FsVaryingLoad,
         ),
-        (FS, "precision mediump float; varying float v; void main(){ gl_FragColor = vec4(v, 0.0, 0.0, 1.0); }", MaliError::ColourZeroHalf),
+        /* a lane and 0.0 as an operand (as a word of the colour it is the
+         * `U16_TO_U32`, sel_vc_zero) */
+        (FS, "precision mediump float; varying vec4 c; varying float d; void main(){ gl_FragColor = c * vec4(d, 0.0, 0.5, 0.5); }", MaliError::ColourZeroHalf),
         /* the S4 rows no reference draws: `!=` on floats and on integers;
          * the clamp forms Mesa's late rules make; a negated float(bool) in
          * a product */
@@ -1394,9 +1398,10 @@ fn gl_frag_data_past_0_is_the_front_end_s_verdict() {
     }
 }
 
-/// The ColourZeroHalf refusal is Mesa's U16_TO_U32, measured: the shim's
-/// program for the same pair (sel_vc_zero) has it where a MKVEC.v2i16
-/// stands for any other constant, and its vertex shader is byte-equal.
+/// A varying lane and 0.0 as a word of the colour is Mesa's U16_TO_U32,
+/// measured: the shim's program for the pair (sel_vc_zero) has it where a
+/// MKVEC.v2i16 stands for any other constant; the linked pair is the
+/// shim's to the byte, and so is the vertex shader alone.
 #[test]
 fn a_varying_lane_paired_with_zero_is_mesa_s_u16_to_u32() {
     const VS_SRC: &str = include_str!("../../../../tools/mali/testdata/sel_vc_zero.vert");
@@ -1405,7 +1410,7 @@ fn a_varying_lane_paired_with_zero_is_mesa_s_u16_to_u32() {
     let fs = region(JSON, "fs.fragment").expect("fs.fragment");
     let ops: Vec<_> = fs.words.iter().map(|w| isa::decode(*w).expect("decodes").op.info().mnemonic).collect();
     assert!(ops.contains(&"U16_TO_U32") && !ops.contains(&"MKVEC.v2i16"), "{ops:?}");
-    assert_eq!(gap(SHC_STAGE_FRAGMENT, FS_SRC), MaliError::ColourZeroHalf);
+    check_linked(VS_SRC, FS_SRC, JSON);
     let v = compile(SHC_STAGE_VERTEX, VS_SRC).expect("the vertex shader compiles");
     let (pos, var) = vs_regions(&v);
     assert_words("sel_vc_zero vs.position", &pos, &region(JSON, "vs.position").unwrap().words);
@@ -4006,11 +4011,11 @@ fn the_uniform_array_population_is_byte_equal_to_mesa_26_2_1() {
 /// (uniarray_vs.expect.json; no `--uniform-values`: gl_ref.py sets no int
 /// uniform, so every pushed uniform word is 0). The vertex shader is built
 /// for the fragment shader's read as the link leaves it (`v_color.x`):
-/// the linked fragment shader itself is refused at its colour pair of
-/// that lane and 0.0 (`U16_TO_U32`, [`MaliError::ColourZeroHalf`]; Mesa
-/// also reads the lane flat, `LD_VAR_BUF_IMM.f32 ... .src_flat32 ...,
-/// 0x0`, the promotion `a_vertex_cube_look_up_is_byte_equal_to_mesa_26_2_1`
-/// pins), neither of which is the array's.
+/// the linked fragment shader's colour pair of that lane and 0.0 is
+/// `U16_TO_U32`, the lane read flat (`LD_VAR_BUF_IMM.f32 ... .src_flat32
+/// ..., 0x0`, the promotion
+/// `a_vertex_cube_look_up_is_byte_equal_to_mesa_26_2_1` pins): the shim's
+/// fragment program to the byte.
 #[test]
 fn a_vertex_float_array_read_at_an_int_uniform_is_byte_equal_to_mesa_26_2_1() {
     let (vs, fs, json) = (td!("uniarray_vs.vert"), td!("uniarray_vs.frag"), td!("uniarray_vs.expect.json"));
@@ -4048,9 +4053,12 @@ fn a_vertex_float_array_read_at_an_int_uniform_is_byte_equal_to_mesa_26_2_1() {
         .expect("the scratch arena is free")
         .expect("the vertex shader's constant lanes")
         .unwrap_or_default();
-    let f = store::with_scratch(|s| super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|_| ()))
-        .expect("the scratch arena is free");
-    assert!(matches!(f, Err(CompileError::BackEnd(codegen::BackEndError::Mali(MaliError::ColourZeroHalf)))), "{f:?}");
+    let f = store::with_scratch(|s| {
+        super::compile_fs_for_vs(fs.as_bytes(), consts, s, store::keep()).map(|(sh, _)| stage_of(&sh))
+    })
+    .expect("the scratch arena is free")
+    .expect("the linked fragment shader compiles");
+    assert_words("fs.fragment", &trim(&f.code), &region(json, "fs.fragment").expect("fs.fragment").words);
 }
 
 /// Case 108 A at highp (uniarray_highp, plan #153 uniarray-int): Mesa keeps

@@ -52,13 +52,14 @@ fn gm2_fma_8_reflect_matches_its_reference() {
     mali_ref::assert_matches_unset("gm2_fma_8");
 }
 
-/// `smoothstep(0.0, 1.0, k)` and `mod(k, t)` of uniforms pass the vertex
-/// walk and stop at the varying link (the four lanes of `vec4(..)` one
-/// value, which Mesa's link merges): another family's refusal.
+/// `smoothstep(0.0, 1.0, k)` and `mod(k, t)` of uniforms: the four lanes
+/// of `vec4(..)` are one uniform value, which Mesa's link merges into one
+/// flat lane (plan #377 lower-varylink, `docs/notes/mali-deqp-varylink.md`
+/// shape E2); both pairs are their references to the byte.
 #[test]
-fn gm2_fma_3_and_6_stop_at_the_varying_link() {
+fn gm2_fma_3_and_6_match_their_references() {
     for name in ["gm2_fma_3", "gm2_fma_6"] {
-        mali_ref::assert_refused_ref(name, "two varying lanes of equal value");
+        mali_ref::assert_matches_unset(name);
     }
 }
 

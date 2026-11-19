@@ -760,3 +760,140 @@ differs.
 7. **Sizing.** E1, E2 and C are one change (origin tag plus one placement
    function) and one session. P is independent and can be its own commit.
    U is small and may go to lower-misc.
+
+## Lowering (item lower-varylink, 2026-11-19)
+
+Done at 80403eba. The spike's patch was not in the clone, so the lowering
+was derived again from this note and the references. Nothing here was run
+on a board.
+
+### The rule: a lane is as divergent, and as constant, as its definition
+
+Mesa's link works on vectors (`nir_lower_alu_width` runs in the back end,
+after it), and both of its questions are asked of a **definition**, not of
+a lane:
+
+- `nir_vertex_divergence_analysis` marks a definition divergent or not.
+  Every component of a vector operation that reads an attribute in one
+  lane is divergent, a lane of uniforms alone or a constant included.
+- `nir_scalar_resolved` looks through `mov` and `vec`, and stops at an
+  operation. A component of a vector operation is its own key for
+  `deduplicate_outputs`, and it is no constant for
+  `propagate_uniform_expressions`, whatever the back end folds it to
+  later.
+
+This one reading gives E2 and C, with no placement function. The study's
+step 6 (a convergent lane fills the unused components of an interpolated
+vec4) is not what the references show: `va_multi3`'s `z` and
+`draw_multi`'s `z` and `w` are lanes of a divergent vector operation, so
+they are interpolated from the start. The reading is of Mesa's source
+(`nir_opt_varyings.c`, `nir_divergence_analysis.c`); the link NIR was not
+printed. It is held by the references below, which is all that tests it.
+
+In the code (`nir.rs` `walk`):
+
+- **`vec_origins`** gives every lane of an IR value an origin: 0 for a
+  scalar of its own, or `1 + 4 * value + lane` for a component of a vector
+  operation. The origin follows the lane through swizzles, locals and the
+  output store (`origins`, `local_origins`, `varying_origins`). An
+  operation of one lane, or one whose lanes are all constants (folded), has
+  no origin. `a * 1.0` and `a + 0.0`, the constant the same in every lane,
+  pass `a`'s origins through (nir_opt_algebraic matches a vector constant
+  lane by lane): `varymerge_equal`'s `u * vec3(1.0)` and
+  `gm2_arithconst_3`'s `diffuse * Albedo.rgb` of ones still merge.
+- **`divergent`**: the varying lanes whose origin is a vector operation
+  with a lane that reads an attribute. Such a lane is interpolated: no
+  `push_flat`, no `ffma(x, 0.0, x)`, and it counts as `smooth` in `build`.
+- **`kept` / `kept_flat`**: a constant lane with an origin is stored by the
+  vertex shader and not propagated (`kept`, the mask lower-intval-2 made
+  for the mediump case). When its vector operation is of uniforms alone it
+  is stored flat (`kept_flat`, with `push_flat` so that the fragment shader
+  loads the slot `.src_flat32`).
+- **`lane_at` and `seen`** key on (origin, value). Convergent lanes are let
+  into the equal classes (Mesa's key ignores divergence), so lanes of one
+  uniform value merge; two components of one vector operation never do,
+  equal or not.
+- The inf-to-NaN conversion of a flat lane is made once per value
+  (`nir_opt_cse`): `draw_single` stores one `FMA.f32 r0, r0^, 0x0, r0^`
+  three times.
+- The origin can only change which of two right programs is built: a lane
+  is merged only with a lane of the same value, and a kept constant is
+  stored where it would have been propagated. Both stages read the same
+  `VaryingConsts`, so they cannot disagree on a slot.
+
+A shader with a late fold (`vs_fmul`, the `AttributeNumbering` family)
+keeps its own rule for constant lanes in both of its walks: the new
+`kept` rule is off for it. Otherwise dEQP `random.basic_expression.vertex.96`
+would compile, which is that family's to decide
+(`a_late_fold_is_refused_only_where_the_attribute_numbering_depends_on_it`).
+
+### Two things the references needed beside the link
+
+- **Mesa joins adjacent uniform loads** (`nir_opt_load_store_vectorize`,
+  bifrost_nir.c:298-310, in `bi_optimize_late`, which runs on the whole
+  vertex shader before the IDVS variants are cut). `u_coordScale` (word 0,
+  read by the position program) and `u_colorScale` (word 1, read by the
+  varying program) are one two-word load, and each variant that reads a
+  word of it pushes both. The FAU is the viewport's six words, both
+  uniform words, the position program's constants, then the varying
+  program's own copy of both words: 14 words with the pad, and the varying
+  program reads `u3.w1`. Modelled in `select.rs` `UboLayout::join_loads`
+  and `fau.rs` `push_ubo`: 32-bit rows of whole uniforms only; an
+  element's or a column's load is aligned to 4 bytes and joins nothing; an
+  fp16 row is left apart (no reference). This is the IDVS_PUSH_RANGE cause
+  of `tests/mali_fau_page.rs`: `gm2_faupage_4` is byte-equal now.
+- **The constant-up rule on a vector with a constant lane.**
+  `vec4(u * color, 1.0) * 0.5` is `fmul(fmul(u, a), 0.5)` in each lane
+  once the back end has scalarised it, so `vs_fmul_const_up` now runs for
+  every lane but one whose zero only the back end folds (`draw_multi`:
+  `u * 0.5` once, then each lane's `FMA`).
+
+`tests/mali_ref` compares a shader that writes gl_PointSize by its
+position program without the store (`MaliShader::no_psiz_offset`), with
+the secondary offset counted from that program: gl_ref.py draws triangles.
+
+### Shape P
+
+The walk's lane loop gives an undefined lane for any lane-wise operation
+with an undefined operand lane (the `Fmul` arm's rule, now for every arm
+but the reductions). No lane past an operand's is computed. The
+`PositionLane` variant and its text are unchanged: `alu_sized` still
+raises it for an undefined operand that reaches it another way, and the
+rename would move section M's rows.
+
+### Results
+
+| reference | state |
+|---|---|
+| `deqp_varylink_swz_xx` (E1) | byte-equal (already) |
+| `deqp_varylink_draw_single` (E2) | byte-equal |
+| `varymerge_equal` (E2, vertex_arrays arm) | byte-equal, now tested |
+| `deqp_varylink_va_multi3` (C) | byte-equal |
+| `deqp_varylink_draw_multi` (C) | byte-equal |
+| `deqp_varylink_op_abs_vec2` (P) | compiles; the fragment program is Mesa's, the vertex program is fp32 where Mesa's is fp16 (mixprec's vertex side). Pinned as a difference |
+| `deqp_varylink_discard` (E1) | refused by the fragment shader's mediump discard (another family) |
+| `deqp_varylink_unwritten` (U) | refused, `a varying lane left unwritten`: left to lower-misc |
+| `varymerge_structsampler` (C, struct arm) | refused, `a varying lane computed from no attribute`: the texel's lanes beside a uniform that is a scalar of its own. This is the study's step 6 proper, which no dEQP row of the measure needs |
+
+What moved beside them:
+
+- `tools/mali/corpus-verdicts.txt`: `va_vec2.vert` is `ok`.
+  `vtex_struct_sampler{,_array}.vert` did not move.
+- glmark2: `ideas` vertex shader a09e was the fixture's one "equal lanes"
+  row (a row made after the study). Its text (`gm2_cf_ifuni_vs`) and #367's
+  reduced shape (`gm2_varylink_dup_uniform`) are byte-equal, and so are
+  `gm2_fma_3` and `gm2_fma_6`. The fixture row is `ok`, edited by hand:
+  the glmark2 corpus could not be generated in this session.
+- `sel_vc_zero` and `uniarray_vs`'s fragment program are byte-equal (the
+  colourpair step, `mali-deqp-colourpair.md`).
+
+### Left
+
+- U, and the convergent scalar beside interpolated lanes
+  (`varymerge_structsampler`): `flat && smooth` is still refused on both
+  sides.
+- The flat slot's descriptor format (`RGBA32UI`) is still not produced by
+  the frame. `draw_single`'s four flat lanes are now drawn, so the board
+  session is the first to show whether `.src_flat32` reads a float
+  descriptor correctly.
+- The vertex shader's fp16 arithmetic (`op_abs_vec2`): mixprec.

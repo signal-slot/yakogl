@@ -7579,6 +7579,10 @@ enum Leaf {
         k: u8,
         c: u8,
         half: u16,
+        /// The constant is the low half: `MKVEC.v2i16 <half>.h0, x.h0`
+        /// (deqp_colourpair_ck_lane_highpcolour's `MKVEC.v2i16 r1, 0x0.h0,
+        /// r0.h0`).
+        first: bool,
     },
     /// Lane `c` of load `k` and lane `d` of load `e`, not one aligned pair,
     /// each converted alone, as a word: `MKVEC.v2i16 x.h0, y.h0`
@@ -8093,12 +8097,16 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
             }
             (Some((v, i)), None, _, Val::Const(c)) => {
                 let half = f16(c)?;
-                /* `MKVEC.v2i16 x, #0` is `U16_TO_U32 x` (bi_lower_mkvec_swz.c:256-257) */
-                if half == 0 {
+                /* `MKVEC.v2i16 x, #0` is `U16_TO_U32 x` (bi_lower_mkvec_swz.c:256-257,
+                 * opt.rs `lower_mkvec_swz`), drawn as a word of the colour
+                 * (deqp_colourpair_default_attrib's `U16_TO_U32 r0, r0.h0`);
+                 * as an operation's operand it has no reference */
+                let word = |c: [Val; 4]| (a, b) == (c[0], c[1]) || (a, b) == (c[2], c[3]);
+                if half == 0 && !f.colour.is_some_and(word) {
                     return Err(MaliError::ColourZeroHalf);
                 }
                 let (k, c) = index(f, v, i)?;
-                P::Leaf(Leaf::Mk { k, c, half })
+                P::Leaf(Leaf::Mk { k, c, half, first: false })
             }
             (None, None, Val::Const(x), Val::Const(y)) => P::Leaf(Leaf::Const(f16(x)? as u32 | (f16(y)? as u32) << 16)),
             /* a word of the fp16 uniform block (Mesa's fp16 block, two
@@ -8123,7 +8131,20 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                     P::Leaf(Leaf::Uniform { base, comp: (w - base) as u8, swz })
                 }
                 (Some(_), ..) | (_, Some(_), ..) => return Err(MaliError::FsUniform),
-                (None, None, Val::Const(_), _) if f.input_lane(b).is_some() => return Err(MaliError::ColourPair),
+                /* a constant, then a load's lane: the constant is the low
+                 * half (deqp_colourpair_ck_lane_highpcolour), as a word of
+                 * the colour; as an operation's operand it has no form here
+                 * ([`conversion_order`]) */
+                (None, None, Val::Const(c), _) if f.input_lane(b).is_some() => {
+                    let word = |c: [Val; 4]| (a, b) == (c[0], c[1]) || (a, b) == (c[2], c[3]);
+                    if !f.colour.is_some_and(word) {
+                        return Err(MaliError::ColourPair);
+                    }
+                    let half = f16(c)?;
+                    let Some((v, i)) = f.input_lane(b) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                    let (k, c) = index(f, v, i)?;
+                    P::Leaf(Leaf::Mk { k, c, half, first: true })
+                }
                 _ => return Err(MaliError::ColourForm),
             },
         },
@@ -8176,6 +8197,13 @@ fn conversion_order(
     for (i, x) in pr.nodes[..pr.n].iter().enumerate() {
         if roots.contains(&(i as u8)) {
             continue;
+        }
+        /* a constant then a lane as an operation's operand: Mesa computes
+         * the lane alone and joins the halves after
+         * (deqp_colourpair_rnd_fs_ck_madd, _zk_tree, _ck_product), a form
+         * not built here; as a colour word it is the `MKVEC` */
+        if matches!(x, P::Leaf(Leaf::Mk { first: true, .. })) {
+            return Err(MaliError::ColourPair);
         }
         for (k, c) in lanes_of(x).into_iter().flatten() {
             tree[k as usize] |= 1 << c;
@@ -9629,6 +9657,11 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let at = match (alpha, pr.nodes[roots[1] as usize]) {
         (None, P::Leaf(Leaf::Lanes { e, d, .. })) => conv_lane(&lv, e, d)?,
         (Some(h), _) => Src::of(Idx::Const(h as u32)).swz(Swz::H00),
+        /* a word made after ATEST of the alpha's own conversion: a lane in
+         * both halves, or a constant then the lane
+         * (deqp_colourpair_rnd_fs_ck_dup's `ATEST .. r0.h0`, then
+         * `MKVEC.v2i16` and `IADD.v2u16 r2, r0^.h00`) */
+        (None, P::Leaf(Leaf::Splat { k, c } | Leaf::Mk { k, c, first: true, .. })) => conv_lane(&lv, k, c)?,
         (None, P::Leaf(Leaf::Uniform { base, comp, swz })) => {
             Src::of(Idx::Ubo { base, comp }).swz(if swz == Swz::H00 { Swz::H00 } else { Swz::H11 })
         }
@@ -9655,7 +9688,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         }
         let w = &mut words[k];
         *w = match pr.nodes[roots[k] as usize] {
-            P::Leaf(Leaf::Mk { k: v, c, half }) => Src::ssa(mkvec(p, &lv, v, c, half, &mut rows)?),
+            P::Leaf(Leaf::Mk { k: v, c, half, first }) => Src::ssa(mkvec(p, &lv, v, c, half, first, &mut rows)?),
             P::Leaf(Leaf::Lanes { k: v, c, e, d }) => Src::ssa(mkvec_lanes(p, &lv, [(v, c), (e, d)], &mut rows)?),
             /* one lane in both halves: `MKVEC.v2i16 x.h0, x.h0`, which
              * opt.rs `lower_mkvec_swz` makes `IADD.v2u16 r1, r0.h00, 0x0`
@@ -12348,10 +12381,21 @@ fn conv_lane(lv: &Leaves, k: u8, c: u8) -> Result<Src, MaliError> {
     Ok(Src::ssa(conv_of(lv, k, c)?).swz(if hi { Swz::H11 } else { Swz::H00 }))
 }
 
-/// `vec2` of a converted lane and a constant half (`MKVEC.v2i16`).
-fn mkvec(p: &mut Prog<'_>, lv: &Leaves, k: u8, c: u8, half: u16, rows: &mut u128) -> Result<u16, MaliError> {
+/// `vec2` of a converted lane and a constant half (`MKVEC.v2i16`), the
+/// constant the low half when `first`.
+fn mkvec(
+    p: &mut Prog<'_>,
+    lv: &Leaves,
+    k: u8,
+    c: u8,
+    half: u16,
+    first: bool,
+    rows: &mut u128,
+) -> Result<u16, MaliError> {
     let x = conv_lane(lv, k, c)?;
-    row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &[x, Src::of(Idx::Const(half as u32)).swz(Swz::H00)])
+    let konst = Src::of(Idx::Const(half as u32)).swz(Swz::H00);
+    let s = if first { [konst, x] } else { [x, konst] };
+    row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)
 }
 
 /// `vec2` of two converted lanes (load, lane) (`MKVEC.v2i16`).
@@ -12443,7 +12487,9 @@ fn op(
     let mut s = [Src::NULL; 3];
     for (k, y) in srcs.iter().enumerate().take(a.arity()) {
         match pr.nodes[*y as usize] {
-            P::Leaf(Leaf::Mk { k: v, c, half }) => val[*y as usize] = Some(Src::ssa(mkvec(p, lv, v, c, half, rows)?)),
+            P::Leaf(Leaf::Mk { k: v, c, half, first }) => {
+                val[*y as usize] = Some(Src::ssa(mkvec(p, lv, v, c, half, first, rows)?))
+            }
             P::Leaf(Leaf::Lanes { k: v, c, e, d }) => {
                 val[*y as usize] = Some(Src::ssa(mkvec_lanes(p, lv, [(v, c), (e, d)], rows)?))
             }

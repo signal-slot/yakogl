@@ -94,6 +94,9 @@ pub struct Stage {
     pub preload: u64,
     /// (offset in bytes, preload, work_reg_count) of the varying program.
     pub secondary: Option<(u32, u64, u8)>,
+    /// The offset in bytes of the position program without the point size
+    /// store (`MaliShader::no_psiz_offset`), which a draw of triangles runs.
+    pub no_psiz: Option<u32>,
     pub fau: Vec<FauWord>,
     /// The uniform rows (name, first dword, dwords).
     pub uniforms: Vec<(String, u16, u16)>,
@@ -155,6 +158,7 @@ fn stage_of(sh: &ShcShader) -> Stage {
         work_reg_count: m.work_reg_count,
         preload: m.preload,
         secondary: m.secondary.map(|s| (s.offset, s.preload, s.work_reg_count)),
+        no_psiz: m.no_psiz_offset,
         fau: m.fau.to_vec(),
         uniforms,
     }
@@ -400,14 +404,16 @@ pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
     let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
     let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 
-    /* the vertex stage: position, then varying (empty when none) */
-    let (pos, var) = match pair.vs.secondary {
-        Some((off, ..)) => {
-            let at = off as usize / 8;
-            (trim(&pair.vs.code[..at]), trim(&pair.vs.code[at..]))
-        }
-        None => (trim(&pair.vs.code), Vec::new()),
-    };
+    /* the vertex stage: position, then varying (empty when none). A
+     * shader that writes gl_PointSize has two position programs, with the
+     * store and, after it, without (`no_psiz`): gl_ref.py draws triangles,
+     * so the reference's `vs.position` is the second (deqp_varylink_draw_*,
+     * va_multi3), and its `secondary_offset` counts from that program */
+    let end = pair.vs.secondary.map_or(pair.vs.code.len(), |(off, ..)| off as usize / 8);
+    let start = pair.vs.no_psiz.map_or(0, |off| off as usize / 8);
+    let with_psiz = trim(&pair.vs.code[..if start == 0 { end } else { start }]);
+    let pos = trim(&pair.vs.code[start..end]);
+    let var = trim(&pair.vs.code[end..]);
     let rp = region(&r.json, "vs.position").expect("the reference has vs.position");
     d.extend(word_diff("vs.position", &pos, &rp.words));
     facts(&mut d, "vs.position", &rp, pair.vs.work_reg_count, pair.vs.preload, &pair.vs.fau, &uv_v);
@@ -417,6 +423,7 @@ pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
             match pair.vs.secondary {
                 Some((off, preload, wrc)) => {
                     facts(&mut d, "vs.varying", &rv, wrc, preload, &pair.vs.fau, &uv_v);
+                    let off = off - (8 * start) as u32;
                     if Some(off) != secondary_offset(&r.json) {
                         d.push(format!("secondary_offset ours {off}, reference {:?}", secondary_offset(&r.json)));
                     }
@@ -433,7 +440,9 @@ pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
             }
         }
     }
-    let want = padded(pos.len()) + if var.is_empty() { 0 } else { padded(var.len()) };
+    let want = if start == 0 { 0 } else { padded(with_psiz.len()) }
+        + padded(pos.len())
+        + if var.is_empty() { 0 } else { padded(var.len()) };
     if pair.vs.code.len() != want && rp.words == pos {
         d.push(format!("vs: {} words with padding, expected {want}", pair.vs.code.len()));
     }

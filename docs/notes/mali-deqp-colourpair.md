@@ -267,3 +267,59 @@ of the two rebuilt cases would confirm them byte for byte.
   `tools/mali/deqp-host-measure.sh` run. The 23 `shaders.random.*` cases of
   the two refusals stay unreferenced until a reference is made from that
   `.qpa`.
+
+## Lowering (item lower-varylink, step B, 2026-11-19)
+
+Done at 80403eba, after the varying link rules of
+`mali-deqp-varylink.md` ("Lowering"). Nothing was run on a board.
+`tests/mali_deqp_colourpair.rs` holds the result: 12 references are
+byte-equal in every region it compares, 2 differ in the vertex program
+only (fp16, as before), 5 are refused.
+
+### What was lowered
+
+1. **The link rule** (`nir.rs`, the varylink note's origins): a vertex
+   lane that is a component of a vector operation is stored, a constant
+   lane included, and is flat only when no lane of the operation reads an
+   attribute. `rnd_vs_uniform_flat` and `rnd_vs_vecop_fs_uniform` are
+   byte-equal from this alone: their fragment shaders have no colour pair
+   once the link keeps those lanes. This is the same rule as
+   lower-intval-2's `kept` lanes for a mediump `color`, without the
+   precision: the "one predicate" the varylink map asked for is `kept`.
+2. **A constant then a load's lane, as a word of the colour**
+   (`nir_fs.rs` `vectorise`, `Leaf::Mk { first: true }`):
+   `MKVEC.v2i16 <constant>.h0, lane.h0`, the constant the low half
+   (`ck_lane_highpcolour`'s `MKVEC.v2i16 r1, 0x0.h0, r0.h0`). Byte-equal:
+   `ck_lane_highpcolour`, `rnd_fs_ck_dup`, `rnd_fs_ck_lz`,
+   `rnd_fs_kword_ck`, `rnd_fs_zword_zk`, `rnd_vs_ck_lz`, `rnd_vs_zk_lz`.
+3. **A load's lane and 0.0, as a word of the colour** (`vectorise`):
+   `MKVEC.v2i16 x, #0`, which `opt.rs` `lower_mkvec_swz` already makes
+   `U16_TO_U32 x`. Byte-equal: `default_attrib`, and the older
+   `sel_vc_zero` and `uniarray_vs` fragment programs, whose unit tests
+   pinned the refusal and now compare the words.
+4. **ATEST's alpha** when the second word is made after it from the
+   alpha's own conversion (a lane in both halves, or a constant then the
+   lane): the conversion's own half, `ATEST .. r0.h0` (`rnd_fs_ck_dup`),
+   where the code read the high half of a word that did not exist yet.
+
+### What stays refused, and why
+
+| reference | refusal | why it was left |
+|---|---|---|
+| `rnd_fs_ck_madd`, `rnd_fs_ck_product`, `rnd_fs_zk_tree` | `a colour pair of a constant then a varying lane` | the pair is an **operand** of an operation. Mesa computes the lane alone and joins the halves afterwards (`rnd_fs_zk_tree`: `FADD.v2f16 r1, r2^.neg.h00`, then `MKVEC.v2i16 r1, 0x0.h0, r1^.h0`), and folds a lane's `0 * x`. Building the pair as `MKVEC` and running the two-lane operation gives a right program with other words, so the operand form is refused at the same site (`vectorise` checks that the pair is one of the colour's two words) |
+| `rnd_fs_uniform_tz_ck` | `a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32)` | a **computed** lane and 0.0 (`lane_word`, the other site), which only `vec_tree` draws |
+| `rnd_vs_vecop_kept` | the partial-varying link (not the code generator's text) | #367's link rule; its colour pair comes after |
+| `ck_lane_mediump`, `rnd_vs_mediump_kept` | compile; the vertex program differs | mixprec's vertex side (fp16 sums) |
+
+A lane and 0.0, or a constant then a lane, as an operand of an operation
+keeps its refusal text, so section M's rows for those shapes do not move
+to another family.
+
+### For the item that takes the rest
+
+- The operand form needs Mesa's split: the constant lane's operation
+  folded (or computed alone), the varying lane's computed at one lane, and
+  the `MKVEC` of the two results. `rnd_fs_ck_madd`, `rnd_fs_ck_product`
+  and `rnd_fs_zk_tree` are its references.
+- `lane_word`'s refusal (`rnd_fs_uniform_tz_ck`) is a classifier edit of
+  the same kind as item 3, for a tree instead of a load.
