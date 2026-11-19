@@ -54,7 +54,7 @@
 20 ideas:speed=duration vs bf4b: ok
 20 ideas:speed=duration vs c236: ok
 20 ideas:speed=duration vs c265: ok
-21 jellyfish fs 22fc: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet
+21 jellyfish fs 22fc: ok
 21 jellyfish fs 8ee5: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet
 21 jellyfish vs 08a2: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet
 21 jellyfish vs 14ac: ok
@@ -90,8 +90,8 @@
 29 function:fragment-steps=5:fragment-complexity=medium fs 849c: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
 29 function:fragment-steps=5:fragment-complexity=medium vs 0162: ok
 30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false fs e016: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false vs 3cb0: Valhall: a loop in a vertex shader is not lowered yet
+30 loop:vertex-steps=5:fragment-steps=5:fragment-loop=false vs 3cb0: ok
 31 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false fs c7ea: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet
-31 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false vs 3cb0: Valhall: a loop in a vertex shader is not lowered yet
+31 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=false vs 3cb0: ok
 32 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true fs 3678: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
-32 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true vs 3cb0: Valhall: a loop in a vertex shader is not lowered yet
+32 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true vs 3cb0: ok

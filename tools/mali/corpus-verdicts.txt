@@ -60,14 +60,14 @@ tools/shaders/es100/int_div.frag: Valhall: arithmetic other than +, -, * and a d
 tools/shaders/es100/intlit.frag: ok
 tools/shaders/es100/ioswap.vert: ok
 tools/shaders/es100/light_amount.frag: ok
-tools/shaders/es100/light_amount_0_16.vert: Valhall: a loop in a vertex shader is not lowered yet
-tools/shaders/es100/light_amount_2_2.vert: Valhall: a loop in a vertex shader is not lowered yet
+tools/shaders/es100/light_amount_0_16.vert: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
+tools/shaders/es100/light_amount_2_2.vert: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet
 tools/shaders/es100/loop_full.frag: Valhall: an integer or boolean value is not lowered yet
 tools/shaders/es100/loop_nested.dowhile.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/loop_nested.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/loop_nested.vert: Valhall: a loop in a vertex shader is not lowered yet
 tools/shaders/es100/loop_nested.while.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
-tools/shaders/es100/loop_uniform.dowhile.vert: Valhall: a loop in a vertex shader is not lowered yet
+tools/shaders/es100/loop_uniform.dowhile.vert: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet
 tools/shaders/es100/loop_uniform.frag: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet
 tools/shaders/es100/loopcarry.frag: ok
 tools/shaders/es100/matattr.frag: ok

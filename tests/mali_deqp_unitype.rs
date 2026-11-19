@@ -28,9 +28,11 @@ const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own l
 /// its colour lane beside 1.0. Mesa's program is `vec16.rs`'s chunks of the
 /// columns plus `v_coords`, a varying that route does not read.
 const FS_OPERAND: &str = "a fragment shader operand of a form or in a place no reference draws";
-/// The `Light` array's loop stands before the array (lower-loops, then
+/// The `Light` array's loop: unrolled since plan #367 lower-int-loops (the
+/// vertex walk unrolls a counted loop), then a mediump uniform of the
+/// light, the vertex fp16 uniform form no reference draws (then
 /// lower-uniarray).
-const VS_LOOP: &str = "a loop in a vertex shader";
+const VS_UNIFORM16: &str = "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,";
 
 /// The references the lowering makes byte-equal (`vsstruct_partial` and
 /// `vsstruct_rip` since plan #377's lower-intval-1 took the `isOk` result in
@@ -78,7 +80,7 @@ const DIFFERS: &[&str] = &["vsmat3_lowp", "vsapi_mat2", "vsapi_struct", "vsstruc
 /// Every refused reference with its refusal, without the `Valhall: `
 /// prefix and the ` is not lowered yet` suffix.
 const REFUSED: &[(&str, &str)] = &[
-    ("vsmat3_light", VS_LOOP),
+    ("vsmat3_light", VS_UNIFORM16),
     ("fsmat3_mediump", FS_OPERAND),
     ("fsivec4", FRAGCOLOR_LANE),
     ("fsmulti", FRAGCOLOR_LANE),
@@ -131,7 +133,7 @@ fn vsmat3_highp() {
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader (the Light array's), lowered by lower-loops then lower-uniarray"]
+#[ignore = "refused: a vertex shader uniform that is not highp ... (after the Light array's loop, unrolled since plan #367 lower-int-loops), then lower-uniarray"]
 fn vsmat3_light() {
     mali_ref::assert_matches("deqp_unitype_vsmat3_light");
 }

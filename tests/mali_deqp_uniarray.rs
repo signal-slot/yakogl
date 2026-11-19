@@ -74,7 +74,7 @@ fn loop_float_fs() {
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader, owned by loops"]
+#[ignore = "refused: a uniform read at a run-time index other than a float array's element ..., after the vertex unroll of plan #367 lower-int-loops"]
 fn loop_float_vs() {
     mali_ref::assert_matches_unset("deqp_uniarray_loop_float_vs");
 }
@@ -162,7 +162,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ),
     (
         "loop_float_vs",
-        "a loop in a vertex shader",
+        "a uniform read at a run-time index other than a float array's element",
     ),
     (
         "struct",
