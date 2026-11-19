@@ -3,7 +3,9 @@
 # Mali (Valhall): the vertex look-ups of cases 101 and 149
 
 **Status: case 101 and the compiler half of case 149 implemented
-(vs-lookups, section 6); 149's frame half open** (plan #336, issue #33). The
+(vs-lookups, section 6); 149's frame half open** (plan #336, issue #33).
+**Two look-ups of glmark2's terrain (TEX_VERTEX, plan #367, #32): the
+same look-up twice and the fp16 texels lowered, section 7.** The
 sections below are the design as written at `60184fe5`. It maps the two vertex look-up refusals left in the sweep
 (`tools/cts/log/2026-11-07-t6-step4a`) to the Mesa 26.2.1 / drm-shim
 references, says where in `src/shaderc/online/mali` and `src/mali` each part is
@@ -446,3 +448,119 @@ refusal of section 3.3 step 4), never the compiler half alone.
   vertex record's `samplers` list too (one binding: as before). Step 4's
   mirror of the fragment tables (`DrawCall::vs_textures`, the counts, the
   literals) and step 5's board capture remain.
+
+## 7. TEX_VERTEX: glmark2 terrain's two look-ups (plan #367 lower-tex-vertex)
+
+glmark2's `terrain.vert` (vs `18bc`) reads `tDisplacement` for the
+displaced position and `tNormal` for the normal:
+
+    vec3 dv = texture2D(tDisplacement, uv).xyz;
+    float df = uDisplacementScale * dv.x + uDisplacementBias;
+    ...
+    vec3 normalTex = texture2D(tNormal, uv).xyz * 2.0 - 1.0;
+
+The two samplers already compiled (section 6). This item lowers what
+glmark2 adds to that, and checks it byte for byte against the four Mesa
+26.2.1 drm-shim references of ref-tex-vertex,
+`tools/mali/testdata/gm2_texvert_1..4` (drawn without `--uniform-values`):
+
+| case | shape | Mesa's code |
+|---|---|---|
+| `_1` | one sampler at two coordinates, each to a varying | two `TEX_SINGLE.32` of one handle |
+| `_2` | two samplers at one coordinate | handles `0x20001800`, `0x20011801` in first-use order |
+| `_3` | terrain's shape: a texel read by highp arithmetic beside a texel times `2.0` minus `1.0` | the first `TEX_SINGLE.32`; the second `TEX_SINGLE.16.rgb @r0:r1`, `FMA.v2f16 r0, r0^, 0x40000000.h11, 0x3C000000.neg.h11` (x, y), `FMA.v2f16 r1, r1^.h00, ..` (z), then `F16_TO_F32` per lane for the highp varying |
+| `_4` | the same look-up twice, one copy to a varying, the other times `vec4(0.5, 1.0, 1.0, 1.0)` plus `a_pos` | **one** `TEX_SINGLE.16`; the first varying four `F16_TO_F32`; the product `FMA.v2f16 r0, r0^, u6.w0, 0x0.neg` of x and y with FAU word `0x3C003800`, z and w the texels themselves |
+
+At the tip before this item `_1` and `_2` were already byte-equal, `_3`
+compiled with an fp32 look-up and fp32 arithmetic (17 words where Mesa has
+19), and `_4` was refused (`TexVertex`, "the same look-up twice").
+
+### 7.1 The rule: when a vertex look-up is fp16
+
+GLSL ES 1.00 gives a vertex shader's `sampler2D` and `samplerCube` the
+default precision lowp. Mesa's `lower_precision` (lower_precision.cpp
+`find_precision_visitor::visit_enter(ir_call)`, `map_builtin`) replaces
+the `texture2D` built-in of a lowp or mediump sampler with a lowered copy,
+so NIR's `tex` is 16 bits and a highp reader gets `f2f32` of it. Panfrost
+does not run `nir_opt_16bit_tex_image`. Its `pan_nir_fuse_io_cvt.c`
+`fuse_tex_instr` makes a look-up 32 bits again **only when every use is
+an `f2f32`** (`uses_are_all_cvt`). So:
+
+* a look-up whose texels only highp code reads (a store to a highp
+  varying, `uDisplacementScale * dv.x`, a highp local) is `TEX_SINGLE.32`
+  (`_1`, `_2`, `_3`'s displacement, terrain's `dv`);
+* a look-up that a mediump operation reads directly stays fp16
+  (`TEX_SINGLE.16`), its other readers `F16_TO_F32` (`_3`'s normal map,
+  terrain's `normalTex`);
+* `nir_opt_cse` merges equal look-ups first, so all copies of one look-up
+  get the width its readers together give (`_4`: the first varying's
+  copy alone would be fp32, but the shared look-up is fp16).
+
+### 7.2 What was built (`src/shaderc/online/mali/`)
+
+* `nir.rs`, the vertex `IrOp::Tex` arm:
+  * `Kind::VsTex` gains `medium` (the IR value's class is Medium: a lowp
+    or mediump sampler).
+  * `vs_tex_read16(m, id)` scans the IR: a Medium `fmul`, `fadd`, `ffma`
+    or `fneg` reads this look-up, or reads a look-up `ir_same` finds equal
+    to it (the same op over the same inputs, constants and uniforms, what
+    `nir_opt_cse` merges). If so, the node is pushed at 16 bits.
+  * An equal `VsTex` node already built is reused (CSE) instead of
+    refused. If it was built fp32 and this copy wants fp16 (the IR scan
+    could not see the two as equal, e.g. a coordinate through a local),
+    it is refused with `TexVertex`.
+* `vs_vec16`: lanes `c` and `c + 1` (`c` even) of a 16-bit look-up are
+  its register `c / 2`, the source `Lane(n, c)` that a two-lane fp16
+  operation reads whole (`vs_tex16_word`). One lane is its half
+  (`r1^.h00`, the existing single-lane path of `vs_alu16u`).
+* `vs_alu16`: a pair of two different constants is one word, its halves
+  in lane order (`Val::Const(lo | hi << 16)`, read `.h01`: `u6.w0 =
+  0x3C003800`). A high half of 0 would read as a broadcast and stays
+  `Fp16Inexact`. `fmul(pair, (1.0, 1.0))` is the pair itself
+  (nir_opt_algebraic's `fmul(a, 1.0)` after `nir_lower_alu_width`).
+* The fp32 ALU arm: a Medium operation that reads a medium look-up's
+  lanes and is not one of the fp16 arms' (a `max`, a comparison, a dot
+  product, ...) is fp16 in Mesa and is refused with `TexVertex`. Before,
+  it compiled at fp32 and silently differed. The message now reads "a
+  vertex shader texture look-up other than 2D or cube look-ups at a level
+  (a size query), or its fp16 texels read by a mediump operation other
+  than a product or sum".
+* `select.rs`, `Kind::VsTex` at 16 bits: `TEX_SINGLE` with `f16`, the
+  write mask the lanes `0..=last` read (`tex16_mask`; a whole-register
+  reader counts both lanes), split into `ceil(n / 2)` registers. Lane `c`
+  is register `c / 2`, `.h00` or `.h11`. The fp16 operation's operand
+  arm reads a `vs_tex16_word` source `.h01`.
+
+### 7.3 Checks
+
+* `tests/mali_tex_vertex.rs`: `gm2_texvert_1..4` byte-equal in every
+  region (words, facts, FAU with the uniforms 0, secondary offset); a
+  mediump `max` of texels refused; a highp sampler's `* 2.0` compiling
+  fp32; section 3.1's `w.x * t + w.y * t` (refused until now) compiling:
+  one fp32 look-up, factored by the distributive rule `Nir::alu` already
+  has. No reference draws that shape.
+* The gap table (`src/shaderc/online/mali/tests.rs`): `TexVertex`'s
+  shape is now the mediump `max` of a texel.
+* `tools/mali/testdata/cases.txt`: pan_shc's verdicts on `_1.._3`. `_4`
+  is not listed (vs.position has the reference's words but other FAU
+  words).
+* `tools/mali/corpus-verdicts.txt` does not move (no `tools/shaders`
+  source has these shapes; `corpus-verdicts.sh --check`: 254 ok -> 254
+  ok). `sweep_passsets.py --delta tools/cts/log` exits 0.
+
+### 7.4 What is left
+
+* The write mask of an fp16 look-up is the prefix `0..=last`. A
+  look-up read in lanes x and z only would be `.rgb` here. Mesa may pack
+  only the lanes read, as the fragment stage's `tex_mask` does. No
+  reference draws it.
+* A broadcast of lane 2 or 3 of an fp16 look-up in a two-lane operation
+  goes through a `vec2` (`MKVEC`). No reference draws it.
+* The width is decided for the whole shader. A look-up that the position
+  program reads only through `f2f32` while the varying program reads it
+  fp16 is fp16 in both; Mesa compiles the IDVS variants from one NIR, so
+  this is expected to agree, but no reference draws it.
+* Section 3.3 step 4 (N vertex textures in the frame) is unchanged.
+  Terrain draws two vertex samplers and so needs it on the board:
+  `src/mali/backend.rs` refuses the draw with `NOT_BUILT_VERTEX_TEXTURES`
+  (section 6), a separate item.

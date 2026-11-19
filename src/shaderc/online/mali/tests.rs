@@ -1251,10 +1251,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
             "precision mediump float; varying vec4 v; void main(){ int i = int(v.x); int j = int(v.y); gl_FragColor = vec4(float(i != j)); }",
             MaliError::IntValue,
         ),
-        /* the same vertex look-up twice: one TEX_SINGLE in Mesa
-         * (`nir_opt_cse`) and its products factored (mali-vs-lookups.md
-         * §3.1) */
-        (VS, "uniform sampler2D s; uniform vec4 w; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0); }", MaliError::TexVertex),
+        /* a lowp sampler's texels read by a mediump `max`: fp16 in Mesa,
+         * and no fp16 arm but the product and the sum takes texels
+         * (mali-vs-lookups.md §7) */
+        (VS, "uniform sampler2D s; attribute vec4 p; varying vec4 v; void main(){ gl_Position = p; v = vec4(max(texture2DLod(s, p.xy, 0.0).x, 0.5)); }", MaliError::TexVertex),
         (FS, "precision mediump float; uniform sampler2D s; varying vec2 v; void main(){ gl_FragColor = texture2D(s, v, 1.0); }", MaliError::TexKind),
         (FS, "precision mediump float; uniform sampler2D s; varying vec3 v; void main(){ gl_FragColor = texture2DProj(s, v); }", MaliError::TexKind),
         /* a cube at the implicit level is lowered in a mediump shader

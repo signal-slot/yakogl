@@ -174,3 +174,11 @@ gm2_fma_2       gm2_fma_2.vert     gm2_fma_2.frag      triangles  vs.position=di
 gm2_fma_5       gm2_fma_5.vert     gm2_fma_5.frag      triangles  vs.position=equal vs.varying=equal fs.fragment=equal
 gm2_fma_7       gm2_fma_7.vert     gm2_fma_7.frag      triangles  vs.position=equal vs.varying=equal fs.fragment=equal
 gm2_fma_8       gm2_fma_8.vert     gm2_fma_8.frag      triangles  vs.position=equal vs.varying=differs:unanalysed:8:27162c4a98a0 fs.fragment=equal
+# #367 lower-tex-vertex: two vertex look-ups (TEX_VERTEX, terrain vs 18bc; docs/notes/mali-vs-lookups.md section 7), drawn
+# without --uniform-values. Our compiler is byte-equal to each reference (tests/mali_tex_vertex.rs). pan_shc's SPIR-V path
+# has no lower_precision: the mediump `v_a + v_b` of gm2_texvert_1/2 and _3's fp16 normal-map texel differ (`mediump`).
+# gm2_texvert_4 is not listed: pan_shc's vertex position program has the reference's words but other FAU words (its fp32
+# `t * vec4(0.5, 1.0, 1.0, 1.0)` pushes no 0x3C003800), a result the list has no form for.
+gm2_texvert_1   gm2_texvert_1.vert gm2_texvert_1.frag  triangles  vs.position=equal vs.varying=equal fs.fragment=differs:mediump:16:84cc244be957
+gm2_texvert_2   gm2_texvert_2.vert gm2_texvert_2.frag  triangles  vs.position=equal vs.varying=equal fs.fragment=differs:mediump:16:84cc244be957
+gm2_texvert_3   gm2_texvert_3.vert gm2_texvert_3.frag  triangles  vs.position=equal vs.varying=differs:mediump:16:a506a81254e5 fs.fragment=equal
