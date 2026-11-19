@@ -485,7 +485,8 @@ standalone path is a development route. A `nanopc_t6` Zephyr image is
 started by kexec from the board's Armbian, and the board comes back to Armbian
 through the watchdog or PSCI `SYSTEM_RESET`. The facts, the memory window and
 the per-stage procedures are in `driver/docs/nanopc-t6-mali.md` ("Z1",
-"Z2 board procedure", "Z3 board procedure"); this section is the overview.
+"Z2 board procedure", "Z3 board procedure", "Z4 board procedure"); this
+section is the overview.
 A kexec run is a development result, as `driver/tools/kexec-zephyr/README.md`
 says.
 
@@ -524,18 +525,21 @@ says.
 
 | Stage | What | Probe (`tools/probes/nanopc_t6/`) | Board module (`driver/rust/src/board/`) | `tools/check.sh` row | State |
 |---|---|---|---|---|---|
-| Z1 | the image, its watchdog, GPU power-on | `t6_hello`, `t6_gpu` | `nanopc_t6.rs`, `nanopc_t6_early.rs`, `nanopc_t6_gpu.rs` | `zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue)`, `... t6_gpu image (Z1, GPU power-on)` | `t6_hello` passed on the board by kexec (2026-10-19). `t6_gpu`: host side done, board run not recorded here |
-| Z2 | AS0 and a cache flush | `t6_mmu` | `nanopc_t6_mmu.rs` | `zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush)` | host side done with a gate row; board run not done |
-| Z3 | the CSF firmware boot | `t6_fw` | `nanopc_t6_fw.rs` | `zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot)` | host side done with a gate row; board run not done |
-| Z4 | CSG 0 / CS 0, tiler heap, the L1 frame, the sync wait | `t6_submit` (not yet in the tree) | `nanopc_t6_submit.rs` (`board::nanopc_t6_submit`, not yet in the tree) with the C entry `yd_t6_submit` (not yet in `driver/rust/src/ffi/rk3588.rs`) | `zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files` (not yet in `tools/check.sh`) | host side in progress; board run not done |
+| Z1 | the image, its watchdog, GPU power-on | `t6_hello`, `t6_gpu` | `nanopc_t6.rs`, `nanopc_t6_early.rs`, `nanopc_t6_gpu.rs` | `zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue)`, `... t6_gpu image (Z1, GPU power-on)` | `t6_hello` passed on the board by kexec (2026-10-19), `t6_gpu` passed on the board (2026-11-11) |
+| Z2 | AS0 and a cache flush | `t6_mmu` | `nanopc_t6_mmu.rs` | `zephyr  nanopc_t6 t6_mmu image (Z2, AS0 and a cache flush)` | passed on the board (2026-11-11), "Z2 board procedure" in `driver/docs/nanopc-t6-mali.md` |
+| Z3 | the CSF firmware boot | `t6_fw` | `nanopc_t6_fw.rs` | `zephyr  nanopc_t6 t6_fw image (Z3, the firmware boot)` | passed on the board (2026-11-12), "Z3 board procedure" in `driver/docs/nanopc-t6-mali.md` |
+| Z4 | CSG 0 / CS 0, tiler heap, the L1 frame, the sync wait | `t6_submit` | `nanopc_t6_submit.rs` (`board::nanopc_t6_submit`) with the C entry `yd_t6_submit` (`driver/rust/src/ffi/rk3588.rs`) | `zephyr  nanopc_t6 t6_submit image (Z4), -Werror on our C files` | passed on the board (2026-11-12, second run), "Z4 board procedure" in `driver/docs/nanopc-t6-mali.md` |
 
 Each of the rows is `step "..., -Werror on our C files"` in `tools/check.sh`.
-The Z2, Z3 and Z4 board runs have not happened. Each needs the owner's
-go-ahead and a person at the power switch (`driver/docs/nanopc-t6-mali.md`),
-and Z3 runs only after Z2 has passed. Z4's kernel side exists over the host
-MCU model (`driver/rust/src/gpu/mali/sched.rs`, `sched/job.rs`, `heap.rs`,
-with `csf.rs` and `fw.rs` from Z3); the frame it submits is built by
-`src/mali/frame.rs`.
+Every stage has passed on the board: the runs of 2026-11-11 and 2026-11-12,
+their verdict lines and their records are in `driver/docs/nanopc-t6-mali.md`
+("Z2 board procedure", "Z3 board procedure", "Z4 board procedure") and in
+the rows of `tools/cts/RESULTS.md` ("Mali: NanoPC-T6 on Zephyr (by kexec)").
+Each board run still needs the owner's go-ahead and a person at the power
+switch (`driver/docs/nanopc-t6-mali.md`), Z3 runs only after Z2 has passed,
+and Z4 only after Z3. Z4's kernel side is `driver/rust/src/gpu/mali/sched.rs`,
+`sched/job.rs` and `heap.rs` over the host MCU model, with `csf.rs` and
+`fw.rs` from Z3; the frame it submits is built by `src/mali/frame.rs`.
 
 ### What a run needs from the host
 
