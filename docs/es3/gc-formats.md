@@ -110,16 +110,16 @@ but the 128-bit ones.
 | `GLES_TEXFMT_R32I` | `TEXTURE_FORMAT_EXT_R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_R32I`, 0x23); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; before the flip it was stored in RGBA32I) | `F:136,286-291`; `X:95` |
 | `GLES_TEXFMT_RG32UI` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as R32UI; the table's EXT_G32R32F, `F:209`, is replaced on HALTI5) | `F:209,286-291`; `X:96` |
 | `GLES_TEXFMT_RG32I` | `TEXTURE_FORMAT_EXT_G32R32I` | RGBA | - | no | yes (HALTI5: `TEXTURE_FORMAT_EXT_G32R32I`, 0x24); in the mask (gc-r32-flip) | yes | - | linear; none | - (as RG32UI; before the flip it was stored in RGBA32I) | `F:210,286-291`; `X:96` |
-| `GLES_TEXFMT_R8_SNORM` | `TEXTURE_FORMAT_EXT_R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_R8_SNORM`, 0x0e); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8_SNORM, then RGBA16F meanwhile) | `F:89`; `X:80` |
-| `GLES_TEXFMT_RG8_SNORM` | `TEXTURE_FORMAT_EXT_G8R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_G8R8_SNORM`, 0x0f); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8_SNORM, then RGBA16F meanwhile) | `F:119`; `X:81` |
-| `GLES_TEXFMT_R8UI` | `TEXTURE_FORMAT_EXT_R8I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R8I`, 0x15); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8UI meanwhile) | `F:90`; `X:85` |
-| `GLES_TEXFMT_R8I` | `TEXTURE_FORMAT_EXT_R8I` | RGBA | `SIGNED_INT8` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R8I`, 0x15); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8I meanwhile) | `F:91`; `D:187-188`; `X:85,165` |
-| `GLES_TEXFMT_RG8UI` | `TEXTURE_FORMAT_EXT_G8R8I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G8R8I`, 0x16); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8UI meanwhile) | `F:120`; `X:86` |
-| `GLES_TEXFMT_RG8I` | `TEXTURE_FORMAT_EXT_G8R8I` | RGBA | `SIGNED_INT8` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G8R8I`, 0x16); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA8I meanwhile) | `F:121`; `D:187-188`; `X:86,165` |
-| `GLES_TEXFMT_R16UI` | `TEXTURE_FORMAT_EXT_R16I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R16I`, 0x18); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA16UI meanwhile) | `F:102`; `X:88` |
-| `GLES_TEXFMT_R16I` | `TEXTURE_FORMAT_EXT_R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R16I`, 0x18); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA16I meanwhile) | `F:103`; `D:187-189`; `X:88,166` |
-| `GLES_TEXFMT_RG16UI` | `TEXTURE_FORMAT_EXT_G16R16I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G16R16I`, 0x19); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA16UI meanwhile) | `F:147`; `X:89` |
-| `GLES_TEXFMT_RG16I` | `TEXTURE_FORMAT_EXT_G16R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G16R16I`, 0x19); built, still outside the mask | no (narrow-classes sets it) | - | linear; none | - (GL-core class, stored in RGBA16I meanwhile) | `F:148`; `D:187-189`; `X:89,166` |
+| `GLES_TEXFMT_R8_SNORM` | `TEXTURE_FORMAT_EXT_R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_R8_SNORM`, 0x0e); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA8_SNORM where the mask lacks the class, then RGBA16F meanwhile) | `F:89`; `X:80` |
+| `GLES_TEXFMT_RG8_SNORM` | `TEXTURE_FORMAT_EXT_G8R8_SNORM` | RGBA | - | no | yes (HALTI1: snorm: `TEXTURE_FORMAT_EXT_G8R8_SNORM`, 0x0f); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA8_SNORM where the mask lacks the class, then RGBA16F meanwhile) | `F:119`; `X:81` |
+| `GLES_TEXFMT_R8UI` | `TEXTURE_FORMAT_EXT_R8I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R8I`, 0x15); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA8UI where the mask lacks the class meanwhile) | `F:90`; `X:85` |
+| `GLES_TEXFMT_R8I` | `TEXTURE_FORMAT_EXT_R8I` | RGBA | `SIGNED_INT8` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R8I`, 0x15); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA8I where the mask lacks the class meanwhile) | `F:91`; `D:187-188`; `X:85,165` |
+| `GLES_TEXFMT_RG8UI` | `TEXTURE_FORMAT_EXT_G8R8I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G8R8I`, 0x16); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA8UI where the mask lacks the class meanwhile) | `F:120`; `X:86` |
+| `GLES_TEXFMT_RG8I` | `TEXTURE_FORMAT_EXT_G8R8I` | RGBA | `SIGNED_INT8` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G8R8I`, 0x16); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA8I where the mask lacks the class meanwhile) | `F:121`; `D:187-188`; `X:86,165` |
+| `GLES_TEXFMT_R16UI` | `TEXTURE_FORMAT_EXT_R16I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R16I`, 0x18); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA16UI where the mask lacks the class meanwhile) | `F:102`; `X:88` |
+| `GLES_TEXFMT_R16I` | `TEXTURE_FORMAT_EXT_R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_R16I`, 0x18); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA16I where the mask lacks the class meanwhile) | `F:103`; `D:187-189`; `X:88,166` |
+| `GLES_TEXFMT_RG16UI` | `TEXTURE_FORMAT_EXT_G16R16I` | RGBA | - | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G16R16I`, 0x19); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA16UI where the mask lacks the class meanwhile) | `F:147`; `X:89` |
+| `GLES_TEXFMT_RG16I` | `TEXTURE_FORMAT_EXT_G16R16I` | RGBA | `SIGNED_INT16` | no | yes (HALTI2: integer: `TEXTURE_FORMAT_EXT_G16R16I`, 0x19); in the mask (gc-narrow-flip) | yes | - | linear; none | - (GL-core class, stored in RGBA16I where the mask lacks the class meanwhile) | `F:148`; `D:187-189`; `X:89,166` |
 
 ## 3. Integer samplers
 
@@ -196,26 +196,29 @@ Built (host only; nothing here has run on the GPU):
 R32UI, R32I, RG32UI, RG32I (`b5e04b14`) are in the mask, so the GL core
 stores them natively on this back end; `GLES_TEXFMT_RGB10A2` stays out for
 the reason `PVR_SAMPLED_TEXFMTS` gives. RGBA32F, RGBA32UI and RGBA32I are
-in the mask as two planes (gc-wide128-flip, section 3). The test fails when
+in the mask as two planes (gc-wide128-flip, section 3), and so are the ten
+narrow classes, R8/RG8 snorm, R8/RG8 and R16/RG16 integer (classes 30-39,
+`gc-narrow-flip`; the words are those of `F:89-91,102-103,119-121,147-148`,
+unchanged by the flip). The test fails when
 the mask and the `in mask` column disagree. The two compressed
 sRGB ETC2 classes are in the mask too (etc2-srgb-gc): the GL core stores
 GL_COMPRESSED_SRGB8_ETC2 and GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC as blocks
 and lists them in GL_COMPRESSED_TEXTURE_FORMATS (5 formats), sampled as the
 linear twin's block format with `SAMP_CTRL1.SRGB` (section 2).
 
-Left:
+Left (nothing in the sampling classes; what stays is the board's):
 
-4. RGBA32F/I/UI as two planes (section 3): in the mask on the host
-   (gc-wide128-flip), the board's dEQP `texture.format` rows not yet rerun;
-   GL_RGBA32F stored there too (`sized_format`'s `rgba32f_own_class`). R32I/UI and RG32I/UI are their own classes in the mask
-   (`b5e04b14`): the TE samples them as `EXT_R32I` / `EXT_G32R32I`
-   (`F:286-291`). Their texture colour attachment has
+4. RGBA32F/I/UI as two planes (section 3), R32I/UI and RG32I/UI, and the
+   narrow classes 30-39 are all in the mask on the host; the board's dEQP
+   `texture.format` rows are not yet rerun (gl_test #28 and dEQP-GLES3 #24,
+   i.MX8MP). GL_RGBA32F is stored in the 128-bit class (`sized_format`'s
+   `rgba32f_own_class`). The 32-bit integer texture colour attachments have
    `integer_texture_surface` rows (`6c5b004f`, `src/gl/framebuffer.rs`) and a
-   host test (`tests/es3_int32_rt_gc.rs`); the board has not run it
-   (`docs/es3/int-rt-gc.md`).
-5. R8, RG8 and the R/RG snorm and integer formats in their own narrow
-   classes (Mesa's EXT_R8 / G8R8 / R8I / G8R8I / R16I / G16R16I rows): memory
-   only, the RGBA classes sample the same values.
+   host test (`tests/es3_int32_rt_gc.rs`; `docs/es3/int-rt-gc.md`).
+5. (done: the narrow classes are Mesa's EXT_R8_SNORM / G8R8_SNORM / R8I /
+   G8R8I / R16I / G16R16I rows, one per class, since `gc-narrow-flip`. A draw
+   that needs a sampler slot past 31, the 128-bit planes included, is
+   refused by name: `emit_textures_inner`.)
 
 ## 5. Host dEQP (GPU=vivante, HOST-ONLY)
 
@@ -247,8 +250,19 @@ RG32I/UI classes (`b5e04b14`), the GL texture swizzle (`840ea7ec`) and the
 `integer_texture_surface` rows (`6c5b004f`); it was not repeated here.
 Whether those cases then pass is the board's to say (verdin-imx8mp; no GPU result exists for any of this).
 
+Run for `gc-narrow-flip` (classes 30-39 in the mask): **not measured.** The
+worker had no full VK-GL-CTS checkout (the deps cache holds only a data
+subtree of `93bca01`) and could not fetch one, so no host dEQP row exists for
+this commit and no count is claimed: the expected 0 upload and 0 compile
+refusals for `texture.format` and `texture.specification` are final-host-run's
+to record by running `tools/cts/host-deqp-run.sh --gpu=vivante --module=gles3`
+on a host with the checkout. The host tests (`tests/es3_formats_gc.rs`,
+`tests/es3_sized_formats.rs`) pin the classes, and `refused()` in
+`the_formats_a_back_end_refuses_to_upload_are_listed` is empty for the
+GC7000UL (no ES 3.0 format is refused at upload).
+
 The compressed sRGB ETC2 classes in the mask (etc2-srgb-gc) were not
-measured with this run: the host that made the change had no VK-GL-CTS
+measured with the 2026-10-22 run: the host that made the change had no VK-GL-CTS
 checkout. They reach the compressed sRGB ETC2 cases of these groups, whose
 glCompressedTexImage* was GL_INVALID_ENUM before (a refusal outside the
-"upload" column above, which counts GL_INVALID_OPERATION); the counts are final-host-run's to record here.
+"upload" column above, which counts GL_INVALID_OPERATION); the counts are still to be recorded here by the run named above.

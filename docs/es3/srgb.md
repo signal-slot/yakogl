@@ -577,9 +577,7 @@ same-encoding and must not set them.
 
 ## 7. What the GL core does not do yet
 
-* Compressed sRGB on the GC7000UL and the V3D, and the punch-through sRGB
-  format everywhere: the names stay GL_INVALID_ENUM and out of
-  GL_COMPRESSED_TEXTURE_FORMATS (the PowerVR stores the other two, 4.3).
+* The punch-through sRGB format everywhere, and compressed sRGB on the V3D: the names stay GL_INVALID_ENUM and out of GL_COMPRESSED_TEXTURE_FORMATS (the PowerVR stores the other two, 4.3; the GC7000UL stores them too, as the linear twin's ETC2 block format with `SAMP_CTRL1.SRGB`, `docs/es3/gc-formats.md`, host only).
 * glCopyTex{Sub}Image between an sRGB and a linear buffer copies the stored
   bytes (3.2).
 * `GL_EXT_sRGB` / `GL_EXT_sRGB_write_control` are not claimed: the ES 2.0

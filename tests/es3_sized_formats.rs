@@ -256,8 +256,10 @@ fn storage_per_gpu_and_the_refusals() {
     assert_eq!(fmt(GL_RGB9_E5).storage_in(gc), Some(GLES_TEXFMT_RGB9E5));
     assert_eq!(fmt(GL_RGBA8_SNORM).storage_in(gc), Some(GLES_TEXFMT_RGBA8_SNORM));
     assert_eq!(fmt(GL_RGB10_A2UI).storage_in(gc), Some(GLES_TEXFMT_RGB10A2UI));
-    assert_eq!(fmt(GL_R8UI).storage_in(gc), Some(GLES_TEXFMT_RGBA8UI));
-    assert_eq!(fmt(GL_RG16UI).storage_in(gc), Some(GLES_TEXFMT_RGBA16UI));
+    /* and the ten narrow classes, each in its own class (gc-narrow-flip) */
+    assert_eq!(fmt(GL_R8UI).storage_in(gc), Some(GLES_TEXFMT_R8UI));
+    assert_eq!(fmt(GL_RG16UI).storage_in(gc), Some(GLES_TEXFMT_RG16UI));
+    assert_eq!(fmt(GL_R8_SNORM).storage_in(gc), Some(GLES_TEXFMT_R8_SNORM));
     /* and the compressed sRGB ETC2 classes, as the PowerVR (etc2-srgb-gc);
      * no sized format is stored in them, the compressed upload picks them */
     for c in [GLES_TEXFMT_ETC2_SRGB_RGB, GLES_TEXFMT_ETC2_SRGB_RGBA] {
@@ -269,13 +271,12 @@ fn storage_per_gpu_and_the_refusals() {
     assert_eq!(fmt(GL_RGB10_A2).storage_in(gc), Some(GLES_TEXFMT_RGBA8));
     assert_eq!(fmt(GL_RGBA32UI).storage_in(gc), Some(GLES_TEXFMT_RGBA32UI));
     assert_eq!(fmt(GL_RGBA32I).storage_in(gc), Some(GLES_TEXFMT_RGBA32I));
-    /* the GC7000UL holds the R32/RG32 integer classes (gc-r32-flip), which
-     * neither the PowerVR's nor the V3D's mask does: their formats fall to
-     * the RGBA32 class there. No mask holds the other classes yet. */
+    /* the GC7000UL holds the R32/RG32 integer classes (gc-r32-flip) and the
+     * narrow ones (gc-narrow-flip), which neither the PowerVR's nor the
+     * V3D's mask does: their formats fall to the RGBA class there. */
     for c in NOT_SAMPLED_YET {
-        let gc_class = (GLES_TEXFMT_R32UI..=GLES_TEXFMT_RG32I).contains(&c);
         for (gpu, mask) in MASKS {
-            let want = gc_class && mask == gc;
+            let want = mask == gc;
             assert_eq!(mask & gles_texfmt_bit(c) != 0, want, "{gpu}: class {c}");
         }
     }
@@ -311,6 +312,16 @@ fn storage_per_gpu_and_the_refusals() {
             GLES_TEXFMT_R32I,
             GLES_TEXFMT_RG32UI,
             GLES_TEXFMT_RG32I,
+            GLES_TEXFMT_R8_SNORM,
+            GLES_TEXFMT_RG8_SNORM,
+            GLES_TEXFMT_R8UI,
+            GLES_TEXFMT_R8I,
+            GLES_TEXFMT_RG8UI,
+            GLES_TEXFMT_RG8I,
+            GLES_TEXFMT_R16UI,
+            GLES_TEXFMT_R16I,
+            GLES_TEXFMT_RG16UI,
+            GLES_TEXFMT_RG16I,
         ]
         .iter()
         .fold(0, |m, &c| m | gles_texfmt_bit(c));

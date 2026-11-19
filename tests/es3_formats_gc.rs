@@ -292,13 +292,12 @@ fn the_r32_and_rg32_integer_classes_are_in_the_gc_mask_only() {
     }
 }
 
-/// The GL core's narrow classes (30-39) are in no back end's mask yet: on the
-/// GC7000UL the ten formats keep the RGBA class they were stored in (the
-/// float one for snorm where RGBA8_SNORM is missing), the PowerVR and the V3D
-/// too, the Mali refuses. The native class holds the leading bytes of the
+/// The GL core's narrow classes (30-39) are in the GC7000UL's mask since
+/// gc-narrow-flip and in no other back end's: the PowerVR and the V3D keep
+/// the RGBA class the ten formats were stored in, the Mali refuses. The native class holds the leading bytes of the
 /// RGBA texel of the same source, and `tf_capture` reads both alike.
 #[test]
-fn the_narrow_classes_are_in_no_mask_yet() {
+fn the_narrow_classes_are_in_the_gc_mask_only() {
     use yakogl::gl::consts::*;
     use yakogl::gl::es3_formats::{convert_row, find, storage_bytes};
     let rows = [
@@ -319,7 +318,9 @@ fn the_narrow_classes_are_in_no_mask_yet() {
         assert_eq!(*e.storage.get(1).unwrap(), wide, "{}: then today's RGBA class", e.name);
         assert_eq!(gles_texfmt_bytes(native), bytes, "{}", e.name);
         assert_eq!(storage_bytes(native), bytes as usize, "{}", e.name);
-        for mask in [GC_SAMPLED_TEXFMTS, PVR_SAMPLED_TEXFMTS, V3D_SAMPLED_TEXFMTS] {
+        assert_ne!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(native), 0, "{}: the GC mask has class {native}", e.name);
+        assert_eq!(e.storage_in(GC_SAMPLED_TEXFMTS), Some(native), "{}: stored natively", e.name);
+        for mask in [PVR_SAMPLED_TEXFMTS, V3D_SAMPLED_TEXFMTS] {
             assert_eq!(mask & gles_texfmt_bit(native), 0, "{}: no mask has class {native}", e.name);
             assert_eq!(e.storage_in(mask), Some(wide), "{}: the RGBA class, as before", e.name);
         }
@@ -360,13 +361,6 @@ fn the_new_register_constants_are_the_rnndb_values() {
 fn the_binding_bits_apply_to_every_class() {
     for (name, id) in CLASSES {
         if !gc_texfmt(id).decoded {
-            continue;
-        }
-        /* the narrow classes have no gc_texfmt arm yet: they fall to the
-         * RGBA8 default, which no texture reaches while GC_SAMPLED_TEXFMTS
-         * lacks them; R32I/UI and RG32I/UI have their own (gc-r32-flip) */
-        if (GLES_TEXFMT_R8_SNORM..=GLES_TEXFMT_RG16I).contains(&id) {
-            assert_eq!(GC_SAMPLED_TEXFMTS & gles_texfmt_bit(id), 0, "{name}");
             continue;
         }
         let base = format_words(&bind(id), false);
