@@ -67,14 +67,50 @@ being fed 30 s after boot and resets the SoC within 10 s more; tryboot brings
 Linux back. A hang anywhere ends the same way, with the last step line on
 the console.
 
+## On the board (M1 to M4, 2026-11-19)
+
+Built from `8eb2b3cf` with `-DYAKOGL_WERROR=ON` (zephyr `af17c0c8aa2a`,
+image sha256 `457d1c7c945cd42e...`, 65,824 bytes) and run once through
+`tools/board.sh pi5 run`, with no change to the probe or the driver:
+`rc=0 verdict=done boot=tryboot row boot_verdict=complete
+result=legacy:v3d_clear_pass resets=0 back_after=213s`, `get_throttled` 0x0
+before and after. The console after Zephyr's banner:
+
+```
+v3d_clear: build 8eb2b3cf
+v3d_clear: cache: CONFIG_CACHE_MANAGEMENT=1 CONFIG_DCACHE=1 sys_cache_data_flush_and_invd_range, data line 64 bytes
+v3d_clear: rpi_5, V3D 7.1, target 128x64 raster RGBA8888, watchdog armed at boot
+M1 mailbox: 0
+M1 before power-on: PM_GRAFX 0x00001040
+M1 power_on: 0, PM_GRAFX 0x00001040, SMS REE_CS 0x00000000 TEE_CS 0x00000050
+M1 V3D clock: rate 0 (500000000 Hz)
+[00:00:00.046,000] <inf> gpu_v3d: V3D 7.1: 1 core(s), 12 QPUs, VPM 65536 bytes, PA 36 / VA 36 bits, MMU yes
+[00:00:00.056,000] <inf> gpu_v3d: V3D raw: HUB_IDENT0..3 42554856 00081117 00001900 00020a10 CTL_IDENT0..2 07443356 81001431 c0078101 MMU_DEBUG_INFO 20804664
+M1 identity: HUB_IDENT0..3 0x42554856 0x00081117 0x00001900 0x00020a10
+M1 identity: CTL_IDENT0..2 0x07443356 0x81001431 0xc0078101 MMU_DEBUG_INFO 0x20804664
+M1 identity: V3D 7.1, 1 core(s), 12 QPUs, VPM 65536 bytes, PA 36 / VA 36 bits, MMU yes: 0
+M2 page table: PA 0x23e000, 4096 entries, scratch PA 0x23d000, VA 0x00100000..0x0012c000 mapped
+M2 mmu_init: 0
+frame 128x64: tile 64x64, 2x1 tiles, lists 19 / 99 / 27 bytes, tile alloc 12288, state 512
+M3 bin: 0
+M3 render: 0
+M3 caches_clean: 0
+M4: 0 of 8192 target pixels wrong, guard row 0 of 128 changed
+v3d_clear: PASS (M1 to M4, 128x64 cleared; 46 pages used incl. page table and scratch, cache: CONFIG_CACHE_MANAGEMENT=1 CONFIG_DCACHE=1 sys_cache_data_flush_and_invd_range)
+```
+
+then the watchdog's reset (`PM_RSTS 00000020`) and Linux. What it answers:
+the firmware hands over the V3D out of reset (`PM_GRAFX_2712` bit 6 set
+before any write) and at 500 MHz (U5); the identity is Linux's (D3,
+`tools/v3d/pi5/v3d_regs.txt`); the GPU reaches the image's `sram0` buffers at
+their ARM physical addresses through our page table (U10 for buffers below
+34 MiB); the 7.1 bin and render done bits are the ones `v3d_hw.c` polls.
+
 ## Limits
 
-- Built, not run on the board. Its first run also answers what the plan
-  leaves to the board: whether the firmware has the V3D powered and clocked
-  before the image (`M1 before power-on` prints `PM_GRAFX`), whether the
-  GPU sees ARM physical addresses as they are (U4/U10: the PA width is in the
-  identity line; the buffers are in `sram0`, below 34 MiB), and whether the
-  7.1 interrupt bits and waits are the 4.2 ones (`v3d_hw.c`).
+- The interrupts are not used (the waits poll); the GIC's line count for
+  SPIs 249 and 250 is still to be read (`driver/docs/rpi5-v3d71-facts.md`,
+  section 8).
 - `get_throttled` is recorded by `tools/board.sh` in `meta.txt`, not by the
   image (the image cannot read it);
   check it before reading a GPU fault as a hardware one.

@@ -99,4 +99,53 @@ Its default end matcher already knows `rpi5_ident: done` and
 reboot. `BOARD_HOST` and `BOARD_UART` come from the leases, never from a file.
 Run it only after `rpi5_wdog` has shown that the watchdog resets the board.
 
-Built, not run on the board.
+## On the board (D2, 2026-11-19)
+
+The default image (no power or clock setup), built from `8eb2b3cf` with
+`-DYAKOGL_WERROR=ON` (zephyr `af17c0c8aa2a`, image sha256 `dbad2cae15ff880e...`,
+53,536 bytes), run once through `tools/board.sh pi5 run`:
+`rc=0 verdict=done boot=tryboot row boot_verdict=complete
+result=legacy:rpi5_ident_done resets=0 back_after=213s`, `get_throttled`
+0x0 before and after. No read faulted; the fallback build was not needed.
+The console, after the boot loader's `Loading 'yakogl-rpi5_ident.bin' to
+0x00000000 offset 0x200000` and TF-A BL31:
+
+```
+board: watchdog armed
+board: PM watchdog resets the SoC ~40 s after boot (tryboot -> Linux)
+*** Booting Zephyr OS build af17c0c8aa2a ***
+rpi5_ident: build 8eb2b3cf
+rpi5_ident: rpi_5, V3D 7.1, no power or clock setup, watchdog armed at boot
+rpi5_ident: hub and core0 mapped, reading
+rpi5_ident: HUB_IDENT0 0x42554856
+rpi5_ident: HUB_IDENT1 0x00081117
+rpi5_ident: HUB_IDENT2 0x00001900
+rpi5_ident: HUB_IDENT3 0x00020a10
+rpi5_ident: CORE_IDENT0 0x07443356
+rpi5_ident: CORE_IDENT1 0x81001431
+rpi5_ident: CORE_IDENT2 0xc0078101
+rpi5_ident: MMU_DEBUG_INFO 0x20804664
+rpi5_ident: V3D 7.1, 1 core(s), 12 QPUs, VPM 65536 bytes, PA 36 / VA 36 bits, MMU yes
+rpi5_ident: done
+```
+
+then nothing until the watchdog's reset (`PM_RSTS 00000020`) and Linux.
+Against Linux's debugfs (D3, `tools/v3d/pi5/v3d_regs.txt`):
+
+| Word | Zephyr (D2) | Linux (D3) |
+|---|---|---|
+| `HUB_IDENT0` | 0x42554856 | 0x42554856 |
+| `HUB_IDENT1` | 0x00081117 | 0x00081117 |
+| `HUB_IDENT2` | 0x00001900 | 0x00001900 |
+| `HUB_IDENT3` | 0x00020a10 | 0x00020a10 |
+| `CORE_IDENT0` (`CTL_IDENT0`) | 0x07443356 | 0x07443356 |
+| `CORE_IDENT1` (`CTL_IDENT1`) | 0x81001431 | 0x81001431 |
+| `CORE_IDENT2` (`CTL_IDENT2`) | 0xc0078101 | 0xc0078101 |
+| `MMU_DEBUG_INFO` | 0x20804664 | 0x20804664 |
+
+`python3 tools/v3d/ident71.py --compare tools/v3d/pi5/v3d_regs.txt <the
+eight lines above>`: `ident71: 43 fields compared, 0 differ` (V3D 7.1,
+IPREV 10, IPIDX 16, compat_rev 2; 3 slices, 12 QPUs, VPM 65536 bytes;
+PA and VA 36 bits, MMU version 4). So the firmware hands the V3D over
+powered and clocked (U2 and U5 answered, `docs/notes/pre-study-rpi5.md`
+section 7; `driver/docs/rpi5-v3d71-facts.md` section 14).
