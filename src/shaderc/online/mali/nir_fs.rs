@@ -151,6 +151,10 @@ pub struct TexLookup {
     /// Its coordinate's load (none for a constant or computed coordinate),
     /// set by [`layout`].
     pub load: Option<u8>,
+    /// The lane of [`TexLookup::load`] the coordinate starts at, set by
+    /// [`layout`]: 0, or 2 for a vec2 varying the link packed after
+    /// another in one slot (gm2_fclane_2's `t1` beside `t0`).
+    pub load_lane: u8,
     /// The texels the colour reads (bit `c`: texel `c`), set by [`layout`].
     pub lanes: u8,
 }
@@ -175,6 +179,7 @@ impl TexLookup {
         node: 0,
         index: 0,
         load: None,
+        load_lane: 0,
         lanes: 0,
     };
 
@@ -643,6 +648,15 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
                  * texmore_48's `a` and `f`, whose `txl` and `txf` follow the
                  * `texture` the constructor names first) */
                 Some(ir::Op::Tex { dim: ir::TexDim::D2Array | ir::TexDim::D3, coord, .. }) => {
+                    stack[sp] = coord.val.0;
+                    sp += 1;
+                }
+                /* and a 2D look-up's (gm2_fclane_2's `vec4 c = texture2D(s1,
+                 * t1)`, read once in the colour: its `TEX_SINGLE` follows
+                 * that of `m`, read twice, so `m`'s handle is pushed first,
+                 * FAU `20001800, 20011801`, though the schedule issues `c`'s
+                 * look-up first) */
+                Some(ir::Op::Tex { dim: ir::TexDim::D2, shadow: false, proj: false, offset: None, coord, .. }) => {
                     stack[sp] = coord.val.0;
                     sp += 1;
                 }
@@ -2361,6 +2375,21 @@ impl<'s> Fs<'s> {
             && matches!((self.texel16(nd.src[0]), nd.src[1]), (true, Val::Const(_)))
     }
 
+    /// `v` is a lane of a sum of two fp16 look-ups' texels taken in pairs
+    /// (`FADD.v2f16 r0, r0^, r2^` of each result's words: gm2_texcoord_4,
+    /// `texture2D(s0, v.xy) + texture2D(s1, v.zw)` to a mediump colour).
+    fn texel_pair_sum(&self, v: Val) -> bool {
+        let Val::Lane(n, _) = v else { return false };
+        let nd = self.nir.nodes[n as usize];
+        let pair = |s: Val| match s {
+            Val::Lane(p, 0) => matches!(self.nir.nodes[p as usize],
+                NirNode { kind: Kind::Alu(Alu::Vec2), bits: 16, width: 2, src: [x, y, _] }
+                    if self.texel16(x) && self.texel16(y)),
+            _ => false,
+        };
+        nd.kind == Kind::Alu(Alu::Fadd) && nd.bits == 16 && nd.width == 2 && pair(nd.src[0]) && pair(nd.src[1])
+    }
+
     /// [`Fs::widen`] at the store of a highp output: lower_precision's
     /// `f162f` where the lowered tree meets the assignment
     /// (mixed_44_hdrsample's four `F16_TO_F32` ahead of `BLEND.v4.f32`).
@@ -2596,7 +2625,9 @@ impl<'s> Fs<'s> {
                     let kk = match (c, d) {
                         (Val::Const(a), Val::Const(b)) if a == b => Val::Const(a),
                         (Val::Const(_), _) | (_, Val::Const(_)) => return Err(MaliError::FragCoordMediump),
-                        _ if a == AluOp::Fadd => self.vec16(c, d, at)?,
+                        /* a second look-up's texels are its words too
+                         * (gm2_texcoord_4) */
+                        _ if a == AluOp::Fadd => self.vec16_of(c, d, true, at)?,
                         _ => return Err(MaliError::FragCoordMediump),
                     };
                     let Val::Lane(n, _) = self.node16(op, [v, kk, u], 2, at)? else {
@@ -3106,6 +3137,11 @@ impl<'s> Fs<'s> {
                 Some((a, b)) if !matches!(f32::from_bits(b), 1.0 | 2.0 | 3.0 | 4.0) => {
                     self.op32(Alu::Fpow, [a, Val::Const(b), u], at)
                 }
+                /* `fpow(a, 2.0)` is `fmul(a, a)` (nir_opt_algebraic.py:1883;
+                 * gm2_fclane_2's `pow(vd.r, 2.0)`, `FMA.f32 r0, r0^, r0^, r4^`
+                 * with the sum it is read by, byte-equal to gm2_fclane_3's
+                 * `vd.r * vd.r`); 1.0, 3.0 and 4.0 have no reference */
+                Some((a, b)) if f32::from_bits(b) == 2.0 => self.op32(Alu::Fmul, [a, a, u], at),
                 _ => Err(MaliError::Arithmetic),
             },
             _ => Err(MaliError::Arithmetic),
@@ -5052,7 +5088,9 @@ fn walk_nodes(
                     /* stored to a mediump colour as they are: no reference
                      * but one texel's product by a constant, an operation
                      * of one lane ([`Fs::alu16`], gm2_texswz_2) */
-                    f.mixed |= lanes.iter().any(|&t| f.texel16_product(t, 0) && !f.lone_texel_product(t));
+                    f.mixed |= lanes
+                        .iter()
+                        .any(|&t| f.texel16_product(t, 0) && !f.lone_texel_product(t) && !f.texel_pair_sum(t));
                 }
                 match slot {
                     IoSlot::FragColor(0) => {
@@ -5095,7 +5133,12 @@ fn walk_nodes(
                 /* a lowp or mediump sampler's texel is fp16 (lower_precision's
                  * `visit_enter(ir_texture)`: the look-up takes its sampler's
                  * precision; hdrsample's `texture(hdr, ..) * 0.25`) */
-                let texel = |f: &Fs<'_>, v: Val| a == AluOp::Fmul && f.texel16(v);
+                /* and a sum of two such look-ups' texels (gm2_texcoord_4's
+                 * `texture2D(s0, v.xy) + texture2D(s1, v.zw)`: `FADD.v2f16`
+                 * of the two results' words); a texel plus a constant or a
+                 * highp value has no reference */
+                let texels = (0..arity).all(|k| (0..n).all(|i| f.texel16(src[k][i])));
+                let texel = |f: &Fs<'_>, v: Val| (a == AluOp::Fmul || (a == AluOp::Fadd && texels)) && f.texel16(v);
                 let low = |f: &Fs<'_>, k: usize| fc[k] || (0..n).any(|i| f.is_f16(src[k][i]) || texel(f, src[k][i]));
                 let konst = |k: usize| (0..n).all(|i| matches!(src[k][i], Val::Const(_)));
                 if (0..arity).any(|k| low(f, k)) && (0..arity).all(|k| low(f, k) || konst(k)) {
@@ -6185,8 +6228,14 @@ fn walk_nodes(
                 let (s, t) = (lane(vals, coord, 0), lane(vals, coord, 1));
                 let coord = match (f.input_lane(s), f.input_lane(t), s, t) {
                     (Some((v, 0)), Some((w, 1)), ..) if v == w && v != POINT_COORD => {
-                        /* a vec2 varying read whole (the references' coordinate) */
-                        if m.inputs.iter().find(|d| d.slot() == IoSlot::Varying(v)).map(|d| d.components) != Some(2) {
+                        /* a vec2 varying read whole (the references' coordinate),
+                         * or the first two lanes of a wider one in a highp
+                         * shader (gm2_texcoord_4's `v.xy` of a vec4, the
+                         * load `.v4` when `.zw` is read too, `.v2` when not:
+                         * docs/notes/mali-tex-coords.md). A mediump shader's
+                         * has no reference here */
+                        let comps = m.inputs.iter().find(|d| d.slot() == IoSlot::Varying(v)).map(|d| d.components);
+                        if comps < Some(2) || (comps != Some(2) && !prec.highp) {
                             return Err(MaliError::TexCoord);
                         }
                         TexCoord::Varying(v)
@@ -7533,10 +7582,15 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
     for j in 0..f.nlook {
         if let (true, TexCoord::Varying(loc)) = (f.look_ups[j].live(), f.look_ups[j].coord) {
             let ((k, x), (k1, y)) = (index(f, loc, 0)?, index(f, loc, 1)?);
-            if k != k1 || (x, y) != (0, 1) {
+            /* or lanes 2 and 3 of a slot the link packed two vec2
+             * varyings in (`compact_varyings`; gm2_fclane_2's `t0` and `t1`,
+             * `LD_VAR_BUF_IMM ... .v4 @r4:r5:r6:r7` then `TEX_SINGLE ...
+             * @r6:r7, @r6:r7` and `TEX_SINGLE ... @r4:r5, @r4:r5`) */
+            if k != k1 || !matches!((x, y), (0, 1) | (2, 3)) {
                 return Err(MaliError::TexCoord);
             }
             f.look_ups[j].load = Some(k);
+            f.look_ups[j].load_lane = x;
         }
     }
     Ok(())
@@ -9958,9 +10012,15 @@ fn word_of(f: &Fs<'_>, a: Val, b: Val) -> Result<Word, MaliError> {
             (Some((u, k, x)), Some((u1, k1, y))) if u == u1 && k == k1 => {
                 if x % 2 == 0 && y == x + 1 {
                     Word::Pair(a, b)
+                } else if x / 2 == y / 2 && !u {
+                    /* one aligned pair of a varying's load the other way
+                     * round: vectorised too, the sources in the colour's
+                     * order (gm2_fclane_1's `vec4(vd.g, vd.r, ..)`:
+                     * `V2F32_TO_V2F16.discard r0, r1^, r0^`) */
+                    Word::Pair(a, b)
                 } else if x / 2 == y / 2 {
-                    /* one aligned pair the other way round: vectorised too,
-                     * not drawn by a reference */
+                    /* a uniform's pair the other way round: not drawn by a
+                     * reference */
                     return Err(MaliError::ColourForm);
                 } else {
                     Word::Lanes(a, b)
@@ -12257,8 +12317,9 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
     let mut staging = [Src::NULL; 3];
     let n = match (t.coord, k) {
         (TexCoord::Varying(_), Some(k)) => {
-            let lane = |c: usize| lv.raw[k as usize][c].ok_or(MaliError::Defect(Defect::IrIndex));
-            staging[..2].copy_from_slice(&[Src::ssa(lane(0)?), Src::ssa(lane(1)?)]);
+            let lane = |c: usize| lv.raw[k as usize][c & 3].ok_or(MaliError::Defect(Defect::IrIndex));
+            let x = usize::from(t.load_lane);
+            staging[..2].copy_from_slice(&[Src::ssa(lane(x)?), Src::ssa(lane(x + 1)?)]);
             2
         }
         (TexCoord::Const(x, y), None) => {

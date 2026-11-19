@@ -2,8 +2,8 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): a texture coordinate that is not a whole vec2 varying (`TexCoord`)
 
-**Status: design** (plan #336, issue #33; row 17 of `mali-corpus-families.md`).
-This note changes no code. It says where `tools/shaders/es100/xlink.frag` is
+**Status: design** (plan #336, issue #33; row 17 of `mali-corpus-families.md`);
+its highp step 1 landed with plan #367 (last section). This note changed no code. It says where `tools/shaders/es100/xlink.frag` is
 refused on the tip, what Mesa 26.2.1 emits for it and for minimal variants of
 its coordinate (measured, quoted), what already matches, what is missing, in
 which files, and which test pins it. Anything not measured is marked
@@ -284,3 +284,49 @@ only highp refusal is the plain `Varying` form's two-component guard.
   vertex shader stores; it is the "partial varying read" of plan item
   `link-partial` (case 19), not new here.
 - Mediump sequences of step 4.
+
+## glmark2's coordinates (plan #367 lower-texcoord-lane, TEX_COORD)
+
+**Status: landed** for the highp forms below. References:
+`tools/mali/testdata/gm2_texcoord_1..4` (Mesa 26.2.1 on drm-shim, drawn with
+`--uniform-values`), pinned by `tests/mali_texcoord_lane.rs`; pan_shc's
+verdicts are cases.txt's `gm2_texcoord_*` lines.
+
+| case | shape | ours |
+|---|---|---|
+| `gm2_texcoord_1` | ideas df64: `gl_FragCoord.xy / 32.0`, alpha test | refused: fp16 `gl_FragCoord` arithmetic (FRAGCOORD_FP16, plan #367 lower-fragcoord16) |
+| `gm2_texcoord_2` | jellyfish 22fc's caustics: `vec2(v.x / 24.0 + t / 20.0, (v.z - v.y) / 48.0 + t / 40.0)` | compiles; **differs** (below) |
+| `gm2_texcoord_3` | `texture2D(tex, v.zw)` of a vec4 | byte-equal (it was already) |
+| `gm2_texcoord_4` | `texture2D(s0, v.xy) + texture2D(s1, v.zw)` | byte-equal (this item) |
+
+What this item changed (`src/shaderc/online/mali/nir_fs.rs`):
+
+1. Step 1 above, for a **highp** shader only: the `Varying(v)` form takes
+   the first two lanes of a varying of two or more components. A mediump
+   shader's keeps the `TexCoord` refusal (step 4: no reference here). The
+   corpus `xlink.frag` moves to `ok` (tools/mali/corpus-verdicts.txt).
+2. The texels of two lowp look-ups summed in a highp shader are fp16
+   (lower_precision gives the sum its operands' precision): `alu16`'s pair
+   rule takes the second look-up's words as a pair too, and the store to the
+   mediump colour accepts the sum (`Fs::texel_pair_sum`): `FADD.v2f16.discard
+   r0, r0^, r2^`, `FADD.v2f16 r1, r1^, r3^`. A texel plus a constant or a
+   highp value has no reference and stays `MixedPrecision`.
+3. A coordinate may be lanes 2 and 3 of its slot (`TexLookup::load_lane`),
+   when the link packed two vec2 varyings in one (mali-varying-constants.md,
+   "glmark2's colour lanes").
+
+**gm2_texcoord_2, the open difference.** Mesa's link moves the whole
+coordinate into the vertex shader, the uniform `t` with it (measured), so
+`can_move_uniforms` (nir_opt_varyings.c:2006) is true for this program
+(**inferred**: its uniforms are far under `MaxUniformComponents`), and every operation is a scalar one
+(panfrost does not scalarise before the link, so a vector operation such as
+`t_comp_hp`'s `v * u` stays put: :3845-3848). The reference's varying
+program is `MOV.i32 r0, u6.w0; FMA.f32 r0, u5.w1, r0^, 0x0.neg` (`t * 0.05`),
+then `FMA.f32 r0, r2^, u6.w1, r0^`, and the fragment program loads the
+finished pair and samples it (8 words). Ours moves `v.x / 24.0` and
+`(v.z - v.y) / 48.0` and keeps `t / 20.0`, `t / 40.0` in the fragment shader
+(motion.rs treats a uniform as unmovable). Moving it needs a uniform node in
+`motion::Moved` and the vertex shader reading a uniform it does not declare
+(its FAU word, the program's uniform upload): a new item, not this one. The
+pair compiles and draws the same values meanwhile; the test pins the
+difference so that the item that closes it updates the pin.
