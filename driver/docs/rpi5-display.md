@@ -469,3 +469,106 @@ the caller read; host test `tools/v3d/check71.d/pv_hdmi.sh`).
 - **The firmware's own drawing:** whether the firmware writes into its
   scanout buffer after the kernel started (a boot message, a splash update);
   Z3 reads the pattern back twice.
+
+## Board results (U3)
+
+One session on 2026-11-19, record
+`records/rpi5/20261119-0551-rpi5_display-80403eba/` (gitignored, redacted,
+`record.sh check` passes). The image was built from commit `80403eba`
+(`west build -p always -b rpi_5 ... -DYAKOGL_WERROR=ON` on
+`tools/probes/rpi5_display`; Zephyr `af17c0c8aa2a`, image sha256
+`63210f692729e6b0...`). `session/run_u3.sh` took the Linux reference over ssh,
+then `tools/board.sh pi5 run` booted the image once through `tryboot` with
+board.sh's own `tryboot.txt` (`kernel=` and `enable_uart`, no `hdmi_*` keys,
+so it is the `fw` boot of section 6: it answers A and B). The PM watchdog reset
+the SoC and the board was back under Linux 435 s after the reboot. `/boot`
+was restored byte for byte: the sha256 of `config.txt` and `cmdline.txt` are
+the same before and after, and `tryboot.txt` and the staged image are absent
+again, as they were before the run. One boot only: the `bare` boot (route C)
+was not needed.
+
+The console bridge takes one client, and the lease's own console server held
+it. So board.sh's capture read a silent local placeholder and printed
+`verdict=no_end_line` (rc 4). The console in the record is the lease's buffer
+of the same boot, from the firmware's `tryboot.txt` read to the image's last
+line. `verdicts.sh` and `route_choice.sh` were run on it before redaction.
+Redaction replaces the host name everywhere, and on this board that name is
+also the prefix of `rpi5_display`, so the record's copies read
+`<name>_display`.
+
+Verdict lines (`verdicts.sh`: 8 of 8, missing none), with get_throttled:
+
+```
+u3 scanout: running
+u3 plane: addr=0x3f800000 fmt=RGB565 pitch=3840 w=1920 h=1080
+u3 adopt-readback: PASS (1920 x 1080 read back byte-equal twice, 100 ms apart, 0 mismatches, checksum 0xcbe2c9d3, list still names it)
+u3 mailbox-fb: FAIL (the allocation and its tags were not answered as a grant (-5))
+u3 mailbox-readback: FAIL (not reached)
+u3 scanout-follows-mailbox: no (no buffer: list 0x0 pitch 0 0x0 fmt unknown, buffer 0x0 pitch 0 0x0 fmt unknown)
+u3 split-screen: not drawn (no buffer read back: neither the mailbox grant nor an adopted 32 bpp plane)
+rpi5_display: FAIL (mailbox-fb FAIL: the allocation and its tags were not answered as a grant (-5); mailbox-readback FAIL: not reached; split-screen not drawn (no buffer read back: neither the mailbox grant nor an adopted 32 bpp plane))
+rpi5_display: feeding stopped, reset expected (the watchdog resets the SoC within 45 s, and tryboot returns the board to Linux)
+u3 route: 1 firmware scanout running, adopt-readback PASS
+get_throttled before: 0x0   after: 0x0   (under Linux, over ssh; the image's own GET_THROTTLED was not answered)
+```
+
+What the Zephyr run showed:
+
+- **Z1, scanout:** the firmware leaves its scanout running for a `kernel=`
+  image. Its log says `FB0 disp 0 max-fb 1 1920x1080 stride 3840` on HDMI0
+  (hotplug 1, best mode 1920x1080 60 Hz; HDMI1 hotplug 0). The HVS is the
+  D stepping (`VERSION` 0x2454, `SCALER6D`). Channel 0 is enabled and running
+  (mode 2, 1920x1080, the frame count went from 27 to 33 in 100 ms). Its
+  display list holds one unity plane: RGB565 (format code 4, order 2),
+  1920x1080 at 0,0, pitch 3840, buffer at the top of the first GiB. Channel 1
+  also runs (640x480) with no list. Channel 2 is off. Both pixel valves have
+  `EN` and `VIDEN` set. IOMMU4 is disabled (`MMMU_CTRL` 0), so the list
+  address is an ARM physical address.
+- **Z3 on the adopted plane:** the pattern was written into the 4147200-byte
+  plane through a Normal non-cacheable mapping and read back byte-equal
+  twice, 100 ms apart. The list still named the same buffer afterwards. The
+  firmware did not draw into it during the run.
+- **Z2, mailbox:** no property-mailbox request was answered: the six
+  framebuffer GET tags, the `FRAMEBUFFER_ALLOCATE` 0x40001 request,
+  `GET_THROTTLED` and all five `GET_CLOCK_RATE` queries all returned
+  `-EIO` with response code 0 (`seen 0x00 answered 0x00`). A firmware that
+  refuses the framebuffer tags would still answer `GET_THROTTLED`. So this
+  run does not show that the BCM2712 firmware refuses `FRAMEBUFFER_ALLOCATE`
+  to a `kernel=` image. It shows that the board layer's mailbox transport got
+  no answer at all on the Pi 5. Route B stays unproven, not closed.
+- **DTB:** the firmware hands over no `simple-framebuffer` node (`u3 dt-fb:
+  none`; the DTB has 3 `/reserved-memory` regions).
+- **HDMI registers were not read:** the HSM clock rate was never answered, so
+  the probe kept to section 6's rule. The `u3 reg hdmi0` words of 0xffffffff
+  are the snapshot's "not read" values, not register contents.
+- **Split screen:** not drawn. The probe draws only into a mailbox grant or
+  into an adopted 32 bpp plane, and the firmware's plane is 16 bpp RGB565.
+
+Linux reference (`linux_ref.sh`, KMS with `vc4-kms-v3d-pi5`; 689 facts,
+2 skipped):
+
+- HDMI-A-1 is connected and enabled at 1920x1080 (the `cmdline.txt` pin);
+  HDMI-A-2 is disconnected.
+- `fb0` is `vc4drmfb`, 1920x1080, 16 bpp, stride 3840: the same size, depth
+  and pitch as the firmware's plane under Zephyr (`verdicts.sh`: 1 fact
+  compared, 1 agrees).
+- HVS `SCALER6D_VERSION` 0x2454; channel 0 `CTRL0` 0x877f0437, the same word
+  the firmware leaves. Linux's list for channel 0 holds one plane of the same
+  size and pitch at an address of its own. Channels 1 and 2 are disabled
+  under Linux, while the firmware left channel 1 running.
+- The pixel valve words differ: under Linux, `PV_HORZB` names 1920 active
+  pixels (0x780). Under the firmware, the valve Zephyr read names 960
+  (0x3c0) with the same vertical timing. Which valve feeds HDMI0, and whether
+  the firmware runs it at two pixels per clock, is not decided here.
+- No `/proc/device-tree` display node was found by the dump (`skip: no
+  display nodes in device tree`). `vcgencmd display_power` returned -1.
+
+**The route the results pick: A, adopt the firmware's running scanout**
+(`route_choice.sh`: `u3 route: 1`). The scanout runs, its list names one
+plane the CPU can write, and the bytes read back as written. The picture
+code takes the plane's size, format and pitch as found: 1920x1080 RGB565,
+pitch 3840, on this sink. It must therefore draw 16 bpp, and the Pi 4's
+32 bpp `fbcon` cannot be used unchanged. Route B is not dropped for good:
+the open question is why the mailbox gave no answer at all, which concerns
+the board layer, not the firmware's tag set. Route C is not needed for a
+first picture.
