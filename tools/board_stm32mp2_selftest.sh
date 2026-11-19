@@ -73,6 +73,11 @@
 #    a board read that fails is not "unset", the lock's HOLD_MAX over the
 #    run's own bounds, the cycle's own disarm, uninstall's UNDO and its
 #    check of the stock files before the record goes.
+# 10. The board's sessions (common_prechecks, tools/board-session-lib.sh):
+#    our own ssh seen from a forwarding address is ours, a third address is
+#    refused with the same message, an empty seen address keeps the old rule
+#    (only this host's addresses are ours); the dry run reads the seen
+#    address right after who and without MP2_SUDO.
 # Prints "board_stm32mp2_selftest: N checks, F failed"; exit 0 only when F is
 # 0 and N is the pinned count. About 90 s (the live runs poll every 5 s; the
 # watchdog case waits 12 s).
@@ -81,7 +86,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=185
+WANT_CHECKS=190
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -1025,6 +1030,58 @@ check "live: every dd that writes names the u-boot-env partition and the copies'
           ! grep -E "(^| )rm " "$F/ssh.all.log" | grep -vqE "rm -(f|rf) /boot/yakogl"'
 check "live: nothing of the fake board or its host leaked into the host's record directory names or the outputs" \
     eval '! grep -rq "mp2board" "$S/live-logs" && ! ls "$S/live-logs" | grep -q "mp2board"'
+
+echo "== 10. the board's sessions (common_prechecks)"
+# A session is ours when it comes from one of this host's addresses or from
+# the address the board sees for our ssh (a task machine reaches the board
+# through a forwarding address, which is none of its own;
+# tools/board-session-lib.sh). The function as board-stm32mp2.sh has it, against a
+# board that answers who with $1 and the seen command with $2; this host's
+# addresses are 127.0.0.1 and 192.0.2.10 (a stub ip). A board read after the
+# two means the sessions passed: "ok". Every address here is a documentation one.
+eval "$(sed -n '/^common_prechecks() {/,/^}/p' "$B")"
+# shellcheck source=tools/board-session-lib.sh
+. "$REPO/tools/board-session-lib.sh"
+fk_prechecks() { # fk_prechecks WHO SEEN: common_prechecks' output, then "rc=N"
+    (
+        fk_who=$1 fk_seen=$2 SU= BOARD_HOST=fake-board
+        bget() {
+            case $2 in
+            who) printf -v "$1" '%s' "$fk_who" ;;
+            "$(board_session_seen_cmd)") printf -v "$1" '%s' "$fk_seen" ;;
+            true | 'uname -n') printf -v "$1" '%s' "${3:-}" ;;
+            *) echo "ok"; exit 0 ;;
+            esac
+        }
+        ip() { printf '1: lo    inet 127.0.0.1/8 scope host lo\n2: eth0    inet 192.0.2.10/24 scope global eth0\n'; }
+        meta() { :; }
+        die() { echo "die: $1"; exit 3; }
+        common_prechecks
+        echo "ok"
+    ) 2>&1
+    echo "rc=$?"
+}
+fk_fwd="root     pts/0        2026-11-19 10:00 (198.51.100.7)"
+fk_third="root     pts/1        2026-11-19 10:01 (203.0.113.9)"
+fk_own="root     pts/2        2026-11-19 10:02 (192.0.2.10)"
+out=$(fk_prechecks "$fk_fwd" 198.51.100.7)
+check "sessions: our own ssh through a forwarding address (who's address = the address the board sees for us) is ours: rc 0" \
+    eval 'grep -qx "ok" <<<"$out" && grep -qx "rc=0" <<<"$out"'
+out=$(fk_prechecks "$fk_fwd
+$fk_third" 198.51.100.7)
+check "sessions: a session from a third address is still refused: rc 3, the same message" \
+    eval 'grep -qxF "die: the board has sessions from other machines; ask before taking it:" <<<"$out" && grep -qx "rc=3" <<<"$out"'
+out=$(fk_prechecks "$fk_fwd
+$fk_own" '')
+check "sessions: an empty seen address keeps the old rule: this host's address is ours, the forwarding one is refused" \
+    eval 'grep -qxF "die: the board has sessions from other machines; ask before taking it:" <<<"$out" && grep -qx "rc=3" <<<"$out"'
+out=$(fk_prechecks "$fk_own" '')
+check "sessions: an empty seen address and only this host's address: rc 0" \
+    eval 'grep -qx "ok" <<<"$out" && grep -qx "rc=0" <<<"$out"'
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2_SUDO="sudo -n " dry run "$S/img/mp2.bin" "$S/logs" trial 2>&1)
+rc=$?
+check "sessions: the dry run reads the address the board sees for our ssh right after who, without MP2_SUDO's sudo: rc 0" \
+    eval '[ "$rc" = 0 ] && grep -q "^DRY board\$ sudo -n true" <<<"$out" && grep -A1 -x "DRY board\\$ who" <<<"$out" | grep -qxF "DRY board\$ $(board_session_seen_cmd)"'
 
 echo "board_stm32mp2_selftest: $n checks, $fails failed (pinned: $WANT_CHECKS)"
 [ "$fails" = 0 ] && [ "$n" = "$WANT_CHECKS" ]

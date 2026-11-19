@@ -35,13 +35,18 @@
 #    or in the window, a standalone default set (tools/mp2s_guard.py --for
 #    oneshot), /boot on the eMMC, files of an earlier run, a busy
 #    console. The command log never writes the environment or a device.
+# 6. The board's sessions (prechecks, tools/board-session-lib.sh): our own
+#    ssh seen from a forwarding address is ours, a third address is refused
+#    with the same message, an empty seen address keeps the old rule (only
+#    this host's addresses are ours); the dry run reads the seen address
+#    right after who and without MP2_SUDO.
 # Prints "oneshot_selftest: N checks, F failed"; exit 0 only when
 # F is 0 and N is the pinned count.
 set -uo pipefail
 export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 B="$HERE/oneshot.sh"
-WANT_CHECKS=70
+WANT_CHECKS=75
 
 S=$(mktemp -d)
 trap 'pkill -f "$S/" 2>/dev/null; rm -rf "$S"' EXIT
@@ -441,6 +446,58 @@ rm -rf "$F/boot/yakogl"
 reset_board; touch "$F/state/busy"
 live_refused "a busy console" "busy or unreachable"
 check "every live refusal: the board commands never wrote anything" log_clean
+
+echo "== 6. the board's sessions (prechecks)"
+# A session is ours when it comes from one of this host's addresses or from
+# the address the board sees for our ssh (a task machine reaches the board
+# through a forwarding address, which is none of its own;
+# tools/board-session-lib.sh). The function as oneshot.sh has it, against a
+# board that answers who with $1 and the seen command with $2; this host's
+# addresses are 127.0.0.1 and 192.0.2.10 (a stub ip). A board read after the
+# two means the sessions passed: "ok". Every address here is a documentation one.
+eval "$(sed -n '/^prechecks() {/,/^}/p' "$B")"
+# shellcheck source=tools/board-session-lib.sh
+. "$HERE/../../../tools/board-session-lib.sh"
+fk_prechecks() { # fk_prechecks WHO SEEN: prechecks' output, then "rc=N"
+    (
+        fk_who=$1 fk_seen=$2 SU= BOARD_HOST=fake-board
+        bget() {
+            case $2 in
+            who) printf -v "$1" '%s' "$fk_who" ;;
+            "$(board_session_seen_cmd)") printf -v "$1" '%s' "$fk_seen" ;;
+            true | 'uname -n') printf -v "$1" '%s' "${3:-}" ;;
+            *) echo "ok"; exit 0 ;;
+            esac
+        }
+        ip() { printf '1: lo    inet 127.0.0.1/8 scope host lo\n2: eth0    inet 192.0.2.10/24 scope global eth0\n'; }
+        meta() { :; }
+        die() { echo "die: $1"; exit 3; }
+        prechecks
+        echo "ok"
+    ) 2>&1
+    echo "rc=$?"
+}
+fk_fwd="root     pts/0        2026-11-19 10:00 (198.51.100.7)"
+fk_third="root     pts/1        2026-11-19 10:01 (203.0.113.9)"
+fk_own="root     pts/2        2026-11-19 10:02 (192.0.2.10)"
+out=$(fk_prechecks "$fk_fwd" 198.51.100.7)
+check "sessions: our own ssh through a forwarding address (who's address = the address the board sees for us) is ours: rc 0" \
+    eval 'grep -qx "ok" <<<"$out" && grep -qx "rc=0" <<<"$out"'
+out=$(fk_prechecks "$fk_fwd
+$fk_third" 198.51.100.7)
+check "sessions: a session from a third address is still refused: rc 3, the same message" \
+    eval 'grep -qxF "die: the board has sessions from other machines; ask before taking it" <<<"$out" && grep -qx "rc=3" <<<"$out"'
+out=$(fk_prechecks "$fk_fwd
+$fk_own" '')
+check "sessions: an empty seen address keeps the old rule: this host's address is ours, the forwarding one is refused" \
+    eval 'grep -qxF "die: the board has sessions from other machines; ask before taking it" <<<"$out" && grep -qx "rc=3" <<<"$out"'
+out=$(fk_prechecks "$fk_own" '')
+check "sessions: an empty seen address and only this host's address: rc 0" \
+    eval 'grep -qx "ok" <<<"$out" && grep -qx "rc=0" <<<"$out"'
+out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2_SUDO="sudo -n " dry run "$S/img/mp2_hello.bin" "$S/logs" 2>&1)
+rc=$?
+check "sessions: the dry run reads the address the board sees for our ssh right after who, without MP2_SUDO's sudo: rc 0" \
+    eval '[ "$rc" = 0 ] && grep -q "^DRY board\$ sudo -n true" <<<"$out" && grep -A1 -x "DRY board\\$ who" <<<"$out" | grep -qxF "DRY board\$ $(board_session_seen_cmd)"'
 
 pkill -f "$S/fakebin/fakecon" 2>/dev/null
 echo "oneshot_selftest: $n checks, $fails failed"

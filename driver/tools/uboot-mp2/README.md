@@ -17,7 +17,7 @@ console helper (`tools/mp2_uboot_console.py`), the board backends
 | `build.sh [OUTDIR]` | builds `mp2-mmc.scr` and `mp2-net.scr` |
 | `selftest.sh` | host check, no board, no network |
 | `oneshot.sh` | the runner: stages a script and an image, types the line, waits for ST's Linux, removes the files, diffs the environment and `/boot` |
-| `oneshot_selftest.sh` | the runner without a board: dry runs, refusals, a fake board and console (70 checks) |
+| `oneshot_selftest.sh` | the runner without a board: dry runs, refusals, a fake board and console (75 checks) |
 
 ## The runner: oneshot.sh
 

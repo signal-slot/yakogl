@@ -221,6 +221,9 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
+# Which of the board's `who` sessions are this run's own (common_prechecks).
+# shellcheck source=tools/board-session-lib.sh
+. "$HERE/board-session-lib.sh"
 SELF="$HERE/board-stm32mp2.sh"
 TAG="board-stm32mp2.sh stm32mp257f-dk"
 BOARD=stm32mp257f-dk
@@ -855,14 +858,16 @@ on_exit() {
     exit "$rc"
 }
 common_prechecks() {
-    local who mine others junk
+    local who seen mine others junk
     bget junk "${SU}true" || die "$BOARD_HOST does not answer (ssh key login${SU:+ and $SU})"
     bget BHOSTNAME 'uname -n' DRY-HOSTNAME || die "cannot read the board's host name"
     bget who 'who' '' || die "cannot run who on the board"
+    # A remote session is ours when it comes from one of this host's addresses,
+    # or from the address the board sees for our own ssh (a forwarding address);
+    # without SU, as who: sudo would drop SSH_CONNECTION. tools/board-session-lib.sh.
+    bget seen "$(board_session_seen_cmd)" '' || die "cannot read the address the board sees for our ssh"
     mine=$(ip -o addr 2>/dev/null | awk '{sub(/\/.*/, "", $4); print $4}')
-    # shellcheck disable=SC2086
-    others=$(awk '/\(.*\)/ { a = $NF; gsub(/[()]/, "", a); print a }' <<<"$who" | sort -u |
-        grep -vxF -f <(printf '%s\n' $mine) || true)
+    others=$(board_session_others "$who" "$mine" "$seen")
     [ -z "$others" ] || die "the board has sessions from other machines; ask before taking it:
 $who"
     meta who_sessions "$(grep -c . <<<"$who")"
