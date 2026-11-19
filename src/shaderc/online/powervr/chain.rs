@@ -66,13 +66,14 @@ pub struct Built<'a> {
     /// The record's `native_cube` byte ([`native_flags`]), read off the
     /// selected program before its samples expand.
     pub native_cube: u8,
-    /// Block members read with `ld`: the shared prefix and the address
-    /// pair ([`UboPlace`]).
+    /// A stage that declares a uniform block: the shared prefix and the
+    /// address pair for its `ld` reads ([`UboPlace`]), whether or not a
+    /// member read survives.
     pub ubo: Option<UboPlace>,
 }
 
-/// Where a stage that reads its uniform-block members with `ld` keeps what
-/// the back end writes (docs/notes/pvr-ubo-memory-load.md §8.4): the
+/// Where a stage that declares a uniform block keeps what the back end
+/// writes (docs/notes/pvr-ubo-memory-load.md §8.4): the
 /// default-block prefix the shared registers hold, `[0, prefix)` of the
 /// stage's flat array from the first register past the descriptors (the
 /// record's `uniform_sh_dwords`), and the address pair's low register,
@@ -86,8 +87,8 @@ pub struct UboPlace {
 /// What a PowerVR online record carries beside its `ShcShader`, in the
 /// record's keep extent behind its `priv_` (`backend::codegen_priv`; read
 /// back with `backend::pvr_ubo_addr_off1`): `ubo_addr_off1`, the address
-/// pair's register plus one, 0 when the stage reads no block member with
-/// `ld`. `ShcShader::ubo_addr_off1` (docs/notes/pvr-ubo-memory-load.md
+/// pair's register plus one, 0 when the stage declares no uniform block.
+/// `ShcShader::ubo_addr_off1` (docs/notes/pvr-ubo-memory-load.md
 /// §8.4) waits for `src/shaderc/mod.rs`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
@@ -95,9 +96,17 @@ pub struct UboRecord {
     pub ubo_addr_off1: u16,
 }
 
-/// The shared layout of a stage whose block members are read with `ld`
-/// ([`SharedLayout`]), or `None` when it reads none: then every uniform
-/// dword is a shared register and the layout is today's.
+/// The shared layout of a stage that declares a uniform block
+/// ([`SharedLayout`]), whether or not a member read survives; `None` only
+/// when it declares none: then every uniform dword is a shared register and
+/// the layout is today's.
+///
+/// A stage that declares a block and reads none of it is laid out too: the
+/// record's `uniform_sh_dwords` 0 means the whole array (the back end's
+/// `uniform_split`), and a 16384-byte block's dwords do not fit the 2048
+/// shared registers. Laying the pair with no member read surviving
+/// ([`ubo_place`]'s fallback) keeps the whole-array rule to block-free
+/// stages.
 ///
 /// The prefix the shared registers hold ends at the last default row before
 /// the first member row: the front end places rows in declaration order, so
@@ -122,14 +131,6 @@ fn shared_layout<'a>(
     }
     let rows = UboRows::build(a, reflection).map_err(|_| ChainError::OutOfScratch)?;
     let member = |d: u16| rows.row(u32::from(d)) != Row::Default;
-    let reads = m.instrs.iter().any(|op| match *op {
-        ir::Op::LoadUniform { dword_off, .. } => member(dword_off),
-        ir::Op::LoadUniformIdx { base_dw, .. } => member(base_dw),
-        _ => false,
-    });
-    if !reads {
-        return Ok(None);
-    }
     let first_member = reflection
         .block_members
         .iter()
@@ -333,10 +334,11 @@ pub fn compile_vertex_with<'a>(
     })
 }
 
-/// A stage that reads block members with `ld`: the record's
+/// A stage that declares a uniform block: the record's
 /// `uniform_sh_dwords`, the prefix the back end DMAs to the shared
 /// registers, and its `ubo_addr_off1` ([`UboRecord`]). Every other record
-/// keeps both as they were (0: the whole array, and no pair).
+/// (declares no block) keeps both as they were (0: the whole array, and no
+/// pair).
 fn record_ubo(sh: &mut crate::shaderc::ShcShader, ubo: Option<UboPlace>) -> Result<(), ChainError> {
     let Some(u) = ubo else { return Ok(()) };
     sh.uniform_sh_dwords = u.prefix;

@@ -776,7 +776,7 @@ fn stage_array(sh: &ShcShader, blk: usize, ie: i32) -> (&'static [u32], usize) {
 /// The record's address pair (`ubo_addr_off1`) and default prefix.
 fn pair_of(sh: &ShcShader) -> (u32, u32) {
     let off1 = yakogl::shaderc::online::backend::pvr_ubo_addr_off1(sh) as u32;
-    assert_ne!(off1, 0, "the stage reads its block members with ld");
+    assert_ne!(off1, 0, "a stage that declares a block carries the pair");
     (off1 - 1, sh.uniform_sh_dwords as u32)
 }
 
@@ -916,6 +916,41 @@ fn a_50688_dword_stage_array_draws_with_only_its_prefix_in_shared_registers() {
     let snap = pair_value(&d, lo);
     assert_eq!(mem_word(&d, snap + 4 * 50687), 0x5A5A_5A5A, "the snapshot's last dword");
     assert_eq!(run_vs(sh, &d), [pat(0), pat(4095), pat(0), pat(4095)]);
+}
+
+/// A stage that declares the 16384-byte block and reads none of it (the
+/// planner's case: a block declared in both stages, read in one): the pair
+/// is laid out all the same, so the record carries its default prefix and
+/// `ubo_addr_off1` and the shared-register DMA carries no block dword --
+/// the whole-array rule (`uniform_sh_dwords == 0`) stays to stages that
+/// declare no block. The defaults before the block still reach the program
+/// through the shared prefix.
+#[test]
+fn a_stage_that_declares_a_block_it_never_reads_keeps_only_its_default_prefix_in_shared_registers() {
+    let _g = context();
+    let prog = link(VS_PLAIN, FS_PLAIN);
+    let vs = format!(
+        "#version 300 es\nin vec4 p;\n{INDICES}{BLOCK_16K}\
+         void main() {{ gl_Position = p + vec4(float(ia), float(ie), 0.0, 0.0); }}\n"
+    );
+    let sh = compile(SHC_STAGE_VERTEX, &vs);
+    let (lo, prefix) = pair_of(sh);
+    assert_eq!(prefix, 2, "ia and ie, declared before the block");
+    let (arr, block_at) = stage_array(sh, 4096, 3);
+    *SWAP.lock().unwrap() = Some(Swap { stage: SHC_STAGE_VERTEX, sh, cpu: arr.as_ptr(), dwords: arr.len() as u16 });
+    let (err, rcs) = draw_triangle(prog);
+    assert_eq!(err, GL_NO_ERROR, "{:?}", logs());
+    assert_eq!(rcs, [0], "the back end recorded the draw: {:?}", logs());
+
+    /* one DMA program writes the pair, takes the 2-dword default prefix and
+    no block dword: `the_dma` checks the total and the pattern */
+    let d = the_dma(lo, prefix, block_at);
+    let snap = pair_value(&d, lo);
+    assert_eq!(mem_word(&d, snap + 4 * block_at as u64), pat(0), "the snapshot holds the block");
+    assert_eq!(mem_word(&d, snap + 4 * (block_at + 4095) as u64), pat(4095));
+    /* the program reads its defaults from the shared prefix, not from the
+    block: gl_Position = p(0) + (float(ia), float(ie), 0, 0) */
+    assert_eq!(run_vs(sh, &d), [0.0f32.to_bits(), 3.0f32.to_bits(), 0, 0]);
 }
 
 /* ---- through GL: a block the GL core links today -------------------------------- */
