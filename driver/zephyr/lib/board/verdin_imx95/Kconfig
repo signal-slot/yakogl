@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The Verdin iMX95 (i.MX 95, Cortex-A55) board glue: every image built for
+# the board (driver/boards/toradex/verdin_imx95), outside the board layer
+# YAKOGL_BOARD, as YAKOGL_NANOPC_T6 and YAKOGL_STM32MP2 are. Built, not run
+# on a board yet (docs/standalone-boot.md, "Toradex Verdin iMX95").
+
+config YAKOGL_VERDIN_IMX95
+	def_bool BOARD_VERDIN_IMX95
+	help
+	  verdin_imx95.c: the end of a run, verdin_imx95_reset()
+	  (verdin_imx95.h: PSCI SYSTEM_RESET to TF-A), and a lifetime timer
+	  that takes it after YAKOGL_VERDIN_IMX95_LIFETIME_S. No watchdog of
+	  the SoC is armed: the i.MX 95's WDOG is not driven by this image yet
+	  (the stub verdin_imx95_wdog_stub() says so at boot, and the image
+	  prints no "board: watchdog armed" line, so tools/board.sh refuses
+	  it). With YAKOGL_GPU_MALI, verdin_imx95_mali.c is the Mali OSAL's
+	  board half: a stub that refuses the GPU's bring-up by name.
+
+if YAKOGL_VERDIN_IMX95
+
+config YAKOGL_VERDIN_IMX95_LIFETIME_S
+	int "Seconds of uptime after which the glue resets the board through PSCI"
+	default YAKOGL_BOARD_LIFETIME_S if YAKOGL_BOARD
+	default 60
+	range 5 3600
+	help
+	  The board layer's lifetime when the image has the layer
+	  (YAKOGL_BOARD_LIFETIME_S), else 60 s. A timer of the system clock,
+	  not a watchdog: it does not cover a hang with interrupts locked or
+	  one before the kernel runs, and nothing covers those until the WDOG
+	  stub is replaced.
+
+endif # YAKOGL_VERDIN_IMX95
+
+config YAKOGL_BOARD_VERDIN_IMX95
+	def_bool YAKOGL_BOARD && YAKOGL_VERDIN_IMX95
+	help
+	  The board layer (yakogl_board.h) on the Verdin iMX95's A55
+	  (board_verdin_imx95.c): no window or screen yet (board_window()
+	  refuses with a line that says so); record: the yk-record line on
+	  the console UART; reset: verdin_imx95_reset(); no watchdog
+	  (YAKOGL_VERDIN_IMX95).

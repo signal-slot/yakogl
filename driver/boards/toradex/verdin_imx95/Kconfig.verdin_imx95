@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2024 NXP
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The A55 cluster of the Verdin iMX95. As Zephyr's imx95_evk
+# (boards/nxp/imx95_evk/Kconfig.imx95_evk at af17c0c8aa2a, Copyright 2024
+# NXP, Apache-2.0): the part number is one the MCUX device headers have
+# for the A55, not the module's own (which this file does not know).
+
+config BOARD_VERDIN_IMX95
+	select SOC_MIMX9596_A55 if BOARD_VERDIN_IMX95_MIMX9596_A55
+	select SOC_PART_NUMBER_MIMX9596AVZXN
