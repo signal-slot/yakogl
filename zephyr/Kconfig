@@ -95,6 +95,24 @@ config YAKOGL_GPU_MALI
 
 endchoice
 
+config YAKOGL_GPU_V3D71
+	bool "Broadcom V3D 7.1 (Raspberry Pi 5) instead of 4.2"
+	depends on YAKOGL_GPU_V3D && SOC_BCM2712
+	select YAKOGL_RPI5_WDOG
+	select YAKOGL_RPI5_MBOX
+	help
+	  The V3D of the Raspberry Pi 5 (BCM2712, V3D 7.1): the V3D backend
+	  with its 7.1 table (cargo feature gpu-v3d71, which implies gpu-v3d),
+	  submitted by the OSAL in src/osal/zephyr_v3d71.c, which drives the
+	  V3D through driver/src/v3d/v3d_hw.c's BCM2712 path (the SMS, pm's
+	  2712 reset bit, firmware clock 5; driver/docs/rpi5-v3d71-facts.md).
+	  The YAKOGL_V3D_* options below apply to it as to the 4.2. The OSAL
+	  refuses its init unless the PM watchdog is armed (selected here:
+	  YAKOGL_RPI5_WDOG arms it at boot, so a hung GPU resets the board
+	  back to Linux); the clock switch is the board's
+	  (driver/zephyr/lib/board/rpi5/rpi5_v3d.c, the mailbox). The binning
+	  is polled, and the 7.1 TFU is not driven yet (refused by name).
+
 config YAKOGL_PVR_POOL_RECLAIM
 	bool "PowerVR: reuse freed GPU memory as soon as no kick can read it"
 	depends on YAKOGL_GPU_POWERVR
