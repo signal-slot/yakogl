@@ -46,6 +46,11 @@ pub const CLOCK_DESCRIBE_RATES: u8 = 0x4;
 pub const CLOCK_RATE_SET: u8 = 0x5;
 pub const CLOCK_RATE_GET: u8 = 0x6;
 pub const CLOCK_CONFIG_SET: u8 = 0x7;
+/// CLOCK_PARENT_SET / _GET (4.6.2.14-15, protocol version 3.0): the i.MX 95
+/// System Manager's `COMMAND_CLOCK_PARENT_SET` 0xD / `_GET` 0xE
+/// (rpc_scmi_clock.c:61-62).
+pub const CLOCK_PARENT_SET: u8 = 0xd;
+pub const CLOCK_PARENT_GET: u8 = 0xe;
 
 /// RESET (4.7.2).
 pub const RESET_DOMAIN_ATTRIBUTES: u8 = 0x3;
@@ -279,6 +284,11 @@ impl<T: Transport> Client<T> {
     /// by the agent), the clock, then the rate as low and high words.
     pub fn clock_rate_set(&mut self, clock: u32, hz: u64) -> Result<(), Error> {
         self.call(PROTO_CLOCK, CLOCK_RATE_SET, &[0, clock, hz as u32, (hz >> 32) as u32], 0).map(|_| ())
+    }
+
+    /// CLOCK_PARENT_SET (4.6.2.14): the clock, then its new parent's id.
+    pub fn clock_parent_set(&mut self, clock: u32, parent: u32) -> Result<(), Error> {
+        self.call(PROTO_CLOCK, CLOCK_PARENT_SET, &[clock, parent], 0).map(|_| ())
     }
 
     /// CLOCK_DESCRIBE_RATES from rate index 0: the first reply only.
