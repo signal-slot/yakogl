@@ -599,9 +599,10 @@ fn the_renderbuffer_and_the_four_channel_texture_are_complete() {
 /// V3D on the four-channel surface of the store with the format's channels as
 /// the write mask, and the job builder takes it with Mesa's row for that
 /// surface (the format's internal type, the wide surface's bpp and bytes);
-/// glClearBuffer reaches it with the tile buffer's words for the raw values;
-/// a read-back in the format's own pair is no error. The format's own
-/// surface (`r.surf`, `r.output`) stays the renderbuffer's.
+/// glClearBuffer reaches it with the tile buffer's words for the raw values
+/// of the format's channels and 0, 0, 1 in the others; a read-back in the
+/// format's own pair is no error. The format's own surface (`r.surf`,
+/// `r.output`) stays the renderbuffer's.
 fn expect_wide(r: &Row) {
     let f = tex_fbo(r.internalformat);
     assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{}", r.name);
@@ -632,13 +633,18 @@ fn expect_wide(r: &Row) {
         r.name
     );
 
-    /* the clear: raw words, unconverted */
+    /* the clear: the format's raw words, unconverted, and 0 (G, B) and 1
+     * (A) in the channels it lacks (src/gl/draw.rs `int_clear_channels`) */
     let (seen, e) = clear_buffer(r.signed);
     assert_eq!(e, GL_NO_ERROR, "{}", r.name);
     let s = seen.unwrap_or_else(|| panic!("{}: the back end saw no clear", r.name));
     assert_eq!(s.clear_target_mask & 1, 1, "{}", r.name);
     assert_eq!(s.targets[0].1, surf, "{}", r.name);
-    assert_eq!(state::clear_words(surf, s.clear_rgba), mesa_clear_words(r.bits, RAW), "{}", r.name);
+    let mut want = RAW;
+    for (ch, w) in want.iter_mut().enumerate().skip(r.channels as usize) {
+        *w = u32::from(ch == 3);
+    }
+    assert_eq!(state::clear_words(surf, s.clear_rgba), mesa_clear_words(r.bits, want), "{}", r.name);
 
     /* the read-back: the class's pair ES 3.0 4.3.1 requires (RGBA_INTEGER with
      * INT or UNSIGNED_INT) is taken and reads 0, 0, 1 in the channels the

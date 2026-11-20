@@ -2922,8 +2922,74 @@ fn plan_clear(
     Some(cp)
 }
 
+/// Does the back end's colour clear of an R or RG integer texture drawn as
+/// the four-channel surface of its store need the GL core to narrow the
+/// clear value? The V3D's clear writes all four channels of the store, the
+/// TLB clear from `GlesDraw::clear_rgba`'s four words (`v3d::state::
+/// clear_words`) and the clear quad from the same four, so the GL core hands
+/// it the format's channels and 0 (G, B) and 1 (A) in the others
+/// ([`int_clear_channels`]). The PowerVR and the GC7000 get the values as
+/// before.
+const NARROW_INT_CLEAR: bool = cfg!(feature = "gpu-v3d");
+
+/// [`int_clear_channels`] has logged its refusal (one line, not one per
+/// clear).
+static REFUSED_UNEVEN_CLEAR: Global<bool> = Global::new(false);
+
+/// The channels (bit 0 R .. 3 A) of the colour clear's value that keep the
+/// application's values on a back end that narrows ([`NARROW_INT_CLEAR`]);
+/// 0xf, every channel, elsewhere and for every clear that names no R or RG
+/// integer texture drawn as its wide store. `mask` is the clear's target mask
+/// as targets of the draw's dense list (0: every target).
+///
+/// Every cleared integer target takes the format's channels of its
+/// attachment ([`framebuffer::fb_target_channel_mask_n`]), every other target
+/// all four. The clear has one value for every target (`clear_rgba`), so a
+/// clear whose targets disagree (an R8I texture beside an RGBA8
+/// renderbuffer under glClear) cannot be narrowed for one without changing
+/// the other: it is refused by name with GL_INVALID_OPERATION rather than
+/// writing the application's B and A into the texture's store.
+fn int_clear_channels(c: &GlContext, d: &GlesDraw, mask: u8) -> Result<u8, DrawError> {
+    if !NARROW_INT_CLEAR {
+        return Ok(0xf);
+    }
+    let lead = d.targets[0].out_shift;
+    let mut channels: Option<(u8, usize)> = None;
+    for (i, t) in d.targets[..d.num_targets.max(1) as usize].iter().enumerate() {
+        if t.gpu == 0 || (mask != 0 && mask & (1u8 << i.min(7)) == 0) {
+            continue;
+        }
+        let own =
+            if gles_surf_is_integer(t.format) { framebuffer::fb_target_channel_mask_n(c, lead + i as u8) } else { 0xf };
+        match channels {
+            None => channels = Some((own, i)),
+            Some((first, _)) if first == own => {}
+            Some((first, at)) => {
+                // SAFETY: single-threaded by contract; no other reference is live.
+                let reported = unsafe { REFUSED_UNEVEN_CLEAR.get() };
+                if !*reported {
+                    *reported = true;
+                    glog!(
+                        "clear refused: draw buffer {} takes channels {:#x}, draw buffer {} channels {:#x} (an R \
+                         or RG integer texture keeps 0, 0, 1 in the channels its format lacks), and this back \
+                         end has one clear value for every target",
+                        lead as usize + at,
+                        first,
+                        lead as usize + i,
+                        own
+                    );
+                }
+                return Err((GL_INVALID_OPERATION, "int_clear_channels"));
+            }
+        }
+    }
+    Ok(channels.map_or(0xf, |(m, _)| m))
+}
+
 /// Fill the clear fields of a draw from the plan (and clear the pending one).
-fn apply_clear_plan(d: &mut GlesDraw, cp: &ClearPlan, pc: &mut PendingClear) {
+/// `channels`: the channels that keep the clear's values
+/// ([`int_clear_channels`]); the others are given 0 (G, B) and 1 (A).
+fn apply_clear_plan(d: &mut GlesDraw, cp: &ClearPlan, pc: &mut PendingClear, channels: u8) {
     d.do_clear = cp.color;
     d.clear_color_mask = cp.color_mask;
     /* The clear's target mask as targets of the draw's dense list: the same
@@ -2932,6 +2998,15 @@ fn apply_clear_plan(d: &mut GlesDraw, cp: &ClearPlan, pc: &mut PendingClear) {
     let target_mask = dense_target_mask(d, pc.state.target_mask);
     d.clear_target_mask = if cp.color { target_mask } else { 0 };
     d.clear_rgba = if cp.color { pc.rgba } else { [0.0; 4] };
+    /* an R or RG integer texture in a four-channel store: the channels its
+     * format lacks hold 0, 0, 1 (ES 3.0 4.3.2), as raw integer bits */
+    if cp.color && channels & 0xf != 0xf {
+        for (k, v) in d.clear_rgba.iter_mut().enumerate() {
+            if channels & (1u8 << k) == 0 {
+                *v = f32::from_bits(u32::from(k == 3));
+            }
+        }
+    }
     /* A clear writes a value the target's format can hold. Only alpha is
      * rounded here: the colour channels of a narrow format (RGB565, RGBA4)
      * differ from the full-precision value by less than a step, which is
@@ -3102,8 +3177,27 @@ fn emit_pending_clear(c: &mut GlContext, d: &mut GlesDraw, reported: &mut u32, w
         }
         return;
     };
+    /* an R or RG integer texture's clear keeps its absent channels at 0, 0,
+     * 1, or a clear of it beside a target that keeps all four is refused */
+    let mut cp = cp;
+    let mut channels = 0xf;
+    if cp.color {
+        match int_clear_channels(c, d, dense_target_mask(d, pc.state.target_mask)) {
+            Ok(m) => channels = m,
+            Err((e, func)) => {
+                if !quiet {
+                    c.set_error(e, func);
+                }
+                pc.color = false;
+                if !(cp.depth || cp.stencil) {
+                    return;
+                }
+                (cp.color, cp.color_mask) = (false, 0);
+            }
+        }
+    }
     let color = cp.color;
-    apply_clear_plan(d, &cp, pc);
+    apply_clear_plan(d, &cp, pc, channels);
     d.clear_quad = cp.quad;
     d.scissor = cp.scissor;
     d.scissor_rect = cp.scissor_rect;
@@ -4272,7 +4366,22 @@ fn build_common(
     if pc.color || pc.depth || pc.stencil {
         let (has_depth, has_stencil) = framebuffer::fb_target_depth_stencil(c);
         match plan_clear(pc, (d.target_w, d.target_h, d.target_gpu != 0), has_depth, has_stencil) {
-            Some(cp) => apply_clear_plan(d, &cp, pc),
+            Some(mut cp) => {
+                /* as in emit_pending_clear: a refused colour clear is
+                 * dropped with its error, the draw and the depth/stencil
+                 * clears go on */
+                let mut channels = 0xf;
+                if cp.color {
+                    match int_clear_channels(c, d, dense_target_mask(d, pc.state.target_mask)) {
+                        Ok(m) => channels = m,
+                        Err((e, func)) => {
+                            c.set_error(e, func);
+                            (cp.color, cp.color_mask) = (false, 0);
+                        }
+                    }
+                }
+                apply_clear_plan(d, &cp, pc, channels)
+            }
             None => {
                 pc.color = false;
                 pc.depth = false;
