@@ -35,6 +35,28 @@ copy, whose response code is still the request's 0. That matches `-EIO` with
 code 0 on every request. The probe tests this hypothesis. The firmware does
 not decide it.
 
+## Cause candidates
+
+For section 4 Q1, ranked by the facts above: **candidate 1** is the cache
+maintenance `rpi5_display`'s image lacked. Its
+[`tools/probes/rpi5_display/prj.conf`](../../rpi5_display/prj.conf) has no
+`CONFIG_CACHE_MANAGEMENT` and the BCM2712 SoC does not select it, so its
+`transact()` made the request with
+`driver/zephyr/lib/board/rpi4/rpi_mbox.c`'s `sys_cache_data_flush_range()`
+and `sys_cache_data_invd_range()` (that file's lines 68 and 87) returning
+`-ENOTSUP` and doing nothing — the same statement `rpi5_clear/README.md:37-39`
+makes; `rpi5_clear` sets the Kconfig (`rpi5_clear/prj.conf:12`), and its run
+of 2026-11-19 got the same transport answered on the same board:
+`M1 mailbox: 0` and `M1 V3D clock: rate 0 (500000000 Hz)`
+(`rpi5_clear/README.md:83,86`). **Candidate 2** is the transport itself
+(base, channel, or the firmware not serving this boot); only the probe's
+`regs` lines can speak for it. What a run proves: with this image's
+`CONFIG_CACHE_MANAGEMENT=y`, every tag answering with status `0x80000000`
+(q1 `cache maintenance`: the display way not, clear and board yes) means
+candidate 1 was the 2026-11-19 cause; `-EIO` again in the clear and board
+ways rules candidate 1 out, and Q1 stays open with this run's raw status and
+response codes as the record.
+
 ## What it does
 
 The board layer arms the PM watchdog in its first `PRE_KERNEL_1` hook, before
@@ -64,8 +86,11 @@ sent, and `rpi_mbox.c` is not changed.
 
 ## The console
 
-Before the requests: `rpi5_mbox: build ...`, `cache: CONFIG_CACHE_MANAGEMENT=1
-CONFIG_DCACHE=1, data line N bytes`, the `paths:` summary, `mailbox init <rc>`,
+Before the requests: `rpi5_mbox: build ...`, `rpi5_mbox: cache management
+on|off` (whether `CONFIG_CACHE_MANAGEMENT` is on, so a record says which case
+ran: `rpi_mbox.c`'s cache calls do nothing with it off),
+`cache: CONFIG_CACHE_MANAGEMENT=1 CONFIG_DCACHE=1, data line N bytes`, the
+`paths:` summary, `mailbox init <rc>`,
 the probe's own mapping, both buffers' physical addresses, and `regs at start:
 sta0 .. cnf0 .. sta1 ..` (`MAIL0_STA`, `MAIL0_CNF`, `MAIL1_STA`). A `sta0`
 without bit 30 (EMPTY) at start means a message was already waiting before the
@@ -111,20 +136,22 @@ on the 60 s hold.
 tools/probes/rpi_5/rpi5_mbox/verdicts.sh <console.txt>
 ```
 
-Prints, always in this order and always all of them: one verdict per request
+Prints, always in this order and always all of them: `cache:` (the image's
+`cache management on|off` line, or `missing`), one verdict per request
 (`answered`, `not answered` or `missing`, with each way's `yes`/`no`/`-` and
 the value), `q1:` (`cache maintenance`, `not reproduced`, `no way answered`
 or `unknown`), `end:` (the image's end line, or `missing`), and
 `rpi5_mbox verdict: PASS (GET_THROTTLED answered by ...)` or `FAIL (...)`.
 Exit 0 PASS, 1 FAIL, 2 usage. The rule is section 3's: PASS when
-`GET_THROTTLED` is answered. A log cut short still gets all ten lines.
+`GET_THROTTLED` is answered. A log cut short still gets all eleven lines.
 
 `verdicts_selftest.sh` (`sh tools/probes/rpi_5/rpi5_mbox/verdicts_selftest.sh`)
 feeds it canned logs and checks every line it prints: all answered; every way
 `-EIO` with code 0, as on 2026-11-19; the cache case (display `-EIO`, the
 answer in memory, clear and board answered); an answer in memory only; one
 request missing; a log truncated inside request 3; a log cut before any
-request; CR line ends with timestamps; usage. The gate gives it a row
+request (its `cache:` line is then `missing`); `cache management off` and the
+timestamped CR form of `on`; usage. The gate gives it a row
 (`tools/check_selftests.py`), and `zephyr_rpi5_probe_images` builds the image.
 
 ## On the board

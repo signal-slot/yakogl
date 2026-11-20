@@ -317,6 +317,10 @@ int main(void)
 	char id[24];
 
 	printk("rpi5_mbox: build %s\n", RPI5_MBOX_BUILD);
+	/* One early line so a record says which case ran: whether
+	 * rpi_mbox.c's sys_cache_data_*() calls do anything (off: -ENOTSUP). */
+	printk("rpi5_mbox: cache management %s\n",
+	       IS_ENABLED(CONFIG_CACHE_MANAGEMENT) ? "on" : "off");
 	printk("rpi5_mbox: cache: CONFIG_CACHE_MANAGEMENT=%d CONFIG_DCACHE=%d, data line %u bytes\n",
 	       IS_ENABLED(CONFIG_CACHE_MANAGEMENT), IS_ENABLED(CONFIG_DCACHE),
 	       (unsigned int)sys_cache_data_line_size_get());
