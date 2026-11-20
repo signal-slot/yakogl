@@ -24,6 +24,11 @@
 # clamp, repeat, mirror, border, mirror-once) at 8 LOD/bias sets, the
 # compare functions, anisotropy and the border variants; TMU P0/P1
 # (v3d_tex.c's, unchanged at 7.1) and P2; refusals and negative controls.
+# And the texture, sampler, P0 and P1 words of every job of Mesa's 7.1
+# references tools/v3d/pi5/gl_tex2d, gl_texfmt, gl_cube (and gl_mipgen's
+# texture and sampler), read from the CLIFs through pi5/src/texstate71.py
+# (python3; none is "gap: python3"): the addresses are the only skipped
+# fields, named in the output.
 # The last line is "tex71: N of N checks, 0 failed" (exit 0).
 #
 # Built -std=gnu11 -Wall -Wextra -Werror (Mesa's headers as system headers)
@@ -96,9 +101,30 @@ if [ "$ok" != 1 ]; then
   exit 1
 fi
 
-out=$("$dir/tex71_check" 2>&1)
+# Mesa's 7.1 references: the texture and sampler records of each job, read
+# from the CLIFs with tools/v3d/pi5/src/texstate71.py (one line a job:
+# shape, job, P0, P1, 6 texture words, 6 sampler words)
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "tex71: no python3 on PATH"
+  echo "gap: python3"
+  exit 77
+fi
+: >"$dir/refs.txt"
+for shape in gl_tex2d gl_texfmt gl_mipgen gl_cube; do
+  python3 -I tools/v3d/pi5/src/texstate71.py "tools/v3d/pi5/$shape.clif" |
+    awk -v shape="$shape" '
+      /^job [0-9]+:/ { job = $2; sub(":", "", job) }
+      /TMU Config Parameter 0 / { p0 = $7 }
+      /TMU Config Parameter 1 / { p1 = $7 }
+      /Texture Shader State \(7.1\) at/ { t = ""; for (i = NF - 5; i <= NF; i++) t = t " " $i }
+      /Sampler State at/ { s = ""; for (i = NF - 5; i <= NF; i++) s = s " " $i
+        print shape, job, p0, p1 t s }' >>"$dir/refs.txt"
+done
+[ -s "$dir/refs.txt" ] || { echo "tex71: no reference records read"; exit 1; }
+
+out=$("$dir/tex71_check" "$dir/refs.txt" 2>&1)
 status=$?
-printf '%s\n' "$out" | grep -E '^(FAIL|  |tex71: .* compared)' | head -40
+printf '%s\n' "$out" | grep -E '^(FAIL|  |tex71: (.* compared|reference jobs|Mesa.s choice|not in))' | head -60
 line=$(printf '%s\n' "$out" | grep -E '^tex71: [0-9]+ of [0-9]+ checks, [0-9]+ failed$' | tail -n 1)
 if [ "$status" -ne 0 ] || [ -z "$line" ]; then
   echo "tex71: exit $status, ${line:-no result line}"

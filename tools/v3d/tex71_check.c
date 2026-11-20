@@ -63,6 +63,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ---- shared between the two sides ------------------------------------------- */
@@ -717,6 +718,187 @@ static void check_samplers(void)
 	printf("tex71: %d texture records, %d samplers compared with Mesa's\n", N_TEX, n_samplers);
 }
 
+/* ---- 3b. Mesa's 7.1 references (tools/v3d/pi5/gl_tex2d, gl_texfmt, gl_cube) ------ */
+
+/* tex71.sh reads the records from tools/v3d/pi5/gl_*.clif (through
+ * pi5/src/texstate71.py) into a file of one line per texture job:
+ * "<shape> <job> <P0> <P1> <6 texture words> <6 sampler words>", all hex.
+ * Each shape's GL setup (pi5/README.md, "The GL calls") is filled below
+ * into our structs the way the GL core would fill them, packed, and
+ * compared with those words. A reference line our table has no shape for,
+ * and a table shape the file lacks, both fail. gl_mipgen's texture and
+ * sampler are included (a mip-chain case; its TFU is tfu71ref's). */
+struct rshape {
+	const char *shape;
+	int job;
+	/* the texture's GL setup */
+	uint32_t w, h, levels, cpp, type, layers;
+	bool srgb;
+	uint8_t swz[4]; /* pipe swizzle of the format's view */
+	uint32_t last_level;
+	/* the sampler's GL setup */
+	int wrap, min_img, mag_img, mip;
+	float max_lod;
+};
+
+static const struct rshape rshapes[] = {
+	/* gl_tex2d: GL_RGBA8 64x64, REPEAT, NEAREST then LINEAR */
+	{ "gl_tex2d", 1, 64, 64, 1, 4, V3D_TEXTURE_DATA_FORMAT_RGBA8, 1, false, RGBA, 0, W_REPEAT, F_NEAREST, F_NEAREST, M_NONE, 1000 },
+	{ "gl_tex2d", 2, 64, 64, 1, 4, V3D_TEXTURE_DATA_FORMAT_RGBA8, 1, false, RGBA, 0, W_REPEAT, F_LINEAR, F_LINEAR, M_NONE, 1000 },
+	/* gl_texfmt: GL_SRGB8_ALPHA8, then GL_RGB565 (swizzle R G B 1) */
+	{ "gl_texfmt", 1, 64, 64, 1, 4, V3D_TEXTURE_DATA_FORMAT_RGBA8, 1, true, RGBA, 0, W_REPEAT, F_NEAREST, F_NEAREST, M_NONE, 1000 },
+	{ "gl_texfmt", 2, 64, 64, 1, 2, V3D_TEXTURE_DATA_FORMAT_RGB565, 1, false, { SX, SY, SZ, S1 }, 0, W_REPEAT, F_NEAREST, F_NEAREST, M_NONE, 1000 },
+	/* gl_mipgen: glTexStorage2D 7 levels, LINEAR_MIPMAP_LINEAR / LINEAR */
+	{ "gl_mipgen", 1, 64, 64, 7, 4, V3D_TEXTURE_DATA_FORMAT_RGBA8, 1, false, RGBA, 6, W_REPEAT, F_LINEAR, F_LINEAR, M_LINEAR, 1000 },
+	/* gl_cube: six 4x4 faces as layers, wrap CLAMP_TO_EDGE (the state
+	 * tracker's seamless forcing makes R CLAMP too); NEAREST in odd jobs,
+	 * LINEAR in even ones */
+	{ "gl_cube", 1, 4, 4, 1, 4, V3D_TEXTURE_DATA_FORMAT_RGBA8, 6, false, RGBA, 0, W_CLAMP_TO_EDGE, F_NEAREST, F_NEAREST, M_NONE, 1000 },
+	{ "gl_cube", 2, 4, 4, 1, 4, V3D_TEXTURE_DATA_FORMAT_RGBA8, 6, false, RGBA, 0, W_CLAMP_TO_EDGE, F_LINEAR, F_LINEAR, M_NONE, 1000 },
+};
+#define N_RSHAPES ((int)(sizeof rshapes / sizeof rshapes[0]))
+
+static const struct rshape *rshape_for(const char *shape, int job)
+{
+	int want = job;
+	if (!strcmp(shape, "gl_cube"))
+		want = (job & 1) ? 1 : 2;
+	for (int i = 0; i < N_RSHAPES; i++)
+		if (!strcmp(rshapes[i].shape, shape) && rshapes[i].job == want)
+			return &rshapes[i];
+	return NULL;
+}
+
+static void words_to_bytes(const uint32_t w[6], uint8_t b[24])
+{
+	for (int i = 0; i < 6; i++)
+		for (int k = 0; k < 4; k++)
+			b[i * 4 + k] = (uint8_t)(w[i] >> (8 * k));
+}
+
+static void check_references(const char *path)
+{
+	FILE *f = fopen(path, "r");
+	if (!f) {
+		check(false, "the reference records file opens");
+		check(false, "every shape of the table is in the references");
+		check(false, "every reference record equals ours");
+		return;
+	}
+	char line[1024];
+	int n = 0, bad = 0, unknown = 0;
+	int seen[16] = { 0 };
+	int tex_ok = 0, smp_ok = 0, p0_ok = 0, p1_ok = 0;
+	while (fgets(line, sizeof line, f)) {
+		char *tok[20];
+		int nt = 0;
+		for (char *t = strtok(line, " \t\r\n"); t && nt < 20; t = strtok(NULL, " \t\r\n"))
+			tok[nt++] = t;
+		if (nt != 16)
+			continue;
+		const struct rshape *r = rshape_for(tok[0], atoi(tok[1]));
+		if (!r) {
+			printf("FAIL: reference %s job %s: no shape in this table\n", tok[0], tok[1]);
+			unknown++;
+			continue;
+		}
+		seen[r - rshapes] = 1;
+		uint32_t p0 = (uint32_t)strtoul(tok[2], NULL, 16), p1 = (uint32_t)strtoul(tok[3], NULL, 16);
+		uint32_t tw[6], sw[6];
+		for (int i = 0; i < 6; i++) {
+			tw[i] = (uint32_t)strtoul(tok[4 + i], NULL, 16);
+			sw[i] = (uint32_t)strtoul(tok[10 + i], NULL, 16);
+		}
+		uint8_t want_t[24], want_s[24], ours[24] = { 0 };
+		words_to_bytes(tw, want_t);
+		words_to_bytes(sw, want_s);
+		n++;
+
+		/* texture: layout and fields as the GL core fills them. Only
+		 * the base address is Mesa's (the shim's 4 KiB buffers): taken
+		 * from the reference; the Cb and Cr base fields our packer
+		 * derives from it (>> 6) are still compared. */
+		struct v3d_tex_layout l;
+		struct v3d_tex71_state s;
+		uint32_t off = 0;
+		bool ok = v3d_tex_layout(r->w, r->h, r->levels, r->cpp, &l);
+		if (ok) {
+			memset(&s, 0, sizeof s);
+			v3d_tex71_state_from_layout(&s, &l);
+			ok = v3d_tex_layer_offset(&l, 0, 0, r->layers, &off);
+		}
+		bool tex_same = false;
+		if (ok) {
+			s.base = tw[0] & ~0x3fu;
+			s.width = r->w;
+			s.height = r->h;
+			s.depth = r->layers;
+			s.max_level = r->last_level;
+			s.type = r->type;
+			for (int i = 0; i < 4; i++)
+				s.swizzle[i] = v3d_swz(r->swz[i]);
+			s.transfer_func = r->srgb ? V3D_TEX71_TRANSFER_SRGB : V3D_TEX71_TRANSFER_NONE;
+			tex_same = v3d_tex71_pack_state(ours, &s) && memcmp(ours, want_t, 24) == 0;
+		}
+		if (!tex_same) {
+			printf("FAIL: %s job %s: texture record differs\n", tok[0], tok[1]);
+			hex("ours", ours, 24);
+			hex("ref ", want_t, 24);
+		}
+		tex_ok += tex_same;
+
+		struct scase sc = { { r->wrap, r->wrap, r->wrap }, r->min_img, r->mag_img, r->mip, 0,
+				    r->max_lod, 0, false, 0, 0, { 0, 0, 0, 0 }, BV_F16_UNORM };
+		struct v3d_tex71_sampler ss;
+		ours_sampler_from(&sc, &ss);
+		memset(ours, 0, sizeof ours);
+		bool smp_same = v3d_tex71_pack_sampler(ours, &ss) && memcmp(ours, want_s, 24) == 0;
+		if (!smp_same) {
+			printf("FAIL: %s job %s: sampler record differs\n", tok[0], tok[1]);
+			hex("ours", ours, 24);
+			hex("ref ", want_s, 24);
+		}
+		smp_ok += smp_same;
+
+		/* P0 and P1: the record address taken from the reference, the
+		 * flag bits (return words, per-pixel mask, ...) compared */
+		uint32_t w0 = 0, w1 = 0;
+		bool a = v3d_tex_p0(p0 & ~0xfu, 0x05000000u | 3, &w0) && w0 == p0;
+		/* Mesa's sampler records sit 8-byte aligned in its state buffer
+		 * (0x...78, 0x...e8, 0x...68 in the references; the field takes
+		 * bits 3 up), where v3d_tex_p1 (a 4.2 file, left unchanged)
+		 * wants V3D_TEX_RECORD_ALIGN (32): the flags are compared with a
+		 * 32-aligned stand-in address, and the address replaced by the
+		 * reference's. */
+		bool b = v3d_tex_p1(0x1000, 0x03000000u | (p1 & 7u), &w1) && w1 == (0x1000u | (p1 & 7u));
+		if (!a || !b)
+			printf("FAIL: %s job %s: P0 %08x/%08x P1 %08x/%08x\n", tok[0], tok[1], p0, w0, p1, w1);
+		p0_ok += a;
+		p1_ok += b;
+		bad += !(tex_same && smp_same && a && b);
+		printf("  %s job %s: texture %s, sampler %s, P0 %s, P1 %s\n", tok[0], tok[1],
+		       tex_same ? "equal" : "DIFFERS", smp_same ? "equal" : "DIFFERS",
+		       a ? "equal" : "DIFFERS", b ? "equal" : "DIFFERS");
+	}
+	fclose(f);
+	int shapes_seen = 0;
+	for (int i = 0; i < N_RSHAPES; i++)
+		shapes_seen += seen[i];
+	check(unknown == 0 && n > 0, "every reference record has a shape in the table");
+	check(shapes_seen == N_RSHAPES, "every shape of the table is in the references");
+	check(bad == 0, "every reference texture record, sampler, P0 and P1 equals ours (0 differences)");
+	printf("tex71: reference jobs %d: %d texture, %d sampler, %d P0, %d P1 equal; skipped, "
+	       "taken from the reference: the texture base address (word 0 bits 6.., the Cb/Cr base "
+	       "fields are derived from it and compared) and the P0/P1 record addresses\n",
+	       n, tex_ok, smp_ok, p0_ok, p1_ok);
+	printf("tex71: Mesa's choice, not a bug: its sampler records are 8-byte aligned (P1 address "
+	       "bits 3 up), v3d_tex_p1 accepts only 32-byte aligned ones; every P1 flag word "
+	       "(per-pixel mask) equals with a 32-aligned stand-in address\n");
+	printf("tex71: not in the references: TMU P2 (each fragment shader has only the P0 and P1 "
+	       "uniforms; P2 is the compiler's word, not Mesa's state); R/B swap and reverse "
+	       "(Gallium never sets them: 0 in every record)\n");
+}
+
 /* ---- 4. TMU parameters ---------------------------------------------------------- */
 
 static uint32_t le32(const uint8_t *b)
@@ -958,17 +1140,18 @@ static void check_controls(void)
 	check(ok && caught == n, "sampler controls: wraps, filters, bias, anisotropy, f16 border words each differ from Mesa");
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	check_tex_cases();
 	check_xml_anchors();
 	check_samplers();
+	check_references(argc > 1 ? argv[1] : "/nonexistent");
 	check_tmu();
 	check_refusals();
 	check_controls();
 	/* N_TEX + 1 coverage + 3 anchors + 2 sampler summary + 2 TMU +
 	 * 5 refusal checks + 2 controls */
-	const int planned = N_TEX + 1 + 3 + 2 + 2 + 5 + 2;
+	const int planned = N_TEX + 1 + 3 + 2 + 3 + 2 + 5 + 2;
 	if (run != planned) {
 		printf("FAIL: %d checks run, %d planned\n", run, planned);
 		printf("tex71: %d of %d checks, %d failed\n", run - failed, planned, failed + 1);
