@@ -35,7 +35,6 @@
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_shadow_array_texsize_v3d
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-v3d", feature = "host-test", not(feature = "report-es2")))]
-#![cfg(all(feature = "shaderc-online", feature = "gpu-v3d", feature = "host-test", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_int, c_void, CStr};
 use std::collections::BTreeMap;
