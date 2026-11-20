@@ -469,6 +469,10 @@ fn print_row_and_reflection(r: &Row, sources: &[Source]) -> Result<Emitted, Stri
     g(&mut row, format!("usc: {},", if usc.is_null() { "&[]".to_string() } else { format!("&{id}_USC") }));
     g(&mut row, format!("temps: {temps},"));
     g(&mut row, format!("num_outputs: {num_outputs},"));
+    /* a variant's tile buffers: the PowerVR's RGBA16F variant of a
+     * three-output shader spills a target that its plain variant does not */
+    g(&mut row, format!("num_tile_buffers: {num_tile_buffers},"));
+    g(&mut row, format!("tile_buffer_sh: {tile_buffer_sh},"));
     g(&mut row, format!("uniform_dwords: {uniform_dwords},"));
     g(&mut row, format!("uses_fbfetch: {uses_fbfetch},"));
     g(&mut row, format!("blend_consts_off: 0x{blend_consts_off:x},"));
@@ -498,8 +502,6 @@ fn print_row_and_reflection(r: &Row, sources: &[Source]) -> Result<Emitted, Stri
         ("reads_front_facing", format!("reads_front_facing: {reads_front_facing},")),
         ("meta_off", format!("meta_off: 0x{meta_off:x},")),
         ("fs_front_face_off1", format!("fs_front_face_off1: {fs_front_face_off1},")),
-        ("num_tile_buffers", format!("num_tile_buffers: {num_tile_buffers},")),
-        ("tile_buffer_sh", format!("tile_buffer_sh: {tile_buffer_sh},")),
         ("vs_output_size", format!("vs_output_size: {vs_output_size},")),
         ("vs_psize_off", format!("vs_psize_off: 0x{vs_psize_off:x},")),
         ("vs_vertex_id_reg1", format!("vs_vertex_id_reg1: {vs_vertex_id_reg1},")),

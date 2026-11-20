@@ -22,18 +22,23 @@
 //! varying 4 coefficients after component c - 1. Variants: RGBA8 (the
 //! default, dEQP's `fixed`), RGBA16F (`SHC_RT_F16X4`, `float`) and the
 //! integer ones (`shc_blend_key_int_rt`). Several elements are checked under
-//! the RGBA8 variant only: the per-target layouts of more colour targets are
-//! RC14's. HOST-ONLY: no GPU arithmetic and no GL read-back.
+//! the RGBA8 variant, and three under the plain replace keys of R16F and
+//! RGBA16F (`array.float.r16f` / `.rgba16f`), which compile per target: the
+//! layout of `chain::target_layout`, three R16F at r0-r2 and three RGBA16F at
+//! r0-1, r2-3 and tile buffer 0. HOST-ONLY: no GPU arithmetic and no GL
+//! read-back.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragout_array
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-powervr", not(feature = "report-es2")))]
 use yakogl::shaderc::online::ir;
-use yakogl::shaderc::online::powervr::chain::compile_fragment_for;
+use yakogl::shaderc::online::powervr::chain::{compile_fragment_for, compile_fragment_targets, TargetPack};
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::{lower, store};
-use yakogl::shaderc::{shc_blend_key_int_rt, shc_blend_key_rt, ShcIntRt, SHC_BLEND_KEY_REPLACE, SHC_RT_F16X4};
+use yakogl::shaderc::{
+    shc_blend_key_int_rt, shc_blend_key_rt, ShcIntRt, SHC_BLEND_KEY_REPLACE, SHC_RT_F16, SHC_RT_F16X4,
+};
 
 mod usc_exec;
 
@@ -44,6 +49,10 @@ static COMPILING: std::sync::Mutex<()> = std::sync::Mutex::new(());
 struct Rec {
     /// Pixel output dwords.
     num_outputs: u8,
+    /// Spilled targets and their address pair's shared register.
+    tile_buffers: (u8, u16),
+    /// The key the record carries.
+    blend_key: u32,
     image: Vec<u8>,
     /// The width of each shadow load (`LoadLocal`) stored to a colour
     /// output, in program order.
@@ -75,6 +84,8 @@ fn compile_for(src: &str, key: u32) -> Result<Rec, String> {
         let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
         Ok(Rec {
             num_outputs: rec.num_outputs,
+            tile_buffers: (rec.num_tile_buffers, rec.tile_buffer_sh),
+            blend_key: rec.blend_key,
             image: code.iter().flat_map(|w| w.to_le_bytes()).collect(),
             shadow_loads,
         })
@@ -178,6 +189,60 @@ fn half_float_array_writes_its_own_lanes() {
             .map(|h| (usc_exec::f16_to_f32(h as u16) * 255.0).round() as u32)
             .collect();
         assert_eq!(lanes, want_lanes(lanes[0], width(ty), 0), "{ty}[1]: {src}");
+    }
+}
+
+/// `src` for the per-target list `targets` (`compile_fragment_targets`):
+/// the USC bytes.
+fn targets_image(src: &str, targets: &[TargetPack]) -> Vec<u8> {
+    let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
+    store::with_scratch(|a| {
+        let _keep = store::begin_keep().expect("keep");
+        let text = a.alloc_str(src).unwrap();
+        let l = lower::compile_to_ir(a, Stage::Fragment, text).unwrap_or_else(|e| panic!("front end: {}", e.msg));
+        let rec = compile_fragment_targets(&l.module, &l.reflection, a, targets).expect("per-target list");
+        // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+        let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+        code.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<u8>>()
+    })
+    .unwrap()
+}
+
+/// dEQP's `array.float.r16f` and `.rgba16f` shapes, three elements under
+/// the plain replace key of the class (the GL core's key when every draw
+/// buffer is of it), which the chain refused as "a blend variant of a
+/// shader with more than one colour output" before (inv-fragout, issue
+/// #313). Each is now the per-target list of three targets of the class:
+/// the same bytes `compile_fragment_targets` builds for it, the record
+/// keeping its key. Three R16F take r0, r1 and r2, element k's lane 0 the
+/// low half of register k; three RGBA16F take r0-1, r2-3 and tile buffer 0
+/// (the byte model has no tile-buffer store, `savmsk.icm`, so the bytes are
+/// held to the per-target build, whose groups tests/es3_pvr_mrt4.rs pins).
+#[test]
+fn half_float_arrays_of_three_targets() {
+    let half = |h: u32| (usc_exec::f16_to_f32(h as u16) * 255.0).round() as u32;
+    for ty in ["float", "vec2", "vec3", "vec4"] {
+        let w = width(ty);
+        let src = array_case("mediump", ty, 3);
+
+        let key = SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(SHC_RT_F16);
+        let (rec, px) = run(&src, key, float_mark);
+        assert_eq!(rec.shadow_loads, vec![w as u8; 3], "{ty}[3] R16F: each element a shadow load");
+        assert_eq!((rec.num_outputs, rec.tile_buffers.0, rec.blend_key), (3, 0, key), "{ty}[3] R16F: r0-r2");
+        assert_eq!(rec.image, targets_image(&src, &[TargetPack::Class(SHC_RT_F16); 3]), "{ty}[3] R16F: per target");
+        let base = half(px[0] & 0xffff);
+        for (k, &d) in px.iter().enumerate() {
+            assert_eq!(half(d & 0xffff), want_lanes(base, w, k)[0], "{ty}[3] R16F element {k}: {src}");
+        }
+
+        let key = SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(SHC_RT_F16X4);
+        let rec = compile_for(&src, key).unwrap_or_else(|e| panic!("{ty}[3] RGBA16F: {e}"));
+        assert_eq!((rec.num_outputs, rec.tile_buffers.0, rec.blend_key), (4, 1, key), "{ty}[3] RGBA16F: spills one");
+        assert_eq!(
+            rec.image,
+            targets_image(&src, &[TargetPack::Class(SHC_RT_F16X4); 3]),
+            "{ty}[3] RGBA16F: per target"
+        );
     }
 }
 

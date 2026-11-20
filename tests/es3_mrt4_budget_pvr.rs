@@ -26,27 +26,31 @@
 //! Today the GL core has no budget in glCheckFramebufferStatus
 //! (src/gl/framebuffer.rs answers UNSUPPORTED only for pitch and
 //! depth-stencil planes), so an over-budget frame is complete. The draw then
-//! answers one of three ways, and the pinned `today` table holds all of
+//! answers one of four ways, and the pinned `today` table holds all of
 //! them:
 //!
-//! - an RGBA8-class frame is drawn short: the back end keeps four
-//!   attachments under the stand-in (item pvr-backend, plan #368; three
-//!   before it) and stops emitting where the next target would pass
-//!   register 3 (the tile-buffer spill is
-//!   not wired: `frame_tile_buffers` is only set from `fs.num_tile_buffers`,
-//!   and no variant spills yet) — GL_NO_ERROR, a short kick;
-//! - a frame of another class (RGBA16F, an integer, or the 16-dword
-//!   RGBA32UI x4 layout) never reaches the back end: the online compiler
-//!   has no multi-output variant of that class (pvr-shout4's, and
-//!   `mrt_layout` refuses the four-RGBA32UI walk), so the GL core drops the
-//!   draw as a missing variant — counted, logged, no GL error, no kick;
+//! - an RGBA8-class frame, and RGBA16F x4, is drawn short: the back end
+//!   keeps four attachments under the stand-in (item pvr-backend, plan #368;
+//!   three before it) and stops emitting where the next target would pass
+//!   register 3 (only the last attachment of three is emitted from a tile
+//!   buffer) — GL_NO_ERROR, a short kick;
+//! - RGBA16F beside RGBA8 is refused by name: the RGBA16F key's program
+//!   lays every output out as RGBA16F's (issue #313's per-target build), so
+//!   the back end does not store the RGBA8 targets from it —
+//!   GL_INVALID_OPERATION, no kick;
+//! - an integer frame (the 16-dword RGBA32UI x4 layout, RGBA32UI beside
+//!   RGBA8) never reaches the back end: the online compiler has no variant
+//!   for it (`mrt_layout` refuses the four-RGBA32UI walk), so the GL core
+//!   drops the draw as a missing variant — counted, logged, no GL error, no
+//!   kick;
 //! - an RGBA32F attachment is not renderable at all (plan #360):
 //!   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT and GL_INVALID_FRAMEBUFFER_-
 //!   OPERATION for draw and clear.
 //!
 //! A clear of a fitting float frame reaches every target today (its frame
 //! runs the back end's own program and emits all attachments on their
-//! budget registers); a GL program's draw does not (second family above).
+//! budget registers); a GL program's draw reaches both of RGBA16F x2 and is
+//! refused for RGBA16F + RGBA8 x2 (second family above).
 //! The `#[ignore = "defect: ..."]` tests hold the recommendation: over-budget
 //! combinations answer UNSUPPORTED, and the fitting combinations draw and
 //! clear every target. No out-of-range register is written: the emitted
@@ -871,13 +875,22 @@ enum Today {
     Emitted(&'static [u32]),
     /// Complete, but the draw is refused before the back end sees it: the
     /// online compiler has no fragment variant for a multi-output program
-    /// of the frame's class (an RGBA16F blend variant, an integer variant,
-    /// or the 16-dword four-RGBA32UI layout `mrt_layout` refuses). A
+    /// of the frame's class (an integer variant, or the 16-dword
+    /// four-RGBA32UI layout `mrt_layout` refuses). A
     /// missing variant is counted (yakogl_draws_refused), logged, and
     /// raises no GL error (src/gl/draw.rs). No kick, so nothing out of
     /// range: attachment 0 of the frame decides, hence the RGBA8-class
     /// rows above kick short while these disappear.
     NoVariant,
+    /// Complete, attachment 0 is RGBA16F and another attachment RGBA8: the
+    /// GL core keys the draw with attachment 0's class, the online compiler
+    /// lays every output out as RGBA16F's (one target of that class each,
+    /// `chain::build_fragment_with`), and the back end refuses the draw by
+    /// name rather than store the RGBA8 targets from registers holding
+    /// halves (`GL_INVALID_OPERATION`, no kick; the glog_once line fires
+    /// once for the process, so it is not asserted per row). A mix of float
+    /// classes has no key of its own yet.
+    MixRefused,
     /// The RGBA32F storage is refused (`GL_INVALID_ENUM`), the framebuffer
     /// is `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT` and the draw is
     /// `GL_INVALID_FRAMEBUFFER_OPERATION` (plan #360: not colour-renderable
@@ -904,14 +917,14 @@ const OVER: [Over; 15] = [
     Over { label: "RGBA8 x3 + RGBA16F", fmts: [A8, A8, A8, F16], today: Emitted(&[0, 1, 2]) },
     Over { label: "RGBA8 x2 + RGBA16F + RGBA8", fmts: [A8, A8, F16, A8], today: Emitted(&[0, 1, 2]) },
     Over { label: "RGBA8 + RGBA16F + RGBA8 x2", fmts: [A8, F16, A8, A8], today: Emitted(&[0, 2]) },
-    Over { label: "RGBA16F + RGBA8 x3", fmts: [F16, A8, A8, A8], today: NoVariant },
+    Over { label: "RGBA16F + RGBA8 x3", fmts: [F16, A8, A8, A8], today: MixRefused },
     Over { label: "RGBA8 x2 + RGBA16F x2", fmts: [A8, A8, F16, F16], today: Emitted(&[0, 1, 2]) },
-    Over { label: "RGBA16F + RGBA8 + RGBA16F + RGBA8", fmts: [F16, A8, F16, A8], today: NoVariant },
-    Over { label: "RGBA16F x2 + RGBA8 x2", fmts: [F16, F16, A8, A8], today: NoVariant },
+    Over { label: "RGBA16F + RGBA8 + RGBA16F + RGBA8", fmts: [F16, A8, F16, A8], today: MixRefused },
+    Over { label: "RGBA16F x2 + RGBA8 x2", fmts: [F16, F16, A8, A8], today: MixRefused },
     Over { label: "RGBA8 + RGBA16F x3", fmts: [A8, F16, F16, F16], today: Emitted(&[0, 2]) },
-    Over { label: "RGBA16F + RGBA8 x2 + RGBA16F", fmts: [F16, A8, A8, F16], today: NoVariant },
-    Over { label: "RGBA16F x3 + RGBA8", fmts: [F16, F16, F16, A8], today: NoVariant },
-    Over { label: "RGBA16F x4", fmts: [F16, F16, F16, F16], today: NoVariant },
+    Over { label: "RGBA16F + RGBA8 x2 + RGBA16F", fmts: [F16, A8, A8, F16], today: MixRefused },
+    Over { label: "RGBA16F x3 + RGBA8", fmts: [F16, F16, F16, A8], today: MixRefused },
+    Over { label: "RGBA16F x4", fmts: [F16, F16, F16, F16], today: Emitted(&[0, 2]) },
     Over { label: "RGBA32UI x4", fmts: [U4, U4, U4, U4], today: NoVariant },
     Over { label: "RGBA32UI + RGBA8 x3", fmts: [U4, A8, A8, A8], today: NoVariant },
     Over { label: "RGBA8 x3 + RGBA32F", fmts: [A8, A8, A8, F4], today: NotRenderable },
@@ -992,6 +1005,7 @@ fn over_budget_framebuffer_statuses_today() {
 ///
 /// - `Emitted`: GL_NO_ERROR, one kick whose PBE states sit exactly at the
 ///   listed registers, each numbered by emission.
+/// - `MixRefused`: GL_INVALID_OPERATION, no kick (refused by name).
 /// - `NoVariant`: no kick and no GL error (the missing variant is refused
 ///   and counted, src/gl/draw.rs; the refusal's log line is a glog_once for
 ///   the process, so it is not asserted here).
@@ -1011,6 +1025,10 @@ fn over_budget_draws_today() {
             }
             NoVariant => {
                 assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
+                assert!(obs.kicks.is_empty() && obs.emits.is_empty(), "{}: no kick: {obs:?}", row.label);
+            }
+            MixRefused => {
+                assert_eq!(obs.err, GL_INVALID_OPERATION, "{}: {:?}", row.label, obs.log);
                 assert!(obs.kicks.is_empty() && obs.emits.is_empty(), "{}: no kick: {obs:?}", row.label);
             }
             NotRenderable => {
@@ -1067,9 +1085,11 @@ fn fitting_combinations_are_complete_today() {
 /// pvr-backend (plan #368) the clear of one buffer is a quad of that
 /// buffer's own over the frame's load of the others (`clear_target_mask`
 /// honoured); before it each buffer took the clear with the others.
-/// The draw with a GL program is refused: no variant packs more than one
-/// output under the RGBA16F frame class (the `NoVariant` rows above; fixed
-/// by pvr-shout4, pinned in `fitting_float_combinations_draw_every_target`).
+/// The draw with a GL program: RGBA16F x2 draws both targets on those
+/// registers (the online compiler builds the RGBA16F key of a two-output
+/// shader per target, issue #313); RGBA16F + RGBA8 x2 is refused by name
+/// (the `MixRefused` rows above: a mix of float classes has no key yet,
+/// `fitting_float_combinations_draw_every_target`).
 #[test]
 fn fitting_float_combinations_clear_every_target_today() {
     let _g = rig();
@@ -1083,8 +1103,15 @@ fn fitting_float_combinations_clear_every_target_today() {
             assert_eq!(emits, want_emits(row.fmts, row.regs), "{}: clear {k} emits: {c:?}", row.label);
         }
         let obs = drawn(row.fmts.len(), class_of(row.fmts));
-        assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
-        assert!(obs.kicks.is_empty(), "{}: no variant, no kick: {obs:?}", row.label);
+        if row.fmts.iter().all(|f| *f == F16) {
+            assert_eq!(obs.err, GL_NO_ERROR, "{}: {:?}", row.label, obs.log);
+            let (num_rt, emits) = obs.one(row.label);
+            assert_eq!(num_rt as usize, row.fmts.len(), "{}: {obs:?}", row.label);
+            assert_eq!(emits, want_emits(row.fmts, row.regs), "{}: PBE states: {obs:?}", row.label);
+        } else {
+            assert_eq!(obs.err, GL_INVALID_OPERATION, "{}: {:?}", row.label, obs.log);
+            assert!(obs.kicks.is_empty(), "{}: refused, no kick: {obs:?}", row.label);
+        }
     }
 }
 
@@ -1153,7 +1180,7 @@ fn four_rgba8_targets_reach_the_hardware() {
 /// with two singles): a GL program draws them with every target emitted on
 /// its budget register, as the back end's own clear frame already does.
 #[test]
-#[ignore = "defect: plan #368 pvr-shout4 (via pvr-budget4-test): the online compiler has no variant that packs more than one output under an RGBA16F frame class (the blend variant of a multi-output shader is refused, key 0x40088621: 'a blend variant of a shader with more than one colour output'), so those frames never get a draw. The fix is pvr-shout4 laying o0-o3 out by the mrt layout in the variant of the frame's class (docs/notes/mrt4-v3d-pvr.md section 2.3); the PBE emit side already places them as pinned by fitting_float_combinations_clear_every_target_today"]
+#[ignore = "defect: plan #388 fix-float-mix: RGBA16F + RGBA8 x2 is keyed with attachment 0's class (0x40088621), whose program lays every output out as RGBA16F's, so the back end refuses the draw by name (RGBA16F x2 draws since issue #313's per-target RGBA16F key, pinned in fitting_float_combinations_clear_every_target_today). The fix is a per-target key for a mix of float classes, as the integer mixes have (docs/notes/pvr-int-mixed-targets.md)"]
 fn fitting_float_combinations_draw_every_target() {
     let _g = rig();
     for row in FITS.iter().filter(|r| r.fmts[0] == F16) {

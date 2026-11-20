@@ -580,6 +580,17 @@ pub fn build_fragment_targets<'a>(
     build_fragment_with(m, limits, a, buf, 0, Some(targets), None)
 }
 
+/// The class of a plain replace key (`SHC_BLEND_KEY_REPLACE` with no colour
+/// mask) for a float class other than RGBA8: F16X4, F16 or F32. A shader
+/// with several colour outputs compiles such a key per target
+/// ([`build_fragment_with`]); `None` for every other key.
+fn replace_class(blend_key: u32) -> Option<u32> {
+    use crate::shaderc::{shc_blend_key_rt, SHC_BLEND_KEY_REPLACE, SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32};
+    [SHC_RT_F16X4, SHC_RT_F16, SHC_RT_F32]
+        .into_iter()
+        .find(|&c| blend_key == SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(c))
+}
+
 /// [`build_fragment_for`]'s body, and [`build_fragment_targets`]'s when
 /// `targets` is given (`blend_key` is then 0).
 fn build_fragment_with<'a>(
@@ -605,6 +616,31 @@ fn build_fragment_with<'a>(
      * shared prefix and the address pair when members are read with `ld`
      * (docs/notes/pvr-ubo-memory-load.md §8.4). */
     let top = super::select::driver_top(m, layout.as_ref());
+    /* Several colour outputs under the plain replace key of one class other
+     * than RGBA8 (three R16F or RGBA16F attachments, dEQP's
+     * `fragment_out.array.float`): every attachment is of that class, so
+     * the draw is the per-target list [Class(c); n] with no blend, laid out
+     * as a mixed key's ([`target_layout`]: three RGBA16F at r0-1, r2-3 and
+     * tile buffer 0), which is where the end-of-tile emit reads each
+     * attachment from. A blend variant still blends one colour and stays
+     * refused below. */
+    let mut class_list = [TargetPack::Class(crate::shaderc::SHC_RT_RGBA8); MAX_PACK_TARGETS];
+    let (targets, blend_key) = match (targets, replace_class(blend_key)) {
+        (None, Some(class)) => {
+            let locs = sel.outputs.iter().filter_map(|(slot, _)| match *slot {
+                ir::IoSlot::FragColor(loc) => Some(usize::from(loc)),
+                _ => None,
+            });
+            let n = locs.clone().max().map_or(0, |l| l + 1);
+            if locs.count() > 1 && n <= MAX_PACK_TARGETS {
+                class_list[..n].fill(TargetPack::Class(class));
+                (Some(&class_list[..n]), 0)
+            } else {
+                (None, blend_key)
+            }
+        }
+        (t, _) => (t, blend_key),
+    };
     /* Attachments of different classes: each integer target's output packed
      * here, the float and normalised ones at the tail; a written depth is
      * clamped below and fed back before the writes, as for one target. A
@@ -2104,6 +2140,12 @@ fn compile_fragment_with<'a>(
         }
         if let Some(r) = output_regs {
             sh.num_outputs = r;
+        }
+        /* several outputs under a plain replace key of one float class,
+         * compiled per target (no blend decoded): the record keeps its key,
+         * as a mixed key's does */
+        if blend.is_none() && replace_class(blend_key).is_some() {
+            sh.blend_key = blend_key;
         }
         /* spilled targets: the stores read their buffers' addresses from
          * sh[tile_buffer_sh..], two dwords each, which the driver DMAs

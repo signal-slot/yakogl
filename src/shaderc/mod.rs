@@ -1878,8 +1878,6 @@ pub struct ShcPrecompiledReflection {
     pub reads_front_facing: u8,
     pub meta_off: u16,
     pub fs_front_face_off1: u16,
-    pub num_tile_buffers: u8,
-    pub tile_buffer_sh: u16,
     pub vs_output_size: u8,
     pub vs_psize_off: u8,
     pub vs_vertex_id_reg1: u8,
@@ -1919,6 +1917,12 @@ pub struct ShcPrecompiledRow {
     pub usc: &'static [u32],
     pub temps: u16,
     pub num_outputs: u8,
+    /// The targets the program stores to tile buffers, and the shared
+    /// register of the first buffer's address pair. Per row, not per source:
+    /// the PowerVR's plain variant of a three-output shader writes three
+    /// RGBA8 registers, its RGBA16F variant spills the third target.
+    pub num_tile_buffers: u8,
+    pub tile_buffer_sh: u16,
     pub uniform_dwords: u16,
     pub uses_fbfetch: u8,
     pub blend_consts_off: u8,

@@ -6726,6 +6726,22 @@ pub fn int_targets_drawn(d: &GlesDraw, fs: Option<&ShcShader>) -> Result<(), &'s
     }
 }
 
+/// The float class (RGBA16F, R16F or R32F) a fragment program laid several
+/// colour outputs out for, one target of that class each: its key is the
+/// plain replace key of the class (`SHC_BLEND_KEY_REPLACE |
+/// shc_blend_key_rt(class)`, which the online chain compiles per target when
+/// the shader writes more than one colour, `chain::build_fragment_with`) and
+/// it spans more output registers than one target of the class takes.
+/// `None` for every other program, a single output of that key included.
+fn per_target_float_class(fs: &ShcShader) -> Option<u32> {
+    use shaderc::{shc_blend_key_rt, SHC_BLEND_KEY_REPLACE, SHC_RT_F16, SHC_RT_F16X4, SHC_RT_F32};
+    let cls = [SHC_RT_F16X4, SHC_RT_F16, SHC_RT_F32]
+        .into_iter()
+        .find(|&c| fs.blend_key == SHC_BLEND_KEY_REPLACE | shc_blend_key_rt(c))?;
+    let one = if cls == SHC_RT_F16X4 { 2 } else { 1 };
+    (fs.num_outputs > one).then_some(cls)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
     // SAFETY: single-threaded by contract; taken once per entry point.
@@ -6795,6 +6811,24 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
                 _ => glog_once!("{}", REFUSE_NOT_A_MIX),
             }
             return -util::ENOTSUP;
+        }
+    }
+    /* Several attachments drawn by a program built per target for one float
+     * class ([`per_target_float_class`]): every output is laid out for that
+     * class, so an attachment of another class would be stored from
+     * registers holding another packing. Refused by name, never drawn with
+     * the wrong packing, until a mix of float classes has a key of its own. */
+    if ntargets > 1 && d.index_count != 0 && !d.clear_quad {
+        // SAFETY: the GL core's draw points `fs` at a live record or at nothing.
+        if let Some(cls) = unsafe { d.fs.as_ref() }.and_then(per_target_float_class) {
+            let other = gles_surf_rt_class(d.target_format) != cls
+                || d.targets[1..ntargets].iter().any(|t| t.gpu != 0 && gles_surf_rt_class(t.format) != cls);
+            if other {
+                glog_once!(
+                    "yakogl/pvr: draw refused: several colour outputs of one float class beside an attachment of another class (not built)"
+                );
+                return -util::ENOTSUP;
+            }
         }
     }
     /* Several sRGB attachments are drawn as RGBA8 ones whose bytes are
