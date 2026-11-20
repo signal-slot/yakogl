@@ -725,13 +725,17 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
    (`mimx9596avzxn-pinctrl.dtsi`, as `imx95_evk`); every pad the module's
    Linux uses is in it and in the 15x15 one, so the console does not depend
    on it, but the module's part is not confirmed.
-6. **The Mali-G310's CSF firmware** is not fetched or pinned yet (panthor
-   loads `arm/mali/arch<major>.<minor>/mali_csffw.bin` by the GPU_ID's
-   architecture; the G610's is `arch10.8`, the G310's is to be read from its
-   GPU_ID), and the GPU's power-on through the System Manager
-   and a bring-up in `driver/rust` that is not the RK3588's do not exist:
-   `driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c` names both and
-   refuses.
+6. **The Mali-G310's bring-up** is in the image, not run: the CSF firmware
+   is the T6's file (`MALI_CSFFW`; panthor loads
+   `arm/mali/arch<major>.<minor>/mali_csffw.bin` by the GPU_ID's
+   architecture, and linux-firmware's `arch10.12` file, the G310's, is the
+   `arch10.8` bytes, `docs/notes/pre-study-imx95.md`), the GPU is powered
+   over SCMI to the System Manager (`docs/notes/imx95-gpu-power.md`), and
+   from `GPU_ID` on the bring-up is the T6's
+   (`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c`,
+   `yd_imx95_osal_up`). What the board answers on day one: the SM's
+   replies over the channel after U-Boot's `go`, the G310's identity words,
+   the firmware's GLB version.
 
 ## On the boards
 
