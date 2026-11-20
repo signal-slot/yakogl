@@ -3,9 +3,12 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
 # hvs6_dlist_swap: driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist_swap.h,
-# our HVS6 display list placed after word 32, the channel's LPTRS swapped as
-# the last single write, the read-back and FRCNT results, and the byte-equal
-# restore of the firmware's list, against a model of one D0 channel
+# the firmware's list found from LPTRS.HEADE and walked to its END (bounded),
+# our HVS6 display list placed in zero words clear of it (from word 32), the
+# channel's LPTRS swapped as the last single write, the read-back and FRCNT
+# results, and the byte-equal restore of exactly the firmware's words and
+# LPTRS, against a model of one D0 channel, including the board's layout
+# (HEADE=672)
 # (driver/zephyr/lib/board/test/hvs6_dlist_swap_mock.c), with -std=c11
 # -Wall -Wextra -Werror and AddressSanitizer + UBSan; the header also
 # compiles alone under -std=c11 -pedantic.
