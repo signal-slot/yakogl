@@ -123,7 +123,8 @@ struct v3d_job71_target {
 	 * separate_stencil of a Z32F_S8X24 zsbuf). With `s`, `zs` is loaded and
 	 * stored as buffer Z and `s` as buffer STENCIL; without, `zs` is
 	 * ZSTENCIL when D24S8 and Z otherwise (v3dx_rcl.c
-	 * zs_buffer_from_pipe_bits). */
+	 * zs_buffer_from_pipe_bits), or the aspects v3d_job71_clear's
+	 * zs_load_aspects / zs_store_aspects name. */
 	struct v3d_job71_zs zs, s;
 };
 
@@ -223,8 +224,23 @@ struct v3d_job71_clear {
 	 * neither loaded nor stored, the rendering mode's Early Depth/Stencil
 	 * Clear is set (v3dx_rcl.c emit_rcl, job->early_zs_clear) */
 	bool zs_cleared;
-	uint8_t pad[3];
+	/* What `zs_load` and `zs_store` move of the `zs` buffer, V3D_JOB71_ZS_*
+	 * bits (Mesa's job->load / job->store PIPE_CLEAR_DEPTH and _STENCIL
+	 * bits, v3dx_rcl.c zs_buffer_from_pipe_bits): DEPTH | STENCIL is buffer
+	 * ZSTENCIL, DEPTH alone Z, STENCIL alone STENCIL, each with the image's
+	 * own format (a D24S8 image moved as Z or as STENCIL keeps
+	 * Output/Input Image Format D24S8). 0: every aspect `zs` holds
+	 * (ZSTENCIL for a D24S8 without `s`, Z otherwise), the behaviour before
+	 * these fields. A STENCIL bit on a `zs` that holds no stencil (not
+	 * D24S8, or with a separate `s`) or a bit above STENCIL makes
+	 * v3d_job71_end refuse the job. Not read when the load or store is not
+	 * asked for. */
+	uint8_t zs_load_aspects, zs_store_aspects;
+	uint8_t pad[1];
 };
+
+#define V3D_JOB71_ZS_DEPTH   1u
+#define V3D_JOB71_ZS_STENCIL 2u
 
 struct v3d_job71 {
 	struct v3d_cl *bcl, *rcl, *ind;
@@ -258,8 +274,8 @@ int v3d_job71_draw(struct v3d_job71 *j, const struct v3d_job71_draw *d,
 
 /* End the job: the BCL epilogue, the generic tile list (in `ind`) and the
  * RCL. `tile_list_start`/`end` may be NULL. False when the job is broken, a
- * buffer to load or store is not given, or a list overflowed; nothing may
- * then be submitted. */
+ * buffer to load or store is not given, a Z/S aspect is not one the buffer
+ * holds, or a list overflowed; nothing may then be submitted. */
 bool v3d_job71_end(struct v3d_job71 *j, const struct v3d_job71_clear *c, uint32_t *tile_list_start,
 		   uint32_t *tile_list_end);
 
