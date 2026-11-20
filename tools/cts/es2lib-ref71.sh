@@ -5,7 +5,7 @@
 # es2lib-ref71.sh - Mesa's V3D 7.1 output for every expect-pass program of the
 # dEQP-GLES2 shader library, as a table of names and counts.
 #
-# Usage: tools/cts/es2lib-ref71.sh [--cts DIR] [--out FILE] [--jobs N]
+# Usage: tools/cts/es2lib-ref71.sh [--shc V3D_SHC] [--cts DIR] [--out FILE] [--jobs N]
 #   V3D_SHC  the v3d_shc binary (tools/v3d/README.md, H2: Mesa 26.2.1's build-v3d
 #            or drm_shim_ref.sh build); needed. Without it the script exits 3
 #            and says `gap: V3D_SHC`.
@@ -32,6 +32,11 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 
+if [ "${1-}" = "--shc" ]; then # same as V3D_SHC=<path>
+  V3D_SHC="${2-}"
+  export V3D_SHC
+  shift 2
+fi
 if [ -z "${V3D_SHC-}" ] || [ ! -x "${V3D_SHC-}" ]; then
   echo "gap: V3D_SHC (set it to Mesa 26.2.1's v3d_shc, tools/v3d/README.md H2)" >&2
   exit 3
