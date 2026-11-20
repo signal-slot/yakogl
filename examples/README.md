@@ -33,6 +33,13 @@ make `driver/src/fw/mali_csffw_blob.h` from the board's `mali_csffw.bin`
 with `driver/tools/mkmalifw.sh` first. The image is not yet run on the
 board (`driver/docs/nanopc-t6-display.md`, step D3).
 
+`triangle` also builds for the Toradex Verdin iMX95 (Mali-G310),
+`-b verdin_imx95/mimx9596/a55`, and nothing more yet: that board has no
+display, no watchdog and no GPU bring-up. Its image stops at
+`board_window()` (no display), and a GL call that reaches `eglInitialize`
+there is refused with lines that name the missing firmware and power-on
+(`driver/zephyr/lib/board/verdin_imx95`, `docs/standalone-boot.md`).
+
 `slint` also needs the no_std Slint tree and the patched femtovg and glow,
 which live outside this repository: `nostd/README.md` says how to make them,
 and the build takes them as `-DSLINT_NOSTD_DIR=<slint tree>
