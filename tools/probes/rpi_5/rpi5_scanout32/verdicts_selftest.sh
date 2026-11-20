@@ -21,6 +21,8 @@
 #   redact     IPv4, host:port, IPv6, MAC, /dev/tty path and tty name in
 #              printed lines never reach the output; 0x values do
 #   usage      argument count, unreadable file -> exit 2; empty log -> 1
+# `sh verdicts_selftest.sh` works too: it re-runs itself under bash.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 unset LC_ALL LANGUAGE
 export LANG=C
