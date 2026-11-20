@@ -14,7 +14,12 @@
 #   noalt      the same buffer twice in a row -> FAIL
 #   restore    'u3 restore: FAIL' -> FAIL; a PASS whose hash differs from the
 #              snapshot -> FAIL
-#   word       placed word < 32 -> FAIL
+#   word       placement overlapping the firmware span at heade, or running
+#              past 4096 -> FAIL
+#   refused    'u3 dlist: refused ..' -> FAIL (placement refused), q4
+#              unanswered, exit 3, swap/named/restore not required
+#   oldsnap    a snapshot without heade= -> incomplete (line missing)
+#   hrestore   restore heade differing from the snapshot's -> FAIL
 #   few        fewer than the minimum of swaps -> incomplete
 #   cut        a log cut after the swaps -> incomplete, stop point named
 #   gap        lines skipped between seen ones -> incomplete, gap named
@@ -43,8 +48,8 @@ bash -n "$V" && ok "verdicts.sh parses (bash -n)" || bad "verdicts.sh: bash -n"
 bash -n "$0" && ok "verdicts_selftest.sh parses (bash -n)" || bad "selftest: bash -n"
 
 # ---- fixture logs ----------------------------------------------------------
-SNAP='u3 snapshot: list-ptr=0x00000000 words=32 hash=0xdeadbeef'
-DL='u3 dlist: placed word 32 len 12'
+SNAP='u3 snapshot: list-ptr=0x00000000 heade=672 words=40 hash=0xdeadbeef'
+DL='u3 dlist: placed word 32 len 12'  # fw at 672..711, ours at 32
 PL='u3 plane: addr=0x3d000000 fmt=XRGB8888 pitch=7680 w=1920 h=1080'
 S1='u3 swap 1: buf A list-ptr=0x00000020 frcnt 10 -> 11'
 S2='u3 swap 2: buf B list-ptr=0x00000020 frcnt 11 -> 12'
@@ -71,7 +76,15 @@ mk "$T/restorefail.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" \
     'u3 restore: FAIL (word 7 differs)' 'rpi5_scanout32: FAIL (restore)'
 mk "$T/restorehash.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" \
     'u3 restore: PASS (hash=0x12345678)' "$TM"
-mk "$T/word.log" "$SNAP" 'u3 dlist: placed word 20 len 12' "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" "$RS" "$TM"
+mk "$T/word.log" "$SNAP" 'u3 dlist: placed word 660 len 20' "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" "$RS" "$TM"
+mk "$T/past.log" "$SNAP" 'u3 dlist: placed word 4090 len 12' "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" "$RS" "$TM"
+mk "$T/after.log" "$SNAP" 'u3 dlist: placed word 712 len 12' "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" "$RS" "$TM"
+mk "$T/refused.log" "$SNAP" 'u3 dlist: refused no unused span of 12 words proven' "$TM"
+mk "$T/oldsnap.log" 'u3 snapshot: list-ptr=0x00000000 words=32 hash=0xdeadbeef' "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" "$RS" "$TM"
+mk "$T/hrestore.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" \
+    'u3 restore: PASS (heade=668 hash=0xdeadbeef)' "$TM"
+mk "$T/hrestoreok.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" \
+    'u3 restore: PASS (heade=672 hash=0xdeadbeef)' "$TM"
 mk "$T/few.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$NM" "$RS" "$TM"
 mk "$T/cut.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4"
 mk "$T/gap.log" "$SNAP" "$PL" "$S1" "$S2" "$S3" "$S4" "$RS" "$TM"
@@ -123,10 +136,29 @@ run "$T/restorehash.log"
 want_rc 3 "restore hash differs"
 check "restore PASS carries hash=0x12345678 but the snapshot has hash=0xdeadbeef" "hash mismatch named"
 
-# ---- placed word < 32 -------------------------------------------------------
+# ---- placement ----------------------------------------------------------------
 run "$T/word.log"
-want_rc 3 "word < 32"
-check "placed word 20 < 32" "placed word named"
+want_rc 3 "overlap"
+check "placed [660,680) overlaps the firmware list [672,712)" "overlap named"
+run "$T/past.log"
+want_rc 3 "past 4096"
+check "placed [4090,4102) runs past word 4096" "past 4096 named"
+run "$T/after.log"
+want_rc 0 "placed right after the firmware span"
+check "q4: yes" "adjacent placement is valid"
+run "$T/refused.log"
+want_rc 3 "refused"
+check "verdicts: FAIL (placement refused: no unused span of 12 words proven)" "refusal is a FAIL"
+check "q4: unanswered (placement refused)" "refusal leaves q4 unanswered"
+nope "missing: u3 swap" "swap lines not required after a refusal"
+run "$T/oldsnap.log"
+want_rc 1 "old snapshot"
+check "missing: u3 snapshot" "snapshot without heade= is missing"
+run "$T/hrestore.log"
+want_rc 3 "restore heade mismatch"
+check "restore carries heade=668 but the snapshot has heade=672" "heade mismatch named"
+run "$T/hrestoreok.log"
+want_rc 0 "restore heade equal"
 
 # ---- truncated, too few swaps, gap ------------------------------------------
 run "$T/cut.log"
