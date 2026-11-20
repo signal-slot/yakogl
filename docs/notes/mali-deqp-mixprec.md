@@ -704,13 +704,9 @@ Item `lower-mixprec` (plan #377), 2026-11-18, on main 5bd67e35 (after
 is not run.
 
 - **Byte-equal to Mesa 26.2.1** (`tests/mali_deqp_mixprec.rs`, `MATCHED`):
-  `cmpf`, `cmpv2`, `rot1`, `rot3`. **Compile, words differ** (`DIFFERS`, each
-  `#[ignore]` names the difference; `differences_pinned` asserts they still
-  differ): `cmpv3` (the last `FMAX`'s operand order), `cmpv4` and `cmptex`
-  (the product chain not rebalanced, and the `FMAX` order; `cmptex` also
-  leaves the texel differences unpaired), `cmpmat2` (column 0's `FADD_IMM`
-  and `FMAX` come first in Mesa). All eight compile, so none refuses any
-  more.
+  all eight. The first session (below) made `cmpf`, `cmpv2`, `rot1` and
+  `rot3` byte-equal; the second (8.1) made `cmpv3`, `cmpv4`, `cmptex` and
+  `cmpmat2` byte-equal, so `DIFFERS` is empty and no test is ignored.
 - **Step 0.** Step 0 was not needed: `mali_ref::compile_pair` compiles the
   `cmp*` pairs with the vertex shader's constant `v_vtxOut` folded, which is
   the reference's program. The shader objects with `v_vtxOut` still a
@@ -754,3 +750,60 @@ is not run.
   regenerated here. The dEQP cases this
   unblocks were not measured here; the next whole-tree or host measure
   counts them.
+
+### 8.1 Second session: `cmpv3`, `cmpv4`, `cmptex`, `cmpmat2`
+
+Item `lower-mixprec` again (plan #377), 2026-11-20, on the integration tip
+98969940. Host only. The order was read from Mesa itself: the drm-shim of
+`tools/mali/drm_shim_ref.sh build` (into `$CONNECTED_DEPS_DIR/mesa-shim`)
+run on each reference's pair with `NIR_DEBUG=print_fs`, which prints the
+shader after every NIR pass with the pass's name (in `<out>.stdout`).
+
+- **No rebalance.** Section 7.2 said `cmpv4`'s tree is GLSL's rebalanced
+  `(x*y)*(z*w)`. It is not: the first fragment shader NIR prints holds the
+  left chain `((x*y)*z)*w` of `compare_vec4`'s return. The order comes from
+  `nir_opt_algebraic`. Its first run makes `x*y` the `b2f(iand(x, y))`
+  (nir_opt_algebraic.py:1679), but a product whose other operand is still
+  a `fmul` matches only `fmul(b2f(a), b)`, so `(x*y)*z` is `bcsel(z,
+  x*y, 0.0)` and `.. * w` is `bcsel(w, .., 0.0)`. The next runs fold
+  `bcsel(w, bcsel(z, v, 0), 0)` to `bcsel(iand(w, z), v, 0)`, then
+  `iand(flt(a, c), flt(b, c))` to `flt(fmax(a, b), c)`: `fmax(fmax(w, z),
+  fmax(x, y))` (`cmpv4`, `cmptex`) and `fmax(z, fmax(x, y))` (`cmpv3`). A
+  product of two products (`cmpmat2`'s two `compare_vec2` calls) waits
+  until both are `b2f`s, so it keeps the source order: `fmax(column 0,
+  column 1)`. This is `Fs::cmp_product` (nir_fs.rs), called by the walk's
+  compare-product arm in place of a bare `and_masks`. It keeps a small table
+  (`Fs::cmp_chain`) of the `b2f` nodes it made, with the leaves folded so
+  far and the base product's mask. The `fmax(z, xy)` node a three-leaf step
+  makes is left to the dead code when a fourth leaf follows. A chain past
+  four leaves has no reference; it folds each new leaf in front of the
+  ones before.
+- **cmpmat2's order** (`call_returns` in nir_fs.rs, called by
+  `order_keys`). `order_keys` places every `?:` of a statement before the
+  statement (GLSL's `conditional_tmp`), and the products after. Column 0's
+  product `compare_vec2(a[0], b[0])` is an inlined call's whole return,
+  which in GLSL is its own statement (`retval = a * b`) before the second
+  call's parameter assignments. Mesa's NIR has column 0's `fadd`, `fabs`
+  and `fmax` before column 1's. The rule: an operation of a statement
+  whose operands are all such placed `?:` trees, and after which a separate
+  statement's store (the next call's parameter copy) stands before a
+  further `?:` of the same statement, takes the `?:` trees' place, by its
+  index. `compare_vec4`'s products have no store in between and stay after
+  every call.
+- **cmptex's pairing** (`mates` in nir_fs.rs). Two scalar fp16 operations
+  whose sources are lanes `2k` and `2k + 1` of one fp16 look-up's texel
+  join as one `.v2f16` operation, like two halves of one uniform word. The
+  differences become `FADD_IMM.v2f16 r0, r0^, #..` on the texel registers.
+- Checks, feature set `host-test,gpu-mali,shaderc-online,no-shader-table`:
+  every `tests/mali_deqp_*.rs` passes, no test of another family that was
+  ignored passes now, and the `shaderc::online::mali` unit tests pass (300).
+  `tests/mali_glmark2_corpus.rs` over a corpus that `run.sh` made from
+  glmark2 22c527cb gives the same verdicts with and without this change.
+  Written with `MALI_GLMARK2_WRITE=1` into a scratch copy, both equal the
+  committed fixture line for line. `tools/mali/corpus-verdicts.txt` does
+  not move (`the_corpus_verdicts_are_pinned` passes).
+- **Left:** the `MixedPrecision` text (step 5) and M2, M3, V2, V3 (no
+  reference), as before. The 92 `compare_*` cases with no reference (mat3,
+  mat4, mat4_mat2, the cube sampler, `uniform_api.random`) go through the
+  same code. Their chains are longer (`compare_mat3` is three `compare_vec3`
+  products), so a reference is still needed before claiming them.
