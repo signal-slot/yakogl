@@ -129,20 +129,24 @@ HDMI0); the C0 stride between channels is 0x20, the D0 stride 0x40.
 | `DISPX_DL` | 0x48 + 0x20·X | 0x11c + 0x40·X | `LACT` 11:0: the word index of the list being scanned now | `:614-619,714` |
 | display-list memory | 0x4000.. | 0x4000.. | `CXM_SIZE` 32-bit words | `:541`; `rpi:vc4_hvs.c:2150-2153` |
 
-The list at `LACT` (or `HEADE`) is a chain of plane entries; each entry is the
-words below in this order, and `CTL0.NEXT` is the entry's length in words
-(`rpi:vc4_plane.c:2143-2217,2296-2299`):
+The list at `LACT` (or `HEADE`) is a chain of plane entries; each entry ends
+with an `END` word that `CTL0.NEXT` counts in the entry's length in words
+(`rpi:vc4_plane.c:2143-2217`, `:2296-2299`): a single-plane entry without
+scaling is 9 words, the `NEXT=9` entry `hvs6_dlist_write.h` writes. After the
+last entry the list has an `END` word of its own (`rpi:vc4_hvs.c:1316`,
+counted in the list's allocation at `:1138`). An entry is the words below in
+this order:
 
 | Word | Fields | Citation |
 |---|---|---|
-| `CTL0` | `END` 31 (the list's end marker, an entry of its own), `VALID` 30, `NEXT` 29:24, `RGB_TRANS` 23, `ADDR_MODE` 22:20 (0 linear, 1 128B, 2 256B, 3 MAP8, 4 UIF), `ALPHA_MASK` 19:18, `UNITY` 15 (no scaling: then `POS1` is absent), `ORDERRGBA` 14:13, `SCL1_MODE` 10:8, `SCL0_MODE` 7:5, `PIXEL_FORMAT` 4:0 | `rpi:vc4_regs.h:1359-1377`; `rpi:vc4_plane.c:2143-2152` |
+| `CTL0` | `END` 31 (the entry's end, counted in `NEXT`; the list ends with an `END` that is an entry of its own), `VALID` 30, `NEXT` 29:24, `RGB_TRANS` 23, `ADDR_MODE` 22:20 (0 linear, 1 128B, 2 256B, 3 MAP8, 4 UIF), `ALPHA_MASK` 19:18 (3 FIXED for a format without alpha on D0), `UNITY` 15 (no scaling: then `POS1` is absent), `ORDERRGBA` 14:13, `SCL1_MODE` 10:8, `SCL0_MODE` 7:5, `PIXEL_FORMAT` 4:0 | `rpi:vc4_regs.h:1359-1377`; `rpi:vc4_plane.c:2143-2152`, `:1333-1346` |
 | `POS0` | `START_Y` 28:16, `HFLIP` 15, `START_X` 12:0 | `:1379-1381`; `:2154-2159` |
-| `CTL2` | alpha mode 31:30, premultiplied 29, mix 28, background fill 26, CSC enable (C0 bit 25, D0 bit 19), alpha 15:4 | `:1383-1389,1215-1216,1212`; `:2161-2166` |
+| `CTL2` | alpha mode 31:30, premultiplied 29, mix 28, background fill 26, CSC enable (C0 bit 25, D0 bit 19), alpha 15:4 (Linux writes `alpha >> 4`: opaque is 0xfff0) | `:1383-1389,1215-1216,1212`; `:2161-2166` |
 | `POS1` (only when not `UNITY`) | `SCL_LINES` 28:16, `SCL_WIDTH` 12:0 (scaled size − 1) | `:1391-1392`; `:2168-2174` |
 | `POS2` | `SRC_LINES` 28:16, `SRC_WIDTH` 12:0 (source size − 1) | `:1394-1395`; `:2176-2182` |
-| `POS3` | context, written by the hardware | `:2184-2185` |
+| `POS3` | context, Linux writes 0xc0c0c0c0 | `:2184-2185` |
 | `PTR0` (per colour plane) | `VFLIP` 31, `UPM_BASE` 28:16, `UPM_HANDLE` 14:10, `UPM_BUFF_SIZE` 9:8, **`UPPER_ADDR` 7:0 = address bits 39:32** | `:1397-1405`; `:2196-2205`, UPM fields `:1136,1193-1197` |
-| `PTR1` | **address bits 31:0** | `:2207-2208`; the flip rewrites `PTR0` and `PTR1` only, `:2451-2463` |
+| `PTR1` | **address bits 31:0** | `:2207-2208`; the flip rewrites `PTR0` and `PTR1` only, `:2451-2466` |
 | `PTR2` | **`PITCH` 16:0** (bytes per line, linear planes) | `:1415`; `:2210-2217` |
 
 The 32 bpp formats: `PIXEL_FORMAT` 7 is RGBA8888 and `ORDERRGBA` says which
