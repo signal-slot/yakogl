@@ -128,3 +128,53 @@ F3S2 sha256=bd133b8066eef1ca67e361b96f1647a5325c307919d1430cb2d180fcff601df6 t_r
    13 cases in 1373 ms, record at 1 s after boot, reset at ~250 s
    slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
    v3d_deqp: build fad0558a DONE, all passed: 13 cases, P 13 F 0 R 0 N 0 other 0
+
+== cycles, session 3 (G3), 2026-11-20
+T05a sha256=e57c6395604b66c46d331854fc965b18fc00a4b25fe61d07e1de06863c195eea t_reboot=1795178530 back_after=338s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   196 cases in 11183 ms, record at 11 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 196 cases, P 190 F 2 R 0 N 4 other 0
+T05b sha256=dfa8dd8f24fb4022ca83355e9d286af62b5d5c7faba00adab02332fc274b0393 t_reboot=1795179022 back_after=308s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   12 cases in 508 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE, all passed: 12 cases, P 12 F 0 R 0 N 0 other 0
+T05c sha256=b772554e6d6f44481fcabddd9b5555e0218bf5adc731330b173a7854f0c5cf3f t_reboot=1795179368 back_after=310s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   4 cases in 523 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE, all passed: 4 cases, P 4 F 0 R 0 N 0 other 0
+T05d sha256=a3fbc8eed2512348858fdd53ec14ba4c602b7ccca630acb25ed9fe403c2bfd42 t_reboot=1795179750 back_after=339s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   8 cases in 959 ms, record at 1 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE, all passed: 8 cases, P 8 F 0 R 0 N 0 other 0
+T06 sha256=bbf96ae7d93c2dc1003e0b92d9ca26e6c349a4f5d24dba7846fbaf90308e0c61 t_reboot=1795180323 back_after=398s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   326 cases in 38333 ms, record at 38 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 326 cases, P 308 F 6 R 0 N 12 other 0
+T07 sha256=09cedf56bceb683a98875537478935170358491680f205b659ca601150ad0893 t_reboot=1795180946 back_after=320s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   240 cases in 37773 ms, record at 37 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 240 cases, P 204 F 36 R 0 N 0 other 0
+T08 sha256=ff7f9ec5ed546406d10a6aad04f8e8b61a4c3d3d8a4cb66c7ff32fd9438de790 t_reboot=1795181428 back_after=320s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   288 cases in 40339 ms, record at 40 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 288 cases, P 0 F 288 R 0 N 0 other 0
+T09 sha256=b258524aba37501fbcda78f701cbb35c1f5dd7421dc7e64e54c891475a6a6eda t_reboot=1795181906 back_after=413s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   224 cases in 97467 ms, record at 97 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 224 cases, P 74 F 144 R 6 N 0 other 0
+T10 sha256=3ee21768b73859882c074f0576659a7b81d10a997d8a61933140b1f11e326eba t_reboot=1795182646 back_after=322s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   363 cases in 84589 ms, record at 84 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 363 cases, P 356 F 7 R 0 N 0 other 0
+T11 sha256=e421735a0e07a1f1264351a5c73fe0fb4d69289e3171194524318326dbccce83 t_reboot=1795182994 back_after=356s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   321 cases in 34369 ms, record at 34 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 321 cases, P 320 F 1 R 0 N 0 other 0
+T12 sha256=6afd311ab05b90320e7b1f8a487dc7cc210d3c7b976d5328855fe5cddecbfc79 t_reboot=1795183556 back_after=335s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   246 cases in 64010 ms, record at 64 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 246 cases, P 242 F 4 R 0 N 0 other 0
+T13 sha256=c429f65770fd1d243e4df8669862e057b4330ced26fe040a54c1720e8a8165da t_reboot=1795183944 back_after=356s new boot_id cleanup=staged image removed, tryboot.txt put back (read back)
+   312 cases in 32775 ms, record at 32 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build fad0558a DONE: 312 cases, P 306 F 6 R 0 N 0 other 0
