@@ -16,6 +16,13 @@
 //! there and names itself in `step`. Z1's and Z2's own records stay with
 //! their probes (`t6_gpu`, `t6_mmu`): here they give their stop, refusal
 //! and value, and the few values Z3 depends on.
+//!
+//! Z1's power-on is the SoC's, everything after it the GPU's: [`fw_up_on`]
+//! runs Z3 over any [`Power`], the SoC's step that ends with the GPU
+//! powered, clocked, identified, reset and its L2 up (the NanoPC-T6's is
+//! [`Rk3588Power`], [`super::nanopc_t6_gpu::gpu_up_with`]; the i.MX 95's
+//! is [`super::imx95_gpu::Imx95Power`], SCMI to the System Manager). From
+//! there on only the GPU's registers at the base it was given are touched.
 
 use super::nanopc_t6_gpu::{self, gpu_up_with, Bases, GpuUp, GPU_QOS_POLICY};
 use super::nanopc_t6_mmu;
@@ -23,7 +30,7 @@ use super::nanopc_t6_sections::{mmu_up_sections, Backing, McuMem, Placement};
 use crate::gpu::mali::csf::{self, GlbInput, GlbOutput, GlobalConfig, GLB_INIT_TOGGLES, GLB_PING};
 use crate::gpu::mali::fw::{self, FwError};
 use crate::gpu::mali::pgtable::Table;
-use crate::gpu::mali::MCU_STATUS;
+use crate::gpu::mali::{Ident, MCU_STATUS};
 use crate::mmio::Mmio;
 use crate::soc::rk3588::QosPolicy;
 use core::mem::offset_of;
@@ -185,6 +192,76 @@ impl FwUp {
     }
 }
 
+/// The SoC's part of a GPU bring-up (Z1): power the GPU at `gpu` on, by
+/// whatever the SoC takes, then run the GPU's own part ([`crate::gpu::mali::probe`]:
+/// the identity, the soft reset, the L2). The record is the SoC's, read in
+/// the order the run read it; [`fw_up_on`] takes from it the identity after
+/// the reset and where it stopped.
+pub trait Power {
+    /// Everything the run read (the NanoPC-T6's [`GpuUp`]).
+    type Record: Copy;
+
+    /// The run. `on_handover` sees the record before the first write that
+    /// could fault (a GPU register with the GPU off is an external abort);
+    /// `delay_us` waits.
+    fn up(
+        &mut self,
+        m: &impl Mmio,
+        gpu: usize,
+        delay_us: &mut impl FnMut(u32),
+        on_handover: &mut impl FnMut(&Self::Record),
+    ) -> Self::Record;
+
+    /// The identity read after the reset.
+    fn ident(r: &Self::Record) -> Ident;
+
+    /// The step that stopped the run (the record's own number for it, 0
+    /// never), its refusal and the value it is about; `None` when every
+    /// step ran.
+    fn stopped(r: &Self::Record) -> Option<(u32, u32, u64)>;
+
+    /// [`FwUp`]'s supply words (`supply_enabled`, `supply_after`,
+    /// `supply_waited_us`): the NanoPC-T6's RK806 enable. 0 on a SoC whose
+    /// supply is not ours to switch.
+    fn supply(_r: &Self::Record) -> (u32, [u32; 2], u32) {
+        (0, [0, 0], 0)
+    }
+}
+
+/// The NanoPC-T6's power-on ([`nanopc_t6_gpu::gpu_up_with`]) over the
+/// RK3588's blocks at `b`, applying `qos`.
+#[derive(Clone, Copy, Debug)]
+pub struct Rk3588Power {
+    pub b: Bases,
+    pub qos: QosPolicy,
+}
+
+impl Power for Rk3588Power {
+    type Record = GpuUp;
+
+    fn up(
+        &mut self,
+        m: &impl Mmio,
+        _gpu: usize,
+        delay_us: &mut impl FnMut(u32),
+        on_handover: &mut impl FnMut(&GpuUp),
+    ) -> GpuUp {
+        gpu_up_with(self.qos, m, self.b, delay_us, on_handover)
+    }
+
+    fn ident(g: &GpuUp) -> Ident {
+        g.ident_after_reset
+    }
+
+    fn stopped(g: &GpuUp) -> Option<(u32, u32, u64)> {
+        (g.stop != nanopc_t6_gpu::Stop::None).then_some((g.stop as u32, g.refusal, g.detail))
+    }
+
+    fn supply(g: &GpuUp) -> (u32, [u32; 2], u32) {
+        (u32::from(g.supply_enabled), g.supply_after.map(u32::from), g.supply_waited_us)
+    }
+}
+
 /// The run (see the module). `m` reaches the registers at the bases of `b`
 /// (the GPU's mapping covering its doorbells, 0x80000 and up) and the
 /// backings at their CPU addresses. `blob` is `mali_csffw.bin`;
@@ -234,6 +311,28 @@ pub fn fw_up_with(
     on_handover: &mut impl FnMut(&GpuUp),
     z1: &mut GpuUp,
 ) -> FwUp {
+    let mut power = Rk3588Power { b, qos };
+    fw_up_on(m, b.gpu, &mut power, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1)
+}
+
+/// [`fw_up`] over any SoC's [`Power`]: its power-on, then Z2 and the boot
+/// on the GPU at `gpu`. The other arguments are [`fw_up`]'s; `z1` receives
+/// the power-on's whole record.
+#[allow(clippy::too_many_arguments)]
+pub fn fw_up_on<P: Power>(
+    m: &impl Mmio,
+    gpu: usize,
+    power: &mut P,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&P::Record),
+    z1: &mut P::Record,
+) -> FwUp {
     let mut o = FwUp::default();
     let img = match fw::parse(blob) {
         Ok(img) => img,
@@ -254,20 +353,19 @@ pub fn fw_up_with(
         }
     };
 
-    let g = gpu_up_with(qos, m, b, delay_us, on_handover);
+    let g = power.up(m, gpu, delay_us, on_handover);
     *z1 = g;
-    o.gpu_id = g.ident_after_reset.gpu_id;
-    o.shader_present = lo_hi(g.ident_after_reset.shader_present);
-    o.mmu_features = g.ident_after_reset.mmu_features;
-    o.supply_enabled = u32::from(g.supply_enabled);
-    o.supply_after = g.supply_after.map(u32::from);
-    o.supply_waited_us = g.supply_waited_us;
-    if g.stop != nanopc_t6_gpu::Stop::None {
-        o.stopped(STEP_GPU, g.stop as u32, g.refusal, g.detail);
+    let id = P::ident(&g);
+    o.gpu_id = id.gpu_id;
+    o.shader_present = lo_hi(id.shader_present);
+    o.mmu_features = id.mmu_features;
+    (o.supply_enabled, o.supply_after, o.supply_waited_us) = P::supply(&g);
+    if let Some((stop, refusal, detail)) = P::stopped(&g) {
+        o.stopped(STEP_GPU, stop, refusal, detail);
         return o;
     }
 
-    let s = mmu_up_sections(m, b.gpu, o.mmu_features, pool, tables_pa, &placement, &mut |a, n| clean(a, n), delay_us);
+    let s = mmu_up_sections(m, gpu, o.mmu_features, pool, tables_pa, &placement, &mut |a, n| clean(a, n), delay_us);
     o.tables_used = s.up.tables_used;
     o.flushed = s.flushed;
     o.shared_pa = lo_hi(s.up.backing_pa);
@@ -277,8 +375,8 @@ pub fn fw_up_with(
     }
 
     let mem = McuMem::new(&placement, clean);
-    let cfg = GlobalConfig { shader_present: g.ident_after_reset.shader_present, timer_hz };
-    let booted = csf::boot(m, &mem, b.gpu, &img, &cfg, delay_us);
+    let cfg = GlobalConfig { shader_present: id.shader_present, timer_hz };
+    let booted = csf::boot(m, &mem, gpu, &img, &cfg, delay_us);
     o.clean_rc = mem.clean_rc();
     let r = match booted {
         Ok(r) => r,
@@ -290,7 +388,7 @@ pub fn fw_up_with(
                 csf::CsfRefusal::PingTimeout => GLB_INIT_TOGGLES | v,
                 _ => 0,
             };
-            o.mcu_status = m.read32(b.gpu + MCU_STATUS);
+            o.mcu_status = m.read32(gpu + MCU_STATUS);
             return o;
         }
     };
@@ -454,6 +552,19 @@ pub(crate) mod tests {
         /// (`csf::tests::Mcu::csg_suspend`).
         pub(crate) fn with_csg_suspend(mut self, size: u32, protm_size: u32) -> T6 {
             self.mcu.csg_suspend = (size, protm_size);
+            self
+        }
+        /// PD_GPU powered with its idle request released, as
+        /// [`rk3588::pd_gpu_on`] leaves it: the GPU answers without the
+        /// RK3588's power-on (another SoC's model sits on top and powers it
+        /// its own way, board::imx95_gpu's test).
+        pub(crate) fn pd_gpu_powered(self) -> T6 {
+            {
+                let mut r = self.soc.borrow_mut();
+                *r.get_mut(&(PMU_BASE + pd_gpu::REPAIR_STATUS)).unwrap() |= 2;
+                *r.get_mut(&(PMU_BASE + pd_gpu::BUS_IDLE_ACK)).unwrap() &= !1;
+                *r.get_mut(&(PMU_BASE + pd_gpu::BUS_IDLE_ST)).unwrap() &= !1;
+            }
             self
         }
         /// CLKSEL_CON(158) as given (the PVTPLL bit, a divider, a mux).
