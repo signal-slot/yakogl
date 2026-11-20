@@ -62,7 +62,7 @@ want driver/src/fw/pvr_fw_blob.h pvr
 want tests/reference/blobs.rs pvr
 want src/vivante/backend.rs vivante
 want src/shaderc/online/vivante/isa.rs vivante
-want tools/hal-nxp/gen_regs.py vivante
+want tools/hal-nxp/gen_regs.py "vivante drivers"
 want tests/gc_mipmap_gpu.rs vivante
 want src/v3d/job.rs v3d
 want src/shaderc/online/v3d/prepare.rs "v3d v3d71"
