@@ -62,6 +62,11 @@ pub const MAX_TARGETS: usize = 8;
 /// The run-time indexed uniform reads one shader may make ([`Fs::ubo_idx`]).
 pub const MAX_UBO_READS: usize = 8;
 
+/// The products of compare selects one shader keeps the chain of
+/// ([`Fs::cmp_product`]); a product past them folds its masks in source
+/// order.
+const MAX_CMP_CHAIN: usize = 32;
+
 /// `nir_opt_loop_unroll`'s bounds as bifrost sets them: a loop of at most
 /// `max_unroll_iterations` passes (bifrost_compile.h:140-144, read at
 /// nir_opt_loop_unroll.c:899-931) whose unrolled body costs at most
@@ -504,7 +509,43 @@ pub fn order_keys(m: &Module<'_>, keys: &mut [u32]) {
             }
         }
     }
+    call_returns(m, n, keys);
     swapped_compares(m, n, &grafted, keys);
+}
+
+/// An inlined call's return expression of `?:` values is its own GLSL
+/// statement (`retval = a * b`), emitted before the next call's parameter
+/// assignments: so an operation of the statement at `S` whose operands
+/// are all `?:` trees placed before `S` (`order_keys`'s ternaries, keyed
+/// `S << 16 - 0x8000 + v`), and after which a separate statement's store
+/// stands before a further `?:` of `S`, takes their place, by its index.
+/// Measured: deqp_mixprec_cmpmat2, `compare_vec2(a[0], b[0]) *
+/// compare_vec2(a[1], b[1])`, column 0's `fmax` before column 1's `fadd`
+/// (the drm-shim's NIR); `compare_vec4`'s products of four calls in one
+/// return stay after every call (deqp_mixprec_cmpv4).
+fn call_returns(m: &Module<'_>, n: usize, keys: &mut [u32]) {
+    for i in 0..n {
+        let ir::Op::Alu(a, srcs) = m.instrs[i] else { continue };
+        let s = keys[i] >> 16;
+        if keys[i] == u32::MAX || keys[i] & 0xffff != i as u32 || s == 0 {
+            continue;
+        }
+        let base = (s << 16).saturating_sub(0x8000);
+        let placed = |k: u32| k >= base && k < s << 16;
+        let operands = srcs
+            .iter()
+            .take(a.arity())
+            .all(|x| matches!(m.instrs.get(x.val.0 as usize), Some(ir::Op::Alu(..))) && placed(keys[x.val.0 as usize]));
+        if !operands {
+            continue;
+        }
+        let Some(t) = (i + 1..n).find(|&t| placed(keys[t]) && is_ternary(m, t)) else { continue };
+        let foreign = (i + 1..t)
+            .any(|j| matches!(m.instrs[j], ir::Op::StoreLocal { .. } | ir::Op::StoreOutput { .. }) && keys[j] < base);
+        if foreign {
+            keys[i] = base + i as u32;
+        }
+    }
 }
 
 /// GLSL IR has no `>` or `<=`: ast_to_hir makes a scalar `a > b` and `a <=
@@ -1094,6 +1135,12 @@ pub struct Fs<'s> {
     /// A highp shader's uniform block ([`select_highp`]'s): where Mesa's
     /// loads are, which [`uniform_vector`] vectorises by.
     ubo: UboLayout,
+    /// The `b2f` nodes the walk made of a product of compare selects
+    /// ([`Fs::cmp_product`]), with the leaves a chain folded on so far
+    /// (Undef for a product of two leaves or of two products) and the
+    /// mask of the product the chain started from.
+    cmp_chain: [(Val, Val, Val); MAX_CMP_CHAIN],
+    ncmp_chain: usize,
     pub prods: u128,
     /// The texture look-ups the shader makes, in the walk's order (an
     /// unrolled loop's once per pass). Each node is 16 bits wide
@@ -2064,6 +2111,47 @@ impl<'s> Fs<'s> {
             }
         }
         self.mask_op(Alu::Iand, a, b, at)
+    }
+
+    /// The `b2f` of the product of two compare selects `x` and `y`
+    /// ([`Fs::cmp_select`]), its masks in Mesa's order. Measured with
+    /// NIR_DEBUG=print_fs on the drm-shim (deqp_mixprec_cmpv4, Mesa
+    /// 26.2.1): the product of two leaves is `b2f(iand(a, b))`
+    /// (nir_opt_algebraic.py:1679) in source order, and so is the product
+    /// of two products once both are `b2f`s (deqp_mixprec_cmpmat2, column 0
+    /// first). A product of a product still a `fmul` and a leaf is first
+    /// `bcsel(leaf, product, 0.0)` (`fmul(b2f(a), b)`), so in a chain
+    /// `((l1 * l2) * l3) * l4` the leaves come first: `bcsel(l4, bcsel(l3,
+    /// v, 0), 0)` is `bcsel(iand(l4, l3), v, 0)`, which is `iand(iand(l4,
+    /// l3), iand(l1, l2))` (cmpv3: `fmax(z, fmax(x, y))`; cmpv4:
+    /// `fmax(fmax(w, z), fmax(x, y))`). A chain past four leaves has no
+    /// reference; it folds each new leaf in front of the ones before.
+    fn cmp_product(&mut self, x: Val, y: Val, at: usize) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        let (Some(a), Some(b)) = (self.cmp_select(x), self.cmp_select(y)) else {
+            return Err(MaliError::Defect(Defect::IrIndex));
+        };
+        let entry = |f: &Self, v: Val| f.cmp_chain[..f.ncmp_chain].iter().find(|e| e.0 == v).copied();
+        let (mask, leaves, base) = match (entry(self, x), entry(self, y)) {
+            (Some((_, lx, bx)), None) | (None, Some((_, lx, bx))) => {
+                let leaf = if entry(self, x).is_some() { b } else { a };
+                let leaves = match lx {
+                    Val::Undef => leaf,
+                    l => self.and_masks(leaf, l, at)?,
+                };
+                (self.and_masks(leaves, bx, at)?, leaves, bx)
+            }
+            _ => {
+                let m = self.and_masks(a, b, at)?;
+                (m, u, m)
+            }
+        };
+        let r = self.node(Alu::B2f, [mask, u, u], at)?;
+        if self.ncmp_chain < MAX_CMP_CHAIN && entry(self, r).is_none() {
+            self.cmp_chain[self.ncmp_chain] = (r, leaves, base);
+            self.ncmp_chain += 1;
+        }
+        Ok(r)
     }
 
     /// `v` is a 32-bit boolean ([`Fs::mask_lane`]) or the `ior` / `iand`
@@ -4014,6 +4102,8 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         ubo_idx: [0; MAX_UBO_READS],
         ubo: UboLayout::NONE,
         nubo: 0,
+        cmp_chain: [(Val::Undef, Val::Undef, Val::Undef); MAX_CMP_CHAIN],
+        ncmp_chain: 0,
         prods: 0,
         look_ups: [TexLookup::NONE; MAX_LOOK_UPS],
         nlook: 0,
@@ -5582,10 +5672,7 @@ fn walk_nodes(
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
                     *o = match (f.cmp_select(x), f.cmp_select(y)) {
-                        (Some(a), Some(b)) => {
-                            let mask = f.and_masks(a, b, at)?;
-                            f.node(Alu::B2f, [mask, u, u], at)?
-                        }
+                        (Some(_), Some(_)) => f.cmp_product(x, y, at)?,
                         (Some(a), None) | (None, Some(a)) => {
                             let other = if f.cmp_select(x).is_some() { y } else { x };
                             let b = f.node(Alu::B2f, [a, u, u], at)?;
@@ -9343,6 +9430,14 @@ fn mates(f: &Fs<'_>, mate: &mut [Option<(u16, u16)>; MAX_NODES]) {
          * scalar lanes: one `FADD_IMM.v2f16 r0, u2.w0, #..`) */
         _ if f.uniform_dword(a).is_some() || f.uniform_dword(b).is_some() => {
             matches!((f.uniform_dword(a), f.uniform_dword(b)), (Some(d), Some(e)) if d % 2 == 0 && e == d + 1)
+        }
+        /* two lanes of one fp16 look-up's texel word, in order
+         * (deqp_mixprec_cmptex's `texture2D(..) - vec4(..)` of
+         * `compare_vec4`'s scalar lanes: `FADD_IMM.v2f16 r0, r0^, #..` on
+         * the texel register itself, x,y then z,w) */
+        _ if f.texel16(a) || f.texel16(b) => {
+            matches!((f.texel(a), f.texel(b)), (Some((j, c)), Some((k, d))) if j == k && c % 2 == 0 && d == c + 1)
+                && f.texel16(a)
         }
         _ => match (f.input_lane(a), f.input_lane(b)) {
             (Some((v, i)), Some((w, j))) => {

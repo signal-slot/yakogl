@@ -5,11 +5,11 @@
 //! mixprec, `docs/notes/mali-deqp-mixprec.md`), one test per reference.
 //! `tests/mali_ref` does the compare.
 //!
-//! The references in [`MATCHED`] compile byte-equal. Every reference
-//! compiles now; the ones in [`DIFFERS`] compile with other words than
-//! Mesa's, so their tests are `#[ignore]`d with the difference named.
-//! `differences_pinned` runs now and asserts that each of them still
-//! differs: a change that makes one byte-equal moves it to [`MATCHED`] and
+//! Every reference compiles byte-equal ([`MATCHED`]). A reference that
+//! compiles with other words than Mesa's goes in [`DIFFERS`] with its test
+//! `#[ignore]`d and the difference named; `differences_pinned` asserts that
+//! each of them still differs and that every reference on disk has a test,
+//! so a change that makes one byte-equal moves it to [`MATCHED`] and
 //! removes its `#[ignore]` in the same commit.
 //!
 //! ```text
@@ -19,14 +19,10 @@
 mod mali_ref;
 
 /// The references that compile byte-equal (their tests run).
-const MATCHED: &[&str] = &["cmpf", "cmpv2", "rot1", "rot3"];
+const MATCHED: &[&str] = &["cmpf", "cmpmat2", "cmptex", "cmpv2", "cmpv3", "cmpv4", "rot1", "rot3"];
 
-/// The references that compile with other words than Mesa's: the `FMAX`
-/// tree of the compare chain in another operand order (Mesa's `iand` order
-/// follows which `b2f` nir_opt_algebraic rewrote first) and, for `cmpv4`
-/// and `cmptex`, not rebalanced (GLSL rebalances the `return` expression of
-/// `compare_vec4` before inlining).
-const DIFFERS: &[&str] = &["cmpmat2", "cmptex", "cmpv3", "cmpv4"];
+/// The references that compile with other words than Mesa's (none now).
+const DIFFERS: &[&str] = &[];
 
 #[test]
 fn cmpf() {
@@ -34,13 +30,11 @@ fn cmpf() {
 }
 
 #[test]
-#[ignore = "differs: the column maxima's order (Mesa computes column 0's FADD_IMM and FMAX before column 1's)"]
 fn cmpmat2() {
     mali_ref::assert_matches("deqp_mixprec_cmpmat2");
 }
 
 #[test]
-#[ignore = "differs: the texel lanes' differences are not paired, and the product chain is not rebalanced"]
 fn cmptex() {
     mali_ref::assert_matches("deqp_mixprec_cmptex");
 }
@@ -51,13 +45,11 @@ fn cmpv2() {
 }
 
 #[test]
-#[ignore = "differs: the last FMAX's operand order (Mesa's `FMAX r0, r1.abs.h00, r0.h00`, z first)"]
 fn cmpv3() {
     mali_ref::assert_matches("deqp_mixprec_cmpv3");
 }
 
 #[test]
-#[ignore = "differs: the product chain is not rebalanced, and the FMAX operand order (Mesa's (w, z), then (zw, xy))"]
 fn cmpv4() {
     mali_ref::assert_matches("deqp_mixprec_cmpv4");
 }
