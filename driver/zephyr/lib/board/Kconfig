@@ -74,12 +74,13 @@ config YAKOGL_BOARD_RPI5_FB_VIRTUAL_HEIGHT
 menuconfig YAKOGL_BOARD
 	bool "YakoGL board layer (yakogl_board.h)"
 	depends on SOC_SERIES_AM62PX_A53 || SOC_MIMX8ML8_A53 || SOC_BCM2711 || \
-		   SOC_SERIES_STM32MP2X_A35
+		   SOC_SERIES_STM32MP2X_A35 || SOC_MIMX9596_A55
 	depends on ARM64
 	help
 	  The window, the screen, the result record, the watchdog and the end
 	  of a run, the same calls on the Verdin AM62P, the Verdin iMX8M Plus
-	  and the Raspberry Pi 4. A sample includes yakogl_board.h and EGL/GL,
+	  and the Raspberry Pi 4 (and, without a window or a watchdog yet, on
+	  the STM32MP257F-DK and the Verdin iMX95). A sample includes yakogl_board.h and EGL/GL,
 	  nothing else from the board.
 
 if YAKOGL_BOARD
@@ -339,3 +340,7 @@ rsource "nanopc_t6/Kconfig"
 # The STM32MP257F-DK (A35) board layer core, outside the board layer above
 # (stm32mp2/Kconfig).
 rsource "stm32mp2/Kconfig"
+
+# The Verdin iMX95 (i.MX 95, A55) glue, outside the board layer above, and its
+# board layer without a window or watchdog yet (verdin_imx95/Kconfig).
+rsource "verdin_imx95/Kconfig"
