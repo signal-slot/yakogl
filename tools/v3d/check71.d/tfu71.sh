@@ -39,6 +39,10 @@
 # assert(for_mipmap) at v3dx_tfu.c:89 is the Gallium caller's contract, and
 # the check also asks about types that caller never passes).
 #
+# Every run also compares ours for gl_mipgen's GL setup (64x64 RGBA8, 7 levels,
+# UIF) with the TFU registers Mesa 7.1 wrote for glGenerateMipmap under
+# drm-shim, tools/v3d/pi5/gl_mipgen.stdout: all twelve words, IOC 0x00086061.
+#
 # Usage: tfu71.sh            check
 #        tfu71.sh --update   rewrite tools/v3d/tfu71_golden.tsv from the Mesa
 #                            tree (after a change of the check's inputs;
@@ -64,6 +68,11 @@ fi
 update=0
 [ "${1:-}" = "--update" ] && update=1
 table=tools/v3d/tfu71_golden.tsv
+# Mesa 7.1's glGenerateMipmap under drm-shim (tools/v3d/pi5/README.md): its
+# TFU job's registers, compared word by word with ours (IOC 0x00086061).
+# IIA and IOA are drm-shim's BO offsets (the board's differ): the input, so
+# compared as an echo. The shim runs no TFU job: values only.
+ref=tools/v3d/pi5/gl_mipgen.stdout
 flags=(-std=gnu11 -O1 -g -Wall -Wextra -Werror)
 
 if [ -n "${CONNECTED_MESA_26_2:-}" ]; then
@@ -98,7 +107,7 @@ if [ -n "$why" ]; then
     exit 1
   }
   echo "tfu71: against the committed $table only: $why"
-  exec "$dir/tfu71_check" "$table"
+  exec "$dir/tfu71_check" "$table" "$ref"
 fi
 
 tfu=$m/src/gallium/drivers/v3d/v3dx_tfu.c
@@ -334,4 +343,4 @@ if ! cmp -s "$dir/tfu71_golden.tsv" "$table"; then
   exit 1
 fi
 echo "tfu71: $table equals Mesa 26.2.2's fill at $m"
-exec "$dir/tfu71_check" "$table"
+exec "$dir/tfu71_check" "$table" "$ref"
