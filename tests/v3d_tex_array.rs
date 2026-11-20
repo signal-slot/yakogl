@@ -777,6 +777,22 @@ mod trampolines {
         assert_eq!(decode_dims(&last_tmu_record().expect("a record")).3, 1);
     }
 
+    /// The words 46/47 of the stream (`textureSize(s, 0).z`, #1261): the back
+    /// end hands the job builder a 3D texture's depth and an array's layer
+    /// count in the draw's `V3dJobTmu` (what `write_uniforms` writes for
+    /// `V3D_QUNIFORM_TEXTURE_DEPTH` / `_ARRAY_SIZE`; tools/v3d/job_check.c
+    /// checks the C half), the other one as 1.
+    #[test]
+    fn the_job_tmu_carries_the_depth_and_the_layer_count() {
+        let _g = rig();
+        for (target, fs, depth, array_size) in [(GL_TEXTURE_2D_ARRAY, FS_ARRAY, 1, 5), (GL_TEXTURE_3D, FS_3D, 5, 1)] {
+            let (err, _, log) = sample(target, fs);
+            assert_eq!(err, DRAW_ERROR, "0x{target:x}: {log:?}");
+            let t = jobs().iter().flat_map(|j| j.tmu.iter().flatten()).last().cloned().expect("a unit");
+            assert_eq!((t.width, t.height, t.depth, t.array_size), (4, 4, depth, array_size), "0x{target:x}");
+        }
+    }
+
     /// Layers rendered through a framebuffer, then the whole array sampled: 5
     /// render jobs at `base + layer * stride` and a window job whose record
     /// has Image Depth 5 (docs/notes/v3d-fbo-render.md section 4, "Tests").
