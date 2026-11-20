@@ -7,13 +7,15 @@
 //! (hwdb `gc7000ULN_v123`: FAST_CLEAR, CACHE128B256BPERLINE, AUTO_DISABLE,
 //! no DEC400, one pixel pipe, no BLT), worked out without a device. Citations
 //! are files under `src/gallium/drivers/etnaviv/` unless a path says
-//! otherwise. Nothing is wired to the back end yet.
+//! otherwise. Nothing is wired to the back end's draws.
 //!
-//! The module is self-contained: no `crate::` or `super::` path; the host
-//! test `tests/gc_ts_words.rs` takes it from the crate as
+//! The pure part is self-contained: no `crate::` or `super::` path; the
+//! host test `tests/gc_ts_words.rs` takes it from the crate as
 //! `yakogl::vivante::ts`. The register addresses are copies of the `regs.rs`
 //! constants named beside each one; the test file compares them against
-//! `regs.rs`.
+//! `regs.rs`. The `test-knobs` hook of the board probe (`gc_debug_ts_probe`),
+//! which allocates through the OSAL and submits its own kicks, and the unit
+//! tests of the probe live in `ts_probe.rs`.
 
 #![allow(dead_code)]
 
@@ -695,19 +697,25 @@ pub const fn probe_source_stride(arm: &ProbeArm, ts_mode: u32) -> u32 {
     v
 }
 
+/// Where a step's `(register, value)` writes go, one at a time: a `Vec` in
+/// the host tests ([`probe_k0`] and the others), the command buffer on the
+/// board (the `test-knobs` hook `gc_debug_ts_probe` in `ts_probe.rs`, which
+/// has no allocator).
+pub type ProbeSink<'a> = &'a mut dyn FnMut(u32, u32);
+
 /// The flush and RA-to-PE stall that opens every step, then `TS_FLUSH_CACHE`.
-#[cfg(feature = "host-test")]
-fn probe_prologue(w: &mut Vec<(u32, u32)>) {
-    w.extend([
+fn probe_prologue(w: ProbeSink) {
+    for (r, v) in [
         (GL_FLUSH_CACHE, GL_FLUSH_COLOR_DEPTH),
         (GL_SEMAPHORE_TOKEN, STALL_RA_PE),
         (GL_STALL_TOKEN, STALL_RA_PE),
         (TS_FLUSH_CACHE, TS_FLUSH),
-    ]);
+    ] {
+        w(r, v);
+    }
 }
 
 /// One side of an RS block: the address and the stride word.
-#[cfg(feature = "host-test")]
 #[derive(Clone, Copy)]
 struct RsSide {
     addr: u32,
@@ -717,9 +725,8 @@ struct RsSide {
 /// One RS block, from `RS_CONFIG` to the last `RS_SINGLE_BUFFER`, in the
 /// golden's order. A fill has no source address (the golden writes none) and
 /// a source stride of 0.
-#[cfg(feature = "host-test")]
 fn probe_rs_block(
-    w: &mut Vec<(u32, u32)>,
+    w: ProbeSink,
     config: u32,
     src: Option<RsSide>,
     dst: RsSide,
@@ -727,11 +734,13 @@ fn probe_rs_block(
     (clear_control, fill0): (u32, u32),
 ) {
     let src_stride = src.map_or(0, |s| s.stride);
-    w.extend([(RS_CONFIG, config), (RS_SOURCE_STRIDE, src_stride), (RS_DEST_STRIDE, dst.stride)]);
+    w(RS_CONFIG, config);
+    w(RS_SOURCE_STRIDE, src_stride);
+    w(RS_DEST_STRIDE, dst.stride);
     if let Some(s) = src {
-        w.push((RS_PIPE_SOURCE_ADDR0, s.addr));
+        w(RS_PIPE_SOURCE_ADDR0, s.addr);
     }
-    w.extend([
+    for (r, v) in [
         (RS_PIPE_DEST_ADDR0, dst.addr),
         (RS_PIPE_OFFSET0, 0),
         (RS_PIPE_OFFSET0 + 4, 0),
@@ -747,7 +756,17 @@ fn probe_rs_block(
         (RS_SINGLE_BUFFER, RS_SINGLE_BUFFER_ENABLE),
         (RS_KICKER, RS_KICKER_VALUE),
         (RS_SINGLE_BUFFER, 0),
-    ]);
+    ] {
+        w(r, v);
+    }
+}
+
+/// The writes of a sink-built step, collected (host tests).
+#[cfg(feature = "host-test")]
+fn probe_collect(build: impl FnOnce(ProbeSink)) -> Vec<(u32, u32)> {
+    let mut w = Vec::new();
+    build(&mut |r, v| w.push((r, v)));
+    w
 }
 
 /// `RS_CONFIG` of the resolve: A8R8G8B8 both ways, the source tiled, no
@@ -756,21 +775,49 @@ pub const PROBE_RESOLVE_CONFIG: u32 = RS_FORMAT_A8R8G8B8 | RS_CONFIG_SOURCE_TILE
 /// `RS_CONFIG` of the TS fill: A8R8G8B8 both ways, `DEST_TILED`.
 pub const PROBE_FILL_CONFIG: u32 = RS_FORMAT_A8R8G8B8 | RS_FORMAT_A8R8G8B8 << 8 | RS_CONFIG_DEST_TILED;
 
-#[cfg(feature = "host-test")]
-fn probe_resolve(w: &mut Vec<(u32, u32)>, arm: &ProbeArm, a: &ProbeAddrs, ts_mode: u32) {
+fn probe_resolve(w: ProbeSink, arm: &ProbeArm, a: &ProbeAddrs, ts_mode: u32) {
     let src = RsSide { addr: a.s, stride: probe_source_stride(arm, ts_mode) };
     let dst = RsSide { addr: a.d, stride: PROBE_SIDE * 4 };
     probe_rs_block(w, PROBE_RESOLVE_CONFIG, Some(src), dst, (PROBE_SIDE, PROBE_SIDE), (0, 0));
 }
 
+/// K0's writes into `w` (see [`probe_k0`]).
+pub fn probe_k0_into(w: ProbeSink, arm: &ProbeArm, a: &ProbeAddrs) {
+    probe_prologue(w);
+    w(TS_MEM_CONFIG, 0);
+    probe_resolve(w, arm, a, TS_MODE_128B);
+}
+
+/// K1's writes into `w` (see [`probe_k1`]).
+pub fn probe_k1_into(w: ProbeSink, a: &ProbeAddrs) {
+    let job = ts_clear_job(ts_layer_stride(PROBE_SURFACE_BYTES, TS_MODE_128B));
+    probe_prologue(w);
+    let dst = RsSide { addr: a.t, stride: job.dest_stride << 2 };
+    probe_rs_block(w, PROBE_FILL_CONFIG, None, dst, (job.width, job.height), (job.clear_control, job.fill));
+}
+
+/// K2's writes into `w` (see [`probe_k2`]); K3 is the same stream.
+pub fn probe_k2_into(w: ProbeSink, arm: &ProbeArm, a: &ProbeAddrs) {
+    probe_prologue(w);
+    for (r, v) in [
+        (TS_MEM_CONFIG, arm.mem_config),
+        (TS_COLOR_STATUS_BASE, a.t),
+        (TS_COLOR_SURFACE_BASE, a.s),
+        (TS_COLOR_CLEAR_VALUE, PROBE_CLEAR),
+        (TS_COLOR_CLEAR_VALUE_EXT, PROBE_CLEAR),
+    ] {
+        w(r, v);
+    }
+    if let Some(n) = arm.auto_disable_count {
+        w(TS_COLOR_AUTO_DISABLE_COUNT, n);
+    }
+    probe_resolve(w, arm, a, arm.ts_mode);
+}
+
 /// K0, the control resolve: `S` to `D` with `TS_MEM_CONFIG` 0.
 #[cfg(feature = "host-test")]
 pub fn probe_k0(arm: &ProbeArm, a: &ProbeAddrs) -> Vec<(u32, u32)> {
-    let mut w = Vec::new();
-    probe_prologue(&mut w);
-    w.push((TS_MEM_CONFIG, 0));
-    probe_resolve(&mut w, arm, a, TS_MODE_128B);
-    w
+    probe_collect(|w| probe_k0_into(w, arm, a))
 }
 
 /// K1, the TS fill: [`ts_clear_job`] of `S`'s TS written to `T`
@@ -778,32 +825,14 @@ pub fn probe_k0(arm: &ProbeArm, a: &ProbeAddrs) -> Vec<(u32, u32)> {
 /// every arm.
 #[cfg(feature = "host-test")]
 pub fn probe_k1(a: &ProbeAddrs) -> Vec<(u32, u32)> {
-    let job = ts_clear_job(ts_layer_stride(PROBE_SURFACE_BYTES, TS_MODE_128B));
-    let mut w = Vec::new();
-    probe_prologue(&mut w);
-    let dst = RsSide { addr: a.t, stride: job.dest_stride << 2 };
-    probe_rs_block(&mut w, PROBE_FILL_CONFIG, None, dst, (job.width, job.height), (job.clear_control, job.fill));
-    w
+    probe_collect(|w| probe_k1_into(w, a))
 }
 
 /// K2, the TS-sourced resolve: K0 with the arm's TS words before the RS
 /// block.
 #[cfg(feature = "host-test")]
 pub fn probe_k2(arm: &ProbeArm, a: &ProbeAddrs) -> Vec<(u32, u32)> {
-    let mut w = Vec::new();
-    probe_prologue(&mut w);
-    w.extend([
-        (TS_MEM_CONFIG, arm.mem_config),
-        (TS_COLOR_STATUS_BASE, a.t),
-        (TS_COLOR_SURFACE_BASE, a.s),
-        (TS_COLOR_CLEAR_VALUE, PROBE_CLEAR),
-        (TS_COLOR_CLEAR_VALUE_EXT, PROBE_CLEAR),
-    ]);
-    if let Some(n) = arm.auto_disable_count {
-        w.push((TS_COLOR_AUTO_DISABLE_COUNT, n));
-    }
-    probe_resolve(&mut w, arm, a, arm.ts_mode);
-    w
+    probe_collect(|w| probe_k2_into(w, arm, a))
 }
 
 /// K3, the pattern resolve: K2's stream again, after the CPU wrote `T` as
@@ -825,3 +854,227 @@ pub fn probe_k3_ts() -> [u8; PROBE_TS_BYTES as usize] {
 pub const fn probe_b(i: u32) -> u32 {
     0xa500_0000 | i
 }
+
+// ---------------------------------------------------------------------------
+// Case 246 `tsprobe` on the board (gc-ts-probe.md's case 243: 243 to 245 were
+// taken by then). What one arm read, reduced to the numbers the C twin
+// (`driver/tools/pvrlab/gl_test_probe_decode.inc`, `struct tsp_readback`)
+// classifies and packs. Pure and without allocation, so the board's library
+// has it.
+// ---------------------------------------------------------------------------
+
+/// "No such index" in [`TspReadback`]'s first-index fields (`TSP_NOT_FOUND`).
+pub const TSP_NOT_FOUND: u32 = 0xffff;
+/// `nibble_order` bit 7 of a K3 page: the row-0 map is none of the candidate
+/// maps (the CRC is kept for the host to decode). Bits 0 and 1 are
+/// [`K3_LOW_NIBBLE_FIRST`] and [`K3_INTERLEAVED`].
+pub const K3_NO_MATCH: u32 = 0x80;
+
+/// `struct tsp_readback` of `gl_test_probe_decode.inc`, field for field: what
+/// the `test-knobs` hook `gc_debug_ts_probe` hands the case. The C's
+/// `tsp_classify` over it is [`classify`] over the slices it was reduced
+/// from.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TspReadback {
+    /// 0..=3.
+    pub arm: u32,
+    /// K0..K3 kicks that completed.
+    pub steps_done: u32,
+    /// Fence timeouts in any step (no kick runs after the first).
+    pub timeouts: u32,
+    /// Guard dwords that changed, all objects.
+    pub guard_changed: u32,
+    /// 1: `S` changed in K1 or K2.
+    pub s_changed: u32,
+    /// 1: K0's `D` is `detile(B)`.
+    pub k0_ok: u32,
+    /// First index of `T[0..64]` that is not `0x11111111` after K1,
+    /// [`TSP_NOT_FOUND`] if none (0 when K1 did not run).
+    pub t_first_bad: u32,
+    /// K2: `count(D == C)`, of 4096.
+    pub n_clear: u32,
+    /// K2: `count(D == detile(B))`.
+    pub n_detile: u32,
+    /// K2: `count(D == 0xdeadbeef)`.
+    pub n_dead: u32,
+    /// CRC-32 of K2's `D` (of K0's when K2 did not run, 0 when neither did).
+    pub crc: u32,
+    /// K2: the first dword of `D` that is neither `C` nor `detile(B)`,
+    /// [`TSP_NOT_FOUND`] if none.
+    pub first_idx: u32,
+    /// The value read there.
+    pub first_val: u32,
+    /// 1: K3 ran (only after K2 read `YES`).
+    pub k3_present: u32,
+    /// Row-0 map of K3's `D`: bit k = dword `8k` of row 0 is `C`.
+    pub k3_map: u32,
+    /// [`k3_nibble_order`].
+    pub k3_nibble_order: u32,
+    pub k3_crc: u32,
+    pub k3_n_clear: u32,
+    pub k3_n_detile: u32,
+}
+
+/// The layout `detile(B)` is read in: TILED, or SUPER_TILED in one of the
+/// two super-tile orders (arm 3).
+pub const fn probe_layout(arm: &ProbeArm, interleaved: bool) -> K3Layout {
+    if !arm.super_tiled {
+        K3Layout::Tiled
+    } else if interleaved {
+        K3Layout::SuperTiledInterleaved
+    } else {
+        K3Layout::SuperTiledDrm
+    }
+}
+
+/// Dword `lin` (`y * 64 + x`) of `detile(B)`: `B` at the dword `layout`
+/// puts pixel `(x, y)` at (`tsp_detile_expect`).
+pub const fn probe_expected_b(layout: K3Layout, lin: u32) -> u32 {
+    let (x, y) = (lin % PROBE_SIDE, lin / PROBE_SIDE);
+    probe_b((k3_offset(layout, x, y, PROBE_SIDE * 4) / 4) as u32)
+}
+
+/// Row 0's map of `k3_expected_clear` without its allocation: bit k set
+/// when pixel `(8k, 0)` lies in a granule whose nibble of `ts` is 1.
+pub fn k3_expected_row0(layout: K3Layout, mode: u32, ts: &[u8], low_nibble_first: bool) -> u32 {
+    let mut m = 0;
+    for k in 0..8u32 {
+        let n = k3_offset(layout, 8 * k, 0, PROBE_SIDE * 4) / tile_size(mode) as usize;
+        let byte = ts.get(n / 2).copied().unwrap_or(0);
+        let low = n.is_multiple_of(2) == low_nibble_first;
+        if (if low { byte & 0xf } else { byte >> 4 }) == 1 {
+            m |= 1 << k;
+        }
+    }
+    m
+}
+
+/// A K3 page's `nibble_order`: which candidate `map` is, for `T` as
+/// [`probe_k3_ts`] writes it. [`K3_LOW_NIBBLE_FIRST`] when the low nibble
+/// covers the first granule, 0 for the high one, plus [`K3_INTERLEAVED`] when
+/// arm 3's map is the `Interleaved` super-tile order's (`Drm` is tried
+/// first); [`K3_NO_MATCH`] when it is none.
+pub fn k3_nibble_order(map: u32, arm: &ProbeArm) -> u32 {
+    let ts = probe_k3_ts();
+    let orders: &[(bool, u32)] = if arm.super_tiled { &[(false, 0), (true, K3_INTERLEAVED)] } else { &[(false, 0)] };
+    for &(interleaved, bit) in orders {
+        for (low, lbit) in [(true, K3_LOW_NIBBLE_FIRST), (false, 0)] {
+            if k3_expected_row0(probe_layout(arm, interleaved), arm.ts_mode, &ts, low) == map {
+                return bit | lbit;
+            }
+        }
+    }
+    K3_NO_MATCH
+}
+
+/// CRC-32 (IEEE, reflected, as zlib and the C's `pd_crc32`) of `words` as
+/// little-endian bytes.
+pub fn probe_crc32(words: &[u32]) -> u32 {
+    let mut crc = !0u32;
+    for b in words.iter().flat_map(|w| w.to_le_bytes()) {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & (crc & 1).wrapping_neg());
+        }
+    }
+    !crc
+}
+
+/// What one arm read, step by step: a slice is empty for a step that did
+/// not run.
+#[derive(Clone, Copy, Debug)]
+pub struct ArmReads<'a> {
+    pub arm: u32,
+    pub steps_done: u32,
+    pub fence_timeouts: u32,
+    pub guard_changed: u32,
+    pub surface_changed: bool,
+    /// `detile(B)` in the layout K0 matched (else the first candidate).
+    pub expected_b: &'a [u32],
+    pub k0_d: &'a [u32],
+    /// `T[0..64]` after K1.
+    pub k1_t: &'a [u32],
+    pub k2_d: &'a [u32],
+    pub k3_d: &'a [u32],
+}
+
+/// The outcome ([`classify`]) and the record the C twin packs.
+pub fn probe_readback(r: &ArmReads, arm: &ProbeArm) -> (Outcome, TspReadback) {
+    let outcome = classify(&ProbeReadback {
+        fence_timeouts: r.fence_timeouts,
+        guard_changed: r.guard_changed,
+        surface_changed: r.surface_changed,
+        expected_b: r.expected_b,
+        k0_d: r.k0_d,
+        k1_t: r.k1_t,
+        k2_d: r.k2_d,
+        clear: PROBE_CLEAR,
+    });
+    let is_b = |i: usize, w: u32| r.expected_b.get(i) == Some(&w);
+    let count =
+        |d: &[u32], f: &dyn Fn(usize, u32) -> bool| d.iter().enumerate().filter(|&(i, &w)| f(i, w)).count() as u32;
+    let d = r.k2_d;
+    let first = d.iter().enumerate().position(|(i, &w)| w != PROBE_CLEAR && !is_b(i, w));
+    let mut out = TspReadback {
+        arm: r.arm,
+        steps_done: r.steps_done,
+        timeouts: r.fence_timeouts,
+        guard_changed: r.guard_changed,
+        s_changed: r.surface_changed as u32,
+        k0_ok: (r.k0_d.len() == PROBE_DWORDS && r.k0_d == r.expected_b) as u32,
+        t_first_bad: if r.k1_t.len() >= PROBE_TS_DWORDS {
+            r.k1_t[..PROBE_TS_DWORDS].iter().position(|&w| w != PROBE_FILL).map_or(TSP_NOT_FOUND, |i| i as u32)
+        } else {
+            0
+        },
+        n_clear: count(d, &|_, w| w == PROBE_CLEAR),
+        n_detile: count(d, &is_b),
+        n_dead: count(d, &|_, w| w == PROBE_DEST_INIT),
+        crc: if !d.is_empty() {
+            probe_crc32(d)
+        } else if !r.k0_d.is_empty() {
+            probe_crc32(r.k0_d)
+        } else {
+            0
+        },
+        first_idx: first.map_or(TSP_NOT_FOUND, |i| i as u32),
+        first_val: first.map_or(0, |i| d[i]),
+        ..TspReadback::default()
+    };
+    let k3 = r.k3_d;
+    if !k3.is_empty() {
+        let map = (0..8usize).filter(|&k| k3.get(8 * k) == Some(&PROBE_CLEAR)).fold(0u32, |m, k| m | 1 << k);
+        out.k3_present = 1;
+        out.k3_map = map;
+        out.k3_nibble_order = k3_nibble_order(map, arm);
+        out.k3_crc = probe_crc32(k3);
+        out.k3_n_clear = count(k3, &|_, w| w == PROBE_CLEAR);
+        out.k3_n_detile = count(k3, &is_b);
+    }
+    (outcome, out)
+}
+
+// ---------------------------------------------------------------------------
+// The hook's refusals (`ts_probe.rs`, `test-knobs`): case 246 calls it once a
+// boot, for one arm.
+// ---------------------------------------------------------------------------
+
+/// `gc_debug_ts_probe`'s refusals, for a step that could not run: bad
+/// arguments. A probe that ran (a hang included) returns its [`Outcome`]
+/// code instead.
+pub const PROBE_ERR_ARGS: i32 = -1;
+/// The arm is past 3.
+pub const PROBE_ERR_ARM: i32 = -2;
+/// The OSAL has no `submit` or no `wait`.
+pub const PROBE_ERR_OSAL: i32 = -3;
+/// An allocation failed.
+pub const PROBE_ERR_ALLOC: i32 = -4;
+/// An object's GPU address does not fit 32 bits.
+pub const PROBE_ERR_ADDR: i32 = -5;
+/// An allocation has no CPU view.
+pub const PROBE_ERR_CPU: i32 = -6;
+/// The back end's own kicks did not finish first.
+pub const PROBE_ERR_FINISH: i32 = -7;
+/// The OSAL refused a submit.
+pub const PROBE_ERR_SUBMIT: i32 = -8;

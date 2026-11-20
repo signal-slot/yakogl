@@ -181,6 +181,13 @@ extern volatile uint32_t gl_test_first_bad_got, gl_test_first_bad_want;
 int gl_test_msaa_page(unsigned int tag, uint32_t *w);
 int gl_test_kick_diff_page(unsigned int tag, uint32_t *w);
 extern unsigned int gl_test_kick_diff_cases;
+#ifdef CONFIG_GL_TEST_GC_TS_PROBE
+/* cases 246 tsprobe and 247 dlayout (gl_test_tsprobe.inc) */
+int gl_test_tsprobe_page(unsigned int tag, uint32_t *w);
+extern unsigned int gl_test_tsprobe_arm;
+extern void (*gl_test_probe_progress)(uint32_t where);
+extern uint32_t (*gl_test_probe_timeouts)(void);
+#endif
 
 /* A colour as six bits: the marker, then one bit per channel at half scale.
  * Enough to tell red from green from blue, which is what a texture or a mip
@@ -356,12 +363,93 @@ static int kick_diff_tag(int *list)
 	return tag;
 }
 
+#ifdef CONFIG_GL_TEST_GC_TS_PROBE
+/*
+ * Cases 246 tsprobe and 247 dlayout (gl_test_tsprobe.inc,
+ * docs/notes/gc-ts-probe.md): the selector GC_RESULT_PERF_SEL | tag, tag
+ * 0xd0..0xdb (246, arm tag & 3) or 0xc0..0xcb (247, mode tag & 3), runs that
+ * case alone and ends with that page as a PERF record, w0's low byte = the
+ * tag. The tag, or -1 when the selector is not one; *the_case gets the case.
+ */
+static int ts_probe_tag(int *the_case)
+{
+	int sel = gc_result_selector();
+	int tag = sel & 0xff;
+
+	if (sel < 0 || (sel & ~0xff) != (int)GC_RESULT_PERF_SEL) {
+		return -1;
+	}
+	if (tag >= 0xd0 && tag <= 0xdb) {
+		*the_case = 246;
+	} else if (tag >= 0xc0 && tag <= 0xcb) {
+		*the_case = 247;
+	} else {
+		return -1;
+	}
+	return tag;
+}
+
+/* a PROGRESS record before each kick of the probe: a wedge leaves it */
+static void ts_probe_progress(uint32_t where)
+{
+	gc_result_progress(where);
+	gc_sample_service_wdog();
+}
+
+static uint32_t ts_probe_timeouts(void)
+{
+	uint32_t timeouts = 0;
+
+	gc_render_counters(&timeouts, NULL, NULL);
+	return timeouts;
+}
+
+/* Arm the case for the selector's tag: its arm or mode and the two hooks.
+ * The case number, or -1 when the selector is not a probe page. */
+static int ts_probe_arm(void)
+{
+	int c, tag = ts_probe_tag(&c);
+
+	gl_test_probe_progress = ts_probe_progress;
+	gl_test_probe_timeouts = ts_probe_timeouts;
+	if (tag < 0) {
+		return -1;
+	}
+	gl_test_tsprobe_arm = (unsigned int)tag & 3u;
+	LOG_INF("gc_gl_test: case %d alone, %s %u, page 0x%02x", c, c == 246 ? "arm" : "mode",
+		gl_test_tsprobe_arm, tag);
+	return c;
+}
+#endif
+
 static void report_result(int rc)
 {
 	int the_case = CONFIG_GC_GL_TEST_CASE;
 	int page = msaa_page_tag();
 	int kd_list;
 	int kd_page = kick_diff_tag(&kd_list);
+
+#ifdef CONFIG_GL_TEST_GC_TS_PROBE
+	{
+		int pc, ts_page = ts_probe_tag(&pc);
+
+		if (ts_page >= 0) {
+			uint32_t w[3];
+
+			if (gl_test_tsprobe_page((unsigned int)ts_page, w) == 0) {
+				LOG_INF("gc_gl_test: case %d page 0x%02x", pc, ts_page);
+				gc_result_write_tag(GC_RESULT_PERF, (uint8_t)ts_page, w[0], w[1], w[2]);
+				return;
+			}
+			/* the case's CASE record says why (a skip, a refusal) */
+			LOG_ERR("gc_gl_test: no page 0x%02x (case %d did not get that far)", ts_page, pc);
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+			return;   /* the sweep's own record stays the verdict */
+#endif
+			the_case = pc;
+		}
+	}
+#endif
 
 	if (kd_page >= 0) {
 		uint32_t w[3];
@@ -530,6 +618,19 @@ int main(void)
 						kd & 0xf, kd_list);
 				}
 			}
+#ifdef CONFIG_GL_TEST_GC_TS_PROBE
+			{
+				/* a tsprobe or dlayout page: that case alone */
+				int pc = ts_probe_arm();
+
+				if (pc >= CONFIG_GC_GL_TEST_SWEEP_FIRST &&
+				    pc < CONFIG_GC_GL_TEST_SWEEP_FIRST + GC_RESULT_SWEEP_CASES) {
+					only = pc - CONFIG_GC_GL_TEST_SWEEP_FIRST;
+				} else if (pc >= 0) {
+					LOG_ERR("gc_gl_test: case %d is not in this sweep's range", pc);
+				}
+			}
+#endif
 			if (only >= GC_RESULT_SWEEP_SEL_LIST) {
 				/* a list of the table, in its own order */
 				n = parse_list(only - GC_RESULT_SWEEP_SEL_LIST, list,
@@ -562,7 +663,18 @@ int main(void)
 				LOG_INF("gc_gl_test: KICK_DIFF armed for case %d", kd & 0xf);
 			}
 		}
-		rc = gl_test_run(CONFIG_GC_GL_TEST_CASE, 0, 0, 0, 0, 0);
+		{
+			int the_case = CONFIG_GC_GL_TEST_CASE;
+#ifdef CONFIG_GL_TEST_GC_TS_PROBE
+			/* a tsprobe or dlayout page: that case alone */
+			int pc = ts_probe_arm();
+
+			if (pc >= 0) {
+				the_case = pc;
+			}
+#endif
+			rc = gl_test_run(the_case, 0, 0, 0, 0, 0);
+		}
 #endif
 		s_stage = 2;
 		LOG_INF("gc_gl_test: the suite took %lld s",
