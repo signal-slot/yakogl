@@ -3,7 +3,7 @@
 /*
  * zephyr_mali.c - Zephyr OSAL backend for YakoGL on the Arm Mali (the
  * NanoPC-T6's Mali-G610, RK3588; the Verdin iMX95's Mali-G310, i.MX 95, built
- * but not brought up: zephyr_mali_board.h). The sibling of zephyr.c
+ * and host-tested, not run on a board yet: zephyr_mali_board.h). The sibling of zephyr.c
  * (PowerVR), zephyr_gc.c (GC7000) and zephyr_v3d.c (V3D); the build compiles
  * exactly one of them, and all define `osal_zephyr_ops`, so nothing above
  * the OSAL changes with the GPU.
@@ -17,7 +17,8 @@
  * forwards to one call:
  *
  *   init        -> osal_zephyr_mali_board_up; on the NanoPC-T6 that is
- *                  yd_t6_osal_up: Z1 to Z3 (power, AS0, the CSF firmware
+ *                  yd_t6_osal_up (on the Verdin iMX95 yd_imx95_osal_up,
+ *                  whose Z1 is the SCMI power-on): Z1 to Z3 (power, AS0, the CSF firmware
  *                  booted from the init argument's image), then CSG 0 / CS 0
  *                  started over a group VM of four regions (the ring, the
  *                  heap's pool and chunks, the carve-out); Z4's record is

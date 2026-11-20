@@ -15,7 +15,8 @@ config YAKOGL_VERDIN_IMX95
 	  (the stub verdin_imx95_wdog_stub() says so at boot, and the image
 	  prints no "board: watchdog armed" line, so tools/board.sh refuses
 	  it). With YAKOGL_GPU_MALI, verdin_imx95_mali.c is the Mali OSAL's
-	  board half: a stub that refuses the GPU's bring-up by name.
+	  board half: the CSF firmware, the GPU's power-on over SCMI to the
+	  System Manager and its bring-up (yd_imx95_osal_up).
 
 if YAKOGL_VERDIN_IMX95
 
