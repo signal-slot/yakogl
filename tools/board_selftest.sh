@@ -1578,6 +1578,85 @@ pi4|v3d_triangle: FAIL (17 of 4096 px differ by more than 3: 12 inside, 5 edge)|
 pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 EOF
 
+echo "== 3i. Pi 5 gl_test image: the record's end, the per-case verdicts, the scrub (board71's six cases 5 58 59 66 67 102)"
+# a synthetic list run in the shape of the Pi 4's (tools/testdata/pi4-tryboot-GT21-*:
+# "gl_test: start (case=-1 ...)", one "gl_test: case N name: PASS|FAIL" per case,
+# "gl_test: all: F of T cases failed (...)", then v3d_gl_test's frozen record
+# "RECORD ..." and its last line "RECORD end, build ..."). No real address.
+# gt5_con FAILCASE: the six cases with FAILCASE's line FAIL (none: all PASS);
+# gt5_tail: the record, as the image prints it after the run.
+gt5_con() {
+    local n name nf=0 st
+    printf '12:00:00 board: PM watchdog resets the SoC ~50 s after boot\n'
+    printf '12:00:01 gl_test: start (case=-1 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)\n'
+    for n in 5:scissor 58:clearscis 59:clearmask 66:clearvp 67:fbods 102:maskclear; do
+        name=${n#*:}; st=PASS
+        if [ "${n%%:*}" = "${1:-}" ]; then st=FAIL; nf=1; fi
+        printf '12:00:02 gl_test: case %s %s: %s\n' "${n%%:*}" "$name" "$st"
+    done
+    printf '12:00:03 gl_test: all: %s of 6 cases failed (%s passed; 0 timed out; first failure case %s at index -1)\n' "$nf" "$((6 - nf))" "${1:--1}"
+}
+gt5_tail() {
+    printf '12:00:03 v3d_gl_test RECORD (no screen: the UART), build 0123abcd, 8 s after boot: DONE\n'
+    printf '12:00:03 gl_test: case 5 scissor: PASS\n'
+    [ "${1:-}" = cut ] && return 0
+    printf '12:00:03 v3d_gl_test RECORD end, build 0123abcd\n'
+}
+g5=0
+while IFS='|' read -r kind want; do
+    g5=$((g5 + 1))
+    d="$S/pi5gt/20261120-1200-g5x$g5-0123abcd"
+    mkrun "$d" board=pi5 boot=tryboot "name=g5x$g5" probe=0 back=1 t_reboot=100 t_back=290
+    case "$kind" in
+    full) { gt5_con; gt5_tail; } > "$d/console.txt" ;;
+    onefail) { gt5_con 66; gt5_tail; } > "$d/console.txt" ;;
+    cut) { gt5_con; gt5_tail cut; } > "$d/console.txt" ;;
+    esac
+    check "pi5 gl_test image, $kind: $want" says pi5 "$d" "$want"
+done <<'EOF'
+full|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:gl_test_record_end
+onefail|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:gl_test_record_end
+cut|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+EOF
+# one case alone (gl_test run with case=N): its own line, live and replayed, is the verdict
+for v in pass fail; do
+    d="$S/pi5gt1-$v/20261120-1200-c66-0123abcd"
+    mkrun "$d" board=pi5 boot=tryboot name=c66 probe=0 back=1 t_reboot=100 t_back=290
+    { printf '12:00:01 gl_test: start (case=66 pretransform=0 ppp_ctrl=0x0 debug=0 no_coalesce=0)\n'
+      printf '12:00:02 gl_test: case 66 clearvp: %s\n' "$(echo $v | tr a-z A-Z)"
+      printf '12:00:03 v3d_gl_test RECORD end, build 0123abcd\n'; } > "$d/console.txt"
+done
+check "pi5 gl_test case 66 alone: PASS is verdict done, FAIL is failed, both result=legacy:gl_test_case" \
+    eval 'says pi5 "$S/pi5gt1-pass/20261120-1200-c66-0123abcd" "rc=0 verdict=done .*result=legacy:gl_test_case" &&
+          says pi5 "$S/pi5gt1-fail/20261120-1200-c66-0123abcd" "rc=4 verdict=failed .*result=legacy:gl_test_case"'
+# the end line is read from the console as plain(): with the record cut, end_seen is false
+{ gt5_con; gt5_tail cut; } > "$S/pi5gt-cut.txt"
+{ gt5_con; gt5_tail; } > "$S/pi5gt-full.txt"
+eval "$(sed -n '/^pi5)/,/^    LEGACY_RE=/p' "$B" | sed -n "s/^    END_RE_DEFAULT=/END_RE=/p")"
+eval "$(sed -n '/^end_seen() {/,/^}/p' "$B")"
+check "pi5 end_seen: the record's end line is an end; the record cut before it, or the case lines and the all: line alone, are not" \
+    eval 'end_seen "$S/pi5gt-full.txt" && ! end_seen "$S/pi5gt-cut.txt" && ! { gt5_con > "$S/pi5gt-nr.txt"; end_seen "$S/pi5gt-nr.txt"; }'
+# the scrub: a gl_test console line holding the board's names comes out as the placeholders
+eval "$(sed -n '/^scrub() {/,/^}/p' "$B")"
+gt5_line='12:00:02 gl_test: case 5 scissor: PASS (relay pi5-bridge.example:40005 /dev/ttyFAKE5 tester@pi5-fake.example 10.20.30.40)'
+sout=$(BOARD=pi5 BOARD_UART=/dev/ttyFAKE5 UART_REAL= BOARD_HOST=tester@pi5-fake.example BHOSTNAME= scrub <<<"$gt5_line")
+check "pi5 scrub: a gl_test case line keeps its verdict, the host, user, UART path and address are placeholders" \
+    eval '! grep -q "pi5-fake\|tester@\|ttyFAKE5\|10\.20\.30\.40" <<<"$sout" && grep -q "gl_test: case 5 scissor: PASS" <<<"$sout" &&
+          grep -q "<BOARD_HOST>\|<board-host>" <<<"$sout" && grep -q "<BOARD_UART>" <<<"$sout" && grep -q "<address>" <<<"$sout"'
+sout=$(BOARD=pi5 BOARD_UART=pi5-bridge.example:40005 UART_REAL= BOARD_HOST=tester@pi5-fake.example BHOSTNAME= scrub <<<"$gt5_line")
+check "pi5 scrub, BOARD_UART a bridge: the bridge's host and port are placeholders too" \
+    eval '! grep -q "pi5-bridge\|40005\|pi5-fake" <<<"$sout" && grep -q "gl_test: case 5 scissor: PASS" <<<"$sout"'
+sout=$(BOARD=pi4 BOARD_UART=/dev/ttyFAKE5 BOARD_HOST=tester@pi5-fake.example scrub <<<"$gt5_line")
+check "scrub on the pi4 changes nothing" eval '[ "$sout" = "$gt5_line" ]'
+# a saved record: redact_run keeps the verdict lines readable by the verdict after it
+d="$S/pi5gt-red/20261120-1200-g5r-0123abcd"
+mkrun "$d" board=pi5 boot=tryboot name=g5r probe=0 back=1 t_reboot=100 t_back=290
+{ gt5_con; echo "12:00:03 console /dev/ttyFAKE5 on pi5-fake.example 10.20.30.40"; gt5_tail; } > "$d/console.txt"
+BOARD=pi5 BOARD_UART=/dev/ttyFAKE5 UART_REAL= BOARD_HOST=tester@pi5-fake.example BHOSTNAME= redact_run "$d"
+check "pi5 gl_test record redacted: no host, UART path or address left, and the verdict still reads done" \
+    eval '! grep -q "pi5-fake\|ttyFAKE5\|10\.20\.30\.40" "$d/console.txt" &&
+          says pi5 "$d" "rc=0 verdict=done .*result=legacy:gl_test_record_end"'
+
 echo "== 5. NanoPC-T6 runs through a fake nanopc-t6.sh (T6_RUNNER) and an ssh that answers"
 # The fake runner: what board.sh handed it into $S/t6/args, then the record
 # the real one writes (its line forms: nanopc-t6.sh's rec lines) for the way
