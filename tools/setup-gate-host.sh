@@ -73,6 +73,8 @@
 # looked for in check.sh's order, only when PCO_SHC names an executable (the
 # row's own condition; PCO_SHC itself is one of the workspaces above, out of
 # scope here), and --install only prints the build that makes it.
+# --check also reports qemu-system-aarch64 ($MP2_QEMU, else PATH; check.sh's
+# "uboot-mp2 qemu" row is a gap without it). --install does not install it.
 #
 # --install also makes the dependency entries (the gate's workspaces
 # included) and prints the gate's environment:
@@ -325,6 +327,19 @@ check_dtc() {
     return
   }
   line ok dtc "${out%%$'\n'*}"
+}
+
+# qemu-system-aarch64: tools/check.sh's "uboot-mp2 qemu" row runs the DK's
+# one-shot scripts in U-Boot on it (driver/tools/uboot-mp2/qemu/run.sh, which
+# takes $MP2_QEMU, else qemu-system-aarch64 on PATH); without it the row is a
+# gap.
+check_qemu() {
+  local q=${MP2_QEMU:-$(command -v qemu-system-aarch64 2>/dev/null)} out
+  if [ -z "$q" ] || [ ! -x "$q" ] || ! out=$("$q" --version 2>&1); then
+    line missing qemu-system-aarch64 "${MP2_QEMU:-qemu-system-aarch64 on PATH} not runnable (\$MP2_QEMU, else PATH: Debian qemu-system-arm, Gentoo app-emulation/qemu with qemu_softmmu_targets_aarch64): the uboot-mp2 qemu row would be a gap"
+    return
+  fi
+  line ok qemu-system-aarch64 "$q: ${out%%$'\n'*}"
 }
 
 # aarch64 C compiler: tools/v3d/check71.d/xbuild71.sh cross-compiles the v3d71
@@ -586,6 +601,7 @@ run_checks() {
   check_glslang
   check_lz4
   check_dtc
+  check_qemu
   check_xcc
   check_pkgconfig
   check_mali_csffw
