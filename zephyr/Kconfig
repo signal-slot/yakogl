@@ -421,6 +421,20 @@ config YAKOGL_MALI_CARVEOUT_BYTES
 	  (board::nanopc_t6_osal::MAX_CARVE_PAGES). The image's RAM must hold
 	  it besides the kernel.
 
+config YAKOGL_MALI_WINDOW_BYTES
+	int "Mali carve-out: bytes at its end kept for the board's windows"
+	depends on YAKOGL_GPU_MALI
+	range 0 268435456
+	default 0
+	help
+	  The last this many bytes of YAKOGL_MALI_CARVEOUT_BYTES are never
+	  handed out by the OSAL's allocator (yd_t6_osal_mem.carve_reserved):
+	  they are the board layer's window and screen buffers
+	  (osal_zephyr_mali_window_mem, src/osal/zephyr_mali_board.h), which
+	  the GPU reaches through map_phys like any range of the carve-out.
+	  Whole pages, less than the carve-out (build asserts). 0: none, and
+	  board_window() has no memory on a Mali board.
+
 config YAKOGL_MALI_HEAP_CHUNKS
 	int "Mali tiler heap: 2 MiB chunks at most"
 	depends on YAKOGL_GPU_MALI

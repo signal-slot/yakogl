@@ -120,15 +120,18 @@ config YAKOGL_BOARD_RPI4
 	  (rpi4/rpi_wdog.c) fed until YAKOGL_BOARD_LIFETIME_S.
 
 config YAKOGL_BOARD_WINDOW_MAX_KB
-	int "KiB of the static window buffer (AM62P, Pi 4)"
+	int "KiB of the static window buffer (AM62P, Pi 4, Verdin iMX95)"
 	default 4800
-	depends on YAKOGL_BOARD_AM62P || YAKOGL_BOARD_RPI4
+	depends on YAKOGL_BOARD_AM62P || YAKOGL_BOARD_RPI4 || YAKOGL_BOARD_VERDIN_IMX95
 	help
 	  The largest window board_window() can give on the boards whose
 	  window is a buffer in the image: 4800 KiB holds 1280x960, or two
 	  1024x600 halves (the AM62P cluster). On the Pi 4 a window that is
 	  a view into the framebuffer (YAKOGL_BOARD_SCANOUT_VIEW) does not
-	  use this buffer.
+	  use this buffer. On the Verdin iMX95 the windows are the start of
+	  the Mali carve-out's window memory (YAKOGL_MALI_WINDOW_BYTES), the
+	  screen buffer its rest; every window board_window() gives takes
+	  its own part.
 
 config YAKOGL_BOARD_RPI4_FB_WIDTH
 	int "Pi 4: framebuffer width asked of the firmware"
@@ -342,5 +345,5 @@ rsource "nanopc_t6/Kconfig"
 rsource "stm32mp2/Kconfig"
 
 # The Verdin iMX95 (i.MX 95, A55) glue, outside the board layer above, and its
-# board layer without a window or watchdog yet (verdin_imx95/Kconfig).
+# board layer with the X4 display and no watchdog yet (verdin_imx95/Kconfig).
 rsource "verdin_imx95/Kconfig"

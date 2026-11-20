@@ -1,0 +1,44 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The Verdin iMX95 on the Mallow with the Toradex Capacitive Touch Display
+ * 10.1" DSI on X4 (driver/docs/imx95-display.md section 4(b)): the picture's
+ * blocks and the bridge, for the board layer's screen (verdin_imx95_display.c,
+ * CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY). The examples get it with app.conf
+ * (examples/zephyr.cmake).
+ *
+ * - x4_display: the blocks at the addresses of NXP's MIMX9596 headers and
+ *   Linux's imx95.dtsi (the note's section 1 table): the DPU, the display
+ *   CSR, the pixel interleaver, the DW MIPI DSI host, the DSI stream and
+ *   master CSRs, the combo PHY CSR, CSI-1 (its PHY test interface) and TPM6
+ *   (Linux's tpm6: pwm@42510000); the bridge's EN on the module's expander
+ *   line 3 (GPIO_10_DSI, Toradex's overlay `enable-gpios`); the backlight's
+ *   pad as TPM6 channel 2.
+ * - x4_bridge: the TI SN65DSI83 at 0x2C on I2C_2_DSI (LPI2C3), Toradex's
+ *   imx95-verdin-panel-cap-touch-10inch-dsi.dtso. No Zephyr driver binds
+ *   it: the board glue reaches it through the env's I2C bus.
+ */
+
+/ {
+	x4_display: display@4b400000 {
+		compatible = "yakogl,imx95-dsi-display";
+		reg = <0x4b400000 0x400000>, <0x4b010000 0x10000>, <0x4b0d0000 0x20000>,
+		      <0x4acf0000 0x10000>, <0x4ad00000 0x10000>, <0x4ad10000 0x10000>,
+		      <0x4ad20000 0x1000>, <0x4ad40000 0x10000>, <0x42510000 0x1000>;
+		reg-names = "dpu", "csr", "interleaver", "dsi", "stream", "master", "phy_csr",
+			    "csi1", "tpm";
+		bridge = <&x4_bridge>;
+		enable-gpios = <&som_gpio_expander 3 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&tpm6_default>;
+		pinctrl-names = "default";
+		status = "okay";
+	};
+};
+
+&lpi2c3 {
+	x4_bridge: bridge@2c {
+		compatible = "ti,sn65dsi83";
+		reg = <0x2c>;
+		status = "okay";
+	};
+};
