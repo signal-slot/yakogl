@@ -8,8 +8,10 @@ nothing), every failing case put to a cause with its code site, the GL-core
 causes fixed (`src/backend.rs`, `src/gl/draw.rs`, `src/gl/es3.rs`; the
 tests in `tests/es3_tex_filtering.rs`), the rest listed for the items that
 own them. Integration tip `70142d35`, VK-GL-CTS `93bca01`, 2026-10-22.
-**Refreshed at `26d1c4a2` (2026-11-15, section 1); sections 1a and 3's V3D
-rows are the state at `70142d35`.**
+**Refreshed at `26d1c4a2` (2026-11-15, section 1), and at `e72ae815`
+(2026-11-20, plan #388 item `inv-sglr`, for section 7's
+`sglrGLContext.cpp:863` rows); sections 1a and 3's V3D rows are the state at
+`70142d35`.**
 
 ## 0. What the host can show, and what it cannot
 
@@ -316,31 +318,55 @@ shared; `host-deqp-run.sh` names such a run `70142d35-dirty`.
 
 ## 7. The AM62P `texture.units`, `texture.swizzle` and `sglrGLContext.cpp:863` rows
 
-**The compile refusals of `units` and `specification` are one cause.** The
-HOST-ONLY run at `be84094b` (`--gpu=powervr --module=gles3`): `texture.units`
-159 cases, 103 compile refusals; `texture.specification` 1,163 cases, 323
-compile refusals. Both groups' cases have **one** reason, the same text:
+**The `sglrGLContext.cpp:863` compile refusals are gone on the host.** The
+`ad2b5ed` board run recorded 493 cases of four groups with that message
+(`docs/es3/am62p-gles3-notpass.tsv`): `texture.specification` 323,
+`texture.units` 103 (`8_units` 40, `4_units` 34, `2_units` 22, `all_units`
+7), `fbo.color.texcube`, `fbo.color.tex3d` and `fbo.color.tex2darray` 19
+each -- the 19 integer-format attachments of each group's 36 cube-face,
+3D-slice and array-layer cases -- and `fbo.depth.depth_test_clamp` and
+`fbo.depth.depth_write_clamp` 5 each. The PowerVR host run at `e72ae815`
+(`--gpu=powervr --module=gles3`, the filters `texture.specification.`,
+`texture.units.`, `fbo.color.` and `fbo.depth.`) compiles and links every
+shader of those 493 cases: no compile refusal and no link refusal in any of
+the four groups. **HOST-ONLY**, pending the AM62P board run: the host shows
+compile and link verdicts only (section 0).
+
+**The selector work closed the family, as RC9 said.** At `be84094b` the run
+had the 103 and the 323 refusals as **one** message,
 `Usc(Select(Unsupported("a texture fetch with an integer result on a cube,
 a 3D texture or an array, gradients, a projective cube or array, or an offset
 on a stacked texture, is not selected yet")))` -- the last `ir::Op::Tex` arm
-of `src/shaderc/online/powervr/select.rs` (line 1294). dEQP records it as
-`Compile failed at sglrGLContext.cpp:863`. The 103 and the 323 equal the
-AM62P compile-failure counts of `texture.units` and
-`texture.specification`, so the compile half of the two groups is this one
-selector refusal: their shaders take an integer result from a cube, a 3D
-texture or an array, or use one of the other shapes that arm covers --
-RC2's "integer cube, 3D and 2D-array samplers", left on the PowerVR, in
-`docs/es3-cts-failures.md`.
+of `src/shaderc/online/powervr/select.rs` (line 1294 then), the shape RC9
+put with RC2's integer samplers, RC6 and RC15. Every fetch that arm refused
+now selects on the PowerVR: integer return types select in each arm (RC2,
+"they select since the stacked arms take the return type"; the native
+integer volumes `e179ad48`, the packed integer outputs `5793f172`
+`40a649ee`, the integer-target colour masks `fea19063`); texel offsets on
+2D arrays and 3D textures are `f9744f26`; gradients on cubes, 3D textures
+and stacked arrays `92b93c23` ("the last `ir::Op::Tex` refusal on the
+PowerVR", its commit message); the shadow, projective and 3D-bias forms are
+RC5's (`919db72b`, `43af85d7`). What is left of the arm is a catch-all no
+ES 3.00 shader reaches: "a texture fetch no GLSL ES 3.00 function makes (a
+projective cube or array, an offset on a cube), is not selected"
+(`select.rs:1977-1979`).
 
-**The other 67 `sglrGLContext.cpp:863` rows are not claimed here.** The TSV
-has 493 of them: the 103 and 323 above, `fbo.color.texcube`,
-`fbo.color.tex3d` and `fbo.color.tex2darray` 19 each, and
-`fbo.depth.depth_test_clamp` and `fbo.depth.depth_write_clamp` 5 each. Those
-67 fbo rows were not run on the host in this session and are not attributed
-to this cause; RC9 of `docs/es3-cts-failures.md` does put
-`fbo.color.{texcube,tex3d,tex2darray}` among the same family of PowerVR
-code-generator refusals, and records nothing about the ten
-`fbo.depth.depth_*_clamp` rows.
+**On the board those cases now reach their image comparison, and a failure
+there is one of the causes recorded here.** The host renders nothing, so the
+run moves the 493 rows' step, not their verdict: integer-result cube fetches
+(`specification`, `units`) into the cube path -- the TPU's native cube
+(`pvr_native_cube`, default ON since step C, `src/shaderc/mod.rs:269-282`;
+the board config leaves `-1`, its default) or the stacked one; array
+fetches into RC6 (the stacked tall image unless the image runs the native
+arm, `DEQP_PVR_NATIVE_ARRAY`, `driver/samples/zephyr/deqp/Kconfig:82`); 3D
+fetches into RC15 (`pvr_native_3d`, default off) with #1285's trilinear
+hang (`docs/notes/pvr-3d-mipmap-hang.md`); the 57 `fbo.color` rows into the
+integer cube-face, 3D-slice and array-layer colour attachments, built and
+pinned on the host (`17ea6760`, `90452224`, `tests/es3_pvr_int_mixed_gl.rs`);
+the ten `fbo.depth.depth_*_clamp` rows into the `gl_FragDepth` clamp with
+the DEPTH_FEEDBACK pass (`7bfac242`, `docs/notes/gl-fragdepth.md`,
+`tests/es3_pvr_fragdepth.rs`). Until the AM62P run (#313) re-measures them,
+the not-pass list still carries the 493 rows as compile refusals.
 
 **The 17 image-failed `texture.units` rows: ten known, seven not.** The ten
 `only_2d_array.*` and `only_3d.*` rows compiled (their message is
@@ -364,10 +390,12 @@ and the PowerVR back end never reads it: `build_tex_desc`
 (`tex_image_word0`, line 1224). The three "pass" rows are the black-on-black
 cases of section 2.
 
-**Owner.** The selector refusal and the unapplied swizzle each take one
-GitHub issue under the ES 3.0 umbrellas #147 and #748 (duplicates checked
-first; RC2 and RC9 carry their facts meanwhile). This session had no GitHub
-access, so neither issue is cited by a number here.
+**Owner.** Nothing new to file for this family: the selector refusal is
+closed on the host as above, and RC2 (integer samplers), RC6, RC9 and RC15
+of `docs/es3-cts-failures.md` carry its facts -- RC9 says of these very
+rows "fixed by RC2 (integer samplers), RC6 and RC15; no single item". The
+493 rows themselves move with the AM62P run (#313), which folds them into
+the not-pass list with their measured cause.
 
 ## 8. ETC2/EAC and V3D shadow compare (plan #354)
 
