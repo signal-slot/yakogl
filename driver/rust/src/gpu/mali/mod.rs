@@ -24,6 +24,12 @@
 //! 0x50005 l2_present=0x1 tiler_present=0x1"; `GPU_ID` read with the GPU
 //! active: 0xa8670005.
 //!
+//! Those are the T6's readings. The code reads them ([`ident`]) and takes
+//! any arch-10 product of panthor's model table ([`identify`]: the G710,
+//! G510, G310 and G610); [`probe`] is the GPU's own part of a power-on, with
+//! no SoC register in it. What is read and the G310 mock's sources:
+//! docs/notes/mali-gpu-model.md.
+//!
 //! Z3, the firmware (host side): [`fw`] parses `mali_csffw.bin`, [`csf`]
 //! loads it, boots the MCU and talks to it through the shared interface.
 //!
@@ -94,8 +100,122 @@ pub const FLUSH_WAIT_US: u32 = 100_000;
 /// `dma-coherent`, so panthor writes this (panthor_gpu.c:49-53).
 pub const COHERENCY_NONE: u32 = 31;
 
-/// The RK3588's Mali-G610 as the T6 reads it: arch 10.8, product 7.
+/// The RK3588's Mali-G610 as the T6 reads it: arch 10.8, product 7. The
+/// code takes the GPU it finds through [`identify`]; this value is the T6's
+/// record (and its mocks').
 pub const G610_GPU_ID: u32 = 0xa867_0005;
+
+/// The fields of `GPU_ID` (panthor_regs.h `GPU_ARCH_MAJOR` .. `GPU_VER_STATUS`):
+/// bits 31:28 arch major, 27:24 arch minor, 23:20 arch revision, 19:16
+/// product major, 15:12 version major, 11:4 version minor, 3:0 status.
+pub const fn arch_major(gpu_id: u32) -> u32 {
+    gpu_id >> 28
+}
+pub const fn arch_minor(gpu_id: u32) -> u32 {
+    (gpu_id >> 24) & 0xf
+}
+pub const fn arch_rev(gpu_id: u32) -> u32 {
+    (gpu_id >> 20) & 0xf
+}
+pub const fn prod_major(gpu_id: u32) -> u32 {
+    (gpu_id >> 16) & 0xf
+}
+pub const fn ver_major(gpu_id: u32) -> u32 {
+    (gpu_id >> 12) & 0xf
+}
+pub const fn ver_minor(gpu_id: u32) -> u32 {
+    (gpu_id >> 4) & 0xff
+}
+pub const fn ver_status(gpu_id: u32) -> u32 {
+    gpu_id & 0xf
+}
+
+/// The GPUs this kernel side takes: the arch-10 (Valhall, CSF) products of
+/// panthor's model table (panthor_hw.c `get_gpu_model_name`, which keys on
+/// `GPU_PROD_ID_MAKE(GPU_ARCH_MAJOR, GPU_PROD_MAJOR)`). Every one runs the
+/// same sequences here; what differs between them is read from the GPU
+/// ([`Ident`]): the L2, tiler and shader masks, the address spaces, the MMU's
+/// VA and PA widths ([`pgtable::Shape`]), the L2 line, and from the firmware
+/// its group and stream counts ([`csf`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Model {
+    /// Product 2.
+    G710,
+    /// Product 3.
+    G510,
+    /// Product 4: the i.MX 95's (Mesa's model table: arch 10.12, product 4).
+    G310,
+    /// Product 7: the RK3588's (arch 10.8).
+    G610,
+}
+
+impl Model {
+    /// panthor's name for it.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Model::G710 => "Mali-G710",
+            Model::G510 => "Mali-G510",
+            Model::G310 => "Mali-G310",
+            Model::G610 => "Mali-G610",
+        }
+    }
+}
+
+/// A `GPU_ID` [`identify`] refuses, with what panthor would call it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unsupported {
+    /// Arch 10 with a product panthor's table does not name.
+    Arch10Product(u32),
+    /// Arch 11 to 13: a CSF GPU panthor names (the G715, G615, G720, G620,
+    /// G725, G625 families) that this kernel side was not written for (arch
+    /// 11 adds `GPU_FEATURES`, later arches change the interfaces).
+    LaterArch { arch: u32, product: u32 },
+    /// Another arch: below 10 a job-manager GPU (panfrost's, no CSF), above
+    /// 13 one panthor v6.18 does not name.
+    Arch(u32),
+}
+
+impl Unsupported {
+    /// What is refused, by name (panthor_hw.c `get_gpu_model_name`'s names
+    /// for arch 11-13; panthor's "(Unknown Mali GPU)" otherwise).
+    pub const fn name(self) -> &'static str {
+        match self {
+            Unsupported::LaterArch { arch: 11, product: 2 } => "Mali-G715",
+            Unsupported::LaterArch { arch: 11, product: 3 } => "Mali-G615",
+            Unsupported::LaterArch { arch: 12, product: 0 } => "Mali-G720",
+            Unsupported::LaterArch { arch: 12, product: 1 } => "Mali-G620",
+            Unsupported::LaterArch { arch: 13, product: 0 } => "Mali-G725",
+            Unsupported::LaterArch { arch: 13, product: 1 } => "Mali-G625",
+            Unsupported::Arch(a) if a < 10 => "job-manager Mali (not CSF)",
+            _ => "(Unknown Mali GPU)",
+        }
+    }
+}
+
+/// The model of `gpu_id`, or what it is when this kernel side does not take
+/// it. Only the arch major and the product major decide, as in panthor; the
+/// arch minor and revision and the version fields do not (a G610 r0p0
+/// status 1 is a G610).
+pub const fn identify(gpu_id: u32) -> Result<Model, Unsupported> {
+    let (arch, product) = (arch_major(gpu_id), prod_major(gpu_id));
+    match (arch, product) {
+        (10, 2) => Ok(Model::G710),
+        (10, 3) => Ok(Model::G510),
+        (10, 4) => Ok(Model::G310),
+        (10, 7) => Ok(Model::G610),
+        (10, p) => Err(Unsupported::Arch10Product(p)),
+        (11..=13, p) => Err(Unsupported::LaterArch { arch, product: p }),
+        (a, _) => Err(Unsupported::Arch(a)),
+    }
+}
+
+/// The firmware's directory under /lib/firmware for `gpu_id`:
+/// `arm/mali/arch<major>.<minor>/mali_csffw.bin` (panthor_fw.c
+/// `panthor_fw_load`, from `GPU_ARCH_MAJOR` and `GPU_ARCH_MINOR`): (10, 8)
+/// on the RK3588, (10, 12) for a G310 as Mesa's table gives it.
+pub const fn fw_arch(gpu_id: u32) -> (u32, u32) {
+    (arch_major(gpu_id), arch_minor(gpu_id))
+}
 
 /// panthor's waits: the soft reset 100 ms (panthor_gpu.c:318), the L2
 /// 20 ms (:247).
@@ -118,6 +238,19 @@ pub struct Ident {
     pub coherency_features: u32,
     pub status: u32,
     pub mcu_status: u32,
+}
+
+impl Ident {
+    /// [`identify`] on `gpu_id`.
+    pub const fn model(&self) -> Result<Model, Unsupported> {
+        identify(self.gpu_id)
+    }
+
+    /// The page tables `mmu_features` asks for ([`pgtable::Shape`]); `None`
+    /// for widths no table here serves.
+    pub const fn mmu_shape(&self) -> Option<pgtable::Shape> {
+        pgtable::Shape::from_mmu_features(self.mmu_features)
+    }
 }
 
 fn read64(m: &impl Mmio, addr: usize) -> u64 {
@@ -327,6 +460,52 @@ pub fn l2_power_on(m: &impl Mmio, base: usize, delay_us: &mut impl FnMut(u32)) -
     Ok(out)
 }
 
+/// What [`probe`] read and did, in order.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Probe {
+    pub ident: Ident,
+    pub reset: Reset,
+    /// After the reset.
+    pub ident_after_reset: Ident,
+    pub l2: L2On,
+}
+
+/// Why [`probe`] stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProbeStop {
+    /// `GPU_ID` names a GPU this kernel side does not take ([`identify`]).
+    /// Nothing was written to the GPU.
+    Unsupported(Unsupported),
+    /// [`soft_reset`] refused (the refusal and `GPU_INT_RAWSTAT`).
+    Reset(MaliRefusal, u32),
+    /// [`l2_power_on`] refused (the refusal and the register it is about).
+    L2(MaliRefusal, u64),
+}
+
+/// The GPU's own part of a power-on, once the SoC has powered and clocked
+/// it (and quieted a GPU another kernel left running,
+/// [`takeover::take_over`]): the identity, the model it names, the soft
+/// reset, the identity again, the L2. No SoC register is touched: the
+/// RK3588's supply, clock, power domain and QoS are the board's
+/// (board::nanopc_t6_gpu), before this. panthor's order: `panthor_hw_init`
+/// reads the identity (panthor_hw.c `panthor_gpu_info_init`), then
+/// `panthor_gpu_init` resets (panthor_gpu.c `panthor_gpu_soft_reset`) and
+/// `panthor_gpu_l2_power_on` powers the L2.
+pub fn probe(m: &impl Mmio, base: usize, delay_us: &mut impl FnMut(u32), o: &mut Probe) -> Result<Model, ProbeStop> {
+    o.ident = ident(m, base);
+    let model = identify(o.ident.gpu_id).map_err(ProbeStop::Unsupported)?;
+    o.reset = soft_reset(m, base, delay_us).map_err(|(why, raw)| ProbeStop::Reset(why, raw))?;
+    o.ident_after_reset = ident(m, base);
+    o.l2 = l2_power_on(m, base, delay_us).map_err(|(why, v)| ProbeStop::L2(why, v))?;
+    Ok(model)
+}
+
+/// Register values of the GPUs the host tests model, one table per GPU:
+/// the G610 of the T6 as measured, the G310 of the i.MX 95 as far as a
+/// public source gives it.
+#[cfg(test)]
+pub(crate) mod mock;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,9 +514,11 @@ mod tests {
 
     const BASE: usize = 0xfb00_0000;
 
-    /// The G610 as panthor's probe line describes it; a soft reset completes
-    /// after `lag` polls, the L2 is ready `lag` polls after its power-on.
-    struct G610 {
+    /// A GPU whose identity registers are one of [`mock`]'s tables (the
+    /// G610 as panthor's probe line describes it, or the G310); a soft reset
+    /// completes after `lag` polls, the L2 is ready `lag` polls after its
+    /// power-on.
+    struct Mali {
         regs: RefCell<HashMap<usize, u32>>,
         writes: RefCell<Vec<(usize, u32)>>,
         lag: u32,
@@ -351,21 +532,16 @@ mod tests {
         sticky_raw: bool,
     }
 
-    impl G610 {
-        fn new(lag: u32) -> G610 {
-            let r = [
-                (GPU_ID, G610_GPU_ID),
-                (GPU_L2_FEATURES, 0x0712_0306),
-                (GPU_TILER_FEATURES, 0x809),
-                (GPU_MEM_FEATURES, 0x301),
-                (GPU_MMU_FEATURES, 0x2830),
-                (GPU_AS_PRESENT, 0xff),
-                (GPU_SHADER_PRESENT, 0x50005),
-                (GPU_TILER_PRESENT, 1),
-                (GPU_L2_PRESENT, 1),
-            ];
-            G610 {
-                regs: RefCell::new(r.into_iter().collect()),
+    /// The T6's GPU.
+    type G610 = Mali;
+
+    impl Mali {
+        fn new(lag: u32) -> Mali {
+            Mali::with_regs(&mock::G610, lag)
+        }
+        fn with_regs(r: &[(usize, u32)], lag: u32) -> Mali {
+            Mali {
+                regs: RefCell::new(r.iter().copied().collect()),
                 writes: RefCell::new(vec![]),
                 lag,
                 polls: RefCell::new(0),
@@ -378,7 +554,7 @@ mod tests {
         }
     }
 
-    impl Mmio for G610 {
+    impl Mmio for Mali {
         fn read32(&self, addr: usize) -> u32 {
             let off = addr - BASE;
             let mut p = self.polls.borrow_mut();
@@ -442,6 +618,80 @@ mod tests {
             (0x7120306, 0x809, 0x301, 0x2830, 0xff)
         );
         assert_eq!((i.shader_present, i.l2_present, i.tiler_present), (0x50005, 1, 1));
+        assert!(g.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn the_models_are_panthor_s_arch_10_products_and_the_rest_is_refused_by_name() {
+        assert_eq!(identify(G610_GPU_ID), Ok(Model::G610));
+        // the version fields do not decide: another G610 status is a G610
+        assert_eq!(identify(0xa867_0001), Ok(Model::G610));
+        assert_eq!(identify(mock::G310_GPU_ID), Ok(Model::G310));
+        assert_eq!(identify(0xa002_0000), Ok(Model::G710));
+        assert_eq!(identify(0xa003_0000), Ok(Model::G510));
+        assert_eq!(
+            [Model::G710, Model::G510, Model::G310, Model::G610].map(Model::name),
+            ["Mali-G710", "Mali-G510", "Mali-G310", "Mali-G610"]
+        );
+        let refused = |id| identify(id).map_err(|u| (u, u.name()));
+        assert_eq!(refused(0xb002_0000), Err((Unsupported::LaterArch { arch: 11, product: 2 }, "Mali-G715")));
+        assert_eq!(refused(0xc001_0000), Err((Unsupported::LaterArch { arch: 12, product: 1 }, "Mali-G620")));
+        assert_eq!(refused(0xd000_0000), Err((Unsupported::LaterArch { arch: 13, product: 0 }, "Mali-G725")));
+        // Mesa's G57 (arch 9, product 1): a job-manager GPU
+        assert_eq!(refused(0x9001_0000), Err((Unsupported::Arch(9), "job-manager Mali (not CSF)")));
+        assert_eq!(refused(0xa86a_0000), Err((Unsupported::Arch10Product(10), "(Unknown Mali GPU)")));
+        assert_eq!(refused(0xe000_0000), Err((Unsupported::Arch(14), "(Unknown Mali GPU)")));
+    }
+
+    #[test]
+    fn the_gpu_id_fields_and_the_firmware_directory_follow_the_register() {
+        let f = |id| {
+            (arch_major(id), arch_minor(id), arch_rev(id), prod_major(id), ver_major(id), ver_minor(id), ver_status(id))
+        };
+        assert_eq!(f(G610_GPU_ID), (10, 8, 6, 7, 0, 0, 5));
+        assert_eq!(f(mock::G310_GPU_ID), (10, 12, 0, 4, 0, 0, 0));
+        assert_eq!(fw_arch(G610_GPU_ID), (10, 8));
+        assert_eq!(fw_arch(mock::G310_GPU_ID), (10, 12));
+    }
+
+    #[test]
+    fn the_g310_reads_its_own_registers() {
+        let g = Mali::with_regs(&mock::G310, 0);
+        let i = ident(&g, BASE);
+        assert_eq!(i.gpu_id, 0xac04_0000);
+        assert_eq!(i.model(), Ok(Model::G310));
+        assert_eq!((i.shader_present, i.l2_present, i.tiler_present, i.as_present), (0x3, 1, 1, 0xff));
+        assert_eq!(i.mmu_shape(), Some(pgtable::Shape { va_bits: 48, pa_bits: 40 }));
+        assert!(g.writes.borrow().is_empty());
+    }
+
+    /// The probe's writes are the same on both GPUs (the sequences do not
+    /// depend on the model); what it read is each GPU's.
+    #[test]
+    fn the_probe_runs_alike_on_the_g610_and_the_g310() {
+        let mut seen = vec![];
+        for (regs, model, shaders) in [(&mock::G610, Model::G610, 0x50005), (&mock::G310, Model::G310, 0x3)] {
+            let g = Mali::with_regs(regs, 3);
+            let mut p = Probe::default();
+            assert_eq!(probe(&g, BASE, &mut |_| {}, &mut p), Ok(model));
+            assert_eq!((p.ident.gpu_id, p.ident_after_reset.gpu_id), (regs[0].1, regs[0].1));
+            assert_eq!(p.ident_after_reset.shader_present, shaders);
+            assert_eq!(p.reset.waited_us, 3);
+            assert_eq!(p.l2, L2On { mask: 1, ready_before: 0, ready: 1, waited_us: [0, 2] });
+            seen.push(g.writes.borrow().clone());
+        }
+        assert_eq!(seen[0], seen[1]);
+        assert_eq!(seen[0][..2], [(GPU_INT_CLEAR, IRQ_RESET_COMPLETED), (GPU_CMD, CMD_SOFT_RESET)]);
+    }
+
+    #[test]
+    fn the_probe_refuses_another_gpu_before_any_write() {
+        let g = Mali::new(0);
+        g.regs.borrow_mut().insert(GPU_ID, 0xb002_0000);
+        let mut p = Probe::default();
+        let r = probe(&g, BASE, &mut |_| {}, &mut p);
+        assert_eq!(r, Err(ProbeStop::Unsupported(Unsupported::LaterArch { arch: 11, product: 2 })));
+        assert_eq!(p.ident.gpu_id, 0xb002_0000);
         assert!(g.writes.borrow().is_empty());
     }
 

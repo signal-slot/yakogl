@@ -362,7 +362,8 @@ int yd_t6_early_arm(uintptr_t wdt_phys, uintptr_t cru_phys, uint32_t top, struct
 				      * (refusal 0, detail: the rate); or its PLL did not lock
 				      * (refusal YD_T6_GPU_CLOCK_PLL_NO_LOCK, detail: PLL_CON6) */
 #define YD_T6_GPU_STOP_PD          5 /* PD_GPU did not come on */
-#define YD_T6_GPU_STOP_NOT_G610    6 /* GPU_ID is not 0xa8670005 */
+#define YD_T6_GPU_STOP_UNSUPPORTED_GPU 6 /* GPU_ID names no arch-10 product of panthor's table
+                                         * (G710, G510, G310, G610); detail: GPU_ID */
 #define YD_T6_GPU_STOP_RESET       7 /* the soft reset did not complete */
 #define YD_T6_GPU_STOP_L2          8 /* the L2 did not come up */
 #define YD_T6_GPU_STOP_CLOCK_SET_REFUSED 9 /* the GPU clock is on no OPP rate and the CPLL is not
@@ -487,7 +488,7 @@ int yd_t6_gpu_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, ui
  * aligned. 0 when every step ran, -EIO when one stopped, -EINVAL for a null
  * or misaligned argument. A 64-bit value is two words, lo first. */
 #define YD_T6_MMU_STOP_NONE      0 /* every step ran, AS0 reads back as written */
-#define YD_T6_MMU_STOP_FEATURES  1 /* MMU_FEATURES is not 48 VA / 40 PA bits (detail) */
+#define YD_T6_MMU_STOP_FEATURES  1 /* MMU_FEATURES' VA or PA bits outside 32..48 (detail) */
 #define YD_T6_MMU_STOP_FLUSH     2 /* the flush round trip did not complete */
 #define YD_T6_MMU_STOP_TABLES    3 /* the tables could not be built (refusal: YD_MALI_PT_*) */
 #define YD_T6_MMU_STOP_WALK      4 /* the CPU walk of the probe VA misses the backing */
@@ -650,7 +651,8 @@ int yd_t6_fw_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, uin
 #define YD_T6_SUBMIT_STEP_FRAME      1 /* the frame or its memory refused (refusal: YD_T6_FRAME_*, detail: the value) */
 #define YD_T6_SUBMIT_STEP_FW         2 /* Z3 stopped (refusal: fw.step; fw holds Z3's record) */
 #define YD_T6_SUBMIT_STEP_IFACE      3 /* reading the interface again refused (refusal: CsfRefusal) */
-#define YD_T6_SUBMIT_STEP_IDENT      4 /* AS_PRESENT has no address space 1 (detail: the word) */
+#define YD_T6_SUBMIT_STEP_IDENT      4 /* refusal 1: AS_PRESENT has no address space 1 (detail: the word);
+                                         * 2: MMU_FEATURES' widths outside 32..48 (detail: the word) */
 #define YD_T6_SUBMIT_STEP_QUEUE_MEM  5 /* mem->queue too small (refusal 1, detail: bytes needed) or misaligned (2) */
 #define YD_T6_SUBMIT_STEP_AS0_MAP    6 /* adding the queue memory to AS0 refused (refusal: YD_MALI_PT_*, detail: the MCU VA) */
 #define YD_T6_SUBMIT_STEP_CLEAN      7 /* a clean() of table pages failed (refusal 1 AS0, 2 the group VM; detail: rc) */

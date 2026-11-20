@@ -44,7 +44,8 @@ pub enum Stop {
     /// Every step ran and every read-back is what was written.
     #[default]
     None = 0,
-    /// `MMU_FEATURES` does not give 48 bits of VA and 40 of PA (`detail`).
+    /// `MMU_FEATURES` gives VA or PA bits no table here serves
+    /// ([`pgtable::Shape::from_mmu_features`]: 32 to 48 each; `detail`).
     Features = 1,
     /// The cache flush round trip did not complete (`refusal`: the
     /// [`mali::MaliRefusal`]).
@@ -169,10 +170,12 @@ pub(crate) fn as0_up(
 ) -> bool {
     o.found = AsRegs::read(m, gpu, AS_MCU);
     o.found_irq = irq(m, gpu);
-    if mmu_features & 0xff != pgtable::VA_BITS || (mmu_features >> 8) & 0xff < pgtable::PA_BITS {
+    // the tables and AS_TRANSCFG follow the GPU's widths, as panthor's
+    // (panthor_mmu.c `panthor_vm_create`, `panthor_vm_active`)
+    let Some(shape) = pgtable::Shape::from_mmu_features(mmu_features) else {
         o.stopped(Stop::Features, 0, u64::from(mmu_features));
         return false;
-    }
+    };
 
     let cln_inv = mali::CACHE_CLEAN | mali::CACHE_INV;
     match mali::flush_caches(m, gpu, cln_inv, cln_inv, 0, delay_us) {
@@ -184,7 +187,7 @@ pub(crate) fn as0_up(
     }
 
     let (root, range) = {
-        let mut t = match Tables::new(pool, tables_pa) {
+        let mut t = match Tables::with_shape(pool, tables_pa, shape) {
             Ok(t) => t,
             Err(why) => {
                 o.stopped(Stop::Tables, why as u32, tables_pa);
@@ -205,8 +208,7 @@ pub(crate) fn as0_up(
         return false;
     }
 
-    let va_bits = mmu_features & 0xff;
-    let transcfg = mmu::transcfg(va_bits, false);
+    let transcfg = mmu::transcfg(shape.va_bits, false);
     let memattr = MEMATTR_LIVE;
     match mmu::as_enable(m, gpu, AS_MCU, root, transcfg, memattr, delay_us) {
         Ok(e) => o.enable = e,
@@ -345,13 +347,54 @@ mod tests {
         assert_eq!(t.used(), 9);
     }
 
+    /// AS0 on the firmware's section from each mock's own `MMU_FEATURES`.
     #[test]
-    fn another_mmu_shape_stops_before_any_write() {
+    fn as0_comes_up_on_the_g610_and_the_g310_from_their_mmu_features() {
+        use crate::gpu::mali::{mock, GPU_MMU_FEATURES};
+        for table in [&mock::G610, &mock::G310] {
+            let f = table.iter().find(|r| r.0 == GPU_MMU_FEATURES).unwrap().1;
+            let g = Gpu::new(1);
+            let mut pool = vec![[0u64; ENTRIES]; 8];
+            let o = mmu_up(&g, BASE, f, &mut pool, TABLES_PA, BACKING_PA, &mut |_, _| 0, &mut |_| {});
+            assert_eq!((o.stop, o.walk.pa), (Stop::None, Some(0x1050_1234)), "{f:#x}");
+            assert_eq!(o.after.transcfg, mmu::transcfg(f & 0xff, false));
+        }
+    }
+
+    #[test]
+    fn an_mmu_shape_no_table_serves_stops_before_any_write() {
+        // 49 VA bits, 24 PA bits, 31 VA bits: outside 32..=48
+        for f in [0x2831, 0x1830, 0x281f] {
+            let g = Gpu::new(0);
+            let mut pool = vec![[0u64; ENTRIES]; 8];
+            let o = mmu_up(&g, BASE, f, &mut pool, TABLES_PA, BACKING_PA, &mut |_, _| 0, &mut |_| {});
+            assert_eq!((o.stop, o.detail), (Stop::Features, u64::from(f)), "{f:#x}");
+            assert!(g.writes.borrow().is_empty());
+        }
+    }
+
+    /// A narrower `MMU_FEATURES` changes the tables and `AS_TRANSCFG` as
+    /// panthor's do: 39 VA bits (0x2827) walk three levels from a level-1
+    /// root, and `AS_TRANSCFG`'s input size is 55 - 39 = 16; 40 bits
+    /// (0x2828) keep four levels with a root of two descriptors.
+    #[test]
+    fn a_narrower_va_builds_fewer_levels_and_says_so_in_transcfg() {
+        let g = Gpu::new(0);
+        let mut pool = vec![[0u64; ENTRIES]; 8];
+        let o = mmu_up(&g, BASE, 0x2827, &mut pool, TABLES_PA, BACKING_PA, &mut |_, _| 0, &mut |_| {});
+        assert_eq!((o.stop, o.refusal, o.detail), (Stop::None, 0, 0));
+        assert_eq!((o.tables_used, o.walk.levels, o.walk.pa), (3, 3, Some(0x1050_1234)));
+        assert_eq!(o.walk.desc, [TABLES_PA + 0x1003, TABLES_PA + 0x2003, probe_pte(BACKING_PA), 0]);
+        assert_eq!(o.after.transcfg, mmu::transcfg(39, false));
+        assert_eq!(o.after.transcfg, 0x4200_0406);
+        // the root is the level-1 table: FW_SHARED_VA's level-1 index is 0
+        assert_eq!((pool[0][0], pool[1][0x20]), (TABLES_PA + 0x1003, TABLES_PA + 0x2003));
+
         let g = Gpu::new(0);
         let mut pool = vec![[0u64; ENTRIES]; 8];
         let o = mmu_up(&g, BASE, 0x2828, &mut pool, TABLES_PA, BACKING_PA, &mut |_, _| 0, &mut |_| {});
-        assert_eq!((o.stop, o.detail), (Stop::Features, 0x2828));
-        assert!(g.writes.borrow().is_empty());
+        assert_eq!((o.stop, o.tables_used, o.walk.levels), (Stop::None, 4, 4));
+        assert_eq!(o.after.transcfg, 0x4200_03c6);
     }
 
     #[test]

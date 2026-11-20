@@ -117,6 +117,20 @@ writes the live word. Changes go LOCK, wait, cache flush, UNLOCK (`panthor_mmu.c
 The whole of it, with the values the image writes: "Z2: AS0 and a cache flush"
 below.
 
+**What the kernel side reads from the GPU (2026-11-20).** The G610 values in the
+table above are the T6's readings, not constants of the code: the identity check
+takes any arch-10 product of panthor's model table (`gpu::mali::identify`:
+G710, G510, G310, G610; stop 6 `UnsupportedGpu` names what it refuses), the
+page tables and `AS_TRANSCFG` follow `MMU_FEATURES`' VA and PA bits
+(`pgtable::Shape`: 48/40 here, four levels), the L2 mask follows `L2_PRESENT`,
+`core_en_mask` and the group's core masks follow `SHADER_PRESENT` and
+`TILER_PRESENT`, the group's address space is checked against `AS_PRESENT`,
+the heap context stride follows `L2_FEATURES`, and the group and stream counts
+are the firmware's. The GPU's own part of the power-on (identity, reset, L2)
+is `gpu::mali::probe`, after the RK3588's supply, clock, domain, take-over and
+QoS steps. What is read, what is still the RK3588's, and the Mali-G310 mock
+the host tests run beside the G610's: `docs/notes/mali-gpu-model.md`.
+
 ## The firmware (Z3)
 
 The file `mali_csffw.bin` (282624 bytes; header 0.3, interface 1.5.0) is a list of
@@ -1622,8 +1636,9 @@ board's values). The order:
 7. `GPU_ID`; soft reset; `GPU_COHERENCY_PROTOCOL` = none; L2 on
    (panthor_gpu.c, under its MIT option). The L2 wait needs `L2_READY` to
    show the L2: panthor's condition (`(mask & val) == val`,
-   panthor_gpu.c:210) also accepts 0. Stops: a `GPU_ID` that is not the G610's
-   is stop 6 (`NotG610`), a soft reset that does not complete stop 7
+   panthor_gpu.c:210) also accepts 0. Stops: a `GPU_ID` that names no arch-10
+   product of panthor's model table (`gpu::mali::identify`: G710, G510,
+   G310, G610) is stop 6 (`UnsupportedGpu`), a soft reset that does not complete stop 7
    (`Reset`), an L2 that does not come up stop 8 (`L2`).
 
 The stop numbers are `board::nanopc_t6_gpu::Stop`, in C `YD_T6_GPU_STOP_*`
