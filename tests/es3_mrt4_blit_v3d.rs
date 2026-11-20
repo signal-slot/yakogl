@@ -330,13 +330,13 @@ fn rgba8ui_draw_all_four() {
     all_four_are_written(Fmt::Rgba8ui);
 }
 
-/// Pinned as today: an RGBA8UI *texture* attachment has no blit image in the
-/// GL core (`attachment_image` handles RGBA8/16F/32F/sRGB textures only), so
-/// a blit from or into one is a silent no-op with no error. A defect of the
-/// GL core (src/gl/blit.rs), not of the V3D back end; a working blit would
-/// copy attachment 3's 10s over the destination's 20s.
+/// An RGBA8UI *texture* at attachment 3 is blitted: the GL core copies an
+/// integer texture image as it copies an integer renderbuffer
+/// (src/gl/blit.rs `attachment_image`; until then the blit was a silent
+/// no-op with no error, tests/es3_blit_int_tex.rs). Attachment 3's 10s
+/// arrive over the destination's 20s.
 #[test]
-fn rgba8ui_texture_attachment3_blit_is_a_silent_noop_today() {
+fn rgba8ui_texture_attachment3_blit_copies() {
     let _g = context();
     let (mut fb, mut tex) = ([0; 2], [0; 2]);
     // SAFETY: plain GL calls; the pixel array holds W x W RGBA bytes.
@@ -361,7 +361,7 @@ fn rgba8ui_texture_attachment3_blit_is_a_silent_noop_today() {
         glReadBuffer(att(0));
         glReadPixels(0, 0, W, W, GL_RGBA_INTEGER, GL_UNSIGNED_INT, u.as_mut_ptr() as *mut c_void);
         assert_eq!(err(), GL_NO_ERROR);
-        assert!(u.iter().all(|&v| v == 20), "destination keeps its pixels today: {u:?}");
+        assert!(u.iter().all(|&v| v == 10), "attachment 3's 10s over the destination's 20s: {u:?}");
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(2, fb.as_ptr());
         glDeleteTextures(2, tex.as_ptr());
