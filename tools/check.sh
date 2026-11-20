@@ -4493,18 +4493,20 @@ zephyr_nanopc_t6_fw_image() {
   fi
   zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$probe}" "${4:-nanopc_$probe}"
 }
-# gl_test on the NanoPC-T6's Mali (driver/samples/zephyr/gl_test, boards/
-# nanopc_t6.conf): it builds with the firmware embedded (its link checks that
-# WDT0 is armed before every init hook, check_early_hooks.cmake), and
-# the image is one driver/tools/kexec-zephyr/nanopc-t6.sh would load: one
+# A GL image on the NanoPC-T6's Mali, <fw> <sample> <build name> (gl_test:
+# driver/samples/zephyr/gl_test, boards/nanopc_t6.conf; examples/triangle:
+# the board layer, driver/zephyr/lib/board/nanopc_t6/app.conf): it builds
+# with the firmware embedded (its link checks that WDT0 is armed before
+# every init hook, check_early_hooks.cmake), and the image is one
+# driver/tools/kexec-zephyr/nanopc-t6.sh would load: one
 # watchdog marker, the RAM footprint (the AArch64 header's image_size) inside
 # zephyr,sram (the window), and the file at most kexec_zephyr's 64 MiB
 # (IMG_MAX). The file is also smaller than the carve-out: the OSAL's memory
 # is .noinit (src/osal/zephyr_mali.c) and must not be in zephyr.bin, where
 # the carve-out would count against IMG_MAX.
-zephyr_nanopc_t6_gltest_image() {
-  local dir=build/zephyr-werror/nanopc_t6-gl_test bin footprint size window marker carve
-  zephyr_nanopc_t6_fw_image "$1" gl_test gl_test nanopc_t6-gl_test || return 1
+zephyr_nanopc_t6_mali_image() {
+  local dir="build/zephyr-werror/$3" bin footprint size window marker carve
+  zephyr_nanopc_t6_fw_image "$1" "${2##*/}" "$2" "$3" || return 1
   bin="$dir/zephyr/zephyr.bin"
   marker=$(strings -n 20 "$bin" | grep -c '^yakogl-wdt: nanopc_t6 WDT0 armed at boot; ') || true
   [ "$marker" = 1 ] || { echo "zephyr.bin carries the watchdog marker ${marker:-0} times, not once"; return 1; }
@@ -4592,8 +4594,9 @@ if [ "$QUICK" -eq 0 ]; then
       stm32mp257f_dk/stm32mp257fxx/a35 gc_clear stm32mp257f_dk-gc_clear
     scope v3d gltest drivers samples
     step "zephyr  rpi4 gl_test image, -Werror on our C files" zephyr_werror_image rpi_4b gl_test rpi4
-    # The examples (examples/README.md): each one built for the three boards,
-    # its board files the board layer's app.conf and app.overlay.
+    # The examples (examples/README.md): each one built for the three boards
+    # (the NanoPC-T6's triangle is with its Mali images below), its board
+    # files the board layer's app.conf and app.overlay.
     scope pvr drivers samples
     needs_pvr_fw_blob
     step "zephyr  am62p examples/triangle image, -Werror on our C files" zephyr_werror_image \
@@ -4650,7 +4653,14 @@ if [ "$QUICK" -eq 0 ]; then
     scope mali gltest drivers samples
     needs_mali_csffw
     step "zephyr  nanopc_t6 gl_test image (Mali), -Werror on our C files, fits the kexec window" \
-      zephyr_nanopc_t6_gltest_image "$mali_csffw"
+      zephyr_nanopc_t6_mali_image "$mali_csffw" gl_test nanopc_t6-gl_test
+    # The triangle example on the board layer (its window at the carve-out's
+    # end, the screen adopted at the first show): the same firmware, the same
+    # gap, the same fit.
+    scope mali drivers samples
+    needs_mali_csffw
+    step "zephyr  nanopc_t6 examples/triangle image (Mali, the board layer), -Werror on our C files, fits the kexec window" \
+      zephyr_nanopc_t6_mali_image "$mali_csffw" examples/triangle nanopc_t6-triangle
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
