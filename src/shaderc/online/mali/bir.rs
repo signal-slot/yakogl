@@ -360,6 +360,15 @@ pub enum Op {
         cmpf: Cmpf,
         result: ResultType,
     },
+    /// `FCMP_AND.f32`: the float compare's mask ANDed with the third
+    /// source (`va_fuse_cmp`'s `LSHIFT_AND.i32` of two `FCMP_OR.f32`, as
+    /// [`Op::IcmpAndS32`]; deqp_intval_reslib_int_vs's `float(b) <= atemp
+    /// && atemp <= float(b + 1)`, `FCMP_AND.f32.ge.m1 r0, r0^, r1^, r2^`).
+    /// Not fused again.
+    FcmpAndF32 {
+        cmpf: Cmpf,
+        result: ResultType,
+    },
     /// `FCMP_OR.v2f16`, the same per 16-bit lane: a mediump compare
     /// (`bi_fcmp_to` of a 16-bit `flt_pan`), each lane's mask 0 / ~0 in
     /// its half.
@@ -877,7 +886,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         /* a pseudo-op (IR_pseudo.xml:139-147: a plain source) */
         (Op::FclampF32, 0) => info(false, false, false, false, 32),
         (Op::FclampV2f16, 0) => info(false, false, false, false, 16),
-        (Op::FcmpOrF32 { .. }, 0..=1) => info(true, true, false, false, 32),
+        (Op::FcmpOrF32 { .. } | Op::FcmpAndF32 { .. }, 0..=1) => info(true, true, false, false, 32),
         (Op::FcmpOrV2f16 { .. }, 0..=1) => info(true, true, false, false, 16),
         /* the third source of a v2f16 or v2u16 compare is 16-bit; the
          * integer pair widens, it does not swizzle (valhall.c FCMP_OR.v2f16,
@@ -891,6 +900,7 @@ pub const fn src_info(op: Op, s: usize) -> SrcInfo {
         (Op::DiscardB32, 0) => info(false, false, false, false, 32),
         (
             Op::FcmpOrF32 { .. }
+            | Op::FcmpAndF32 { .. }
             | Op::IcmpOrS32 { .. }
             | Op::IcmpOrU32 { .. }
             | Op::IcmpAndS32 { .. }
@@ -1095,7 +1105,7 @@ pub const fn nr_srcs(op: Op) -> usize {
         Op::FmaRscaleF32 => 4,
         Op::FmaF32 | Op::FmaV2f16 | Op::Atest | Op::ZsEmit { .. } => 3,
         Op::FcmpOrF32 { .. } | Op::IcmpOrS32 { .. } | Op::IcmpOrU32 { .. } | Op::MuxI32 | Op::MuxV2i16 => 3,
-        Op::IcmpAndS32 { .. } | Op::IcmpAndU32 { .. } => 3,
+        Op::FcmpAndF32 { .. } | Op::IcmpAndS32 { .. } | Op::IcmpAndU32 { .. } => 3,
         Op::FcmpOrV2f16 { .. } | Op::IcmpOrV2u16 { .. } => 3,
         Op::MuxBitI32 | Op::Cubeface1 | Op::Cubeface2 | Op::CubeSsel | Op::CubeTsel => 3,
         Op::CselU32 | Op::CselS32 { .. } => 4,

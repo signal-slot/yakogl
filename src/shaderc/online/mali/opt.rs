@@ -470,7 +470,7 @@ pub fn fuse_add_imm(p: &mut Prog<'_>) {
 /// other side) but are not fused again (`va_cmp_can_fuse`: OR forms only).
 fn cmp_family(op: Op) -> Option<(u8, ResultType)> {
     match op {
-        Op::FcmpOrF32 { result, .. } => Some((0, result)),
+        Op::FcmpOrF32 { result, .. } | Op::FcmpAndF32 { result, .. } => Some((0, result)),
         Op::IcmpOrS32 { result, .. } | Op::IcmpAndS32 { result, .. } => Some((1, result)),
         Op::IcmpOrU32 { result, .. } | Op::IcmpAndU32 { result, .. } => Some((2, result)),
         _ => None,
@@ -487,7 +487,8 @@ fn cmp_family(op: Op) -> Option<(u8, ResultType)> {
 /// try is the OR's, :265-271), the compare in its `_AND` form
 /// (deqp_intval_reslib_mixed_fs: `ICMP_AND.u32.eq.m1 r1, r2^, u3.w0, r1^` of
 /// `all(ivec3 == ivec3)`'s inner `iand`; its outer `iand` reads that `_AND`
-/// first and stays `LSHIFT_AND.i32`). The float `_AND` has no reference.
+/// first and stays `LSHIFT_AND.i32`); the float `_AND` alike
+/// (deqp_intval_reslib_int_vs: `FCMP_AND.f32.ge.m1 r0, r0^, r1^, r2^`).
 pub fn fuse_cmp(p: &mut Prog<'_>) {
     let def = |p: &Prog<'_>, s: &Src| -> Option<usize> {
         let v = s.ssa_value()?;
@@ -531,9 +532,12 @@ pub fn fuse_cmp(p: &mut Prog<'_>) {
             };
             let o = p.ins[old];
             /* `va_remap_logical_to_logical_cmp`: the LSHIFT's logic on the
-             * compare; the float AND form is not drawn */
+             * compare (deqp_intval_reslib_int_vs: `FCMP_AND.f32.ge.m1 r0,
+             * r0^, r1^, r2^`, the `iand`'s first compare with the second's
+             * mask) */
             let op = match (and, o.op) {
                 (false, op) => op,
+                (true, Op::FcmpOrF32 { cmpf, result }) => Op::FcmpAndF32 { cmpf, result },
                 (true, Op::IcmpOrS32 { cmpf, result }) => Op::IcmpAndS32 { cmpf, result },
                 (true, Op::IcmpOrU32 { cmpf, result }) => Op::IcmpAndU32 { cmpf, result },
                 (true, _) => continue,

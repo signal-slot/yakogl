@@ -2184,8 +2184,39 @@ impl<'s> Fs<'s> {
     fn bool32(&self, v: Val) -> bool {
         match self.alu_of(v) {
             Some((Alu::Ior | Alu::Iand, [a, b, _])) if !self.mask16(v) => self.bool32(a) && self.bool32(b),
-            _ => self.mask_lane(v),
+            _ => self.mask_lane(v) || self.fcmp32(v),
         }
+    }
+
+    /// `v` is the 32-bit mask of an fp32 compare of a mediump shader (an
+    /// integer's float on one side, the walk's compare arm): a boolean of
+    /// its compare's width (`pan_nir_lower_bool_to_bitsize`).
+    fn fcmp32(&self, v: Val) -> bool {
+        matches!(v, Val::Lane(n, 0) if matches!(
+            self.nir.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: 32, width: 1, .. }
+        )) && !self.prec.highp
+    }
+
+    /// `iand(p, q)` of two fp32 compares' masks ([`Fs::fcmp32`]) that no
+    /// rule of nir_opt_algebraic.py rewrites: the `&&` stays a `iand`,
+    /// which `va_fuse_cmp` makes one `FCMP_AND.f32` (deqp_intval_reslib_
+    /// int_vs's `float(b) <= atemp && atemp <= float(b + 1)`, `atemp` on
+    /// either side). A constant operand (the rules of :918, :1162-1165,
+    /// :1206-1214), an operand shared in the same place (:1158-1161) or
+    /// the same compare with its sources swapped (:749-750) is another
+    /// program in Mesa, with no reference: refused.
+    fn and_fcmp32(&self, p: Val, q: Val) -> bool {
+        let (Some((Alu::Fcmp(c), [a, b, _])), Some((Alu::Fcmp(d), [x, y, _]))) = (self.alu_of(p), self.alu_of(q))
+        else {
+            return false;
+        };
+        self.fcmp32(p)
+            && self.fcmp32(q)
+            && ![a, b, x, y].iter().any(|v| matches!(v, Val::Const(_)))
+            && a != x
+            && b != y
+            && !(c == d && a == y && b == x)
     }
 
     /// `op` (`ior`, `iand`) of two booleans of `any` / `all`: two constants
@@ -2326,6 +2357,9 @@ impl<'s> Fs<'s> {
              * ones */
             AluOp::Ixor if self.mask16(p) && self.mask16(q) => self.node(Alu::Ixor, [p, q, u], at),
             AluOp::Ixor if self.bool32(p) && self.bool32(q) => self.int32(Alu::Ixor, [p, q, u], at),
+            /* `&&` of two fp32 compares' masks ([`Fs::and_fcmp32`]): a
+             * 32-bit `iand`, `FCMP_AND.f32` once fused */
+            AluOp::Iand if self.and_fcmp32(p, q) => self.mask_op(Alu::Iand, p, q, at),
             /* `int(b)` of an fp16 compare's mask: `b2i32` keeps its 16-bit
              * source (no arm of `lower_alu_instr` resizes it), `MUX.i32 0,
              * 1, b` reading the mask replicated into a word
@@ -2750,6 +2784,30 @@ impl<'s> Fs<'s> {
                 id
             }
         };
+        Ok(Val::Lane(id, 0))
+    }
+
+    /// The fp32 value of a mediump local's fp16 value `v` that an fp32
+    /// operation reads: lower_precision's `f162f` of the assignment
+    /// (`atemp = f162f(f2fmp(a) + 0.5)`; a mediump reader's `f2fmp` of it
+    /// folds back to `v`), so the `f2f32` comes right after `v` in the
+    /// order, CSE'd (deqp_intval_reslib_int_vs: `F16_TO_F32 r0, r0^.h0`
+    /// right after the `FADD.v2f16` of `atemp`, before the `S32_TO_F32` of
+    /// the compare that reads it). A `v` the order does not hold has no
+    /// reference: refused.
+    fn widen_local(&mut self, v: Val) -> Result<Val, MaliError> {
+        let u = Val::Undef;
+        let nd = NirNode { kind: Kind::Alu(Alu::F2f32), src: [v, u, u], bits: 32, width: 1 };
+        if let Some(i) = self.nir.nodes[..self.nir.n].iter().position(|x| *x == nd) {
+            return Ok(Val::Lane(i as u16, 0));
+        }
+        let Val::Lane(n, _) = v else { return Err(MaliError::Defect(Defect::IrIndex)) };
+        let Some(k) = self.nir.order[..self.nir.len].iter().position(|&x| x == n) else {
+            return Err(MaliError::IntValue);
+        };
+        let id = self.nir.insert_before(k + 1, nd)?;
+        self.nir.block[id as usize] = self.nir.block[n as usize];
+        self.origin[id as usize] = self.origin[n as usize];
         Ok(Val::Lane(id, 0))
     }
 
@@ -5912,6 +5970,34 @@ fn walk_nodes(
                      * `DISCARD.f32.eq r0^.h0, 0x0`) */
                     let pz = |v: Val| if v == Val::Const(F32_NEG_ZERO) { Val::Const(0) } else { v };
                     let (x, y) = (pz(x), pz(y));
+                    /* an integer's float on either side (fp32: lower_precision
+                     * lowers no conversion from an integer) makes the compare
+                     * fp32, an fp16 operand widened (`f2f32`): dEQP's
+                     * `isOk(float a, int b)`, `float(b) <= atemp` of the
+                     * mediump `atemp = a + 0.5` (deqp_intval_reslib_int_vs:
+                     * `F16_TO_F32 r0, r0^.h0`, `FCMP_OR.f32.ge.m1`). Another
+                     * operand (a constant, which an algebraic rule may fold
+                     * into the integer's compare; a varying's lane) has no
+                     * reference */
+                    if f.int_float(x) || f.int_float(y) {
+                        let local = |k: usize| matches!(m.def(s[k].val), Some(ir::Op::LoadLocal { index: None, .. }));
+                        let mut xy = [x, y];
+                        for (k, v) in xy.iter_mut().enumerate() {
+                            *v = match *v {
+                                v if f.int_float(v) => v,
+                                v if f.is_f16(v) && local(k) => f.widen_local(v)?,
+                                _ => return Err(MaliError::IntValue),
+                            };
+                        }
+                        let [x, y] = xy;
+                        let u = Val::Undef;
+                        *o = match a {
+                            AluOp::Flt => f.op32(Alu::Fcmp(Cmpf::Lt), [x, y, u], at)?,
+                            AluOp::Fle => f.op32(Alu::Fcmp(Cmpf::Ge), [y, x, u], at)?,
+                            _ => f.op32(Alu::Fcmp(Cmpf::Eq), [x, y, u], at)?,
+                        };
+                        continue;
+                    }
                     *o = match a {
                         AluOp::Flt => f.node(Alu::Fcmp(Cmpf::Lt), [x, y, Val::Undef], at)?,
                         AluOp::Fle => f.node(Alu::Fcmp(Cmpf::Ge), [y, x, Val::Undef], at)?,
@@ -11290,9 +11376,22 @@ pub fn bool_colour(f: &Fs<'_>) -> bool {
         return false;
     }
     let live = |k: usize| f.live[k / 64] >> (k % 64) & 1 != 0;
+    /* an fp32 operand of an fp32 compare (the walk's compare arm: an
+     * integer's float, an fp16 lane widened), read by such compares alone
+     * (deqp_intval_reslib_int_vs: `S32_TO_F32`, `F16_TO_F32`, then
+     * `FCMP_OR.f32`) */
+    let cmp_operand = |k: usize| {
+        let mut readers = (0..f.nir.n).filter(|&j| live(j)).filter(|&j| {
+            let nd = f.nir.nodes[j];
+            matches!(nd.kind, Kind::Alu(_)) && nd.src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n as usize == k))
+        });
+        readers.clone().next().is_some()
+            && readers.all(|j| matches!(f.nir.nodes[j], NirNode { kind: Kind::Alu(Alu::Fcmp(_)), bits: 32, .. }))
+    };
     (0..f.nir.n).filter(|&k| live(k)).all(|k| match f.nir.nodes[k] {
         NirNode { kind: Kind::Preload { .. } | Kind::Uniform { .. }, .. } => true,
         NirNode { kind: Kind::Input { loc, .. }, bits: 32, .. } => (loc as usize) < MAX_VARYINGS,
+        NirNode { kind: Kind::Alu(Alu::I2f | Alu::U2f | Alu::F2f32), bits: 32, .. } => cmp_operand(k),
         NirNode { kind: Kind::Alu(op), bits: 32, .. } => op.is_int() || matches!(op, Alu::B2f | Alu::Bcsel),
         NirNode { kind: Kind::Alu(op), bits: 16, .. } => {
             matches!(
