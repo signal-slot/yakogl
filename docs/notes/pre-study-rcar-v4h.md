@@ -12,6 +12,8 @@ Update 2026-11-20: section 9 has the host answers to U1 to U6, U9
 and U11. The core is BVNC 30.3.408.101, of the DDK's Volcanic
 architecture, not a Rogue one. Verdict lines 2, 5 and 6 below and
 sections 3.2 and 8 were written before that and are kept as written.
+The port is on hold since 2026-11-20 (section 10): with public
+sources only, the GPU cannot be made to draw.
 
 ## Verdict in six lines
 
@@ -845,7 +847,16 @@ board, firmware source or Zephyr support was looked at.
 
 ## 10. The plan after section 9 (2026-11-20)
 
-The owner's two decisions of 2026-11-20:
+**On hold (the owner, 2026-11-20).** With public sources only the
+V4H's GPU cannot be made to draw: the geometry stream and the shader
+instruction set have no public definition (the table below). No item
+of this section is started. The port is taken up again when one of
+these happens: Mesa gains the rest of the Volcanic definitions and a
+compiler target for it; Imagination or Renesas give documentation
+that may be used in Apache-2.0 code; Renesas permit, in writing, what
+`G: License.txt` forbids.
+
+The owner's two decisions of 2026-11-20 that lead there:
 
 - The board is the V4H (Sparrow Hawk). The V4M of section 9.4 is not
   available and is not planned.
@@ -866,7 +877,8 @@ What the public sources cover, and where they stop:
 | Shader instruction set and a compiler for it | none (`M2: pco` is built for rogue only) | missing |
 | Display (DU, VSP, DSC, DSI, SN65DSI86) | mainline drivers (section 1.3) | complete as a reading base |
 
-Items, replacing P5 to P9 of section 8. P1 is dropped (section 9.5);
+Items for when the port is taken up again, replacing P5 to P9 of
+section 8. P1 is dropped (section 9.5);
 P2 is done (section 9.2); P3 and P4 stand as written.
 
 | # | Item | Size | Depends on | Done when |
@@ -878,10 +890,7 @@ P2 is done (section 9.2); P3 and P4 stand as written.
 | V5 | The Volcanic kernel side from `KM:`: MMU version 4 tables, the META firmware boot, the firmware's init and its trace | L | V3 | the firmware answers its first command on the board |
 | V6 | Geometry, shaders, ES 2.0 | — | a public definition of the geometry stream and of the shader instruction set | not planned until that exists |
 
-V6 is a stop, not an item. What lifts it is a public source: Mesa
-gaining the rest of the Volcanic definitions and a `pco` target for
-it (the follow-ups of merge request 39526; none had landed in `M2:`
-by 2026-11-20), or documentation from Imagination or Renesas that
-may be read under its own terms. V3, V4 and V5 are worth doing
-before that only for what they give by themselves: the board on
-Zephyr, its display, and a GPU whose firmware runs.
+V6 is a stop, not an item, and it is why the port is on hold: V1 to
+V5 give the board on Zephyr, its display and a GPU whose firmware
+runs, and no OpenGL ES. The follow-ups of merge request 39526 are
+the thing to watch (none had landed in `M2:` by 2026-11-20).
