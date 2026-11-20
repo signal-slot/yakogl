@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The same sram0 as every Pi 5 image (tools/probes/rpi_5/rpi5_clear,
+ * tools/probes/rpi5_display): 32 MiB from 0x200000, below 4 GiB, so the
+ * mailbox's message buffer address fits its 32-bit word. Both images whose
+ * mailbox calls this probe compares had this overlay, so the buffers sit in
+ * the same region here. Zephyr's own mailbox driver (mbox0) stays disabled,
+ * as bcm2712.dtsi has it: the board layer's rpi_mbox.c owns the mailbox.
+ */
+&sram0 {
+	reg = <0x0 0x200000 0x2000000>;
+};
