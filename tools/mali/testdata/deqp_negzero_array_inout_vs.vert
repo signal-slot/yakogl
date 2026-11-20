@@ -1,10 +1,8 @@
-/* dEQP-GLES2.functional.shaders.functions.array_arguments.copy_local_inout_on_call_vertex,
- * rebuilt from VK-GL-CTS 93bca018 (Apache-2.0): the "both" source of the case
- * copy_local_inout_on_call (data/gles3/shaders/functions.test:2547-2590 at the
- * same commit, its #version 300 es line dropped: the gles2 data file was not
- * reachable offline) through glsShaderLibraryCase.cpp's specializeVertexShader. */
+/* dEQP-GLES2.functional.shaders.functions.array_arguments.copy_local_inout_on_call_vertex: the vertex shader,
+ * verbatim from the .qpa of tools/mali/deqp-host-measure.sh (VK-GL-CTS
+ * 93bca018, Apache-2.0; HOST-ONLY run at cc89a1cf). Shape array_inout of
+ * docs/notes/mali-deqp-negzero.md. */
 precision mediump float;
-
 attribute highp vec4 dEQP_Position;
 attribute vec4 in0;
 varying vec4 out0;
