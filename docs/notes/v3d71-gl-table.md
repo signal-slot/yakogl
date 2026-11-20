@@ -32,7 +32,7 @@ and `docs/notes/v3d71-backend.md`.
 | 7.1 packets and frame | `v3d_cl.h` with `-DV3D_CL_VER=71`; the 7.1 triangle frame `driver/src/v3d/v3d_frame71_tri.c` (declared `v3d_frame.h:270-313`); texture state `v3d_tex71.*`; TFU `v3d_tfu71.*`; the 7.1 job builder `driver/src/v3d/v3d_job71.{c,h}` (checked by `tools/v3d/check71.d/job71.sh` against Mesa's 7.1 references, G1 included, section 5) |
 | 7.1 compiler | the `*71.rs` files under `src/shaderc/online/v3d/`; host checks `tools/v3d/check71.d/`, `tests/v3d71_*.rs` |
 | 7.1 on the board | `v3d_triangle` PASS with Mesa's shaders and ours (`tools/cts/RESULTS.md`, "V3D 7.1: Raspberry Pi 5 on Zephyr") |
-| `src/v3d/**` for 7.1 | pure modules only, each host-tested through `#[path]` in its test and **not yet in `src/v3d/mod.rs`**: `attr71.rs` (`tests/v3d71_attr.rs`), `rt71.rs` (`v3d71_rt.rs`), `draw71.rs` (`v3d71_draw.rs`), `frame71.rs` (`v3d71_frame.rs`), `ident71.rs` (`v3d71_ident.rs`), `format71.rs` (`v3d71_fmt.rs`). The table itself, `ffi71.rs` and `backend71.rs`, and the `gpu-v3d71` feature (absent from `Cargo.toml`) are still to come: that is P9 |
+| `src/v3d/**` for 7.1 | pure modules only, each host-tested through `#[path]` in its test and **not yet in `src/v3d/mod.rs`**: `attr71.rs` (`tests/v3d71_attr.rs`), `rt71.rs` (`v3d71_rt.rs`), `draw71.rs` (`v3d71_draw.rs`), `frame71.rs` (`v3d71_frame.rs`), `ident71.rs` (`v3d71_ident.rs`), `format71.rs` (`v3d71_fmt.rs`), `sampler71.rs` (`v3d71_sampler.rs`). The table itself, `ffi71.rs` and `backend71.rs`, and the `gpu-v3d71` feature (absent from `Cargo.toml`) are still to come: that is P9 |
 
 How the Pi 4 did the same step (`pi4-v3d-bringup.md`, "gl_test on the V3D",
 line 322): one `v3d_gl_test` image, the list 5, 58, 59, 66, 67, 102 on one
