@@ -6,6 +6,10 @@ Status 2026-10-28, written before the board arrives. Nothing here has run on
 silicon. This note says what an ES 2.0 port to the Zero 2 W costs, what it
 brings, what can be done on the host first, and what is still unknown.
 
+Update 2026-11-20: section 9. Upstream Zephyr has had the SoC and the
+board since 2026-08-17, which changes section 4 and item 4; the rest
+stands.
+
 ## How to read the citations
 
 - `mesa:<path>` is a file of Mesa 26.2.1 (the tree the Mali and V3D reference
@@ -685,7 +689,7 @@ week or more in units of that port, not calendar promises.
 | 1 | `tools/vc4/`: Mesa vc4 + drm-shim build script, `vc4_shc`, a list recorder | M | clean build; stored reference words and lists |
 | 2 | QPU ISA model, encoder, decoder, round trip (`src/shaderc/online/vc4/`) | M | round trip over the corpus and `vc4_qpu_disasm.c` vectors |
 | 3 | Packet and record encoders for binner and render lists; golden test | M | byte equality with item 1 |
-| 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only | M | image builds in a gate row |
+| 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only. **2026-11-20: upstream Zephyr has both (section 9); the item is now how our workspace gets them** | M | image builds in a gate row |
 | 5 | Driver: mailbox clock and power (the Pi 4's `rpi_mbox.c` with base `0x3f00b880`, Q6), reset, list start, interrupts (Q4), overflow memory, hang reset, mock test | M | host mock test; day-one checks 1 and 2 |
 | 6 | Board day one: UART, identity, clear, triangle with Mesa's own shaders | S (board) | section 6 |
 | 7 | Compiler: select, schedule, allocate for FS/VS/CS, uniform stream, VPM I/O, SFU; no 32-bit multiply, no divide | L | corpus words vs `vc4_shc`; QPU sim; gl_test shader cases |
@@ -703,3 +707,83 @@ on when our image starts), the first non-GIC interrupt controller of item 4
 (Q4 is now a two-level controller with known registers), and item 7 (the QPU has fewer
 operations than the other GPUs, so more shader shapes need multi-instruction
 sequences).
+
+## 9. Update, 2026-11-20
+
+Host reading only, main `1d9022e7`. Nothing ran on a board.
+
+`zephyr-main:` is `github.com/zephyrproject-rtos/zephyr`, branch
+`main` at `4f2d5263e2` (2026-11-20, `VERSION` 4.5.99), read through
+the GitHub API and raw files. `zephyr:` stays the workspace pin of
+`west.yml`, `af17c0c8` (2026-07-29, 4.4.99).
+
+### 9.1 Upstream Zephyr has the SoC and the board
+
+Section 4's first point ("there is no BCM2710/BCM2837 SoC and no Zero
+2 W board") is true of the pin and no longer of upstream:
+
+- `zephyr-main:soc/brcm/bcm2710/` and
+  `zephyr-main:boards/raspberrypi/rpi_zero_2w/` were added on
+  2026-08-17 (`40222de576`, "boards: raspberrypi: add Raspberry Pi
+  Zero 2 W"), three weeks after the pin. The pin's `soc/brcm` holds
+  `bcm2711`, `bcm2712` and `bcmvk` only.
+- The SoC selects `ARM64`, `CPU_CORTEX_A53`, `ARM_ARCH_TIMER` and
+  `ARM_CUSTOM_INTERRUPT_CONTROLLER` (`soc/brcm/bcm2710/Kconfig`): the
+  hook section 4 named. `soc_irq.c` gives the `z_soc_irq_*` functions
+  over two new drivers, `drivers/interrupt_controller/intc_bcm2836_l1.c`
+  (local interrupts 0 to 9) and `intc_bcm2835_armctrl.c` (the
+  peripheral controller as interrupts 32 to 127, cascaded under local
+  interrupt 8). That is Q4's design, written and upstream. Peripheral
+  and GPU interrupts stay on core 0.
+- Four cores: `ee3207193d` (2026-11-11) adds SMP through the
+  spin-table and a mailbox IPI. The board page still says single core.
+- `dts/arm64/broadcom/bcm2710.dtsi` has the mailbox at `0x3f00b880`
+  with the `brcm,bcm2711-mbox` driver (Q6's answer, in use), the
+  auxiliary UART at `0x3f215040` as the console, the two interrupt
+  controllers, GPIO, I2C, DMA and the RNG. It has no V3D, HVS, HDMI or
+  watchdog node.
+- `boards/raspberrypi/common/rpi_common.dtsi` (2026-10-29) gives the
+  board the firmware property driver (`rpi_fw`,
+  `raspberrypi,bcm283x-firmware`, through a 64 KiB shared region at
+  `0x10200000`), a firmware framebuffer as the Zephyr display (`fb0`,
+  `raspberrypi,bcm2711-framebuffer`, 640x480 ARGB8888 with red and
+  blue swapped) and firmware power domains
+  (`drivers/power_domain/power_domain_rpi_bcm283x.c`). So upstream
+  already asks this board's firmware for a framebuffer, which is what
+  Q8 asks; that it works on the board is upstream's statement, not
+  our measurement. The power-domain binding
+  (`include/zephyr/dt-bindings/power/rpi_bcm283x_power.h`) lists ids
+  0 to 10 with no V3D entry, so the V3D domain of Q3 is still ours to
+  request.
+- Boot, from the board page: `config.txt` with `arm_64bit=1`,
+  `enable_uart=1`, `core_freq=250`, `kernel_address=0x200000`,
+  `kernel=zephyr.bin`, beside the stock `bootcode.bin`, `start.elf`
+  and `fixup.dat`; the image is linked at `0x200000` in a 256 MiB
+  window. This is Q7's answer for the load address, again by
+  upstream's statement. `core_freq=250` is new to us: it keeps the
+  mini-UART's divisor valid.
+
+### 9.2 What item 4 becomes
+
+The pin is 13,576 commits behind `zephyr-main:`. Two ways to get the
+board, not chosen here:
+
+| Way | Cost | Risk |
+| --- | --- | --- |
+| Move the `west.yml` pin to a revision that has the board | every image of every board is rebuilt and rerun on the new Zephyr | the largest change to the workspace since the pin was set; all board results depend on it |
+| Carry the SoC, the board, the device tree include and the two interrupt drivers in this repository as out-of-tree Zephyr roots (they are Apache-2.0), until the pin moves for another reason | about a dozen files copied at a named upstream commit | they must build against the pin's arch code; `ARM_CUSTOM_INTERRUPT_CONTROLLER` is in the pin (section 4), the rest is unchecked |
+
+Either way the interrupt controller, the console, the mailbox and
+the boot recipe are no longer ours to write, and item 4 is S, not M.
+
+### 9.3 What did not change
+
+- The GPU side: a new back end (section 3), from Mesa's vc4 and the
+  Broadcom guide, both public. Items 1 to 3 and 5 to 13 stand.
+- This host has no Mesa tree (`tools/cts/deps-env.sh --check`
+  reports the Mali one missing, and there is no V3D one), so item 1
+  starts with the build, as `tools/v3d/drm_shim_ref.sh build` does
+  for V3D.
+- The board is not a farm resource. Day one (section 6) waits for it.
+- Q2, Q5's cache question, Q9 to Q14 are as they were.
+
