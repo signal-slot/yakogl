@@ -161,6 +161,7 @@ struct gles_texture_bind {
 	uint8_t  unit;           /* sampler binding = descriptor slot (sh[20 unit..]) */
 	uint8_t  format;         /* enum gles_texfmt */
 	uint8_t  type;           /* enum gles_textype */
+	uint8_t  base_level;     /* GL_TEXTURE_BASE_LEVEL */
 	uint16_t layers;         /* images in the stack: 6 for a cube, 1 for plain 2D */
 	uint64_t base_gpu;       /* GPU VA of the texels (level 0) */
 	uint32_t width, height, stride_texels;

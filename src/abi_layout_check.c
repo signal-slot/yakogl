@@ -276,6 +276,7 @@ _Static_assert(sizeof(struct gles_texture_bind) == 72, "struct gles_texture_bind
 _Static_assert(offsetof(struct gles_texture_bind, unit) == 0, "struct gles_texture_bind.unit");
 _Static_assert(offsetof(struct gles_texture_bind, format) == 1, "struct gles_texture_bind.format");
 _Static_assert(offsetof(struct gles_texture_bind, type) == 2, "struct gles_texture_bind.type");
+_Static_assert(offsetof(struct gles_texture_bind, base_level) == 3, "struct gles_texture_bind.base_level");
 _Static_assert(offsetof(struct gles_texture_bind, layers) == 4, "struct gles_texture_bind.layers");
 _Static_assert(offsetof(struct gles_texture_bind, base_gpu) == 8, "struct gles_texture_bind.base_gpu");
 _Static_assert(offsetof(struct gles_texture_bind, width) == 16, "struct gles_texture_bind.width");
