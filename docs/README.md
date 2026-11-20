@@ -25,6 +25,7 @@ design the code follows; there are no run logs or session diaries.
 | `notes/v3d71-gl-table.md` | The P9 figures for the 7.1 `src/v3d` back-end table (the 7.1 shader record and draw index, the limits, `Clear Render Targets`, TFU `IOC`) and how a build selects 7.1. |
 | `notes/rpi5-display.md` | The Pi 5 display design (P11, U3): which Pi 4 pieces carry over, what the HVS 6.x and pixel valves make new, one implementation order for a Zephyr image that draws GL on the board, and what only the board can still answer. |
 | `notes/mali-g310-vs-g610.md` | The i.MX 95 port's host measurement: what Mesa 26.2.1 generates for a Mali-G310 against the Mali-G610 (every reference's shader words, FAU and descriptors, frame probes), the Mesa lines that tell the two apart, and which of our files carry a G610 assumption. |
+| `notes/imx95-gpu-power.md` | The i.MX 95 GPU power over SCMI (Verdin iMX95): the System Manager's ids, Linux's path reduced to messages, the A55 agent's permissions in Toradex's SM configuration, what Zephyr's SCMI drivers lack, and what day one on the board confirms. |
 
 Elsewhere: board results are `tools/cts/RESULTS.md` (current results only)
 and its Japanese summary `tools/cts/STATUS.md`; the stages are `ROADMAP.md`;
