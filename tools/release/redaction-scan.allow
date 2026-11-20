@@ -93,6 +93,10 @@ drop | tailnet-dns | tools/mp2_uboot_record_check.py | \bdk1\.tail1234\.ts\.net\
 drop | private-ipv4 | tools/probes/rpi5_display/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
 drop | ipv6-local | tools/probes/rpi5_display/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
 drop | email | tools/probes/rpi5_display/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
+# The Pi 5 scanout32 verdict self-test: inputs its redaction check must never print.
+drop | private-ipv4 | tools/probes/rpi_5/rpi5_scanout32/verdicts_selftest.sh | \b100\.64\.7\.9\b | private-range input of a redaction test: a console line the verdict tool must not print
+drop | ipv6-local | tools/probes/rpi_5/rpi5_scanout32/verdicts_selftest.sh | \bfe80::1\b | link-local input of the same redaction test
+drop | email | tools/probes/rpi_5/rpi5_scanout32/verdicts_selftest.sh | \bserial-getty@ttyS2\.service\b | systemd unit name in the same console line
 # The i.MX8MP GLES3 acceptance checks and their self-tests (5ddb981f,
 # 36339a2e): their own fixtures and pattern text.  The owners may drop the
 # fixtures instead.
