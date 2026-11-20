@@ -59,6 +59,14 @@ pub mod record;
 pub mod record_screen;
 pub mod rpi4;
 pub mod rpi_fb;
+#[cfg(any(feature = "imx95", test))]
+pub mod verdin_imx95_display;
+#[cfg(test)]
+mod verdin_imx95_display_tests;
+#[cfg(any(feature = "imx95", test))]
+pub mod verdin_imx95_dsi;
+#[cfg(test)]
+mod verdin_imx95_dsi_tests;
 
 #[cfg(test)]
 mod tests {
