@@ -536,6 +536,10 @@ What the Zephyr run showed:
   run does not show that the BCM2712 firmware refuses `FRAMEBUFFER_ALLOCATE`
   to a `kernel=` image. It shows that the board layer's mailbox transport got
   no answer at all on the Pi 5. Route B stays unproven, not closed.
+  Cause candidate (desk check mboxdesk): that image was built without
+  `CONFIG_CACHE_MANAGEMENT`, so `rpi_mbox.c`'s cache flush and invalidate did
+  nothing and the firmware saw stale memory. The board run of `rpi5_mbox`
+  confirms or excludes it; Kconfig now selects the option and the transaction returns a failed cache call.
 - **DTB:** the firmware hands over no `simple-framebuffer` node (`u3 dt-fb:
   none`; the DTB has 3 `/reserved-memory` regions).
 - **HDMI registers were not read:** the HSM clock rate was never answered, so
