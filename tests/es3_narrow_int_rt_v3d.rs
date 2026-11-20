@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//! V3D: the twelve R and RG integer textures (R8I .. RG32UI) as colour
+//! attachments. `es3_formats` holds each in the four-channel store of its
+//! channel type and width; the V3D build (`WIDE_INT_RT`, src/gl/framebuffer.rs)
+//! draws and clears that store's surface with the format's channels as the
+//! write mask, and reads the others back as 0, 0, 1. The back end is a
+//! stand-in that records what `state::refusal`, `state::unsupported` and
+//! `state::job_state` make of each draw; no GPU runs here.
+//!
+//! ```text
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_narrow_int_rt_v3d
+//! ```
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
@@ -54,6 +65,7 @@ struct Seen {
     clear_target_mask: u8,
     /// `targets[..num_targets]`: (gpu, format).
     targets: Vec<(u64, u8)>,
+    color_mask: u8,
     /// `state::refusal` / `state::unsupported`.
     refused: Option<&'static str>,
     /// `state::job_state`, when the V3D takes the draw.
@@ -73,6 +85,7 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
         clear_rgba: d.clear_rgba,
         clear_target_mask: d.clear_target_mask,
         targets: d.targets[..n].iter().map(|t| (t.gpu, t.format)).collect(),
+        color_mask: d.color_mask,
         refused,
         job,
     });
@@ -516,24 +529,39 @@ fn read_pixel(r: &Row) -> GLenum {
     err()
 }
 
-/* ---- today: the texture is an incomplete attachment --------------------- */
+/* ---- the texture is drawn as its four-channel store ---------------------- */
 
-/// Storage and attach are accepted, and the framebuffer is
-/// GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT for all twelve: the GL core's
-/// `integer_texture_internalformat` (src/gl/framebuffer.rs:404) admits only
-/// the four-channel classes. (`tex_fbo` asserts the storage and the attach.)
+/// The four-channel surface the store of `r` is (`es3_formats` widens an R or
+/// RG integer texture to the four-channel class of its channel type and
+/// width), and that surface's `V3D_INTERNAL_BPP_*`.
+fn wide(r: &Row) -> (u8, u32) {
+    match (r.bits, r.signed) {
+        (8, true) => (GLES_SURF_RGBA8I, V3D_INTERNAL_BPP_32),
+        (8, false) => (GLES_SURF_RGBA8UI, V3D_INTERNAL_BPP_32),
+        (16, true) => (GLES_SURF_RGBA16I, V3D_INTERNAL_BPP_64),
+        (16, false) => (GLES_SURF_RGBA16UI, V3D_INTERNAL_BPP_64),
+        (32, true) => (GLES_SURF_RGBA32I, V3D_INTERNAL_BPP_128),
+        _ => (GLES_SURF_RGBA32UI, V3D_INTERNAL_BPP_128),
+    }
+}
+
+/// Storage and attach are accepted, and the framebuffer is complete for all
+/// twelve: the GL core's `integer_texture_internalformat`
+/// (src/gl/framebuffer.rs) takes the widened store where `WIDE_INT_RT` is
+/// set, which the V3D build is. (`tex_fbo` asserts the storage and the
+/// attach.)
 #[test]
-fn every_narrow_texture_is_an_incomplete_attachment_today() {
+fn every_narrow_texture_is_a_complete_attachment() {
     let _g = context();
     for r in rows() {
         let _f = tex_fbo(r.internalformat);
-        assert_eq!(status(), GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{}", r.name);
+        assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{}", r.name);
     }
 }
 
 /// Controls: the same formats as renderbuffers are complete on their own
 /// surface (renderbuffer_surf_format), and the four-channel sibling texture
-/// is complete. So the gate is the texture's narrow class, nothing else.
+/// is complete: the class the narrow texture is drawn as.
 #[test]
 fn the_renderbuffer_and_the_four_channel_texture_are_complete() {
     let _g = context();
@@ -565,99 +593,92 @@ fn the_renderbuffer_and_the_four_channel_texture_are_complete() {
     }
 }
 
-/// A draw into the incomplete framebuffer: GL_INVALID_FRAMEBUFFER_OPERATION,
-/// and the back end is handed nothing.
-#[test]
-fn a_draw_is_refused_by_the_gl_core_today() {
-    let _g = context();
-    for r in rows() {
-        let _f = tex_fbo(r.internalformat);
-        program(if r.signed { "ivec4" } else { "uvec4" });
-        let (seen, e) = draw();
-        assert_eq!(e, GL_INVALID_FRAMEBUFFER_OPERATION, "{}", r.name);
-        assert!(seen.is_none(), "{}: the back end saw a draw", r.name);
-    }
-}
+/* ---- the expected words, per format -------------------------------------- */
 
-/// glClearBufferiv / uiv on the incomplete framebuffer:
-/// GL_INVALID_FRAMEBUFFER_OPERATION (ES 3.0 4.4.4.4; until 2026-11-16 the
-/// call was dropped with no error) and no clear reaches the back end.
-#[test]
-fn a_clear_buffer_is_refused_by_the_gl_core_today() {
-    let _g = context();
-    for r in rows() {
-        let _f = tex_fbo(r.internalformat);
-        let (seen, e) = clear_buffer(r.signed);
-        assert_eq!(e, GL_INVALID_FRAMEBUFFER_OPERATION, "{}", r.name);
-        assert!(seen.is_none(), "{}: the back end saw a clear", r.name);
-    }
-}
-
-/// glReadPixels from the incomplete framebuffer: GL_INVALID_FRAMEBUFFER_OPERATION
-/// (ES 3.0 4.3.1: the completeness check comes before the format pair).
-#[test]
-fn a_read_back_is_refused_by_the_gl_core_today() {
-    let _g = context();
-    for r in rows() {
-        let _f = tex_fbo(r.internalformat);
-        assert_eq!(read_pixel(&r), GL_INVALID_FRAMEBUFFER_OPERATION, "{}", r.name);
-    }
-}
-
-/* ---- the expected words, per owner -------------------------------------- */
-
-/// Everything a texture attachment of `r` must do once it is complete:
-/// the status, the job's render-target row (Mesa's table), the clear words
-/// of both clear calls, and a read-back without error.
-fn expect_renderable(r: &Row) {
+/// Everything a texture attachment of `r` does: complete; a draw reaches the
+/// V3D on the four-channel surface of the store with the format's channels as
+/// the write mask, and the job builder takes it with Mesa's row for that
+/// surface (the format's internal type, the wide surface's bpp and bytes);
+/// glClearBuffer reaches it with the tile buffer's words for the raw values;
+/// a read-back in the format's own pair is no error. The format's own
+/// surface (`r.surf`, `r.output`) stays the renderbuffer's.
+fn expect_wide(r: &Row) {
     let f = tex_fbo(r.internalformat);
     assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{}", r.name);
+    let (surf, bpp) = wide(r);
+    let own = (1u8 << r.channels) - 1;
 
-    /* a draw writing an ivec4 / uvec4: the V3D takes it on the narrow surface */
+    /* a draw writing an ivec4 / uvec4: the V3D takes it on the wide surface */
     program(if r.signed { "ivec4" } else { "uvec4" });
     let (seen, e) = draw();
     assert_eq!(e, GL_NO_ERROR, "{}", r.name);
     let s = seen.unwrap_or_else(|| panic!("{}: the back end saw no draw", r.name));
     assert_eq!(s.refused, None, "{}", r.name);
-    assert_eq!(s.targets[0].1, r.surf, "{}: surface {}", r.name, gles_surf_name(s.targets[0].1));
-    assert!(s.job.is_some(), "{}: job_state takes the draw", r.name);
-    let row = state::rt_format(r.surf).unwrap();
+    assert_eq!(s.targets[0].1, surf, "{}: surface {}", r.name, gles_surf_name(s.targets[0].1));
+    assert_eq!(s.color_mask, own, "{}: the format's channels only", r.name);
+    let job = s.job.unwrap_or_else(|| panic!("{}: job_state refuses the draw", r.name));
+    assert_eq!(job.colormask, u32::from(own), "{}: the job's colour mask", r.name);
+    let row = state::rt_format(surf).unwrap();
+    assert_eq!((row.internal_type, row.internal_bpp), (r.internal_type, bpp), "{}", r.name);
+    assert_eq!(row.clamp, V3D_RENDER_TARGET_CLAMP_INT, "{}", r.name);
+    assert_eq!(row.bytes, r.bits / 8 * 4, "{}: bytes a pixel of the wide store", r.name);
+    assert_ne!(row.output, r.output, "{}: not the narrow surface's output format", r.name);
+    /* the format's own surface keeps Mesa's row (the renderbuffer's) */
+    let narrow = state::rt_format(r.surf).unwrap();
     assert_eq!(
-        (row.output, row.internal_type, row.internal_bpp),
+        (narrow.output, narrow.internal_type, narrow.internal_bpp),
         (r.output, r.internal_type, r.internal_bpp),
-        "{}",
+        "{}: the narrow surface",
         r.name
     );
-    assert_eq!(row.clamp, V3D_RENDER_TARGET_CLAMP_INT, "{}", r.name);
-    assert_eq!(row.bytes, r.bits / 8 * r.channels, "{}: bytes a pixel of the narrow surface", r.name);
 
     /* the clear: raw words, unconverted */
     let (seen, e) = clear_buffer(r.signed);
     assert_eq!(e, GL_NO_ERROR, "{}", r.name);
     let s = seen.unwrap_or_else(|| panic!("{}: the back end saw no clear", r.name));
     assert_eq!(s.clear_target_mask & 1, 1, "{}", r.name);
-    assert_eq!(s.targets[0].1, r.surf, "{}", r.name);
-    assert_eq!(state::clear_words(r.surf, s.clear_rgba), mesa_clear_words(r.bits, RAW), "{}", r.name);
+    assert_eq!(s.targets[0].1, surf, "{}", r.name);
+    assert_eq!(state::clear_words(surf, s.clear_rgba), mesa_clear_words(r.bits, RAW), "{}", r.name);
 
-    /* the read-back */
-    assert_eq!(read_pixel(r), GL_NO_ERROR, "{}", r.name);
+    /* the read-back: the class's pair ES 3.0 4.3.1 requires (RGBA_INTEGER with
+     * INT or UNSIGNED_INT) is taken and reads 0, 0, 1 in the channels the
+     * format lacks (this stand-in stores no clear, so the format's own
+     * channels are not compared here: tests/es3_readback_v3d.rs reads them
+     * through the V3D back end); the implementation's pair is taken; the
+     * format's own pair (RED_INTEGER / BYTE ..) is not, as the
+     * implementation's pair is the wide store's */
+    let mut px = [0xdead_beefu32; 4];
+    let ty = if r.signed { GL_INT } else { GL_UNSIGNED_INT };
+    // SAFETY: room for one pixel of four words.
+    unsafe { glReadPixels(0, 0, 1, 1, GL_RGBA_INTEGER, ty, px.as_mut_ptr() as *mut c_void) };
+    assert_eq!(err(), GL_NO_ERROR, "{}: RGBA_INTEGER", r.name);
+    for (ch, w) in px.iter().enumerate().skip(r.channels as usize) {
+        assert_eq!(*w, u32::from(ch == 3), "{}: channel {ch} reads 0, 0, 1", r.name);
+    }
+    let (mut fmt, mut ity) = (0, 0);
+    // SAFETY: one value each.
+    unsafe {
+        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &mut fmt);
+        glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &mut ity);
+        glReadPixels(0, 0, 1, 1, fmt as GLenum, ity as GLenum, px.as_mut_ptr() as *mut c_void);
+    }
+    assert_eq!(err(), GL_NO_ERROR, "{}: the implementation's pair {fmt:#x}/{ity:#x}", r.name);
+    assert_eq!(read_pixel(r), GL_INVALID_OPERATION, "{}: the format's own pair", r.name);
     drop(f);
 }
 
-/// One ignored test a format, each with the step that blocks it.
-macro_rules! owed {
-    ($owner:literal: $($fn:ident $name:literal;)*) => {$(
+/// One test a format.
+macro_rules! wide {
+    ($($fn:ident $name:literal;)*) => {$(
         #[test]
-        #[ignore = $owner]
         fn $fn() {
             let _g = context();
-            expect_renderable(rows().iter().find(|r| r.name == $name).unwrap());
+            expect_wide(rows().iter().find(|r| r.name == $name).unwrap());
         }
     )*};
 }
 
-owed! {
-    "owner: GL core classes 30-39 (narrow-classes, docs/notes/gl-texture-classes-es3.md 2.7) and integer_texture_surface (step 4), then src/v3d sampled bits and tmu_format":
+wide! {
     r8i_texture_renders_clears_and_reads "R8I";
     r8ui_texture_renders_clears_and_reads "R8UI";
     rg8i_texture_renders_clears_and_reads "RG8I";
@@ -666,10 +687,6 @@ owed! {
     r16ui_texture_renders_clears_and_reads "R16UI";
     rg16i_texture_renders_clears_and_reads "RG16I";
     rg16ui_texture_renders_clears_and_reads "RG16UI";
-}
-
-owed! {
-    "owner: GL core integer_texture_surface for classes 26-29 (step 4, src/gl/framebuffer.rs), then src/v3d V3D_SAMPLED_TEXFMTS bits 26-29 and tmu_format":
     r32i_texture_renders_clears_and_reads "R32I";
     r32ui_texture_renders_clears_and_reads "R32UI";
     rg32i_texture_renders_clears_and_reads "RG32I";

@@ -4,14 +4,14 @@
 //! docs/notes/v3d-format-matrix.md; dEQP fbo.color, fbo.render and
 //! fbo.completeness.renderable.texture.color0.*, plan #383).
 //!
-//! The twelve formats (R8I .. RG32UI) are drawn today as renderbuffers, each
-//! on its own TLB surface (`GLES_SURF_R8I` ..). As textures they are held in
-//! the four-channel store of the same channel type and width, and the GL core
-//! answers GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT for them on the V3D because
-//! `integer_texture_internalformat` (src/gl/framebuffer.rs) takes such a store
-//! only where `WIDE_INT_RT` is set (the PowerVR: tests/es3_pvr_fbo_int_rg.rs).
+//! The twelve formats (R8I .. RG32UI) are drawn as renderbuffers each on its
+//! own TLB surface (`GLES_SURF_R8I` ..). As textures they are held in the
+//! four-channel store of the same channel type and width, and the V3D draws
+//! them as that store's wide surface (`WIDE_INT_RT`, src/gl/framebuffer.rs,
+//! as the PowerVR does: tests/es3_pvr_fbo_int_rg.rs) with the format's
+//! channels as the write mask; glReadPixels fills 0, 0, 1 for the others.
 //!
-//! Held and passing:
+//! Held:
 //!
 //! - each of the twelve as a renderbuffer at GL_COLOR_ATTACHMENT0 is complete;
 //!   an `ivec4` / `uvec4` draw reaches the back end on the format's own surface
@@ -19,13 +19,16 @@
 //!   GL_RGBA_INTEGER gives the format's channels and 0, 0, 1 for the absent ones;
 //! - the same renderbuffer beside an RGBA8 target (MRT): the draw is taken, or
 //!   refused with a reason that names its cause; it is never drawn with the one
-//!   draw-wide colour mask cut down to the narrower format's channels.
-//!
-//! Written in full and `#[ignore]`d until the V3D takes the wide store (plan
-//! #383 `v3d-wide-int-rt`): the same twelve as a TEXTURE_2D at attachment 0, as
-//! a TEXTURE_2D_ARRAY layer, as level 1 of a mipmapped texture, and beside an
-//! RGBA8 / RGBA8UI target at attachment 1 (a correct draw of both, or a
-//! refusal that names its cause, never the wrong picture).
+//!   draw-wide colour mask cut down to the narrower format's channels;
+//! - the same twelve as a TEXTURE_2D at attachment 0, as a TEXTURE_2D_ARRAY
+//!   layer and as level 1 of a mipmapped texture: complete, drawn on the wide
+//!   surface with the format's write mask, cleared and read back as above;
+//! - the texture beside an RGBA8 / RGBA8UI renderbuffer at attachment 1: with
+//!   every channel on the two targets need different masks and the V3D has
+//!   one for all (v3d_job.c), so the GL core refuses the draw by name
+//!   (`refuse_uneven_target_masks`, GL_INVALID_OPERATION, nothing handed to
+//!   the back end); with glColorMask on the format's channels alone, one mask
+//!   is right for both and the draw is taken with it.
 //!
 //! What it cannot see: the GPU. The back end here is a stand-in that records
 //! each draw (`state::refusal`, `state::unsupported`, `state::job_state`) and
@@ -567,11 +570,18 @@ fn a_renderbuffer_beside_another_target_is_drawn_or_refused_by_name() {
     }
 }
 
-/* ---- the textures: owed to the wide store (plan #383) --------------------- */
+/* ---- the textures: drawn as the wide store (plan #383) ------------------- */
+
+/// The channels (bit 0 R .. bit 3 A) of the format.
+fn own_mask(r: &Row) -> u8 {
+    (1u8 << r.channels) - 1
+}
 
 /// Everything a texture attachment of `kind` owes: complete; a draw reaches
-/// the back end taken (not refused), on a surface of the format's channel type
-/// and width; a clear reads back with 0, 0, 1 in the absent channels.
+/// the back end taken (not refused, `state::job_state` takes it) on the
+/// four-channel surface of the store, of the format's channel type and
+/// width, with the format's channels as the write mask; a clear reads back
+/// with 0, 0, 1 in the absent channels.
 fn expect_texture(r: &Row, kind: Kind) {
     let f = fbo(r, kind);
     assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{} {kind:?}", r.name);
@@ -587,14 +597,14 @@ fn expect_texture(r: &Row, kind: Kind) {
     let l = backend::gles_surf_int_layout(t.3).unwrap_or_else(|| panic!("{} {kind:?}: not an integer surface", r.name));
     let want = backend::gles_surf_int_layout(r.surf).unwrap();
     assert_eq!((l.bits, l.signed), (want.bits, want.signed), "{} {kind:?}: the store's type", r.name);
-    assert!(l.channels >= r.channels, "{} {kind:?}: the store holds the format's channels", r.name);
+    assert_eq!(l.channels, 4, "{} {kind:?}: the wide surface of the store, {}", r.name, gles_surf_name(t.3));
+    assert_eq!(s.color_mask, own_mask(r), "{} {kind:?}: only the format's channels are written", r.name);
     clear_and_read_back(r, f.w, &format!("{kind:?}"));
 }
 
 /// A TEXTURE_2D of each of the twelve at GL_COLOR_ATTACHMENT0
 /// (fbo.completeness.renderable.texture.color0.*, fbo.color.tex2d.*).
 #[test]
-#[ignore = "V3D: R/RG int texture needs WIDE_INT_RT (plan #383 v3d-wide-int-rt)"]
 fn r_and_rg_integer_texture_2d_at_attachment_0_completes_and_draws() {
     let _g = context();
     for r in ROWS {
@@ -604,7 +614,6 @@ fn r_and_rg_integer_texture_2d_at_attachment_0_completes_and_draws() {
 
 /// Layer 1 of a TEXTURE_2D_ARRAY (fbo.color.tex2darray.*).
 #[test]
-#[ignore = "V3D: R/RG int texture needs WIDE_INT_RT (plan #383 v3d-wide-int-rt)"]
 fn r_and_rg_integer_texture_2d_array_layer_completes_and_draws() {
     let _g = context();
     for r in ROWS {
@@ -614,7 +623,6 @@ fn r_and_rg_integer_texture_2d_array_layer_completes_and_draws() {
 
 /// Level 1 of a mipmapped TEXTURE_2D.
 #[test]
-#[ignore = "V3D: R/RG int texture needs WIDE_INT_RT (plan #383 v3d-wide-int-rt)"]
 fn r_and_rg_integer_texture_level_1_completes_and_draws() {
     let _g = context();
     for r in ROWS {
@@ -623,12 +631,16 @@ fn r_and_rg_integer_texture_level_1_completes_and_draws() {
 }
 
 /// The texture at attachment 0 beside an RGBA8 / RGBA8UI renderbuffer at
-/// attachment 1: complete; the draw is taken with a mask that is right for
-/// both targets, or refused with a reason that names its cause. The wrong
-/// picture (the draw-wide mask cut to the texture's channels while the
-/// second target has four) fails.
+/// attachment 1, complete. The V3D writes one colour mask to every render
+/// target (v3d_job.c, RT 0's), so:
+///
+/// - every channel on: the texture needs the format's channels, the
+///   renderbuffer all four. The GL core refuses the draw by name
+///   (draw.rs `refuse_uneven_target_masks`): GL_INVALID_OPERATION and the
+///   back end is handed nothing, never the wrong picture;
+/// - glColorMask on the format's channels alone: both targets need the same
+///   mask, and the draw reaches the back end with it on both targets.
 #[test]
-#[ignore = "V3D: R/RG int texture needs WIDE_INT_RT (plan #383 v3d-wide-int-rt)"]
 fn r_and_rg_integer_texture_beside_another_target_is_drawn_or_refused_by_name() {
     let _g = context();
     for r in ROWS {
@@ -637,8 +649,22 @@ fn r_and_rg_integer_texture_beside_another_target_is_drawn_or_refused_by_name() 
             add_second(&mut f, second);
             assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{} beside {second:#x}", r.name);
             program_two(&r, second_ty);
+
             let (seen, e) = draw();
-            check_mrt(&r, &format!("texture beside {second:#x}"), 0xf, seen, e);
+            assert_eq!(e, GL_INVALID_OPERATION, "{} beside {second:#x}, every channel on: refused", r.name);
+            assert!(seen.is_none(), "{} beside {second:#x}, every channel on: the back end saw a draw", r.name);
+
+            // SAFETY: plain GL call.
+            unsafe { glColorMask(1, (r.channels == 2) as GLboolean, 0, 0) };
+            let (seen, e) = draw();
+            let what = format!("beside {second:#x}, the format's channels on");
+            assert_eq!(e, GL_NO_ERROR, "{} {what}", r.name);
+            let s = seen.unwrap_or_else(|| panic!("{} {what}: the back end saw no draw", r.name));
+            assert_eq!(s.refused, None, "{} {what}", r.name);
+            assert_eq!(s.targets.len(), 2, "{} {what}: two targets", r.name);
+            assert_eq!(s.color_mask, own_mask(&r), "{} {what}: one mask, right for both", r.name);
+            // SAFETY: plain GL call.
+            unsafe { glColorMask(1, 1, 1, 1) };
         }
     }
 }
