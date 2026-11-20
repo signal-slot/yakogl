@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! `textureGrad` with `GL_TEXTURE_BASE_LEVEL` > 0 on the V3D (plan #382 item
-//! gradbasepin, issue #1261; the dEQP-GLES3 `texturegrad.*` cases of S32a).
+//! gradbasepin, issue #1261; the dEQP-GLES3 3D and 2D-array `textureGrad`
+//! cases of S32a).
 //!
-//! `textureGrad` on a 3D texture or a 2D array reads the size uniform words
-//! 44-46 as well: the compiler scales the gradients by the size (see
-//! tests/es3_texsize3d_v3d.rs `a_3d_texture_grad_scales_its_gradients_by_the_depth_too`).
-//! The words come from the draw's `V3dJobTmu` (`texture_units` in
-//! src/v3d/backend.rs), which today holds the LEVEL-0 sizes:
-//! `GL_TEXTURE_BASE_LEVEL` is not applied. tests/es3_texsize_base_level_v3d.rs
-//! and tests/es3_texsize_base_level_vs_v3d.rs pin the same for `textureSize`.
+//! `textureGrad` reads the same size uniform words as `textureSize` (44
+//! width, 45 height, 46 depth for a 3D texture; the compiler's `grad_lod`
+//! scales the gradients by them and hands the TMU an explicit lod), filled
+//! from the draw's `V3dJobTmu` (`texture_units` in src/v3d/backend.rs),
+//! which today holds the LEVEL-0 sizes: `GL_TEXTURE_BASE_LEVEL` is not
+//! applied there (tests/es3_texsize_base_level_v3d.rs pins the same for
+//! `textureSize`). When the words follow the base level (Mesa's
+//! v3d_uniforms.c `u_minify(first_level)` for width, height and depth, the
+//! layer count as is) the gradient scaling follows too; whether the TMU
+//! then adds the base level to the explicit lod a second time is the open
+//! question of the item gradbase.
 //!
-//! The BASE_LEVEL 0 controls assert the correct sizes and stay. Each
+//! The BASE_LEVEL 0 controls assert the correct sizes and stay; each
 //! `..._flip_when_the_base_level_is_applied` test asserts today's level-0
-//! record with BASE_LEVEL 1 and says in its doc comment what the value is
-//! once the words follow the base level; the fix flips those asserts.
+//! record with BASE_LEVEL 1 and says in its doc comment what the correct
+//! value is; the fix flips those asserts in its commit.
 //!
 //! The textures are 16x16 (x8 deep, x5 layers) with the whole mip chain
-//! given level by level, so they are complete at BASE_LEVEL 1.
+//! given level by level, NEAREST filters, so they are complete at
+//! BASE_LEVEL 1.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_grad_base_level_v3d
@@ -520,18 +526,19 @@ impl Kind {
             Kind::Array => GL_TEXTURE_2D_ARRAY,
         }
     }
-    /// The sampler type and the `textureGrad` the fragment shader does.
+    /// The sampler type of the shader and the `textureGrad` it does, with
+    /// gradients from the varying so the compiler cannot fold them.
     fn sampler(self) -> (&'static str, &'static str) {
         match self {
-            Kind::Tex3d => ("sampler3D", "textureGrad(s, v.xyz * 0.5 + 0.5, vec3(0.01), vec3(0.01))"),
-            Kind::Array => ("sampler2DArray", "textureGrad(s, vec3(v.xy * 0.5 + 0.5, 1.0), vec2(0.01), vec2(0.01))"),
+            Kind::Tex3d => ("sampler3D", "textureGrad(s, vec3(0.5), v.xyz * 0.01, v.zxy * 0.01)"),
+            Kind::Array => ("sampler2DArray", "textureGrad(s, vec3(0.5, 0.5, 1.0), v.xy * 0.01, v.yx * 0.01)"),
         }
     }
 }
 
-/// A complete `kind` texture on unit 0, `GL_TEXTURE_BASE_LEVEL` `base`:
-/// 16x16, 3D 8 deep (halved per level), array 5 layers (the same at every
-/// level), with a mipmapped minification filter.
+/// A complete `kind` texture of the module on unit 0, `GL_TEXTURE_BASE_LEVEL`
+/// `base`: 16x16, 3D 8 deep (halved per level), array 5 layers (the same at
+/// every level).
 fn texture(kind: Kind, base: GLint) -> GLuint {
     let target = kind.target();
     let mut t = 0;
@@ -542,24 +549,18 @@ fn texture(kind: Kind, base: GLint) -> GLuint {
         glBindTexture(target, t);
         for level in 0..LEVELS {
             let w = (SIZE >> level).max(1) as GLsizei;
-            let d = match kind {
-                Kind::Tex3d => (8 >> level).max(1) as GLsizei,
-                Kind::Array => 5,
-            };
-            glTexImage3D(
-                target,
-                level as GLint,
-                GL_RGBA8 as GLint,
-                w,
-                w,
-                d,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                core::ptr::null(),
-            );
+            let none = core::ptr::null();
+            match kind {
+                Kind::Tex3d => {
+                    let d = (8 >> level).max(1) as GLsizei;
+                    glTexImage3D(target, level as GLint, GL_RGBA8 as GLint, w, w, d, 0, GL_RGBA, GL_UNSIGNED_BYTE, none)
+                }
+                Kind::Array => {
+                    glTexImage3D(target, level as GLint, GL_RGBA8 as GLint, w, w, 5, 0, GL_RGBA, GL_UNSIGNED_BYTE, none)
+                }
+            }
         }
-        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST as GLint);
+        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST as GLint);
         glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST as GLint);
         glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE as GLint);
         glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE as GLint);
@@ -569,16 +570,16 @@ fn texture(kind: Kind, base: GLint) -> GLuint {
     t
 }
 
-/// The unit 0 record the job builder gets for a fragment `textureGrad` of a
-/// `kind` texture with `GL_TEXTURE_BASE_LEVEL` `base`: the draw is accepted,
-/// the unit has its texture record, and the `(width, height, depth,
-/// array_size)` the words 44-47 read.
+/// The unit 0 record the job builder gets for a fragment `textureGrad`
+/// of a `kind` texture with `GL_TEXTURE_BASE_LEVEL` `base`: the draw is
+/// accepted (no GL error, no refusal), the unit has its texture record, and
+/// the `(width, height, depth, array_size)` the words 44-47 read.
 fn unit0_sizes(kind: Kind, base: GLint) -> (u32, u32, u32, u32) {
     let t = texture(kind, base);
-    let (ty, grad) = kind.sampler();
+    let (ty, query) = kind.sampler();
     let fs = format!(
         "#version 300 es\nprecision highp float;\nprecision highp {ty};\nuniform {ty} s;\nin highp vec4 v;\n\
-         out vec4 o;\nvoid main() {{ o = {grad}; }}\n"
+         out vec4 o;\nvoid main() {{ o = {query}; }}\n"
     );
     let p = program(VS, &fs);
     let e = draw_triangle();
@@ -615,12 +616,13 @@ fn a_2d_array_grad_at_base_level_0_has_its_level_0_size() {
 
 /* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x8 `sampler3D`
-/// `textureGrad` still hands the level-0 size words, 16x16 and depth 8, so
-/// the compiler scales the gradients by level 0's size. Once the words follow
-/// the base level the value is 8x8 and depth 4 (`u_minify(first_level)` of
-/// width, height and depth). Flip to (8, 8, 4, 1) then, and check that the
-/// base level is not applied twice (words and TMU).
+/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 16x16x8
+/// `sampler3D` `textureGrad` hands the job builder the LEVEL-0 size and
+/// depth, 16x16 and 8, so the compiler scales the gradients by those. The
+/// post-fix value is the base level's: 8x8 and depth 4 (Mesa's v3d_uniforms.c
+/// `u_minify(first_level)` of width, height and depth). Flip the assert to
+/// (8, 8, 4, 1) when the base level is applied, and check then that the TMU
+/// does not add the base level to the explicit lod again (item gradbase).
 #[test]
 fn a_3d_texture_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
@@ -628,9 +630,10 @@ fn a_3d_texture_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_
 }
 
 /// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x5 `sampler2DArray`
-/// `textureGrad` hands 16x16 and 5 layers. Once the words follow the base
-/// level the value is 8x8 and 5 layers, which are never minified. Flip to
-/// (8, 8, 1, 5) then; only the width and height change.
+/// `textureGrad` hands 16x16 and 5 layers. The post-fix value is 8x8 and 5
+/// layers: the layer count is never minified (Mesa writes the array size as
+/// is). Flip to (8, 8, 1, 5) when the base level is applied; only the width
+/// and height change.
 #[test]
 fn a_2d_array_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
