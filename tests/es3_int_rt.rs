@@ -407,11 +407,11 @@ mod es3 {
     /// at colour attachment 0 and beyond it.
     ///
     /// The R and RG classes are held widened to four channels (`es3_formats`),
-    /// a store that is not the layout of their surface: the PowerVR draws
-    /// them as the four-channel surface of the store
-    /// (tests/es3_pvr_fbo_int_rg.rs), the other back ends keep them
-    /// incomplete, except the 32-bit classes a back end stores in their own
-    /// class (`integer_texture_surface` has their rows).
+    /// a store that is not the layout of their surface: the PowerVR and the
+    /// V3D draw them as the four-channel surface of the store
+    /// (tests/es3_pvr_fbo_int_rg.rs, tests/es3_v3d_fbo_int_rg.rs), the GC7000
+    /// keeps them incomplete, except the 32-bit classes it stores in their
+    /// own class (`integer_texture_surface` has their rows).
     #[test]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
@@ -422,7 +422,8 @@ mod es3 {
             made += 1;
             // the GC samples and draws the 32-bit R and RG classes as their own surface (RC17)
             let own = cfg!(feature = "gpu-vivante") && bits == 32;
-            let want = if channels == 4 || own || cfg!(feature = "gpu-powervr") {
+            let wide = cfg!(feature = "gpu-powervr") || cfg!(feature = "gpu-v3d");
+            let want = if channels == 4 || own || wide {
                 GL_FRAMEBUFFER_COMPLETE
             } else {
                 GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT

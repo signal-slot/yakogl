@@ -21,9 +21,9 @@
 //! formats as texture attachments: the ones the GL core takes (the
 //! four-channel integer classes, R16F, RG16F, RGB16F, RGBA16F, and R32F
 //! under the same gate as the renderbuffer rows) read the same;
-//! the narrow integer textures are incomplete attachments today (pinned
-//! with their expected results in tests/es3_narrow_int_rt_v3d.rs), so no
-//! readback of them begins.
+//! the one- and two-channel integer textures, held and drawn as the
+//! four-channel store of their type (`WIDE_INT_RT`), read their clear with
+//! 0, 0, 1 in the channels the format lacks.
 //!
 //! The rig is tests/es3_pbo_rb_clears_v3d.rs' `gl_rig`: the job builder and
 //! the GPU stood in for. The stand-in GPU applies a job's whole-target clear
@@ -1353,27 +1353,33 @@ fn texture_attachments_read_their_clear_the_same() {
     }
 }
 
-/// The one- and two-channel integer textures are
-/// GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT today (the GL core admits only the
-/// four-channel integer classes on the V3D: pinned, with the expected
-/// results, in tests/es3_narrow_int_rt_v3d.rs), so no readback of them
-/// begins: the read is refused (the pair check or completeness, see
-/// `an_incomplete_framebuffer_is_refused`) and writes nothing. (The RGB16F
-/// texture is a colour attachment, `texture_attachments_read_their_clear_the_same`.)
+/// The one- and two-channel integer textures are complete colour attachments
+/// on the V3D (`WIDE_INT_RT`, src/gl/framebuffer.rs): they are held in the
+/// four-channel store of their channel type and width, drawn and cleared as
+/// that store's surface, and read back with the format's channels and 0, 0, 1
+/// for the others (ES 3.0 4.3.2), whatever the store holds there. Pinned with
+/// the draw in tests/es3_v3d_fbo_int_rg.rs and tests/es3_narrow_int_rt_v3d.rs.
 #[test]
-fn narrow_integer_textures_are_incomplete_today() {
+fn narrow_integer_textures_read_their_clear_with_0_0_1() {
     let _g = gl_rig::rig();
-    let incomplete: Vec<&Fmt> = INTS.iter().filter(|f| f.channels < 4).collect();
-    assert_eq!(incomplete.len(), 12);
-    for f in incomplete {
+    let narrow: Vec<&Fmt> = INTS.iter().filter(|f| f.channels < 4).collect();
+    assert_eq!(narrow.len(), 12);
+    for f in narrow {
         let (tex, fbo) = texture_fb(f);
         // SAFETY: a plain GL call.
         let status = unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) };
-        assert_eq!(status, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "{}", f.name);
+        assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "{}", f.name);
+        f.clear(0);
+        assert_eq!(gl_rig::err(), GL_NO_ERROR, "{}: the clear", f.name);
         let (format, ty) = f.pair();
         let (e, px) = read(format, ty);
-        assert!(matches!(e, GL_INVALID_OPERATION | GL_INVALID_FRAMEBUFFER_OPERATION), "{}: {e:#x}", f.name);
-        assert!(px.iter().all(|w| *w == 0xdead_beef), "{}: nothing is written", f.name);
+        assert_eq!(e, GL_NO_ERROR, "{}: {:?}", f.name, gl_rig::logs());
+        for (i, p) in px.chunks(4).enumerate() {
+            assert_eq!(p, f.expect(), "{} texture pixel {i}", f.name);
+        }
+        let pair = implementation_pair();
+        assert_eq!(read_error(pair.0, pair.1), GL_NO_ERROR, "{}: the implementation's pair", f.name);
+        nothing_refused(f.name);
         release_texture_fb(tex, fbo);
     }
 }

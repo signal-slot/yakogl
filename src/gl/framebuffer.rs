@@ -416,10 +416,14 @@ fn integer_texture_internalformat(t: &context::GlTexture) -> Option<GLenum> {
 /// Does this build draw an R or RG integer texture as the four-channel surface
 /// of its widened store? The PowerVR does: its PBE writes the wide integer
 /// surfaces (`pbe_int_packmode`) and the online compiler packs all four
-/// channels of the output for them. The V3D and the GC7000 keep such a texture
-/// incomplete until their own runs check a narrow format beside other targets
-/// (one `GlesDraw::color_mask` is the whole draw's there).
-const WIDE_INT_RT: bool = cfg!(feature = "gpu-powervr");
+/// channels of the output for them. The V3D does: `rt_format` has the wide
+/// RGBA integer surfaces and their strides, and COLOR_WRITE_MASKS keeps the
+/// channels the format lacks out (`GlesDraw::color_mask`). Its one mask is
+/// every render target's (v3d_job.c, RT 0's mask for all), so a draw where
+/// another target would need a different mask is refused by name
+/// (draw.rs `refuse_uneven_target_masks`). The GC7000 keeps such a texture
+/// incomplete.
+const WIDE_INT_RT: bool = cfg!(any(feature = "gpu-powervr", feature = "gpu-v3d"));
 
 /// Is `wide` the four-channel integer surface an R or RG integer surface
 /// `narrow` is widened into: the same channel width and signedness?

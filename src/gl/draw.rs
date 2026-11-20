@@ -2713,6 +2713,55 @@ fn refuse_undrawable_targets(d: &GlesDraw, mask: u8) -> Result<(), DrawError> {
     Ok(())
 }
 
+/// Does the back end write one colour mask to every render target of a draw?
+/// The V3D does: without independent blend its COLOR_WRITE_MASKS gives every
+/// RT the mask of RT 0 (driver/src/v3d/v3d_job.c, Mesa's v3dx_emit.c:571-585),
+/// which is `GlesDraw::color_mask`.
+const ONE_COLOR_MASK: bool = cfg!(feature = "gpu-v3d");
+
+/// [`refuse_uneven_target_masks`] has logged its refusal (one line, not one
+/// per draw).
+static REFUSED_UNEVEN_MASK: Global<bool> = Global::new(false);
+
+/// A draw into several colour targets where one mask cannot be right for all
+/// of them is refused by name before it reaches a back end that has one mask
+/// for every target ([`ONE_COLOR_MASK`]). Each target writes the application's
+/// mask `app` limited to its own channels: an R or RG integer texture drawn as
+/// the four-channel surface of its store has only the format's
+/// ([`framebuffer::fb_target_channel_mask_n`]), every other target all four.
+/// `d.color_mask` is the frame target's. Another written target whose mask
+/// differs (an R8I texture beside an RGBA8 renderbuffer, every channel on)
+/// would take the frame target's mask and lose channels it must write, or
+/// the texture would take channels its store must not hold: either is the
+/// wrong picture, so the draw is dropped with GL_INVALID_OPERATION.
+fn refuse_uneven_target_masks(c: &GlContext, d: &GlesDraw, app: u8) -> Result<(), DrawError> {
+    let lead = d.targets[0].out_shift;
+    for (i, t) in d.targets[..d.num_targets as usize].iter().enumerate().skip(1) {
+        if t.gpu == 0 {
+            continue;
+        }
+        let own = app & framebuffer::fb_target_channel_mask_n(c, lead + i as u8);
+        if own == d.color_mask {
+            continue;
+        }
+        // SAFETY: single-threaded by contract; no other reference is live.
+        let reported = unsafe { REFUSED_UNEVEN_MASK.get() };
+        if !*reported {
+            *reported = true;
+            glog!(
+                "draw refused: colour mask {:#x} of the frame target, {:#x} of draw buffer {} (an R or RG \
+                 integer texture writes only its format's channels), and this back end has one colour mask \
+                 for every target",
+                d.color_mask,
+                own,
+                lead as usize + i
+            );
+        }
+        return Err((GL_INVALID_OPERATION, "refuse_uneven_target_masks"));
+    }
+    Ok(())
+}
+
 /// The draw's colour targets, built from the glDrawBuffers mapping (ES 3.0
 /// 4.2.1): slot i is draw buffer i, which writes attachment i or nothing.
 /// Each written slot carries its attachment's memory, size and format.
@@ -4960,7 +5009,11 @@ fn build_common(
     d.color_mask = (!disabled_channels(c) & 0xf) as u8;
     /* an R or RG integer texture drawn as its four-channel surface: only the
      * format's channels (the others read 0, 0, 1) */
+    let app_mask = d.color_mask;
     d.color_mask &= framebuffer::fb_target_channel_mask_n(c, framebuffer::frame_attachment(c));
+    if ONE_COLOR_MASK && d.target_gpu != 0 {
+        refuse_uneven_target_masks(c, d, app_mask)?;
+    }
     /* no colour target (a depth/stencil-only framebuffer): nothing of colour
      * is written, whatever glColorMask says */
     if d.target_gpu == 0 {
