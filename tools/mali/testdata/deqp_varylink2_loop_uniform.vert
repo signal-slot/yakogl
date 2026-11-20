@@ -1,0 +1,59 @@
+/* dEQP-GLES2.functional.shaders.indexing.tmp_array.float_const_write_dynamic_loop_read_vertex (vertex shader),
+ * verbatim from the .qpa of tools/mali/deqp-host-measure.sh at cc89a1cf
+ * (VK-GL-CTS 93bca018, Apache-2.0). Shape loop_uniform of
+ * docs/notes/mali-deqp-varylink2.md: a lane a run-time loop computes from constants alone, refused by the vertex shader compiled alone. */
+attribute highp vec4 a_position;
+attribute highp vec4 a_coords;
+varying mediump vec4 v_color;
+uniform mediump int ui_four;
+
+void main()
+{
+    gl_Position = a_position;
+    mediump float arr[40];
+    arr[0] = float(0.125);
+    arr[1] = float(0.125) * 0.5;
+    arr[2] = float(0.125) * 0.25;
+    arr[3] = float(0.125) * 0.125;
+    int i = 4;
+    arr[i++] = float(4.0);
+    arr[i++] = float(5.0);
+    arr[i++] = float(6.0);
+    arr[i++] = float(7.0);
+    arr[i++] = float(8.0);
+    arr[i++] = float(9.0);
+    arr[i++] = float(10.0);
+    arr[i++] = float(11.0);
+    arr[i++] = float(12.0);
+    arr[i++] = float(13.0);
+    arr[i++] = float(14.0);
+    arr[i++] = float(15.0);
+    arr[i++] = float(16.0);
+    arr[i++] = float(17.0);
+    arr[i++] = float(18.0);
+    arr[i++] = float(19.0);
+    arr[i++] = float(20.0);
+    arr[i++] = float(21.0);
+    arr[i++] = float(22.0);
+    arr[i++] = float(23.0);
+    arr[i++] = float(24.0);
+    arr[i++] = float(25.0);
+    arr[i++] = float(26.0);
+    arr[i++] = float(27.0);
+    arr[i++] = float(28.0);
+    arr[i++] = float(29.0);
+    arr[i++] = float(30.0);
+    arr[i++] = float(31.0);
+    arr[i++] = float(32.0);
+    arr[i++] = float(33.0);
+    arr[i++] = float(34.0);
+    arr[i++] = float(35.0);
+    arr[i++] = float(36.0);
+    arr[i++] = float(37.0);
+    arr[i++] = float(38.0);
+    arr[i++] = float(39.0);
+    mediump float res = float(0.0);
+    for (int i = 0; i < ui_four; i++)
+        res += arr[i];
+    v_color = vec4(res, 0.0, 0.0, 1.0);
+}
