@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Toradex Verdin iMX95 (on the Mallow carrier), Cortex-A55 cluster. Zephyr
+# has no Verdin iMX95 board; this one is derived from Zephyr's imx95_evk A55
+# board at the workspace pin (west.yml, zephyr af17c0c8aa2a), with the
+# module's differences from mainline Linux's imx95-verdin.dtsi and
+# imx95-verdin-mallow.dtsi.
+#   verdin_imx95/mimx9596/a55  an image started by U-Boot ("go 0xd0000000",
+#                              docs/standalone-boot.md, "Toradex Verdin
+#                              iMX95"); not run on a board yet
+board:
+  name: verdin_imx95
+  full_name: Verdin iMX95
+  vendor: toradex
+  socs:
+  - name: mimx9596

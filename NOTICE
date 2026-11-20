@@ -410,6 +410,20 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
     the boot, interface discovery, global init and ping sequences of
     panthor_fw.c, transcribed under MIT.
 
+13. Zephyr RTOS (https://github.com/zephyrproject-rtos/zephyr) at af17c0c8aa2a
+    (the workspace pin, west.yml), the i.MX 95 EVK board
+    (boards/nxp/imx95_evk/): Licence Apache-2.0, Copyright 2024-2026 NXP.
+    driver/boards/toradex/verdin_imx95/ is derived from its A55 files
+    (imx95_evk_mimx9596_a55.dts, _defconfig, Kconfig.imx95_evk,
+    Kconfig.defconfig, the lpuart1 group of imx95_evk-pinctrl.dtsi); each file
+    names its origin and keeps NXP's copyright line. The Verdin iMX95's own
+    values in them (the console UART and its pad setting, the Mali node, the
+    GPU's clock and power-domain ids) are read from mainline Linux's
+    arch/arm64/boot/dts/freescale/imx95.dtsi, imx95-verdin.dtsi,
+    imx95-verdin-mallow.dtsi, imx95-clock.h and imx95-power.h (torvalds/linux
+    65e4fd942f72; GPL-2.0-or-later OR MIT, Copyright NXP and Toradex), used
+    under MIT as facts, no text copied.
+
 Material written after GPL-only sources (Linux display, v3d and
 bcm2835-power drivers) is listed in docs/source-form.md with the plan
 to replace it; it is not relicensed by this file.
