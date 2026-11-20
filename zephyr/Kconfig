@@ -93,11 +93,13 @@ config YAKOGL_GPU_MALI
 	  most 16 times in an image; each restart prints one UART line. Errors
 	  that need a GPU reset, or one past the 16, leave the OSAL dead: every
 	  later kick is -EIO. board::nanopc_t6_osal ("Recovery") lists them.
-	  On the Verdin iMX95 (i.MX 95, Mali-G310) the image builds and links
-	  with the same OSAL, but its board half is a stub
-	  (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c): no CSF
-	  firmware is embedded and the GPU is not brought up, so EGL's init
-	  fails with a line that names both.
+	  On the Verdin iMX95 (i.MX 95, Mali-G310) the same OSAL runs over
+	  the board's half
+	  (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c): the
+	  same CSF firmware embedded (the arch 10.12 file is the arch 10.8
+	  bytes), the GPU powered over SCMI to the System Manager, then the
+	  T6's bring-up from GPU_ID on (yd_imx95_osal_up). Built and
+	  host-tested; not run on a board yet.
 
 endchoice
 
