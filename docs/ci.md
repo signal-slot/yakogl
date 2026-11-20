@@ -482,6 +482,36 @@ runners that does not allow public repositories. `gate.yml` uses no
 `ubuntu-latest` on pushes to main and by dispatch only, so no fork reaches
 it.
 
+### 3.6 The disk (2026-11-20)
+
+A full walk filled a 193 GB host that had about 110 GB in use (plan #344's
+walk-fit: it ran out with about 84 GB written). `tools/check.sh` now keeps
+less on disk:
+
+- `CARGO_INCREMENTAL=0` for every row unless the caller set the variable:
+  a gate builds each configuration once, and the incremental caches only
+  grew `<target>/debug/incremental`. The test binaries' bytes change with
+  it, so the first run after the change runs every binary (no "passed on
+  main" entry matches) until the nightly records the new ones.
+- A directory only some rows read goes when its last reader ends
+  (`prune_after_row`; each call names that row): the artefact row's
+  `<target>/check-artefact` (four release target directories), after the
+  "no Mesa reference in the artefact" row; `build/pvr-check/rgx-target`
+  after the "run pvr km_check" row; each Zephyr image under
+  `build/zephyr-werror/<image>` after the row that built it (its `.log`
+  stays). The row's log prints a `prune` line with the size. Never pruned:
+  the test-ok store and `build/precompiled/*.rs` (cache keys read them),
+  `build/glmark2-host/shaders` (later test rows read it).
+  `YAKOGL_CHECK_PRUNE=0` keeps them all, for a warm rerun on a host with
+  the room: the artefact row then starts warm, as before.
+- A heavy row (its label starts with `clippy`, `test` or `zephyr`) starts
+  only when the filesystems of the cargo target directory
+  (`CARGO_TARGET_DIR`, else `target`) and of `build/` each have
+  `YAKOGL_CHECK_MIN_FREE_GB` GiB free (default 8; 0 turns the check off).
+  Below that the row fails with `check.sh: not enough free disk: <path> has
+  N bytes free, this row needs M`: a full disk is the host's failure, never
+  a gap or a skip.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;
