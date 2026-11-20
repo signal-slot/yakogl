@@ -333,6 +333,24 @@ fn vs_prog71<'a>(
     })
 }
 
+/// The lines variant's fragment operations: each `gl_PointCoord` lane a
+/// constant 0.0, so that select_fragment takes no implicit point varying
+/// (Mesa nir_to_vir.c:4869-4878 takes none for a lines FS without line
+/// smoothing). The same operations otherwise, at the same indices.
+fn point_coord_as_zero<'a>(ops: &'a [SOp], a: &'a Arena<'a>) -> Result<&'a [SOp], ArenaError> {
+    if !ops.iter().any(|o| matches!(o, SOp::PointCoord { .. })) {
+        return Ok(ops);
+    }
+    let out = a.alloc_filled(ops.len(), SOp::Const(0))?;
+    for (o, &op) in out.iter_mut().zip(ops) {
+        *o = match op {
+            SOp::PointCoord { .. } => SOp::Const(0.0f32.to_bits()),
+            op => op,
+        };
+    }
+    Ok(out)
+}
+
 /// Compile the GL program `vs` + `fs` for `prim` on `target` at 7.1, with
 /// the keys chain.rs `compile_program` uses.
 pub fn compile_program71<'a>(
@@ -357,19 +375,40 @@ pub fn compile_program71_keyed<'a>(
     fs_key: LodKey,
     a: &'a Arena<'a>,
 ) -> Result<V3dProgram71<'a>, V3d71Error> {
-    /* chain-hook replaces this: chain.rs:406-410, the primitive. */
-    match prim {
-        Prim::Triangles => {}
-        Prim::Lines => return Err(V3dError::NotYet("the lines variant of the fragment shader").into()),
-        Prim::Points => return Err(V3dError::NotYet("the points variant of the fragment shader").into()),
-    }
+    /* The primitive (chain.rs:437-441 refuses Points and Lines at 4.2; 7.1
+     * compiles both). Mesa keys the fragment shader by it (v3d_program.c:
+     * 604-606, is_points and is_lines) and reads it in one place,
+     * nir_to_vir.c:4869-4878: a points FS that reads gl_PointCoord takes
+     * the two implicit point varyings first; a lines FS takes the implicit
+     * line varying only for SYSTEM_VALUE_LINE_COORD, which only the line
+     * smoothing lowering reads (vir.c:1282-1283, key line_smoothing,
+     * v3d_program.c:607-608), and ES has no line smoothing. The vertex and
+     * coordinate shaders are the same for every primitive here: Mesa's
+     * per_vertex_point_size (v3d_program.c:783-785, v3d_nir_lower_io.c:427)
+     * only leaves gl_PointSize out of a non-points VPM row, and our records
+     * carry the row whenever the shader writes it (writes_psiz).
+     *
+     * Triangles keeps the link-time program 4.2 builds (select.rs
+     * select_fragment: the implicit point varyings whenever the shader
+     * reads gl_PointCoord; the GL table draws such a program as points
+     * only, src/v3d/backend.rs), so Points is that program word for word.
+     * Lines is Mesa's is_lines program: no implicit varying, and
+     * gl_PointCoord, undefined off a point (GLSL ES 1.00 section 7.2),
+     * reads 0.0 ([`point_coord_as_zero`]). */
+    let lines = match prim {
+        Prim::Triangles | Prim::Points => false,
+        Prim::Lines => true,
+    };
     /* chain-hook replaces this: chain.rs:411-418, loops first. */
     let (vs, vs_trips) = unrolled(vs, a)?;
     let (fs, fs_trips) = unrolled(fs, a)?;
 
     /* chain-hook replaces this: chain.rs:420-449, the fragment shader's
      * inputs and their flat and centroid bits. */
-    let fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a).map_err(V3dError::from)?;
+    let mut fsp = prepare_fragment_with(fs, fs_trips, fs_key.cube_noseam, a).map_err(V3dError::from)?;
+    if lines {
+        fsp.ops = point_coord_as_zero(fsp.ops, a)?;
+    }
     let inputs = fragment_inputs(&fsp, a).map_err(V3dError::from)?;
     let mut flat = 0u64;
     let mut centroid = 0u64;
@@ -637,12 +676,12 @@ mod tests {
         let fs = |body: &str| std::format!("precision mediump float; varying vec4 v_color; void main() {{ {body} }}");
         /* prepare.rs counted_loop: an output written in a loop that can
          * leave on data (chain.rs what_this_cut_does_not_compile_is_refused_by_name);
-         * a varying the vertex shader does not declare; the points and
-         * lines variants. */
+         * a varying the vertex shader does not declare. (The points and
+         * lines variants compile at 7.1: points_and_lines_compile_at_7_1.) */
         let loop_fs = fs("vec4 c = v_color; for (float f = 0.0; f < 2.0; f += 1.0) { if (c.x > 0.5) break; \
                           gl_FragColor = c; c = c * v_color; }");
         let no_varying_vs = "attribute vec4 a_pos; void main() { gl_Position = a_pos; }";
-        let cases: [(&str, &str, Prim, V3dError); 4] = [
+        let cases: [(&str, &str, Prim, V3dError); 2] = [
             (
                 PASSTHROUGH_VS,
                 &loop_fs,
@@ -650,8 +689,6 @@ mod tests {
                 V3dError::NotYet("an output written inside a loop that can leave on data"),
             ),
             (no_varying_vs, INTERP_FS, Prim::Triangles, V3dError::VaryingWithoutVertexOutput),
-            (PASSTHROUGH_VS, INTERP_FS, Prim::Points, V3dError::NotYet("the points variant of the fragment shader")),
-            (PASSTHROUGH_VS, INTERP_FS, Prim::Lines, V3dError::NotYet("the lines variant of the fragment shader")),
         ];
         for (vs, fs, prim, want) in cases {
             with_modules(vs, fs, |v, f, a| {
@@ -663,6 +700,129 @@ mod tests {
                 }
             });
         }
+    }
+
+    /// es100/pointcoord.frag's shape with a declared varying beside it:
+    /// gl_PointCoord in red and green, the varying in blue.
+    const POINT_FS: &str = "precision mediump float; varying vec4 v_color; \
+                            void main() { gl_FragColor = vec4(gl_PointCoord, v_color.x, 1.0); }";
+
+    /// `vs` + `fs` at 7.1 for `prim`, every stage through [`check71`].
+    fn compile71<'a>(v: &'a ir::Module<'a>, f: &'a ir::Module<'a>, prim: Prim, a: &'a Arena<'a>) -> V3dProgram71<'a> {
+        let p = compile_program71_keyed(v, f, prim, TARGET71, LodKey::NONE, LodKey::NONE, a)
+            .unwrap_or_else(|e| panic!("{prim:?}: {e:?}"));
+        check71("fs", &p.fs.code, p.fs.threads, p.fs.single_seg);
+        check71("vs", &p.vs.code, p.vs.threads, p.vs.single_seg);
+        check71("cs", &p.cs.code, p.cs.threads, p.cs.single_seg);
+        p
+    }
+
+    fn ldvarys(c: &Code71<'_>) -> usize {
+        c.instrs.iter().filter(|i| matches!(i, Instr71::Alu(x) if x.sig.ldvary)).count()
+    }
+
+    /// Both variants compile at 7.1 (the 4.2 chain still refuses them), every
+    /// word decoding to its instruction and verify71 passing. The vertex and
+    /// coordinate shaders are the Triangles program's for every primitive;
+    /// so is the fragment shader of a program that does not read
+    /// gl_PointCoord, and of every points variant.
+    #[test]
+    fn points_and_lines_compile_at_7_1() {
+        for (what, vs, fs) in [PAIRS[0], PAIRS[1], ("passthrough+point", PASSTHROUGH_VS, POINT_FS)] {
+            with_modules(vs, fs, |v, f, a| {
+                let tri = compile71(v, f, Prim::Triangles, a);
+                let reads_pntc = tri.fs.uses_implicit_point_line_varyings;
+                assert_eq!(reads_pntc, fs == POINT_FS, "{what}");
+                for prim in [Prim::Points, Prim::Lines] {
+                    let p = compile71(v, f, prim, a);
+                    for (s, o, t) in [("vs", &p.vs, &tri.vs), ("cs", &p.cs, &tri.cs)] {
+                        assert_eq!(o.code.words, t.code.words, "{what} {prim:?} {s}");
+                        assert_eq!(o.code.uniforms, t.code.uniforms, "{what} {prim:?} {s}");
+                    }
+                    assert_eq!(p.fs.input_slots, tri.fs.input_slots, "{what} {prim:?}");
+                    assert_eq!(p.attributes, tri.attributes, "{what} {prim:?}");
+                    let same_fs = prim == Prim::Points || !reads_pntc;
+                    assert_eq!(p.fs.code.words == tri.fs.code.words, same_fs, "{what} {prim:?}");
+                    assert_eq!(p.fs.uses_implicit_point_line_varyings, prim == Prim::Points && reads_pntc, "{what}");
+                    /* 4.2 is unchanged: it refuses both variants by name */
+                    assert!(
+                        matches!(
+                            chain::compile_program_keyed(v, f, prim, TARGET71, LodKey::NONE, LodKey::NONE, a),
+                            Err(V3dError::NotYet(_))
+                        ),
+                        "{what} {prim:?} at 4.2"
+                    );
+                }
+            });
+        }
+    }
+
+    /// The points variant of a program reading gl_PointCoord: two LDVARY
+    /// before the declared ones (Mesa nir_to_vir.c:4869-4872), y through
+    /// the PNTC transform; the lines variant: none, and gl_PointCoord reads
+    /// 0.0. Run in sim71 with the implicit varyings (x, y) = (0.25, 0.125),
+    /// v_color.x = 0.5 and the window transform (scale -1.0, offset 1.0).
+    #[test]
+    fn the_point_coord_of_each_variant_in_sim71() {
+        use super::super::select::{
+            QUNIFORM_CONSTANT, QUNIFORM_FB_PNTC_Y_OFFSET, QUNIFORM_FB_PNTC_Y_SCALE, QUNIFORM_UNIFORM,
+        };
+        use super::super::sim::{half_to_f32, Env, FsInputs, Inputs, Varying, LANES};
+        use super::super::sim71::run71;
+        let stream = |u: &[Uniform]| -> std::vec::Vec<u32> {
+            u.iter()
+                .map(|u| match u.contents {
+                    QUNIFORM_CONSTANT => u.data,
+                    QUNIFORM_FB_PNTC_Y_SCALE => (-1.0f32).to_bits(),
+                    QUNIFORM_FB_PNTC_Y_OFFSET => 1.0f32.to_bits(),
+                    QUNIFORM_UNIFORM => panic!("no user uniform here"),
+                    c => panic!("uniform contents {c:#x} not modelled here"),
+                })
+                .collect()
+        };
+        /* smooth: vary * W + C, with W = 1.0 and vary = 0 */
+        let vary = |x: f32| Varying { vary: [0; LANES], c: [x.to_bits(); LANES] };
+        let run = |c: &Code71<'_>, threads: u32, varyings: std::vec::Vec<Varying>| {
+            let one = [1.0f32.to_bits(); LANES];
+            let inputs = Inputs::Fragment(std::boxed::Box::new(FsInputs {
+                w: one,
+                w_centroid: one,
+                z: one,
+                x: one,
+                y: one,
+                back_facing: [false; LANES],
+                varyings,
+            }));
+            let o = run71(c.words, &stream(c.uniforms), &inputs, &Env { threads, ..Env::default() })
+                .unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(o.tlb.len(), 2, "two colour TLB writes");
+            let h = |w: Option<u32>, hi: bool| {
+                let w = w.expect("a defined colour");
+                half_to_f32(if hi { (w >> 16) as u16 } else { w as u16 })
+            };
+            let (p, q) = (o.tlb[0].value[0], o.tlb[1].value[0]);
+            for l in 0..LANES {
+                assert_eq!((o.tlb[0].value[l], o.tlb[1].value[l]), (p, q), "lane {l}");
+            }
+            [h(p, false), h(p, true), h(q, false), h(q, true)]
+        };
+        with_modules(PASSTHROUGH_VS, POINT_FS, |v, f, a| {
+            let p = compile71(v, f, Prim::Points, a);
+            assert!(p.fs.uses_implicit_point_line_varyings);
+            assert_eq!(ldvarys(&p.fs.code), p.fs.num_inputs as usize + 2);
+            for c in [QUNIFORM_FB_PNTC_Y_SCALE, QUNIFORM_FB_PNTC_Y_OFFSET] {
+                assert!(p.fs.code.uniforms.contains(&Uniform { contents: c, data: 0 }), "{c:#x}");
+            }
+            let got = run(&p.fs.code, p.fs.threads, std::vec![vary(0.25), vary(0.125), vary(0.5)]);
+            assert_eq!(got, [0.25, 1.0 - 0.125, 0.5, 1.0]);
+
+            let l = compile71(v, f, Prim::Lines, a);
+            assert!(!l.fs.uses_implicit_point_line_varyings);
+            assert_eq!(ldvarys(&l.fs.code), l.fs.num_inputs as usize);
+            assert!(!l.fs.code.uniforms.iter().any(|u| u.contents == QUNIFORM_FB_PNTC_Y_SCALE));
+            let got = run(&l.fs.code, l.fs.threads, std::vec![vary(0.5)]);
+            assert_eq!(got, [0.0, 0.0, 0.5, 1.0]);
+        });
     }
 
     #[test]
