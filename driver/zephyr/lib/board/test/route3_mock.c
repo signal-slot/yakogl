@@ -29,10 +29,10 @@ static void check(int ok, const char *what)
 	printf("%s: %s\n", ok ? "ok" : "FAIL", what);
 }
 
-/* Expected counts: clk-query 1, dlist 9, hvs-chan 7, clk-hsm 1, clk-bvb 1,
+/* Expected counts: clk-query 1, dlist 10, hvs-chan 7, clk-hsm 1, clk-bvb 1,
  * phy-init 1, hdmi-configure 12, pv-reset 2, pv-config 9, pv-enable 1,
  * hdmi-pre-enable 11, pv-viden 1, hdmi-post-enable 7 writes + 3 waits. */
-#define PLAN_STEPS (1 + 9 + 7 + 1 + 1 + 1 + 12 + 2 + 9 + 1 + 11 + 1 + 7 + 3)
+#define PLAN_STEPS (1 + 10 + 7 + 1 + 1 + 1 + 12 + 2 + 9 + 1 + 11 + 1 + 7 + 3)
 /* pv-viden-off 1, wait-viden 1, wait-20ms 1, hdmi-disable 3, wait-1ms 1, pv-reset 2,
  * hvs-stop 2, wait-hvs-disabled 1, hdmi-powerdown 1, phy-disable 1 */
 #define TEARDOWN_STEPS (1 + 1 + 1 + 3 + 1 + 2 + 2 + 1 + 1 + 1)
@@ -283,7 +283,7 @@ static void check_mode(uint8_t vic, const char *tag, enum yd5_hvs6_variant v, ui
 	      name);
 
 	snprintf(name, sizeof(name), "%s: stage step counts", tag);
-	check(count_named(&p, "dlist") == 9 && count_named(&p, "hvs-chan") == 7 &&
+	check(count_named(&p, "dlist") == 10 && count_named(&p, "hvs-chan") == 7 &&
 	      count_named(&p, "hdmi-configure") == 12 && count_named(&p, "pv-reset") == 2 &&
 	      count_named(&p, "pv-config") == 9 && count_named(&p, "hdmi-pre-enable") == 11 &&
 	      count_named(&p, "hdmi-post-enable") == 7,

@@ -42,7 +42,13 @@ static void roundtrip(const struct hvs6w_plane *p, uint32_t exp_code, uint32_t e
 	CHECK(d.rgb32 == (exp_code == HVS6_FMT_RGBA8888));
 	CHECK(d.unity && d.nwords == HVS6W_ENTRY_WORDS);
 	/* the END word follows the entry, and an END at the start decodes as empty */
+	CHECK(HVS6W_ENTRY_WORDS == 9u && HVS6W_LIST_WORDS == 10u && n == 10);
+	CHECK(buf[start + HVS6W_ENTRY_WORDS - 1u] == HVS6_CTL0_END);
 	CHECK(buf[start + HVS6W_ENTRY_WORDS] == HVS6_CTL0_END);
+	CHECK(((buf[start] >> 24) & 0x3fu) == 9u);
+	CHECK(buf[start + 2] == 0xfff0u);
+	CHECK(((buf[start] >> 18) & 3u) == 3u);
+	CHECK(buf[start + 4] == 0xc0c0c0c0u);
 	CHECK(hvs6_dlist_first_plane(buf, start + HVS6W_LIST_WORDS, start + HVS6W_ENTRY_WORDS,
 				     &d) == HVS6_ERR_END);
 	/* nothing outside the list is written */
@@ -85,15 +91,18 @@ int main(void)
 	roundtrip(&p, HVS6_FMT_RGBA8888, HVS6_ORDER_ARGB, 5);
 	/* the words, once, against the cited positions */
 	p = (struct hvs6w_plane){HVS6W_XRGB8888, 3, 5, 16, 8, 64, 0x2aabcd1000ull};
-	CHECK(hvs6w_write_plane(buf, 16, &p) == 9);
-	CHECK(buf[0] == (0x40000000u | (8u << 24) | 0x8000u | (2u << 13) | 7u));
+	CHECK(hvs6w_write_plane(buf, 16, &p) == 10);
+	CHECK(buf[0] == (0x40000000u | (9u << 24) | (3u << 18) | 0x8000u | (2u << 13) | 7u));
+	CHECK(buf[2] == 0xfff0u);
+	CHECK(buf[4] == 0xc0c0c0c0u);
 	CHECK(buf[1] == ((5u << 16) | 3u));
 	CHECK(buf[3] == ((7u << 16) | 15u));
 	CHECK(buf[5] == 0x2au && buf[6] == 0xabcd1000u && buf[7] == 64u);
 	CHECK(buf[8] == 0x80000000u);
+	CHECK(buf[9] == 0x80000000u);
 
 	/* errors */
-	errcase(HVS6W_ERR_BUFFER, base, 8);
+	errcase(HVS6W_ERR_BUFFER, base, 9);
 	errcase(HVS6W_ERR_BUFFER, base, 0);
 	CHECK(hvs6w_write_plane(NULL, 16, &base) == HVS6W_ERR_BUFFER);
 	CHECK(hvs6w_write_plane(buf, 16, NULL) == HVS6W_ERR_BUFFER);
