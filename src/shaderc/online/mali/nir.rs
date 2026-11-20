@@ -816,6 +816,30 @@ pub(super) const CUBE_S_MASK: u32 = 0x1fff_ffff;
 /// 1.0 and no maximum).
 const F16_ONE: u32 = 0x3c00;
 
+/// Every store to an invariant output is a copy: an attribute, a uniform
+/// or a constant, read directly or through locals stored the same way (no
+/// ALU operation, no look-up, no indexed read).
+fn invariant_copies(m: &Module<'_>) -> bool {
+    fn copy(m: &Module<'_>, v: ValueId, depth: u8) -> bool {
+        match m.def(v) {
+            Some(IrOp::LoadInput { .. } | IrOp::LoadUniform { .. } | IrOp::ConstF32(_)) => true,
+            Some(IrOp::LoadLocal { local, index: None, .. }) if depth < 8 => m.instrs.iter().all(|op| match op {
+                IrOp::StoreLocal { local: l, index, src, .. } if l == local => {
+                    index.is_none() && copy(m, src.val, depth + 1)
+                }
+                _ => true,
+            }),
+            _ => false,
+        }
+    }
+    m.instrs.iter().all(|op| match op {
+        IrOp::StoreOutput { slot, src } if m.outputs.iter().any(|o| o.invariant && o.slot() == *slot) => {
+            copy(m, src.val, 0)
+        }
+        _ => true,
+    })
+}
+
 fn is_zero(v: Val) -> bool {
     matches!(v, Val::Const(F32_ZERO | F32_NEG_ZERO))
 }
@@ -5230,8 +5254,13 @@ fn walk<'s>(
         }
     }
     /* an invariant output keeps its arithmetic exact in Mesa (no
-     * contraction, the viewport transform's included) */
-    if m.outputs.iter().any(|o| o.invariant) {
+     * contraction): refused, unless every invariant output is a copy (an
+     * attribute, a uniform or a constant, through locals), which has no
+     * arithmetic to keep exact. Measured: deqp_misc_invariant_position,
+     * `invariant gl_Position; gl_Position = a_pos;`, whose position
+     * program is the non-invariant one's, the viewport transform fused
+     * (`FMA.f32 r0, r0^, u0.w0, u0.w1`) */
+    if m.outputs.iter().any(|o| o.invariant) && !invariant_copies(m) {
         return Err(MaliError::Invariant);
     }
     /* the locations the output lanes read, whichever the fragment shader

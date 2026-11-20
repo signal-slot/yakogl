@@ -536,3 +536,74 @@ What these references change in the Plan above, for `lower-misc`:
    step is that fp16 product, not a register-allocator change.
 3. `SpecialInput`: the conversion of z is `FADD.f32 rN.h0, rN^, 0x0.neg`.
 4. `AlgebraicForm`: as the Plan, with the mediump forms above.
+
+## What `lower-mixprec` did
+
+Item `lower-mixprec` (plan #377), 2026-11-20, on the integration tip
+98969940, after its mixprec step (`mali-deqp-mixprec.md` 8.1). Host only.
+The steps follow the Plan's order. `tests/mali_deqp_misc.rs` byte-compares
+each reference with `mali_ref::assert_matches`.
+
+**Byte-equal now (5 of 11):**
+- `cmp_fne_hp`, `cmp_ine0_hp`: already byte-equal at the tip (the highp
+  `Fne`/`Ine` arm had landed).
+- `cmp_notequal_vec2`: in a highp shader, the `i2b` of a `bool` uniform is
+  the uniform's word itself, and `ieq(b, true)` of such a word is `b`
+  (`alu32`'s lane arms, `bool_uniform32` in nir_fs.rs; the mediump arm
+  already had both rules). dEQP's `isOk(true, ref_out0)` becomes the word,
+  with no compare. The test uses `assert_matches_unset`, because the
+  reference was drawn without `--uniform-values` (this note's References).
+- `fragcoord_xyz`: in a mediump ES 1.00 shader, `gl_FragCoord.z` is the
+  `FRAG_Z` special varying's fp32 lane, read the way a varying lane is
+  (`frag_coord16`; `lane_tree`'s varying arm takes `FRAG_Z`). The colour
+  narrows it with its own `FADD.f32 .h0`. Mesa narrows
+  `vec4(u2f32(pixel_coord), z, w)` lane by lane, so the select's events
+  place z's `LD_VAR_SPECIAL` and conversion after the x and y narrowing
+  and before their `MKVEC` word (the `FRAG` event is split into its lanes
+  and `FRAG_WORD`). As the reference showed, z's conversion is the
+  `FADD.f32 .h0`, not `F32_TO_F16`. w stays refused.
+- `invariant_position`: an invariant output whose every store is a copy
+  (an attribute, a uniform or a constant, directly or through locals) has
+  no arithmetic to keep exact. `build` (nir.rs) no longer refuses it
+  (`invariant_copies`), and the program is the non-invariant one, with
+  the viewport transform fused. The unit pin `tests.rs` keeps `Invariant`
+  with `gl_Position = p * p`. This is the "cheap subset" of section 1
+  (`pragma_vertex`, `invariant_storage*`). Those cases still refuse
+  elsewhere (section 1's table); this step was not measured on them.
+
+**Still refused (6), pinned in `REFUSALS`:**
+- `spill_{lowp,mediump}_mat4_mat4` (`Spill`): not attempted. The reference
+  is a 71-word varying program of `FMA.v2f16` on fp16 FAU halves, with
+  swizzles such as `u7.w1.h11, u7.w0.h11` and a negated-zero accumulator
+  (`r2.neg` of `MOV.i32 r2, 0x0`), then `F16_TO_F32` and `FMA.f32 r, r,
+  0x0, r` of the three results. The vertex back end (nir.rs) has no fp16
+  arithmetic. This is a vertex fp16 path of its own, with its vectorisation
+  and order to be read off the drm-shim's NIR, not one step.
+- `constmat_{mat2,mat4}_{highp,mediump}` (`AlgebraicForm`): tried and
+  reverted. Generalising `Fs::op`'s factoring (`fadd(fmul(a, b), fmul(a,
+  c))` to one `fmul(a, b + c)` folded at the shader's precision, and
+  `fadd(fmul(a, b), a)`, :248) moves past this refusal, but nothing is
+  byte-equal behind it:
+  * `mat2_mediump` then compiles in 11 words against 13. Mesa shrinks each
+    column's product to the lane still read once the factoring took the
+    other (`nir_opt_shrink_vectors`), so `res[1][0]` is a scalar `fmul(v,
+    -1.0)`, an fneg (`FADD.v2f16 r2, r0.neg.h00, 0x0.neg`), and `res[0][0]`
+    is `FMA.v2f16 r1, u2.w0, r0.h00` with `0.6` in both halves. Our walk
+    applies `Rule::Negate` only when both lanes of the column pair are -1.0,
+    so it pairs x and y as one `FMA` with the constants `(0.6, -1.0)`.
+    Matching needs the per-lane rules after a column lane dies, which no
+    reference had pinned before.
+  * `mat2_highp` then refuses `MixedPrecision`, and `mat4_*` refuse
+    `ColourForm`. These were not followed further.
+
+  A compile that is not byte-equal would go against this compiler's rule
+  of refusing what no reference draws, so the step is left out and the
+  refusal stays `AlgebraicForm`.
+
+**Checks** (feature set `host-test,gpu-mali,shaderc-online,no-shader-table`):
+every `tests/mali_deqp_*.rs` passes; no test of another family that was
+ignored passes now; the `shaderc::online::mali` unit tests pass, including
+`the_corpus_verdicts_are_pinned` (`tools/mali/corpus-verdicts.txt` does not
+move). `tests/mali_glmark2_corpus.rs` gives the same verdicts with and
+without these changes (`run.sh` corpus of glmark2 22c527cb, written into a
+scratch copy with `MALI_GLMARK2_WRITE=1`, equal to the committed fixture).

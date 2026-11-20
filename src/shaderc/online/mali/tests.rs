@@ -1193,7 +1193,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
-        (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p; }", MaliError::Invariant),
+        /* an invariant output with arithmetic (a copy compiles:
+         * deqp_misc_invariant_position) */
+        (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p * p; }", MaliError::Invariant),
         (VS, "attribute vec2 p; void main(){ gl_Position.xy = p; }", MaliError::PositionLane),
         (FS, "precision mediump float; uniform vec4 u; void main(){ gl_FragColor = u.yxzw; }", MaliError::FsUniform),
         /* a highp uniform's lanes paired other than in order (in order is

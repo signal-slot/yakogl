@@ -5,15 +5,14 @@
 //! small refusals — comparison forms, the mediump/lowp vertex `mat4 * mat4`
 //! over 32 work registers, mediump `gl_FragCoord.z`, the factored constant
 //! matrix products, an invariant `gl_Position`; see
-//! `docs/notes/mali-deqp-misc.md`). One test per reference. All eleven
-//! references are refused at the tip, so each test is ignored with its
-//! refusal quoted and the step that lowers it; the lowering removes the
-//! `ignore` and the reference's entry in `REFUSALS` together.
-//! `refusals_pinned` runs now: it asserts each ignored reference's exact
-//! current refusal (the vertex shader's when it refuses, else the fragment
-//! shader's). `invariant_position` stays refused after lower-misc: the note
-//! marks `Invariant` later, and its reference settles the viewport-transform
-//! question for that later step.
+//! `docs/notes/mali-deqp-misc.md`). One test per reference. Five compile
+//! byte-equal and run: `cmp_fne_hp`, `cmp_ine0_hp`, `cmp_notequal_vec2`,
+//! `fragcoord_xyz` and `invariant_position` (a copy, which has no
+//! arithmetic to keep exact). The others are refused, each test ignored with
+//! its refusal quoted; the lowering removes the `ignore` and the
+//! reference's entry in `REFUSALS` together. `refusals_pinned` runs now: it
+//! asserts each ignored reference's exact current refusal (the vertex
+//! shader's when it refuses, else the fragment shader's).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_misc
@@ -68,7 +67,6 @@ fn misc_fragcoord_xyz() {
 }
 
 #[test]
-#[ignore = "refused: an invariant output (Mesa keeps its arithmetic exact, unfused), the Invariant family (mali-deqp-misc.md section 1: later)"]
 fn misc_invariant_position() {
     mali_ref::assert_matches("deqp_misc_invariant_position");
 }
@@ -91,7 +89,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc_constmat_mat2_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_invariant_position", "an invariant output (Mesa keeps its arithmetic exact, unfused)"),
     ("deqp_misc_spill_lowp_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
     ("deqp_misc_spill_mediump_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
 ];
