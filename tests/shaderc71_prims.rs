@@ -28,6 +28,19 @@
 //!   the shader does not read gl_PointCoord; when it does, it has no
 //!   implicit varying (`uses_implicit_point_line_varyings` false).
 //!
+//! Two pins the sim71-prims-self study (plan #386) left as tests:
+//!
+//! * `the_points_program_is_the_triangles_program_in_every_field`: not only
+//!   the words — the code of every stage (words, instructions, uniform
+//!   stream and branch edges), every prog_data field and the attributes of
+//!   the points program equal the Triangles program's, for every es100
+//!   program that compiles at Triangles;
+//! * `the_lines_variant_reads_gl_point_coord_as_zero_in_sim71`: each es100
+//!   shader that reads gl_PointCoord, at `Prim::Lines`, has its words decode
+//!   and verify, and run in `sim71::run71` on fixed inputs gives the colour
+//!   chain71's doc comment promises off a point: gl_PointCoord is 0.0
+//!   (GLSL ES 1.00 section 7.2, `point_coord_as_zero`).
+//!
 //! Mesa's instruction counts (`tools/v3d/es100_counts_71.tsv`) are of its
 //! Triangles key (`v3d_shc --prim triangles`, the default), whose FS takes no
 //! implicit point varying, like our lines variant: for the sources that read
@@ -45,10 +58,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::v3d::chain::Prim;
-use yakogl::shaderc::online::v3d::chain71::{compile_program71, Code71, V3dProgram71, TARGET71};
+use yakogl::shaderc::online::v3d::chain71::{compile_program71, Code71, FsProg71, V3dProgram71, VsProg71, TARGET71};
 use yakogl::shaderc::online::v3d::codec71::{decode71, same_instr71};
 use yakogl::shaderc::online::v3d::sched71_cf::branches_are_structured71;
+use yakogl::shaderc::online::v3d::select::{QUNIFORM_CONSTANT, QUNIFORM_FB_PNTC_Y_OFFSET, QUNIFORM_FB_PNTC_Y_SCALE};
+use yakogl::shaderc::online::v3d::sim::{half_to_f32, Env, FsInputs, Inputs, Varying, LANES};
+use yakogl::shaderc::online::v3d::sim71::run71;
 use yakogl::shaderc::online::v3d::verify71::{registers_fit_threads71, verify71};
+use yakogl::shaderc::online::v3d::vop71::{Instr71, Uniform};
 use yakogl::shaderc::online::{lower, store};
 
 /// tools/shaders/es100's sources.
@@ -119,9 +136,15 @@ fn variant(key: &str, prim: Prim, p: &V3dProgram71<'_>) -> Variant {
     }
 }
 
+/// The scratch region is one per process (`store::with_scratch` refuses a
+/// second borrower): the harness runs this file's tests in parallel, so they
+/// take turns (tests/v3d71_shapes.rs's idiom).
+static SCRATCH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// `vs` + `fs` at 7.1 for each of [`PRIMS`], in that order: the variant or
 /// the refusal's message (the front end's, or `V3d71Error`'s Debug form).
 fn compile(key: &str, names: [&str; 2], vs: &str, fs: &str) -> Vec<Result<Variant, String>> {
+    let _turn = SCRATCH.lock().unwrap_or_else(|e| e.into_inner());
     store::with_scratch(|a| {
         let mut m = Vec::new();
         for (stage, name, src) in [(Stage::Vertex, names[0], vs), (Stage::Fragment, names[1], fs)] {
@@ -356,4 +379,308 @@ fn every_es100_program_compiles_at_points_and_lines_as_at_triangles() {
     );
     assert_eq!(compiled, [ES100_COMPILED; 3], "es100 programs compiled at 7.1: a moved count is a decision");
     assert_eq!(reads_pntc, READS_POINT_COORD, "es100 sources reading gl_PointCoord");
+}
+
+// ---------------------------------------------------------------------------
+// The Points pin, every field. A program borrows its arena, so every field of
+// the two programs is copied into an owned snapshot and the snapshots
+// compared as one value (sim71-prims-self: every Points program equals its
+// Triangles program in every field).
+// ---------------------------------------------------------------------------
+
+/// One [`Code71`], owned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CodeSnap {
+    words: Vec<u64>,
+    instrs: Vec<Instr71>,
+    uniforms: Vec<Uniform>,
+    back_edges: Vec<(u32, u32)>,
+    fwd_branches: Vec<(u32, u32)>,
+}
+
+impl CodeSnap {
+    fn of(c: &Code71<'_>) -> CodeSnap {
+        CodeSnap {
+            words: c.words.to_vec(),
+            instrs: c.instrs.to_vec(),
+            uniforms: c.uniforms.to_vec(),
+            back_edges: c.back_edges.to_vec(),
+            fwd_branches: c.fwd_branches.to_vec(),
+        }
+    }
+}
+
+/// One [`FsProg71`], owned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FsSnap {
+    code: CodeSnap,
+    threads: u32,
+    single_seg: bool,
+    num_inputs: u32,
+    input_slots: Vec<(u8, u8)>,
+    flat_shade_flags: u32,
+    noperspective_flags: u32,
+    centroid_flags: u32,
+    flat_shade_flags_hi: u32,
+    noperspective_flags_hi: u32,
+    centroid_flags_hi: u32,
+    writes_z: bool,
+    disable_ez: bool,
+    uses_center_w: bool,
+    lock_scoreboard_on_first_thrsw: bool,
+    uses_implicit_point_line_varyings: bool,
+    uses_pid: bool,
+    rt_mask: u8,
+    force_per_sample_msaa: bool,
+    tmu_dirty_rcl: bool,
+    uses_discard: bool,
+}
+
+impl FsSnap {
+    fn of(f: &FsProg71<'_>) -> FsSnap {
+        FsSnap {
+            code: CodeSnap::of(&f.code),
+            threads: f.threads,
+            single_seg: f.single_seg,
+            num_inputs: f.num_inputs,
+            input_slots: f.input_slots.to_vec(),
+            flat_shade_flags: f.flat_shade_flags,
+            noperspective_flags: f.noperspective_flags,
+            centroid_flags: f.centroid_flags,
+            flat_shade_flags_hi: f.flat_shade_flags_hi,
+            noperspective_flags_hi: f.noperspective_flags_hi,
+            centroid_flags_hi: f.centroid_flags_hi,
+            writes_z: f.writes_z,
+            disable_ez: f.disable_ez,
+            uses_center_w: f.uses_center_w,
+            lock_scoreboard_on_first_thrsw: f.lock_scoreboard_on_first_thrsw,
+            uses_implicit_point_line_varyings: f.uses_implicit_point_line_varyings,
+            uses_pid: f.uses_pid,
+            rt_mask: f.rt_mask,
+            force_per_sample_msaa: f.force_per_sample_msaa,
+            tmu_dirty_rcl: f.tmu_dirty_rcl,
+            uses_discard: f.uses_discard,
+        }
+    }
+}
+
+/// One [`VsProg71`], owned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct VsSnap {
+    code: CodeSnap,
+    threads: u32,
+    single_seg: bool,
+    vpm_input_size: u32,
+    vpm_output_size: u32,
+    separate_segments: bool,
+    vcm_cache_size: u32,
+    uses_vid: bool,
+    uses_iid: bool,
+    uses_biid: bool,
+    writes_psiz: bool,
+    vattr_sizes: [u8; 16],
+    tmu_dirty_rcl: bool,
+}
+
+impl VsSnap {
+    fn of(v: &VsProg71<'_>) -> VsSnap {
+        VsSnap {
+            code: CodeSnap::of(&v.code),
+            threads: v.threads,
+            single_seg: v.single_seg,
+            vpm_input_size: v.vpm_input_size,
+            vpm_output_size: v.vpm_output_size,
+            separate_segments: v.separate_segments,
+            vcm_cache_size: v.vcm_cache_size,
+            uses_vid: v.uses_vid,
+            uses_iid: v.uses_iid,
+            uses_biid: v.uses_biid,
+            writes_psiz: v.writes_psiz,
+            vattr_sizes: v.vattr_sizes,
+            tmu_dirty_rcl: v.tmu_dirty_rcl,
+        }
+    }
+}
+
+/// One [`V3dProgram71`], owned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ProgSnap {
+    fs: FsSnap,
+    vs: VsSnap,
+    cs: VsSnap,
+    attributes: Vec<(u8, Option<u8>)>,
+}
+
+impl ProgSnap {
+    fn of(p: &V3dProgram71<'_>) -> ProgSnap {
+        ProgSnap {
+            fs: FsSnap::of(&p.fs),
+            vs: VsSnap::of(&p.vs),
+            cs: VsSnap::of(&p.cs),
+            attributes: p.attributes.to_vec(),
+        }
+    }
+}
+
+/// `vs` + `fs` at 7.1: the Triangles program as a snapshot, and the Points
+/// program's snapshot or refusal message. `None` is a refusal of Triangles
+/// itself or of the front end (the refusals are pinned by
+/// [`every_es100_program_compiles_at_points_and_lines_as_at_triangles`]).
+fn pair_snaps(vs: &str, fs: &str) -> Option<(ProgSnap, Result<ProgSnap, String>)> {
+    let _turn = SCRATCH.lock().unwrap_or_else(|e| e.into_inner());
+    store::with_scratch(|a| {
+        let mut m = Vec::new();
+        for (stage, src) in [(Stage::Vertex, vs), (Stage::Fragment, fs)] {
+            match lower::compile_to_ir(a, stage, a.alloc_str(src).expect("scratch")) {
+                Ok(l) => m.push(l.module),
+                Err(_) => return None,
+            }
+        }
+        let v = &a.alloc_filled(1, m[0]).expect("scratch")[0];
+        let f = &a.alloc_filled(1, m[1]).expect("scratch")[0];
+        let Ok(tri) = compile_program71(v, f, Prim::Triangles, TARGET71, a) else { return None };
+        let pts =
+            compile_program71(v, f, Prim::Points, TARGET71, a).map(|p| ProgSnap::of(&p)).map_err(|e| format!("{e:?}"));
+        Some((ProgSnap::of(&tri), pts))
+    })
+    .expect("scratch")
+}
+
+#[test]
+fn the_points_program_is_the_triangles_program_in_every_field() {
+    let mut files = Vec::new();
+    sources(&root().join("es100"), &mut files);
+    let mut rels: Vec<String> =
+        files.iter().map(|p| p.strip_prefix(root()).unwrap().to_string_lossy().into_owned()).collect();
+    rels.sort();
+    assert_eq!(rels.len(), ES100_PROGRAMS, "tools/shaders/es100 holds {ES100_PROGRAMS} sources; re-derive the pins");
+    let mut pinned = 0usize;
+    for rel in &rels {
+        let src = read(rel);
+        let vary = varyings(&src);
+        let (vs, fs) =
+            if rel.ends_with(".vert") { (src.clone(), stub_fs(&vary)) } else { (stub_vs(&vary), src.clone()) };
+        let Some((tri, pts)) = pair_snaps(&vs, &fs) else { continue };
+        let pts = pts.unwrap_or_else(|e| panic!("{rel}: Triangles compiles and Points does not: {e}"));
+        assert_eq!(pts, tri, "{rel}: the points program is the Triangles program in every field");
+        pinned += 1;
+    }
+    assert_eq!(pinned, ES100_COMPILED, "programs whose points build is pinned to Triangles field by field");
+}
+
+// ---------------------------------------------------------------------------
+// The Lines pin: off a point gl_PointCoord is undefined (GLSL ES 1.00
+// section 7.2), and chain71's lines variant promises it as 0.0
+// (`point_coord_as_zero`). Each reader runs in sim71 with W 1.0 and every
+// fragment input 0.5; the colour says whether gl_PointCoord read as 0.0.
+// ---------------------------------------------------------------------------
+
+/// The value of every fragment input of the run (exact as an f16).
+const FIXED_VARYING: f32 = 0.5;
+
+/// The colour the source must draw once gl_PointCoord reads 0.0, given every
+/// fragment input 0.5: `pointcoord.frag` is `vec4(gl_PointCoord, 0.0, 1.0)`,
+/// `pointcoordvary.frag` is `vec4(gl_PointCoord, v_color.b, 1.0)`.
+fn fixed_input_colour(rel: &str) -> [f32; 4] {
+    match rel {
+        "es100/pointcoord.frag" => [0.0, 0.0, 0.0, 1.0],
+        "es100/pointcoordvary.frag" => [0.0, 0.0, FIXED_VARYING, 1.0],
+        r => panic!("no expectation for {r}: a new gl_PointCoord reader, derive one from its source"),
+    }
+}
+
+#[test]
+fn the_lines_variant_reads_gl_point_coord_as_zero_in_sim71() {
+    let mut files = Vec::new();
+    sources(&root().join("es100"), &mut files);
+    let mut rels: Vec<String> =
+        files.iter().map(|p| p.strip_prefix(root()).unwrap().to_string_lossy().into_owned()).collect();
+    rels.sort();
+    rels.retain(|rel| rel.ends_with(".frag") && strip_comments(&read(rel)).contains("gl_PointCoord"));
+    assert_eq!(
+        rels,
+        ["es100/pointcoord.frag".to_string(), "es100/pointcoordvary.frag".to_string()],
+        "the es100 sources that read gl_PointCoord ({READS_POINT_COORD}): re-derive the expectations"
+    );
+    for rel in rels {
+        let src = read(&rel);
+        let vs = stub_vs(&varyings(&src));
+        let expect = fixed_input_colour(&rel);
+        let _turn = SCRATCH.lock().unwrap_or_else(|e| e.into_inner());
+        let colour: [[f32; 4]; LANES] = store::with_scratch(|a| {
+            let mut m = Vec::new();
+            for (stage, s) in [(Stage::Vertex, &vs[..]), (Stage::Fragment, &src[..])] {
+                let l = lower::compile_to_ir(a, stage, a.alloc_str(s).expect("scratch"))
+                    .unwrap_or_else(|e| panic!("{rel} {stage:?}: front end: {}", e.msg));
+                m.push(l.module);
+            }
+            let v = &a.alloc_filled(1, m[0]).expect("scratch")[0];
+            let f = &a.alloc_filled(1, m[1]).expect("scratch")[0];
+            let tri = compile_program71(v, f, Prim::Triangles, TARGET71, a)
+                .unwrap_or_else(|e| panic!("{rel} Triangles: {e:?}"));
+            assert!(
+                tri.fs.uses_implicit_point_line_varyings,
+                "{rel}: the Triangles program takes the implicit point varyings"
+            );
+            let p = compile_program71(v, f, Prim::Lines, TARGET71, a).unwrap_or_else(|e| panic!("{rel} Lines: {e:?}"));
+            assert!(!p.fs.uses_implicit_point_line_varyings, "{rel}: the lines variant takes no implicit varying");
+            let what = |s: &str| format!("{rel} Lines {s}");
+            check_stage(&what("fs"), &p.fs.code, p.fs.threads, p.fs.single_seg);
+            check_stage(&what("vs"), &p.vs.code, p.vs.threads, p.vs.single_seg);
+            check_stage(&what("cs"), &p.cs.code, p.cs.threads, p.cs.single_seg);
+
+            /* Its own uniform stream: the readers declare no uniforms, so the
+             * stream is constants (the TLB configuration), and the lines
+             * variant carries no point coordinate transform. */
+            let stream: Vec<u32> =
+                p.fs.code
+                    .uniforms
+                    .iter()
+                    .map(|u| match u.contents {
+                        QUNIFORM_CONSTANT => u.data,
+                        QUNIFORM_FB_PNTC_Y_SCALE | QUNIFORM_FB_PNTC_Y_OFFSET => {
+                            panic!("{rel}: the lines variant carries a point coordinate transform")
+                        }
+                        c => panic!("{rel}: uniform contents {c:#x} not modelled here"),
+                    })
+                    .collect();
+            let one = [1.0f32.to_bits(); LANES];
+            let fixed = [FIXED_VARYING.to_bits(); LANES];
+            let inputs = Inputs::Fragment(std::boxed::Box::new(FsInputs {
+                w: one,
+                w_centroid: one,
+                z: fixed,
+                x: fixed,
+                y: fixed,
+                back_facing: [false; LANES],
+                /* smooth with W 1.0: the value of every input slot is C */
+                varyings: (0..p.fs.num_inputs).map(|_| Varying { vary: [0; LANES], c: fixed }).collect(),
+            }));
+            let o = run71(p.fs.code.words, &stream, &inputs, &Env { threads: p.fs.threads, ..Env::default() })
+                .unwrap_or_else(|e| panic!("{rel}: sim71: {e}"));
+            assert!(o.msf.iter().all(|&m| m != 0), "{rel}: a lane discarded");
+
+            /* RT0's colour: the two vfpack writes of f16 pairs, the low
+             * channel first (vir_emit_tlb_color_write, nir_to_vir.c:1953-1984). */
+            assert_eq!(o.tlb.len(), 2, "{rel}: two colour TLB writes");
+            let mut spec = 0xff;
+            let mut pairs: Vec<[u32; LANES]> = Vec::new();
+            for t in &o.tlb {
+                if let Some(c) = t.config {
+                    spec = c & 0xff;
+                }
+                assert_eq!(spec, 0xff, "{rel}: TLB specifier {spec:#x} (only RT0 f16 vec4, 0xff, is read)");
+                pairs.push(t.value.map(|v| v.unwrap_or_else(|| panic!("{rel}: an undefined colour in a kept lane"))));
+            }
+            let h = |w: u32, hi: bool| half_to_f32(if hi { (w >> 16) as u16 } else { w as u16 });
+            core::array::from_fn(|l| {
+                [h(pairs[0][l], false), h(pairs[0][l], true), h(pairs[1][l], false), h(pairs[1][l], true)]
+            })
+        })
+        .expect("scratch");
+        let want = format!("{expect:?}");
+        for (l, c) in colour.iter().enumerate() {
+            assert_eq!(format!("{c:?}"), want, "{rel}: lane {l} off a point: gl_PointCoord must read 0.0");
+        }
+    }
 }
