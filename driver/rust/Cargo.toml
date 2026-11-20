@@ -45,8 +45,8 @@ am62p = []
 rk3588 = []
 # The STM32MP257F (STM32MP257F-DK): the SMC watchdog (soc::stm32mp2).
 stm32mp2 = []
-# The i.MX 95 (Toradex Verdin iMX95): the GPU power-on over SCMI
-# (soc::imx95::gpu_power).
+# The i.MX 95 (Toradex Verdin iMX95): the GPU power-on and the display's
+# power, pixel clock and DPU scan-out over SCMI and MMIO (soc::imx95).
 imx95 = []
 # The Mali-G610's kernel side (gpu::mali); the NanoPC-T6 images.
 mali = []
