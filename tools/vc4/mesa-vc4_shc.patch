@@ -1,0 +1,22 @@
+--- a/src/gallium/drivers/vc4/meson.build
++++ b/src/gallium/drivers/vc4/meson.build
+@@ -102,6 +102,19 @@
+   build_by_default : false,
+ )
+
++# YakoGL's offline shader tool (OpenGL SPIR-V program -> VC4 FS/VS/CS QPU words
++# and uniform streams). The kernel call vc4_bo_alloc_shader is wrapped away.
++vc4_shc = executable(
++  'vc4_shc',
++  ['vc4_shc.c', v3d_xml_pack],
++  include_directories : [inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom, inc_gallium_drivers],
++  link_with : [libvc4, libgallium, libbroadcom_cle, libbroadcom_v3d],
++  link_args : ['-Wl,--wrap=vc4_bo_alloc_shader'],
++  c_args : [vc4_c_args],
++  dependencies : [vc4_deps, idep_nir, idep_vtn, idep_mesautil],
++  build_by_default : false,
++)
++
+ driver_vc4 = declare_dependency(
+   compile_args : '-DGALLIUM_VC4',
+   link_with : [libvc4, libvc4winsys, libbroadcom_cle, libbroadcom_v3d],
