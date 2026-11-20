@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  The i.MX 95's display stream 0 routed to its MIPI DSI output, as one
+  picture: the DPU, the display block's CSR and pixel interleaver, the DW
+  MIPI DSI host with the camera mix's CSRs and the combo D-PHY (reached
+  through CSI-1's test interface), a TPM for the backlight, and a TI
+  SN65DSI83 bridge on I2C with its EN on a GPIO. The register logic is
+  driver/rust/src/board/verdin_imx95_display.rs (the order of
+  driver/docs/imx95-display.md section 4(b)); the board layer drives it
+  (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_display.c), no Zephyr
+  driver binds this node. The blocks' clocks and power domains are the
+  System Manager's, asked over SCMI by the Rust side.
+
+  Every value here is a fact of the SoC (the addresses), the module (the
+  expander line, the bridge's bus) or the display on the carrier (the
+  bridge's address, the backlight pin).
+
+compatible: "yakogl,imx95-dsi-display"
+
+include: [base.yaml, pinctrl-device.yaml]
+
+properties:
+  reg:
+    required: true
+
+  reg-names:
+    required: true
+    description: |
+      "dpu", "csr" (display CSR), "interleaver", "dsi" (DW host), "stream"
+      and "master" (the DSI stream and master CSRs), "phy_csr" (combo PHY
+      CSR), "csi1" (the CSI-2 host whose test interface reaches the combo
+      PHY), "tpm" (the backlight's TPM), in this order.
+
+  bridge:
+    type: phandle
+    required: true
+    description: The SN65DSI83's node on its I2C bus (its reg is the address).
+
+  enable-gpios:
+    type: phandle-array
+    required: true
+    description: The bridge's EN pin (active high at the pin).
+
+  pinctrl-0:
+    required: true
+    description: The backlight's TPM channel on its pad.

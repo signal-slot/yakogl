@@ -4671,6 +4671,8 @@ zephyr_nanopc_t6_mali_image() {
   }
   [ "$size" -le $((64 << 20)) ] || { echo "zephyr.bin is $size bytes; kexec_zephyr reads at most 64 MiB"; return 1; }
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no X4 display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
   carve=$(sed -n 's/^CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=//p' "$dir/zephyr/.config")
   [ -n "$carve" ] && [ "$size" -lt "$carve" ] || {
     echo "zephyr.bin is $size bytes, not under the carve-out's ${carve:-?}: the file holds the GPU's memory"
@@ -4686,14 +4688,18 @@ zephyr_nanopc_t6_mali_image() {
 # U-Boot route would load: the RAM footprint (the AArch64 header's
 # image_size) inside zephyr,sram; the GPU's bring-up in it (the firmware's
 # line and the SCMI power-on's lines, once each; no "STUB:" line about the
-# GPU); and the watchdog's stub line once, so the image cannot pass for one
-# that arms a watchdog.
+# GPU); the X4 display's screen in it (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY,
+# the board layer's display lines once each, verdin_imx95_display.c, and no
+# "no display yet" refusal); and the watchdog's stub line once, so the image
+# cannot pass for one that arms a watchdog.
 zephyr_verdin_imx95_triangle_image() {
   local dir=build/zephyr-werror/verdin_imx95-triangle bin footprint window line n
   mali_csffw_header "$1" verdin_imx95-triangle || return 1
   zephyr_werror_image verdin_imx95/mimx9596/a55 examples/triangle verdin_imx95-triangle || return 1
   bin="$dir/zephyr/zephyr.bin"
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no X4 display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
   footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
   window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
   [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
@@ -4701,12 +4707,15 @@ zephyr_verdin_imx95_triangle_image() {
     return 1
   }
   for line in 'verdin_imx95: STUB: no watchdog armed' 'verdin_imx95: CSF firmware %u bytes embedded' \
-    'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: '; do
+    'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: ' \
+    'verdin_imx95: display up: ' 'verdin_imx95: display stopped: '; do
     n=$(strings -n 20 "$bin" | grep -cF "$line") || true
     [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
   done
   n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: STUB: .*Mali') || true
   [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries a Mali STUB line"; return 1; }
+  n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: no display yet') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries the no-display refusal"; return 1; }
 }
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for

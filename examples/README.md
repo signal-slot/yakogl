@@ -36,10 +36,11 @@ board (`driver/docs/nanopc-t6-display.md`, step D3).
 `triangle` also builds for the Toradex Verdin iMX95 (Mali-G310),
 `-b verdin_imx95/mimx9596/a55`, with the Mali CSF firmware header
 (`driver/src/fw/mali_csffw_blob.h`, the NanoPC-T6's) in place, and nothing
-more yet: that board has no display and no watchdog, and nothing has run on
-one. Its image stops at `board_window()` (no display); the GPU's bring-up
-behind `eglInitialize` (the power-on over SCMI, then the firmware) is in
-the image (`driver/zephyr/lib/board/verdin_imx95`, `docs/standalone-boot.md`).
+more: the GPU's bring-up behind `eglInitialize` (the power-on over SCMI,
+then the firmware) and the Toradex 10.1" DSI display on the Mallow's X4
+behind `board_show()` are in the image; the board has no watchdog yet, and
+nothing has run on one (`driver/zephyr/lib/board/verdin_imx95`,
+`docs/standalone-boot.md`).
 
 `slint` also needs the no_std Slint tree and the patched femtovg and glow,
 which live outside this repository: `nostd/README.md` says how to make them,

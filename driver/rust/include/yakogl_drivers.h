@@ -1048,6 +1048,100 @@ int yd_t6_osal_gpu(struct osal_mali_gpu *out);
 int yd_t6_osal_heap(struct osal_mali_heap *out);
 int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
 
+/* yd_imx95_display_*: the Verdin iMX95's picture on X4, the Toradex 10.1"
+ * DSI display (ffi::imx95_display over board::verdin_imx95_display, the
+ * twelve steps of driver/docs/imx95-display.md section 4(b); feature
+ * imx95). `scmi` is yd_imx95_osal_up's channel (one per image, shared with
+ * the GPU's power-on). `bases` holds where the image mapped each block, at
+ * least YD_IMX95_*_SIZE bytes from YD_IMX95_*_PHYS (Device memory). `env`
+ * serves the bridge: I2C bus YD_IMX95_DISPLAY_BRIDGE_BUS is the SN65DSI83
+ * (0x2C on LPI2C3), GPIO line YD_IMX95_DISPLAY_LINE_EN its EN (the module's
+ * PCAL6416A at 0x20 on LPI2C2, line 3), the waits busy. `fb` is the
+ * physical address of a YD_IMX95_DISPLAY_WIDTH x _HEIGHT XRGB8888 buffer,
+ * rows `stride` bytes apart (a multiple of 4, at least WIDTH x 4); the DPU
+ * has no IOMMU and does not snoop the CPU's caches.
+ *   up    0, -EBUSY (already up), -EINVAL (a missing block, buffer or
+ *         callback: nothing sent or written), -EIO (a step stopped: `stop`
+ *         names the side, the error is one log line through env; final),
+ *         -ENODEV (after a stopped up or a down)
+ *   flip  another buffer of the up's stride from the next frame, waited
+ *         for (ExtDst0's shadow load, at most three frames): 0 (also for
+ *         the buffer already shown), -EINVAL (not fetchable: nothing
+ *         written), -ETIMEDOUT (no shadow load; logged), -ENODEV (not up)
+ *   down  backlight, bridge, DSI host and PHY, CAMERA, then stream 0 and
+ *         DISPLAY: 0, -EIO (logged), -ENODEV (not up)
+ * One thread only. */
+#define YD_IMX95_DPU_PHYS            0x4b400000 /* soc::imx95::dpu::DPU_BASE */
+#define YD_IMX95_DPU_SIZE            0x400000
+#define YD_IMX95_DISPLAY_CSR_PHYS    0x4b010000 /* soc::imx95::display::CSR_BASE */
+#define YD_IMX95_DISPLAY_CSR_SIZE    0x10000
+#define YD_IMX95_INTERLEAVER_PHYS    0x4b0d0000 /* soc::imx95::display::INTERLEAVER_BASE */
+#define YD_IMX95_INTERLEAVER_SIZE    0x20000
+#define YD_IMX95_DSI_PHYS            0x4acf0000 /* soc::imx95::combo_phy::DSI_BASE */
+#define YD_IMX95_DSI_SIZE            0x10000
+#define YD_IMX95_DSI_STREAM_CSR_PHYS 0x4ad00000 /* combo_phy::STREAM_CSR_BASE */
+#define YD_IMX95_DSI_STREAM_CSR_SIZE 0x10000
+#define YD_IMX95_DSI_MASTER_CSR_PHYS 0x4ad10000 /* combo_phy::MASTER_CSR_BASE */
+#define YD_IMX95_DSI_MASTER_CSR_SIZE 0x10000
+#define YD_IMX95_COMBO_PHY_CSR_PHYS  0x4ad20000 /* combo_phy::PHY_CSR_BASE */
+#define YD_IMX95_COMBO_PHY_CSR_SIZE  0x1000
+#define YD_IMX95_CSI1_PHYS           0x4ad40000 /* combo_phy::CSI1_BASE (its PHY test interface) */
+#define YD_IMX95_CSI1_SIZE           0x10000
+#define YD_IMX95_TPM6_PHYS           0x42510000 /* board::verdin_imx95_dsi::TPM6_BASE */
+#define YD_IMX95_TPM6_SIZE           0x1000
+#define YD_IMX95_DISPLAY_WIDTH       1280 /* board::verdin_imx95_dsi::PANEL */
+#define YD_IMX95_DISPLAY_HEIGHT      800
+#define YD_IMX95_DISPLAY_BRIDGE_BUS  0 /* ip::sn65dsi8x::BUS */
+#define YD_IMX95_DISPLAY_LINE_EN     0 /* ip::sn65dsi8x::LINE_EN */
+/* struct yd_imx95_display's state and stop */
+#define YD_IMX95_DISPLAY_NEW         0
+#define YD_IMX95_DISPLAY_UP          1
+#define YD_IMX95_DISPLAY_FAILED      2
+#define YD_IMX95_DISPLAY_DOWN        3
+#define YD_IMX95_DISPLAY_STOP_DPU    1 /* soc::imx95::display: power, pixel clock, DPU, flip */
+#define YD_IMX95_DISPLAY_STOP_DSI    2 /* board::verdin_imx95_dsi: CAMERA, host, PHY, bridge, PWM */
+
+struct yd_imx95_display_bases {
+	uintptr_t dpu, csr, interleaver;              /* DPU, display CSR, interleaver */
+	uintptr_t dsi, stream, master, phy_csr, csi1; /* DW host, camera mix CSRs, CSI-1 */
+	uintptr_t tpm;                                /* TPM6, the backlight */
+};
+
+/* All zero before the first up; the caller keeps it. */
+struct yd_imx95_display {
+	uint64_t fb;            /* the buffer the DPU scans */
+	uint32_t stride;        /* every buffer's */
+	uint32_t state;         /* YD_IMX95_DISPLAY_NEW .. _DOWN */
+	uint32_t width, height; /* the mode shown */
+	uint32_t pix_hz[2];     /* DISP1PIX as the System Manager made it, lo first */
+	uint32_t level;         /* the DISP performance level */
+	uint32_t sync_us;       /* FrameGen0's wait for sync */
+	uint32_t lane_kbps;     /* the DSI lane rate the PHY PLL makes */
+	uint32_t link_irq_stat; /* the bridge's IRQ_STAT after video on: 0 is a clean link */
+	uint32_t host_version;  /* the DW host's VERSION */
+	uint32_t backlight;     /* level of 255 */
+	uint32_t flips;         /* flips that changed the address */
+	uint32_t flip_us;       /* the last flip's wait */
+	uint32_t stop;          /* 0, YD_IMX95_DISPLAY_STOP_DPU or _DSI */
+	uint32_t reserved;
+};
+_Static_assert(sizeof(struct yd_imx95_display_bases) == 72, "ffi::imx95_display YdImx95DisplayBases");
+_Static_assert(offsetof(struct yd_imx95_display_bases, tpm) == 64, "ffi::imx95_display YdImx95DisplayBases");
+_Static_assert(sizeof(struct yd_imx95_display) == 72, "ffi::imx95_display YdImx95Display");
+_Static_assert(offsetof(struct yd_imx95_display, stride) == 8, "ffi::imx95_display YdImx95Display");
+_Static_assert(offsetof(struct yd_imx95_display, pix_hz) == 24, "ffi::imx95_display YdImx95Display");
+_Static_assert(offsetof(struct yd_imx95_display, stop) == 64, "ffi::imx95_display YdImx95Display");
+
+int yd_imx95_display_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			const struct yd_imx95_display_bases *bases, const struct yd_env *env,
+			uint64_t fb, uint32_t stride, struct yd_imx95_display *d);
+int yd_imx95_display_flip(const struct yd_imx95_display_bases *bases, const struct yd_env *env,
+			  uint64_t fb, struct yd_imx95_display *d);
+int yd_imx95_display_down(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx,
+					size_t rx_cap),
+			  const struct yd_imx95_display_bases *bases, const struct yd_env *env,
+			  struct yd_imx95_display *d);
+
 /* D2, the display a crash kexec left running, adopted (board::nanopc_t6_display
  * over ip::vop2 and ip::rk_iommu; feature rk3588): read what Linux left
  * (PD_VOP usable, its CRU gates open, VERSION_INFO, VP0 running in

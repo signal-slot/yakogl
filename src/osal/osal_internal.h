@@ -266,8 +266,10 @@ void osal_mali_diag_print(void);
  * Once per image and before the OSAL's init, which lays the carve-out out:
  * 0; -EINVAL for no bytes, a null pointer, or a size that leaves the
  * carve-out no page (CONFIG_YAKOGL_MALI_CARVEOUT_BYTES); -ENOMEM for a
- * second call; -EBUSY after init; else what making the memory uncached
- * returned. */
+ * second call; -EBUSY after init; -ENOTSUP on an image whose window memory
+ * has the build's size instead (CONFIG_YAKOGL_MALI_WINDOW_BYTES not 0,
+ * osal_zephyr_mali_window_mem in zephyr_mali_board.h: the same pages); else
+ * what making the memory uncached returned. */
 int osal_mali_board_window(size_t bytes, uint64_t *phys, void **cpu);
 
 /* The V3D OSAL's job record, for a sample that prints one at the end of a
