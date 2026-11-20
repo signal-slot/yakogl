@@ -74,7 +74,7 @@ Not built in P9; recorded so the table's shape leaves room for it.
 | Revision split | one layout | **7.1.2 has no R/B swap bit** and its stride starts at bit 32; Mesa uses the 7.1.5 definition for all. The table therefore refuses revisions below 7.1.5 (section 4) rather than carrying two layouts | `X:1686-1690` |
 | Driver structs | `v3d_tex.*` | `v3d_tex71.h:82-102` (`transfer_func`, `r_b_swap`, `reverse`, `array_stride_64`), unsupported-state refusals `v3d_tex71.h:117` | |
 | Texture data formats | no BSTC | new values 46 to 63 (BSTC, `rgba10x6`, BT.1886); not needed before ES 3 compressed formats | `pre-study-rpi5.md:193` (`X:271-284`) |
-| Mip chain | TFU 4.2 | TFU with `IOC` (item 6) | section 2 |
+| Mip chain | TFU 4.2 | TFU with `IOC` (item 6). Whether this Pi 5's TFU works at all is unproven: its identity reads `TFU: no` (`tools/v3d/pi5/v3d_ident.txt:3`), section 6 | section 2, 6 |
 | Cube map (U8) | non-seamless on 4.2 (`docs/v3d-noseamless-cube.md`) | seamless filtering is the first cube case; U8 stays open until the board answers | `pre-study-rpi5.md` U8 |
 
 ## 4. Build selection (decision)
@@ -149,7 +149,37 @@ The Pi 4's run, and the refusal strings the shared code produces:
 | 59 clear with write masks | **refused**: "the draw reads stencil an earlier job wrote, and the target has no depth/stencil buffer to keep it in" (`src/v3d/backend.rs:3791`; the host pin `backend_tests.rs:6276`) | **refused, the same string**: `state.rs`/the shared decision, not the 7.1 builder. Stencil kept between jobs is a separate item |
 | 66 clear not bounded by viewport | PASS | pass |
 | 67 FBO limits | **refused**: "a colour format with fewer than 8 alpha bits" (`src/v3d/state.rs:969`, `backend_tests.rs:3359`: the GL_RGB frame) | **refused, the same string** |
-| 102 clear under partial colour mask | PASS (maskclear 0 of 4096 wrong) | pass if the 7.1 compiler emits the clear quad's program; otherwise refused with a 7.1 name |
+| 102 clear under partial colour mask | PASS (maskclear 0 of 4096 wrong) | pass; the clear quad under a partial mask, and its program compiles (below) |
+
+Two host answers bear on this table, both pinned in the tree:
+
+- **Programs.** Both programs of the six cases compile with our 7.1 online
+  compiler, so no case needs Mesa's offline 7.1 binaries: `color_uv` (the
+  draws of 5, 58, 59, 67 and 102; 66 links none of its own) and `clear` (the
+  float clear quad of all six) are committed as
+  `tools/v3d/gltest-shaders71/ours_color_uv.h` and `ours_clear.h` (prefixes
+  `OURS71_COLOR_UV_*` and `OURS71_CLEAR_*`), re-compiled byte for byte,
+  decoded, verified and run on the 7.1 simulator by
+  `tests/v3d71_gltest_shaders.rs`; a program the compiler cannot build would
+  be pinned there as a named refusal and there is none
+  (`tests/v3d71_gltest_shaders.rs:28-30,63-65`). The clear program's fragment
+  shader reads `u_color` as dwords 0 to 3 of its uniform block
+  (`OURS71_CLEAR_UNIFORM_U_COLOR_WORD` 0, "frag, 4 dwords": `ours_clear.h:49`;
+  the simulator resolves exactly those reads, `tests/v3d71_gltest_shaders.rs:570-585`).
+- **Job builder.** `driver/src/v3d/v3d_job71.c` covers what the six shapes
+  put on the wire: the scissored clip window (`:408-418`), the 7.1 1/64-pixel
+  viewport (`:475-488`), `COLOR_WRITE_MASKS` (`:538-542`), four and eight
+  render targets (four and eight in the compared shapes; the builder takes 1
+  to `V3D_JOB71_MAX_RTS` = 8, `v3d_job71.h:66`, job71.sh's `multi` builds 8,
+  and P9's six cases use one), and D16/D24S8 with Z
+  and with a separate stencil (`v3d_job71.c:203-212`; loads and stores
+  `:882-925`). Its one gap: a D24S8 buffer loaded or stored Z-only or
+  stencil-only picks its buffer from `zs_buffer()` (`:838-844`), which
+  answers Z or ZSTENCIL from the format and the presence of a separate
+  stencil, not from the load/store side; a separate change to `v3d_job71`
+  and `tools/v3d/check71.d/job71.sh` is fixing that. It reaches only the
+  stencil frames of 59 and 67, which the shared refusal refuses anyway (the
+  two rows above).
 
 Expectation: **4 of 6 pass, 59 and 67 refused by the same names**, as the Pi 4
 started. Further refusals are allowed only with a name: a program the 7.1
@@ -162,9 +192,27 @@ row after the board session, not before.
 
 ## 6. Open
 
-- Whether the 7.1 compiler emits the clear quad's program for 58, 59, 66, 102
-  (item "cases71" of plan #384 finds out on the host first).
-- `IOC` and the mip path run only in P10; the encoders are checked on the host,
-  not on the board.
+- `IOC` and the mip path run only in P10; the encoders are checked on the
+  host, not on the board. Whether the Pi 5 has a usable TFU is itself open:
+  its identity reads `TFU: no` (`tools/v3d/pi5/v3d_ident.txt:3`), HUB_IDENT1
+  bit 17 (`WITH_TFU`, `tools/v3d/ident71.py:17,100`), clear in the Pi 5's
+  `0x00081117` (`tools/v3d/pi5/v3d_regs.txt:3`) and set in the Pi 4's
+  `0x000e1124` where the TFU works (`driver/docs/rpi4-v3d.md:161`). The
+  repository does not say what the bit means on 7.x: Linux and Mesa carry a
+  full 7.1 TFU submit path (`driver/docs/rpi5-v3d71-facts.md:179,186`) and
+  our 4.2 `v3d_tfu_run` refuses the BCM2712 only because its job's register
+  block is the 0x400 one, not because the TFU is absent
+  (`driver/src/v3d/v3d_hw.c:530-533`). So the TFU is unproven on the Pi 5
+  until the `tools/probes/rpi_5/rpi5_tfu` probe (one 7.1 TFU mip-chain job,
+  being added) runs on the board: `glGenerateMipmap` on 7.1 goes through the
+  TFU if that passes and is otherwise refused by name.
+  `tools/cts/RESULTS.md` has no TFU row today, and none is claimed here.
 - Seamless cube filtering (U8) and the transfer-function column of section 3
   need the board.
+
+Answered on the host since this section was written: the 7.1 online compiler
+does emit the clear quad's program, and `color_uv` with it, so 58, 59, 66
+and 102 need no Mesa offline binaries —
+`tools/v3d/gltest-shaders71/ours_clear.h` and `ours_color_uv.h`, pinned and
+simulated by `tests/v3d71_gltest_shaders.rs`; section 5 carries it case by
+case.
