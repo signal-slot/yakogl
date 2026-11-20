@@ -95,6 +95,19 @@ if(CONFIG_YAKOGL)
     set(YAKOGL_GPU_DEF "YAKOGL_GPU_VIVANTE")
     set(_yakogl_osal_c "${YAKOGL_SRC}/osal/zephyr_gc.c")
     set(_yakogl_gpu_c "")
+  elseif(CONFIG_YAKOGL_GPU_V3D71)
+    # The V3D 7.1 (Raspberry Pi 5): its own OSAL over the driver's hardware
+    # steps (v3d_hw.c's BCM2712 path) and the board's clock switch
+    # (rpi5/rpi5_v3d.c), all at V3D_CL_VER 71 (below). The 7.1 job builder
+    # and its FFI pins join this list with the 7.1 table.
+    set(YAKOGL_GPU "v3d")
+    set(YAKOGL_GPU_DEF "YAKOGL_GPU_V3D")
+    set(_yakogl_osal_c "${YAKOGL_SRC}/osal/zephyr_v3d71.c")
+    set(_yakogl_gpu_c
+      "${PVR_DRIVER_SRC}/v3d/v3d_hw.c"
+      "${PVR_DRIVER_SRC}/../zephyr/lib/board/rpi5/rpi5_v3d.c")
+    set_source_files_properties(${_yakogl_osal_c} ${_yakogl_gpu_c}
+      PROPERTIES COMPILE_DEFINITIONS "V3D_CL_VER=71")
   elseif(CONFIG_YAKOGL_GPU_V3D)
     # The V3D: the job builder the backend calls through FFI (and the frame
     # builder whose tiling it shares), the driver's hardware steps the OSAL
@@ -204,6 +217,11 @@ if(CONFIG_YAKOGL)
     "${YAKOGL_SRC}/v3d"       # v3d_kick.h: the C view of the V3D submit descriptor
     "${PVR_DRIVER_SRC}"
     "${PVR_DRIVER_SRC}/v3d")
+  if(CONFIG_YAKOGL_GPU_V3D71)
+    # rpi5/rpi5_v3d.c's mailbox (rpi4/rpi_mbox.h; the library is the board
+    # layer's, CONFIG_YAKOGL_RPI5_MBOX)
+    zephyr_library_include_directories("${PVR_DRIVER_SRC}/../zephyr/lib/board/rpi4")
+  endif()
   if(CONFIG_YAKOGL_GPU_V3D)
     # The V3D's packers and texel tiling are Mesa's (driver/src/v3d/v3d_cl.h,
     # v3d_tiling_mesa.c): headers vendored unmodified in third_party/, and
