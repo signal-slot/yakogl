@@ -73,7 +73,7 @@ table=tools/v3d/tfu71_golden.tsv
 # IIA and IOA are drm-shim's BO offsets (the board's differ): the input, so
 # compared as an echo. The shim runs no TFU job: values only.
 ref=tools/v3d/pi5/gl_mipgen.stdout
-flags=(-std=gnu11 -O1 -g -Wall -Wextra -Werror)
+flags="-std=gnu11 -O1 -g -Wall -Wextra -Werror"
 
 if [ -n "${CONNECTED_MESA_26_2:-}" ]; then
   m=$CONNECTED_MESA_26_2
@@ -98,9 +98,9 @@ if [ -n "$why" ]; then
     exit 77
   fi
   # the committed table alone
-  "$cc" "${flags[@]}" -Idriver/src/v3d -c driver/src/v3d/v3d_tfu71.c -o "$dir/v3d_tfu71.o" \
+  "$cc" $flags -Idriver/src/v3d -c driver/src/v3d/v3d_tfu71.c -o "$dir/v3d_tfu71.o" \
     >"$dir/build.log" 2>&1 &&
-    "$cc" "${flags[@]}" -Idriver/src/v3d tools/v3d/tfu71_check.c "$dir/v3d_tfu71.o" \
+    "$cc" $flags -Idriver/src/v3d tools/v3d/tfu71_check.c "$dir/v3d_tfu71.o" \
       -o "$dir/tfu71_check" >>"$dir/build.log" 2>&1 || {
     tail -40 "$dir/build.log"
     echo "tfu71: build failed, 1 failed"
@@ -318,11 +318,11 @@ const unsigned mesa_tfu71_nconsts = sizeof(mesa_tfu71_consts) / sizeof(mesa_tfu7
 EOF
 } >"$s"
 
-"$cc" "${flags[@]}" -DNDEBUG -I"$m/include" -I"$m/src" -c "$s" -o "$dir/mesa_tfu71.o" \
+"$cc" $flags -DNDEBUG -I"$m/include" -I"$m/src" -c "$s" -o "$dir/mesa_tfu71.o" \
   >"$dir/build.log" 2>&1 &&
-  "$cc" "${flags[@]}" -Idriver/src/v3d -c driver/src/v3d/v3d_tfu71.c -o "$dir/v3d_tfu71.o" \
+  "$cc" $flags -Idriver/src/v3d -c driver/src/v3d/v3d_tfu71.c -o "$dir/v3d_tfu71.o" \
     >>"$dir/build.log" 2>&1 &&
-  "$cc" "${flags[@]}" -DTFU71_MESA -Idriver/src/v3d tools/v3d/tfu71_check.c "$dir/v3d_tfu71.o" \
+  "$cc" $flags -DTFU71_MESA -Idriver/src/v3d tools/v3d/tfu71_check.c "$dir/v3d_tfu71.o" \
     "$dir/mesa_tfu71.o" -o "$dir/tfu71_check" >>"$dir/build.log" 2>&1 || {
   tail -40 "$dir/build.log"
   echo "tfu71: build failed, 1 failed"
