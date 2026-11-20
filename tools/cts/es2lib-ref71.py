@@ -23,7 +23,7 @@ SHC_HEADER = re.compile(r"^(--- \w+: \d+ instructions$|\s*\d+ 0x[0-9a-f]{16} )")
 def find_shaders(cands):
     for c in cands:
         for sub in ("", "data/gles2/shaders"):
-            if os.path.isfile(os.path.join(c, sub, "arrays.test")):
+            if os.path.isfile(os.path.join(c, sub, "linkage.test")):
                 return os.path.join(c, sub)
     return None
 
