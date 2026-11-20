@@ -187,4 +187,4 @@ varyings, a field out of range, a list that does not fit), and, at 7.1:
   prog_data; any field `H` holds constant here (propagate NaNs, the VPM
   input size, the base-instance and draw-index bits) needs a case of its own
   before a program that differs is accepted.
-- `xbuild71.sh` cross-compiles `v3d_frame.c` but not yet `v3d_frame71_tri.c`.
+- `xbuild71.sh` cross-compiles `v3d_frame.c` and `v3d_frame71_tri.c` (and `v3d_tex71.c`) at `-DV3D_CL_VER=71` for `-mcpu=cortex-a76`.
