@@ -485,6 +485,19 @@ static bool write_uniforms(struct v3d_cl *cl, const struct v3d_uniform *u, uint3
 			}
 			break;
 		}
+		case V3D_QUNIFORM_TEXTURE_DEPTH:
+		case V3D_QUNIFORM_TEXTURE_ARRAY_SIZE: {
+			/* v3d_uniforms.c: the base level's depth / the layer count of
+			 * the binding `data`; a binding not given, or given without
+			 * it, is refused */
+			const struct v3d_job_tmu *t = find_tmu(tmu, num_tmu, u[i].data);
+			v = !t ? 0 : u[i].contents == V3D_QUNIFORM_TEXTURE_DEPTH ? t->depth : t->array_size;
+			if (v == 0) {
+				cl->bad_field = true;
+				return false;
+			}
+			break;
+		}
 		case V3D_QUNIFORM_FB_WPOS_Y_SCALE:
 		case V3D_QUNIFORM_FB_WPOS_Y_OFFSET:
 		case V3D_QUNIFORM_FB_PNTC_Y_SCALE:

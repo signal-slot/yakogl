@@ -26,15 +26,13 @@
 //!   texture's depth or layer count;
 //! * `driver/src/v3d/v3d_job.c`'s switch over the stream has cases for the
 //!   width and the height (`V3D_QUNIFORM_TEXTURE_WIDTH` / `_HEIGHT`, from
-//!   `struct v3d_job_tmu`'s `width` and `height`) and none for 46 or 47, and
-//!   its `default:` is `bad_field`, the refusal above. `struct v3d_job_tmu`
-//!   has no depth or layer-count field to write them from.
-//!
-//! Until the job builder writes them (v3d_job.c / v3d_job.h, `V3dJobTmu` in
-//! src/v3d/ffi.rs, `texture_units` in src/v3d/backend.rs; none of them is in
-//! this change) every dEQP case whose shader reads a 3D depth or a 2D array's
-//! layer count draws nothing on the Pi 4. The fix flips
-//! `the_job_builder_has_no_case_for_depth_or_array_size`.
+//!   `struct v3d_job_tmu`'s `width` and `height`) and, since the fix of #1261,
+//!   for 46 and 47 (`depth` and `array_size`, filled by `texture_units` in
+//!   src/v3d/backend.rs); its `default:` is still `bad_field`, the refusal
+//!   above, for a word it does not write. tools/v3d/job_check.c checks the
+//!   values written. Before the fix every dEQP case whose shader reads a 3D
+//!   depth or a 2D array's layer count drew nothing on the Pi 4;
+//!   `the_job_builder_has_cases_for_depth_and_array_size` is the pin.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_texsize3d_v3d
@@ -108,25 +106,23 @@ fn a_2d_texture_grad_reads_no_depth_or_layer_count() {
 
 /// What the C job builder writes of the stream (driver/src/v3d/v3d_job.c).
 #[test]
-fn the_job_builder_has_no_case_for_depth_or_array_size() {
+fn the_job_builder_has_cases_for_depth_and_array_size() {
     let src = include_str!("../driver/src/v3d/v3d_job.c");
     let sw = src.find("case V3D_QUNIFORM_TEXTURE_WIDTH:").expect("the width case");
     let rest = &src[sw..];
     let end = rest.find("put_u32(p + i * 4, v);").expect("the end of the uniform switch");
     let sw = &rest[..end];
     assert!(sw.contains("case V3D_QUNIFORM_TEXTURE_HEIGHT:"), "the height case");
-    for gap in ["V3D_QUNIFORM_TEXTURE_DEPTH", "V3D_QUNIFORM_TEXTURE_ARRAY_SIZE", "case 46:", "case 47:"] {
-        assert!(!sw.contains(gap), "the job builder now writes `{gap}`: flip this test");
+    for case in ["case V3D_QUNIFORM_TEXTURE_DEPTH:", "case V3D_QUNIFORM_TEXTURE_ARRAY_SIZE:"] {
+        assert!(sw.contains(case), "the job builder lacks `{case}`");
     }
     assert!(
         sw.contains("default:\n\t\t\tcl->bad_field = true;\n\t\t\treturn false;"),
         "a word no case writes is refused (bad_field): {sw}"
     );
     let header = include_str!("../driver/src/v3d/v3d_job.h");
-    assert!(
-        !header.contains("TEXTURE_DEPTH") && !header.contains("TEXTURE_ARRAY_SIZE"),
-        "v3d_job.h names a depth or array-size word: flip this test"
-    );
+    assert!(header.contains("V3D_QUNIFORM_TEXTURE_DEPTH      46"), "word 46");
+    assert!(header.contains("V3D_QUNIFORM_TEXTURE_ARRAY_SIZE 47"), "word 47");
     let backend = include_str!("../src/v3d/backend.rs");
     assert!(
         backend.contains("the job builder refused the draw (a uniform, program or primitive it does not write)"),
