@@ -1,0 +1,13 @@
+/bin/bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+host-deqp-run: library and harness from 6e92b3a9, GPU v3d, gles3 (HOST-ONLY: compile/link outcomes only)
+host-deqp-run: YAKOGL_V3D_TILED_COPIES_BYTES=16777216 (the Pi 4 image uses 16777216)
+host-deqp-run: 3368 of 3368 cases began; process exits (a resumed chunk has several):
+      4 exit=0
+     30 exit=1
+34 .qpa file(s), 0 compile refusal(s), 0 distinct reason(s)
+  on cases dEQP FAILED (real gaps)        : 0  in 0 reason(s)
+  on cases dEQP NOT SUPPORTED (excused)   : 0
+  on cases dEQP PASSED (correct refusals) : 0  in 0 reason(s)
+no refusal carried a `0:<line>:` reason. Either nothing was refused, or the refusals came from somewhere that does not name itself -- check a failure log before reading this as clean.
+host-deqp-run: groups, failures by message: /home/orion/connected-work/01a1f8fb-7e3e-7181-aca3-5dd7089e4161/build/host-deqp/run-6e92b3a9-v3d-gles3/summary.txt
+host-deqp-run: results in /home/orion/connected-work/01a1f8fb-7e3e-7181-aca3-5dd7089e4161/build/host-deqp/run-6e92b3a9-v3d-gles3 (HOST-ONLY: never quote a render verdict from them)
