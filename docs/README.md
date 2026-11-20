@@ -14,6 +14,7 @@ design the code follows; there are no run logs or session diaries.
 | `notes/` | Designs and findings that the code relies on (comments cite them), one file per subject. Each file's title line says what it covers: `grep -m1 '^# ' docs/notes/*.md` lists them. This row names no file. |
 | `release/` | Release stage: building guide, checklist, licence and redaction audits. |
 | `ci.md`, `source-form.md`, `standalone-boot.md`, `v3d-noseamless-cube.md`, `notes/v3d-texture-size-words.md` | The CI gate, the source-form rule, standalone boot, two V3D designs: the non-seamless cube, and the texture size uniform words 44-47. |
+| `notes/v3d71-cube-seamless.md` | Mesa's 7.1 cube-map and seamless reading (packets, driver, CI): what the 7.1 table sets for a cube, the U8 prediction, and the case board71-tex runs. |
 
 Elsewhere: board results are `tools/cts/RESULTS.md` (current results only)
 and its Japanese summary `tools/cts/STATUS.md`; the stages are `ROADMAP.md`;
