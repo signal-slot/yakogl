@@ -347,6 +347,10 @@ for f in sorted(x for x in files if x.endswith(".rs") and x not in not_read):
             before = line[:m.start()]
             if re.search(r"(include_str!|include_bytes!|include!)\(\s*$|#\[path\s*=\s*$", before):
                 continue
+            # a citation of upstream lines ("src/.../v3dx_draw.c:1676-1687")
+            # names a place in another tree; nothing opens it
+            if re.search(r"\.[A-Za-z0-9]+:[0-9]+(-[0-9]+)?$", m.group(1)):
+                continue
             p = re.sub(r"^(\.\./)+", "", m.group(1)).split("{")[0].rstrip("/")
             if not any(p == k or p.startswith(k + "/") or k.startswith(p + "/") for k in keyed):
                 print("%s:%d %s" % (f, n, m.group(1)))
@@ -356,8 +360,13 @@ out=$(literal_paths)
 checks=$((checks + 1))
 [ -z "$out" ] || { echo "FAIL a test names a path outside the tree key:"; printf '%s\n' "$out" | sed 's/^/    /'; fails=$((fails + 1)); }
 probes+=(tests/testcache_selftest_probe.rs)
-echo 'fn f() { let _ = std::fs::read("driver/zephyr/testcache-probe.txt"); }' > tests/testcache_selftest_probe.rs
-expect "the control: a read outside the tree key is named" 'testcache_selftest_probe.rs:1 driver/zephyr/testcache-probe.txt' "$(literal_paths)"
+printf '%s\n' 'fn f() { let _ = std::fs::read("driver/zephyr/testcache-probe.txt"); }' \
+  'const CITE: &str = "driver/zephyr/testcache-probe.c:10-12";' > tests/testcache_selftest_probe.rs
+out=$(literal_paths)
+expect "the control: a read outside the tree key is named" 'testcache_selftest_probe.rs:1 driver/zephyr/testcache-probe.txt' "$out"
+checks=$((checks + 1))
+! printf '%s\n' "$out" | grep -q 'testcache_selftest_probe.rs:2 ' ||
+  { echo "FAIL a citation of upstream lines (path:line) is named as a read"; fails=$((fails + 1)); }
 rm -f tests/testcache_selftest_probe.rs
 rm -f "${probes[@]}"
 probes=()

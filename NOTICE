@@ -403,6 +403,22 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
     the boot, interface discovery, global init and ping sequences of
     panthor_fw.c, transcribed under MIT.
 
+13. Zephyr RTOS (https://github.com/zephyrproject-rtos/zephyr), main at
+    4f2d5263e21e731928ffe14ca1e8b366fdaeece8: the Raspberry Pi Zero 2 W
+    board and its BCM2710 SoC, carried until the west.yml pin has them
+    Licence: Apache-2.0 (LICENSES/Apache-2.0.txt)
+    Copyright (c) 2026 Jonathan Elliot Peace; Copyright (c) 2026 Muhammad
+    Waleed Badar
+    driver/boards/raspberrypi/rpi_zero_2w/, driver/boards/raspberrypi/common/
+    rpi_common.dtsi, driver/soc/brcm/bcm2710/, driver/soc/brcm/common/
+    pinctrl_soc.h, driver/dts/arm64/broadcom/bcm2710.dtsi, the two
+    interrupt-controller bindings, drivers and headers (driver/dts/bindings/
+    interrupt-controller/brcm,bcm283*, driver/drivers/interrupt_controller/,
+    driver/include/zephyr/), each file at its upstream path under driver/;
+    unchanged except the three patches in driver/patches/zephyr-rpi_zero_2w/
+    (our changes, Apache-2.0). The list with hashes is
+    driver/UPSTREAM.zephyr-rpi_zero_2w.
+
 Material written after GPL-only sources (Linux display, v3d and
 bcm2835-power drivers) is listed in docs/source-form.md with the plan
 to replace it; it is not relicensed by this file.

@@ -57,6 +57,7 @@ info | email | * | @kdab\.com\b | upstream: authors of the Slint sources the pat
 info | email | driver/src/vivante/hw/*.xml.h | @ | upstream: authors of the etnaviv rules-ng headers
 info | email | driver/src/v3d/* | \brobclark@freedesktop\.org\b | upstream: Mesa author of the code this file follows
 info | email | tools/vivante/*.patch | @gmail\.com\b | upstream: etnaviv author in a Mesa patch
+info | email | driver/* | \bjep@alphabetiq\.com\b | upstream: author of the Zephyr Raspberry Pi Zero 2 W board and BCM2710 SoC files carried unchanged (driver/UPSTREAM.zephyr-rpi_zero_2w)
 # Self-test fixtures of files held by other plans (their owners may drop the
 # fixture instead; see docs/release/redaction-audit.md part 4).  One rule per
 # value and exact path.  The names under .example and example.com are

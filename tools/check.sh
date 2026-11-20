@@ -1101,6 +1101,10 @@ TEST_TREE_PATHS=(
   # remakes it when V3D_SHC is set
   tools/v3d/es100_counts_71.tsv tools/v3d/es100_ref71.sh
   tools/pco_shc/usc_blobs.txt                    # tests/pvr_ld_encode.rs: the programs' words
+  # the V3D 7.1 tests (tests/v3d71_*.rs) compare with the Pi 5 references
+  # (CLIF dumps, stdout, v3d_ident.txt, README.md, src/gl_shapes.py) and read
+  # the documents and sources whose words they pin (v3d71_ident, v3d71_zskeep)
+  tools/v3d/pi5 driver/docs/rpi5-v3d71-facts.md docs/notes/pre-study-rpi5.md src/v3d
 )
 # The hash of those files (their blob ids; a file changed or added in the
 # working tree by its content). The library's own unit tests (src/lib.rs)
@@ -2533,6 +2537,39 @@ if command -v cc >/dev/null 2>&1; then
   }
   scope all
   step "sha256  third_party files are the upstream files (UPSTREAM)" upstream_files_unmodified
+  # The Zephyr files driver/ carries for the Raspberry Pi Zero 2 W (the board,
+  # the BCM2710 SoC, its interrupt controllers; driver/UPSTREAM.zephyr-rpi_zero_2w)
+  # are the upstream files plus the recorded patches and nothing else: on a
+  # copy, the patches reversed (last first, no fuzz) give every listed hash,
+  # and the patches directory holds exactly the patches the record lists.
+  carried_zephyr_files_upstream() {
+    local u="$PWD/driver/UPSTREAM.zephyr-rpi_zero_2w" t f p listed present
+    listed=$(grep -oE 'patches/zephyr-rpi_zero_2w/[0-9]{4}-[^ ]+\.patch' "$u" | sort -u)
+    present=$(cd driver && ls patches/zephyr-rpi_zero_2w/*.patch | sort)
+    [ "$listed" = "$present" ] || {
+      echo "driver/patches/zephyr-rpi_zero_2w/ and the patches: of $u differ:"
+      diff <(echo "$listed") <(echo "$present")
+      return 1
+    }
+    t=$(mktemp -d "$PWD/build/check/carried-zephyr.XXXXXX") || return 1
+    for f in $(awk 'NF==2 && $1 ~ /^[0-9a-f]{64}$/ {print $2}' "$u"); do
+      mkdir -p "$t/${f%/*}" && cp "driver/$f" "$t/$f" || { rm -rf "$t"; return 1; }
+    done
+    for p in $(sort -r <<<"$listed"); do
+      patch -s -R -p1 -F0 --no-backup-if-mismatch -d "$t" <"driver/$p" ||
+        { echo "driver/$p does not reverse on the carried files"; rm -rf "$t"; return 1; }
+    done
+    (cd "$t" && awk 'NF==2 && $1 ~ /^[0-9a-f]{64}$/ {print $1 "  " $2}' "$u" | sha256sum --quiet -c -) ||
+      { rm -rf "$t"; return 1; }
+    rm -rf "$t"
+  }
+  scope drivers
+  if command -v patch >/dev/null 2>&1; then
+    step "sha256  driver/ Zephyr files for rpi_zero_2w are upstream's plus the recorded patches" \
+      carried_zephyr_files_upstream
+  else
+    gap "driver/ Zephyr files for rpi_zero_2w: patch is not on PATH: the carried files were NOT compared with upstream's hashes"
+  fi
   scope v3d
   step "cc      v3d FFI layout pins" cc -std=c11 -fsyntax-only -Wall -Wextra -Werror \
     "${v3d_inc[@]}" src/v3d/ffi_layout_check.c
@@ -4339,9 +4376,11 @@ zephyr_werror_image() {
   shift 3
   local mods log="$dir.log" root="$PWD" src
   # An example (examples/<name>) or a probe (tools/probes/...) is named by its
-  # path from the checkout; a sample by its name under driver/samples/zephyr.
+  # path from the checkout; a sample by its name under driver/samples/zephyr;
+  # ws:<path> is a path in the west workspace (ws:zephyr/samples/hello_world).
   case "$sample" in
     examples/* | tools/*) src="$root/$sample" ;;
+    ws:*) src="$ZEPHYR_WS/${sample#ws:}" ;;
     *) src="$root/driver/samples/zephyr/$sample" ;;
   esac
   mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || return 1
@@ -4654,6 +4693,12 @@ if [ "$QUICK" -eq 0 ]; then
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
+    # The Raspberry Pi Zero 2 W: Zephyr's hello_world for rpi_zero_2w with the
+    # pin, the board and SoC from driver/ (carried from upstream Zephyr,
+    # driver/UPSTREAM.zephyr-rpi_zero_2w). Built, not run on a board: the row
+    # says the carried files build against the pin's arch code and drivers.
+    step "zephyr  rpi_zero_2w hello_world image (board and SoC carried from upstream), built not run" \
+      zephyr_werror_image rpi_zero_2w ws:zephyr/samples/hello_world rpi_zero_2w
   else
     gap "zephyr images: no west workspace at ZEPHYR_WS='${ZEPHYR_WS-}' (set ZEPHYR_WS): our C files were NOT compiled with -Werror"
   fi

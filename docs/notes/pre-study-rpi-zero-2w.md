@@ -689,7 +689,7 @@ week or more in units of that port, not calendar promises.
 | 1 | `tools/vc4/`: Mesa vc4 + drm-shim build script, `vc4_shc`, a list recorder | M | clean build; stored reference words and lists |
 | 2 | QPU ISA model, encoder, decoder, round trip (`src/shaderc/online/vc4/`) | M | round trip over the corpus and `vc4_qpu_disasm.c` vectors |
 | 3 | Packet and record encoders for binner and render lists; golden test | M | byte equality with item 1 |
-| 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only. **2026-11-20: upstream Zephyr has both (section 9); the item is now how our workspace gets them** | M | image builds in a gate row |
+| 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only. **2026-11-20: upstream Zephyr has both (section 9); the item is now how our workspace gets them. Done 2026-11-20, carried out of tree (9.2): upstream `4f2d5263e21e`'s SoC `bcm2710`, board and interrupt controllers in `driver/`, three patches for the pin; `hello_world` builds with the pin (gate row `zephyr  rpi_zero_2w hello_world image`); not run** | S | image builds in a gate row |
 | 5 | Driver: mailbox clock and power (the Pi 4's `rpi_mbox.c` with base `0x3f00b880`, Q6), reset, list start, interrupts (Q4), overflow memory, hang reset, mock test | M | host mock test; day-one checks 1 and 2 |
 | 6 | Board day one: UART, identity, clear, triangle with Mesa's own shaders | S (board) | section 6 |
 | 7 | Compiler: select, schedule, allocate for FS/VS/CS, uniform stream, VPM I/O, SFU; no 32-bit multiply, no divide | L | corpus words vs `vc4_shc`; QPU sim; gl_test shader cases |
@@ -775,6 +775,42 @@ board, not chosen here:
 
 Either way the interrupt controller, the console, the mailbox and
 the boot recipe are no longer ours to write, and item 4 is S, not M.
+
+**Done, 2026-11-20: the second way.** The files are upstream's at
+`zephyr-main:` `4f2d5263e21e` (the tip of main that day, the commit 9.1
+read), carried in the `yakogl-drivers` Zephyr module (`driver/`, whose
+board, SoC and devicetree roots already hold the Verdin, NanoPC-T6 and
+STM32MP257F-DK boards) at their upstream paths:
+`soc/brcm/bcm2710/`, `soc/brcm/common/pinctrl_soc.h`,
+`boards/raspberrypi/rpi_zero_2w/` (without `doc/`),
+`boards/raspberrypi/common/rpi_common.dtsi`,
+`dts/arm64/broadcom/bcm2710.dtsi`, the two interrupt controllers
+(`drivers/interrupt_controller/intc_bcm2836_l1.c`,
+`intc_bcm2835_armctrl.c`, `Kconfig.brcm`, their bindings and their
+headers) and the dt-bindings headers the devicetree includes.
+`driver/UPSTREAM.zephyr-rpi_zero_2w` has the commit, the upstream sha256
+of each file, and the patches; `tools/check.sh` checks both. The
+pin's arch code took the SoC as it is (`ARM_CUSTOM_INTERRUPT_CONTROLLER`,
+`SOC_PER_CORE_INIT_HOOK` and the arm64 MMU calls the drivers use are all
+in the pin): no core API the board needs for one core is missing. Three
+devicetree patches, each against an upstream change the pin lacks:
+
+| Patch | File | Why |
+| --- | --- | --- |
+| 0001 | `bcm2710.dtsi` | no `cpu-release-addr`: the pin's `arm,cortex-a53` binding does not declare it. Upstream's four-core start (`ee3207193d`) also needs the spin-table CPU ops and the arm64 IPI hook for custom controllers (`fddb97c939d`), which the pin lacks: **on the pin the image is single-core** |
+| 0002 | `bcm2710.dtsi` | the console UART on the pin's own mini-UART driver (`brcm,bcm2711-aux-uart`, the Pi 4's); upstream's `ns16550` BCM283x variant (`d7c5d598635`) is not in the pin, whose plain `ns16550` would set a wrong baud divisor |
+| 0003 | `rpi_common.dtsi` | the firmware framebuffer under the firmware node, as the pin's driver and binding expect (upstream `967b76a1a16`, `e242dcfea46`) |
+
+Left out (not needed to build and boot to a console): the board page
+and picture, and the drivers and bindings of the RNG, the firmware
+thermal sensor, the firmware power domains and DMA (their nodes are
+parsed and ignored; the power domains are used only with `PM`).
+Zephyr's `samples/hello_world` builds for `rpi_zero_2w` with the pin,
+`-DYAKOGL_WERROR=ON` as the other image rows, 36,956-byte
+`zephyr.bin`; the gate row is `zephyr  rpi_zero_2w hello_world image`,
+a gap without `ZEPHYR_WS`. The card and `config.txt` are in
+`docs/standalone-boot.md`, "Raspberry Pi Zero 2 W". Not run: the board
+is not here (section 6, day one).
 
 ### 9.3 What did not change
 
