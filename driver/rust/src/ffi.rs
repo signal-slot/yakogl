@@ -59,6 +59,11 @@ mod imx8mp_dsi;
 /// `yd_t6_osal_*`): src/ffi/imx95.rs.
 #[cfg(any(all(feature = "imx95", feature = "rk3588", feature = "mali"), test))]
 mod imx95;
+/// The Verdin iMX95's picture on X4, `yd_imx95_display_up` / `_flip` / `_down`
+/// (board::verdin_imx95_display), and the SCMI channel's Rust side both
+/// halves share: src/ffi/imx95_display.rs.
+#[cfg(any(feature = "imx95", test))]
+mod imx95_display;
 /// The i.MX WDOG self-arm (ip::imx_wdog; the shim is
 /// driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c): src/ffi/imx_wdog.rs.
 #[cfg(any(feature = "imx8mp", test))]
