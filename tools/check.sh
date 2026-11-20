@@ -4225,14 +4225,15 @@ step "clippy  yakogl-drivers" cargo clippy -p yakogl-drivers --all-features --al
 # and this row did not see it). So clippy each feature set an image or a
 # knob builds, alone, with -D warnings: none, each SoC, the PowerVR rgxlayer
 # alone and as the AM62P builds it, with each opt-in knob and both, the
-# i.MX 8M Plus GC7000 side, and the NanoPC-T6's (rk3588, mali: the watchdog
-# glue, the GPU power-on, the Z3 firmware). The V3D has no feature in this
+# i.MX 8M Plus GC7000 side, the NanoPC-T6's (rk3588, mali: the watchdog
+# glue, the GPU power-on, the Z3 firmware), and the i.MX 95's GPU power-on
+# over SCMI (imx95). The V3D has no feature in this
 # crate (its driver is C, driver/src/v3d). A new feature or knob joins this
 # list.
 drivers_clippy_arms() {
   local f
   for f in "" imx8mp am62p pvr am62p,pvr am62p,pvr,pvr-fine-wait am62p,pvr,pvr-kick-times \
-    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali; do
+    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali imx95; do
     echo "== yakogl-drivers features [$f]"
     cargo clippy -p yakogl-drivers --no-default-features --features "$f" --all-targets -- -D warnings ||
       { echo "clippy refused yakogl-drivers features [$f]"; return 1; }
@@ -4281,11 +4282,12 @@ scope drivers pvr vivante
 # builds core for it; with neither the row is a gap. The feature sets an image
 # builds: all SoC drivers; the AM62P's (the GPU's rgxlayer and the display
 # path); the i.MX 8M Plus GC7000 kernel side (gpu::vivante); the NanoPC-T6's
-# (rk3588, mali, as driver/zephyr/CMakeLists.txt builds it); and
+# (rk3588, mali, as driver/zephyr/CMakeLists.txt builds it); the i.MX 95's
+# GPU power-on over SCMI (imx95, soc::imx95, ahead of its image); and
 # none (only the SoC-independent I2C driver, ip::sn65dsi8x).
 drivers_softfloat_check() {
   local t=aarch64-unknown-none-softfloat f
-  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali ""; do
+  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali imx95 ""; do
     if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
       cargo check -p yakogl-drivers --no-default-features --features "$f" --target "$t" || return 1
     else
