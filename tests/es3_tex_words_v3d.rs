@@ -18,15 +18,15 @@
 //! (`Attempt::Unsupported` after `v3d_job_draw` in src/v3d/backend.rs,
 //! -ENOTSUP, which the GL core maps to GL_INVALID_OPERATION). The C half is not
 //! linked into a host test, so the nearest host-visible points are pinned: the
-//! text in src/v3d/backend.rs, the C switch's lack of a case, and the
-//! compiled stream. tests/es3_texsize3d_v3d.rs pins the same cause from the
+//! text in src/v3d/backend.rs, the C switch's cases, and the compiled stream. tests/es3_texsize3d_v3d.rs pins the same cause from the
 //! stream's side; this file adds the narrowness: a plain 3D `texture()`, a 2D
 //! `textureSize` and a 2D `textureGrad` emit no such word and so are not
 //! refused for it.
 //!
-//! The tests whose names end `_flip_when_words_46_47_are_written` are the ones
-//! whoever makes the job builder write words 46/47 (#321's driver/src/v3d/**)
-//! must flip; the control test stays.
+//! The job builder writes both words now (`v3d_job_tmu`'s `depth` and
+//! `array_size`, filled by `texture_units`; the values are checked against the C
+//! builder by tools/v3d/job_check.c), so the tests `..._is_written_by_the_job_builder`
+//! assert that the cases exist; the control test stays.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_tex_words_v3d
@@ -86,27 +86,27 @@ fn the_refusal_text_is_pinned() {
 }
 
 #[test]
-fn texture_size_of_a_3d_sampler_needs_word_46_flip_when_words_46_47_are_written() {
+fn texture_size_of_a_3d_sampler_needs_word_46_is_written_by_the_job_builder() {
     let c = fragment_contents("sampler3D", "o = vec4(vec3(textureSize(s, 0)), 1.0);");
     assert!(c.contains(&QUNIFORM_TEXTURE_DEPTH), "{c:?}");
     let sw = job_builder_switch();
-    assert!(!sw.contains("V3D_QUNIFORM_TEXTURE_DEPTH") && !sw.contains("case 46:"), "flip: 46 is written");
-    assert!(sw.contains("default:\n\t\t\tcl->bad_field = true;"), "a word without a case is refused");
+    assert!(sw.contains("case V3D_QUNIFORM_TEXTURE_DEPTH:"), "46 is written");
+    assert!(sw.contains("default:\n\t\t\tcl->bad_field = true;"), "a word without a case is still refused");
 }
 
 #[test]
-fn texture_size_of_a_2d_array_needs_word_47_flip_when_words_46_47_are_written() {
+fn texture_size_of_a_2d_array_needs_word_47_is_written_by_the_job_builder() {
     let c = fragment_contents("sampler2DArray", "o = vec4(vec3(textureSize(s, 0)), 1.0);");
     assert!(c.contains(&QUNIFORM_TEXTURE_ARRAY_SIZE), "{c:?}");
     let sw = job_builder_switch();
-    assert!(!sw.contains("V3D_QUNIFORM_TEXTURE_ARRAY_SIZE") && !sw.contains("case 47:"), "flip: 47 is written");
+    assert!(sw.contains("case V3D_QUNIFORM_TEXTURE_ARRAY_SIZE:"), "47 is written");
 }
 
 #[test]
-fn texture_grad_of_a_3d_sampler_needs_word_46_flip_when_words_46_47_are_written() {
+fn texture_grad_of_a_3d_sampler_needs_word_46_is_written_by_the_job_builder() {
     let c = fragment_contents("sampler3D", "o = textureGrad(s, v_texCoord, vec3(0.1), vec3(0.2));");
     assert!(c.contains(&QUNIFORM_TEXTURE_DEPTH), "{c:?}");
-    assert!(!job_builder_switch().contains("case 46:"), "flip: 46 is written");
+    assert!(job_builder_switch().contains("case V3D_QUNIFORM_TEXTURE_DEPTH:"), "46 is written");
 }
 
 /// The control: the refusal is narrow. These programs name no word the job

@@ -246,20 +246,28 @@ struct v3d_job_draw {
  * non-seamless cube look-up's level of detail (the face size). */
 #define V3D_QUNIFORM_TEXTURE_WIDTH  44
 #define V3D_QUNIFORM_TEXTURE_HEIGHT 45
+/* The base level's depth of a 3D texture and the layer count of a 2D array
+ * at sampler binding `data` (v3d_uniforms.c QUNIFORM_TEXTURE_DEPTH and
+ * _ARRAY_SIZE): textureSize and a 3D textureGrad's gradient scale. */
+#define V3D_QUNIFORM_TEXTURE_DEPTH      46
+#define V3D_QUNIFORM_TEXTURE_ARRAY_SIZE 47
 
 /* One sampler binding of a stage: the GPU addresses of its texture shader state
  * and its sampler state (driver/src/v3d/v3d_tex.h), each aligned to
  * V3D_TEX_RECORD_ALIGN (32): the uniform ORs the compiler's bits into the
  * low ones (v3d_uniforms.c write_tmu_p0/p1); and the size of the base level
  * the texture state record samples from, which
- * V3D_QUNIFORM_TEXTURE_WIDTH / _HEIGHT read (0: not given, and such a word
- * is refused). */
+ * V3D_QUNIFORM_TEXTURE_WIDTH / _HEIGHT read, and the base level's depth (a
+ * 3D texture) and layer count (a 2D array), which _DEPTH / _ARRAY_SIZE read
+ * (1 for any other texture; 0: not given, and such a word is refused). */
 struct v3d_job_tmu {
 	uint32_t unit;
 	uint32_t tex_state;
 	uint32_t sampler;
 	uint32_t width;
 	uint32_t height;
+	uint32_t depth;
+	uint32_t array_size;
 };
 
 /* What the render list does with the tile buffer before the draws. */

@@ -35,7 +35,9 @@ use crate::osal::{
 };
 use crate::shaderc::online::v3d::decode::decode as qpu_decode;
 use crate::shaderc::online::v3d::isa::Instr as QpuInstr;
-use crate::shaderc::online::v3d::select::{QUNIFORM_TEXTURE_HEIGHT, QUNIFORM_TEXTURE_WIDTH};
+use crate::shaderc::online::v3d::select::{
+    QUNIFORM_TEXTURE_ARRAY_SIZE, QUNIFORM_TEXTURE_DEPTH, QUNIFORM_TEXTURE_HEIGHT, QUNIFORM_TEXTURE_WIDTH,
+};
 use crate::shaderc::{ShcShader, ShcV3dVs, SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX, SHC_V3D_NO_RECORD};
 use crate::util::{Global, EBUSY, EINVAL, EIO, ENODEV, ENOMEM, ENOTSUP};
 
@@ -5953,7 +5955,10 @@ fn texture_units(
         };
         let sampler = sampler_for(g, b)?;
         let (width, height) = if b.incomplete != 0 { (1, 1) } else { (b.width, b.height) };
-        out[n] = V3dJobTmu { unit: b.unit as u32, tex_state, sampler, width, height };
+        let layers = if b.incomplete != 0 { 1 } else { u32::from(b.layers).max(1) };
+        let depth = if b.type_ == GLES_TEXTYPE_3D { layers } else { 1 };
+        let array_size = if b.type_ == GLES_TEXTYPE_2D_ARRAY { layers } else { 1 };
+        out[n] = V3dJobTmu { unit: b.unit as u32, tex_state, sampler, width, height, depth, array_size };
         n += 1;
     }
     let mut black_sampler = None;
@@ -5970,7 +5975,10 @@ fn texture_units(
              * as their whole data */
             let unit = match w.contents {
                 V3D_QUNIFORM_TMU_CONFIG_P0 | V3D_QUNIFORM_TMU_CONFIG_P1 => w.data >> 24,
-                QUNIFORM_TEXTURE_WIDTH | QUNIFORM_TEXTURE_HEIGHT => w.data,
+                QUNIFORM_TEXTURE_WIDTH
+                | QUNIFORM_TEXTURE_HEIGHT
+                | QUNIFORM_TEXTURE_DEPTH
+                | QUNIFORM_TEXTURE_ARRAY_SIZE => w.data,
                 _ => continue,
             };
             if out[..n].iter().any(|t| t.unit == unit) {
@@ -5993,7 +6001,15 @@ fn texture_units(
                 }
             };
             let cube = unit < 32 && cube_units & (1 << unit) != 0;
-            out[n] = V3dJobTmu { unit, tex_state: black_state(g, cube), sampler, width: 1, height: 1 };
+            out[n] = V3dJobTmu {
+                unit,
+                tex_state: black_state(g, cube),
+                sampler,
+                width: 1,
+                height: 1,
+                depth: 1,
+                array_size: 1,
+            };
             n += 1;
         }
     }

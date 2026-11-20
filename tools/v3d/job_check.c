@@ -894,6 +894,39 @@ static void part_tmu(void)
 	r.num_tmu = 2;
 	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
 	      "a size word for a binding given without its size: REFUSED, nothing left");
+	/* the depth and array-size words (QUNIFORM_TEXTURE_DEPTH 46 and
+	 * _ARRAY_SIZE 47): the same lookup by binding; the depth of a 3D
+	 * texture and the layer count of an array, 0 (not given) or a
+	 * binding the draw did not give is REFUSED */
+	static const struct v3d_uniform fs_da_u[] = {
+		{ V3D_QUNIFORM_TEXTURE_DEPTH, 1 }, { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 1 },
+		{ V3D_QUNIFORM_TEXTURE_DEPTH, 0 }, { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 0 },
+	};
+	struct v3d_fs_prog fs_da = fs;
+	fs_da.uniforms = fs_da_u;
+	fs_da.num_uniforms = 4;
+	const struct v3d_job_tmu deep[2] = { { 1, 0x00500040u, 0x00500060u, 15, 7, 9, 1 },
+					     { 0, 0x00500000u, 0x00500020u, 64, 32, 1, 5 } };
+	r = d;
+	r.fs = &fs_da;
+	r.tmu = deep;
+	check(v3d_job_draw(&j, &r, &lo) == V3D_JOB_OK, "a draw reading depth and layer count goes in");
+	const uint32_t want_da[4] = { 9, 1, 1, 5 };
+	for (int i = 0; i < 4; i++) {
+		char what[120];
+		uint32_t got = ind_word(lo.fs_uniforms + 4 * (uint32_t)i);
+		snprintf(what, sizeof(what), "FS depth/array word %d: %u, want %u", i, got, want_da[i]);
+		check(got == want_da[i], what);
+	}
+	snapshot();
+	r.tmu = &deep[1]; /* binding 0 only */
+	r.num_tmu = 1;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "a depth word for a binding the draw did not give: REFUSED, nothing left");
+	r.tmu = sized; /* sizes given, no depth or layer count */
+	r.num_tmu = 2;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "a depth word for a binding given without it: REFUSED, nothing left");
 	struct v3d_job_clear c = { .rgba8 = 0xff202020u, .z = 1.0f };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the textured job ends");
 }
@@ -2706,7 +2739,7 @@ int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
 	 * part 4: 3 + 3 + 19 fields; part 5: 2 + 5 words + 2 refusals + 3 per
-	 * stage + 1 + 1 + 4 size words + 2 size refusals; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
+	 * stage + 1 + 1 + 4 size words + 2 size refusals + 1 + 4 + 2 depth and layer-count words; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
 	 * refusals + 4 refusals + 1 + 3 (the M5 frame);
 	 * part 7: 3 builds + 3 + 5 load fields + 1 + 5 store fields + 1 + 2 +
 	 * 3 builds + 8 apart;
@@ -2723,7 +2756,7 @@ int main(void)
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals;
 	 * part 21 (varying flag words 1 and 2): 1 build + 7 + 1 refusal */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 20 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
+	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 27 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
 			    28 + 8 + 6 + 10 + 6 + 9 + 9;
 	part_identity();
 	part_rollback();
