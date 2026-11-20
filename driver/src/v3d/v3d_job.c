@@ -771,12 +771,19 @@ static bool emit_state(struct v3d_job *j, const struct v3d_job_draw *d, struct p
 		 be ? st->alpha_dst : 0))
 		emit_blend(bcl, st);
 	/* COLOR_WRITE_MASKS (v3dx_emit.c:571-585): translate_colormask per RT,
-	 * a set bit disables the channel; without independent blend every RT
-	 * takes RT0's mask */
-	uint32_t off = (~st->colormask) & 0xf;
-	if (PACK(V3D_PACK_COLOR_MASK, 1, off)) {
+	 * a set bit disables the channel, RT n at bits 4n..4n+3; without
+	 * independent blend every RT takes RT0's mask, with
+	 * `rt_colormask_own` RT 1..3 take their own */
+	uint32_t off = (~st->colormask) & 0xf, wmask = 0;
+	for (uint32_t n = 0; n < 4; n++) {
+		uint32_t rt_off = off;
+		if (n && st->rt_colormask_own)
+			rt_off = (~(st->rt_colormask >> (4 * (n - 1)))) & 0xf;
+		wmask |= rt_off << (4 * n);
+	}
+	if (PACK(V3D_PACK_COLOR_MASK, 1, wmask)) {
 		v3d_cl_emit(bcl, COLOR_WRITE_MASKS, wm) {
-			wm.mask = off | off << 4 | off << 8 | off << 12;
+			wm.mask = wmask;
 		}
 	}
 	const uint16_t *bc = st->blend_color_f16;

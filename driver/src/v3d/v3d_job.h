@@ -194,6 +194,18 @@ struct v3d_job_state {
 	 * query's draws keep one address across jobs (v3d_query_pipe.c:91-101).
 	 * 4-byte aligned. */
 	uint32_t oq_addr;
+	/* A colour write mask per render target (COLOR_WRITE_MASKS' "Mask":
+	 * 4 disable bits per RT, RT n at bits 4n..4n+3, as Mesa's
+	 * v3dx_emit.c:571-585 packs translate_colormask(rt[n].colormask) when
+	 * the blend state is independent). With `rt_colormask_own`, RT n
+	 * (1..3) writes rt_colormask bits 4(n-1)..4(n-1)+3 (PIPE_MASK_RGBA, set
+	 * = written) and RT 0 `colormask`; without it (zeroed: every caller
+	 * before this field), every RT takes `colormask`, as before. The GL
+	 * core gives its own masks only where an R or RG integer texture,
+	 * drawn as its four-channel store, writes fewer channels than another
+	 * target of the draw. */
+	bool rt_colormask_own;
+	uint32_t rt_colormask;
 };
 
 /* Primitive codes: Mesa's "Primitive" enum (V3D_PRIM_POINTS ..

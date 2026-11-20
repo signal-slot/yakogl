@@ -386,6 +386,12 @@ pub struct V3dJobState {
     /// OCCLUSION_QUERY_COUNTER's address: the counter of the occlusion
     /// query this draw counts for, 0 for none.
     pub oq_addr: u32,
+    /// RT 1..3 write their own colour masks (`rt_colormask`); false: every
+    /// RT takes `colormask`.
+    pub rt_colormask_own: bool,
+    /// With `rt_colormask_own`: RT n (1..3) at bits 4(n-1)..4(n-1)+3,
+    /// PIPE_MASK_RGBA (set = written).
+    pub rt_colormask: u32,
 }
 
 /// `struct v3d_job_draw_layout`: where one draw's uniform streams went (GPU
@@ -885,7 +891,7 @@ const _: () = assert!(offset_of!(V3dJobTarget, uif_only) == 117);
 const _: () = assert!(offset_of!(V3dJobTarget, uif_load) == 118);
 const _: () = assert!(offset_of!(V3dJobTarget, rt_format) == 120);
 const _: () = assert!(size_of::<V3dJobStencilFace>() == 28);
-const _: () = assert!(size_of::<V3dJobState>() == 188);
+const _: () = assert!(size_of::<V3dJobState>() == 196);
 const _: () = assert!(offset_of!(V3dJobState, scissor) == 24);
 const _: () = assert!(offset_of!(V3dJobState, scissor_maxy) == 40);
 const _: () = assert!(offset_of!(V3dJobState, front_ccw) == 44);
@@ -904,6 +910,8 @@ const _: () = assert!(offset_of!(V3dJobState, blend_color_f16) == 164);
 const _: () = assert!(offset_of!(V3dJobState, wpos) == 172);
 const _: () = assert!(offset_of!(V3dJobState, sample_mask) == 180);
 const _: () = assert!(offset_of!(V3dJobState, oq_addr) == 184);
+const _: () = assert!(offset_of!(V3dJobState, rt_colormask_own) == 188);
+const _: () = assert!(offset_of!(V3dJobState, rt_colormask) == 192);
 const _: () = assert!(size_of::<V3dWpos>() == 8);
 const _: () = assert!(size_of::<V3dJobDraw>() == 152);
 const _: () = assert!(offset_of!(V3dJobDraw, instances) == 144);

@@ -1293,6 +1293,15 @@ pub struct GlesDraw {
     /// mirrors `target_*`; `num_targets` 0 means one.
     pub targets: [GlesDrawTarget; GLES_MAX_TARGETS],
     pub num_targets: u8,
+    /// Per-target colour write masks (bit 0 R .. bit 3 A) for a backend
+    /// with a write mask per render target (the V3D's COLOR_WRITE_MASKS):
+    /// with `per_target_mask`, `targets[k]` writes `target_color_mask[k]`
+    /// (0 for a slot that writes nothing); `[0]` is `color_mask`. Set only
+    /// where the targets' masks differ (an R or RG integer texture drawn as
+    /// its four-channel store writes only its format's channels); otherwise
+    /// every target takes `color_mask`.
+    pub per_target_mask: bool,
+    pub target_color_mask: [u8; GLES_MAX_TARGETS],
 
     pub textures: [GlesTextureBind; GLES_MAX_TEX_BINDS],
     pub num_textures: u8,
@@ -1477,6 +1486,8 @@ impl GlesDraw {
         fs_uniform_cpu: core::ptr::null(),
         targets: [GlesDrawTarget::ZERO; GLES_MAX_TARGETS],
         num_targets: 0,
+        per_target_mask: false,
+        target_color_mask: [0; GLES_MAX_TARGETS],
         textures: [GlesTextureBind::ZERO; GLES_MAX_TEX_BINDS],
         num_textures: 0,
         vs_textures: [GlesTextureBind::ZERO; GLES_MAX_VS_TEX_BINDS],

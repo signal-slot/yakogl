@@ -2713,52 +2713,77 @@ fn refuse_undrawable_targets(d: &GlesDraw, mask: u8) -> Result<(), DrawError> {
     Ok(())
 }
 
-/// Does the back end write one colour mask to every render target of a draw?
-/// The V3D does: without independent blend its COLOR_WRITE_MASKS gives every
-/// RT the mask of RT 0 (driver/src/v3d/v3d_job.c, Mesa's v3dx_emit.c:571-585),
-/// which is `GlesDraw::color_mask`.
-const ONE_COLOR_MASK: bool = cfg!(feature = "gpu-v3d");
+/// Does the back end take a colour write mask per render target
+/// (`GlesDraw::per_target_mask`)? The V3D does: its COLOR_WRITE_MASKS packet
+/// carries four disable bits per RT (Mesa's v3d_packet.xml "Color Write
+/// Masks", field "Mask"; v3dx_emit.c:571-585 packs one per RT with
+/// independent blend), which driver/src/v3d/v3d_job.c fills from
+/// `V3dJobState::rt_colormask`. The other back ends key a shader variant per
+/// target and read neither field.
+const PER_TARGET_MASK: bool = cfg!(feature = "gpu-v3d");
 
-/// [`refuse_uneven_target_masks`] has logged its refusal (one line, not one
-/// per draw).
-static REFUSED_UNEVEN_MASK: Global<bool> = Global::new(false);
+/// [`per_target_masks`] has logged its refusal (one line, not one per
+/// draw).
+static REFUSED_UNEVEN_BLEND: Global<bool> = Global::new(false);
 
-/// A draw into several colour targets where one mask cannot be right for all
-/// of them is refused by name before it reaches a back end that has one mask
-/// for every target ([`ONE_COLOR_MASK`]). Each target writes the application's
-/// mask `app` limited to its own channels: an R or RG integer texture drawn as
-/// the four-channel surface of its store has only the format's
-/// ([`framebuffer::fb_target_channel_mask_n`]), every other target all four.
-/// `d.color_mask` is the frame target's. Another written target whose mask
-/// differs (an R8I texture beside an RGBA8 renderbuffer, every channel on)
-/// would take the frame target's mask and lose channels it must write, or
-/// the texture would take channels its store must not hold: either is the
-/// wrong picture, so the draw is dropped with GL_INVALID_OPERATION.
-fn refuse_uneven_target_masks(c: &GlContext, d: &GlesDraw, app: u8) -> Result<(), DrawError> {
+/// A draw into several colour targets whose masks differ, on a back end with
+/// a mask per target ([`PER_TARGET_MASK`]). Each target writes the
+/// application's mask `app` limited to its own channels: an R or RG integer
+/// texture drawn as the four-channel surface of its store has only the
+/// format's ([`framebuffer::fb_target_channel_mask_n`]), every other target
+/// all four. `d.color_mask` is the frame target's (target 0). Where another
+/// written target's mask differs (an R8I texture beside an RGBA8
+/// renderbuffer, every channel on), the draw carries every target's own mask
+/// (`per_target_mask`, `target_color_mask`); where all agree, nothing is set
+/// and every target takes `color_mask`, as before.
+///
+/// Blending is one state for every RT on the V3D (BLEND_ENABLES 0xf, one
+/// BLEND_CFG for all, driver/src/v3d/v3d_job.c emit_blend), and ES 3.0
+/// 4.1.8 ignores it for an integer target only. A draw with uneven masks,
+/// glEnable(GL_BLEND) on and both integer and non-integer targets would
+/// blend the integer store, or not blend the other target: it is refused
+/// by name with GL_INVALID_OPERATION, as every uneven draw was before the
+/// V3D took a mask per RT.
+fn per_target_masks(c: &GlContext, d: &mut GlesDraw, app: u8) -> Result<(), DrawError> {
     let lead = d.targets[0].out_shift;
-    for (i, t) in d.targets[..d.num_targets as usize].iter().enumerate().skip(1) {
+    let n = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
+    let mut masks = [0u8; GLES_MAX_TARGETS];
+    masks[0] = d.color_mask;
+    let (mut uneven, mut int, mut other) = (false, false, false);
+    for (i, t) in d.targets[..n].iter().enumerate() {
         if t.gpu == 0 {
             continue;
         }
-        let own = app & framebuffer::fb_target_channel_mask_n(c, lead + i as u8);
-        if own == d.color_mask {
+        if gles_surf_is_integer(t.format) {
+            int = true;
+        } else {
+            other = true;
+        }
+        if i == 0 {
             continue;
         }
+        masks[i] = app & framebuffer::fb_target_channel_mask_n(c, lead + i as u8);
+        uneven |= masks[i] != d.color_mask;
+    }
+    if !uneven {
+        return Ok(());
+    }
+    if c.blend && int && other {
         // SAFETY: single-threaded by contract; no other reference is live.
-        let reported = unsafe { REFUSED_UNEVEN_MASK.get() };
+        let reported = unsafe { REFUSED_UNEVEN_BLEND.get() };
         if !*reported {
             *reported = true;
             glog!(
-                "draw refused: colour mask {:#x} of the frame target, {:#x} of draw buffer {} (an R or RG \
-                 integer texture writes only its format's channels), and this back end has one colour mask \
-                 for every target",
-                d.color_mask,
-                own,
-                lead as usize + i
+                "draw refused: colour masks {:#x?} per draw buffer (an R or RG integer texture writes only its \
+                 format's channels) under glEnable(GL_BLEND) with integer and non-integer targets, and this back \
+                 end has one blend enable for every target",
+                &masks[..n]
             );
         }
-        return Err((GL_INVALID_OPERATION, "refuse_uneven_target_masks"));
+        return Err((GL_INVALID_OPERATION, "per_target_masks"));
     }
+    d.per_target_mask = true;
+    d.target_color_mask = masks;
     Ok(())
 }
 
@@ -5120,8 +5145,9 @@ fn build_common(
      * format's channels (the others read 0, 0, 1) */
     let app_mask = d.color_mask;
     d.color_mask &= framebuffer::fb_target_channel_mask_n(c, framebuffer::frame_attachment(c));
-    if ONE_COLOR_MASK && d.target_gpu != 0 {
-        refuse_uneven_target_masks(c, d, app_mask)?;
+    (d.per_target_mask, d.target_color_mask) = (false, [0; GLES_MAX_TARGETS]);
+    if PER_TARGET_MASK && d.target_gpu != 0 {
+        per_target_masks(c, d, app_mask)?;
     }
     /* no colour target (a depth/stencil-only framebuffer): nothing of colour
      * is written, whatever glColorMask says */
