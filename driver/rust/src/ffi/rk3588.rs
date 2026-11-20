@@ -690,7 +690,7 @@ const _: () = assert!(offset_of!(YdT6GpuUp, take_over_ran) == 4 * 129);
 const _: () = assert!(offset_of!(YdT6GpuUp, take_over_after) == 4 * 148);
 
 #[cfg(any(feature = "mali", test))]
-fn lo_hi(v: u64) -> [u32; 2] {
+pub(crate) fn lo_hi(v: u64) -> [u32; 2] {
     [v as u32, (v >> 32) as u32]
 }
 
@@ -700,7 +700,7 @@ fn pd_words(r: &rk3588::PdGpuRegs) -> [u32; 6] {
 }
 
 #[cfg(any(feature = "mali", test))]
-fn ident_words(i: &crate::gpu::mali::Ident) -> [u32; 16] {
+pub(crate) fn ident_words(i: &crate::gpu::mali::Ident) -> [u32; 16] {
     let [s0, s1] = lo_hi(i.shader_present);
     let [t0, t1] = lo_hi(i.tiler_present);
     let [l0, l1] = lo_hi(i.l2_present);
@@ -1498,10 +1498,8 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     z1: *mut YdT6GpuUp,
     out: *mut YdT6SubmitUp,
 ) -> i32 {
-    use crate::board::nanopc_t6_osal::{place_sections, OsalMem};
-    use crate::board::nanopc_t6_sections::Backing;
-    use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, SubmitUp, QUEUE_MCU_VA};
-    use crate::gpu::mali::pgtable::{Table, PAGE};
+    use crate::board::nanopc_t6_fw::Rk3588Power;
+    use crate::board::nanopc_t6_submit::SubmitUp;
     let Some(b) = t6_bases(cru, pmu, spi2, qos, gpu, gpu_len) else { return -EINVAL };
     let (Some(clean), Some(delay), Some(on_handover)) = (clean, delay_us, on_handover) else { return -EINVAL };
     if out.is_null() || z1.is_null() || blob.is_null() || mem.is_null() {
@@ -1509,12 +1507,65 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     }
     // SAFETY: the caller's contract.
     let (z, blob) = unsafe { (*mem, core::slice::from_raw_parts(blob, blob_len)) };
+    let mut o = SubmitUp::default();
+    let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
+    let mut power = Rk3588Power { b, qos: crate::board::nanopc_t6_gpu::GPU_QOS_POLICY };
+    let mut handover = |h: &crate::board::nanopc_t6_gpu::GpuUp| {
+        let h = YdT6GpuUp::from(h);
+        on_handover(&h);
+    };
+    // SAFETY: the caller's contract.
+    let r = unsafe { osal_up_on(&mut power, b.gpu, blob, timer_hz, z, clean, delay, &mut handover, &mut g, &mut o) };
+    let Ok(r) = r else { return -EINVAL };
+    // SAFETY: the caller's contract.
+    unsafe {
+        *z1 = YdT6GpuUp::from(&g);
+        *out = o;
+    }
+    if r.is_ok() {
+        0
+    } else {
+        -EIO
+    }
+}
+
+/// The part of a Mali OSAL bring-up that is not the SoC's, shared by
+/// [`yd_t6_osal_up`] and the i.MX 95's `yd_imx95_osal_up` (ffi::imx95) once
+/// each has checked its own arguments: the firmware's sections placed in
+/// `z.fw`, the table pools taken from `z`, `delay` kept for the later
+/// calls, then [`crate::board::nanopc_t6_osal::Osal::up_on`] with the SoC's
+/// `power` and the GPU mapped at `gpu`. `Err` (nothing touched, nothing
+/// written to `z1` or `o`) for a misaligned or empty pool or a firmware
+/// that does not parse or does not fit `z.fw`; `Ok` with what the OSAL's
+/// `up` answered otherwise.
+///
+/// # Safety
+/// As [`yd_t6_osal_up`]'s for `z`'s memory, `gpu`'s mapping, `clean` and
+/// `delay`. One thread only (include/gles_osal.h).
+#[cfg(feature = "mali")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe fn osal_up_on<P: crate::board::nanopc_t6_fw::Power>(
+    power: &mut P,
+    gpu: usize,
+    blob: &[u8],
+    timer_hz: u32,
+    z: YdT6OsalMem,
+    clean: extern "C" fn(usize, usize) -> i32,
+    delay: extern "C" fn(u32),
+    on_handover: &mut impl FnMut(&P::Record),
+    z1: &mut P::Record,
+    o: &mut crate::board::nanopc_t6_submit::SubmitUp,
+) -> Result<Result<(), u32>, ()> {
+    use crate::board::nanopc_t6_osal::{place_sections, OsalMem};
+    use crate::board::nanopc_t6_sections::Backing;
+    use crate::board::nanopc_t6_submit::{GroupBacking, McuBacking, QUEUE_MCU_VA};
+    use crate::gpu::mali::pgtable::{Table, PAGE};
     let aligned = |p: *mut u8| !p.is_null() && (p as usize).is_multiple_of(PAGE as usize);
     if !aligned(z.pool) || !aligned(z.vm_pool) || z.pool_pages == 0 || z.vm_pool_pages == 0 {
-        return -EINVAL;
+        return Err(());
     }
     let arena = Backing { pa: z.fw.pa, cpu: z.fw.cpu, size: z.fw.size };
-    let Some((backings, n)) = place_sections(blob, arena) else { return -EINVAL };
+    let Some((backings, n)) = place_sections(blob, arena) else { return Err(()) };
     // SAFETY: the caller's contract; 4 KiB aligned covers u64's alignment.
     let (pool, vm_pool) = unsafe {
         (
@@ -1539,11 +1590,10 @@ pub unsafe extern "C" fn yd_t6_osal_up(
     // SAFETY: one thread (the contract).
     let s = unsafe { osal() };
     s.1 = Some(delay);
-    let mut o = SubmitUp::default();
-    let mut g = crate::board::nanopc_t6_gpu::GpuUp::default();
-    let r = s.0.up(
+    Ok(s.0.up_on(
         &osal_hw(),
-        b,
+        gpu,
+        power,
         blob,
         &backings[..n],
         pool,
@@ -1552,23 +1602,10 @@ pub unsafe extern "C" fn yd_t6_osal_up(
         mem,
         &|a, n| clean(a, n),
         &mut |us| delay(us),
-        &mut |h| {
-            let h = YdT6GpuUp::from(h);
-            on_handover(&h);
-        },
-        &mut g,
-        &mut o,
-    );
-    // SAFETY: the caller's contract.
-    unsafe {
-        *z1 = YdT6GpuUp::from(&g);
-        *out = o;
-    }
-    if r.is_ok() {
-        0
-    } else {
-        -EIO
-    }
+        on_handover,
+        z1,
+        o,
+    ))
 }
 
 #[cfg(feature = "mali")]

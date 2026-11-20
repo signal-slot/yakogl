@@ -102,7 +102,8 @@
 //! and the UART's stop line say which. `map_phys` outside the carve-out is
 //! `-ENOTSUP`.
 
-use super::nanopc_t6_gpu::{Bases, GpuUp};
+use super::nanopc_t6_fw::{Power, Rk3588Power};
+use super::nanopc_t6_gpu::{Bases, GpuUp, GPU_QOS_POLICY};
 use super::nanopc_t6_sections::Backing;
 use super::nanopc_t6_submit::{
     self as z4, GroupBacking, GroupUp, HeapPlace, Mapping, McuBacking, Region, SubmitUp, Z4Mem, HEAP_CTX_VA,
@@ -515,6 +516,46 @@ impl Osal {
         z1: &mut GpuUp,
         o: &mut SubmitUp,
     ) -> Result<(), u32> {
+        let mut power = Rk3588Power { b, qos: GPU_QOS_POLICY };
+        self.up_on(
+            m,
+            b.gpu,
+            &mut power,
+            blob,
+            backings,
+            pool,
+            tables_pa,
+            timer_hz,
+            mem,
+            clean,
+            delay_us,
+            on_handover,
+            z1,
+            o,
+        )
+    }
+
+    /// [`Osal::up`] over any SoC's [`Power`] and the GPU at `gpu`
+    /// ([`z4::group_up_on`]): the SoC's power-on, then the same Z2, Z3 and
+    /// group as on the NanoPC-T6. `z1` receives the power-on's whole record.
+    #[allow(clippy::too_many_arguments)]
+    pub fn up_on<P: Power>(
+        &mut self,
+        m: &impl Mmio,
+        gpu: usize,
+        power: &mut P,
+        blob: &[u8],
+        backings: &[Backing],
+        pool: &mut [Table],
+        tables_pa: u64,
+        timer_hz: u32,
+        mem: OsalMem<'_>,
+        clean: &impl Fn(usize, usize) -> i32,
+        delay_us: &mut impl FnMut(u32),
+        on_handover: &mut impl FnMut(&P::Record),
+        z1: &mut P::Record,
+        o: &mut SubmitUp,
+    ) -> Result<(), u32> {
         if self.up.is_some() {
             return Ok(());
         }
@@ -546,9 +587,10 @@ impl Osal {
         let heap =
             HeapPlace { pool_va: HEAP_POOL_VA, chunk_va: HEAP_CHUNK_VA, chunk_size: HEAP_CHUNK_SIZE, chunks: initial };
         let z4mem = Z4Mem { queue: mem.queue, vm: &backs, vm_pool: mem.vm_pool, vm_tables_pa: mem.vm_tables_pa };
-        let up = z4::group_up(
+        let up = z4::group_up_on(
             m,
-            b,
+            gpu,
+            power,
             blob,
             backings,
             pool,
@@ -572,12 +614,12 @@ impl Osal {
         let made = self.make_heap(up.id.l2_features, initial);
         if let Err((code, v)) = made.and_then(|h| if h == up.heap { Ok(()) } else { Err((18, h.first_chunk_gpu)) }) {
             (o.step, o.refusal, o.detail) = (z4::STEP_HEAP, code, v);
-            o.ended(&sched::stop_and_terminate(m, b.gpu, &up.iface, &up.csg, &up.cs, delay_us));
+            o.ended(&sched::stop_and_terminate(m, gpu, &up.iface, &up.csg, &up.cs, delay_us));
             *self = Osal::EMPTY;
             return Err(o.step);
         }
         self.up = Some(up);
-        self.gpu = b.gpu;
+        self.gpu = gpu;
         self.carve = mem.carve;
         self.pages = pages;
         self.window_pages = window_pages;
