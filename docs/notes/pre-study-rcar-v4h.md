@@ -8,6 +8,11 @@ separate, later step. Everything below was read from public sources at
 named versions, listed in the table. The claim sources are marked with
 a short prefix and defined in that table.
 
+Update 2026-11-20: section 9 has the host answers to U1 to U6, U9
+and U11. The core is BVNC 30.3.408.101, of the DDK's Volcanic
+architecture, not a Rogue one. Verdict lines 2, 5 and 6 below and
+sections 3.2 and 8 were written before that and are kept as written.
+
 ## Verdict in six lines
 
 1. The board and SoC are pinned: the Sparrow Hawk board is the R-Car
@@ -653,17 +658,17 @@ Each stays a question. Nothing here is guessed.
 
 | # | Question | What answers it |
 | --- | --- | --- |
-| U1 | Which core is it really: an AXM-8-256-era BVNC or the BXS-4-64 the task names? | board read-back D2; H2's device definitions |
-| U2 | Is that BVNC Rogue-family in the sense our code means: will the `csbgen/rogue` packet headers and the USC back end serve it? | D2+D3; Mesa's own answer for unlisted BVNCs is a refusal (§2.3), which tells us the table is not the limit of the ISA, but not what differs |
-| U3 | Which firmware image does the V4H core need, what is its file name, and under what licence? | D1 (`dmesg`), H3 file names; upstream `linux-firmware` has only the three §2.2 files, so a different BVNC means a vendor-supplied file |
-| U4 | How does the BSP kernel module bind the GPU when no DT node names it? | H2 (read the module's device-code), or D1 (watch what appears after the module loads) |
-| U5 | GPU register base, size, interrupt, clock inputs and power domains on V4H | H2/D1 for the driver's answer; the R-Car manual (needs a Renesas account) for the hardware truth; U5 blocks our own DT skeleton until answered |
-| U6 | Does "GSX" name a DDK variant of the rogue family or a different core family? | H2 (the tarball's own build files answer it in one read) |
+| U1 | Which core is it really: an AXM-8-256-era BVNC or the BXS-4-64 the task names? | board read-back D2; H2's device definitions **Host answer (2026-11-20, H2 and H3, section 9): BVNC 30.3.408.101.** The BSP kernel module is built for `RGX_BVNC := 30.3.408.101` and the BSP firmware files carry the same four numbers; the board's own read-back (D2) is still to come |
+| U2 | Is that BVNC Rogue-family in the sense our code means: will the `csbgen/rogue` packet headers and the USC back end serve it? | D2+D3; Mesa's own answer for unlisted BVNCs is a refusal (§2.3), which tells us the table is not the limit of the ISA, but not what differs **Host answer (2026-11-20, section 9): no.** 30.3.408.101 is defined under the DDK's `hwdefs/volcanic`, not `hwdefs/rogue`: a second architecture with its own register map, device code and firmware interface, a META firmware processor and no public packet set for geometry |
+| U3 | Which firmware image does the V4H core need, what is its file name, and under what licence? | D1 (`dmesg`), H3 file names; upstream `linux-firmware` has only the three §2.2 files, so a different BVNC means a vendor-supplied file **Host answer (2026-11-20, H3): `rgx.fw.30.3.408.101` (147,456 B) and `rgx.sh.30.3.408.101` (395,744 B)**, in the closed user-module tarball under the binary-use licence; not in linux-firmware |
+| U4 | How does the BSP kernel module bind the GPU when no DT node names it? | H2 (read the module's device-code), or D1 (watch what appears after the module loads) **Host answer (2026-11-20, H2): through a device-tree node.** The BSP kernel has `gsx@fd000000`, compatible `renesas,gsx`, and the module's makefile sets `SYS_RGX_OF_COMPATIBLE` to that string (section 9.3) |
+| U5 | GPU register base, size, interrupt, clock inputs and power domains on V4H | H2/D1 for the driver's answer; the R-Car manual (needs a Renesas account) for the hardware truth; U5 blocks our own DT skeleton until answered **Host answer (2026-11-20, the BSP device tree, section 9.3): base 0xfd000000, size 0x800000, `GIC_SPI 464`, clock `CPG_MOD 0` (set to 600 MHz by the module), power domain `R8A779G0_PD_A23DGB`, reset `<&cpg 0>`.** The manual is still unread |
+| U6 | Does "GSX" name a DDK variant of the rogue family or a different core family? | H2 (the tarball's own build files answer it in one read) **Host answer (2026-11-20, H2): neither.** "GSX" is Renesas's name for the GPU block (`renesas,gsx`, `rgx_rcar`); the tarball is Imagination's `rogueddk` 25.1 tree, which holds both the `rogue` and the `volcanic` architecture, and the V4H build takes `volcanic` |
 | U7 | Can the owner obtain R19UH0186EJ (and the GPU chapters) with a Renesas account? | the owner's Renesas account; until then sections 1.2/4.3 keep the manual-only facts open |
 | U8 | Zephyr's GIC window (0xf0000000 pair) differs from mainline Linux's (0xf1000000 pair) — which is right for the R52 view? | the manual, or a board test (D2 exercises interrupts); a wrong window is a bring-up bug we want found on purpose, not by surprise |
-| U9 | Does the Rogue firmware on V4H require the IPMMU (the BSP enables it; AM62P runs without an IOMMU in our design)? | H2 (what the vendor module sets up); else D3's boot success/failure |
+| U9 | Does the Rogue firmware on V4H require the IPMMU (the BSP enables it; AM62P runs without an IOMMU in our design)? | H2 (what the vendor module sets up); else D3's boot success/failure **Host answer (2026-11-20, H2): the vendor stack does not put the GPU behind the IPMMU.** The BSP tree has an `ipmmu_3dg` unit, but the `gsx` node has no `iommus` property and `rgx_rcar/sysconfig.c` names no IOMMU |
 | U10 | Is the Cortex-A76 route ever worth upstream Zephyr work, versus staying on Cortex-R52 + AArch32? | an upstream Zephyr SoC addition; decide after U1 pins the core; until then plan AArch32 |
-| U11 | The `rcar-gfx` top `License.txt` is binary-use-only (no reverse engineering) while `kernel-module-gles.bb` declares `GPL-2.0-only & MIT` for the gfxdrv tarball. Which licence governs the file we read in H2? | the LICENSE files inside the tarball itself (H2's first step); the owner's legal call before any reading that the stricter label would forbid; nothing from a non-redistributable SDK enters the tree either way (task rule) |
+| U11 | The `rcar-gfx` top `License.txt` is binary-use-only (no reverse engineering) while `kernel-module-gles.bb` declares `GPL-2.0-only & MIT` for the gfxdrv tarball. Which licence governs the file we read in H2? | the LICENSE files inside the tarball itself (H2's first step); the owner's legal call before any reading that the stricter label would forbid; nothing from a non-redistributable SDK enters the tree either way (task rule) **Host answer (2026-11-20, H2's first step): the kernel-module tarball is Dual MIT/GPLv2 by its own files.** Its `README`, `MIT-COPYING` and `GPL-COPYING` have the sha256 of the three files in `third_party/ti-img-rogue-ddk-25.2/UPSTREAM`; the binary-use `License.txt` is the one that covers the user-module tarball, of which only names, sizes and hashes were taken (section 9.1) |
 
 ## 8. Proposed items, ordered
 
@@ -690,3 +695,150 @@ P9); P3/P4 are the host-side long poles and can run beside P0-P2. If
 P0 shows a non-Rogue family (U1 answers badly), the item list stops
 after P0-P4 and the port is re-planned as a new back end — that is
 why P0 sits first and alone.
+
+## 9. Host answers, 2026-11-20 (H2 and H3)
+
+Host reading only: no board was touched. Main `1d9022e7`. The sources,
+with the same prefixes as above and three new states:
+
+| Prefix | What, at what version |
+| --- | --- |
+| `G:` | `github.com/rcar-community/rcar-gfx`, branch `main`, commit `7ab92b1f0` (2026-10-06) |
+| `KM:` | `G: gfxdrv/GSX_KM_V4H_SparrowHawk.tar.bz2`, 2,097,403 B, sha256 `92a2be149a900f06b94aecc12e4ec768eec2a231c31c0f5719245d4cc75fedf2`, 1,219 entries under `rogue_km/`; `include/pvrversion.h`: "PVR_DDK_Linux+Linux_WS rogueddk 25.1@6794074" |
+| `UM:` | `G: opengl/r8a779g3_linux_gsx_binaries_gles.tar.bz2`, 21,966,659 B, sha256 `d1ca1d4c7504c89940c053bb64396eecc78179bcb0da7f64fc6d8f949c457980`; listed with `tar tjvf`, never unpacked |
+| `B2:` | `github.com/rcar-community/linux`, branches `renesas-lts/v6.18.64-2026-11-18-sparrow-hawk` and `renesas-slts/v6.12.118-2026-11-19-sparrow-hawk` |
+| `L2:` | mainline Linux master on 2026-11-20, `Makefile` 7.4.0-rc3 |
+| `M2:` | Mesa `main` at `bf593eb0` (2026-11-20) |
+
+### 9.1 Licence of what was read (U11)
+
+- `KM: README` says the tree may be used under MIT or under GPL
+  version 2. `README`, `MIT-COPYING` and `GPL-COPYING` have the sha256
+  values `third_party/ti-img-rogue-ddk-25.2/UPSTREAM` lists for TI's
+  copy of the same DDK, byte for byte.
+- File headers in `KM:`: 974 "Dual MIT/GPLv2", 17 "Synopsys Permissive
+  License", 1 "MIT", and 1 "Strictly Confidential"
+  (`build/linux/common/window_systems/nullws_drm.mk`). That one file
+  was not read.
+- `G: License.txt` (binary form only, no reverse engineering, Renesas
+  devices only) is the licence of the user-module tarball. Of `UM:`
+  only the file names, sizes and the tarball's hash were taken.
+- Nothing of either tarball is in this tree.
+
+### 9.2 The core: 30.3.408.101, the Volcanic architecture (U1, U2, U6)
+
+- `KM: build/linux/r8a779g_linux/Makefile` sets
+  `RGX_BVNC := 30.3.408.101` and `PVR_SYSTEM := rgx_rcar`.
+- The firmware files in `UM:` are `rogue/usr/lib/firmware/rgx.fw.30.3.408.101`
+  (147,456 B) and `rgx.sh.30.3.408.101` (395,744 B): the DDK's
+  `rgx.fw.B.V.N.C` naming (`KM: services/server/include/fwload.h:93`),
+  the same four numbers.
+- The DDK holds two architectures. `KM: hwdefs/rogue/km/` has 39 cores
+  (36.53.104.796 among them) and `KM: hwdefs/volcanic/km/` has 19.
+  30.3.408.101 is `hwdefs/volcanic/km/cores/rgxcore_km_30.3.408.101.h`
+  with `configs/rgxconfig_km_30.V.408.101.h`; `build/linux/config/core.mk:263`
+  branches on `PVR_ARCH` being `volcanic`.
+- The configuration header, against the AM62P's
+  (`third_party/ti-img-rogue-ddk-25.2/hwdefs/rogue/km/configs/rgxconfig_km_36.V.104.796.h`):
+
+  | | V4H, 30.V.408.101 | AM62P, 36.V.104.796 |
+  | --- | --- | --- |
+  | top level | `ALBIORIX_TOP_INFRASTRUCTURE`, `S7_TOP_INFRASTRUCTURE` | `ROGUEXE`, `XE_ARCHITECTURE 1` |
+  | firmware processor | `META (MTP219)`, core memory 96 in 8 banks | `RISCV_FW_PROCESSOR` |
+  | MMU | `MMU_VERSION 4` | no version feature |
+  | tile | 32 x 32 | 16 x 16 |
+  | parameter format | no simple format; `SCALABLE_TE_ARCH 1`, `SCALABLE_VCE 1` | `SIMPLE_INTERNAL_PARAMETER_FORMAT` V2 |
+  | physical bus | 40 bits | 36 bits |
+  | compute stream format | 4 | 1 |
+  | ISP/IPP pipes | 4 | 6 |
+  | SLC | 128 KiB, 1024-bit lines | 16 KiB, 512-bit lines |
+
+  The core header has `FIX_HW_BRN_71960`, `FIX_HW_BRN_72144`,
+  `HW_ERN_65104`, `HW_ERN_69700`.
+- The name: the board page and the vendor image say "A-Series
+  AXM-8-256" (section 1.2); the DDK names no product in these headers.
+  The BVNC is the identity, and it is not BXS-4-64's.
+- How far the two architectures are apart in the kernel-side DDK:
+  - registers (`rgx_cr_defs_km.h`, offsets only): 661 names in rogue,
+    802 in volcanic, 364 names in both, 237 of them at the same
+    offset. The packed BVNC is at 0x0020 in both (rogue
+    `RGX_CR_CORE_ID__PBVNC`, volcanic `RGX_CR_CORE_ID`), so the D2
+    read-back needs no change. `RGX_CR_FWCORE_BOOT` is 0x3090 against
+    0x70c0; volcanic has no `RGX_CR_BIF_CAT_BASE0`;
+  - device code: `services/server/devices/rogue` (15 files, 23,797
+    lines) and `services/server/devices/volcanic` (15 files, 20,923
+    lines) are separate; the other 66 entries of
+    `services/server/devices` are common;
+  - firmware interface: `include/rogue/rgx_fwif_km.h` and
+    `include/volcanic/rgx_fwif_km.h` differ in 618 lines,
+    `rgx_fwif_shared.h` in 371.
+- Our firmware boot is the RISC-V one (`driver/src/pvr_fw_boot.c:344-360`).
+  A META firmware processor boots another way.
+- Mesa: `M2: src/imagination/csbgen/volcanic/` has `cdm`, `ipf`,
+  `lls`, `pbestate`, `pds` and `texstate` XMLs (commit `384ce6d8`,
+  2026-02-13, "pvr: add basic volcanic hw-definitions"; also in
+  26.2.1). It has no `cr`, `vdm`, `ppp` or `kmd_stream`, which rogue
+  has. No Mesa build uses them: `M2: src/imagination/vulkan/meson.build:147`
+  still builds `['rogue']` only, and `common/device_info/` has no
+  A-Series header besides `axe-1-16m.h`. So there is no public
+  geometry packet set, no public driver and no public shader compiler
+  for this core. Its shader instruction set was not looked at: no
+  public source for it was found.
+
+### 9.3 The GPU node (U4, U5, U9)
+
+`B2: arch/arm64/boot/dts/renesas/r8a779g0.dtsi:2131-2138`, the same
+lines in both branches (section 1.2 searched the BSP tree for `gpu@`
+nodes; this node is named `gsx@`):
+
+```
+gsx: gsx@fd000000 {
+	compatible = "renesas,gsx";
+	reg = <0 0xfd000000 0 0x800000>;
+	interrupts = <GIC_SPI 464 IRQ_TYPE_LEVEL_HIGH>;
+	clocks = <&cpg CPG_MOD 0>;
+	power-domains = <&sysc R8A779G0_PD_A23DGB>;
+	resets = <&cpg 0>;
+};
+```
+
+- The module's makefile has the same values (`RGX_3DGE_REG_BASE_ADDR
+  := 0xFD000000`, `RGX_3DGE_IRQ_NUM := (464 + 32)`), a core clock of
+  600,000,000 Hz, and `SYS_RGX_OF_COMPATIBLE := "renesas,gsx"`.
+  `KM: services/system/rgx_rcar/sysconfig.c` takes one clock, sets
+  that rate, and uses runtime PM for the power domain.
+- `A23DGB`'s parent is `A33DGA` (section 4.3), so both 3DG domains
+  must be on.
+- `B2:` has `ipmmu_3dg: iommu@eee00000`, but the `gsx` node has no
+  `iommus` property and `sysconfig.c` names no IOMMU.
+- `L2:` `r8a779g0.dtsi` has no `gpu@` or `gsx@` node.
+
+### 9.4 The R-Car V4M has the AM62P's core
+
+`KM: build/linux/r8a779h_linux/Makefile` sets
+`RGX_BVNC := 36.53.104.796`: the R-Car V4M (R8A779H0) is built for
+exactly the BVNC our back end is keyed to (section 3.1), at the same
+register base (0xFD000000, size 0x800000), interrupt (464) and clock
+(600 MHz) as the V4H. "BXS-4-64 on a Renesas Gen4 part", which the
+task named for the V4H, is true of the V4M. `B2:`'s `r8a779h0.dtsi`
+has `ipmmu_3dg` and no `gsx` node; `L2:`'s has no GPU node. No V4M
+board, firmware source or Zephyr support was looked at.
+
+### 9.5 What this does to the item list
+
+- P0 is answered from the host as far as it can be: one BVNC, and it
+  is not a Rogue one. By section 8's own rule the list stops after
+  P0 to P4. P5 to P9 as written assumed the AM62P back end with a
+  second device-info block; that assumption is wrong for the V4H.
+- A V4H port needs, new: the kernel side for the Volcanic register
+  map, MMU version 4 and a META firmware boot; the geometry packets
+  (no public definition); a shader back end for a core no public
+  compiler targets. The DDK kernel source (MIT) is the only public
+  reading base, and it covers the kernel side only.
+- Unchanged: the display path (section 1.3), the Zephyr items H4 and
+  H5, the AArch32 question H6, the boot route (section 4.6). H5's GPU
+  part now has its values (section 9.3).
+- H1 (the drm-shim matrix over Mesa's Rogue BVNCs) tells nothing
+  about this core.
+- Still to be read on a board: the BVNC by our own code (D2).
+
