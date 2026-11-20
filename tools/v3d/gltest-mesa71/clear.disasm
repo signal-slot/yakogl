@@ -1,0 +1,42 @@
+v3d: MESA_SHADER_FRAGMENT shader: 6 inst, 4 threads, 0 loops, 4 uniforms, 4 max-temps, 0:0 spills:fills, 0 sfu-stalls, 6 inst-and-stalls, 1 nops
+v3d: MESA_SHADER_VERTEX shader: 15 inst, 4 threads, 0 loops, 10 uniforms, 7 max-temps, 0:0 spills:fills, 0 sfu-stalls, 15 inst-and-stalls, 0 nops
+v3d: MESA_SHADER_VERTEX_BIN shader: 15 inst, 4 threads, 0 loops, 8 uniforms, 11 max-temps, 0:0 spills:fills, 0 sfu-stalls, 15 inst-and-stalls, 0 nops
+--- fs: 6 instructions
+   0 0x39a13186bb03f000 nop                           ; nop                         ; thrsw; ldunifrf.rf4
+   1 0x39a17186bb03f000 nop                           ; nop                         ; thrsw; ldunifrf.rf5
+   2 0x3981b186bb03f000 nop                           ; nop                         ; ldunifrf.rf6
+   3 0x39a1f1873503f105 vfpack tlb, rf4, rf5          ; nop                         ; thrsw; ldunifrf.rf7
+   4 0x380031873503f187 vfpack tlb, rf6, rf7          ; nop
+   5 0x38003186bb03f000 nop                           ; nop
+--- vs: 15 instructions
+   0 0x39813186bb03f000 nop                           ; nop                         ; ldunifrf.rf4
+   1 0x38403186bb03f000 nop                           ; nop                         ; ldunif
+   2 0x38402185bc03f000 ldvpmv_in rf5, rf0            ; nop                         ; ldunif
+   3 0x5581c246bc144000 ldvpmv_in rf6, rf0            ; fmul rf9, rf5, rf4          ; ldunifrf.rf7
+   4 0x38402188bc03f1c0 ldvpmv_in rf8, rf7            ; nop                         ; ldunif
+   5 0x558342cabc2001a0 recip rf10, rf6               ; fmul rf11, rf8, rf0         ; ldunifrf.rf13
+   6 0x3840218ebc03f340 ldvpmv_in rf14, rf13          ; nop                         ; ldunif
+   7 0x55849306bb24a000 nop                           ; fmul rf12, rf9, rf10        ; ldunifrf.rf18
+   8 0x54400411f5380307 ftoin rf17, rf12              ; fmul rf16, rf14, rf0        ; ldunif
+   9 0x544003c0be2ca011 stvpmv rf0, rf17              ; fmul rf15, rf11, rf10       ; ldunif
+  10 0x540004d4f540a3c7 ftoin rf20, rf15              ; fmul rf19, rf16, rf10
+  11 0x380021950503f493 fadd rf21, rf18, rf19         ; nop
+  12 0x38202180be03f1d4 stvpmv rf7, rf20              ; nop                         ; thrsw
+  13 0x38002180be03f355 stvpmv rf13, rf21             ; nop
+  14 0x38002180be03f00a stvpmv rf0, rf10              ; nop
+--- cs: 15 instructions
+   0 0x39813186bb03f000 nop                           ; nop                         ; ldunifrf.rf4
+   1 0x39817186bb03f000 nop                           ; nop                         ; ldunifrf.rf5
+   2 0x3981e186bc03f140 ldvpmv_in rf6, rf5            ; nop                         ; ldunifrf.rf7
+   3 0x55824348bc1841c0 ldvpmv_in rf8, rf7            ; fmul rf13, rf6, rf4         ; ldunifrf.rf9
+   4 0x3982e18abc03f240 ldvpmv_in rf10, rf9           ; nop                         ; ldunifrf.rf11
+   5 0x3840218cbc03f2c0 ldvpmv_in rf12, rf11          ; nop                         ; ldunif
+   6 0x544003cebc200320 recip rf14, rf12              ; fmul rf15, rf8, rf0         ; ldunif
+   7 0x38002180be03f146 stvpmv rf5, rf6               ; nop
+   8 0x54000400be34e1c8 stvpmv rf7, rf8               ; fmul rf16, rf13, rf14
+   9 0x54000440be3ce24a stvpmv rf9, rf10              ; fmul rf17, rf15, rf14
+  10 0x38002192f503f407 ftoin rf18, rf16              ; nop
+  11 0x38002180be03f2cc stvpmv rf11, rf12             ; nop
+  12 0x38602180be03f012 stvpmv rf0, rf18              ; nop                         ; thrsw; ldunif
+  13 0x38002193f503f447 ftoin rf19, rf17              ; nop
+  14 0x38002180be03f013 stvpmv rf0, rf19              ; nop
