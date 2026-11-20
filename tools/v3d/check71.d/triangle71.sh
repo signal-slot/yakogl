@@ -278,7 +278,11 @@ check_against() {
   *"BCL 126 RCL 96 indirect 187 bytes (record +0x60, tile list +0xa0..+0xbb)"*) ;;
   *) fail "($where) not the board's list sizes and layout: $last" ;;
   esac
-  python3 -I tools/v3d/clif_cmp.py "$dir/$where.clif" "$refclif" "${IGNORED[@]}" \
+  # the expected plain-decode differences ($@) are left out of clif_cmp.py's
+  # record comparison and pinned exactly by rec_cmp.py recs below
+  local ign=("${IGNORED[@]}") f
+  for f in "$@"; do ign+=(--ignore "SHADREC_GL_MAIN.$f"); done
+  python3 -I tools/v3d/clif_cmp.py "$dir/$where.clif" "$refclif" "${ign[@]}" \
     >"$dir/$where.cmp" 2>&1 || {
     fail "($where) differs from $refclif:"
     sed 's/^/  /' "$dir/$where.cmp"
