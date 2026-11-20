@@ -163,7 +163,46 @@ timestamped CR form of `on`; usage. The gate gives it a row
 
 ## On the board
 
-Not run yet.
+Ran on 2026-11-20 on the Pi 5 (tryboot, one run, image built from
+`0e7742f0`, `image_sha256` 65ecd23b, 61728 bytes; the board came back to Linux
+by itself; `get_throttled` 0x0 before and after). The verdict is `PASS
+(GET_THROTTLED answered by clear board)`, `done (7 of 7 answered)`, and
+`q1: cache maintenance`. The image printed `cache management on`, `mailbox
+init 0`, the probe's mapping, `buffer mode cacheable, cache maintenance, no
+second mapping` (no panic this time), and `regs at start: sta0 0x40000000 cnf0
+0x00000000 sta1 0x40000000` (MAIL0 empty, nothing waiting). In every way the
+words were sent and the reply word read back equal (`sent` = `reply`), no
+other-channel message was dropped, and `sta0`/`sta1` were the same before and
+after.
+
+| tag | display (no cache calls) | clear (clean, invalidate) | board (`rpi_mbox_request_timed`) |
+|---|---|---|---|
+| `GET_THROTTLED` | status 0x0, rc -5 | 0x80000000, value 0x0 | rc 0, value 0x0 |
+| `GET_FIRMWARE_REVISION` | status 0x0, rc -5 | 0x80000000, value 0x684bf1ce | rc 0, value 0x684bf1ce |
+| clock 4 (core) | status 0x0, rc -5 | 0x80000000, 0x1dcd6500 (500000000 Hz) | rc 0, the same |
+| clock 16 (HVS disp) | status 0x0, rc -5 | 0x80000000, 0 Hz | rc 0, 0 Hz |
+| clock 13 (HDMI HSM) | status 0x0, rc -5 | 0x80000000, 0 Hz | rc 0, 0 Hz |
+| clock 14 (HDMI bvb) | status 0x0, rc -5 | 0x80000000, 0 Hz | rc 0, 0 Hz |
+| clock 5 (V3D) | status 0x0, rc -5 | 0x80000000, 0x1dcd6500 (500000000 Hz) | rc 0, the same |
+
+The `answered:` line was `display 0 of 7, memory 0 of 7, clear 7 of 7, board
+7 of 7`. The `memory` lines (display buffer read after an invalidate) show
+status 0, answered 0 and value 0 for every request: the firmware wrote nothing
+into the buffer of the display way. That is what a request it never saw looks
+like, which is candidate 1: the request words stayed in the CPU's cache
+(no clean before the doorbell), the firmware read other bytes at that address,
+and the CPU's cached copy kept the request's response code 0 (no invalidate).
+The two ways with the cache calls, on the same base, channel and mailbox,
+answered at once (poll count about 45800 in the board way). Candidate 2 (the
+transport) is ruled out. The answers also show the firmware revision
+0x684bf1ce and the core and V3D clocks at 500 MHz; the HVS disp, HDMI HSM and
+HDMI bvb clocks read 0 Hz, which answers nothing about their real rate (the
+firmware reports 0 for a clock it does not track, or one that is off): Q5 of
+`docs/notes/rpi5-display.md` stays open.
+
+How the run was made: build and run as below, with `BOARD_END_RE` set; the
+run directory was outside the checkout and is not committed. The session's
+capture ended at the end line after 213 lines.
 
 A session runs it through `tools/board.sh pi5 run <zephyr.bin> <logdir>` with
 
