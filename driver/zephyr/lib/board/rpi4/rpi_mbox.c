@@ -4,7 +4,8 @@
  * The BCM2711 and BCM2712 property mailbox (see rpi_mbox.h). One request in
  * flight at a time; the sample is single-threaded.
  *
- * The SoC is a parameter (CONFIG_SOC_BCM2712 or the Pi 4's). The register block
+ * The SoC is a parameter (CONFIG_SOC_BCM2712, CONFIG_SOC_BCM2837 for the
+ * Zero 2 W, or the Pi 4's). The register block
  * is the same on both (the BCM2712 node is `brcm,bcm2835-mbox`); the address
  * and the bus view of memory differ.
  */
@@ -25,6 +26,14 @@
  * dts/broadcom/bcm2712.dtsi, nodes `mailbox` and `soc`, rpi-6.12.y; Zephyr
  * dts/arm64/broadcom/bcm2712.dtsi:61-69, mbox@107c013880, size 0x40). */
 #define MBOX_BASE      0x107c013880ull
+#elif defined(CONFIG_SOC_BCM2837)
+/* The BCM2837 (Raspberry Pi Zero 2 W): the same mailbox node at bus
+ * 0x7e00b880 (bcm283x.dtsi:100-105), ARM 0x3f00b880 through the soc ranges
+ * (bcm2837.dtsi:8-10; docs/notes/pre-study-rpi-zero-2w.md Q6). The pinned
+ * Zephyr has no such SoC; upstream's soc/brcm/bcm2710 (the note's section 9)
+ * may name its symbol differently, item 4 settles it. driver/src/vc4's mock
+ * test builds this file with it. */
+#define MBOX_BASE      0x3f00b880u
 #else
 #define MBOX_BASE      0xfe00b880u   /* bcm283x.dtsi:100, bus 0x7e00b880 */
 #endif
@@ -46,7 +55,8 @@
  * mailbox word (below 4 GiB; the image's sram0 is). */
 #define BUS_ALIAS      0x00000000u
 #else
-/* The VC sees ARM physical memory at bus 0xc0000000 (bcm2711.dtsi:45). */
+/* The VC sees ARM physical memory at bus 0xc0000000 (bcm2711.dtsi:45; the
+ * BCM2837's dma-ranges too, bcm2837.dtsi:10). */
 #define BUS_ALIAS      0xc0000000u
 #endif
 
