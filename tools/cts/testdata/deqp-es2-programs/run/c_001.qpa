@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The attribute_location form (glsAttributeLocationTests.cpp logShaders and
+# logProgram): sections with a KernelSource, an "Info Log" section and a
+# "Compilation result" / "Link result" message, the link after the shaders.
+# The process then stopped; resumed_dup ran in c_001.r1.qpa.
+#beginTestCaseResult dEQP-GLES2.functional.attribute_location.selftest.section_form
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.attribute_location.selftest.section_form" CaseType="SelfValidate">
+ <Text>Create and attach shaders to program.</Text>
+ <Section Name="Vertex Shader Info" Description="Vertex Shader Info">
+  <KernelSource>attribute highp vec4 a_0;
+void main (void)
+{
+	gl_Position = a_0;
+}
+</KernelSource>
+  <Section Name="Info Log" Description="Info Log">
+   <Text></Text>
+  </Section>
+  <Text>Compilation result: Ok</Text>
+ </Section>
+ <Section Name="Fragment Shader Info" Description="Fragment Shader Info">
+  <KernelSource>void main (void)
+{
+	gl_FragColor = vec4(1.0);
+}
+</KernelSource>
+  <Section Name="Info Log" Description="Info Log">
+   <Text></Text>
+  </Section>
+  <Text>Compilation result: Ok</Text>
+ </Section>
+ <Text>Link program.</Text>
+ <Section Name="Program Link Info" Description="Program Link Info">
+  <Section Name="Info Log" Description="Info Log">
+   <Text></Text>
+  </Section>
+  <Text>Link result: Ok</Text>
+ </Section>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
