@@ -543,6 +543,14 @@ handling in `main_imx8mp.c`:
 The default image is unchanged: the option is n, and without it both cases
 SKIP by name and `main_imx8mp.c` compiles as before.
 
+Host build check (item probe-cases-build, no board): `IMX8MP_BOARD=x2
+tools/cts/imx8mp-gltest-build.sh tsp-off 246` and the same with
+`-DCONFIG_GL_TEST_GC_TS_PROBE=y` (name `tsp-on`) both gave `rc=0` and an
+`armadillo_x2/mimx8ml8/a53` `zephyr.bin` carrying `gc_wdog_arm: armed`. The
+off image's `.config` reads `# CONFIG_GL_TEST_GC_TS_PROBE is not set` and
+links neither hook. The on image links `gc_debug_ts_probe` and
+`gc_debug_depth_dump`.
+
 ### Session commands (item x2-ts-probe-session)
 
 One image, from an `origin/main` commit that has this item. The sweep
