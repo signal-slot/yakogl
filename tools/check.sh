@@ -208,7 +208,10 @@ scope_of_path() {
   src/shaderc/online/mali/* | src/mali/* | tools/mali/* | tests/mali_*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
-  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_rt_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
+  # the generator of both i.MX register maps: the i.MX 8M Plus's row
+  # (vivante) and the i.MX 95's (drivers)
+  tools/hal-nxp/*) echo "vivante drivers" ;;
+  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_rt_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
   # gl_FragDepth's shape test (tests/es3_fragdepth_cases.rs) pins its verdicts
   # on both GPUs: a change there reaches both fragdepth rows, and nothing else
   tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
@@ -4943,6 +4946,18 @@ if command -v python3 >/dev/null 2>&1; then
     step "gen     driver/rust imx8mp regs.rs == gen_regs.py on hal_nxp 1e91007b" hal_nxp_regs_regenerate
   else
     gap "imx8mp regs.rs: no hal_nxp at $hal_nxp_dir (set HAL_NXP_DIR): the generated registers were NOT checked"
+  fi
+  # driver/rust/src/soc/imx95/regs.rs: the i.MX 95 display's registers
+  # (soc::imx95::dpu, ::display), the same generator and pin.
+  scope drivers
+  if [ -d "$hal_nxp_dir/mcux/mcux-sdk-ng/devices/i.MX/i.MX95/periph" ]; then
+    hal_nxp_imx95_regs_regenerate() {
+      python3 tools/hal-nxp/gen_regs.py --soc imx95 "$hal_nxp_dir" | cmp - driver/rust/src/soc/imx95/regs.rs
+    }
+    scope drivers
+    step "gen     driver/rust imx95 regs.rs == gen_regs.py --soc imx95 on hal_nxp 1e91007b" hal_nxp_imx95_regs_regenerate
+  else
+    gap "imx95 regs.rs: no hal_nxp at $hal_nxp_dir (set HAL_NXP_DIR): the generated registers were NOT checked"
   fi
   # driver/rust/src/soc/am62p/ti_pr114866.rs: the four D-PHY / DSI facts the
   # AM62Px TRM does not state, generated from TI's Zephyr driver vendored
