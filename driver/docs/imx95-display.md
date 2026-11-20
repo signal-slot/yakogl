@@ -25,7 +25,8 @@ only.
 | `mub:` | mainline U-Boot, the `github.com/u-boot/u-boot` mirror, `master` | `ece349ade297` (the mirror's last commit, 2026-07-06; directory listing only) |
 | `hal:` | `github.com/zephyrproject-rtos/hal_nxp` `master` | `0f32f1caa5cf` (2026-11-19) |
 | `z:` | `github.com/zephyrproject-rtos/zephyr` `main` | `4f2d5263e21e` (2026-11-20) |
-| `sm:` | NXP's System Manager, `github.com/nxp-imx/imx-sm` `master` | `eec232878ab7` (2026-09-03) |
+| `sm:` | NXP's System Manager, `github.com/nxp-imx/imx-sm` `master` (its EVK configuration, for comparison) | `eec232878ab7` (2026-09-03) |
+| `tsm:` | Toradex's System Manager, `git.toradex.com/imx-sm-toradex.git` branch `main`: `configs/verdin-imx95.cfg`, the generated `configs/verdin-imx95/config_scmi.h`, and the SM sources it builds | `3aa8a77a15d6` (2026-11-16) |
 | `V95:` | Toradex, Verdin iMX95 Datasheet, Rev. 0.7, 20-Jul-2026 (preliminary), `docs.toradex.com/200007-verdin_imx95_datasheet.pdf` | |
 | `MAL:` | Toradex, Mallow Carrier Board V1.1 Datasheet, Rev. 1.9, 24-Sep-2025, `docs.toradex.com/116791-mallow_carrier_board_datasheet.pdf` | |
 | `repo:` | this repository | `f7ab6fa0` |
@@ -43,7 +44,7 @@ Licences, and what each source may be used for:
 | Device trees (`ml:`/`nxp:` `imx95.dtsi`; `tdx:` overlays; `ml:` Verdin files) | `GPL-2.0-only OR MIT` (`imx95.dtsi`, the Toradex overlays), `GPL-2.0-or-later OR MIT` (the Verdin and Mallow files) | facts; the MIT side would allow more, not needed |
 | `hal:` register headers (`PERI_DISPLAY_SEERIS.h`, `PERI_LDB.h`, `PERI_DISPLAY_*.h`, `PERI_MIPI_DSI.h`, `MIMX9596_ca55_COMMON.h`) and drivers (`fsl_dpu.c` in `drivers/dpu_1`, `fsl_ldb.c` in `drivers/ldb_1`) | BSD-3-Clause (NXP) | **register map and sequence source**; may be generated from or vendored unmodified, as the i.MX8MP's `regs.rs` is (`tools/hal-nxp/gen_regs.py`) |
 | `z:` `display_socionext_dpu.c`, `dsi_nxp_dwc.c` and the i.MX 95 M7 device tree | Apache-2.0 | sequence source; may be read and vendored |
-| `sm:` configuration | BSD-3-Clause | facts |
+| `sm:`, `tsm:` configuration and sources | BSD-3-Clause | facts |
 | Datasheets | Toradex documents | facts by section and page |
 
 Not read: the i.MX 95 Reference Manual (IMX95RM). Its address
@@ -54,8 +55,8 @@ says "the DPU chapter is missing from the i.MX95 RM" (cover letter,
 his statement, not checked here. lore.kernel.org and patchwork were not
 searched directly; the two threads below were read through mirrors (LWN,
 and the dri-devel archive at `ratatoskr.run`). Toradex's System Manager
-configuration was not found (`git.toradex.com/imx-sm.git` does not exist);
-NXP's EVK configuration stands in for it. The Verdin iMX95 developer page was
+configuration is `tsm:` (its repository is `imx-sm-toradex`, not `imx-sm`).
+The Verdin iMX95 developer page was
 read; the Mallow product page refused the fetch (HTTP 403), its datasheet was
 read instead. Toradex's Dahlia and Development Board datasheets were not
 read.
@@ -136,15 +137,61 @@ Three facts change the house method for this SoC:
   it. It is the nearest thing to a camera this display has (section 4).
 
 The SCMI side: the i.MX 95 runs a System Manager on the M33. Linux and
-U-Boot reach it over MU2 (0x445B0000) with shared memory in its SRAM
+U-Boot reach it through a messaging unit with shared memory in its SRAM
 (`ml:imx95.dtsi:338-340,1590-1612`); power domains are SCMI protocol 0x11,
-clocks 0x14. In NXP's EVK configuration the A55 logical machine "AP" owns the
-DC, the display blk-ctrl, LVDS, MIPI DSI and its PHY, and VIDEO_PLL1, and may
-set `CLOCK_DISP1PIX` and `LDB_PLL` (`sm:configs/mx95evk.cfg:443,584,596,608,625-627,798,801-802,886`).
-U-Boot, Linux and our image all run in that one logical machine, so a
-hand-over between them is not an agent leaving: the System Manager turns a
-logical machine's resources off when that machine is reset, not when one
-program in it jumps to the next (to be confirmed on the board, U2).
+clocks 0x14, performance 0x13.
+
+**Who owns the display on the Verdin iMX95 (Toradex's configuration,
+`tsm:`).** The A55 logical machine "AP" (`configs/verdin-imx95.cfg:443`) has
+two SCMI agents: "AP-S" (agent 1, secure, MU 1, `:496-499`) and "AP-NS"
+(agent 2, non-secure, MU 3, `:570-573`). U-Boot, Linux and our image are
+AP-NS. AP-NS holds, all with permission ALL (the highest,
+`sm/rpc/scmi/rpc_scmi_config.h:83-89`):
+
+| What | Entry |
+|---|---|
+| power domains DISPLAY (13) and CAMERA (3) | `config_scmi.h:458-459` (the configuration tool derives them; the `.cfg` has no line for them) |
+| performance domains DISP (12) and CAM | `config_scmi.h:467-468` |
+| clocks DISP1PIX (80), LDBPLL and LDBPLL_VCO (38, 37), VIDEOPLL1 and its VCO (19, 18), MIPIPHYCFG, MIPIPHYPLLBYPASS, MIPIPHYPLLREF, MIPITESTBYTE (66-69), LPI2C3 | `config_scmi.h:251,269-270,272,294-297,315-316`; `.cfg:584,596` |
+| resources, owner with non-secure read/write (`.cfg:562`): DC and all its parts, BLK_CTRL_DISPLAYMIX, BLK_CTRL_CAMERAMIX, CAMERA1-8, LVDS, MIPI_CSI0/1, MIPI_DSI, MIPI_PHY, VIDEO_PLL1, LPI2C3, LPTPM5, LPTPM6, GPIO5 | `.cfg:608-643,755,776,794-795,804-808,892` |
+| pins: GPIO_IO06 (TPM5, `PWM_2`, the X12 backlight), XSPI1_DATA4 (GPIO5_IO04, the backlight enable), GPIO_IO12, GPIO_IO19 (`PWM_3_DSI`), GPIO_IO28/29 (`I2C_2_DSI`); the LVDS and DSI pads are dedicated and have no pin entry | `.cfg:946,952,959,968-969,1021`; pads `ml:imx95-verdin.dtsi:885-887,1027-1028,1037-1038` |
+
+**DISPAPB, DISPAXI and DISPOCRAM (75, 76, 78) belong to no agent.** They are
+on the System Manager's own list "Modified via PERF protocol"
+(`.cfg:149-170`); no agent has a clock permission for them, so an enable or
+a rate request returns `DENIED` (permission below SET or EXCLUSIVE,
+`sm/rpc/scmi/rpc_scmi_clock.c:1078-1086,1268-1276`); reading the rate is not
+checked. The System Manager runs them with the DISPLAY domain
+(`devices/MIMX95/sm/dev_sm_clock.c:1511-1519` puts them, with VIDEOPLL1,
+LDBPLL and DISP1PIX, in that domain) and sets their rates from the DISP
+performance level (`devices/MIMX95/sm/dev_sm_perf.c:1277-1283,2093,2302`).
+CAMAPB is the same for the DSI side (`.cfg:164`). So the image does not
+switch these clocks: it turns DISPLAY on and, if the default level is too
+slow, sets perf DISP.
+
+**What turns them off.** The System Manager keeps one vote per agent per
+power domain and clock. It clears an agent's votes, which turns a domain off
+unless another agent voted for it, in one function
+(`sm/rpc/scmi/rpc_scmi_base.c:1024-1130`, power `:1127` and
+`sm/rpc/scmi/rpc_scmi_power.c:791-806`, clocks `:1120`), called in two cases
+only: the logical machine is shut down or reset (`sm/lmm/lmm_sys.c:1055-1066`
+into `sm/lmm/lmm.c:265-276` and `sm/rpc/scmi/rpc_scmi.c:456-470`), or an
+agent sends BASE_RESET_AGENT_CONFIGURATION, which needs a base permission of
+PRIV over the target (`rpc_scmi_base.c:913-952`) and no agent in this
+configuration has any base permission (`config_scmi.h` has no `basePerms`).
+The AP machine's stop list names only the A55 domains (`.cfg:452-492`), and
+no other agent may vote for DISPLAY (the M7 agent holds only its own domain,
+`config_scmi.h:93`). So:
+
+- a U-Boot `go` or `booti`, a normal kexec and a crash kexec are invisible to
+  the System Manager: the same agent on the same channel, no machine reset.
+  The DISPLAY domain and the clock votes stay as the previous program left
+  them. A normal kexec still loses the display, because Linux's own drivers
+  power it down on the way out; a crash kexec skips them and keeps it.
+- a reset of the AP machine (its watchdogs WDOG4 and the software fault give
+  `lm_reset`, WDOG3 `sys_reset`, `.cfg:551-553`) turns the display off.
+- our image can turn the display off itself (a DISPLAY off vote from AP-NS);
+  the adopt probe must not send one.
 
 ## 2. The Mallow, and the other boards
 
@@ -281,7 +328,7 @@ The list, in the order U-Boot's and hal_nxp's sequences agree on
 
 | Step | Block | Registers (BSD header) | Permissive sequence | GPL cross-check (lines) |
 |---|---|---|---|---|
-| 1 | SCMI: DISPLAY (13) on; DISPAPB (75), DISPAXI (76), DISPOCRAM (78) on; LDBPLL_VCO (37) 2,986.2 MHz, LDBPLL (38) 497.7 MHz for 71.1 MHz | (SCMI) | `repo:driver/rust/src/firmware/scmi.rs` codec; a new MU2 transport | `nxp:imx95.dtsi:2696-2703`; `tdx:...10inch-lvds.dtso:80-83` |
+| 1 | SCMI as agent AP-NS: DISPLAY (13) on, which runs DISPAPB, DISPAXI and DISPOCRAM (not ours to switch, section 1); perf DISP level if needed; LDBPLL_VCO (37) 2,986.2 MHz, LDBPLL (38) 497.7 MHz for 71.1 MHz, both enabled | (SCMI) | `repo:driver/rust/src/firmware/scmi.rs` codec; a new MU transport | `nxp:imx95.dtsi:2696-2703`; `tdx:...10inch-lvds.dtso:80-83`; permissions `tsm:` (section 1) |
 | 2 | display CSR: engine 0 clock select = LDB PLL / 7; interleaver control | `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h:408-415,430-468` | | `ml:clk-imx95-blk-ctl.c:226-251`; `tub:imx95_dpu.c:595-598` |
 | 3 | LVDS CSR: PHY clock divider, the four clock gates (U4), LDB control (channel 0 to DI0, 24 bit, SPWG or JEIDA, sync polarities, `VSYNC_ADJ_EN`), LVDS PHY 0 enable | `PERI_LDB.h:408-412` and its field masks | `fsl_ldb.c:33-95` (96 lines) | `nxp:imx95-ldb.c` (578), `phy-fsl-imx8mp-lvds.c` (317); `tub:imx95-ldb.c` (551) |
 | 4 | pixel interleaver channel 0: reset, polarities, format | `PERI_DISPLAY_INTERLEAVER.h:411-421` | | `nxp:imx95-pixel-interleaver.c:24-43,84-147` (402); `tub:` (283) |
@@ -314,7 +361,7 @@ Risks:
 
 | Risk | Note |
 |---|---|
-| The System Manager refuses a clock rate or a domain to our agent (Toradex's configuration unknown) | SCMI returns `DENIED`; read under Linux first (M3) |
+| The System Manager refuses a request | Toradex's configuration gives AP-NS everything the path needs (section 1); a request on DISPAPB/AXI/OCRAM returns `DENIED` by design, so the code must not send one. A board with another System Manager build is checked by Z0 |
 | LDB PLL rate: the VCO must be 6 x 7 x the pixel clock; the PLL may not reach a mode's exact rate | the Toradex panel's rate is the overlay's; other panels are later |
 | A full mode change wedges the ExtDst shadow load unless the FrameGen is disabled and re-enabled (the upstream port's open defect) | set the mode once, at start; flips change only the fetch address |
 | Reading DPU registers with DISPLAY off | U6; the probe reads the domain state first |
@@ -360,6 +407,10 @@ domain, and a permissive LDB sequence of 96 lines; X14 is dead on this
 module. Why cold rather than a U-Boot that lights the panel: Toradex's U-Boot
 does not, and carrying our own U-Boot build for it is the cost the T6 note
 refused.
+Toradex's System Manager configuration (section 1) leaves the order as it
+was: our agent holds every domain, clock and block the X12 path needs, and
+nothing between Linux and our image (a crash kexec) or between U-Boot and our
+image (`go`) turns the display off.
 
 What would change it:
 
@@ -376,9 +427,10 @@ What would change it:
 - **The board runs mainline Linux or no Linux**: no adopt; (b) without a
   golden dump, from the header and the permissive drivers alone, with the
   signature unit and the FrameGen status as the proof.
-- **The System Manager denies the display clocks to the AP**: nothing works
-  until Toradex's configuration is changed; that is a firmware question for
-  the owner.
+- **The board's System Manager is not Toradex's `main` configuration**
+  (another build, or a configuration that gives the display to the M7):
+  Z0 shows it; then the permissions are a firmware question for the owner.
+  As read (section 1), they change nothing in this order.
 
 ## 6. Board checks for day one (reads only)
 
@@ -399,7 +451,7 @@ Under Zephyr (the first probe image, later):
 
 | Check | What the image does | Answers |
 |---|---|---|
-| Z0 | SCMI base discovery over MU2 (agent id, protocols); power state of domains 13 and 3; rate and state of clocks 75, 76, 78, 80, 37, 38 | does our image reach the System Manager, and is the display domain on? |
+| Z0 | SCMI base discovery (agent id, expected 2 "AP-NS"; protocols); power state of domains 13 and 3; the perf DISP level; rate and state of clocks 75, 76, 78, 80, 37, 38; `CLOCK_GET_PERMISSIONS` on 37, 38, 80 (expected all) and 75 (expected none) | does our image reach the System Manager, and is the display domain on? |
 | Z1 | only if Z0 says DISPLAY is on: FrameGen0/1 enable and status, the fetch unit's address, stride and size | after a crash kexec: **a scanout to adopt?** |
 | Z2 | the cold X12 path of section 4(b), stage by stage, with the read-backs of "Proof without a camera" | **our own picture** |
 
@@ -417,7 +469,7 @@ Which result picks which route:
 | # | Question | What answers it |
 |---|---|---|
 | U1 | What display is on the Mallow: an LVDS panel on X12, a DSI display on X4, nothing? | M2, or the owner |
-| U2 | Does Toradex's System Manager configuration give the AP the display domain, `LDB_PLL` and `CLOCK_DISP1PIX` as NXP's EVK configuration does, and does it leave them on when U-Boot jumps or Linux crash-kexecs? | M3 under Linux; Z0 under Zephyr; Toradex's configuration source if it is published |
+| U2 | Answered from `tsm:` (section 1): AP-NS (agent 2) holds DISPLAY, CAMERA, perf DISP and CAM, DISP1PIX, the LDB and video PLLs and the MIPI PHY clocks with ALL, and owns the DPU, LVDS, DSI and the pins; DISPAPB/AXI/OCRAM are the System Manager's; only a reset of the AP machine clears the votes, so a `go` or a kexec keeps them. Still open: that the board runs this configuration | Z0 (agent id, permissions, domain state); the System Manager's build line in Linux's `dmesg` (M3) |
 | U3 | Which Linux does the board run: Toradex's BSP (with `dpu95` and the LVDS overlay) or mainline? | M1 |
 | U4 | The LVDS CSR word at +0x0: Linux's clock driver has the PHY divider in bit 0 and four set-to-disable gates in bits 1-4 (`ml:clk-imx95-blk-ctl.c:163-218`); hal_nxp's `PERI_LDB.h` names only the divider bit. Which is right? | M4 value under a running panel |
 | U5 | Is the pixel link part of the LVDS path? Toradex's LVDS overlay enables it; NXP's Liu Ying says it is DSI only | M4 read of display CSR + 0x8 under a running LVDS panel; a cold run without it |
