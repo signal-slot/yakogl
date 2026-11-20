@@ -61,21 +61,22 @@ endif()
 add_subdirectory_ifdef(CONFIG_YAKOGL_STM32MP2 stm32mp2)
 
 # The Verdin iMX95's A55 glue (verdin_imx95/verdin_imx95.c: the PSCI reset, the
-# lifetime timer, the watchdog stub), its board layer (the windows, and the
-# X4 display: verdin_imx95_display.c), the raw SCMI channel
-# (verdin_imx95_scmi.c), and in a Mali image the OSAL's board half (verdin_imx95_mali.c: the GPU's power-on
+# lifetime timer; verdin_imx95_wdog.c: WDOG3 over ip::wdog32 of the
+# yakogl-drivers crate), its board layer (the windows, and the X4 display:
+# verdin_imx95_display.c), the raw SCMI channel (verdin_imx95_scmi.c), and in
+# a Mali image the OSAL's board half (verdin_imx95_mali.c: the GPU's power-on
 # over SCMI and its bring-up, yd_imx95_osal_up, with the CSF firmware
 # driver/src/fw/mali_csffw_blob.h embedded, made by driver/tools/mkmalifw.sh,
 # never committed): every image for the board (verdin_imx95/Kconfig).
 if(CONFIG_YAKOGL_VERDIN_IMX95)
   zephyr_library_named(yakogl_board_verdin_imx95)
-  zephyr_library_sources(verdin_imx95/verdin_imx95.c)
+  zephyr_library_sources(verdin_imx95/verdin_imx95.c verdin_imx95/verdin_imx95_wdog.c)
+  add_dependencies(yakogl_board_verdin_imx95 yakogl_drivers_rust)
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_BOARD_VERDIN_IMX95 verdin_imx95/board_verdin_imx95.c)
   zephyr_include_directories(verdin_imx95)
   if(CONFIG_YAKOGL_GPU_MALI OR CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)
     # the one raw SCMI channel of the GPU's power-on and the display's
     zephyr_library_sources(verdin_imx95/verdin_imx95_scmi.c)
-    add_dependencies(yakogl_board_verdin_imx95 yakogl_drivers_rust)
   endif()
   if(CONFIG_YAKOGL_GPU_MALI)
     get_filename_component(_vi95_repo "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)

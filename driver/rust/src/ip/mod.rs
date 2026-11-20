@@ -77,3 +77,7 @@ pub mod tpm_pwm;
 /// The RK3588's VOP2: one Esmart window on one video port, for HDMI.
 #[cfg(any(feature = "rk3588", test))]
 pub mod vop2;
+/// The NXP WDOG32 (the i.MX 95's WDOG3), armed by an image that U-Boot may
+/// have left running with its own timeout.
+#[cfg(any(feature = "imx95", test))]
+pub mod wdog32;
