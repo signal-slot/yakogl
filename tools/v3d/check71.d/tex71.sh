@@ -36,6 +36,8 @@
 # (build/v3d-check/mesa), or MESA_V3D_TREE with build-v3d as the v3d rows
 # of tools/check.sh. No C compiler: exit 77, "gap: cc". Convention:
 # tools/v3d/check71.d/README.md.
+# Run as `sh tex71.sh` too: a POSIX shell hands it to bash before any bash syntax.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 cd "$(dirname "$0")/../../.." || exit 1
 

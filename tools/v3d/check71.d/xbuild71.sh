@@ -54,6 +54,8 @@
 # cross toolchain is not a verdict on the code); any other non-zero exit is a
 # failure, and a file that does not compile prints the compiler's lines.
 # Convention: tools/v3d/check71.d/README.md.
+# Run as `sh xbuild71.sh` too: a POSIX shell hands it to bash before any bash syntax.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 cd "$(dirname "$0")/../../.." || exit 1
 

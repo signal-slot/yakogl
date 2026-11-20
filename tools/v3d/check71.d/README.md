@@ -12,7 +12,11 @@ Each script:
 
 - is standalone bash (`#!/usr/bin/env bash`, SPDX header, executable bit),
   run from the repository root (`cd "$(dirname "$0")/../../.."` first, so it
-  also runs by hand from anywhere);
+  also runs by hand from anywhere); a script may use bash-only syntax (arrays,
+  `[[`), and each one that does carries, as its first line after the header,
+  `[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"`, which hands it to bash
+  before that syntax is reached, so `sh <script>` and `bash <script>` give the
+  same exit code and verdict line;
 - builds only into `build/v3d71/<name>/`, `<name>` being the file name
   without `.sh`;
 - compares against the vendored Mesa reference build, `tools/v3d/mesa_ref.sh`
