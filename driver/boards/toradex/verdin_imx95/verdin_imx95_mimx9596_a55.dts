@@ -30,6 +30,16 @@
  *   Nothing in Zephyr drives it: the Mali OSAL reads its register block
  *   from here (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c).
  *   Its clocks and power domain are the System Manager's, through SCMI.
+ * - I2C: LPI2C2, the module's CTRL_I2C at 400 kHz, with the NXP PCAL6416A
+ *   I/O expander at 0x20 (Linux's som_gpio_expander; its line 3 is
+ *   GPIO_10_DSI, the X4 display's enable), and LPI2C3, the Verdin
+ *   I2C_2_DSI at 100 kHz (X4's bus), as imx95-verdin.dtsi has them. All
+ *   three are zephyr,deferred-init: nothing touches them at boot. The
+ *   display's board glue turns the two LPI2C clocks on over SCMI and then
+ *   initialises them (driver/zephyr/lib/board/verdin_imx95/
+ *   verdin_imx95_display.c); an image without it leaves them alone. The
+ *   expander is not reset at its init (no-auto-reset): its other lines
+ *   (USB enables, the Ethernet PHY's reset) keep what U-Boot left.
  *
  * Not run on a board yet.
  */
@@ -108,4 +118,31 @@
 	current-speed = <115200>;
 	pinctrl-0 = <&lpuart1_default>;
 	pinctrl-names = "default";
+};
+
+&lpi2c2 {
+	clock-frequency = <I2C_BITRATE_FAST>;
+	pinctrl-0 = <&lpi2c2_default>;
+	pinctrl-names = "default";
+	zephyr,deferred-init;
+	status = "okay";
+
+	som_gpio_expander: gpio@20 {
+		compatible = "nxp,pcal6416";
+		reg = <0x20>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		ngpios = <16>;
+		no-auto-reset;
+		zephyr,deferred-init;
+		status = "okay";
+	};
+};
+
+&lpi2c3 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	pinctrl-0 = <&lpi2c3_default>;
+	pinctrl-names = "default";
+	zephyr,deferred-init;
+	status = "okay";
 };
