@@ -16,12 +16,22 @@
 # The probe's C code prints exactly these formats; the note leaves the
 # details open and this header fixes them:
 #
-#   u3 snapshot: list-ptr=0x<hex> words=<n> hash=0x<hex>
+#   u3 snapshot: list-ptr=0x<hex> heade=<n> words=<n> hash=0x<hex>
 #       the firmware's state before anything is changed: channel 0's list
-#       pointer and a checksum/hash of the bootloader's 32-word list
+#       pointer, heade = the firmware list's start word (LPTRS.HEADE, read at
+#       run time, decimal), words = its length in words up to and including
+#       its END word (decimal, >= 1) and a hash of those words. The firmware's
+#       span is [heade, heade+words). A snapshot without heade= is malformed
+#       (the line counts as missing)
 #   u3 dlist: placed word <n> len <n>
-#       where our list starts in the list memory and its length in words;
-#       <n> of 'word' must be >= 32 (after the firmware's list), len >= 1
+#     | u3 dlist: refused <free text>
+#       where our list starts in the list memory and its length in words.
+#       Valid only if len >= 1, [word, word+len) does not overlap
+#       [heade, heade+words) and word+len <= 4096 (the 12-bit LPTRS field).
+#       Words below heade are not assumed used or unused: the probe places
+#       only in a span it proved unused. A probe that finds none prints the
+#       'refused' line instead; the swap, plane, named and restore lines are
+#       then not required (plane, swap and named are shown if present)
 #   u3 plane: addr=0x<hex> fmt=XRGB8888 pitch=<n> w=<n> h=<n>
 #       fields in any order; fmt must be XRGB8888
 #   u3 swap <k>: buf A|B list-ptr=0x<hex> frcnt <before> -> <after>
@@ -35,7 +45,8 @@
 #       first swap
 #   u3 restore: PASS|FAIL <free text>
 #       the firmware's list words and pointer byte-equal to the snapshot.
-#       A PASS carrying hash=0x<hex> must equal the snapshot's hash
+#       A PASS carrying hash=0x<hex> must equal the snapshot's hash; a
+#       heade=<n> on the line, if present, must equal the snapshot's heade
 #   rpi5_scanout32: PASS (...)|FAIL (reason)|feeding stopped, reset expected
 #
 # 'rpi5_scanout32: feeding stopped, reset expected' after a PASS/FAIL line
@@ -44,11 +55,14 @@
 #
 # Output: the seen lines, 'missing:' naming absent lines (after the last
 # seen one: the image stopped there; between two seen ones: a gap), then
-#   verdicts: PASS (...)            all of: placed word >= 32, our list
+#   verdicts: PASS (...)            all of: placement valid (no overlap with
+#                                   the firmware span, within 4096), our list
 #                                   named, every swap's FRCNT advanced, the
 #                                   buffers alternated, restore PASS, the
 #                                   probe's own line not FAIL
 #   verdicts: FAIL (reasons)        complete log, one of those not met
+#   verdicts: FAIL (placement refused: <text>) for a 'refused' line, with
+#   q4: unanswered (placement refused)
 #   verdicts: incomplete (...)      a line missing (fewer than MIN_SWAPS
 #                                   swap lines count as missing 'u3 swap')
 #   q4: yes|no|unanswered (...)     can channel 0's list pointer be swapped
@@ -120,8 +134,8 @@ SW=()
 while IFS=$'\t' read -r idx line; do
     if [ "$idx" = s ]; then SW+=("$line"); else SEEN[$idx]=$line; fi
 done < <(awk '
-    !seen[1] && /^u3 snapshot: list-ptr=0x[[:xdigit:]]+ words=[0-9]+ hash=0x[[:xdigit:]]+/ { seen[1] = 1; print 1 "\t" $0 }
-    !seen[2] && /^u3 dlist: placed word [0-9]+ len [0-9]+/ { seen[2] = 1; print 2 "\t" $0 }
+    !seen[1] && /^u3 snapshot: list-ptr=0x[[:xdigit:]]+ heade=[0-9]+ words=[0-9]+ hash=0x[[:xdigit:]]+/ { seen[1] = 1; print 1 "\t" $0 }
+    !seen[2] && (/^u3 dlist: placed word [0-9]+ len [0-9]+/ || /^u3 dlist: refused( |[ \t]*$)/) { seen[2] = 1; print 2 "\t" $0 }
     !seen[3] && /^u3 plane: / { seen[3] = 1; print 3 "\t" $0 }
     /^u3 swap [0-9]+: buf [AB] list-ptr=0x[[:xdigit:]]+ frcnt [0-9]+ -> [0-9]+/ { print "s\t" $0 }
     !seen[5] && /^u3 named: (yes|no)( |[ \t]*$)/ { seen[5] = 1; print 5 "\t" $0 }
@@ -132,6 +146,13 @@ done < <(awk '
 NSW=${#SW[@]}
 [ "$NSW" -ge "$MIN_SWAPS" ] && SEEN[4]=${SW[0]}
 
+REFUSED=0
+case "${SEEN[2]:-}" in "u3 dlist: refused"*) REFUSED=1 ;; esac
+# a refused placement needs only the snapshot, the dlist line and the
+# probe's own line; plane, swap, named and restore are then optional
+if [ "$REFUSED" -eq 1 ]; then REQ="1 2 7"; else REQ="1 2 3 4 5 6 7"; fi
+isreq() { case " $REQ " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+nreq=$(wc -w <<< "$REQ")
 nseen=0
 LASTKEY=0
 for i in 1 2 3 4 5 6 7; do
@@ -142,7 +163,7 @@ if [ "$NSW" -gt 0 ] && [ "$LASTKEY" -lt 4 ]; then LASTKEY=4; fi
 LASTLINE=${SEEN[$LASTKEY]:-}
 if [ "$LASTKEY" -eq 4 ] && [ "$NSW" -gt 0 ]; then LASTLINE=${SW[$((NSW - 1))]}; fi
 
-say "$PROG: $nseen of 7 expected verdict lines in $LOG ($NSW swap line(s))"
+say "$PROG: $nseen of $nreq expected verdict lines in $LOG ($NSW swap line(s))"
 for i in 1 2 3; do [ -n "${SEEN[$i]:-}" ] && say "  [$i] ${SEEN[$i]}"; done
 for ((j = 0; j < NSW; j++)); do say "  [4] ${SW[$j]}"; done
 for i in 5 6 7; do [ -n "${SEEN[$i]:-}" ] && say "  [$i] ${SEEN[$i]}"; done
@@ -151,6 +172,7 @@ if [ -n "${SEEN[8]:-}" ] && [ "${SEEN[8]}" != "${SEEN[7]:-}" ]; then say "  [8] 
 MISS="" GAP="" TAIL=""
 for i in 1 2 3 4 5 6 7; do
     [ -n "${SEEN[$i]:-}" ] && continue
+    isreq "$i" || continue
     name=${KEYS[$((i - 1))]}
     [ "$i" -eq 4 ] && name="u3 swap (need $MIN_SWAPS, saw $NSW)"
     MISS="$MISS $name"
@@ -170,13 +192,27 @@ else
     say "  missing: none"
 fi
 
-if [ "$nseen" -lt 7 ]; then
+miss_req=0
+for i in $REQ; do [ -z "${SEEN[$i]:-}" ] && miss_req=1; done
+if [ "$miss_req" -eq 1 ]; then
     say "verdicts: incomplete (the run did not print all expected verdict lines)"
     say "q4: unanswered (incomplete log)"
     exit 1
 fi
 
 # ---- complete log: judge ---------------------------------------------------
+heade=$(sed -E 's/.* heade=([0-9]+) .*/\1/' <<< "${SEEN[1]}")
+fwlen=$(sed -E 's/.* words=([0-9]+) .*/\1/' <<< "${SEEN[1]}")
+snap_bad=""
+[ "$fwlen" -ge 1 ] || snap_bad="snapshot words=$fwlen (must be >= 1)"
+if [ "$REFUSED" -eq 1 ]; then
+    txt=$(sed -E 's/^u3 dlist: refused[ \t]*//' <<< "${SEEN[2]}")
+    r="placement refused: $txt"
+    [ -n "$snap_bad" ] && r="$r; $snap_bad"
+    say "q4: unanswered (placement refused)"
+    say "verdicts: FAIL ($r)"
+    exit 3
+fi
 swap_fail=""
 other=()
 prev_buf="" expect=1
@@ -216,8 +252,12 @@ fi
 
 word=$(sed -E 's/^u3 dlist: placed word ([0-9]+) len ([0-9]+).*/\1/' <<< "${SEEN[2]}")
 len=$(sed -E 's/^u3 dlist: placed word ([0-9]+) len ([0-9]+).*/\2/' <<< "${SEEN[2]}")
-[ "$word" -ge 32 ] || other+=("placed word $word < 32, inside the firmware's list")
 [ "$len" -ge 1 ] || other+=("placed list length 0")
+[ -n "$snap_bad" ] && other+=("$snap_bad")
+if [ "$word" -lt $((heade + fwlen)) ] && [ $((word + len)) -gt "$heade" ]; then
+    other+=("placed [$word,$((word + len))) overlaps the firmware list [$heade,$((heade + fwlen)))")
+fi
+[ $((word + len)) -le 4096 ] || other+=("placed [$word,$((word + len))) runs past word 4096")
 
 grep -qE '\bfmt=XRGB8888( |$)' <<< "${SEEN[3]}" || other+=("plane fmt is not XRGB8888")
 
@@ -228,6 +268,10 @@ if [ "$rst" = "PASS" ]; then
     sh=$(grep -oE 'hash=0x[[:xdigit:]]+' <<< "${SEEN[1]}" | head -n 1)
     if [ -n "$rh" ] && [ "${rh,,}" != "${sh,,}" ]; then
         other+=("restore PASS carries $rh but the snapshot has $sh")
+    fi
+    rhe=$(grep -oE 'heade=[0-9]+' <<< "${SEEN[6]}" | head -n 1)
+    if [ -n "$rhe" ] && [ "$rhe" != "heade=$heade" ]; then
+        other+=("restore carries $rhe but the snapshot has heade=$heade")
     fi
 fi
 
@@ -240,7 +284,7 @@ else
 fi
 
 if [ ${#other[@]} -eq 0 ]; then
-    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word, FRCNT advanced, firmware list restored byte-equal)"
+    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, FRCNT advanced, firmware list restored byte-equal)"
     exit 0
 fi
 r=""
