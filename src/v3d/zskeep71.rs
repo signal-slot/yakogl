@@ -116,7 +116,7 @@ pub const fn gfxh1461_applies(ver: u32) -> bool {
 }
 
 /// The Mesa citation of the 7.1 answer.
-pub const GFXH1461_MESA: &str = "src/gallium/drivers/v3d/v3dx_draw.c:1676-1687";
+pub const GFXH1461_MESA: &str = "Mesa src/gallium/drivers/v3d/v3dx_draw.c:1676-1687";
 
 /// The start value of an undefined depth plane: 1.0 as f32 bits.
 pub const UNDEFINED_Z_BITS: u32 = 0x3f80_0000;

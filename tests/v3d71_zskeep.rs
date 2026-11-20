@@ -49,7 +49,7 @@ const COLOUR_ONLY: Target71 = Target71 { layout: Layout71::TileOnly, depth: fals
 fn gfxh1461_is_42_only() {
     assert!(gfxh1461_applies(42));
     assert!(!gfxh1461_applies(71));
-    assert_eq!(GFXH1461_MESA, "src/gallium/drivers/v3d/v3dx_draw.c:1676-1687");
+    assert_eq!(GFXH1461_MESA, "Mesa src/gallium/drivers/v3d/v3dx_draw.c:1676-1687");
     let src = read("src/v3d/zskeep71.rs");
     for cite in [
         "`src/gallium/drivers/v3d/v3dx_draw.c:1676-1687`",
