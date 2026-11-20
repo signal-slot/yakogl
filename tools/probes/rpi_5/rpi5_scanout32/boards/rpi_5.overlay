@@ -1,0 +1,28 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The same sram0 as every Pi 5 image: 32 MiB from 0x200000, below 4 GiB.
+ *
+ * The blocks this probe touches are mapped in src/main.c with device_map()
+ * (as rpi5_display does) and are named here so the addresses sit in one
+ * place. They have no compatible: no Zephyr driver binds to them.
+ *   hvs: ARM 0x10_7c580000, 0x1a000 bytes; the display-list memory is the
+ *        words from byte 0x4000 of it (rpi:bcm2712.dtsi:612-617)
+ *   pv0: pixelvalve0, HDMI0's, 0x10_7c410000, 0x100 bytes
+ *        (rpi:bcm2712.dtsi:294)
+ */
+&sram0 {
+	reg = <0x0 0x200000 0x2000000>;
+};
+
+/ {
+	yakogl_hvs: yakogl-hvs@107c580000 {
+		reg = <0x10 0x7c580000 0x1a000>;
+		status = "reserved";
+	};
+
+	yakogl_pv0: yakogl-pv0@107c410000 {
+		reg = <0x10 0x7c410000 0x100>;
+		status = "reserved";
+	};
+};
