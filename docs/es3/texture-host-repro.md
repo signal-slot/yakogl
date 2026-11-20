@@ -9,9 +9,9 @@ causes fixed (`src/backend.rs`, `src/gl/draw.rs`, `src/gl/es3.rs`; the
 tests in `tests/es3_tex_filtering.rs`), the rest listed for the items that
 own them. Integration tip `70142d35`, VK-GL-CTS `93bca01`, 2026-10-22.
 **Refreshed at `26d1c4a2` (2026-11-15, section 1), and at `e72ae815`
-(2026-11-20, plan #388 item `inv-sglr`, for section 7's
-`sglrGLContext.cpp:863` rows); sections 1a and 3's V3D rows are the state at
-`70142d35`.**
+(2026-11-20, plan #388 item `inv-sglr`, section 7's
+`sglrGLContext.cpp:863` rows; the swizzle rows of sections 3, 5 and 7 at
+`2df189df`); sections 1a and 3's V3D rows are the state at `70142d35`.**
 
 ## 0. What the host can show, and what it cannot
 
@@ -83,7 +83,7 @@ Classes and owners at `26d1c4a2` (every class the host shows has a cause):
 | NotSupported `GL_EXT_texture_sRGB_R8/RG8` | 48 (filtering) | an optional extension, not claimed; not a failure (`src/gl/state.rs` extension string) |
 | API error, compile, link, upload, draw refusal, crash, out of memory | 0 | none to own: nothing refused |
 | picture Fail, filtering | 492 | black read-back, not a result; the board's to judge. The causes recorded in section 3 (PowerVR 2D array and 3D, RC6 and RC15, board data) are board-only and unchanged by this run |
-| picture Fail, swizzle | 70 | black read-back; the GL core delivers `GlesTextureBind::swizzle` (section 4, `tests/es3_tex_filtering.rs`); whether each back end applies it is the board's to show (section 5) |
+| picture Fail, swizzle | 70 | black read-back; the GL core delivers `GlesTextureBind::swizzle` (section 4, `tests/es3_tex_filtering.rs`); the V3D and, since `2df189df`, the PowerVR apply it (section 5); whether the pictures are right is the board's to show |
 | swizzle black-on-black "Pass" | 13 | not passes (section 2's three board passes are the only real ones) |
 
 `tests/es3_tex_filtering.rs`, run unchanged at this checkout with
@@ -198,7 +198,7 @@ failure on a board, a black picture on the host).
 | subgroup | GPU | count | cause | code site | fix or owner |
 |---|---|---:|---|---|---|
 | swizzle.single_channel, swizzle.multi_channel | all | 83 (AM62P: 80 fail, 3 pass) | **GL core**: `GL_TEXTURE_SWIZZLE_*` is stored and read back but `GlesTextureBind` had no field for it, so no draw ever handed it to a back end | `src/gl/texture.rs` `tex_parameter` (stored, with the comment "stored and read back, not applied"); `src/gl/draw.rs` texture-binding loop and `texture_bind_2d` (bind built without it); `src/backend.rs` `GlesTextureBind` | **fixed**: `GlesTextureBind::swizzle` (section 4) |
-| swizzle.* | PowerVR | 83 | **back end**: TEXSTATE_IMAGE_WORD0's `swiz0..3` come from the texel format alone (`TexFormat`), never from the texture state | `src/pvr/backend.rs` `TexFormat` / `tex_stride_no_alpha` (about line 1045-1180), `tex_image_word0` (1223), `build_tex_desc` (4542) | a PowerVR item (not in the plan yet): compose `b.swizzle` with the format's swizzle, as Mesa does (`pvr_arch_image.c:189-191` `util_format_compose_swizzles`, then `pvr_arch_tex_state.c:40-64` `pvr_get_hw_swizzle`) |
+| swizzle.* | PowerVR | 83 | **back end**: IMAGE_WORD0's `swiz0..3` came from the texel format alone (`TexFormat`), never from the texture state | composed on the host at `2df189df`: `src/pvr/backend.rs` `compose_tex_swizzle` (line 6155, called in `build_tex_desc` at 6268), written by `tex_image_word0` (1324) | **built, host only**: the bind's `GL_TEXTURE_SWIZZLE_*` composed with the format's own table through `swizzle_source` (ZERO and ONE straight to `SWIZ_ZERO` / `SWIZ_ONE`), as Mesa does (`pvr_arch_image.c:189-191` `util_format_compose_swizzles`, `pvr_arch_tex_state.c:40-64` `pvr_get_hw_swizzle`); pinned by `tests/es3_pvr_swizzle.rs`; the 80 board rows wait for the AM62P rerun to be re-measured |
 | swizzle.* | GC7000 | 83 (no board run) | **back end**: the descriptor's `TEXDESC_SWIZZLE_{R,G,B,A}` are the format's (luminance, `no_alpha`) only | `src/vivante/texture.rs` lines 202-205 | `formats-gc` (ready) or a GC7000 item: `swizzle_source(k, b.swizzle[k])` through the format's table, as Mesa `etnaviv_format.c:347` `get_texture_swiz` (the view swizzle with the R8-as-L8 and DXT1 fix-ups) |
 | swizzle.* | V3D | 83 (no board run) | **back end** (the V3D composes both since `18027de1`; this row is the state before it): the texture shader state's swizzle is `tmu_format`'s (the format's, `depth_luminance`, `bgra`) only | `src/v3d/texture.rs` `tmu_format` (146-183), `state` (229-240) | `formats-v3d` (running) or a V3D item: compose with `b.swizzle` as Mesa `v3dx_state.c:1059-1073` (`v3d_create_sampler_view`, `util_format_compose_swizzles(fmt_swizzle, view_swizzle)`) |
 | filtering.3d.* (all three subgroups) | all | 153 | **GL core**: `GL_TEXTURE_WRAP_R` (and a sampler object's) stored and read back, never in the bind: every back end wraps the third axis however it likes | `src/gl/texture.rs` `tex_parameter` (stored); `src/gl/es3.rs` `sampler_state` (S and T only); `src/gl/draw.rs` binding loop | **fixed**: `GlesTextureBind::wrap_r`, `sampler_state` returns wrap R (section 4) |
@@ -278,12 +278,14 @@ section 1 cannot move either way.
 
 ## 5. What each back end has to do (for the items that own them)
 
-- **PowerVR** (`src/pvr/backend.rs`): in `build_tex_desc`, `swiz0..3` of
-  IMAGE_WORD0 = the format's swizzle indexed through `swizzle_source(k,
-  b.swizzle[k])` (ZERO and ONE straight to `SWIZ_ZERO` / `SWIZ_ONE`);
-  `addrmode_w` = `tpu_addrmode(b.wrap_r)` once the TPU samples a real 3D
-  image (`pvr-3d`); until then the grid shader would have to wrap z itself.
-  Mesa: `pvr_arch_image.c:166-191`, `pvr_arch_tex_state.c:40-64, 199-205`.
+- **PowerVR** (`src/pvr/backend.rs`): done at `2df189df` --
+  `compose_tex_swizzle` (line 6155, applied in `build_tex_desc` at 6268)
+  puts the bind's swizzle through `swizzle_source(k, b.swizzle[k])` into
+  the format's own table (ZERO and ONE straight to `SWIZ_ZERO` /
+  `SWIZ_ONE`), and `addrmode_w` = `tpu_addrmode(b.wrap_r)` for the native
+  3D target (CLAMP_TO_EDGE for the others; the stacked grid still wraps z
+  itself, RC15). Mesa: `pvr_arch_image.c:166-191`,
+  `pvr_arch_tex_state.c:40-64, 199-205`.
 - **GC7000** (`src/vivante/texture.rs`): `texdesc_swizzle_*` from the
   composed table (lines 202-205); `samp_wwrap` from `b.wrap_r` (388), with
   the same one-texel clamp rule as U and V. Mesa: `etnaviv_format.c:347`,
@@ -380,15 +382,16 @@ checkout on this host, and the host renders nothing -- the next step is the
 type table of `es3fTextureUnitTests.cpp` on a host that has it, or a board
 session).
 
-**`texture.swizzle` is the section 3 back-end gap, not a compiler one.**
-The host refuses nothing in it (section 1: swizzle 0 compile, upload and
-draw refusals on the PowerVR); all 80 AM62P rows are image failures. The
+**`texture.swizzle` is a back-end row, not a compiler one.** The host
+refuses nothing in it (section 1: swizzle 0 compile, upload and draw
+refusals on the PowerVR); all 80 `ad2b5ed` rows are image failures. The
 core delivers the swizzle (`GlesTextureBind::swizzle`, sections 3 and 4)
-and the PowerVR back end never reads it: `build_tex_desc`
-(`src/pvr/backend.rs`, line 4552) receives the bind, but IMAGE_WORD0's
-`swiz0..3` come from the texel format's `TexFormat` table alone
-(`tex_image_word0`, line 1224). The three "pass" rows are the black-on-black
-cases of section 2.
+and the PowerVR back end now reads it: `compose_tex_swizzle` composes the
+bind's `GL_TEXTURE_SWIZZLE_*` with the format's own table in
+`build_tex_desc` (`src/pvr/backend.rs`, lines 6155 and 6268) for
+`tex_image_word0` (1324) to write (`2df189df`, `tests/es3_pvr_swizzle.rs`)
+-- HOST-ONLY, so its 80 board rows wait for the rerun. The three "pass"
+rows are the black-on-black cases of section 2.
 
 **Owner.** Nothing new to file for this family: the selector refusal is
 closed on the host as above, and RC2 (integer samplers), RC6, RC9 and RC15
