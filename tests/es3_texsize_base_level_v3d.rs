@@ -5,8 +5,8 @@
 //!
 //! The texture size uniform words the stream asks for (44 width, 45 height,
 //! 46 depth, 47 array size) are filled from the draw's `V3dJobTmu`
-//! (`texture_units` in src/v3d/backend.rs), which today holds the LEVEL-0
-//! sizes: `GL_TEXTURE_BASE_LEVEL` is not applied there. dEQP's texturesize
+//! (`texture_units` in src/v3d/backend.rs), which holds the BASE level's
+//! sizes (`GlesTextureBind::base_level`, filled by the GL core). dEQP's texturesize
 //! cases set `GL_TEXTURE_BASE_LEVEL` > 0 and expect `textureSize(s, 0)` to
 //! answer the BASE level's size (VK-GL-CTS 93bca01
 //! es3fShaderTextureFunctionTests.cpp:1408-1411 sets the base level,
@@ -15,12 +15,8 @@
 //! does that with `u_minify(first_level)` for width, height and depth, and
 //! the layer count as is.
 //!
-//! This file pins what the draw hands the job builder today, as the
-//! `_flip_when_words_46_47_are_written` tests of tests/es3_tex_words_v3d.rs
-//! did: the BASE_LEVEL 0 controls assert the correct sizes and stay; each
-//! `..._flip_when_the_base_level_is_applied` test asserts today's level-0
-//! record with BASE_LEVEL 1 and says in its doc comment what the correct
-//! value is; the fix flips those asserts in its commit.
+//! This file checks what the draw hands the job builder: the BASE_LEVEL 0
+//! controls assert level 0's sizes, the BASE_LEVEL 1 tests the base level's.
 //!
 //! The textures are 16x16 (x8 deep, x5 layers) with the whole mip chain
 //! given level by level, NEAREST filters, so they are complete at
@@ -639,7 +635,7 @@ fn unit0_sizes(kind: Kind, base: GLint) -> (u32, u32, u32, u32) {
     (u.width, u.height, u.depth, u.array_size)
 }
 
-/* ---- BASE_LEVEL 0: the controls, correct today and after the fix ---- */
+/* ---- BASE_LEVEL 0: the controls ---- */
 
 /// Control: a 16x16 `sampler2D` at BASE_LEVEL 0 answers 16x16.
 #[test]
@@ -677,57 +673,48 @@ fn a_2d_array_shadow_at_base_level_0_has_its_level_0_size() {
     assert_eq!(unit0_sizes(Kind::ArrayShadow, 0), (16, 16, 1, 5));
 }
 
-/* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's size ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 16x16 `sampler2D`
-/// still hands the job builder the LEVEL-0 size, 16x16. The correct value is
-/// the base level's, 8x8 (dEQP es3fShaderTextureFunctionTests.cpp:1408-1411
-/// sets the base level, :1511 expects the minified size; Mesa's
-/// v3d_uniforms.c `u_minify(first_level)`). Flip the assert to (8, 8, 1, 1)
-/// when the base level is applied.
+/// With GL_TEXTURE_BASE_LEVEL 1 the 16x16 `sampler2D` hands the job builder
+/// the base level's size, 8x8 (dEQP es3fShaderTextureFunctionTests.cpp
+/// :1408-1411 sets the base level, :1511 expects the minified size; Mesa's
+/// v3d_uniforms.c `u_minify(first_level)`).
 #[test]
-fn a_2d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_texture_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Tex2d, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x8 `sampler3D` hands
-/// the level-0 size and depth, 16x16 and 8. The correct value is 8x8 and
-/// depth 4 (:1408-1411, :1511; `u_minify(first_level)` of width, height and
-/// depth). Flip to (8, 8, 4, 1) when the base level is applied.
+/// With BASE_LEVEL 1 the 16x16x8 `sampler3D` hands 8x8 and depth 4
+/// (:1408-1411, :1511; `u_minify(first_level)` of width, height and depth).
 #[test]
-fn a_3d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_3d_texture_at_base_level_1_hands_the_base_level_size_and_depth() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x5 `sampler2DArray`
-/// hands 16x16 and 5 layers. The correct value is 8x8 and 5 layers: the
-/// layer count is NOT minified (:1408-1411, :1511; Mesa writes the array
-/// size as is). Flip to (8, 8, 1, 5) when the base level is applied; only the
-/// width and height change.
+/// With BASE_LEVEL 1 the 16x16x5 `sampler2DArray` hands 8x8 and 5 layers:
+/// the layer count is NOT minified (:1408-1411, :1511; Mesa writes the array
+/// size as is).
 #[test]
-fn a_2d_array_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_array_at_base_level_1_hands_the_base_level_size_and_every_layer() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, 1), (8, 8, 1, 5));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 16x16 `samplerCube` hands
-/// 16x16. The correct value is 8x8 (:1408-1411, :1511; `u_minify`). Flip to
-/// (8, 8, 1, 1) when the base level is applied.
+/// With BASE_LEVEL 1 the 16x16 `samplerCube` hands 8x8 (:1408-1411, :1511;
+/// `u_minify`).
 #[test]
-fn a_cube_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_cube_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Cube, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Cube, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the size-only
-/// `sampler2DArrayShadow` over a DEPTH_COMPONENT32F 16x16x5 array (a full
-/// chain, so complete) hands 16x16 and 5 layers. The correct value is 8x8
-/// and 5 layers (:1408-1411, :1511; `u_minify`, layers as is). Flip to
-/// (8, 8, 1, 5) when the base level is applied.
+/// With BASE_LEVEL 1 the size-only `sampler2DArrayShadow` over a
+/// DEPTH_COMPONENT32F 16x16x5 array (a full chain, so complete) hands 8x8
+/// and 5 layers (:1408-1411, :1511; `u_minify`, layers as is).
 #[test]
-fn a_2d_array_shadow_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_array_shadow_at_base_level_1_hands_the_base_level_size_and_every_layer() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::ArrayShadow, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::ArrayShadow, 1), (8, 8, 1, 5));
 }

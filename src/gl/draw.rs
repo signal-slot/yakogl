@@ -4741,6 +4741,11 @@ fn build_common(
                 _ => GLES_TEXTYPE_2D,
             };
             tb.layers = nlayers as u16;
+            /* GL_TEXTURE_BASE_LEVEL, for the size words of a backend that
+             * applies it (ES 3.0.6 3.8.10: an immutable texture's is clamped
+             * to its last level); everything else here stays level 0 */
+            let base_max = if t.immutable && t.immutable_levels > 0 { i32::from(t.immutable_levels) - 1 } else { 255 };
+            tb.base_level = t.base_level.clamp(0, base_max) as u8;
             /* the whole stack, not one layer: the rows above are what the
              * hardware is told, these are what the storage holds */
             tb.bytes = if t.block_bytes != 0 {
