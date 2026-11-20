@@ -19,7 +19,11 @@
 //!   read of ldvary's C term, a thread switch or control flow, and a plain
 //!   `ldunif` never lands between an `ldvary` and a read of its C term,
 //! * rf1..rf3 (the fragment payload, read through `Src71::Payload`) are
-//!   never handed out, whatever the stage,
+//!   never handed out outside a fragment shader; in a fragment shader a
+//!   value may take one only where that payload value is dead (the payload
+//!   register is a pseudo value of the dataflow, live from the program's
+//!   start to its last read, across loop back edges), so the value never
+//!   overwrites a payload still to be read,
 //! * every register is below `rf_end71(threads)` and `rf_end` is one past
 //!   the highest register from `RF_FIRST71` up that a defined value uses.
 //!
@@ -76,13 +80,23 @@ fn has(b: &Bits, v: usize) -> bool {
 
 /// What an operation reads and writes for liveness: a [`Op71::Copy`] defines
 /// its destination (it does not read it), a [`Op71::CondMov`] reads and keeps
-/// it.
-fn reads(op: &Op71) -> Vec<usize> {
+/// it. A read of payload register `p` (rf1..rf3) is a read of the pseudo
+/// value `vregs + p - 1` ([`payload_bit`]), which nothing defines.
+fn reads(op: &Op71, vregs: u32) -> Vec<usize> {
     let srcs: Vec<Src71> = match *op {
         Op71::Copy { src, .. } => vec![src],
         _ => op.uses().to_vec(),
     };
-    srcs.iter().filter_map(|s| s.vreg()).map(|v| v.0 as usize).collect()
+    srcs.iter()
+        .filter_map(|s| match *s {
+            Src71::Payload(p) => Some(payload_bit(vregs, p)),
+            _ => s.vreg().map(|v| v.0 as usize),
+        })
+        .collect()
+}
+/// The dataflow bit of payload register `p` (1..=3), past the vregs.
+fn payload_bit(vregs: u32, p: u8) -> usize {
+    vregs as usize + p as usize - 1
 }
 fn writes(op: &Op71) -> Option<usize> {
     match *op {
@@ -120,7 +134,7 @@ fn succs(ops: &[Op71], i: usize, label_at: &BTreeMap<u32, usize>, head_of: &BTre
 /// Live-out per operation, by backward dataflow to a fixed point.
 fn liveness(sel: &Selected71<'_>) -> Vec<Bits> {
     let ops = sel.ops;
-    let words = (sel.vregs as usize).div_ceil(64).max(1);
+    let words = (sel.vregs as usize + 3).div_ceil(64);
     let mut label_at = BTreeMap::new();
     let mut head_of = BTreeMap::new();
     let mut heads = Vec::new();
@@ -152,7 +166,7 @@ fn liveness(sel: &Selected71<'_>) -> Vec<Bits> {
             if let Some(w) = writes(&ops[i]) {
                 clear(&mut inn, w);
             }
-            for r in reads(&ops[i]) {
+            for r in reads(&ops[i], sel.vregs) {
                 set(&mut inn, r);
             }
             if inn != live_in[i] || out != live_out[i] {
@@ -189,8 +203,8 @@ fn check(sel: &Selected71<'_>, reg: &[Rf], rf_end: u8, threads: u32) -> Vec<Stri
         if r.0 >= end {
             bad.push(format!("v{v} in rf{} at or past rf_end71({threads}) = {end}", r.0));
         }
-        if (1..RF_FIRST71).contains(&r.0) {
-            bad.push(format!("v{v} in rf{}, a payload register", r.0));
+        if (1..RF_FIRST71).contains(&r.0) && !sel.fragment {
+            bad.push(format!("v{v} in rf{}, a payload register outside a fragment shader", r.0));
         }
         if r.0 >= RF_FIRST71 {
             top = top.max(r.0 + 1);
@@ -199,9 +213,14 @@ fn check(sel: &Selected71<'_>, reg: &[Rf], rf_end: u8, threads: u32) -> Vec<Stri
     if rf_end != top {
         bad.push(format!("rf_end {rf_end}, the highest register used makes it {top}"));
     }
-    /* interference: a definition against everything live after it */
+    /* interference: a definition against everything live after it, and a
+     * definition into rf1..rf3 against that payload value still to be read */
     for (i, op) in ops.iter().enumerate() {
         let Some(w) = writes(op) else { continue };
+        let r = reg[w].0;
+        if (1..RF_FIRST71).contains(&r) && has(&live_out[i], payload_bit(sel.vregs, r)) {
+            bad.push(format!("op {i}: v{w} is written into rf{r}, whose payload value is still to be read"));
+        }
         for v in 0..sel.vregs as usize {
             if v != w && has(&live_out[i], v) && reg[v] == reg[w] {
                 bad.push(format!("op {i}: v{w} is written into rf{}, which v{v} holds and still needs", reg[w].0));
@@ -472,24 +491,26 @@ fn allocate71_is_sound_over_every_corpus_pair() {
 /// the ones whose two sources compile).
 const PAIRS: usize = 36;
 /// Of the 31 pairs that reach their stages (3 each: fragment, vertex,
-/// coordinate), 92 allocate at 4 threads, none needs 2 and one does not
-/// allocate at all.
+/// coordinate), 92 allocate at 4 threads and one (varyings15's fragment
+/// shader, 15 varying vec4s) at 2, in rf1..rf3 once its payload is read.
 const FOUR: usize = 92;
-const TWO: usize = 0;
-const NOT_ALLOCATED: usize = 1;
+const TWO: usize = 1;
+const NOT_ALLOCATED: usize = 0;
 /// 3 desktop GLSL sources and 2 pairs whose varying has no vertex output.
 const FRONT_STOPS: usize = 5;
 /// Values in rf0, summed over the allocations made (a stage that fails at
-/// a pressure level and is retried counts at each).
-const RF0: usize = 256;
+/// a pressure level and is retried counts at each). 58 of them are
+/// varyings15's fragment shader, allocated since rf1..rf3 are handed out.
+const RF0: usize = 314;
 
-/// The stage no pressure level fits in 2 threads (varyings15 reads 15 vec4).
-const REFUSED: [&str; 1] = ["es100/varyings15 fragment: alloc71 DoesNotFit at 2 threads"];
+/// The stages no pressure level fits in 2 threads: none.
+const REFUSED: [&str; 0] = [];
 
 #[cfg(test)]
 mod checker {
     use super::*;
-    use yakogl::shaderc::online::v3d::vop71::{AddOp71, Dst71, Uniform, V};
+    use yakogl::shaderc::online::v3d::isa::Msfign;
+    use yakogl::shaderc::online::v3d::vop71::{AddOp71, Dst71, MulOp71, Uniform, V};
 
     fn ld(d: u32) -> Op71 {
         Op71::Ldunif { dst: V(d), u: Uniform::constant(d) }
@@ -512,7 +533,26 @@ mod checker {
         assert!(!run(&ops, 3, &[4, 4, 5], 6).is_empty(), "two live values in one register");
         assert!(!run(&ops, 3, &[4, 5, 4], 7).is_empty(), "rf_end past the highest register");
         assert!(!run(&ops, 3, &[4, 5, 32], 33).is_empty(), "a register at rf_end71(4)");
-        assert!(!run(&ops, 3, &[2, 5, 4], 6).is_empty(), "a payload register handed out");
+        assert_eq!(run(&ops, 3, &[2, 5, 4], 6), Vec::<String>::new(), "rf2 of a payload never read");
+        /* a payload register while its value is still to be read, and once read */
+        let fmov_z =
+            |d: u32| Op71::Mul { op: MulOp71::Fmov, dst: Dst71::V(V(d)), a: Src71::Payload(2), b: Src71::None };
+        let ops = [ld(0), ld(1), add(2, 0, 1), fmov_z(3), add(4, 2, 3)];
+        assert!(!run(&ops, 5, &[2, 5, 4, 6, 4], 7).is_empty(), "rf2 written before Z is read");
+        assert_eq!(run(&ops, 5, &[4, 5, 4, 2, 4], 6), Vec::<String>::new(), "rf2 written by Z's read");
+        /* read inside a loop: live to the back edge, so not before it */
+        let ops = [
+            ld(0),
+            Op71::LoopHead,
+            fmov_z(1),
+            add(2, 0, 1),
+            Op71::BackEdge { cond: BranchCond::AnyA, msfign: Msfign::None },
+        ];
+        assert!(!run(&ops, 3, &[4, 2, 5], 6).is_empty(), "rf2 in a loop that reads Z again");
+        assert_eq!(run(&ops, 3, &[4, 5, 6], 7), Vec::<String>::new());
+        /* outside a fragment shader rf1..rf3 stay out */
+        let sel = Selected71 { ops: &[ld(0)], fragment: false, vregs: 1 };
+        assert!(!check(&sel, &[Rf(2)], RF_FIRST71, 4).is_empty(), "a payload register in a vertex shader");
         /* rf0 for a value an ldvary ends, and for a non-ldunif */
         let ops = [ld(0), Op71::Ldvary { dst: V(1) }, add(2, 0, 1)];
         assert!(!run(&ops, 3, &[0, 4, 5], 6).is_empty(), "rf0 live across an ldvary");
