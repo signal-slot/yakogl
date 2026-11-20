@@ -5122,7 +5122,7 @@ if command -v python3 >/dev/null 2>&1; then
     gap "imx8mp regs.rs: no hal_nxp at $hal_nxp_dir (set HAL_NXP_DIR): the generated registers were NOT checked"
   fi
   # driver/rust/src/soc/imx95/regs.rs: the i.MX 95 display's registers
-  # (soc::imx95::dpu, ::display), the same generator and pin.
+  # (soc::imx95::dpu, ::display, ::combo_phy), the same generator and pin.
   scope drivers
   if [ -d "$hal_nxp_dir/mcux/mcux-sdk-ng/devices/i.MX/i.MX95/periph" ]; then
     hal_nxp_imx95_regs_regenerate() {

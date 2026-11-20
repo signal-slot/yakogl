@@ -7,6 +7,9 @@
 //   PERI_DISPLAY_SEERIS.h  sha256 fd2429314cc9282d0c64904865bba5993db81f013c97686cb36f735b34c2963b
 //   PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h  sha256 629a22a0281e80751eb307de6c741520611fd6875f6fb99e5eb4a01714d00c5b
 //   PERI_DISPLAY_INTERLEAVER.h  sha256 1daabf4ddf8199dcb31e28f2d0584549c0594af2c401b7451b9e3edc888c74fc
+//   PERI_CAMERA_DSI_STREAM_CSR.h  sha256 707569eed5c914c316377a55063f9b8b5997a9cf221e2382a3e60415f72c4c7c
+//   PERI_CAMERA_DSI_MASTER_CSR.h  sha256 68f7fd4cacac4e032a325d0dc888b6ab30c45bc8fae7b4cf686ad821bb82ac43
+//   PERI_CAMERA_DSI_OR_CSI_PHY_CSR.h  sha256 0e187f5fabdd0e7c48d1d81a71b8ffe0f7165e04c3a0443301404f680ab7f179
 // Copyright 1997-2016 Freescale Semiconductor, Inc.; Copyright 2016-2026 NXP.
 // The field value lists are NXP's text from the same headers.
 
@@ -1451,5 +1454,270 @@ pub mod display_interleaver {
     pub mod ictrl {
         pub const WIDTH_MASK: u32 = 0xfff;
         pub const WIDTH_SHIFT: u32 = 0;
+    }
+}
+
+/// `CAMERA_DSI_STREAM_CSR_Type` (PERI_CAMERA_DSI_STREAM_CSR.h): offsets from the block's base address.
+pub mod camera_dsi_stream_csr {
+    pub const DSI_HOST_CONFIGURATION: u32 = 0x0;
+    /// Fields of `DSI_HOST_CONFIGURATION`.
+    pub mod dsi_host_configuration {
+        /// 0b000..RGB 24-bit
+        /// 0b001..RGB 30-bit
+        /// 0b010..RGB 18-bit
+        /// 0b011..RGB 16-bit
+        /// 0b100..20-bit YCbCr, 4:2:2 format
+        /// 0b101..16-bit YCbCr, 4:2:2 format
+        pub const PIXEL_LINK_FORMAT_MASK: u32 = 0x7;
+        pub const PIXEL_LINK_FORMAT_SHIFT: u32 = 0;
+        /// 0b0..'1' to '0': send a turn on peripheral command (short packet - 0x32)
+        /// 0b1..'0' to '1': send a shut down peripheral command (short packet - 0x22)
+        pub const SHUTDOWN_MASK: u32 = 0x10;
+        pub const SHUTDOWN_SHIFT: u32 = 4;
+        /// 0b0..'1' to '0': Send a Color Mode Off Command (Short packet - 0x02) switches a Video Mode display module from
+        /// 0b1..'0' to '1': Send a Color Mode On Command (Short packet - 0x12)switches a Video Mode display module to a low-color mode for power saving.
+        pub const COLORMODE_MASK: u32 = 0x20;
+        pub const COLORMODE_SHIFT: u32 = 5;
+    }
+}
+
+/// `CAMERA_DSI_MASTER_CSR_Type` (PERI_CAMERA_DSI_MASTER_CSR.h): offsets from the block's base address.
+pub mod camera_dsi_master_csr {
+    pub const DSI_CLOCK_GATING_CONTROL: u32 = 0x0;
+    /// Fields of `DSI_CLOCK_GATING_CONTROL`.
+    pub mod dsi_clock_gating_control {
+        /// 0b0..Pixel clock is enabled
+        /// 0b1..Pixel clock is disabled (gated)
+        pub const DISPLAY_0_ASYNC_FIFO_MASK: u32 = 0x1;
+        pub const DISPLAY_0_ASYNC_FIFO_SHIFT: u32 = 0;
+        /// 0b0..Pixel clock is enabled
+        /// 0b1..Pixel clock is disabled (gated)
+        pub const DISPLAY_1_ASYNC_FIFO_MASK: u32 = 0x2;
+        pub const DISPLAY_1_ASYNC_FIFO_SHIFT: u32 = 1;
+        /// 0b0..clkin is enabled
+        /// 0b1..clkin is disabled (gated)
+        pub const DPHY_PLL_CLKIN_MASK: u32 = 0x4;
+        pub const DPHY_PLL_CLKIN_SHIFT: u32 = 2;
+        /// 0b0..clkout is enabled
+        /// 0b1..clkout is disabled (gated)
+        pub const DPHY_PLL_CLKOUT_MASK: u32 = 0x8;
+        pub const DPHY_PLL_CLKOUT_SHIFT: u32 = 3;
+        /// 0b0..clkext is enabled
+        /// 0b1..clkext is disabled (gated)
+        pub const DPHY_PLL_CLKEXT_MASK: u32 = 0x10;
+        pub const DPHY_PLL_CLKEXT_SHIFT: u32 = 4;
+    }
+
+    pub const DSI_PIXEL_LINK_CONTROL: u32 = 0x4;
+    /// Fields of `DSI_PIXEL_LINK_CONTROL`.
+    pub mod dsi_pixel_link_control {
+        /// 0b0..Pixel Link 0
+        /// 0b1..Pixel Link 1
+        pub const PIXEL_LINK_SEL_MASK: u32 = 0x1;
+        pub const PIXEL_LINK_SEL_SHIFT: u32 = 0;
+    }
+
+    pub const DSI_CLOCK_SETTING: u32 = 0x8;
+    /// Fields of `DSI_CLOCK_SETTING`.
+    pub mod dsi_clock_setting {
+        /// 0b0..24 MHz
+        /// 0b1..Pixel link clock divided by 'Dphy_ref_clock_div'
+        pub const DPHY_REF_CLOCK_DIV_MASK: u32 = 0xf;
+        pub const DPHY_REF_CLOCK_DIV_SHIFT: u32 = 0;
+        /// 0b0..24 MHz
+        /// 0b1..Pixel link clock divided by 'Dphy_ref_clock_div'
+        pub const DPHY_REF_CLOCK_SOURCE_MASK: u32 = 0x80;
+        pub const DPHY_REF_CLOCK_SOURCE_SHIFT: u32 = 7;
+        pub const DPHY_PLL_DIV_MASK: u32 = 0xf00;
+        pub const DPHY_PLL_DIV_SHIFT: u32 = 8;
+    }
+}
+
+/// `CAMERA_DSI_OR_CSI_PHY_CSR_Type` (PERI_CAMERA_DSI_OR_CSI_PHY_CSR.h): offsets from the block's base address.
+pub mod camera_dsi_or_csi_phy_csr {
+    pub const COMBO_PHY_MODE_CONTROL: u32 = 0x100;
+    /// Fields of `COMBO_PHY_MODE_CONTROL`.
+    pub mod combo_phy_mode_control {
+        /// 0b0..CSI mode
+        /// 0b1..DSI mode
+        pub const TX_RXZ_MASK: u32 = 0x1;
+        pub const TX_RXZ_SHIFT: u32 = 0;
+        /// 0b00..Clocks stopped
+        /// 0b01..Clock generation
+        /// 0b10..Buffered clkext
+        /// 0b11..Reserved
+        pub const PLL_CLKSEL_MASK: u32 = 0x6;
+        pub const PLL_CLKSEL_SHIFT: u32 = 1;
+        /// 0b0..Disable gp_clk_en
+        /// 0b1..Enable
+        pub const PLL_GP_CLK_EN_MASK: u32 = 0x8;
+        pub const PLL_GP_CLK_EN_SHIFT: u32 = 3;
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const PHY_ENABLE_EXT_MASK: u32 = 0xf0;
+        pub const PHY_ENABLE_EXT_SHIFT: u32 = 4;
+    }
+
+    pub const COMBO_PHY_FREQ_CONTROL: u32 = 0x104;
+    /// Fields of `COMBO_PHY_FREQ_CONTROL`.
+    pub mod combo_phy_freq_control {
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const PHY_CFGCLKFREQRANGE_MASK: u32 = 0xff;
+        pub const PHY_CFGCLKFREQRANGE_SHIFT: u32 = 0;
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const PHY_HSFREQRANGE_MASK: u32 = 0x7f0000;
+        pub const PHY_HSFREQRANGE_SHIFT: u32 = 16;
+    }
+
+    pub const COMBO_PHY_TEST_MODE_CONTROL: u32 = 0x108;
+    /// Fields of `COMBO_PHY_TEST_MODE_CONTROL`.
+    pub mod combo_phy_test_mode_control {
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const BASEDIR_0_MASK: u32 = 0x1;
+        pub const BASEDIR_0_SHIFT: u32 = 0;
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const BASEDIR_1_MASK: u32 = 0x2;
+        pub const BASEDIR_1_SHIFT: u32 = 1;
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const BASEDIR_2_MASK: u32 = 0x4;
+        pub const BASEDIR_2_SHIFT: u32 = 2;
+        /// 0b0..Configure lane as TX
+        /// 0b1..Configure lane as RX
+        pub const BASEDIR_3_MASK: u32 = 0x8;
+        pub const BASEDIR_3_SHIFT: u32 = 3;
+        /// 0b0..Do not force lane module into transmit mode and Stop state following an error indication
+        /// 0b1..Force lane module into transmit mode and Stop state following an error indication
+        pub const FORCETXSTOPMODE_0_MASK: u32 = 0x10;
+        pub const FORCETXSTOPMODE_0_SHIFT: u32 = 4;
+        /// 0b0..Do not force lane module into transmit mode and Stop state following an error indication
+        /// 0b1..Force lane module into transmit mode and Stop state following an error indication
+        pub const FORCETXSTOPMODE_1_MASK: u32 = 0x20;
+        pub const FORCETXSTOPMODE_1_SHIFT: u32 = 5;
+        /// 0b0..Do not force lane module into transmit mode and Stop state following an error indication
+        /// 0b1..Force lane module into transmit mode and Stop state following an error indication
+        pub const FORCETXSTOPMODE_2_MASK: u32 = 0x40;
+        pub const FORCETXSTOPMODE_2_SHIFT: u32 = 6;
+        /// 0b0..Do not force lane module into transmit mode and Stop state following an error indication
+        /// 0b1..Force lane module into transmit mode and Stop state following an error indication
+        pub const FORCETXSTOPMODE_3_MASK: u32 = 0x80;
+        pub const FORCETXSTOPMODE_3_SHIFT: u32 = 7;
+        /// 0b0..Do not force lane module into receive mode and wait for Stop state
+        /// 0b1..Force lane module into receive mode and wait for Stop state
+        pub const FORCERXMODE_0_MASK: u32 = 0x100;
+        pub const FORCERXMODE_0_SHIFT: u32 = 8;
+        /// 0b0..Do not force lane module into receive mode and wait for Stop state
+        /// 0b1..Force lane module into receive mode and wait for Stop state
+        pub const FORCERXMODE_1_MASK: u32 = 0x200;
+        pub const FORCERXMODE_1_SHIFT: u32 = 9;
+        /// 0b0..Do not force lane module into receive mode and wait for Stop state
+        /// 0b1..Force lane module into receive mode and wait for Stop state
+        pub const FORCERXMODE_2_MASK: u32 = 0x400;
+        pub const FORCERXMODE_2_SHIFT: u32 = 10;
+        /// 0b0..Do not force lane module into receive mode and wait for Stop state
+        /// 0b1..Force lane module into receive mode and wait for Stop state
+        pub const FORCERXMODE_3_MASK: u32 = 0x800;
+        pub const FORCERXMODE_3_SHIFT: u32 = 11;
+        /// 0b0..Disable clock lane
+        /// 0b1..Enable clock lane
+        pub const ENABLECLK_EXT_MASK: u32 = 0x1000;
+        pub const ENABLECLK_EXT_SHIFT: u32 = 12;
+        /// 0b0..Allow turn around
+        /// 0b1..Disable turn around
+        pub const TURNDISABLE_0_MASK: u32 = 0x2000;
+        pub const TURNDISABLE_0_SHIFT: u32 = 13;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const PHY_ENABLE_BYP_MASK: u32 = 0x4000;
+        pub const PHY_ENABLE_BYP_SHIFT: u32 = 14;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const TURNREQUEST_0_SEL_MASK: u32 = 0x8000;
+        pub const TURNREQUEST_0_SEL_SHIFT: u32 = 15;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const TXDATAHS_SEL_MASK: u32 = 0x10000;
+        pub const TXDATAHS_SEL_SHIFT: u32 = 16;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const TXBYTECLKHS_SEL_MASK: u32 = 0x20000;
+        pub const TXBYTECLKHS_SEL_SHIFT: u32 = 17;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const TXULPSCLK_SEL_MASK: u32 = 0x40000;
+        pub const TXULPSCLK_SEL_SHIFT: u32 = 18;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const TXLP_DATA_ESC_SEL_MASK: u32 = 0x80000;
+        pub const TXLP_DATA_ESC_SEL_SHIFT: u32 = 19;
+        /// 0b0..Controller generated signals
+        /// 0b1..External signals
+        pub const TXCLKESC_SEL_MASK: u32 = 0x100000;
+        pub const TXCLKESC_SEL_SHIFT: u32 = 20;
+        /// 0b0..BIST off
+        /// 0b1..Start BIST
+        pub const BISTON_MASK: u32 = 0x200000;
+        pub const BISTON_SHIFT: u32 = 21;
+    }
+
+    pub const COMBO_PHY_TEST_MODE_STATUS: u32 = 0x10c;
+    /// Fields of `COMBO_PHY_TEST_MODE_STATUS`.
+    pub mod combo_phy_test_mode_status {
+        /// 0b0..Lane is in ULP state
+        /// 0b1..Lane is not in ULP state
+        pub const ULPSACTIVENOT_0_MASK: u32 = 0x1;
+        pub const ULPSACTIVENOT_0_SHIFT: u32 = 0;
+        /// 0b0..Lane is in ULP state
+        /// 0b1..Lane is not in ULP state
+        pub const ULPSACTIVENOT_1_MASK: u32 = 0x2;
+        pub const ULPSACTIVENOT_1_SHIFT: u32 = 1;
+        /// 0b0..Lane is in ULP state
+        /// 0b1..Lane is not in ULP state
+        pub const ULPSACTIVENOT_2_MASK: u32 = 0x4;
+        pub const ULPSACTIVENOT_2_SHIFT: u32 = 2;
+        /// 0b0..Lane is in ULP state
+        /// 0b1..Lane is not in ULP state
+        pub const ULPSACTIVENOT_3_MASK: u32 = 0x8;
+        pub const ULPSACTIVENOT_3_SHIFT: u32 = 3;
+        /// 0b0..No control error detected
+        /// 0b1..Control error detected
+        pub const ERRCONTROL_0_MASK: u32 = 0x10;
+        pub const ERRCONTROL_0_SHIFT: u32 = 4;
+        /// 0b0..No control error detected
+        /// 0b1..Control error detected
+        pub const ERRCONTROL_1_MASK: u32 = 0x20;
+        pub const ERRCONTROL_1_SHIFT: u32 = 5;
+        /// 0b0..No control error detected
+        /// 0b1..Control error detected
+        pub const ERRCONTROL_2_MASK: u32 = 0x40;
+        pub const ERRCONTROL_2_SHIFT: u32 = 6;
+        /// 0b0..No control error detected
+        /// 0b1..Control error detected
+        pub const ERRCONTROL_3_MASK: u32 = 0x80;
+        pub const ERRCONTROL_3_SHIFT: u32 = 7;
+        /// 0b0..Clock lane is in ULP state
+        /// 0b1..Clock lane is not in ULP state
+        pub const RXULPSCLKNOT_MASK: u32 = 0x100;
+        pub const RXULPSCLKNOT_SHIFT: u32 = 8;
+        /// 0b0..Clock lane is in ULP state
+        /// 0b1..Clock lane is not in ULP state
+        pub const ULPSACTIVENOTCLK_MASK: u32 = 0x200;
+        pub const ULPSACTIVENOTCLK_SHIFT: u32 = 9;
+        /// 0b0..PLL is not locked
+        /// 0b1..PLL is locked
+        pub const PHY_LOCK_MASK: u32 = 0x800;
+        pub const PHY_LOCK_SHIFT: u32 = 11;
+        /// 0b0..HS bist test not done.
+        /// 0b1..HS bist test done.
+        pub const BISTDONE_MASK: u32 = 0x1000;
+        pub const BISTDONE_SHIFT: u32 = 12;
+        /// 0b0..BIST test completed with errors
+        /// 0b1..BIST test is OK
+        pub const BISTOK_MASK: u32 = 0x2000;
+        pub const BISTOK_SHIFT: u32 = 13;
     }
 }
