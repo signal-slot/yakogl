@@ -60,7 +60,16 @@
 //!   set here from [`VideoMode::de_high`].
 //! - Linux's burst-mode line time multiplies in 32 bits (:785); here in 64.
 //! - The version: Linux's ST glue accepts IP 1.30, 1.31 and 1.41 only
-//!   (ST dw_mipi_dsi-stm.c:1344-1351); [`probe`] does the same.
+//!   (ST dw_mipi_dsi-stm.c:1344-1351); [`probe`] does the same. A SoC whose
+//!   glue names no version list (the i.MX 95: NXP's `imx95-mipi-dsi.c`
+//!   checks none, and hal_nxp's `PERI_MIPI_DSI.h` gives no reset value for
+//!   `VERSION`) uses [`probe_at_least`]: any Synopsys "1.xy" version from a
+//!   floor up, the floor being the `PHY_TMR_CFG` layout its header documents.
+//!
+//! The i.MX 95 (`soc::imx95::dsi`) drives this host unchanged, with its own
+//! [`Phy`] (`soc::imx95::combo_phy`), which reaches the combo D-PHY's
+//! registers through the host's PHY test interface ([`regs::PHY_TST_CTRL0`],
+//! [`regs::PHY_TST_CTRL1`]).
 //!
 //! Not used on the ADV7535 path, kept minimal: command-mode writes
 //! ([`transfer`], :374-465, generic and DCS writes as drm_mipi_dsi.c builds
@@ -153,6 +162,14 @@ pub mod regs {
     pub const PHY_LOCK: u32 = 1 << 0;
     pub const PHY_TST_CTRL0: u32 = 0xb4;
     pub const PHY_TESTCLR: u32 = 1 << 0;
+    /// PHY_TST_CTRL0 bit 1: the test interface clock (hal_nxp
+    /// `PERI_MIPI_DSI.h`, `phy_testclk`).
+    pub const PHY_TESTCLK: u32 = 1 << 1;
+    /// The test interface's data and enable pins (hal_nxp `PERI_MIPI_DSI.h`,
+    /// offset 0xB8): TESTDIN 7:0, TESTDOUT 15:8, TESTEN 16.
+    pub const PHY_TST_CTRL1: u32 = 0xb8;
+    pub const PHY_TESTEN: u32 = 1 << 16;
+    pub const PHY_TESTDOUT_SHIFT: u32 = 8;
     pub const INT_ST0: u32 = 0xbc;
     pub const INT_ST1: u32 = 0xc0;
     pub const INT_MSK0: u32 = 0xc4;
@@ -197,6 +214,9 @@ pub mod flags {
     pub const MODE_VIDEO_BURST: u32 = 1 << 1;
     pub const MODE_VIDEO_SYNC_PULSE: u32 = 1 << 2;
     pub const MODE_VIDEO_HSE: u32 = 1 << 4;
+    /// No horizontal sync active (drm_mipi_dsi.h); this host never reads it
+    /// (dw-mipi-dsi.c), kept so a device's flags can be stated whole.
+    pub const MODE_VIDEO_NO_HSA: u32 = 1 << 7;
     pub const MODE_NO_EOT_PACKET: u32 = 1 << 9;
     pub const CLOCK_NON_CONTINUOUS: u32 = 1 << 10;
     /// What the ADV7533/7535 asks of its host (adv7533.c:152-153): video,
@@ -448,6 +468,20 @@ pub fn probe(m: &impl Mmio, base: usize) -> Result<u32, i32> {
     match version(m, base) {
         v @ (r::HWVER_130 | r::HWVER_131 | r::HWVER_141) => Ok(v),
         _ => Err(-ENODEV),
+    }
+}
+
+/// The IP version if it is a Synopsys "1.xy" version (`VERSION` reads the
+/// ASCII digits "1", "x", "y" in its top three bytes) at or above `floor`
+/// (for example [`regs::HWVER_131`]); `-ENODEV` otherwise. For a SoC whose
+/// glue names no version list (module text); [`probe`] is ST's list.
+pub fn probe_at_least(m: &impl Mmio, base: usize, floor: u32) -> Result<u32, i32> {
+    let v = version(m, base);
+    let digit = |b: u32| (0x30..=0x39).contains(&b);
+    if v >> 24 == 0x31 && digit(v >> 16 & 0xff) && digit(v >> 8 & 0xff) && v >= floor {
+        Ok(v)
+    } else {
+        Err(-ENODEV)
     }
 }
 
@@ -1274,6 +1308,22 @@ mod tests {
         let tmr = [R(r::VERSION, r::HWVER_130), W(r::PHY_TMR_CFG, (23 << 24) | (49 << 16) | 10_000)]; // :877
         let head = expected_head(&tmr);
         assert_eq!(log.borrow()[..head.len()], head[..]);
+    }
+
+    #[test]
+    fn probe_at_least_takes_any_synopsys_version_from_the_floor() {
+        for (v, ok) in [
+            (r::HWVER_131 | 0x2a, true),
+            (r::HWVER_141, true),
+            (0x3135_3000, true), // 1.50
+            (r::HWVER_130, false),
+            (0, false),
+            (0xffff_ffff, false),
+            (0x3231_3000, false), // "2.1": not this IP's numbering
+        ] {
+            let (_, dsi, _, _) = rig(v);
+            assert_eq!(probe_at_least(&dsi, BASE, r::HWVER_131).is_ok(), ok, "{v:#x}");
+        }
     }
 
     #[test]
