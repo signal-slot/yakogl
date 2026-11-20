@@ -324,6 +324,8 @@ const _: () = assert!(offset_of!(crate::backend::GlesDraw, fs_uniform_dwords) ==
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, fs_uniform_cpu) == 992);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, targets) == 1000);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, num_targets) == 1096);
+const _: () = assert!(offset_of!(crate::backend::GlesDraw, per_target_mask) == 1097);
+const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_color_mask) == 1098);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, textures) == 1104);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, num_textures) == 2256);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, vs_textures) == 2264);

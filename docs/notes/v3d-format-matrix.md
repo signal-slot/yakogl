@@ -91,7 +91,7 @@ format can be a colour attachment (`attachment_storage`,
 | SRGB8 | SRGB8_A8, alpha 255 (`texture.rs:5751`) | n/a (not renderable: `framebuffer.rs:505-507` refuses `t.format == GL_RGB` of the class; no RB name) | n/a: incomplete |
 | RGB10_A2 | RGB10A2 (`es3_formats.rs:121-129`) | RGB10_A2 (`framebuffer.rs:729`) | drawn (`framebuffer.rs:425-426`, `:535`); `tests/es3_formats_v3d.rs:1334` |
 | RGB10_A2UI | RGB10A2UI (`es3_formats.rs:130-138`) | RGB10_A2UI (`framebuffer.rs:659`) | drawn (`framebuffer.rs:439`) |
-| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:412`, `WIDE_INT_RT` `:426`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1125`); beside another target one mask serves both, refused by name where the masks differ (`src/gl/draw.rs:2737`); G2, `tests/es3_v3d_fbo_int_rg.rs` |
+| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:412`, `WIDE_INT_RT` `:426`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1125`); beside another target each RT takes its own mask (`per_target_masks`, `src/gl/draw.rs:2747`), refused by name only under GL_BLEND beside a non-integer target; G2, G3, `tests/es3_v3d_fbo_int_rg.rs` |
 | RGBA8I, RGBA8UI | RGBA8I / RGBA8UI | own surface | drawn (`framebuffer.rs:433-434`) |
 | R16I, R16UI, RG16I, RG16UI | RGBA16I / RGBA16UI | own surface | drawn as the store's wide surface RGBA16I / RGBA16UI, as `R8I .. RG8UI` above; G2 |
 | RGBA16I, RGBA16UI | RGBA16I / RGBA16UI | own surface | drawn (`framebuffer.rs:435-436`) |
@@ -318,15 +318,24 @@ same samples through `XYZW`.
   the fill at `:3413-3418` over `read_int_row` `:3614`). The RGB integer
   textures (no ES 3.0 render surface) stay incomplete. Host verdicts
   only: no picture is compared.
-  - *Beside other colour targets (G3).* The job writes one mask, RT 0's,
-    into every RT (`v3d_job.c:773-780`), so a draw into an R or RG
-    integer texture that would need a different mask on another written
-    target is refused by name before the back end:
-    `refuse_uneven_target_masks` (`src/gl/draw.rs:2737-2763`, called at
-    `:5014-5016` where `ONE_COLOR_MASK` `:2720` says the back end has one
-    mask; GL_INVALID_OPERATION, one log line naming both masks and the
-    draw buffer). Where every written target takes the same mask the draw
-    is taken with it.
+  - *Beside other colour targets (G3).* Drawn with a colour mask per
+    render target since plan #383 item `v3d-per-rt-mask` (commit "v3d: a
+    colour write mask per render target, so a wide r/rg integer texture
+    draws beside other targets"). `per_target_masks`
+    (`src/gl/draw.rs:2747`, called at `:5150` where `PER_TARGET_MASK`
+    `:2723` holds for `gpu-v3d` only) gives each written target
+    glColorMask limited to its own channels and, where they differ, sets
+    `GlesDraw::per_target_mask` and `target_color_mask`; `job_state`
+    (`src/v3d/state.rs:714`) turns them into
+    `V3dJobState::rt_colormask_own` / `rt_colormask` (RT 1..3), and
+    `v3d_job.c:773-788` packs four disable bits per RT into
+    COLOR_WRITE_MASKS' Mask (Mesa's v3d_packet.xml "Color Write Masks",
+    RT n at bits 4n..4n+3; `v3dx_emit.c:571-585` with independent blend).
+    Where every target takes the same mask nothing is set and the packet
+    is the one from before. Still refused by name (GL_INVALID_OPERATION,
+    one log line naming the masks): uneven masks under glEnable(GL_BLEND)
+    with both integer and non-integer targets, because one BLEND_ENABLES
+    and one BLEND_CFG serve every RT (G3).
   - *Open: clears still write all four store channels.* A glClear /
     glClearBuffer of such a texture clears the whole wide store, on the
     TLB clear words and the quad path alike
@@ -343,8 +352,13 @@ same samples through `XYZW`.
   0, as a TEXTURE_2D_ARRAY layer and as level 1 of a mipmapped texture is
   complete, is drawn on the wide surface with the format's write mask,
   and clears and reads back with 0, 0, 1; beside an RGBA8 / RGBA8UI
-  renderbuffer a disagreeing-mask draw is refused and an agreeing one
-  taken. `tests/es3_int_rt.rs`
+  renderbuffer a disagreeing-mask draw is taken with a mask per target
+  and an agreeing one with the one mask.
+  `tests/es3_v3d_int_rg_mrt_mask.rs` (same feature set) decodes the
+  COLOR_WRITE_MASKS word the real `v3d_job.c` builds for each format at
+  attachment 1 beside RGBA8 and RGBA32UI, at attachment 0 beside RGBA8,
+  under glColorMask subsets, with three targets, and pins the blend
+  refusal. `tests/es3_int_rt.rs`
   `completeness_takes_four_channel_integer_texture_attachments` (`:416`)
   pins the completeness answer at `:423-429`: COMPLETE for R / RG under
   `gpu-powervr` and `gpu-v3d`, INCOMPLETE under `gpu-vivante` (its 8- and
@@ -366,13 +380,16 @@ same samples through `XYZW`.
   (`state.rs:682`), so a framebuffer of an alpha-less and an
   alpha-bearing RT blends one of them with the wrong destination-alpha
   factor (a draw's own RTs 1..3 do blend now, under RT 0's config). The
-  colour mask has the same shape: COLOR_WRITE_MASKS writes RT 0's mask
-  into every RT (`v3d_job.c:773-780`; Mesa the same without independent
-  blend, `v3dx_emit.c:571-585`). The G2 MRT refusal is where this meets
-  ES 3.0: `v3d-wide-int-rt` did not give the hardware a mask per RT, it
-  made the GL core compare the per-format masks and refuse by name a draw
-  that would need two (`src/gl/draw.rs:2737-2763`). A blend config per RT
-  and a colour mask per RT remain open.
+  colour-mask half is closed by `v3d-per-rt-mask`: COLOR_WRITE_MASKS
+  carries a mask per RT where the GL core gives one
+  (`V3dJobState::rt_colormask_own`, `v3d_job.c:773-788`; Mesa packs one
+  per RT with independent blend, `v3dx_emit.c:571-585`), so the G2 draw
+  of an R or RG integer texture beside another target is taken. The
+  application still has one glColorMask (ES 3.0 has no glColorMaski); the
+  per-RT masks only limit it to each target's channels. A blend enable
+  and a blend config per RT remain open, and with them the one refusal
+  left (uneven masks under GL_BLEND with integer and non-integer
+  targets, `src/gl/draw.rs:2747`).
 - **G4 The clear quad does not clamp a fixed-point clear colour.** The TLB
   path clamps for sRGB and RGB10_A2 (`state.rs:529-539`); the quad hands
   `clear_rgba` to the float program (`backend.rs:5546-5552`), and `glClearColor`

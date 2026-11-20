@@ -24,11 +24,12 @@
 //!   layer and as level 1 of a mipmapped texture: complete, drawn on the wide
 //!   surface with the format's write mask, cleared and read back as above;
 //! - the texture beside an RGBA8 / RGBA8UI renderbuffer at attachment 1: with
-//!   every channel on the two targets need different masks and the V3D has
-//!   one for all (v3d_job.c), so the GL core refuses the draw by name
-//!   (`refuse_uneven_target_masks`, GL_INVALID_OPERATION, nothing handed to
-//!   the back end); with glColorMask on the format's channels alone, one mask
-//!   is right for both and the draw is taken with it.
+//!   every channel on the two targets need different masks, and the GL core
+//!   hands the V3D a mask per target (`per_target_masks`,
+//!   `GlesDraw::per_target_mask`), which its job state carries into
+//!   COLOR_WRITE_MASKS per RT; with glColorMask on the format's channels
+//!   alone, one mask is right for both and the draw is taken with it.
+//!   tests/es3_v3d_int_rg_mrt_mask.rs holds the per-RT masks in detail.
 //!
 //! What it cannot see: the GPU. The back end here is a stand-in that records
 //! each draw (`state::refusal`, `state::unsupported`, `state::job_state`) and
@@ -91,6 +92,9 @@ struct Seen {
     /// `targets[..num_targets]`: (gpu, w, h, format).
     targets: Vec<(u64, u32, u32, u8)>,
     color_mask: u8,
+    /// The job state's (colormask, rt_colormask_own, rt_colormask) of a
+    /// draw the V3D takes.
+    job: Option<(u32, bool, u32)>,
     /// `state::refusal` / `state::unsupported`, or the job builder's reason.
     refused: Option<&'static str>,
 }
@@ -110,10 +114,15 @@ unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
             None
         }
     });
+    let job = (d.index_count != 0)
+        .then(|| state::job_state(d).ok())
+        .flatten()
+        .map(|st| (st.colormask, st.rt_colormask_own, st.rt_colormask));
     SEEN.lock().unwrap().push(Seen {
         draws: d.index_count != 0,
         targets: d.targets[..n].iter().map(|t| (t.gpu, t.w, t.h, t.format)).collect(),
         color_mask: d.color_mask,
+        job,
         refused,
     });
     let t = &d.targets[0];
@@ -631,17 +640,17 @@ fn r_and_rg_integer_texture_level_1_completes_and_draws() {
 }
 
 /// The texture at attachment 0 beside an RGBA8 / RGBA8UI renderbuffer at
-/// attachment 1, complete. The V3D writes one colour mask to every render
-/// target (v3d_job.c, RT 0's), so:
+/// attachment 1, complete. The V3D writes a colour mask per render target
+/// (COLOR_WRITE_MASKS, `V3dJobState::rt_colormask`), so:
 ///
 /// - every channel on: the texture needs the format's channels, the
-///   renderbuffer all four. The GL core refuses the draw by name
-///   (draw.rs `refuse_uneven_target_masks`): GL_INVALID_OPERATION and the
-///   back end is handed nothing, never the wrong picture;
+///   renderbuffer all four. The GL core gives each target its own mask
+///   (draw.rs `per_target_masks`) and the draw is taken: RT 0 the format's
+///   channels, RT 1 all four;
 /// - glColorMask on the format's channels alone: both targets need the same
 ///   mask, and the draw reaches the back end with it on both targets.
 #[test]
-fn r_and_rg_integer_texture_beside_another_target_is_drawn_or_refused_by_name() {
+fn r_and_rg_integer_texture_beside_another_target_is_drawn_with_a_mask_per_target() {
     let _g = context();
     for r in ROWS {
         for (second, second_ty) in [(GL_RGBA8, "vec4"), (GL_RGBA8UI, "uvec4")] {
@@ -651,8 +660,18 @@ fn r_and_rg_integer_texture_beside_another_target_is_drawn_or_refused_by_name() 
             program_two(&r, second_ty);
 
             let (seen, e) = draw();
-            assert_eq!(e, GL_INVALID_OPERATION, "{} beside {second:#x}, every channel on: refused", r.name);
-            assert!(seen.is_none(), "{} beside {second:#x}, every channel on: the back end saw a draw", r.name);
+            let what = format!("beside {second:#x}, every channel on");
+            assert_eq!(e, GL_NO_ERROR, "{} {what}", r.name);
+            let s = seen.unwrap_or_else(|| panic!("{} {what}: the back end saw no draw", r.name));
+            assert_eq!(s.refused, None, "{} {what}", r.name);
+            assert_eq!(s.targets.len(), 2, "{} {what}: two targets", r.name);
+            assert_eq!(s.color_mask, own_mask(&r), "{} {what}: RT 0 writes the format's channels", r.name);
+            assert_eq!(
+                s.job,
+                Some((u32::from(own_mask(&r)), true, 0xf)),
+                "{} {what}: RT 0 the format's channels, RT 1 all four",
+                r.name
+            );
 
             // SAFETY: plain GL call.
             unsafe { glColorMask(1, (r.channels == 2) as GLboolean, 0, 0) };
@@ -663,6 +682,7 @@ fn r_and_rg_integer_texture_beside_another_target_is_drawn_or_refused_by_name() 
             assert_eq!(s.refused, None, "{} {what}", r.name);
             assert_eq!(s.targets.len(), 2, "{} {what}: two targets", r.name);
             assert_eq!(s.color_mask, own_mask(&r), "{} {what}: one mask, right for both", r.name);
+            assert_eq!(s.job, Some((u32::from(own_mask(&r)), false, 0)), "{} {what}: no mask of its own", r.name);
             // SAFETY: plain GL call.
             unsafe { glColorMask(1, 1, 1, 1) };
         }
