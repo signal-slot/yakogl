@@ -16,7 +16,7 @@ design the code follows; there are no run logs or session diaries.
 | `ci.md`, `source-form.md`, `standalone-boot.md`, `v3d-noseamless-cube.md`, `notes/v3d-texture-size-words.md` | The CI gate, the source-form rule, standalone boot, two V3D designs: the non-seamless cube, and the texture size uniform words 44-47. |
 | `notes/v3d71-cube-seamless.md` | Mesa's 7.1 cube-map and seamless reading (packets, driver, CI): what the 7.1 table sets for a cube, the U8 prediction, and the case board71-tex runs. |
 | `notes/pre-study-rpi5.md` | The Pi 5 pre-study (BCM2712, VideoCore VII, V3D 7.1): the host reading of Mesa, Linux and the firmware, and the P and U steps stage 5 cites from it. |
-| `notes/pre-study-imx95.md` | The NXP i.MX 95 pre-study (Mali-G310, arch 10.12): the SoC and the candidate boards, the System Manager and SCMI, what in the Mali back end is keyed to the G610 or the RK3588, and the host and board items in order. |
+| `notes/pre-study-imx95.md` | The Toradex Verdin iMX95 on Mallow pre-study (NXP i.MX 95, Mali-G310): the module's variants, the boot chain and the U-Boot sign-off route, the System Manager's rights for our agent, the firmware, and the host and board items in order. |
 | `notes/v3d71-backend.md` | The 7.1 online-compiler back end (P8): the design that fixes the file names, types and function signatures the later items implement. |
 | `notes/v3d71-clear-frame.md` | The 7.1 clear-only frame packet by packet and the 7.1 tile sizes: the specification the frame builder follows for the first clears on the board (H5, M1-M4). |
 | `notes/v3d71-triangle-frame.md` | The 7.1 clear-then-triangle frame (M5): what the job holds packet by packet, and the BCM2712 D0 shader record it needs. |
