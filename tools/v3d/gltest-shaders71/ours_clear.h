@@ -82,27 +82,23 @@ static const uint32_t ours71_clear_fs_uniforms[4][2] = {
 #define OURS71_CLEAR_FS_FORCE_PER_SAMPLE_MSAA 0
 #define OURS71_CLEAR_FS_TMU_DIRTY_RCL 0
 
-#define OURS71_CLEAR_VS_NUM_WORDS 20
-static const uint64_t ours71_clear_vs_code[20] __attribute__((aligned(8))) = {
+#define OURS71_CLEAR_VS_NUM_WORDS 16
+static const uint64_t ours71_clear_vs_code[16] __attribute__((aligned(8))) = {
 	0x39813186bb03f000ull,
 	0x39816184bc03f100ull,
 	0x3981a185bc03f140ull,
 	0x3981e186bc03f180ull,
-	0x38002187bc03f1c0ull,
-	0x39822187bc03f1e0ull,
-	0x54001106bb108000ull,
-	0x54001106bb107000ull,
-	0x39822184f503f107ull,
-	0x39812180be03f204ull,
-	0x54001106bb144000ull,
-	0x54001106bb107000ull,
-	0x39816184f503f107ull,
-	0x39812180be03f144ull,
-	0x54001106bb184000ull,
-	0x55815106bb107000ull,
-	0x398161840503f105ull,
-	0x39a12180be03f144ull,
-	0x38002180be03f107ull,
+	0x39822187bc03f1c0ull,
+	0x55820107bc1081e0ull,
+	0x39827186bb03f000ull,
+	0x55829106bb107000ull,
+	0x55824144f5149107ull,
+	0x55814100be147204ull,
+	0x55820184f5189107ull,
+	0x55818100be187284ull,
+	0x380021840503f105ull,
+	0x38202180be03f204ull,
+	0x38002180be03f187ull,
 	0x38003186bb03f000ull,
 };
 #define OURS71_CLEAR_VS_NUM_UNIFORMS 12
@@ -133,8 +129,8 @@ static const uint32_t ours71_clear_vs_uniforms[12][2] = {
 #define OURS71_CLEAR_VS_TMU_DIRTY_RCL 0
 #define OURS71_CLEAR_VS_VATTR_SIZES { 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
-#define OURS71_CLEAR_CS_NUM_WORDS 20
-static const uint64_t ours71_clear_cs_code[20] __attribute__((aligned(8))) = {
+#define OURS71_CLEAR_CS_NUM_WORDS 18
+static const uint64_t ours71_clear_cs_code[18] __attribute__((aligned(8))) = {
 	0x39813186bb03f000ull,
 	0x39816184bc03f100ull,
 	0x3981a185bc03f140ull,
@@ -143,16 +139,14 @@ static const uint64_t ours71_clear_cs_code[20] __attribute__((aligned(8))) = {
 	0x39822180be03f204ull,
 	0x39822180be03f205ull,
 	0x3981a180be03f206ull,
-	0x38002180be03f187ull,
-	0x3981e186bc03f1e0ull,
-	0x54001106bb107000ull,
-	0x54001106bb106000ull,
-	0x3981e184f503f107ull,
-	0x39812180be03f1c4ull,
-	0x54001106bb144000ull,
-	0x54001106bb106000ull,
-	0x39816184f503f107ull,
-	0x38202180be03f144ull,
+	0x3981a180be03f187ull,
+	0x55818107bc1061e0ull,
+	0x39823186bb03f000ull,
+	0x55825106bb107000ull,
+	0x54000144f5148107ull,
+	0x54000100be147184ull,
+	0x38002184f503f107ull,
+	0x38202180be03f244ull,
 	0x38003186bb03f000ull,
 	0x38003186bb03f000ull,
 };

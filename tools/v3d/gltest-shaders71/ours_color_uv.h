@@ -86,8 +86,8 @@ static const uint64_t ours71_color_uv_fs_code[17] __attribute__((aligned(8))) = 
 #define OURS71_COLOR_UV_FS_FORCE_PER_SAMPLE_MSAA 0
 #define OURS71_COLOR_UV_FS_TMU_DIRTY_RCL 0
 
-#define OURS71_COLOR_UV_VS_NUM_WORDS 32
-static const uint64_t ours71_color_uv_vs_code[32] __attribute__((aligned(8))) = {
+#define OURS71_COLOR_UV_VS_NUM_WORDS 27
+static const uint64_t ours71_color_uv_vs_code[27] __attribute__((aligned(8))) = {
 	0x39813186bb03f000ull,
 	0x39816184bc03f100ull,
 	0x3981a185bc03f140ull,
@@ -98,28 +98,23 @@ static const uint64_t ours71_color_uv_vs_code[32] __attribute__((aligned(8))) = 
 	0x3982e18abc03f280ull,
 	0x3983218bbc03f2c0ull,
 	0x3983618cbc03f300ull,
-	0x3800218dbc03f340ull,
-	0x3983a187bc03f1e0ull,
-	0x54001106bb10e000ull,
-	0x54001106bb107000ull,
-	0x3983a184f503f107ull,
-	0x39812180be03f384ull,
-	0x54001106bb144000ull,
-	0x54001106bb107000ull,
-	0x39816184f503f107ull,
-	0x39812180be03f144ull,
-	0x54001106bb184000ull,
-	0x55815106bb107000ull,
+	0x3983a18dbc03f340ull,
+	0x55838107bc10e1e0ull,
+	0x3983f186bb03f000ull,
+	0x55841106bb107000ull,
+	0x5583c144f514f107ull,
+	0x55814100be147384ull,
+	0x55838184f518f107ull,
+	0x55818100be187404ull,
 	0x398161840503f105ull,
-	0x39812180be03f144ull,
-	0x39812180be03f107ull,
-	0x39812180be03f108ull,
+	0x39812180be03f384ull,
+	0x3981a180be03f187ull,
+	0x39816180be03f148ull,
 	0x39812180be03f109ull,
-	0x39812180be03f10aull,
-	0x39812180be03f10bull,
-	0x39a12180be03f10cull,
-	0x38002180be03f10dull,
-	0x38003186bb03f000ull,
+	0x3981a180be03f18aull,
+	0x38202180be03f14bull,
+	0x38002180be03f10cull,
+	0x38002180be03f18dull,
 };
 #define OURS71_COLOR_UV_VS_NUM_UNIFORMS 24
 static const uint32_t ours71_color_uv_vs_uniforms[24][2] = {
@@ -161,8 +156,8 @@ static const uint32_t ours71_color_uv_vs_uniforms[24][2] = {
 #define OURS71_COLOR_UV_VS_TMU_DIRTY_RCL 0
 #define OURS71_COLOR_UV_VS_VATTR_SIZES { 4, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
-#define OURS71_COLOR_UV_CS_NUM_WORDS 20
-static const uint64_t ours71_color_uv_cs_code[20] __attribute__((aligned(8))) = {
+#define OURS71_COLOR_UV_CS_NUM_WORDS 18
+static const uint64_t ours71_color_uv_cs_code[18] __attribute__((aligned(8))) = {
 	0x39813186bb03f000ull,
 	0x39816184bc03f100ull,
 	0x3981a185bc03f140ull,
@@ -171,16 +166,14 @@ static const uint64_t ours71_color_uv_cs_code[20] __attribute__((aligned(8))) = 
 	0x39822180be03f204ull,
 	0x39822180be03f205ull,
 	0x3981a180be03f206ull,
-	0x38002180be03f187ull,
-	0x3981e186bc03f1e0ull,
-	0x54001106bb107000ull,
-	0x54001106bb106000ull,
-	0x3981e184f503f107ull,
-	0x39812180be03f1c4ull,
-	0x54001106bb144000ull,
-	0x54001106bb106000ull,
-	0x39816184f503f107ull,
-	0x38202180be03f144ull,
+	0x3981a180be03f187ull,
+	0x55818107bc1061e0ull,
+	0x39823186bb03f000ull,
+	0x55825106bb107000ull,
+	0x54000144f5148107ull,
+	0x54000100be147184ull,
+	0x38002184f503f107ull,
+	0x38202180be03f244ull,
 	0x38003186bb03f000ull,
 	0x38003186bb03f000ull,
 };

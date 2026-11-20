@@ -37,9 +37,9 @@ use super::qpu_ffi::Gen;
 use super::sched71::{pack71, Sched71Error};
 use super::sched71_cf::{branches_are_structured71, schedule71, Scheduled71};
 use super::select::{select_fragment, select_vertex_keyed, tmu_input_writes, Pressure, SelectError, Selected, VOp};
-use super::select71::{select71, Select71Error};
+use super::select71::{interleave71, select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
-use super::vop71::{Instr71, Op71, Uniform};
+use super::vop71::{Instr71, Op71, Selected71, Uniform};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir::{self, IoKind};
 use crate::shaderc::online::powervr::unroll::Trip;
@@ -195,19 +195,48 @@ pub const TARGET71: Target = Target { vpm_size: 65536 };
 /// 4 when its values fit 4 threads' registers and no look-up writes more
 /// than 16 / 4 TMU inputs, else 2 (chain.rs `build`, chain.rs:277-322).
 /// Then encode71 of every word, verify71 and registers_fit_threads71.
+///
+/// The operations go through twice: in select71's order, and in
+/// [`interleave71`]'s, which sched71 pairs better. The interleaved build is
+/// kept when it is no fewer threads and fewer words; the in-order one
+/// decides every refusal (its error is the stage's), and the interleaved
+/// one is tried only when the scratch left holds twice what the first took.
 pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code71<'a>, u32), V3d71Error> {
     let sel71 = select71(sel, a)?;
     let four = tmu_input_writes(sel.ops) <= 16 / 4;
-    let (al, threads) = match if four { allocate71(&sel71, 4, a) } else { Err(Alloc71Error::DoesNotFit) } {
+    let before = a.used();
+    let plain = finish71(&sel71, four, single_seg, a)?;
+    let cost = a.used().saturating_sub(before);
+    if a.left() < 2 * cost {
+        return Ok(plain);
+    }
+    let Ok(moved) = interleave71(&sel71, a) else {
+        return Ok(plain);
+    };
+    match finish71(&moved, four, single_seg, a) {
+        Ok(alt) if alt.1 >= plain.1 && alt.0.words.len() < plain.0.words.len() => Ok(alt),
+        _ => Ok(plain),
+    }
+}
+
+/// [`build71`] of one order of the operations: allocation at 4 threads
+/// (when `four`) or 2, packing or scheduling, encoding and the checks.
+fn finish71<'a>(
+    sel71: &Selected71<'_>,
+    four: bool,
+    single_seg: bool,
+    a: &Arena<'a>,
+) -> Result<(Code71<'a>, u32), V3d71Error> {
+    let (al, threads) = match if four { allocate71(sel71, 4, a) } else { Err(Alloc71Error::DoesNotFit) } {
         Ok(al) => (al, 4),
-        Err(Alloc71Error::DoesNotFit) => (allocate71(&sel71, 2, a)?, 2),
+        Err(Alloc71Error::DoesNotFit) => (allocate71(sel71, 2, a)?, 2),
         Err(e) => return Err(e.into()),
     };
     /* a program with no control-flow Op71 is one straight-line run, which
      * pack71 packs as schedule71 would (sched71_cf's tests compare the two
      * word for word); anything else goes to schedule71 */
     let s = if sel71.ops.iter().any(Op71::is_control_flow) {
-        schedule71(&sel71, &al, a)?
+        schedule71(sel71, &al, a)?
     } else {
         let p = pack71(sel71.ops, &al, a)?;
         Scheduled71 { instrs: p.instrs, uniforms: p.uniforms, back_edges: &[], fwd_branches: &[] }
