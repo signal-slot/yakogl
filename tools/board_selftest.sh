@@ -1571,10 +1571,13 @@ pi5|v3d_clear: PASS (128x64 read back 0xff336699; 9 pages used incl. page table 
 pi5|v3d_clear: FAIL (render: no frame done in 1000 ms; 9 pages used incl. page table and scratch, cache: 1 sys_cache_data_flush_and_invd_range)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_clear_fail
 pi5|v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1440 inside, 2512 outside, 96 edge, tol 3; shaders mesa)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_triangle_pass
 pi5|v3d_triangle: FAIL (17 of 4096 px differ by more than 3: 12 inside, 0 outside, 5 edge, first at 20,31; shaders mesa)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_triangle_fail
+pi5|v3d_tfu: PASS (levels 0-6 checked, 0 px wrong: level 0 exact, levels 1-6 (1365 px) within 2 of the 2x2 box (max 1); done by TFUC in 40 us; IOC 0x00086061; HUB_IDENT1 0x00081117 bit 17 0)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_tfu_pass
+pi5|v3d_tfu: FAIL (timeout: no TFUC and no CS count in 1000000 us, CS 0x00000000 SU 0x00000000 hub INT_STS 0x00000000; HUB_IDENT1 0x00081117)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_tfu_fail
 pi5|rpi5_wdog: FAIL no reset|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_wdog_fail
 pi5|rpi5_wdog: feeding stopped, reset expected within 10 s|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi4|v3d_clear: FAIL (render: no frame done in 1000 ms)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi4|v3d_triangle: FAIL (17 of 4096 px differ by more than 3: 12 inside, 5 edge)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+pi4|v3d_tfu: PASS (levels 0-6 checked, 0 px wrong)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 EOF
 
