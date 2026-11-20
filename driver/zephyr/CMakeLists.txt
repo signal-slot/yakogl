@@ -228,13 +228,12 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     list(APPEND _yd_features rk3588 mali)
   endif()
   if(CONFIG_YAKOGL_VERDIN_IMX95 AND CONFIG_YAKOGL_GPU_MALI)
-    # The Mali OSAL's ops (src/osal/zephyr_mali.c) call the yd_t6_osal_*
-    # entries, whose only kernel side is the NanoPC-T6's (board::nanopc_t6_osal
-    # over gpu::mali, features rk3588 mali). On the Verdin iMX95 the bring-up
-    # that would reach the RK3588 code is the board's stub, which refuses
-    # (lib/board/verdin_imx95/verdin_imx95_mali.c): linked, never entered,
-    # until the crate has a bring-up that is not the RK3588's.
-    list(APPEND _yd_features rk3588 mali)
+    # The Verdin iMX95's bring-up, yd_imx95_osal_up (ffi::imx95: the SCMI
+    # power-on of soc::imx95::gpu_power, then board::nanopc_t6_osal's group
+    # over gpu::mali), and the Mali OSAL's ops (src/osal/zephyr_mali.c), the
+    # yd_t6_osal_* entries, which still live in ffi::rk3588 under the
+    # rk3588 feature; no RK3588 power-on is linked (nothing references it).
+    list(APPEND _yd_features imx95 rk3588 mali)
   endif()
   if(CONFIG_YAKOGL_STM32MP2_GPU)
     # soc::stm32mp2's GPU power C ABI (gpu_ffi.rs over gpu::vivante's

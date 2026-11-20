@@ -305,7 +305,7 @@ note = "not reproducible: the header is made from the board's PowerVR firmware f
 name = "MALI_CSFFW"
 path = "mali-csffw/mali_csffw.bin"
 marker = "mali-csffw/mali_csffw.bin"
-note = "the Mali-G610's CSF firmware (Arm's, LICENCE.mali_csffw of linux-firmware): the NanoPC-T6's Armbian file /lib/firmware/arm/mali/arch10.8/mali_csffw.bin is byte for byte linux-firmware's at 930ef904 (282624 bytes, the sha256 below, checked 2026-10-28), so it is fetched from there; never committed; driver/tools/mkmalifw.sh makes the header; without it the firmware row of tools/check.sh is a gap. The gate workflow builds this one entry when it is absent (a single pinned file, no tree)"
+note = "the Mali-G610's CSF firmware (Arm's, LICENCE.mali_csffw of linux-firmware): the NanoPC-T6's Armbian file /lib/firmware/arm/mali/arch10.8/mali_csffw.bin is byte for byte linux-firmware's at 930ef904 (282624 bytes, the sha256 below, checked 2026-10-28), so it is fetched from there; it is the Mali-G310's (i.MX 95, arch 10.12) too: linux-firmware's arm/mali/arch10.12/mali_csffw.bin is the same bytes (f9919c7a, docs/notes/pre-study-imx95.md section 2), so the Verdin iMX95 image embeds this file; never committed; driver/tools/mkmalifw.sh makes the header; without it the firmware rows of tools/check.sh (the NanoPC-T6's and the Verdin iMX95's images) are gaps. The gate workflow builds this one entry when it is absent (a single pinned file, no tree)"
 build = '''
 mkdir -p "$DEPS/mali-csffw"
 cp "$DEPS/downloads/mali_csffw.bin" "$DEPS/mali-csffw/mali_csffw.bin.part"
