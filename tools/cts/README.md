@@ -677,6 +677,15 @@ count is **HOST-ONLY** (the linux OSAL reads black): record it in
 `docs/notes/es3-msaa-renderbuffers.md`, never in `tools/cts/RESULTS.md` or
 `STATUS.md`, which hold board results.
 
+**Mesa's V3D 7.1 counts for the .test library.** `V3D_SHC=<v3d_shc>
+tools/cts/es2lib-ref71.sh` runs Mesa's `v3d_shc --device 71` over every
+expect-pass GLES2 program of `data/gles2/shaders/*.test` (the set
+`tools/es100_oracle.py`'s `programs_of()` yields; the test files from
+`--cts`, `$DEQP_GLES2_TEST_DIR` or `$CONNECTED_DEPS_DIR/VK-GL-CTS-gles2-data`)
+and writes `tools/shaders/deqp_es2_lib_counts_71.tsv` (names, instruction,
+thread and uniform counts, never shader text). Without `V3D_SHC` it exits 3
+with `gap: V3D_SHC`. The header of the script has the columns.
+
 ## 2c. The whole tree on the Verdin i.MX8M Plus, one image
 
 The i.MX8MP has no UART, so its tree is one dEQP image that carries the
