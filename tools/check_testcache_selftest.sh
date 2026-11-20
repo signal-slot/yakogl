@@ -348,6 +348,10 @@ for f in sorted(x for x in files if x.endswith(".rs") and x not in not_read):
             if re.search(r"(include_str!|include_bytes!|include!)\(\s*$|#\[path\s*=\s*$", before):
                 continue
             p = re.sub(r"^(\.\./)+", "", m.group(1)).split("{")[0].rstrip("/")
+            # a citation with line numbers ("src/gallium/.../v3dx_draw.c:1676-1687",
+            # a Mesa reference a test compares as text) names no file to open
+            if re.search(r"\.[A-Za-z0-9]+:[0-9]", p):
+                continue
             if not any(p == k or p.startswith(k + "/") or k.startswith(p + "/") for k in keyed):
                 print("%s:%d %s" % (f, n, m.group(1)))
 PY

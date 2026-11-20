@@ -73,6 +73,9 @@
 # looked for in check.sh's order, only when PCO_SHC names an executable (the
 # row's own condition; PCO_SHC itself is one of the workspaces above, out of
 # scope here), and --install only prints the build that makes it.
+# --check also reports qemu-system-aarch64 ($MP2_QEMU, else PATH; check.sh's
+# "uboot-mp2 qemu" row is a gap without it); its package is in the gate's
+# list (qemu-system-arm on apt), so --install-packages and --install add it.
 #
 # --install also makes the dependency entries (the gate's workspaces
 # included) and prints the gate's environment:
@@ -325,6 +328,19 @@ check_dtc() {
     return
   }
   line ok dtc "${out%%$'\n'*}"
+}
+
+# qemu-system-aarch64: tools/check.sh's "uboot-mp2 qemu" row runs the DK's
+# one-shot scripts in U-Boot on it (driver/tools/uboot-mp2/qemu/run.sh, which
+# takes $MP2_QEMU, else qemu-system-aarch64 on PATH); without it the row is a
+# gap.
+check_qemu() {
+  local q=${MP2_QEMU:-$(command -v qemu-system-aarch64 2>/dev/null)} out
+  if [ -z "$q" ] || [ ! -x "$q" ] || ! out=$("$q" --version 2>&1); then
+    line missing qemu-system-aarch64 "${MP2_QEMU:-qemu-system-aarch64 on PATH} not runnable (\$MP2_QEMU, else PATH: Debian qemu-system-arm, Gentoo app-emulation/qemu with qemu_softmmu_targets_aarch64): the uboot-mp2 qemu row would be a gap"
+    return
+  fi
+  line ok qemu-system-aarch64 "$q: ${out%%$'\n'*}"
 }
 
 # aarch64 C compiler: tools/v3d/check71.d/xbuild71.sh cross-compiles the v3d71
@@ -586,6 +602,7 @@ run_checks() {
   check_glslang
   check_lz4
   check_dtc
+  check_qemu
   check_xcc
   check_pkgconfig
   check_mali_csffw
@@ -610,10 +627,21 @@ run() {
 
 # apt: the packages tools/check.sh needs, plus (below) the packages of every
 # entry of tools/cts/deps.toml, so an entry's packages reach this script
-# without a second edit.
-apt_packages=(clang libclang-dev python3-yaml glslang-tools pkg-config libexpat1-dev zlib1g-dev)
+# without a second edit. qemu-system-arm (qemu-system-aarch64), ipxe-qemu,
+# bison, flex, the OpenSSL headers, sfdisk (fdisk) and mke2fs (e2fsprogs) are
+# the "uboot-mp2 qemu" row's: its QEMU and the e1000's option ROM
+# (efi-e1000.rom, which QEMU refuses to start the device without; only a
+# Recommends of qemu-system-arm, so named here), its U-Boot host build
+# (driver/tools/uboot-mp2/qemu/README.md) and its SD image; the row is a gap
+# without them, and --check reports the QEMU. Its cross compiler is the
+# Zephyr SDK's (ZEPHYR_SDK_INSTALL_DIR, a deps.toml entry), not a distro
+# aarch64-linux-gnu-gcc: on PATH that one would also become the cc crate's
+# compiler for the aarch64-unknown-linux-gnu rows.
+apt_packages=(clang libclang-dev python3-yaml glslang-tools pkg-config libexpat1-dev zlib1g-dev
+  qemu-system-arm ipxe-qemu bison flex libssl-dev fdisk e2fsprogs)
 # Gentoo-like: the same tools as portage categories.
-emerge_packages=(sys-devel/clang sys-libs/clang dev-python/pyyaml virtual/pkgconfig dev-libs/expat sys-libs/zlib media-libs/glslang)
+emerge_packages=(sys-devel/clang sys-libs/clang dev-python/pyyaml virtual/pkgconfig dev-libs/expat sys-libs/zlib media-libs/glslang
+  app-emulation/qemu sys-devel/bison sys-devel/flex dev-libs/openssl sys-apps/util-linux sys-fs/e2fsprogs)
 
 # add_dep_packages <array name> <family>: append deps.toml's packages of the
 # family to the array, each once.
@@ -661,12 +689,21 @@ install_distro() {
       return 0
     fi
     if sudo -n true 2>/dev/null; then
+      # The package lists first: an image's lists are as old as the image,
+      # and a package updated since (QEMU gets security updates) is a 404
+      # from them. A list that fails to update (one unreachable source) is
+      # not the end: the install below says whether what it needs was there.
+      # A freshly started machine may hold the dpkg lock (its unattended
+      # upgrades): both wait for it rather than fail at once, and nothing
+      # asks a question (no terminal in a job).
+      run sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 update -q ||
+        echo "apt-get update failed: installing from the lists as they are"
       # shellcheck disable=SC2086 # the names are one per line, no spaces
-      run sudo -n apt-get install -y $missing && return 0
+      run sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y $missing && return 0
       return 1
     fi
     echo "no passwordless sudo here; owner command:"
-    echo "  sudo apt-get install -y $(printf '%s\n' $missing | paste -sd' ')"
+    echo "  sudo apt-get update && sudo apt-get install -y $(printf '%s\n' $missing | paste -sd' ')"
     return 1
   fi
   if command -v emerge >/dev/null 2>&1 || [ -d /var/db/portage ]; then
@@ -678,7 +715,9 @@ install_distro() {
     return 1
   fi
   echo "no apt-get or emerge found: install clang, libclang, PyYAML, glslang,"
-  echo "pkg-config, expat and zlib with this distribution's package manager."
+  echo "pkg-config, expat, zlib, qemu-system-aarch64, bison, flex, the OpenSSL"
+  echo "headers, sfdisk and mke2fs with this distribution's"
+  echo "package manager."
   return 1
 }
 
