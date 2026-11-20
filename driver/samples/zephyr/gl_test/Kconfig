@@ -383,6 +383,25 @@ config GL_TEST_GC_TILED_RT
 	  RS in the same stream, and early depth into them. Off, the cases run
 	  as before.
 
+config GL_TEST_GC_TS_PROBE
+	bool "gl_test 246 tsprobe and 247 dlayout: tile status and depth layout (a measurement)"
+	depends on YAKOGL_TEST_KNOBS
+	default n
+	help
+	  Builds cases 246 tsprobe and 247 dlayout (docs/notes/gc-ts-probe.md,
+	  designed there as 243 and 244) and the selector pages they end
+	  with. The selector GC_RESULT_PERF_SEL | tag runs one of them alone
+	  and ends the run with that page as a PERF record instead of the
+	  CASE record: tag 0xd0..0xdb runs case 246 with arm tag & 3 (pages
+	  0xd0 + arm the outcome, 0xd4 + arm the K3 map, 0xd8 + arm the
+	  first difference), tag 0xc0..0xcb case 247 with mode tag & 3 (pages
+	  A 0xc0 + mode, B 0xc4 + mode, C 0xc8 + mode). In a sweep image the
+	  case must be in the sweep's range. Each kick writes a PROGRESS
+	  record (0x200 | arm << 4 | step, 0x300 | mode << 4 | step) before
+	  it runs. Case 246 programs the tile-status registers with the GPU
+	  MMU off, which no image has done before: off by default, and only
+	  for an X2 session of plan #355.
+
 config GC_GL_TEST_MSAA
 	bool "Turn the GC7000's 4x MSAA on (a measurement, off in products)"
 	depends on YAKOGL_TEST_KNOBS
