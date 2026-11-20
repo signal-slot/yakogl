@@ -1018,6 +1018,54 @@ int yd_t6_osal_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, u
 		  const struct yd_t6_osal_mem *mem, int (*clean)(uintptr_t addr, size_t len),
 		  void (*delay_us)(uint32_t us), void (*on_handover)(const struct yd_t6_gpu_up *h),
 		  struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *out);
+/* yd_imx95_osal_up: the same OSAL brought up on the i.MX 95 (Verdin iMX95,
+ * Mali-G310; board::imx95_gpu, ffi::imx95; features imx95 rk3588 mali): the
+ * GPU powered over SCMI to the System Manager (soc::imx95::gpu_power: the
+ * protocol versions, the GPU's performance levels, power domain 14 on, the
+ * fastest level at or below rate_hz, 0 for 800 MHz, clock gate 174 on and
+ * its rate read; no SoC register is written from the A55), then GPU_ID, the
+ * soft reset, the L2, the CSF firmware and the group exactly as
+ * yd_t6_osal_up's. scmi sends one command (tx: header and payload as built)
+ * and writes the whole reply to rx (header, status, return values, at most
+ * rx_cap = YD_IMX95_SCMI_MAX_MSG bytes); it returns the reply's length or a
+ * negative errno. gpu is the GPU's block (0x4d900000) mapped for gpu_len
+ * bytes, at least YD_IMX95_GPU_MAP_MIN (its doorbells up to the group's).
+ * on_handover sees z1 once the SM has powered the GPU, before its first
+ * register is read. z1 holds the GPU's part (identity, reset, L2) and the
+ * stop: YD_IMX95_GPU_STOP_SCMI for the power-on, YD_T6_GPU_STOP_* for the
+ * GPU's own steps; its RK3588 words are 0. power holds what the SM answered.
+ * Returns and out as yd_t6_osal_up's; after it the OSAL ops below. */
+#define YD_IMX95_GPU_STOP_SCMI 15 /* the SCMI power-on stopped: refusal and detail as power's */
+#define YD_IMX95_GPU_MAP_MIN 0xa0000 /* board::imx95_gpu::GPU_MAP_MIN; ffi::imx95 pins it */
+#define YD_IMX95_SCMI_MAX_MSG 128 /* firmware::scmi::MAX_MSG: the most bytes of a reply */
+
+struct yd_imx95_gpu_power {
+	uint32_t on;              /* 1: every SCMI message of the power-on answered as asked */
+	uint32_t requested_hz[2]; /* the rate asked for */
+	uint32_t level_index;     /* the performance level set and read back, and its kHz */
+	uint32_t level_khz;
+	uint32_t rate_hz[2];      /* CLOCK_RATE_GET of the gate after the enable */
+	/* where it stopped (board::imx95_gpu::scmi_error_code): 0 none, 1 the
+	 * transport (detail lo: its errno), 2 the SM refused (status), 3 a reply
+	 * header that is not the request's, 4 a short reply, 5 a protocol major
+	 * not written for, 6 a GET that does not read back the SET, 7 the
+	 * levels' reply, 8 no level at or below the rate, 9 the gate's rate 0 or
+	 * above the level's */
+	uint32_t refusal;
+	uint32_t message;         /* protocol << 8 | message id of the stop (0x1104 POWER_STATE_SET) */
+	int32_t status;           /* the SCMI status of refusal 2 (-3 DENIED) */
+	uint32_t detail[2];
+};
+_Static_assert(sizeof(struct yd_imx95_gpu_power) == 48, "ffi::imx95 YdImx95GpuPower");
+_Static_assert(offsetof(struct yd_imx95_gpu_power, refusal) == 28, "ffi::imx95 YdImx95GpuPower");
+_Static_assert(offsetof(struct yd_imx95_gpu_power, detail) == 40, "ffi::imx95 YdImx95GpuPower");
+
+int yd_imx95_osal_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+		     uint64_t rate_hz, uintptr_t gpu, size_t gpu_len, const void *blob,
+		     size_t blob_len, uint32_t timer_hz, const struct yd_t6_osal_mem *mem,
+		     int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
+		     void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
+		     struct yd_imx95_gpu_power *power, struct yd_t6_submit_up *out);
 int yd_t6_osal_alloc(size_t size, struct osal_gpu_mem *out);
 int yd_t6_osal_free(struct osal_gpu_mem *mem);
 void yd_t6_osal_frame_open(bool open);

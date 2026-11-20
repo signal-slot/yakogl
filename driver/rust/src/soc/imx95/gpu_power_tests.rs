@@ -7,7 +7,9 @@
 //! `ClockRateSet`: EXCLUSIVE, and INVALID_PARAMETERS for a rate on a gate,
 //! dev_sm_clock.c `DEV_SM_ClockRateSet`) and the AP-NS agent's permissions
 //! of Toradex's verdin-imx95 configuration (docs/notes/imx95-gpu-power.md).
-//! Every request is recorded as (protocol, message, payload words).
+//! Every request is recorded as (protocol, message, payload words). The
+//! model and the power-on's requests serve board::imx95_gpu's bring-up test
+//! too.
 
 use super::gpu_power::{
     self, pick_level, Config, Error, Level, Status, Step, CLK_GPU, CLK_GPUAPB, CLK_GPU_CGC, PD_GPU, PERF_GPU,
@@ -23,31 +25,31 @@ const PERM_EXCLUSIVE: u8 = 5;
 const PERM_ALL: u8 = 255;
 
 /// One request: protocol, message, payload words.
-type Req = (u8, u8, Vec<u32>);
+pub(crate) type Req = (u8, u8, Vec<u32>);
 
-struct Sm {
+pub(crate) struct Sm {
     clk_perm: HashMap<u32, u8>,
-    pd_perm: HashMap<u32, u8>,
+    pub(crate) pd_perm: HashMap<u32, u8>,
     perf_perm: HashMap<u32, u8>,
     /// (kHz, index) of domain 9, in index order.
     levels: Vec<(u32, u32)>,
     /// Levels per DESCRIBE_LEVELS reply.
     page: usize,
-    pd_on: bool,
+    pub(crate) pd_on: bool,
     /// Another agent's vote keeps the domain on.
     pd_held: bool,
-    level: u32,
-    clk_on: bool,
+    pub(crate) level: u32,
+    pub(crate) clk_on: bool,
     /// What the clock root makes of a level's rate (a PLL's rounding).
     rate_offset: i64,
-    log: Vec<Req>,
+    pub(crate) log: Vec<Req>,
 }
 
 impl Sm {
     /// The Verdin iMX95's SM as the AP-NS agent sees it: power domain 14,
     /// performance domain 9 and clock 174 at ALL; clocks 83 and 84 not
     /// granted; the GPU's levels PRK, LOW, NOM, ODV (dev_sm_perf.c).
-    fn verdin() -> Sm {
+    pub(crate) fn verdin() -> Sm {
         Sm {
             clk_perm: HashMap::from([(CLK_GPU_CGC, PERM_ALL)]),
             pd_perm: HashMap::from([(PD_GPU, PERM_ALL)]),
@@ -172,7 +174,7 @@ fn reads() -> Vec<Req> {
 }
 
 /// The power-on's requests for level `index`.
-fn on(index: u32) -> Vec<Req> {
+pub(crate) fn on(index: u32) -> Vec<Req> {
     let mut v = reads();
     v.extend([
         req(P, scmi::POWER_STATE_SET, &[0, 14, 0]),

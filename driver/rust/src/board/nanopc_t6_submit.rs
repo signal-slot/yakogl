@@ -96,7 +96,7 @@
 //! [`SEQNO`], 1, the first of a fresh queue (panthor_sched.c:3165-3169).
 
 use super::nanopc_t6_frame as gen;
-use super::nanopc_t6_fw::{self, fw_up_with, FwUp};
+use super::nanopc_t6_fw::{self, fw_up_on, FwUp, Power, Rk3588Power};
 use super::nanopc_t6_gpu::GPU_QOS_POLICY;
 use super::nanopc_t6_gpu::{Bases, GpuUp};
 use super::nanopc_t6_mmu::MEMATTR_LIVE;
@@ -962,7 +962,7 @@ pub fn group_up(
     )
 }
 
-/// [`group_up`] with Z3's power-on applying `qos` ([`fw_up_with`]).
+/// [`group_up`] with Z3's power-on applying `qos` ([`nanopc_t6_fw::fw_up_with`]).
 #[allow(clippy::too_many_arguments)]
 pub fn group_up_with(
     qos: QosPolicy,
@@ -983,8 +983,53 @@ pub fn group_up_with(
     z1: &mut GpuUp,
     o: &mut SubmitUp,
 ) -> Option<GroupUp> {
+    let mut power = Rk3588Power { b, qos };
+    group_up_on(
+        m,
+        b.gpu,
+        &mut power,
+        blob,
+        backings,
+        pool,
+        tables_pa,
+        timer_hz,
+        mem,
+        regions,
+        queue_va,
+        heap,
+        clean,
+        delay_us,
+        on_handover,
+        z1,
+        o,
+    )
+}
+
+/// [`group_up`] over any SoC's [`Power`] ([`nanopc_t6_fw::fw_up_on`]) and
+/// the GPU at `gpu`: everything after the power-on touches that GPU's
+/// registers alone. `z1` receives the power-on's whole record.
+#[allow(clippy::too_many_arguments)]
+pub fn group_up_on<P: Power>(
+    m: &impl Mmio,
+    gpu: usize,
+    power: &mut P,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    mem: Z4Mem<'_>,
+    regions: &[Region],
+    queue_va: u64,
+    heap: &HeapPlace,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&P::Record),
+    z1: &mut P::Record,
+    o: &mut SubmitUp,
+) -> Option<GroupUp> {
     // Z3
-    o.fw = fw_up_with(qos, m, b, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
+    o.fw = fw_up_on(m, gpu, power, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
     if o.fw.step != nanopc_t6_fw::STEP_NONE {
         o.stopped(STEP_FW, o.fw.step, 0);
         return None;
@@ -1006,7 +1051,7 @@ pub fn group_up_with(
             return None;
         }
     };
-    let id: Ident = mali::ident(m, b.gpu);
+    let id: Ident = mali::ident(m, gpu);
     o.as_present = id.as_present;
     o.l2_features = id.l2_features;
     if id.as_present & (1 << GROUP_AS) == 0 {
@@ -1067,7 +1112,7 @@ pub fn group_up_with(
         }
     }
     // panthor_vm_map_pages: the flush after a map into a live VM
-    if let Err((why, v)) = mmu::hw_do_operation(m, b.gpu, 0, u64::from(q.va), need, FlushOp::Pt, delay_us) {
+    if let Err((why, v)) = mmu::hw_do_operation(m, gpu, 0, u64::from(q.va), need, FlushOp::Pt, delay_us) {
         o.stopped(STEP_AS0_FLUSH, why as u32, u64::from(v));
         return None;
     }
@@ -1102,7 +1147,7 @@ pub fn group_up_with(
         t.root_pa()
     };
     let transcfg = mmu::transcfg(shape.va_bits, false);
-    if let Err((why, v)) = mmu::as_enable(m, b.gpu, GROUP_AS, root, transcfg, MEMATTR_LIVE, delay_us) {
+    if let Err((why, v)) = mmu::as_enable(m, gpu, GROUP_AS, root, transcfg, MEMATTR_LIVE, delay_us) {
         o.stopped(STEP_VM_ENABLE, why as u32, u64::from(v));
         return None;
     }
@@ -1149,11 +1194,11 @@ pub fn group_up_with(
         priority: QUEUE_PRIORITY,
     };
     let qmem = QueueMcu { fw: &fw_mem, q };
-    let s: Started = match sched::start(m, b.gpu, &qmem, &vmap, &id, &iface, &csg, &cs, &group, &queue, delay_us) {
+    let s: Started = match sched::start(m, gpu, &qmem, &vmap, &id, &iface, &csg, &cs, &group, &queue, delay_us) {
         Ok(s) => s,
         Err((why, v)) => {
             o.stopped(STEP_START, why as u32, u64::from(v));
-            o.ended(&sched::stop_and_terminate(m, b.gpu, &iface, &csg, &cs, delay_us));
+            o.ended(&sched::stop_and_terminate(m, gpu, &iface, &csg, &cs, delay_us));
             return None;
         }
     };
@@ -1567,6 +1612,10 @@ pub(crate) mod tests {
         /// CS 0's stop requests the firmware does not acknowledge (its state
         /// field stays as it was; the group's terminate still is).
         pub(crate) deaf_to_stop: Cell<bool>,
+        /// Identity registers that read as given (offset from the GPU,
+        /// value) before anything else answers them: another GPU's table
+        /// (`mali::mock`), board::imx95_gpu's test.
+        pub(crate) ident: Vec<(usize, u32)>,
     }
 
     /// An error the model raises at a `CALL` ([`Z4::fail_at`]).
@@ -1667,6 +1716,7 @@ pub(crate) mod tests {
                 deaf_to_start: Cell::new(false),
                 terminates_left: Cell::new(None),
                 deaf_to_stop: Cell::new(false),
+                ident: vec![],
             }
         }
         /// Raise `f` at the `n`-th `CALL` counted from the model's start
@@ -1965,6 +2015,9 @@ pub(crate) mod tests {
             self.tick(&self.csg_due, || self.answer_csg());
             self.tick(&self.job_due, || self.answer_job());
             self.tick(&self.publish_due, || self.publish());
+            if let Some(&(_, v)) = self.ident.iter().find(|&&(off, _)| GPU + off == a) {
+                return v;
+            }
             match a {
                 _ if a == GPU + mali::GPU_ID && self.gpu_id.is_some() => self.gpu_id.unwrap(),
                 _ if a == GPU + mali::GPU_AS_PRESENT => self.as_present,
