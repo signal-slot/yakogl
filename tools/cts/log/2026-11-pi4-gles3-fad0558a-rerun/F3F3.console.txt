@@ -1,0 +1,374 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at fad0558a, 2026-11-20, image F3F3: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  3.98 [sdcard] pieeprom.upd not found
+  3.98 [sdcard] recover4.elf not found
+  3.99 [sdcard] recovery.elf not found
+  4.16 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.22 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.23 0x00d03114 0x00000000 0x00001fff
+  4.27 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.63 Starting start4.elf @ 0xfec00200 partition 1
+  4.16 XHCI-STOP
+  4.16 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.17 USBSTS 18
+  4.17 PCI0 reset
+  4.18 +
+
+MESS:00:00:04.198050:0: arasan: arasan_emmc_open
+MESS:00:00:04.199708:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.319933:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.332802:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.367073:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.368486:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.372869:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.537675:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.540501:0: brfs: File read: 166 bytes
+MESS:00:00:04.633180:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.637687:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.654262:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.153337:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.158884:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.167921:0: *** Restart logging
+MESS:00:00:05.169692:0: brfs: File read: 166 bytes
+MESS:00:00:05.248243:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.253275:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.271533:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.276604:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.282203:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.290961:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.296460:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.318567:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.334030:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.337322:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.378079:0: brfs: File read: 56249 bytes
+MESS:00:00:05.397214:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.462138:0: brfs: File read: 5971 bytes
+MESS:00:00:05.468923:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.510050:0: brfs: File read: 166 bytes
+MESS:00:00:05.514256:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.517210:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.523060:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.680023:0: brfs: File read: 145 bytes
+MESS:00:00:07.095006:0: brfs: File read: /mfs/sd/yakogl-F3F3.bin
+MESS:00:00:07.097914:0: Loaded 'yakogl-F3F3.bin' to 0x200000 size 0xffef50
+MESS:00:00:07.104526:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.113305:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.119827:0: uart: Baud rate change done...
+MESS:00:00:07.121849:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build fad0558a
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_nearest,dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3372000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 1 (draw)
+  cube(draw) @0x14ec000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -401.1458 -390.6458 -380.3125 -369.8125 -359.4792 -348.9792 -338.6458 -328.1458 -317.8125 -307.3125 -296.9792 -286.4792 -276.1458 -265.6458 -255.3125 -244.8125
+  cube(draw) level 1 (32x32 @0x200000): -385.5833 -364.5833 -343.9167 -322.9167 -302.2500 -281.2500 -260.5833 -239.5833 -218.8333 -198.0000 -177.1667 -156.3333 -135.5000 -114.6667 -93.8333 -73.0000
+  cube(draw) level 2 (16x16 @0x280000): -354.1667 -312.5000 -270.8333 -229.1667 -187.5000 -145.8333 -104.1667 -62.5000 -20.8333 20.8333 62.5000 104.1667 145.8333 187.5000 229.1667 270.8333 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): -291.6667 -208.3333 -125.0000 -41.6667 41.6667 125.0000 208.3333 291.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -250.0000 -83.3333 83.3333 250.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): -166.6667 166.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+yakogl/v3d: tiled copies high-water 2101248 of 16777216 bytes
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+  cube-bind: 0x14ec000 unit 0 kick 2 (draw)
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+  cube-bind: 0x1797000 unit 0 kick 3 (draw)
+  cube(draw) @0x1797000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000 1000.0000 -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000
+  cube(draw) level 1 (32x32 @0x200000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x280000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -333.2917 -333.2917 -333.2917 -333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): 333.2917 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+yakogl/v3d: tiled copies high-water 4202496 of 16777216 bytes
+  cube-bind: 0x1797000 unit 0 kick 4 (draw)
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear
+v3d_deqp: case #0 P 649ms k2/10 c20141/29719 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear_mipmap_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 5 (draw)
+  cube(draw) @0x14ec000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -401.1458 -390.6458 -380.3125 -369.8125 -359.4792 -348.9792 -338.6458 -328.1458 -317.8125 -307.3125 -296.9792 -286.4792 -276.1458 -265.6458 -255.3125 -244.8125
+  cube(draw) level 1 (32x32 @0x200000): -385.5833 -364.5833 -343.9167 -322.9167 -302.2500 -281.2500 -260.5833 -239.5833 -218.8333 -198.0000 -177.1667 -156.3333 -135.5000 -114.6667 -93.8333 -73.0000
+  cube(draw) level 2 (16x16 @0x280000): -354.1667 -312.5000 -270.8333 -229.1667 -187.5000 -145.8333 -104.1667 -62.5000 -20.8333 20.8333 62.5000 104.1667 145.8333 187.5000 229.1667 270.8333 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): -291.6667 -208.3333 -125.0000 -41.6667 41.6667 125.0000 208.3333 291.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -250.0000 -83.3333 83.3333 250.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): -166.6667 166.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x14ec000 unit 0 kick 6 (draw)
+  cube-bind: 0x1797000 unit 0 kick 7 (draw)
+  cube(draw) @0x1797000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000 1000.0000 -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000
+  cube(draw) level 1 (32x32 @0x200000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x280000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -333.2917 -333.2917 -333.2917 -333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): 333.2917 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1797000 unit 0 kick 8 (draw)
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear_mipmap_nearest
+v3d_deqp: case #1 P 422ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear_mipmap_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 9 (draw)
+  cube(draw) @0x14ec000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -401.1458 -390.6458 -380.3125 -369.8125 -359.4792 -348.9792 -338.6458 -328.1458 -317.8125 -307.3125 -296.9792 -286.4792 -276.1458 -265.6458 -255.3125 -244.8125
+  cube(draw) level 1 (32x32 @0x200000): -385.5833 -364.5833 -343.9167 -322.9167 -302.2500 -281.2500 -260.5833 -239.5833 -218.8333 -198.0000 -177.1667 -156.3333 -135.5000 -114.6667 -93.8333 -73.0000
+  cube(draw) level 2 (16x16 @0x280000): -354.1667 -312.5000 -270.8333 -229.1667 -187.5000 -145.8333 -104.1667 -62.5000 -20.8333 20.8333 62.5000 104.1667 145.8333 187.5000 229.1667 270.8333 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): -291.6667 -208.3333 -125.0000 -41.6667 41.6667 125.0000 208.3333 291.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -250.0000 -83.3333 83.3333 250.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): -166.6667 166.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x14ec000 unit 0 kick 10 (draw)
+  cube-bind: 0x1797000 unit 0 kick 11 (draw)
+  cube(draw) @0x1797000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000 1000.0000 -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000
+  cube(draw) level 1 (32x32 @0x200000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x280000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -333.2917 -333.2917 -333.2917 -333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): 333.2917 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1797000 unit 0 kick 12 (draw)
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest
+v3d_deqp: case #2 P 410ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 13 (draw)
+  cube(draw) @0x14ec000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -401.1458 -390.6458 -380.3125 -369.8125 -359.4792 -348.9792 -338.6458 -328.1458 -317.8125 -307.3125 -296.9792 -286.4792 -276.1458 -265.6458 -255.3125 -244.8125
+  cube(draw) level 1 (32x32 @0x200000): -385.5833 -364.5833 -343.9167 -322.9167 -302.2500 -281.2500 -260.5833 -239.5833 -218.8333 -198.0000 -177.1667 -156.3333 -135.5000 -114.6667 -93.8333 -73.0000
+  cube(draw) level 2 (16x16 @0x280000): -354.1667 -312.5000 -270.8333 -229.1667 -187.5000 -145.8333 -104.1667 -62.5000 -20.8333 20.8333 62.5000 104.1667 145.8333 187.5000 229.1667 270.8333 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): -291.6667 -208.3333 -125.0000 -41.6667 41.6667 125.0000 208.3333 291.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -250.0000 -83.3333 83.3333 250.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): -166.6667 166.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x14ec000 unit 0 kick 14 (draw)
+  cube-bind: 0x1797000 unit 0 kick 15 (draw)
+  cube(draw) @0x1797000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000 1000.0000 -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000
+  cube(draw) level 1 (32x32 @0x200000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x280000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -333.2917 -333.2917 -333.2917 -333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): 333.2917 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1797000 unit 0 kick 16 (draw)
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_linear
+v3d_deqp: case #3 P 431ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 17 (draw)
+  cube(draw) @0x14ec000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -401.1458 -390.6458 -380.3125 -369.8125 -359.4792 -348.9792 -338.6458 -328.1458 -317.8125 -307.3125 -296.9792 -286.4792 -276.1458 -265.6458 -255.3125 -244.8125
+  cube(draw) level 1 (32x32 @0x200000): -385.5833 -364.5833 -343.9167 -322.9167 -302.2500 -281.2500 -260.5833 -239.5833 -218.8333 -198.0000 -177.1667 -156.3333 -135.5000 -114.6667 -93.8333 -73.0000
+  cube(draw) level 2 (16x16 @0x280000): -354.1667 -312.5000 -270.8333 -229.1667 -187.5000 -145.8333 -104.1667 -62.5000 -20.8333 20.8333 62.5000 104.1667 145.8333 187.5000 229.1667 270.8333 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): -291.6667 -208.3333 -125.0000 -41.6667 41.6667 125.0000 208.3333 291.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -250.0000 -83.3333 83.3333 250.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): -166.6667 166.6667 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x14ec000 unit 0 kick 18 (draw)
+  cube-bind: 0x1797000 unit 0 kick 19 (draw)
+  cube(draw) @0x1797000 64x64 x64, chain 7, written 7, max_level 12
+  cube(draw) level 0 (64x64 @0x0): -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000 1000.0000 -1000.0000 -1000.0000 -1000.0000 -1000.0000 1000.0000 1000.0000 1000.0000
+  cube(draw) level 1 (32x32 @0x200000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (16x16 @0x280000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (8x8 @0x2a0000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (4x4 @0x2a8000): -333.2917 -333.2917 -333.2917 -333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (2x2 @0x2aa000): 333.2917 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x1 @0x2aa800): 333.2917 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1797000 unit 0 kick 20 (draw)
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_nearest
+v3d_deqp: case #4 P 419ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_nearest_mipmap_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 21 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 22 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 23 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 24 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear
+v3d_deqp: case #5 P 144ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 25 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 26 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 27 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 28 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_linear
+v3d_deqp: case #6 P 170ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 29 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 30 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 31 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 32 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_nearest
+v3d_deqp: case #7 P 146ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_linear_mipmap_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 33 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 34 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 35 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 36 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest
+v3d_deqp: case #8 P 134ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 37 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 38 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 39 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 40 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_linear
+v3d_deqp: case #9 P 153ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 41 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 42 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 43 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 44 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_nearest
+v3d_deqp: case #10 P 142ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba4_nearest_mipmap_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 45 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 46 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 47 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 48 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear
+v3d_deqp: case #11 P 116ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear'..
+  cube-bind: 0x14ec000 unit 0 kick 49 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 50 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 51 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 52 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear
+v3d_deqp: case #12 P 138ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_linear
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 53 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 54 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 55 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 56 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_nearest
+v3d_deqp: case #13 P 119ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_linear_mipmap_nearest
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest'..
+  cube-bind: 0x14ec000 unit 0 kick 57 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x14ec000 unit 0 kick 58 (draw)
+  cube(draw) @0x14ec000 64x64 x64: fmt 0, cpu 0x1e5eb000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 59 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+  cube-bind: 0x1642000 unit 0 kick 60 (draw)
+  cube(draw) @0x1642000 64x64 x64: fmt 0, cpu 0x1e741000 - not dumped
+deqp: Pass dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest
+v3d_deqp: case #14 P 108ms k2/10 c20141/30311 r0 dEQP-GLES3.functional.texture.filtering.3d.formats.rgba8_nearest
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        15/15 (100.0%)
+  Failed:        0/15 (0.0%)
+  Not supported: 0/15 (0.0%)
+  Warnings:      0/15 (0.0%)
+  Waived:        0/15 (0.0%)
+deqp: done: 15 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 15 cases begun, 15 with a result, 0 without
+v3d_deqp DONE, all passed: build fad0558a, filter 'dEQP-GLES3.functional.texture.filtering.3d.formats.rgba16f_linear,dEQP-GLES3.functional.texture.filtering...
+  15 cases in 3701 ms, record at 3 s after boot, reset at ~250 s
+  totals: P 15  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 15 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 15 cases begun, 15 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 10; slowest #0 649 ms
+  carve-out (KiB, of 48636): after #0 20141, last 20141, high-water 30311
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 60 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20096256 bytes used now, 31038720 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 111 calls, 48002 map reads (432 a call, at most 1344 in one); free runs 2, longest 29706240 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 60 jobs ended; emitted 1260, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3372000, GPU VA 0x181000..0x3100000
+driver: ... 8 more lines (UART)
+v3d_deqp: build fad0558a DONE, all passed: 15 cases, P 15 F 0 R 0 N 0 other 0

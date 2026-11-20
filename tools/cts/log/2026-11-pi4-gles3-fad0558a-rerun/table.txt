@@ -1040,3 +1040,134 @@ Fail dEQP-GLES3.functional.state_query.integers.max_draw_buffers_getfloat
 Fail dEQP-GLES3.functional.state_query.integers.max_draw_buffers_getinteger64
 Fail dEQP-GLES3.functional.state_query.integers.max_samples_getfloat
 Fail dEQP-GLES3.functional.state_query.integers.max_samples_getinteger64
+
+# Session 2 (G2), 2026-11-20: deqp-uart-tally.py --table over the eighteen consoles S32a ... F3S2 (README.md)
+== mustpass: 954 cases in these records' case filters (41856 outside them, not run, left out); 954 with a result (1111 case lines seen)
+group                           pass   fail   n.s.     QW  other   none
+shaders                          587     91      0      0      0      0
+texture                          263      0     13      0      0      0
+TOTAL                            850     91     13      0      0      0
+== the totals above are the result lines seen; the image's own counters, beside them:
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 571 cases begun, 571 with a result; deqp: done 515 passed, 56 failed, 0 not supported, 0 warnings; fad0558a DONE: 571 cases, P 515 F 24 R 32 N 0 other 0; 571 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 34 cases begun, 34 with a result; deqp: done 0 passed, 34 failed, 0 not supported, 0 warnings; fad0558a DONE: 34 cases, P 0 F 16 R 18 N 0 other 0; 34 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; fad0558a DONE: 1 cases, P 0 F 1 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; fad0558a DONE: 1 cases, P 0 F 1 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; fad0558a DONE: 1 cases, P 0 F 1 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; fad0558a DONE: 1 cases, P 0 F 1 R 0 N 0 other 0; 1 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 138 cases begun, 138 with a result; deqp: done 138 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 138 cases, P 138 F 0 R 0 N 0 other 0; 138 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 222 cases begun, 222 with a result; deqp: done 210 passed, 0 failed, 12 not supported, 0 warnings; fad0558a DONE, none failed: 222 cases, P 210 F 0 R 0 N 12 other 0; 222 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 14 cases begun, 14 with a result; deqp: done 14 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 14 cases, P 14 F 0 R 0 N 0 other 0; 14 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 14 cases begun, 14 with a result; deqp: done 14 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 14 cases, P 14 F 0 R 0 N 0 other 0; 14 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 14 cases begun, 14 with a result; deqp: done 14 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 14 cases, P 14 F 0 R 0 N 0 other 0; 14 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 14 cases begun, 14 with a result; deqp: done 14 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 14 cases, P 14 F 0 R 0 N 0 other 0; 14 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 15 cases begun, 15 with a result; deqp: done 15 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 15 cases, P 15 F 0 R 0 N 0 other 0; 15 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 15 cases begun, 15 with a result; deqp: done 15 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 15 cases, P 15 F 0 R 0 N 0 other 0; 15 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 15 cases begun, 15 with a result; deqp: done 15 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 15 cases, P 15 F 0 R 0 N 0 other 0; 15 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 15 cases begun, 15 with a result; deqp: done 14 passed, 0 failed, 1 not supported, 0 warnings; fad0558a DONE, none failed: 15 cases, P 14 F 0 R 0 N 1 other 0; 15 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 13 cases begun, 13 with a result; deqp: done 13 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 13 cases, P 13 F 0 R 0 N 0 other 0; 13 result lines seen
+  2026-11-pi4-gles3-fad0558a-rerun: deqp: summary 13 cases begun, 13 with a result; deqp: done 13 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 13 cases, P 13 F 0 R 0 N 0 other 0; 13 result lines seen
+== not Pass, by name
+Fail dEQP-GLES3.functional.shaders.texture_functions.texture.sampler2darrayshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.isampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2darrayshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.sampler3d_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegrad.usampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.isampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2darrayshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.sampler3d_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturegradoffset.usampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturelod.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturelodoffset.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.isampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.sampler3d_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgrad.usampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.isampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.sampler3d_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojgradoffset.usampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojlod.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojlod.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.textureprojlodoffset.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercubeshadow_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercubeshadow_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment
+Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_linear
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_linear_mipmap_nearest
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_linear
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_r8_nearest_mipmap_nearest
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_linear
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_linear_mipmap_nearest
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_linear
+NotSupported dEQP-GLES3.functional.texture.filtering.2d_array.formats.srgb_rg8_nearest_mipmap_nearest
+NotSupported dEQP-GLES3.functional.texture.filtering.3d.formats.srgb_r8_linear

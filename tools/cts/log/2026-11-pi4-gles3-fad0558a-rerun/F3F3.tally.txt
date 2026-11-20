@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image F3F3: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt F3F3.console.txt
+F3F3.console.txt: deqp: done: 15 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 15 cases begun, 15 with a result, 0 without
+mustpass cases with a result: 15 (of 15 seen)
+group                                       pass   fail    n/s  other
+texture                                       15      0      0      0
+TOTAL                                         15      0      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  F3F3: deqp: summary 15 cases begun, 15 with a result; deqp: done 15 passed, 0 failed, 0 not supported, 0 warnings; fad0558a DONE, all passed: 15 cases, P 15 F 0 R 0 N 0 other 0; 15 result lines seen

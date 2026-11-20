@@ -4,7 +4,7 @@
 
 commit: fad0558a7def0e5677761608eec56b12e9855d18
 
-Plan #380, step "the Pi 4's remaining GLES3 images" (issue #1261). The images of `tools/cts/pi4-gles3-tree.txt` whose `b1b5b845` result main has changed since (`../2026-11-18-pi4-gles3-ac2fe51f-map/README.md`), run again on the Raspberry Pi 4 from one commit, `fad0558a`. Every session of this rerun builds from this commit and adds its section below. Per-image files, relative to this directory: `<LABEL>.console.txt`, `<LABEL>.tally.txt`. Counts are the mustpass view of the tally's TOTAL line. "before" is the `b1b5b845` record (`../2026-11-pi4-gles3-b1b5b845-rows00-15/`, `-rows16-30/`, `-rows31-45/`), in the same view.
+Plan #380, step "the Pi 4's remaining GLES3 images" (issue #1261). The images of `tools/cts/pi4-gles3-tree.txt` whose `b1b5b845` result main has changed since (`../2026-11-18-pi4-gles3-ac2fe51f-map/README.md`), run again on the Raspberry Pi 4 from one commit, `fad0558a`. Every session of this rerun builds from this commit and adds its section below. Per-image files, relative to this directory: `<LABEL>.console.txt`, `<LABEL>.tally.txt`. Counts are the mustpass view of the tally's TOTAL line. "before" is the `b1b5b845` record (`../2026-11-pi4-gles3-b1b5b845-rows00-15/`, `-rows16-30/`, `-rows31-45/`, `-rows46-60/`, `-rows61-75/`), in the same view.
 
 ## Session 1 (G1)
 
@@ -64,11 +64,67 @@ The board runner could not capture the console: the Pi 4's UART bridge takes one
 
 Checks: `tools/cts/pi4-session-tally.sh` (13 tallies), `pi4-console-scan.py` (above), `check-pi4-gles3-log.py --commit fad0558a7def0e5677761608eec56b12e9855d18` on this directory (no duplicate, no abort, the commit line; it lists as missing the labels this session did not run), `check-gles3-tree.py tools/cts/pi4-gles3-tree.txt` (`100 images, 42810 matched once`).
 
+## Session 2 (G2)
+
+Eighteen images of the table's S32a..F3S2 part: S32a S32b S32c1 S32c2 S32c3 S32c4 S32d T03 F3C1 F3C2 F3C3 F3C4 F3F1 F3F2 F3F3 F3F4 F3S1 F3S2 (rows 53-59, 62, 64-71, 73, 74 counted from 1; `TREE_ROWS=52-58,61,63-70,72,73`). S32c ran as the four one-case images S32c1-S32c4 of the table; no image of this session was re-split.
+
+| row | image | Pass | Fail | NotSupported | other | run | GPU recoveries | hangs | verdict | before (b1b5b845) P / F / N.S. / other / without | after P / F / N.S. / other / without | moved |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 53 | S32a | 469 | 53 | 0 | 0 | 39.9 s | 0 | none | DONE | 262 / 260 / 0 / 0 / 0 | 469 / 53 / 0 / 0 / 0 | 207 Fail to Pass |
+| 54 | S32b | 0 | 34 | 0 | 0 | 7.3 s | 0 | none | DONE | 0 / 34 / 0 / 0 / 0 | 0 / 34 / 0 / 0 / 0 | none (18 change cause, below) |
+| 55 | S32c1 | 0 | 1 | 0 | 0 | 0.2 s | 0 | none | DONE | 0 / 0 / 0 / 1 / 0 (the refused case of the abort) | 0 / 1 / 0 / 0 / 0 | aborted to Fail |
+| 56 | S32c2 | 0 | 1 | 0 | 0 | 0.2 s | 0 | none | DONE | 0 / 0 / 0 / 0 / 1 (never began) | 0 / 1 / 0 / 0 / 0 | no result to Fail |
+| 57 | S32c3 | 0 | 1 | 0 | 0 | 0.2 s | 0 | none | DONE | 0 / 0 / 0 / 0 / 1 (never began) | 0 / 1 / 0 / 0 / 0 | no result to Fail |
+| 58 | S32c4 | 0 | 1 | 0 | 0 | 0.2 s | 0 | none | DONE | 0 / 0 / 0 / 0 / 1 (never began) | 0 / 1 / 0 / 0 / 0 | no result to Fail |
+| 59 | S32d | 118 | 0 | 0 | 0 | 5.1 s | 0 | none | DONE, all passed | 116 / 2 / 0 / 0 / 0 | 118 / 0 / 0 / 0 / 0 | 2 Fail to Pass |
+| 62 | T03 | 122 | 0 | 12 | 0 | 26.2 s | 0 | none | DONE, none failed | 0 / 122 / 12 / 0 / 0 | 122 / 0 / 12 / 0 / 0 | 122 Fail to Pass |
+| 64 | F3C1 | 14 | 0 | 0 | 0 | 2.1 s | 0 | none | DONE, all passed | 0 / 14 / 0 / 0 / 0 | 14 / 0 / 0 / 0 / 0 | 14 Fail to Pass |
+| 65 | F3C2 | 14 | 0 | 0 | 0 | 2.1 s | 0 | none | DONE, all passed | 0 / 14 / 0 / 0 / 0 | 14 / 0 / 0 / 0 / 0 | 14 Fail to Pass |
+| 66 | F3C3 | 14 | 0 | 0 | 0 | 2.0 s | 0 | none | DONE, all passed | 0 / 14 / 0 / 0 / 0 | 14 / 0 / 0 / 0 / 0 | 14 Fail to Pass |
+| 67 | F3C4 | 14 | 0 | 0 | 0 | 2.0 s | 0 | none | DONE, all passed | 0 / 14 / 0 / 0 / 0 | 14 / 0 / 0 / 0 / 0 | 14 Fail to Pass |
+| 68 | F3F1 | 15 | 0 | 0 | 0 | 2.7 s | 0 | none | DONE, all passed | 0 / 15 / 0 / 0 / 0 | 15 / 0 / 0 / 0 / 0 | 15 Fail to Pass |
+| 69 | F3F2 | 15 | 0 | 0 | 0 | 3.7 s | 0 | none | DONE, all passed | 0 / 15 / 0 / 0 / 0 | 15 / 0 / 0 / 0 / 0 | 15 Fail to Pass |
+| 70 | F3F3 | 15 | 0 | 0 | 0 | 3.7 s | 0 | none | DONE, all passed | 0 / 15 / 0 / 0 / 0 | 15 / 0 / 0 / 0 / 0 | 15 Fail to Pass |
+| 71 | F3F4 | 14 | 0 | 1 | 0 | 2.5 s | 0 | none | DONE, none failed | 0 / 14 / 1 / 0 / 0 | 14 / 0 / 1 / 0 / 0 | 14 Fail to Pass |
+| 73 | F3S1 | 13 | 0 | 0 | 0 | 1.6 s | 0 | none | DONE, all passed | 0 / 13 / 0 / 0 / 0 | 13 / 0 / 0 / 0 / 0 | 13 Fail to Pass |
+| 74 | F3S2 | 13 | 0 | 0 | 0 | 1.4 s | 0 | none | DONE, all passed | 0 / 13 / 0 / 0 / 0 | 13 / 0 / 0 / 0 / 0 | 13 Fail to Pass |
+
+("before" of S32c1-S32c4 is the one `S32c` record of `../2026-11-pi4-gles3-b1b5b845-rows46-60/`, case by case: S32c aborted at its first case, a refused draw, and the other three never began.)
+
+### Result
+
+Run 2026-11-20 05:01 to 07:12 UTC on the Raspberry Pi 4 (V3D 4.2, Zephyr af17c0c8, tryboot), item pi4-g2 of plan #380. 954 mustpass cases in the eighteen images, 954 with a result: **850 pass, 91 fail, 13 NotSupported, 0 without a result**. At `b1b5b845` the same cases read 378 pass, 559 fail, 13 NotSupported, 1 refused in an aborted run and 3 without a result: **472 cases moved from Fail to Pass, the four S32c cases now have a result (Fail), and none moved from Pass.** All eighteen images ended `complete=1` with `0 without` a result; none aborted, so the table was not re-split. 0 GPU recoveries, 0 job timeouts, 0 hung jobs, 0 MMU faults, 0 slow jobs, 0 resets before the end of any run (`pi4-console-scan.py`: `18 image run(s): 18 finished, 0 without a finish line; recoveries 0, job timeouts 0, hung 0, MMU faults 0, resets 0, faults 0`). The longest run is S32a's 39.9 s of the 210 s record deadline. Every console prints `v3d_deqp: build fad0558a` and ends with the image's own end line.
+
+What moved, by image (`table.txt` names every case that is not Pass):
+
+- **S32a**: 207 pass (the texelFetch, offset, 2D-array / 3D and shadow look-ups that the compiler refused at `b1b5b845`). Still not Pass 53, two causes:
+  - 32 draws refused by the job builder (`v3d_deqp` letter R, `glGetError() returned GL_INVALID_OPERATION at glsShaderRenderCase.cpp:742`): `texturegrad`, `texturegradoffset`, `textureprojgrad`, `textureprojgradoffset` of `sampler3d_fixed`, `sampler3d_float`, `isampler3d`, `usampler3d`, vertex and fragment (8 each). These are the 32 of the uniform words 46/47 that the rerun map expected to stay (its issue draft 1).
+  - 21 Fail with no refusal (`Fail (Fail)`, a wrong image): shadow look-ups with an explicit level or gradient, and the 2D-array shadow `texture`: `texturegrad.sampler2dshadow_*` 2, `texturegrad.sampler2darrayshadow_*` 2, `texturegradoffset.sampler2dshadow_*` 2, `texturegradoffset.sampler2darrayshadow_*` 2, `texturelod.sampler2dshadow_*` 2, `texturelodoffset.sampler2dshadow_*` 2, `textureprojgrad.sampler2dshadow_*` 2, `textureprojgradoffset.sampler2dshadow_*` 2, `textureprojlod.sampler2dshadow_*` 2, `textureprojlodoffset.sampler2dshadow_*` 2, `texture.sampler2darrayshadow_fragment` 1. Outside the mustpass the image also fails `texture.sampler2darrayshadow_vertex` and `texturegrad.samplercubeshadow_{fragment,vertex}` the same way. New on the board: at `b1b5b845` these cases failed to compile (`Failed to compile shader program at glsShaderRenderCase.cpp:447`); they now compile and draw and read wrong. The cause is not read here.
+- **S32b**: unchanged, 34 Fail. The 16 `textureSize` cases of 2D and cube samplers (`isampler2d`, `usampler2d`, `sampler2d_{fixed,float}`, `isamplercube`, `usamplercube`, `samplercube_{fixed,float}`, vertex and fragment) draw with no refusal and fail `Got unexpected texture size`, as at `b1b5b845`. The 18 of 3D and 2D-array samplers (`sampler2darrayshadow_*` included) are now draws refused by the job builder (letter R, 324 refused draws, `the job builder refused the draw (a uniform, program or primitive it does not write)`) where at `b1b5b845` they were `Shader failed`: the rerun map's "the cause has moved" (issue draft 1). The verdict text of all 34 is `Got unexpected texture size`.
+- **S32c1-S32c4**: the RET16_OF_32 refusal is gone (`080240bc`): each of `texturesize.sampler2dshadow_{fragment,vertex}` and `samplercubeshadow_{fragment,vertex}` draws with no refusal and ends `complete=1`. Each fails `Got unexpected texture size`, the verdict of S32b's 16 non-refused 2D and cube cases: 20 `textureSize` cases of 2D, cube and their shadow samplers now read a wrong size on the board with no refusal.
+- **S32d**: the two `long_instance_name` Fails pass (reflection names of 63+ characters); the image has no Fail.
+- **T03**: the 122 Fails pass (`texture.filtering.2d_array`: 2D-array look-ups the compiler refused at `b1b5b845`); the 12 NotSupported (`formats.srgb_r8_*`, `srgb_rg8_*`: `GL_EXT_texture_sRGB_R8` / `_RG8` not advertised) stay.
+- **F3C1-F3C4, F3F1-F3F4, F3S1, F3S2**: every `texture.filtering.3d` case of these images passes (141; F3F4's `formats.srgb_r8_linear` stays NotSupported).
+
+No case moved from Pass. The two Fail classes left without a refusal (S32a's 21 shadow explicit-level look-ups, the 20 `textureSize` cases of S32b and S32c1-S32c4) are named in the report's issue drafts; their causes are not read on the board here.
+
+### The board
+
+Eighteen tryboot cycles, one image each. Before the first cycle the board was in Linux with `tryboot.txt` holding one newline (sha256 `01ba4719...`), `config.txt` sha256 `6ea8eaef...`, and no staged image. After every cycle Linux came back with a new boot_id (298-340 s after the reboot), the staged `yakogl-<LABEL>.bin` was removed and `tryboot.txt` put back to its one-newline content, both read back, and the sha256 of `tryboot.txt` and `config.txt` read again equal to the values before the first cycle. After the last cycle (F3S2) the board was read once more: Linux up, no `yakogl-*.bin`, `pi4run-*.bin` or `config-linux.txt` under `/boot/firmware`, `tryboot.txt` one newline and `config.txt` with the sha256 read before the first cycle. `config.txt` was never written. Nothing else on the board was changed: no partition, no U-Boot variable, no kernel module, no service. No ssh connection timed out and no cycle was repeated.
+
+### Method
+
+Built in a worktree of `fad0558a` (`git describe --always --dirty`: `fad0558a`): VK-GL-CTS 93bca01 with its externals (a shallow fetch of that commit), the gles3 stage 1 of `docs/es3/board-recipe-pi4.md` section 2 (Zephyr SDK 1.0.1, 4 cores, 453 ninja steps), then the eighteen images with `DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh` from a table holding only these images' `# image` and filter lines, copied from `tools/cts/pi4-gles3-tree.txt`. 18 `rc=0 build=fad0558a` lines, every image `RAM: 166356-166364 KB 256 MB 63.46%`, each `.config` passed by the builder's `check-deqp-images.py --config --gles3` line.
+
+As in session 1, the leased serial console held the UART bridge's one client slot, so the steps of `tools/board.sh pi4` were done by hand in its order, one image at a time, by one script per step: the image checks of `nb_check_image` (the AArch64 header, `image_size` inside the 256 MiB window, the `board: PM watchdog resets` marker) and the `.built` line's sha256 and build; `sudo`, free-space and leftover prechecks over ssh (no `yakogl-*.bin` / `pi4run-*.bin`, no `config-linux.txt`, `tryboot.txt` the one-newline stock); the undo printed; the image sent xz-compressed, unpacked on the board and installed to `/boot/firmware/yakogl-<LABEL>.bin`; `tryboot.txt` written with `pi4_stage`'s lines (its comment line, `[all]`, `kernel=`, `arm_64bit=1`, `enable_uart=1`, `uart_2ndstage=1`; no `hdmi_timings`, the panel's value was not in the environment); both read back (sha256, text) before the reboot; `sudo reboot "0 tryboot"`; the end line awaited on the leased serial console (`serial_expect`), the console read from it (`serial_read`) and cut by a script from the first firmware line after the reboot to the end line, CRs and NULs dropped, never copied by hand; Linux back (a new boot_id), the staged image removed and `tryboot.txt` put back, read back. `board.sh`'s lease file was not written; there are no `board.sh pi4 <LABEL> rc=... verdict=...` lines, the verdicts are the end lines in `cycles.txt` and the scan's.
+
+Checks: `tools/cts/pi4-session-tally.sh` (31 tallies; session 1's thirteen read back unchanged), `pi4-console-scan.py` over the eighteen consoles (above), `check-pi4-gles3-log.py --commit fad0558a7def0e5677761608eec56b12e9855d18` on this directory (`100 images, 31 with a tally, 69 missing, 0 duplicated, 0 aborted, commit fad0558a`: the missing are the images of sessions 3 and 4, plan #376's and those not rerun), `check-gles3-tree.py tools/cts/pi4-gles3-tree.txt` (`100 images, 42810 matched once`).
+
 ## Not in this session
 
-- Later sessions of this rerun, from the same commit: S32a, S32b, S32c1-S32c4, S32d, T02, T03, T04, F3C1-F3C4, F3F1-F3F4, F3S1, F3S2 (session 2); T05a-T05d, T06-T13 (session 3); T17, UB1-UB3, UA1-UA3 (session 4).
+- Later sessions of this rerun, from the same commit: T05a-T05d, T06-T13 (session 3); T17, UB1-UB3, UA1-UA3 (session 4).
 - Plan #376's images: S03-S08, T14, TF1, TF2.
-- No change expected (their `b1b5b845` result stands): the other images of the table, among them B1, C1, D1, FO1-FO6, PR, S01, S02, S09, S11-S15, S17-S27, S5f, S5v, S30, S31 of the A1..S31 part.
+- No change expected (their `b1b5b845` result stands): the other images of the table, among them B1, C1, D1, FO1-FO6, PR, S01, S02, S09, S11-S15, S17-S27, S5f, S5v, S30, S31 of the A1..S31 part and T01, T02, T04, F3F5 of the S32a..F3S2 part (the rerun map's verdict; session 1 had listed T02 and T04 under session 2, and session 2 did not run them).
 
 ## Files
 
@@ -76,5 +132,5 @@ Every `.txt` starts with three `#` header lines (SPDX, then a title); the tally 
 
 - `<LABEL>.console.txt`: the image's console from the firmware's first line of its boot to the `v3d_deqp: build fad0558a ...` end line, CRs and NULs dropped, no time stamps.
 - `<LABEL>.tally.txt`: `tools/cts/pi4-session-tally.sh` (deqp-uart-tally.py `--label <LABEL> <LABEL>.console.txt` from inside this directory).
-- `table.txt`: `--table` over the thirteen consoles, in the table's order.
-- `cycles.txt`: per image the sha256 of `zephyr.bin`, the reboot time (unix seconds), the seconds until Linux was back, the clean-up read-back, the `cases in` line, the jobs line and the end line.
+- `table.txt`: `--table` over each session's consoles, in the table's order: session 1's thirteen, then (after a `# Session 2 (G2)` line) session 2's eighteen.
+- `cycles.txt`: per session (`== cycles, session 2 (G2)` starts the second) and per image the sha256 of `zephyr.bin`, the reboot time (unix seconds), the seconds until Linux was back, the clean-up read-back, the `cases in` line, the jobs line and the end line.
