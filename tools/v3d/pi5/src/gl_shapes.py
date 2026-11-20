@@ -52,12 +52,43 @@ Shapes (gl_test case, function in driver/tools/pvrlab/gl_test.c):
   mrt4       -    a clear of four GL_RGBA8 colour targets (glDrawBuffers 4).
   mrt8       -    the same with eight targets (V3D 7.1's maximum).
 
+The P10 texture shapes (TEX_SHAPES) draw into the same window. tex2d, texfmt
+and mipgen use gl_test's ES 1.00 UV pair (gl_test_uv_vs_src,
+gl_test_texture_fs_src: texture2D(u_tex, v_uv), u_tex on unit 0) with its
+24-byte puv vertex (pos4, uv2; puv_quad(): a full-screen quad, uv (0,0) at
+NDC (-1,-1)) at attributes 0 and 1. Their textures hold fixed bytes
+(tex_bytes()). Each of the four runs with tfu_spy.c ahead of the drm-shim
+(with_tfu_spy()), which prints every TFU submission's registers on stdout.
+
+  tex2d      -    a 64x64 GL_RGBA8 texture (glTexImage2D with data, level 0
+                  only, wrap REPEAT) drawn after a black clear with NEAREST
+                  min and mag filters, glFinish, and again with LINEAR: two
+                  jobs.
+  texfmt     -    the same NEAREST draw from a 64x64 GL_SRGB8_ALPHA8 texture
+                  (Mesa's 7.1 Transfer func sRGB), glFinish, and from a 64x64
+                  GL_RGB565 texture (GL_UNSIGNED_SHORT_5_6_5, Mesa's
+                  B5G6R5_UNORM: R and B swapped against RGB565): two jobs.
+  mipgen     -    glTexStorage2D of a 64x64 GL_RGBA8 texture with 7 levels,
+                  level 0 by glTexSubImage2D, glGenerateMipmap (Mesa's TFU job:
+                  not in the CLIF dump; its registers are tfu_spy.c's stdout
+                  lines), then the draw with LINEAR_MIPMAP_LINEAR and LINEAR:
+                  one job.
+  cube       115  case_texcube: six 4x4 GL_RGBA faces (tools/v3d/tex_cube_case.h
+                  tcc_make_faces: R a ramp along s, G along t, B 16 + 40 *
+                  face), CLAMP_TO_EDGE, gl_test's texcube pair
+                  (gl_test_texcube_vs_src, gl_test_texcube_fs_src) with
+                  tcc_faces' u_major, u_sx, u_ty, a 32x32 viewport; per face,
+                  NEAREST and then LINEAR: a clear to (0,0,0,0), the quad and a
+                  glFinish, 12 jobs. An ES 3.0 context, so Mesa's core asks
+                  for seamless cube filtering (v3d has no field for it).
+
 The vertex data is fixed in this file so that the jobs' bytes are the same on
 every run. Prints the renderer and glGetError; exits non-zero on any EGL or GL
 failure.
 """
 import ctypes as C
 import os
+import subprocess
 import sys
 
 EGL_PLATFORM_SURFACELESS_MESA = 0x31DD
@@ -78,6 +109,11 @@ GL_SCISSOR_TEST, GL_DEPTH_TEST, GL_STENCIL_TEST, GL_BLEND = 0x0C11, 0x0B71, 0x0B
 GL_LESS, GL_EQUAL, GL_KEEP = 0x0201, 0x0202, 0x1E00
 GL_ARRAY_BUFFER, GL_STATIC_DRAW = 0x8892, 0x88E4
 GL_TRIANGLES, GL_RENDERER = 0x0004, 0x1F01
+GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR = 0x2601, 0x2703
+GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE = 0x2802, 0x2803, 0x812F
+GL_SRGB8_ALPHA8, GL_RGB565, GL_UNSIGNED_SHORT_5_6_5 = 0x8C43, 0x8D62, 0x8363
+GL_TEXTURE_CUBE_MAP, GL_TEXTURE_CUBE_MAP_POSITIVE_X = 0x8513, 0x8515
+GL_TEXTURE0, GL_UNPACK_ALIGNMENT = 0x84C0, 0x0CF5
 T, F = 1, 0
 TW = TH = 64
 
@@ -100,10 +136,57 @@ varying vec4 v_color;
 varying vec2 v_uv;
 void main() { gl_FragColor = v_color * vec4(v_uv, 1.0, 1.0); }
 """
+# gl_test_uv_vs_src and gl_test_texture_fs_src (gl_test_shaders_es100.h),
+# comments left out: tex2d, texfmt, mipgen.
+UV_VS = b"""#version 100
+attribute vec4 a_pos;
+attribute vec2 a_uv;
+varying vec2 v_uv;
+void main() {
+    gl_Position = a_pos;
+    v_uv = a_uv;
+}
+"""
+TEX_FS = b"""#version 100
+precision mediump float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+void main() { gl_FragColor = texture2D(u_tex, v_uv); }
+"""
+# gl_test_texcube_vs_src and gl_test_texcube_fs_src: cube (case 115).
+CUBE_VS = b"""#version 100
+attribute vec4 a_pos;
+uniform vec3 u_major;
+uniform vec3 u_sx;
+uniform vec3 u_ty;
+varying vec3 v_dir;
+void main() {
+    v_dir = u_major + a_pos.x * u_sx + a_pos.y * u_ty;
+    gl_Position = a_pos;
+}
+"""
+CUBE_FS = b"""#version 100
+precision mediump float;
+uniform samplerCube u_s;
+varying vec3 v_dir;
+void main() {
+    gl_FragColor = textureCube(u_s, v_dir);
+}
+"""
+# tools/v3d/tex_cube_case.h tcc_faces: (major, sx, ty) per face, GL's order
+CUBE_FACES = (
+    ((1, 0, 0), (0, 0, -1), (0, -1, 0)),
+    ((-1, 0, 0), (0, 0, 1), (0, -1, 0)),
+    ((0, 1, 0), (1, 0, 0), (0, 0, 1)),
+    ((0, -1, 0), (1, 0, 0), (0, 0, -1)),
+    ((0, 0, 1), (1, 0, 0), (0, -1, 0)),
+    ((0, 0, -1), (-1, 0, 0), (0, -1, 0)),
+)
 FULL = ((-1, -1), (1, -1), (1, 1), (-1, -1), (1, 1), (-1, 1))
 LOWER_LEFT = ((-1, -1), (0, -1), (0, 0), (-1, -1), (0, 0), (-1, 0))
 
 SHAPES = ("scissor", "scisbox", "writemask", "viewport", "fbods", "colormask", "mrt4", "mrt8")
+TEX_SHAPES = ("tex2d", "texfmt", "mipgen", "cube")
 
 
 class Gl:
@@ -120,6 +203,23 @@ class Gl:
         return call
 
 
+def puv_quad(uv=True):
+    """gl_test's puv_quad(): pos (x, y, 0, 1) and uv, (0,0) at NDC (-1,-1);
+    uv (0,0) everywhere when uv is False (case 115 reads only a_pos)."""
+    out = []
+    for x, y in FULL:
+        u, v = ((x + 1) / 2.0, (y + 1) / 2.0) if uv else (0.0, 0.0)
+        out += [float(x), float(y), 0.0, 1.0, u, v]
+    return out
+
+
+def tex_bytes(w, h, bpp):
+    """Fixed texel bytes of a w x h image, bpp bytes a texel: byte k of texel
+    (i, j) is (4 * i + 16 * j + 64 * k) & 0xff."""
+    return bytes((4 * i + 16 * j + 64 * k) & 0xff
+                 for j in range(h) for i in range(w) for k in range(bpp))
+
+
 def quad(corners, z, rgb):
     """cuv_set() for each corner: pos (x, y, z, 1), colour (rgb, 1), uv (1, 1)."""
     out = []
@@ -133,7 +233,7 @@ class Case:
         self.gl = gl
         self.vbo = None
 
-    def program(self):
+    def program(self, vs=VS, fs=FS, attrs=(b"a_pos", b"a_color", b"a_uv")):
         gl = self.gl
 
         def shader(kind, src):
@@ -150,9 +250,9 @@ class Case:
             return sh
 
         prog = gl.glCreateProgram()
-        gl.glAttachShader(prog, shader(GL_VERTEX_SHADER, VS))
-        gl.glAttachShader(prog, shader(GL_FRAGMENT_SHADER, FS))
-        for i, name in enumerate((b"a_pos", b"a_color", b"a_uv")):
+        gl.glAttachShader(prog, shader(GL_VERTEX_SHADER, vs))
+        gl.glAttachShader(prog, shader(GL_FRAGMENT_SHADER, fs))
+        for i, name in enumerate(attrs):
             gl.glBindAttribLocation(prog, i, name)
         gl.glLinkProgram(prog)
         ok = C.c_int()
@@ -160,6 +260,7 @@ class Case:
         if not ok.value:
             raise SystemExit("gl_shapes: link failed")
         gl.glUseProgram(prog)
+        return prog
 
     def upload(self, floats):
         """upload_vbo() and cuv_attribs(): a GL_ARRAY_BUFFER of 40-byte vertices."""
@@ -471,13 +572,133 @@ class Case:
     def mrt8(self):
         self.mrt(8)
 
+    # ---- the P10 texture shapes -----------------------------------------------
+
+    def puv(self, prog_args, uv=True):
+        """the window, a program, unit 0 active, and puv_quad() at attribute 0
+        (pos4) and, when uv, 1 (uv2), 24 bytes a vertex."""
+        gl = self.gl
+        self.window()
+        prog = self.program(*prog_args)
+        gl.glActiveTexture(GL_TEXTURE0)
+        floats = puv_quad(uv)
+        vbo = C.c_uint()
+        gl.glGenBuffers(1, C.byref(vbo))
+        gl.glBindBuffer(GL_ARRAY_BUFFER, vbo.value)
+        data = (C.c_float * len(floats))(*floats)
+        gl.glBufferData(GL_ARRAY_BUFFER, C.c_ssize_t(C.sizeof(data)), data, GL_STATIC_DRAW)
+        for i, (n, off) in enumerate(((4, 0), (2, 16))[:2 if uv else 1]):
+            gl.glVertexAttribPointer(i, n, GL_FLOAT, F, 24, C.c_void_p(off))
+            gl.glEnableVertexAttribArray(i)
+        return prog
+
+    def uv_program(self):
+        prog = self.puv((UV_VS, TEX_FS, (b"a_pos", b"a_uv")))
+        self.gl.glUniform1i(self.gl.glGetUniformLocation(prog, b"u_tex"), 0)
+
+    def new_texture(self, target):
+        gl = self.gl
+        tex = C.c_uint()
+        gl.glGenTextures(1, C.byref(tex))
+        gl.glBindTexture(target, tex.value)
+        gl.glPixelStorei(GL_UNPACK_ALIGNMENT, 4)
+        return tex.value
+
+    def filters(self, target, min_filter, mag_filter):
+        self.gl.glTexParameteri(target, GL_TEXTURE_MIN_FILTER, min_filter)
+        self.gl.glTexParameteri(target, GL_TEXTURE_MAG_FILTER, mag_filter)
+
+    def image2d(self, ifmt, fmt, typ, bpp):
+        """a bound 64x64 2D texture of tex_bytes(), level 0 only, NEAREST."""
+        self.new_texture(GL_TEXTURE_2D)
+        self.gl.glTexImage2D(GL_TEXTURE_2D, 0, ifmt, TW, TH, 0, fmt, typ, tex_bytes(TW, TH, bpp))
+        self.filters(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST)
+
+    def draw_tex(self):
+        gl = self.gl
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        gl.glDrawArrays(GL_TRIANGLES, 0, 6)
+        gl.glFinish()
+
+    def tex2d(self):
+        self.uv_program()
+        self.image2d(GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4)
+        self.draw_tex()
+        self.filters(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR)
+        self.draw_tex()
+
+    def texfmt(self):
+        self.uv_program()
+        self.image2d(GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, 4)
+        self.draw_tex()
+        self.image2d(GL_RGB565, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 2)
+        self.draw_tex()
+
+    def mipgen(self):
+        gl = self.gl
+        self.uv_program()
+        self.new_texture(GL_TEXTURE_2D)
+        gl.glTexStorage2D(GL_TEXTURE_2D, 7, GL_RGBA8, TW, TH)
+        gl.glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TW, TH, GL_RGBA, GL_UNSIGNED_BYTE,
+                           tex_bytes(TW, TH, 4))
+        gl.glGenerateMipmap(GL_TEXTURE_2D)
+        self.filters(GL_TEXTURE_2D, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR)
+        self.draw_tex()
+
+    def cube(self):
+        gl = self.gl
+        prog = self.puv((CUBE_VS, CUBE_FS, (b"a_pos",)), uv=False)
+        gl.glUniform1i(gl.glGetUniformLocation(prog, b"u_s"), 0)
+        loc = [gl.glGetUniformLocation(prog, n) for n in (b"u_major", b"u_sx", b"u_ty")]
+        self.new_texture(GL_TEXTURE_CUBE_MAP)
+        ramp = (0, 85, 170, 255)
+        for f in range(6):
+            texels = bytes(c for j in range(4) for i in range(4)
+                           for c in (ramp[i], ramp[j], 16 + 40 * f, 255))
+            gl.glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, 0, GL_RGBA, 4, 4, 0,
+                            GL_RGBA, GL_UNSIGNED_BYTE, texels)
+        gl.glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        gl.glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        gl.glViewport(0, 0, 32, 32)
+        for i in range(12):
+            for at, v in zip(loc, CUBE_FACES[i // 2]):
+                gl.glUniform3f(at, float(v[0]), float(v[1]), float(v[2]))
+            filt = GL_LINEAR if i & 1 else GL_NEAREST
+            self.filters(GL_TEXTURE_CUBE_MAP, filt, filt)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClear(GL_COLOR_BUFFER_BIT)
+            gl.glDrawArrays(GL_TRIANGLES, 0, 6)
+            gl.glFinish()
+        gl.glViewport(0, 0, TW, TH)
+
+
+def with_tfu_spy(libdir):
+    """Run this program again with tfu_spy.c's ioctl() ahead of the drm-shim in
+    LD_PRELOAD (built as <libdir>/gl_shapes_tfu_spy.so), so that every TFU
+    submission's registers are printed; returns once that is in place."""
+    if os.environ.get("GL_SHAPES_TFU_SPY"):
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    uapi = os.path.join(here, "..", "..", "..", "..", "third_party", "mesa-26.2.1",
+                        "include", "drm-uapi")
+    so = os.path.join(libdir, "gl_shapes_tfu_spy.so")
+    subprocess.run(["cc", "-shared", "-fPIC", "-O2", "-I", os.path.normpath(uapi), "-o", so,
+                    os.path.join(here, "tfu_spy.c"), "-ldl"], check=True)
+    env = dict(os.environ, GL_SHAPES_TFU_SPY=so)
+    env["LD_PRELOAD"] = ":".join(p for p in (so, os.environ.get("LD_PRELOAD")) if p)
+    os.execve(sys.executable, [sys.executable, "-u", os.path.abspath(__file__)] + sys.argv[1:],
+              env)
+
 
 def main():
     args = sys.argv[1:]
-    if len(args) != 2 or args[1] not in SHAPES:
+    if len(args) != 2 or args[1] not in SHAPES + TEX_SHAPES:
         print(__doc__, file=sys.stderr)
         return 2
     libdir, shape = args
+    if shape in TEX_SHAPES:
+        with_tfu_spy(libdir)
     egl = C.CDLL(os.path.join(libdir, "libEGL.so.1"))
     glib = C.CDLL(os.path.join(libdir, "libGLESv2.so.2"))
     egl.eglGetProcAddress.restype = C.c_void_p

@@ -1,0 +1,4 @@
+gl_shapes: renderer V3D 7.1.10.2
+gl_shapes: SUBMIT_TFU icfg 0x03040000 iia 0x00011000 iis 0x00000008 ica 0x00000000 iua 0x00000000 ioa 0x00011000 ios 0x00400040 coef 0x00000000 0x00000000 0x00000000 0x00000000 ioc 0x00086061 bo_handles 6 0 0 0 in_sync 1 out_sync 1 flags 0x0 extensions 0
+gl_shapes: SUBMIT_TFU 7.1: ICFG IFORMAT 6 OTYPE 4; IOS 64x64; IOC DIMTW 1 NUMMM 6 FORMAT 6 STRIDE 8
+gl_shapes: mipgen, framebuffer 64x64, glGetError 0x0
