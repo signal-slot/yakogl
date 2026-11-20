@@ -1,4 +1,4 @@
-# host dEQP-GLES3 (MODULE=gles3, 42810 cases) at 26d1c4a2, HOST-ONLY: API, compile and refusal verdicts only, render verdicts meaningless
+# host dEQP-GLES3 (MODULE=gles3, 42810 cases) at 26d1c4a2 (powervr rows at bee6896d), HOST-ONLY: API, compile and refusal verdicts only, render verdicts meaningless
 gpu	group	pass	fail	notsupported	crash	other
 powervr	functional.attribute_location	274	0	0	0	0
 powervr	functional.buffer	168	527	0	0	0
@@ -10,11 +10,11 @@ powervr	functional.depth_stencil_clear	0	10	0	0	0
 powervr	functional.dither	0	20	0	0	0
 powervr	functional.draw	2	320	0	0	0
 powervr	functional.draw_buffers_indexed	0	0	76	0	0
-powervr	functional.fbo	571	1202	255	0	0
+powervr	functional.fbo	573	1200	255	0	0
 powervr	functional.fence_sync	10	0	0	0	0
 powervr	functional.fragment_ops	91	3079	0	0	0
 powervr	functional.fragment_out	0	825	115	0	0
-powervr	functional.implementation_limits	41	8	0	0	0
+powervr	functional.implementation_limits	46	3	0	0	0
 powervr	functional.instanced	0	45	0	0	0
 powervr	functional.lifetime	56	0	0	0	0
 powervr	functional.multisample	9	7	48	0	0
@@ -28,10 +28,10 @@ powervr	functional.rasterization	34	54	12	0	0
 powervr	functional.rasterizer_discard	0	51	0	0	0
 powervr	functional.read_pixels	0	48	0	0	0
 powervr	functional.samplers	42	0	0	0	0
-powervr	functional.shader_api	38	0	14	0	0
+powervr	functional.shader_api	52	0	0	0	0
 powervr	functional.shaders	2498	17163	0	0	955
-powervr	functional.state_query	919	18	9	0	0
-powervr	functional.texture	22	3505	1578	0	0
+powervr	functional.state_query	928	9	9	0	0
+powervr	functional.texture	22	3745	1338	0	0
 powervr	functional.transform_feedback	882	0	0	0	0
 powervr	functional.ubo	0	2355	0	0	0
 powervr	functional.uniform_api	1605	576	0	0	0
