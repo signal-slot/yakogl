@@ -624,6 +624,115 @@ own mini-UART driver, which keeps the baud rate the firmware set
 The board is not a farm resource yet; the first run is day one of
 `docs/notes/pre-study-rpi-zero-2w.md` section 6.
 
+## Toradex Verdin iMX95
+
+The Verdin iMX95 (NXP i.MX 95, six Cortex-A55, Mali-G310) on the Mallow
+carrier. **Nothing in this section has been run by us**: there is no board
+yet. What exists is a build. `tools/check.sh` builds `examples/triangle` for
+`verdin_imx95/mimx9596/a55` (row `zephyr  verdin_imx95 examples/triangle
+image (Mali-G310, built only), -Werror on our C files`), from the board
+`driver/boards/toradex/verdin_imx95`, which is derived from Zephyr's
+`imx95_evk` A55 board at the workspace pin, and the board glue
+`driver/zephyr/lib/board/verdin_imx95`. The image has no display, arms no
+watchdog, and does not bring up the GPU; each of these is a stub that says
+so on the console. The route below is the documented one, and the open
+questions at the end are what a first session must answer.
+
+### The boot chain
+
+The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
+`board/toradex/verdin-imx95/` (u-boot `ece349ade297`), and the pin's
+`boards/nxp/imx95_evk/doc/index.rst` (zephyr `af17c0c8aa2a`).
+
+- The boot core is the Cortex-M33, not an A55. Its boot ROM, with the
+  EdgeLock Enclave (the ELE firmware container `mx95b0-ahab-container.img`),
+  loads the OEI, which trains the DDR (LPDDR4X firmware `lpddr4x*v202409.bin`),
+  then the **System Manager** (`m33_image.bin`, Toradex's `imx-sm-toradex`,
+  `config=verdin-imx95`). The System Manager configures isolation, starts the
+  A55, and from then on serves clocks, power domains, pins and sensors to the
+  other cores over SCMI. It keeps running for the whole life of the board,
+  whatever the A55 runs.
+- On the A55: U-Boot SPL, then TF-A BL31 (`nxp-imx/imx-atf`, `lf_v2.12`,
+  `PLAT=imx95`), then U-Boot proper ("SPL ---> ATF (TF-A) ---> U-Boot proper").
+  All of these are one `flash.bin` in the eMMC's boot partition (`mmc dev 0
+  1`, written from offset 0; the env's `update_uboot`). U-Boot's console is
+  LPUART1 (`serial@44380000`, Verdin UART_3), the same UART our image uses.
+- What must be on the board: that `flash.bin`, as Toradex ships the module.
+  Nothing of ours replaces any of it. Our image is one file that U-Boot
+  loads, as on the other two Verdins.
+
+### How U-Boot would start the image
+
+- The image is `zephyr.bin` with an AArch64 Image header, linked and loaded at
+  **0xd0000000** (`zephyr,sram`, 256 MiB, in
+  `verdin_imx95_mimx9596_a55.dts`), the address of the pin's `imx95_evk` A55
+  board and of its documented U-Boot route ("Option 2": `fatload mmc 1:1
+  0xd0000000 zephyr.bin`, then `dcache off; icache flush; go 0xd0000000`).
+- Toradex's U-Boot keeps the first 256 MiB of DRAM for the firmware (DRAM
+  from 0x80000000, its own from 0x90000000; TF-A and OP-TEE at 0x8a000000,
+  64 MiB) and uses 0x90400000 (`kernel_addr_r`, `loadaddr`) to 0x9c800000
+  (`ramdisk_addr_r`) for its loads; it relocates itself below 4 GiB. 0xd0000000
+  to 0xdfffffff is clear of those and below 4 GiB on every module size (U-Boot
+  probes 2, 4, 8 or 16 GiB; its doc shows an 8 GB module).
+- The product form is then the other Verdins' (above): `ext4load mmc <dev>:<part>
+  0xd0000000 /zephyr.bin && dcache off && icache off && go 0xd0000000`, and
+  the test form `BOARD_BOOT=uboot-mmc`: the one-shot hook of
+  `tools/uboot-netboot-lib.sh` in front of the board's `bootcmd` (mainline's is
+  `bootflow scan -b`), the file staged by Linux under `/var/yakogl`. `go`, not
+  `booti`, for the reason in "What the image does on a `go` entry": `booti`
+  moves an image with `text_offset` 0 to the start of DRAM. `tools/board.sh`
+  has no `verdin-imx95` board yet; adding it is the session's first step.
+- The development route `kexec-dev` (`driver/tools/kexec-zephyr`, as on the
+  Verdin iMX8M Plus and the NanoPC-T6) carries over in its form: Linux loads
+  the image at 0xd0000000 with `kexec_load` and jumps. The Verdin iMX95's
+  Linux has a CMA pool that may cover that address (`linux,cma`: 960 MiB
+  allocated from 0x80000000 to 0xff000000, `imx95-verdin.dtsi`); a
+  `crashkernel=` reservation there, as the iMX8M Plus's
+  `crashkernel=64M@0x60000000`, would be the clean form. Not tried.
+- At the end of a run the image resets through PSCI `SYSTEM_RESET` (TF-A,
+  which asks the System Manager), the way back to U-Boot and Linux. A
+  software timer takes that reset after `CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S`
+  (the board layer's `YAKOGL_BOARD_LIFETIME_S`, 300 s, in an image with the
+  layer; else 60 s). It is not a watchdog.
+
+### Open questions for sign-off
+
+1. **Can U-Boot start our image with the System Manager still serving
+   SCMI?** The System Manager runs on the M33 on its own, so it is still
+   there after `go`; the image's first SCMI messages (the LPUART1 pins and
+   clock, at `PRE_KERNEL`) go through the same channel U-Boot used (MU2,
+   shared memory at 0x445b1000; the same channel in Linux's `imx95.dtsi`).
+   To check on the board: that U-Boot leaves no message pending on that
+   channel, and that the System Manager's configuration for this module
+   (`imx-sm-toradex`, `verdin-imx95`) gives the A55 non-secure agent the
+   LPUART1 pins and clock and, for the GPU later, power domain 14 and the
+   GPU clocks.
+2. **The watchdog after `go`.** Toradex's U-Boot is built with `CONFIG_WDT`
+   and `CONFIG_ULP_WATCHDOG` (30 s), and the module's Linux enables WDOG3
+   with its external reset output. If U-Boot starts WDOG3 and leaves it
+   running, an image that does not feed it is reset about 30 s after
+   U-Boot's last feed (as the iMX8M Plus's U-Boot starts WDOG1, measured
+   there). Our image neither arms nor feeds a watchdog
+   (`verdin_imx95_wdog_stub`); `tools/board.sh` requires the
+   `board: watchdog armed` line, which this image does not print.
+3. **Caches at `go`.** The pin's EVK route uses `dcache off; icache flush`,
+   the other Verdins' `dcache off; icache off`. Either must leave the MMU off
+   at entry; which one this U-Boot needs is unmeasured.
+4. **The eMMC device and partition U-Boot reads**, and where Linux can stage
+   the file (Torizon's `/var` on the other Verdins). U-Boot's `mmc 0` is the
+   eMMC (`update_uboot`); the rest is unknown.
+5. **The SoC package.** The board takes the 19x19 package's pin list
+   (`mimx9596avzxn-pinctrl.dtsi`, as `imx95_evk`); every pad the module's
+   Linux uses is in it and in the 15x15 one, so the console does not depend
+   on it, but the module's part is not confirmed.
+6. **The Mali-G310's CSF firmware** is not fetched or pinned yet (panthor
+   loads `arm/mali/arch<major>.<minor>/mali_csffw.bin` by the GPU_ID's
+   architecture; the G610's is `arch10.8`, the G310's is to be read from its
+   GPU_ID), and the GPU's power-on through the System Manager
+   and a bring-up in `driver/rust` that is not the RK3588's do not exist:
+   `driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c` names both and
+   refuses.
+
 ## On the boards
 
 In order; stop at the first step that prints something else.
