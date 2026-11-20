@@ -23,7 +23,7 @@ static uint32_t st(uint32_t frcnt)
 
 static struct swap_sample good(void)
 {
-	struct swap_sample s = { 0x0, 0x40, 0x40, st(10), st(11), 1, 1 };
+	struct swap_sample s = { 0x0, 0x40, 0x40, st(10), st(11), 1, 1, 672, 10, 10 };
 
 	return s;
 }
@@ -52,11 +52,44 @@ static void test_judge(void)
 	CHECK(swap_judge(&s) == SWAP_VALVE_OFF);
 	s = good(); s.pv_vcontrol = 0;
 	CHECK(swap_judge(&s) == SWAP_VALVE_OFF);
-	s = good(); s.expected_word = 31; s.ptr_after = 31;
-	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	/* firmware at 672 len 10: ours at 32 len 10 is clear */
 	s = good(); s.expected_word = 32; s.ptr_after = 32;
 	CHECK(swap_judge(&s) == SWAP_OURS);
+	/* word 0 is no longer special */
+	s = good(); s.expected_word = 0; s.ptr_after = 0;
+	CHECK(swap_judge(&s) == SWAP_OURS);
+	/* overlap: start inside, end inside, covering */
+	s = good(); s.expected_word = 675; s.ptr_after = 675;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	s = good(); s.expected_word = 665; s.ptr_after = 665;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	s = good(); s.expected_word = 600; s.our_words = 200; s.ptr_after = 600;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	/* touching exactly: ours ends at 672, or starts at 682 */
+	s = good(); s.expected_word = 662; s.ptr_after = 662;
+	CHECK(swap_judge(&s) == SWAP_OURS);
+	s = good(); s.expected_word = 682; s.ptr_after = 682;
+	CHECK(swap_judge(&s) == SWAP_OURS);
+	s = good(); s.expected_word = 681; s.ptr_after = 681;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	/* the LPTRS field: ending at 4096 is fine, past it is not */
+	s = good(); s.expected_word = 4086; s.ptr_after = 4086;
+	CHECK(swap_judge(&s) == SWAP_OURS);
+	s = good(); s.expected_word = 4087; s.ptr_after = 4087;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
 	s = good(); s.expected_word = 0x1000; s.ptr_after = 0;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	s = good(); s.expected_word = 0xfffffff0u; s.ptr_after = 0;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	/* unknown lengths are refused */
+	s = good(); s.fw_words = 0;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	s = good(); s.our_words = 0;
+	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
+	/* placement is judged after FRCNT, before the pointer */
+	s = good(); s.fw_words = 0; s.status_after = st(10);
+	CHECK(swap_judge(&s) == SWAP_FRCNT_STALLED);
+	s = good(); s.fw_words = 0; s.ptr_after = 0;
 	CHECK(swap_judge(&s) == SWAP_BAD_PLACEMENT);
 	s = good(); s.status_after = 0xffffffffu;
 	CHECK(swap_judge(&s) == SWAP_UNCLOCKED_FAIL);
