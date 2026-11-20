@@ -2448,6 +2448,12 @@ step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uni
     --test mali_deqp_unitype --test mali_deqp_uniarray --test mali_deqp_mixprec \
     --test mali_deqp_colourpair --test mali_deqp_loops --test mali_deqp_misc \
     --test mali_ref_selftest
+# Plan #367's glmark2 compile pins: each file compiles reductions of glmark2's
+# shader shapes (Mesa 26.2.1 references where the record has one) and pins the
+# program or the refusal. Feature sets are those of each file's header.
+step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
+    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
 step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
     --test mali_zs_sharing --test mali_vcube_magswitch
