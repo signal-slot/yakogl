@@ -9,7 +9,8 @@
 //! STATE_WORD0/1 pair of each target slot (WORD0 is the address and is not pinned).
 //!
 //! Pinned, as literals of what the back end does today, for one target of each
-//! colour format class, two and three RGBA8 targets, two R32UI and two RG32I (two RGBA16F and two R32F are pinned as refused):
+//! colour format class, two and three RGBA8 targets, two R32UI, two RG32I,
+//! two RGBA16F and two R32F:
 //! the program selection, WORD1 of every slot, and per format the
 //! output-register dword count implied by the source positions
 //! (`source_pos` WORD1 bits 14..15, `mrt_index` bits 16..18). The count table is
@@ -827,27 +828,33 @@ fn rgba8_beside_rgb10_a2() {
     pin(&[&RGB10_A2, &RGB10_A2], 0x1002, &[0x0008_2000, 0x0009_6000]);
 }
 
-/* Two RGBA16F and two R32F targets are not accepted today: the online
- * compiler refuses the blend variant of a shader with more than one colour
- * output of those formats, so no kick reaches the end-of-tile emit. Pinned as
- * a refusal (item pvr-accept must not move it by accident). */
+/* Two RGBA16F and two R32F targets: the GL core keys the draw with the plain
+ * replace key of the class, which the online compiler builds per target
+ * when the shader writes several colour outputs (issue #313, inv-fragout's
+ * "several 16F targets refused by the compiler"; it refused the key before,
+ * and no kick reached the end-of-tile emit). RGBA16F at r0-1 and r2-3, R32F
+ * at r0 and r1. */
 #[test]
-fn two_rgba16f_and_two_r32f_are_refused() {
-    assert!(draw(&[&RGBA16F, &RGBA16F]).is_none(), "two RGBA16F");
-    assert!(draw(&[&R32F, &R32F]).is_none(), "two R32F");
+fn two_rgba16f() {
+    pin(&[&RGBA16F, &RGBA16F], 0x1002, &[0x0000_0500, 0x0001_8500]);
+}
+
+#[test]
+fn two_r32f() {
+    pin(&[&R32F, &R32F], 0x1002, &[0x0000_1b00, 0x0001_5b00]);
 }
 
 /* The output-register dword count per format, as the source position of a
  * following target shows it. The table is tests/pvr_pbe_mixed_words.rs's
  * (RGBA8, R32UI: 1; RGBA16F, RG32UI: 2), extended; only the formats an
  * accepted pair shows are read off the words, the others are the table's
- * (RGBA16F, R32F and RGBA32UI have no accepted pair today). */
+ * (RGBA32UI has no accepted pair today). */
 #[test]
 fn dwords_per_format_from_source_positions() {
-    for (f, dw) in [(&RGBA8, 1), (&RGB10_A2, 1), (&R32UI, 1), (&RG32I, 2)] {
+    for (f, dw) in [(&RGBA8, 1), (&RGB10_A2, 1), (&R32UI, 1), (&RG32I, 2), (&RGBA16F, 2), (&R32F, 1)] {
         assert_eq!(f.dwords, dw, "{} table", f.name);
         let s = draw(&[f, f]).unwrap_or_else(|| panic!("{} pair refused", f.name));
         assert_eq!(source_pos(s.words[1][1]), dw, "{}: the second target's source_pos", f.name);
     }
-    assert_eq!([RGBA16F.dwords, R32F.dwords, RGBA32UI.dwords], [2, 1, 4]);
+    assert_eq!(RGBA32UI.dwords, 4);
 }
