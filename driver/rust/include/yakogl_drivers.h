@@ -230,6 +230,40 @@ struct yd_imx_wdog_arm {
 int yd_imx_wdog_arm(uintptr_t wdog_base, uintptr_t ccm_base, uint32_t timeout_ms,
 		    uint32_t ext_reset, struct yd_imx_wdog_arm *out);
 
+/* ---- NXP WDOG32 (ip::wdog32; the Verdin iMX95's verdin_imx95_wdog.c) -----
+ * yd_wdog32_arm: one call at PRE_KERNEL_1, interrupts off: the WDOG32 at
+ * base (the glue's mapping of WDOG3, 0x42490000) unlocked, written with
+ * Linux's CS for fsl,imx93-wdt (32-bit commands, LPO / 256 = 125 Hz,
+ * UPDATE, WAIT, STOP; INT when ext_reset != 0) and EN, TOVAL for timeout_ms
+ * (whole 8 ms ticks, 8 ms .. 524.28 s), refreshed and read back. polls
+ * bounds each wait (ULK, RCS) in reads of CS. 0, -EIO when the WDOG32
+ * refused (refusal says why), -EINVAL for a NULL out or base.
+ * yd_wdog32_refresh: one write of the refresh word to CNT. Any context. */
+
+#define YD_WDOG32_WAS_RUNNING (1u << 0) /* CS.EN was set: an earlier stage started it */
+
+#define YD_WDOG32_REFUSED_TIMEOUT         1 /* not a whole 8 ms tick in 8 ms .. 524.28 s */
+#define YD_WDOG32_REFUSED_UNLOCK          2 /* CS.ULK did not show within the polls */
+#define YD_WDOG32_REFUSED_RECONFIG        3 /* CS.RCS did not show within the polls */
+#define YD_WDOG32_REFUSED_CS_READ_BACK    4 /* CS read back other than written */
+#define YD_WDOG32_REFUSED_TOVAL_READ_BACK 5 /* TOVAL read back other than written */
+
+struct yd_wdog32_arm {
+	uint32_t cs_found;    /* CS as found, before any write */
+	uint32_t toval_found; /* TOVAL as found */
+	uint32_t cs_now;      /* CS read back (on a refusal: the read it is about) */
+	uint32_t toval_now;   /* TOVAL read back (0 when not read) */
+	uint32_t flags;       /* YD_WDOG32_* */
+	uint32_t refusal;     /* 0 or YD_WDOG32_REFUSED_* */
+	uint32_t timeout_ms;  /* from the read-back TOVAL; 0 on a refusal */
+	uint32_t ulk_polls;   /* reads of CS that saw ULK still clear */
+	uint32_t rcs_polls;   /* reads of CS that saw RCS still clear */
+};
+
+int yd_wdog32_arm(uintptr_t base, uint32_t timeout_ms, uint32_t ext_reset, uint32_t polls,
+		  struct yd_wdog32_arm *out);
+void yd_wdog32_refresh(uintptr_t base);
+
 /* ---- RK3588 board glue (ip::dw_wdt, soc::rk3588, aarch64; nanopc_t6.c) ----
  * yd_dw_wdt_arm: WDT0's two CRU gates opened (CLKGATE_CON(15) bits 0, 1),
  * then the DW_apb_wdt armed for the period of `top` (2^(16 + top) cycles of
@@ -2056,6 +2090,12 @@ _Static_assert(offsetof(struct yd_imx_wdog_arm, wcr_now) == 4, "yd_imx_wdog_arm.
 _Static_assert(offsetof(struct yd_imx_wdog_arm, flags) == 8, "yd_imx_wdog_arm.flags");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, refusal) == 12, "yd_imx_wdog_arm.refusal");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, timeout_ms) == 16, "yd_imx_wdog_arm.timeout_ms");
+_Static_assert(sizeof(struct yd_wdog32_arm) == 36, "struct yd_wdog32_arm");
+_Static_assert(offsetof(struct yd_wdog32_arm, cs_now) == 8, "yd_wdog32_arm.cs_now");
+_Static_assert(offsetof(struct yd_wdog32_arm, flags) == 16, "yd_wdog32_arm.flags");
+_Static_assert(offsetof(struct yd_wdog32_arm, refusal) == 20, "yd_wdog32_arm.refusal");
+_Static_assert(offsetof(struct yd_wdog32_arm, timeout_ms) == 24, "yd_wdog32_arm.timeout_ms");
+_Static_assert(offsetof(struct yd_wdog32_arm, rcs_polls) == 32, "yd_wdog32_arm.rcs_polls");
 _Static_assert(sizeof(struct yd_mp2_wdt) == 16, "struct yd_mp2_wdt");
 _Static_assert(offsetof(struct yd_mp2_wdt, value) == 0, "yd_mp2_wdt.value");
 _Static_assert(offsetof(struct yd_mp2_wdt, cmd) == 8, "yd_mp2_wdt.cmd");

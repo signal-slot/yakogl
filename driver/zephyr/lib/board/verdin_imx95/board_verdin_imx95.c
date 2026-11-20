@@ -8,7 +8,7 @@
  *   screen   none yet: the i.MX 95 display path (DPU, LVDS/MIPI DSI on the
  *            Mallow's connectors) has no Zephyr driver of ours
  *   record   the yk-record line on the console UART (common/record.c)
- *   watchdog none: STUB (verdin_imx95.c, verdin_imx95_wdog_stub)
+ *   watchdog WDOG3 (verdin_imx95_wdog.c), fed while board_wdog_alive()
  *   reset    verdin_imx95_reset(): PSCI SYSTEM_RESET
  * Built, not run on a board yet.
  */

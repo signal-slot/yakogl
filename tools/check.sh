@@ -4542,8 +4542,10 @@ zephyr_nanopc_t6_gltest_image() {
 # U-Boot route would load: the RAM footprint (the AArch64 header's
 # image_size) inside zephyr,sram; the GPU's bring-up in it (the firmware's
 # line and the SCMI power-on's lines, once each; no "STUB:" line about the
-# GPU); and the watchdog's stub line once, so the image cannot pass for one
-# that arms a watchdog.
+# GPU); and WDOG3's (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c):
+# its armed line and the board layer's "board: watchdog armed" once each, its
+# arming entry (ip::wdog32's yd_wdog32_arm) linked, and no "STUB:" line about
+# the watchdog.
 zephyr_verdin_imx95_triangle_image() {
   local dir=build/zephyr-werror/verdin_imx95-triangle bin footprint window line n
   mali_csffw_header "$1" verdin_imx95-triangle || return 1
@@ -4556,13 +4558,16 @@ zephyr_verdin_imx95_triangle_image() {
     echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
     return 1
   }
-  for line in 'verdin_imx95: STUB: no watchdog armed' 'verdin_imx95: CSF firmware %u bytes embedded' \
+  for line in 'verdin_imx95: WDOG3 armed: CS 0x%08x' 'board: watchdog armed' \
+    'verdin_imx95: CSF firmware %u bytes embedded' \
     'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: '; do
     n=$(strings -n 20 "$bin" | grep -cF "$line") || true
     [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
   done
-  n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: STUB: .*Mali') || true
-  [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries a Mali STUB line"; return 1; }
+  n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: STUB: .*\(Mali\|watchdog\)') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries a Mali or watchdog STUB line"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_wdog32_arm$' ||
+    { echo "zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
 }
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
