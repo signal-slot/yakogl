@@ -11,10 +11,10 @@
 //! copied in the layout of the class it is stored in, the way an integer
 //! renderbuffer is: NEAREST only, values kept within one signedness and
 //! saturated to the destination's width. An R or RG integer format that
-//! es3_formats widened (R8UI kept in RGBA8UI) is copied in the wide store,
-//! the channels the format lacks reading and written as 0, 0, 1; where the
-//! build keeps such a texture incomplete (the V3D, `WIDE_INT_RT`) the blit
-//! answers GL_INVALID_FRAMEBUFFER_OPERATION instead.
+//! es3_formats widened (R8UI kept in RGBA8UI) is a complete colour
+//! attachment on both builds this file runs for (the V3D and the PowerVR,
+//! see the `#![cfg]` below, `WIDE_INT_RT`): the blit copies it in the wide
+//! store, the channels the format lacks reading and written as 0, 0, 1.
 //!
 //! Every value is read back through glReadPixels(GL_RGBA_INTEGER), never
 //! from the storage. The expected pictures come from the spec's NEAREST rule
@@ -192,8 +192,18 @@ const RGBA16I: Fmt = fmt(GL_RGBA16I, GL_RGBA_INTEGER, GL_SHORT, 4, 16, true);
 const RGBA16UI: Fmt = fmt(GL_RGBA16UI, GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, 4, 16, false);
 const RGBA32UI: Fmt = fmt(GL_RGBA32UI, GL_RGBA_INTEGER, GL_UNSIGNED_INT, 4, 32, false);
 const RGBA32I: Fmt = fmt(GL_RGBA32I, GL_RGBA_INTEGER, GL_INT, 4, 32, true);
+const R8I: Fmt = fmt(GL_R8I, GL_RED_INTEGER, GL_BYTE, 1, 8, true);
 const R8UI: Fmt = fmt(GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, 1, 8, false);
+const R16I: Fmt = fmt(GL_R16I, GL_RED_INTEGER, GL_SHORT, 1, 16, true);
+const R16UI: Fmt = fmt(GL_R16UI, GL_RED_INTEGER, GL_UNSIGNED_SHORT, 1, 16, false);
+const R32I: Fmt = fmt(GL_R32I, GL_RED_INTEGER, GL_INT, 1, 32, true);
+const R32UI: Fmt = fmt(GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, 1, 32, false);
+const RG8I: Fmt = fmt(GL_RG8I, GL_RG_INTEGER, GL_BYTE, 2, 8, true);
+const RG8UI: Fmt = fmt(GL_RG8UI, GL_RG_INTEGER, GL_UNSIGNED_BYTE, 2, 8, false);
 const RG16I: Fmt = fmt(GL_RG16I, GL_RG_INTEGER, GL_SHORT, 2, 16, true);
+const RG16UI: Fmt = fmt(GL_RG16UI, GL_RG_INTEGER, GL_UNSIGNED_SHORT, 2, 16, false);
+const RG32I: Fmt = fmt(GL_RG32I, GL_RG_INTEGER, GL_INT, 2, 32, true);
+const RG32UI: Fmt = fmt(GL_RG32UI, GL_RG_INTEGER, GL_UNSIGNED_INT, 2, 32, false);
 const RGBA8: Fmt = fmt(GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4, 8, false);
 
 /// The value of channel `ch` of texel (x, y) of image `seed`, in range of
@@ -541,22 +551,31 @@ fn an_array_layer_a_level_and_a_cube_face_are_the_images_attached() {
     untouched(&l0, 20);
 }
 
-/// An R or RG integer texture where this build makes it complete (es3_formats
-/// keeps it in the four-channel store of its width) copies its channels; the
-/// ones it lacks read 0, 0, 1. Where the build keeps it incomplete the blit
-/// is GL_INVALID_FRAMEBUFFER_OPERATION, never a silent no-op.
+/// An R or RG integer texture is a complete colour attachment on both builds
+/// this file runs for (es3_formats keeps it in the four-channel store of its
+/// channel type and width, `WIDE_INT_RT`), and a blit copies it in that
+/// store: its channels arrive, the ones the format lacks read and written
+/// 0, 0, 1 — into a destination of its own format and into the four-channel
+/// format of its store.
 #[test]
-fn r_and_rg_integer_textures_copy_or_are_incomplete() {
+fn r_and_rg_integer_textures_copy_in_their_wide_store() {
     let _g = context();
-    for (f, wide) in [(R8UI, RGBA8UI), (RG16I, RGBA16I)] {
-        let src = tex2d(f, 40, 5, 3);
-        if !complete(&src) {
-            let other = tex2d_complete(wide, 42, 5, 3);
-            let e = blit(&src, whole(&src), &other, whole(&other), GL_NEAREST);
-            assert_eq!(e, GL_INVALID_FRAMEBUFFER_OPERATION, "{:#x} incomplete", f.internal);
-            untouched(&other, 42);
-            continue;
-        }
+    for (f, wide) in [
+        (R8I, RGBA8I),
+        (R8UI, RGBA8UI),
+        (RG8I, RGBA8I),
+        (RG8UI, RGBA8UI),
+        (R16I, RGBA16I),
+        (R16UI, RGBA16UI),
+        (RG16I, RGBA16I),
+        (RG16UI, RGBA16UI),
+        (R32I, RGBA32I),
+        (R32UI, RGBA32UI),
+        (RG32I, RGBA32I),
+        (RG32UI, RGBA32UI),
+    ] {
+        let src = tex2d_complete(f, 40, 5, 3);
+        /* a same-format copy: the absent channels read 0, 0,1 on both sides */
         let dst = tex2d_complete(f, 41, 5, 3);
         assert_eq!(blit(&src, whole(&src), &dst, whole(&dst), GL_NEAREST), GL_NO_ERROR, "{:#x}", f.internal);
         assert_eq!(read(&dst), model(&src, 40, whole(&src), &dst, 41, whole(&dst)), "{:#x}", f.internal);
@@ -564,6 +583,77 @@ fn r_and_rg_integer_textures_copy_or_are_incomplete() {
         let other = tex2d_complete(wide, 43, 5, 3);
         assert_eq!(blit(&src, whole(&src), &other, whole(&other), GL_NEAREST), GL_NO_ERROR, "{:#x}", f.internal);
         assert_eq!(read(&other), model(&src, 40, whole(&src), &other, 43, whole(&other)), "{:#x}", f.internal);
+    }
+}
+
+/// Layer 1 of a 2D array texture and level 1 of a two-level 2D texture of an
+/// R or RG integer format are the images blitted, in the wide store: layer 1
+/// arrives whole at level 1 (the absent channels 0, 0, 1) and the other
+/// layers and the other level are untouched.
+#[test]
+fn an_r_or_rg_array_layer_blits_into_a_level() {
+    let _g = context();
+    for f in [R8UI, RG16I, RG32UI] {
+        let (w, h, layers) = (4u32, 4u32, 3u32);
+        /* the 2D array: layer l holds image 10 + l */
+        let mut arr = 0;
+        let all: Vec<u8> = (0..layers).flat_map(|l| pixels(f, 10 + l, w, h)).collect();
+        // SAFETY: room for one name; `all` holds w x h x layers texels of `f`.
+        unsafe {
+            glGenTextures(1, &mut arr);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, arr);
+            let p = all.as_ptr() as *const c_void;
+            let (wi, hi, li) = (w as GLsizei, h as GLsizei, layers as GLsizei);
+            glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, f.internal as GLint, wi, hi, li, 0, f.format, f.ty, p);
+        }
+        assert_eq!(err(), GL_NO_ERROR, "a {:#x} 2D array texture", f.internal);
+        let src = complete_fb(arr, true, f, w, h, "layer 1 of a 2D array", || unsafe {
+            // SAFETY: plain GL call.
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, arr, 0, 1)
+        });
+
+        /* level 1 of a 2D texture whose level 0 is twice the size */
+        let mut t2 = 0;
+        let (l0, l1) = (pixels(f, 20, 2 * w, 2 * h), pixels(f, 21, w, h));
+        // SAFETY: room for one name; the levels hold their texels of `f`.
+        unsafe {
+            glGenTextures(1, &mut t2);
+            glBindTexture(GL_TEXTURE_2D, t2);
+            let (fi, ty, fo) = (f.internal as GLint, f.ty, f.format);
+            glTexImage2D(GL_TEXTURE_2D, 0, fi, 2 * w as GLsizei, 2 * h as GLsizei, 0, fo, ty, l0.as_ptr() as _);
+            glTexImage2D(GL_TEXTURE_2D, 1, fi, w as GLsizei, h as GLsizei, 0, fo, ty, l1.as_ptr() as _);
+        }
+        assert_eq!(err(), GL_NO_ERROR, "the two-level {:#x} texture", f.internal);
+        let lvl = complete_fb(t2, true, f, w, h, "level 1 of a 2D texture", || unsafe {
+            // SAFETY: plain GL call.
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t2, 1)
+        });
+        assert_eq!(
+            blit(&src, whole(&src), &lvl, whole(&lvl), GL_NEAREST),
+            GL_NO_ERROR,
+            "{:#x}: layer 1 into level 1",
+            f.internal
+        );
+        assert_eq!(
+            read(&lvl),
+            model(&src, 11, whole(&src), &lvl, 21, whole(&lvl)),
+            "{:#x}: level 1 holds layer 1",
+            f.internal
+        );
+
+        /* the other layers of the source, and level 0 of the destination, are untouched */
+        for l in [0u32, 2] {
+            let other = complete_fb(arr, false, f, w, h, "another layer", || unsafe {
+                // SAFETY: plain GL call.
+                glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, arr, 0, l as GLint)
+            });
+            untouched(&other, 10 + l);
+        }
+        let l0 = complete_fb(t2, false, f, 2 * w, 2 * h, "level 0", || unsafe {
+            // SAFETY: plain GL call.
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t2, 0)
+        });
+        untouched(&l0, 20);
     }
 }
 
