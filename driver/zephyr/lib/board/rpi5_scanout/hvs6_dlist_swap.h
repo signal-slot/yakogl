@@ -4,14 +4,35 @@
  * hvs6_dlist_swap: put one display list of our own on a running BCM2712 HVS
  * (scaler6, stepping D0) channel by swapping the channel's list pointer, and
  * give the firmware its list back, byte-equal, afterwards. Stage 2 of
- * docs/notes/rpi5-display.md (Q4): our XRGB8888 plane after word 32, the
- * pointer swap at vblank, the firmware's list restored.
+ * docs/notes/rpi5-display.md (Q4): our XRGB8888 plane in free list memory,
+ * the pointer swap at vblank, the firmware's list restored.
  *
  * Header only, C11, no Zephyr includes. Register and list-memory access go
  * through struct hvs6s_io (offsets from the HVS base, as in snapshot.h and
  * hvs6_chan.h), so the host mock (driver/zephyr/lib/board/test/
  * hvs6_dlist_swap_mock.c, tools/v3d/check71.d/hvs6_dlist_swap.sh) runs the
  * same code against a model of the channel.
+ *
+ * API change of dlplace (plan #385), for the rpi5_scanout32 probe. The board
+ * (s32dumprun at cc89a1cf, Pi 5 D0, HVS VERSION 0x2454) showed channel 0's
+ * LPTRS = DL = 0x2a0: the firmware's live list starts at word 672, its first
+ * entry is the firmware plane with NEXT=32, and a 256-entry walk saw no END.
+ * So the firmware's list is no longer assumed to sit at words 0..31:
+ *  - struct hvs6s_snap lost kept[] (words 0..31). The snapshot is exactly
+ *    LPTRS and the firmware's words [HEADE, HEADE + fw_len), and the restore
+ *    compares exactly those. New fields: fw_entries, walk_stop, walk_word.
+ *  - hvs6s_snapshot refuses a list it cannot walk to its END within
+ *    HVS6S_FW_MAX words (HVS6S_ERR_FW_NOEND), and a walk that meets an entry
+ *    with NEXT 0 or one running past the list memory (HVS6S_ERR_FW_WALK).
+ *    It used to keep a capped span and go on.
+ *  - hvs6s_place_io (new, used by hvs6s_run) reads the target range first
+ *    and refuses any non-zero word in it (HVS6S_ERR_PLACE_USED); with
+ *    HVS6S_AUTO it searches past such words. hvs6s_place is kept, geometry
+ *    only (no read), for planning A/B slots.
+ *  - hvs6s_lines prints place, write and restore as "skip" after a refused
+ *    snapshot (it used to stop after the snapshot line). New report fields:
+ *    place_bad_word, place_bad_val, place_skipped.
+ *  struct hvs6s_cfg is unchanged; the old error codes keep their values.
  *
  * Facts, from the pinned tree (raspberrypi/linux rpi-6.12.y at 5bd564aa,
  * drivers/gpu/drm/vc4/, as rpi:<file>:<line>; taken from the linuxdesk desk
@@ -31,20 +52,26 @@
  *  - Linux frees an old list only once FRCNT moved past the frame of the
  *    swap, target (FRCNT + 1) & 63 (rpi:vc4_hvs.c:682-697). FRCNT is STATUS
  *    bits 21:16 (rpi:vc4_regs.h:605). Here: two advances, to be safe.
- *  - Lists start at or after word 32, HVS_BOOTLOADER_DLIST_END
- *    (rpi:vc4_regs.h:1056, rpi:vc4_hvs.c:1576-1583).
+ *  - Linux's lists start at or after word 32, HVS_BOOTLOADER_DLIST_END
+ *    (rpi:vc4_regs.h:1056, rpi:vc4_hvs.c:1576-1583). Words 0..31 stay
+ *    refused for our list (HVS6S_ERR_PLACE_KEPT); the firmware's own list
+ *    is found from LPTRS.HEADE, wherever it is.
  *  - CTRL1.BGENB is the background fill, toggled at EOF from needs_bg_fill
  *    (rpi:vc4_hvs.c:1484-1510). A swap does not need it. CTRL1 is never
  *    written here; it is read for the record only.
  *
  * The sequence (hvs6s_run, or the steps one by one):
- *  1. hvs6s_snapshot: the firmware's LPTRS, list words 0..31, and its list
- *     from LPTRS.HEADE up to its END (walked by CTL0.NEXT, at most
- *     HVS6S_FW_MAX words).
- *  2. hvs6s_place: our list's start, at or after word 32 via dlist_alloc.h
- *     (HVS6S_AUTO), or the caller's start checked. Refused by name: overlap
- *     with words 0..31, overlap with the firmware's list, a list that does
- *     not fit the memory or the 12-bit HEADE.
+ *  1. hvs6s_snapshot: the firmware's LPTRS, and its list from LPTRS.HEADE,
+ *     walked entry by entry by CTL0.NEXT (the entry's size in words) to the
+ *     list END word, at most HVS6S_FW_MAX words. Refused, with nothing
+ *     written and no restore needed, when the walk reaches no END.
+ *  2. hvs6s_place_io: our list's start, the first fit at or after word 32
+ *     (HVS6S_AUTO), or the caller's start checked. The range holds our
+ *     whole list, HVS6W_LIST_WORDS (the 9-word entry with NEXT=9 and the
+ *     list END, as hvs6_dlist_write.h writes). Refused by name: overlap with
+ *     words 0..31, overlap with [HEADE, HEADE + fw_len), a list that does
+ *     not fit the memory (cfg.mem_words, from CXM_SIZE) or the 12-bit HEADE,
+ *     a non-zero word in the range (read before anything is written).
  *  3. hvs6s_swap: our entry from hvs6_dlist_write.h (10 words, Linux's
  *     layout), written and read back word by word; the cache cleaned over
  *     the list (fb_flush.h's line-rounded range) and a barrier; the bus
@@ -54,10 +81,11 @@
  *     max_polls polls. FRCNT, STATUS.MODE, LPTRS, DL and CTRL1.BGENB are
  *     recorded at the write and after it. Then FRCNT must advance twice past
  *     the write before the old list is reused or checked.
- *  4. hvs6s_restore, always, even after a failure in 2 or 3: the
- *     firmware's LPTRS written back, two FRCNT advances, then LPTRS and
- *     words 0..31 (and the firmware's list words) compared byte for byte
- *     with the snapshot; the first differing word is named.
+ *  4. hvs6s_restore, always once the snapshot was taken, even after a
+ *     failure in 2 or 3: the firmware's LPTRS written back, two FRCNT
+ *     advances, then LPTRS and the firmware's words [HEADE, HEADE + fw_len)
+ *     compared byte for byte with the snapshot; the first differing word is
+ *     named. Our own list's words are left in list memory, not cleared.
  *
  * The list memory sits at HVS + 0x4000 and is device memory on the Pi 5's
  * Zephyr map; the clean is then a no-op, kept so that a staged list in
@@ -80,11 +108,12 @@
 #include "hvs6_chan.h"
 #include "hvs6_dlist_write.h"
 
-/* Our list's start chosen by dlist_alloc.h (first fit from word 32). */
+/* Our list's start chosen here (first free fit from word 32). */
 #define HVS6S_AUTO 0xffffffffu
-/* Words of the firmware's list kept for the restore, walked from HEADE. */
-#define HVS6S_FW_MAX 64u
-/* Words 0..31 the bootloader keeps (rpi:vc4_regs.h:1056). */
+/* The walk's hard bound: words of the firmware's list, from HEADE, that the
+ * walk may cover and the snapshot keeps. No END within it: refused. */
+#define HVS6S_FW_MAX 256u
+/* Words 0..31 Linux leaves to the bootloader (rpi:vc4_regs.h:1056). */
 #define HVS6S_KEPT 32u
 /* STATUS.FRCNT, bits 21:16 (rpi:vc4_regs.h:605). */
 #define HVS6S_FRCNT_SHIFT 16u
@@ -135,6 +164,9 @@ enum hvs6s_err {
 	HVS6S_ERR_RESTORE_FRCNT,/* FRCNT did not advance twice after the restore */
 	HVS6S_ERR_RESTORE_LPTRS,/* LPTRS differs from the snapshot after the restore */
 	HVS6S_ERR_RESTORE_WORD, /* a list word differs from the snapshot */
+	HVS6S_ERR_FW_NOEND,     /* no list END within HVS6S_FW_MAX words of HEADE */
+	HVS6S_ERR_FW_WALK,      /* an entry with NEXT 0, or one past the list memory */
+	HVS6S_ERR_PLACE_USED,   /* a word of our target range is not zero */
 };
 
 static inline const char *hvs6s_err_name(enum hvs6s_err e)
@@ -155,17 +187,21 @@ static inline const char *hvs6s_err_name(enum hvs6s_err e)
 	case HVS6S_ERR_RESTORE_FRCNT: return "restore: FRCNT did not advance twice";
 	case HVS6S_ERR_RESTORE_LPTRS: return "restore: LPTRS differs";
 	case HVS6S_ERR_RESTORE_WORD: return "restore: list word differs";
+	case HVS6S_ERR_FW_NOEND: return "snapshot: no END within the walk's bound";
+	case HVS6S_ERR_FW_WALK: return "snapshot: entry with NEXT 0 or past the list memory";
+	case HVS6S_ERR_PLACE_USED: return "place: target range holds a non-zero word";
 	}
 	return "?";
 }
 
 /* The firmware's state, taken before anything is written. */
 struct hvs6s_snap {
-	int taken;
+	int taken;                      /* 1 only when the walk reached the list END */
 	uint32_t lptrs;                 /* the whole register */
-	uint32_t kept[HVS6S_KEPT];      /* words 0..31 */
-	uint32_t fw_head, fw_len;       /* its list's span in words */
-	int fw_end_found;               /* 0: span capped, no END within HVS6S_FW_MAX */
+	uint32_t fw_head, fw_len;       /* its list's span in words, END included */
+	int fw_end_found;
+	uint32_t fw_entries;            /* entries walked before the END */
+	uint32_t walk_stop, walk_word;  /* last word the walk read, and its value */
 	uint32_t fw[HVS6S_FW_MAX];      /* words fw_head .. fw_head + fw_len - 1 */
 };
 
@@ -228,6 +264,9 @@ struct hvs6s_report {
 	/* place */
 	enum hvs6s_err place_err;
 	uint32_t start, len;         /* our list, in words */
+	int64_t place_bad_word;      /* non-zero word that refused the start, -1 when none */
+	uint32_t place_bad_val;
+	uint32_t place_skipped;      /* HVS6S_AUTO: non-zero words the search stepped past */
 	uint64_t list_bus;           /* bus address of our list's first word */
 	struct fb_range cleaned;     /* the cleaned range (ARM) */
 
@@ -261,6 +300,7 @@ static inline void hvs6s_report_init(struct hvs6s_report *r)
 {
 	*r = (struct hvs6s_report){0};
 	r->diff_word = -1;
+	r->place_bad_word = -1;
 	r->start = HVS6S_AUTO;
 }
 
@@ -289,45 +329,50 @@ static inline void hvs6s_sample(const struct hvs6s_io *io, unsigned int ch, stru
 	s->ctrl1 = io->read32(io->ctx, hvs6s_ctrl1_reg(ch));
 }
 
-/* 1. The firmware's LPTRS, words 0..31 and its list up to END. */
+/*
+ * 1. The firmware's LPTRS and its list, from LPTRS.HEADE to the list END.
+ * Entries are walked by CTL0.NEXT (the entry's size in words; an entry's
+ * inner END, Linux's layout, is skipped by it). Words between entries are
+ * kept too. Only reads; on a refusal s->taken stays 0 and walk_stop and
+ * walk_word name where the walk stopped.
+ */
 static inline enum hvs6s_err hvs6s_snapshot(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
 					    struct hvs6s_snap *s)
 {
-	uint32_t pos, head;
+	uint32_t pos = 0, head, room;
 
-	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !s)
+	if (!s)
 		return HVS6S_ERR_ARG;
 	*s = (struct hvs6s_snap){0};
+	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c))
+		return HVS6S_ERR_ARG;
 	s->lptrs = io->read32(io->ctx, hvs6s_lptrs_reg(c->chan));
-	for (uint32_t i = 0; i < HVS6S_KEPT; i++)
-		s->kept[i] = io->read32(io->ctx, hvs6s_word_off(i));
 	head = s->lptrs & YD5_HVS6_LPTRS_HEADE_MASK;
+	s->fw_head = head;
+	s->walk_stop = head;
 	if (head >= c->mem_words)
 		return HVS6S_ERR_SNAPSHOT;
-	s->fw_head = head;
-	pos = head;
-	/* Walk entries by CTL0.NEXT; the list END ends it. The entry's own END
-	 * (Linux's layout) is skipped by NEXT. Words between are kept too. */
-	while (pos < c->mem_words && pos - head < HVS6S_FW_MAX) {
-		uint32_t w = io->read32(io->ctx, hvs6s_word_off(pos));
-		uint32_t n;
+	room = c->mem_words - head; /* words from HEADE to the memory's end */
+	for (;;) {
+		uint32_t w, n;
 
-		if (w & HVS6_CTL0_END) {
-			s->fw_len = pos - head + 1u;
-			s->fw_end_found = 1;
+		if (pos >= room)
+			return HVS6S_ERR_FW_WALK;
+		if (pos >= HVS6S_FW_MAX)
+			return HVS6S_ERR_FW_NOEND;
+		w = io->read32(io->ctx, hvs6s_word_off(head + pos));
+		s->walk_stop = head + pos;
+		s->walk_word = w;
+		if (w & HVS6_CTL0_END)
 			break;
-		}
 		n = (w >> HVS6_CTL0_NEXT_SHIFT) & HVS6_CTL0_NEXT_MASK;
 		if (n == 0)
-			break;
+			return HVS6S_ERR_FW_WALK;
+		s->fw_entries++;
 		pos += n;
 	}
-	if (!s->fw_end_found) {
-		/* No END in reach: keep the most the walk could cover. */
-		s->fw_len = c->mem_words - head;
-		if (s->fw_len > HVS6S_FW_MAX)
-			s->fw_len = HVS6S_FW_MAX;
-	}
+	s->fw_len = pos + 1u;
+	s->fw_end_found = 1;
 	for (uint32_t i = 0; i < s->fw_len; i++)
 		s->fw[i] = io->read32(io->ctx, hvs6s_word_off(head + i));
 	s->taken = 1;
@@ -355,7 +400,9 @@ static inline enum hvs6s_err hvs6s_check_span(const struct hvs6s_cfg *c, const s
 	return HVS6S_OK;
 }
 
-/* 2. Our list's start: dlist_alloc.h's first fit, or the caller's, checked. */
+/* Our list's start by geometry only (no read): dlist_alloc.h's first fit,
+ * or the caller's, checked. hvs6s_run uses hvs6s_place_io, which also reads
+ * the range; this one stays for planning A/B slots. */
 static inline enum hvs6s_err hvs6s_place(const struct hvs6s_cfg *c, const struct hvs6s_snap *s,
 					 uint32_t len, uint32_t *start)
 {
@@ -383,6 +430,79 @@ static inline enum hvs6s_err hvs6s_place(const struct hvs6s_cfg *c, const struct
 
 		if (e != HVS6S_OK)
 			return e;
+	}
+	*start = st;
+	return HVS6S_OK;
+}
+
+/* The first non-zero word of [start, start + len), read in order; 1 if any. */
+static inline int hvs6s_first_used(const struct hvs6s_io *io, uint32_t start, uint32_t len,
+				   uint32_t *at, uint32_t *val)
+{
+	for (uint32_t i = 0; i < len; i++) {
+		uint32_t w = io->read32(io->ctx, hvs6s_word_off(start + i));
+
+		if (w != 0) {
+			*at = start + i;
+			*val = w;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * 2. Our list's start, read and checked: the geometry of hvs6s_check_span
+ * and every word of [start, start + len) zero. HVS6S_AUTO searches from word
+ * 32 for the first range that passes both, stepping past the firmware's
+ * list and past each non-zero word it meets (r->place_skipped counts
+ * those). A caller's start with a non-zero word is refused as
+ * HVS6S_ERR_PLACE_USED, the word named in r->place_bad_word/_val. Only
+ * reads. r may be NULL.
+ */
+static inline enum hvs6s_err hvs6s_place_io(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
+					    const struct hvs6s_snap *s, uint32_t len, uint32_t *start,
+					    struct hvs6s_report *r)
+{
+	uint32_t st, at = 0, val = 0;
+	enum hvs6s_err e;
+
+	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !s || !s->taken || !start || !len)
+		return HVS6S_ERR_ARG;
+	if (c->start == HVS6S_AUTO) {
+		/* the last start that HEADE can point at, and the memory's end */
+		uint64_t lim = c->mem_words;
+
+		if (lim > (uint64_t)YD5_HVS6_LPTRS_HEADE_MASK + len)
+			lim = (uint64_t)YD5_HVS6_LPTRS_HEADE_MASK + len;
+		st = HVS6S_KEPT;
+		for (;;) {
+			if ((uint64_t)st + len > lim)
+				return HVS6S_ERR_PLACE_FIT;
+			if (hvs6s_overlap(st, len, s->fw_head, s->fw_len)) {
+				st = s->fw_head + s->fw_len;
+				continue;
+			}
+			if (hvs6s_first_used(io, st, len, &at, &val)) {
+				if (r)
+					r->place_skipped++;
+				st = at + 1u;
+				continue;
+			}
+			break;
+		}
+	} else {
+		st = c->start;
+	}
+	e = hvs6s_check_span(c, s, st, len);
+	if (e != HVS6S_OK)
+		return e;
+	if (hvs6s_first_used(io, st, len, &at, &val)) {
+		if (r) {
+			r->place_bad_word = at;
+			r->place_bad_val = val;
+		}
+		return HVS6S_ERR_PLACE_USED;
 	}
 	*start = st;
 	return HVS6S_OK;
@@ -526,14 +646,7 @@ static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const stru
 	r->restore_lptrs_ok = r->after_restore.lptrs == s->lptrs;
 	if (!r->restore_lptrs_ok)
 		r->restore_equal = 0;
-	for (i = 0; i < HVS6S_KEPT && r->diff_word < 0; i++) {
-		got = io->read32(io->ctx, hvs6s_word_off(i));
-		if (got != s->kept[i]) {
-			r->diff_word = i;
-			r->diff_want = s->kept[i];
-			r->diff_got = got;
-		}
-	}
+	/* exactly the snapshot's words, [HEADE, HEADE + fw_len) */
 	for (i = 0; i < s->fw_len && r->diff_word < 0; i++) {
 		got = io->read32(io->ctx, hvs6s_word_off(s->fw_head + i));
 		if (got != s->fw[i]) {
@@ -555,8 +668,9 @@ static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const stru
 
 /*
  * The whole sequence: snapshot, place, swap, restore. The restore runs
- * whenever the snapshot was taken, whatever failed before it. r->err is the
- * first failure (HVS6S_OK when all passed), also returned.
+ * whenever the snapshot was taken, whatever failed before it; a refused
+ * snapshot writes nothing. r->err is the first failure (HVS6S_OK when all
+ * passed), also returned.
  */
 static inline enum hvs6s_err hvs6s_run(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
 				       struct hvs6s_snap *s, struct hvs6s_report *r)
@@ -572,7 +686,7 @@ static inline enum hvs6s_err hvs6s_run(const struct hvs6s_io *io, const struct h
 		hvs6s_fail(r, e);
 		return r->err;
 	}
-	r->place_err = hvs6s_place(c, s, HVS6W_LIST_WORDS, &start);
+	r->place_err = hvs6s_place_io(io, c, s, HVS6W_LIST_WORDS, &start, r);
 	if (r->place_err != HVS6S_OK) {
 		hvs6s_fail(r, r->place_err);
 	} else {
@@ -619,16 +733,37 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 
 	if (!s || !r || !em || !em->line)
 		return 0;
-	(void)snprintf(b, sizeof(b), HVS6S_TAG " snapshot %s lptrs=0x%08x fw_head=%u fw_len=%u end=%s",
-		       s->taken ? "ok" : "FAIL", (unsigned)s->lptrs, (unsigned)s->fw_head,
-		       (unsigned)s->fw_len, s->fw_end_found ? "found" : "capped");
+	if (s->taken)
+		(void)snprintf(b, sizeof(b),
+			       HVS6S_TAG " snapshot ok lptrs=0x%08x fw_head=%u fw_len=%u entries=%u end=%u",
+			       (unsigned)s->lptrs, (unsigned)s->fw_head, (unsigned)s->fw_len,
+			       (unsigned)s->fw_entries, (unsigned)s->walk_stop);
+	else
+		(void)snprintf(b, sizeof(b),
+			       HVS6S_TAG " snapshot FAIL %s lptrs=0x%08x fw_head=%u entries=%u stop=%u word=0x%08x",
+			       hvs6s_err_name(r->err), (unsigned)s->lptrs, (unsigned)s->fw_head,
+			       (unsigned)s->fw_entries, (unsigned)s->walk_stop, (unsigned)s->walk_word);
 	em->line(em->ctx, b);
 	n++;
-	if (!s->taken)
-		return n;
+	if (!s->taken) {
+		/* nothing placed, written or restored: each step says so */
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " place skip (no snapshot)");
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " write skip (not placed)");
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " restore skip (nothing written)");
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " result FAIL %s", hvs6s_err_name(r->err));
+		em->line(em->ctx, b);
+		return n + 4;
+	}
 	if (r->place_err == HVS6S_OK)
-		(void)snprintf(b, sizeof(b), HVS6S_TAG " place ok start=%u len=%u", (unsigned)r->start,
-			       (unsigned)r->len);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " place ok start=%u len=%u skipped=%u",
+			       (unsigned)r->start, (unsigned)r->len, (unsigned)r->place_skipped);
+	else if (r->place_bad_word >= 0)
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " place FAIL %s word=%u val=0x%08x",
+			       hvs6s_err_name(r->place_err), (unsigned)r->place_bad_word,
+			       (unsigned)r->place_bad_val);
 	else
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " place FAIL %s", hvs6s_err_name(r->place_err));
 	em->line(em->ctx, b);
@@ -674,7 +809,7 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 			       (unsigned)r->after_restore.lptrs);
 		em->line(em->ctx, b);
 		if (r->diff_word < 0)
-			(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-words ok 0..31 and fw %u..%u equal",
+			(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-words ok fw %u..%u equal",
 				       (unsigned)s->fw_head, (unsigned)(s->fw_head + s->fw_len - 1u));
 		else
 			(void)snprintf(b, sizeof(b),
