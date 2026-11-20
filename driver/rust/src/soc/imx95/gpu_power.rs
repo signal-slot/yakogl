@@ -55,10 +55,13 @@
 //! word untouched. On the board it sits on Zephyr's `scmi_send_message`,
 //! whose reply carries the raw status (the protocol drivers turn DENIED
 //! into `-EACCES`, which would lose the name); on the host on a mock SM
-//! (`gpu_power_tests`). Every message carries [`TOKEN`]: one channel, one
-//! message in flight, as Zephyr's own drivers send them.
+//! (`sm_mock`). Every message carries [`TOKEN`]: one channel, one message
+//! in flight, as Zephyr's own drivers send them. The message layer is
+//! [`super::sm`], shared with [`super::display_power`].
 
-use crate::firmware::scmi::{self, Transport, MAX_MSG};
+use super::sm::{self, Fault, LevelsFault, Resp};
+pub use super::sm::{pick_level, Level, Status, MAX_LEVELS, PARK_LEVEL, TOKEN};
+use crate::firmware::scmi::{self, Transport};
 
 /// `DEV_SM_PD_GPU` (dev_sm_power.h), Linux's `IMX95_PD_GPU`.
 pub const PD_GPU: u32 = 14;
@@ -78,25 +81,12 @@ pub const POWER_MAJOR: u32 = 3;
 pub const PERF_MAJOR: u32 = 4;
 pub const CLOCK_MAJOR: u32 = 3;
 
-/// The token of every message.
-pub const TOKEN: u16 = 0;
-
 /// The GPU's OPP rates (Linux imx95.dtsi `gpu_opp_table`), equal to the SM's
 /// LOW, NOM and ODV levels of domain 9.
 pub const OPP_HZ: [u64; 3] = [500_000_000, 800_000_000, 1_000_000_000];
 /// The rate a board asks for unless told otherwise: nominal drive, which
 /// needs no overdrive voltage.
 pub const DEFAULT_RATE_HZ: u64 = 800_000_000;
-
-/// The most levels kept from PERFORMANCE_DESCRIBE_LEVELS (the SM has four
-/// per SoC domain, `DEV_SM_NUM_PERF_LVL_SOC`: park, low, nominal,
-/// overdrive; it returns at most four per reply, `PERF_MAX_PERFLEVELS`).
-pub const MAX_LEVELS: usize = 8;
-/// Words per level in a version 4 reply: value, power cost, attributes,
-/// indicative frequency (kHz), level index.
-const LEVEL_WORDS: usize = 5;
-/// The parking level (`DEV_SM_PERF_LVL_PRK`, 24 MHz from the oscillator).
-pub const PARK_LEVEL: u32 = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Config {
@@ -155,73 +145,6 @@ impl Step {
             Step::PerfLevelCheck => "PERFORMANCE_LEVEL_GET",
             Step::ClockEnable | Step::ClockDisable => "CLOCK_CONFIG_SET",
             Step::ClockRate => "CLOCK_RATE_GET",
-        }
-    }
-}
-
-/// A non-zero SCMI status (DEN0056 table 6).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Status {
-    NotSupported,
-    InvalidParameters,
-    Denied,
-    NotFound,
-    OutOfRange,
-    Busy,
-    CommsError,
-    GenericError,
-    HardwareError,
-    ProtocolError,
-    Other(i32),
-}
-
-impl Status {
-    pub fn from_code(code: i32) -> Status {
-        match code {
-            scmi::STATUS_NOT_SUPPORTED => Status::NotSupported,
-            scmi::STATUS_INVALID_PARAMETERS => Status::InvalidParameters,
-            scmi::STATUS_DENIED => Status::Denied,
-            scmi::STATUS_NOT_FOUND => Status::NotFound,
-            scmi::STATUS_OUT_OF_RANGE => Status::OutOfRange,
-            scmi::STATUS_BUSY => Status::Busy,
-            scmi::STATUS_COMMS_ERROR => Status::CommsError,
-            scmi::STATUS_GENERIC_ERROR => Status::GenericError,
-            scmi::STATUS_HARDWARE_ERROR => Status::HardwareError,
-            scmi::STATUS_PROTOCOL_ERROR => Status::ProtocolError,
-            c => Status::Other(c),
-        }
-    }
-
-    pub const fn code(self) -> i32 {
-        match self {
-            Status::NotSupported => scmi::STATUS_NOT_SUPPORTED,
-            Status::InvalidParameters => scmi::STATUS_INVALID_PARAMETERS,
-            Status::Denied => scmi::STATUS_DENIED,
-            Status::NotFound => scmi::STATUS_NOT_FOUND,
-            Status::OutOfRange => scmi::STATUS_OUT_OF_RANGE,
-            Status::Busy => scmi::STATUS_BUSY,
-            Status::CommsError => scmi::STATUS_COMMS_ERROR,
-            Status::GenericError => scmi::STATUS_GENERIC_ERROR,
-            Status::HardwareError => scmi::STATUS_HARDWARE_ERROR,
-            Status::ProtocolError => scmi::STATUS_PROTOCOL_ERROR,
-            Status::Other(c) => c,
-        }
-    }
-
-    /// The status's name in DEN0056.
-    pub const fn name(self) -> &'static str {
-        match self {
-            Status::NotSupported => "NOT_SUPPORTED",
-            Status::InvalidParameters => "INVALID_PARAMETERS",
-            Status::Denied => "DENIED",
-            Status::NotFound => "NOT_FOUND",
-            Status::OutOfRange => "OUT_OF_RANGE",
-            Status::Busy => "BUSY",
-            Status::CommsError => "COMMS_ERROR",
-            Status::GenericError => "GENERIC_ERROR",
-            Status::HardwareError => "HARDWARE_ERROR",
-            Status::ProtocolError => "PROTOCOL_ERROR",
-            Status::Other(_) => "unknown status",
         }
     }
 }
@@ -289,21 +212,6 @@ impl core::fmt::Display for Error {
     }
 }
 
-/// One level of the GPU's performance domain.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct Level {
-    /// The level index PERFORMANCE_LEVEL_SET takes.
-    pub index: u32,
-    /// The indicative frequency, kHz.
-    pub khz: u32,
-}
-
-impl Level {
-    pub const fn hz(self) -> u64 {
-        self.khz as u64 * 1000
-    }
-}
-
 /// What a power-on did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Up {
@@ -314,46 +222,21 @@ pub struct Up {
     pub rate_hz: u64,
 }
 
-/// The values of a reply (the words after the status).
-struct Resp {
-    buf: [u8; MAX_MSG],
-    n: usize,
-}
-
-impl Resp {
-    fn get(&self, i: usize) -> u32 {
-        scmi::word(&self.buf, 2 + i)
+impl Error {
+    fn at(step: Step, f: Fault) -> Error {
+        match f {
+            Fault::Transport(code) => Error::Transport { step, code },
+            Fault::Refused(status) => Error::Refused { step, status },
+            Fault::Echo { sent, got } => Error::Echo { step, sent, got },
+            Fault::Length(len) => Error::Length { step, len },
+        }
     }
 }
 
-/// One command with [`TOKEN`]; at least `want` return values on success.
+/// One command of `step`; at least `want` return values on success.
 fn call<T: Transport>(t: &mut T, step: Step, words: &[u32], want: usize) -> Result<Resp, Error> {
     let (proto, msg) = step.ids();
-    let hdr = scmi::header(proto, msg, TOKEN);
-    let mut tx = [0u8; MAX_MSG];
-    // At most four payload words: always fits.
-    let len = scmi::encode(&mut tx, hdr, words).map_err(|_| Error::Length { step, len: 0 })?;
-    let mut buf = [0u8; MAX_MSG];
-    let got = t.transfer(&tx[..len], &mut buf).map_err(|code| Error::Transport { step, code })?;
-    if !(4..=MAX_MSG).contains(&got) {
-        return Err(Error::Length { step, len: got });
-    }
-    let echo = scmi::word(&buf, 0);
-    if echo != hdr {
-        return Err(Error::Echo { step, sent: hdr, got: echo });
-    }
-    if got < 8 {
-        return Err(Error::Length { step, len: got });
-    }
-    let status = scmi::word(&buf, 1) as i32;
-    if status != scmi::STATUS_SUCCESS {
-        return Err(Error::Refused { step, status: Status::from_code(status) });
-    }
-    let n = (got - 8) / 4;
-    if n < want {
-        return Err(Error::Length { step, len: got });
-    }
-    Ok(Resp { buf, n })
+    sm::call(t, proto, msg, words, want).map_err(|f| Error::at(step, f))
 }
 
 fn check_version<T: Transport>(t: &mut T, step: Step, major: u32) -> Result<(), Error> {
@@ -367,31 +250,10 @@ fn check_version<T: Transport>(t: &mut T, step: Step, major: u32) -> Result<(), 
 /// PERFORMANCE_DESCRIBE_LEVELS of [`PERF_GPU`], every reply until none
 /// remain. Returns the levels and their count.
 fn describe_levels<T: Transport>(t: &mut T) -> Result<([Level; MAX_LEVELS], usize), Error> {
-    let mut levels = [Level::default(); MAX_LEVELS];
-    let mut count = 0usize;
-    loop {
-        let r = call(t, Step::PerfDescribe, &[PERF_GPU, count as u32], 1)?;
-        let w = r.get(0);
-        let returned = w & 0xfff;
-        let remaining = w >> 16;
-        let k = returned as usize;
-        if k == 0 || count + k > MAX_LEVELS || r.n < 1 + LEVEL_WORDS * k {
-            return Err(Error::Levels { returned, remaining });
-        }
-        for i in 0..k {
-            let at = 1 + LEVEL_WORDS * i;
-            levels[count + i] = Level { index: r.get(at + 4), khz: r.get(at + 3) };
-        }
-        count += k;
-        if remaining == 0 {
-            return Ok((levels, count));
-        }
-    }
-}
-
-/// The fastest level at or below `rate_hz`, never [`PARK_LEVEL`].
-pub fn pick_level(levels: &[Level], rate_hz: u64) -> Option<Level> {
-    levels.iter().copied().filter(|l| l.index != PARK_LEVEL && l.hz() <= rate_hz).max_by_key(|l| l.khz)
+    sm::describe_levels(t, PERF_GPU).map_err(|f| match f {
+        LevelsFault::Call(f) => Error::at(Step::PerfDescribe, f),
+        LevelsFault::Levels { returned, remaining } => Error::Levels { returned, remaining },
+    })
 }
 
 /// Power the GPU on: power domain, performance level, clock gate (the

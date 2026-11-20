@@ -1,165 +1,14 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! [`super::gpu_power`] against a mock System Manager: a host model of the
-//! part of NXP's SM the GPU sequence reaches, with the permission checks of
-//! its SCMI handlers (rpc_scmi_power.c `PowerStateSet`: SET; rpc_scmi_perf.c
-//! `PerformanceLevelSet`: PRIV; rpc_scmi_clock.c `ClockConfigSet`: SET,
-//! `ClockRateSet`: EXCLUSIVE, and INVALID_PARAMETERS for a rate on a gate,
-//! dev_sm_clock.c `DEV_SM_ClockRateSet`) and the AP-NS agent's permissions
-//! of Toradex's verdin-imx95 configuration (docs/notes/imx95-gpu-power.md).
-//! Every request is recorded as (protocol, message, payload words).
+//! [`super::gpu_power`] against the mock System Manager ([`super::sm_mock`]):
+//! the part of NXP's SM the GPU sequence reaches, with the permission checks
+//! of its SCMI handlers and the AP-NS agent's permissions of Toradex's
+//! verdin-imx95 configuration (docs/notes/imx95-gpu-power.md). Every request
+//! is recorded as (protocol, message, payload words).
 
 use super::gpu_power::{
     self, pick_level, Config, Error, Level, Status, Step, CLK_GPU, CLK_GPUAPB, CLK_GPU_CGC, PD_GPU, PERF_GPU,
 };
+use super::sm_mock::{req, writes, Req, Sm, C, F, P, PERM_SET};
 use crate::firmware::scmi::{self, Transport};
-use std::collections::HashMap;
-
-/// SM permission levels (rpc_scmi_config.h).
-const PERM_NONE: u8 = 0;
-const PERM_SET: u8 = 3;
-const PERM_PRIV: u8 = 4;
-const PERM_EXCLUSIVE: u8 = 5;
-const PERM_ALL: u8 = 255;
-
-/// One request: protocol, message, payload words.
-type Req = (u8, u8, Vec<u32>);
-
-struct Sm {
-    clk_perm: HashMap<u32, u8>,
-    pd_perm: HashMap<u32, u8>,
-    perf_perm: HashMap<u32, u8>,
-    /// (kHz, index) of domain 9, in index order.
-    levels: Vec<(u32, u32)>,
-    /// Levels per DESCRIBE_LEVELS reply.
-    page: usize,
-    pd_on: bool,
-    /// Another agent's vote keeps the domain on.
-    pd_held: bool,
-    level: u32,
-    clk_on: bool,
-    /// What the clock root makes of a level's rate (a PLL's rounding).
-    rate_offset: i64,
-    log: Vec<Req>,
-}
-
-impl Sm {
-    /// The Verdin iMX95's SM as the AP-NS agent sees it: power domain 14,
-    /// performance domain 9 and clock 174 at ALL; clocks 83 and 84 not
-    /// granted; the GPU's levels PRK, LOW, NOM, ODV (dev_sm_perf.c).
-    fn verdin() -> Sm {
-        Sm {
-            clk_perm: HashMap::from([(CLK_GPU_CGC, PERM_ALL)]),
-            pd_perm: HashMap::from([(PD_GPU, PERM_ALL)]),
-            perf_perm: HashMap::from([(PERF_GPU, PERM_ALL)]),
-            levels: vec![(24_000, 0), (500_000, 1), (800_000, 2), (1_000_000, 3)],
-            page: 8,
-            pd_on: false,
-            pd_held: false,
-            level: 0,
-            clk_on: false,
-            rate_offset: 0,
-            log: Vec::new(),
-        }
-    }
-
-    fn perm(map: &HashMap<u32, u8>, id: u32) -> u8 {
-        *map.get(&id).unwrap_or(&PERM_NONE)
-    }
-
-    fn rate(&self) -> u64 {
-        let khz = self.levels.iter().find(|l| l.1 == self.level).map_or(0, |l| l.0);
-        (khz as i64 * 1000 + self.rate_offset) as u64
-    }
-
-    /// The SM's answer: status and return values.
-    fn serve(&mut self, proto: u8, msg: u8, w: &[u32]) -> (i32, Vec<u32>) {
-        const OK: i32 = scmi::STATUS_SUCCESS;
-        match (proto, msg) {
-            (scmi::PROTO_POWER, scmi::PROTOCOL_VERSION) => (OK, vec![0x30001]),
-            (scmi::PROTO_PERF, scmi::PROTOCOL_VERSION) => (OK, vec![0x40000]),
-            (scmi::PROTO_CLOCK, scmi::PROTOCOL_VERSION) => (OK, vec![0x30000]),
-            (scmi::PROTO_POWER, scmi::POWER_STATE_SET) => {
-                if Self::perm(&self.pd_perm, w[1]) < PERM_SET {
-                    return (scmi::STATUS_DENIED, vec![]);
-                }
-                self.pd_on = w[2] == scmi::POWER_ON || self.pd_held;
-                (OK, vec![])
-            }
-            (scmi::PROTO_POWER, scmi::POWER_STATE_GET) => {
-                (OK, vec![if self.pd_on { scmi::POWER_ON } else { scmi::POWER_OFF }])
-            }
-            (scmi::PROTO_PERF, scmi::PERF_DESCRIBE_LEVELS) => {
-                let skip = w[1] as usize;
-                let rest = &self.levels[skip.min(self.levels.len())..];
-                let n = rest.len().min(self.page);
-                let mut v = vec![n as u32 | ((rest.len() - n) as u32) << 16];
-                for &(khz, index) in &rest[..n] {
-                    v.extend([khz, 0, 1, khz, index]);
-                }
-                (OK, v)
-            }
-            (scmi::PROTO_PERF, scmi::PERF_LEVEL_SET) => {
-                if Self::perm(&self.perf_perm, w[0]) < PERM_PRIV {
-                    return (scmi::STATUS_DENIED, vec![]);
-                }
-                if w[1] as usize >= self.levels.len() {
-                    return (scmi::STATUS_INVALID_PARAMETERS, vec![]);
-                }
-                self.level = w[1];
-                (OK, vec![])
-            }
-            (scmi::PROTO_PERF, scmi::PERF_LEVEL_GET) => (OK, vec![self.level]),
-            (scmi::PROTO_CLOCK, scmi::CLOCK_CONFIG_SET) => {
-                if Self::perm(&self.clk_perm, w[0]) < PERM_SET {
-                    return (scmi::STATUS_DENIED, vec![]);
-                }
-                self.clk_on = w[1] & 3 == scmi::CLOCK_ENABLE;
-                (OK, vec![])
-            }
-            (scmi::PROTO_CLOCK, scmi::CLOCK_RATE_SET) => {
-                if Self::perm(&self.clk_perm, w[1]) < PERM_EXCLUSIVE {
-                    return (scmi::STATUS_DENIED, vec![]);
-                }
-                // A gate has no rate of its own (DEV_SM_ClockRateSet).
-                (scmi::STATUS_INVALID_PARAMETERS, vec![])
-            }
-            (scmi::PROTO_CLOCK, scmi::CLOCK_RATE_GET) => {
-                let r = self.rate();
-                (OK, vec![r as u32, (r >> 32) as u32])
-            }
-            _ => (scmi::STATUS_NOT_SUPPORTED, vec![]),
-        }
-    }
-}
-
-impl Transport for Sm {
-    fn transfer(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<usize, i32> {
-        assert!(tx.len() >= 4 && tx.len().is_multiple_of(4), "a request is whole words");
-        let hdr = scmi::word(tx, 0);
-        assert_eq!(hdr >> 8 & 3, 0, "a command");
-        assert_eq!(hdr >> 18 & 0x3ff, gpu_power::TOKEN as u32, "the token");
-        let proto = (hdr >> 10 & 0xff) as u8;
-        let msg = (hdr & 0xff) as u8;
-        let words: Vec<u32> = (1..tx.len() / 4).map(|i| scmi::word(tx, i)).collect();
-        self.log.push((proto, msg, words.clone()));
-        let (status, values) = self.serve(proto, msg, &words);
-        rx[..4].copy_from_slice(&hdr.to_le_bytes());
-        rx[4..8].copy_from_slice(&status.to_le_bytes());
-        for (i, v) in values.iter().enumerate() {
-            rx[8 + 4 * i..12 + 4 * i].copy_from_slice(&v.to_le_bytes());
-        }
-        Ok(8 + 4 * values.len())
-    }
-}
-
-const P: u8 = scmi::PROTO_POWER;
-const F: u8 = scmi::PROTO_PERF;
-const C: u8 = scmi::PROTO_CLOCK;
-
-fn req(p: u8, m: u8, w: &[u32]) -> Req {
-    (p, m, w.to_vec())
-}
 
 /// The reads before the first write, from one DESCRIBE_LEVELS reply.
 fn reads() -> Vec<Req> {
@@ -193,18 +42,6 @@ fn off() -> Vec<Req> {
     ]
 }
 
-/// Every request of `log` that changes the SM's state.
-fn writes(log: &[Req]) -> Vec<Req> {
-    let set = [
-        (P, scmi::POWER_STATE_SET),
-        (F, scmi::PERF_LEVEL_SET),
-        (F, scmi::PERF_LIMITS_SET),
-        (C, scmi::CLOCK_CONFIG_SET),
-        (C, scmi::CLOCK_RATE_SET),
-    ];
-    log.iter().filter(|r| set.contains(&(r.0, r.1))).cloned().collect()
-}
-
 #[test]
 fn the_ids_are_the_sms_and_linuxs() {
     // dev_sm_power.h DEV_SM_PD_GPU 14; dev_sm_perf.h DEV_SM_PERF_GPU 9;
@@ -223,7 +60,7 @@ fn power_on_sends_power_then_level_then_gate_with_the_verdin_ids() {
     assert_eq!(sm.log, on(2));
     assert_eq!(up.level, Level { index: 2, khz: 800_000 });
     assert_eq!((up.requested_hz, up.rate_hz), (800_000_000, 800_000_000));
-    assert!(sm.pd_on && sm.clk_on && sm.level == 2);
+    assert!(sm.on(PD_GPU) && sm.enabled(CLK_GPU_CGC) && sm.level_of(PERF_GPU) == 2);
 }
 
 #[test]
@@ -252,9 +89,9 @@ fn power_off_sends_gate_then_domain_and_reads_it_off() {
     sm.log.clear();
     gpu_power::power_off(&mut sm).unwrap();
     assert_eq!(sm.log, off());
-    assert!(!sm.pd_on && !sm.clk_on);
+    assert!(!sm.on(PD_GPU) && !sm.enabled(CLK_GPU_CGC));
     // the level is left as it was
-    assert_eq!(sm.level, 2);
+    assert_eq!(sm.level_of(PERF_GPU), 2);
 }
 
 #[test]
@@ -281,7 +118,7 @@ fn a_denied_power_domain_is_named_and_not_retried() {
     let mut want = reads();
     want.push(req(P, scmi::POWER_STATE_SET, &[0, 14, 0]));
     assert_eq!(sm.log, want);
-    assert!(!sm.pd_on);
+    assert!(!sm.on(PD_GPU));
 }
 
 #[test]
@@ -294,7 +131,7 @@ fn a_denied_level_stops_before_the_clock_and_leaves_the_domain_on() {
     assert_eq!(format!("{e}"), "PERFORMANCE_LEVEL_SET (0x13/0x07): SCMI DENIED (-3)");
     assert_eq!(sm.log, on(2)[..7].to_vec());
     assert_eq!(writes(&sm.log).iter().filter(|r| r.1 == scmi::PERF_LEVEL_SET).count(), 1);
-    assert!(sm.pd_on && !sm.clk_on);
+    assert!(sm.on(PD_GPU) && !sm.enabled(CLK_GPU_CGC));
 }
 
 #[test]
@@ -306,7 +143,7 @@ fn a_denied_gate_is_named_and_not_retried() {
     assert_eq!(e, Error::Refused { step: Step::ClockEnable, status: Status::Denied });
     assert_eq!(format!("{e}"), "CLOCK_CONFIG_SET (0x14/0x07): SCMI DENIED (-3)");
     assert_eq!(sm.log, on(2)[..9].to_vec());
-    assert!(!sm.clk_on);
+    assert!(!sm.enabled(CLK_GPU_CGC));
 }
 
 #[test]
@@ -369,7 +206,7 @@ fn levels_over_several_replies_are_all_read() {
     gpu_power::power_on(&mut sm, &Config { rate_hz: 1_000_000_000 }).unwrap();
     let describes: Vec<_> = sm.log.iter().filter(|r| (r.0, r.1) == (F, scmi::PERF_DESCRIBE_LEVELS)).collect();
     assert_eq!(describes, [&req(F, scmi::PERF_DESCRIBE_LEVELS, &[9, 0]), &req(F, scmi::PERF_DESCRIBE_LEVELS, &[9, 3])]);
-    assert_eq!(sm.level, 3);
+    assert_eq!(sm.level_of(PERF_GPU), 3);
 }
 
 #[test]
@@ -396,7 +233,7 @@ fn an_empty_or_short_level_reply_is_refused_before_any_write() {
 fn a_domain_another_agent_holds_on_fails_the_off_read_back() {
     let mut sm = Sm::verdin();
     gpu_power::power_on(&mut sm, &Config::VERDIN).unwrap();
-    sm.pd_held = true;
+    sm.pd_held.insert(PD_GPU);
     let e = gpu_power::power_off(&mut sm).unwrap_err();
     assert_eq!(e, Error::Readback { step: Step::PowerOffCheck, want: scmi::POWER_OFF, got: scmi::POWER_ON });
 }
