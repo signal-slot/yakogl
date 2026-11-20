@@ -24,8 +24,9 @@ use crate::gpu::mali::fw::synth;
 use crate::gpu::mali::mock::{G310, G310_ASSUMED, G310_GPU_ID};
 use crate::gpu::mali::pgtable::{Table, ENTRIES};
 use crate::gpu::mali::{CMD_SOFT_RESET, GPU_CMD, GPU_ID, L2_PWRON};
-use crate::soc::imx95::gpu_power::{Status, Step, PD_GPU};
-use crate::soc::imx95::gpu_power_tests::{on, Req, Sm};
+use crate::soc::imx95::gpu_power::{Status, Step, CLK_GPU_CGC, PD_GPU};
+use crate::soc::imx95::gpu_power_tests::on;
+use crate::soc::imx95::sm_mock::{Req, Sm};
 use std::cell::RefCell;
 
 /// What the board saw, in order.
@@ -78,7 +79,11 @@ impl Imx95 {
     /// A GPU register with the domain or the gate off is an external abort.
     fn check(&self, a: usize) {
         let sm = self.sm.borrow();
-        assert!(sm.pd_on && sm.clk_on, "GPU register {:#x} with the GPU off: an external abort", a - GPU);
+        assert!(
+            sm.on(PD_GPU) && sm.enabled(CLK_GPU_CGC),
+            "GPU register {:#x} with the GPU off: an external abort",
+            a - GPU
+        );
     }
 
     fn log(&self) -> Vec<Ev> {
