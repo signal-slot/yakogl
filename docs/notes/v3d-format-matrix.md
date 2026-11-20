@@ -6,7 +6,12 @@ Research note, item `v3d-format-matrix-note` of plan #330. One table per
 question, one row per ES 3.0 sized colour format, every cell with the
 `file:line` that decides it. Nothing here is measured on a board: it is what
 the code at main `434d2695` does, read against Mesa 26.2.1's V3D 4.2 tables.
-No code changed.
+No code changed. Two gap entries and the section 2 rows they decide were
+rewritten after that baseline moved: `684ef106` (plan #368) moved G3's
+blend half, and the plan #383 item `v3d-wide-int-rt` closed G2 for the
+R / RG formats; those entries name their commits, and the `file:line`
+cites inside them and in the section 2 rows they decide are of this
+workspace.
 
 **Sources of the format list.** ES 3.0.6 table 3.13 (sized internal formats:
 48 colour rows) and its colour-renderable list (R8, RG8, RGB8, RGB565, RGBA4,
@@ -66,11 +71,12 @@ row `state.rs:463`), and the RGB10A2 gate is open (`03f4bbd9`; the row
 ## 2. Per format: texture class, render surface, attachment
 
 `Class` is the texture class on the V3D (`src/gl/es3_formats.rs` storage list,
-first entry in `V3D_SAMPLED_TEXFMTS`; older names `texture.rs:5749-5760`).
-`RB surface` is `renderbuffer_surf_format` (`framebuffer.rs:719-735`). `Tex
-attach` is whether a texture of the format can be a colour attachment
-(`attachment_storage`, `framebuffer.rs:451-540`; the integer rule is the doc
-at `:396-403`, `integer_texture_internalformat` `:404`).
+first entry in `V3D_SAMPLED_TEXFMTS`; older names `texture.rs:6379`
+`sized_format`). `RB surface` is `renderbuffer_surf_format`
+(`framebuffer.rs:853-870`). `Tex attach` is whether a texture of the
+format can be a colour attachment (`attachment_storage`,
+`framebuffer.rs:481-664`; the integer rule is the doc at `:395-407`,
+`integer_texture_internalformat` `:408-414`, `WIDE_INT_RT` `:426`).
 
 | Format | Class (texture store) | RB surface | Tex attach |
 |---|---|---|---|
@@ -85,12 +91,12 @@ at `:396-403`, `integer_texture_internalformat` `:404`).
 | SRGB8 | SRGB8_A8, alpha 255 (`texture.rs:5751`) | n/a (not renderable: `framebuffer.rs:505-507` refuses `t.format == GL_RGB` of the class; no RB name) | n/a: incomplete |
 | RGB10_A2 | RGB10A2 (`es3_formats.rs:121-129`) | RGB10_A2 (`framebuffer.rs:729`) | drawn (`framebuffer.rs:425-426`, `:535`); `tests/es3_formats_v3d.rs:1334` |
 | RGB10_A2UI | RGB10A2UI (`es3_formats.rs:130-138`) | RGB10_A2UI (`framebuffer.rs:659`) | drawn (`framebuffer.rs:439`) |
-| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:139-150`) | own surface (`framebuffer.rs:641-658`) | n/a for R/RG: incomplete, G2 (`framebuffer.rs:396-403`) |
+| R8I, R8UI, RG8I, RG8UI | RGBA8I / RGBA8UI (`es3_formats.rs:95-98`, `:149-156`) | own surface (`framebuffer.rs:772-786`) | drawn as the store's wide surface RGBA8I / RGBA8UI (`framebuffer.rs:412`, `WIDE_INT_RT` `:426`), mask limited to the format's channels (`fb_target_channel_mask_n` `:1125`); beside another target one mask serves both, refused by name where the masks differ (`src/gl/draw.rs:2737`); G2, `tests/es3_v3d_fbo_int_rg.rs` |
 | RGBA8I, RGBA8UI | RGBA8I / RGBA8UI | own surface | drawn (`framebuffer.rs:433-434`) |
-| R16I, R16UI, RG16I, RG16UI | RGBA16I / RGBA16UI | own surface | incomplete, G2 |
+| R16I, R16UI, RG16I, RG16UI | RGBA16I / RGBA16UI | own surface | drawn as the store's wide surface RGBA16I / RGBA16UI, as `R8I .. RG8UI` above; G2 |
 | RGBA16I, RGBA16UI | RGBA16I / RGBA16UI | own surface | drawn (`framebuffer.rs:435-436`) |
-| R32I, R32UI | RGBA32I / RGBA32UI, because classes 27/26 are in no mask (`es3_formats.rs:89-92`, `backend.rs:243-258`); M7 | own surface | incomplete, G2 |
-| RG32I, RG32UI | RGBA32I / RGBA32UI (classes 29/28 in no mask); M7 | own surface | incomplete, G2 |
+| R32I, R32UI | RGBA32I / RGBA32UI, because classes 27/26 are in no mask (`es3_formats.rs:89-92`, `backend.rs:290-309`); M7 | own surface | drawn as the store's wide surface RGBA32I / RGBA32UI, as `R8I .. RG8UI` above; G2 |
+| RG32I, RG32UI | RGBA32I / RGBA32UI (classes 29/28 in no mask); M7 | own surface | drawn as the store's wide surface RGBA32I / RGBA32UI, as `R8I .. RG8UI` above; G2 |
 | RGBA32I, RGBA32UI | RGBA32I / RGBA32UI | own surface | drawn (`framebuffer.rs:437-438`) |
 | RGB8I, RGB8UI, RGB16I, RGB16UI, RGB32I, RGB32UI | RGBA8I.. RGBA32UI (`es3_formats.rs:151-156`) | n/a (no RGB integer surface, not renderable in ES 3.0) | n/a: incomplete |
 | R16F | R16F (`texture.rs:5758`) | R16F (`framebuffer.rs:722`) | drawn (`framebuffer.rs:532`) |
@@ -124,9 +130,10 @@ Beside several attachments a quad clear is `R "a scissored or masked colour
 clear of several colour attachments"` (`backend.rs:6063`), for every row.
 
 **Blend.** The TLB blends in the tile buffer's type
-(`state.rs:646-662`, `v3d_job.c:615-632`). Integer surfaces take no blend:
-`d.blend = c.blend && !gles_surf_is_integer(...)` (`src/gl/draw.rs:3433`,
-ES 3.0 4.1.8). One BLEND_CFG serves every RT, enabled for RT 0 only (G3).
+(`state.rs:681-696`, `v3d_job.c:691-708`). Integer surfaces take no blend:
+`d.blend = c.blend && !gles_surf_is_integer(...)` (`src/gl/draw.rs:4174`,
+ES 3.0 4.1.8). One BLEND_CFG serves every RT, enabled for every RT since
+`684ef106` (`v3d_job.c:696-707`), configured from RT 0 (G3).
 
 **Read-back** is `glReadPixels` (`src/gl/framebuffer.rs:2969-3148`): float
 surfaces by `read_float_row` (`:3184`, RGBA/UNSIGNED_BYTE clamped or
@@ -287,19 +294,85 @@ same samples through `XYZW`.
   `(r, 0, 0, 1)` / `(r, g, 0, 1)`. The comment at `framebuffer.rs:996-1001`
   says the same of the PBE's swizzle. Pinned by no V3D test; whether the
   dEQP cases compare the unwritten channels is not known from the code.
-- **G2 R / RG / RGB integer textures cannot be attached.** Only the
-  four-channel integer classes are render targets
-  (`framebuffer.rs:396-403`): `GL_R8I`..`GL_RG32UI` textures are incomplete
-  while their renderbuffers draw. dEQP `fbo.render.texture.*` and
-  `fragment_out` on the integer R / RG formats reach it.
-- **G3 One blend for one render target.** BLEND_ENABLES is `mask = 1`
-  (`v3d_job.c:621-623`) and BLEND_CFG's mask is 0xf; Mesa enables every RT
-  when RT 0 blends without independent blend (`v3dx_state.c:151-155`,
-  `v3dx_emit.c:528-563`) and splits BLEND_CFG between RTs with and without
-  alpha (`:540-558`, `blend_dst_alpha_one`). yakogl takes the alpha-less
-  rule from RT 0 only (`state.rs:647`). A blended draw to RT 1..3 is
-  unblended, and a framebuffer of an alpha-less and an alpha-bearing RT
-  blends one of them with the wrong destination-alpha factor.
+- **G2 R / RG integer textures are drawn as their wide store.** Closed
+  for the twelve `GL_R8I`..`GL_RG32UI` textures by the commit "v3d: r and
+  rg integer textures are complete colour attachments drawn as their wide
+  store" (plan #383 item `v3d-wide-int-rt`; its sha may change on merge),
+  which takes the PowerVR's design (`48ed224f`) over to `gpu-v3d`.
+  `WIDE_INT_RT` (`framebuffer.rs:426`) now holds for `gpu-v3d` beside
+  `gpu-powervr`, so `integer_texture_internalformat` (`:408-414`, its doc
+  `:395-407`, the widened-store test `widened_into` `:430-435`) accepts a
+  texture whose store `es3_formats` widened to four channels
+  (`es3_formats.rs:149-160`, the lists `:89-92`, `:95-102`) as a complete
+  colour attachment
+  (`attachment_storage` `:481`, the call at `:523`); `fb_target_format_n`
+  (`:1082-1118`, the integer arm `:1089-1094`) draws it on the store's
+  wide four-channel surface, which `rt_format` already had
+  (`src/v3d/state.rs:498-503` RGBA8I .. RGBA32UI — no V3D job change; the
+  renderbuffers keep their narrow rows `:486-497`);
+  `fb_target_channel_mask_n` (`:1125-1142`) limits `GlesDraw::color_mask`
+  to the format's channels (`src/gl/draw.rs:5013`), which the job builder
+  writes into COLOR_WRITE_MASKS (`driver/src/v3d/v3d_job.c:773-780`); and
+  `glReadPixels` fills 0, 0, 1 for the channels the format lacks,
+  whatever the store holds (`read_pixels` `:3256`, the mask at `:3292`,
+  the fill at `:3413-3418` over `read_int_row` `:3614`). The RGB integer
+  textures (no ES 3.0 render surface) stay incomplete. Host verdicts
+  only: no picture is compared.
+  - *Beside other colour targets (G3).* The job writes one mask, RT 0's,
+    into every RT (`v3d_job.c:773-780`), so a draw into an R or RG
+    integer texture that would need a different mask on another written
+    target is refused by name before the back end:
+    `refuse_uneven_target_masks` (`src/gl/draw.rs:2737-2763`, called at
+    `:5014-5016` where `ONE_COLOR_MASK` `:2720` says the back end has one
+    mask; GL_INVALID_OPERATION, one log line naming both masks and the
+    draw buffer). Where every written target takes the same mask the draw
+    is taken with it.
+  - *Open: clears still write all four store channels.* A glClear /
+    glClearBuffer of such a texture clears the whole wide store, on the
+    TLB clear words and the quad path alike
+    (`docs/notes/v3d-int-clear.md`), so its hidden blue and alpha
+    channels hold the application's values until plan item
+    `v3d-int-clear-narrow`; the clear cases wait ignored in
+    `tests/es3_v3d_int_rg_clear.rs` (`v3d-int-clear-test-scaffold`). The
+    read-back fills 0, 0, 1 regardless, and no test asserts a hidden
+    channel of the store after a clear.
+  Tests (host only): `tests/es3_v3d_fbo_int_rg.rs` (header: `cargo test
+  --no-default-features --features
+  host-test,gpu-v3d,shaderc-online,no-shader-table --test
+  es3_v3d_fbo_int_rg`) — each of the twelve as a TEXTURE_2D at attachment
+  0, as a TEXTURE_2D_ARRAY layer and as level 1 of a mipmapped texture is
+  complete, is drawn on the wide surface with the format's write mask,
+  and clears and reads back with 0, 0, 1; beside an RGBA8 / RGBA8UI
+  renderbuffer a disagreeing-mask draw is refused and an agreeing one
+  taken. `tests/es3_int_rt.rs`
+  `completeness_takes_four_channel_integer_texture_attachments` (`:416`)
+  pins the completeness answer at `:423-429`: COMPLETE for R / RG under
+  `gpu-powervr` and `gpu-v3d`, INCOMPLETE under `gpu-vivante` (its 8- and
+  16-bit formats); its header names the gate rows that run the file (the
+  gpu-powervr, gpu-vivante and V3D rows, with and without `report-es2`).
+  dEQP's `fbo.completeness.renderable.texture.color0.*`, `fbo.color.*`
+  and `fbo.render.*` cases on these formats now reach the wide store;
+  the host dEQP and board counts are plan #383's fbo items, not this
+  note.
+- **G3 One blend state and one colour mask for every render target.**
+  When this note was written BLEND_ENABLES carried `mask = 1`, enabling
+  RT 0 only; `684ef106` matched Mesa, which enables every RT when RT 0
+  blends without independent blend (`on.mask = 0xf`, `v3d_job.c:696-698`;
+  Mesa `v3dx_state.c:151-155`, `v3dx_emit.c:528-531`). One BLEND_CFG
+  still serves all four RTs (mask 0xf, `v3d_job.c:699-707`) with RT 0's
+  state: Mesa splits it between RTs with and without alpha when a
+  framebuffer mixes them (`v3dx_emit.c:540-558`, `blend_dst_alpha_one`),
+  yakogl takes the alpha-less rule from the frame target alone
+  (`state.rs:682`), so a framebuffer of an alpha-less and an
+  alpha-bearing RT blends one of them with the wrong destination-alpha
+  factor (a draw's own RTs 1..3 do blend now, under RT 0's config). The
+  colour mask has the same shape: COLOR_WRITE_MASKS writes RT 0's mask
+  into every RT (`v3d_job.c:773-780`; Mesa the same without independent
+  blend, `v3dx_emit.c:571-585`). The G2 MRT refusal is where this meets
+  ES 3.0: `v3d-wide-int-rt` did not give the hardware a mask per RT, it
+  made the GL core compare the per-format masks and refuse by name a draw
+  that would need two (`src/gl/draw.rs:2737-2763`). A blend config per RT
+  and a colour mask per RT remain open.
 - **G4 The clear quad does not clamp a fixed-point clear colour.** The TLB
   path clamps for sRGB and RGB10_A2 (`state.rs:529-539`); the quad hands
   `clear_rgba` to the float program (`backend.rs:5546-5552`), and `glClearColor`
