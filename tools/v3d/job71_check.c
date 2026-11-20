@@ -20,6 +20,17 @@
  *                          in full, the packet census is the job's, and the
  *                          render-target packets are the expected bytes
  *   job71_check refusals   inputs the builder must refuse, each refused
+ *   job71_check gl <dir>   every job of the eight tools/v3d/pi5/gl_*.clif
+ *                          references (Mesa on the drm-shim at 7.1.10, the
+ *                          six gl_test shapes and the 4- and 8-target
+ *                          clears), built from each shape's GL state, into
+ *                          <dir>/gl_<shape>.clif, job after job; job71.sh
+ *                          compares them with the references
+ *   job71_check g1         a D24S8 depth buffer loaded and stored as Z only,
+ *                          stencil only and both (v3d_job71_clear's
+ *                          zs_load_aspects / zs_store_aspects), the LOAD and
+ *                          STORE fields read back; aspects a buffer does not
+ *                          hold refused
  *
  * JOB71_CLIF=<file> stores the decoded CLIF text of clear, triangle or multi.
  * The last line is "job71_check: <mode> ...: ok" or ends "FAIL". Built with
@@ -66,16 +77,34 @@ struct bo {
 	uint8_t *cpu;
 };
 
-/* Decode the job with Mesa's clif_dump (the CLIF form V3D_DEBUG=clif
- * writes, not pretty) and return its text, malloc'd. */
-static char *decode(const struct bo *bos, unsigned n, const struct drm_v3d_submit_cl *submit)
+static const char *log_path;
+
+static void drop_log(void)
 {
-	const char *dir = getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp";
-	char path[512];
-	snprintf(path, sizeof(path), "%s/job71_check_%d.log", dir, (int)getpid());
-	setenv("MESA_LOG_FILE", path, 1);
-	setenv("MESA_LOG_LEVEL", "info", 1);
-	setenv("MESA_LOG_PREFIX", "", 1);
+	if (log_path)
+		unlink(log_path);
+}
+
+/* Decode the job with Mesa's clif_dump (the CLIF form V3D_DEBUG=clif
+ * writes, not pretty) and return its text, malloc'd. The text also goes to
+ * `out_path` (fopen mode `out_mode`) when it is not NULL. */
+static char *decode_to(const struct bo *bos, unsigned n, const struct drm_v3d_submit_cl *submit,
+		       const char *out_path, const char *out_mode)
+{
+	/* Mesa's logger opens MESA_LOG_FILE once per process and keeps it: a
+	 * second decode appends to the same file, so each decode reads from
+	 * where the one before ended, and the file goes at exit */
+	static char path[512];
+	static long seen;
+	if (!path[0]) {
+		const char *dir = getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp";
+		snprintf(path, sizeof(path), "%s/job71_check_%d.log", dir, (int)getpid());
+		setenv("MESA_LOG_FILE", path, 1);
+		setenv("MESA_LOG_LEVEL", "info", 1);
+		setenv("MESA_LOG_PREFIX", "", 1);
+		atexit(drop_log);
+		log_path = path;
+	}
 	struct v3d_device_info devinfo = { .ver = 71, .has_accumulators = false, .cle_readahead = 256 };
 	struct log_stream *stream = mesa_log_streami();
 	struct clif_dump *clif = clif_dump_init(&devinfo, stream, false, false);
@@ -90,20 +119,27 @@ static char *decode(const struct bo *bos, unsigned n, const struct drm_v3d_submi
 	if (!in)
 		return NULL;
 	fseek(in, 0, SEEK_END);
-	long len = ftell(in);
-	fseek(in, 0, SEEK_SET);
+	long len = ftell(in) - seen;
+	if (len < 0)
+		len = 0;
+	fseek(in, seen, SEEK_SET);
 	char *text = malloc(len + 1);
 	size_t got = fread(text, 1, len, in);
 	text[got] = 0;
 	fclose(in);
-	unlink(path);
-	const char *out_path = getenv("JOB71_CLIF");
+	seen += (long)got;
 	if (out_path) {
-		FILE *out = fopen(out_path, "w");
+		FILE *out = fopen(out_path, out_mode);
 		if (!out || fputs(text, out) < 0 || fclose(out) != 0)
 			fail("cannot write %s", out_path);
 	}
 	return text;
+}
+
+/* decode_to into JOB71_CLIF=<file>, when given */
+static char *decode(const struct bo *bos, unsigned n, const struct drm_v3d_submit_cl *submit)
+{
+	return decode_to(bos, n, submit, getenv("JOB71_CLIF"), "w");
 }
 
 /* Lines whose first word is exactly `name`. */
@@ -126,7 +162,8 @@ static int census(const char *text, const char *name)
 }
 
 /* The structural checks of every decode: no decoder error, every
- * unindented upper-case line a packet of the census (`total` of them), and
+ * unindented upper-case line a packet of the census (`total` of them; a
+ * negative `total`: not counted), and
  * binary data only in buffers named resource_* and where `ind_bin` says
  * (a "[<indirect buffer>+<offset>]" prefix: the uniform streams). Returns
  * the number of control-list sections. */
@@ -156,7 +193,7 @@ static int structure(const char *text, int total, const char *ind_bin)
 			break;
 		line = nl + 1;
 	}
-	if (packets != total)
+	if (total >= 0 && packets != total)
 		fail("%d packets decoded, the census has %d", packets, total);
 	return lists;
 }
@@ -726,6 +763,553 @@ static int run_multi(void)
 }
 
 /* ------------------------------------------------------------------------ */
+/* gl: the jobs of tools/v3d/pi5/gl_*.clif, Mesa 26.2.1 on the drm-shim at
+ * 7.1.10 (tools/v3d/pi5/README.md, "The gl_test shapes"; the GL calls are
+ * tools/v3d/pi5/src/gl_shapes.py's), each built through the v3d_job71 API
+ * from the shape's GL state and written, job after job, to
+ * <dir>/gl_<shape>.clif for check71.d/job71.sh to compare with the
+ * reference job by job.
+ *
+ * From the GL state: the 64x64 targets (GL_RGBA textures, RGBA8 UIF of 8
+ * UIF blocks' padded height; the window's GL_DEPTH24_STENCIL8, case 67's
+ * GL_DEPTH_COMPONENT16 and its GL_STENCIL_INDEX8, which Mesa keeps as a
+ * D24S8 image), the clear colours, depth and stencil values packed as the
+ * tile buffer holds them, the viewport, the scissor box, the depth, stencil
+ * and colour-mask state and the glDrawArrays ranges. From Mesa's job, as
+ * the GL table is to do the same: which buffers a job loads and stores
+ * (job->load / job->store: only what the job reads and changes; a buffer
+ * not yet written is neither loaded nor cleared early); a clear the tile
+ * buffer cannot do (a scissor box, a partial colour mask, a stencil write
+ * mask) is Mesa's clear blitter draw, a full-viewport TRIANGLE_FAN of 4
+ * vertices with the scissor off (the quad covers the box), line width 0,
+ * every colour channel the clear leaves alone masked, and for a stencil
+ * clear the REPLACE of the clear value through the write mask. The
+ * programs' record fields are compile results, not GL state: they are
+ * those of the references' records (gl_programs), as (b) takes Mesa's
+ * triangle from triangle.clif. The uniform streams, the QPU code and the
+ * vertex data are not compared (the references hold Mesa's; the programs
+ * here read no uniform).
+ */
+
+#define G_SIZE 64u
+#define G_BCL 0x100000u
+#define G_RCL 0x110000u
+#define G_IND 0x120000u
+#define G_CL 0x2000u
+#define G_CODE 0x200000u
+#define G_VTX 0x300000u
+#define G_TILE 0x400000u
+#define G_TSDA 0x500000u
+#define G_RT(n) (0x1000000u + (n) * 0x100000u)
+#define G_ZS 0x2000000u
+#define G_PAGE 4096u /* the drm-shim's buffer granule */
+
+enum { GP_GLTEST, GP_BLIT };
+static struct v3d_fs_prog g_fs[2];
+static struct v3d_vs_prog g_vs[2], g_cs[2];
+static struct v3d_vertex_attr g_attrs[2][3];
+static const uint32_t G_NATTRS[2] = { 3, 1 };
+
+/* The two programs of the references, as their records read (every
+ * `shadrec_gl_main` and `shadrec_gl_attr` of the eight files is one of
+ * these two). */
+static void gl_programs(void)
+{
+	/* gl_test_vs_src / gl_test_fs_src (gl_test_shaders_es100.h): 6 FS
+	 * inputs (v_color, v_uv), real pixel centre W (the D0 bit that the
+	 * dump's plain 7.1 decode prints as "Insert Primitive ID as first
+	 * varying": README "Differences" item 4), VS output segment 2, CS 1,
+	 * every stage 4-way, the VS and CS starting in the final thread
+	 * section, a VCM cache of 4 batches; a_pos read as 4 values by the VS
+	 * and the CS, a_color as 4 and a_uv as 2 by the VS, from gl_test's
+	 * 40-byte cuv vertex (pos4 +0, color4 +16, uv2 +32) */
+	g_fs[GP_GLTEST] = (struct v3d_fs_prog){
+		.code = G_CODE, .threads = 4, .num_inputs = 6, .uses_center_w = true,
+	};
+	g_vs[GP_GLTEST] = (struct v3d_vs_prog){
+		.code = G_CODE + 0x100, .threads = 4, .single_seg = true, .vpm_output_size = 2,
+		.vcm_cache_size = 4, .vattr_sizes = { 4, 4, 2 },
+	};
+	g_cs[GP_GLTEST] = (struct v3d_vs_prog){
+		.code = G_CODE + 0x200, .threads = 4, .single_seg = true, .vpm_output_size = 1,
+		.vcm_cache_size = 4, .vattr_sizes = { 4 },
+	};
+	g_attrs[GP_GLTEST][0] = (struct v3d_vertex_attr){ G_VTX, 40, 4, 0 };
+	g_attrs[GP_GLTEST][1] = (struct v3d_vertex_attr){ G_VTX + 16, 40, 4, 0 };
+	g_attrs[GP_GLTEST][2] = (struct v3d_vertex_attr){ G_VTX + 32, 40, 2, 0 };
+	/* Mesa's clear blitter (util_blitter's clear): no FS input, VS and CS
+	 * output segment 1, 4-way, the VS and CS in the final thread section,
+	 * VCM cache 4; one 3-component float attribute of stride 36 read as 4
+	 * values by the VS and the CS */
+	g_fs[GP_BLIT] = (struct v3d_fs_prog){ .code = G_CODE + 0x300, .threads = 4 };
+	g_vs[GP_BLIT] = (struct v3d_vs_prog){
+		.code = G_CODE + 0x400, .threads = 4, .single_seg = true, .vpm_output_size = 1,
+		.vcm_cache_size = 4, .vattr_sizes = { 4 },
+	};
+	g_cs[GP_BLIT] = g_vs[GP_BLIT];
+	g_cs[GP_BLIT].code = G_CODE + 0x500;
+	g_attrs[GP_BLIT][0] = (struct v3d_vertex_attr){ G_VTX + 0x100, 36, 3, 0 };
+}
+
+/* One draw: gl_test's (6 vertices from `first`) or the clear blitter's. */
+struct gdraw {
+	int prog;
+	uint32_t first;
+	uint32_t colormask;  /* PIPE_MASK_RGBA */
+	bool scissor;        /* glScissor(0, 0, 32, 32) on */
+	uint32_t depth_func; /* 0: the depth test off; else on, GL_LESS, writes on */
+	bool stencil;        /* the stencil test on, `sf` front and back */
+	struct v3d_job71_stencil_face sf;
+};
+
+#define G_ALL 0x80u /* a load or store of every aspect (the aspects field 0) */
+enum { G_ZS_NONE, G_ZS_D24S8, G_ZS_D16 };
+
+/* One job (one glFinish). */
+struct gjob {
+	uint32_t rts;        /* GL_RGBA colour targets */
+	int zs;              /* G_ZS_* */
+	bool load_rt;        /* the colour targets are loaded (not cleared in this job) */
+	uint32_t color;      /* every target's clear colour, RGBA8 as the tile buffer holds it */
+	float z;             /* the Z/S clear values */
+	uint32_t stencil;
+	uint32_t zs_load, zs_store; /* V3D_JOB71_ZS_* aspects or G_ALL; 0: not moved */
+	bool zs_cleared;     /* Mesa clears the Z/S tile buffer (glClear, or a buffer not yet written) */
+	uint32_t ndraws;
+	struct gdraw d[3];
+};
+
+struct gshape {
+	const char *name;
+	uint32_t njobs;
+	const struct gjob *jobs;
+};
+
+#define BLACK 0xff000000u
+#define BLUE 0xffff0000u
+#define WHITE 0xffffffffu
+#define RED_QUARTER 0x400000ffu /* (1, 0, 0, 0.25) */
+#define SF_CLEAR(r, wm)                                                                            \
+	{ V3D_COMPARE_FUNC_ALWAYS, V3D_STENCIL_OP_REPLACE, V3D_STENCIL_OP_REPLACE,                 \
+	  V3D_STENCIL_OP_REPLACE, (r), 0xff, (wm) }
+#define SF_EQUAL(r)                                                                                \
+	{ V3D_COMPARE_FUNC_EQUAL, V3D_STENCIL_OP_KEEP, V3D_STENCIL_OP_KEEP, V3D_STENCIL_OP_KEEP, (r), \
+	  0xff, 0xff }
+#define GLT(f) { .prog = GP_GLTEST, .first = (f), .colormask = 0xf }
+#define GLT_SCISSOR { .prog = GP_GLTEST, .colormask = 0xf, .scissor = true }
+#define GLT_LESS(f) { .prog = GP_GLTEST, .first = (f), .colormask = 0xf, .depth_func = V3D_COMPARE_FUNC_LESS }
+#define GLT_EQUAL(r) { .prog = GP_GLTEST, .colormask = 0xf, .stencil = true, .sf = SF_EQUAL(r) }
+#define BLIT(mask) { .prog = GP_BLIT, .colormask = (mask) }
+#define BLIT_STENCIL(r, wm) { .prog = GP_BLIT, .stencil = true, .sf = SF_CLEAR(r, wm) }
+#define WIN .rts = 1, .zs = G_ZS_D24S8
+
+/* case 5 case_scissor */
+static const struct gjob GJ_SCISSOR[] = {
+	{ WIN, .color = BLACK, .zs_cleared = true },
+	{ WIN, .load_rt = true, .zs_cleared = true, .ndraws = 2, .d = { BLIT(0xf), GLT_SCISSOR } },
+};
+/* case 58 case_clearscis */
+static const struct gjob GJ_SCISBOX[] = {
+	{ WIN, .color = BLUE, .zs_cleared = true, .ndraws = 1, .d = { BLIT(0xf) } },
+	{ WIN, .color = BLUE, .zs_cleared = true, .ndraws = 2, .d = { GLT(0), BLIT(0xf) } },
+	{ WIN, .color = BLUE, .zs_cleared = true, .ndraws = 1, .d = { BLIT(0xf) } },
+};
+/* case 59 case_clearmask: the masked colour clear does nothing; the
+ * depth-only and stencil-only stores and the stencil-only load of the
+ * window's D24S8 (G1) */
+static const struct gjob GJ_WRITEMASK[] = {
+	{ WIN, .color = BLUE, .zs_cleared = true },
+	{ WIN, .color = BLUE, .z = 1.0f, .zs_store = V3D_JOB71_ZS_DEPTH, .zs_cleared = true, .ndraws = 2,
+	  .d = { GLT_LESS(0), GLT_LESS(0) } },
+	{ WIN, .color = BLUE, .zs_store = V3D_JOB71_ZS_STENCIL, .zs_cleared = true, .ndraws = 2,
+	  .d = { BLIT_STENCIL(0xff, 0x0f), GLT_EQUAL(0xff) } },
+	{ WIN, .load_rt = true, .zs_load = V3D_JOB71_ZS_STENCIL, .ndraws = 1, .d = { GLT_EQUAL(0x0f) } },
+};
+/* case 66 case_clearvp */
+static const struct gjob GJ_VIEWPORT[] = {
+	{ WIN, .color = WHITE, .zs_cleared = true },
+	{ WIN, .color = BLUE, .zs_cleared = true },
+	{ WIN, .load_rt = true, .zs_cleared = true, .ndraws = 1, .d = { BLIT(0xf) } },
+};
+/* case 67 case_fbods frames 1 to 8: no depth buffer (the depth and stencil
+ * tests have nothing to test); GL_RGB (an RGBA8 target); two
+ * GL_DEPTH_COMPONENT16 buffers (every aspect: Z); GL_STENCIL_INDEX8, a
+ * D24S8 image stored and loaded as its stencil (G1) */
+static const struct gjob GJ_FBODS[] = {
+	{ .rts = 1, .color = BLUE, .ndraws = 2, .d = { GLT(0), GLT(6) } },
+	{ .rts = 1, .color = BLUE, .ndraws = 1, .d = { GLT(0) } },
+	{ .rts = 1, .color = RED_QUARTER },
+	{ .rts = 1, .zs = G_ZS_D16, .color = BLUE, .z = 1.0f, .zs_store = G_ALL, .zs_cleared = true,
+	  .ndraws = 1, .d = { GLT_LESS(0) } },
+	{ .rts = 1, .zs = G_ZS_D16, .load_rt = true, .zs_store = G_ALL, .ndraws = 1, .d = { GLT_LESS(6) } },
+	{ WIN, .color = BLUE, .zs_store = V3D_JOB71_ZS_STENCIL, .zs_cleared = true, .ndraws = 2,
+	  .d = { BLIT_STENCIL(1, 0xff), GLT_EQUAL(0) } },
+	{ WIN, .color = BLUE, .zs_store = V3D_JOB71_ZS_STENCIL, .zs_cleared = true, .ndraws = 3,
+	  .d = { GLT(6), BLIT_STENCIL(1, 0xff), GLT_EQUAL(0) } },
+	{ WIN, .color = BLUE, .zs_store = V3D_JOB71_ZS_STENCIL, .zs_cleared = true, .ndraws = 2,
+	  .d = { GLT(6), BLIT_STENCIL(1, 0xff) } },
+	{ WIN, .load_rt = true, .zs_load = V3D_JOB71_ZS_STENCIL, .ndraws = 1, .d = { GLT_EQUAL(0) } },
+};
+/* case 102 case_maskclear: R+A, G (scissored) and B clears */
+static const struct gjob GJ_COLORMASK[] = {
+	{ WIN, .color = BLACK, .zs_cleared = true },
+	{ WIN, .load_rt = true, .zs_cleared = true, .ndraws = 1, .d = { BLIT(0x9) } },
+	{ WIN, .color = BLACK, .zs_cleared = true },
+	{ WIN, .load_rt = true, .zs_cleared = true, .ndraws = 1, .d = { BLIT(0x2) } },
+	{ WIN, .color = BLACK, .zs_cleared = true },
+	{ WIN, .load_rt = true, .zs_cleared = true, .ndraws = 2, .d = { BLIT(0x4), GLT(0) } },
+};
+static const struct gjob GJ_MRT4[] = { { .rts = 4, .color = BLUE } };
+static const struct gjob GJ_MRT8[] = { { .rts = 8, .color = BLUE } };
+
+#define GSHAPE(n, a) { n, sizeof(a) / sizeof(a[0]), a }
+static const struct gshape GSHAPES[] = {
+	GSHAPE("scissor", GJ_SCISSOR),   GSHAPE("scisbox", GJ_SCISBOX), GSHAPE("writemask", GJ_WRITEMASK),
+	GSHAPE("viewport", GJ_VIEWPORT), GSHAPE("fbods", GJ_FBODS),     GSHAPE("colormask", GJ_COLORMASK),
+	GSHAPE("mrt4", GJ_MRT4),         GSHAPE("mrt8", GJ_MRT8),
+};
+
+static uint8_t g_bcl[G_CL], g_rcl[G_CL], g_ind[G_CL], g_code[0x600], g_vtx[0x200], g_tile[0x100],
+	g_tsda[0x100], g_rt[V3D_JOB71_MAX_RTS][0x100], g_zs[0x100];
+
+/* The 64x64 target of `g`. */
+static void gl_target(const struct gjob *g, struct v3d_job71_target *t)
+{
+	memset(t, 0, sizeof(*t));
+	t->width = G_SIZE;
+	t->height = G_SIZE;
+	t->tile_alloc = G_TILE;
+	t->rts = g->rts;
+	for (uint32_t n = 0; n < g->rts; n++)
+		t->rt[n] = (struct v3d_job71_rt){
+			.address = G_RT(n),
+			.format = V3D_OUTPUT_IMAGE_FORMAT_RGBA8,
+			.memory_format = V3D_MEMORY_FORMAT_UIF_NO_XOR,
+			.height_in_ub_or_stride = 8,
+		};
+	t->depth_type = V3D_INTERNAL_TYPE_DEPTH_32F; /* Mesa's 0 with no zsbuf */
+	if (g->zs == G_ZS_D24S8) {
+		t->depth_type = V3D_INTERNAL_TYPE_DEPTH_24;
+		t->zs = (struct v3d_job71_zs){ G_ZS, V3D_OUTPUT_IMAGE_FORMAT_D24S8,
+					       V3D_MEMORY_FORMAT_UIF_NO_XOR, 8 };
+	} else if (g->zs == G_ZS_D16) {
+		t->depth_type = V3D_INTERNAL_TYPE_DEPTH_16;
+		t->zs = (struct v3d_job71_zs){ G_ZS, V3D_OUTPUT_IMAGE_FORMAT_D16,
+					       V3D_MEMORY_FORMAT_UIF_NO_XOR, 8 };
+	}
+}
+
+/* The submit's buffers in one list, for decode_to. */
+static unsigned gl_bos(struct bo *bos)
+{
+	static char names[V3D_JOB71_MAX_RTS][32];
+	unsigned n = 0;
+	bos[n++] = (struct bo){ "CL_bcl", G_BCL, G_CL, g_bcl };
+	bos[n++] = (struct bo){ "CL_rcl", G_RCL, G_CL, g_rcl };
+	bos[n++] = (struct bo){ "CL_ind", G_IND, G_CL, g_ind };
+	bos[n++] = (struct bo){ "resource_code", G_CODE, sizeof(g_code), g_code };
+	bos[n++] = (struct bo){ "resource_vtx", G_VTX, sizeof(g_vtx), g_vtx };
+	bos[n++] = (struct bo){ "tile_alloc", G_TILE, sizeof(g_tile), g_tile };
+	bos[n++] = (struct bo){ "TSDA", G_TSDA, sizeof(g_tsda), g_tsda };
+	for (int k = 0; k < V3D_JOB71_MAX_RTS; k++) {
+		snprintf(names[k], sizeof(names[k]), "resource_rt%d", k);
+		bos[n++] = (struct bo){ names[k], G_RT(k), sizeof(g_rt[k]), g_rt[k] };
+	}
+	bos[n++] = (struct bo){ "resource_zs", G_ZS, sizeof(g_zs), g_zs };
+	return n;
+}
+
+/* Build job `k` of `s`, append its decode to `out`; the number of draws. */
+static uint32_t gl_job(const struct gshape *s, uint32_t k, const char *out)
+{
+	const struct gjob *g = &s->jobs[k];
+	struct v3d_cl bcl, rcl, ind;
+	v3d_cl_init(&bcl, g_bcl, G_BCL, G_CL);
+	v3d_cl_init(&rcl, g_rcl, G_RCL, G_CL);
+	v3d_cl_init(&ind, g_ind, G_IND, G_CL);
+	memset(g_bcl, 0, sizeof(g_bcl));
+	memset(g_rcl, 0, sizeof(g_rcl));
+	memset(g_ind, 0, sizeof(g_ind));
+	struct v3d_job71_target t;
+	gl_target(g, &t);
+	struct v3d_job71 j;
+	if (!v3d_job71_begin(&j, &t, &bcl, &rcl, &ind)) {
+		fail("gl_%s job %u: v3d_job71_begin refused the target", s->name, k);
+		return 0;
+	}
+	static struct v3d_job71_state st[3];
+	for (uint32_t i = 0; i < g->ndraws; i++) {
+		const struct gdraw *gd = &g->d[i];
+		const int p = gd->prog;
+		memset(&st[i], 0, sizeof(st[i]));
+		/* glViewport(0, 0, 64, 64), glDepthRangef(0, 1) into a
+		 * framebuffer object (rows bottom up: no Y flip); the blitter
+		 * sets the same. GL's GL_CCW front face into a framebuffer object
+		 * is st/mesa's front_ccw false (the references' CFG_BITS
+		 * "Clockwise Primitives" 0). */
+		v3d_viewport_gl(0, 0, (float)G_SIZE, (float)G_SIZE, 0, 1, false, G_SIZE, &st[i].vp);
+		st[i].line_width = p == GP_BLIT ? 0.0f : 1.0f;
+		st[i].colormask = gd->colormask;
+		st[i].depth_func = V3D_COMPARE_FUNC_LESS;
+		st[i].sample_mask = 0xf;
+		if (gd->depth_func) {
+			st[i].depth_enabled = true;
+			st[i].depth_writemask = true;
+			st[i].depth_func = gd->depth_func;
+		}
+		if (gd->stencil) {
+			st[i].stencil_enabled = true;
+			st[i].stencil_front = gd->sf;
+		}
+		if (gd->scissor) {
+			st[i].scissor = true;
+			st[i].scissor_maxx = 32;
+			st[i].scissor_maxy = 32;
+		}
+		struct v3d_job71_draw d = {
+			.st = &st[i],
+			.fs = &g_fs[p],
+			.vs = &g_vs[p],
+			.cs = &g_cs[p],
+			.attrs = g_attrs[p],
+			.num_attrs = G_NATTRS[p],
+			.prim = p == GP_BLIT ? V3D_PRIM_TRIANGLE_FAN : V3D_PRIM_TRIANGLES,
+			.count = p == GP_BLIT ? 4 : 6,
+			.first = gd->first,
+		};
+		int r = v3d_job71_draw(&j, &d, NULL);
+		if (r != V3D_JOB71_OK) {
+			fail("gl_%s job %u: draw %u returned %d", s->name, k, i, r);
+			return 0;
+		}
+	}
+	struct v3d_job71_clear c;
+	memset(&c, 0, sizeof(c));
+	c.load_rts = g->load_rt ? (1u << g->rts) - 1 : 0;
+	for (uint32_t n = 0; n < g->rts; n++)
+		c.color[n][0] = g->color;
+	c.z = g->z;
+	c.stencil = g->stencil;
+	c.zs_load = g->zs_load != 0;
+	c.zs_store = g->zs_store != 0;
+	c.zs_load_aspects = (uint8_t)(g->zs_load & ~G_ALL);
+	c.zs_store_aspects = (uint8_t)(g->zs_store & ~G_ALL);
+	c.zs_cleared = g->zs_cleared;
+	if (!v3d_job71_end(&j, &c, NULL, NULL)) {
+		fail("gl_%s job %u: v3d_job71_end refused the job", s->name, k);
+		return 0;
+	}
+	uint32_t qms, qts_size;
+	v3d_job71_alloc_sizes(&j, G_PAGE, &qms, &qts_size);
+	struct drm_v3d_submit_cl submit = {
+		.bcl_start = bcl.gpu, .bcl_end = bcl.gpu + bcl.used,
+		.rcl_start = rcl.gpu, .rcl_end = rcl.gpu + rcl.used,
+		.qma = G_TILE, .qms = qms, .qts = G_TSDA,
+	};
+	struct bo bos[24];
+	unsigned n = gl_bos(bos);
+	char *text = decode_to(bos, n, &submit, out, k ? "a" : "w");
+	if (!text) {
+		fail("gl_%s job %u: no decoder output", s->name, k);
+		return 0;
+	}
+	/* every list decodes in full; binary data only where the uniform
+	 * streams and the records' padding are */
+	structure(text, -1, "[CL_ind+");
+	free(text);
+	return g->ndraws;
+}
+
+static int run_gl(const char *dir)
+{
+	gl_programs();
+	for (size_t i = 0; i < sizeof(GSHAPES) / sizeof(GSHAPES[0]); i++) {
+		const struct gshape *s = &GSHAPES[i];
+		const int before = failures;
+		char out[512];
+		snprintf(out, sizeof(out), "%s/gl_%s.clif", dir, s->name);
+		uint32_t draws = 0;
+		for (uint32_t k = 0; k < s->njobs; k++)
+			draws += gl_job(s, k, out);
+		printf("job71_check: gl_%s %u job(s), %u draw(s) built into %s: %s\n", s->name, s->njobs,
+		       draws, out, failures != before ? "FAIL" : "ok");
+	}
+	printf("job71_check: gl %zu shapes: %s\n", sizeof(GSHAPES) / sizeof(GSHAPES[0]),
+	       failures ? "FAIL" : "ok");
+	return failures ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------ */
+/* g1: a D24S8 depth buffer loaded or stored as Z only or as stencil only
+ * (v3d_job71_clear's zs_load_aspects / zs_store_aspects, Mesa's
+ * zs_buffer_from_pipe_bits), the aspects 0 path unchanged, and the aspects
+ * a buffer does not hold refused. Each job is the window's (64x64 RGBA8,
+ * D24S8) with no draw; the decoded generic tile list's LOAD and STORE
+ * packets are read field by field. */
+
+/* The value of `field` in the `nth` (from 0) packet named `name` of the
+ * buffer section `buffer` of a decode; -1 when absent. */
+static long field_in(const char *text, const char *buffer, const char *name, int nth, const char *field)
+{
+	char head[64];
+	snprintf(head, sizeof(head), "@buffer %s\n", buffer);
+	const char *p = strstr(text, head);
+	if (!p)
+		return -1;
+	const char *end = strstr(p + strlen(head), "@buffer ");
+	char pk[64];
+	snprintf(pk, sizeof(pk), "\n%s\n", name);
+	for (int k = 0;; k++) {
+		p = strstr(p, pk);
+		if (!p || (end && p > end))
+			return -1;
+		p += strlen(pk);
+		if (k == nth)
+			break;
+	}
+	/* the packet's field lines run to the next unindented line */
+	for (const char *line = p; *line == ' ';) {
+		const char *nl = strchr(line, '\n');
+		const char *f = strstr(line, field);
+		if (f && (!nl || f < nl)) {
+			const char *v = strstr(f, "*/");
+			return v ? strtol(v + 2, NULL, 10) : -1;
+		}
+		if (!nl)
+			break;
+		line = nl + 1;
+	}
+	return -1;
+}
+
+static int run_g1(void)
+{
+	static const struct {
+		const char *what;
+		bool load;
+		uint8_t aspects;
+		uint32_t buffer; /* the LOAD's / STORE's buffer number */
+	} ok[] = {
+		{ "a Z-only store", false, V3D_JOB71_ZS_DEPTH, V3D_STORE_BUFFER_Z },
+		{ "a stencil-only store", false, V3D_JOB71_ZS_STENCIL, V3D_STORE_BUFFER_STENCIL },
+		{ "a Z/S store", false, V3D_JOB71_ZS_DEPTH | V3D_JOB71_ZS_STENCIL, V3D_STORE_BUFFER_ZSTENCIL },
+		{ "a store of every aspect (0)", false, 0, V3D_STORE_BUFFER_ZSTENCIL },
+		{ "a Z-only load", true, V3D_JOB71_ZS_DEPTH, V3D_LOAD_BUFFER_Z },
+		{ "a stencil-only load", true, V3D_JOB71_ZS_STENCIL, V3D_LOAD_BUFFER_STENCIL },
+		{ "a load of every aspect (0)", true, 0, V3D_LOAD_BUFFER_ZSTENCIL },
+	};
+	const struct gjob win = { WIN, .color = BLUE };
+	struct bo bos[24];
+	unsigned checked = 0;
+	for (size_t i = 0; i < sizeof(ok) / sizeof(ok[0]); i++) {
+		struct v3d_cl bcl, rcl, ind;
+		v3d_cl_init(&bcl, g_bcl, G_BCL, G_CL);
+		v3d_cl_init(&rcl, g_rcl, G_RCL, G_CL);
+		v3d_cl_init(&ind, g_ind, G_IND, G_CL);
+		struct v3d_job71_target t;
+		gl_target(&win, &t);
+		struct v3d_job71 j;
+		struct v3d_job71_clear c = { .color = { { BLUE } } };
+		if (ok[i].load) {
+			c.zs_load = true;
+			c.zs_load_aspects = ok[i].aspects;
+		} else {
+			c.zs_store = true;
+			c.zs_store_aspects = ok[i].aspects;
+		}
+		if (!v3d_job71_begin(&j, &t, &bcl, &rcl, &ind) || !v3d_job71_end(&j, &c, NULL, NULL)) {
+			fail("g1: %s refused", ok[i].what);
+			continue;
+		}
+		uint32_t qms, qts_size;
+		v3d_job71_alloc_sizes(&j, G_PAGE, &qms, &qts_size);
+		struct drm_v3d_submit_cl submit = {
+			.bcl_start = bcl.gpu, .bcl_end = bcl.gpu + bcl.used,
+			.rcl_start = rcl.gpu, .rcl_end = rcl.gpu + rcl.used,
+			.qma = G_TILE, .qms = qms, .qts = G_TSDA,
+		};
+		char *text = decode_to(bos, gl_bos(bos), &submit, NULL, NULL);
+		if (!text) {
+			fail("g1: %s: no decoder output", ok[i].what);
+			continue;
+		}
+		structure(text, -1, "[CL_ind+");
+		/* the tile list: RT 0's store, then the Z/S packet with the
+		 * image's own format, UIF and padded height */
+		const char *pk = ok[i].load ? "LOAD" : "STORE";
+		const int nth = ok[i].load ? 0 : 1;
+		const long buf = field_in(text, "CL_ind", pk, nth, ok[i].load ? "Buffer to Load" : "Buffer to Store");
+		const long fmt = field_in(text, "CL_ind", pk, nth,
+					  ok[i].load ? "Input Image Format" : "Output Image Format");
+		const long mf = field_in(text, "CL_ind", pk, nth, "Memory Format");
+		const long hub = field_in(text, "CL_ind", pk, nth, "Height in UB or Stride");
+		const long extra = field_in(text, "CL_ind", pk, ok[i].load ? 1 : 2, "Buffer to");
+		if (buf != (long)ok[i].buffer || fmt != V3D_OUTPUT_IMAGE_FORMAT_D24S8 ||
+		    mf != V3D_MEMORY_FORMAT_UIF_NO_XOR || hub != 8 || extra != -1)
+			fail("g1: %s: %s buffer %ld format %ld memory format %ld height %ld (one more: %ld), "
+			     "expected buffer %u of the D24S8 image, UIF, 8, alone",
+			     ok[i].what, pk, buf, fmt, mf, hub, extra, ok[i].buffer);
+		/* a Z/S buffer moved is not cleared early */
+		if (field_in(text, "CL_rcl", "TILE_RENDERING_MODE_CFG_COMMON", 0, "Early Depth/Stencil Clear") != 0)
+			fail("g1: %s: Early Depth/Stencil Clear set", ok[i].what);
+		free(text);
+		checked++;
+	}
+
+	/* refused: an aspect the Z/S buffer does not hold */
+	static const struct {
+		const char *what;
+		int zs;
+		bool separate_s, load;
+		uint8_t aspects;
+	} bad[] = {
+		{ "a stencil-only store of a D16 buffer", G_ZS_D16, false, false, V3D_JOB71_ZS_STENCIL },
+		{ "a Z/S load of a D16 buffer", G_ZS_D16, false, true, V3D_JOB71_ZS_DEPTH | V3D_JOB71_ZS_STENCIL },
+		{ "a stencil-only store of `zs` beside a separate stencil", G_ZS_D24S8, true, false,
+		  V3D_JOB71_ZS_STENCIL },
+		{ "a stencil-only load of `zs` beside a separate stencil", G_ZS_D24S8, true, true,
+		  V3D_JOB71_ZS_STENCIL },
+		{ "aspect bit 2", G_ZS_D24S8, false, false, 4 },
+		{ "aspects 0xff on a load", G_ZS_D24S8, false, true, 0xff },
+	};
+	unsigned refused = 0;
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		struct v3d_cl bcl, rcl, ind;
+		v3d_cl_init(&bcl, g_bcl, G_BCL, G_CL);
+		v3d_cl_init(&rcl, g_rcl, G_RCL, G_CL);
+		v3d_cl_init(&ind, g_ind, G_IND, G_CL);
+		const struct gjob g = { .rts = 1, .zs = bad[i].zs, .color = BLUE };
+		struct v3d_job71_target t;
+		gl_target(&g, &t);
+		if (bad[i].separate_s)
+			t.s = (struct v3d_job71_zs){ G_ZS + 0x80, V3D_OUTPUT_IMAGE_FORMAT_S8,
+						     V3D_MEMORY_FORMAT_UIF_NO_XOR, 8 };
+		struct v3d_job71_clear c = { .color = { { BLUE } } };
+		if (bad[i].load) {
+			c.zs_load = true;
+			c.zs_load_aspects = bad[i].aspects;
+		} else {
+			c.zs_store = true;
+			c.zs_store_aspects = bad[i].aspects;
+		}
+		struct v3d_job71 j;
+		if (!v3d_job71_begin(&j, &t, &bcl, &rcl, &ind)) {
+			fail("g1: %s: the target itself refused", bad[i].what);
+			continue;
+		}
+		if (v3d_job71_end(&j, &c, NULL, NULL) || !j.broken)
+			fail("g1: built a job with %s", bad[i].what);
+		else
+			refused++;
+	}
+	printf("job71_check: g1 %u of %zu D24S8 Z-only / stencil-only / Z/S loads and stores, %u of "
+	       "%zu refused: %s\n",
+	       checked, sizeof(ok) / sizeof(ok[0]), refused, sizeof(bad) / sizeof(bad[0]),
+	       failures ? "FAIL" : "ok");
+	return failures ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------ */
 /* refusals: each a copy of the board's triangle job changed in one way */
 
 #define REFUSALS 18
@@ -808,6 +1392,10 @@ int main(int argc, char **argv)
 		return run_multi();
 	if (strcmp(mode, "refusals") == 0)
 		return run_refusals();
-	printf("job71_check: FAIL usage: job71_check clear|triangle|multi|refusals\n");
+	if (strcmp(mode, "gl") == 0 && argc > 2)
+		return run_gl(argv[2]);
+	if (strcmp(mode, "g1") == 0)
+		return run_g1();
+	printf("job71_check: FAIL usage: job71_check clear|triangle|multi|refusals|gl <dir>|g1\n");
 	return 1;
 }
