@@ -455,6 +455,16 @@ FAMILIES = [
     ('367:TEX_COORD', False, 'a texture coordinate other than'),
     ('367:TEX_VERTEX', False, 'a texture look-up other than'),
     ('367:CONTROL_FLOW', False, 'control flow (if, a loop, a return before the end)'),
+    # texts the tip emits that the slices' families did not name (first
+    # ranked at 9ac31f30, docs/notes/mali-deqp-families.md section 18)
+    ('new:DEFECT_IRINDEX', False, 'back end defect: an invariant of the pipeline did not hold (IrIndex'),
+    ('new:DEFECT_ENCODE', False, 'back end defect: an invariant of the pipeline did not hold (Encode'),
+    ('new:ATTR_LINK', False, 'the Valhall back end of a vertex shader at the link'),
+    ('new:ATTR_FOLD', False, 'a vertex shader whose attribute numbering waits for a fold'),
+    ('new:FRAGCOORD_FP16', False, 'fp16 arithmetic on gl_FragCoord'),
+    ('new:DISCARD_FORM', False, 'a discard other than'),
+    ('new:TEX_VS_FORM', False, 'a vertex shader texture look-up other than'),
+    ('new:COLOUR_TOO_LARGE', False, 'a fragment colour of more than 255'),
 ]
 TAKEN = OrderedDict()
 for fam, taken, _ in FAMILIES:

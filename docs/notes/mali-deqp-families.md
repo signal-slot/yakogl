@@ -579,3 +579,259 @@ uncovered). Cases per family, NotSupported included:
 | `constop` | 621 | `invariant` | 12 |
 | `colourpair` | 171 | `misc` | 44 |
 | `vsloop` + `fsloop` | 497 + 277 | | |
+
+## 18. Ranked refusal texts at `9ac31f30` (HOST-ONLY)
+
+Plan #387 item `rank`. The method is this note's own (sections 1 and 2),
+rerun at the integration tip `9ac31f30` (25 commits under
+`src/shaderc/online/mali/` after the board run's `de2f2c10`, listed in
+section 18.5). HOST-ONLY: compile and link outcomes of `deqp-gles2` against
+the Mali C pair on the Linux OSAL; every board status quoted is the
+NanoPC-T6's own from the slices `37305608`, never the host's.
+
+- Cases: the same 10,597 of the slices `2026-11-15-t6-gles2-S{1..4}-37305608`
+  as section 2 (9,644 Fail, 939 NotSupported, 14 Pass by the board).
+- CTS: `93bca01861b0e3ef3c387027a9791e6d065f900c` with
+  `cts-yakogl-target.patch` applied, in `$CONNECTED_DEPS_DIR/VK-GL-CTS`.
+- Command (4 cores, `--jobs 3 --chunk 100`; most of the wall time is the
+  one-off `deqp-gles2` and library builds, the run itself is minutes):
+
+```sh
+tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS" \
+    --out "$PWD/build/measure" --jobs 3 --chunk 100
+```
+
+- All 10,597 cases began. 106 processes exited 1 (dEQP's "not every case
+  passed") and **2 exited 139** (a segfault of the library, section 18.4);
+  the chunks went on in fresh processes, and 2 cases ended `NoResult`.
+
+### 18.1 What the tip compiles
+
+| | Cases | Fail (board) | NotSupported (board) | Pass (board) |
+|---|--:|--:|--:|--:|
+| asked | 10,597 | 9,644 | 939 | 14 |
+| still refused by the compiler at the tip (first refusal, any text) | **6,196** | 5,340 | 846 | 10 |
+| **compile and link at the tip** (no refusal text; dEQP on the host reads black, so its verdict is void) | **4,401** | 4,304 | 93 | 4 |
+
+So 4,401 of the 10,597 cases (41.5 %) the board refused at `37305608` no
+longer meet a compile refusal on the host. They are *not* passes: by the
+host's dEQP verdict 4,204 are `Fail` (black read-back, as on every host
+run), 195 `Pass` and 2 `NoResult` (the crashes of section 18.4). Whether they render right is the
+board rerun's (item `board-rerun-1`), not this measure's. The board's own
+Fail count of this population is 9,644; the first refusal still holds
+5,340 of them (55.4 %) and 846 of the 939 NotSupported.
+
+2,805 cases are refused by a **different** text than on the board (their
+first refusal moved while the code landed); they are counted below under
+the text they meet now. The per-case host and board texts are in
+`not-reproduced.tsv` of the run directory (not committed).
+
+### 18.2 Every refusal text still produced, ranked by must-pass cases blocked
+
+A case is counted once, under its **first** refusal (the first one in
+its log; the stage is the refusing shader's). `Fail` and `NS` are the
+board's status at `37305608`; the 10 Pass cases that still refuse are in
+`Cases` only. `Raised at` is the message line of the text in
+`src/shaderc/online/mali/mod.rs` (the `MaliError` variant) and the sites
+that return the variant (`grep MaliError::<variant>`, first non-test sites,
+the count in brackets when more). Cases of the two `Defect` rows are not
+refusals by name: they are the back end's own invariant failing.
+
+The 43 rows below are every text the host measure produced; the counts sum
+to **6,196** (2,454 vertex, 3,742 fragment). Eight of the texts are newly
+named in the script's `FAMILIES` table (`new:*`, below; they were `other`
+in section 2).
+
+| # | Refusal text (`MaliError`, message line) | Stage vs / fs | Cases | Fail | NS | dEQP groups (top 3) | Raised at | Owner / status |
+|--:|---|---|--:|--:|--:|---|---|---|
+| 1 | arithmetic other than +, -, * (fs: +, -, *, abs) (`MaliError::Arithmetic`, `mod.rs:412`) | 574 / 889 | 1463 | 1400 | 63 | shaders.operator 574, shaders.random 326, uniform_api.value 136 | `nir.rs:3695; the fs walk (24 sites)` | #367 ARITH; open for the dEQP shapes (item arith-ref, arith-lower-1) |
+| 2 | gl_FragColor lane other than the varying's own or a constant (`MaliError::ColourForm`, `mod.rs:522`) | 0 / 821 | 821 | 820 | 1 | shaders.operator 292, uniform_api.value 188, shaders.matrix 146 | `nir_fs.rs:1394 (18 sites)` | #367 FRAGCOLOR_LANE: glmark2 shapes landed 5244a7f5; dEQP shapes open (items fclane-ref, fclane-lower-1/2) |
+| 3 | vs uniform other than float/vec2/3/4/mat4 (`MaliError::UniformType`, `mod.rs:416`) | 462 / 0 | 462 | 314 | 148 | shaders.random 160, shaders.indexing 82, uniform_api.value 78 | `nir.rs:1158, :1180, :4456` | plan #377 unitype: fp16 matrices and bvec3 all(==) landed 9a4a8d93 (11 of 20 refs); int/bool uniforms wait for intval (intval-vs16, intval-rest) |
+| 4 | constant product in a shape Mesa folds (CONST_FOLD) (`MaliError::ArithConstant`, `mod.rs:444`) | 298 / 88 | 386 | 386 | 0 | shaders.random 313, shaders.constant_expressions 16, shaders.operator 16 | `glsl.rs:52, :1492, :1590 (36 sites)` | #367 CONST_FOLD; open for the dEQP random shapes (arith-ref) |
+| 5 | kept (run-time bound) loop in a mediump fs (`MaliError::LoopMediump`, `mod.rs:489`) | 0 / 281 | 281 | 0 | 281 | shaders.loops 181, shaders.indexing 84, shaders.struct 6 | `nir_fs.rs:5057` | plan #377 map-loops (mali-deqp-loops.md): open, needs intval for counters and bounds; glmark2 shapes #367 |
+| 6 | mediump fs uniform other than float/vec2/3/4, vec4 array, int (`MaliError::FsUniform`, `mod.rs:426`) | 0 / 280 | 280 | 280 | 0 | uniform_api.value 128, shaders.matrix 67, shaders.random 42 | `mod.rs:1459; nir_fs.rs:8372 (22 sites)` | plan #377 unitype: partly landed 9a4a8d93; matrices, structs, bool/int open |
+| 7 | int or bool value (fs) (`MaliError::IntValue`, `mod.rs:415`) | 0 / 271 | 271 | 247 | 24 | shaders.operator 95, shaders.random 39, shaders.conversions 37 | `nir_fs.rs:1416` | landed in part: fs step 1 ab9cde96, vs step 2 56bed483 (plan #377); left: intval-vs16, intval-reslib, intval-rest |
+| 8 | loop in a vertex shader (`MaliError::LoopVertex`, `mod.rs:495`) | 241 / 0 | 241 | 29 | 212 | shaders.loops 156, shaders.indexing 62, shaders.functions 7 | `nir.rs:4174, :4184, :4205, :4255 (11 sites)` | glmark2 vertex loops landed 011bade0 (#367); dEQP shapes open (plan #377 map-loops); int counters need intval |
+| 9 | constant operation on a value that is not a finite normal float (`MaliError::ConstantFold`, `mod.rs:450`) | 177 / 27 | 204 | 167 | 28 | shaders.indexing 82, shaders.random 52, shaders.constant_expressions 26 | `nir.rs:2166, :2171, :2274, :2806 (11 sites)` | landed in part: constop 0fd576ea (plan #377); rest open |
+| 10 | uniform array (`MaliError::UniformArray`, `mod.rs:419`) | 193 / 0 | 193 | 193 | 0 | uniform_api.value 154, uniform_api.info_query 20, uniform_api.random 19 | `nir.rs:1062; nir_fs.rs:7350` | open: read-only spike 74dabf88 (plan #377 uniarray), no lowering merged; int/bool arrays need intval |
+| 11 | back end defect IrIndex (fs; 185 direct, 2 through a link error) (`MaliError::Defect(IrIndex)`, `mod.rs:575`) | 0 / 187 | 187 | 187 | 0 | shaders.swizzles 108, shaders.conversions 45, shaders.matrix 13 | `likeliest mod.rs:1071-1074 (FsPrecision::of re-parse); also :1788, :1913 (unverified)` | NEW at the tip, no owner: a defect, not a refusal (section 18.4) |
+| 12 | texture coordinate other than a vec2 varying or two constants (`MaliError::TexCoord`, `mod.rs:468`) | 0 / 182 | 182 | 182 | 0 | texture.specification 86, uniform_api.value 52, shaders.random 25 | `nir_fs.rs (21 sites; tests.rs:1281)` | #367 TEX_COORD: glmark2 shapes landed 5244a7f5; dEQP shapes open |
+| 13 | fs mixing highp and mediump/lowp floats (`MaliError::MixedPrecision`, `mod.rs:429`) | 0 / 166 | 166 | 164 | 2 | shaders.random 94, shaders.operator 45, shaders.matrix 15 | `mod.rs:1448, :1571; 17 sites` | landed in part: lower-mixprec c81b75ea, c349f227 (plan #377); rest open |
+| 14 | fs operand of a form no reference draws (`MaliError::FsOperandForm`, `mod.rs:510`) | 0 / 152 | 152 | 152 | 0 | shaders.operator 69, shaders.random 35, shaders.matrix 29 | `nir_fs.rs (35 sites; tests.rs:1209)` | #367 FS_OPERAND (with ARITH); open (arith-ref) |
+| 15 | fused multiply-add other than a matrix product (`MaliError::FusedMultiplyAdd`, `mod.rs:453`) | 139 / 0 | 139 | 139 | 0 | shaders.operator 42, shaders.matrix 41, shaders.constant_expressions 32 | `no literal site outside tests.rs:1198 (raised through a helper)` | #367 FMA: glmark2 vertex built-ins landed 33d4d021; dEQP forms open (arith-ref) |
+| 16 | -0.0 read through a variable (`MaliError::NegZeroShared`, `mod.rs:441`) | 68 / 69 | 137 | 137 | 0 | shaders.random 135, fragment_ops.interaction 2 | `glsl.rs:1866, :2077, :2100, :2141 (15 sites)` | landed in part: 4b38072e, constop 0fd576ea; random shapes open |
+| 17 | vs uniform that is not highp (`MaliError::UniformPrecision`, `mod.rs:423`) | 99 / 0 | 99 | 46 | 53 | shaders.loops 41, uniform_api.value 36, shaders.indexing 12 | `mod.rs:1364; nir.rs:1144` | plan #377 unitype, mediump vs uniforms: waits for the mediump vertex walk (intval-vs16) |
+| 18 | control flow (if, loop, early return) (`MaliError::ControlFlow`, `mod.rs:411`) | 39 / 34 | 73 | 69 | 4 | shaders.random 46, shaders.conditionals 7, fragment_ops.interaction 6 | `nir.rs:3772, :3821, :3877, :3910 (14 sites)` | #367 CONTROL_FLOW; open |
+| 19 | colour pair: constant then varying lane (`MaliError::ColourPair`, `mod.rs:525`) | 0 / 61 | 61 | 61 | 0 | shaders.random 49, shaders.operator 9, fragment_ops.interaction 3 | `nir_fs.rs:8706, :8771` | plan #377 colourpair; 22eb4440 landed in part; random shapes open |
+| 20 | vs texture look-up other than 2D/cube at a level (`MaliError::TexVertex`, `mod.rs:459`) | 60 / 0 | 60 | 60 | 0 | uniform_api.value 44, uniform_api.random 10, uniform_api.info_query 6 | `nir.rs:4631` | glmark2 look-ups landed 80403eba; dEQP shapes open; text newly named in FAMILIES |
+| 21 | two varying lanes of equal value (`MaliError::VaryingDuplicate`, `mod.rs:507`) | 9 / 40 | 49 | 40 | 9 | shaders.swizzles 33, shaders.indexing 9, shaders.conversions 6 | `nir.rs:5478; nir_fs.rs:11483` | landed in part: varylink 22eb4440, 09adb275 (plan #377); swizzle shapes open |
+| 22 | fs varying load or conversion of a form no reference draws (`MaliError::FsVaryingLoad`, `mod.rs:526`) | 0 / 43 | 43 | 43 | 0 | shaders.operator 23, shaders.random 10, shaders.indexing 4 | `nir_fs.rs:5831 (11 sites)` | plan #377 mixprec; open |
+| 23 | fp16 arithmetic on gl_FragCoord (`MaliError::FragCoordMediump`, `mod.rs:432`) | 0 / 42 | 42 | 42 | 0 | shaders.conversions 32, shaders.random 9, shaders.functions 1 | `nir_fs.rs:2786, :2820` | #367 FRAGCOORD_FP16: c7c377d3, 98969940 landed for glmark2; dEQP conversion shapes open; newly named in FAMILIES |
+| 24 | fs texture look-up other than texture2D(sampler2D, coordinate) (`MaliError::TexKind`, `mod.rs:462`) | 0 / 42 | 42 | 42 | 0 | shaders.random 34, shaders.texture_functions 4, texture.mipmap 4 | `tests.rs:1270 (15 sites)` | #367 TEX_VERTEX (family name); open |
+| 25 | varying lane computed from no attribute (`MaliError::VaryingNotFromAttribute`, `mod.rs:504`) | 32 / 0 | 32 | 31 | 1 | shaders.random 23, fragment_ops.interaction 6, shaders.struct 2 | `mod.rs:1839; nir.rs:5471, :5492` | landed in part: varylink 22eb4440 (plan #377); rest open |
+| 26 | discard other than a highp fs `if (a < b) discard;` (`MaliError::DiscardForm`, `mod.rs:483`) | 0 / 16 | 16 | 16 | 0 | shaders.discard 16 | `nir_fs.rs (12 sites; tests.rs:1295)` | open, no owner (mali-discard.md); newly named in FAMILIES |
+| 27 | colour pair of a varying lane and 0.0 (`MaliError::ColourZeroHalf`, `mod.rs:529`) | 0 / 16 | 16 | 16 | 0 | shaders.operator 9, shaders.random 7 | `nir_fs.rs:8671, :9065` | plan #377 colourpair; open |
+| 28 | three or more additions or multiplications in a chain (`MaliError::Rebalance`, `mod.rs:447`) | 8 / 4 | 12 | 12 | 0 | shaders.random 7, shaders.invariance 3, shaders.functions 2 | `glsl.rs:1255, :1270, :1310 (15 sites)` | #367 ARITH (rebalance); open |
+| 29 | break/continue behind a run-time condition in an unrolled mediump loop (`MaliError::GuardMediump`, `mod.rs:492`) | 0 / 12 | 12 | 0 | 12 | shaders.loops 12 | `nir_fs.rs:4546` | plan #377 map-loops; open |
+| 30 | uniform read at a run-time index (`MaliError::UniformIndexed`, `mod.rs:420`) | 10 / 0 | 10 | 4 | 6 | shaders.indexing 10 | `nir.rs:1215, :1244` | plan #377 uniarray; open |
+| 31 | invariant output (`MaliError::Invariant`, `mod.rs:456`) | 9 / 0 | 9 | 9 | 0 | shaders.invariance 9 | `nir.rs:5264` | a3651e1f landed for copies; shaders.invariance forms open |
+| 32 | vertex shader at the link's attribute locations (attribute_location.bind_aliasing) (`MaliError::LinkedVertexNotLowered`, `mod.rs:407`) | 8 / 0 | 8 | 8 | 0 | attribute_location.bind_aliasing 8 | `mod.rs:2021` | open, no owner; newly named in FAMILIES |
+| 33 | shape Mesa's algebraic rules rewrite without a reference (`MaliError::AlgebraicForm`, `mod.rs:561`) | 0 / 8 | 8 | 8 | 0 | shaders.matrix 6, shaders.random 2 | `nir_fs.rs:6203, :12651` | plan #377 misc; open |
+| 34 | vs attribute numbering waits for a fold (`MaliError::AttributeNumbering`, `mod.rs:570`) | 8 / 0 | 8 | 8 | 0 | shaders.random 8 | `nir.rs:3991` | open (shaders.random vertex); newly named in FAMILIES |
+| 35 | back end defect Encode (vs) (`MaliError::Defect(Encode)`, `mod.rs:575`) | 6 / 0 | 6 | 6 | 0 | attribute_location.bind_aliasing 6 | `not located` | NEW at the tip, no owner: a defect (section 18.4) |
+| 36 | gl_Position lane left unwritten (`MaliError::PositionLane`, `mod.rs:501`) | 6 / 0 | 6 | 6 | 0 | shaders.operator 6 | `nir.rs:2120, :5368` | plan #377 varylink; open |
+| 37 | varying lane left unwritten (`MaliError::VaryingForm`, `mod.rs:503`) | 4 / 0 | 4 | 3 | 0 | shaders.linkage 3, shaders.declarations 1 | `nir.rs:5421; motion.rs:216` | plan #377 varylink (shaders.linkage negative cases); open |
+| 38 | fs colour of more than 255 vectorised operations (`MaliError::FragmentTooLarge`, `mod.rs:513`) | 0 / 4 | 4 | 4 | 0 | uniform_api.value 2, uniform_api.info_query 1, uniform_api.random 1 | `nir_fs.rs:8225; vec16.rs:247` | open, no owner; newly named in FAMILIES |
+| 39 | loop past the unroll limits or with two run-time breaks (`MaliError::LoopForm`, `mod.rs:486`) | 0 / 3 | 3 | 1 | 2 | shaders.loops 3 | `nir.rs:1658, :1660` | plan #377 map-loops; open |
+| 40 | constant fp16 does not hold (`MaliError::Fp16Inexact`, `mod.rs:532`) | 0 / 3 | 3 | 3 | 0 | shaders.matrix 3 | `nir.rs:2131, :2986` | plan #377 constop; open |
+| 41 | more than 32 work registers (`MaliError::Spill`, `mod.rs:536`) | 2 / 0 | 2 | 2 | 0 | shaders.matrix 2 | `ra.rs:697` | open (shaders.matrix) |
+| 42 | more than 2048 IR values (`MaliError::TooManyValues`, `mod.rs:540`) | 2 / 0 | 2 | 2 | 0 | uniform_api.random 2 | `nir.rs:2024, :4294` | open (table size) |
+| 43 | texture result lanes other than its own pairs (`MaliError::TexLanes`, `mod.rs:477`) | 0 / 1 | 1 | 1 | 0 | shaders.struct 1 | `nir_fs.rs:9812, :9819` | #367 TEX_LANES; open |
+| | **Total** | 2454 / 3742 | 6196 | 5340 | 846 | | | |
+
+`Fail` + `NS` + the 10 Pass cases = 6,196. The mapping text to family is the
+script's `FAMILIES` table; `tools/cts/mali-family-refusals.txt` is the
+board's tree (section 17) and is unchanged: the new texts were not first
+refusals of the board's tree rows (they sit in what the tree leaves out), and
+changing it would move `tools/cts/mali-family-tree-selftest.sh`'s pinned
+counts without a board rerun.
+
+### 18.3 Work order and the shapes each item must cover
+
+The order is fixed by the plan: integer/boolean first, then `gl_FragColor`
+lane sources, then by count. Counts are cases whose first refusal is the
+text (section 18.2); "also" names cases of the same text that other shapes
+hold. The shape names are the script's (`measure.tsv`, `summary.md`); the
+representative pair of each is `shapes/<family>_<shape>.vert|.frag` of a run
+(not committed; section 14's `tools/mali/testdata/deqp_shapes/` holds the
+committed pairs). The families of #367's glmark2 texts (`Arithmetic`,
+`ColourForm`, `ArithConstant`, `TexCoord`, `FsOperandForm`,
+`FusedMultiplyAdd`) have no shape classification in the script (one shape
+`367`); their shapes are given by dEQP group, and item `fclane-ref` and
+`arith-ref` name the real shapes.
+
+**1. Integer and boolean values** (items `intval-vs16`, `intval-reslib`,
+`intval-rest`; owner plan #377's intval, `mali-deqp-intval.md`). The direct
+text is `IntValue` (271), but the family is now spread over the texts the
+walk reached after it; the int/bool-bearing shapes of the table are 1,120
+cases:
+
+| Shape (script name) | Text | Cases | Groups |
+|---|---|--:|---|
+| `int_uniform` | IntValue (fs) | 101 | shaders.functions 30, shaders.indexing 20, shaders.scoping 16 |
+| `ivec_operator` | IntValue | 72 | shaders.operator 72 (`not_equal`, `equal`, `less_than` ... `_int_fragment`, ivec) |
+| `random_mixed` | IntValue | 40 | shaders.random 39, fragment_ops.interaction 1 |
+| `bool_uniform` | IntValue | 31 | shaders.conversions 25, shaders.functions 6 |
+| `step_sign` | IntValue | 21 | shaders.operator 21 (`step`, `sign`) |
+| `bool_literal`, `bool_logic`, `scalar_conversion` | IntValue | 6 | shaders.conditionals 4, shaders.operator 2 |
+| `vs_int_uniform` | UniformType (vs) | 346 | shaders.random 160, shaders.indexing 82, shaders.loops 56 |
+| `vs_struct_uniform` | UniformType (vs) | 116 | uniform_api.value 66, shaders.struct 37, uniform_api.info_query 12 |
+| `vs_mediump_basic` / `_struct` / `_array` | UniformPrecision (vs) | 99 | shaders.loops 41, uniform_api.value 36, shaders.indexing 12: the mediump vertex walk (`intval-vs16`) |
+| `fs_bool_uniform`, `fs_int_uniform`, `fs_struct_uniform` | FsUniform (fs) | 151 | uniform_api.value, shaders.random 12 |
+| `bool_array`, `int_array` | UniformArray (vs) | 137 | uniform_api.value 116 |
+
+`intval-vs16` takes the vertex walk's mediump compare path
+(`opvs_logical_and`, `opvs_not_equal_bvec3`; `_vertex` `bool_compare`,
+`float_compare`, `logical_*`, bvec `equal`/`not_equal`): the
+`UniformType`/`UniformPrecision` vertex rows above and the ~100 Fail
+of `mali-deqp-intval.md` section 8. `intval-reslib` takes the shader-library
+`_vertex` cases with an int output (the fragment compare, section 8's
+`reslib_int_vs`). `intval-rest` takes the fragment `IntValue` shapes
+(`int_uniform`, `ivec_operator`, `random_mixed`, `bool_uniform`,
+`step_sign`) and the fs/array rows, by count. The kept loops of section 11
+need the counters of this step (`LoopVertex` 241, `LoopMediump` 281, below).
+
+**1a. `Defect(IrIndex)`, 187 cases, to triage with `intval-rest`** (section
+18.4). 152 of them were board `intval` cases: fragment shaders that are mostly
+`bvec`/`bool` conversions and swizzles (`shaders.swizzles.vector_swizzles`
+108, `shaders.conversions.*` 45, `shaders.matrix.mul` 5,
+`shaders.operator.float_compare` 5). They are a defect, not a missing
+lowering: the owner decides whether it is a regression of `ab9cde96` (intval
+step 1).
+
+**2. `gl_FragColor` lane sources** (`ColourForm`, 821, all fragment; items
+`fclane-ref`, `fclane-lower-1`, `fclane-lower-2`; #367 FRAGCOLOR_LANE). By
+dEQP group: uniform_api.value 188, shaders.operator.binary_operator 144,
+shaders.operator.unary_operator 61, shaders.matrix.mul 46, shaders.indexing
+40, shaders.operator.common_functions 30, uniform_api.info_query 27,
+shaders.random.basic_expression 21, texture.specification 20,
+shaders.matrix.add 16. `5244a7f5` landed glmark2's shapes only. The
+refusing shapes are the `gl_FragColor = vec4(v.x, v.y, ...)` colour with a
+lane that is not the varying's own (a swizzle, a computed lane, a uniform
+read), each with a Mesa reference to byte-compare.
+
+**3. Then by count** (a text of 100 or more cases; Fail + NS in 18.2):
+
+| # | Text (variant) | Cases | Shapes to cover (script shape, or dEQP group) | Item / owner |
+|--:|---|--:|---|---|
+| 3.1 | Arithmetic other than +, -, * | 1,463 | shaders.operator.common_functions 221, shaders.random.exponential 140, uniform_api.value 136, shaders.operator.binary_operator 126, angle_and_trigonometry 104, shaders.swizzles.vector_swizzles 93, shaders.random.trigonometric 85, shaders.constant_expressions 74, shaders.operator.exponential 64; (vs 574 / fs 889) | `arith-ref`, `arith-lower-1`; #367 ARITH |
+| 3.2 | Constant product Mesa folds (`ArithConstant`) | 386 | shaders.random.basic_expression 86, `scalar_conversion` 62, `all_features` 54, `conditionals` 45, `comparison_ops` 17, shaders.constant_expressions 16, operator.angle_and_trigonometry 16; (vs 298 / fs 88) | `arith-ref`; #367 CONST_FOLD |
+| 3.3 | Kept loop, mediump fs (`LoopMediump`) | 281 (all NS) | `fs_kept_for_index` 90 (shaders.indexing 84, struct 6), `fs_kept_for` 73, `fs_kept_while` 67, `fs_kept_do_while` 51 | plan #377 map-loops, after intval; open, unnumbered item |
+| 3.4 | Mediump fs uniform (`FsUniform`) | 280 | `fs_mat_uniform` 79, `fs_struct_uniform` 75, `fs_other` 50, `fs_bool_uniform` 41, `fs_int_uniform` 35 (the last three in section 1) | plan #377 unitype; open |
+| 3.5 | Loop in a vertex shader (`LoopVertex`) | 241 | `vs_for_index` 62, `vs_do_while` 52, `vs_while` 52, `vs_for_uniform` 38, `vs_for_constant` 31, `vs_for_dynamic` 6 (212 NS) | plan #377 map-loops, after intval; `vs_for_*` partly #367 |
+| 3.6 | Constant op on a non-finite-normal value (`ConstantFold`) | 204 | `zero_operand` 98, `random_mixed` 60, `const_other` 23, `const_call_transcendental` 16, `const_call_other` 7 | plan #377 constop, rest; open |
+| 3.7 | Uniform array (`UniformArray`) | 193 | `bool_array` 90, `int_array` 47, `array_in_struct` 34, `mat_array` 21, `struct_array` 1 | plan #377 uniarray (spike 74dabf88); open |
+| 3.8 | Texture coordinate (`TexCoord`) | 182 | texture.specification 86, uniform_api.value 52, shaders.random.texture 25, uniform_api.info_query 11, shaders.discard 4 | #367 TEX_COORD; open for dEQP |
+| 3.9 | Mixed highp/mediump (`MixedPrecision`) | 166 | `fs_mixed_other` 101 (shaders.random 94), `fs_highp_declared` 65 (shaders.operator 43, shaders.matrix 15) | plan #377 mixprec, rest; open |
+| 3.10 | Fragment operand of a form no reference draws (`FsOperandForm`) | 152 | shaders.operator.binary_operator 42, unary_operator 14, shaders.random.basic_expression 14, shaders.matrix.sub 10, mul 9 | #367 FS_OPERAND; with `arith-ref` |
+| 3.11 | Fused multiply-add (`FusedMultiplyAdd`) | 139 (all vs) | shaders.operator 42, shaders.matrix 41, shaders.constant_expressions 32, shaders.random 15 | #367 FMA; with `arith-ref` |
+| 3.12 | -0.0 through a variable (`NegZeroShared`) | 137 | `neg_zero_variable` 137 (shaders.random 135; vs 68 / fs 69) | plan #377 constop; open |
+
+3.1 to 3.2, 3.10 and 3.11 are the same #367 arithmetic family (1,463 + 386 +
+152 + 139 = 2,140 cases, 35 % of the refusals): the `arith-*` items own them
+together. Every text below 100 stays in 18.2 (`UniformPrecision` 99 is
+inside section 1; `ControlFlow` 73, `ColourPair` 61 and the rest follow).
+
+### 18.4 New at the tip: two defects and a crash (not in `de2f2c10`'s 40 texts)
+
+- `Defect(IrIndex)` (fragment): 187 cases. The message is the generic
+  "back end defect: an invariant of the pipeline did not hold". The site is
+  not named by the text; `FsPrecision::of` (`mod.rs:1071-1074`) re-parses
+  the shader with `map_err(|_| Defect::IrIndex)` and the cases are
+  `bvec`/`bool` shaders (`bvec2 in0 = bvec2(v_in0); out0 = in0.gggg;` in
+  `shaders.swizzles.vector_swizzles.mediump_bvec2_gggg_fragment`), so the
+  re-parse of a bool-vector source is the first suspect. Unconfirmed: no
+  `src/` change was made here. The 2 `link error:` cases are the same
+  defect reached through a program link.
+- `Defect(Encode)` (vertex): 6 cases, all `attribute_location.bind_aliasing`
+  (`max_cond_float` and the like).
+- 2 library crashes (SIGSEGV, processes exit 139): the cases
+  `dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.96` and
+  `.fragment.96`, both board `intval` Fail. They end `NoResult`, counted in
+  the 4,401, not in the 6,196.
+
+### 18.5 Landed since `de2f2c10` (the commits behind the status column)
+
+`git log --oneline de2f2c10..HEAD -- src/shaderc/online/mali`: intval step 1
+`ab9cde96` (fragment) and step 2 `56bed483` (vertex); unitype `9a4a8d93`;
+constop `0fd576ea`; mixprec `c81b75ea`, `c349f227`; varylink `22eb4440`,
+`09adb275`; glmark2 colour lanes and texture coordinates `5244a7f5`;
+vertex built-ins `33d4d021`; vertex look-ups `80403eba`, `ea40c2b7`;
+vertex loops `011bade0`; locals `74308a71`; FAU pages `443c62f5`; fragment
+operand widths `6b3eca91`, `4b38072e`, `98969940`; misc `a3651e1f`,
+`c7c377d3`; attribute records `24c04082`; uniform rows `3cbecbb9`; the
+read-only spikes `205547fa`, `289ac2fa`, `74dabf88` (patches, not merged).
+The `LOCALS` text (`more than 32 local variables`) no longer appears
+(`74308a71`: up to 256 locals compile).
+
+The issue numbers #31, #32, #33, #4479, #4500, #4536 (precision design),
+#4732, #6232 and #6433 are not cited in `docs/notes` or `tools/cts`: this
+section's owner column names the plan and the note instead; `gh` was not
+available to read them.
+
+### 18.6 Caveats
+
+- HOST-ONLY: the compile and link outcome at the tip, as section 2. A case
+  that compiles here is not a pass on the board; it can still mis-render, or
+  be refused at the draw.
+- Only the cases refused in the slices `37305608` (10,597) are measured.
+  The board run of `de2f2c10` (10,489 refused compiles of 40 texts, records
+  gitignored, not available here) refused cases the slices did not: a case
+  that compiled at `37305608` and was refused only at `de2f2c10` is in
+  neither the table nor the 4,401. The top-level counts of
+  `tools/cts/RESULTS.md` (9,545 Fail) are the `de2f2c10` run's, not these.
+- The first refusal is the refusing stage's; a case whose partner shader
+  also refuses moves to the partner's text, not to a pass. "Next refusal"
+  per shape is in `summary.md` of a run.
+- 20 of the cases of section 13 can move their first refusal between
+  runs; the counts here are those of one run at `9ac31f30`.
