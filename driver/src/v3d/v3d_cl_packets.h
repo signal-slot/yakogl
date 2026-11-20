@@ -20,7 +20,9 @@
  * written at 7.1 only: Mesa's 7.1 clear frame starts its binning list with
  * it and the Pi 5 probes follow that frame; the 4.2 clear frame does not
  * emit it, and the 4.2 table (and the case count tools/check.sh pins for
- * it) stays as it is.
+ * it) stays as it is. GL_SHADER_STATE_RECORD_DRAW_INDEX is the BCM2712 D0's
+ * (V3D 7.1.10) shader record, which the 7.1 triangle frame writes
+ * (docs/notes/v3d71-triangle-frame.md); it has no 4.2 counterpart.
  */
 #ifndef V3D_CL_PACKETS_H
 #define V3D_CL_PACKETS_H
@@ -103,6 +105,7 @@
 	X(TILE_COORDINATES_IMPLICIT)                                                               \
 	X(TILE_LIST_INITIAL_BLOCK_SIZE)                                                            \
 	X(GL_SHADER_STATE_RECORD)                                                                  \
+	V3D_CL_X71(X, GL_SHADER_STATE_RECORD_DRAW_INDEX)                                           \
 	X(GL_SHADER_STATE_ATTRIBUTE_RECORD)                                                        \
 	X(TEXTURE_SHADER_STATE)                                                                    \
 	X(SAMPLER_STATE)
