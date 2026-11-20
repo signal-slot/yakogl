@@ -945,3 +945,103 @@ suite's `mediump vec4 color`, `color.x = float(res)`, `color = color * 0.10
 - The vertex walk's `udiv`/`umod`/`umin`/`umax` and `imod` by other than a
   power of two: ES 3.00, no reference.
 
+
+## 9. The fragment shader of a `_vertex` case's int output (intval-reslib), done
+
+Plan #387, item intval-reslib. `reslib_int_vs` compiles and is byte-equal
+to Mesa 26.2.1 (`tests/mali_deqp_intval.rs`, `LOWERED`; every region): its
+vertex program since step 2, now its fragment program, dEQP's
+`genFragmentShader` check of an `int` output,
+
+```glsl
+bool isOk (float a, int b) { float atemp = a+0.5; return (float(b) <= atemp && atemp <= float(b+1)); }
+```
+
+Mesa's words: the mediump `atemp` at fp16 (`FADD.f32 r0.h0` of the varying,
+`FADD.v2f16 r0, r0^.h00, 0x38000000.h11`), widened once (`F16_TO_F32 r0,
+r0^.h0`), the two integer floats at fp32 (`S32_TO_F32 r1, u2.w0`,
+`IADD_IMM.i32` and `S32_TO_F32` of `b + 1`), the second compare
+(`FCMP_OR.f32.ge.m1 r2, r2^, r0, 0x0`), then the first ANDed with it
+(`FCMP_AND.f32.ge.m1 r0, r0^, r1^, r2^`) and the colour's `MUX.v2i16` as
+`reslib_int_fs`'s.
+
+### What was lowered, and where (all in `src/shaderc/online/mali/`)
+
+- `nir_fs.rs`, the walk's mediump compare arm: an integer's float on
+  either side (`Fs::int_float`: `i2f32`/`u2f32`, fp32 since lower_precision
+  lowers no conversion from an integer) makes the compare fp32 (`op32`,
+  `FCMP_OR.f32`). The other side must be another integer's float or an
+  fp16 value read through a local (`LoadLocal`); that value is widened by
+  `Fs::widen_local`, one CSE'd `f2f32` placed right after the fp16 value in
+  the order. This is lower_precision's `f162f` at the assignment
+  (`atemp = f162f(f2fmp(a) + 0.5)`), and it is why Mesa's `F16_TO_F32` comes
+  before the `S32_TO_F32` of the compare that reads it. A constant on the
+  other side is refused (`IntValue`): nir_opt_algebraic.py:885-896 rewrite
+  `flt(i2f(a), 0.0)` and the like into integer compares. So is a varying's
+  lane or an fp16 expression not stored to a local. Neither has a
+  reference.
+- `Fs::fcmp32`: the 32-bit mask of such a compare is a boolean of its
+  compare's width (`pan_nir_lower_bool_to_bitsize`), counted by `bool32`
+  (not by `mask_lane`, so the flattened `if`'s condition rule is
+  unchanged).
+- `Fs::int_lane`, a new `iand` arm: `&&` of two such masks
+  (`Fs::and_fcmp32`) is a 32-bit `iand`. It is refused where a rule of
+  nir_opt_algebraic.py makes another program: a constant operand
+  (:918, :1162-1165, :1206-1214), an operand shared in the same place
+  (:1158-1161, `fmin`/`fmax` of the other sides), or the same compare with
+  its sources swapped (:749-750).
+- `bool_colour`: an `i2f32`, `u2f32` or `f2f32` whose live readers are all
+  fp32 compares joins the graph.
+- `FCMP_AND.f32`: `bir.rs` `Op::FcmpAndF32` (the sources' info of
+  `FCMP_OR.f32`, a 32-bit third source), `pack.rs` (the `FCMP_OR.f32` fill
+  on `IsaOp::FcmpAndF32`), `opt.rs` `fuse_cmp`
+  (`va_remap_logical_to_logical_cmp`'s float AND form: the `LSHIFT_AND.i32`
+  of two `FCMP_OR.f32` is the first compare's `_AND` with the second's mask
+  as its third source). `tests.rs` `ALL_OPS` and `mesa_opcode` list it
+  (`FCMP_AND_F32` of `valhall_src_info.txt`).
+
+### What moved with it
+
+- No other byte-compare moved: the `mali_deqp_*`, `mali_fs_arith`,
+  `mali_vs_arith`, `mali_int_loops`, `mali_locals`, `mali_fragcoord16`,
+  `mali_arith_const`, `mali_const_fold`, `mali_texcoord_lane`,
+  `mali_fragment_random`, `mali_vs_fma` and `mali_ref_selftest` suites and
+  the module's unit tests pass unchanged. That includes
+  `the_corpus_verdicts_are_pinned`, so no corpus verdict moved.
+- No new `emit.rs` row: the fp32 `Fcmp`, `F2f32`, `I2f` and 32-bit `Iand`
+  rows were already drawn.
+
+### Forecast (HOST-ONLY)
+
+`tools/mali/deqp-host-measure.sh --filter _vertex` (VK-GL-CTS 93bca01,
+the 3,365 `_vertex` cases of the committed slices
+`tools/cts/log/2026-11-15-t6-gles2-S{1..4}-37305608`), run at 9ac31f30
+without and with this change. These are compile and link outcomes only,
+no render verdict:
+
+- 64 cases go from this family's refusal (shape `int_uniform`, fragment
+  stage) to no refusal at all: `shaders.functions` 21, `shaders.scoping`
+  16, `shaders.swizzles` 15, `shaders.conversions` 12. On the board they
+  were 62 Fail and 2 NotSupported. No case moves to another refusal, and
+  no case regresses.
+- The `_vertex` cases refused with this text go from 70 to 6. All six are
+  constant int outputs (`constants.int_0..4_vertex`,
+  `constant_expressions.trivial.int_vertex`). Presumably Mesa's link
+  propagates the constant varying into the fragment shader, so `atemp`
+  is a constant and the compare is one of the constant forms refused
+  above (not checked against a reference).
+
+The note's earlier estimate of "about 103 VS cases" counted the board's
+refusals at de2f2c10, before the later lowerings moved some of them.
+
+### Left
+
+- The other checks of gluShaderLibrary.cpp:1932-1947 are other fragment
+  shaders with no reference here: `ivecN` (`ivecN(floor(a + 0.5)) == b`),
+  `bvecN` (`greaterThan(a, vecN(0.5)) == b`). So is a case with several
+  outputs, whose `RES` is the `&&` of several `isOk`s (an `iand` of
+  `FCMP_AND` results, which `Fs::and_fcmp32` does not take). The forecast
+  above names the cases that still refuse.
+- `||` of two fp32 compares (`FCMP_OR.f32` with a third source) and `&&`
+  of two 32-bit integer compares outside `all()` are not taken: no
+  reference.

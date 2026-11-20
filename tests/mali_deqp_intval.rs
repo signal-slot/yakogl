@@ -2,17 +2,18 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Byte-compare of the Mali online compiler against the Mesa 26.2.1
 //! references `tools/mali/testdata/deqp_intval_*` (plan #377, family intval,
-//! `docs/notes/mali-deqp-intval.md` sections 5, 7 and 8), one test per
+//! `docs/notes/mali-deqp-intval.md` sections 5, 7, 8 and 9), one test per
 //! reference. `tests/mali_ref` does the compare; the references were drawn
 //! with `--uniform-values`, so each uniform word of the FAU is the value
 //! gl_ref.py set (an int as the integer, a true bool as `ffffffff`).
 //!
-//! The twelve fragment-walk references of step 1 (lower-intval-1) and nine
-//! vertex-walk references of step 2 (lower-intval-2) compile and are
-//! byte-equal ([`LOWERED`]): the shader library's `isOk` chains, the
-//! operator suite's int arithmetic, compares and bool logic in either
-//! stage, the rsg programs' folded literals and the `uniform_api` bool
-//! compares. `opvs_logical_and` compiles with other words than Mesa's
+//! The twelve fragment-walk references of step 1 (lower-intval-1), nine
+//! vertex-walk references of step 2 (lower-intval-2) and `reslib_int_vs`
+//! (plan #387 intval-reslib: the fp32 compares of a `_vertex` case's int
+//! output and their `FCMP_AND.f32`) compile and are byte-equal
+//! ([`LOWERED`]): the shader library's `isOk` chains, the operator suite's
+//! int arithmetic, compares and bool logic in either stage, the rsg
+//! programs' folded literals and the `uniform_api` bool compares. `opvs_logical_and` compiles with other words than Mesa's
 //! ([`DIFFERS`]: Mesa compares the mediump attributes at fp16, the vertex
 //! walk at fp32). The rest stay `#[ignore]`d with their refusal
 //! ([`REFUSED`], asserted exactly by `refusals_pinned`): the lowering that
@@ -27,7 +28,7 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The references the two steps lowered, without the `deqp_intval_` prefix:
+/// The references the steps lowered, without the `deqp_intval_` prefix:
 /// each has a byte-compare test below.
 const LOWERED: &[&str] = &[
     "opfs_add_int_mediump",
@@ -46,6 +47,7 @@ const LOWERED: &[&str] = &[
     "reslib_bvec_fs",
     "reslib_float_fs",
     "reslib_int_fs",
+    "reslib_int_vs",
     "reslib_mixed_fs",
     "rsg_constbool_vs",
     "rsg_conv_vs",
@@ -69,12 +71,6 @@ const REFUSED: &[(&str, &str)] = &[
         "opvs_not_equal_bvec3",
         "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet",
     ),
-    /* the fragment shader of every `_vertex` shader-library case with an
-     * int output: `isOk(float a, int b)` compares the mediump `atemp`
-     * widened with `float(b)` and `float(b + 1)` at fp32 and `&&`s the two
-     * 32-bit masks (`FCMP_AND.f32.ge.m1`, a form the ISA table lacks): the
-     * mixprec family's fragment side */
-    ("reslib_int_vs", "Valhall: an integer or boolean value is not lowered yet"),
     /* its vertex shader compiles since step 2; its fragment shader reads
      * the varyings Mesa's link removes as dead, which `mali_ref` cannot
      * reach */
@@ -173,8 +169,12 @@ fn reslib_int_fs() {
     mali_ref::assert_matches("deqp_intval_reslib_int_fs");
 }
 
+/// The fragment shader of every `_vertex` shader-library case with an int
+/// output: `isOk(float a, int b)` compares the mediump `atemp` widened
+/// (`F16_TO_F32` right after its `FADD.v2f16`) with `float(b)` and
+/// `float(b + 1)` at fp32, and the `&&` of the two masks is one
+/// `FCMP_AND.f32.ge.m1`.
 #[test]
-#[ignore = "refused: an integer or boolean value is not lowered yet (its fragment shader's fp32 compares of the widened mediump atemp and their `&&`, mixprec's fragment side)"]
 fn reslib_int_vs() {
     mali_ref::assert_matches("deqp_intval_reslib_int_vs");
 }

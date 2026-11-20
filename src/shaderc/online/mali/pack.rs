@@ -259,8 +259,8 @@ pub fn pack_one(i: &Ins, branch: i32) -> Result<u64, MaliError> {
             f.put("round", 0)?.put("clamp", i.clamp as u32)?;
             alu_dest(&mut f, i, "dest_width_narrow")?;
         }
-        Op::FcmpOrF32 { cmpf, result } => {
-            f = Fill::new(IsaOp::FcmpOrF32);
+        Op::FcmpOrF32 { cmpf, result } | Op::FcmpAndF32 { cmpf, result } => {
+            f = Fill::new(if matches!(i.op, Op::FcmpOrF32 { .. }) { IsaOp::FcmpOrF32 } else { IsaOp::FcmpAndF32 });
             for s in 0..2 {
                 fsrc(&mut f, i, s)?;
             }

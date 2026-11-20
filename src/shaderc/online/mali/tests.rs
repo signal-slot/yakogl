@@ -3201,6 +3201,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
         O::FminV2f16 => "FMIN_V2F16",
         O::FabsnegF32 | O::FabsnegV2f16 | O::FclampF32 | O::FclampV2f16 => return None,
         O::FcmpOrF32 { .. } => "FCMP_OR_F32",
+        O::FcmpAndF32 { .. } => "FCMP_AND_F32",
         O::FcmpOrV2f16 { .. } => "FCMP_OR_V2F16",
         O::IcmpOrS32 { .. } => "ICMP_OR_S32",
         O::IcmpOrU32 { .. } => "ICMP_OR_U32",
@@ -3284,7 +3285,7 @@ fn mesa_opcode(op: bir::Op) -> Option<&'static str> {
 
 /// Every op of [`bir::Op`], one value per variant (each width of LD_PKA);
 /// [`all_ops_holds_every_variant_of_op`] fails while a variant is missing.
-const ALL_OPS: [bir::Op; 100] = {
+const ALL_OPS: [bir::Op; 101] = {
     use bir::{Access, Cmpf, LodMode, Op as O, ResultType, Round, TexDim, VaryingName};
     let (cmpf, result) = (Cmpf::Eq, ResultType::M1);
     [
@@ -3308,6 +3309,7 @@ const ALL_OPS: [bir::Op; 100] = {
         O::FclampF32,
         O::FclampV2f16,
         O::FcmpOrF32 { cmpf, result },
+        O::FcmpAndF32 { cmpf, result },
         O::FcmpOrV2f16 { cmpf, result },
         O::IcmpOrS32 { cmpf, result },
         O::IcmpOrU32 { cmpf, result },
