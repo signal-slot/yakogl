@@ -747,6 +747,24 @@ fn neg_literal(m: &Module<'_>, s: &[ir::Src; 3]) -> Option<usize> {
 
 /// IR instruction `i` is a `?:` whose condition is no constant: GLSL's
 /// `conditional_tmp`, an `if` before the statement ([`order_keys`]).
+/// `s` reads a word of a `bool` / `bvecN` uniform (`LoadUniform`), or its
+/// `i2b`.
+fn bool_uniform32(m: &Module<'_>, s: ir::Src) -> bool {
+    let dword_off = match m.def(s.val) {
+        Some(ir::Op::LoadUniform { dword_off, .. }) => dword_off,
+        Some(ir::Op::Alu(AluOp::I2b, x)) => match m.def(x[0].val) {
+            Some(ir::Op::LoadUniform { dword_off, .. }) => dword_off,
+            _ => return false,
+        },
+        _ => return false,
+    };
+    m.uniforms.iter().any(|u| {
+        *dword_off >= u.dword_off
+            && *dword_off < u.dword_off + u.dwords.max(1)
+            && matches!(u.gl_type as u32, GL_BOOL | GL_BOOL_VEC2 | GL_BOOL_VEC3 | GL_BOOL_VEC4)
+    })
+}
+
 fn is_ternary(m: &Module<'_>, i: usize) -> bool {
     matches!(m.instrs.get(i), Some(ir::Op::Alu(AluOp::Bcsel, s)) if !matches!(m.def(s[0].val), Some(ir::Op::ConstBool(_))))
 }
@@ -1974,6 +1992,13 @@ impl<'s> Fs<'s> {
                 xy
             }
         };
+        /* z is the special varying's fp32 lane ([`FRAG_Z`]), read as a
+         * varying's lane is: narrowed by its own conversion where the
+         * colour reads it (deqp_misc_fragcoord_xyz: `LD_VAR_SPECIAL.f32 ..
+         * index:0x3`, then `FADD.f32 r2.h0, r2^, 0x0.neg`); w stays
+         * refused */
+        let _ = z;
+        let z = Val::Lane(self.input(FRAG_Z, at)?, 0);
         Ok([xy[0], xy[1], z, w])
     }
 
@@ -3337,8 +3362,20 @@ impl<'s> Fs<'s> {
             AluOp::Ile => self.op32(Alu::Icmp(Cmpf::Ge), [y, x, u], at),
             /* `ieq_pan` (femtovg's `texType == 1`); measured:
              * fvg_texture_copy_unclipped.expect.json's `ICMP_OR.u32.eq.m1` */
+            /* `ieq(b, true)` of a boolean is `b` (nir_opt_algebraic.py),
+             * the mediump arm's rule ([`Fs::int_lane`]): dEQP's `isOk(a,
+             * b)` of a `true` constant and a `bool` uniform is the
+             * uniform's word (deqp_misc_cmp_notequal_vec2, no compare) */
+            AluOp::Ieq if x == Val::Const(u32::MAX) && bool_uniform32(m, srcs[1]) => Ok(y),
+            AluOp::Ieq if y == Val::Const(u32::MAX) && bool_uniform32(m, srcs[0]) => Ok(x),
             AluOp::Ieq => self.op32(Alu::Icmp(Cmpf::Eq), [x, y, u], at),
             AluOp::B2f => self.op32(Alu::B2f, [x, u, u], at),
+            /* a `bool` uniform's `i2b` is its word itself: GL stores true
+             * as ~0 (`UniformBooleanTrue`), and Mesa's NIR reads the 32-bit
+             * word as the boolean, no compare (deqp_misc_cmp_notequal_vec2:
+             * `MOV.i32 r0, u2.w0`, then the `MUX.v2i16` of its `b2f16`),
+             * as the mediump arm does ([`Fs::int_lane`]) */
+            AluOp::I2b if bool_uniform32(m, srcs[0]) => Ok(x),
             /* `bcsel(a, 1.0, 0.0)` is `b2f(a)` (nir_opt_algebraic.py:2067),
              * so the colour's conversion is `b2f16` (measured: gl_test's
              * databreak, `top > 0.5 ? 1.0 : 0.0`, `MUX.v2i16 r0, 0x0,
@@ -9378,7 +9415,7 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         /* a varying's lane: its half of the pair's conversion when the
          * other lane of the pair is read too ([`pair_read`]; `r0.h11` of
          * `v.y`), else its own conversion's (`r1^.h00` of `v.z`) */
-        (None, None, _) if f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS) => {
+        (None, None, _) if f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS || loc == FRAG_Z) => {
             let (loc, c) = f.input_lane(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
             let (k, c) = index(f, loc, c)?;
             if pair_read(f, k, c) {
@@ -9944,8 +9981,9 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     const NODE: u8 = 4;
     const DISCARD: u8 = 5;
     const FRAG: u8 = 6;
+    const FRAG_WORD: u8 = 7;
     let mut events =
-        [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + MAX_LOOK_UPS + 2 + 2 * MAX_UBO_READS + MAX_DISCARDS];
+        [(0u32, 0u8, LOAD, 0u8); MAX_VARYINGS + MAX_PAIRS + MAX_LOOK_UPS + 3 + 2 * MAX_UBO_READS + MAX_DISCARDS];
     let mut ne = 0;
     for (k, d) in discards[..nd].iter().enumerate() {
         events[ne] = (d.0, 0, DISCARD, k as u8);
@@ -9978,6 +10016,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     if let (Some([x, _]), true) = (f.frag16, frag_word || frag_lane) {
         events[ne] = (f.key(x), 0, FRAG, 0);
         ne += 1;
+        if frag_word {
+            events[ne] = (f.key(x), 0, FRAG_WORD, 0);
+            ne += 1;
+        }
     }
     let key_of = |at: u16| f.keys.get(at as usize).copied().ok_or(MaliError::Defect(Defect::IrIndex));
     for (j, t) in f.live_look_ups() {
@@ -10035,7 +10077,18 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     let events = &mut events[..ne];
     /* an fneg the fusion made stands before its ffma: the index, last, keeps
      * the order the events were made in (no_std has no stable sort) */
-    events.sort_unstable_by_key(|e| (e.0, e.1, e.2, e.3));
+    /* gl_FragCoord.z of a mediump shader after the narrowed x and y read
+     * with it: `vec4(u2f32(load_pixel_coord), z, w)`, narrowed lane after
+     * lane, and x and y's word after them (deqp_misc_fragcoord_xyz: x, y's
+     * `FADD.f32 .h0`, then z's `LD_VAR_SPECIAL` and its own, then the
+     * `MKVEC.v2i16` of x and y) */
+    let frag_event = events.iter().any(|e| e.2 == FRAG);
+    let rank = |e: &(u32, u8, u8, u8)| match e.2 {
+        LOAD if frag_event && f.varyings[e.3 as usize].location == FRAG_Z => FRAG + 1,
+        FRAG_WORD => FRAG + 2,
+        w => w,
+    };
+    events.sort_unstable_by_key(|e| (e.0, e.1, rank(e), e.3));
     let mut lv = Leaves {
         conv: [[None; 4]; MAX_VARYINGS],
         conv_hi: [0; MAX_VARYINGS],
@@ -10171,9 +10224,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             FRAG => {
                 let lanes = frag16_lanes(p, &lv, &mut rows)?;
                 lv.frag_lanes = lanes.map(Some);
-                if frag_word {
-                    lv.frag = Some(frag16(p, lanes, &mut rows)?);
-                }
+            }
+            FRAG_WORD => {
+                let lanes = lv.frag_lanes.map(|l| l.ok_or(MaliError::Defect(Defect::IrIndex)));
+                lv.frag = Some(frag16(p, [lanes[0]?, lanes[1]?], &mut rows)?);
             }
             UBO if vec4 => ubo_load(p, f, &mut lv, &mut rows)?,
             OFFSET => ubo_offset(p, f, x as usize, &mut lv, &mut rows)?,
