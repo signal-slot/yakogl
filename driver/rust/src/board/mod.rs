@@ -62,7 +62,7 @@ pub mod rpi_fb;
 #[cfg(any(feature = "imx95", test))]
 pub mod verdin_imx95_display;
 #[cfg(test)]
-mod verdin_imx95_display_tests;
+pub(crate) mod verdin_imx95_display_tests;
 #[cfg(any(feature = "imx95", test))]
 pub mod verdin_imx95_dsi;
 #[cfg(test)]

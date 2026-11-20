@@ -48,17 +48,21 @@
  *                  caches
  *   present, display_busy
  *               -> the board layer's screen (osal_internal.h,
- *                  yakogl_zephyr_present; osal_mali_board_window below is
- *                  its window)
+ *                  yakogl_zephyr_present; osal_mali_board_window and
+ *                  osal_zephyr_mali_window_mem below are its window)
  *
- * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank (the board's show
- * never waits). A tiler out-of-memory event grows the heap, up to
+ * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank (the NanoPC-T6's show
+ * never waits; the Verdin iMX95's waits for its own flip, board_show()). A
+ * tiler out-of-memory event grows the heap, up to
  * CONFIG_YAKOGL_MALI_HEAP_CHUNKS; a GPU fault, fatal or the job timeout
  * loses the kicks in flight and restarts the group; what needs a GPU reset
  * stops the OSAL (board::nanopc_t6_osal, "Recovery").
  *
  * Memory: one .noinit block of the image, whose mapping init makes uncached
- * ("The GPU's memory" below).
+ * ("The GPU's memory" below). The carve-out's last pages are the board's
+ * window memory, never allocated: as many as osal_mali_board_window was
+ * asked for (the NanoPC-T6), or CONFIG_YAKOGL_MALI_WINDOW_BYTES handed out
+ * by osal_zephyr_mali_window_mem (the Verdin iMX95).
  */
 
 #include <stdarg.h>
@@ -94,6 +98,7 @@
  * buffers; 1 MiB is far over what the firmware asks (t6_submit). */
 #define MALI_QUEUE_MEM (1024u * 1024u)
 #define MALI_CARVE CONFIG_YAKOGL_MALI_CARVEOUT_BYTES
+#define MALI_WINDOW CONFIG_YAKOGL_MALI_WINDOW_BYTES
 #define MALI_CHUNKS CONFIG_YAKOGL_MALI_HEAP_CHUNKS
 #define MALI_CHUNKS_INITIAL CONFIG_YAKOGL_MALI_HEAP_INITIAL_CHUNKS
 /* The group VM's tables, 4 KiB pages only: one level-3 table per 2 MiB of
@@ -105,6 +110,8 @@ BUILD_ASSERT(MALI_CARVE % PAGE == 0, "the carve-out is whole pages");
 BUILD_ASSERT(MALI_CHUNKS_INITIAL >= 1 && MALI_CHUNKS_INITIAL <= MALI_CHUNKS,
 	     "the heap starts with 1 to YAKOGL_MALI_HEAP_CHUNKS chunks");
 BUILD_ASSERT(MALI_CARVE <= YD_T6_OSAL_CARVE_MAX, "the carve-out is at most YD_T6_OSAL_CARVE_MAX");
+BUILD_ASSERT(MALI_WINDOW % PAGE == 0 && MALI_WINDOW < MALI_CARVE,
+	     "the board's window memory is whole pages at the carve-out's end, not all of it");
 
 /* The GPU's memory: one block of the image's .noinit, which lies after
  * .bss and so is not in zephyr.bin. (A __nocache static is in the file:
@@ -188,7 +195,10 @@ static struct yd_t6_fw_backing backing(size_t off, size_t size)
  * does on the other boards. The block is made uncached here when init has
  * not run yet: it is zeroed only once, so what the caller writes into the
  * window before init stays. The size is kept for a later init (shutdown
- * leaves the memory the image's). */
+ * leaves the memory the image's). -ENOTSUP on an image whose window memory
+ * has the build's size (CONFIG_YAKOGL_MALI_WINDOW_BYTES,
+ * osal_zephyr_mali_window_mem below): both are the carve-out's last pages,
+ * so an image has one of the two. */
 int osal_mali_board_window(size_t bytes, uint64_t *phys, void **cpu)
 {
 	size_t reserved = ROUND_UP(bytes, PAGE);
@@ -197,6 +207,8 @@ int osal_mali_board_window(size_t bytes, uint64_t *phys, void **cpu)
 
 	if (!phys || !cpu || bytes == 0 || reserved < bytes || reserved >= MALI_CARVE)
 		return -EINVAL;
+	if (MALI_WINDOW != 0)
+		return -ENOTSUP;
 	if (s.inited)
 		return -EBUSY;
 	if (s.window != 0)
@@ -208,6 +220,30 @@ int osal_mali_board_window(size_t bytes, uint64_t *phys, void **cpu)
 	at = mali_mem + OFF_CARVE + MALI_CARVE - reserved;
 	*phys = k_mem_phys_addr(at);
 	*cpu = at;
+	return 0;
+}
+
+/* The board's window memory of the build's size (zephyr_mali_board.h): the
+ * carve-out's last CONFIG_YAKOGL_MALI_WINDOW_BYTES, the same pages
+ * osal_mali_board_window takes on an image where the option is 0. */
+int osal_zephyr_mali_window_mem(uintptr_t *phys, void **cpu, size_t *bytes)
+{
+	uint8_t *at = mali_mem + OFF_CARVE + MALI_CARVE - MALI_WINDOW;
+	int rc;
+
+	*phys = 0;
+	*cpu = NULL;
+	*bytes = 0;
+	if (MALI_WINDOW == 0)
+		return -ENOTSUP;
+	/* zeroed and uncached once; z_init's call is then a no-op, so what
+	 * the board wrote into its windows before eglInitialize stays */
+	rc = mem_uncache();
+	if (rc)
+		return rc;
+	*phys = k_mem_phys_addr(at);
+	*cpu = at;
+	*bytes = MALI_WINDOW;
 	return 0;
 }
 
@@ -280,7 +316,8 @@ static int z_init(void *platform_arg)
 	mem.vm_pool_pages = MALI_VM_POOL_PAGES;
 	mem.vm_tables_pa = k_mem_phys_addr(mali_mem + OFF_VM_POOL);
 	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
-	mem.carve_reserved = s.window;
+	/* the build's window memory, or what osal_mali_board_window took */
+	mem.carve_reserved = MALI_WINDOW != 0 ? MALI_WINDOW : s.window;
 
 	osal_zephyr_mali_board_feed();
 	rc = osal_zephyr_mali_board_up(arg, &mem, clean, delay_us, on_handover, &z1, &o);
@@ -305,7 +342,7 @@ static int z_init(void *platform_arg)
 	       "carve-out %u KiB at 0x%llx (%u KiB of it the board window), csg ack %u us\n",
 	       o.fw.gpu_id, (unsigned long long)o.heap_ctx, (unsigned int)MALI_CHUNKS_INITIAL,
 	       (unsigned int)MALI_CHUNKS, o.heap_chunk_size, (unsigned int)(MALI_CARVE / 1024),
-	       (unsigned long long)YD_T6_OSAL_CARVE_VA, s.window / 1024u, o.csg_ack_us);
+	       (unsigned long long)YD_T6_OSAL_CARVE_VA, mem.carve_reserved / 1024u, o.csg_ack_us);
 	return 0;
 }
 
