@@ -83,4 +83,46 @@ done
 sec=$(awk '/^## functional.z.y.w$/{f=1;next}/^## /{f=0}f' "$tmp/pi4n.md")
 grep -q '^- host-also-fails: 1$' <<<"$sec" || fail "pi4 console rows: --gpu v3d host verdict"
 
+# 5. cause families: 3- and 4-column rows, --apply, --check, family grouping.
+printf '# rules\nRCx-a\tdEQP-GLES3.functional.a.*\nRCy-b\tdEQP-GLES3.functional.b.*,dEQP-GLES3.functional.c.*\tboom\n#9-wd\tdEQP-GLES3.functional.d.*\n' >"$tmp/rules.txt"
+printf '# h\nFail\tdEQP-GLES3.functional.a.one\tm\nFail\tdEQP-GLES3.functional.b.two\tboom here\nNoResult\tdEQP-GLES3.functional.d.three\nFail\tdEQP-GLES3.functional.a.four\tm\tKEEP-me\n' >"$tmp/f3.tsv"
+python3 -I "$tri" "$tmp/f3.tsv" --depth 2 >"$tmp/f3.md"            # 3/4-column rows parse
+[ "$(sum_cases <"$tmp/f3.md")" = 4 ] || fail "family: mixed 3/4-column parse"
+python3 -I "$tri" "$tmp/f3.tsv" --families "$tmp/rules.txt" --apply "$tmp/f4.tsv"
+[ "$(grep -vc '^#' "$tmp/f4.tsv")" = 4 ] || fail "apply: row count"
+[ "$(grep -c '^#' "$tmp/f4.tsv")" = 1 ] || fail "apply: header kept"
+awk -F'\t' '!/^#/ && NF != 4 {exit 1}' "$tmp/f4.tsv" || fail "apply: not 4 columns"
+grep -q "$(printf 'one\tm\tRCx-a$')" "$tmp/f4.tsv" || fail "apply: RCx-a"
+grep -q "$(printf 'two\tboom here\tRCy-b$')" "$tmp/f4.tsv" || fail "apply: regex rule"
+grep -q "$(printf 'three\t\t#9-wd$')" "$tmp/f4.tsv" || fail "apply: '#' family id"
+grep -q "$(printf 'four\tm\tKEEP-me$')" "$tmp/f4.tsv" || fail "apply: existing family kept"
+python3 -I "$tri" "$tmp/f4.tsv" >"$tmp/fam.md"                      # groups by family
+[ "$(nsec <"$tmp/fam.md")" = 4 ] || fail "family grouping: expected 4 groups"
+grep -q '^## RCx-a$' "$tmp/fam.md" || fail "family grouping: RCx-a heading"
+grep -q '^- family: RCx-a (1)$' "$tmp/fam.md" || fail "family grouping: count"
+python3 -I "$tri" "$tmp/f4.tsv" --depth 2 >"$tmp/famd.md"
+grep -q '^## functional.a$' "$tmp/famd.md" || fail "--depth keeps path grouping"
+python3 -I "$tri" "$tmp/f4.tsv" --check >"$tmp/chk.txt" || fail "check should pass"
+[ "$(tail -n1 "$tmp/chk.txt")" = "$(printf 'total\t4')" ] || fail "check total line"
+grep -qx "$(printf 'RCx-a\t1')" "$tmp/chk.txt" || fail "check first family"
+# a row no rule matches is 'unassigned', and --check lists it and fails
+printf 'Fail\tdEQP-GLES3.functional.z.nope\tm\n' >>"$tmp/f3.tsv"
+python3 -I "$tri" "$tmp/f3.tsv" --families "$tmp/rules.txt" --apply "$tmp/f5.tsv"
+grep -q "$(printf 'nope\tm\tunassigned$')" "$tmp/f5.tsv" || fail "apply: unassigned"
+if python3 -I "$tri" "$tmp/f5.tsv" --check >"$tmp/o.txt" 2>"$tmp/e.txt"; then fail "check passed with unassigned"; fi
+grep -q 'functional.z.nope' "$tmp/e.txt" || fail "check does not list the unassigned row"
+# an empty family cell (3-column row) fails --check
+if python3 -I "$tri" "$tmp/f3.tsv" --check >"$tmp/o.txt" 2>"$tmp/e.txt"; then fail "check passed with empty family"; fi
+grep -q 'empty family' "$tmp/e.txt" || fail "check does not name the empty family"
+# an empty outcome cell fails --check
+printf '\tdEQP-GLES3.functional.a.x\tm\tRCx-a\n' >"$tmp/eo.tsv"
+if python3 -I "$tri" "$tmp/eo.tsv" --check >"$tmp/o.txt" 2>"$tmp/e.txt"; then fail "check passed with empty outcome"; fi
+grep -q 'empty outcome' "$tmp/e.txt" || fail "check does not name the empty outcome"
+# the real list through the seeded rules: --apply gives 4 columns, --check sums or lists
+python3 -I "$tri" "$np" --families "$here/am62p-gles3-families.txt" --apply "$tmp/real4.tsv"
+awk -F'\t' '!/^#/ && NF != 4 {exit 1}' "$tmp/real4.tsv" || fail "real apply: not 4 columns"
+if python3 -I "$tri" "$tmp/real4.tsv" --check >"$tmp/rc.txt" 2>/dev/null; then
+  [ "$(tail -n1 "$tmp/rc.txt")" = "$(printf 'total\t%s' "$rows")" ] || fail "real check total"
+fi
+
 echo "gles3-triage-selftest: ok"
