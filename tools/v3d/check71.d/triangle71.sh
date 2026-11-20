@@ -20,9 +20,10 @@
 #  (b) against tools/v3d/pi5/triangle.clif: every packet of every list and
 #      every submit argument through tools/v3d/clif_cmp.py with only
 #      IGNORED below left out (no address field, not the tile allocation
-#      size: it is the board's 16384); the shader
-#      record and the attribute records field by field (clif_cmp.py reads no
-#      record section); the QPU words of the three programs, the uniform
+#      size: it is the board's 16384; clif_cmp.py also reads the record
+#      sections, as pseudo-packets SHADREC_GL_MAIN and SHADREC_GL_ATTR); the
+#      shader record and the attribute records field by field again with
+#      rec_cmp, which pins the expected differences; the QPU words of the three programs, the uniform
 #      streams and the vertex data word by word. The record is the BCM2712
 #      D0 layout ("GL Shader State Record Draw Index"), which Mesa's decoder
 #      prints with the plain 7.1 layout on both sides
@@ -32,7 +33,8 @@
 #      the board's record as the header gives it.
 #  (c) against tools/v3d/shim71/triangle.clif (drm-shim, V3D 7.1.7, the plain
 #      7.1 record), the job built at the shim's addresses: the lists and
-#      submit as in (b); the plain decodes of the two records differ in
+#      submit as in (b) (clif_cmp.py leaves SHIM_DIFFERS out of the record
+#      section; rec_cmp requires exactly those to differ); the plain decodes of the two records differ in
 #      exactly SHIM_DIFFERS (the D0 layout's flags from bit 5 up sit 2 to 4
 #      bits higher), and our record read at the D0 layout equals the shim's
 #      record read at its own, plain, layout in every field the plain layout
@@ -263,7 +265,11 @@ EOF
 check_against() {
   local where=$1 refclif=$2
   shift 2
-  local out rc last
+  local out rc last f
+  # clif_cmp.py compares the record section too (SHADREC_GL_MAIN): the fields
+  # expected to differ are left to rec_cmp below, which requires exactly them
+  local recign=()
+  for f in "$@"; do recign+=(--ignore "SHADREC_GL_MAIN.$f"); done
   out=$(TMPDIR=$dir/tmp FRAME_CHECK_CLIF=$dir/$where.clif "$dir/frame_check_tri71" --triangle71 \
     "$where" 2>&1)
   rc=$?
@@ -278,7 +284,7 @@ check_against() {
   *"BCL 126 RCL 96 indirect 187 bytes (record +0x60, tile list +0xa0..+0xbb)"*) ;;
   *) fail "($where) not the board's list sizes and layout: $last" ;;
   esac
-  python3 -I tools/v3d/clif_cmp.py "$dir/$where.clif" "$refclif" "${IGNORED[@]}" \
+  python3 -I tools/v3d/clif_cmp.py "$dir/$where.clif" "$refclif" "${IGNORED[@]}" "${recign[@]}" \
     >"$dir/$where.cmp" 2>&1 || {
     fail "($where) differs from $refclif:"
     sed 's/^/  /' "$dir/$where.cmp"
