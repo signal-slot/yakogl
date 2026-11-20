@@ -378,3 +378,5 @@ the threads and Mesa's refusal message, if any. It needs `V3D_SHC` and
 one. The committed result is `tools/shaders/glmark2_counts_71.tsv`: names and
 numbers only, never shader text. Regenerate it with the command in its header
 whenever the corpus or the Mesa tree changes.
+
+The knobs' refusals are checked by `ref71-selftest.sh` (no Mesa tree needed).
