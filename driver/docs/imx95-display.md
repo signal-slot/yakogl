@@ -2,14 +2,18 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Verdin iMX95 on Mallow: the picture from Zephyr
 
-Status: design (2026-11-20), host reading only. No i.MX 95 display code
-exists and nothing here was run on a board. The board is fixed by the owner:
-a Toradex Verdin iMX95 module on a Toradex Mallow carrier. The goal is the
+Status: design (2026-11-20; the display fixed 2026-11-21), host reading
+only. No i.MX 95 display code exists and nothing here was run on a board.
+The board is fixed by the owner: a Toradex Verdin iMX95 module on a Toradex
+Mallow carrier, with a **Toradex Capacitive Touch Display 10.1" DSI on the
+Mallow's X4 (MIPI DSI) connector** and no LVDS panel on X12 (owner,
+2026-11-21; U1). The goal is the
 other boards' screen path on it: a Zephyr image puts a GPU-rendered picture
 on a display, with the console beside it, in the product form (U-Boot starts
 Zephyr, no Linux before it). This note names the display hardware, what the
 Mallow puts behind it, three routes in the order the house method takes them
-(adopt, cold, none), the board checks that pick one, and what is still open.
+(adopt, cold, none), the cold DSI path in enough detail to implement it
+(section 4(b)), the board checks, and what is still open.
 The overall i.MX 95 pre-study is a separate note; this one is the display
 only.
 
@@ -25,6 +29,9 @@ only.
 | `mub:` | mainline U-Boot, the `github.com/u-boot/u-boot` mirror, `master` | `ece349ade297` (the mirror's last commit, 2026-07-06; directory listing only) |
 | `hal:` | `github.com/zephyrproject-rtos/hal_nxp` `master` | `0f32f1caa5cf` (2026-11-19) |
 | `z:` | `github.com/zephyrproject-rtos/zephyr` `main` | `4f2d5263e21e` (2026-11-20) |
+| `hal:` (DSI) | hal_nxp's DW MIPI DSI driver `mcux/mcux-sdk-ng/drivers/mipi_dsi_imx/fsl_mipi_dsi.c` (the one Zephyr's `dsi_nxp_dwc.c` calls for the i.MX 95) and the camera-side headers `PERI_CAMERA_DSI_MASTER_CSR.h`, `PERI_CAMERA_DSI_OR_CSI_PHY_CSR.h`, `PERI_CAMERA_DSI_STREAM_CSR.h` (`devices/i.MX/i.MX95/periph/`) | `0f32f1caa5cf`, as `hal:` |
+| `nxp:` (bridge) | `drivers/gpu/drm/bridge/ti-sn65dsi83.c` of the same tree | `6e694eda40aa` |
+| `tsm:` (sources) | `boards/tdx-common/sm/brd_sm_tdx_common.c`, `devices/MIMX95/sm/dev_sm_perf.c` of the same tree | `3aa8a77a15d6` |
 | `sm:` | NXP's System Manager, `github.com/nxp-imx/imx-sm` `master` (its EVK configuration, for comparison) | `eec232878ab7` (2026-09-03) |
 | `tsm:` | Toradex's System Manager, `git.toradex.com/imx-sm-toradex.git` branch `main`: `configs/verdin-imx95.cfg`, the generated `configs/verdin-imx95/config_scmi.h`, and the SM sources it builds | `3aa8a77a15d6` (2026-11-16) |
 | `V95:` | Toradex, Verdin iMX95 Datasheet, Rev. 0.7, 20-Jul-2026 (preliminary), `docs.toradex.com/200007-verdin_imx95_datasheet.pdf` | |
@@ -39,10 +46,10 @@ Licences, and what each source may be used for:
 
 | Source | Licence | Use here |
 |---|---|---|
-| Linux drivers (`nxp:` `dpu95/`, the `imx95-*` bridges, `phy-fsl-imx8mp-lvds.c`; `ml:` `clk-imx95-blk-ctl.c`) | GPL-2.0 (`dpu95`, bridges, PHY: GPL-2.0+; the clock file GPL-2.0) | facts and `file:line` only, never code, comments or tables (`docs/source-form.md`) |
+| Linux drivers (`nxp:` `dpu95/`, the `imx95-*` bridges, `ti-sn65dsi83.c`, `phy-fsl-imx8mp-lvds.c`; `ml:` `clk-imx95-blk-ctl.c`) | GPL-2.0 (`dpu95`, bridges, PHY: GPL-2.0+; the clock file GPL-2.0) | facts and `file:line` only, never code, comments or tables (`docs/source-form.md`) |
 | U-Boot drivers (`tub:` `drivers/video/nxp/imx/imx95_dpu.c`, `imx95-ldb.c`, `imx95-pixel-*.c`, `dw_dsi_imx95.c`) | GPL-2.0+ | as Linux |
 | Device trees (`ml:`/`nxp:` `imx95.dtsi`; `tdx:` overlays; `ml:` Verdin files) | `GPL-2.0-only OR MIT` (`imx95.dtsi`, the Toradex overlays), `GPL-2.0-or-later OR MIT` (the Verdin and Mallow files) | facts; the MIT side would allow more, not needed |
-| `hal:` register headers (`PERI_DISPLAY_SEERIS.h`, `PERI_LDB.h`, `PERI_DISPLAY_*.h`, `PERI_MIPI_DSI.h`, `MIMX9596_ca55_COMMON.h`) and drivers (`fsl_dpu.c` in `drivers/dpu_1`, `fsl_ldb.c` in `drivers/ldb_1`) | BSD-3-Clause (NXP) | **register map and sequence source**; may be generated from or vendored unmodified, as the i.MX8MP's `regs.rs` is (`tools/hal-nxp/gen_regs.py`) |
+| `hal:` register headers (`PERI_DISPLAY_SEERIS.h`, `PERI_LDB.h`, `PERI_DISPLAY_*.h`, `PERI_MIPI_DSI.h`, `MIMX9596_ca55_COMMON.h`) and drivers (`fsl_dpu.c` in `drivers/dpu_1`, `fsl_ldb.c` in `drivers/ldb_1`, `fsl_mipi_dsi.c` in `drivers/mipi_dsi_imx`), the `PERI_CAMERA_DSI_*` headers | BSD-3-Clause (NXP) | **register map and sequence source**; may be generated from or vendored unmodified, as the i.MX8MP's `regs.rs` is (`tools/hal-nxp/gen_regs.py`) |
 | `z:` `display_socionext_dpu.c`, `dsi_nxp_dwc.c` and the i.MX 95 M7 device tree | Apache-2.0 | sequence source; may be read and vendored |
 | `sm:`, `tsm:` configuration and sources | BSD-3-Clause | facts |
 | Datasheets | Toradex documents | facts by section and page |
@@ -166,8 +173,15 @@ checked. The System Manager runs them with the DISPLAY domain
 LDBPLL and DISP1PIX, in that domain) and sets their rates from the DISP
 performance level (`devices/MIMX95/sm/dev_sm_perf.c:1277-1283,2093,2302`).
 CAMAPB is the same for the DSI side (`.cfg:164`). So the image does not
-switch these clocks: it turns DISPLAY on and, if the default level is too
-slow, sets perf DISP.
+switch these clocks: it turns DISPLAY (and, for DSI, CAMERA) on. Toradex's
+System Manager starts every performance domain without a local PLL at its
+run level, overdrive (`BOARD_PERF_LEVEL` = `DEV_SM_PERF_LVL_ODV`,
+`brd_sm_tdx_common.c:107,163`; the loop `dev_sm_perf.c:1374-1394` clamps only
+the DRAM and A55 domains, `:1871-1909`), and the configuration sets no other
+level (`.cfg` has only `PERF_A55` lines). DISP (12) and CAM (11) therefore
+run at ODV, DISPAXI and CAMAXI from the 800 MHz parent (`dev_sm_perf.c:815-836,
+921-942`), unless an agent lowered them: no perf request is needed, Z0 reads
+the level.
 
 **What turns them off.** The System Manager keeps one vote per agent per
 power domain and clock. It clears an agent's votes, which turns a domain off
@@ -219,12 +233,20 @@ What the Verdin iMX95 brings to the Verdin edge connector:
 
 | Mallow connector | Signals | What sits between the SoC and it | I2C | What the SoC must drive | Source |
 |---|---|---|---|---|---|
-| X12 LVDS, Hirose DF13 40-pin; X13 touch (FFC 10-pin) | `LVDS_1_A` = Verdin pins 88-114 = **LVDS0**; `LVDS_1_B` = pins 118-144 = LVDS1; backlight PWM pin 35 (Verdin 16, `PWM_2`), enable pin 37 (Verdin 46); +12 V backlight through jumper JP1 | **nothing**: native LVDS, no bridge | touch only (the panel needs none) | DPU, interleaver, LDB, LVDS PHY 0, LDB PLL; TPM5 PWM and one GPIO for the backlight | `MAL:` 2.9.3, Tables 16-17, pages 24-25; `V95:` Table 23 |
-| X4 MIPI DSI, Würth 34-pin FFC (Toradex "Simple MIPI DSI") | `DSI_1` clock and 4 lanes, `I2C_DSI` (Verdin 53/55), `GPIO_10_DSI`, `PWM_3_DSI`, `GPIO_9_DSI`, reset, 1.8/3.3/5 V | whatever the display carries: Toradex's 7" and 10.1" DSI displays carry a **TI SN65DSI83** DSI-to-LVDS bridge with a Riverdi LVDS panel | SN65DSI83 at 0x2C on `I2C_2_DSI` (LPI2C3) | DPU, interleaver, pixel link, DW MIPI DSI, combo PHY, then the bridge over I2C | `MAL:` 2.9.1, Table 14, pages 22-23; `tdx:imx95-verdin-panel-cap-touch-10inch-dsi.dtso:33,82-88`, `tdx:imx95-verdin-panel-cap-touch-7inch-dsi.dtso:33,82-88` |
+| X12 LVDS, Hirose DF13 40-pin; X13 touch (FFC 10-pin). **Not this board's setup** (nothing on X12) | `LVDS_1_A` = Verdin pins 88-114 = **LVDS0**; `LVDS_1_B` = pins 118-144 = LVDS1; backlight PWM pin 35 (Verdin 16, `PWM_2`), enable pin 37 (Verdin 46); +12 V backlight through jumper JP1 | **nothing**: native LVDS, no bridge | touch only (the panel needs none) | DPU, interleaver, LDB, LVDS PHY 0, LDB PLL; TPM5 PWM and one GPIO for the backlight | `MAL:` 2.9.3, Tables 16-17, pages 24-25; `V95:` Table 23 |
+| X4 MIPI DSI, Würth 687134149022 34-pin FFC (Toradex "Simple MIPI DSI"). **This board: the Toradex Capacitive Touch Display 10.1" DSI** | `DSI_1` clock and 4 lanes (pins 2-15), `GPIO_10_DSI` (pin 17, "display is OFF when the signal is Low", pull-up on the display), `PWM_3_DSI` (18, 10K to GND), `GPIO_9_DSI` (19, from the display), `I2C_DSI` (20/21 = Verdin 55/53, 1.8K to 1.8 V), `DSI_RESET_CON#` (22 = Verdin 42), 1.8/3.3/5 V | the display carries a **TI SN65DSI83** DSI-to-LVDS bridge and a Riverdi RVT101HVDNWC00-B LVDS panel (Toradex's 7" DSI display the same bridge with an RVT70HSLNWCA0) | SN65DSI83 at 0x2C and the touch controller (Ilitek ILI2132) at 0x41, both on `I2C_2_DSI` (LPI2C3) | DPU, interleaver, pixel link, DW MIPI DSI, combo PHY, then the bridge over I2C; `GPIO_10_DSI` and `GPIO_9_DSI` sit on the module's I/O expander (section 4(b)) | `MAL:` 2.9.1, Table 14, pages 22-23; `tdx:imx95-verdin-panel-cap-touch-10inch-dsi.dtso:32-60,86-125`, `tdx:imx95-verdin-panel-cap-touch-7inch-dsi.dtso:33` |
 | X14 HDMI | fed from the Verdin `HDMI_1` pins | nothing, and the module leaves those pins unconnected | | **dead with this module** | `MAL:` 2.9.2, Table 15, pages 23-24; `V95:` Table 8 |
 
-So the Mallow has no HDMI with this module. The shortest path to a picture
-is **X12 with an LVDS panel**: no bridge, no I2C, no DSI PHY, one power
+So the Mallow has no HDMI with this module, and the owner's board takes its
+picture from **X4**: the Toradex 10.1" DSI display, whose chain Toradex's
+overlay `imx95-verdin-panel-cap-touch-10inch-dsi.dtso` names (DPU, pixel
+link, interleaver channel 0, DW MIPI DSI, SN65DSI83, panel-lvds; section
+4(b) takes it apart). X4 is a Toradex "Simple MIPI DSI" FFC, so the display
+plugs in directly; the "DSI Display Adapter" the overlay's header mentions is
+for the Development Board's and Dahlia's Samtec connector (`:5-8`).
+
+X12, for the record (not this board's setup): it would have been the
+shortest path to a picture, with no bridge, no I2C, no DSI PHY and one power
 domain. Toradex's overlay for it (`imx95-verdin-panel-cap-touch-10inch-lvds.dtso`,
 "carrier boards with a Toradex standard LVDS display connector (e.g.,
 Mallow)", `:3-6`) names the whole chain: panel 1280x800 at 71.1 MHz, VESA
@@ -234,7 +256,7 @@ LVDS PHY 0 (`:65-106,126-137`); LDBPLL_VCO 2,986.2 MHz and LDBPLL 497.7 MHz
 backlight `PWM_2` on TPM5 and enable `I2S_2_D_OUT` (GPIO5_IO04) (`:22-32`).
 The pixel link enabled there is questioned upstream: Liu Ying (NXP) says the
 pixel link belongs only to the DSI path (dri-devel RFC thread, 2026-07-06);
-U5 below.
+U5 below. On the DSI path the pixel link is certainly used (section 4(b)).
 
 Mainline's Mallow file enables `I3C2`, `LPI2C3` and `LPI2C4` and puts only a
 temperature sensor (0x4F) and the carrier EEPROM (0x57) on `I2C_1`
@@ -259,14 +281,16 @@ needs no adapter; it is also the one path validated by the upstream port
 
 | Ours | From | On the Mallow |
 |---|---|---|
-| `ip::sn65dsi8x` (`driver/rust/src/ip/sn65dsi8x.rs`) | the Verdin AM62P's SN65DSI83 and the Verdin iMX8MP's SN65DSI84 (`driver/docs/am62p-display-cold.md`, `driver/docs/imx8mp-display-cold.md`) | **yes**, for a Toradex DSI display on X4 (SN65DSI83 at 0x2C on `I2C_2_DSI`) |
-| `ip::dw_mipi_dsi` (`driver/rust/src/ip/dw_mipi_dsi.rs`) | the STM32MP25's Synopsys DW MIPI DSI host | **the host part**, for X4: the i.MX 95 DSI is the same DW core (`nxp:drivers/gpu/drm/bridge/imx/imx95-mipi-dsi.c:23`). Its PHY (NXP combo PHY, CSRs at 0x4AD00000..) is new |
-| `firmware::scmi` (`driver/rust/src/firmware/scmi.rs`) | the STM32MP2 over OP-TEE | **the codec and client** (power, clock, perf); the `Transport` trait (`:127`) needs an i.MX MU-plus-SRAM transport |
+| `ip::sn65dsi8x` (`driver/rust/src/ip/sn65dsi8x.rs`) | the Verdin AM62P's SN65DSI83 and the Verdin iMX8MP's SN65DSI84 (`driver/docs/am62p-display-cold.md`, `driver/docs/imx8mp-display-cold.md`) | **yes, unchanged**: the i.MX8MP drives the same panel (Riverdi 10.1", 1280x800, 1404 x 840 total) through the same bridge family; only the pixel clock (70 MHz) and the lane rate (420 Mbit/s) differ (section 4(b)) |
+| `ip::dw_mipi_dsi` (`driver/rust/src/ip/dw_mipi_dsi.rs`) | the STM32MP25's Synopsys DW MIPI DSI host | **the host sequence and plan**: the i.MX 95 DSI is the same DW core (`nxp:drivers/gpu/drm/bridge/imx/imx95-mipi-dsi.c:23`). Two changes: `probe` accepts ST's versions only (`:447-452`), and the `Phy` trait (`:265`) gets a new implementation for the NXP combo D-PHY (section 4(b)) |
+| `firmware::scmi` (`driver/rust/src/firmware/scmi.rs`) | the STM32MP2 over OP-TEE | **the codec and client** (power, clock, perf); the `Transport` trait (`:127`) needs an i.MX MU-plus-SRAM transport, and the client a CLOCK_PARENT_SET (message 0xD, `tsm:sm/rpc/scmi/rpc_scmi_clock.c:61,524`) for DISP1PIX and the MIPI PHY clocks |
 | `ip::adv7535` | the STM32MP257F-DK | no (NXP's EVK adapter only) |
 | `ip::lcdifv3`, `ip::samsung_dsim`, `ip::cdns_dsi`, `ip::ti_dss7` | i.MX8MP, AM62P | no: different controller and DSI host |
 | LT8912B | none in the tree | only for the DSI-to-HDMI adapter, which does not fit the Mallow's X4 |
+| an LPI2C, a PCAL6416A and a TPM PWM driver | none in Rust (`ip::stm32_i2c`, `ip::imx_pwm` are other blocks) | needed: LPI2C3 for the bridge, LPI2C2 for the module's I/O expander that holds the bridge enable, TPM6 for the backlight (section 4(b)). The bridge driver already reaches I2C and GPIOs through `Env::i2c_write`, `i2c_write_read`, `gpio_set` (`driver/rust/src/env.rs:54-55`, served by the C side), so Zephyr's own LPI2C, PCA-series GPIO and TPM drivers would do, if they build for this A55 board (U19) |
 
-The Mallow X12 panel path needs no bridge code at all.
+The X12 LVDS path would have needed no bridge code; the X4 path reuses the
+bridge and the DSI host and adds the combo D-PHY.
 
 ## 3. What exists upstream, and what U-Boot leaves
 
@@ -308,18 +332,221 @@ Who could leave one on the Mallow:
 | Previous stage | Leaves a display? | Note |
 |---|---|---|
 | Toradex's U-Boot as shipped | **no** (section 3) | |
-| a Toradex U-Boot rebuilt with NXP's video drivers and a Mallow LVDS device tree | yes, by NXP's EVK precedent | a boot loader of our own to carry, as the T6 note concluded for Rockchip's (`driver/docs/nanopc-t6-display.md`, 2(b)); whether `go` leaves the FrameGen running is open (U9). Not proposed |
-| Linux (Toradex's 6.18 BSP with the LVDS overlay), then a crash kexec into Zephyr | yes, if the board runs that kernel with a panel on X12 | the T6's development route (`driver/docs/nanopc-t6-display.md`, 2(a)); the crash path skips the drivers' shutdown, so the DPU keeps scanning; the logical machine is not reset (section 1). Needs kexec and a crash reservation in that kernel (U8) |
+| a Toradex U-Boot rebuilt with NXP's video drivers and a Mallow DSI device tree (with an SN65DSI83 driver, which the read U-Boot tree does not show) | yes, by NXP's EVK precedent | a boot loader of our own to carry, as the T6 note concluded for Rockchip's (`driver/docs/nanopc-t6-display.md`, 2(b)); whether `go` leaves the FrameGen running is open (U9). Not proposed |
+| Linux (Toradex's 6.18 BSP with the overlay `imx95-verdin-panel-cap-touch-10inch-dsi.dtbo`), then a crash kexec into Zephyr | yes, if the board runs that kernel with that overlay applied | the T6's development route (`driver/docs/nanopc-t6-display.md`, 2(a)); the crash path skips the drivers' shutdown, so the DPU keeps scanning; the logical machine is not reset (section 1). Needs kexec and a crash reservation in that kernel (U8) |
 | mainline Linux | no (no driver) | |
 
 Needs: a SCMI transport only to read the DISPLAY domain state first; no
 clock or power change. Size: small, as on the T6: a reader of a dozen
 registers, a pattern, a read-back. Value: it gives the golden dump (the
-register values of a working LVDS mode on this board) that the cold path is
-checked against, and a known-good link for the proofs below. It is
-development only; it is not the product.
+register values of the working DSI mode on this board: DPU, display CSR,
+camera-side CSRs, DW host, and the bridge's I2C registers) that the cold path
+is checked against, and it settles the points where NXP's two sources
+disagree (U13-U16). It is development only; it is not the product.
 
-### (b) Cold: X12 LVDS from Zephyr (the product form)
+### (b) Cold: X4 DSI from Zephyr (the product form)
+
+Everything below is for the owner's display: the Toradex Capacitive Touch
+Display 10.1" DSI on X4, as Toradex's overlay
+`tdx:imx95-verdin-panel-cap-touch-10inch-dsi.dtso` (cited `dsi.dtso:N`)
+describes it. Register maps are hal_nxp's BSD headers; the sequences are
+hal_nxp's `fsl_mipi_dsi.c` (BSD-3, cited `fsl_mipi_dsi.c:N`), Zephyr's
+`dsi_nxp_dwc.c` (Apache-2.0, `dsi_nxp_dwc.c:N`), and, for facts only, NXP's
+glue `nxp:drivers/gpu/drm/bridge/imx/imx95-mipi-dsi.c` (GPL, `glue:N`; Toradex's
+copy is the same file) and `nxp:ti-sn65dsi83.c` (GPL, `sn65:N`). Where the
+permissive and the GPL source give different values, both are listed and a
+U-number names the board reading that decides.
+
+**The display.**
+
+| What | Value | Source |
+|---|---|---|
+| Panel | Riverdi RVT101HVDNWC00-B, 217 x 136 mm, LVDS `vesa-24`, behind the SN65DSI83 | `dsi.dtso:32-37` |
+| Mode | 1280 x 800, pixel clock **70.000 MHz**; H: active 1280, front porch 36, sync 24, back porch 64, total **1404**; V: active 800, front porch 8, sync 8, back porch 24, total **840**; hsync and vsync active low, DE active high, data on the rising edge; refresh 70 MHz / (1404 x 840) = **59.36 Hz** | `dsi.dtso:39-53` |
+| DSI link | 4 data lanes, RGB888 (24 bpp), video **burst** mode, no EoT packet, continuous clock (the SN65DSI83 asks for the mode flags `VIDEO`, `VIDEO_BURST`, `VIDEO_NO_HFP`, `VIDEO_NO_HBP`, `VIDEO_NO_HSA`, `NO_EOT_PACKET`, format RGB888) | `dsi.dtso:100`; `sn65:921-925` |
+| Lane rate | 70 MHz x 24 / 4 = **420 Mbit/s** a lane (Linux takes `pixel clock x bpp / lanes` with no margin: `glue:887-911` through `phy_mipi_dphy_get_default_config`); DSI clock lane 210 MHz (DDR); lane byte clock 52.5 MHz | `glue:887-911,1093-1118` |
+| Same as the i.MX8MP | the same panel and timing (1404 x 840) run on the Verdin iMX8MP at 69.3 MHz and 426.6 Mbit/s, 2.6 % above the pixel payload, because the Samsung DSIM broke with no margin (`driver/docs/imx8mp-display-cold.md`, "The chain"); here the DW host runs with none (risk below, U17) | |
+
+**Clock plan (SCMI, agent AP-NS).** All rates are Toradex's overlay and NXP's
+`imx95.dtsi`; the ids are `imx95-clock.h` (`IMX95_CCM_NUM_CLK_SRC` = 41).
+
+| Clock (id) | Parent | Rate | Source |
+|---|---|---|---|
+| VIDEOPLL1_VCO (18) | | 3,360 MHz | `dsi.dtso:72-76` |
+| VIDEOPLL1 (19) | VIDEOPLL1_VCO | 420 MHz (/8) | `dsi.dtso:72-76` |
+| DISP1PIX (80) | **VIDEOPLL1** | 70 MHz (420 / 6, exact): the DPU's `pix` and the DSI host's `pix`; the DPU sets it to the mode's clock, `tub:imx95_dpu.c:592-593` | `dsi.dtso:72-75`; `nxp:imx95.dtsi:2109-2113` |
+| MIPIPHYCFG (66) | 24M (2) | 24 MHz: `cfgclkfreqrange` = (24 - 17) x 4 = **0x1C** (`glue:665-672`; hal and Zephyr write 0x1C, `dsi_nxp_dwc.c:109-111`) | `nxp:imx95.dtsi:2115-2120` |
+| MIPIPHYPLLREF (68) | 24M (2) | 24 MHz, the D-PHY PLL's input (Fin) | as above; `PERI_CAMERA_DSI_MASTER_CSR.h:489-495` (`Dphy_ref_clock_source` 0 = 24 MHz) |
+| MIPIPHYPLLBYPASS (67) | VIDEOPLL1 | (Linux sets the parent; the PLL is in clock-generation mode, so it carries nothing) | `nxp:imx95.dtsi:2115-2120` |
+| CAMAPB (62), DISPAPB/AXI/OCRAM (75, 76, 78) | | the System Manager's, from the CAM and DISP perf levels (ODV, section 1) | `tsm:` |
+| LPI2C3 (129), LPI2C2 (48), TPM6 (155) | | the bridge bus (100 kHz), the expander bus (400 kHz), the backlight PWM | `ml:imx95-verdin.dtsi:395-399,468-476`; `tsm:config_scmi.h:271-272,310` |
+
+AP-NS holds every one of these with ALL (section 1, and `config_scmi.h:271-272,310`
+for the I2C and TPM clocks). DISP1PIX's parent and the PHY clocks' parents
+need CLOCK_PARENT_SET.
+
+**The NXP combo D-PHY PLL for 420 Mbit/s.** The PLL output is the DDR clock,
+Fout = lane rate / 2 = **210 MHz**; Fout = Fin x M / (N x div), Fin 24 MHz,
+2 MHz <= Fin / N <= 8 MHz, M 64-625, N 1-16, div 1/2/4/8 from
+`vco_cntrl[5:4]` (`glue:155-170,549-651`); hal's form is
+VCO = Fin x (M_field + 2) / (N_field + 1) with VCO = 2 x Fout for Fout in
+160-320 MHz (`fsl_mipi_dsi.c:505-563,1153-1180`). Both searches land on the
+same exact point:
+
+| Parameter | Value | Linux (`glue:`) | hal (`fsl_mipi_dsi.c:`) |
+|---|---|---|---|
+| N | 4 (Fin / N = 6 MHz); field N - 1 = 3 | first exact hit, n = 4 (n = 3 gives M 53, below 64), `:594-631` | n_field = 3, `:530-560` |
+| M | 70; field M - 2 = 68 = **0x44** | `:119-123,744-749` | m_field = 68, `:1290-1291` |
+| VCO, div | 420 MHz, / 2 | `vco_cntrl` 0x1F (band 160-220 MHz) or 0x19 (210-330); both have div 2, Linux keeps the first: **0x1F**, `:226-238` | **0x19** (`{210, 25}`), `:1184-1205` |
+| prop_cntrl | 0x0D | `:226-238` | 13, `:1109-1121` |
+| hsfreqrange | | **0x16** (`{449, 0x16}`), `:241-310` | **0x05** (`{425.0, 5}`), `:1064-1100` |
+| sr_osc_freq_target | | 0x7D0 (always), `:732-733` | **0x384** (Fout <= 500 MHz), `:1127-1150` |
+
+The test-interface writes (8-bit registers reached through the DW host's
+`PHY_TST_CTRL0/1` at 0xB4/0xB8, the 12-bit test code in two halves,
+`fsl_mipi_dsi.c:1212-1240`, `glue:436-498`), in hal's order
+(`fsl_mipi_dsi.c:1243-1317`), with the value for this mode:
+
+| Test code | Register | Value | Differs? |
+|---|---|---|---|
+| 0x16A | PLL_13 `pll_mpll_prog_rw` | 0x03 | |
+| 0x1AB, 0x1AA | CB_1, CB_0 (LP-RX reference) | 0x06, 0x53 | |
+| 0x1AC | CB_2 `cb_clkdiv_clk_en_rw` (below 450 Mbit/s) | 0x10 | |
+| 0x402 | CLK_TERMLOWCAP | 0x02 | |
+| 0x272, 0x271, 0x270, 0x272 | SLEW_7 off, `sr_osc_freq_target` high, low, SLEW_7 on | 0x00, **0x03, 0x84** (hal) / **0x07, 0xD0** (Linux), 0x10 | U15 |
+| 0x17A, 0x179 | PLL_29, PLL_28: M field | 0x00, 0x44 | |
+| 0x178 | PLL_27: N override enable, N field | 0x98 | |
+| 0x17B | PLL_30: VCO override enable, `vco_cntrl`, M override enable | **0xB3** (hal, 0x19) / **0xBF** (Linux, 0x1F) | U14 |
+| 0x15E, 0x162 | PLL_1 `cpbias` 0x10; PLL_5 `gmp` 1, `int` 0 | 0x10, 0x01 | |
+| 0x173-0x176 | PLL_22-25: lock thresholds | 0x02, 0x00, 0x60, 0x03 | |
+| 0x166 | PLL_9 `pll_lock_sel_rw` | 0x04 | |
+| 0x16E | PLL_17: `prop_cntrl`, power-on override | **0x0D** (hal: its comment says the power-on bits are set, its value does not) / **0xCD** (Linux sets bits 7:6, `glue:790-793`) | U15 |
+| 0x17C | PLL_31: clock out left and right | 0x03 | |
+
+Then hal waits 100 ms (`fsl_mipi_dsi.c:1316`). Linux writes the PLL_* codes
+read-modify-write (`glue:513-531`); hal writes whole bytes. U-Boot's
+`tub:dw_dsi_imx95.c` has Linux's values (`:249-250,575-581,624-641`).
+
+**The camera-side CSRs** (CAMERA domain, CAMAPB; addresses
+`hal:MIMX9596_ca55_COMMON.h:810-830,2017`, fields the `PERI_CAMERA_DSI_*`
+headers):
+
+| Register | Value | Meaning | Source |
+|---|---|---|---|
+| DSI master CSR 0x4AD10004 `DSI_PIXEL_LINK_CONTROL` | 0 | `Pixel_link_sel` = pixel link 0 (interleaver channel 0, display engine 0) | `MASTER_CSR.h:472-478`; `dsi_nxp_dwc.c:112-113`; Linux's mux `nxp:imx95.dtsi:2168-2173`, `glue:381-427,809` |
+| DSI master CSR 0x4AD10008 `DSI_CLOCK_SETTING` | 0 | PLL reference 24 MHz, not the pixel-link clock | `MASTER_CSR.h:484-500`; `glue:823` |
+| DSI master CSR 0x4AD10000 `DSI_CLOCK_GATING_CONTROL` | 0x2 | display 0 async FIFO clock on, display 1 gated, D-PHY PLL clkin/clkout/clkext on (1 = gated) | `MASTER_CSR.h:428-466`; `glue:861-862` |
+| DSI stream CSR 0x4AD00000 `DSI_HOST_CONFIGURATION` | 0 | `Pixel_link_format` RGB 24-bit, `shutdown` 0 | `STREAM_CSR.h:429-458`; `glue:825-828` |
+| PHY CSR 0x4AD20100 `COMBO_PHY_MODE_CONTROL` | **0xF3** (Linux: `PHY_enable_ext` lanes 0-3, `PLL_clksel` 01 clock generation, `Tx_Rxz` 1 DSI) / **0x03** (Zephyr: no lane enables) | | `OR_CSI_PHY_CSR.h:622-655`; `glue:848-851`; `dsi_nxp_dwc.c:117`; U16 |
+| PHY CSR 0x4AD20104 `COMBO_PHY_FREQ_CONTROL` | `Phy_cfgclkfreqrange` 0x1C, `Phy_hsfreqrange` 0x16 or 0x05: **0x0016001C** / **0x0005001C** | | `OR_CSI_PHY_CSR.h:657-669`; `glue:706-708`; `dsi_nxp_dwc.c:109-111`; U13 |
+| PHY CSR 0x4AD20108 `COMBO_PHY_TEST_MODE_CONTROL` | 0x2000 (`turndisable_0`) after the PLL (Linux only) | | `OR_CSI_PHY_CSR.h:778-784`; `glue:859` |
+| PHY CSR 0x4AD2010C `COMBO_PHY_TEST_MODE_STATUS` | read: `phy_lock` bit 11 | | `OR_CSI_PHY_CSR.h:934-940` |
+| CSI-2 receiver 1 (0x4AD40000) test interface +0x50/+0x54, RX test code 0x302 | bit 1 (`HSRXENTERM` bypass on the shared PHY's clock lane), written and read back (Linux only) | | `glue:143-148,840-846`; `nxp:imx95.dtsi:2252-2256`; U16 |
+
+And in the display CSR: 0x4B010000 `DSIP_CLK0_SEL` = 0 (CCM video PLL clock,
+i.e. DISP1PIX; `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h:428-438`,
+`tub:imx95_dpu.c:331-334,595-596`), 0x4B010008 `PIXEL_LINK_CTRL` = 0x3
+(`PL0_valid`, `PL0_enable`; `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h:471-488`,
+`dsi_nxp_dwc.c:114-116`, Linux's pixel-link bridge sets valid then enable in
+its `enable`, `nxp:imx95-pixel-link.c:80-96,276-282`).
+
+**The DW MIPI DSI host at 0x4ACF0000** (`hal:PERI_MIPI_DSI.h`; the sequence
+is `ip::dw_mipi_dsi::attach`, which follows `dw-mipi-dsi.c`; hal's
+`DSI_Init`, `DSI_SetDpiConfig`, `DSI_InitDphy`, `DSI_PowerUp` are the
+permissive equivalent, `fsl_mipi_dsi.c:271-603`). For this mode,
+`ip::dw_mipi_dsi::plan` gives:
+
+| Field | Value | Note |
+|---|---|---|
+| `DPI_COLOR_CODING` | 0x5 (24 bit) | |
+| `DPI_CFG_POL` | 0x6 (hsync, vsync active low) | the glue writes 0x6 whatever the mode (`glue:821`); the same here |
+| `VID_MODE_CFG` | burst, low power in every blanking region | |
+| `PCKHDL_CFG` | no EoTp | the bridge's `NO_EOT_PACKET` |
+| `CLKMGR_CFG` escape divider | 3 (52.5 MHz / 3 = 17.5 MHz <= 20) | `esc_division(420, 20)` |
+| `VID_PKT_SIZE` | 1280 | |
+| `VID_HLINE_TIME`, `HSA`, `HBP` | 1053, 18, 48 lane byte clocks (burst: x 420 / 8 / 70, exact) | 1053 x 4 lanes = 4212 bytes a line against 3840 of pixels |
+| `VID_VSA/VBP/VFP/VACTIVE_LINES` | 8, 24, 8, 800 | |
+| PHY timing | clock LP-to-HS 65, HS-to-LP 40; data LP-to-HS 49, HS-to-LP 23 (byte clocks, the 450 Mbit/s row) | `glue:1125-1201`; the same row in `fsl_mipi_dsi.c:33-58` |
+| `PHY_IF_CFG` | 4 lanes; stop wait 0x20 (Linux) / 0x28 (hal) | `fsl_mipi_dsi.c:452` |
+| two-frame wait | 34 ms | |
+| lock | `PHY_STATUS` bit 0, as hal polls it (`fsl_mipi_dsi.c:565-580`): `lock_in_phy_status` true | |
+
+`probe` must accept the i.MX 95's `VERSION` (U18). The glue's `phy_ops`
+map one to one onto the `Phy` trait: `get_lane_mbps` (420), `get_timing`
+(the row above), `init` (master and stream CSRs, the CSI-1 termination
+bypass, `COMBO_PHY_MODE_CONTROL`, `COMBO_PHY_FREQ_CONTROL`, the test-code
+writes, `COMBO_PHY_TEST_MODE_CONTROL`, the clock gating; `glue:803-865`),
+`power_off` (gate everything, `glue:867-885`). New code: that `Phy`
+(about 250 lines with its tests) and a test-code writer.
+
+**The SN65DSI83** at 0x2C on LPI2C3 (0x42530000, 100 kHz, pads GPIO_IO28/29,
+`ml:imx95-verdin.dtsi:468-476,921-924`; `dsi.dtso:86-113`), enable
+`GPIO_10_DSI`. `ip::sn65dsi8x::plan` with the i.MX8MP's `Board` (4 lanes,
+24 bpp, format 2 = VESA, 200 ohm termination, no reset line) and the mode
+above at 420 Mbit/s gives, and NXP's driver computes the same
+(`sn65:337-370`):
+
+| CSR | Value | |
+|---|---|---|
+| 0x0A | 0x05: `LVDS_CLK_RANGE` 2 (62.5-87.5 MHz), `HS_CLK_SRC` (0x85 once `PLL_EN_STAT`) | |
+| 0x0B | 0x10: `DSI_CLK_DIVIDER` 3 (210 / 3 = 70 MHz LVDS clock) | |
+| 0x10 | `CHA_DSI_LANES` 0 (four lanes); 0x26 in the i.MX8MP golden, our driver writes only those two bits | |
+| 0x12 | 0x2A: `CHA_DSI_CLK_RANGE` 42 (210 <= f < 215 MHz) | the lane rate sits on the range's lower edge |
+| 0x18 | 0x18 by our plan and the i.MX8MP's Linux dump of the same panel; **0x78** by `sn65:563-568` (HS and VS negative from the panel's `hsync-active`/`vsync-active` 0) | U20 |
+| 0x20-0x3A | 1280, 800, sync delay 33, HSA 24, VSA 8, HBP 64, VBP 24, HFP 36, VFP 8 | the i.MX8MP golden holds the same bytes, `driver/src/display/golden-linux-2026-09-21.txt:934-942` |
+
+The order is SLLSEC1I's (the bridge CSRs with the DSI clock lane in HS and no
+video, then PLL, soft reset, then video), which NXP's driver keeps with
+`pre_enable_prev_first` (the DSI host comes up first, `sn65:995`) and its
+`pre_enable`/`enable` split (`sn65:473-670`).
+
+**GPIOs, backlight, touch.**
+
+| Signal | Where | What to do | Source |
+|---|---|---|---|
+| `GPIO_10_DSI` (Verdin 21, X4 17; Toradex calls it `DSI_1_BKL_EN`) | the module's NXP **PCAL6416A** I/O expander at **0x20** on **LPI2C2** (0x44350000, on-module `CTRL_I2C`, 400 kHz), line **3** | the bridge's EN (Toradex's `enable-gpios`) and, on the display, "display OFF when Low": low >= 10 ms, then high before the bridge's CSRs | `dsi.dtso:88-90`; `ml:imx95-verdin.dtsi:395-420`; `V95:` 1.7.9 and Table 22, page 41; `MAL:` Table 14 |
+| `GPIO_9_DSI` (Verdin 17, X4 19) | expander line **2**, input | the touch interrupt (falling edge); not needed for the picture | `dsi.dtso:119-122` |
+| `DSI_RESET_CON#` (Verdin 42 = `I2S_2_BCLK`, X4 22) | **GPIO5_IO06** (0x43850000; pad XSPI1_DATA6, 0x51E), active low, 1.8K pull-up on the Mallow | Toradex's overlay makes it the touch controller's reset; left undriven it is released by the pull-up | `dsi.dtso:117-124`; `ml:imx95-verdin.dtsi:875-877`; `MAL:` Table 14 |
+| `PWM_3_DSI` (Verdin 19, X4 18) | **TPM6 channel 2** (0x42510000), pad GPIO_IO19 mux TPM6_CH2 (0x11E) | period 6,666,667 ns (**150 Hz**), normal polarity; brightness steps 0, 45, 63, 88, 119, 158, 203, 255 of 255, default step 4 (119, 47 %); 10K to GND on the Mallow, so an undriven pin is dark | `dsi.dtso:24-30,158-161`; `ml:imx95-verdin.dtsi:687-690,1037-1039`; `MAL:` Table 14 |
+| touch | **Ilitek ILI2132 at 0x41** on LPI2C3, the bridge's bus | not part of the picture | `dsi.dtso:115-125` |
+
+AP-NS owns LPI2C2 and LPI2C3, LPTPM6, GPIO2 and GPIO5 and their pins
+(`tsm:.cfg:752,755,775-776,795,959,968-969,978-979,1023`). The expander's own
+registers (output port, configuration port) are from NXP's PCAL6416A data
+sheet, not read here (U19).
+
+**The order, cold** (the i.MX8MP's order, `driver/docs/imx8mp-display-cold.md`
+"The sequence", which the bridge's data sheet fixes; hal's and Zephyr's DSI
+steps inside it):
+
+| Step | What | Registers | Permissive source |
+|---|---|---|---|
+| 1 | SCMI: power DISPLAY (13) and CAMERA (3) on; read perf DISP (12) and CAM (11) (ODV expected); VIDEOPLL1_VCO 3,360 MHz, VIDEOPLL1 420 MHz; DISP1PIX parent VIDEOPLL1, 70 MHz; MIPIPHYCFG and MIPIPHYPLLREF parent 24M, 24 MHz; MIPIPHYPLLBYPASS parent VIDEOPLL1; enable DISP1PIX, 66, 67, 68, LPI2C2/3, TPM6 | (SCMI) | `firmware::scmi` + MU transport + CLOCK_PARENT_SET |
+| 2 | Expander: `GPIO_10_DSI` output low (bridge in reset, display off) for at least 10 ms; backlight PWM at 0 | PCAL6416A over LPI2C2; TPM6 | (U19) |
+| 3 | Display CSR: `DSIP_CLK0_SEL` 0 (CCM); interleaver control `Mode` 0 (bypass) | 0x4B010000, 0x4B010004 | `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h` |
+| 4 | Pixel interleaver channel 0, as for LVDS | `PERI_DISPLAY_INTERLEAVER.h:411-421` | |
+| 5 | DPU configured, not started: one plane, LayerBlend1 over ConstFrame0, ExtDst0, DomainBlend0, FrameGen0 1280 x 800 in 1404 x 840 | `PERI_DISPLAY_SEERIS.h` | `fsl_dpu.c`; `display_socionext_dpu.c:256-327` |
+| 6 | Pixel link 0: master CSR select 0, clock setting 0; stream CSR RGB 24; display CSR `PIXEL_LINK_CTRL` 0x3 | the table above | `dsi_nxp_dwc.c:112-116` |
+| 7 | DW host attach (`ip::dw_mipi_dsi::attach`): `PWR_UP` 0, escape divider, DPI, packet handler, burst video config, command mode, line and vertical timing, PHY held in reset, PHY timing, `PHY_IF_CFG`; then `Phy::init`: CSI-1 termination bypass, `COMBO_PHY_MODE_CONTROL`, `COMBO_PHY_FREQ_CONTROL`, the test-code table, `COMBO_PHY_TEST_MODE_CONTROL`, clock gating 0x2; `PHY_RSTZ` 0xF, `PWR_UP` 1, wait `PHY_STATUS` lock and clock-lane stop state; two frames; command mode with the clock lane requested in HS | `PERI_MIPI_DSI.h`, the CSR tables above | `fsl_mipi_dsi.c:271-603,1243-1317`; `dsi_nxp_dwc.c:44-133` |
+| 8 | Bridge: `GPIO_10_DSI` high, ID (retried, as the AM62P display's power-up needed), CSRs, PLL, `PLL_EN_STAT`, soft reset, 10 ms (`ip::sn65dsi8x::Bridge::start`) | SN65DSI83 over LPI2C3 | SLLSEC1I Table 7-2 |
+| 9 | DPU started: FrameGen0 enabled, shadow loads, wait `PrimSyncStat` | | as LVDS step 5 |
+| 10 | DW host to video mode (`ip::dw_mipi_dsi::video_on`) | `MODE_CFG` | |
+| 11 | Bridge link check: `IRQ_STAT` (0xE5) cleared, read after 1 ms (`check_link`; `sn65:646-668`) | | |
+| 12 | Backlight: TPM6 channel 2, 150 Hz, the default duty | TPM | |
+
+Expected size: the part shared with the LVDS path (the hal_nxp register
+module, the DPU one-plane path, the interleaver, the MU transport and the
+SCMI calls; sized under (b') below), plus the combo D-PHY `Phy` and its
+test-code writer (about 250 lines), the camera-side CSR setup (about 80),
+the board layer for the bridge, the expander and the PWM (about 150), and
+host tests for the PLL search and the CSR values, with both sources' values
+as cases. The DW host and the bridge are already ours.
+
+### (b') Cold: X12 LVDS from Zephyr (not this board's setup)
+
+Kept for a board with an LVDS panel on X12; nothing below is on the owner's
+path except steps shared with the DSI path (SCMI, display CSR, interleaver,
+DPU).
 
 The list, in the order U-Boot's and hal_nxp's sequences agree on
 (`tub:drivers/video/nxp/imx/imx95_dpu.c:880-1006`;
@@ -328,7 +555,7 @@ The list, in the order U-Boot's and hal_nxp's sequences agree on
 
 | Step | Block | Registers (BSD header) | Permissive sequence | GPL cross-check (lines) |
 |---|---|---|---|---|
-| 1 | SCMI as agent AP-NS: DISPLAY (13) on, which runs DISPAPB, DISPAXI and DISPOCRAM (not ours to switch, section 1); perf DISP level if needed; LDBPLL_VCO (37) 2,986.2 MHz, LDBPLL (38) 497.7 MHz for 71.1 MHz, both enabled | (SCMI) | `repo:driver/rust/src/firmware/scmi.rs` codec; a new MU transport | `nxp:imx95.dtsi:2696-2703`; `tdx:...10inch-lvds.dtso:80-83`; permissions `tsm:` (section 1) |
+| 1 | SCMI as agent AP-NS: DISPLAY (13) on, which runs DISPAPB, DISPAXI and DISPOCRAM (not ours to switch, section 1; perf DISP at ODV); LDBPLL_VCO (37) 2,986.2 MHz, LDBPLL (38) 497.7 MHz for 71.1 MHz, both enabled | (SCMI) | `repo:driver/rust/src/firmware/scmi.rs` codec; a new MU transport | `nxp:imx95.dtsi:2696-2703`; `tdx:...10inch-lvds.dtso:80-83`; permissions `tsm:` (section 1) |
 | 2 | display CSR: engine 0 clock select = LDB PLL / 7; interleaver control | `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h:408-415,430-468` | | `ml:clk-imx95-blk-ctl.c:226-251`; `tub:imx95_dpu.c:595-598` |
 | 3 | LVDS CSR: PHY clock divider, the four clock gates (U4), LDB control (channel 0 to DI0, 24 bit, SPWG or JEIDA, sync polarities, `VSYNC_ADJ_EN`), LVDS PHY 0 enable | `PERI_LDB.h:408-412` and its field masks | `fsl_ldb.c:33-95` (96 lines) | `nxp:imx95-ldb.c` (578), `phy-fsl-imx8mp-lvds.c` (317); `tub:imx95-ldb.c` (551) |
 | 4 | pixel interleaver channel 0: reset, polarities, format | `PERI_DISPLAY_INTERLEAVER.h:411-421` | | `nxp:imx95-pixel-interleaver.c:24-43,84-147` (402); `tub:` (283) |
@@ -339,30 +566,31 @@ Not needed for X12: the pixel link (U5), the DSI host and combo PHY, the
 CAMERA domain, any I2C. Not needed for a first picture: the irqsteer (poll
 `FGCHSTAT`), the signature unit.
 
-Expected size, on the AM62P and i.MX8MP precedents: a register module
-generated from hal_nxp as `regs.rs` is today (new header list in the
-generator), about 600 lines of Rust for the DPU one-plane path, about 200 for
-LDB, PHY and interleaver, about 300 for the MU transport and the SCMI calls,
-a board layer, and host tests against the golden dump. One more open choice:
+Expected size, on the AM62P and i.MX8MP precedents, shared with the DSI
+path: a register module generated from hal_nxp as `regs.rs` is today (new
+header list in the generator), about 600 lines of Rust for the DPU one-plane
+path, about 300 for the MU transport and the SCMI calls, a board layer, and
+host tests against the golden dump; LVDS only: about 200 for LDB, PHY and
+interleaver. One more open choice:
 vendoring `fsl_dpu.c`/`fsl_ldb.c` unmodified under `third_party/` and calling
 them, as the AM62P vendors TI's Zephyr DSI driver
 (`driver/docs/am62p-display-cold.md`, "Documents"), against writing the
 subset in Rust from the header. The house rule (`docs/source-form.md`)
 allows either; the Rust subset is smaller than the 4,918-line driver.
 
-The DSI variant (X4 with a Toradex DSI display) adds: the CAMERA domain and
-four more clocks, the pixel link and DSI master CSR, the DW MIPI DSI host
-(`ip::dw_mipi_dsi`), the NXP combo PHY and its PLL (`z:dsi_nxp_dwc.c:109-126`
-and the BSD CSR headers; `nxp:imx95-mipi-dsi.c`, 1,348 lines;
-`tub:dw_dsi_imx95.c`, 1,146 lines), and `ip::sn65dsi8x` over LPI2C3. Roughly
-twice the LVDS path, most of it already ours.
+The same vendoring choice applies to hal_nxp's `fsl_mipi_dsi.c` (1,317
+lines) on the DSI path; there the Rust host already exists, so only the
+D-PHY part would be new either way.
 
-Risks:
+Risks (both variants unless marked):
 
 | Risk | Note |
 |---|---|
 | The System Manager refuses a request | Toradex's configuration gives AP-NS everything the path needs (section 1); a request on DISPAPB/AXI/OCRAM returns `DENIED` by design, so the code must not send one. A board with another System Manager build is checked by Z0 |
-| LDB PLL rate: the VCO must be 6 x 7 x the pixel clock; the PLL may not reach a mode's exact rate | the Toradex panel's rate is the overlay's; other panels are later |
+| LVDS only: LDB PLL rate: the VCO must be 6 x 7 x the pixel clock; the PLL may not reach a mode's exact rate | the Toradex panel's rate is the overlay's; other panels are later |
+| DSI: the link has no margin. 420 Mbit/s is exactly 70 MHz x 24 / 4; the i.MX8MP's Samsung DSIM broke the same panel's picture with no margin (issue #8) | the DW host in burst mode sends each line's 3840 bytes inside a 4212-byte line time (1053 byte clocks), so 372 byte times a line are left for the packet overhead and the LP-HS turnarounds (49 + 23 byte clocks); Toradex's BSP runs exactly this. If the picture breaks: raise the lane rate to a point the PLL makes exactly (e.g. Fout 216 MHz, M 72, N 4: 432 Mbit/s, 2.9 % margin); the line time follows from the rate, and the bridge's divider stays 3 (LVDS 72 MHz over a 70 MHz pixel clock, as the i.MX8MP runs 71.1 over 69.3); U17 |
+| DSI: NXP's two sources disagree on four D-PHY values (hsfreqrange, `vco_cntrl`, `sr_osc_freq_target`, the PLL power-on override) and on the lane enables and the CSI-side termination bypass | start from Linux's values (the ones Toradex's BSP runs on this display) and keep hal's as the fallback; the M4 reads decide what can be read (U13, U16), a cold run the rest (U14, U15) |
+| DSI: the bridge's EN sits behind the module's I/O expander on another I2C bus | two I2C buses and an expander before the first DSI byte; a wrong expander write can touch the module's other lines (the line names, among them USB recovery and the TPM on lines 10-13, `ml:imx95-verdin.dtsi:416-432`): write only line 3's bits, read-modify-write |
 | A full mode change wedges the ExtDst shadow load unless the FrameGen is disabled and re-enabled (the upstream port's open defect) | set the mode once, at start; flips change only the fetch address |
 | Reading DPU registers with DISPLAY off | U6; the probe reads the domain state first |
 
@@ -382,43 +610,59 @@ display is open.
 From the BSD header, all readable by the image: `FGENABLE` and `FGENSTS`
 (the FrameGen runs), `FGCHSTAT.PrimSyncStat` (the primary channel is in
 sync), `FGTIMESTAMP` read twice (frames advance), FetchLayer0's address,
-stride and size read back equal to our buffer, the LDB and PHY control words
-equal to the golden dump. Beyond what the other boards had: **Signature0**
+stride and size read back equal to our buffer, the control words equal to
+the golden dump. On the DSI path also: `COMBO_PHY_TEST_MODE_STATUS.phy_lock`
+and the DW host's `PHY_STATUS` (lock, lanes in stop state or HS), its
+`INT_ST0/1` and `VID_PKT_STATUS` (no FIFO errors), and the bridge's
+`PLL_EN_STAT` and `IRQ_STAT` (0xE5: no SoT, ECC, CRC or sync error once
+cleared), as the i.MX8MP's health word reads them. The bridge can also draw
+its own test pattern (`CHA_TEST_PATTERN`, 0x3C bit 4, with the vertical
+fields that only the pattern uses), which separates "bridge and panel work"
+from "the DSI stream is right" when a person looks at the panel. Beyond what
+the other boards had: **Signature0**
 gives per-window CRCs of what the display engine actually sends; a CRC that
 is stable while the buffer is unchanged, changes when one pixel changes, and
 equals the CRC measured under Linux for the same pattern proves the content
 without a camera (U7). A person at the panel confirms; the farm has no
-capture device for an LVDS panel.
+capture device for this panel.
 
 ## 5. Recommendation
 
 1. **(c) from day one**: the GPU bring-up and its sign-off do not depend on
    the display.
-2. **The day-one reads (section 6)**, which say whether a panel is attached
-   and whether the board's Linux drives it.
-3. **(a) by crash kexec, if M1-M2 show Toradex's kernel driving a panel on
-   X12**: a few days, and it yields the golden dump and a working reference
-   link. Skip it otherwise; it is not worth building a Linux setup for.
-4. **(b) cold on X12** from hal_nxp's headers and drivers, checked against
-   the dump: the product form, signed off with U-Boot starting the image.
+2. **The day-one reads (section 6)**, which say whether the board's Linux
+   drives the X4 display and read the values NXP's two sources disagree on.
+3. **(a) by crash kexec, if M1-M2 show Toradex's kernel driving the DSI
+   display**: a few days, and it yields the golden dump (DPU, CSRs, DW host,
+   bridge) and a working reference link. Skip it otherwise; it is not worth
+   building a Linux setup for. The M4 reads alone already give most of the
+   dump.
+4. **(b) cold on X4** from hal_nxp's headers and drivers, with
+   `ip::dw_mipi_dsi`, a new combo D-PHY `Phy` and `ip::sn65dsi8x`, checked
+   against the dump: the product form, signed off with U-Boot starting the
+   image.
 
-Why LVDS on X12 and not DSI on X4: no bridge, no I2C, no PHY PLL, one power
-domain, and a permissive LDB sequence of 96 lines; X14 is dead on this
-module. Why cold rather than a U-Boot that lights the panel: Toradex's U-Boot
-does not, and carrying our own U-Boot build for it is the cost the T6 note
-refused.
+Why DSI on X4: it is the owner's display (2026-11-21); X12 is empty and X14
+is dead on this module. The DSI path costs more than LVDS would have (a
+second power domain, the combo D-PHY and its PLL, the bridge and the expander
+over two I2C buses), but the DW host and the bridge driver are ours already
+and the i.MX8MP runs the same panel through the same bridge family. Why cold
+rather than a U-Boot that lights the panel: Toradex's U-Boot does not, and
+carrying our own U-Boot build for it is the cost the T6 note refused.
 Toradex's System Manager configuration (section 1) leaves the order as it
-was: our agent holds every domain, clock and block the X12 path needs, and
-nothing between Linux and our image (a crash kexec) or between U-Boot and our
-image (`go`) turns the display off.
+was: our agent holds every domain, clock and block the X4 path needs
+(DISPLAY and CAMERA, the video PLL, DISP1PIX, the MIPI PHY clocks, MIPI_DSI,
+MIPI_PHY, LPI2C2/3, LPTPM6, GPIO5 and their pins), and nothing between Linux
+and our image (a crash kexec) or between U-Boot and our image (`go`) turns
+the display off.
 
 What would change it:
 
-- **No LVDS panel on the board, a Toradex DSI display on X4 instead**: (b) in
-  its DSI variant; `ip::dw_mipi_dsi` and `ip::sn65dsi8x` carry over, the
-  combo PHY is new.
-- **No panel at all**: the owner chooses a panel (Toradex's 10.1" LVDS
-  display fits X12 and X13 directly); until then only (c).
+- **An LVDS panel on X12 instead** (not the owner's setup): (b') without the
+  bridge, the expander, the D-PHY and the CAMERA domain.
+- **Toradex's 7" DSI display instead of the 10.1"**: the same path with its
+  mode (1024 x 600 at 60 MHz, 2 lanes, `tdx:...7inch-dsi.dtso:39-53,100`):
+  720 Mbit/s a lane, a new PLL point and timing row.
 - **An HDMI monitor is required**: the Mallow cannot give it with this
   module. It needs a DSI-to-HDMI device on X4 that the Mallow's FFC takes
   (Toradex's own adapter has the LSS-130 connector of the Development Board
@@ -439,9 +683,9 @@ Under the board's Linux, over ssh, nothing written:
 | Check | What is read | What it gives |
 |---|---|---|
 | M1 | `/proc/device-tree/model` and `compatible` (expected "Toradex Verdin iMX95 ... on Mallow Board"); `uname -r`; `/etc/os-release`; the applied overlays (Toradex's `overlays.txt`) | the carrier; whether the kernel is Toradex's BSP (has `dpu95`) or mainline (has no display) |
-| M2 | `/sys/class/drm/*/status` and `modes`; `dmesg` lines of `dpu95`, `imx95-ldb`, `panel`; `i2cdetect -r -y` on the `I2C_2_DSI` bus: 0x2C (SN65DSI83, a DSI display on X4), 0x4A or 0x41 (a display's touch controller) | **is a panel attached, on X12 or X4, and does Linux drive it?** |
-| M3 | `dmesg` SCMI and System Manager lines (protocol versions, firmware build); `/sys/kernel/debug/clk/clk_summary` rows for `dispapb`, `dispaxi`, `dispocram`, `disp1pix`, `ldbpll`, `ldbpll_vco`, `videopll1`; `/sys/kernel/debug/pm_genpd/pm_genpd_summary` for display and camera; `/proc/config.gz` for `KEXEC`, `CRASH_DUMP`; `/proc/iomem` for a crash reservation | what the System Manager lets the AP set; whether (a) can run |
-| M4 | only if M2 shows a running panel and M3 the display domain on: one 32-bit read each of DPU `COMCTRL_IPIDENTIFIER` (0x4B400000); FetchLayer0 0x4B5D0008-0x4B5D004C and FetchYUV0's first block; ExtDst0 0x4B510008-0x4B510014; FrameGen0 0x4B6B0008-0x4B6B00A0; Signature0 0x4B6D0008-0x4B6D0028 and 0x4B6D0400-0x4B6D0408; display CSR 0x4B010000-0x4B010020; LVDS CSR 0x4B0C0000-0x4B0C000C; interleaver 0x4B0D0000, +0x20, +0x50 | the golden dump, with an allow list as the T6's and X2's (`driver/docs/nanopc-t6-display-allow.txt`) |
+| M2 | `/sys/class/drm/*/status` and `modes` (expected 1280x800); `dmesg` lines of `dpu95`, `imx95-mipi-dsi` ("Using Pixel Link0"), `sn65dsi83`, `panel`; `i2cdetect -r -y` on the `I2C_2_DSI` bus (LPI2C3): 0x2C (SN65DSI83) and 0x41 (ILI2132 touch); `i2cdump -y -r 0x00-0xff <bus> 0x2c b` (reads only) | **does Linux drive the X4 display?**, and the bridge's registers (U20) |
+| M3 | `dmesg` SCMI and System Manager lines (protocol versions, firmware build); `/sys/kernel/debug/clk/clk_summary` rows for `dispapb`, `dispaxi`, `dispocram`, `disp1pix`, `videopll1`, `videopll1_vco`, `mipiphycfg`, `mipiphypllref`, `mipiphypllbypass`, `camapb`; `/sys/kernel/debug/pm_genpd/pm_genpd_summary` for display and camera; `/proc/config.gz` for `KEXEC`, `CRASH_DUMP`; `/proc/iomem` for a crash reservation | what the System Manager lets the AP set; whether (a) can run |
+| M4 | only if M2 shows a running panel and M3 the display domain on: one 32-bit read each of DPU `COMCTRL_IPIDENTIFIER` (0x4B400000); FetchLayer0 0x4B5D0008-0x4B5D004C and FetchYUV0's first block; ExtDst0 0x4B510008-0x4B510014; FrameGen0 0x4B6B0008-0x4B6B00A0; Signature0 0x4B6D0008-0x4B6D0028 and 0x4B6D0400-0x4B6D0408; display CSR 0x4B010000-0x4B010020; interleaver 0x4B0D0000, +0x20, +0x50; with CAMERA on: DSI stream CSR 0x4AD00000-0x4AD0000C, DSI master CSR 0x4AD10000-0x4AD10008, combo PHY CSR 0x4AD20100-0x4AD20110 (U13, U16), DW host 0x4ACF0000-0x4ACF0110 (`VERSION` for U18, the timing and PHY words) | the golden dump, with an allow list as the T6's and X2's (`driver/docs/nanopc-t6-display-allow.txt`) |
 
 Under U-Boot, at its prompt: `dm tree` (no `video` device expected),
 `bdinfo` (DRAM banks, where a buffer may live). No register reads: U-Boot
@@ -451,32 +695,40 @@ Under Zephyr (the first probe image, later):
 
 | Check | What the image does | Answers |
 |---|---|---|
-| Z0 | SCMI base discovery (agent id, expected 2 "AP-NS"; protocols); power state of domains 13 and 3; the perf DISP level; rate and state of clocks 75, 76, 78, 80, 37, 38; `CLOCK_GET_PERMISSIONS` on 37, 38, 80 (expected all) and 75 (expected none) | does our image reach the System Manager, and is the display domain on? |
+| Z0 | SCMI base discovery (agent id, expected 2 "AP-NS"; protocols); power state of domains 13 and 3; the perf DISP and CAM levels (expected 3, ODV); rate and state of clocks 75, 76, 78, 80, 18, 19, 62, 66, 67, 68; `CLOCK_GET_PERMISSIONS` on 18, 19, 66-68, 80 (expected all) and 75 (expected none) | does our image reach the System Manager, and is the display domain on? |
 | Z1 | only if Z0 says DISPLAY is on: FrameGen0/1 enable and status, the fetch unit's address, stride and size | after a crash kexec: **a scanout to adopt?** |
-| Z2 | the cold X12 path of section 4(b), stage by stage, with the read-backs of "Proof without a camera" | **our own picture** |
+| Z2 | the cold X4 path of section 4(b), step by step (a stop-after per step, as the i.MX8MP's `STOP_AFTER`), with the read-backs of "Proof without a camera"; the bridge's test pattern first, then our stream | **our own picture** |
 
 Which result picks which route:
 
-| M2: panel driven by Linux on X12 | M3: kexec and crash reservation | Route |
+| M2: the X4 display driven by Linux | M3: kexec and crash reservation | Route |
 |---|---|---|
 | yes | yes | (a) by crash kexec for the dump and the reference, then (b) |
 | yes | no | the dump from M4, then (b) directly |
-| a DSI display on X4 | either | (b), DSI variant |
-| no panel | | (c) only; ask the owner for a panel |
+| no (mainline, or no overlay) | | (b) from the sources alone, Linux's values first |
 
 ## 7. Unknowns
 
 | # | Question | What answers it |
 |---|---|---|
-| U1 | What display is on the Mallow: an LVDS panel on X12, a DSI display on X4, nothing? | M2, or the owner |
+| U1 | Answered by the owner (2026-11-21): the Toradex Capacitive Touch Display 10.1" DSI on X4; no LVDS panel on X12 | (M2 confirms it under Linux) |
 | U2 | Answered from `tsm:` (section 1): AP-NS (agent 2) holds DISPLAY, CAMERA, perf DISP and CAM, DISP1PIX, the LDB and video PLLs and the MIPI PHY clocks with ALL, and owns the DPU, LVDS, DSI and the pins; DISPAPB/AXI/OCRAM are the System Manager's; only a reset of the AP machine clears the votes, so a `go` or a kexec keeps them. Still open: that the board runs this configuration | Z0 (agent id, permissions, domain state); the System Manager's build line in Linux's `dmesg` (M3) |
-| U3 | Which Linux does the board run: Toradex's BSP (with `dpu95` and the LVDS overlay) or mainline? | M1 |
-| U4 | The LVDS CSR word at +0x0: Linux's clock driver has the PHY divider in bit 0 and four set-to-disable gates in bits 1-4 (`ml:clk-imx95-blk-ctl.c:163-218`); hal_nxp's `PERI_LDB.h` names only the divider bit. Which is right? | M4 value under a running panel |
-| U5 | Is the pixel link part of the LVDS path? Toradex's LVDS overlay enables it; NXP's Liu Ying says it is DSI only | M4 read of display CSR + 0x8 under a running LVDS panel; a cold run without it |
+| U3 | Which Linux does the board run: Toradex's BSP (with `dpu95` and the 10.1" DSI overlay) or mainline? | M1 |
+| U4 | LVDS only, not on this board's path. The LVDS CSR word at +0x0: Linux's clock driver has the PHY divider in bit 0 and four set-to-disable gates in bits 1-4 (`ml:clk-imx95-blk-ctl.c:163-218`); hal_nxp's `PERI_LDB.h` names only the divider bit. Which is right? | M4 value under a running panel |
+| U5 | LVDS only (on the DSI path the pixel link is used). Is the pixel link part of the LVDS path? Toradex's LVDS overlay enables it; NXP's Liu Ying says it is DSI only | M4 read of display CSR + 0x8 under a running LVDS panel; a cold run without it |
 | U6 | What does a read of a DPU register do with the DISPLAY domain off: a bus error, a stall, zero? | do not try it; Z0 reads the domain first |
 | U7 | Is Signature0's CRC usable as a proof: stable over frames, sensitive to one pixel, equal to the value under Linux for the same pattern? Its CRC polynomial is not stated in the header | a board run of the signature unit in Z2, and the same windows under Linux |
 | U8 | Does Toradex's kernel support kexec with a crash reservation on the i.MX 95 (as Armbian's does on the T6)? | M3 |
 | U9 | If a video U-Boot were ever used: does `go` or `booti` leave the FrameGen running, or does pre-boot device removal run the driver's `remove`? | not on the recommended path; a U-Boot run only if (a) through U-Boot is ever wanted |
-| U10 | The touch controller's bus: the Mallow wires X13's I2C to Verdin pins 12/14 (`I2C_1`, LPI2C4, `MAL:` Table 17), Toradex's overlay puts the touch on LPI2C3 (`tdx:...10inch-lvds.dtso:108-123`). No effect on the picture | M2 `i2cdetect` on both buses |
+| U10 | For the X4 display, answered: the touch (ILI2132, 0x41) is on LPI2C3 with the bridge, X4's only I2C (`dsi.dtso:115-125`, `MAL:` Table 14). The open question was X12/X13's (LPI2C4 by the Mallow, LPI2C3 by Toradex's LVDS overlay) and no longer matters | M2 `i2cdetect` shows 0x41 |
 | U11 | Does the IMX95RM, with an NXP account, have the DPU chapter, and is it needed now that hal_nxp's header exists? | someone with an account reads its table of contents; until then the header is the documentation |
 | U12 | hal_nxp's `DPU_SetFetchUnitSrcBufferAddr` takes a 32-bit address (`fsl_dpu.c:2518`); the hardware has an MSB register. Is the A55's frame buffer below 4 GiB on this board? | the image's memory map (DRAM starts at 0x80000000; its first 16 MiB are reserved for the M7, `ml:imx95-verdin.dtsi:162-165`); `bdinfo` |
+| U13 | `Phy_hsfreqrange` for 420 Mbit/s: 0x16 (Linux and U-Boot, `glue:262-263`) or 0x05 (hal and Zephyr, `fsl_mipi_dsi.c:1078`)? The two tables put the 420 Mbit/s point on opposite sides of a range edge | M4: `COMBO_PHY_FREQ_CONTROL` (0x4AD20104) under Linux, a plain CSR read |
+| U14 | `vco_cntrl` 0x1F (Linux) or 0x19 (hal): the 210 MHz point lies in both bands of the databook table both copy | not a plain read (PLL_30 is behind the test interface, whose read needs TESTCLK/TESTEN writes): a cold run with each, PHY lock and the bridge's error status as the check |
+| U15 | `sr_osc_freq_target` 0x7D0 (Linux, any rate) or 0x384 (hal, at this rate), and PLL_17 with or without the power-on override bits (Linux 0xCD, hal 0x0D) | as U14 |
+| U16 | `COMBO_PHY_MODE_CONTROL` with the four lane enables (0xF3, Linux) or without (0x03, Zephyr), `COMBO_PHY_TEST_MODE_CONTROL.turndisable_0`, and the CSI-1 clock-lane termination bypass (Linux only): which are needed for TX? | M4 reads 0x4AD20100 and 0x4AD20108 under Linux; the CSI-1 test register is behind its test interface (as U14) |
+| U17 | Does the zero-margin link (420 Mbit/s for 70 MHz x 24 / 4) give a stable picture through the DW host, where the i.MX8MP's DSIM needed 2.6 %? | M2 (Linux's picture is stable, a person looks); Z2's error counters over a minute |
+| U18 | The i.MX 95 DW host's `VERSION` (`ip::dw_mipi_dsi::probe` accepts 1.30, 1.31, 1.41); hal writes `PHY_TMR_RD_CFG`, so 1.31 or later | M4 read of 0x4ACF0000 |
+| U19 | The PCAL6416A's register map (output and configuration ports) and whether Zephyr's LPI2C, PCA-series GPIO and TPM PWM drivers build for this A55 board; NXP's PCAL6416A data sheet was not read | the data sheet; a Zephyr build |
+| U20 | Bridge `LVDS_FMT` (0x18): 0x18 (our plan; the i.MX8MP's Linux dump of the same panel) or 0x78 (NXP's driver from the panel's active-low syncs)? An LVDS panel with DE likely ignores it | M2 `i2cdump` of 0x2C |
+| U21 | The display's power-up after `GPIO_10_DSI` rises: how long until the bridge answers on I2C (the AM62P's adapter needed about 50 ms, `ip::sn65dsi8x` retries for a second) | Z2's ID retry count |
