@@ -12,7 +12,9 @@
  * Constants are repeated from driver/zephyr/lib/board/rpi5_scanout/ so the
  * header stands alone:
  *   hvs6_chan.h:94     YD5_HVS6_LPTRS_HEADE_MASK 0xfff (list start, in words)
- *   hvs6_chan.h:107    YD5_HVS6_BOOTLOADER_DLIST_END 32 (firmware list words)
+ *   (the firmware's list is NOT the 32 words at word 0 that
+ *   hvs6_chan.h:107 YD5_HVS6_BOOTLOADER_DLIST_END names: s32dumprun read it
+ *   starting at LPTRS.HEADE, 672 on the board; fw_start/fw_words below)
  *   scanout_alive.h:63 STATUS.FRCNT 21:16 (SA_STATUS_FRCNT_SHIFT/_MASK)
  *   scanout_alive.h:77 SA_PV_CONTROL_EN (bit 0)
  *   scanout_alive.h:79 SA_PV_VCONTROL_VIDEN (bit 0)
@@ -28,7 +30,6 @@
 #include <stdint.h>
 
 #define SWAP_LPTRS_MASK 0xfffu
-#define SWAP_FW_LIST_WORDS 32u
 #define SWAP_FRCNT_SHIFT 16u
 #define SWAP_FRCNT_MASK 0x3fu
 #define SWAP_PV_CONTROL_EN (1u << 0)
@@ -60,19 +61,42 @@ enum swap_reason {
 	SWAP_UNCLOCKED_FAIL,   /* a register read all ones */
 	SWAP_VALVE_OFF,        /* PV_CONTROL.EN or PV_V_CONTROL.VIDEN clear */
 	SWAP_FRCNT_STALLED,    /* FRCNT did not advance */
-	SWAP_BAD_PLACEMENT,    /* expected word inside the firmware's 32 words */
+	SWAP_BAD_PLACEMENT,    /* our span overlaps the firmware list, runs past
+                                * the 12-bit LPTRS field, or a length is unknown */
 	SWAP_NOT_LATCHED,      /* pointer did not name ours after the wait */
 };
 
 struct swap_sample {
 	uint32_t ptr_before;      /* LPTRS/DL word read before the write */
 	uint32_t ptr_after;       /* the same register after the wait */
-	uint32_t expected_word;   /* word offset of our list, >= 32 */
+	uint32_t expected_word;   /* word offset of our list */
 	uint32_t status_before;   /* DISPx_STATUS before the write */
 	uint32_t status_after;    /* DISPx_STATUS after the wait */
 	uint32_t pv_control;
 	uint32_t pv_vcontrol;
+	/* Placement. The firmware's list spans [fw_start, fw_start+fw_words):
+	 * fw_start is LPTRS.HEADE read at run time (a word offset), fw_words
+	 * its measured length up to the END word. Ours spans
+	 * [expected_word, expected_word+our_words). Zero fw_words or zero
+	 * our_words means "unknown": the judge refuses the placement, since
+	 * overlap cannot be excluded. Zero-initialised = refused. */
+	uint32_t fw_start;
+	uint32_t fw_words;
+	uint32_t our_words;
 };
+
+/* True when our span is clear of the firmware's and inside the LPTRS field. */
+static inline bool swap_placement_ok(const struct swap_sample *s)
+{
+	uint64_t o0 = s->expected_word, o1 = o0 + s->our_words;
+	uint64_t f0 = s->fw_start, f1 = f0 + s->fw_words;
+
+	if (s->fw_words == 0 || s->our_words == 0)
+		return false;
+	if (o1 > (uint64_t)SWAP_LPTRS_MASK + 1u)
+		return false;
+	return o1 <= f0 || o0 >= f1; /* touching the end exactly is clear */
+}
 
 static inline const char *swap_reason_name(enum swap_reason r)
 {
@@ -106,7 +130,7 @@ static inline enum swap_reason swap_judge(const struct swap_sample *s)
 		return SWAP_VALVE_OFF;
 	if (swap_frames(s->status_before, s->status_after) == 0)
 		return SWAP_FRCNT_STALLED;
-	if (s->expected_word < SWAP_FW_LIST_WORDS || s->expected_word > SWAP_LPTRS_MASK)
+	if (!swap_placement_ok(s))
 		return SWAP_BAD_PLACEMENT;
 	if ((s->ptr_after & SWAP_LPTRS_MASK) != s->expected_word)
 		return SWAP_NOT_LATCHED;
