@@ -12,14 +12,6 @@
 # listed, a message that changed, and a listed entry that now compiles all fail
 # the test, so the list stays exact.
 
-# es100: the 7.1 allocator has no spilling yet (alloc71.rs). The values of this
-# fragment shader (15 varying vec4s) fit neither 4 nor 2 threads' registers at any
-# selection pressure. Mesa compiles it at 7.1 (es100_counts_71.tsv).
-es100/varyings15.frag: Alloc(DoesNotFit)
-
-# qpu_corpus_71: the same fragment shader in its program, no spilling yet.
-es100/varyings15.vert + es100/varyings15.frag: Alloc(DoesNotFit)
-
 # qpu_corpus_71: color_uv.vert is desktop GLSL (`#version 1xx`) and the front end is an
 # OpenGL ES compiler (known-uncompilable-v3d.txt lists it at 4.2 too). Mesa
 # compiled these from glsl2v3d.py's translation. 30 program(s).

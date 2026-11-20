@@ -23,13 +23,24 @@
 //! * rf0..rf31 at 4 threads, rf0..rf63 at 1 or 2 (`PHYS_COUNT >> threads`,
 //!   vir_register_allocate.c:1054-1072, the thread index :1427-1435; no
 //!   version branch), as at 4.2.
-//! * rf1, rf2 and rf3 are never handed out, in any stage: at 7.1 they hold
-//!   the fragment payload, centroid W, Z and W (nir_to_vir.c:4851-4858;
-//!   `reg_is_payload`, vir_register_allocate.c:1103-1124), read through
-//!   [`Src71::Payload`]. Mesa starts at rf4 "to prevent TLB writes from using
-//!   RF2-3" (:1415-1421) and keeps the last instructions off rf0..rf3
-//!   (`safe_rf_start`, :977-987). Every value goes to rf4 and up, lowest
-//!   first ([`RF_FIRST71`]).
+//! * rf1, rf2 and rf3 hold the fragment payload at 7.1, centroid W, Z and W
+//!   (`reg_is_payload`, vir_register_allocate.c:1103-1124), read through
+//!   [`Src71::Payload`]. Mesa reads each once, by a MOV into a temp at the
+//!   program's start (nir_to_vir.c:4851-4858), and from then on rf1..rf3 are
+//!   registers like any other in its classes: its round-robin starts at rf4
+//!   "to prevent TLB writes from using RF2-3" (:1415-1421) and reaches
+//!   rf1..rf3 after the rest (:989-1004), and it keeps program-end values
+//!   off rf0..rf3 (`safe_rf_start`, :977-987). Here a payload register is
+//!   read where its value is used, so it holds the payload from the start
+//!   to its last read (to a loop's back edge when read inside it), which is
+//!   what Mesa's temp holds; in a fragment shader it is free after that
+//!   ([`RF_PAYLOAD71`]). Every value goes to rf4 and up, lowest first
+//!   ([`RF_FIRST71`]), and to a free rf1..rf3 only when none is left: so
+//!   a program that fits rf4 and up allocates as before, and the program
+//!   end, whose thread-end slots may not touch rf2/rf3 (qpu_schedule.c:
+//!   2043-2056, sched71's `ok_in_thrend71`, verify71), keeps off them as
+//!   Mesa's does. Outside a fragment shader rf1..rf3 stay out (Mesa's 7.1
+//!   compute payload is rf2/rf3; vertex shaders are left as they were).
 //! * rf0 is the implicit destination of `ldunif`, `ldunifa` and `ldvary`'s C
 //!   term (`v3d_qpu_writes_rf0_implicitly`, qpu/qpu_instr.c:1030-1040). Mesa
 //!   keeps every temp live across such a write out of rf0
@@ -90,6 +101,9 @@ pub const RF_IMPLICIT: Rf = Rf(0);
 /// The first register-file register handed out (rf1..rf3 are the payload;
 /// rf3 on 4.2).
 pub const RF_FIRST71: u8 = 4;
+/// A fragment shader's payload registers, rf1..rf3: handed out after their
+/// last [`Src71::Payload`] read, once rf4 and up are taken.
+pub const RF_PAYLOAD71: core::ops::Range<u8> = 1..RF_FIRST71;
 /// One past the last register a thread has at 4 threads.
 pub const RF_END71_4_THREADS: u8 = 32;
 /// One past the last register a thread has at 1 or 2 threads.
@@ -227,6 +241,13 @@ pub fn allocate71<'a>(sel: &Selected71<'_>, threads: u32, a: &Arena<'a>) -> Resu
     let mut busy = [NONE; RF_END71_2_THREADS as usize];
     let mut owner = [NONE; RF_END71_2_THREADS as usize];
     let mut lent = [NONE; RF_END71_2_THREADS as usize];
+    /* A fragment shader's payload registers hold their value from the
+     * program's start to its last read, then are free like any other. */
+    if sel.fragment {
+        for (r, b) in payload_busy(ops, a)? {
+            busy[r as usize] = b;
+        }
+    }
     let mut rf0_busy = NONE;
     let mut rf_end = RF_FIRST71;
     /* What ends a uniform's stay in rf0: another implicit write (every
@@ -289,11 +310,15 @@ pub fn allocate71<'a>(sel: &Selected71<'_>, threads: u32, a: &Arena<'a>) -> Resu
         let same = match *op {
             Op71::Mul { op: MulOp71::Mov, a: Src71::V(x), b: Src71::None, .. } if last[x.0 as usize] == i as u32 => {
                 let r = reg[x.0 as usize].0;
-                (r >= RF_FIRST71 && r < end && free(busy[r as usize])).then_some(r)
+                (r != RF_IMPLICIT.0 && r < end && free(busy[r as usize])).then_some(r)
             }
             _ => None,
         };
-        let pick = |lend: bool| (RF_FIRST71..end).find(|&r| ok(r, lend));
+        /* rf4 and up lowest first, then the payload registers (Mesa's
+         * round-robin starts at rf4 and reaches rf1..rf3 last). Only a
+         * fragment shader's: elsewhere they stay out, as before. */
+        let payload = if sel.fragment { RF_PAYLOAD71 } else { 0..0 };
+        let pick = |lend: bool| (RF_FIRST71..end).chain(payload.clone()).find(|&r| ok(r, lend));
         /* First a register free in the plain sense; only when there is none,
          * one lent inside its holder's hole. */
         let (r, l) = match (same, pick(false)) {
@@ -306,10 +331,42 @@ pub fn allocate71<'a>(sel: &Selected71<'_>, threads: u32, a: &Arena<'a>) -> Resu
         } else {
             (busy[k], owner[k], lent[k]) = (last[v], v as u32, NONE);
         }
-        rf_end = rf_end.max(r + 1);
+        if r >= RF_FIRST71 {
+            rf_end = rf_end.max(r + 1);
+        }
         reg[v] = Rf(r);
     }
     Ok(Allocation71 { reg, rf_end })
+}
+
+/// Per payload register (rf1..rf3), the operation index from which it is
+/// free: one past nothing (0) when no operation reads its
+/// [`Src71::Payload`], else its last read, carried to the back edge of every
+/// counted loop that reads it (it is live from the program's start, so
+/// before every loop head; the loop rule of [`allocate71`]). A loop's span
+/// holds every loop nested in it, so an outer loop around a read extends it
+/// to the outer back edge by the same test.
+fn payload_busy<'a>(ops: &[Op71], a: &Arena<'a>) -> Result<[(u8, u32); 3], Alloc71Error> {
+    let mut out = [(1, NONE), (2, NONE), (3, NONE)];
+    for (r, b) in out.iter_mut() {
+        let reads = |o: &Op71| o.uses().contains(&Src71::Payload(*r));
+        let Some(mut last) = ops.iter().rposition(reads) else { continue };
+        let mut heads: AVec<'a, usize> = AVec::new();
+        for (e, o) in ops.iter().enumerate() {
+            match o {
+                Op71::LoopHead => heads.push(a, e)?,
+                Op71::BackEdge { .. } => {
+                    let h = heads.pop().ok_or(Alloc71Error::UnmatchedBackEdge)?;
+                    if ops[h..e].iter().any(reads) {
+                        last = last.max(e);
+                    }
+                }
+                _ => {}
+            }
+        }
+        *b = last as u32;
+    }
+    Ok(out)
 }
 
 /// The C term of an earlier `ldvary` is still to be read after operation
@@ -669,5 +726,116 @@ mod tests {
         assert_eq!(run(&live_at_once(1), false, 2, 8), Err(Alloc71Error::Threads));
         /* nothing allocated: rf_end is RF_FIRST71 */
         assert_eq!(run(&[], true, 0, 4), Ok((std::vec![], RF_FIRST71)));
+    }
+
+    /// `live_at_once(n)` with a read of each payload register in `reads`
+    /// right after the loads, or at the very end when `late`.
+    fn with_payload_reads(n: u32, reads: &[u8], late: bool) -> (Vec<Op71>, u32) {
+        let mut ops = live_at_once(n);
+        let mut vregs = 2 * n;
+        let at = if late { ops.len() } else { n as usize };
+        for (k, &p) in reads.iter().enumerate() {
+            ops.insert(
+                at + k,
+                Op71::Mul { op: MulOp71::Fmov, dst: Dst71::V(V(vregs)), a: Src71::Payload(p), b: Src71::None },
+            );
+            vregs += 1;
+        }
+        (ops, vregs)
+    }
+
+    #[test]
+    fn a_fragment_shader_takes_the_payload_registers_once_read() {
+        /* no payload read: rf4..rf31 and then rf1..rf3, 31 at 4 threads and
+         * 63 at 2; rf_end counts rf4 and up only */
+        let (reg, end) = run(&live_at_once(31), true, 62, 4).unwrap();
+        assert_eq!(end, 32);
+        assert_eq!(reg[..31].iter().filter(|r| RF_PAYLOAD71.contains(&r.0)).count(), 3, "{reg:?}");
+        assert_eq!(reg[..3], [Rf(4), Rf(5), Rf(6)], "rf4 and up first: {reg:?}");
+        assert_eq!(reg[28..31], [Rf(1), Rf(2), Rf(3)], "then rf1..rf3, lowest first: {reg:?}");
+        assert_eq!(run(&live_at_once(32), true, 64, 4), Err(Alloc71Error::DoesNotFit));
+        assert_eq!(run(&live_at_once(63), true, 126, 2).map(|r| r.1), Ok(64));
+        assert_eq!(run(&live_at_once(64), true, 128, 2), Err(Alloc71Error::DoesNotFit));
+        /* a vertex shader has no payload and keeps off rf1..rf3 as before */
+        assert_eq!(run(&live_at_once(29), false, 58, 4), Err(Alloc71Error::DoesNotFit));
+        /* every payload register read at the end: all three are held to
+         * that read, so 29 loads do not fit and 28 do, in rf4..rf31 */
+        let (ops, n) = with_payload_reads(29, &[1, 2, 3], true);
+        assert_eq!(run(&ops, true, n, 4), Err(Alloc71Error::DoesNotFit));
+        let (ops, n) = with_payload_reads(28, &[1, 2, 3], true);
+        let reg = run(&ops, true, n, 4).unwrap().0;
+        assert_in_file(&reg, 32);
+        /* only W read, at the end: rf1 and rf2 are free, rf3 is not */
+        let (ops, n) = with_payload_reads(30, &[3], true);
+        let reg = run(&ops, true, n, 4).unwrap().0;
+        assert!(reg[..30].contains(&Rf(1)) && reg[..30].contains(&Rf(2)), "{reg:?}");
+        assert!(!reg[..30].contains(&Rf(3)), "W is read after: {reg:?}");
+        let (ops, n) = with_payload_reads(31, &[3], true);
+        assert_eq!(run(&ops, true, n, 4), Err(Alloc71Error::DoesNotFit));
+        /* W read right after the loads: the add chain's results may take
+         * rf3 once it is read, from the read on (an operation reads its
+         * operands before it writes) */
+        let (ops, n) = with_payload_reads(31, &[3], false);
+        assert_eq!(run(&ops, true, n, 4), Err(Alloc71Error::DoesNotFit), "31 loads live across the read");
+        let mut ops =
+            std::vec![Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(0)), a: Src71::Payload(3), b: Src71::Payload(2) }];
+        ops.extend((1..=30).map(ldunif));
+        ops.push(fadd(31, 0, 1));
+        for i in 2..=30 {
+            ops.push(fadd(30 + i, 30 + i - 1, i));
+        }
+        let reg = run(&ops, true, 61, 4).expect("31 values fit after the payload's one read").0;
+        assert_eq!(reg[0], Rf(4), "v0 is made by the read: rf4 first {reg:?}");
+        assert_eq!(reg[28..31], [Rf(1), Rf(2), Rf(3)], "{reg:?}");
+    }
+
+    #[test]
+    fn a_payload_read_in_a_loop_holds_its_register_to_the_back_edge() {
+        /* W read at the top of a loop body, v0 read there too (so live to
+         * the back edge), then k loads live together with v0 and v1: rf3 is
+         * W's again on the next pass so they cannot take it; k + 2 values
+         * fit rf4..rf31, rf1 and rf2 up to k = 28 (no Copy: a merge
+         * register's hole would lend its register) */
+        let body = |k: u32| {
+            let mut ops = std::vec![
+                ldunif(0),
+                Op71::LoopHead,
+                Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(1)), a: v(0), b: Src71::Payload(3) },
+            ];
+            ops.extend((0..k).map(|i| ldunif(2 + i)));
+            let mut acc = 1;
+            for i in 0..k {
+                ops.push(fadd(2 + k + i, acc, 2 + i));
+                acc = 2 + k + i;
+            }
+            ops.push(Op71::Flags {
+                unit: FlagOp71::Add(AddOp71::Fsub),
+                a: v(acc),
+                b: v(acc),
+                pf: Pf::PushN,
+                uf: Uf::None,
+            });
+            ops.push(Op71::BackEdge { cond: BranchCond::AnyA, msfign: Msfign::None });
+            ops.push(tlb(0));
+            (ops, 2 + 2 * k)
+        };
+        let (ops, n) = body(28);
+        let reg = run(&ops, true, n, 4).unwrap().0;
+        assert!(!reg.contains(&Rf(3)), "W is read again on the next pass: {reg:?}");
+        assert!(reg.contains(&Rf(1)) && reg.contains(&Rf(2)), "{reg:?}");
+        let (ops, n) = body(29);
+        assert_eq!(run(&ops, true, n, 4), Err(Alloc71Error::DoesNotFit));
+        /* with no loop rf3 is free after the read: the same 31 values fit,
+         * the last load in rf3 */
+        let (mut ops, n) = body(29);
+        ops.retain(|o| !matches!(o, Op71::LoopHead | Op71::BackEdge { .. }));
+        let reg = run(&ops, true, n, 4).expect("fits once W is read").0;
+        assert!(reg.contains(&Rf(3)), "{reg:?}");
+        /* a back edge with no head is refused here too */
+        let ops = [
+            Op71::Mul { op: MulOp71::Fmov, dst: Dst71::V(V(0)), a: Src71::Payload(3), b: Src71::None },
+            Op71::BackEdge { cond: BranchCond::AnyA, msfign: Msfign::None },
+        ];
+        assert_eq!(run(&ops, true, 1, 4), Err(Alloc71Error::UnmatchedBackEdge));
     }
 }

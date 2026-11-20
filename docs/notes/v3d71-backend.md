@@ -838,7 +838,12 @@ Mesa's, printed, not enforced (the packer is not Mesa's list scheduler):
 
 - **es100**: 126 programs, **125 compile at 7.1** (19 with a branch), 1
   refused: `es100/varyings15.frag: Alloc(DoesNotFit)` — alloc71 has no
-  spilling yet ((b), an open item). Mesa's table refused two ours compiles
+  spilling yet ((b), an open item). Since then alloc71 hands out rf1..rf3
+  in a fragment shader after their last payload read (Mesa: rf1..rf3 are
+  plain registers after the start-of-program payload MOVs,
+  nir_to_vir.c:4851-4858, vir_register_allocate.c:989-1004), and
+  varyings15 compiles at 2 threads: es100 126 of 126, qpu_corpus_71 874
+  of 1090; the figures below are of the first cut. Mesa's table refused two ours compiles
   (`es100/vtex_struct_sampler.vert`, `es100/vtex_struct_sampler_array.vert`).
   On the 123 both compile: ours 8318 instructions, Mesa 4865
   (`es100_counts_71.tsv`).

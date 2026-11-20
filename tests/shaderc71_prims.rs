@@ -4,8 +4,8 @@
 //! of the fragment shader over every `tools/shaders/es100` program: each
 //! program goes through `chain71::compile_program71` at `Prim::Triangles`,
 //! `Prim::Points` and `Prim::Lines`, and every variant compiles exactly when
-//! the Triangles program does (the count is pinned; the one refusal,
-//! es100/varyings15.frag's `Alloc(DoesNotFit)`, is the same at all three).
+//! the Triangles program does (the count is pinned: all 126; a refusal,
+//! should one return, must be the same at all three).
 //!
 //! The programs are `tests/v3d71_online_corpus.rs`'s es100 rows: each
 //! source paired with `tools/v3d/es100_ref71.sh`'s stub of the other stage
@@ -72,7 +72,7 @@ use yakogl::shaderc::online::{lower, store};
 const ES100_PROGRAMS: usize = 126;
 /// Of them, the programs our 7.1 back end compiles, at every primitive
 /// (tests/v3d71_online_corpus.rs `ES100_COMPILED` for Triangles).
-const ES100_COMPILED: usize = 125;
+const ES100_COMPILED: usize = 126;
 /// The sources that read gl_PointCoord (es100/pointcoord.frag and
 /// es100/pointcoordvary.frag): the only ones whose lines variant differs.
 const READS_POINT_COORD: usize = 2;
@@ -372,10 +372,10 @@ fn every_es100_program_compiles_at_points_and_lines_as_at_triangles() {
     /* the same refusals, with the same message, at every primitive */
     assert_eq!(refused[1], refused[0], "the points variant refuses what Triangles refuses");
     assert_eq!(refused[2], refused[0], "the lines variant refuses what Triangles refuses");
-    assert_eq!(
-        refused[0].get("es100/varyings15.frag").map(String::as_str),
-        Some("Alloc(DoesNotFit)"),
-        "the one es100 refusal (tools/shaders/known-uncompilable-v3d71.txt)"
+    assert!(
+        refused[0].is_empty(),
+        "no es100 refusal at 7.1 (tools/shaders/known-uncompilable-v3d71.txt): {:?}",
+        refused[0]
     );
     assert_eq!(compiled, [ES100_COMPILED; 3], "es100 programs compiled at 7.1: a moved count is a decision");
     assert_eq!(reads_pntc, READS_POINT_COORD, "es100 sources reading gl_PointCoord");
