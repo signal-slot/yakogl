@@ -186,7 +186,12 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
                 GLES_TEXFMT_RGB10A2 => GLES_SURF_RGB10_A2,
                 GLES_TEXFMT_RGBA8 if t.bgra => GLES_SURF_XRGB8888,
                 GLES_TEXFMT_RGBA8 => GLES_SURF_RGBA8888,
-                _ => return None,
+                /* an integer texture: the surface of the class it is stored
+                 * in, as the renderbuffer of the store's layout. An R or RG
+                 * format es3_formats widened (R8I in RGBA8I) is copied in the
+                 * wide store; the channels the format lacks read and are
+                 * written 0, 0, 1 (`texture_bits`, `decode_int`) */
+                f => integer_store_surface(f)?,
             };
             /* a texture the pixel engine rendered into holds B,G,R,A
              * (`pe_order`); one only the CPU wrote, R,G,B,A */
@@ -224,9 +229,30 @@ fn attachment_image(c: &GlContext, a: &GlAttachment) -> Option<Image> {
     })
 }
 
+/// The integer surface with the memory layout of integer texel class
+/// `texfmt` (the classes `framebuffer::attachment_storage` lets be a colour
+/// attachment; it has refused the others before this is asked).
+fn integer_store_surface(texfmt: u8) -> Option<u8> {
+    use crate::backend::*;
+    Some(match texfmt {
+        GLES_TEXFMT_RGBA8I => GLES_SURF_RGBA8I,
+        GLES_TEXFMT_RGBA8UI => GLES_SURF_RGBA8UI,
+        GLES_TEXFMT_RGBA16I => GLES_SURF_RGBA16I,
+        GLES_TEXFMT_RGBA16UI => GLES_SURF_RGBA16UI,
+        GLES_TEXFMT_RGBA32I => GLES_SURF_RGBA32I,
+        GLES_TEXFMT_RGBA32UI => GLES_SURF_RGBA32UI,
+        GLES_TEXFMT_R32I => GLES_SURF_R32I,
+        GLES_TEXFMT_R32UI => GLES_SURF_R32UI,
+        GLES_TEXFMT_RG32I => GLES_SURF_RG32I,
+        GLES_TEXFMT_RG32UI => GLES_SURF_RG32UI,
+        GLES_TEXFMT_RGB10A2UI => GLES_SURF_RGB10_A2UI,
+        _ => return None,
+    })
+}
+
 /// The data type of the colour image attached at `a`, whether or not the
-/// GL core can copy it (`attachment_image` has no RGBA32I texture, for
-/// one): 4.3.3's errors are about the formats, not about the copy.
+/// GL core can copy it (`attachment_image` has no RG32F texture, for one):
+/// 4.3.3's errors are about the formats, not about the copy.
 fn attachment_kind(c: &GlContext, a: &GlAttachment) -> Option<ColorKind> {
     let bits = match a.type_ {
         GL_TEXTURE => {
@@ -678,6 +704,12 @@ fn decode_int(img: &Image, raw: &[u8; 16]) -> [u32; 4] {
             _ => u32::from_le_bytes([b[0], b[1], b[2], b[3]]),
         };
     }
+    /* a channel the format lacks in a wider store (R8I kept in RGBA8I) */
+    for (ch, x) in v.iter_mut().enumerate() {
+        if img.bits[ch] == 0 {
+            *x = (ch == 3) as u32;
+        }
+    }
     v
 }
 
@@ -694,8 +726,16 @@ fn saturate(v: u32, bits: u32, signed: bool) -> u32 {
 
 /// The stored bytes of integer values `v` in an integer image, each
 /// saturated to the channel's width (dEQP's reference saturates too).
-fn encode_int(img: &Image, v: [u32; 4], raw: &mut [u8; 16]) {
+///
+/// A channel the format lacks in a wider store (R8I kept in RGBA8I) is
+/// written 0 (alpha 1), as the upload stores it.
+fn encode_int(img: &Image, mut v: [u32; 4], raw: &mut [u8; 16]) {
     let Some(l) = gles_surf_int_layout(img.surf) else { return };
+    for (ch, x) in v.iter_mut().enumerate() {
+        if img.bits[ch] == 0 {
+            *x = (ch == 3) as u32;
+        }
+    }
     if l.bits == 10 {
         let w = saturate(v[0], 10, false)
             | saturate(v[1], 10, false) << 10
@@ -925,6 +965,9 @@ const REFUSED_STENCIL: u8 = 1 << 0;
 const REFUSED_DEPTH_DST: u8 = 1 << 1;
 const REFUSED_DEPTH_SRC: u8 = 1 << 2;
 const REFUSED_DS_UNHELD: u8 = 1 << 3;
+/// An integer colour image the GL core has no copy for: refused rather than
+/// the colour bit dropped without an error.
+const REFUSED_INT_COLOUR: u8 = 1 << 4;
 
 /// The causes already said in the log.
 static WARNED_DS: Global<u8> = Global::new(0);
@@ -936,8 +979,8 @@ pub(crate) fn reset_for_tests() {
     unsafe { *WARNED_DS.get() = 0 };
 }
 
-/// Refuse a depth or stencil copy the GL core cannot make: GL_INVALID_OPERATION,
-/// and the cause said once.
+/// Refuse a depth, stencil or integer colour copy the GL core cannot make:
+/// GL_INVALID_OPERATION, and the cause said once.
 fn refuse_ds(c: &mut GlContext, cause: u8) {
     // SAFETY: single-threaded by contract; no other reference is live.
     let warned = unsafe { WARNED_DS.get() };
@@ -952,6 +995,7 @@ fn refuse_ds(c: &mut GlContext, cause: u8) {
                 "a depth blit into the window or into a renderbuffer of a back end without the ds_write entry, \
                  or into a depth texture that is not a 2D, cube map or 2D array texture"
             }
+            REFUSED_INT_COLOUR => "a colour blit of an integer image whose stored layout the GL core has no copy for",
             REFUSED_DS_UNHELD => {
                 "a depth or stencil blit into a renderbuffer or the window the back end holds no buffer for (no \
                  frame has drawn into it, or its buffer went to another target)"
@@ -1218,20 +1262,32 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
      * integer data and any draw buffer does not (or the reverse), signed
      * and unsigned integers are mixed, or filter is LINEAR and the read
      * buffer contains integer data": taken from the formats of what is
-     * attached, before an image the GL core cannot copy (an RGBA32I
-     * texture) drops the colour bit below */
+     * attached, before the images are looked at for the copy below */
+    /* the draw buffers an integer read buffer is copied into */
+    let mut int_draws = 0;
     if mask & GL_COLOR_BUFFER_BIT != 0 {
         let window = |_: &GlContext| Some(ColorKind::Float);
         if let Some(s) = read_with(c, read, window, attachment_kind) {
-            let (kinds, _) = draws_with(c, window, attachment_kind);
+            let (kinds, n) = draws_with(c, window, attachment_kind);
             if kinds.iter().flatten().any(|&d| d != s) || (filter == GL_LINEAR && s != ColorKind::Float) {
                 c.set_error(GL_INVALID_OPERATION, FN);
                 return;
+            }
+            if s != ColorKind::Float {
+                int_draws = n;
             }
         }
     }
     let src = read_image(c, read);
     let (dsts, ndst) = draw_images(c);
+    /* what the GL core cannot copy, refused after every check below */
+    let mut refused = 0u8;
+    /* an integer image the GL core has no copy for is refused by name, never
+     * dropped without an error (the bit is ignored only where a buffer does
+     * not exist in both framebuffers) */
+    if int_draws > 0 && (src.is_none() || ndst != int_draws) {
+        refused |= REFUSED_INT_COLOUR;
+    }
     if mask & GL_COLOR_BUFFER_BIT != 0 {
         match src {
             Some(s) if ndst > 0 => {
@@ -1252,8 +1308,6 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
             _ => mask &= !GL_COLOR_BUFFER_BIT,
         }
     }
-    /* what the GL core cannot copy, refused after every check above */
-    let mut refused = 0u8;
     let mut copies: [Option<DepthCopy>; 2] = [None, None];
     for (bit, stencil) in [(GL_STENCIL_BUFFER_BIT, true), (GL_DEPTH_BUFFER_BIT, false)] {
         if mask & bit == 0 {
@@ -1336,7 +1390,7 @@ pub(super) fn blit_framebuffer(c: &mut GlContext, k: Corners, mut mask: GLbitfie
     }
     if refused != 0 {
         /* nothing is copied, the colour neither: the call fails whole */
-        for cause in [REFUSED_STENCIL, REFUSED_DEPTH_DST, REFUSED_DEPTH_SRC, REFUSED_DS_UNHELD] {
+        for cause in [REFUSED_INT_COLOUR, REFUSED_STENCIL, REFUSED_DEPTH_DST, REFUSED_DEPTH_SRC, REFUSED_DS_UNHELD] {
             if refused & cause != 0 {
                 refuse_ds(c, cause);
             }

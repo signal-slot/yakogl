@@ -7,10 +7,11 @@
 //! meet, and when the filter is GL_LINEAR with an integer read buffer.
 //!
 //! The images are RGBA32I, RGBA32UI, RGBA16F and RGBA8 textures, the integer
-//! ones as in the dEQP case: the GL core copies no integer texture
-//! (gl/blit.rs `attachment_image`), which until 2026-11-07 dropped the
-//! colour bit before these checks, so each such blit answered GL_NO_ERROR. A valid integer blit still answers
-//! GL_NO_ERROR.
+//! ones as in the dEQP case. Until 2026-11-07 the GL core, which then copied
+//! no integer texture (gl/blit.rs `attachment_image`), dropped the colour bit
+//! before these checks, so each such blit answered GL_NO_ERROR; integer
+//! textures are copied since (tests/es3_blit_int_tex.rs). A valid integer
+//! blit still answers GL_NO_ERROR.
 //!
 //! No GPU runs: the stand-in back end draws nothing.
 //!
@@ -162,8 +163,7 @@ const RGBA8: (GLenum, GLenum, GLenum) = (GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
 /// The eight-bit integer format of the same signedness, for a back end that
 /// samples no 32-bit integer texels or renders into none (the GC7000 samples
 /// RGBA32I/UI as two planes but refuses them as a target, `GC_INT_RT_128BPP`):
-/// the GL core copies neither (`attachment_image`), so the blit's checks see
-/// the same case.
+/// the blit's checks see the same case.
 fn narrow(fmt: (GLenum, GLenum, GLenum)) -> (GLenum, GLenum, GLenum) {
     match fmt.0 {
         GL_RGBA32I => (GL_RGBA8I, GL_RGBA_INTEGER, GL_BYTE),

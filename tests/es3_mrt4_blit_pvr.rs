@@ -24,14 +24,13 @@
 //! * an integer read buffer 3 into a float draw buffer is GL_INVALID_OPERATION
 //!   and writes nothing; an R32UI texture at attachment 3 makes the FBO
 //!   complete on the PowerVR (its widened integer RT, gl/framebuffer.rs
-//!   `WIDE_INT_RT`), and a blit from it into anything copyable drops the
-//!   colour bit: integer-to-integer is a silent no-op (the same class as the
-//!   RGBA8UI *texture* no-op pinned below);
-//! * an RGBA8UI texture attachment has no blit image in the GL core
-//!   (`attachment_image` handles RGBA8/16F/32F/sRGB textures only), so a blit
-//!   from or into one is a silent no-op with no error — a defect of the GL
-//!   core (src/gl/blit.rs), not of the back end, as tests/es3_mrt4_blit_v3d.rs
-//!   pins it for the V3D build;
+//!   `WIDE_INT_RT`), and integer-to-integer copies its red channel, the
+//!   others reading 0, 0, 1 (src/gl/blit.rs copies integer textures,
+//!   tests/es3_blit_int_tex.rs);
+//! * an RGBA8UI texture attachment is blitted as an integer renderbuffer is
+//!   (until src/gl/blit.rs `attachment_image` had an integer texture case,
+//!   a silent no-op with no error), as tests/es3_mrt4_blit_v3d.rs checks it
+//!   for the V3D build;
 //! * GL_COLOR_ATTACHMENT3 in glInvalidateFramebuffer / glInvalidateSubFramebuffer
 //!   is accepted (no error) alone, with 0..2, with the depth/stencil points,
 //!   whole and as a sub-rectangle, on the draw, read and combined targets,
@@ -273,8 +272,8 @@ enum Fmt {
 }
 
 /// A framebuffer of `n` attachments: textures for RGBA8, renderbuffers for
-/// RGBA8UI (the GL core's blit copies an integer renderbuffer; an RGBA8UI
-/// texture has no blit image today, see the no-op test).
+/// RGBA8UI (the GL core's blit copies an integer renderbuffer and, since
+/// tests/es3_blit_int_tex.rs, an integer texture).
 struct Fbo {
     fb: GLuint,
     texs: Vec<GLuint>,
@@ -459,14 +458,13 @@ fn rgba8ui_draw_all_four() {
     all_four_are_written(Fmt::Rgba8ui);
 }
 
-/// Pinned as today: an RGBA8UI *texture* attachment has no blit image in the
-/// GL core (`attachment_image` handles RGBA8/16F/32F/sRGB textures only), so
-/// a blit from or into one is a silent no-op with no error. A defect of the
-/// GL core (src/gl/blit.rs), not of the PowerVR back end; the same one
-/// tests/es3_mrt4_blit_v3d.rs pins for the V3D build. A working blit would
-/// copy attachment 3's 10s over the destination's 20s.
+/// An RGBA8UI *texture* at attachment 3 is blitted: the GL core copies an
+/// integer texture image as it copies an integer renderbuffer
+/// (src/gl/blit.rs `attachment_image`; until then the blit was a silent
+/// no-op with no error), as tests/es3_mrt4_blit_v3d.rs checks for the V3D
+/// build. Attachment 3's 10s arrive over the destination's 20s.
 #[test]
-fn rgba8ui_texture_attachment3_blit_is_a_silent_noop_today() {
+fn rgba8ui_texture_attachment3_blit_copies() {
     let _g = context();
     let (mut fb, mut tex) = ([0; 2], [0; 2]);
     // SAFETY: plain GL calls; the pixel array holds W x W RGBA bytes.
@@ -491,7 +489,7 @@ fn rgba8ui_texture_attachment3_blit_is_a_silent_noop_today() {
         glReadBuffer(att(0));
         glReadPixels(0, 0, W, W, GL_RGBA_INTEGER, GL_UNSIGNED_INT, u.as_mut_ptr() as *mut c_void);
         assert_eq!(err(), GL_NO_ERROR);
-        assert!(u.iter().all(|&v| v == 20), "destination keeps its pixels today: {u:?}");
+        assert!(u.iter().all(|&v| v == 10), "attachment 3's 10s over the destination's 20s: {u:?}");
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(2, fb.as_ptr());
         glDeleteTextures(2, tex.as_ptr());
@@ -514,16 +512,20 @@ fn integer_attachment3_into_rgba8_is_refused() {
 /// PowerVR: the build draws an R integer texture as the four-channel widened
 /// surface (gl/framebuffer.rs `WIDE_INT_RT`, `pbe_int_packmode`). A blit from
 /// that read buffer keeps the format rules: into a float draw buffer it is
-/// GL_INVALID_OPERATION, and integer-to-integer drops the colour bit today
-/// (the same no-op class as the RGBA8UI texture above) — the formats are
-/// checked on the attachment, not on the image the GL core can copy.
+/// GL_INVALID_OPERATION, and integer-to-integer copies the red channel out
+/// of the widened store, the channels R32UI lacks reading 0, 0, 1.
 #[test]
 fn r32ui_attachment3_is_drawable_and_its_blit_follows_the_integer_rules() {
     let _g = context();
     let texs = [texture(GL_RGBA8), texture(GL_RGBA8), texture(GL_RGBA8), texture(GL_R32UI)];
     let mut fb = 0;
-    // SAFETY: room for one name; the textures are 2D level 0.
+    let red = vec![9u32; (W * W) as usize];
+    // SAFETY: room for one name; the textures are 2D level 0; `red` holds
+    // W x W R32UI texels.
     unsafe {
+        glBindTexture(GL_TEXTURE_2D, texs[3]);
+        let p = red.as_ptr() as *const c_void;
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, W, GL_RED_INTEGER, GL_UNSIGNED_INT, p);
         glGenFramebuffers(1, &mut fb);
         glBindFramebuffer(GL_FRAMEBUFFER, fb);
         for (i, t) in texs.iter().enumerate() {
@@ -542,7 +544,7 @@ fn r32ui_attachment3_is_drawable_and_its_blit_follows_the_integer_rules() {
     }
     assert_eq!(err(), GL_INVALID_OPERATION, "integer read buffer 3 into a float draw buffer");
     assert_eq!(read(&dst, Fmt::Rgba8, 0), vec![[5, 5, 5, 5]; (W * W) as usize]);
-    /* integer-to-integer passes the format rules and copies nothing today */
+    /* integer-to-integer passes the format rules and copies */
     let uint = fbo(Fmt::Rgba8ui, 1, |_, _, _| [7, 7, 7, 7]);
     // SAFETY: plain GL calls.
     unsafe {
@@ -552,7 +554,7 @@ fn r32ui_attachment3_is_drawable_and_its_blit_follows_the_integer_rules() {
         glBlitFramebuffer(0, 0, W, W, 0, 0, W, W, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
     assert_eq!(err(), GL_NO_ERROR, "R32UI read buffer 3 into an RGBA8UI draw buffer");
-    assert_eq!(read(&uint, Fmt::Rgba8ui, 0), vec![[7, 7, 7, 7]; (W * W) as usize], "the copy is a no-op today");
+    assert_eq!(read(&uint, Fmt::Rgba8ui, 0), vec![[9, 0, 0, 1]; (W * W) as usize], "R of R32UI, then 0, 0, 1");
     // SAFETY: names this test made.
     unsafe {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
