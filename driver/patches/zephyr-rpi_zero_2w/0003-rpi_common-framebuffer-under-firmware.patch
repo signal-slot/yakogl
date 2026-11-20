@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Muhammad Waleed Badar (the file patched); 2026 Signal Slot, Inc. (the change)
+#
+# boards/raspberrypi/common/rpi_common.dtsi: the firmware framebuffer fb0 as
+# a child of the firmware node, without firmware, pixel-format and
+# red-blue-swap.
+#
+# Why: the pin's raspberrypi,bcm2711-framebuffer binding is display-controller
+# (width, height) only, so the devicetree step stops on the undeclared
+# `firmware` property ("'firmware' appears in /framebuffer ... but is not
+# declared in 'properties:'"). Upstream added `pixel-format` and
+# `red-blue-swap` with 967b76a1a16 ("drivers: display: rpi_bcm2711_fb: add
+# pixel-format dt-property") and the `firmware` phandle, with the node moved
+# out of the firmware node, with e242dcfea46 ("drivers: display:
+# rpi_bcm2711_fb: use common framebuffer helpers"). The pin's display_rpi_bcm2711_fb.c finds the
+# firmware as the node's parent (DEVICE_DT_GET(DT_INST_PARENT(n))), as the
+# pin's own rpi_4b.dts places it, so the node goes back under the firmware
+# node and keeps its label, width and height. The chosen zephyr,display is
+# unchanged. Checked by a build with CONFIG_DISPLAY=y (the pin's framebuffer
+# and firmware drivers compile for this tree); not run.
+# Drop this patch when the pin has the upstream binding and driver.
+--- a/boards/raspberrypi/common/rpi_common.dtsi
++++ b/boards/raspberrypi/common/rpi_common.dtsi
+@@ -27,15 +27,12 @@
+ 			compatible = "raspberrypi,bcm283x-vc-thermal";
+ 			status = "okay";
+ 		};
+-	};
+
+-	fb0: framebuffer {
+-		compatible = "raspberrypi,bcm2711-framebuffer";
+-		firmware = <&rpi_fw>;
+-		pixel-format = <PANEL_PIXEL_FORMAT_ARGB_8888>;
+-		width = <640>;
+-		height = <480>;
+-		red-blue-swap;
++		fb0: framebuffer {
++			compatible = "raspberrypi,bcm2711-framebuffer";
++			width = <640>;
++			height = <480>;
++		};
+ 	};
+
+ 	power-domains {

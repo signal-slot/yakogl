@@ -99,3 +99,6 @@ driver/rust/tests/gm-record/* | Apache-2.0 | recorded page lists and SNVS captur
 src/mali/genxml/mesa_tests.rs | generated-ok | our test over Mesa's generated packers (NOTICE 1b)
 tools/mali/gen_isa_rs.py | generated-ok | our generator over Mesa's ISA XML (MIT, NOTICE 1b)
 tools/mali/gen_pack_rs.py | generated-ok | our generator over Mesa's genxml (MIT, NOTICE 1b)
+driver/boards/raspberrypi/rpi_zero_2w/board.yml | Apache-2.0 | upstream Zephyr file carried unchanged, no header upstream; Zephyr is Apache-2.0 (driver/UPSTREAM.zephyr-rpi_zero_2w, NOTICE 13)
+driver/boards/raspberrypi/rpi_zero_2w/rpi_zero_2w.yaml | Apache-2.0 | upstream Zephyr file carried unchanged, no header upstream; Zephyr is Apache-2.0 (driver/UPSTREAM.zephyr-rpi_zero_2w, NOTICE 13)
+driver/soc/brcm/bcm2710/soc.yml | Apache-2.0 | upstream Zephyr file carried unchanged, no header upstream; Zephyr is Apache-2.0 (driver/UPSTREAM.zephyr-rpi_zero_2w, NOTICE 13)

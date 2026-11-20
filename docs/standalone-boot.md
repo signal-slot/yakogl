@@ -570,6 +570,60 @@ and Z4 only after Z3. Z4's kernel side is `driver/rust/src/gpu/mali/sched.rs`,
   `MALI_CSFFW`; `CONTRIBUTING.md` has the details. Without it the firmware
   rows are a gap.
 
+## Raspberry Pi Zero 2 W
+
+**Not yet run on our board.** Everything in this section is upstream
+Zephyr's statement (the board page `boards/raspberrypi/rpi_zero_2w/doc/index.rst`
+at `4f2d5263e21e`) or a build on the host, not a measurement.
+
+The board (BCM2710A1 in the RP3A0, four Cortex-A53, VideoCore IV) and its SoC
+are upstream Zephyr's, carried in `driver/` until the `west.yml` pin has them
+(`driver/UPSTREAM.zephyr-rpi_zero_2w`: the upstream commit, the hashes, and
+three patches for the pin). An image builds with the pin as for any other
+board, `west build -b rpi_zero_2w <app>`, with this repository's `driver/` in
+the module list (`tools/cts/zephyr-modules.sh`); the gate row
+`zephyr  rpi_zero_2w hello_world image` builds Zephyr's `samples/hello_world`.
+On the pin the image is single-core: the four-core start upstream added
+later needs arch code the pin does not have (patch 0001).
+
+The Zero 2 W has no EEPROM: the boot ROM reads `bootcode.bin` from the
+card's first FAT partition, and that loads the firmware. The card, as the
+board page gives it: a Raspberry Pi OS Lite (64-bit) card, whose boot
+partition holds the firmware, with two changes in its root directory:
+
+| file | from | what it is |
+|---|---|---|
+| `bootcode.bin` | Raspberry Pi OS boot partition | the second stage the boot ROM loads from the card |
+| `start.elf`, `fixup.dat` | Raspberry Pi OS boot partition | the firmware and its memory fix-up (a matching pair) |
+| `config.txt` | below, replacing the card's | the configuration |
+| `zephyr.bin` | the build (`build/zephyr/zephyr.bin`) | the kernel, loaded at 0x200000 |
+
+`config.txt`:
+
+```ini
+arm_64bit=1
+enable_uart=1
+core_freq=250
+kernel_address=0x200000
+kernel=zephyr.bin
+```
+
+| key | what it does (the board page's reasons) |
+|---|---|
+| `arm_64bit=1` | 64-bit; needed when the kernel file is not named `kernel8*` |
+| `enable_uart=1` | the mini-UART on GPIO 14/15 (header pins 8 and 10), Zephyr's console at 115200 8N1; otherwise the Bluetooth radio has those pins |
+| `core_freq=250` | fixes the VPU clock, from which the mini-UART's baud divisor is derived |
+| `kernel_address=0x200000` | must match the DRAM base of the board's devicetree (`dram0: memory@200000`, a 256 MiB window) |
+| `kernel=zephyr.bin` | the file to boot |
+
+The console is expected to print `*** Booting Zephyr OS build ...` and
+`Hello World! rpi_zero_2w/bcm2710` (the pin's `hello_world` prints
+`CONFIG_BOARD_TARGET`). On the pin, the console UART uses the pin's
+own mini-UART driver, which keeps the baud rate the firmware set
+(patch 0002), so `enable_uart=1` and `core_freq=250` are what set the rate.
+The board is not a farm resource yet; the first run is day one of
+`docs/notes/pre-study-rpi-zero-2w.md` section 6.
+
 ## On the boards
 
 In order; stop at the first step that prints something else.

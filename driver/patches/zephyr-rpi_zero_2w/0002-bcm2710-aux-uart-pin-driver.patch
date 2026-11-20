@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan Elliot Peace (the file patched); 2026 Signal Slot, Inc. (the change)
+#
+# dts/arm64/broadcom/bcm2710.dtsi: the console UART (uart1, the auxiliary
+# "mini" UART at 0x3f215040) on the pin's own mini-UART driver.
+#
+# Why: upstream drives this UART with the generic ns16550 driver through the
+# "brcm,bcm283x-aux-uart" variant (d7c5d598635, "drivers: serial: ns16550:
+# add BCM283x auxiliary UART support": the 8x baud divisor in the BRD1
+# register and the RX/TX enable in the control register). The pin's
+# uart_ns16550.c has no such variant and no binding for the compatible, so
+# the node falls through to plain "ns16550": the image builds, but the baud
+# divisor would be computed for a 16x clock and written to the 16550 divisor
+# latch, which on this block is wrong, and the console would not read.
+# Carrying uart_ns16550.c is not an option (a core driver the pin already
+# builds for the same compatible). The pin's drivers/serial/uart_bcm2711.c
+# ("brcm,bcm2711-aux-uart", built for the Pi 4) drives the same BCM283x
+# auxiliary UART register block and keeps the baud rate the firmware set
+# (enable_uart=1, core_freq=250), so the node names it: its binding wants
+# `clocks` (the core clock node clk_core, 250 MHz, already in this file)
+# and has no reg-shift or clock-frequency.
+# Drop this patch when the pin has d7c5d598635.
+--- a/dts/arm64/broadcom/bcm2710.dtsi
++++ b/dts/arm64/broadcom/bcm2710.dtsi
+@@ -182,11 +182,10 @@
+ 		};
+
+ 		uart1: uart@3f215040 {
+-			compatible = "brcm,bcm283x-aux-uart", "ns16550";
++			compatible = "brcm,bcm2711-aux-uart";
+ 			reg = <0x3f215040 0x40>;
+-			reg-shift = <2>;
+ 			interrupts = <BCM2835_IRQ_AUX IRQ_TYPE_LEVEL 0>;
+-			clock-frequency = <DT_FREQ_M(250)>;
++			clocks = <&clk_core>;
+ 			status = "disabled";
+ 		};
+
