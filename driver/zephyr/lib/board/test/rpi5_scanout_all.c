@@ -37,6 +37,7 @@
 #include "../rpi5_scanout/hdmi_rates.h"
 #include "../rpi5_scanout/hvs6_chan.h"
 #include "../rpi5_scanout/hvs6_dlist.h"
+#include "../rpi5_scanout/hvs6_dlist_swap.h"
 #include "../rpi5_scanout/hvs6_dlist_write.h"
 #include "../rpi5_scanout/hvs6_fmt.h"
 #include "../rpi5_scanout/infoframe.h"
@@ -69,6 +70,7 @@
 #include "../rpi5_scanout/hdmi_rates.h"
 #include "../rpi5_scanout/hvs6_chan.h"
 #include "../rpi5_scanout/hvs6_dlist.h"
+#include "../rpi5_scanout/hvs6_dlist_swap.h"
 #include "../rpi5_scanout/hvs6_dlist_write.h"
 #include "../rpi5_scanout/hvs6_fmt.h"
 #include "../rpi5_scanout/infoframe.h"
@@ -104,6 +106,7 @@ int main(void)
 	touched = (intptr_t)&hdmi_rates_core_min; /* hdmi_rates.h */
 	touched = (intptr_t)&yd5_hvs6_log_init; /* hvs6_chan.h */
 	touched = (intptr_t)&hvs6_gen_from_version; /* hvs6_dlist.h */
+	touched = (intptr_t)&hvs6s_run; /* hvs6_dlist_swap.h */
 	touched = (intptr_t)&hvs6w_bpp; /* hvs6_dlist_write.h */
 	touched = (intptr_t)&hvs6_fmt_lookup; /* hvs6_fmt.h */
 	touched = (intptr_t)&avi_infoframe_build; /* infoframe.h */
