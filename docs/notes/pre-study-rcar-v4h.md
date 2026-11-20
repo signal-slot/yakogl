@@ -842,3 +842,46 @@ board, firmware source or Zephyr support was looked at.
   about this core.
 - Still to be read on a board: the BVNC by our own code (D2).
 
+
+## 10. The plan after section 9 (2026-11-20)
+
+The owner's two decisions of 2026-11-20:
+
+- The board is the V4H (Sparrow Hawk). The V4M of section 9.4 is not
+  available and is not planned.
+- Public sources only. Watching what the vendor's closed stack makes
+  (its control streams, its shader output, its calls into the kernel
+  module) is reverse engineering under `G: License.txt` and is not
+  done. The firmware files are run on the board as they are and never
+  committed (section 2.2).
+
+What the public sources cover, and where they stop:
+
+| Part | Public source | State |
+| --- | --- | --- |
+| Clock, power domain, reset, register window, interrupt | `B2:` device tree, `KM: services/system/rgx_rcar` | complete (section 9.3) |
+| Volcanic registers, MMU version 4, META firmware boot, firmware interface, kernel-side job submission | `KM:` (Dual MIT/GPLv2): `hwdefs/volcanic`, `include/volcanic`, `services/server/devices/volcanic` | complete for the kernel side |
+| PDS, PBE state, texture state, IPF, LLS, compute stream words | `M2: csbgen/volcanic/` (661 lines of XML; rogue's set is 5,393) | partial: Mesa merge request 39526 (Erik Faye-Lund, reviewed by Imagination, merged 2026-02-13) says it "isn't complete enough to drive the GPU, but gets us a step on the way" |
+| Geometry stream (rogue's `vdm`, `ppp`), `cr`, `kmd_stream` | none | missing |
+| Shader instruction set and a compiler for it | none (`M2: pco` is built for rogue only) | missing |
+| Display (DU, VSP, DSC, DSI, SN65DSI86) | mainline drivers (section 1.3) | complete as a reading base |
+
+Items, replacing P5 to P9 of section 8. P1 is dropped (section 9.5);
+P2 is done (section 9.2); P3 and P4 stand as written.
+
+| # | Item | Size | Depends on | Done when |
+| --- | --- | --- | --- | --- |
+| V1 | P3 with the GPU values of section 9.3 in the skeleton dts | M | — | the build-not-run row is green |
+| V2 | P4, the AArch32 decision | M | — | the drivers build for the board target in a gate row |
+| V3 | Our image on the Cortex-R52 through U-Boot remoteproc; A33DGA and A23DGB on, `CPG_MOD 0` at 600 MHz, reset released; the BVNC read at 0x0020 | M | V1, V2, the board | 30.3.408.101 printed by our own code (D2) |
+| V4 | Scan-out with a buffer the CPU fills: DU, VSPD, DSC, DSI1, SN65DSI86 | L | V3 | a picture on CN6. It needs nothing of the GPU |
+| V5 | The Volcanic kernel side from `KM:`: MMU version 4 tables, the META firmware boot, the firmware's init and its trace | L | V3 | the firmware answers its first command on the board |
+| V6 | Geometry, shaders, ES 2.0 | — | a public definition of the geometry stream and of the shader instruction set | not planned until that exists |
+
+V6 is a stop, not an item. What lifts it is a public source: Mesa
+gaining the rest of the Volcanic definitions and a `pco` target for
+it (the follow-ups of merge request 39526; none had landed in `M2:`
+by 2026-11-20), or documentation from Imagination or Renesas that
+may be read under its own terms. V3, V4 and V5 are worth doing
+before that only for what they give by themselves: the board on
+Zephyr, its display, and a GPU whose firmware runs.
