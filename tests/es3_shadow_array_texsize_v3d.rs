@@ -742,11 +742,13 @@ fn looks_up_unit0(w: &[(u32, u32)]) -> bool {
 /// it: it is checked against the key its look-up was compiled for, and a
 /// 16-bit key over the 32-bit depth array is `RET16_OF_32` (`refusal_for`,
 /// decided in `tex_state_for` before any uniform word is written, so the
-/// missing word 47 does not mix in). A draw cannot reach the 16-bit key here
-/// (the core keys a real look-up for 32 bits), so this is pinned at the level
-/// that tells the reasons apart: the stream's classification and the rule.
+/// missing word 47 does not mix in). This test pins the return-size rule as
+/// seen through `refusal_for(b, false)`, plus the stream's classification; it
+/// does not assert a refused draw. A draw-level RET16_OF_32 refusal is not
+/// reachable on main: the core keys a real look-up for 32 bits, so a draw
+/// never reaches the 16-bit key.
 #[test]
-fn a_sampled_and_queried_array_shadow_unit_of_a_32_bit_depth_array_keeps_ret16_of_32() {
+fn the_return_size_rule_for_a_sampled_and_queried_array_shadow_unit_is_ret16_of_32_at_refusal_for() {
     let both = fs_stream("o = vec4(texture(s, vec4(v_texCoord, 0.5))) + vec4(vec3(textureSize(s, 0)), 1.0);");
     assert!(both.iter().any(|&(c, _)| c == QUNIFORM_TEXTURE_ARRAY_SIZE), "it is queried: {both:?}");
     assert!(looks_up_unit0(&both), "it is sampled, so not size-only: {both:?}");
@@ -759,9 +761,11 @@ fn a_sampled_and_queried_array_shadow_unit_of_a_32_bit_depth_array_keeps_ret16_o
 }
 
 /// The control: a sampling-only unit of the same array has a look-up word and
-/// no size word, and the 16-bit key is `RET16_OF_32`.
+/// no size word, and the 16-bit key is `RET16_OF_32` as seen through
+/// `refusal_for(b, false)`, the rule, not a refused draw (a draw-level RET16
+/// refusal is not reachable on main).
 #[test]
-fn a_sampling_only_array_shadow_unit_of_a_32_bit_depth_array_keeps_ret16_of_32() {
+fn the_return_size_rule_for_a_sampling_only_array_shadow_unit_is_ret16_of_32_at_refusal_for() {
     let s = fs_stream("o = vec4(texture(s, vec4(v_texCoord, 0.5)));");
     assert!(looks_up_unit0(&s), "{s:?}");
     assert!(!s.iter().any(|&(c, _)| c == QUNIFORM_TEXTURE_ARRAY_SIZE), "{s:?}");
