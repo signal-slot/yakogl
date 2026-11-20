@@ -927,6 +927,51 @@ static void part_tmu(void)
 	r.num_tmu = 2;
 	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
 	      "a depth word for a binding given without it: REFUSED, nothing left");
+	/* words 44-47 hand through whatever v3d_job_tmu holds, level-0 or not
+	 * (a size minified to GL_TEXTURE_BASE_LEVEL: max(x >> base, 1) for the
+	 * width, height and 3D depth; the layer count of an array is never
+	 * minified): one unit alone (a 3D texture, a 2D array, 1x1x1), then
+	 * two units with different values in one stream */
+	static const struct v3d_uniform fs_w4[] = {
+		{ V3D_QUNIFORM_TEXTURE_WIDTH, 1 }, { V3D_QUNIFORM_TEXTURE_HEIGHT, 1 },
+		{ V3D_QUNIFORM_TEXTURE_DEPTH, 1 }, { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 1 },
+		{ V3D_QUNIFORM_TEXTURE_WIDTH, 0 }, { V3D_QUNIFORM_TEXTURE_HEIGHT, 0 },
+		{ V3D_QUNIFORM_TEXTURE_DEPTH, 0 }, { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 0 },
+	};
+	struct v3d_fs_prog fs_mw = fs;
+	fs_mw.uniforms = fs_w4;
+	const struct v3d_job_tmu m3d = { 1, 0x00500040u, 0x00500060u, 4, 2, 2, 1 };
+	const struct v3d_job_tmu marr = { 1, 0x00500040u, 0x00500060u, 1, 1, 1, 5 };
+	const struct v3d_job_tmu mone = { 1, 0x00500040u, 0x00500060u, 1, 1, 1, 1 };
+	const struct v3d_job_tmu mtwo[2] = { { 1, 0x00500040u, 0x00500060u, 4, 2, 2, 1 },
+					     { 0, 0x00500000u, 0x00500020u, 1, 1, 1, 5 } };
+	const struct {
+		const char *name;
+		const struct v3d_job_tmu *tmu;
+		int num_tmu;
+		uint32_t want[8];
+	} mcase[4] = {
+		{ "a minified 3D unit (4x2x2)", &m3d, 1, { 4, 2, 2, 1 } },
+		{ "a 2D-array unit (1x1, 5 layers)", &marr, 1, { 1, 1, 1, 5 } },
+		{ "two units in one stream", mtwo, 2, { 4, 2, 2, 1, 1, 1, 1, 5 } },
+		{ "a 1x1x1 unit", &mone, 1, { 1, 1, 1, 1 } },
+	};
+	for (int k = 0; k < 4; k++) {
+		char what[120];
+		r = d;
+		r.fs = &fs_mw;
+		fs_mw.num_uniforms = mcase[k].num_tmu == 2 ? 8 : 4;
+		r.tmu = mcase[k].tmu;
+		r.num_tmu = mcase[k].num_tmu;
+		snprintf(what, sizeof(what), "a draw reading words 44-47 of %s goes in", mcase[k].name);
+		check(v3d_job_draw(&j, &r, &lo) == V3D_JOB_OK, what);
+		for (uint32_t i = 0; i < fs_mw.num_uniforms; i++) {
+			uint32_t got = ind_word(lo.fs_uniforms + 4 * i);
+			snprintf(what, sizeof(what), "%s, word %u: %u, want %u", mcase[k].name, i, got,
+				 mcase[k].want[i]);
+			check(got == mcase[k].want[i], what);
+		}
+	}
 	struct v3d_job_clear c = { .rgba8 = 0xff202020u, .z = 1.0f };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the textured job ends");
 }
@@ -2739,7 +2784,7 @@ int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
 	 * part 4: 3 + 3 + 19 fields; part 5: 2 + 5 words + 2 refusals + 3 per
-	 * stage + 1 + 1 + 4 size words + 2 size refusals + 1 + 4 + 2 depth and layer-count words; part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
+	 * stage + 1 + 1 + 4 size words + 2 size refusals + 1 + 4 + 2 depth and layer-count words + 24 minified-size checks (4 draws + 20 words); part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
 	 * refusals + 4 refusals + 1 + 3 (the M5 frame);
 	 * part 7: 3 builds + 3 + 5 load fields + 1 + 5 store fields + 1 + 2 +
 	 * 3 builds + 8 apart;
@@ -2756,7 +2801,7 @@ int main(void)
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals;
 	 * part 21 (varying flag words 1 and 2): 1 build + 7 + 1 refusal */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 27 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
+	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 51 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
 			    28 + 8 + 6 + 10 + 6 + 9 + 9;
 	part_identity();
 	part_rollback();
