@@ -1335,6 +1335,28 @@ pub(crate) mod tests {
         assert_eq!(slept, 3);
     }
 
+    /// The firmware interface comes up on the G310 as on the G610: the same
+    /// writes, version and counts (the firmware's, read from its interface),
+    /// and `core_en_mask` the G310's own `SHADER_PRESENT`.
+    #[test]
+    fn the_boot_on_the_g310_enables_its_own_cores() {
+        let reg = |t: &[(usize, u32)], off| t.iter().find(|r| r.0 == off).unwrap().1;
+        let mut writes = vec![];
+        for (table, cores) in [(&super::super::mock::G610, 0x50005), (&super::super::mock::G310, 0x3)] {
+            let shader_present = u64::from(reg(table, super::super::GPU_SHADER_PRESENT));
+            let b = synth::small();
+            let img = fw::parse(&b).unwrap();
+            let g = Mcu::new(b.clone());
+            let cfg = GlobalConfig { shader_present, timer_hz: RK3588_TIMER_HZ };
+            let r = boot(&g, &g, GPU, &img, &cfg, &mut |_| {}).unwrap();
+            assert_eq!((r.iface.version, r.iface.group_num, r.csg0.stream_num), (iface_version(1, 5, 0), 8, 8));
+            assert_eq!(r.init.core_en_mask, cores);
+            assert_eq!([g.word(MEM + 0x400_2000 + 0x18), g.word(MEM + 0x400_2000 + 0x1c)], [cores as u32, 0]);
+            writes.push(g.writes.borrow().clone());
+        }
+        assert_eq!(writes[0], writes[1]);
+    }
+
     #[test]
     fn an_mcu_that_never_answers_times_out_after_1_s_with_its_status() {
         let b = synth::small();

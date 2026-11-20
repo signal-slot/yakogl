@@ -148,7 +148,7 @@ driver/rust/include/yakogl_drivers.h:324-352). `refusal` and `detail` are the
 supply steps. The others: 0 `None` (every step ran), 1 `SpiGate` (an SPI2 clock
 gate stays closed; refusal its bit), 2 `Rk806Read` (an RK806 read failed;
 refusal the `SpiRefusal`), 5 `PowerDomain` (`pd_gpu_on` refused; refusal the
-`PdRefusal`, detail the PMU word; before the QoS write), 6 `NotG610` (detail
+`PdRefusal`, detail the PMU word; before the QoS write), 6 `UnsupportedGpu` (detail
 the `GPU_ID` read), 7 `Reset` (the soft reset did not complete) and 8 `L2` (the
 L2 did not come up); 6 to 8 come after the QoS write.
 

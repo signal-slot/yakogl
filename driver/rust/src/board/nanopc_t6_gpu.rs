@@ -59,7 +59,7 @@
 //! the GPU's idle request was set when the domain is off.
 
 use crate::gpu::mali::takeover::{self, TakeOver};
-use crate::gpu::mali::{self, Ident, L2On, Reset};
+use crate::gpu::mali::{self, Ident, L2On, ProbeStop, Reset};
 use crate::ip::{rk806, rockchip_spi};
 use crate::mmio::Mmio;
 use crate::soc::rk3588::{self, ClockRefusal, ClockSet, GpuClock, PdGpuRegs, PdOn, PllOn, QosPolicy};
@@ -132,8 +132,11 @@ pub enum Stop {
     ClockNotCovered = 4,
     /// PD_GPU did not come on (`refusal` is the [`rk3588::PdRefusal`]).
     PowerDomain = 5,
-    /// `GPU_ID` is not the G610's.
-    NotG610 = 6,
+    /// `GPU_ID` names no GPU the Mali kernel side takes
+    /// ([`mali::identify`]: the arch-10 products of panthor's table, the
+    /// G610 the T6's); the detail is `GPU_ID`, [`mali::Unsupported::name`]
+    /// says what it is. Nothing was written to the GPU after the take-over.
+    UnsupportedGpu = 6,
     /// The soft reset did not complete.
     Reset = 7,
     /// The L2 did not come up (`refusal` is the [`mali::MaliRefusal`]).
@@ -383,22 +386,15 @@ pub fn gpu_up_with(
         }
     }
 
-    o.ident = mali::ident(m, b.gpu);
-    if o.ident.gpu_id != mali::G610_GPU_ID {
-        o.stopped(Stop::NotG610, 0, u64::from(o.ident.gpu_id));
-        return o;
-    }
-    match mali::soft_reset(m, b.gpu, delay_us) {
-        Ok(r) => o.reset = r,
-        Err((why, raw)) => {
-            o.stopped(Stop::Reset, why as u32, u64::from(raw));
-            return o;
-        }
-    }
-    o.ident_after_reset = mali::ident(m, b.gpu);
-    match mali::l2_power_on(m, b.gpu, delay_us) {
-        Ok(l2) => o.l2 = l2,
-        Err((why, v)) => o.stopped(Stop::L2, why as u32, v),
+    // the GPU's own part: no SoC register from here on
+    let mut p = mali::Probe::default();
+    let r = mali::probe(m, b.gpu, delay_us, &mut p);
+    (o.ident, o.reset, o.ident_after_reset, o.l2) = (p.ident, p.reset, p.ident_after_reset, p.l2);
+    match r {
+        Ok(_) => {}
+        Err(ProbeStop::Unsupported(_)) => o.stopped(Stop::UnsupportedGpu, 0, u64::from(o.ident.gpu_id)),
+        Err(ProbeStop::Reset(why, raw)) => o.stopped(Stop::Reset, why as u32, u64::from(raw)),
+        Err(ProbeStop::L2(why, v)) => o.stopped(Stop::L2, why as u32, v),
     }
     o
 }
@@ -1244,9 +1240,9 @@ mod tests {
     #[test]
     fn another_gpu_id_stops_before_the_reset() {
         let t6 = T6::handed_over();
-        t6.regs.borrow_mut().insert(GPU + mali::GPU_ID, 0xa867_0001);
+        t6.regs.borrow_mut().insert(GPU + mali::GPU_ID, 0xb002_0000);
         let o = gpu_up(&t6, B, &mut |_| {}, &mut |_| {});
-        assert_eq!((o.stop, o.detail), (Stop::NotG610, 0xa867_0001));
+        assert_eq!((o.stop, o.detail), (Stop::UnsupportedGpu, 0xb002_0000));
         assert!(t6.writes.borrow().iter().all(|w| w.0 != GPU + mali::GPU_CMD));
     }
 
