@@ -206,7 +206,7 @@ static inline int yd5_hvs6_chan_disable(struct yd5_hvs6_log *log, unsigned int c
 
 /*
  * Start, in the order of the kernel's vc4_hvs_atomic_enable
- * (rpi:vc4_hvs.c:1218-1237): display list pointer (vc4_hvs_install_dlist,
+ * (rpi:vc4_hvs.c:1218-1234): display list pointer (vc4_hvs_install_dlist,
  * rpi:vc4_hvs.c:1166-1169), then vc6_hvs_init_channel (rpi:vc4_hvs.c:1004-1036):
  * CTRL0 = RESET (:1020), CTRL1 without INTLACE (:1022-1025), CTRL0 = ENB |
  * FWIDTH(width-1) | LINES(height-1) (:1027-1033).
