@@ -15,6 +15,14 @@ design the code follows; there are no run logs or session diaries.
 | `release/` | Release stage: building guide, checklist, licence and redaction audits. |
 | `ci.md`, `source-form.md`, `standalone-boot.md`, `v3d-noseamless-cube.md`, `notes/v3d-texture-size-words.md` | The CI gate, the source-form rule, standalone boot, two V3D designs: the non-seamless cube, and the texture size uniform words 44-47. |
 | `notes/v3d71-cube-seamless.md` | Mesa's 7.1 cube-map and seamless reading (packets, driver, CI): what the 7.1 table sets for a cube, the U8 prediction, and the case board71-tex runs. |
+| `notes/pre-study-rpi5.md` | The Pi 5 pre-study (BCM2712, VideoCore VII, V3D 7.1): the host reading of Mesa, Linux and the firmware, and the P and U steps stage 5 cites from it. |
+| `notes/v3d71-backend.md` | The 7.1 online-compiler back end (P8): the design that fixes the file names, types and function signatures the later items implement. |
+| `notes/v3d71-clear-frame.md` | The 7.1 clear-only frame packet by packet and the 7.1 tile sizes: the specification the frame builder follows for the first clears on the board (H5, M1-M4). |
+| `notes/v3d71-triangle-frame.md` | The 7.1 clear-then-triangle frame (M5): what the job holds packet by packet, and the BCM2712 D0 shader record it needs. |
+| `notes/v3d71-bin-submit.md` | The bin and render submission for the first triangle with a binning pass on the board (M5): the facts for the 7.1 frame, the `rpi5_triangle` probe and the board session. |
+| `notes/v3d71-tri-ours-record.md` | The D0 shader record Mesa wrote for its Pi 5 triangle against the one our 7.1 pass-through programs need: the input of the probe's "ours" option. |
+| `notes/v3d71-gl-table.md` | The P9 figures for the 7.1 `src/v3d` back-end table (the 7.1 shader record and draw index, the limits, `Clear Render Targets`, TFU `IOC`) and how a build selects 7.1. |
+| `notes/rpi5-display.md` | The Pi 5 display design (P11, U3): which Pi 4 pieces carry over, what the HVS 6.x and pixel valves make new, one implementation order for a Zephyr image that draws GL on the board, and what only the board can still answer. |
 
 Elsewhere: board results are `tools/cts/RESULTS.md` (current results only)
 and its Japanese summary `tools/cts/STATUS.md`; the stages are `ROADMAP.md`;
