@@ -52,7 +52,9 @@ use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps, OsalV3dCpuOf};
 use yakogl::shaderc::online::arena::Arena;
 use yakogl::shaderc::online::ir::Op;
 use yakogl::shaderc::online::v3d::chain::{compile_program, Prim, Target};
-use yakogl::shaderc::online::v3d::select::QUNIFORM_TEXTURE_ARRAY_SIZE;
+use yakogl::shaderc::online::v3d::select::{
+    QUNIFORM_TEXTURE_ARRAY_SIZE, QUNIFORM_TMU_CONFIG_P0, QUNIFORM_TMU_CONFIG_P1,
+};
 use yakogl::shaderc::online::{lower, sema};
 use yakogl::v3d::backend::yakogl_backend_v3d;
 use yakogl::v3d::ffi::*;
@@ -706,6 +708,65 @@ fn the_array_size_program_also_carries_word_47() {
         .unwrap_or_else(|e| panic!("program: {e:?}"));
     let c: Vec<u32> = p.fs.code.uniforms.iter().map(|u| u.contents).collect();
     assert!(c.contains(&QUNIFORM_TEXTURE_ARRAY_SIZE), "{c:?}");
+}
+
+/// The fragment stream (contents, data) of `body` over a `sampler2DArrayShadow s`.
+fn fs_stream(body: &str) -> Vec<(u32, u32)> {
+    let fs = format!(
+        "#version 300 es\nprecision highp float;\nprecision highp sampler2DArrayShadow;\n\
+         uniform sampler2DArrayShadow s;\nin highp vec3 v_texCoord;\n\
+         layout(location = 0) out highp vec4 o;\nvoid main() {{ {body} }}\n"
+    );
+    let vs = "#version 300 es\nin highp vec4 a_position;\nout highp vec3 v_texCoord;\n\
+              void main() { v_texCoord = a_position.xyz; gl_Position = a_position; }\n";
+    let mut mem = vec![0u8; 16 << 20];
+    let a = Arena::new(&mut mem);
+    let vs = a.alloc_str(vs).unwrap();
+    let fs = a.alloc_str(&fs).unwrap();
+    let v = lower::compile_to_ir(&a, sema::Stage::Vertex, vs).unwrap_or_else(|e| panic!("vertex: {}", e.msg));
+    let f = lower::compile_to_ir(&a, sema::Stage::Fragment, fs).unwrap_or_else(|e| panic!("fragment: {}", e.msg));
+    let p = compile_program(&v.module, &f.module, Prim::Triangles, Target { vpm_size: 65536 }, &a)
+        .unwrap_or_else(|e| panic!("program: {e:?}"));
+    p.fs.code.uniforms.iter().map(|u| (u.contents, u.data)).collect()
+}
+
+/// Whether the stream has a TMU P0/P1 word for unit 0 (what `texture_units`
+/// calls "looked up": the unit is not size-only, so 080240bc's exemption does
+/// not reach it).
+fn looks_up_unit0(w: &[(u32, u32)]) -> bool {
+    w.iter().any(|&(c, d)| (c == QUNIFORM_TMU_CONFIG_P0 || c == QUNIFORM_TMU_CONFIG_P1) && d >> 24 == 0)
+}
+
+/// Criterion c3 of issue #1261: the exemption 080240bc made, and 7b6a4f0c
+/// pinned for the size-only unit, is for a unit that only queries. A unit
+/// that is also sampled has a P0/P1 word, so `texture_units` does not exempt
+/// it: it is checked against the key its look-up was compiled for, and a
+/// 16-bit key over the 32-bit depth array is `RET16_OF_32` (`refusal_for`,
+/// decided in `tex_state_for` before any uniform word is written, so the
+/// missing word 47 does not mix in). A draw cannot reach the 16-bit key here
+/// (the core keys a real look-up for 32 bits), so this is pinned at the level
+/// that tells the reasons apart: the stream's classification and the rule.
+#[test]
+fn a_sampled_and_queried_array_shadow_unit_of_a_32_bit_depth_array_keeps_ret16_of_32() {
+    let both = fs_stream("o = vec4(texture(s, vec4(v_texCoord, 0.5))) + vec4(vec3(textureSize(s, 0)), 1.0);");
+    assert!(both.iter().any(|&(c, _)| c == QUNIFORM_TEXTURE_ARRAY_SIZE), "it is queried: {both:?}");
+    assert!(looks_up_unit0(&both), "it is sampled, so not size-only: {both:?}");
+    let size_only = fs_stream("o = vec4(vec3(textureSize(s, 0)), 1.0);");
+    assert!(!looks_up_unit0(&size_only), "the size-only unit has no P0/P1 word: {size_only:?}");
+
+    let b = depth32(GLES_TEXTYPE_2D_ARRAY, 4);
+    assert_eq!(texture::refusal_for(&b, false), Some(RET16_OF_32));
+    assert_eq!(texture::refusal_for(&b, true), None);
+}
+
+/// The control: a sampling-only unit of the same array has a look-up word and
+/// no size word, and the 16-bit key is `RET16_OF_32`.
+#[test]
+fn a_sampling_only_array_shadow_unit_of_a_32_bit_depth_array_keeps_ret16_of_32() {
+    let s = fs_stream("o = vec4(texture(s, vec4(v_texCoord, 0.5)));");
+    assert!(looks_up_unit0(&s), "{s:?}");
+    assert!(!s.iter().any(|&(c, _)| c == QUNIFORM_TEXTURE_ARRAY_SIZE), "{s:?}");
+    assert_eq!(texture::refusal_for(&depth32(GLES_TEXTYPE_2D_ARRAY, 4), false), Some(RET16_OF_32));
 }
 
 #[test]
