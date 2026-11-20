@@ -64,6 +64,10 @@ Mesa rules predict by analogy and must be measured before it is coded.
   `deqp_unitype_vsmat2_mediump`, `deqp_colourpair_ck_lane_mediump`,
   `deqp_colourpair_rnd_vs_mediump_kept`, `deqp_loops_vs_for_uni`,
   `deqp_loops_vs_select`, `deqp_arith_uniform_api_bool_compare_vs_none`.
+  Also the `arith-ref` references of the same stage, read for section 4.6:
+  `deqp_arith_op_bool_{all,any}_vs_none`, `deqp_arith_op_binary_{equal,
+  not_equal}_vs_none` (bvec2), `deqp_arith_op_binary_{equal,not_equal}_vs_
+  mediump` (ivec2 of mediump attributes), `deqp_arith_other_ball_vs_none`.
   There is no `deqp_unif2_*` and no `deqp_intval3_*` on this tip (the
   `intval3-ref` item is running; this note does not use it).
 - The compiler: `nir.rs` (`uniform_of` :1045, `fp16_uniform` :1145,
@@ -265,6 +269,51 @@ of a bvec/ivec uniform is the *use* order, not the declaration order
 (`vsbvec3`'s `DIFFERS` is that; a separate defect, intval section 8 /
 unitype "Lowering result", **not** part of this item).
 
+### 4.6 The bvec2 forms the arith references already hold (read after the first draft of this note)
+
+`arith-ref` committed vertex references of the same shapes at width two, all
+`mediump vec4` attributes, `bvec2 in0 = greaterThan(a_in0.wy, vec2(0.0))`
+(`tools/mali/testdata/deqp_arith_*`, quoted from their `text`):
+
+```
+; op_bool_all_vs_none: all(in0)             ; op_bool_any_vs_none: any(in0)
+FADD.f32 r0.h0, r1^, 0x0.neg   (y)           same two narrowings
+FADD.f32 r1.h0, r3^, 0x0.neg   (w)
+FMIN.v2f16 r0, r0^.h00, r1^.h00              FMAX.v2f16 r0, r0^.h00, r1^.h00
+FCMP_OR.v2f16.lt.m1 r0, 0x0, r0^.h00, 0x0    (same)
+S16_TO_S32 r0, r0^.h0 ; CSEL.u32.eq r0, r0^, 0x0, 0x0, 0x3F800000
+
+; op_binary_equal_vs_none: in0 == in1 (in1 = greaterThan(a_in1.yx, 0.0))
+FADD.f32 r0.h0, r1^, 0x0.neg ; FADD.f32 r1.h0, r3^, 0x0.neg      ; in0.y, in0.w
+LD_ATTR_IMM.v4 ... index:0x2 ; V2F32_TO_V2F16 r2, r2^, r3^        ; in1.x, in1.y as a pair
+FCMP_OR.v2f16.lt.m1 r0, 0x0, r0^.h00, 0x0
+FCMP_OR.v2f16.lt.m1 r2, 0x0, r2^.h10, 0x0                       ; the pair swapped (.h10): yx
+ICMP_OR.v2u16.eq.m1 r0, r0^.h00, r2.h11, 0x0
+FCMP_OR.v2f16.lt.m1 r1, 0x0, r1^.h00, 0x0
+ICMP_OR.v2u16.eq.m1 r1, r1^.h00, r2^.h00, 0x0
+LSHIFT_AND.v2i16 r0, r0^.h00, 0x0.b00, r1^      ; != is the same with .ne and LSHIFT_OR.v2i16
+S16_TO_S32 r0, r0^.h0 ; CSEL.u32.eq r0, r0^, 0x0, 0x0, 0x3F800000
+```
+
+This settles what 4.1 and 4.3 left "by analogy": `any` of two `0 < x` masks
+is `flt(0, fmax(a, b))` (`FMAX.v2f16`, the mirror of the `fmin` rule, so M2's
+`ior` rule **has a reference**), `all` is `FMIN`; the width-two `bvec` `==`
+is `ball_iequal2` = `iand` of two lanes' `ieq`, `!=` the `ior` of their `ine`
+(`ICMP_OR.v2u16`, then `LSHIFT_AND` / `LSHIFT_OR.v2i16`); the pair of the
+second operand is read swizzled in place (`r2^.h10`, `r2.h11`, `r2^.h00`)
+without a move. Width three (`opvs_not_equal_bvec3`) differs from width two
+only by the third lane's `FCMP`/`ICMP`/`LSHIFT_OR`. Width four is the only
+one still without a reference.
+
+`arith_op_binary_{equal,not_equal}_vs_mediump` is the *integer* neighbour:
+`ivec2(a_in0.wy) == ivec2(a_in1.yx)` of mediump attributes, 32-bit (`F32_TO_S32.rtz`
+per lane, then `ICMP_OR.u32.eq.m1` / `ICMP_AND.u32.eq.m1 r0, r1^, r2^, r0^` with
+the first compare's mask as the accumulator, `ne` as `ICMP_OR.u32.ne.m1` twice).
+No 16-bit form is involved; it is refused today only by `vs_reduce`'s width
+(`Arithmetic`) and belongs to M3's `ball`/`bany` arm for ints (`opt.rs`
+`fuse_cmp` makes the accumulator form of the vertex `opvs_less_ivec4`'s `ICMP`
+chain already).
+
 ## 5. The mechanisms
 
 Each names what changes, the functions, the Mesa pattern (section 4), the
@@ -430,11 +479,11 @@ is dEQP's own generated shader (`shaders.operator`'s `ShaderOperatorCase`
 | # | shape | for | needed because |
 |---|---|---|---|
 | R1 | `float_compare.lessThan.mediump_vec3_vertex` (and one `equal`, one `notEqual`) | M1/M3 vector forms | no reference of a `bvecN` of fp16 compares widened lane by lane into the colour |
-| R2 | `logical_or.bool_vertex` | M2 | the `flt(0, fmax)` rule is by analogy |
+| R2 | `logical_or.bool_vertex` | M2 | the `flt(0, fmax)` rule is held by `deqp_arith_op_bool_any_vs_none` (section 4.6); the scalar `||` of two `a_in.x > 0.0` itself is not, generate only if vs16-1 wants the byte proof |
 | R3 | `logical_xor.bool_vertex` | M2 | `ixor` of two 16-bit masks |
 | R4 | `not.bool_vertex` | M2 | `inot` of a 16-bit mask into the select (arms swapped?) |
-| R5 | `bool_compare.equal.bvec2_vertex`, `.bvec4_vertex`, `.any`/`.all` `bvec3` | M3 | order of the `ior`/`iand` chain per width |
-| R6 | `binary_operator.equal.mediump_vec4_vertex`, `not_equal.mediump_float_vertex` | M3 | `==` of whole vectors, scalar `fneu` at 16 |
+| R5 | `bool_compare.equal.bvec4_vertex`, `.any`/`.all` `bvec3`/`bvec4` | M3 | order of the `ior`/`iand` chain at widths 3 and 4. **Width 2 is held** (section 4.6: `deqp_arith_op_bool_{all,any}_vs_none`, `op_binary_{equal,not_equal}_vs_none`), only 3 and 4 are missing |
+| R6 | `binary_operator.equal.mediump_vec4_vertex`, `not_equal.mediump_float_vertex` | M3 | `==` of whole *float* vectors and scalar `fneu` at 16 (no float-vector or scalar `==` reference at 16 bits exists; the held `_vs_none`/`_vs_mediump` ones are bvec2 and ivec2) |
 | R7 | `binary_operator.less.lowp_float_vertex` | M1 | confirm lowp = mediump words |
 | R8 | `uniform_api.value.initial.render.basic.int_vertex`, `.ivec3_vertex`, `basic_struct.int_ivec4_vertex` (vertex) | M5 | the int/ivec compare of uniforms against constants (`ieq` + `ball`), no reference of a vertex int uniform compare other than the loop test |
 | R9 | `uniform_api` `bvec2/4` with a true/false mix of the dEQP values | M5/M3 | the constant pattern decides the `inot`/`ior`/`iand` form (`deqp_arith_uniform_api_bool_compare_vs_none` is `bvec2(false, true)`; `vsbvec3` the all-false 3) |
@@ -464,6 +513,16 @@ At risk (each is pinned by exact bytes or text):
   (the `vs_narrow_input` and `vs_alu16u` bytes must not change);
   `DIFFERS` `vsapi_mat2`, `vsapi_struct` (M4 only), `vsmat3_lowp`,
   `vsbvec3` (FAU order: untouched by this item), `refusals_pinned`.
+- `tests/mali_deqp_arith.rs` (`REFUSED`, each entry the exact `Arithmetic`
+  text, `refusals_pinned` asserts it): `op_bool_all_vs_none`,
+  `op_bool_any_vs_none`, `op_binary_equal_vs_none`, `op_binary_not_equal_vs_none`
+  and `op_binary_{equal,not_equal}_vs_mediump` are M3's shapes: when M3
+  lowers one it must move to `LOWERED` in that file in the same commit (the
+  design listed the three files named by the item and missed this one).
+  `uniform_api_bool_compare_vs_none` (179 cases) is `vs_reduce` at width two
+  over bool *uniform words*, step 8 of `mali-deqp-arith.md` and owned there by
+  `intval-rest`, not by this item; it is the same arm as M3 and its
+  byte-compare is the same file.
 - `tests/mali_deqp_loops.rs` (4 mentions of the precision/type text) and
   `tests/mali_deqp_uniarray.rs` (2) by M5.
 - `src/shaderc/online/mali/tests.rs` (2 mentions of "not highp"; the int
@@ -492,3 +551,30 @@ shapes of 3.1 by case name against `tools/cts/log/2026-11-15-t6-gles2-S*/refusal
 4. `opvs_not_equal_bvec3` with the lanes' `FCMP_OR` pair/lone grouping depends
    on `nir_lower_alu_width` pairing `x,y` and leaving `z`: the same rule as
    `vs_narrow_input`; a bvec4 pairs (x,y), (z,w) — R5 confirms.
+
+## 10. Overlap with the arith plan (`mali-deqp-arith.md` step 8)
+
+`vs_reduce` is shared. The arith note's step 8 "vs-reduce" holds 265 cases:
+179 `uniform_api.bool_compare` (bool uniform words, 32-bit, `intval-rest`),
+48 `shaders.operator` (`op.binary.equal/not_equal` 21 each, bool `all`/`any`),
+24 `shaders.random` (`random_bany`: 22), `other.bany`/`ball` 4 each. The
+operator and random parts (about 86) are this note's M3 (the 16-bit masks of
+mediump attributes) and M3's `ivec` forms. So:
+
+- the case count of M3 in section 3.1 and the 86 of the arith note are the
+  same cases seen from two sides, not additive; the host measure (section 8)
+  decides which text a case carries first;
+- `intval-vs16` (M1 to M3) and `arith-lower-1` do not share a function today
+  (`arith-lower-1`'s steps are the vertex transcendentals, the fragment `/` and
+  the pair trees: `vs_reduce` is its step 8, later); whoever takes `vs_reduce`
+  first adds the arms and moves the `mali_deqp_arith.rs` pins, the other
+  rebases onto it. M3 as designed here is written as new arms *before*
+  `_ => Err(Arithmetic)`, so the merge is a union of match arms;
+- the 179 bool-uniform compares need no 16-bit form: `LSHIFT_OR.i32` /
+  `LSHIFT_AND.i32` of the words with the constants deciding `.not`
+  (`deqp_arith_uniform_api_bool_compare_vs_none`), the width-two sibling of
+  `vsbvec3`'s `vs_reduce` arm (width three, y-x-z order). They are the
+  largest single group behind the "integer uniform" gates (M5) and should be
+  scheduled with vs16-2, not later, if `intval-rest` is not about to start:
+  the same session adds the width-two (and four, after R9) arm of the 32-bit
+  bool reduction.
