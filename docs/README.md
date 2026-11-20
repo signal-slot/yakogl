@@ -13,7 +13,7 @@ design the code follows; there are no run logs or session diaries.
 | `online-shaderc/` | The on-board shader compiler: front end, IR, back ends, ISAs and ABIs. |
 | `notes/` | Designs and findings that the code relies on (comments cite them), one file per subject. Each file's title line says what it covers: `grep -m1 '^# ' docs/notes/*.md` lists them. This row names no file. |
 | `release/` | Release stage: building guide, checklist, licence and redaction audits. |
-| `ci.md`, `source-form.md`, `standalone-boot.md`, `v3d-noseamless-cube.md` | The CI gate, the source-form rule, standalone boot, one V3D design. |
+| `ci.md`, `source-form.md`, `standalone-boot.md`, `v3d-noseamless-cube.md`, `notes/v3d-texture-size-words.md` | The CI gate, the source-form rule, standalone boot, two V3D designs: the non-seamless cube, and the texture size uniform words 44-47. |
 
 Elsewhere: board results are `tools/cts/RESULTS.md` (current results only)
 and its Japanese summary `tools/cts/STATUS.md`; the stages are `ROADMAP.md`;
