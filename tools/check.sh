@@ -4530,6 +4530,32 @@ zephyr_nanopc_t6_gltest_image() {
     return 1
   }
 }
+# examples/triangle on the Verdin iMX95 (i.MX 95, Mali-G310; the board
+# driver/boards/toradex/verdin_imx95, the glue driver/zephyr/lib/board/
+# verdin_imx95): built only, no board yet (docs/standalone-boot.md, "Toradex
+# Verdin iMX95"). It builds for the Mali with the board layer, and the image
+# is what that section's U-Boot route would load: the RAM footprint (the
+# AArch64 header's image_size) inside zephyr,sram, and the stubs that refuse
+# the watchdog and the GPU's bring-up by name are in it (each "STUB:" line
+# once), so the image cannot pass for one that brings the GPU up. No firmware
+# is embedded, so the row needs none.
+zephyr_verdin_imx95_triangle_image() {
+  local dir=build/zephyr-werror/verdin_imx95-triangle bin footprint window line n
+  zephyr_werror_image verdin_imx95/mimx9596/a55 examples/triangle verdin_imx95-triangle || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+  for line in 'verdin_imx95: STUB: no watchdog armed' 'verdin_imx95: STUB: no Mali-G310 CSF firmware' \
+    'verdin_imx95: STUB: the Mali at '; do
+    n=$(strings -n 20 "$bin" | grep -cF "$line") || true
+    [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
+  done
+}
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
 # the runner's MP2_NO_WATCHDOG=1 step): it builds, and it carries the layer's
@@ -4658,6 +4684,10 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  nanopc_t6 gl_test image (Mali), -Werror on our C files, fits the kexec window" \
       zephyr_nanopc_t6_gltest_image "$mali_csffw"
+    # examples/triangle on the Verdin iMX95's A55 (Mali-G310): built only.
+    scope mali drivers samples
+    step "zephyr  verdin_imx95 examples/triangle image (Mali-G310, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_triangle_image
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images

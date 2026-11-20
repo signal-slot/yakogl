@@ -1,19 +1,23 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * zephyr_mali.c - Zephyr OSAL backend for YakoGL on the Arm Mali-G610
- * (NanoPC-T6, RK3588). The sibling of zephyr.c (PowerVR), zephyr_gc.c
- * (GC7000) and zephyr_v3d.c (V3D); the build compiles exactly one of them,
- * and all define `osal_zephyr_ops`, so nothing above the OSAL changes with
- * the GPU.
+ * zephyr_mali.c - Zephyr OSAL backend for YakoGL on the Arm Mali (the
+ * NanoPC-T6's Mali-G610, RK3588; the Verdin iMX95's Mali-G310, i.MX 95, built
+ * but not brought up: zephyr_mali_board.h). The sibling of zephyr.c
+ * (PowerVR), zephyr_gc.c (GC7000) and zephyr_v3d.c (V3D); the build compiles
+ * exactly one of them, and all define `osal_zephyr_ops`, so nothing above
+ * the OSAL changes with the GPU.
  *
  * The OSAL's logic is Rust (driver/rust, board::nanopc_t6_osal, through the
  * yd_t6_osal_* entries of yakogl_drivers.h); this file holds what is the
- * image's: the memory the GPU uses (one static, made uncached), the register
- * mappings, the delay that feeds the board's watchdog, the log and the
- * table. Every op forwards to one call:
+ * image's: the memory the GPU uses (one static, made uncached), the delay
+ * that feeds the board's watchdog, the log and the table. What depends on
+ * the SoC (its register mappings, the GPU's power-on, the call that brings
+ * the group up, the watchdog) is the board's (zephyr_mali_board.h). Every op
+ * forwards to one call:
  *
- *   init        -> yd_t6_osal_up: Z1 to Z3 (power, AS0, the CSF firmware
+ *   init        -> osal_zephyr_mali_board_up; on the NanoPC-T6 that is
+ *                  yd_t6_osal_up: Z1 to Z3 (power, AS0, the CSF firmware
  *                  booted from the init argument's image), then CSG 0 / CS 0
  *                  started over a group VM of four regions (the ring, the
  *                  heap's pool and chunks, the carve-out); Z4's record is
@@ -69,19 +73,8 @@
 #include "gles_osal.h"
 #include "osal_internal.h"
 #include "osal_log.h"
-#include <nanopc_t6.h>
+#include "zephyr_mali_board.h"
 #include <yakogl_drivers.h>
-
-/* The RK3588's blocks Z1 to Z3 touch (soc::rk3588, board::nanopc_t6_gpu:
- * the CRU, the PMU, SPI2 to the RK806 PMIC, the GPU's QoS, the GPU), and
- * the GPU mapping's size: the doorbells are at 0x80000 and up. */
-#define T6_CRU_PHYS  0xfd7c0000UL
-#define T6_PMU_PHYS  0xfd8d8000UL
-#define T6_SPI2_PHYS 0xfeb20000UL
-#define T6_QOS_PHYS  0xfdf35000UL
-#define T6_GPU_PHYS  0xfb000000UL
-#define T6_GPU_MAP   0x280000
-#define T6_TIMER_HZ  24000000 /* CNTFRQ_EL0 */
 
 #define PAGE 4096u
 
@@ -184,15 +177,15 @@ static struct yd_t6_fw_backing backing(size_t off, size_t size)
 }
 
 /* The Rust waits poll through this (Z3's bring-up, the 5 s job timeout):
- * the board glue wants t6_watchdog_feed() at most
- * CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart, so every delay feeds it, in slices
- * of at most 100 ms, as t6_submit's does. */
+ * the board glue wants its feed (on the NanoPC-T6 t6_watchdog_feed(), at
+ * most CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart), so every delay feeds it, in
+ * slices of at most 100 ms, as t6_submit's does. */
 static void delay_us(uint32_t us)
 {
 	do {
 		uint32_t slice = us > 100000U ? 100000U : us;
 
-		t6_watchdog_feed();
+		osal_zephyr_mali_board_feed();
 		k_busy_wait(slice);
 		us -= slice;
 	} while (us > 0U);
@@ -207,7 +200,7 @@ static int clean(uintptr_t addr, size_t len)
 static void on_handover(const struct yd_t6_gpu_up *h)
 {
 	ARG_UNUSED(h);
-	t6_watchdog_feed();
+	osal_zephyr_mali_board_feed();
 }
 
 /* ---- lifecycle ---------------------------------------------------------- */
@@ -223,7 +216,6 @@ static int z_init(void *platform_arg)
 	static struct yd_t6_submit_up o;
 	static struct yd_t6_gpu_up z1; /* hundreds of bytes: not on the caller's stack */
 	struct yd_t6_osal_mem mem = { 0 };
-	mm_reg_t cru, pmu, spi2, qos, gpu;
 	int rc;
 
 	if (s.inited)
@@ -234,13 +226,7 @@ static int z_init(void *platform_arg)
 		printk("osal(mali): init needs struct osal_zephyr_mali_init with the CSF firmware\n");
 		return -EINVAL;
 	}
-	device_map(&cru, T6_CRU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&pmu, T6_PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&spi2, T6_SPI2_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&qos, T6_QOS_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&gpu, T6_GPU_PHYS, T6_GPU_MAP, K_MEM_CACHE_NONE);
-
-	t6_watchdog_feed();
+	osal_zephyr_mali_board_feed();
 	rc = mem_uncache();
 	if (rc) {
 		printk("osal(mali): the GPU's memory was not made uncached: rc %d\n", rc);
@@ -260,10 +246,13 @@ static int z_init(void *platform_arg)
 	mem.vm_tables_pa = k_mem_phys_addr(mali_mem + OFF_VM_POOL);
 	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
 
-	t6_watchdog_feed();
-	rc = yd_t6_osal_up(cru, pmu, spi2, qos, gpu, T6_GPU_MAP, arg->fw, arg->fw_len, T6_TIMER_HZ,
-			   &mem, clean, delay_us, on_handover, &z1, &o);
-	t6_watchdog_feed();
+	osal_zephyr_mali_board_feed();
+	rc = osal_zephyr_mali_board_up(arg, &mem, clean, delay_us, on_handover, &z1, &o);
+	osal_zephyr_mali_board_feed();
+	if (rc == -ENOTSUP) {
+		/* no bring-up on this board yet: its line said what is missing */
+		return rc;
+	}
 	if (rc) {
 		printk("osal(mali): up: rc %d step %u refusal %u detail 0x%llx; Z3 step %u stop %u "
 		       "refusal %u\n",
