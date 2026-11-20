@@ -15,6 +15,13 @@ Part of ROADMAP stage 5 (issue #7), step P11 of `docs/notes/pre-study-rpi5.md`.
 west build -p always -b rpi_5 -d build/rpi5_mbox yakogl/tools/probes/rpi_5/rpi5_mbox -- -DYAKOGL_WERROR=ON
 ```
 
+Buffer mode: both buffers stay cacheable in sram0, which Zephyr already maps.
+The probe makes no `device_map()` or `k_mem_map()` of RAM: a second mapping of
+that page is refused (`__arch_mem_map` -16, a kernel panic; the run at
+6966a16d). The `memory` line reads the display buffer after
+`sys_cache_data_invd_range()`, having copied the CPU's view out first; the
+image prints `buffer mode cacheable, cache maintenance, no second mapping`.
+
 ## The two images' mailbox paths
 
 Both images use the board layer's transport,
@@ -71,9 +78,9 @@ order:
   bounds and buffer layout), without the cache calls. This is what
   `rpi5_display`'s image ran. `GET_THROTTLED` this way is the image's very
   first request, as in `rpi5_display`. After the wait, the same buffer is also
-  read through an uncached alias (the `memory` line). That shows the words the
-  firmware left in memory, which the cached read cannot show, and the words it
-  found there before the doorbell.
+  read again after a cache invalidate (the `memory` line). That shows the words
+  the firmware left in memory, which the cached read cannot show, and the words
+  it found there before the doorbell.
 - **clear**: the same copy with the clean before and the invalidate after.
   This is what `rpi5_clear`'s image ran.
 - **board**: `rpi_mbox_request_timed()` of the board layer in this image,
