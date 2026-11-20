@@ -418,11 +418,12 @@ fn integer_texture_internalformat(t: &context::GlTexture) -> Option<GLenum> {
 /// surfaces (`pbe_int_packmode`) and the online compiler packs all four
 /// channels of the output for them. The V3D does: `rt_format` has the wide
 /// RGBA integer surfaces and their strides, and COLOR_WRITE_MASKS keeps the
-/// channels the format lacks out (`GlesDraw::color_mask`). Its one mask is
-/// every render target's (v3d_job.c, RT 0's mask for all), so a draw where
-/// another target would need a different mask is refused by name
-/// (draw.rs `refuse_uneven_target_masks`). The GC7000 keeps such a texture
-/// incomplete.
+/// channels the format lacks out (`GlesDraw::color_mask`), with a mask per
+/// render target where another target of the draw needs a different one
+/// (draw.rs `per_target_masks`, `GlesDraw::per_target_mask`). Such a draw
+/// under glEnable(GL_BLEND) beside a non-integer target is refused by name:
+/// the V3D has one blend enable for every target. The GC7000 keeps such a
+/// texture incomplete.
 const WIDE_INT_RT: bool = cfg!(any(feature = "gpu-powervr", feature = "gpu-v3d"));
 
 /// Is `wide` the four-channel integer surface an R or RG integer surface

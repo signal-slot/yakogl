@@ -705,6 +705,18 @@ pub fn job_state(d: &GlesDraw) -> Result<V3dJobState, Refusal> {
     if d.target_alpha_bits == 0 {
         st.colormask &= 0x7;
     }
+    /* A mask per render target (COLOR_WRITE_MASKS, 4 bits per RT,
+     * v3dx_emit.c:571-585): the GL core gives them where the targets'
+     * masks differ (`GlesDraw::per_target_mask`: an R or RG integer texture
+     * drawn as its four-channel store beside a target with more channels).
+     * RT k is `targets[k]` (a draw's list never starts past attachment 0,
+     * `refusal` above); RT 0 keeps `colormask`, alpha rule included. */
+    if d.per_target_mask && d.color_write {
+        st.rt_colormask_own = true;
+        st.rt_colormask = (1..GLES_MAX_TARGETS)
+            .map(|k| u32::from(d.target_color_mask[k] & 0xf) << (4 * (k - 1)))
+            .fold(0, |a, m| a | m);
+    }
     st.blend_color_f16 = d.blend_color.map(f32_to_f16);
     Ok(st)
 }

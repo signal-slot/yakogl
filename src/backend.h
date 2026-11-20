@@ -331,6 +331,15 @@ struct gles_draw {
 	 * `yakogl-tools abi-layout` pins its layout too.) */
 	struct gles_draw_target { uint64_t gpu; uint32_t w, h; uint8_t format; uint8_t out_shift; } targets[GLES_MAX_TARGETS];
 	uint8_t num_targets;
+	/* Per-target colour write masks (bit 0 R .. bit 3 A), for a backend
+	 * with a write mask per render target (the V3D's COLOR_WRITE_MASKS):
+	 * with per_target_mask, targets[k] writes target_color_mask[k] (0 for a
+	 * slot that writes nothing); [0] is color_mask. Set only where the
+	 * targets' masks differ (an R or RG integer texture drawn as its
+	 * four-channel store writes only its format's channels); otherwise
+	 * every target takes color_mask. In num_targets' padding. */
+	bool per_target_mask;
+	uint8_t target_color_mask[GLES_MAX_TARGETS];
 
 	/* textures: the fragment stage's, and the vertex stage's (Qt Quick 3D
 	 * reads bone and morph-target matrices from a texture in the vertex

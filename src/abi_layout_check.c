@@ -353,6 +353,8 @@ _Static_assert(offsetof(struct gles_draw, fs_uniform_dwords) == 984, "struct gle
 _Static_assert(offsetof(struct gles_draw, fs_uniform_cpu) == 992, "struct gles_draw.fs_uniform_cpu");
 _Static_assert(offsetof(struct gles_draw, targets) == 1000, "struct gles_draw.targets");
 _Static_assert(offsetof(struct gles_draw, num_targets) == 1096, "struct gles_draw.num_targets");
+_Static_assert(offsetof(struct gles_draw, per_target_mask) == 1097, "struct gles_draw.per_target_mask");
+_Static_assert(offsetof(struct gles_draw, target_color_mask) == 1098, "struct gles_draw.target_color_mask");
 _Static_assert(offsetof(struct gles_draw, textures) == 1104, "struct gles_draw.textures");
 _Static_assert(offsetof(struct gles_draw, num_textures) == 2256, "struct gles_draw.num_textures");
 _Static_assert(offsetof(struct gles_draw, vs_textures) == 2264, "struct gles_draw.vs_textures");
