@@ -19,7 +19,8 @@
 //!   gives it; a glClearBuffer of draw buffer 3 loads render targets 0-2 and
 //!   writes render target 3 alone, by a clear-attach program whose one
 //!   output write is register 3;
-//! - with the stand-in at 0 (the build's own three): three pairs for every
+//! - with the stand-in at 3 (a three-target back end; the build's own count
+//!   is four since plan #325 item mrt-frameload): three pairs for every
 //!   render, three targets at most, as before item pvr-backend.
 //!
 //! The platform is the one of tests/es3_mrt4_clear_pvr.rs (host memory, the
@@ -714,7 +715,11 @@ fn the_decision_follows_the_draw_target_count() {
     assert_eq!(pvr_backend_eot_pairs(), 4);
     drop(_g);
     let _g = rig(0);
-    assert!(!eot_four_rt(), "the build's own three");
+    assert!(eot_four_rt(), "the build's own four (DRAW_TARGETS)");
+    assert_eq!(pvr_backend_eot_pairs(), 4);
+    drop(_g);
+    let _g = rig(3);
+    assert!(!eot_four_rt(), "a three-target back end");
     assert_eq!(pvr_backend_eot_pairs(), 3);
     assert_eq!((eot_pds_pairs(false), eot_pds_pairs(true)), (3, 4), "pvr_render_eot_pds_pairs");
 }
@@ -823,7 +828,7 @@ fn every_render_carries_four_pairs_at_four_targets() {
 /// three at three.
 #[test]
 fn the_partial_render_carries_the_frames_pairs() {
-    for (targets, want) in [(4u8, 4u32), (0, 3)] {
+    for (targets, want) in [(4u8, 4u32), (3, 3), (0, 4)] {
         let _g = rig(targets);
         pvr_backend_set_option(PVR_BACKEND_OPT_PARTIAL_RENDER, 1);
         fbo(&[GL_RGBA8]);
@@ -949,14 +954,15 @@ fn a_clear_of_an_integer_buffer_3_is_kicked() {
     assert_ne!(f.kicks[0].frag.pbe_word[3], [0, 0]);
 }
 
-/* ---- the stand-in at 0: today's three ---------------------------------------------- */
+/* ---- the stand-in at 3: the three-target back end ---------------------------------- */
 
-/// Without the stand-in the back end is the three-target one it was: three
-/// end-of-tile pairs for every render, at most three targets a kick, the
-/// three-target program's info word.
+/// With a three-target stand-in the back end is the three-target one it was
+/// (the build's own until plan #325 item mrt-frameload): three end-of-tile
+/// pairs for every render, at most three targets a kick, the three-target
+/// program's info word.
 #[test]
-fn without_the_stand_in_three_targets_and_three_pairs() {
-    let _g = rig(0);
+fn a_three_target_stand_in_keeps_three_targets_and_three_pairs() {
+    let _g = rig(3);
     assert_eq!(pvr_backend_eot_pairs(), 3);
     for n in [1usize, 3] {
         fbo(&[GL_RGBA8; 3][..n]);

@@ -363,7 +363,8 @@ mod es3 {
     use yakogl::backend::{GLES_SURF_R32I, GLES_SURF_RGBA16F, GLES_SURF_RGBA8888, GLES_SURF_RGBA8UI};
 
     /// The limits are the back end's: 4 with a four-target back end, the
-    /// build's own count (3 on every GPU today) without one.
+    /// build's own count without one (4 on the PowerVR since plan #325 item
+    /// mrt-frameload, 3 on the others), 3 with a three-target one.
     #[test]
     fn the_limits_follow_the_back_end() {
         let _g = context();
@@ -373,10 +374,14 @@ mod es3 {
         assert_eq!(geti(GL_DRAW_BUFFER0 + 4), Err(GL_INVALID_ENUM), "past GL_MAX_DRAW_BUFFERS");
         backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
         let own = backend::DRAW_TARGETS as GLint;
-        assert_eq!(own, 3);
+        assert_eq!(own, if cfg!(feature = "gpu-powervr") { 4 } else { 3 });
         assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(own));
         assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(own));
         assert_eq!(geti(GL_DRAW_BUFFER0 + own as GLenum), Err(GL_INVALID_ENUM));
+        backend::HOST_DRAW_TARGETS.store(3, Ordering::Relaxed);
+        assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(3));
+        assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(3));
+        assert_eq!(geti(GL_DRAW_BUFFER0 + 3), Err(GL_INVALID_ENUM));
         backend::HOST_DRAW_TARGETS.store(4, Ordering::Relaxed);
     }
 
@@ -404,7 +409,7 @@ mod es3 {
         }
         release(fb, &rbs);
 
-        backend::HOST_DRAW_TARGETS.store(0, Ordering::Relaxed);
+        backend::HOST_DRAW_TARGETS.store(3, Ordering::Relaxed);
         let (fb, rbs) = framebuffer(0);
         let rb = renderbuffer(8, 8);
         // SAFETY: plain GL call.
