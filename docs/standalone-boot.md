@@ -579,15 +579,15 @@ yet. What exists is a build. `tools/check.sh` builds `examples/triangle` for
 image (Mali-G310, built only), -Werror on our C files`), from the board
 `driver/boards/toradex/verdin_imx95`, which is derived from Zephyr's
 `imx95_evk` A55 board at the workspace pin, and the board glue
-`driver/zephyr/lib/board/verdin_imx95`. The image brings the GPU up over
-SCMI behind `eglInitialize`, renders the triangle into a window in the Mali
-carve-out, and shows it on the Toradex Capacitive Touch Display 10.1" DSI
-on the Mallow's X4 (`board_show()`: the window, 1024x600, is copied into a
-1280x800 screen buffer at the panel's top left, and the first show brings
-the display up cold, `driver/docs/imx95-display.md` section 4(b)). It arms
-no watchdog: that is a stub that says so on the console. The route below is
-the documented one, and the open questions at the end are what a first
-session must answer.
+`driver/zephyr/lib/board/verdin_imx95`. The image arms WDOG3 (below),
+brings the GPU up over SCMI behind `eglInitialize`, renders the triangle
+into a window in the Mali carve-out, and shows it on the Toradex Capacitive
+Touch Display 10.1" DSI on the Mallow's X4 (`board_show()`: the window,
+1024x600, is copied into a 1280x800 screen buffer at the panel's top left,
+and the first show brings the display up cold,
+`driver/docs/imx95-display.md` section 4(b)). The route below is the
+documented one, and the open questions at the end are what a first session
+must answer.
 
 ### The boot chain
 
@@ -644,7 +644,21 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
   which asks the System Manager), the way back to U-Boot and Linux. A
   software timer takes that reset after `CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S`
   (the board layer's `YAKOGL_BOARD_LIFETIME_S`, 300 s, in an image with the
-  layer; else 60 s). It is not a watchdog.
+  layer; else 60 s).
+- The watchdog is **WDOG3**, the A55 non-secure agent's
+  (`verdin_imx95_wdog.c` over the yakogl-drivers crate's `ip::wdog32`). The
+  image arms it first thing (`PRE_KERNEL_1` 0, before any other init hook)
+  for 60 s, with Linux's configuration for this module (`CS.INT` on, which
+  the System Manager's fault is), prints `verdin_imx95: WDOG3 armed: ...` and
+  `board: watchdog armed`, and a 1 s timer feeds it up to the lifetime and
+  while the board layer's alive window holds. A refusal resets through PSCI
+  at once; a PSCI reset that returns halts with interrupts off and WDOG3
+  bites. Its timeout is the System Manager's `FAULT_WDOG3` with
+  `reaction=sys_reset`, which on Toradex's System Manager pulls `WDOG_ANY`
+  to reset the PMIC: the whole board, System Manager included, boots again
+  as from power-on into U-Boot and Linux, and no SCMI power vote of the image
+  (the GPU's) survives. Sources and the comparison with WDOG4 and the System
+  Manager: `docs/notes/pre-study-imx95.md`, section 1.6.
 
 ### Open questions for sign-off
 
@@ -658,14 +672,13 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
    (`imx-sm-toradex`, `verdin-imx95`) gives the A55 non-secure agent the
    LPUART1 pins and clock and, for the GPU later, power domain 14 and the
    GPU clocks.
-2. **The watchdog after `go`.** Toradex's U-Boot is built with `CONFIG_WDT`
-   and `CONFIG_ULP_WATCHDOG` (30 s), and the module's Linux enables WDOG3
-   with its external reset output. If U-Boot starts WDOG3 and leaves it
-   running, an image that does not feed it is reset about 30 s after
-   U-Boot's last feed (as the iMX8M Plus's U-Boot starts WDOG1, measured
-   there). Our image neither arms nor feeds a watchdog
-   (`verdin_imx95_wdog_stub`); `tools/board.sh` requires the
-   `board: watchdog armed` line, which this image does not print.
+2. **The watchdog.** The image arms WDOG3 itself (above), so it does not
+   depend on U-Boot's (`CONFIG_WDT`, `CONFIG_ULP_WATCHDOG`, 30 s), which is
+   probably still counting at `go`. To check on the board: the armed line's
+   `CS`/`TOVAL` found (running with `TOVAL` 0xea6 if U-Boot left it so), the
+   poll counts and time of the arming, and a proof run that arms and never
+   feeds: WDOG3's timeout must reach the System Manager's fault (with
+   `CS.INT` set) and reset the board through `WDOG_ANY` back into Linux.
 3. **Caches at `go`.** The pin's EVK route uses `dcache off; icache flush`,
    the other Verdins' `dcache off; icache off`. Either must leave the MMU off
    at entry; which one this U-Boot needs is unmeasured.

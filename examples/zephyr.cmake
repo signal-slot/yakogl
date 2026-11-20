@@ -14,7 +14,8 @@
 #   west build -b verdin_imx8mp/mimx8ml8/a53 examples/triangle
 #   west build -b rpi_4b examples/triangle
 #   west build -b verdin_imx95/mimx9596/a55 examples/triangle   (builds, with
-#     the GPU's bring-up; no display yet: driver/zephyr/lib/board/verdin_imx95)
+#     the GPU's bring-up, the X4 DSI display and WDOG3:
+#     driver/zephyr/lib/board/verdin_imx95)
 
 get_filename_component(YAKOGL_EXAMPLES "${CMAKE_CURRENT_LIST_DIR}" ABSOLUTE)
 get_filename_component(PVR_REPO "${YAKOGL_EXAMPLES}/../driver" ABSOLUTE)
