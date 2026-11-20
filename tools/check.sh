@@ -4358,14 +4358,16 @@ step "clippy  yakogl-drivers" cargo clippy -p yakogl-drivers --all-features --al
 # knob builds, alone, with -D warnings: none, each SoC, the PowerVR rgxlayer
 # alone and as the AM62P builds it, with each opt-in knob and both, the
 # i.MX 8M Plus GC7000 side, the NanoPC-T6's (rk3588, mali: the watchdog
-# glue, the GPU power-on, the Z3 firmware), and the i.MX 95's GPU power-on
-# over SCMI (imx95). The V3D has no feature in this
+# glue, the GPU power-on, the Z3 firmware), the i.MX 95's GPU power-on
+# over SCMI (imx95), and the Verdin iMX95's Mali image (imx95, rk3588,
+# mali: yd_imx95_osal_up over the T6's OSAL). The V3D has no feature in this
 # crate (its driver is C, driver/src/v3d). A new feature or knob joins this
 # list.
 drivers_clippy_arms() {
   local f
   for f in "" imx8mp am62p pvr am62p,pvr am62p,pvr,pvr-fine-wait am62p,pvr,pvr-kick-times \
-    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali imx95; do
+    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali imx95 \
+    imx95,rk3588,mali; do
     echo "== yakogl-drivers features [$f]"
     cargo clippy -p yakogl-drivers --no-default-features --features "$f" --all-targets -- -D warnings ||
       { echo "clippy refused yakogl-drivers features [$f]"; return 1; }
@@ -4415,11 +4417,12 @@ scope drivers pvr vivante
 # builds: all SoC drivers; the AM62P's (the GPU's rgxlayer and the display
 # path); the i.MX 8M Plus GC7000 kernel side (gpu::vivante); the NanoPC-T6's
 # (rk3588, mali, as driver/zephyr/CMakeLists.txt builds it); the i.MX 95's
-# GPU power-on over SCMI (imx95, soc::imx95, ahead of its image); and
+# GPU power-on over SCMI (imx95, soc::imx95) and the Verdin iMX95's Mali
+# image (imx95, rk3588, mali); and
 # none (only the SoC-independent I2C driver, ip::sn65dsi8x).
 drivers_softfloat_check() {
   local t=aarch64-unknown-none-softfloat f
-  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali imx95 ""; do
+  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali imx95 imx95,rk3588,mali ""; do
     if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
       cargo check -p yakogl-drivers --no-default-features --features "$f" --target "$t" || return 1
     else
@@ -4626,13 +4629,18 @@ zephyr_nanopc_t6_image() {
 # tools/probes/nanopc_t6/<name> by default; <name> also names the row's own
 # copy of the header.
 zephyr_nanopc_t6_fw_image() {
+  mali_csffw_header "$1" "$2" || return 1
+  zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$2}" "${4:-nanopc_$2}"
+}
+# mali_csffw_header <fw> <name>: driver/src/fw/mali_csffw_blob.h made from
+# <fw> when it is there, as above (<name> names this row's own copy).
+mali_csffw_header() {
   local f="$1" probe="$2" h=driver/src/fw/mali_csffw_blob.h t="build/zephyr-werror/mali_csffw_blob.$2.h"
   if [ -f "$f" ]; then
     mkdir -p build/zephyr-werror
     bash driver/tools/mkmalifw.sh "$f" "$t" || return 1
     cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h.$probe.new" && mv "$h.$probe.new" "$h"; } || return 1
   fi
-  zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$probe}" "${4:-nanopc_$probe}"
 }
 # A GL image on the NanoPC-T6's Mali, <fw> <sample> <build name> (gl_test:
 # driver/samples/zephyr/gl_test, boards/nanopc_t6.conf; examples/triangle:
@@ -4669,14 +4677,17 @@ zephyr_nanopc_t6_mali_image() {
 # examples/triangle on the Verdin iMX95 (i.MX 95, Mali-G310; the board
 # driver/boards/toradex/verdin_imx95, the glue driver/zephyr/lib/board/
 # verdin_imx95): built only, no board yet (docs/standalone-boot.md, "Toradex
-# Verdin iMX95"). It builds for the Mali with the board layer, and the image
-# is what that section's U-Boot route would load: the RAM footprint (the
-# AArch64 header's image_size) inside zephyr,sram, and the stubs that refuse
-# the watchdog and the GPU's bring-up by name are in it (each "STUB:" line
-# once), so the image cannot pass for one that brings the GPU up. No firmware
-# is embedded, so the row needs none.
+# Verdin iMX95"). It builds for the Mali with the board layer and the CSF
+# firmware embedded (the T6's file, $1, made into the header as
+# zephyr_nanopc_t6_fw_image does), and the image is what that section's
+# U-Boot route would load: the RAM footprint (the AArch64 header's
+# image_size) inside zephyr,sram; the GPU's bring-up in it (the firmware's
+# line and the SCMI power-on's lines, once each; no "STUB:" line about the
+# GPU); and the watchdog's stub line once, so the image cannot pass for one
+# that arms a watchdog.
 zephyr_verdin_imx95_triangle_image() {
   local dir=build/zephyr-werror/verdin_imx95-triangle bin footprint window line n
+  mali_csffw_header "$1" verdin_imx95-triangle || return 1
   zephyr_werror_image verdin_imx95/mimx9596/a55 examples/triangle verdin_imx95-triangle || return 1
   bin="$dir/zephyr/zephyr.bin"
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
@@ -4686,11 +4697,13 @@ zephyr_verdin_imx95_triangle_image() {
     echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
     return 1
   }
-  for line in 'verdin_imx95: STUB: no watchdog armed' 'verdin_imx95: STUB: no Mali-G310 CSF firmware' \
-    'verdin_imx95: STUB: the Mali at '; do
+  for line in 'verdin_imx95: STUB: no watchdog armed' 'verdin_imx95: CSF firmware %u bytes embedded' \
+    'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: '; do
     n=$(strings -n 20 "$bin" | grep -cF "$line") || true
     [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
   done
+  n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: STUB: .*Mali') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries a Mali STUB line"; return 1; }
 }
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
@@ -4831,10 +4844,12 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  nanopc_t6 examples/triangle image (Mali, the board layer), -Werror on our C files, fits the kexec window" \
       zephyr_nanopc_t6_mali_image "$mali_csffw" examples/triangle nanopc_t6-triangle
-    # examples/triangle on the Verdin iMX95's A55 (Mali-G310): built only.
+    # examples/triangle on the Verdin iMX95's A55 (Mali-G310): built only,
+    # with the same firmware embedded: the same gap without it.
     scope mali drivers samples
+    needs_mali_csffw
     step "zephyr  verdin_imx95 examples/triangle image (Mali-G310, built only), -Werror on our C files" \
-      zephyr_verdin_imx95_triangle_image
+      zephyr_verdin_imx95_triangle_image "$mali_csffw"
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
