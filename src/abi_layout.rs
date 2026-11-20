@@ -247,6 +247,7 @@ const _: () = assert!(size_of::<crate::backend::GlesTextureBind>() == 72);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, unit) == 0);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, format) == 1);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, type_) == 2);
+const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, base_level) == 3);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, layers) == 4);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, base_gpu) == 8);
 const _: () = assert!(offset_of!(crate::backend::GlesTextureBind, width) == 16);

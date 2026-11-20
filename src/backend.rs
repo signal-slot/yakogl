@@ -1009,6 +1009,8 @@ pub struct GlesTextureBind {
     pub format: u8,
     /// [`GlesTexType`].
     pub type_: u8,
+    /// GL_TEXTURE_BASE_LEVEL (offset 3, what was padding).
+    pub base_level: u8,
     /// Images in the stack: 6 for a cube, 1 for plain 2D.
     pub layers: u16,
     pub base_gpu: u64,
@@ -1148,6 +1150,7 @@ impl GlesTextureBind {
         unit: 0,
         format: 0,
         type_: GLES_TEXTYPE_2D,
+        base_level: 0,
         layers: 0,
         base_gpu: 0,
         width: 0,
