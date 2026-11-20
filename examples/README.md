@@ -32,8 +32,8 @@ The other examples build the same way, with their own directory in place of
 (`driver/src/fw/mali_csffw_blob.h`, the NanoPC-T6's) in place, and nothing
 more: the GPU's bring-up behind `eglInitialize` (the power-on over SCMI,
 then the firmware) and the Toradex 10.1" DSI display on the Mallow's X4
-behind `board_show()` are in the image; the board has no watchdog yet, and
-nothing has run on one (`driver/zephyr/lib/board/verdin_imx95`,
+behind `board_show()` are in the image, with WDOG3 armed at boot; nothing
+has run on one (`driver/zephyr/lib/board/verdin_imx95`,
 `docs/standalone-boot.md`).
 
 `slint` also needs the no_std Slint tree and the patched femtovg and glow,
