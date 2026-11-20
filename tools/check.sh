@@ -1726,6 +1726,12 @@ KNOBS_TESTS=(
   vivante::backend::backend_tests::tiled_rt_tests::a_draw_elsewhere_finds_the_shadow_written_back_and_a_return_needs_no_tile_in
   vivante::backend::backend_tests::tiled_rt_tests::released_storage_is_never_written_back_by_the_stream
   vivante::backend::backend_tests::tiled_rt_tests::the_copy_back_survives_a_stream_filled_with_shadow_draws
+  vivante::ts::tests::hook_tests::every_arm_reads_yes_on_mesas_ts_semantics
+  vivante::ts::tests::hook_tests::a_ts_the_rs_ignores_reads_ignored_and_runs_no_k3
+  vivante::ts::tests::hook_tests::a_hang_stops_the_arm
+  vivante::ts::tests::hook_tests::the_hook_refuses_what_it_cannot_run
+  vivante::depth_dump::tests::hook_tests::the_hook_dumps_the_two_reachable_modes
+  vivante::depth_dump::tests::hook_tests::the_hook_refuses_what_it_cannot_read
   gl::egl::tests::the_gc7000_offers_the_multisampled_config_while_msaa_is_on
   gl::texture::tests::the_gc7000_narrow_la_knob_selects_the_rgba8_store
   gl::framebuffer::tests::kick_diff_arm_target_sees_a_late_write_through_the_cpu_cache
@@ -3629,9 +3635,9 @@ step "tools   board-sudo-setup.sh --dry-run runs from a clean environment" \
 # The test knobs the "no test knob" row requires of each GPU's test-knobs
 # archive (check_knobs_absent, below); here because that row's key holds
 # them.
-KNOB_VIVANTE_SYMBOLS="gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
+KNOB_VIVANTE_SYMBOLS="gc_debug_depth_dump gc_debug_depth_tpu gc_debug_flip_experiment gc_debug_msaa gc_debug_msaa_scratch gc_debug_msaa_scratch_map
 gc_debug_msaa_scratch_zero gc_debug_narrow_la gc_debug_set_depth_tpu gc_debug_set_flip_experiment gc_debug_set_msaa
-gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
+gc_debug_set_narrow_la gc_debug_set_tiled_rt gc_debug_tiled_rt gc_debug_ts_probe gc_kick_diff_after_fence gc_kick_diff_arm_target gc_kick_diff_enable gc_kick_diff_stats"
 KNOB_POWERVR_SYMBOLS="pvr_debug_narrow_la pvr_debug_set_narrow_la pvr_debug_set_split_zs pvr_debug_split_zs"
 RELEASE_KEY_PATHS=(Cargo.toml Cargo.lock ':(glob)**/Cargo.toml' build.rs src capi include tests/reference
   driver/rust/src/errno_numbers.rs driver/compat driver/src/pvr/generated third_party/mesa-26.2.1

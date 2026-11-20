@@ -8,6 +8,12 @@ changed and no board was run.** It gives the two gl_test cases word by word,
 what each outcome reads as, what each outcome means for W7 to W9 and W12 of
 `gc-tiled-wire.md`, the risk, and the items that build and run it.
 
+**Built since** (item probe-cases-build; section "As built" below): the cases
+are **246 `tsprobe`** and **247 `dlayout`** (243 to 245 had gone to divmix,
+w128tex and mrt4), behind the sample option `CONFIG_GL_TEST_GC_TS_PROBE`
+(default n). The page tags are this note's. Case 247 runs modes 1 and 3 only.
+The design below still says 243 and 244.
+
 Why it is needed. W1 to W5 of `gc-tiled-wire.md` program no tile status (TS),
 so session A cannot say whether the TS works on this board. W7 to W9 (TS
 buffers, the colour and depth fast clears, the TS-sourced resolve) are gated on
@@ -425,6 +431,187 @@ The codes below are the low nibble of page A's w1.
 - **For `gc-depth-sample.md`**: it is the second half of the missing check:
   route 1 ("render depth SUPER_TILED to match Mesa") needs mode 1 to read as
   a known map, and then the TPU read of that map is a case 222 variant.
+
+## As built (item probe-cases-build)
+
+Not run on a board. Where the build differs from the design above, the build
+is what the session runs.
+
+### The hooks (`test-knobs`, in the library of every image with the knobs)
+
+- `gc_debug_ts_probe(arm, out, out_bytes, progress) -> i32`
+  (`src/vivante/ts.rs`, module `hook`). `out` is `struct tsp_readback` of
+  `gl_test_probe_decode.inc` (`ts::TspReadback`, the same 19 words) and
+  `out_bytes` its size. `progress(step)` is called before each step:
+  1 set-up, 2 K0, 3 K1, 4 K2, 5 K3, 6 readback. The hook:
+  - waits for the back end's kicks (`finish`);
+  - allocates `S`, `T`, `D` from the data heap, each with at least one
+    0x1000 guard on either side at a 0x1000-aligned address below 4 GiB,
+    plus a CPU-only scratch and a 1 KiB command buffer in the command heap;
+  - submits K0, K1, K2 and, after a `YES` only, K3, each as its own kick.
+    A kick is one `LOAD_STATE` of one register a write, through the OSAL's
+    `submit`, waited on with `wait(fence, 2 s)`. No kick runs after a
+    timeout;
+  - classifies with `ts::classify`, and returns the outcome code (`F` on a
+    hang) or a `PROBE_ERR_*` (-1 arguments, -2 arm, -3 no submit or wait,
+    -4 allocation, -5 address above 4 GiB, -6 no CPU view, -7 finish,
+    -8 submit refused) for a step that could not run.
+
+  Arm 3's `detile(B)` is whichever super-tile order K0 matched (`Drm`
+  first). The K3 page's `nibble_order` has one bit the design did not
+  have: bit 7 (`K3_NO_MATCH`) means the map is no candidate.
+- `gc_debug_depth_dump(mode, timeouts, surf, pages) -> i32`
+  (`src/vivante/depth_dump.rs`, module `hook`). After the case's draw it:
+  - waits for the back end's kicks;
+  - checks that the back end's depth surface is 64x64, has a CPU view, has
+    the mode's layout and, when linear, has 256-byte rows;
+  - copies its 4096 dwords into `surf` (when not null) and decodes them over
+    `0xffffff00` (`layout::dlayout_decode`);
+  - writes the C twin's pages A, B, C into `pages[0..9]`
+    (`Dump::as_c_words`, the words `pd_pack_a/b/c` give);
+  - returns the code, or a `DUMP_ERR_*` (-1 arguments, -2 mode, -3 a mode no
+    draw reaches, -4 surface, -5 layout, -7 finish).
+
+  **No override knob was built.** The two fields come from the back end's
+  own draw. Mode 3 (SINGLE_BUFFER 1, no SUPER_TILED) is every draw with
+  `gc_tiled_rt` off. Mode 1 (SINGLE_BUFFER 2 with SUPER_TILED) is a draw
+  into a tiled shadow with `gc_tiled_rt` on (`ds_cache::select_in`). Modes
+  0 and 2 need the override in `backend.rs`'s depth-only draw, which this
+  item could not touch, so the hook refuses them (-3) and the case SKIPs
+  them by name. A mode-1 draw that takes no shadow is refused with -5.
+
+The unit tests are in the two files (`--lib vivante::ts`,
+`--lib vivante::depth_dump`, feature set
+`host-test,gpu-vivante,shaderc-online,test-knobs`: the gate's existing
+knobs `--lib` rows). `ts.rs`'s tests run the hook over a host OSAL whose
+GPU is `rs_interp` with Mesa's TS semantics:
+- every arm gives `YES` with K3's predicted map;
+- the four kicks are exactly `probe_k0..k3`;
+- a TS the RS ignores gives `IGNORED` with no K3;
+- a fence that never signals gives `HANG` and no later kick;
+- the C twin's `tsp_classify`, transcribed, agrees with the hook.
+
+`depth_dump.rs`'s tests run the hook over a depth surface set by hand, in
+both reachable modes and every refusal.
+
+### The cases (`driver/tools/pvrlab/gl_test_tsprobe.inc`)
+
+- **246 `tsprobe`**:
+  - runs arm `gl_test_tsprobe_arm` through the hook;
+  - classifies and packs the record with `gl_test_probe_decode.inc`
+    (`tsp_classify`, `tsp_pack_p/k3/x`);
+  - keeps pages `0xd0 + arm`, `0xd4 + arm` (after `YES`) and `0xd8 + arm`;
+  - prints `gl_test: tsprobe: arm A: <CODE> (code N), ...` and one
+    `gl_test: tsprobe: page 0xTT w1 w2 w3` line a page.
+
+  Check 1: the hook ran (got = minus its refusal). Check 2: the C twin's
+  code is the hook's. PASS means the arm ran to its end, whatever the code.
+- **247 `dlayout`**:
+  - draws the ramp into a framebuffer with a 64x64 RGBA8 texture and a D24S8
+    renderbuffer (cleared to depth 1.0, stencil 0), with `GL_ALWAYS`. Before
+    the draw it sets `gc_debug_set_tiled_rt(mode == 1)`, and puts the knob
+    back after;
+  - reads the surface through the hook, decodes it again with `pd_decode`,
+    and keeps pages `0xc0/0xc4/0xc8 + mode`;
+  - prints `gl_test: dlayout: mode M: <CODE> (code N), ...` and the page
+    lines.
+
+  Checks:
+  - 1: the program linked;
+  - 2: the framebuffer is complete;
+  - 3: the hook read the surface;
+  - 4: no GL error;
+  - 5 to 7: the C twin's pages A, B and C are the hook's, word for word;
+  - 8: the codes agree.
+- PROGRESS records: `0x200 | arm << 4 | step` and `0x300 | mode << 4 | step`
+  (the image's main hands `gc_result_progress` and the render service's fence
+  timeouts to the case through `gl_test_probe_progress` and
+  `gl_test_probe_timeouts`).
+
+### The image (`driver/samples/zephyr/gl_test`)
+
+`CONFIG_GL_TEST_GC_TS_PROBE` (Kconfig, the i.MX8M Plus menu; default n,
+depends on `YAKOGL_TEST_KNOBS`) builds the cases' bodies and the selector
+handling in `main_imx8mp.c`:
+- the selector `GC_RESULT_PERF_SEL | tag`, with tag `0xd0..0xdb` (case 246,
+  arm `tag & 3`) or `0xc0..0xcb` (case 247, mode `tag & 3`), runs that case
+  alone;
+- the run ends with that page as a PERF record, w0's low byte the tag. A
+  page the case did not reach logs `no page 0xTT` and leaves the CASE
+  record (in a sweep image, the sweep's record).
+
+The default image is unchanged: the option is n, and without it both cases
+SKIP by name and `main_imx8mp.c` compiles as before.
+
+Host build check (item probe-cases-build, no board): `IMX8MP_BOARD=x2
+tools/cts/imx8mp-gltest-build.sh tsp-off 246` and the same with
+`-DCONFIG_GL_TEST_GC_TS_PROBE=y` (name `tsp-on`) both gave `rc=0` and an
+`armadillo_x2/mimx8ml8/a53` `zephyr.bin` carrying `gc_wdog_arm: armed`. The
+off image's `.config` reads `# CONFIG_GL_TEST_GC_TS_PROBE is not set` and
+links neither hook. The on image links `gc_debug_ts_probe` and
+`gc_debug_depth_dump`.
+
+The two hooks are test knobs of the GC7000 namespace, so `tools/check.sh`
+lists them: `gc_debug_depth_dump` and `gc_debug_ts_probe` are in
+`KNOB_VIVANTE_SYMBOLS` (the row "no test knob in the artefact" wants the
+test-knobs archive's `gc_debug_*` symbols to be exactly that set, and the
+product archive to have none), and the six knob-gated hook tests are in
+`KNOBS_TESTS` (each must run and pass in the knobs `--lib` row).
+
+### Session commands (item x2-ts-probe-session)
+
+One image, from an `origin/main` commit that has this item. The sweep
+configuration with 246 as its first case, the deadline at 60 s, WDOG1
+self-armed by the build script's default:
+
+```sh
+IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh tsprobe-<sha8> 246 \
+    -DCONFIG_GL_TEST_GC_TS_PROBE=y -DCONFIG_GC_GL_TEST_DEADLINE_SECONDS=60
+img=$IMX8MP_OUT/x2/tsprobe-<sha8>/zephyr
+strings "$img/zephyr.elf" | grep -c 'gc_wdog_arm: armed'      # must be 1 or more
+grep -E 'CONFIG_GL_TEST_GC_TS_PROBE=y|CONFIG_GC_GL_TEST_DEADLINE_SECONDS=60' \
+    "$img/.config"                                            # both lines
+SEL=0x10d0 tools/board.sh --dry-run x2 run "$img/zephyr.bin" records/x2/dry
+```
+
+Then one boot a page, in the order of item 4 above, each into its own
+record directory. A `HANG` or `GUARD` page stops the session (no retry), and
+so does a board that does not come back. Never `NETBOOT_NO_WATCHDOG=1`:
+
+```sh
+r=records/x2/<YYYYMMDD-HHMM>-tsprobe-<sha8>
+SEL=0x10d0 tools/board.sh x2 run "$img/zephyr.bin" $r/d0 tsprobe-d0   # arm 0
+SEL=0x10d4 tools/board.sh x2 run "$img/zephyr.bin" $r/d4 tsprobe-d4   # arm 0's K3, only after YES
+SEL=0x10d8 tools/board.sh x2 run "$img/zephyr.bin" $r/d8 tsprobe-d8   # arm 0's first difference
+# then 0x10d2, 0x10d1, 0x10d3 (and their 0x10d6.., 0x10da..) as "What each outcome means" allows
+SEL=0x10c3 tools/board.sh x2 run "$img/zephyr.bin" $r/c3 dlayout-c3   # mode 3, the control: A
+SEL=0x10c7 tools/board.sh x2 run "$img/zephyr.bin" $r/c7 dlayout-c7   #   B
+SEL=0x10cb tools/board.sh x2 run "$img/zephyr.bin" $r/cb dlayout-cb   #   C
+SEL=0x10c1 tools/board.sh x2 run "$img/zephyr.bin" $r/c1 dlayout-c1   # mode 1 (gc_tiled_rt on): A
+SEL=0x10c5 tools/board.sh x2 run "$img/zephyr.bin" $r/c5 dlayout-c5   #   B
+SEL=0x10c9 tools/board.sh x2 run "$img/zephyr.bin" $r/c9 dlayout-c9   #   C
+```
+
+Every boot reruns its arm or mode and ends with the one page its selector
+names: arm 0's three pages are three boots. That is 3 boots for arm 0, up to
+9 for arms 1 to 3, and 6 for modes 1 and 3, so up to 18 in all (the design
+said 16 with 4 modes and fewer pages). Always pass `SEL`: in this sweep
+image a boot without one runs the whole range from 246 (247 mode 0 SKIPs,
+248 and up are no case). Arm 0 alone is already the gate's answer for W7 to
+W9.
+
+**The X2 record has no w3.** The X2 keeps its record in LPGPR1..3 (U-Boot
+owns LPGPR0, `CONFIG_GC_COMMON_RESULT_SNVS_KEEP_LPGPR0`), so a PERF page
+reaches the record as w0 (tag), w1, w2 only. `tools/board.sh` decodes it
+with `yakogl-tools record --words 3`. The page's third word is lost there:
+- 246's counts `count(D == C) << 16 | count(D == detile(B))` and its K3
+  counts;
+- 247's (4,0)/(8,0), the first non-clear dword, and (0,32)/(63,63).
+
+The case prints every page in full on the console
+(`gl_test: tsprobe: page 0xTT w1 w2 w3`, `gl_test: dlayout: page ...`).
+The session therefore reads w3 from the X2 console log (`target:x2-console`,
+read only) and checks w1 and w2 against the record.
 
 ## The risk
 
