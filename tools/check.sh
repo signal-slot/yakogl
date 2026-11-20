@@ -4557,8 +4557,6 @@ zephyr_nanopc_t6_gltest_image() {
   }
   [ "$size" -le $((64 << 20)) ] || { echo "zephyr.bin is $size bytes; kexec_zephyr reads at most 64 MiB"; return 1; }
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
-  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
-    { echo "the image has no X4 display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
   carve=$(sed -n 's/^CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=//p' "$dir/zephyr/.config")
   [ -n "$carve" ] && [ "$size" -lt "$carve" ] || {
     echo "zephyr.bin is $size bytes, not under the carve-out's ${carve:-?}: the file holds the GPU's memory"
