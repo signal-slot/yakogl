@@ -1,0 +1,55 @@
+--- fs: 8 instructions
+   0 0x114049e080827036 nop nop, r0, r0 ; mov r0.8a, uni
+   1 0x115049e080827036 nop nop, r0, r0 ; mov r0.8b, uni
+   2 0x116049e080827036 nop nop, r0, r0 ; mov r0.8c, uni
+   3 0x117049e080827036 nop nop, r0, r0 ; mov r0.8d, uni
+   4 0x10020ba7159e7000 mov tlb_color_all, r0 ; nop nop, r0, r0
+   5 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+   6 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+   7 0x500009e7009e7000 sig_unlock_score nop nop, r0, r0 ; nop nop, r0, r0
+--- vs: 21 instructions
+   0 0xe0024c6700401a00 load_imm vr_setup, nop, 0x00401a00 (0.000000)
+   1 0x100049e220c20037 nop nop, r0, r0 ; fmul r2, vpm_read, uni
+   2 0x100049c020c20037 nop nop, r0, r0 ; fmul rb0, vpm_read, uni
+   3 0x100059c120c20037 nop nop, r0, r0 ; fmul ra1, vpm_read, uni
+   4 0x100208e715c27d80 mov r3, vpm_read ; nop nop, r0, r0
+   5 0x10021d27159e76c0 mov sfu_recip, r3 ; nop nop, r0, r0
+   6 0xe0025c6700001a00 load_imm vw_setup, nop, 0x00001a00 (0.000000)
+   7 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+   8 0x100049e0209e701c nop nop, r0, r0 ; fmul r0, r3, r4
+   9 0xd0020867029e1e00 sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0
+  10 0x100049e3209e7021 nop nop, r0, r0 ; fmul r3, r4, r1
+  11 0x100049e0209e7013 nop nop, r0, r0 ; fmul r0, r2, r3
+  12 0x10124021279c003b ftoi ra0.16a, r0, r0 ; fmul r1, rb0, r3
+  13 0x1022402227067273 ftoi ra0.16b, r1, r1 ; fmul r2, ra1, r3
+  14 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+  15 0x10020c2715027d80 mov vpm, ra0 ; nop nop, r0, r0
+  16 0x10020c2701827580 fadd vpm, r2, uni ; nop nop, r0, r0
+  17 0x10020c27159e76c0 mov vpm, r3 ; nop nop, r0, r0
+  18 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+  19 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+  20 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+--- cs: 23 instructions
+   0 0xe0024c6700401a00 load_imm vr_setup, nop, 0x00401a00 (0.000000)
+   1 0x100208e715c27d80 mov r3, vpm_read ; nop nop, r0, r0
+   2 0x100208a715c27d80 mov r2, vpm_read ; nop nop, r0, r0
+   3 0x1002006715c27d80 mov ra1, vpm_read ; nop nop, r0, r0
+   4 0xe0025c6700001a00 load_imm vw_setup, nop, 0x00001a00 (0.000000)
+   5 0x10024c2095c276f6 mov vpm, r3 ; mov r0, vpm_read
+   6 0x10024c34959e7480 mov vpm, r2 ; mov sfu_recip, r0
+   7 0x10024c2235060d97 mov vpm, ra1 ; fmul r2, r2, uni
+   8 0x10020c27159e7000 mov vpm, r0 ; nop nop, r0, r0
+   9 0x100049e0209e7004 nop nop, r0, r0 ; fmul r0, r0, r4
+  10 0xd0020867029e1e00 sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0
+  11 0x100049c0209e7021 nop nop, r0, r0 ; fmul rb0, r4, r1
+  12 0x100049e02082701e nop nop, r0, r0 ; fmul r0, r3, uni
+  13 0x100049e1209c0007 nop nop, r0, r0 ; fmul r1, r0, rb0
+  14 0x10124023279c0257 ftoi ra0.16a, r1, r1 ; fmul r3, r2, rb0
+  15 0x10224022270606f7 ftoi ra0.16b, r3, r3 ; fmul r2, ra1, uni
+  16 0x100049e3209c0017 nop nop, r0, r0 ; fmul r3, r2, rb0
+  17 0x10020c2715027d80 mov vpm, ra0 ; nop nop, r0, r0
+  18 0x10020c2701827780 fadd vpm, r3, uni ; nop nop, r0, r0
+  19 0x10020c27159c0fc0 mov vpm, rb0 ; nop nop, r0, r0
+  20 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+  21 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+  22 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0

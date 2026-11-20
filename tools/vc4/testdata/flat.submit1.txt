@@ -1,0 +1,50 @@
+# struct drm_vc4_submit_cl (include/drm-uapi/vc4_drm.h), 176 bytes; the four pointers are 0 in .struct.bin
+bin_cl_size 92
+shader_rec_size 60
+shader_rec_count 1
+uniforms_size 48
+bo_handle_count 5
+width 64
+height 64
+min_x_tile 0
+min_y_tile 0
+max_x_tile 0
+max_y_tile 0
+color_read.hindex 0xffffffff
+color_read.offset 0x00000000
+color_read.bits 0x0000
+color_read.flags 0x0000
+color_write.hindex 0x00000004
+color_write.offset 0x00000000
+color_write.bits 0x0044
+color_write.flags 0x0000
+zs_read.hindex 0xffffffff
+zs_read.offset 0x00000000
+zs_read.bits 0x0000
+zs_read.flags 0x0000
+zs_write.hindex 0xffffffff
+zs_write.offset 0x00000000
+zs_write.bits 0x0000
+zs_write.flags 0x0000
+msaa_color_write.hindex 0xffffffff
+msaa_color_write.offset 0x00000000
+msaa_color_write.bits 0x0000
+msaa_color_write.flags 0x0000
+msaa_zs_write.hindex 0xffffffff
+msaa_zs_write.offset 0x00000000
+msaa_zs_write.bits 0x0000
+msaa_zs_write.flags 0x0000
+clear_color 0xffff0000 0xffff0000
+clear_z 0x00000000
+clear_s 0x00
+flags 0x00000001
+seqno 0
+perfmonid 0
+in_sync 0
+out_sync 1
+# BO table: index handle kind size file (a plain BO's file stops at its last non-zero byte)
+bo 0 3 shader 64 bo3
+bo 1 4 shader 168 bo4
+bo 2 5 shader 184 bo5
+bo 3 2 plain 1048576 bo2
+bo 4 1 plain 16384 (not mapped)

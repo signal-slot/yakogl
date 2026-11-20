@@ -15,7 +15,7 @@
 #       v3d_shc, and install into <work dir>/inst. v3d_shc is
 #       <work dir>/mesa-X.Y.Z/build/src/broadcom/v3d_shc.
 #   tools/v3d/drm_shim_ref.sh run <work dir> <case> <out prefix> [GPU id]
-#       <case> is clear or triangle (tools/v3d/gl_ref.py), or a gl_test shape
+#       <case> is clear, triangle or flat (tools/v3d/gl_ref.py), or a gl_test shape
 #       of tools/v3d/pi5/src/gl_shapes.py. Draws once on the shim, which
 #       reports the GPU <GPU id> (42, 71 or 7.1.10; 71 by default), with
 #       V3D_DEBUG=clif, and writes <out prefix>.clif (the control lists Mesa
@@ -89,10 +89,10 @@ run)
   for d in "$WORK"/inst/lib/*-linux-gnu "$WORK/inst/lib"; do
     [ -f "$INST/libv3d_noop_drm_shim.so" ] || INST=$d
   done
-  # clear and triangle are gl_ref.py's; every other case is a gl_test shape of
+  # clear, triangle and flat are gl_ref.py's; every other case is a gl_test shape of
   # tools/v3d/pi5/src/gl_shapes.py (its docstring lists them).
   case $CASE in
-  clear|triangle) PROG=$HERE/gl_ref.py ;;
+  clear|triangle|flat) PROG=$HERE/gl_ref.py ;;
   *) PROG=$HERE/pi5/src/gl_shapes.py ;;
   esac
   [ -f "$INST/libv3d_noop_drm_shim.so" ] ||

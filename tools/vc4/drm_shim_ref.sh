@@ -23,6 +23,11 @@
 #       and of the buffers it names, tools/vc4/README.md), .log (Mesa's text
 #       dump: the binner list as vc4_cl_dump.c prints it and the QPU
 #       disassembly) and .stdout (gl_ref.py's two lines).
+#   tools/vc4/drm_shim_ref.sh shc <work dir> <vs> <fs> <out prefix> [vc4_shc options]
+#       compile a GLSL 450 vertex and fragment shader to OpenGL SPIR-V
+#       (glslangValidator -G) and run the build's vc4_shc on them: writes
+#       <out prefix>.shc.json (QPU words and uniform streams) and
+#       <out prefix>.shc.disasm (Mesa's disassembly).
 #
 # The shim stubs the submit: drm-shim/vc4_noop.c has no DRM_VC4_SUBMIT_CL entry,
 # so the shim answers it -EINVAL and Mesa logs "Draw call returned Invalid
@@ -36,7 +41,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-usage() { sed -n '11,25p' "$0" >&2; exit 2; }
+usage() { sed -n '11,30p' "$0" >&2; exit 2; }
 
 case "${1-}" in
 build)
@@ -86,6 +91,23 @@ run)
   ls "$OUT".submit1.txt >/dev/null 2>&1 || { echo "drm_shim_ref: no submit was recorded" >&2; exit 1; }
   grep '^gl_ref:' "$OUT.stdout"
   echo "drm_shim_ref: $(ls "$OUT".submit[0-9]*.txt | wc -l) submit(s), $OUT.submit*.txt"
+  ;;
+shc)
+  [ $# -ge 5 ] || usage
+  WORK="$(cd "$2" && pwd)"
+  VS=$3 FS=$4 OUT=$5
+  shift 5
+  SHC=$(ls "$WORK"/mesa-*/build/src/gallium/drivers/vc4/vc4_shc 2>/dev/null | head -1)
+  [ -x "$SHC" ] || { echo "drm_shim_ref: $WORK has no vc4_shc (run the build form)" >&2; exit 1; }
+  T="$WORK/shc-spv"
+  mkdir -p "$T"
+  glslangValidator -G "$VS" -o "$T/vs.spv" > "$T/glslang.log" ||
+    { cat "$T/glslang.log" >&2; exit 1; }
+  glslangValidator -G "$FS" -o "$T/fs.spv" > "$T/glslang.log" ||
+    { cat "$T/glslang.log" >&2; exit 1; }
+  "$SHC" "$T/vs.spv" "$T/fs.spv" "$@" > "$OUT.shc.json" 2> "$OUT.shc.disasm" ||
+    { tail -5 "$OUT.shc.disasm" >&2; echo "drm_shim_ref: vc4_shc failed" >&2; exit 1; }
+  echo "drm_shim_ref: $OUT.shc.json, $OUT.shc.disasm"
   ;;
 *) usage ;;
 esac

@@ -21,8 +21,10 @@
  *                                for each handle in the table: a shader BO's
  *                                QPU code as DRM_IOCTL_VC4_CREATE_SHADER_BO
  *                                passed it (the shim keeps no copy), another
- *                                BO's bytes through Mesa's own mapping of it;
- *                                a BO Mesa never mapped has no file
+ *                                BO's bytes through Mesa's own mapping of it,
+ *                                up to its last non-zero byte (the rest is
+ *                                zero; the .txt gives the BO's size); a BO
+ *                                Mesa never mapped has no file
  *   <prefix>.submitN.txt         every field of the struct, by name, and the
  *                                BO table (index, handle, kind, size, file)
  *
@@ -140,7 +142,8 @@ static void record_submit(const struct drm_vc4_submit_cl *in)
 		   "seqno %llu\nperfmonid %u\nin_sync %u\nout_sync %u\n",
 		in->clear_color[0], in->clear_color[1], in->clear_z, in->clear_s, in->flags,
 		(unsigned long long)in->seqno, in->perfmonid, in->in_sync, in->out_sync);
-	fprintf(t, "# BO table: index handle kind size file\n");
+	fprintf(t, "# BO table: index handle kind size file (a plain BO's file stops at its "
+		   "last non-zero byte)\n");
 	for (uint32_t i = 0; i < in->bo_handle_count; i++) {
 		uint32_t h = handles[i];
 		const struct rec_bo *bo = h < MAX_HANDLES ? &bos[h] : NULL;
@@ -156,8 +159,14 @@ static void record_submit(const struct drm_vc4_submit_cl *in)
 		bool seen = false;
 		for (uint32_t j = 0; j < i; j++)
 			seen |= handles[j] == h;
+		/* a plain BO is written up to its last non-zero byte (the shim's
+		 * memory starts zeroed; Mesa's upload buffer is 1 MiB) */
+		size_t len = data ? bo->size : 0;
+		if (data && bo->kind == BO_PLAIN)
+			while (len && ((const uint8_t *)data)[len - 1] == 0)
+				len--;
 		if (data && !seen)
-			write_file(prefix, n, what, data, bo->size);
+			write_file(prefix, n, what, data, len);
 		fprintf(t, "bo %u %u %s %u %s\n", i, h, kind, bo ? bo->size : 0,
 			data ? what : "(not mapped)");
 	}

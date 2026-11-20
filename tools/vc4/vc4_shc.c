@@ -34,8 +34,8 @@
  * builds; key attr_formats R32..._FLOAT); default 4 for each. The VS code
  * depends on it (vc4_nir_lower_io.c fills the missing components).
  * --color-format is the render target's format in the FS key (default rgba8,
- * PIPE_FORMAT_R8G8B8A8_UNORM, what st/mesa picks on vc4 for a GL_RGBA
- * texture; tools/vc4/README.md). --no-threaded-fs compiles the FS as on a
+ * PIPE_FORMAT_R8G8B8A8_UNORM; with it the words of gl_ref.py's programs equal
+ * the GL driver's, tools/vc4/testdata/README.md). --no-threaded-fs compiles the FS as on a
  * kernel without DRM_VC4_PARAM_SUPPORTS_THREADED_FS (the drm-shim and the
  * Linux driver answer 1, so the default is threaded where it fits).
  *
