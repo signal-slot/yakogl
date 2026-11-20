@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The same sram0 as every Pi 5 image (rpi5_clear, rpi5_display, rpi5_mbox).
+ * The HVS (0x10_7c580000), the pixel valves (0x10_7c410000, 0x10_7c411000)
+ * and HDMI0 (0x10_7c701400, 0x10_7c720000) are not enabled devicetree nodes
+ * of this board: as in rpi5_display, src/main.c maps them with device_map().
+ * The watchdog is the board layer's (CONFIG_YAKOGL_RPI5_WDOG).
+ */
+&sram0 {
+	reg = <0x0 0x200000 0x2000000>;
+};
