@@ -155,10 +155,21 @@ side, under ssh before the Zephyr run, supplies the references
 
 ## 4. Open questions only the board can answer
 
-1. **Why does the mailbox not answer?** Every request, including
-   `GET_THROTTLED`, returned `-EIO` with response code 0 (`dd:531-538`). A
-   wrong base, a missing doorbell step, a clock or a firmware that does not
-   serve a `kernel=` image are all consistent. `rpi5_mbox` answers it.
+1. **Why does the mailbox not answer?** Answered 2026-11-20 by `rpi5_mbox`
+   (one tryboot run, image from `0e7742f0`): the missing cache maintenance of
+   `rpi5_display`'s image. Every request, including `GET_THROTTLED`, returned
+   `-EIO` with response code 0 (`dd:531-538`) because that image had no
+   `CONFIG_CACHE_MANAGEMENT`, so `rpi_mbox.c`'s clean before the doorbell and
+   invalidate after the reply did nothing with the data cache on. In the probe
+   the same registers and buffer without the cache calls again got 0 of 7
+   answered (status 0, and the buffer read after an invalidate was still
+   zeros: the firmware never saw the request), while the clean-and-invalidate
+   way and the board layer's `rpi_mbox_request_timed()` answered 7 of 7 with
+   status 0x80000000 (firmware revision 0x684bf1ce, core and V3D clocks
+   500000000 Hz, disp, HDMI HSM and bvb clocks 0 Hz). The base, channel and a
+   `kernel=` image are not the cause. Any image that sends a mailbox request
+   builds with `CONFIG_CACHE_MANAGEMENT=y`; record in
+   `tools/probes/rpi_5/rpi5_mbox/README.md`.
 2. **Does the firmware redraw into its plane after hand-over, and does it
    keep the list?** Seen unchanged for 100 ms only (`dd:524-530`); the
    open question of `dd:469-471` is a longer run.
