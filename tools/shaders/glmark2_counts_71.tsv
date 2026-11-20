@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Mesa's V3D 7.1 output (v3d_shc --device 71, rev 7, compat_rev 0) for every
+# vertex/fragment pair of the glmark2-es2 corpus: names and numbers only.
+# command: V3D_SHC=<v3d_shc> GLMARK2_SRC=<glmark2> tools/hostharness/glmark2/ref71.sh \
+#   build/glmark2-host/shaders tools/shaders/glmark2_counts_71.tsv
+# GLMARK2_SRC: glmark2 commit 22c527cb0556f3a1ac4445aaa52cc532760928d5
+# Mesa tree: mesa-26.2.1 (v3d_shc, build/src/broadcom/v3d_shc)
+# programs: 93, compiled: 59, refused: 34 (69 shaders in the index)
+# columns: key (vs file+fs file), vs instructions, fs instructions, vs threads, fs threads, reason
+buffer-723443fdbaf22e8b.vert.glsl+buffer-9fe66cb469a36a66.frag.glsl	111	19	4	4	ok
+build-ace204f6171a58b1.vert.glsl+build-474800a67afed087.frag.glsl	52	6	4	4	ok
+build-ace204f6171a58b1.vert.glsl+texture-425bd493829699b6.frag.glsl	56	14	4	4	ok
+bump-270aae3cfcae71a2.vert.glsl+bump-77c536a2dad6a903.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 TextureCoord'
+bump-51d0a6207c34d50c.vert.glsl+bump-487d34975c3c8a1e.frag.glsl	37	49	4	4	ok
+conditionals-310736a638617746.vert.glsl+conditionals-6c61e8344a883119.frag.glsl	35	10	4	4	ok
+conditionals-310736a638617746.vert.glsl+conditionals-a5b5e74601fb18a9.frag.glsl	35	40	4	4	ok
+conditionals-a21c916ffe4265bc.vert.glsl+conditionals-6c61e8344a883119.frag.glsl	65	10	4	4	ok
+desktop-792b1bd04a03eaaa.vert.glsl+desktop-68afdb5a2dcf8400.frag.glsl	15	72	4	4	ok
+desktop-792b1bd04a03eaaa.vert.glsl+desktop-7f177aebfac60da2.frag.glsl	15	72	4	4	ok
+desktop-792b1bd04a03eaaa.vert.glsl+desktop-9ce90a0e44b5ae05.frag.glsl	15	9	4	4	ok
+effect2d-46239418fca1dc03.vert.glsl+effect2d-3c3d57ba2c0ece72.frag.glsl	17	37	4	4	ok
+effect2d-46239418fca1dc03.vert.glsl+effect2d-ba8e6925e955f7f2.frag.glsl	17	72	4	4	ok
+function-016263068a7fa619.vert.glsl+function-849c78149ac0211c.frag.glsl	38	52	4	4	ok
+function-016263068a7fa619.vert.glsl+function-c8ce6c64e0b9bbb0.frag.glsl	38	25	4	4	ok
+ideas-038e5d26ce5671ff.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'vertex_position' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-038e5d26ce5671ff.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	103	8	4	4	ok
+ideas-038e5d26ce5671ff.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-038e5d26ce5671ff.vert.glsl+ideas-df64b7201645108a.frag.glsl	103	15	4	4	ok
+ideas-038e5d26ce5671ff.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	103	6	4	4	ok
+ideas-4f27e86c3643a88a.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'vertex_position' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-4f27e86c3643a88a.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'color' has no VS output of that name
+ideas-4f27e86c3643a88a.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-4f27e86c3643a88a.vert.glsl+ideas-df64b7201645108a.frag.glsl	103	15	4	4	ok
+ideas-4f27e86c3643a88a.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	103	6	4	4	ok
+ideas-51b217c5b7686924.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	173	165	4	2	ok
+ideas-51b217c5b7686924.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'color' has no VS output of that name
+ideas-51b217c5b7686924.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	173	77	4	4	ok
+ideas-51b217c5b7686924.vert.glsl+ideas-df64b7201645108a.frag.glsl	103	15	4	4	ok
+ideas-51b217c5b7686924.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	103	6	4	4	ok
+ideas-a09e06caff031f78.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'vertex_position' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-a09e06caff031f78.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	86	6	4	4	ok
+ideas-a09e06caff031f78.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-a09e06caff031f78.vert.glsl+ideas-df64b7201645108a.frag.glsl	81	15	4	4	ok
+ideas-a09e06caff031f78.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	81	6	4	4	ok
+ideas-bf4bdbb017a1985a.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'vertex_position' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-bf4bdbb017a1985a.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	129	6	4	4	ok
+ideas-bf4bdbb017a1985a.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-bf4bdbb017a1985a.vert.glsl+ideas-df64b7201645108a.frag.glsl	103	15	4	4	ok
+ideas-bf4bdbb017a1985a.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	103	6	4	4	ok
+ideas-c23687991226ad5a.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'vertex_position' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-c23687991226ad5a.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	103	6	4	4	ok
+ideas-c23687991226ad5a.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-c23687991226ad5a.vert.glsl+ideas-df64b7201645108a.frag.glsl	103	15	4	4	ok
+ideas-c23687991226ad5a.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	103	6	4	4	ok
+ideas-c265c68a7991e5ae.vert.glsl+ideas-1acaaccc424c9602.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'vertex_position' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-c265c68a7991e5ae.vert.glsl+ideas-23c87c182efb90f6.frag.glsl	130	7	4	4	ok
+ideas-c265c68a7991e5ae.vert.glsl+ideas-c5652010d501f7e4.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'eye_direction' has no VS output of that name
+ideas-c265c68a7991e5ae.vert.glsl+ideas-df64b7201645108a.frag.glsl	103	15	4	4	ok
+ideas-c265c68a7991e5ae.vert.glsl+ideas-e6a9ec772d9b5d00.frag.glsl	103	6	4	4	ok
+jellyfish-08a26355a7bc5cc3.vert.glsl+jellyfish-22fca12963ebb4df.frag.glsl	151	21	4	4	ok
+jellyfish-08a26355a7bc5cc3.vert.glsl+jellyfish-8ee578801bfa8bdc.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'uv' has no VS output of that name
+jellyfish-14accf178aebd0fd.vert.glsl+jellyfish-22fca12963ebb4df.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vWorld' has no VS output of that name / link: FS input 'vTextureCoord' has no VS output of that name / link: FS input 'vFresnel' has no VS output of that name / link: FS input 'vAmbient' has no VS output of that name / link: FS input 'vDiffuse' has no VS output of that name
+jellyfish-14accf178aebd0fd.vert.glsl+jellyfish-8ee578801bfa8bdc.frag.glsl	15	15	4	4	ok
+loop-3cb095bbd6bfdb49.vert.glsl+loop-3678074e44f2c92c.frag.glsl	46	22	4	4	ok
+loop-3cb095bbd6bfdb49.vert.glsl+loop-c7eae5f6b11b98b4.frag.glsl	46	25	4	4	ok
+loop-3cb095bbd6bfdb49.vert.glsl+loop-e016aee79842b644.frag.glsl	46	25	4	4	ok
+pulsar-9d75bb1847b5cc25.vert.glsl+build-474800a67afed087.frag.glsl	42	9	4	4	ok
+refract-7215f4f5052a383c.vert.glsl+refract-3fae89c9ab969ea3.frag.glsl	95	108	4	4	ok
+refract-7215f4f5052a383c.vert.glsl+shadow-928e172a68b7f175.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'Normal' has no VS output of that name
+shading-78e3ba59e507a5cc.vert.glsl+bump-d4424181c7796637.frag.glsl	53	31	4	4	ok
+shading-78e3ba59e507a5cc.vert.glsl+shading-994f0197ada4c9fa.frag.glsl	53	29	4	4	ok
+shading-83cd81fbb702ee85.vert.glsl+build-474800a67afed087.frag.glsl	52	8	4	4	ok
+shading-e5f21674435c0404.vert.glsl+shading-8a641531f03295fb.frag.glsl	78	55	4	4	ok
+shading-e5f21674435c0404.vert.glsl+shading-fea0d079a13967da.frag.glsl	66	63	4	4	ok
+shadow-37f46ae8961221f2.vert.glsl+build-474800a67afed087.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'Color' has no VS output of that name
+shadow-37f46ae8961221f2.vert.glsl+refract-3fae89c9ab969ea3.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'vertex_position' has no VS output of that name / link: FS input 'vertex_normal' has no VS output of that name / link: FS input 'MapCoord' has no VS output of that name
+shadow-37f46ae8961221f2.vert.glsl+shadow-928e172a68b7f175.frag.glsl	39	8	4	4	ok
+shadow-37f46ae8961221f2.vert.glsl+shadow-cf4bf899d84af04d.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'ShadowCoord' has no VS output of that name / link: FS input 'Color' has no VS output of that name
+shadow-6964fcf6aaac9739.vert.glsl+build-474800a67afed087.frag.glsl	54	6	4	4	ok
+shadow-6964fcf6aaac9739.vert.glsl+shadow-928e172a68b7f175.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'Normal' has no VS output of that name
+shadow-6964fcf6aaac9739.vert.glsl+shadow-cf4bf899d84af04d.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'ShadowCoord' has no VS output of that name
+shadow-b9d18073e5979540.vert.glsl+build-474800a67afed087.frag.glsl	29	6	4	4	ok
+shadow-b9d18073e5979540.vert.glsl+shadow-928e172a68b7f175.frag.glsl	-	-	-	-	v3d_shc: link: FS input 'Normal' has no VS output of that name
+shadow-b9d18073e5979540.vert.glsl+shadow-cf4bf899d84af04d.frag.glsl	46	21	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-1637be2eef2e8a5e.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-18bca803a331552c.vert.glsl+terrain-4d266cda76461dc0.frag.glsl	132	136	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-895a73bccb0398fc.frag.glsl	73	14	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-8c8662245addb598.frag.glsl	73	66	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-bbba1ac2cdc22b1a.frag.glsl	73	64	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-bdfd8dd627aa0bf2.frag.glsl	73	40	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-c549a79aadfd095b.frag.glsl	73	28	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-d697bb5000d6955f.frag.glsl	73	15	4	4	ok
+terrain-18bca803a331552c.vert.glsl+terrain-e043e1e89bacfac4.frag.glsl	73	39	4	4	ok
+terrain-8b696c5053d8c476.vert.glsl+terrain-1637be2eef2e8a5e.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-4d266cda76461dc0.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-895a73bccb0398fc.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-8c8662245addb598.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-bbba1ac2cdc22b1a.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-bdfd8dd627aa0bf2.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-c549a79aadfd095b.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-d697bb5000d6955f.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
+terrain-8b696c5053d8c476.vert.glsl+terrain-e043e1e89bacfac4.frag.glsl	-	-	-	-	translate: cannot parse declarator 'vec2 uvScale'
