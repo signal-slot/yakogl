@@ -8,11 +8,11 @@ Each ends with a line a run can grep for.
 
 | Probe | Shows | End line | In the tree |
 |---|---|---|---|
-| `rpi5_wdog` | the BCM2712 PM watchdog resets the board (the first board fact) | `rpi5_wdog: feeding stopped, reset expected within 10 s`, then the console goes quiet and the boot loader follows; `rpi5_wdog: FAIL no reset` if it did not reset | yes |
+| `rpi5_wdog` | the BCM2712 PM watchdog resets the board (the first board fact) | `rpi5_wdog: feeding stopped, reset expected within 10 s`, then the console goes quiet and the boot loader follows; `rpi5_wdog: FAIL no reset` if it did not reset | yes (ran on the board and passed, build `8eb2b3cf`) |
 | `rpi5_hello` | the smallest image boots from `kernel=` and prints on uart10 | planned | planned |
-| `rpi5_dtb` (D1) | the DTB pointer the firmware passes and the V3D, SMS, HVS, clock and `pm` nodes in it; answers U6 | planned | planned |
-| `rpi5_ident` (D2) | the V3D hub and core identity and `MMU_DEBUG_INFO` read with no setup, equal to Linux's | planned | planned |
-| `rpi5_clear` (M1 to M4) | power-on, identity (raw, with `MMU_DEBUG_INFO`), MMU, the 7.1 clear-only frame binned and rendered, a TLB clear to a 128x64 raster target read back | `v3d_clear: PASS (...)` or `v3d_clear: FAIL (reason)` | yes (built, not run) |
+| `rpi5_dtb` (D1) | the DTB pointer the firmware passes and the V3D, SMS, HVS, clock and `pm` nodes in it; answers U6 | `rpi5_dtb: done` or `rpi5_dtb: FAIL: ...` | yes (ran on the board and passed, build `8eb2b3cf`) |
+| `rpi5_ident` (D2) | the V3D hub and core identity and `MMU_DEBUG_INFO` read with no setup, equal to Linux's | `rpi5_ident: done`; no `FAIL` line: a faulted read is ended by the watchdog's reset | yes (ran on the board and passed, build `8eb2b3cf`) |
+| `rpi5_clear` (M1 to M4) | power-on, identity (raw, with `MMU_DEBUG_INFO`), MMU, the 7.1 clear-only frame binned and rendered, a TLB clear to a 128x64 raster target read back | `v3d_clear: PASS (...)` or `v3d_clear: FAIL (reason)` | yes (ran on the board and passed, build `8eb2b3cf`) |
 | `rpi5_triangle` (M5) | M1 and M2 as `rpi5_clear`, then the driver's 7.1 clear-then-triangle job (`v3d_frame_build_triangle`) with Mesa's shaders out of the board's `triangle.clif`, binned (256 KiB overflow block) and rendered; the 64x64 target read back, inside / outside / edge to the tolerance of 3 | `v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: ...; shaders mesa)` or `v3d_triangle: FAIL (reason; shaders mesa)` | yes (ran on the board and passed, build `0c58c457`) |
 | `rpi5_triangle_ours` (M5) | `rpi5_triangle` built with our 7.1 compiler's pass-through shaders (no sources of its own) | as `rpi5_triangle`, with `shaders ours` | yes (ran on the board and passed, build `0c58c457`) |
 
