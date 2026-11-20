@@ -115,6 +115,47 @@ pub fn level_depth(depth: u32, level: u32) -> u32 {
     (pot_depth >> level.min(31)).max(1)
 }
 
+/// The four texture size uniform words 44-47 (QUNIFORM_TEXTURE_WIDTH,
+/// _HEIGHT, _DEPTH, _ARRAY_SIZE, src/shaderc/online/v3d/select.rs) of `b`
+/// for the first level the unit reads, as Mesa's `get_texture_size`
+/// (v3d_uniforms.c:63-79 (tree)) fills them: (width, height, depth,
+/// array_size), the values `struct v3d_job_tmu` carries
+/// (`driver/src/v3d/v3d_job.h`) and `write_uniforms` writes. An incomplete
+/// unit is 1, 1, 1, 1 with the black stand-in, GL ES 2.0 3.7.10
+/// (`backend.rs` `texture_units`). Otherwise width and height are `b`'s
+/// minified `first_level` times, `max(x >> first_level, 1)` (`u_minify`;
+/// a shift of 32 or more saturates to 1), the 3D depth is `b.layers` (the
+/// level 0 depth) minified the same way, and the 2D-array layer count is
+/// `b.layers` whole — every level of a 2D array has the same number of
+/// layers, and the shader's own minify does not minify the array lane
+/// either (Mesa's `ntq_emit_txs`, "Don't minify the array size", and
+/// tests/es3_texsize_lod_v3d.rs). A 2D or cube unit gives 1 and 1 for
+/// depth and array size. Clamping `first_level` to the texture's last
+/// level is the caller's job; this saturates whatever it is given, so a
+/// level past the chain still gives 1 for the three minified words.
+///
+/// Not called yet: `texture_units` (src/v3d/backend.rs) computes the four
+/// words inline at level 0; basefix (plan #382) replaces those lines with
+/// a call here at the binding's first level, the plan's rules
+/// (docs/notes/v3d-texture-size-words.md, (b) and (e),
+/// tests/es3_texsize_lod_v3d.rs). With `first_level` 0 this is exactly
+/// what `texture_units` computes today, pinned below for 2D, cube, 3D, 2D
+/// array and incomplete binds. The words' depth is `u_minify` of the real
+/// depth, not [`level_depth`]'s slice count: from level 1 that is Mesa's
+/// power-of-two padding (a depth of 6 allocates 4 slices at level 1 where
+/// `textureSize` answers 3).
+pub fn size_words(b: &GlesTextureBind, first_level: u32) -> (u32, u32, u32, u32) {
+    if b.incomplete != 0 {
+        return (1, 1, 1, 1);
+    }
+    let layers = u32::from(b.layers).max(1);
+    let shift = first_level.min(31);
+    let minify = |x: u32| (x >> shift).max(1);
+    let depth = if b.type_ == GLES_TEXTYPE_3D { minify(layers) } else { 1 };
+    let array_size = if b.type_ == GLES_TEXTYPE_2D_ARRAY { layers } else { 1 };
+    (minify(b.width), minify(b.height), depth, array_size)
+}
+
 /// The ES 3.0 compressed formats, the rows of driver/src/v3d/v3d_tex.c's
 /// table (`V3D_TEX_FORMAT_ETC2_*`, in its order), which tools/v3d/tex_check.c
 /// compares with Mesa's built V3D 4.2 table and util_format.
@@ -1882,5 +1923,75 @@ mod tests {
         b.mip_filter = 0;
         assert!(sampler(&b).mip_none, "no mip filter clamps the LOD to level 0");
         assert_eq!(sampler(&bind(4, 4)).wrap_s, V3D_WRAP_MODE_REPEAT, "GL's default");
+    }
+
+    /// [`size_words`] with a first level of 0 is exactly what
+    /// `texture_units` (src/v3d/backend.rs, `V3dJobTmu`'s four fields)
+    /// computes inline today — the inline lines written out again here —
+    /// for a 2D, a cube, a 3D, a 2D array (the shadow array included) and
+    /// an incomplete binding of a 3D or a cube shape.
+    #[test]
+    fn size_words_at_level_0_are_the_backends_inline_words() {
+        let inline = |b: &GlesTextureBind| {
+            let (width, height) = if b.incomplete != 0 { (1, 1) } else { (b.width, b.height) };
+            let layers = if b.incomplete != 0 { 1 } else { u32::from(b.layers).max(1) };
+            let depth = if b.type_ == GLES_TEXTYPE_3D { layers } else { 1 };
+            let array_size = if b.type_ == GLES_TEXTYPE_2D_ARRAY { layers } else { 1 };
+            (width, height, depth, array_size)
+        };
+        let shadow = || GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op: 4, ..array(16, 8, 5, 1) };
+        let binds: [GlesTextureBind; 7] = [
+            bind(8, 6),
+            cube(8, 1),
+            vol(8, 8, 4, 3),
+            array(16, 8, 5, 2),
+            shadow(),
+            GlesTextureBind { incomplete: 1, ..vol(8, 8, 4, 3) },
+            GlesTextureBind { incomplete: 1, ..cube(8, 4) },
+        ];
+        for b in binds {
+            let shape = (b.type_, b.layers, b.incomplete);
+            assert_eq!(size_words(&b, 0), inline(&b), "shape {shape:?}");
+        }
+        assert_eq!(size_words(&shadow(), 0), (16, 8, 1, 5), "the shadow array's words");
+    }
+
+    /// The first level minifies width, height and the 3D depth, never the
+    /// 2D array's layer count (Mesa's `get_texture_size` and the shader's
+    /// own rule, docs/notes/v3d-texture-size-words.md (a), (e)): 8x8x4 is
+    /// 8x8x4, 4x4x2, 2x2x1, 1x1x1 at levels 0 to 3; a 16x8 array of 5
+    /// layers keeps its 5 at level 1. A 2D and a cube unit answer 1 and 1
+    /// for words 46 and 47 whatever the level — a cube's six layers reach
+    /// neither word — and an incomplete unit is 1, 1, 1, 1 at every level
+    /// and shape.
+    #[test]
+    fn size_words_minify_the_depth_never_the_layers() {
+        let v = vol(8, 8, 4, 3);
+        assert_eq!(size_words(&v, 0), (8, 8, 4, 1));
+        assert_eq!(size_words(&v, 1), (4, 4, 2, 1));
+        assert_eq!(size_words(&v, 2), (2, 2, 1, 1));
+        assert_eq!(size_words(&v, 3), (1, 1, 1, 1));
+        let a = array(16, 8, 5, 2);
+        assert_eq!(size_words(&a, 0), (16, 8, 1, 5));
+        assert_eq!(size_words(&a, 1), (8, 4, 1, 5), "the layer count stays 5");
+        let shadow = GlesTextureBind { format: GLES_TEXFMT_R32F, compare_op: 4, ..a };
+        assert_eq!(size_words(&shadow, 1), (8, 4, 1, 5), "a shadow array sizes the same");
+        assert_eq!(size_words(&bind(8, 6), 1), (4, 3, 1, 1));
+        assert_eq!(size_words(&cube(8, 4), 0), (8, 8, 1, 1));
+        assert_eq!(size_words(&cube(8, 4), 2), (2, 2, 1, 1), "the six faces reach neither word");
+        let inc = GlesTextureBind { incomplete: 1, ..vol(8, 8, 4, 3) };
+        assert_eq!(size_words(&inc, 0), (1, 1, 1, 1));
+        assert_eq!(size_words(&inc, 2), (1, 1, 1, 1));
+    }
+
+    /// A 1x1 texture stays 1x1x1x1 at a level past its chain, and a first
+    /// level of 40 does not shift past 32 bits: the three minified words
+    /// saturate to 1 and the array's layer count stays.
+    #[test]
+    fn size_words_past_the_chain_saturate_to_one() {
+        assert_eq!(size_words(&bind(1, 1), 3), (1, 1, 1, 1));
+        assert_eq!(size_words(&bind(1, 1), 40), (1, 1, 1, 1));
+        assert_eq!(size_words(&vol(8, 8, 4, 3), 40), (1, 1, 1, 1), "a depth of 4 at level 40");
+        assert_eq!(size_words(&array(16, 8, 5, 2), 40), (1, 1, 1, 5), "and the layers stay 5");
     }
 }
