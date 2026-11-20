@@ -7,17 +7,18 @@
 #ifndef YAKOGL_VERDIN_IMX95_H
 #define YAKOGL_VERDIN_IMX95_H
 
+#include <stdint.h>
 #include <zephyr/toolchain.h>
 
 /* The end of a run: `why` is printed, then PSCI SYSTEM_RESET (TF-A's BL31,
  * which asks the System Manager for the reset). If it returns, the error is
- * printed and the core halts: no watchdog of the SoC is armed by this image
- * (verdin_imx95_wdog_stub). Any context (the lifetime timer calls it from
- * its handler). Not run on a board yet. */
+ * printed and the core halts with interrupts off, so nothing feeds WDOG3 and
+ * it resets the board (verdin_imx95_wdog.c). Any context (the lifetime timer
+ * calls it from its handler). Not run on a board yet. */
 FUNC_NORETURN void verdin_imx95_reset(const char *why);
 
-/* STUB: the i.MX 95's watchdog is not driven by this image. Prints one line
- * that says so at boot; returns -ENOTSUP. */
-int verdin_imx95_wdog_stub(void);
+/* WDOG3's timeout as armed at boot (verdin_imx95_wdog.c), 0 if the arming
+ * refused (the image then resets at once). Any context. */
+uint32_t verdin_imx95_wdog_timeout_ms(void);
 
 #endif /* YAKOGL_VERDIN_IMX95_H */

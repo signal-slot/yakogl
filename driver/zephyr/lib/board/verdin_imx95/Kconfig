@@ -10,11 +10,13 @@ config YAKOGL_VERDIN_IMX95
 	help
 	  verdin_imx95.c: the end of a run, verdin_imx95_reset()
 	  (verdin_imx95.h: PSCI SYSTEM_RESET to TF-A), and a lifetime timer
-	  that takes it after YAKOGL_VERDIN_IMX95_LIFETIME_S. No watchdog of
-	  the SoC is armed: the i.MX 95's WDOG is not driven by this image yet
-	  (the stub verdin_imx95_wdog_stub() says so at boot, and the image
-	  prints no "board: watchdog armed" line, so tools/board.sh refuses
-	  it). With YAKOGL_GPU_MALI, verdin_imx95_mali.c is the Mali OSAL's
+	  that takes it after YAKOGL_VERDIN_IMX95_LIFETIME_S.
+	  verdin_imx95_wdog.c: WDOG3, armed at PRE_KERNEL_1 for 60 s
+	  (ip::wdog32 in the yakogl-drivers crate, feature imx95) and fed by
+	  a 1 s timer up to the lifetime and while the board layer's alive
+	  window holds; its timeout resets the whole board through the
+	  System Manager (docs/notes/pre-study-imx95.md, "The watchdog").
+	  With YAKOGL_GPU_MALI, verdin_imx95_mali.c is the Mali OSAL's
 	  board half: the CSF firmware, the GPU's power-on over SCMI to the
 	  System Manager and its bring-up (yd_imx95_osal_up), over the
 	  board's one raw SCMI channel (verdin_imx95_scmi.c), which the
@@ -29,10 +31,10 @@ config YAKOGL_VERDIN_IMX95_LIFETIME_S
 	range 5 3600
 	help
 	  The board layer's lifetime when the image has the layer
-	  (YAKOGL_BOARD_LIFETIME_S), else 60 s. A timer of the system clock,
-	  not a watchdog: it does not cover a hang with interrupts locked or
-	  one before the kernel runs, and nothing covers those until the WDOG
-	  stub is replaced.
+	  (YAKOGL_BOARD_LIFETIME_S), else 60 s. A timer of the system clock;
+	  WDOG3's feeding stops at the same uptime, so a PSCI reset that
+	  returns, or a hang with interrupts locked, ends in WDOG3's reset
+	  at most 60 s later.
 
 endif # YAKOGL_VERDIN_IMX95
 
@@ -43,7 +45,7 @@ config YAKOGL_BOARD_VERDIN_IMX95
 	  (board_verdin_imx95.c): the windows in the Mali carve-out's window
 	  memory (YAKOGL_MALI_WINDOW_BYTES), the screen with
 	  YAKOGL_VERDIN_IMX95_DISPLAY; record: the yk-record line on the
-	  console UART; reset: verdin_imx95_reset(); no watchdog
+	  console UART; reset: verdin_imx95_reset(); watchdog: WDOG3
 	  (YAKOGL_VERDIN_IMX95).
 
 config YAKOGL_VERDIN_IMX95_DISPLAY

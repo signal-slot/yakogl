@@ -20,7 +20,7 @@
  *            (the fallback, counted: board_show_copied). Without the option
  *            board_show() refuses (-ENOTSUP)
  *   record   the yk-record line on the console UART (common/record.c)
- *   watchdog none: STUB (verdin_imx95.c, verdin_imx95_wdog_stub)
+ *   watchdog WDOG3 (verdin_imx95_wdog.c), fed while board_wdog_alive()
  *   reset    verdin_imx95_reset(): PSCI SYSTEM_RESET, the picture taken
  *            down first
  * Built, not run on a board yet.
