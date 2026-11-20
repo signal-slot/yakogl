@@ -4,29 +4,27 @@
 //! of docs/notes/v3d-format-matrix.md, plan #383; the clear half of
 //! tests/es3_v3d_fbo_int_rg.rs).
 //!
-//! An R or RG integer texture is held in (and, once `v3d-wide-int-rt` lands,
-//! drawn as) the four-channel store of the same type and width. glClearBuffer
-//! {i,ui}v and glClear hand the back end the application's four raw values
-//! (`GlesDraw::clear_rgba`), and the TLB clear words (`state::clear_words`) or
-//! the clear quad carry all four into the store, so the channels the format
-//! lacks get the application's B and A instead of 0 and 1. A follow-up
-//! (`v3d-int-clear-narrow`) narrows them.
+//! An R or RG integer texture is held in and drawn as the four-channel store
+//! of the same type and width. The TLB clear words (`state::clear_words`) and
+//! the clear quad carry all four values of `GlesDraw::clear_rgba` into the
+//! store, so the GL core narrows them (`draw.rs` `int_clear_channels`,
+//! `NARROW_INT_CLEAR`, V3D only): the channels the format lacks get 0 (G, B)
+//! and 1 (A), never the application's B and A.
 //!
-//! Held and passing: an R/RG integer renderbuffer's clear reaches the back end
+//! Renderbuffers: an R/RG integer renderbuffer's clear reaches the back end
 //! on the format's own surface with the raw values, target mask and quad
 //! decision the GL core sets (a scissor or a partial colour mask make it a
 //! quad); a clear of an R8I renderbuffer at attachment 1 beside a float
 //! attachment 0 addresses draw buffer 1 only.
 //!
-//! `#[ignore = "... owner: v3d-int-clear-narrow"]`: for each of the twelve
-//! formats as a texture, glClearBuffer{i,ui}v {5, 6, 7, 8} at attachment 0, at
-//! layer 1 of a 2D array and at level 1 leaves 0 (G, B) and 1 (A) in the
-//! store's absent channels; a glClear with a partial colour mask or a scissor
-//! (the quad path) changes only the format's channels; an R8I texture at
-//! attachment 1 beside a float attachment 0 keeps RT 0's clear value and is
-//! narrowed or refused by a named reason. They also wait for the wide store
-//! itself (`v3d-wide-int-rt`): until then the texture is incomplete and the
-//! clear is a GL error.
+//! Textures: for each of the twelve formats, glClearBuffer{i,ui}v {5, 6, 7,
+//! 8} at attachment 0, at layer 1 of a 2D array and at level 1 leaves 0 (G,
+//! B) and 1 (A) in the store's absent channels; a glClear with a partial
+//! colour mask or a scissor (the quad path) changes only the format's
+//! channels; an R8I texture at attachment 1 beside a float attachment 0
+//! keeps RT 0's clear value and is narrowed, or the clear is refused by a
+//! named reason (one clear value for every target: the GL core drops it with
+//! GL_INVALID_OPERATION and a "clear refused" log line).
 //!
 //! What the stand-in sees, and what it cannot. It sees each clear as the
 //! `GlesDraw` the back end is handed: `clear_rgba`, `clear_color_mask`,
@@ -591,7 +589,6 @@ fn expect_narrowed_clear(r: &Row, kind: Kind) {
 
 /// A TEXTURE_2D of each of the twelve at GL_COLOR_ATTACHMENT0.
 #[test]
-#[ignore = "V3D: R/RG int texture clear at attachment 0 keeps B/A out of the wide store (owner: v3d-int-clear-narrow)"]
 fn texture_2d_clear_at_attachment_0_leaves_0_0_1_in_the_absent_channels() {
     let _g = context();
     for r in ROWS {
@@ -601,7 +598,6 @@ fn texture_2d_clear_at_attachment_0_leaves_0_0_1_in_the_absent_channels() {
 
 /// Layer 1 of a TEXTURE_2D_ARRAY.
 #[test]
-#[ignore = "V3D: R/RG int texture clear of a 2D-array layer keeps B/A out of the wide store (owner: v3d-int-clear-narrow)"]
 fn texture_2d_array_layer_clear_leaves_0_0_1_in_the_absent_channels() {
     let _g = context();
     for r in ROWS {
@@ -611,7 +607,6 @@ fn texture_2d_array_layer_clear_leaves_0_0_1_in_the_absent_channels() {
 
 /// Level 1 of a mipmapped TEXTURE_2D.
 #[test]
-#[ignore = "V3D: R/RG int texture clear of level 1 keeps B/A out of the wide store (owner: v3d-int-clear-narrow)"]
 fn texture_level_1_clear_leaves_0_0_1_in_the_absent_channels() {
     let _g = context();
     for r in ROWS {
@@ -625,7 +620,6 @@ fn texture_level_1_clear_leaves_0_0_1_in_the_absent_channels() {
 /// the quad path. Only the format's channels may change: the quad's mask
 /// excludes the absent ones, or the values are narrowed.
 #[test]
-#[ignore = "V3D: R/RG int texture glClear quad path writes the absent channels (owner: v3d-int-clear-narrow)"]
 fn texture_glclear_quad_path_changes_only_the_formats_channels() {
     let _g = context();
     for r in ROWS {
@@ -670,11 +664,13 @@ fn texture_glclear_quad_path_changes_only_the_formats_channels() {
 /// An R8I texture at attachment 1 beside an RGBA8 renderbuffer at attachment 0
 /// under glClear: RT 0's clear value is the application's float colour,
 /// unchanged by the integer RT; RT 1 is narrowed (the clear words of its wide
-/// store hold 0, 0, 1 in G, B, A) or the clear is refused with a named cause.
-/// (Which of a float colour's bits an integer RT takes is undefined by the
-/// spec; the hidden channels are not.)
+/// store hold 0, 0, 1 in G, B, A) or the clear is refused with a named cause:
+/// by the back end (`state::refusal` / `state::unsupported`), or by the GL
+/// core before it (one clear value cannot be right for both targets: no
+/// clear reaches the back end and GL_INVALID_OPERATION is raised, with the
+/// "clear refused" log line). (Which of a float colour's bits an integer RT
+/// takes is undefined by the spec; the hidden channels are not.)
 #[test]
-#[ignore = "V3D: R8I texture beside a float RT under glClear (owner: v3d-int-clear-narrow)"]
 fn r8i_texture_beside_a_float_target_under_glclear_keeps_rt0_and_narrows_or_refuses_rt1() {
     let _g = context();
     let r = ROWS[0];
@@ -687,7 +683,10 @@ fn r8i_texture_beside_a_float_target_under_glclear_keeps_rt0_and_narrows_or_refu
     }
     let _ = err();
     let c = clears();
-    assert!(!c.is_empty(), "no clear reached the back end");
+    if c.is_empty() {
+        assert_eq!(err(), GL_INVALID_OPERATION, "no clear reached the back end, and none was refused");
+        return;
+    }
     for s in &c {
         match s.refused {
             Some(why) => assert!(!why.is_empty(), "a refusal without a cause"),
@@ -711,7 +710,6 @@ fn r8i_texture_beside_a_float_target_under_glclear_keeps_rt0_and_narrows_or_refu
 /// The same, clearing draw buffer 1 alone with glClearBufferiv: RT 0 is not in
 /// the clear, RT 1's clear words are narrowed.
 #[test]
-#[ignore = "V3D: R8I texture at attachment 1, glClearBufferiv beside a float RT (owner: v3d-int-clear-narrow)"]
 fn r8i_texture_at_attachment_1_clearbuffer_leaves_rt0_out_and_narrows_rt1() {
     let _g = context();
     let r = ROWS[0];
