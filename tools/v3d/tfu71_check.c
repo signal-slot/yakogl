@@ -33,7 +33,20 @@
  * check per comparison; the last line is "tfu71: N of N checks, 0 failed"
  * (exit 0) or the count of failures (1).
  *
- * Usage: tfu71_check TABLE            (both builds)
+ * Also, against Mesa 7.1's own glGenerateMipmap (tools/v3d/pi5/gl_mipgen.stdout,
+ * made with drm-shim): the TFU job's register words are read from its
+ * SUBMIT_TFU line, v3d_tfu71's inputs are filled from gl_mipgen's GL setup
+ * (glTexStorage2D 7 levels, GL_RGBA8, 64x64: RGBA8, cpp 4, 64x64, 6 levels
+ * after the base, source = destination = the texture's UIF level 0) and all
+ * twelve words are compared. Addresses: drm-shim's BO offsets (0x11000, 4 KiB
+ * aligned, where the board's are 16 KiB) are the check's input addresses, so
+ * IIA and IOA are compared as an echo of the input, not as an answer. The
+ * tiling, UIF_NO_XOR, is Mesa's choice for that buffer (read from the
+ * reference's ICFG IFORMAT and IOC FORMAT, which must agree); the padded
+ * height 64 rows is what a 64-row UIF level at 4 cpp has (IIS 8 UIF blocks,
+ * checked). The shim runs no TFU job, so only values are compared.
+ *
+ * Usage: tfu71_check TABLE [GL_MIPGEN_STDOUT]   (both builds)
  *        tfu71_check --emit OUT       (the -DTFU71_MESA build: write the table)
  */
 #include <inttypes.h>
@@ -497,6 +510,77 @@ static int emit(const char *path)
 }
 #endif
 
+/* gl_mipgen's SUBMIT_TFU line: icfg iia iis ica iua ioa ios coef0..3 ioc */
+static int read_mipgen_ref(const char *path, uint32_t w[12])
+{
+	FILE *f = fopen(path, "r");
+	char line[512];
+	int found = 0;
+	if (!f) {
+		printf("tfu71: cannot open the reference %s\n", path);
+		return 0;
+	}
+	while (fgets(line, sizeof(line), f)) {
+		const char *p = strstr(line, "SUBMIT_TFU icfg ");
+		if (!p)
+			continue;
+		found = sscanf(p,
+			       "SUBMIT_TFU icfg %" SCNx32 " iia %" SCNx32 " iis %" SCNx32 " ica %" SCNx32
+			       " iua %" SCNx32 " ioa %" SCNx32 " ios %" SCNx32 " coef %" SCNx32 " %" SCNx32
+			       " %" SCNx32 " %" SCNx32 " ioc %" SCNx32,
+			       &w[0], &w[1], &w[2], &w[3], &w[4], &w[5], &w[6], &w[7], &w[8], &w[9], &w[10],
+			       &w[11]) == 12;
+		break;
+	}
+	fclose(f);
+	if (!found)
+		printf("tfu71: no SUBMIT_TFU line in %s\n", path);
+	return found;
+}
+
+/* Our job for gl_mipgen's GL setup against the words Mesa 7.1 wrote. */
+static void check_mipgen(const char *path)
+{
+	char what[320];
+	uint32_t w[12];
+	if (!read_mipgen_ref(path, w)) {
+		check(0, "gl_mipgen's SUBMIT_TFU line reads");
+		return;
+	}
+	check(1, "gl_mipgen's SUBMIT_TFU line reads");
+	/* the reference's own tiling, UIF_NO_XOR, two ways: ICFG and IOC */
+	const uint32_t ifmt = w[0] >> V3D_TFU71_ICFG_IFORMAT_SHIFT,
+		       ofmt = (w[11] >> V3D_TFU71_IOC_FORMAT_SHIFT) & 0xf;
+	const uint32_t tiling = V3D_TFU71_TILING_UIF_NO_XOR;
+	const uint32_t code = V3D_TFU71_ICFG_FORMAT_LINEARTILE + (tiling - V3D_TFU71_TILING_LINEARTILE);
+	check(ifmt == code && ofmt == code, "gl_mipgen: ICFG IFORMAT and IOC FORMAT are UIF_NO_XOR's code");
+	/* GL setup -> inputs: RGBA8, cpp 4, 64x64, 7 levels = 6 after the base,
+	 * source = destination (v3d_generate_mipmap), UIF with 64 rows; the
+	 * address is drm-shim's, taken from the reference */
+	const struct tfu71_in in = { V3D_TFU71_TTYPE_RGBA8, 4, 64, 64, 6, w[1], tiling, 64, w[5], tiling, 64 };
+	const struct v3d_tfu71_args a = to_args(&in);
+	struct v3d_tfu71_job j;
+	memset(&j, 0xa5, sizeof(j));
+	if (!v3d_tfu71_pack(&a, &j)) {
+		check(0, "gl_mipgen: our job packs");
+		return;
+	}
+	const uint32_t ow[12] = { j.icfg, j.iia,     j.iis,     j.ica,     j.iua,     j.ioa,
+				  j.ios,  j.coef[0], j.coef[1], j.coef[2], j.coef[3], j.ioc };
+	printf("gl_mipgen's TFU job, ours against Mesa 7.1 (%s), word by word:\n", path);
+	for (int i = 0; i < 12; i++) {
+		const int addr = i == 1 || i == 5;
+		printf("  %-6s ours 0x%08x Mesa 0x%08x %s%s\n", word_names[i], ow[i], w[i],
+		       ow[i] == w[i] ? "match" : "DIFFERENT",
+		       addr ? " (an address: drm-shim's BO offset, fed from the reference as the input)" : "");
+		snprintf(what, sizeof(what), "gl_mipgen: %s ours 0x%08x, Mesa 0x%08x", word_names[i], ow[i], w[i]);
+		check(ow[i] == w[i], what);
+	}
+	check(ow[11] == 0x00086061u, "gl_mipgen: IOC is 0x00086061 (DIMTW 1, NUMMM 6, FORMAT 6, STRIDE 8)");
+	printf("  IOC 0x%08x: DIMTW %u NUMMM %u FORMAT %u STRIDE %u\n", ow[11], ow[11] & 1u, (ow[11] >> 4) & 0xf,
+	       (ow[11] >> 12) & 0xf, ow[11] >> 16);
+}
+
 int main(int argc, char **argv)
 {
 	char what[256];
@@ -506,8 +590,8 @@ int main(int argc, char **argv)
 	if (argc == 3 && strcmp(argv[1], "--emit") == 0)
 		return emit(argv[2]);
 #endif
-	if (argc != 2 || argv[1][0] == '-') {
-		fprintf(stderr, "usage: %s TABLE\n", argv[0]);
+	if ((argc != 2 && argc != 3) || argv[1][0] == '-') {
+		fprintf(stderr, "usage: %s TABLE [GL_MIPGEN_STDOUT]\n", argv[0]);
 		return 2;
 	}
 
@@ -546,6 +630,10 @@ int main(int argc, char **argv)
 	}
 	live = checks - after_named;
 #endif
+
+	/* 2b. gl_mipgen's TFU job from Mesa 7.1 under drm-shim */
+	if (argc == 3)
+		check_mipgen(argv[2]);
 
 	/* 3. what only ours refuses: a value that would not fit or not
 	 * describe the image (Mesa never asks) */
