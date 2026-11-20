@@ -65,6 +65,7 @@ tools/cts/
   readme-glmark2-check.py      the README glmark2 table: one main commit, a RESULTS.md row per board
   glmark2-ms.py                a board's glmark2 console log -> per-scene ms a frame table
   host-deqp-run.sh             dEQP on THIS host: compile/link outcomes only (2b)
+  deqp-es2-programs.sh         every dEQP-GLES2 program of a host v3d run, deduplicated (2b)
 ```
 
 `readme-glmark2-check.py [--readme F] [--results F] [--ref R] [--scenes LIST]` reads the
@@ -599,6 +600,24 @@ directory `lib-<gpu>[-es3]-x<cksum>`, the same suffix on the default run
 directory, and `lib-cmake-args=` in `$OUT/commit`). Unset, the run is unchanged.
 Check the feature on cargo's line in `build/host-deqp/lib-*-build.log`. For
 example `GPU=powervr EXTRA_FEATURES=pvr-instance-divisor`.
+
+### Every dEQP-GLES2 program as a corpus: `deqp-es2-programs.sh`
+
+```sh
+tools/cts/deqp-es2-programs.sh                     # build, run the mustpass, extract
+tools/cts/deqp-es2-programs.sh --stage extract --out DIR   # extract again from DIR/run
+```
+
+The C++-generated dEQP-GLES2 shaders (shaders.random, operator, loops,
+uniform_api, ...) are not in the `.test` library; only a deqp-gles2 run logs
+them. This runs the whole `gles2-mustpass.txt` against the V3D 4.2 library
+(`host-deqp-run.sh --gpu=v3d`, its `--build-only` first) with shader sources
+logged, and `deqp-es2-programs.py` writes `OUT/index.tsv` (id, first case,
+cases, 4.2 outcome, first refusal line), `OUT/programs/<id>.vert/.frag`,
+`OUT/cases-without-program.txt` and `OUT/commit`. The id is the first 16 hex
+digits of sha256(vs NUL fs), so it is stable across runs. The text is dEQP's
+output and is not committed. `deqp-es2-programs-selftest.sh` checks the
+extract over `testdata/deqp-es2-programs/`.
 
 ### The HOST-ONLY tip table and not-pass list: `host-gles3-tally.py`
 

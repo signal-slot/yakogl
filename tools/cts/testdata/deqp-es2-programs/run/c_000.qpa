@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Hand-written for tools/cts/deqp-es2-programs-selftest.sh, in the form
+# deqp-gles2 writes with --deqp-log-shader-sources=enable (qpTestLog.c:
+# LinkStatus and CompileStatus are OK or Fail). Program A compiles and is used
+# by two cases; program B's fragment shader is refused; no_program logs a lone
+# vertex shader (not a program) and nothing else.
+#beginTestCaseResult dEQP-GLES2.functional.shaders.selftest.compiled_a
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.shaders.selftest.compiled_a" CaseType="SelfValidate">
+ <ShaderProgram LinkStatus="OK">
+  <InfoLog></InfoLog>
+  <VertexShader CompileStatus="OK">
+   <ShaderSource>attribute highp vec4 a_position;
+void main()
+{
+	gl_Position = a_position;
+}
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </VertexShader>
+  <FragmentShader CompileStatus="OK">
+   <ShaderSource>void main()
+{
+	gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </FragmentShader>
+ </ShaderProgram>
+ <Result StatusCode="Fail">Image comparison failed</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES2.functional.shaders.selftest.compiled_a_again
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.shaders.selftest.compiled_a_again" CaseType="SelfValidate">
+ <ShaderProgram LinkStatus="OK">
+  <InfoLog></InfoLog>
+  <VertexShader CompileStatus="OK">
+   <ShaderSource>attribute highp vec4 a_position;
+void main()
+{
+	gl_Position = a_position;
+}
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </VertexShader>
+  <FragmentShader CompileStatus="OK">
+   <ShaderSource>void main()
+{
+	gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </FragmentShader>
+ </ShaderProgram>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES2.functional.shaders.selftest.refused_fs
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.shaders.selftest.refused_fs" CaseType="SelfValidate">
+ <ShaderProgram LinkStatus="Fail">
+  <InfoLog>link error: the fragment shader did not compile</InfoLog>
+  <VertexShader CompileStatus="OK">
+   <ShaderSource>attribute highp vec4 a_position;
+varying mediump float v_x;
+void main()
+{
+	v_x = a_position.x;
+	gl_Position = a_position;
+}
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </VertexShader>
+  <FragmentShader CompileStatus="Fail">
+   <ShaderSource>varying mediump float v_x;
+void main()
+{
+	gl_FragColor = vec4(v_x &lt; 0.5 &amp;&amp; v_x &gt; 0.25);
+}
+</ShaderSource>
+   <InfoLog>online shaderc: the code generator refused this fragment shader: Select(&apos;&lt;&apos; of a varying)
+second line of the log</InfoLog>
+  </FragmentShader>
+ </ShaderProgram>
+ <Result StatusCode="Fail">Compile failed</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
+#beginTestCaseResult dEQP-GLES2.functional.shaders.selftest.no_program
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.shaders.selftest.no_program" CaseType="SelfValidate">
+ <ShaderProgram LinkStatus="Fail">
+  <InfoLog></InfoLog>
+  <VertexShader CompileStatus="OK">
+   <ShaderSource>void main() { gl_Position = vec4(0.0); }
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </VertexShader>
+ </ShaderProgram>
+ <Result StatusCode="Pass">Pass</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+
