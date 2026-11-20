@@ -342,6 +342,462 @@ pub fn select71<'a>(sel: &Selected<'_>, a: &Arena<'a>) -> Result<Selected71<'a>,
     Ok(Selected71 { ops: out.into_slice(), fragment: sel.fragment, vregs: next })
 }
 
+// ---------------------------------------------------------------------------
+// Interleaving: the operations in an order sched71 pairs.
+// ---------------------------------------------------------------------------
+
+/// How far ahead of the first operation not yet placed [`interleave71`]
+/// looks for one to place (operations, not words): the bound on how far an
+/// operation moves up, and so on how much longer its value lives.
+pub const INTERLEAVE_WINDOW71: usize = 32;
+
+/// What [`interleave71`] knows of one operation: the registers and pseudo
+/// registers it reads and writes, the issue slots it takes, the latency of
+/// its result.
+#[derive(Clone, Copy)]
+struct Shape {
+    reads: [u32; 4],
+    writes: [u32; 4],
+    /// [`SLOT_ADD`] .. [`SLOT_EITHER`] bits.
+    slots: u8,
+    /// Words until a reader of its result (an `ldvary`'s: of its C term)
+    /// may issue (sched71.rs header: an SFU result two, the C term two).
+    latency: u8,
+    /// A thread switch or control flow: it stays, and nothing crosses it.
+    barrier: bool,
+}
+
+const NO_RES: u32 = u32::MAX;
+const EMPTY: Shape = Shape { reads: [NO_RES; 4], writes: [NO_RES; 4], slots: 0, latency: 1, barrier: false };
+const SLOT_ADD: u8 = 1;
+const SLOT_MUL: u8 = 2;
+/// The signal: `ldunif`, `ldvary`, `ldtmu`, `wrtmuc`.
+const SLOT_SIG: u8 = 4;
+/// The word's one uniform.
+const SLOT_UNIF: u8 = 8;
+/// The word's one small immediate (qpu_validate.c:204-218).
+const SLOT_IMM: u8 = 16;
+/// One TLB or TMU access.
+const SLOT_PERIPH: u8 = 32;
+/// The condition field: a flag push, a conditional write, or a load signal
+/// that names its register (`ldunifrf`, `ldvary` and `ldtmu` at 7.1,
+/// vir_to_qpu.c:328-350).
+const SLOT_COND: u8 = 64;
+/// The mul unit, or the add unit when the mul unit is taken (a MOV or
+/// FMOV: sched71 converts it, `can_do_mul_as_add`).
+const SLOT_EITHER: u8 = 128;
+
+/// The add operations that move when they write a register: arithmetic,
+/// logic, conversions, packs and moves of their operands only, with no
+/// flag, lane, quad, VPM, TMU or rtop state (sched.rs `hoistable`'s list,
+/// at 7.1).
+fn pure_add71(op: AddOp71) -> bool {
+    use AddOp71::*;
+    matches!(
+        op,
+        Fadd | Faddnf
+            | Vfpack
+            | Add
+            | Sub
+            | Fsub
+            | Min
+            | Max
+            | Umin
+            | Umax
+            | Shl
+            | Shr
+            | Asr
+            | Ror
+            | Fmin
+            | Fmax
+            | Vfmin
+            | Vfmax
+            | Vfadd
+            | Vfsub
+            | Vfmov
+            | Vfabs
+            | Vfneg
+            | Vfnab
+            | And
+            | Or
+            | Xor
+            | Vadd
+            | Vsub
+            | Not
+            | Neg
+            | Fround
+            | Ftoin
+            | Ftrunc
+            | Ftoiz
+            | Ffloor
+            | Ftouz
+            | Fceil
+            | Ftoc
+            | Itof
+            | Utof
+            | Clz
+            | Fmov
+            | Mov
+            | Vpack
+            | V8pack
+            | V10pack
+            | V11fpack
+    )
+}
+
+/// The mul operations that move (UMUL24 and MULTOP share the hidden rtop).
+fn pure_mul71(op: MulOp71) -> bool {
+    matches!(
+        op,
+        MulOp71::Add | MulOp71::Sub | MulOp71::Fmul | MulOp71::Fmov | MulOp71::Mov | MulOp71::Vfmul | MulOp71::Smul24
+    )
+}
+
+/// A non-register destination's issue slots beyond its unit.
+fn dst_slots(d: Dst71) -> u8 {
+    match d {
+        Dst71::Tlb | Dst71::Magic(_) => SLOT_PERIPH,
+        Dst71::Tlbu(_) => SLOT_PERIPH | SLOT_UNIF,
+        _ => 0,
+    }
+}
+
+/// A destination that consumes a uniform, or a magic address that is no TMU
+/// register (UNIFA, which moves the uniform stream, among them): in order
+/// with the uniform loads.
+fn dst_takes_uniform(d: Dst71) -> bool {
+    match d {
+        Dst71::Tlbu(_) => true,
+        Dst71::Magic(w) => !matches!(w, 11..=13 | 32..=46),
+        _ => false,
+    }
+}
+
+/// The resources of [`shape`]: the virtual registers, then four pseudo
+/// registers.
+#[derive(Clone, Copy)]
+struct Res {
+    /// The flags (pushes, updates, conditional writes, flag reads).
+    flags: u32,
+    /// The uniform stream.
+    unif: u32,
+    /// rf0's implicit writes (`ldunif`, `ldvary`) against the `ldvary` C
+    /// reads, which name the last `ldvary` before them.
+    rf0: u32,
+    /// Every operation with an effect beyond its register result: they keep
+    /// their order among themselves.
+    side: u32,
+}
+
+struct ShapeBuilder {
+    s: Shape,
+    r: usize,
+    w: usize,
+}
+
+impl ShapeBuilder {
+    fn read(&mut self, x: u32) {
+        if !self.s.reads[..self.r].contains(&x) {
+            self.s.reads[self.r] = x;
+            self.r += 1;
+        }
+    }
+    fn write(&mut self, x: u32) {
+        if !self.s.writes[..self.w].contains(&x) {
+            self.s.writes[self.w] = x;
+            self.w += 1;
+        }
+    }
+    /// An effect beyond the register result: in order with every other one,
+    /// and with the flags (some of them read or write the flags).
+    fn effect(&mut self, res: Res) {
+        self.read(res.side);
+        self.write(res.side);
+        self.read(res.flags);
+        self.write(res.flags);
+    }
+}
+
+/// The shape of `op`. Reads: at most two operands, rf0 or the pseudo
+/// registers; writes: a register and at most three pseudo registers.
+fn shape(op: &Op71, res: Res) -> Shape {
+    let mut b = ShapeBuilder { s: EMPTY, r: 0, w: 0 };
+    let mut imm = 0u8;
+    for src in op.uses() {
+        match src {
+            Src71::V(v) | Src71::Unpacked(v, _) => b.read(v.0),
+            Src71::LdvaryC => b.read(res.rf0),
+            Src71::SmallImm(_) => imm = SLOT_IMM,
+            Src71::Payload(_) | Src71::None => {}
+        }
+    }
+    /* an ALU operation: a pure one into a register moves freely; anything
+     * else is an effect, and a non-register destination may take a
+     * peripheral or a uniform */
+    let alu = |b: &mut ShapeBuilder, pure: bool, dst: Dst71| match dst {
+        Dst71::V(v) => {
+            b.write(v.0);
+            if !pure {
+                b.effect(res);
+            }
+        }
+        d => {
+            b.effect(res);
+            b.s.slots |= dst_slots(d);
+            if dst_takes_uniform(d) {
+                b.write(res.unif);
+            }
+        }
+    };
+    let either = |o: MulOp71| if matches!(o, MulOp71::Mov | MulOp71::Fmov) { SLOT_EITHER } else { SLOT_MUL };
+    match *op {
+        Op71::Thrsw | Op71::LoopHead | Op71::BackEdge { .. } | Op71::FwdBranch { .. } | Op71::Label(_) => {
+            b.s.barrier = true;
+        }
+        Op71::Add { op: o, dst, .. } => {
+            b.s.slots = SLOT_ADD | imm;
+            alu(&mut b, pure_add71(o), dst);
+        }
+        Op71::Mul { op: o, dst, .. } => {
+            b.s.slots = either(o) | imm;
+            alu(&mut b, pure_mul71(o), dst);
+        }
+        Op71::Sfu { dst, .. } => {
+            b.s.slots = SLOT_ADD | imm;
+            b.s.latency = 2;
+            b.write(dst.0);
+        }
+        Op71::Ldunif { dst, .. } => {
+            b.s.slots = SLOT_SIG | SLOT_UNIF | SLOT_COND;
+            b.write(dst.0);
+            b.write(res.unif);
+            b.write(res.rf0);
+        }
+        Op71::Ldvary { dst } => {
+            b.s.slots = SLOT_SIG | SLOT_COND;
+            b.s.latency = 2;
+            b.write(dst.0);
+            b.write(res.rf0);
+            b.read(res.side);
+            b.write(res.side);
+        }
+        Op71::Ldtmu { dst } => {
+            b.s.slots = SLOT_SIG | SLOT_COND;
+            b.write(dst.0);
+            b.read(res.side);
+            b.write(res.side);
+        }
+        Op71::Wrtmuc { .. } => {
+            b.s.slots = SLOT_SIG | SLOT_UNIF;
+            b.write(res.unif);
+            b.read(res.side);
+            b.write(res.side);
+        }
+        Op71::Flags { unit, .. } => {
+            let pure = match unit {
+                FlagOp71::Add(o) => {
+                    b.s.slots = SLOT_ADD;
+                    pure_add71(o) || o == AddOp71::Fcmp
+                }
+                FlagOp71::Mul(o) => {
+                    b.s.slots = either(o);
+                    pure_mul71(o)
+                }
+            };
+            b.s.slots |= imm | SLOT_COND;
+            b.read(res.flags);
+            b.write(res.flags);
+            if !pure {
+                b.read(res.side);
+                b.write(res.side);
+            }
+        }
+        Op71::CondMov { dst, .. } => {
+            /* a use of dst (Op71::uses) and a write of it */
+            b.s.slots = SLOT_EITHER | SLOT_COND | imm;
+            b.read(res.flags);
+            b.write(dst.0);
+        }
+        Op71::Setmsf { .. } => {
+            b.s.slots = SLOT_ADD | SLOT_COND | imm;
+            b.effect(res);
+        }
+        Op71::Copy { dst, .. } => {
+            /* loop-carried values: in order with the effects */
+            b.s.slots = SLOT_EITHER | imm;
+            b.write(dst.0);
+            b.read(res.side);
+            b.write(res.side);
+        }
+    }
+    b.s
+}
+
+/// Every dependence of the region `start..end` of `shapes`, as
+/// `emit(from, to, latency)`: read after write (the writer's latency),
+/// write after write (1) and write after read (0: a read sees the old value
+/// in the word of the write) on every register and pseudo register.
+/// `last_w` and `head` have a slot per resource; `nodes` one per read.
+fn region_edges(
+    shapes: &[Shape],
+    start: usize,
+    end: usize,
+    last_w: &mut [u32],
+    head: &mut [u32],
+    nodes: &mut [(u32, u32)],
+    emit: &mut dyn FnMut(usize, usize, u32),
+) {
+    last_w.fill(u32::MAX);
+    head.fill(u32::MAX);
+    let mut used = 0usize;
+    for (i, s) in shapes.iter().enumerate().take(end).skip(start) {
+        for &r in s.reads.iter().filter(|&&r| r != NO_RES) {
+            let p = last_w[r as usize];
+            if p != u32::MAX {
+                emit(p as usize, i, shapes[p as usize].latency as u32);
+            }
+        }
+        for &w in s.writes.iter().filter(|&&w| w != NO_RES) {
+            let p = last_w[w as usize];
+            if p != u32::MAX {
+                emit(p as usize, i, 1);
+            }
+            /* the reads since that write, this operation's own excepted */
+            let mut k = head[w as usize];
+            while k != u32::MAX {
+                let (reader, next) = nodes[k as usize];
+                if reader as usize != i {
+                    emit(reader as usize, i, 0);
+                }
+                k = next;
+            }
+        }
+        for &w in s.writes.iter().filter(|&&w| w != NO_RES) {
+            last_w[w as usize] = i as u32;
+            head[w as usize] = u32::MAX;
+        }
+        for &r in s.reads.iter().filter(|&&r| r != NO_RES) {
+            /* a read and a write of the same pseudo register (an effect):
+             * the next writer waits for this one through the write */
+            if s.writes.contains(&r) {
+                continue;
+            }
+            nodes[used] = (i as u32, head[r as usize]);
+            head[r as usize] = used as u32;
+            used += 1;
+        }
+    }
+}
+
+/// `sel`'s operations in an order sched71 pairs better. pack71 and
+/// schedule71 keep the operations' order and only merge neighbours
+/// (sched71.rs header); 4.2's sched.rs finds its pairs with `hoist` and
+/// `ldvary_back`, which sched71 does not have. Between two barriers (a
+/// thread switch or a control-flow operation, which stay in place), a list
+/// scheduler fills one word at a time with the earliest operations whose
+/// inputs are ready in it and whose issue slots are free (the add and mul
+/// units, one signal, one uniform, one small immediate, one TLB or TMU
+/// access, the condition field), looking [`INTERLEAVE_WINDOW71`] operations
+/// past the first one not yet placed.
+///
+/// The new order means what the old one did: each virtual register's
+/// reads and writes keep their order, and so do the flags', the uniform
+/// stream's, rf0's (its implicit writes against the `ldvary` C reads), and
+/// all operations with an effect beyond their register result (TMU, TLB,
+/// VPM, `ldvary`, `ldtmu`, lane and flag reads, rtop, loop copies) among
+/// themselves. chain71 keeps the result only when it compiles to fewer words
+/// at no fewer threads.
+pub fn interleave71<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
+    let order = order71(sel.ops, sel.vregs, a)?;
+    let out = a.alloc_filled(sel.ops.len(), Op71::Thrsw)?;
+    for (o, &i) in out.iter_mut().zip(order.iter()) {
+        *o = sel.ops[i as usize];
+    }
+    Ok(Selected71 { ops: out, fragment: sel.fragment, vregs: sel.vregs })
+}
+
+/// [`interleave71`]'s order: position k of the new order holds operation
+/// `order[k]` of `ops`.
+fn order71<'a>(ops: &[Op71], v: u32, a: &Arena<'a>) -> Result<&'a [u32], ArenaError> {
+    let n = ops.len();
+    let res = Res { flags: v, unif: v + 1, rf0: v + 2, side: v + 3 };
+    let nres = v as usize + 4;
+    let shapes = a.alloc_filled(n, EMPTY)?;
+    for (s, op) in shapes.iter_mut().zip(ops) {
+        *s = shape(op, res);
+    }
+    let out = a.alloc_filled(n, 0u32)?;
+    let last_w = a.alloc_filled(nres, u32::MAX)?;
+    let head = a.alloc_filled(nres, u32::MAX)?;
+    let nodes = a.alloc_filled(4 * n, (0u32, 0u32))?;
+    let first_edge = a.alloc_filled(n + 1, 0u32)?;
+    let fill = a.alloc_filled(n, 0u32)?;
+    let npred = a.alloc_filled(n, 0u32)?;
+    let earliest = a.alloc_filled(n, 0u32)?;
+    let done = a.alloc_filled(n, false)?;
+    let mut placed = 0usize;
+    let mut start = 0usize;
+    while start < n {
+        if shapes[start].barrier {
+            out[placed] = start as u32;
+            placed += 1;
+            start += 1;
+            continue;
+        }
+        let end = (start..n).find(|&i| shapes[i].barrier).unwrap_or(n);
+        /* the successor lists, counted then filled */
+        first_edge[start..=end].fill(0);
+        region_edges(shapes, start, end, last_w, head, nodes, &mut |from, _, _| first_edge[from + 1] += 1);
+        for i in start..end {
+            first_edge[i + 1] += first_edge[i];
+        }
+        let succ = a.alloc_filled(first_edge[end] as usize - first_edge[start] as usize, (0u32, 0u32))?;
+        let base = first_edge[start] as usize;
+        fill[start..end].fill(0);
+        npred[start..end].fill(0);
+        earliest[start..end].fill(0);
+        done[start..end].fill(false);
+        region_edges(shapes, start, end, last_w, head, nodes, &mut |from, to, lat| {
+            succ[first_edge[from] as usize - base + fill[from] as usize] = (to as u32, lat);
+            fill[from] += 1;
+            npred[to] += 1;
+        });
+        /* the words: each takes the earliest operations that fit */
+        let mut first = start;
+        let mut cycle = 0u32;
+        while first < end {
+            let mut used = 0u8;
+            for j in first..(first + INTERLEAVE_WINDOW71).min(end) {
+                if done[j] || npred[j] != 0 || earliest[j] > cycle {
+                    continue;
+                }
+                let mut need = shapes[j].slots;
+                if need & SLOT_EITHER != 0 {
+                    need = (need & !SLOT_EITHER) | if used & SLOT_MUL == 0 { SLOT_MUL } else { SLOT_ADD };
+                }
+                if need & used != 0 {
+                    continue;
+                }
+                used |= need;
+                done[j] = true;
+                out[placed] = j as u32;
+                placed += 1;
+                for &(to, lat) in &succ[first_edge[j] as usize - base..first_edge[j + 1] as usize - base] {
+                    npred[to as usize] -= 1;
+                    earliest[to as usize] = earliest[to as usize].max(cycle + lat);
+                }
+            }
+            while first < end && done[first] {
+                first += 1;
+            }
+            cycle += 1;
+        }
+        start = end;
+    }
+    debug_assert_eq!(placed, n);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -810,5 +1266,194 @@ void main() { gl_FragColor = vec4(inversesqrt(v_color.x), exp2(v_color.y), 0.0, 
             assert_eq!(o as u32, op as u32);
             assert_eq!(std::format!("{o:?}"), std::format!("{op:?}"));
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // interleave71
+    // -----------------------------------------------------------------------
+
+    /// The virtual register an operation writes: its definition, or the one
+    /// a CondMov or Copy writes.
+    fn written(op: &Op71) -> Option<V> {
+        match *op {
+            Op71::CondMov { dst, .. } | Op71::Copy { dst, .. } => Some(dst),
+            _ => op.def(),
+        }
+    }
+
+    /// An operation whose place carries meaning beyond its registers and the
+    /// uniform stream: these keep their order.
+    fn ordered(op: &Op71) -> bool {
+        match *op {
+            Op71::Add { op: o, dst, .. } => !matches!(dst, Dst71::V(_)) || !pure_add71(o),
+            Op71::Mul { op: o, dst, .. } => !matches!(dst, Dst71::V(_)) || !pure_mul71(o),
+            Op71::Flags { unit: FlagOp71::Add(o), .. } => !(pure_add71(o) || o == AddOp71::Fcmp),
+            Op71::Flags { unit: FlagOp71::Mul(o), .. } => !pure_mul71(o),
+            Op71::Sfu { .. } | Op71::CondMov { .. } | Op71::Ldunif { .. } => false,
+            _ => true,
+        }
+    }
+
+    /// An operation that reads the uniform stream or may move it.
+    fn takes_uniform(op: &Op71) -> bool {
+        match *op {
+            Op71::Add { dst, .. } | Op71::Mul { dst, .. } => dst_takes_uniform(dst),
+            Op71::Ldunif { .. } | Op71::Wrtmuc { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// For each operation of `ops` run in the order `order`, what it sees
+    /// (original indices): the writer of each register it reads, the last
+    /// implicit rf0 writer before a C read, the last flag push before a
+    /// conditional operation.
+    fn seen(ops: &[Op71], order: &[u32]) -> Vec<(u32, [u32; 2], u32, u32)> {
+        let mut last: std::collections::BTreeMap<u32, u32> = Default::default();
+        let (mut rf0, mut flags) = (u32::MAX, u32::MAX);
+        let mut out = vec![(0, [0; 2], 0, 0); ops.len()];
+        for &i in order {
+            let op = &ops[i as usize];
+            let reads = op.uses().map(|s| s.vreg().map_or(u32::MAX, |v| *last.get(&v.0).unwrap_or(&u32::MAX)));
+            let c = if op.uses().contains(&Src71::LdvaryC) { rf0 } else { u32::MAX };
+            let f = if matches!(op, Op71::CondMov { .. } | Op71::Setmsf { .. }) { flags } else { u32::MAX };
+            out[i as usize] = (i, reads, c, f);
+            if let Some(v) = written(op) {
+                last.insert(v.0, i);
+            }
+            if op.writes_rf0_implicitly() {
+                rf0 = i;
+            }
+            if matches!(op, Op71::Flags { .. }) {
+                flags = i;
+            }
+        }
+        out
+    }
+
+    /// `order` is a permutation of `ops` that means the same: every read sees
+    /// the same writer, every C read the same rf0 writer, every conditional
+    /// operation the same push; the ordered operations keep their order and
+    /// the barriers their places.
+    fn same_meaning(ops: &[Op71], order: &[u32]) {
+        let n = ops.len();
+        assert_eq!(order.len(), n);
+        let mut hit = vec![false; n];
+        for &i in order {
+            assert!(!std::mem::replace(&mut hit[i as usize], true), "operation {i} twice");
+        }
+        let id: Vec<u32> = (0..n as u32).collect();
+        assert_eq!(seen(ops, order), seen(ops, &id), "a read sees another write");
+        let keep = |o: &[u32]| o.iter().copied().filter(|&i| ordered(&ops[i as usize])).collect::<Vec<_>>();
+        assert_eq!(keep(order), keep(&id), "the ordered operations moved past each other");
+        let pushes = |o: &[u32]| {
+            o.iter().copied().filter(|&i| matches!(ops[i as usize], Op71::Flags { .. })).collect::<Vec<_>>()
+        };
+        assert_eq!(pushes(order), pushes(&id), "the flag pushes changed order");
+        let unif = |o: &[u32]| o.iter().copied().filter(|&i| takes_uniform(&ops[i as usize])).collect::<Vec<_>>();
+        assert_eq!(unif(order), unif(&id), "the uniform stream changed order");
+        for (k, &i) in order.iter().enumerate() {
+            if shape(&ops[i as usize], Res { flags: 0, unif: 0, rf0: 0, side: 0 }).barrier {
+                assert_eq!(k, i as usize, "a barrier moved");
+            }
+        }
+    }
+
+    /// The fragment shader `fs`, or the vertex and coordinate shaders of
+    /// `vs` with `fs`, lowered; each order interleave71 gives them means the
+    /// same. Returns how many operations moved, summed.
+    fn interleaved(vs: Option<&str>, fs: &str) -> usize {
+        let mut moved = 0;
+        let mut check = |l: &Selected71<'_>| {
+            let mut buf = std::vec![0u8; 1 << 20];
+            let a = Arena::new(&mut buf);
+            let order = order71(l.ops, l.vregs, &a).expect("scratch");
+            same_meaning(l.ops, order);
+            moved += order.iter().enumerate().filter(|&(k, &i)| k != i as usize).count();
+            let il = interleave71(l, &a).expect("scratch");
+            assert_eq!(il.ops.len(), l.ops.len());
+            assert_eq!((il.fragment, il.vregs), (l.fragment, l.vregs));
+        };
+        match vs {
+            None => with_fs(fs, |_, l| check(&l.expect("lowers"))),
+            Some(vs) => {
+                with_vs(vs, fs, false, |_, l| check(&l.expect("lowers")));
+                with_vs(vs, fs, true, |_, l| check(&l.expect("lowers")));
+            }
+        }
+        moved
+    }
+
+    #[test]
+    fn interleaving_keeps_what_every_operation_sees() {
+        for fs in [PASS_FS, UNIFORM_FS, IF_FS, TEX_FS, SFU_FS] {
+            interleaved(None, fs);
+        }
+        interleaved(Some(PASS_VS), PASS_FS);
+    }
+
+    const MATS_VS: &str = "#version 100
+uniform mat4 u_m0, u_m1, u_m2;
+attribute vec4 a_pos;
+varying vec4 v_a, v_b;
+void main() { v_a = u_m0 * a_pos; v_b = u_m1 * a_pos; gl_Position = u_m2 * a_pos; }
+";
+    const MATS_FS: &str = "#version 100
+precision mediump float;
+varying vec4 v_a, v_b;
+void main() { gl_FragColor = v_a + v_b; }
+";
+
+    /// A vertex shader of three independent matrix products: its loads and
+    /// products move up, and what each reads stays the same.
+    #[test]
+    fn interleaving_moves_a_vertex_shaders_loads_and_products() {
+        assert!(interleaved(Some(MATS_VS), MATS_FS) > 20);
+    }
+
+    /// `ldunif ; fmul ; fadd` of the product, then an independent
+    /// `ldunif ; fmul`: the second load goes up into the first product's
+    /// word, and the second product into the sum's.
+    #[test]
+    fn a_load_goes_up_past_a_dependent_sum() {
+        let u = Uniform::constant(0x3f80_0000);
+        let m =
+            |d: u32, x: u32| Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(d)), a: Src71::V(V(x)), b: Src71::V(V(x)) };
+        let ops = [
+            Op71::Ldunif { dst: V(0), u },
+            m(1, 0),
+            Op71::Add { op: AddOp71::Fadd, dst: Dst71::V(V(2)), a: Src71::V(V(1)), b: Src71::V(V(1)) },
+            Op71::Ldunif { dst: V(3), u },
+            m(4, 3),
+            Op71::Add { op: AddOp71::Vfpack, dst: Dst71::Tlb, a: Src71::V(V(2)), b: Src71::V(V(4)) },
+        ];
+        let mut buf = std::vec![0u8; 1 << 16];
+        let a = Arena::new(&mut buf);
+        let order = order71(&ops, 5, &a).unwrap();
+        same_meaning(&ops, order);
+        assert_eq!(order, [0, 1, 3, 2, 4, 5]);
+    }
+
+    /// An `ldvary`'s C read stays before the next implicit rf0 write, and a
+    /// load never passes a TLBU write's uniform.
+    #[test]
+    fn rf0_and_the_uniform_stream_keep_their_order() {
+        let u = Uniform::constant(0);
+        let ops = [
+            Op71::Ldvary { dst: V(0) },
+            Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(1)), a: Src71::V(V(0)), b: Src71::Payload(3) },
+            Op71::Add { op: AddOp71::Fadd, dst: Dst71::V(V(2)), a: Src71::V(V(1)), b: Src71::LdvaryC },
+            Op71::Ldunif { dst: V(3), u },
+            Op71::Mul { op: MulOp71::Mov, dst: Dst71::Tlbu(u), a: Src71::V(V(2)), b: Src71::None },
+            Op71::Ldunif { dst: V(4), u },
+            Op71::Mul { op: MulOp71::Mov, dst: Dst71::Tlb, a: Src71::V(V(4)), b: Src71::None },
+            Op71::Mul { op: MulOp71::Mov, dst: Dst71::Tlb, a: Src71::V(V(3)), b: Src71::None },
+        ];
+        let mut buf = std::vec![0u8; 1 << 16];
+        let a = Arena::new(&mut buf);
+        let order = order71(&ops, 5, &a).unwrap();
+        same_meaning(&ops, order);
+        let pos = |i: u32| order.iter().position(|&x| x == i).unwrap();
+        assert!(pos(2) < pos(3), "the C read after the ldunif that overwrites rf0: {order:?}");
+        assert!(pos(4) < pos(5), "a load before the TLBU write's uniform: {order:?}");
     }
 }
