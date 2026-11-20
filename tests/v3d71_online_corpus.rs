@@ -55,11 +55,11 @@ use yakogl::shaderc::online::{lower, store};
 /// tools/shaders/es100's sources (es100_counts_71.tsv's rows).
 const ES100_PROGRAMS: usize = 126;
 /// Of them, the programs our 7.1 back end compiles.
-const ES100_COMPILED: usize = 125;
+const ES100_COMPILED: usize = 126;
 /// qpu_corpus_71.txt's programs (`# pairs: 1090 ok`).
 const CORPUS_PROGRAMS: usize = 1090;
 /// Of them, the programs our 7.1 back end compiles.
-const CORPUS_COMPILED: usize = 873;
+const CORPUS_COMPILED: usize = 874;
 
 static SOURCES_71: &str = include_str!("../tools/v3d/qpu_corpus_71_sources.tsv");
 static COUNTS_71: &str = include_str!("../tools/v3d/qpu_counts_71.tsv");
