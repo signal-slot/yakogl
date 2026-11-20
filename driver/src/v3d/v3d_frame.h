@@ -28,7 +28,8 @@
  * (docs/notes/v3d71-clear-frame.md section 1: NUMBER_OF_LAYERS, the tile
  * size in the binning and common packets, RENDER_TARGET_PART1,
  * CLEAR_RENDER_TARGETS) with the 7.1 tile size (v3d_frame_tiling_gen); the
- * triangle (M5) exists at 4.2 only. The 4.2 output does not depend on this.
+ * 7.1 triangle (M5) is v3d_frame71_tri.c, for the BCM2712 D0's shader record
+ * (docs/notes/v3d71-triangle-frame.md). The 4.2 output does not depend on this.
  *
  * No OS calls: the caller owns the memory and the addresses.
  */
@@ -236,7 +237,7 @@ struct v3d_triangle_frame {
 	struct v3d_wpos wpos;           /* zeroed: absent (v3d_wpos_uniform) */
 };
 
-#if V3D_CL_VER == 42 /* the triangle frame is 4.2's only */
+#if V3D_CL_VER == 42 /* the 4.2 triangle frame; 7.1's is below */
 /* Where the builder put what it wrote into the indirect list (GPU addresses),
  * so that a checker can find the records again. */
 struct v3d_triangle_layout {
@@ -265,5 +266,50 @@ bool v3d_frame_build_triangle(const struct v3d_triangle_frame *f, struct v3d_cl 
 			      struct v3d_cl *rcl, struct v3d_cl *indirect,
 			      struct v3d_triangle_layout *layout);
 #endif /* V3D_CL_VER == 42 */
+
+#if V3D_CL_VER == 71 /* the 7.1 triangle frame, v3d_frame71_tri.c */
+/*
+ * The same for the BCM2712 D0 (V3D 7.1.10, the Raspberry Pi 5), as Mesa
+ * 26.2.2 writes it there (tools/v3d/pi5/triangle.clif;
+ * docs/notes/v3d71-triangle-frame.md). 7.1 has no default attribute values,
+ * and the shader record is the D0 layout, "GL Shader State Record Draw
+ * Index" (32 bytes; tools/v3d/pi5/README.md, "Differences" item 4), which an
+ * older 7.1 revision (the drm-shim's 7.1.7) would read with its flags in
+ * other bits: this record is for 7.1.10 and later only.
+ */
+struct v3d_triangle_layout {
+	uint32_t fs_uniforms, vs_uniforms, cs_uniforms;
+	uint32_t record;                       /* GL_SHADER_STATE_RECORD_DRAW_INDEX */
+	uint32_t attr_records;                 /* the first attribute record */
+	uint32_t tile_list_start, tile_list_end;
+	struct V3D71_GL_SHADER_STATE_RECORD_DRAW_INDEX rec; /* the record's values */
+	struct V3D71_GL_SHADER_STATE_ATTRIBUTE_RECORD attr[V3D_MAX_ATTRS];
+};
+
+/*
+ * Write the lists of a clear-then-triangle frame at 7.1. `indirect` takes, in
+ * Mesa's order: the uniform streams (FS, VS, CS), the shader state record
+ * (32-byte aligned) and the attribute records, then the generic per-tile
+ * list. The vertex data is the caller's, at the attributes' addresses.
+ * Returns false, and nothing may be submitted, for everything the 4.2
+ * builder refuses and, at 7.1, for what no 7.1 reference shows: separate VPM
+ * input and output segments or a non-zero VPM input size (Mesa's 7.1
+ * compiler shares them), a program reading the base instance, an attribute
+ * with an instance divisor. `layout` may be NULL.
+ */
+bool v3d_frame_build_triangle(const struct v3d_triangle_frame *f, struct v3d_cl *bcl,
+			      struct v3d_cl *rcl, struct v3d_cl *indirect,
+			      struct v3d_triangle_layout *layout);
+
+/* The clear frame's steps, shared with the 7.1 triangle (v3d_frame.c):
+ * the binning prologue (NUMBER_OF_LAYERS to START_TILE_BINNING), the generic
+ * per-tile list written into `list`, and the render list. */
+void v3d_frame71_start_binning(uint32_t width, uint32_t height, const struct v3d_tiling *t,
+			       struct v3d_cl *bcl);
+void v3d_frame71_tile_list(const struct v3d_clear_frame *f, struct v3d_cl *list, uint32_t *start,
+			   uint32_t *end);
+void v3d_frame71_rcl(const struct v3d_clear_frame *f, const struct v3d_tiling *t,
+		     uint32_t list_start, uint32_t list_end, struct v3d_cl *rcl);
+#endif /* V3D_CL_VER == 71 */
 
 #endif

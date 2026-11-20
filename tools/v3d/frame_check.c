@@ -43,7 +43,18 @@
  * of the clear (tools/v3d/shim71/clear.clif), and the decoder writes the CLIF
  * form V3D_DEBUG=clif writes, so that tools/v3d/clif_cmp.py compares the two;
  * FRAME_CHECK_CLIF=<file> stores it there. FRAME_CHECK_CLEAR=<0xAABBGGRR>
- * sets the clear colour (default 0xff00ff00). The triangle is 4.2's only.
+ * sets the clear colour (default 0xff00ff00).
+ *
+ * V3D 7.1 triangle (M5 on the Pi 5): -DV3D_CL_VER=71 -DFRAME_CHECK_TRIANGLE,
+ * linked with v3d_frame.o and v3d_frame71_tri.o, -Itools/v3d/tri-shaders71,
+ * builds ./frame_check --triangle71 pi5|shim: v3d_frame_build_triangle at 7.1
+ * with Mesa's shaders (mesa_passthrough_interp_color.h) and its buffers at
+ * the addresses and names of tools/v3d/pi5/triangle.clif (pi5) or
+ * tools/v3d/shim71/triangle.clif (shim), decoded by a version 71 clif_dump
+ * into FRAME_CHECK_CLIF; the census, no undecoded list byte, the record
+ * unpacked at the BCM2712 D0 layout against the header's values (printed as
+ * "d0 <field>: <value>" lines), and the refused inputs.
+ * tools/v3d/check71.d/triangle71.sh runs it.
  *
  * The triangle mode needs the generated program header on the include path:
  *
@@ -66,9 +77,8 @@
 
 #include "v3d_frame.h"
 
-#if V3D_CL_VER == 71 && defined(FRAME_CHECK_TRIANGLE)
-#error "the triangle frame (M5) is 4.2's only: build --triangle without -DV3D_CL_VER=71"
-#endif
+/* At 7.1, -DFRAME_CHECK_TRIANGLE builds --triangle71 (below) instead of the
+ * 4.2 --triangle: tools/v3d/check71.d/triangle71.sh. */
 
 #if V3D_CL_VER == 71
 /* The buffers of Mesa's 7.1 clear dump (tools/v3d/shim71/clear.clif), each
@@ -335,7 +345,7 @@ static int run_clear(uint32_t w, uint32_t h)
 /* ======================================================================== */
 /* --triangle: M5 */
 
-#ifdef FRAME_CHECK_TRIANGLE
+#if defined(FRAME_CHECK_TRIANGLE) && V3D_CL_VER == 42
 #include "tri_prog.h"
 
 struct named_bo {
@@ -1163,8 +1173,490 @@ static int run_triangle(uint32_t w, uint32_t h, const char *json_path)
 }
 #endif
 
+/* ======================================================================== */
+/* --triangle71: M5 at V3D 7.1, the BCM2712 D0 (docs/notes/v3d71-triangle-frame.md) */
+
+#if defined(FRAME_CHECK_TRIANGLE) && V3D_CL_VER == 71
+#include <stdarg.h>
+
+#include "mesa_passthrough_interp_color.h"
+
+/* The buffers of a 7.1 triangle dump, each where that dump has it (its
+ * @createbuf lines, in their order) and named as it names it. The sizes are
+ * the dump's buffer sizes (its blank spans); only the lists are followed. */
+struct tri71_place {
+	const char *name;
+	uint32_t code, code_size, target, target_size, bcl, vertex, vertex_size, indirect,
+		tile_alloc, tile_alloc_size, tsda, tsda_size, rcl, cl_size;
+};
+static const struct tri71_place TRI71_PLACES[] = {
+	/* tools/v3d/pi5/triangle.clif: 16 KiB buffers of the board's kernel */
+	{ "pi5", 0x1000, 0x5000, 0x9000, 0x5000, 0x11000, 0x15000, 0x101000, 0x119000, 0x11d000,
+	  0x4000, 0x121000, 0x1000, 0x125000, 0x4000 },
+	/* tools/v3d/shim71/triangle.clif: the drm-shim's 4 KiB buffers */
+	{ "shim", 0x1000, 0x2000, 0x3000, 0x5000, 0x8000, 0x9000, 0x101000, 0x10a000, 0x10b000,
+	  0x4000, 0x10f000, 0x1000, 0x110000, 0x1000 },
+};
+
+/* The dump's frame: 64x64 RGBA8, cleared to 0xffff0000 (its RENDER_TARGET_PART1
+ * "Clear Color low bits" 4294901760), glViewport(0, 0, 64, 64), the colour
+ * attribute 0x30 bytes behind the positions in one vertex buffer. */
+#define TRI71_W 64u
+#define TRI71_H 64u
+#define TRI71_CLEAR 0xffff0000u
+#define TRI71_COLOR_OFFSET 0x30u
+/* gl_ref.py's triangle (the dump's vertex buffer): positions, then colours */
+static const float TRI71_VERTICES[24] = {
+	-0.75f, -0.75f, 0.0f, 1.0f, 0.75f, -0.75f, 0.0f, 1.0f, 0.0f, 0.75f, 0.0f, 1.0f,
+	1.0f,   0.0f,   0.0f, 1.0f, 0.0f,  1.0f,   0.0f, 1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+};
+
+static uint8_t t71_code[0x5000], t71_target[0x5000], t71_bcl[0x4000], t71_vertex[0x101000],
+	t71_ind[0x4000], t71_tile[0x4000], t71_tsda[0x1000], t71_rcl[0x4000];
+static struct v3d_uniform t71_vs_u[MESA71_TRI_VS_UNIFORM_COUNT], t71_cs_u[MESA71_TRI_CS_UNIFORM_COUNT];
+static struct v3d_fs_prog t71_fs;
+static struct v3d_vs_prog t71_vs, t71_cs;
+static struct v3d_vertex_attr t71_attrs[MESA71_TRI_ATTR_COUNT];
+static int t71_failures;
+
+__attribute__((format(printf, 1, 2))) static void t71_fail(const char *fmt, ...)
+{
+	va_list ap;
+	t71_failures++;
+	printf("frame_check: FAIL ");
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+	printf("\n");
+}
+
+/* Mesa's shaders, as the header gives them, at the dump's code addresses:
+ * FS, VS, CS back to back from code + 0x60 (the record's 0x1060, 0x10a8,
+ * 0x1160); the first 0x60 bytes of Mesa's buffer are not code and stay 0. */
+static void t71_programs(const struct tri71_place *p, struct v3d_triangle_frame *f)
+{
+	uint32_t at = 0x60;
+	const struct { const uint64_t *w; uint32_t n; } code[3] = {
+		{ mesa71_tri_fs_code, MESA71_TRI_FS_CODE_COUNT },
+		{ mesa71_tri_vs_code, MESA71_TRI_VS_CODE_COUNT },
+		{ mesa71_tri_cs_code, MESA71_TRI_CS_CODE_COUNT },
+	};
+	uint32_t addr[3];
+	memset(t71_code, 0, sizeof(t71_code));
+	for (int s = 0; s < 3; s++) {
+		addr[s] = p->code + at;
+		for (uint32_t i = 0; i < code[s].n; i++, at += 8)
+			for (int b = 0; b < 8; b++)
+				t71_code[at + b] = (uint8_t)(code[s].w[i] >> (8 * b));
+	}
+	for (uint32_t i = 0; i < MESA71_TRI_VS_UNIFORM_COUNT; i++) {
+		t71_vs_u[i].contents = mesa71_tri_vs_uniform_kind[i];
+		t71_vs_u[i].data = mesa71_tri_vs_uniform_kind[i] == MESA71_TRI_UNIFORM_CONSTANT ?
+					   mesa71_tri_vs_uniform[i] : 0;
+	}
+	for (uint32_t i = 0; i < MESA71_TRI_CS_UNIFORM_COUNT; i++) {
+		t71_cs_u[i].contents = mesa71_tri_cs_uniform_kind[i];
+		t71_cs_u[i].data = mesa71_tri_cs_uniform_kind[i] == MESA71_TRI_UNIFORM_CONSTANT ?
+					   mesa71_tri_cs_uniform[i] : 0;
+	}
+	/* a stage that is not 4-way threadable is taken as 2-way: the record
+	 * says only "4-way or not", and Mesa's are all 4-way here */
+	t71_fs = (struct v3d_fs_prog){
+		.code = addr[0],
+		.threads = MESA71_TRI_FS_FOUR_THREADS ? 4 : 2,
+		.single_seg = MESA71_TRI_FS_FINAL_THREAD_SECTION,
+		.num_inputs = MESA71_TRI_REC_VARYINGS,
+		.writes_z = MESA71_TRI_REC_FS_Z_WRITES,
+		.disable_ez = MESA71_TRI_REC_EARLY_Z_OFF,
+		.uses_center_w = MESA71_TRI_REC_FS_USES_REAL_CENTRE_W,
+		.lock_scoreboard_on_first_thrsw = MESA71_TRI_REC_SCOREBOARD_WAIT_FIRST_THRSW,
+		.uses_implicit_point_line_varyings = !MESA71_TRI_REC_DISABLE_IMPLICIT_PL_VARYINGS,
+		.uses_pid = MESA71_TRI_REC_INSERT_PRIM_ID,
+	};
+	t71_vs = (struct v3d_vs_prog){
+		.code = addr[1],
+		.threads = MESA71_TRI_VS_FOUR_THREADS ? 4 : 2,
+		.single_seg = MESA71_TRI_VS_FINAL_THREAD_SECTION,
+		.vpm_input_size = MESA71_TRI_REC_VS_IN_VPM,
+		.vpm_output_size = MESA71_TRI_REC_VS_OUT_VPM,
+		.vcm_cache_size = MESA71_TRI_VCM_CACHE_BATCHES,
+		.uniforms = t71_vs_u,
+		.num_uniforms = MESA71_TRI_VS_UNIFORM_COUNT,
+	};
+	t71_cs = (struct v3d_vs_prog){
+		.code = addr[2],
+		.threads = MESA71_TRI_CS_FOUR_THREADS ? 4 : 2,
+		.single_seg = MESA71_TRI_CS_FINAL_THREAD_SECTION,
+		.vpm_input_size = MESA71_TRI_REC_CS_IN_VPM,
+		.vpm_output_size = MESA71_TRI_REC_CS_OUT_VPM,
+		.vcm_cache_size = MESA71_TRI_VCM_CACHE_BATCHES,
+		.uniforms = t71_cs_u,
+		.num_uniforms = MESA71_TRI_CS_UNIFORM_COUNT,
+	};
+	for (uint32_t i = 0; i < MESA71_TRI_ATTR_COUNT; i++) {
+		t71_vs.vattr_sizes[i] = mesa71_tri_attr[i].vs_values;
+		t71_cs.vattr_sizes[i] = mesa71_tri_attr[i].cs_values;
+		t71_attrs[i] = (struct v3d_vertex_attr){
+			.address = p->vertex + (i ? TRI71_COLOR_OFFSET : 0),
+			.stride = mesa71_tri_attr[i].stride,
+			.components = mesa71_tri_attr[i].vec_size,
+			.divisor = mesa71_tri_attr[i].divisor,
+		};
+	}
+
+	memset(f, 0, sizeof(*f));
+	f->clear = (struct v3d_clear_frame){ .width = TRI71_W, .height = TRI71_H,
+					     .clear_rgba8 = TRI71_CLEAR, .target = p->target,
+					     .stride = TRI71_W * 4, .tile_alloc = p->tile_alloc };
+	v3d_viewport_gl(0, 0, (float)TRI71_W, (float)TRI71_H, 0, 1, false, TRI71_H, &f->vp);
+	f->front_ccw = false; /* the dump's CFG_BITS "Clockwise Primitives: 0" */
+	f->fs = &t71_fs;
+	f->vs = &t71_vs;
+	f->cs = &t71_cs;
+	f->attrs = t71_attrs;
+	f->num_attrs = MESA71_TRI_ATTR_COUNT;
+	f->first_vertex = 0;
+	f->vertex_count = 3;
+}
+
+/* One refused input: a copy of the good frame changed by `which`. True when
+ * the builder refuses it. */
+static bool t71_refused(const struct tri71_place *p, int which, const char **what)
+{
+	static uint8_t b[0x1000], r[0x1000], i[0x1000];
+	struct v3d_triangle_frame f;
+	t71_programs(p, &f);
+	struct v3d_fs_prog fs = t71_fs;
+	struct v3d_vs_prog vs = t71_vs, cs = t71_cs;
+	struct v3d_vertex_attr at[MESA71_TRI_ATTR_COUNT];
+	struct v3d_uniform u[MESA71_TRI_VS_UNIFORM_COUNT];
+	memcpy(at, t71_attrs, sizeof(at));
+	memcpy(u, t71_vs_u, sizeof(u));
+	f.fs = &fs;
+	f.vs = &vs;
+	f.cs = &cs;
+	f.attrs = at;
+	vs.uniforms = u;
+	uint32_t cap = 0x1000;
+	switch (which) {
+	case 0: *what = "width 0"; f.clear.width = 0; break;
+	case 1: *what = "4 vertices (not whole triangles)"; f.vertex_count = 4; break;
+	case 2: *what = "no attribute record"; f.num_attrs = 0; break;
+	case 3: *what = "the VS reads attribute 2, which has no record"; vs.vattr_sizes[2] = 1; break;
+	case 4: *what = "a 5-component attribute"; at[1].components = 5; break;
+	case 5: *what = "an instance divisor"; at[1].divisor = 1; break;
+	case 6: *what = "3 FS threads"; fs.threads = 3; break;
+	case 7: *what = "separate VPM segments (no 7.1 record flag)"; vs.separate_segments = true; break;
+	case 8: *what = "a VPM input size with shared segments"; cs.vpm_input_size = 1; break;
+	case 9: *what = "a CS reading the base instance"; cs.uses_biid = true; break;
+	case 10: *what = "a flat-shaded varying"; fs.flat_shade_flags = 1; break;
+	case 11: *what = "a uniform contents the builder does not write"; u[3].contents = 99; break;
+	case 12: *what = "a QUNIFORM_UNIFORM with no storage"; u[3].contents = V3D_QUNIFORM_UNIFORM; break;
+	case 13: *what = "FS code not 8-byte aligned"; fs.code += 4; break;
+	case 14: *what = "a 16-bit VPM output size field given 16"; vs.vpm_output_size = 16; break;
+	case 15: *what = "an FS with 256 varyings"; fs.num_inputs = 256; break;
+	case 16: *what = "a VS reading 16 values of an attribute (a 4-bit field)"; vs.vattr_sizes[0] = 16; break;
+	case 17: *what = "lists of 64 bytes"; cap = 64; break;
+	case 18: *what = "no CS"; f.cs = NULL; break;
+	case 19: *what = "a viewport left of the frame by more than 2^16"; f.vp.translate[0] = -70000.0f; break;
+	default: return false;
+	}
+	struct v3d_cl bcl, rcl, ind;
+	v3d_cl_init(&bcl, b, p->bcl, cap);
+	v3d_cl_init(&rcl, r, p->rcl, cap);
+	v3d_cl_init(&ind, i, p->indirect, cap);
+	return !v3d_frame_build_triangle(&f, &bcl, &rcl, &ind, NULL);
+}
+#define T71_REFUSALS 20
+
+static int run_triangle71(const char *where)
+{
+	const struct tri71_place *p = NULL;
+	for (unsigned k = 0; k < sizeof(TRI71_PLACES) / sizeof(TRI71_PLACES[0]); k++)
+		if (strcmp(where, TRI71_PLACES[k].name) == 0)
+			p = &TRI71_PLACES[k];
+	if (!p) {
+		printf("frame_check: FAIL --triangle71 takes pi5 or shim, not '%s'\n", where);
+		return 1;
+	}
+	struct v3d_triangle_frame f;
+	t71_programs(p, &f);
+	memset(t71_vertex, 0, sizeof(t71_vertex));
+	memcpy(t71_vertex, TRI71_VERTICES, sizeof(TRI71_VERTICES));
+
+	struct v3d_cl bcl, rcl, ind;
+	v3d_cl_init(&bcl, t71_bcl, p->bcl, p->cl_size);
+	v3d_cl_init(&rcl, t71_rcl, p->rcl, p->cl_size);
+	v3d_cl_init(&ind, t71_ind, p->indirect, p->cl_size);
+	struct v3d_triangle_layout lo;
+	if (!v3d_frame_build_triangle(&f, &bcl, &rcl, &ind, &lo)) {
+		printf("frame_check: FAIL the builder refused Mesa's triangle\n");
+		return 1;
+	}
+	struct v3d_tiling t;
+	v3d_frame_tiling_gen(71, TRI71_W, TRI71_H, 1, false, 0, 4, &t);
+	/* the submit as Mesa's v3d_job_submit fills it; one draw */
+	uint32_t qms, qts_size;
+	v3d_frame_alloc_sizes(&t, 1, 4096, &qms, &qts_size);
+	struct drm_v3d_submit_cl submit = {
+		.bcl_start = bcl.gpu, .bcl_end = bcl.gpu + bcl.used,
+		.rcl_start = rcl.gpu, .rcl_end = rcl.gpu + rcl.used,
+		.qma = p->tile_alloc, .qms = qms, .qts = p->tsda,
+	};
+
+	const char *dir = getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp";
+	char path[512];
+	snprintf(path, sizeof(path), "%s/frame_check71_%d.log", dir, (int)getpid());
+	setenv("MESA_LOG_FILE", path, 1);
+	setenv("MESA_LOG_LEVEL", "info", 1);
+	setenv("MESA_LOG_PREFIX", "", 1);
+	struct v3d_device_info devinfo = { .ver = 71, .has_accumulators = false,
+					   .cle_readahead = 256 };
+	struct log_stream *stream = mesa_log_streami();
+	struct clif_dump *clif = clif_dump_init(&devinfo, stream, false, false);
+	char names[8][32];
+	snprintf(names[0], 32, "resource_0x%x", p->code);
+	snprintf(names[1], 32, "resource_0x%x", p->target);
+	snprintf(names[2], 32, "CL_0x%x", p->bcl);
+	snprintf(names[3], 32, "resource_0x%x", p->vertex);
+	snprintf(names[4], 32, "CL_0x%x", p->indirect);
+	snprintf(names[5], 32, "tile_alloc_0x%x", p->tile_alloc);
+	snprintf(names[6], 32, "TSDA_0x%x", p->tsda);
+	snprintf(names[7], 32, "CL_0x%x", p->rcl);
+	clif_dump_add_bo(clif, names[0], p->code, p->code_size, t71_code);
+	clif_dump_add_bo(clif, names[1], p->target, p->target_size, t71_target);
+	clif_dump_add_bo(clif, names[2], p->bcl, p->cl_size, t71_bcl);
+	clif_dump_add_bo(clif, names[3], p->vertex, p->vertex_size, t71_vertex);
+	clif_dump_add_bo(clif, names[4], p->indirect, p->cl_size, t71_ind);
+	clif_dump_add_bo(clif, names[5], p->tile_alloc, p->tile_alloc_size, t71_tile);
+	clif_dump_add_bo(clif, names[6], p->tsda, p->tsda_size, t71_tsda);
+	clif_dump_add_bo(clif, names[7], p->rcl, p->cl_size, t71_rcl);
+	clif_dump(clif, &submit);
+	clif_dump_destroy(clif);
+	mesa_log_stream_destroy(stream);
+
+	FILE *in = fopen(path, "r");
+	if (!in) {
+		printf("frame_check: FAIL no decoder output at %s\n", path);
+		return 1;
+	}
+	fseek(in, 0, SEEK_END);
+	long n = ftell(in);
+	fseek(in, 0, SEEK_SET);
+	char *text = malloc(n + 1);
+	size_t got_bytes = fread(text, 1, n, in);
+	text[got_bytes] = 0;
+	fclose(in);
+	unlink(path);
+	if (getenv("FRAME_CHECK_DUMP"))
+		fputs(text, stdout);
+	const char *clif_out = getenv("FRAME_CHECK_CLIF");
+	if (clif_out) {
+		FILE *out = fopen(clif_out, "w");
+		if (!out || fputs(text, out) < 0 || fclose(out) != 0) {
+			printf("frame_check: FAIL cannot write %s\n", clif_out);
+			free(text);
+			return 1;
+		}
+	}
+
+	/* (a) the census: the board's lists, packet for packet (triangle.clif) */
+	const struct { const char *name; int n; } want[] = {
+		{ "NUMBER_OF_LAYERS", 1 }, { "TILE_BINNING_MODE_CFG", 1 },
+		{ "CLEAR_VCD_CACHE", 2 },  /* BCL once, RCL once */
+		{ "OCCLUSION_QUERY_COUNTER_ENABLE", 2 }, /* start_binning, emit_state */
+		{ "START_TILE_BINNING", 1 }, { "CLIP", 1 }, { "CFG_BITS", 1 }, { "POINT_SIZE", 1 },
+		{ "LINE_WIDTH", 1 }, { "CLIPPER_XY", 1 }, { "CLIPPER_Z", 1 }, { "CLIPZ", 1 },
+		{ "VIEWPORT_OFFSET", 1 }, { "BLEND_ENABLES", 1 }, { "COLOR_WMASKS", 1 },
+		{ "BLEND_CCOLOR", 1 }, { "ZERO_ALL_FLATSHADE_FLAGS", 1 },
+		{ "ZERO_ALL_NOPERSPECTIVE_FLAGS", 1 }, { "ZERO_ALL_CENTROID_FLAGS", 1 },
+		{ "TRANSFORM_FEEDBACK_SPECS", 1 }, { "SAMPLE_STATE", 1 }, { "VCM_CACHE_SIZE", 1 },
+		{ "GL_SHADER", 1 }, { "VERTEX_ARRAY_PRIMS", 1 }, { "FLUSH", 1 },
+		{ "TILE_RENDERING_MODE_CFG_COMMON", 1 },
+		{ "TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1", 1 },
+		{ "TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES", 1 }, { "TILE_LIST_INITIAL_BLOCK_SIZE", 1 },
+		{ "MULTICORE_RENDERING_TILE_LIST_BASE", 1 }, { "MULTICORE_RENDERING_SUPERTILE_CFG", 1 },
+		{ "TILE_COORDS", 2 }, { "END_LOADS", 3 }, { "STORE", 3 }, { "CLEAR_RT", 2 },
+		{ "END_TILE", 3 }, { "GENERIC_TILE_LIST", 1 }, { "IMPLICIT_TILE_COORDS", 1 },
+		{ "PRIM_LIST_FORMAT", 1 }, { "SET_INSTANCEID", 1 }, { "BRANCH_IMPLICIT_TILE", 1 },
+		{ "RETURN", 1 }, { "SUPERTILE_COORDS", 1 }, { "END_RENDER", 1 },
+	};
+	int total = 0;
+	for (unsigned i = 0; i < sizeof(want) / sizeof(want[0]); i++) {
+		int got = census(text, want[i].name);
+		total += got;
+		if (got != want[i].n)
+			t71_fail("%s: decoded %d, expected %d", want[i].name, got, want[i].n);
+	}
+	if (strstr(text, "Failed") || strstr(text, "nknown"))
+		t71_fail("the decoder reported an error");
+	/* every list read in full: each unindented upper-case line is a census
+	 * packet; four control-list sections (the BCL, which the decoder reopens
+	 * after TRANSFORM_FEEDBACK_SPECS, the tile list, the RCL); one record and
+	 * two attribute records; binary data only in the resources and in front
+	 * of the record in the indirect buffer (the uniform streams) */
+	int lists = 0, packets = 0, recs = 0, attrs = 0;
+	char ind_bin[64];
+	snprintf(ind_bin, sizeof(ind_bin), "[%s+0x00000000]", names[4]);
+	for (const char *line = text; *line;) {
+		const char *nl = strchr(line, '\n');
+		size_t len = nl ? (size_t)(nl - line) : strlen(line);
+		if (len >= 16 && strncmp(line, "@format ctrllist", 16) == 0)
+			lists++;
+		if (len >= 23 && strncmp(line, "@format shadrec_gl_main", 23) == 0)
+			recs++;
+		if (len >= 23 && strncmp(line, "@format shadrec_gl_attr", 23) == 0)
+			attrs++;
+		if (len >= 14 && strncmp(line, "@format binary", 14) == 0) {
+			char l[256];
+			snprintf(l, sizeof(l), "%.*s", (int)(len < 255 ? len : 255), line);
+			if (!strstr(l, "[resource_") && !strstr(l, ind_bin))
+				t71_fail("bytes of a list left undecoded: %s", l);
+		}
+		size_t k = 0;
+		while (k < len && ((line[k] >= 'A' && line[k] <= 'Z') || line[k] == '_' ||
+				   (k > 0 && line[k] >= '0' && line[k] <= '9')))
+			k++;
+		if (k > 0 && k == len)
+			packets++;
+		if (!nl)
+			break;
+		line = nl + 1;
+	}
+	if (lists != 4)
+		t71_fail("%d control-list sections, expected 4", lists);
+	if (recs != 1 || attrs != (int)MESA71_TRI_ATTR_COUNT)
+		t71_fail("%d shader records and %d attribute records decoded", recs, attrs);
+	if (packets != total)
+		t71_fail("%d packets decoded, the census has %d", packets, total);
+	if (ind.used != lo.tile_list_end - ind.gpu || lo.record != ind.gpu + 0x60 ||
+	    lo.attr_records != lo.record + 32 || lo.tile_list_start != lo.attr_records + 32)
+		t71_fail("the indirect buffer's layout is not the board's");
+
+	/* (b) the record at the D0 layout, against the board's record as the
+	 * header gives it (tools/v3d/clif_shaders71.py read the board's plain
+	 * decode back at D0). "d0" lines: the values, for triangle71.sh's
+	 * comparison with the drm-shim's plain-layout record. */
+	struct V3D71_GL_SHADER_STATE_RECORD_DRAW_INDEX r;
+	const uint8_t *rb = t71_ind + (lo.record - ind.gpu);
+	memset(&r, 0, sizeof(r));
+	V3D71_GL_SHADER_STATE_RECORD_DRAW_INDEX_unpack(rb, &r);
+	uint32_t flags = rb[0] | (uint32_t)rb[1] << 8 | (uint32_t)rb[2] << 16;
+	const struct { const char *label; uint32_t got, want; } d0[] = {
+		{ "Point size in shaded vertex data", r.point_size_in_shaded_vertex_data, MESA71_TRI_REC_POINT_SIZE },
+		{ "Enable clipping", r.enable_clipping, MESA71_TRI_REC_ENABLE_CLIPPING },
+		{ "Vertex ID read by coordinate shader", r.vertex_id_read_by_coordinate_shader, 0 },
+		{ "Instance ID read by coordinate shader", r.instance_id_read_by_coordinate_shader, 0 },
+		{ "Base Instance ID read by coordinate shader", r.base_instance_id_read_by_coordinate_shader, 0 },
+		{ "cs_basevertex", r.cs_basevertex, 0 },
+		{ "cs_drawindex", r.cs_drawindex, 0 },
+		{ "Vertex ID read by vertex shader", r.vertex_id_read_by_vertex_shader, 0 },
+		{ "Instance ID read by vertex shader", r.instance_id_read_by_vertex_shader, 0 },
+		{ "Base Instance ID read by vertex shader", r.base_instance_id_read_by_vertex_shader, 0 },
+		{ "vs_basevertex", r.vs_basevertex, 0 },
+		{ "vs_drawindex", r.vs_drawindex, 0 },
+		{ "Fragment shader does Z writes", r.fragment_shader_does_z_writes, MESA71_TRI_REC_FS_Z_WRITES },
+		{ "Turn off early-z test", r.turn_off_early_z_test, MESA71_TRI_REC_EARLY_Z_OFF },
+		{ "Fragment shader uses real pixel centre W in addition to centroid W2",
+		  r.fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2,
+		  MESA71_TRI_REC_FS_USES_REAL_CENTRE_W },
+		{ "Enable Sample Rate Shading", r.enable_sample_rate_shading, MESA71_TRI_REC_SAMPLE_RATE_SHADING },
+		{ "Any shader reads hardware-written Primitive ID",
+		  r.any_shader_reads_hardware_written_primitive_id, MESA71_TRI_REC_INSERT_PRIM_ID },
+		{ "Insert Primitive ID as first varying to fragment shader",
+		  r.insert_primitive_id_as_first_varying_to_fragment_shader, MESA71_TRI_REC_INSERT_PRIM_ID },
+		{ "Turn off scoreboard", r.turn_off_scoreboard, MESA71_TRI_REC_SCOREBOARD_OFF },
+		{ "Do scoreboard wait on first thread switch", r.do_scoreboard_wait_on_first_thread_switch,
+		  MESA71_TRI_REC_SCOREBOARD_WAIT_FIRST_THRSW },
+		{ "Disable implicit point/line varyings", r.disable_implicit_point_line_varyings,
+		  MESA71_TRI_REC_DISABLE_IMPLICIT_PL_VARYINGS },
+		{ "No prim pack", r.no_prim_pack, MESA71_TRI_REC_NO_PRIM_PACK },
+		{ "Never defer FEP depth writes", r.never_defer_fep_depth_writes, 0 },
+		{ "Number of varyings in Fragment Shader", r.number_of_varyings_in_fragment_shader,
+		  MESA71_TRI_REC_VARYINGS },
+		{ "Coordinate Shader output VPM segment size", r.coordinate_shader_output_vpm_segment_size,
+		  MESA71_TRI_REC_CS_OUT_VPM },
+		{ "Min Coord Shader output segments required in play in addition to VCM cache size",
+		  r.min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size,
+		  MESA71_TRI_REC_CS_MIN_OUT },
+		{ "Coordinate Shader input VPM segment size", r.coordinate_shader_input_vpm_segment_size,
+		  MESA71_TRI_REC_CS_IN_VPM },
+		{ "Min Coord Shader input segments required in play",
+		  r.min_coord_shader_input_segments_required_in_play, MESA71_TRI_REC_CS_MIN_IN },
+		{ "Vertex Shader output VPM segment size", r.vertex_shader_output_vpm_segment_size,
+		  MESA71_TRI_REC_VS_OUT_VPM },
+		{ "Min Vertex Shader output segments required in play in addition to VCM cache size",
+		  r.min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size,
+		  MESA71_TRI_REC_VS_MIN_OUT },
+		{ "Vertex Shader input VPM segment size", r.vertex_shader_input_vpm_segment_size,
+		  MESA71_TRI_REC_VS_IN_VPM },
+		{ "Min Vertex Shader input segments required in play",
+		  r.min_vertex_shader_input_segments_required_in_play, MESA71_TRI_REC_VS_MIN_IN },
+		{ "Fragment Shader 4-way threadable", r.fragment_shader_4_way_threadable, MESA71_TRI_FS_FOUR_THREADS },
+		{ "Fragment Shader start in final thread section", r.fragment_shader_start_in_final_thread_section,
+		  MESA71_TRI_FS_FINAL_THREAD_SECTION },
+		{ "Fragment Shader Propagate NaNs", r.fragment_shader_propagate_nans, MESA71_TRI_FS_PROPAGATE_NANS },
+		{ "Vertex Shader 4-way threadable", r.vertex_shader_4_way_threadable, MESA71_TRI_VS_FOUR_THREADS },
+		{ "Vertex Shader start in final thread section", r.vertex_shader_start_in_final_thread_section,
+		  MESA71_TRI_VS_FINAL_THREAD_SECTION },
+		{ "Vertex Shader Propagate NaNs", r.vertex_shader_propagate_nans, MESA71_TRI_VS_PROPAGATE_NANS },
+		{ "Coordinate Shader 4-way threadable", r.coordinate_shader_4_way_threadable, MESA71_TRI_CS_FOUR_THREADS },
+		{ "Coordinate Shader start in final thread section",
+		  r.coordinate_shader_start_in_final_thread_section, MESA71_TRI_CS_FINAL_THREAD_SECTION },
+		{ "Coordinate Shader Propagate NaNs", r.coordinate_shader_propagate_nans, MESA71_TRI_CS_PROPAGATE_NANS },
+		/* the addresses: the dump's (code + 0x60, 0xa8, 0x160; the
+		 * indirect buffer + 0, + 0, + 0x40) */
+		{ "Fragment Shader Code Address", r.fragment_shader_code_address, p->code + 0x60 },
+		{ "Fragment Shader Uniforms Address", r.fragment_shader_uniforms_address, p->indirect },
+		{ "Vertex Shader Code Address", r.vertex_shader_code_address, p->code + 0xa8 },
+		{ "Vertex Shader Uniforms Address", r.vertex_shader_uniforms_address, p->indirect },
+		{ "Coordinate Shader Code Address", r.coordinate_shader_code_address, p->code + 0x160 },
+		{ "Coordinate Shader Uniforms Address", r.coordinate_shader_uniforms_address, p->indirect + 0x40 },
+	};
+	int fields = 0;
+	for (unsigned i = 0; i < sizeof(d0) / sizeof(d0[0]); i++) {
+		fields++;
+		if (strstr(d0[i].label, "Address"))
+			printf("d0 %s: 0x%08x\n", d0[i].label, d0[i].got);
+		else
+			printf("d0 %s: %u\n", d0[i].label, d0[i].got);
+		if (d0[i].got != d0[i].want)
+			t71_fail("D0 record %s: 0x%x, the board's 0x%x", d0[i].label, d0[i].got, d0[i].want);
+	}
+	if (flags != MESA71_TRI_REC_FLAGS)
+		t71_fail("the D0 flag bits 0x%06x, the board's 0x%06x", flags, MESA71_TRI_REC_FLAGS);
+
+	/* (d) refused inputs */
+	int refusals = 0;
+	for (int k = 0; k < T71_REFUSALS; k++) {
+		const char *what = "";
+		if (t71_refused(p, k, &what))
+			refusals++;
+		else
+			t71_fail("built a frame with %s", what);
+	}
+
+	printf("frame_check: triangle71 %s %ux%u, BCL %u RCL %u indirect %u bytes (record +0x%x, "
+	       "tile list +0x%x..+0x%x), tile allocation %u, %d packets, D0 flags 0x%06x, "
+	       "%d record fields, %d of %d refused: %s\n",
+	       p->name, TRI71_W, TRI71_H, bcl.used, rcl.used, ind.used, lo.record - ind.gpu,
+	       lo.tile_list_start - ind.gpu, lo.tile_list_end - ind.gpu, qms, total, flags, fields,
+	       refusals, T71_REFUSALS, t71_failures ? "FAIL" : "ok");
+	free(text);
+	return t71_failures ? 1 : 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
+	if (argc > 1 && strcmp(argv[1], "--triangle71") == 0) {
+#if defined(FRAME_CHECK_TRIANGLE) && V3D_CL_VER == 71
+		return run_triangle71(argc > 2 ? argv[2] : "pi5");
+#else
+		printf("frame_check: FAIL --triangle71 needs -DV3D_CL_VER=71 -DFRAME_CHECK_TRIANGLE\n");
+		return 1;
+#endif
+	}
 	int a = 1;
 	bool triangle = argc > 1 && strcmp(argv[1], "--triangle") == 0;
 	if (triangle)
@@ -1172,7 +1664,7 @@ int main(int argc, char **argv)
 	uint32_t w = argc > a + 1 ? strtoul(argv[a], NULL, 0) : 200;
 	uint32_t h = argc > a + 1 ? strtoul(argv[a + 1], NULL, 0) : 100;
 	if (triangle) {
-#ifdef FRAME_CHECK_TRIANGLE
+#if defined(FRAME_CHECK_TRIANGLE) && V3D_CL_VER == 42
 		const char *json = getenv("FRAME_CHECK_JSON");
 		if (!json) {
 			printf("frame_check: FAIL --triangle needs FRAME_CHECK_JSON=<v3d_shc JSON>\n");

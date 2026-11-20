@@ -14,7 +14,8 @@
  * -DV3D_CL_VER=71, through v3d_cl.h's v3d_cl_emit). The generation is
  * V3D_CL_VER: where 7.1 writes other packets or fields than 4.2 the code
  * says so in place (docs/notes/v3d71-clear-frame.md section 1). The
- * triangle (M5) is 4.2 only.
+ * triangle (M5) below is 4.2's; the 7.1 triangle is v3d_frame71_tri.c
+ * (docs/notes/v3d71-triangle-frame.md), over the three v3d_frame71_* steps.
  */
 #include "v3d_frame.h"
 
@@ -339,6 +340,29 @@ bool v3d_frame_build_clear(const struct v3d_clear_frame *f, struct v3d_cl *bcl, 
 	return v3d_cl_ok(bcl) && v3d_cl_ok(rcl) && v3d_cl_ok(tile_list);
 }
 
+#if V3D_CL_VER == 71
+/* The clear frame's three steps for the 7.1 triangle (v3d_frame71_tri.c),
+ * which writes the same binning prologue, generic tile list and render list
+ * around its draw (docs/notes/v3d71-triangle-frame.md section 1). */
+void v3d_frame71_start_binning(uint32_t width, uint32_t height, const struct v3d_tiling *t,
+			       struct v3d_cl *bcl)
+{
+	emit_start_binning(width, height, t, bcl);
+}
+
+void v3d_frame71_tile_list(const struct v3d_clear_frame *f, struct v3d_cl *list, uint32_t *start,
+			   uint32_t *end)
+{
+	emit_tile_list(f, list, start, end);
+}
+
+void v3d_frame71_rcl(const struct v3d_clear_frame *f, const struct v3d_tiling *t,
+		     uint32_t list_start, uint32_t list_end, struct v3d_cl *rcl)
+{
+	emit_rcl(f, t, list_start, list_end, rcl);
+}
+#endif
+
 /* ------------------------------------------------------------------------ */
 /* M5 */
 
@@ -396,7 +420,7 @@ bool v3d_wpos_uniform(const struct v3d_wpos *w, uint32_t fb_height, uint32_t con
 	return true;
 }
 
-#if V3D_CL_VER == 42 /* the triangle frame (M5) is 4.2's only */
+#if V3D_CL_VER == 42 /* the 4.2 triangle frame (M5); 7.1's is v3d_frame71_tri.c */
 static float abs_f(float v)
 {
 	return v < 0.0f ? -v : v;
