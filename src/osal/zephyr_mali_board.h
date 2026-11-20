@@ -9,10 +9,11 @@
  *   NanoPC-T6 (RK3588)      driver/zephyr/lib/board/nanopc_t6/nanopc_t6_mali.c
  *   Verdin iMX95 (i.MX 95)  driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c
  *
- * The kernel side the ops forward to is still the NanoPC-T6's module
- * (board::nanopc_t6_osal through the yd_t6_osal_* entries of
- * yakogl_drivers.h): its bring-up, yd_t6_osal_up, takes the RK3588's block
- * bases, so it is the T6's board_up below and nothing else calls it.
+ * The kernel side the ops forward to is board::nanopc_t6_osal through the
+ * yd_t6_osal_* entries of yakogl_drivers.h, the same on every board. Only
+ * the bring-up is the SoC's: the T6's board_up calls yd_t6_osal_up (the
+ * RK3588's CRU, PMU, PMIC and QoS), the Verdin iMX95's yd_imx95_osal_up
+ * (SCMI to the System Manager); from GPU_ID on both run the same code.
  */
 #ifndef YAKOGL_ZEPHYR_MALI_BOARD_H
 #define YAKOGL_ZEPHYR_MALI_BOARD_H
