@@ -1,0 +1,7 @@
+dEQP-GLES2.functional.shaders.selftest.compiled_a
+dEQP-GLES2.functional.shaders.selftest.compiled_a_again
+dEQP-GLES2.functional.shaders.selftest.refused_fs
+dEQP-GLES2.functional.shaders.selftest.no_program
+dEQP-GLES2.functional.shaders.selftest.never_began
+dEQP-GLES2.functional.attribute_location.selftest.section_form
+dEQP-GLES2.functional.shaders.selftest.resumed_dup

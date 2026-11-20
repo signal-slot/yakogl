@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The resumed process of chunk c_001: one case using program B (refused in
+# c_000.qpa) again, so B is one program of two cases.
+#beginTestCaseResult dEQP-GLES2.functional.shaders.selftest.resumed_dup
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="dEQP-GLES2.functional.shaders.selftest.resumed_dup" CaseType="SelfValidate">
+ <ShaderProgram LinkStatus="Fail">
+  <InfoLog>link error: the fragment shader did not compile</InfoLog>
+  <VertexShader CompileStatus="OK">
+   <ShaderSource>attribute highp vec4 a_position;
+varying mediump float v_x;
+void main()
+{
+	v_x = a_position.x;
+	gl_Position = a_position;
+}
+</ShaderSource>
+   <InfoLog></InfoLog>
+  </VertexShader>
+  <FragmentShader CompileStatus="Fail">
+   <ShaderSource>varying mediump float v_x;
+void main()
+{
+	gl_FragColor = vec4(v_x &lt; 0.5 &amp;&amp; v_x &gt; 0.25);
+}
+</ShaderSource>
+   <InfoLog>online shaderc: the code generator refused this fragment shader: Select(&apos;&lt;&apos; of a varying)
+second line of the log</InfoLog>
+  </FragmentShader>
+ </ShaderProgram>
+ <Result StatusCode="Fail">Compile failed</Result>
+</TestCaseResult>
+
+#endTestCaseResult
+

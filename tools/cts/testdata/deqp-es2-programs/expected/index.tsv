@@ -1,0 +1,4 @@
+id	case	cases	outcome	refusal
+4f34fd86082972d4	dEQP-GLES2.functional.attribute_location.selftest.section_form	1	compiled	
+bda5f9fb41b8838a	dEQP-GLES2.functional.shaders.selftest.refused_fs	2	refused	online shaderc: the code generator refused this fragment shader: Select('<' of a varying)
+edcf217fb3e27eee	dEQP-GLES2.functional.shaders.selftest.compiled_a	2	compiled	

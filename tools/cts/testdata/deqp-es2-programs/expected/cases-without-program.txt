@@ -1,0 +1,2 @@
+dEQP-GLES2.functional.shaders.selftest.no_program	no-program
+dEQP-GLES2.functional.shaders.selftest.never_began	not-run

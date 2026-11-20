@@ -167,6 +167,8 @@ LIB_ARGS=()
 # --lib-cmake-arg=ARG (repeatable) is LIB_CMAKE_ARGS, --compare=DIR is COMPARE.
 # --report=DIR builds and runs nothing: it prints step 4's report of the
 # finished run in DIR again (and rewrites its aborted.txt and summary.txt).
+# --build-only builds deqp-<module> and the library (steps 1 and 2) and stops
+# before the case list (tools/cts/deqp-es2-programs.sh --stage build).
 while [ $# -gt 0 ]; do
     case "$1" in
         --gpu=*) GPU=${1#*=} ;;
@@ -180,6 +182,7 @@ while [ $# -gt 0 ]; do
         --compare=*) COMPARE=${1#*=} ;;
         --compare-only=*) compare_runs "$(a=${1#*=}; echo "${a%%,*}")" "${1##*,}"; exit ;;
         --report=*) OUT=${1#*=}; REPORT=1 ;;
+        --build-only) BUILD_ONLY=1 ;;
         *) break ;;
     esac
     shift
@@ -254,6 +257,7 @@ cmake -S "$REPO" -B "$LIB" -DYAKOGL_OSAL=linux -DYAKOGL_GPU="$GPU" \
 cmake --build "$LIB" -j"$(nproc)" >> "$LIB-build.log" 2>&1 ||
     { tail -20 "$LIB-build.log"; exit 1; }
 [ -e "$LIB/libGLESv2.so.2" ] || { echo "host-deqp-run: no libGLESv2.so.2 in $LIB" >&2; exit 1; }
+[ -z "${BUILD_ONLY:-}" ] || { echo "host-deqp-run: built $DEQP_DIR/modules/$MODULE/deqp-$MODULE and $LIB"; exit 0; }
 
 # 3. The case list, in fresh-process chunks.
 rm -rf "$OUT"
