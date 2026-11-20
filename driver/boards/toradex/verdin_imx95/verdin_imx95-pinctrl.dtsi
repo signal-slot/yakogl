@@ -1,0 +1,28 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2024-2026 NXP
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * The Verdin iMX95's pins this image uses, through the System Manager's SCMI
+ * pin control (protocol 0x19). From Zephyr's
+ * boards/nxp/imx95_evk/imx95_evk-pinctrl.dtsi at af17c0c8aa2a (its
+ * lpuart1_default group, kept as it is): the module routes Verdin UART_3,
+ * the debug console, to the same pads, UART1_RXD and UART1_TXD (SODIMM 147
+ * and 149), with pad setting 0x31e in mainline Linux's imx95-verdin.dtsi
+ * (pinctrl_uart1): pull-up, FSEL "slightly fast", DSE x4, which is this
+ * group's.
+ */
+
+#include <nxp/nxp_imx/mimx9596avzxn-pinctrl.dtsi>
+
+&pinctrl {
+	lpuart1_default: lpuart1_default {
+		group0 {
+			pinmux = <&iomuxc_uart1_rxd_lpuart_rx_lpuart1_rx>,
+				 <&iomuxc_uart1_txd_lpuart_tx_lpuart1_tx>;
+			bias-pull-up;
+			slew-rate = "slightly_fast";
+			drive-strength = "x4";
+		};
+	};
+};

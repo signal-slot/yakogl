@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+description: |
+  Arm Mali Valhall GPU with a command stream frontend (CSF): the Mali-G310 of
+  the NXP i.MX 95. The node is Linux's (arch/arm64/boot/dts/freescale/
+  imx95.dtsi, gpu@4d900000). No Zephyr driver binds it: the YakoGL Mali OSAL
+  (src/osal/zephyr_mali.c, its board half in driver/zephyr/lib/board/) reads
+  the register block from it. The clocks and the power domain are the SoC's
+  firmware's (the i.MX 95 System Manager, through SCMI); who asks for them
+  is the board's.
+
+compatible: "arm,mali-valhall-csf"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+    description: The GPU's register block, doorbell pages included.
+
+  interrupts:
+    required: true
+    description: Three, named "job", "mmu" and "gpu".
+
+  interrupt-names:
+    required: true
+
+  clocks:
+    required: true
+    description: |
+      "core" and "coregroup" (on the i.MX 95 the SCMI clocks
+      IMX95_CLK_GPU_CGC and IMX95_CLK_GPUAPB).
+
+  clock-names:
+    required: true
+
+  power-domains:
+    required: true
+    description: The GPU's power domain (on the i.MX 95 SCMI domain 14, IMX95_PD_GPU).
