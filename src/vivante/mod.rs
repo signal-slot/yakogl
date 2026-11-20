@@ -23,6 +23,7 @@
 //! | [`pe_zs`] | when the pixel engine may skip depth and stencil (PE_DEPTH_CONFIG DISABLE_ZS), clears included |
 //! | [`pe_overwrite`] | the PE colour COMPONENTS mask and OVERWRITE bit of a draw |
 //! | [`dedup`] | the state groups as the open stream last wrote them: a draw writes only the ones that differ |
+//! | [`depth_dump`] | case 247's depth-layout override plan, the dump pages of a readback, and its `test-knobs` hook `gc_debug_depth_dump` |
 //! | [`depth_format`] | the depth surface format, size and clear word per GL depth attachment (not yet used) |
 //! | [`early_z`] | the early-depth rule: whether a draw may use it and the PE_DEPTH_CONFIG and RA_EARLY_DEPTH words for it (a draw into a tiled shadow, `gc_tiled_rt`; every other draw keeps "never") |
 //! | [`shader`] | the register wiring of the two stages, the instruction cache, the uniforms |
@@ -36,12 +37,14 @@
 //! | [`tiled_rt`] | the tiled shadow of a 32-bit colour target, resolved back by the resolve engine in the same stream (`gc_tiled_rt`, off by default) |
 //! | [`layout`] | the address map of the 4x4-tiled and 64x64 super-tiled layouts: offsets, padding, stride, and whole-buffer linear-to-tiled conversion (the depth surface's and the shadow's layouts name it; the CPU conversion is not used) |
 //! | `rs_interp` | `host-test` only: the resolve engine's copies and fills run over a captured stream's writes and a memory model, through [`layout`] |
-//! | [`ts`] | tile-status buffer sizes, fast-clear words, and the PE_MEM_CONFIG and TS_MEM_CONFIG values Mesa writes (not yet used) |
+//! | [`ts`] | tile-status buffer sizes, fast-clear words, and the PE_MEM_CONFIG and TS_MEM_CONFIG values Mesa writes (not yet used); case 246's TS probe streams and readback |
+//! | [`ts_probe`] | case 246's `test-knobs` hook `gc_debug_ts_probe` (the probe's kicks on the board) and the probe's unit tests |
 #![cfg(feature = "gpu-vivante")]
 
 pub mod backend;
 pub mod cmd;
 pub mod dedup;
+pub mod depth_dump;
 pub mod depth_format;
 pub mod depth_sample;
 pub mod ds_cache;
@@ -73,4 +76,5 @@ pub mod texture;
 pub mod tiled_copy;
 pub mod tiled_rt;
 pub mod ts;
+pub mod ts_probe;
 pub mod wide_target;
