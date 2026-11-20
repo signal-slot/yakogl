@@ -173,3 +173,175 @@ list names is a 7.1 command and no list is empty. It also checks that each
 `.stdout` reports `V3D 7.1.10.2` and `glGetError 0x0`, and the number of jobs
 in each file (the table). On 2026-11-20: 8 files, 1514 packets, 0 failed.
 Two runs of all eight shapes gave byte-identical files.
+
+## The P10 texture shapes, Mesa on the drm-shim at 7.1.10 (texrefs71)
+
+The same method, build and command as the section above (Mesa 26.2.1,
+commit `da14d65e4499e66468094be52bff9ea0915a695e`, built on 2026-11-20 on
+an x86_64 Ubuntu host, gcc 15.2.0, meson 1.10.1; the same build reproduced
+the eight refs71 files byte for byte first). They are the references for
+the 7.1 texture state (tex71), glGenerateMipmap through the TFU (mip71) and
+the first cube-map case of the board (board71-tex, U8):
+
+```sh
+bash tools/v3d/drm_shim_ref.sh run <work dir> <shape> tools/v3d/pi5/gl_<shape> 7.1.10
+```
+
+| File (`.clif`, `.stdout`) | gl_test case | Jobs | What the jobs hold |
+|---|---|---|---|
+| `gl_tex2d` | - | 2 | a 64x64 `GL_RGBA8` texture sampled over the 64x64 window, NEAREST, then LINEAR |
+| `gl_texfmt` | - | 2 | the same draw from a `GL_SRGB8_ALPHA8` texture, then from a `GL_RGB565` texture |
+| `gl_mipgen` | - | 1 (and 1 TFU) | `glGenerateMipmap` of a 7-level 64x64 `GL_RGBA8` texture (a TFU job, before the draw), then a LINEAR_MIPMAP_LINEAR draw |
+| `gl_cube` | 115 `case_texcube` | 12 | per face, NEAREST then LINEAR: a clear to (0,0,0,0) and the face's quad into a 32x32 viewport |
+
+**The GL calls.** Each shape starts with the window of the section above
+(a 64x64 `GL_RGBA` texture and a `GL_DEPTH24_STENCIL8` renderbuffer,
+`glViewport(0, 0, 64, 64)`). `gl_tex2d`, `gl_texfmt` and `gl_mipgen` draw
+with gl_test's ES 1.00 UV pair (`gl_test_uv_vs_src`,
+`gl_test_texture_fs_src`: `gl_FragColor = texture2D(u_tex, v_uv)`, `u_tex`
+on unit 0) and its 24-byte `puv` vertex (pos4 and uv2, `puv_quad()`: two
+triangles over the viewport, uv (0,0) at NDC (-1,-1)) at attributes 0 and
+1. Their texels are fixed bytes (`gl_shapes.py` `tex_bytes()`), uploaded
+with `GL_UNPACK_ALIGNMENT` 4; each draw is `glClearColor(0,0,0,1)`,
+`glClear(GL_COLOR_BUFFER_BIT)`, `glDrawArrays(GL_TRIANGLES, 0, 6)`,
+`glFinish()`.
+
+- `gl_tex2d`: `glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0,
+  GL_RGBA, GL_UNSIGNED_BYTE, data)`, min and mag filter `GL_NEAREST`, the
+  wrap modes left at `GL_REPEAT`; the draw; min and mag `GL_LINEAR`; the
+  draw.
+- `gl_texfmt`: the same with `GL_SRGB8_ALPHA8` (`GL_RGBA`,
+  `GL_UNSIGNED_BYTE`), NEAREST, the draw; then a new texture
+  `GL_RGB565` (`GL_RGB`, `GL_UNSIGNED_SHORT_5_6_5`), NEAREST, the draw.
+- `gl_mipgen`: `glTexStorage2D(GL_TEXTURE_2D, 7, GL_RGBA8, 64, 64)`,
+  `glTexSubImage2D` of level 0, `glGenerateMipmap(GL_TEXTURE_2D)`, min
+  filter `GL_LINEAR_MIPMAP_LINEAR`, mag `GL_LINEAR`, the draw.
+  (`glTexStorage2D` so that Mesa does not reallocate the texture, and copy
+  level 0, inside `glGenerateMipmap`.)
+- `gl_cube`: gl_test case 115 (`driver/tools/pvrlab/gl_test.c:11163`
+  `case_texcube`) with its scene from `tools/v3d/tex_cube_case.h`: the
+  texcube pair (`gl_test_texcube_vs_src`, `gl_test_texcube_fs_src`:
+  `textureCube(u_s, v_dir)`, `v_dir = u_major + a_pos.x * u_sx + a_pos.y *
+  u_ty`), the six 4x4 `GL_RGBA` faces of `tcc_make_faces()` (R a ramp along
+  s, G along t, B `16 + 40 * face`) to `GL_TEXTURE_CUBE_MAP_POSITIVE_X + f`,
+  wrap S and T `GL_CLAMP_TO_EDGE`, `glViewport(0, 0, 32, 32)`; then for
+  draw i in 0..11 (face i / 2, LINEAR when i is odd): `glUniform3f` of
+  `tcc_faces[face]`'s `u_major`, `u_sx`, `u_ty`, min and mag filter,
+  `glClearColor(0,0,0,0)`, `glClear`, the quad, `glFinish`. The context is
+  ES 3.0, so Mesa's core asks for seamless cube filtering
+  (`src/mesa/main/version.c:690`, `CubeMapSeamless = _mesa_is_gles3(ctx)`), the case board71-tex runs
+  on the ES 3.0-reporting image (`docs/notes/v3d71-cube-seamless.md`
+  section 8). glReadPixels and the verdict are left out, as in every shape.
+
+**Reading the texture records.** The CLIF dump decodes the control lists
+and shader records but prints the uniform streams and Mesa's state buffer
+(`resource_0x1000`: sampler records, texture records and shader code) as
+raw words. `python3 -I tools/v3d/pi5/src/texstate71.py <file.clif> [job]`
+takes, for every job, the fragment shader's uniform stream (from the
+record's `Fragment Shader Uniforms Address` to the next stream) and each
+pair of words that point into dumped words, TMU Config Parameter 0
+(texture state address | return words) and Parameter 1 (sampler state
+address | flags), and prints both records field by field with the 7.1
+layouts of `third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml`
+(`Texture Shader State` min_ver 71, `Sampler State`). In every job of the
+four shapes the fragment shader has exactly those two uniforms: P0 return
+words 3, P1 per-pixel mask 1, unnormalized 0, output 32-bit 0. The records
+(words in memory order; fields as texstate71.py decodes them):
+
+| Shape, job | Texture Shader State (7.1), 6 words | Fields | Sampler State, 6 words | Fields |
+|---|---|---|---|---|
+| `gl_tex2d` 1 | `0x0000f000 0x00000200 0x00404001 0x00b1a840 0x000f0340 0x00003c00` | type 4 RGBA8, 64x64, depth 1, base/max level 0/0, swizzle R G B A, array stride 256 (x 64 bytes), level 0 strictly UIF, XOR off, UB_PAD 0, R/B swap 0, reverse 0, transfer func 0 (none), Cb = Cr = base >> 6 (960), chroma offsets 1, 1 | `0x00100007 0 0 0 0 0` | mag, min, mip filter nearest; min LOD 0, max LOD 1/256; wrap S, T, R 0 (REPEAT); bias 0; compare NEVER; border 0 |
+| `gl_tex2d` 2 | the same record | | `0x00100004 0 0 0 0 0` | mag and min LINEAR, mip nearest; the rest as job 1 |
+| `gl_texfmt` 1 | `0x0000f004 0x00000200 0x00404001 0x00b1a840 0x000f0340 0x00003c00` | as `gl_tex2d`, with **transfer func 1 (sRGB)** in bits 2..4 of word 0 | `0x00100007 0 0 0 0 0` | as `gl_tex2d` 1 |
+| `gl_texfmt` 2 | `0x0001b000 0x00000100 0x00404001 0x0031a860 0x001b0340 0x00006c00` | **type 6 RGB565**, swizzle R G B **1**, array stride 128, R/B swap 0, transfer func 0 | `0x00100007 0 0 0 0 0` | as `gl_tex2d` 1 |
+| `gl_mipgen` 1 | `0x00011000 0x00000300 0x00404001 0x06b1a840 0x00110340 0x00004400` | type 4 RGBA8, 64x64, **max level 6**, array stride 384 (the 7-level chain, 24576 bytes), level 0 strictly UIF, transfer func 0 | `0xf0000000 0 0 0 0 0` | mag, min and mip filter LINEAR; min LOD 0, **max LOD 15**; wrap REPEAT |
+| `gl_cube` odd jobs (NEAREST) | `0x0000d000 0x10000002 0x01800400 0x00b1a040 0x000d0300 0x00003400` | type 4 RGBA8, **4x4, depth 6** (the six faces as layers), array stride 1 (64 bytes, one 4x4 face), base/max level 0/0, level 0 not strictly UIF (a 4x4 image is not UIF-tiled), R/B swap 0, transfer func 0, no cube or seamless field | `0x00100007 0x00490000 0 0 0 0` | mag, min, mip filter nearest; **wrap S, T and R 1 (CLAMP)**; max LOD 1/256 |
+| `gl_cube` even jobs (LINEAR) | the same record | | `0x00100004 0x00490000 0 0 0 0` | mag and min LINEAR, mip nearest; wrap S, T, R CLAMP |
+
+What Mesa sets, and where (Mesa 26.2.1; `third_party/` vendors the format
+table and the packet XML; the other files are the tarball's, as extracted by
+the build):
+
+- **Transfer function, per revision.** `src/gallium/drivers/v3d/v3dx_state.c:1023-1029`:
+  `is_srgb = util_format_is_srgb(cso->format)`, written as `tex.srgb` at
+  `V3D_VERSION == 42` and as `tex.transfer_func = is_srgb ?
+  TRANSFER_FUNC_SRGB : TRANSFER_FUNC_NONE` at `V3D_VERSION >= 71` (line
+  1028): `gl_texfmt` job 1's word 0 `0x...004`. The texture type stays
+  RGBA8 (`v3dx_format_table.c:67`, `R8G8B8A8_SRGB` -> `SRGB8_ALPHA8` render
+  target, `RGBA8` texture).
+- **R/B swap.** The Gallium (GL) path never writes `r_b_swap` or `reverse`
+  (no assignment in `src/gallium/drivers/v3d/`); only Vulkan does
+  (`src/broadcom/vulkan/v3dvx_image.c:144-145`, `tex.reverse` and
+  `tex.r_b_swap` from the view's `channel_reverse` and `swap_rb`). A
+  swapped channel order reaches the GL record through the format table's
+  type and swizzle: `GL_RGB565` with `GL_UNSIGNED_SHORT_5_6_5` is Gallium's
+  `B5G6R5_UNORM`, which `third_party/mesa-26.2.1/src/gallium/drivers/v3d/v3dx_format_table.c:81`
+  maps to texture type `RGB565` (the XML: "B in low bits", `v3d_packet.xml:339`)
+  with swizzle `SWIZ_XYZ1`; `gl_texfmt` job 2 has R/B swap 0, swizzle R G B 1.
+  So no shape here can show the bit set: in GL it is 0 at every revision.
+- **The TFU job.** `glGenerateMipmap` reaches `v3d_generate_mipmap`
+  (`src/gallium/drivers/v3d/v3d_blit.c:240`; the cap is
+  `v3d_screen.c:296`, `DRM_V3D_PARAM_SUPPORTS_TFU`, which the shim answers 1,
+  `drm-shim/v3d_noop.c:147`), which calls `v3dX(tfu)` with `for_mipmap`
+  (`src/gallium/drivers/v3d/v3dx_tfu.c`; the 7.1 block is lines 165-202,
+  `IOC` at 176-201, the ioctl at 204).
+- **Seamless cube.** v3d has no field for it (`docs/notes/v3d71-cube-seamless.md`
+  sections 1 and 3); the one trace in the records is the state tracker's:
+  `src/mesa/state_tracker/st_atom_sampler.c:88-95` forces wrap S, T and R
+  to `CLAMP_TO_EDGE` for a cube map when `seamless_cube_map` is set (it is,
+  `CubeMapSeamless` in an ES 3 context): `gl_cube`'s sampler word 1
+  `0x00490000` is CLAMP in all three, where the GL state has wrap R at its
+  default REPEAT.
+
+**The TFU registers (`gl_mipgen`).** Mesa's `V3D_DEBUG=clif` dumps the
+control lists of render jobs only; a TFU job is its own ioctl,
+`DRM_IOCTL_V3D_SUBMIT_TFU`, and the shim's handler is a no-op, so the CLIF
+holds no trace of it. `gl_shapes.py` runs each of the four P10 shapes with
+`src/tfu_spy.c` ahead of the shim in `LD_PRELOAD` (it builds it with `cc`
+into `<libdir>/gl_shapes_tfu_spy.so` and runs itself again;
+`drm_shim_ref.sh` is unchanged): an `ioctl()` that prints the submission's
+`struct drm_v3d_submit_tfu`
+(`third_party/mesa-26.2.1/include/drm-uapi/v3d_drm.h:317-347`) on stdout
+and passes the call on. Its two lines in `gl_mipgen.stdout`:
+
+```
+gl_shapes: SUBMIT_TFU icfg 0x03040000 iia 0x00011000 iis 0x00000008 ica 0x00000000 iua 0x00000000 ioa 0x00011000 ios 0x00400040 coef 0x00000000 0x00000000 0x00000000 0x00000000 ioc 0x00086061 bo_handles 6 0 0 0 in_sync 1 out_sync 1 flags 0x0 extensions 0
+gl_shapes: SUBMIT_TFU 7.1: ICFG IFORMAT 6 OTYPE 4; IOS 64x64; IOC DIMTW 1 NUMMM 6 FORMAT 6 STRIDE 8
+```
+
+With the shifts of Mesa's `src/broadcom/common/v3d_tfu.h` (`V3D71_*`):
+`ICFG` = input format 6 (`UIF_NO_XOR`, bits 23 up) and output type 4
+(`RGBA8`, bits 16 up), nothing else (at 7.1 the level count moved to IOC);
+`IIA` = `IOA` = `0x00011000`, the texture's own buffer (source and
+destination are the same resource; `bo_handles` names it once); `IIS` 8 =
+the source's padded height in UIF blocks (64 / (2 x 4-row utiles));
+`IOS` = `0x00400040`, height 64 << 16 | width 64; **`IOC` = `0x00086061`**:
+`DIMTW` 1 (bit 0: level 0 is not written, only the chain below it), `NUMMM`
+6 (bits 4 up: levels 1 to 6), `FORMAT` 6 (bits 12 up: `UIF_NO_XOR`),
+`STRIDE` 8 (bits 16 up: the destination's padded height in UIF blocks);
+`ICA`, `IUA`, the coefficients and `flags` 0; in and out sync the context's
+one syncobj. The draw that follows samples the chain: `Max Level` 6 in the
+texture record above.
+
+**Divergences from the board.** Those of the section above hold here: the
+GL shader records are the D0 draw-index layout decoded by the dump with the
+plain 7.1 layout (every new record reads "Insert Primitive ID as first
+varying" 1; "Differences" item 4), and buffers are 4 KiB-aligned on the
+shim where the board's are 16 KiB, so every address differs (the texture
+base pointers, `Cb`/`Cr` (base >> 6), the TFU `IIA`/`IOA`, the P0/P1
+uniforms). All 17 jobs have a draw and a tile allocation size of 16384, the
+board's figure. Two more, from the TFU: the shim answers
+`DRM_V3D_PARAM_SUPPORTS_TFU` 1 unconditionally (`v3d_noop.c:147`), where
+the board's answer comes from its kernel (this directory's `v3d_ident.txt`
+decodes as "no TFU" in the identity registers, so board71-tex should read
+what the board's own Mesa does for `glGenerateMipmap` before taking
+`gl_mipgen`'s TFU job as the board's); and the shim never runs the TFU
+job, so nothing here says what the TFU writes.
+
+**Decoding.** `bash tools/v3d/pi5/src/decode71.sh` covers the four files
+too: their job counts (the table), `V3D 7.1.10.2` and `glGetError 0x0` in
+each `.stdout`, the number of `SUBMIT_TFU` lines (1 in `gl_mipgen`, 0 in
+the others), and a texture and sampler record found by `texstate71.py` for
+the fragment shader of every job. On 2026-11-20: 12 files, 2432 packets,
+0 failed; 2 + 2 + 1 + 12 texture records. Two runs of the four shapes gave
+byte-identical files.

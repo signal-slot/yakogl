@@ -11,13 +11,19 @@
 # the vendored reference build (tools/v3d/mesa_ref.sh) or MESA_V3D_TREE. Also:
 # each .stdout says the shim reported V3D 7.1.10.2 and glGetError 0, and each
 # file has as many jobs (one @wait_render_all_cores per submitted job) as its
-# shape's glFinish calls make (EXPECTED below).
+# shape's glFinish calls make (EXPECTED below). The P10 texture shapes
+# (TEXTURED) also: their .stdout has as many SUBMIT_TFU lines (tfu_spy.c) as
+# TFU lists, and texstate71.py finds a texture and sampler record for the
+# fragment shader of every job.
 # Exit 0 when every file passes; 1 otherwise; 77 when shim71.sh is a gap.
 set -u
 cd "$(dirname "$0")/../../../.." || exit 1
 
 # shape -> jobs (gl_shapes.py's docstring; one job per glFinish of the case)
-EXPECTED=(scissor:2 scisbox:3 writemask:4 viewport:3 fbods:9 colormask:6 mrt4:1 mrt8:1)
+EXPECTED=(scissor:2 scisbox:3 writemask:4 viewport:3 fbods:9 colormask:6 mrt4:1 mrt8:1
+  tex2d:2 texfmt:2 mipgen:1 cube:12)
+# textured shape -> TFU submissions (glGenerateMipmap: one)
+TEXTURED=(tex2d:0 texfmt:0 mipgen:1 cube:0)
 
 out=$(bash tools/v3d/check71.d/shim71.sh 2>&1)
 rc=$?
@@ -43,6 +49,18 @@ for e in "${EXPECTED[@]}"; do
   [ "$jobs" = "$want" ] ||
     { echo "FAIL: $c has $jobs jobs, $want expected"; failed=1; }
   echo "decode71: gl_$shape: $jobs jobs"
+done
+for e in "${TEXTURED[@]}"; do
+  shape=${e%%:*} want=${e#*:}
+  c=tools/v3d/pi5/gl_$shape.clif
+  s=tools/v3d/pi5/gl_$shape.stdout
+  tfu=$(grep -c '^gl_shapes: SUBMIT_TFU icfg ' "$s")
+  [ "$tfu" = "$want" ] ||
+    { echo "FAIL: $s has $tfu TFU submissions, $want expected"; failed=1; }
+  out=$(python3 -I tools/v3d/pi5/src/texstate71.py "$c") ||
+    { echo "FAIL: texstate71.py finds no texture record in a job of $c"; failed=1; }
+  pairs=$(printf '%s\n' "$out" | grep -c 'TMU Config Parameter 0')
+  echo "decode71: gl_$shape: $tfu TFU submissions, $pairs texture records"
 done
 "$chk" "${files[@]}" || failed=1
 exit $failed
