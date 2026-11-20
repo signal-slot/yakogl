@@ -530,7 +530,8 @@ The bench Pi 5 (Model B Rev 1.1, 8 GB, BCM2712 D0, boot loader of
 Under Linux (D3) the files are in `tools/v3d/pi5/` (its README says how each
 was taken); the Zephyr runs went through `tools/board.sh pi5` (tryboot), and
 their console lines are quoted in the probes' READMEs
-(`tools/probes/rpi_5/rpi5_ident/README.md`, `.../rpi5_clear/README.md`).
+(`tools/probes/rpi_5/rpi5_ident/README.md`, `.../rpi5_clear/README.md`,
+`.../rpi5_triangle/README.md`).
 
 | Fact | Value | Record |
 |---|---|---|
@@ -545,6 +546,7 @@ their console lines are quoted in the probes' READMEs
 | PM watchdog | resets the BCM2712 (`PM_RSTS 00000020` at the next boot) after feeding stops, and tryboot then boots Linux with nobody at the board | `rpi5_wdog`; every later run ends the same way |
 | Return to Linux | `back_after` 213 to 221 s after the tryboot reboot for an image the watchdog resets ~40 s after boot | `board.sh pi5` meta.txt of each run |
 | First clear (M1 to M4) | `v3d_clear: PASS`: the 7.1 clear-only frame (lists 19 / 99 / 27 bytes, tile 64x64, 2x1 tiles, tile alloc 12288) bins and renders under our MMU (page table at PA 0x23e000, VA 0x100000..0x12c000), `FLDONE`/`FRDONE` within the 1 s polls, 0 of 8192 pixels wrong, guard row 0 of 128 changed | `rpi5_clear` console; `tools/cts/RESULTS.md`, "V3D 7.1: Raspberry Pi 5 on Zephyr" |
+| First triangle (M5, 2026-11-20) | `v3d_triangle: PASS` with Mesa's shaders and with ours: the driver's 7.1 clear-then-triangle job (BCL 126 / RCL 96 bytes, D0 shader record, indirect 187 bytes with Mesa's programs, 219 with ours, tile alloc 16384) bins and renders with no overflow block, `FLDONE`/`FRDONE` within the 1 s polls, `ERR_STAT` 0x1000 (idle) after the render; 64x64 read back with 0 of 4096 pixels wrong (1012 inside with max diff 1, 2796 outside, 288 edge, tol 3), guard rows unchanged, rows not flipped; both runs give the same pixels | `rpi5_triangle` and `rpi5_triangle_ours` consoles (build `0c58c457`); `tools/cts/RESULTS.md`, "V3D 7.1: Raspberry Pi 5 on Zephyr" |
 | Mesa's clear and triangle | The clear's 36 packets equal the shim's apart from buffer addresses and the 16 KiB tile allocation size (16384 against 12288); the triangle uses the D0 shader record | `tools/v3d/pi5/clear.clif`, `triangle.clif`, `README.md` ("Differences") |
 
 Not measured: the GIC-400's line count (`GICD_TYPER`, section 8), the V3D's
