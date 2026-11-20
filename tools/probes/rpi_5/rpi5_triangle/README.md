@@ -151,10 +151,81 @@ Mesa's shaders first; ours only after Mesa's passed. If the board does not
 come back within the runner's limit, stop: no retry
 (`tools/probes/rpi_5/README.md`).
 
-## On the board
+## On the board (M5, 2026-11-20)
 
-<!-- the board session (M5) fills this: build, image, the board.sh result
-line, get_throttled, the console, what it answers -->
+Both images built from `0c58c457` with `-DYAKOGL_WERROR=ON` (zephyr
+`af17c0c8aa2a`, 82,208 bytes each; `rpi5_triangle` sha256
+`1a8697651604f873...`, `rpi5_triangle_ours` sha256 `0fb81874ead08a6f...`) and
+run once each through `tools/board.sh pi5 run`, Mesa's shaders first, with no
+change to the probe or the driver:
+
+- `rpi5_triangle`: `rc=0 verdict=done boot=tryboot row
+  boot_verdict=complete result=legacy:v3d_triangle_pass resets=0
+  back_after=227s`
+- `rpi5_triangle_ours`: `rc=0 verdict=done boot=tryboot row
+  boot_verdict=complete result=legacy:v3d_triangle_pass resets=0
+  back_after=215s`
+
+`get_throttled` read 0x0 before and after both. The console of the Mesa run
+after Zephyr's banner:
+
+```
+v3d_triangle: build 0c58c457, shaders mesa (FS 9, VS 23, CS 15 instructions)
+v3d_triangle: cache: CONFIG_CACHE_MANAGEMENT=1 CONFIG_DCACHE=1 sys_cache_data_flush_and_invd_range, data line 64 bytes
+v3d_triangle: rpi_5, V3D 7.1, target 64x64 raster RGBA8888, watchdog armed at boot
+M1 mailbox: 0
+M1 before power-on: PM_GRAFX 0x00001040
+M1 power_on: 0, PM_GRAFX 0x00001040, SMS REE_CS 0x00000000 TEE_CS 0x00000050
+M1 V3D clock: rate 0 (500000000 Hz)
+[00:00:00.051,000] <inf> gpu_v3d: V3D 7.1: 1 core(s), 12 QPUs, VPM 65536 bytes, PA 36 / VA 36 bits, MMU yes
+[00:00:00.061,000] <inf> gpu_v3d: V3D raw: HUB_IDENT0..3 42554856 00081117 00001900 00020a10 CTL_IDENT0..2 07443356 81001431 c0078101 MMU_DEBUG_INFO 20804664
+M1 identity: HUB_IDENT0..3 0x42554856 0x00081117 0x00001900 0x00020a10
+M1 identity: CTL_IDENT0..2 0x07443356 0x81001431 0xc0078101 MMU_DEBUG_INFO 0x20804664
+M1 identity: V3D 7.1, 1 core(s), 12 QPUs, VPM 65536 bytes, PA 36 / VA 36 bits, MMU yes: 0
+M2 page table: PA 0x280000, 4096 entries, scratch PA 0x27f000, VA 0x00100000..0x0016a000 mapped, 108 pages used
+M2 mmu_init: 0
+frame 64x64: tile 64x64, 1x1 tiles, BCL 126 / RCL 96 / indirect 187 bytes (record +0x60, attributes +0x80, tile list +0xa0..+0xbb), tile alloc 16384 (draws 1), state 256
+frame uniforms: FS +0x0, VS +0x0, CS +0x40; code FS 0x00103000 VS 0x00103200 CS 0x00103400
+frame record: first dword 0x04208002, 0 field(s) differ from the mesa header
+M5 before bin: MISCCFG 0x00000006 UIFCFG 0x00000045 ERR_STAT 0x00001000 FDBGS 0x00000007 core INT_STS 0x00000000 hub INT_STS 0x00000000
+M5 bin: 0, CT0CA 0x0010007e CT0EA 0x0010007e (end 0x0010007e), BPCA 0x00108000 BPCS 0x00001000, overflow blocks used 0
+M5 render: 0, CT1CA 0x00101060 (end 0x00101060), ERR_STAT 0x00001000
+M5 caches_clean: 0
+M5 vertices (window): (8,8) (56,8) (32,56), clear 00 00 ff ff, tol 3, margin 1 px
+M5 pixel centre (32,24): 51 56 58 ff
+M5 pixel near v0 (12,10): e0 11 0d ff
+M5 pixel near v1 (51,10): 11 e0 0d ff
+M5 pixel near v2 (32,50): 0c 11 e2 ff
+M5 pixel corner (1,62): 00 00 ff ff
+M5 read-back: 0, 1012 inside (0 wrong, max diff 1), 2796 outside (0 wrong), 288 edge (0 wrong), guard rows 0 of 512 bytes changed
+v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside, 2796 outside, 288 edge, tol 3; shaders mesa)
+```
+
+then the watchdog's reset and Linux. Our shaders' run prints the same lines
+except these:
+
+```
+v3d_triangle: build 0c58c457, shaders ours (FS 12, VS 28, CS 20 instructions)
+frame 64x64: tile 64x64, 1x1 tiles, BCL 126 / RCL 96 / indirect 219 bytes (record +0x80, attributes +0xa0, tile list +0xc0..+0xdb), tile alloc 16384 (draws 1), state 256
+frame uniforms: FS +0x0, VS +0x0, CS +0x50; code FS 0x00103000 VS 0x00103200 CS 0x00103400
+frame record: first dword 0x04208002, 0 field(s) differ from the ours header
+v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1012 inside, 2796 outside, 288 edge, tol 3; shaders ours)
+```
+
+The five sample pixels and the read-back counts are the same in both runs.
+
+What it answers:
+- The driver's 7.1 clear-then-triangle job (`v3d_frame_build_triangle`,
+  equal to the board's `triangle.clif` on the host) bins and renders on
+  the 7.1.10 core under our MMU. Both waits return within the 1 s polls,
+  no overflow block is used (Mesa's 16384-byte tile allocation is enough),
+  and `ERR_STAT` stays at its idle 0x1000.
+- The D0 shader record and the attribute records are right as built for
+  both programs' shapes.
+- The window orientation is the frame's: no wrong pixel without flipping
+  the rows.
+- Our 7.1 compiler's pass-through VS, CS and FS run on the hardware and
+  give the same pixels as Mesa's.
 
 ## Limits
 
