@@ -7,6 +7,10 @@
 # Reads the console log of the rpi5_mbox image (src/main.c) and prints, always
 # in this order and always all of them:
 #
+#   rpi5_mbox verdict: cache: <on|off|missing>
+#                         CONFIG_CACHE_MANAGEMENT as the image ran (its early
+#                         `cache management` line; `missing` if that line is
+#                         not in the log)
 #   rpi5_mbox verdict: <id> <name>: <state> (display <s>, memory <s>, clear <s>, board <s>)[ value ...]
 #                         one line per request, seven, in the image's order
 #   rpi5_mbox verdict: q1: <cause> (...)
@@ -15,6 +19,7 @@
 #
 # The image's request lines (other lines are ignored):
 #
+#   rpi5_mbox: cache management <on|off>
 #   rpi5_mbox: tag <id> status <hex|n/a> answered <hex> value <hex> rc <n> way <display|clear|board> ...
 #   rpi5_mbox: memory tag <id> status <hex> answered <hex> value <hex> way display ...
 #
@@ -88,9 +93,15 @@ BEGIN {
         known[ids[i]] = i
     nways = split("display memory clear board", ways, " ")
     endline = ""
+    cache = ""
 }
 {
     sub(/^.*rpi5_mbox: /, "rpi5_mbox: ")
+}
+/^rpi5_mbox: cache management (on|off)/ {
+    if ($4 == "on" || $4 == "off")
+        cache = $4
+    next
 }
 /^rpi5_mbox: (done|FAIL) \(/ {
     endline = $0
@@ -131,6 +142,9 @@ BEGIN {
     val[id, way] = va
 }
 END {
+    if (cache == "")
+        cache = "missing (no cache management line in the log)"
+    printf "rpi5_mbox verdict: cache: %s\n", cache
     nd = nm = nc = nb = 0
     sd = sc = sb = 0
     for (i = 1; i <= n; i++) {
