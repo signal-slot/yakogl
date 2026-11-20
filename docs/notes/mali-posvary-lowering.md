@@ -20,8 +20,11 @@ quoted as `M:nir_opt_varyings.c:<line>`); `src/shaderc/online/mali/` `nir.rs`,
 `nir_fs.rs`, `select.rs`, `link.rs`, `mod.rs`, `motion.rs`; the notes
 `mali-varying-constants.md`, `mali-partial-varyings.md`,
 `mali-deqp-varylink.md`, `mali-attribute-records.md`, `mali-deqp-families.md`
-section 18 (rows 25, 36, 37). Nothing was run: no probe, no build.
-Statements marked *(reading)* are from the code, not from an instrumented run.
+section 18 (rows 25, 36, 37). Sections 1 to 8 were written from the words
+and the code alone. Statements marked *(reading)* are from the code, not from
+an instrumented run. Section 9 holds what a later instrumented run measured
+(temporary `eprintln!`s at the refusal sites, reverted, nothing committed):
+where it differs from a *(reading)*, section 9 is right.
 
 ## 1. The 18 references, word by word
 
@@ -429,3 +432,109 @@ beside attribute lanes in a vec2 (`tests.rs:7053`'s shape) and `vec4(c, u,
 1.0)` (`:1253`), unless the lowering's own tests are the posvary references
 alone; a program with **two** flat vec4s or a *declared* ES 3.00 `flat`
 beside a smooth one (not reached by the 42 cases).
+
+## 9. Measured at the integration tip `3497799a`, HOST-ONLY
+
+Method: the 18 references through `mali_ref::compile_pair` (what
+`refusals_pinned` runs), with a temporary `eprintln!` at every site that
+returns `PositionLane`, `VaryingForm` or `VaryingNotFromAttribute`
+(`nir.rs`, `nir_fs.rs`, `mod.rs`, `motion.rs`) and at `compile_vs_for_reads`,
+printing the site, the vertex layout's masks and the reads the vertex shader
+is built for. The patch and the scratch test were removed again; `git diff`
+of `src/` and `tests/` is empty.
+
+| reference | site that refuses | state there |
+|---|---|---|
+| `flat_sep_rnd13` | `nir.rs:5492` `flat && smooth` | layout `(0, 4 lanes, byte 0), (1, 1 lane, byte 16)`, masks `[15, 1]`; built for reads `[(0, 15), (1, 1)]` |
+| `flat_sep_kau_bs26` | `nir.rs:5492` | masks `[15, 1]` (vec4 at 0, float at 16); reads `[(0, 1), (1, 15)]` (the fragment's own numbering) |
+| `flat_sep_vec4_bs51` | `nir.rs:5492` | three varyings `(0, 4, byte 0), (1, 1, 16), (2, 1, 20)`, masks `[15, 1, 0]`; reads `[(0, 15), (1, 1)]` |
+| `flat_lane_vec4_v86` | `nir.rs:5492` | one varying, mask `13` (x, z, w; y is `push_equal` of x); reads `[(0, 15)]` |
+| `flat_lane_vec4_c30` | `nir.rs:5492` | seven varyings, masks `[5, 1, 0, 1, 0, 0, 1]`; reads `[(0, 1), (2, 5), (3, 1), (6, 1)]` |
+| `tex_uniform_w`, `_array` | `nir.rs:5492` | one varying, mask `15`; reads `[(0, 15)]` |
+| `loop_phi_array` | `nir.rs:5471` (the phi arm), not `:5492` | |
+| `fract_*` (6) | `nir.rs:2120` only | `op = Ffloor, bits = 32, srcs = [Undef, Undef, Undef]`; `nir.rs:5368` is never reached |
+| `unwritten_*` (4) | `nir.rs:5421` only | |
+
+What this changes in sections 1 to 8:
+
+1. **M2 is confirmed to the operation.** The `Undef` operand is the `Ffloor`
+   the `Ffract` arm makes at lane 0 (`nir.rs:4869-4876`, every lane `i <
+   width`), as section 5 read it; the dEQP shader has no `floor`, and the
+   probe in the note `mali-deqp-posvary.md` (`f11`, no local, compiles) fits.
+   The guard of section 5 (skip `Undef` lanes in the `held` loop) is the first
+   edit; the `eprintln!` of section 5 is no longer needed.
+2. **M3 has one site**, `nir.rs:5421`, for all four references; `motion.rs`
+   and `nir.rs:5437` are not reached. The edit of section 6 step 1 (filter the
+   outputs with no store before `generic_layout`) is the whole vertex side;
+   whether it also needs the fragment side's `Undef` fold (section 6 step 2)
+   is for `unwritten_declared_dead_read` to say: it is the one whose fragment
+   reads `var`.
+3. **Section 3.1 is half answered.** `rnd13` and `c30` reach `:5492` with a
+   vertex shader built for reads that **include lanes Mesa's fragment shader
+   does not read**: `rnd13`'s `e` (mask 1 of the second varying; its only use
+   is in a `gl_FragColor` assignment the next assignment overwrites) and
+   `c30`'s `e` and `n` (read in an overwritten assignment and in an expression
+   statement with no effect). The packing rule alone does not give Mesa's
+   words for them: the dead lanes must leave the reads first, else `e` is an
+   extra `Interp` lane in `c30` (shifting the fill) and a flat lane in `rnd13`
+   (the `ffma` store and a flat load Mesa does not have). `kau_bs26` and
+   `bs51` are not affected (`kau`'s `e` is read for real; `bs51`'s dead `d`
+   is already mask 0). Where the reads come from was **not** found: an
+   `eprintln!` in `nir_fs.rs` `layout` (at its `decls` line, `:7974`) printed
+   nothing for any of the 18 pairs before the vertex refusal, so the
+   reads handed to `compile_vs_for_reads` do not come from a run of that
+   function for these fragment shaders (`vs_for_fragment`, `backend.rs:2121`:
+   `link_consts_of` then `compile_and_publish_linked`, or `partial_reads` of
+   the stand-alone record). Finding which record carries `e` is step M1a of
+   section 4.3, now with the symptom named: the record's mask is the
+   fragment's own, not the link's.
+4. **The flat load may share a vec4 with smooth ones.** The ES 3.00
+   references `fsload_qual1..3` (`tools/mali/testdata/fsload_qual*.expect.json`,
+   pinned at `tests.rs:2360` as a fragment refusal `VaryingNotFromAttribute`)
+   have `out vec2 p; flat out vec2 q;`: the fragment loads
+   `LD_VAR_BUF_IMM.f32.v2.src_f32 @r0:r1, r61, index:0x0` and
+   `LD_VAR_BUF_IMM.f32.v2.src_flat32 @r2:r3, 0x0, index:0x8`, the vertex
+   stores four words in order. A *declared* flat lane is therefore the next
+   scalar word after the interpolated ones, **not** a new vec4 (section 4.2's
+   `pack_lanes` step 2 says "next word of a flat vec4"; and its per-slot flat
+   flag cannot say it): the load is **per run of equal qualifier**, `.vN` of
+   the run's width at byte `4 * first word`, `.src_flat32` for the flat run. For
+   the 42 cases the two readings give the same bytes (the flat run starts at a
+   vec4 boundary there: `kau_bs26` 4 interpolated words, `bs51` after the fill
+   of 3), so the per-run form is the safe one to build and it makes
+   `fsload_qual1..3` byte-comparable too, a pin that flips at
+   `tests.rs:2360` (the three references exist; no case count: they are ES 3.00
+   and not in the 42). What a *convergent* lane does when it lands after a
+   flat run that is not at a vec4 boundary is not measured.
+5. **The record model.** `link.rs` `pair` (`:420-470`) finds one `(offset,
+   mask)` per varying (`.find(|s| s.varying == Some(loc))`) and compares them
+   between the stages; `compile_module` (`mod.rs:1617`) pushes one
+   `VaryingSlot` per `f.reads` entry; `src/mali/program.rs:120` only takes the
+   largest `offset + 4 * comps`. A varying whose lanes are in two places
+   (`v86`: `z, w` at words 0, 1 and `x`/`y` at word 2; `bs51`: `a.x..a.z` at
+   words 1-3 and `a.w` at 4) therefore needs **one record per run** (the same
+   `varying`, disjoint `mask`s, each `offset` its first word) and `pair` must
+   collect all entries of a location and compare the sets; the rank of
+   `VaryingOrder` takes the lowest offset. This is compiler-side only: the
+   frame's use (`program.rs`) is unchanged, and no driver table gains a field
+   (the record has no interpolation field today either, and the all-flat
+   `varyconst_117` shipped without one, `mali-varying-constants.md`).
+6. **Attribute records follow the stored lanes.** `c30`'s varying program
+   loads one attribute (`LD_ATTR_IMM.f32 ... index:0x1`; the dead `t`, `r` and
+   the `q*s` partners are not loaded and take no index) and `rnd13`'s loads
+   `o` at index 1 alone: the attribute numbering of
+   `mali-attribute-records.md` is the bits of `inputs_read` of what survives.
+   Dead lanes (item 3) must be removed *before* `vs.counted = vs.inputs_read()`
+   (`nir.rs:3938`, `:3974`), or the attribute table of `c30` is longer than
+   Mesa's and the byte compare differs in the load indexes.
+7. **The classification for `loop_phi_array`** is as section 7 says (`Interp`,
+   plain store); the constants stored after it are the `kept` rule of
+   section 4.5 (the fragment reads the mediump `v_color` whole, as in
+   `kau_bs26`). It also needs the thread-local array and the int-uniform
+   loop, which no posvary step owns; keep it last.
+
+Revised first step of M1 (section 4.3, M1a): find which fragment record gives
+`rnd13`/`c30` their dead lanes, and make those lanes leave `reads`; check
+`kau_bs26`/`bs51` stay unchanged; then `rnd13` should reach the compare with
+no packing change, and `c30`'s `e`/`n` drop out of its seven-varying layout
+(the fill then has two lanes to place, as section 2's table says).
