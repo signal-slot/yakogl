@@ -120,13 +120,16 @@ nothing (`st_atom_rasterizer.c:217-223`); `line_smooth` is not GLES state. What
 
 ```sh
 tools/mali/drm_shim_ref.sh build <mesa-X.Y.Z.tar.xz> <work dir>
-tools/mali/drm_shim_ref.sh run <work dir> vs.vert fs.frag <out prefix> [--prim P] [--size WxH] [--viewport X,Y,W,H] [--depth-range N,F]
+tools/mali/drm_shim_ref.sh run <work dir> vs.vert fs.frag <out prefix> [--gpu g610|g310v1..g310v5] [--prim P] [--size WxH] [--viewport X,Y,W,H] [--depth-range N,F]
 tools/mali/pan_ref_diff.py list <out prefix>.trace
 tools/mali/pan_ref_diff.py diff out.json disasm.txt <trace> --draw    # pan_shc vs the trace's draw
 PAN_SHC=<binary> tools/mali/ref_cases.py <work dir> <out dir>         # the control cases
 ```
 
 `build` makes gallium panfrost with EGL (surfaceless), GLES 2 and the drm-shim.
+`--gpu` picks the GPU the shim reports: `g610` (the default, as before) or a
+Mali-G310 variant of Mesa's model table, for the i.MX 95 measurement
+(`docs/notes/mali-g310-vs-g610.md`).
 `run` draws once with the program through `gl_ref.py` (an FBO, 64x64 unless
 `--size` says otherwise, the viewport and depth range of `--viewport` and
 `--depth-range` or the whole FBO and 0,1, attributes bound in declaration
