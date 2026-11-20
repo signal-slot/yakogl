@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at fad0558a, 2026-11-20, image S32c1: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.12 [sdcard] pieeprom.upd not found
+  4.12 [sdcard] recover4.elf not found
+  4.12 [sdcard] recovery.elf not found
+  4.54 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.61 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.62 0x00d03114 0x00000000 0x00001fff
+  4.66 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.02 Starting start4.elf @ 0xfec00200 partition 1
+  4.30 XHCI-STOP
+  4.30 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.31 USBSTS 18
+  4.31 PCI0 reset
+  4.32 +
+
+MESS:00:00:04.336999:0: arasan: arasan_emmc_open
+MESS:00:00:04.338658:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.458885:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.471755:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.506036:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.507448:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.511833:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.676670:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.679488:0: brfs: File read: 168 bytes
+MESS:00:00:04.772197:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.776705:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.792990:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.292375:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.297922:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.306958:0: *** Restart logging
+MESS:00:00:05.308730:0: brfs: File read: 168 bytes
+MESS:00:00:05.387170:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.392202:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.410493:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.415563:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.421162:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.429921:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.435419:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.457307:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.472677:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.475969:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.516726:0: brfs: File read: 56249 bytes
+MESS:00:00:05.536802:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.601756:0: brfs: File read: 5971 bytes
+MESS:00:00:05.608275:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.649401:0: brfs: File read: 168 bytes
+MESS:00:00:05.653475:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.656561:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.662410:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.819334:0: brfs: File read: 145 bytes
+MESS:00:00:07.232332:0: brfs: File read: /mfs/sd/yakogl-S32c1.bin
+MESS:00:00:07.235325:0: Loaded 'yakogl-S32c1.bin' to 0x200000 size 0xffdf50
+MESS:00:00:07.242024:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.250815:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.257327:0: uart: Baud rate change done...
+MESS:00:00:07.259350:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build fad0558a
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment
+v3d_deqp: case #0 F 173ms k2/9 c20140/20288 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment
+  Fail (Got unexpected texture size)
+
+DONE!
+
+Test run totals:
+  Passed:        0/1 (0.0%)
+  Failed:        1/1 (100.0%)
+  Not supported: 0/1 (0.0%)
+  Warnings:      0/1 (0.0%)
+  Waived:        0/1 (0.0%)
+deqp: done: 0 passed, 1 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 1 cases begun, 1 with a result, 0 without
+v3d_deqp DONE: build fad0558a, filter 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment'
+  1 cases in 173 ms, record at 0 s after boot, reset at ~250 s
+  totals: F 1  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 1 failed, 0 not supported, 0 warnings, complete=1
+  summary: 1 cases begun, 1 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9, before #0 (first not passed) 0; slowest #0 173 ms
+  carve-out (KiB, of 48636): after #0 20140, last 20140, high-water 20288
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 38 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20095744 bytes used now, 20775680 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 93 calls, 10282 map reads (110 a call, at most 1153 in one); free runs 2, longest 29706496 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 38 jobs ended; emitted 720, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 F
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  texturesize                                                 1 F1                      1x Got unexpected texture size
+    0 F sampler2dshadow_fragment                         173ms k2/9 c20140/20288         Got unexpected texture size
+v3d_deqp: build fad0558a DONE: 1 cases, P 0 F 1 R 0 N 0 other 0

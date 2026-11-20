@@ -1,0 +1,1013 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at fad0558a, 2026-11-20, image S32b: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.12 [sdcard] pieeprom.upd not found
+  4.12 [sdcard] recover4.elf not found
+  4.13 [sdcard] recovery.elf not found
+  4.56 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.62 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.64 0x00d03114 0x00000000 0x00001fff
+  4.67 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.04 Starting start4.elf @ 0xfec00200 partition 1
+  4.30 XHCI-STOP
+  4.30 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.31 USBSTS 18
+  4.31 PCI0 reset
+  4.32 +
+
+MESS:00:00:04.338654:0: arasan: arasan_emmc_open
+MESS:00:00:04.340313:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.460541:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.473411:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.507689:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.509102:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.513486:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.678406:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.681239:0: brfs: File read: 166 bytes
+MESS:00:00:04.773911:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.778419:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.794744:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.260777:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.266323:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.275364:0: *** Restart logging
+MESS:00:00:05.277132:0: brfs: File read: 166 bytes
+MESS:00:00:05.355567:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.360599:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.373392:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.382987:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.386810:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.395566:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.401057:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.422982:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.439101:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.442392:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.483534:0: brfs: File read: 56249 bytes
+MESS:00:00:05.503382:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.568260:0: brfs: File read: 5971 bytes
+MESS:00:00:05.574778:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.615890:0: brfs: File read: 166 bytes
+MESS:00:00:05.619954:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.623049:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.628900:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.785557:0: brfs: File read: 145 bytes
+MESS:00:00:07.205547:0: brfs: File read: /mfs/sd/yakogl-S32b.bin
+MESS:00:00:07.208454:0: Loaded 'yakogl-S32b.bin' to 0x200000 size 0xffff50
+MESS:00:00:07.215067:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.223843:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.230368:0: uart: Baud rate change done...
+MESS:00:00:07.232390:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build fad0558a
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment,dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3373000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment'..
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment
+v3d_deqp: case #0 F 417ms k2/9 c20140/20288 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex
+v3d_deqp: case #1 F 43ms k2/9 c20140/20288 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment'..
+yakogl/v3d: draw refused: the job builder refused the draw (a uniform, program or primitive it does not write)
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x14ab200 unit 0 kick 80 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 17, cpu 0x1e5aa200 - not dumped
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 82 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+yakogl/v3d: tiled copies high-water 299008 of 16777216 bytes
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 84 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 86 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 88 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 90 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+yakogl/v3d: tiled copies high-water 2101248 of 16777216 bytes
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 92 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+yakogl: glDrawArrays was not recorded (-134); the frame is missing it
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 94 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 96 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 98 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 100 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 102 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 104 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 106 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 108 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+GL error 0x502 in glDrawArrays
+  cube-bind: 0x1531000 unit 0 kick 110 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 112 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment
+v3d_deqp: case #2 R 398ms k2/9 c20153/24342 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 118 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 17, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 120 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 122 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 124 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 126 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 128 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 130 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 132 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 134 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 136 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 138 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 140 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 142 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 144 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 146 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 148 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 150 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex
+v3d_deqp: case #3 R 294ms k2/9 c20153/24342 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2darray_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 156 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 17, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 158 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 160 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 162 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 164 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 166 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 168 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 170 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 172 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 174 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 176 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 178 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 180 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 182 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 184 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 186 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 188 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment
+v3d_deqp: case #4 R 293ms k2/9 c20153/24342 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 194 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 17, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 196 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 198 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 200 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 202 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 204 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 206 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 208 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 210 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 212 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 214 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 216 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 218 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 220 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 222 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 224 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 226 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 17, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex
+v3d_deqp: case #5 R 293ms k2/9 c20153/24342 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler3d_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 257 (draw)
+  cube(draw) @0x14ab200 1x1 x6: fmt 17, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 258 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 259 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 260 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 261 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 262 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 265 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment
+v3d_deqp: case #6 F 107ms k2/9 c20140/24342 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 295 (draw)
+  cube(draw) @0x14ab200 1x1 x6: fmt 17, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 296 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 297 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 298 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 299 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 300 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 303 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 17, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex
+v3d_deqp: case #7 F 107ms k2/9 c20140/24342 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.isamplercube_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment
+v3d_deqp: case #8 F 44ms k2/9 c20140/24342 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex
+v3d_deqp: case #9 F 44ms k2/9 c20140/24342 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_fixed_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment
+v3d_deqp: case #10 F 47ms k2/9 c20140/24342 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex
+v3d_deqp: case #11 F 47ms k2/9 c20140/24342 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2d_float_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 460 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 0, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 462 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 464 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 466 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 468 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 470 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 472 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 474 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 476 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 478 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 480 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 482 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 484 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 486 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 488 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 490 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 492 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment
+v3d_deqp: case #12 R 293ms k2/9 c20153/24342 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 498 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 0, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 500 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 502 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 504 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 506 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 508 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 510 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 512 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 514 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 516 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 518 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 520 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 522 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 524 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 526 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 528 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 530 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex
+v3d_deqp: case #13 R 294ms k2/9 c20153/24342 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_fixed_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 536 (draw)
+  cube(draw) @0x14ab200 1x3 x2, chain 1, written 1, max_level 12
+  cube(draw) level 0 (1x3 @0x0): 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 538 (draw)
+  cube(draw) @0x1531000 100x31 x18, chain 1, written 1, max_level 12
+  cube(draw) level 0 (100x31 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 540 (draw)
+  cube-bind: 0x1531000 unit 0 kick 542 (draw)
+  cube(draw) @0x1531000 100x31 x18, chain 7, written 1, max_level 12
+  cube(draw) level 0 (100x31 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (50x15 @0x6cfc0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (25x7 @0x875a0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (12x3 @0x8dc00): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (6x1 @0x8f040): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 544 (draw)
+  cube-bind: 0x1531000 unit 0 kick 546 (draw)
+  cube(draw) @0x1531000 100x128 x32, chain 8, written 1, max_level 12
+  cube(draw) level 0 (100x128 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (50x64 @0x320000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (25x32 @0x3e8000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (12x16 @0x41c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (6x8 @0x428000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (3x4 @0x42b000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x2 @0x42c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 548 (draw)
+  cube-bind: 0x1531000 unit 0 kick 550 (draw)
+  cube(draw) @0x1531000 100x128 x32, chain 8, written 1, max_level 12
+  cube(draw) level 0 (100x128 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (50x64 @0x320000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (25x32 @0x3e8000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (12x16 @0x41c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (6x8 @0x428000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (3x4 @0x42b000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (1x2 @0x42c000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 552 (draw)
+  cube-bind: 0x1531000 unit 0 kick 554 (draw)
+  cube(draw) @0x1531000 128x64 x32, chain 8, written 1, max_level 12
+  cube(draw) level 0 (128x64 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 1 (64x32 @0x200000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 2 (32x16 @0x280000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 3 (16x8 @0x2a0000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 4 (8x4 @0x2a8000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 5 (4x2 @0x2aa000): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube(draw) level 6 (2x1 @0x2aa800): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 556 (draw)
+  cube-bind: 0x1531000 unit 0 kick 558 (draw)
+  cube-bind: 0x1531000 unit 0 kick 560 (draw)
+  cube-bind: 0x1531000 unit 0 kick 562 (draw)
+  cube-bind: 0x1531000 unit 0 kick 564 (draw)
+  cube-bind: 0x1531000 unit 0 kick 566 (draw)
+  cube-bind: 0x1531000 unit 0 kick 568 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment
+v3d_deqp: case #14 R 736ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 574 (draw)
+  cube(draw) @0x14ab200 1x3 x2, chain 1, written 1, max_level 12
+  cube(draw) level 0 (1x3 @0x0): 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 576 (draw)
+  cube-bind: 0x1531000 unit 0 kick 578 (draw)
+  cube-bind: 0x1531000 unit 0 kick 580 (draw)
+  cube-bind: 0x1531000 unit 0 kick 582 (draw)
+  cube-bind: 0x1531000 unit 0 kick 584 (draw)
+  cube-bind: 0x1531000 unit 0 kick 586 (draw)
+  cube-bind: 0x1531000 unit 0 kick 588 (draw)
+  cube-bind: 0x1531000 unit 0 kick 590 (draw)
+  cube-bind: 0x1531000 unit 0 kick 592 (draw)
+  cube-bind: 0x1531000 unit 0 kick 594 (draw)
+  cube-bind: 0x1531000 unit 0 kick 596 (draw)
+  cube-bind: 0x1531000 unit 0 kick 598 (draw)
+  cube-bind: 0x1531000 unit 0 kick 600 (draw)
+  cube-bind: 0x1531000 unit 0 kick 602 (draw)
+  cube-bind: 0x1531000 unit 0 kick 604 (draw)
+  cube-bind: 0x1531000 unit 0 kick 606 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex
+v3d_deqp: case #15 R 261ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darray_float_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 612 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 7, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 614 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 616 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 618 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 620 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 622 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 624 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 626 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 628 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 630 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 632 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 634 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 636 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 638 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 640 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 642 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 644 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment
+v3d_deqp: case #16 R 294ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 650 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 7, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 652 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 654 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 656 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 658 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 660 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 662 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 664 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 666 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 668 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 670 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 672 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 674 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 676 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 678 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 680 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 7, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 682 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 7, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex
+v3d_deqp: case #17 R 294ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2darrayshadow_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 688 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 0, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 690 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 692 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 694 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 696 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 698 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 700 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 702 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 704 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 706 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 708 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 710 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 712 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 714 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 716 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 718 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 720 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment
+v3d_deqp: case #18 R 293ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 726 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 0, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 728 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 730 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 732 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 734 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 736 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 738 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 740 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 742 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 744 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 746 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 748 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 750 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 752 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 754 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 756 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 758 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 0, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex
+v3d_deqp: case #19 R 293ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_fixed_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 764 (draw)
+  cube(draw) @0x14ab200 1x3 x2, chain 2, written 1, max_level 12
+  cube(draw) level 0 (1x3 @0x0): 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 766 (draw)
+  cube-bind: 0x1531000 unit 0 kick 768 (draw)
+  cube-bind: 0x1531000 unit 0 kick 770 (draw)
+  cube-bind: 0x1531000 unit 0 kick 772 (draw)
+  cube-bind: 0x1531000 unit 0 kick 774 (draw)
+  cube-bind: 0x1531000 unit 0 kick 776 (draw)
+  cube-bind: 0x1531000 unit 0 kick 778 (draw)
+  cube-bind: 0x1531000 unit 0 kick 780 (draw)
+  cube-bind: 0x1531000 unit 0 kick 782 (draw)
+  cube-bind: 0x1531000 unit 0 kick 784 (draw)
+  cube-bind: 0x1531000 unit 0 kick 786 (draw)
+  cube-bind: 0x1531000 unit 0 kick 788 (draw)
+  cube-bind: 0x1531000 unit 0 kick 790 (draw)
+  cube-bind: 0x1531000 unit 0 kick 792 (draw)
+  cube-bind: 0x1531000 unit 0 kick 794 (draw)
+  cube-bind: 0x1531000 unit 0 kick 796 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment
+v3d_deqp: case #20 R 260ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 802 (draw)
+  cube(draw) @0x14ab200 1x3 x2, chain 2, written 1, max_level 12
+  cube(draw) level 0 (1x3 @0x0): 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 804 (draw)
+  cube-bind: 0x1531000 unit 0 kick 806 (draw)
+  cube-bind: 0x1531000 unit 0 kick 808 (draw)
+  cube-bind: 0x1531000 unit 0 kick 810 (draw)
+  cube-bind: 0x1531000 unit 0 kick 812 (draw)
+  cube-bind: 0x1531000 unit 0 kick 814 (draw)
+  cube-bind: 0x1531000 unit 0 kick 816 (draw)
+  cube-bind: 0x1531000 unit 0 kick 818 (draw)
+  cube-bind: 0x1531000 unit 0 kick 820 (draw)
+  cube-bind: 0x1531000 unit 0 kick 822 (draw)
+  cube-bind: 0x1531000 unit 0 kick 824 (draw)
+  cube-bind: 0x1531000 unit 0 kick 826 (draw)
+  cube-bind: 0x1531000 unit 0 kick 828 (draw)
+  cube-bind: 0x1531000 unit 0 kick 830 (draw)
+  cube-bind: 0x1531000 unit 0 kick 832 (draw)
+  cube-bind: 0x1531000 unit 0 kick 834 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex
+v3d_deqp: case #21 R 261ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler3d_float_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 865 (draw)
+  cube(draw) @0x14ab200 1x1 x6: fmt 0, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 866 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 867 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 868 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 869 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 870 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 873 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment
+v3d_deqp: case #22 F 108ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 903 (draw)
+  cube(draw) @0x14ab200 1x1 x6: fmt 0, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 904 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 905 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 906 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 907 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 908 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 911 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 0, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex
+v3d_deqp: case #23 F 108ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_fixed_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 941 (draw)
+  cube(draw) @0x14ab200 1x1 x6, chain 1, written 1, max_level 12
+  cube(draw) level 0 (1x1 @0x0): 0.0000 0.0000 0.0000 0.0000 0.0000 0.0000
+  cube-bind: 0x1531000 unit 0 kick 942 (draw)
+  cube-bind: 0x1531000 unit 0 kick 943 (draw)
+  cube-bind: 0x1531000 unit 0 kick 944 (draw)
+  cube-bind: 0x1531000 unit 0 kick 945 (draw)
+  cube-bind: 0x1531000 unit 0 kick 946 (draw)
+  cube-bind: 0x1531000 unit 0 kick 949 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment
+v3d_deqp: case #24 F 79ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 979 (draw)
+  cube-bind: 0x1531000 unit 0 kick 980 (draw)
+  cube-bind: 0x1531000 unit 0 kick 981 (draw)
+  cube-bind: 0x1531000 unit 0 kick 982 (draw)
+  cube-bind: 0x1531000 unit 0 kick 983 (draw)
+  cube-bind: 0x1531000 unit 0 kick 984 (draw)
+  cube-bind: 0x1531000 unit 0 kick 987 (draw)
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex
+v3d_deqp: case #25 F 66ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercube_float_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment
+v3d_deqp: case #26 F 43ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex'..
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex
+v3d_deqp: case #27 F 43ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2d_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 1068 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 16, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1070 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1072 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1074 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1076 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1078 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1080 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1082 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1084 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1086 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1088 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1090 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1092 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1094 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1096 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1098 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1100 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment
+v3d_deqp: case #28 R 295ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 1106 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 16, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1108 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1110 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1112 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1114 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1116 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1118 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1120 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1122 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1124 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1126 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1128 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1130 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1132 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1134 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1136 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1138 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex
+v3d_deqp: case #29 R 296ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler2darray_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 1144 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 16, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1146 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1148 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1150 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1152 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1154 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1156 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1158 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1160 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1162 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1164 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1166 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1168 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1170 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1172 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1174 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1176 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment
+v3d_deqp: case #30 R 294ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 1182 (draw)
+  cube(draw) @0x14ab200 1x3 x2: fmt 16, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1184 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1186 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1188 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1190 (draw)
+  cube(draw) @0x1531000 100x31 x18: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1192 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1194 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1196 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1198 (draw)
+  cube(draw) @0x1531000 100x128 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1200 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1202 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1204 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1206 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1208 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1210 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1212 (draw)
+  cube(draw) @0x1531000 64x64 x64: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1214 (draw)
+  cube(draw) @0x1531000 128x64 x32: fmt 16, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex
+v3d_deqp: case #31 R 295ms k2/9 c20153/28526 r18 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usampler3d_vertex
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment'..
+  cube-bind: 0x14ab200 unit 0 kick 1245 (draw)
+  cube(draw) @0x14ab200 1x1 x6: fmt 16, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1246 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1247 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1248 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1249 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1250 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1253 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment
+v3d_deqp: case #32 F 107ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_fragment
+  Fail (Got unexpected texture size)
+
+Test case 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex'..
+  cube-bind: 0x14ab200 unit 0 kick 1283 (draw)
+  cube(draw) @0x14ab200 1x1 x6: fmt 16, cpu 0x1e5aa200 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1284 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1285 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1286 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1287 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1288 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+  cube-bind: 0x1531000 unit 0 kick 1291 (draw)
+  cube(draw) @0x1531000 64x64 x6: fmt 16, cpu 0x1e630000 - not dumped
+deqp: Fail dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex
+v3d_deqp: case #33 F 108ms k2/9 c20140/28526 r0 dEQP-GLES3.functional.shaders.texture_functions.texturesize.usamplercube_vertex
+  Fail (Got unexpected texture size)
+
+DONE!
+
+Test run totals:
+  Passed:        0/34 (0.0%)
+  Failed:        34/34 (100.0%)
+  Not supported: 0/34 (0.0%)
+  Warnings:      0/34 (0.0%)
+  Waived:        0/34 (0.0%)
+deqp: done: 0 passed, 34 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 34 cases begun, 34 with a result, 0 without
+v3d_deqp DONE: build fad0558a, filter 'dEQP-GLES3.functional.shaders.texture_functions.texturesize.isampler2d_fragment,dEQP-GLES3.functional.shaders.texture...
+  34 cases in 7255 ms, record at 7 s after boot, reset at ~250 s
+  totals: F 16 R 18  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 0 passed, 34 failed, 0 not supported, 0 warnings, complete=1
+  summary: 34 cases begun, 34 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9, before #0 (first not passed) 0; slowest #14 736 ms
+  carve-out (KiB, of 48636): after #0 20140, last 20140, high-water 28526
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 1292 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20095744 bytes used now, 29211136 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 2/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 1747 calls, 335959 map reads (192 a call, at most 1153 in one); free runs 2, longest 29706496 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 1292 jobs ended; emitted 6880, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 FFRRRRFFFFFFRRRRRRRRRRFFFFFFRRRRFF
+refusals: 324 draws refused by the V3D backend (v3d_refused_draws), causes:
+  r0 (first #2) the job builder refused the draw (a uniform, program or primitive it does not write)
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3373000, GPU VA 0x181000..0x3100000
+driver: ... 8 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  texturesize                                                34 F16 R18                34x Got unexpected texture size
+    0 F isampler2d_fragment                              417ms k2/9 c20140/20288         Got unexpected texture size
+    1 F isampler2d_vertex                                43ms k2/9 c20140/20288          Got unexpected texture size
+    2 R isampler2darray_fragment                         398ms k2/9 c20153/24342 r0      Got unexpected texture size
+    3 R isampler2darray_vertex                           294ms k2/9 c20153/24342 r?      Got unexpected texture size
+    4 R isampler3d_fragment                              293ms k2/9 c20153/24342 r?      Got unexpected texture size
+    5 R isampler3d_vertex                                293ms k2/9 c20153/24342 r?      Got unexpected texture size
+    6 F isamplercube_fragment                            107ms k2/9 c20140/24342         Got unexpected texture size
+    7 F isamplercube_vertex                              107ms k2/9 c20140/24342         Got unexpected texture size
+    8 F sampler2d_fixed_fragment                         44ms k2/9 c20140/24342          Got unexpected texture size
+    9 F sampler2d_fixed_vertex                           44ms k2/9 c20140/24342          Got unexpected texture size
+  ... 24 more not passed (the UART has every line)
+v3d_deqp: build fad0558a DONE: 34 cases, P 0 F 16 R 18 N 0 other 0

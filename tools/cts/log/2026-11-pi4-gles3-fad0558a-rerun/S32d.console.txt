@@ -1,0 +1,880 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at fad0558a, 2026-11-20, image S32d: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  4.13 [sdcard] pieeprom.upd not found
+  4.13 [sdcard] recover4.elf not found
+  4.14 [sdcard] recovery.elf not found
+  4.65 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.71 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.73 0x00d03114 0x00000000 0x00001fff
+  4.76 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.12 Starting start4.elf @ 0xfec00200 partition 1
+  4.31 XHCI-STOP
+  4.31 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.32 USBSTS 18
+  4.32 PCI0 reset
+  4.33 +
+
+MESS:00:00:04.347355:0: arasan: arasan_emmc_open
+MESS:00:00:04.349013:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.469240:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.482109:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.516388:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.517801:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.522184:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.687880:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.690704:0: brfs: File read: 166 bytes
+MESS:00:00:04.783561:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.788069:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.804672:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.303747:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.309294:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.318331:0: *** Restart logging
+MESS:00:00:05.320102:0: brfs: File read: 166 bytes
+MESS:00:00:05.398685:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.403718:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.422005:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.427090:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.432690:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.441448:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.446946:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.468978:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.484398:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.487690:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.528388:0: brfs: File read: 56249 bytes
+MESS:00:00:05.547696:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.612646:0: brfs: File read: 5971 bytes
+MESS:00:00:05.619314:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.660446:0: brfs: File read: 166 bytes
+MESS:00:00:05.664611:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.667605:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.673455:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.829997:0: brfs: File read: 145 bytes
+MESS:00:00:07.244145:0: brfs: File read: /mfs/sd/yakogl-S32d.bin
+MESS:00:00:07.247053:0: Loaded 'yakogl-S32d.bin' to 0x200000 size 0xffdf50
+MESS:00:00:07.253665:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.262453:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.268965:0: uart: Baud rate change done...
+MESS:00:00:07.270987:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build fad0558a
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.shaders.uniform_block.*'
+Writing test log into deqp.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_block_name_fragment'..
+glCompileShader(5): 0:11: 'UniformBlock' : already declared as a function, and a name cannot also be a structure [fragment stage, 248 bytes]
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_block_name_fragment
+v3d_deqp: case #0 P 159ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_block_name_vertex'..
+glCompileShader(3): 0:11: 'UniformBlock' : already declared as a function, and a name cannot also be a structure [vertex stage, 216 bytes]
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_block_name_vertex
+v3d_deqp: case #1 P 64ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_instance_name_fragment'..
+glCompileShader(5): 0:11: 'uniformBlock' : already declared in this scope as something other than a variable [fragment stage, 248 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_instance_name_fragment
+v3d_deqp: case #2 P 46ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_instance_name_vertex'..
+glCompileShader(3): 0:11: 'uniformBlock' : already declared in this scope as something other than a variable [vertex stage, 216 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_instance_name_vertex
+v3d_deqp: case #3 P 46ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_function_and_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_block_name_fragment'..
+glCompileShader(5): 0:11: 'UniformBlock' : already declared in this scope as something other than a variable [fragment stage, 223 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_block_name_fragment
+v3d_deqp: case #4 P 44ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_block_name_vertex'..
+glCompileShader(3): 0:11: 'UniformBlock' : already declared in this scope as something other than a variable [vertex stage, 191 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_block_name_vertex
+v3d_deqp: case #5 P 44ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_instance_name_fragment'..
+glCompileShader(5): 0:11: 'uniformBlock' : redeclared in the same scope [fragment stage, 223 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_instance_name_fragment
+v3d_deqp: case #6 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_instance_name_vertex'..
+glCompileShader(3): 0:11: 'uniformBlock' : redeclared in the same scope [vertex stage, 191 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_instance_name_vertex
+v3d_deqp: case #7 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_in_and_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_instance_names_fragment'..
+glCompileShader(5): 0:11: 'uniformBlock' : redeclared in the same scope [fragment stage, 266 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_instance_names_fragment
+v3d_deqp: case #8 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_instance_names_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_instance_names_vertex'..
+glCompileShader(3): 0:11: 'uniformBlock' : redeclared in the same scope [vertex stage, 234 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_instance_names_vertex
+v3d_deqp: case #9 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_instance_names_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_block_name_fragment'..
+glCompileShader(5): 0:11: 'UniformBlock' : already declared in this scope as something other than a variable [fragment stage, 224 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_block_name_fragment
+v3d_deqp: case #10 P 44ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_block_name_vertex'..
+glCompileShader(3): 0:11: 'UniformBlock' : already declared in this scope as something other than a variable [vertex stage, 192 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_block_name_vertex
+v3d_deqp: case #11 P 44ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_instance_name_fragment'..
+glCompileShader(5): 0:11: 'uniformBlock' : redeclared in the same scope [fragment stage, 224 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_instance_name_fragment
+v3d_deqp: case #12 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_instance_name_vertex'..
+glCompileShader(3): 0:11: 'uniformBlock' : redeclared in the same scope [vertex stage, 192 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_instance_name_vertex
+v3d_deqp: case #13 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_out_and_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_block_name_fragment'..
+glCompileShader(5): 0:11: 'UniformBlock' : already declared in this scope as something other than a variable [fragment stage, 228 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_block_name_fragment
+v3d_deqp: case #14 P 45ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_block_name_vertex'..
+glCompileShader(3): 0:11: 'UniformBlock' : already declared in this scope as something other than a variable [vertex stage, 196 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_block_name_vertex
+v3d_deqp: case #15 P 45ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_instance_name_fragment'..
+glCompileShader(5): 0:11: 'uniformBlock' : redeclared in the same scope [fragment stage, 228 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_instance_name_fragment
+v3d_deqp: case #16 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_instance_name_vertex'..
+glCompileShader(3): 0:11: 'uniformBlock' : redeclared in the same scope [vertex stage, 196 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_instance_name_vertex
+v3d_deqp: case #17 P 43ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.conflicting_uniform_and_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_block_fragment'..
+glCompileShader(5): 0:6: 'UniformBlock' : a uniform block must have at least one member [fragment stage, 159 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_block_fragment
+v3d_deqp: case #18 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_block_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_block_vertex'..
+glCompileShader(3): 0:6: 'UniformBlock' : a uniform block must have at least one member [vertex stage, 127 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_block_vertex
+v3d_deqp: case #19 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_block_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_global_layout_fragment'..
+glCompileShader(5): 0:4: ')' : expected a layout qualifier [fragment stage, 219 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_global_layout_fragment
+v3d_deqp: case #20 P 36ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_global_layout_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_global_layout_vertex'..
+glCompileShader(3): 0:4: ')' : expected a layout qualifier [vertex stage, 187 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_global_layout_vertex
+v3d_deqp: case #21 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_global_layout_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_layout_fragment'..
+glCompileShader(5): 0:6: ')' : expected a layout qualifier [fragment stage, 209 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_layout_fragment
+v3d_deqp: case #22 P 35ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_layout_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_layout_vertex'..
+glCompileShader(3): 0:6: ')' : expected a layout qualifier [vertex stage, 177 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_layout_vertex
+v3d_deqp: case #23 P 35ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_layout_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_member_layout_fragment'..
+glCompileShader(5): 0:8: ')' : expected a layout qualifier [fragment stage, 209 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_member_layout_fragment
+v3d_deqp: case #24 P 36ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_member_layout_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_member_layout_vertex'..
+glCompileShader(3): 0:8: ')' : expected a layout qualifier [vertex stage, 177 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_member_layout_vertex
+v3d_deqp: case #25 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.empty_member_layout_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_block_name_fragment'..
+glCompileShader(5): 0:6: '$' : illegal character [fragment stage, 201 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_block_name_fragment
+v3d_deqp: case #26 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_block_name_vertex'..
+glCompileShader(3): 0:6: '$' : illegal character [vertex stage, 169 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_block_name_vertex
+v3d_deqp: case #27 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_instance_name_fragment'..
+glCompileShader(5): 0:9: '$' : illegal character [fragment stage, 205 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_instance_name_fragment
+v3d_deqp: case #28 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_instance_name_vertex'..
+glCompileShader(3): 0:9: '$' : illegal character [vertex stage, 173 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_instance_name_vertex
+v3d_deqp: case #29 P 38ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_dollar_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_block_name_fragment'..
+glCompileShader(5): 0:6: '#' : '#' is only allowed at the start of a line [fragment stage, 201 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_block_name_fragment
+v3d_deqp: case #30 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_block_name_vertex'..
+glCompileShader(3): 0:6: '#' : '#' is only allowed at the start of a line [vertex stage, 169 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_block_name_vertex
+v3d_deqp: case #31 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_instance_name_fragment'..
+glCompileShader(5): 0:9: '$' : illegal character [fragment stage, 205 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_instance_name_fragment
+v3d_deqp: case #32 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_instance_name_vertex'..
+glCompileShader(3): 0:9: '$' : illegal character [vertex stage, 173 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_instance_name_vertex
+v3d_deqp: case #33 P 38ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_hash_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_block_name_fragment'..
+glCompileShader(5): 0:6: 'gl_UniformBlock' : a block name may not begin with 'gl_' [fragment stage, 203 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_block_name_fragment
+v3d_deqp: case #34 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_block_name_vertex'..
+glCompileShader(3): 0:6: 'gl_UniformBlock' : a block name may not begin with 'gl_' [vertex stage, 171 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_block_name_vertex
+v3d_deqp: case #35 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_instance_name_fragment'..
+glCompileShader(5): 0:6: 'gl_uniformBlock' : 'gl_' is reserved: a user-defined name cannot begin with it [fragment stage, 206 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_instance_name_fragment
+v3d_deqp: case #36 P 44ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_instance_name_vertex'..
+glCompileShader(3): 0:6: 'gl_uniformBlock' : 'gl_' is reserved: a user-defined name cannot begin with it [vertex stage, 174 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_instance_name_vertex
+v3d_deqp: case #37 P 44ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_identifier_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_block_name_fragment'..
+glCompileShader(5): 0:6: '0Un' : invalid suffix on an integer constant [fragment stage, 201 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_block_name_fragment
+v3d_deqp: case #38 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_block_name_vertex'..
+glCompileShader(3): 0:6: '0Un' : invalid suffix on an integer constant [vertex stage, 169 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_block_name_vertex
+v3d_deqp: case #39 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_instance_name_fragment'..
+glCompileShader(5): 0:9: '0un' : invalid suffix on an integer constant [fragment stage, 205 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_instance_name_fragment
+v3d_deqp: case #40 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_instance_name_vertex'..
+glCompileShader(3): 0:9: '0un' : invalid suffix on an integer constant [vertex stage, 173 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_instance_name_vertex
+v3d_deqp: case #41 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.invalid_number_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.matching_instance_and_block_name_fragment'..
+glCompileShader(5): 0:9: 'UniformBlock' : an instance may not have its block's name [fragment stage, 200 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.matching_instance_and_block_name_fragment
+v3d_deqp: case #42 P 43ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.matching_instance_and_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.matching_instance_and_block_name_vertex'..
+glCompileShader(3): 0:9: 'UniformBlock' : an instance may not have its block's name [vertex stage, 168 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.matching_instance_and_block_name_vertex
+v3d_deqp: case #43 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.matching_instance_and_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_attribute_interface_qualifier_fragment'..
+glCompileShader(5): 0:8: 'attribute' : reserved for future use [fragment stage, 210 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_attribute_interface_qualifier_fragment
+v3d_deqp: case #44 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_attribute_interface_qualifier_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_attribute_interface_qualifier_vertex'..
+glCompileShader(3): 0:8: 'attribute' : reserved for future use [vertex stage, 178 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_attribute_interface_qualifier_vertex
+v3d_deqp: case #45 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_attribute_interface_qualifier_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_buffer_interface_qualifier_fragment'..
+glCompileShader(5): 0:8: 'buffer' : expected a type [fragment stage, 207 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_buffer_interface_qualifier_fragment
+v3d_deqp: case #46 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_buffer_interface_qualifier_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_buffer_interface_qualifier_vertex'..
+glCompileShader(3): 0:8: 'buffer' : expected a type [vertex stage, 175 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_buffer_interface_qualifier_vertex
+v3d_deqp: case #47 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_buffer_interface_qualifier_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_in_interface_qualifier_fragment'..
+glCompileShader(5): 0:8: 'in' : a uniform block member cannot have this qualifier [fragment stage, 203 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_in_interface_qualifier_fragment
+v3d_deqp: case #48 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_in_interface_qualifier_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_in_interface_qualifier_vertex'..
+glCompileShader(3): 0:8: 'in' : a uniform block member cannot have this qualifier [vertex stage, 171 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_in_interface_qualifier_vertex
+v3d_deqp: case #49 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_in_interface_qualifier_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_packed_fragment'..
+glCompileShader(5): 0:8: 'layout' : a block member takes only 'row_major' or 'column_major' [fragment stage, 215 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_packed_fragment
+v3d_deqp: case #50 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_packed_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_packed_vertex'..
+glCompileShader(3): 0:8: 'layout' : a block member takes only 'row_major' or 'column_major' [vertex stage, 183 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_packed_vertex
+v3d_deqp: case #51 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_packed_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_shared_fragment'..
+glCompileShader(5): 0:8: 'layout' : a block member takes only 'row_major' or 'column_major' [fragment stage, 215 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_shared_fragment
+v3d_deqp: case #52 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_shared_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_shared_vertex'..
+glCompileShader(3): 0:8: 'layout' : a block member takes only 'row_major' or 'column_major' [vertex stage, 183 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_shared_vertex
+v3d_deqp: case #53 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_shared_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_std140_fragment'..
+glCompileShader(5): 0:8: 'layout' : a block member takes only 'row_major' or 'column_major' [fragment stage, 215 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_std140_fragment
+v3d_deqp: case #54 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_std140_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_std140_vertex'..
+glCompileShader(3): 0:8: 'layout' : a block member takes only 'row_major' or 'column_major' [vertex stage, 183 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_std140_vertex
+v3d_deqp: case #55 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_layout_std140_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_out_interface_qualifier_fragment'..
+glCompileShader(5): 0:8: 'out' : a uniform block member cannot have this qualifier [fragment stage, 204 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_out_interface_qualifier_fragment
+v3d_deqp: case #56 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_out_interface_qualifier_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_out_interface_qualifier_vertex'..
+glCompileShader(3): 0:8: 'out' : a uniform block member cannot have this qualifier [vertex stage, 172 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_out_interface_qualifier_vertex
+v3d_deqp: case #57 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_out_interface_qualifier_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_varying_interface_qualifier_fragment'..
+glCompileShader(5): 0:8: 'varying' : reserved for future use [fragment stage, 208 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_varying_interface_qualifier_fragment
+v3d_deqp: case #58 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_varying_interface_qualifier_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.member_varying_interface_qualifier_vertex'..
+glCompileShader(3): 0:8: 'varying' : reserved for future use [vertex stage, 176 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.member_varying_interface_qualifier_vertex
+v3d_deqp: case #59 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.member_varying_interface_qualifier_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.missing_block_name_fragment'..
+glCompileShader(5): 0:7: '{' : expected a type [fragment stage, 187 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.missing_block_name_fragment
+v3d_deqp: case #60 P 37ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.missing_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.missing_block_name_vertex'..
+glCompileShader(3): 0:7: '{' : expected a type [vertex stage, 155 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.missing_block_name_vertex
+v3d_deqp: case #61 P 35ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.missing_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.reference_using_block_name_fragment'..
+glCompileShader(5): 0:0: 'UniformBlock' : a type name is not a value [fragment stage, 200 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.reference_using_block_name_fragment
+v3d_deqp: case #62 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.reference_using_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.reference_using_block_name_vertex'..
+glCompileShader(3): 0:0: 'UniformBlock' : a type name is not a value [vertex stage, 168 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.reference_using_block_name_vertex
+v3d_deqp: case #63 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.reference_using_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_fragment'..
+glCompileShader(5): 0:11: 'UniformBlock' : this name is already a type or a block [fragment stage, 297 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_fragment
+v3d_deqp: case #64 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_no_instance_name_fragment'..
+glCompileShader(5): 0:11: 'UniformBlock' : this name is already a type or a block [fragment stage, 267 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_no_instance_name_fragment
+v3d_deqp: case #65 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_no_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_no_instance_name_vertex'..
+glCompileShader(3): 0:11: 'UniformBlock' : this name is already a type or a block [vertex stage, 235 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_no_instance_name_vertex
+v3d_deqp: case #66 P 42ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_no_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_vertex'..
+glCompileShader(3): 0:11: 'UniformBlock' : this name is already a type or a block [vertex stage, 265 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_vertex
+v3d_deqp: case #67 P 38ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.repeated_block_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.structure_definition_fragment'..
+glCompileShader(5): 0:8: 'struct' : a structure cannot be defined in a uniform block [fragment stage, 234 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.structure_definition_fragment
+v3d_deqp: case #68 P 39ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.structure_definition_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.structure_definition_vertex'..
+glCompileShader(3): 0:8: 'struct' : a structure cannot be defined in a uniform block [vertex stage, 202 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.structure_definition_vertex
+v3d_deqp: case #69 P 40ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.structure_definition_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.too_long_block_name_fragment'..
+glCompileShader(5): 0:7: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' : an identifier is longer than 1024 characters [fragment stage, 1241 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.too_long_block_name_fragment
+v3d_deqp: case #70 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.too_long_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.invalid.too_long_block_name_vertex'..
+glCompileShader(3): 0:7: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' : an identifier is longer than 1024 characters [vertex stage, 1209 bytes]
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.invalid.too_long_block_name_vertex
+v3d_deqp: case #71 P 41ms k2/6 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.invalid.too_long_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_8_times_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_8_times_fragment
+v3d_deqp: case #72 P 31ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_8_times_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_8_times_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_8_times_vertex
+v3d_deqp: case #73 P 32ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_8_times_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_fragment
+v3d_deqp: case #74 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_vertex
+v3d_deqp: case #75 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_all_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_column_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_column_major_fragment
+v3d_deqp: case #76 P 31ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_column_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_column_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_column_major_vertex
+v3d_deqp: case #77 P 31ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_column_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_packed_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_packed_fragment
+v3d_deqp: case #78 P 31ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_packed_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_packed_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_packed_vertex
+v3d_deqp: case #79 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_packed_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_row_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_row_major_fragment
+v3d_deqp: case #80 P 31ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_row_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_row_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_row_major_vertex
+v3d_deqp: case #81 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_row_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_shared_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_shared_fragment
+v3d_deqp: case #82 P 31ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_shared_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_shared_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_shared_vertex
+v3d_deqp: case #83 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_shared_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_std140_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_std140_fragment
+v3d_deqp: case #84 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_std140_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_std140_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_std140_vertex
+v3d_deqp: case #85 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.global_layout_std140_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_8_times_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_8_times_fragment
+v3d_deqp: case #86 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_8_times_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_8_times_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_8_times_vertex
+v3d_deqp: case #87 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_8_times_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_fragment
+v3d_deqp: case #88 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_vertex
+v3d_deqp: case #89 P 27ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_all_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_column_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_column_major_fragment
+v3d_deqp: case #90 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_column_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_column_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_column_major_vertex
+v3d_deqp: case #91 P 30ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_column_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_packed_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_packed_fragment
+v3d_deqp: case #92 P 28ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_packed_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_packed_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_packed_vertex
+v3d_deqp: case #93 P 28ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_packed_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_row_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_row_major_fragment
+v3d_deqp: case #94 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_row_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_row_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_row_major_vertex
+v3d_deqp: case #95 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_row_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_shared_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_shared_fragment
+v3d_deqp: case #96 P 29ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_shared_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_shared_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_shared_vertex
+v3d_deqp: case #97 P 28ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_shared_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_std140_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_std140_fragment
+v3d_deqp: case #98 P 28ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_std140_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.layout_std140_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.layout_std140_vertex
+v3d_deqp: case #99 P 28ms k2/9 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.layout_std140_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.long_block_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.long_block_name_fragment
+v3d_deqp: case #100 P 29ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.long_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.long_block_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.long_block_name_vertex
+v3d_deqp: case #101 P 29ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.long_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_fragment
+v3d_deqp: case #102 P 30ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_vertex
+v3d_deqp: case #103 P 29ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.long_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_8_times_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_8_times_fragment
+v3d_deqp: case #104 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_8_times_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_8_times_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_8_times_vertex
+v3d_deqp: case #105 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_8_times_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_fragment
+v3d_deqp: case #106 P 30ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_vertex
+v3d_deqp: case #107 P 30ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_all_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_fragment
+v3d_deqp: case #108 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vec4_fragment
+v3d_deqp: case #109 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vec4_vertex
+v3d_deqp: case #110 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vertex
+v3d_deqp: case #111 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_column_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_fragment
+v3d_deqp: case #112 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vec4_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vec4_fragment
+v3d_deqp: case #113 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vec4_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vec4_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vec4_vertex
+v3d_deqp: case #114 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vec4_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vertex
+v3d_deqp: case #115 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.member_layout_row_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.no_instance_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.no_instance_name_fragment
+v3d_deqp: case #116 P 30ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.no_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.no_instance_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.no_instance_name_vertex
+v3d_deqp: case #117 P 29ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.no_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.repeat_interface_qualifier_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.repeat_interface_qualifier_fragment
+v3d_deqp: case #118 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.repeat_interface_qualifier_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.repeat_interface_qualifier_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.repeat_interface_qualifier_vertex
+v3d_deqp: case #119 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.repeat_interface_qualifier_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_block_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_block_name_fragment
+v3d_deqp: case #120 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_block_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_block_name_vertex
+v3d_deqp: case #121 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_instance_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_instance_name_fragment
+v3d_deqp: case #122 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_instance_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_instance_name_vertex
+v3d_deqp: case #123 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.same_variable_and_instance_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_fragment
+v3d_deqp: case #124 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_8_times_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_8_times_fragment
+v3d_deqp: case #125 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_8_times_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_8_times_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_8_times_vertex
+v3d_deqp: case #126 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_8_times_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_fragment
+v3d_deqp: case #127 P 32ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_vertex
+v3d_deqp: case #128 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_all_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_column_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_column_major_fragment
+v3d_deqp: case #129 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_column_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_column_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_column_major_vertex
+v3d_deqp: case #130 P 34ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_column_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_row_major_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_row_major_fragment
+v3d_deqp: case #131 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_row_major_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_row_major_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_row_major_vertex
+v3d_deqp: case #132 P 33ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_layout_row_major_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_vertex
+v3d_deqp: case #133 P 29ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.struct_member_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_block_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_block_name_fragment
+v3d_deqp: case #134 P 30ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_block_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_block_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_block_name_vertex
+v3d_deqp: case #135 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_block_name_vertex
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_instance_name_fragment'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_instance_name_fragment
+v3d_deqp: case #136 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_instance_name_fragment
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_instance_name_vertex'..
+deqp: Pass dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_instance_name_vertex
+v3d_deqp: case #137 P 31ms k2/15 c20140/20140 r0 dEQP-GLES3.functional.shaders.uniform_block.valid.underscore_instance_name_vertex
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        138/138 (100.0%)
+  Failed:        0/138 (0.0%)
+  Not supported: 0/138 (0.0%)
+  Warnings:      0/138 (0.0%)
+  Waived:        0/138 (0.0%)
+deqp: done: 138 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 138 cases begun, 138 with a result, 0 without
+v3d_deqp DONE, all passed: build fad0558a, filter 'dEQP-GLES3.functional.shaders.uniform_block.*'
+  138 cases in 5065 ms, record at 5 s after boot, reset at ~250 s
+  totals: P 138  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 138 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+  summary: 138 cases begun, 138 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 15; slowest #0 159 ms
+  carve-out (KiB, of 48636): after #0 20140, last 20140, high-water 20140
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201011 ca 0x201011 ra 0x0 qba 0x201000 qea 0x201011 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 138 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20095488 bytes used now, 20623872 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 18 calls, 5031 map reads (279 a call, at most 1153 in one); free runs 1, longest 29707776 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 138 jobs ended; emitted 0, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+v3d_deqp: build fad0558a DONE, all passed: 138 cases, P 138 F 0 R 0 N 0 other 0
