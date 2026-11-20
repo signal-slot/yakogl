@@ -9,6 +9,9 @@ pub mod imx8mp;
 #[cfg(any(feature = "am62p", test))]
 pub mod am62p;
 
+#[cfg(any(feature = "imx95", test))]
+pub mod imx95;
+
 #[cfg(any(feature = "rk3588", test))]
 pub mod rk3588;
 

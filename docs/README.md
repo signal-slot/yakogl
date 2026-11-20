@@ -23,6 +23,7 @@ design the code follows; there are no run logs or session diaries.
 | `notes/v3d71-tri-ours-record.md` | The D0 shader record Mesa wrote for its Pi 5 triangle against the one our 7.1 pass-through programs need: the input of the probe's "ours" option. |
 | `notes/v3d71-gl-table.md` | The P9 figures for the 7.1 `src/v3d` back-end table (the 7.1 shader record and draw index, the limits, `Clear Render Targets`, TFU `IOC`) and how a build selects 7.1. |
 | `notes/rpi5-display.md` | The Pi 5 display design (P11, U3): which Pi 4 pieces carry over, what the HVS 6.x and pixel valves make new, one implementation order for a Zephyr image that draws GL on the board, and what only the board can still answer. |
+| `notes/imx95-gpu-power.md` | The i.MX 95 GPU power over SCMI (Verdin iMX95): the System Manager's ids, Linux's path reduced to messages, the A55 agent's permissions in Toradex's SM configuration, what Zephyr's SCMI drivers lack, and what day one on the board confirms. |
 
 Elsewhere: board results are `tools/cts/RESULTS.md` (current results only)
 and its Japanese summary `tools/cts/STATUS.md`; the stages are `ROADMAP.md`;
