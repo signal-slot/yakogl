@@ -34,7 +34,7 @@
  *   display  the probe's own copy of transact() (rpi_mbox.c:62-89, the same
  *            registers, bounds and buffer layout) with no cache call: what
  *            rpi5_display's image ran. After the reply the same buffer is read
- *            through an uncached alias too (`memory` line): the words the
+ *            again after a cache invalidate too (`memory` line): the words the
  *            firmware left in memory, which the cached read cannot show.
  *   clear    the same copy with the clean before and the invalidate after:
  *            what rpi5_clear's image ran.
@@ -128,7 +128,6 @@ static uint32_t buf_display[BUF_WORDS] __aligned(64);
 static uint32_t buf_clear[BUF_WORDS] __aligned(64);
 
 static mm_reg_t mbox;
-static volatile uint32_t *mem_display; /* buf_display through an uncached alias */
 static volatile bool finished;
 
 /* The feeding stops once the end line is out: the reset follows within one
@@ -175,6 +174,7 @@ static void raw_xact(uint32_t *b, bool cache, struct xact *x)
 {
 	memset(x, 0, sizeof(*x));
 	x->reply = 0xffffffffu;
+	x->pre[0] = x->pre[1] = x->pre[2] = 0xffffffffu; /* not read */
 	x->last_other = 0xffffffffu;
 	x->flush_rc = x->invd_rc = 1; /* 1: not called */
 	x->stage = "not sent";
@@ -195,10 +195,9 @@ static void raw_xact(uint32_t *b, bool cache, struct xact *x)
 	}
 	if (cache)
 		x->flush_rc = sys_cache_data_flush_range(b, BUF_WORDS * 4u);
-	if (!cache && mem_display) {
-		for (int i = 0; i < 3; i++)
-			x->pre[i] = mem_display[i];
-	}
+	/* The memory before the doorbell cannot be read without a second
+	 * mapping or an invalidate that would discard the request: x->pre stays
+	 * at its 0xffffffff "not read" value (memset in the caller). */
 	for (int t = 0; sys_read32(mbox + MAIL1_STA) & MBOX_FULL; t++) {
 		if (t > FULL_TRIES) {
 			x->stage = "MAIL1 stayed full";
@@ -250,33 +249,42 @@ static bool answered(const uint32_t *w, const struct req *q)
 	return w[1] == STATUS_SUCCESS && w[2] == q->tag && (w[4] & TAG_RESPONSE) != 0;
 }
 
-/* The display way; also the `memory` line. Answered as the CPU saw it. */
+/* The display way; also the `memory` line. Answered as the CPU saw it.
+ * The memory line needs the words the firmware left in RAM, which the cached
+ * read cannot show. They come from the same cacheable buffer, by cache
+ * maintenance, not by a second mapping of its page (sram0 is already mapped
+ * by Zephyr; device_map() of it is -EBUSY and a kernel panic): the CPU's view
+ * is copied out first, then the buffer's lines are invalidated and read again. */
 static bool way_display(const char *id, const struct req *q, bool *mem_ok)
 {
 	struct xact x;
-	uint32_t m[BUF_WORDS];
+	uint32_t c[BUF_WORDS], m[BUF_WORDS];
+	int drc;
 
 	build(buf_display, q);
 	raw_xact(buf_display, false, &x);
+	for (uint32_t i = 0; i < BUF_WORDS; i++)
+		c[i] = buf_display[i];
 	print_regs(id, "display", &x);
 	printk("rpi5_mbox: tag %s status 0x%08x answered 0x%08x value 0x%08x rc %d way display (no clean "
 	       "before, no invalidate after: rpi5_display's path; buffer PA 0x%llx)\n",
-	       id, buf_display[1], buf_display[4], buf_display[4u + q->nval], x.rc,
+	       id, c[1], c[4], c[4u + q->nval], x.rc,
 	       (unsigned long long)k_mem_phys_addr(buf_display));
 	*mem_ok = false;
-	if (mem_display) {
+	drc = sys_cache_data_invd_range(buf_display, BUF_WORDS * 4u);
+	if (drc == 0) {
 		for (uint32_t i = 0; i < BUF_WORDS; i++)
-			m[i] = mem_display[i];
+			m[i] = buf_display[i];
 		*mem_ok = answered(m, q);
 		printk("rpi5_mbox: memory tag %s status 0x%08x answered 0x%08x value 0x%08x way display (the "
-		       "same buffer read uncached after the wait: size 0x%08x tag 0x%08x; before the doorbell "
-		       "size 0x%08x code 0x%08x tag 0x%08x)\n",
+		       "same buffer read after an invalidate, no second mapping: size 0x%08x tag 0x%08x; "
+		       "before the doorbell (not read, no second mapping) size 0x%08x code 0x%08x tag 0x%08x)\n",
 		       id, m[1], m[4], m[4u + q->nval], m[0], m[2], x.pre[0], x.pre[1], x.pre[2]);
 	} else {
 		printk("rpi5_mbox: memory tag %s status 0xffffffff answered 0xffffffff value 0xffffffff way "
-		       "display (not read: the uncached alias was not mapped)\n", id);
+		       "display (not read: the invalidate returned %d)\n", id, drc);
 	}
-	return x.rc == 0 && answered(buf_display, q);
+	return x.rc == 0 && answered(c, q);
 }
 
 static bool way_clear(const char *id, const struct req *q)
@@ -336,15 +344,12 @@ int main(void)
 	printk("rpi5_mbox: probe mapping of 0x%llx: %s\n", (unsigned long long)MBOX_BASE,
 	       mbox ? "mapped" : "NOT mapped");
 
-	uint64_t pa = k_mem_phys_addr(buf_display);
-	uint64_t page = pa & ~(uint64_t)0xfff;
-	mm_reg_t alias = 0;
-
-	device_map(&alias, (uintptr_t)page, 0x1000, K_MEM_CACHE_NONE);
-	if (alias)
-		mem_display = (volatile uint32_t *)(alias + (uintptr_t)(pa - page));
-	printk("rpi5_mbox: buffers: display PA 0x%llx (uncached alias %s), clear PA 0x%llx, %u bytes each\n",
-	       (unsigned long long)pa, alias ? "mapped" : "NOT mapped",
+	/* Buffer mode: both buffers stay cacheable in sram0, which Zephyr maps
+	 * already; no device_map()/k_mem_map() of RAM (a second mapping panics
+	 * with -EBUSY). The memory line is read after a cache invalidate. */
+	printk("rpi5_mbox: buffer mode cacheable, cache maintenance, no second mapping\n");
+	printk("rpi5_mbox: buffers: display PA 0x%llx, clear PA 0x%llx, %u bytes each\n",
+	       (unsigned long long)k_mem_phys_addr(buf_display),
 	       (unsigned long long)k_mem_phys_addr(buf_clear), BUF_WORDS * 4u);
 	if (mbox)
 		regs(r);
