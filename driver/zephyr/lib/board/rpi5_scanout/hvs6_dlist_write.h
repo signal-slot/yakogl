@@ -16,7 +16,7 @@
  * 9-word entry and then the list's own END word, 10 words in all:
  *   0 CTL0  VALID | NEXT=9 | UNITY | ORDERRGBA | PIXEL_FORMAT, linear; the
  *           alpha-mask field (bits 19:18) is 3 FIXED for a format without
- *           alpha (rpi:vc4_plane.c:1333-1346, rpi:vc4_regs.h:1371)
+ *           alpha (rpi:vc4_plane.c:1333-1346, rpi:vc4_regs.h:1370-1372)
  *   1 POS0  START_Y, START_X
  *   2 CTL2  alpha in bits 15:4 = alpha >> 4, 0xfff0 opaque
  *           (rpi:vc4_plane.c:2161-2166, rpi:vc4_regs.h:1383-1389)
@@ -62,7 +62,7 @@ enum hvs6w_err {
  * list: the entry and the list END word. */
 #define HVS6W_ENTRY_WORDS 9u
 #define HVS6W_LIST_WORDS (HVS6W_ENTRY_WORDS + 1u)
-/* CTL0 alpha-mask field, bits 19:18; FIXED is 3 (rpi:vc4_regs.h:1371). */
+/* CTL0 alpha-mask field, bits 19:18; FIXED is 3 (rpi:vc4_regs.h:1370-1372). */
 #define HVS6W_CTL0_ALPHA_MASK_SHIFT 18
 #define HVS6W_CTL0_ALPHA_MASK_FIXED 3u
 /* CTL2 of an opaque plane: alpha 0xfff in bits 15:4. */
