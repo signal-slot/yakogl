@@ -1,0 +1,696 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * hvs6_dlist_swap: put one display list of our own on a running BCM2712 HVS
+ * (scaler6, stepping D0) channel by swapping the channel's list pointer, and
+ * give the firmware its list back, byte-equal, afterwards. Stage 2 of
+ * docs/notes/rpi5-display.md (Q4): our XRGB8888 plane after word 32, the
+ * pointer swap at vblank, the firmware's list restored.
+ *
+ * Header only, C11, no Zephyr includes. Register and list-memory access go
+ * through struct hvs6s_io (offsets from the HVS base, as in snapshot.h and
+ * hvs6_chan.h), so the host mock (driver/zephyr/lib/board/test/
+ * hvs6_dlist_swap_mock.c, tools/v3d/check71.d/hvs6_dlist_swap.sh) runs the
+ * same code against a model of the channel.
+ *
+ * Facts, from the pinned tree (raspberrypi/linux rpi-6.12.y at 5bd564aa,
+ * drivers/gpu/drm/vc4/, as rpi:<file>:<line>; taken from the linuxdesk desk
+ * check of plan #385, not re-read for this header; no code copied):
+ *  - Channel 0's list pointer on D0 is SCALER6D_DISP0_LPTRS at 0x110, +0x40
+ *    per channel, one field HEADE in bits 11:0, in words
+ *    (rpi:vc4_regs.h:588-591, :704). Offsets here are hvs6_chan.h's
+ *    YD5_HVS6D_* macros.
+ *  - Linux updates a live channel with one LPTRS write and no read-back or
+ *    wait (rpi:vc4_hvs.c:1166-1169, called at :1343-1346), after writing the
+ *    whole new list including its END word (:1316).
+ *  - There is no latch or pending bit in the channel registers
+ *    (rpi:vc4_regs.h:564-622, :701-733). Hence nothing here claims that the
+ *    HVS latched the pointer: the two results below (read-back, FRCNT moved)
+ *    do not prove it. When the pointer takes effect (frame start or at once)
+ *    only the board can show, and only through what it scans out.
+ *  - Linux frees an old list only once FRCNT moved past the frame of the
+ *    swap, target (FRCNT + 1) & 63 (rpi:vc4_hvs.c:682-697). FRCNT is STATUS
+ *    bits 21:16 (rpi:vc4_regs.h:605). Here: two advances, to be safe.
+ *  - Lists start at or after word 32, HVS_BOOTLOADER_DLIST_END
+ *    (rpi:vc4_regs.h:1056, rpi:vc4_hvs.c:1576-1583).
+ *  - CTRL1.BGENB is the background fill, toggled at EOF from needs_bg_fill
+ *    (rpi:vc4_hvs.c:1484-1510). A swap does not need it. CTRL1 is never
+ *    written here; it is read for the record only.
+ *
+ * The sequence (hvs6s_run, or the steps one by one):
+ *  1. hvs6s_snapshot: the firmware's LPTRS, list words 0..31, and its list
+ *     from LPTRS.HEADE up to its END (walked by CTL0.NEXT, at most
+ *     HVS6S_FW_MAX words).
+ *  2. hvs6s_place: our list's start, at or after word 32 via dlist_alloc.h
+ *     (HVS6S_AUTO), or the caller's start checked. Refused by name: overlap
+ *     with words 0..31, overlap with the firmware's list, a list that does
+ *     not fit the memory or the 12-bit HEADE.
+ *  3. hvs6s_swap: our entry from hvs6_dlist_write.h (10 words, Linux's
+ *     layout), written and read back word by word; the cache cleaned over
+ *     the list (fb_flush.h's line-rounded range) and a barrier; the bus
+ *     address of the list from bus_addr.h recorded; then LPTRS, last, as
+ *     one write. Then two results, each on its own: LPTRS read back as
+ *     written, and FRCNT advanced (6-bit wrap aware), each within
+ *     max_polls polls. FRCNT, STATUS.MODE, LPTRS, DL and CTRL1.BGENB are
+ *     recorded at the write and after it. Then FRCNT must advance twice past
+ *     the write before the old list is reused or checked.
+ *  4. hvs6s_restore, always, even after a failure in 2 or 3: the
+ *     firmware's LPTRS written back, two FRCNT advances, then LPTRS and
+ *     words 0..31 (and the firmware's list words) compared byte for byte
+ *     with the snapshot; the first differing word is named.
+ *
+ * The list memory sits at HVS + 0x4000 and is device memory on the Pi 5's
+ * Zephyr map; the clean is then a no-op, kept so that a staged list in
+ * normal memory and the A/B buffers of the caller are treated alike. The
+ * framebuffer's own clean is the caller's (fb_flush.h).
+ *
+ * The poll interval (io->wait) must be under 64 frames (about 1 s at 60 Hz),
+ * or a 6-bit FRCNT difference aliases.
+ */
+#ifndef YAKOGL_BOARD_RPI5_SCANOUT_HVS6_DLIST_SWAP_H
+#define YAKOGL_BOARD_RPI5_SCANOUT_HVS6_DLIST_SWAP_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "bus_addr.h"
+#include "dlist_alloc.h"
+#include "fb_flush.h"
+#include "hvs6_chan.h"
+#include "hvs6_dlist_write.h"
+
+/* Our list's start chosen by dlist_alloc.h (first fit from word 32). */
+#define HVS6S_AUTO 0xffffffffu
+/* Words of the firmware's list kept for the restore, walked from HEADE. */
+#define HVS6S_FW_MAX 64u
+/* Words 0..31 the bootloader keeps (rpi:vc4_regs.h:1056). */
+#define HVS6S_KEPT 32u
+/* STATUS.FRCNT, bits 21:16 (rpi:vc4_regs.h:605). */
+#define HVS6S_FRCNT_SHIFT 16u
+#define HVS6S_FRCNT_MASK 0x3fu
+/* DISPx_DL.LACT, bits 11:0, the list word being scanned (scanout_alive.h's
+ * SA_DL_LACT_MASK, rpi:vc4_regs.h:619). Recorded, never a pass criterion. */
+#define HVS6S_DL_LACT_MASK 0x00000fffu
+/* FRCNT advances to wait past a pointer write before the old list is reused. */
+#define HVS6S_SETTLE_FRAMES 2u
+/* The record's prefix of every line hvs6s_lines prints. */
+#define HVS6S_TAG "dlswap"
+
+/* Register and list-memory access. Offsets are from the HVS base. */
+struct hvs6s_io {
+	uint32_t (*read32)(void *ctx, uint32_t off);
+	void (*write32)(void *ctx, uint32_t off, uint32_t val);
+	/* data cache clean of [addr, addr + len), ARM physical addresses */
+	void (*clean)(void *ctx, uint64_t addr, uint64_t len);
+	void (*barrier)(void *ctx); /* dsb: the list's writes before LPTRS */
+	void (*wait)(void *ctx);    /* one poll interval, well under a frame */
+	void *ctx;
+};
+
+struct hvs6s_cfg {
+	unsigned int chan;     /* 0..2 */
+	uint32_t mem_words;    /* list memory in words (CXM_SIZE, read by the caller) */
+	uint32_t start;        /* HVS6S_AUTO, or the word our list starts at */
+	uint64_t list_arm;     /* ARM physical address of list word 0 (HVS + 0x4000) */
+	uint32_t cache_line;   /* bytes; 0 means fb_flush.h's 64 */
+	uint32_t max_polls;    /* polls allowed per FRCNT wait and read-back */
+	struct hvs6w_plane plane;
+};
+
+/* What failed, first failure only; HVS6S_OK when everything passed. */
+enum hvs6s_err {
+	HVS6S_OK = 0,
+	HVS6S_ERR_ARG,          /* null io/cfg/callback, channel over 2, max_polls 0 */
+	HVS6S_ERR_SNAPSHOT,     /* the firmware's LPTRS outside the list memory */
+	HVS6S_ERR_PLACE_KEPT,   /* our list overlaps words 0..31 */
+	HVS6S_ERR_PLACE_FW,     /* our list overlaps the firmware's list */
+	HVS6S_ERR_PLACE_FIT,    /* our list does not fit memory or HEADE */
+	HVS6S_ERR_PLANE,        /* hvs6_dlist_write.h refused the plane */
+	HVS6S_ERR_BUS,          /* the list's address has no bus address */
+	HVS6S_ERR_LIST_READ,    /* a written list word did not read back */
+	HVS6S_ERR_LPTRS_READ,   /* LPTRS never read back as written */
+	HVS6S_ERR_FRCNT,        /* FRCNT did not advance after the write */
+	HVS6S_ERR_SETTLE,       /* FRCNT did not advance twice past the write */
+	HVS6S_ERR_RESTORE_FRCNT,/* FRCNT did not advance twice after the restore */
+	HVS6S_ERR_RESTORE_LPTRS,/* LPTRS differs from the snapshot after the restore */
+	HVS6S_ERR_RESTORE_WORD, /* a list word differs from the snapshot */
+};
+
+static inline const char *hvs6s_err_name(enum hvs6s_err e)
+{
+	switch (e) {
+	case HVS6S_OK: return "ok";
+	case HVS6S_ERR_ARG: return "bad argument";
+	case HVS6S_ERR_SNAPSHOT: return "firmware LPTRS outside the list memory";
+	case HVS6S_ERR_PLACE_KEPT: return "place: overlaps words 0..31";
+	case HVS6S_ERR_PLACE_FW: return "place: overlaps the firmware's list";
+	case HVS6S_ERR_PLACE_FIT: return "place: does not fit";
+	case HVS6S_ERR_PLANE: return "plane: refused by hvs6_dlist_write";
+	case HVS6S_ERR_BUS: return "list address has no bus address";
+	case HVS6S_ERR_LIST_READ: return "list word did not read back";
+	case HVS6S_ERR_LPTRS_READ: return "LPTRS did not read back";
+	case HVS6S_ERR_FRCNT: return "FRCNT did not advance";
+	case HVS6S_ERR_SETTLE: return "FRCNT did not advance twice";
+	case HVS6S_ERR_RESTORE_FRCNT: return "restore: FRCNT did not advance twice";
+	case HVS6S_ERR_RESTORE_LPTRS: return "restore: LPTRS differs";
+	case HVS6S_ERR_RESTORE_WORD: return "restore: list word differs";
+	}
+	return "?";
+}
+
+/* The firmware's state, taken before anything is written. */
+struct hvs6s_snap {
+	int taken;
+	uint32_t lptrs;                 /* the whole register */
+	uint32_t kept[HVS6S_KEPT];      /* words 0..31 */
+	uint32_t fw_head, fw_len;       /* its list's span in words */
+	int fw_end_found;               /* 0: span capped, no END within HVS6S_FW_MAX */
+	uint32_t fw[HVS6S_FW_MAX];      /* words fw_head .. fw_head + fw_len - 1 */
+};
+
+/* One sample of the channel registers. */
+struct hvs6s_regs {
+	uint32_t status, lptrs, dl, ctrl1;
+};
+
+static inline uint32_t hvs6s_frcnt(uint32_t status)
+{
+	return (status >> HVS6S_FRCNT_SHIFT) & HVS6S_FRCNT_MASK;
+}
+
+static inline uint32_t hvs6s_mode(uint32_t status)
+{
+	return (status >> YD5_HVS6_STATUS_MODE_SHIFT) & YD5_HVS6_STATUS_MODE_MASK;
+}
+
+static inline uint32_t hvs6s_bgenb(uint32_t ctrl1)
+{
+	return (ctrl1 & YD5_HVS6_CTRL1_BGENB) ? 1u : 0u;
+}
+
+/* Frames from a to b on the 6-bit counter. */
+static inline uint32_t hvs6s_frdelta(uint32_t a, uint32_t b)
+{
+	return (b - a) & HVS6S_FRCNT_MASK;
+}
+
+/* D0 channel offsets (hvs6_chan.h). */
+static inline uint32_t hvs6s_lptrs_reg(unsigned int ch)
+{
+	return yd5_hvs6_lptrs_reg(YD5_HVS6_D0, ch);
+}
+
+static inline uint32_t hvs6s_status_reg(unsigned int ch)
+{
+	return yd5_hvs6_status_reg(YD5_HVS6_D0, ch);
+}
+
+static inline uint32_t hvs6s_ctrl1_reg(unsigned int ch)
+{
+	return yd5_hvs6_ctrl1_reg(YD5_HVS6_D0, ch);
+}
+
+static inline uint32_t hvs6s_dl_reg(unsigned int ch)
+{
+	return YD5_HVS6D_DISP0_DL + ch * YD5_HVS6D_DISP_STRIDE;
+}
+
+static inline uint32_t hvs6s_word_off(uint32_t word)
+{
+	return HVS6_DLIST_OFFSET + word * 4u;
+}
+
+/* The whole record of one run. */
+struct hvs6s_report {
+	enum hvs6s_err err;          /* the first failure */
+
+	/* place */
+	enum hvs6s_err place_err;
+	uint32_t start, len;         /* our list, in words */
+	uint64_t list_bus;           /* bus address of our list's first word */
+	struct fb_range cleaned;     /* the cleaned range (ARM) */
+
+	/* swap */
+	int swapped;                 /* LPTRS was written with our start */
+	uint32_t list_bad_word;      /* list word that did not read back (index in our list) */
+	uint32_t lptrs_written;
+	struct hvs6s_regs at_write;  /* sampled just before the LPTRS write */
+	struct hvs6s_regs after;     /* sampled when both results were in, or at the timeout */
+	int lptrs_ok;                /* result 1: LPTRS read back as written */
+	uint32_t lptrs_first;        /* LPTRS read at once after the write */
+	uint32_t lptrs_poll;         /* polls before it read back (0: at once) */
+	int frcnt_ok;                /* result 2: FRCNT advanced */
+	uint32_t frcnt_polls;        /* polls before it advanced */
+	int lact_follows;            /* DL.LACT equals our start after (record only) */
+	int settle_ok;               /* two advances past the write */
+	uint32_t settle_polls;
+
+	/* restore */
+	int restored;                /* the firmware's LPTRS was written back */
+	int restore_frcnt_ok;
+	uint32_t restore_polls;
+	struct hvs6s_regs at_restore, after_restore;
+	int restore_lptrs_ok;
+	int restore_equal;           /* LPTRS and every kept word equal the snapshot */
+	int64_t diff_word;           /* first differing list word, -1 when none */
+	uint32_t diff_want, diff_got;
+};
+
+static inline void hvs6s_report_init(struct hvs6s_report *r)
+{
+	*r = (struct hvs6s_report){0};
+	r->diff_word = -1;
+	r->start = HVS6S_AUTO;
+}
+
+static inline void hvs6s_fail(struct hvs6s_report *r, enum hvs6s_err e)
+{
+	if (r->err == HVS6S_OK)
+		r->err = e;
+}
+
+static inline int hvs6s_io_ok(const struct hvs6s_io *io)
+{
+	return io && io->read32 && io->write32 && io->clean && io->barrier && io->wait;
+}
+
+static inline int hvs6s_cfg_ok(const struct hvs6s_cfg *c)
+{
+	return c && c->chan < YD5_HVS6_NUM_CHANNELS && c->max_polls > 0 &&
+	       c->mem_words >= HVS6S_KEPT;
+}
+
+static inline void hvs6s_sample(const struct hvs6s_io *io, unsigned int ch, struct hvs6s_regs *s)
+{
+	s->status = io->read32(io->ctx, hvs6s_status_reg(ch));
+	s->lptrs = io->read32(io->ctx, hvs6s_lptrs_reg(ch));
+	s->dl = io->read32(io->ctx, hvs6s_dl_reg(ch));
+	s->ctrl1 = io->read32(io->ctx, hvs6s_ctrl1_reg(ch));
+}
+
+/* 1. The firmware's LPTRS, words 0..31 and its list up to END. */
+static inline enum hvs6s_err hvs6s_snapshot(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
+					    struct hvs6s_snap *s)
+{
+	uint32_t pos, head;
+
+	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !s)
+		return HVS6S_ERR_ARG;
+	*s = (struct hvs6s_snap){0};
+	s->lptrs = io->read32(io->ctx, hvs6s_lptrs_reg(c->chan));
+	for (uint32_t i = 0; i < HVS6S_KEPT; i++)
+		s->kept[i] = io->read32(io->ctx, hvs6s_word_off(i));
+	head = s->lptrs & YD5_HVS6_LPTRS_HEADE_MASK;
+	if (head >= c->mem_words)
+		return HVS6S_ERR_SNAPSHOT;
+	s->fw_head = head;
+	pos = head;
+	/* Walk entries by CTL0.NEXT; the list END ends it. The entry's own END
+	 * (Linux's layout) is skipped by NEXT. Words between are kept too. */
+	while (pos < c->mem_words && pos - head < HVS6S_FW_MAX) {
+		uint32_t w = io->read32(io->ctx, hvs6s_word_off(pos));
+		uint32_t n;
+
+		if (w & HVS6_CTL0_END) {
+			s->fw_len = pos - head + 1u;
+			s->fw_end_found = 1;
+			break;
+		}
+		n = (w >> HVS6_CTL0_NEXT_SHIFT) & HVS6_CTL0_NEXT_MASK;
+		if (n == 0)
+			break;
+		pos += n;
+	}
+	if (!s->fw_end_found) {
+		/* No END in reach: keep the most the walk could cover. */
+		s->fw_len = c->mem_words - head;
+		if (s->fw_len > HVS6S_FW_MAX)
+			s->fw_len = HVS6S_FW_MAX;
+	}
+	for (uint32_t i = 0; i < s->fw_len; i++)
+		s->fw[i] = io->read32(io->ctx, hvs6s_word_off(head + i));
+	s->taken = 1;
+	return HVS6S_OK;
+}
+
+static inline int hvs6s_overlap(uint32_t a, uint32_t al, uint32_t b, uint32_t bl)
+{
+	return al && bl && (uint64_t)a < (uint64_t)b + bl && (uint64_t)b < (uint64_t)a + al;
+}
+
+/* A span of len words at start against the kept words, the firmware's list
+ * and the memory. Usable for each slot of an A/B pair. */
+static inline enum hvs6s_err hvs6s_check_span(const struct hvs6s_cfg *c, const struct hvs6s_snap *s,
+					      uint32_t start, uint32_t len)
+{
+	if (!c || !s || !len)
+		return HVS6S_ERR_ARG;
+	if (hvs6s_overlap(start, len, 0, HVS6S_KEPT))
+		return HVS6S_ERR_PLACE_KEPT;
+	if (hvs6s_overlap(start, len, s->fw_head, s->fw_len))
+		return HVS6S_ERR_PLACE_FW;
+	if ((uint64_t)start + len > c->mem_words || start > YD5_HVS6_LPTRS_HEADE_MASK)
+		return HVS6S_ERR_PLACE_FIT;
+	return HVS6S_OK;
+}
+
+/* 2. Our list's start: dlist_alloc.h's first fit, or the caller's, checked. */
+static inline enum hvs6s_err hvs6s_place(const struct hvs6s_cfg *c, const struct hvs6s_snap *s,
+					 uint32_t len, uint32_t *start)
+{
+	uint32_t st;
+
+	if (!c || !s || !s->taken || !start || !len)
+		return HVS6S_ERR_ARG;
+	if (c->start == HVS6S_AUTO) {
+		struct dla_span fw = { s->fw_head, s->fw_len };
+		uint32_t mem = c->mem_words;
+		int64_t a;
+
+		/* a start past HEADE cannot be pointed at */
+		if (mem > YD5_HVS6_LPTRS_HEADE_MASK + len)
+			mem = YD5_HVS6_LPTRS_HEADE_MASK + len;
+		a = dla_first_fit(mem, len, DLA_MIN_ALIGN, &fw, 1);
+		if (a < 0)
+			return HVS6S_ERR_PLACE_FIT;
+		st = (uint32_t)a;
+	} else {
+		st = c->start;
+	}
+	{
+		enum hvs6s_err e = hvs6s_check_span(c, s, st, len);
+
+		if (e != HVS6S_OK)
+			return e;
+	}
+	*start = st;
+	return HVS6S_OK;
+}
+
+/*
+ * Poll until FRCNT is at least `need` frames past `from`, adding the
+ * frames between successive reads (6-bit wrap aware). *polls gets the
+ * waits taken. Returns 1 when FRCNT got there, 0 after max_polls waits.
+ */
+static inline int hvs6s_wait_frames(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
+				    uint32_t from, uint32_t need, uint32_t *polls)
+{
+	uint32_t last = from, total = 0;
+
+	for (uint32_t i = 0;; i++) {
+		uint32_t f = hvs6s_frcnt(io->read32(io->ctx, hvs6s_status_reg(c->chan)));
+
+		total += hvs6s_frdelta(last, f);
+		last = f;
+		if (total >= need) {
+			*polls = i;
+			return 1;
+		}
+		if (i >= c->max_polls) {
+			*polls = i;
+			return 0;
+		}
+		io->wait(io->ctx);
+	}
+}
+
+/* 3. Write our list at start, then LPTRS last; the two results; the settle. */
+static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
+					uint32_t start, struct hvs6s_report *r)
+{
+	uint32_t list[HVS6W_LIST_WORDS];
+	uint32_t f0, last, total = 0, lp_poll = 0, fr_poll = 0;
+	int n, lp_ok = 0, fr_ok = 0;
+	uint64_t arm, bus;
+	uint32_t i;
+
+	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !r)
+		return HVS6S_ERR_ARG;
+	n = hvs6w_write_plane(list, HVS6W_LIST_WORDS, &c->plane);
+	if (n != (int)HVS6W_LIST_WORDS)
+		return HVS6S_ERR_PLANE;
+	r->start = start;
+	r->len = (uint32_t)n;
+	arm = c->list_arm + (uint64_t)start * 4u;
+	if (bcm2712_arm_to_bus(arm, &bus) != 0)
+		return HVS6S_ERR_BUS;
+	r->list_bus = bus;
+
+	for (i = 0; i < r->len; i++)
+		io->write32(io->ctx, hvs6s_word_off(start + i), list[i]);
+	for (i = 0; i < r->len; i++) {
+		if (io->read32(io->ctx, hvs6s_word_off(start + i)) != list[i]) {
+			r->list_bad_word = i;
+			return HVS6S_ERR_LIST_READ;
+		}
+	}
+	r->cleaned = fb_flush_range(arm, (uint64_t)r->len * 4u,
+				    c->cache_line ? c->cache_line : FB_FLUSH_LINE_A76);
+	if (r->cleaned.end != r->cleaned.start)
+		io->clean(io->ctx, r->cleaned.start, r->cleaned.end - r->cleaned.start);
+	io->barrier(io->ctx);
+
+	hvs6s_sample(io, c->chan, &r->at_write);
+	f0 = hvs6s_frcnt(r->at_write.status);
+	r->lptrs_written = dla_ptr(start) & YD5_HVS6_LPTRS_HEADE_MASK;
+	io->write32(io->ctx, hvs6s_lptrs_reg(c->chan), r->lptrs_written); /* the one write */
+	r->swapped = 1;
+
+	/* Results 1 and 2, polled together, each kept on its own. */
+	r->lptrs_first = io->read32(io->ctx, hvs6s_lptrs_reg(c->chan));
+	last = f0;
+	for (i = 0;; i++) {
+		struct hvs6s_regs s;
+
+		hvs6s_sample(io, c->chan, &s);
+		if (!lp_ok && (s.lptrs & YD5_HVS6_LPTRS_HEADE_MASK) == r->lptrs_written) {
+			lp_ok = 1;
+			lp_poll = i;
+		}
+		total += hvs6s_frdelta(last, hvs6s_frcnt(s.status));
+		last = hvs6s_frcnt(s.status);
+		if (!fr_ok && total >= 1) {
+			fr_ok = 1;
+			fr_poll = i;
+		}
+		r->after = s;
+		if ((lp_ok && fr_ok) || i >= c->max_polls)
+			break;
+		io->wait(io->ctx);
+	}
+	r->lptrs_ok = lp_ok;
+	r->lptrs_poll = lp_poll;
+	r->frcnt_ok = fr_ok;
+	r->frcnt_polls = fr_ok ? fr_poll : i;
+	r->lact_follows = (r->after.dl & HVS6S_DL_LACT_MASK) == start;
+
+	/* Two advances past the write before the old list is touched. */
+	if (fr_ok) {
+		uint32_t p = 0;
+
+		if (total >= HVS6S_SETTLE_FRAMES) {
+			r->settle_ok = 1;
+		} else {
+			r->settle_ok = hvs6s_wait_frames(io, c, last, HVS6S_SETTLE_FRAMES - total, &p);
+		}
+		r->settle_polls = p;
+	}
+	if (!lp_ok)
+		return HVS6S_ERR_LPTRS_READ;
+	if (!fr_ok)
+		return HVS6S_ERR_FRCNT;
+	if (!r->settle_ok)
+		return HVS6S_ERR_SETTLE;
+	return HVS6S_OK;
+}
+
+/* 4. The firmware's LPTRS back, two advances, then the byte-equal compare. */
+static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
+					   const struct hvs6s_snap *s, struct hvs6s_report *r)
+{
+	uint32_t i, got;
+
+	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !s || !s->taken || !r)
+		return HVS6S_ERR_ARG;
+	hvs6s_sample(io, c->chan, &r->at_restore);
+	io->barrier(io->ctx);
+	io->write32(io->ctx, hvs6s_lptrs_reg(c->chan), s->lptrs);
+	r->restored = 1;
+	r->restore_frcnt_ok = hvs6s_wait_frames(io, c, hvs6s_frcnt(r->at_restore.status),
+						 HVS6S_SETTLE_FRAMES, &r->restore_polls);
+	hvs6s_sample(io, c->chan, &r->after_restore);
+
+	/* Compared even after a stall: the record says what was there. */
+	r->restore_equal = 1;
+	r->restore_lptrs_ok = r->after_restore.lptrs == s->lptrs;
+	if (!r->restore_lptrs_ok)
+		r->restore_equal = 0;
+	for (i = 0; i < HVS6S_KEPT && r->diff_word < 0; i++) {
+		got = io->read32(io->ctx, hvs6s_word_off(i));
+		if (got != s->kept[i]) {
+			r->diff_word = i;
+			r->diff_want = s->kept[i];
+			r->diff_got = got;
+		}
+	}
+	for (i = 0; i < s->fw_len && r->diff_word < 0; i++) {
+		got = io->read32(io->ctx, hvs6s_word_off(s->fw_head + i));
+		if (got != s->fw[i]) {
+			r->diff_word = s->fw_head + i;
+			r->diff_want = s->fw[i];
+			r->diff_got = got;
+		}
+	}
+	if (r->diff_word >= 0)
+		r->restore_equal = 0;
+	if (!r->restore_frcnt_ok)
+		return HVS6S_ERR_RESTORE_FRCNT;
+	if (!r->restore_lptrs_ok)
+		return HVS6S_ERR_RESTORE_LPTRS;
+	if (r->diff_word >= 0)
+		return HVS6S_ERR_RESTORE_WORD;
+	return HVS6S_OK;
+}
+
+/*
+ * The whole sequence: snapshot, place, swap, restore. The restore runs
+ * whenever the snapshot was taken, whatever failed before it. r->err is the
+ * first failure (HVS6S_OK when all passed), also returned.
+ */
+static inline enum hvs6s_err hvs6s_run(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
+				       struct hvs6s_snap *s, struct hvs6s_report *r)
+{
+	enum hvs6s_err e;
+	uint32_t start = 0;
+
+	if (!r)
+		return HVS6S_ERR_ARG;
+	hvs6s_report_init(r);
+	e = hvs6s_snapshot(io, c, s);
+	if (e != HVS6S_OK) {
+		hvs6s_fail(r, e);
+		return r->err;
+	}
+	r->place_err = hvs6s_place(c, s, HVS6W_LIST_WORDS, &start);
+	if (r->place_err != HVS6S_OK) {
+		hvs6s_fail(r, r->place_err);
+	} else {
+		r->start = start;
+		r->len = HVS6W_LIST_WORDS;
+		e = hvs6s_swap(io, c, start, r);
+		if (e != HVS6S_OK)
+			hvs6s_fail(r, e);
+	}
+	e = hvs6s_restore(io, c, s, r);
+	if (e != HVS6S_OK)
+		hvs6s_fail(r, e);
+	return r->err;
+}
+
+/* Line sink, as snapshot.h's: one NUL-terminated line without a newline. */
+struct hvs6s_emit {
+	void (*line)(void *ctx, const char *text);
+	void *ctx;
+};
+
+static inline void hvs6s_regs_line(const struct hvs6s_emit *em, const char *step,
+				   const struct hvs6s_regs *g)
+{
+	char b[160];
+
+	(void)snprintf(b, sizeof(b),
+		       HVS6S_TAG " %s frcnt=%u mode=%u lptrs=0x%08x lact=%u bgenb=%u status=0x%08x",
+		       step, (unsigned)hvs6s_frcnt(g->status), (unsigned)hvs6s_mode(g->status),
+		       (unsigned)g->lptrs, (unsigned)(g->dl & HVS6S_DL_LACT_MASK),
+		       (unsigned)hvs6s_bgenb(g->ctrl1), (unsigned)g->status);
+	em->line(em->ctx, b);
+}
+
+/*
+ * The record as lines, one per step, each printed whether the step passed,
+ * failed or did not run ("skip"). Returns the lines emitted.
+ */
+static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_report *r,
+				 const struct hvs6s_emit *em)
+{
+	char b[200];
+	size_t n = 0;
+
+	if (!s || !r || !em || !em->line)
+		return 0;
+	(void)snprintf(b, sizeof(b), HVS6S_TAG " snapshot %s lptrs=0x%08x fw_head=%u fw_len=%u end=%s",
+		       s->taken ? "ok" : "FAIL", (unsigned)s->lptrs, (unsigned)s->fw_head,
+		       (unsigned)s->fw_len, s->fw_end_found ? "found" : "capped");
+	em->line(em->ctx, b);
+	n++;
+	if (!s->taken)
+		return n;
+	if (r->place_err == HVS6S_OK)
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " place ok start=%u len=%u", (unsigned)r->start,
+			       (unsigned)r->len);
+	else
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " place FAIL %s", hvs6s_err_name(r->place_err));
+	em->line(em->ctx, b);
+	n++;
+	if (r->swapped) {
+		(void)snprintf(b, sizeof(b),
+			       HVS6S_TAG " write ok lptrs=0x%03x bus=0x%010llx clean=0x%llx+0x%llx",
+			       (unsigned)r->lptrs_written, (unsigned long long)r->list_bus,
+			       (unsigned long long)r->cleaned.start,
+			       (unsigned long long)(r->cleaned.end - r->cleaned.start));
+		em->line(em->ctx, b);
+		hvs6s_regs_line(em, "at-write", &r->at_write);
+		hvs6s_regs_line(em, "after", &r->after);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " lptrs-readback %s first=0x%08x poll=%u",
+			       r->lptrs_ok ? "ok" : "FAIL", (unsigned)r->lptrs_first,
+			       (unsigned)r->lptrs_poll);
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " frcnt-advance %s polls=%u", r->frcnt_ok ? "ok" : "FAIL",
+			       (unsigned)r->frcnt_polls);
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " lact-follows %s (record only, not a latch proof)",
+			       r->lact_follows ? "yes" : "no");
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " settle %s polls=%u",
+			       r->settle_ok ? "ok" : (r->frcnt_ok ? "FAIL" : "skip"),
+			       (unsigned)r->settle_polls);
+		em->line(em->ctx, b);
+		n += 7;
+	} else {
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " write %s %s",
+			       r->place_err == HVS6S_OK ? "FAIL" : "skip",
+			       r->place_err == HVS6S_OK ? hvs6s_err_name(r->err) : "(not placed)");
+		em->line(em->ctx, b);
+		n++;
+	}
+	if (r->restored) {
+		hvs6s_regs_line(em, "restore-after", &r->after_restore);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-frcnt %s polls=%u",
+			       r->restore_frcnt_ok ? "ok" : "FAIL", (unsigned)r->restore_polls);
+		em->line(em->ctx, b);
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-lptrs %s want=0x%08x got=0x%08x",
+			       r->restore_lptrs_ok ? "ok" : "FAIL", (unsigned)s->lptrs,
+			       (unsigned)r->after_restore.lptrs);
+		em->line(em->ctx, b);
+		if (r->diff_word < 0)
+			(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-words ok 0..31 and fw %u..%u equal",
+				       (unsigned)s->fw_head, (unsigned)(s->fw_head + s->fw_len - 1u));
+		else
+			(void)snprintf(b, sizeof(b),
+				       HVS6S_TAG " restore-words FAIL word %u want=0x%08x got=0x%08x",
+				       (unsigned)r->diff_word, (unsigned)r->diff_want, (unsigned)r->diff_got);
+		em->line(em->ctx, b);
+		n += 4;
+	} else {
+		(void)snprintf(b, sizeof(b), HVS6S_TAG " restore FAIL not run");
+		em->line(em->ctx, b);
+		n++;
+	}
+	(void)snprintf(b, sizeof(b), HVS6S_TAG " result %s %s", r->err == HVS6S_OK ? "ok" : "FAIL",
+		       hvs6s_err_name(r->err));
+	em->line(em->ctx, b);
+	return n + 1;
+}
+
+#endif /* YAKOGL_BOARD_RPI5_SCANOUT_HVS6_DLIST_SWAP_H */
