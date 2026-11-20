@@ -8,18 +8,16 @@
 //! width, 45 height, 46 depth for a 3D texture; the compiler's `grad_lod`
 //! scales the gradients by them and hands the TMU an explicit lod), filled
 //! from the draw's `V3dJobTmu` (`texture_units` in src/v3d/backend.rs),
-//! which today holds the LEVEL-0 sizes: `GL_TEXTURE_BASE_LEVEL` is not
-//! applied there (tests/es3_texsize_base_level_v3d.rs pins the same for
-//! `textureSize`). When the words follow the base level (Mesa's
-//! v3d_uniforms.c `u_minify(first_level)` for width, height and depth, the
-//! layer count as is) the gradient scaling follows too; whether the TMU
-//! then adds the base level to the explicit lod a second time is the open
-//! question of the item gradbase.
+//! which holds the BASE level's sizes (Mesa's v3d_uniforms.c
+//! `u_minify(first_level)` for width, height and depth, the layer count as
+//! is; tests/es3_texsize_base_level_v3d.rs checks the same for
+//! `textureSize`), so the gradient scaling follows the base level. The
+//! TMU's texture state still has base level 0
+//! (tests/es3_sample_base_level_v3d.rs), so the explicit lod counts from
+//! level 0 until that state follows the base level too (item gradbase).
 //!
-//! The BASE_LEVEL 0 controls assert the correct sizes and stay; each
-//! `..._flip_when_the_base_level_is_applied` test asserts today's level-0
-//! record with BASE_LEVEL 1 and says in its doc comment what the correct
-//! value is; the fix flips those asserts in its commit.
+//! The BASE_LEVEL 0 controls assert level 0's sizes, the BASE_LEVEL 1 tests
+//! the base level's.
 //!
 //! The textures are 16x16 (x8 deep, x5 layers) with the whole mip chain
 //! given level by level, NEAREST filters, so they are complete at
@@ -597,7 +595,7 @@ fn unit0_sizes(kind: Kind, base: GLint) -> (u32, u32, u32, u32) {
     (u.width, u.height, u.depth, u.array_size)
 }
 
-/* ---- BASE_LEVEL 0: the controls, correct today and after the fix ---- */
+/* ---- BASE_LEVEL 0: the controls ---- */
 
 /// Control: a 16x16x8 `sampler3D` `textureGrad` at BASE_LEVEL 0: 16x16, depth 8.
 #[test]
@@ -614,28 +612,23 @@ fn a_2d_array_grad_at_base_level_0_has_its_level_0_size() {
     assert_eq!(unit0_sizes(Kind::Array, 0), (16, 16, 1, 5));
 }
 
-/* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's size ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 16x16x8
-/// `sampler3D` `textureGrad` hands the job builder the LEVEL-0 size and
-/// depth, 16x16 and 8, so the compiler scales the gradients by those. The
-/// post-fix value is the base level's: 8x8 and depth 4 (Mesa's v3d_uniforms.c
-/// `u_minify(first_level)` of width, height and depth). Flip the assert to
-/// (8, 8, 4, 1) when the base level is applied, and check then that the TMU
-/// does not add the base level to the explicit lod again (item gradbase).
+/// With GL_TEXTURE_BASE_LEVEL 1 the 16x16x8 `sampler3D` `textureGrad` hands
+/// the job builder the base level's size and depth, 8x8 and 4 (Mesa's
+/// v3d_uniforms.c `u_minify(first_level)` of width, height and depth), so
+/// the compiler scales the gradients by those.
 #[test]
-fn a_3d_texture_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_3d_texture_grad_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x5 `sampler2DArray`
-/// `textureGrad` hands 16x16 and 5 layers. The post-fix value is 8x8 and 5
-/// layers: the layer count is never minified (Mesa writes the array size as
-/// is). Flip to (8, 8, 1, 5) when the base level is applied; only the width
-/// and height change.
+/// With BASE_LEVEL 1 the 16x16x5 `sampler2DArray` `textureGrad` hands 8x8
+/// and 5 layers: the layer count is never minified (Mesa writes the array
+/// size as is).
 #[test]
-fn a_2d_array_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_array_grad_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, 1), (8, 8, 1, 5));
 }

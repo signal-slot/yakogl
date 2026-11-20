@@ -113,15 +113,21 @@ and so do the sampled-and-queried and sampling-only units
 consistent draw never meets the 16-bit key; its predicate-level pin and
 RGBA8 control are there too.
 
-## (e) The level-0 limit
+## (e) The base level
 
-The words carry level 0: `texture_units` copies `b.width`, `b.height` and
-`b.layers`, the texture object's base image, and the GL core applies
-`GL_TEXTURE_BASE_LEVEL` nowhere in the draw — its completeness rule says so
-outright (`mip_levels_needed`, `src/gl/draw.rs:3438-3444`). Mesa's
-`get_texture_size` instead minifies width, height and depth by the sampler
-view's base level `u.tex.first_level` (`v3d_uniforms.c:63-72` (tree)); only
-the array size stays unminified (`:73-79`). So at `GL_TEXTURE_BASE_LEVEL`
-above 0 our words give level 0's numbers where Mesa's give the base
-level's. Whether any draw is wrong for it, and which dEQP-GLES3 cases reach
-it, is being looked into separately; it is not decided here.
+The words carry the base level's size, as Mesa's `get_texture_size` does
+(it minifies width, height and depth by the sampler view's base level
+`u.tex.first_level`, `v3d_uniforms.c:63-72` (tree); the array size stays
+unminified, `:73-79`). The GL core hands `GL_TEXTURE_BASE_LEVEL` in
+`GlesTextureBind::base_level` (`build_common`, `src/gl/draw.rs`; an
+immutable texture's clamped to its last level, ES 3.0.6 3.8.10), and
+`texture_units` shifts `b.width`, `b.height` and a 3D texture's depth right
+by it, each at least 1; the layer count goes as is (the job builder refuses
+0). One spot covers the fragment, vertex and compute units.
+`tests/es3_texsize_base_level_v3d.rs` and
+`tests/es3_texsize_base_level_vs_v3d.rs` check it at BASE_LEVEL 0 and 1.
+
+Only the size words follow the base level. Sampling still starts at level 0
+(the texture state's base level is 0, and the completeness rule counts from
+level 0: `mip_levels_needed`, `src/gl/draw.rs`);
+`tests/es3_sample_base_level_v3d.rs` pins that.
