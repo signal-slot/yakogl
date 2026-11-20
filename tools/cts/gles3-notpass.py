@@ -6,6 +6,8 @@
   gles3-notpass.py [--commit SHA] [--board NAME] [--date RUN]
                    [--mustpass FILE] [-o OUT] SOURCE...
   gles3-notpass.py --pi4 [--mustpass FILE] [--tree FILE] [-o OUT] SESSION_DIR...
+  gles3-notpass.py --splice OLD.tsv --rows AA-BB[,CC-DD] [--tree FILE]
+                   [--commit SHA] [--date RUN] [--mustpass FILE] [-o OUT] SOURCE...
   gles3-notpass.py --self-test
 
 A SOURCE is read whole, in the order given:
@@ -61,6 +63,26 @@ re-split after the run (S32c into S32c1..S32c4: every tree label that is
 the console's label plus a letter or a number) is read over the union of
 its parts' lines under the label it ran as; the parts count as not run,
 and a part with a console of its own beside it is refused.
+
+--splice replaces the rows of OLD.tsv (the committed not-pass TSV, 3 columns
+or more) that belong to some tree rows by the rows the SOURCEs give for those
+rows, and keeps OLD's line for every other case, with any column after the
+message (a cause-family column) untouched; new lines get an empty value in
+such columns. A mustpass case belongs to the row of --tree (default
+tools/cts/am62p-gles3-tree.txt, rows counted from 0 as board.sh tree does)
+whose filter matches it: the table is read and each filter turned into a
+regex by check-gles3-tree.py's own read_table() and row_regex() (imported,
+not restated; a case matching two rows is refused). --rows lists the rows
+that were run, AA-BB or one number, comma separated. Of those rows, a case
+the SOURCEs do not report is NoResult; a reported case that belongs to
+another row is an error (a slice of the wrong rows overwrites nothing). Rows
+come out in mustpass order. The header gives, per row range, the build and
+the run date the range comes from, one line each:
+    # rows 0-10: build abcdef12, run 2026-11-21
+OLD's own header lines are merged: its ranges lose the rows just replaced (a
+range may split), and an OLD with only the one-line form 'build X, run Y:'
+counts as covering every row of the tree. Build and date are --commit (or
+the slice directory's) and --date.
 
 stdout (or -o OUT): the header naming the build, the board and the run date,
 then every mustpass case (tools/cts/gles3-mustpass.txt) that is not Pass, in
@@ -411,6 +433,124 @@ def pi4_rows(dirs, mustpass, tree):
     return head + "".join(r for _, r in sorted(rows)), run, stopped
 
 
+def tree_tool():
+    path = os.path.join(HERE, "check-gles3-tree.py")
+    spec = spec_from_file_location("check_gles3_tree", path)
+    mod = module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def parse_rows(spec, n):
+    """'0-10,22-38' or '5' -> sorted list of row numbers, each < n."""
+    rows = set()
+    for part in spec.split(","):
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", part.strip())
+        if not m:
+            raise NotpassError("--rows: %r is not AA-BB or AA" % part)
+        lo = int(m.group(1))
+        hi = int(m.group(2) if m.group(2) is not None else m.group(1))
+        if lo > hi or hi >= n:
+            raise NotpassError("--rows: %s is not within the tree's rows 0-%d" % (part, n - 1))
+        rows.update(range(lo, hi + 1))
+    return sorted(rows)
+
+
+def case_rows(tree_text, mustpass):
+    """({case: tree row}, number of rows) with check-gles3-tree.py's matcher;
+    a case in two rows is refused, a case in none has no entry."""
+    tool = tree_tool()
+    table = tool.read_table(tree_text)
+    blob = "\n".join(mustpass)
+    owner = {}
+    for i, (_, _, filt) in enumerate(table):
+        for m in tool.row_regex(filt).finditer(blob):
+            if m.group(0) in owner:
+                raise NotpassError("%s matches tree rows %d and %d" % (m.group(0), owner[m.group(0)], i))
+            owner[m.group(0)] = i
+    return owner, len(table)
+
+
+RANGE_LINE = re.compile(r"^# rows (\d+)-(\d+): build (\S+), run (\S+)\s*$")
+LEGACY_LINE = re.compile(r"^# .*? build (\S+), run ([^:]+?):")
+
+
+def old_ranges(lines, nrows):
+    """[(lo, hi, commit, date)] of OLD's header."""
+    out = [(int(m.group(1)), int(m.group(2)), m.group(3), m.group(4))
+           for m in map(RANGE_LINE.match, lines) if m]
+    if not out:
+        for l in lines:
+            m = LEGACY_LINE.match(l)
+            if m:
+                return [(0, nrows - 1, m.group(1), m.group(2))]
+    return out
+
+
+def merge_ranges(old, rows, commit, date):
+    """OLD's ranges minus the replaced rows plus the new ones, sorted;
+    neighbouring rows of one build and date are joined."""
+    per_row = {}
+    for lo, hi, c, d in old:
+        for r in range(lo, hi + 1):
+            per_row[r] = (c, d)
+    for r in rows:
+        per_row[r] = (commit, date)
+    out = []
+    for r in sorted(per_row):
+        if out and out[-1][1] == r - 1 and out[-1][2:] == per_row[r]:
+            out[-1] = (out[-1][0], r) + per_row[r]
+        else:
+            out.append((r, r) + per_row[r])
+    return out
+
+
+def splice(old_text, tree_text, rows_spec, results, mustpass, commit, date, board):
+    """The spliced TSV text and the number of mustpass cases of the rows."""
+    owner, nrows = case_rows(tree_text, mustpass)
+    rows = set(parse_rows(rows_spec, nrows))
+    stray = [c for c in results if c in owner and owner[c] not in rows]
+    if stray:
+        raise NotpassError("%d reported case(s) belong to rows outside %s, first: %s (row %d)"
+                           % (len(stray), rows_spec, stray[0], owner[stray[0]]))
+    mine = [c for c in mustpass if owner.get(c) in rows]
+    if not mine:
+        raise NotpassError("the rows %s hold no mustpass case" % rows_spec)
+    text, _ = render(results, mine, commit, board, date)
+    new = {l.split("\t")[1]: l for l in text.splitlines() if l and not l.startswith("#")}
+    header, kept = [], {}
+    order = {c: i for i, c in enumerate(mustpass)}
+    for k, line in enumerate(old_text.splitlines(), 1):
+        if line.startswith("#"):
+            header.append(line)
+        elif line.strip():
+            p = line.split("\t")
+            if len(p) < 3 or p[0] not in COUNTED or not p[1].startswith("dEQP-"):
+                raise NotpassError("OLD:%d: not <outcome> TAB <case> TAB <message>: %r" % (k, line))
+            if p[1] not in order:
+                raise NotpassError("OLD:%d: %s is not a mustpass case" % (k, p[1]))
+            if p[1] in kept:
+                raise NotpassError("OLD:%d: %s twice" % (k, p[1]))
+            if owner.get(p[1]) not in rows:
+                kept[p[1]] = p
+    width = max([len(p) for p in kept.values()] + [3])
+    lines = {c: "\t".join(p + [""] * (width - len(p))) for c, p in kept.items()}
+    for c, l in new.items():
+        lines[c] = l + "\t" * (width - 3)
+    ranges = merge_ranges(old_ranges(header, nrows), sorted(rows), commit, date)
+    head = ("# SPDX-License-Identifier: Apache-2.0\n"
+            "# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.\n"
+            "# dEQP-GLES3 on the %s: every mustpass case\n"
+            "# (tools/cts/gles3-mustpass.txt) whose result is not Pass. One case per line, tab separated:\n"
+            "# <outcome> <case> <first message line>. NoResult: the case never ran\n"
+            "# (no status in any source). Written by gles3-notpass.py --splice; the build and\n"
+            "# the run date per row range of tools/cts/am62p-gles3-tree.txt (counted from 0):\n"
+            % board)
+    head += "".join("# rows %d-%d: build %s, run %s\n" % r for r in ranges)
+    body = "".join(lines[c] + "\n" for c in sorted(lines, key=order.get))
+    return head + body, len(mine)
+
+
 def self_test():
     d = os.path.join(HERE, "testdata", "gles3-notpass")
     fails = []
@@ -494,6 +634,7 @@ def self_test():
     check("the CLI refuses --commit disagreeing with the slices",
           rc == 1 and "deadbeef" in err, "(rc %d, %s)" % (rc, err[:200]))
     pi4_self_test(check)
+    splice_self_test(check)
     return 1 if fails else 0
 
 
@@ -551,6 +692,52 @@ def pi4_self_test(check):
         check("pi4: a re-split part run beside its parent is refused", "B1a" in str(e), "(%s)" % e)
 
 
+def splice_self_test(check):
+    must = (["dEQP-GLES3.a.%d" % i for i in range(4)] + ["dEQP-GLES3.b.%d" % i for i in range(3)]
+            + ["dEQP-GLES3.c.0", "dEQP-GLES3.c.1"])
+    tree = "# image A:\ndEQP-GLES3.a.*\n# image B:\ndEQP-GLES3.b.*\ndEQP-GLES3.c.*\n"   # rows 0, 1, 2
+    old = ("# SPDX-License-Identifier: Apache-2.0\n"
+           "# dEQP-GLES3 on the X, build 1111111, run 2026-10-13/14: every mustpass case\n"
+           "Fail\tdEQP-GLES3.a.0\tstale\tfamA\n"
+           "NotSupported\tdEQP-GLES3.a.1\tm\tfamA\n"
+           "Fail\tdEQP-GLES3.b.1\tkeep b\tfamB\n"
+           "Fail\tdEQP-GLES3.c.0\tkeep c\tfamC\n")
+    got = {"dEQP-GLES3.a.2": ("Fail", "new msg", "s"), "dEQP-GLES3.a.0": ("Pass", "", "s"),
+           "dEQP-GLES3.a.1": ("Pass", "", "s")}
+    text, n = splice(old, tree, "0-0", dict(got), must, "2222222", "2026-11-21", "X")
+    body = [l for l in text.splitlines() if not l.startswith("#")]
+    check("splice: a replaced row shows its new cases, passes drop out, an unreported case is NoResult",
+          body == ["Fail\tdEQP-GLES3.a.2\tnew msg\t", "NoResult\tdEQP-GLES3.a.3\t\t",
+                   "Fail\tdEQP-GLES3.b.1\tkeep b\tfamB", "Fail\tdEQP-GLES3.c.0\tkeep c\tfamC"]
+          and n == 4, "(%s)" % body)
+    check("splice: other rows are untouched and their 4th column is kept",
+          "Fail\tdEQP-GLES3.b.1\tkeep b\tfamB" in body and not any("stale" in l for l in body), "(%s)" % body)
+    check("splice: the header names the new range and OLD's one-line build for the rest",
+          "# rows 0-0: build 2222222, run 2026-11-21\n# rows 1-2: build 1111111, run 2026-10-13/14\n" in text,
+          "(%s)" % text)
+    text2, _ = splice(text, tree, "1-1", {"dEQP-GLES3.b.0": ("Fail", "x", "s"),
+                                          "dEQP-GLES3.b.1": ("Pass", "", "s"),
+                                          "dEQP-GLES3.b.2": ("Pass", "", "s")},
+                      must, "3333333", "2026-11-22", "X")
+    hdr = [l for l in text2.splitlines() if l.startswith("# rows")]
+    check("splice: the header lists two commits after a second splice, merging OLD's ranges",
+          hdr == ["# rows 0-0: build 2222222, run 2026-11-21", "# rows 1-1: build 3333333, run 2026-11-22",
+                  "# rows 2-2: build 1111111, run 2026-10-13/14"], "(%s)" % hdr)
+    body2 = [l for l in text2.splitlines() if not l.startswith("#")]
+    check("splice: the first splice's rows survive the second",
+          body2 == ["Fail\tdEQP-GLES3.a.2\tnew msg\t", "NoResult\tdEQP-GLES3.a.3\t\t",
+                    "Fail\tdEQP-GLES3.b.0\tx\t", "Fail\tdEQP-GLES3.c.0\tkeep c\tfamC"], "(%s)" % body2)
+    for name, spec, res, word in (
+            ("a reported case outside the rows is refused", "0-0",
+             {"dEQP-GLES3.b.0": ("Fail", "x", "s")}, "dEQP-GLES3.b.0"),
+            ("rows beyond the tree are refused", "0-3", {}, "0-3")):
+        try:
+            splice(old, tree, spec, res, must, "2222222", "2026-11-21", "X")
+            check("splice: " + name, False, "(no error)")
+        except NotpassError as e:
+            check("splice: " + name, word in str(e), "(%s)" % e)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("sources", nargs="*", metavar="SOURCE")
@@ -561,12 +748,41 @@ def main():
     ap.add_argument("-o", "--output", metavar="OUT")
     ap.add_argument("--pi4", action="store_true", help="session directories of one Pi 4 commit")
     ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
+    ap.add_argument("--splice", metavar="OLD.tsv", help="replace the --rows of OLD.tsv by the SOURCEs")
+    ap.add_argument("--rows", metavar="AA-BB[,CC-DD]", help="tree rows (from 0) the SOURCEs hold, with --splice")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
     if not a.sources:
         ap.error("at least one SOURCE is required")
+    if a.splice:
+        if not a.rows:
+            ap.error("--splice needs --rows")
+        results = {}
+        try:
+            commit = resolve_commit(a.commit, collect(a.sources, results))
+            if not results:
+                raise NotpassError("no per-case result read from any source")
+            tree = a.tree
+            if tree == os.path.join(HERE, "pi4-gles3-tree.txt"):
+                tree = os.path.join(HERE, "am62p-gles3-tree.txt")
+            with open(a.splice, encoding="utf-8") as f:
+                old = f.read()
+            with open(tree, encoding="utf-8") as f:
+                tree_text = f.read()
+            text, n = splice(old, tree_text, a.rows, results, read_mustpass(a.mustpass),
+                             commit, a.date, a.board)
+        except NotpassError as e:
+            sys.stderr.write("gles3-notpass: %s\n" % e)
+            return 1
+        if a.output:
+            with open(a.output, "w", encoding="utf-8") as f:
+                f.write(text)
+        else:
+            sys.stdout.write(text)
+        sys.stderr.write("commit %s, rows %s: %d mustpass case(s) replaced\n" % (commit, a.rows, n))
+        return 0
     if a.pi4:
         try:
             text, run, stopped = pi4_rows(a.sources, read_mustpass(a.mustpass), read_tree(a.tree))
