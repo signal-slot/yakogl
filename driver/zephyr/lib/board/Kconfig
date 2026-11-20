@@ -27,6 +27,7 @@ config YAKOGL_RPI5_WDOG_HOLD_S
 config YAKOGL_RPI5_MBOX
 	bool "Raspberry Pi 5: the firmware property mailbox client (clock 5, clock reads)"
 	depends on SOC_BCM2712
+	select CACHE_MANAGEMENT
 	help
 	  rpi_mbox_init() maps the mailbox; rpi_clock_*() ask the firmware. The
 	  message buffer is in the image and below 4 GiB.
@@ -107,6 +108,7 @@ config YAKOGL_BOARD_IMX8MP
 
 config YAKOGL_BOARD_RPI4
 	def_bool SOC_BCM2711
+	select CACHE_MANAGEMENT
 	help
 	  Window: a view into the firmware framebuffer with
 	  YAKOGL_BOARD_SCANOUT_VIEW when it fits (board_show() copies

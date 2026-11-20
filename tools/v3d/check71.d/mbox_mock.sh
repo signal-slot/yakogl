@@ -30,7 +30,7 @@ done
 
 mkdir -p "$out"
 san="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
-flags="-std=gnu11 -g -O1 -Wall -Wextra -Werror $san -I$t/stub -I$b/rpi4"
+flags="-std=gnu11 -g -O1 -Wall -Wextra -Werror $san -I$t/stub -DCONFIG_CACHE_MANAGEMENT=1 -I$b/rpi4"
 
 fail=0
 total=0
