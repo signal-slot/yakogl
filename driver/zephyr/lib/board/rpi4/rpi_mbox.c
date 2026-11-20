@@ -19,6 +19,13 @@
 
 #include "rpi_mbox.h"
 
+/* Without CONFIG_CACHE_MANAGEMENT sys_cache_data_flush_range() and
+ * sys_cache_data_invd_range() do nothing and return -ENOTSUP: the message
+ * buffer is neither cleaned nor invalidated and the firmware reads stale
+ * memory (the candidate cause of the Pi 5 -EIO, docs/rpi5-display.md Q1).
+ * Kconfig selects the option; the calls' results are returned, so an image
+ * without it fails with -ENOTSUP, not -EIO. */
+
 #ifdef CONFIG_SOC_BCM2712
 /* mailbox@7c013880, reg <0x7c013880 0x40> under soc@107c000000, whose ranges
  * <0x0 0x10 0x0 0x80000000> put it at ARM 0x10_7c013880 (rpi:arch/arm64/boot/
@@ -65,7 +72,9 @@ static int transact(void)
 	uint32_t phys = (uint32_t)phys64;
 	if ((uint64_t)phys64 != phys)
 		return -ERANGE; /* the mailbox word holds 32 bits */
-	sys_cache_data_flush_range(buf, sizeof(buf));
+	int crc = sys_cache_data_flush_range(buf, sizeof(buf));
+	if (crc)
+		return crc;
 
 	for (int t = 0; sys_read32(mbox + MAIL1_STA) & MBOX_FULL; t++) {
 		if (t > 100000)
@@ -84,7 +93,9 @@ static int transact(void)
 			return -ETIMEDOUT;
 		k_busy_wait(1);
 	}
-	sys_cache_data_invd_range(buf, sizeof(buf));
+	crc = sys_cache_data_invd_range(buf, sizeof(buf));
+	if (crc)
+		return crc;
 	return buf[1] == STATUS_SUCCESS ? 0 : -EIO;
 }
 
@@ -96,7 +107,9 @@ static int transact_timed(struct rpi_mbox_timing *tm)
 	uint32_t phys = (uint32_t)phys64;
 	if ((uint64_t)phys64 != phys)
 		return -ERANGE; /* the mailbox word holds 32 bits */
-	sys_cache_data_flush_range(buf, sizeof(buf));
+	int crc = sys_cache_data_flush_range(buf, sizeof(buf));
+	if (crc)
+		return crc;
 
 	for (int t = 0; sys_read32(mbox + MAIL1_STA) & MBOX_FULL; t++) {
 		if (t > 100000)
@@ -117,7 +130,9 @@ static int transact_timed(struct rpi_mbox_timing *tm)
 		k_busy_wait(1);
 	}
 	uint64_t t2 = k_cycle_get_64();
-	sys_cache_data_invd_range(buf, sizeof(buf));
+	crc = sys_cache_data_invd_range(buf, sizeof(buf));
+	if (crc)
+		return crc;
 	uint64_t t3 = k_cycle_get_64();
 	if (tm) {
 		tm->write = t1 - t0;
