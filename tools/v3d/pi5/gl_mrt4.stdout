@@ -1,0 +1,2 @@
+gl_shapes: renderer V3D 7.1.10.2
+gl_shapes: mrt4, framebuffer 64x64, glGetError 0x0
