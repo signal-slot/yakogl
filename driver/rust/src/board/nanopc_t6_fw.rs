@@ -872,7 +872,7 @@ pub(crate) mod tests {
     fn z1_and_z2_stops_are_named_with_their_own_numbers() {
         let blob = synth::small();
         let t6 = T6::handed_over(blob.clone());
-        t6.soc.borrow_mut().insert(GPU + mali::GPU_ID, 0xa867_0001);
+        t6.soc.borrow_mut().insert(GPU + mali::GPU_ID, 0xb002_0000);
         let mut z1 = GpuUp::default();
         let mut pool = vec![[0u64; ENTRIES]; 16];
         let clean = |a, n| t6.clean(a, n);
@@ -889,10 +889,10 @@ pub(crate) mod tests {
             &mut |_| {},
             &mut z1,
         );
-        let stop = nanopc_t6_gpu::Stop::NotG610 as u32;
-        assert_eq!((o.step, o.stop, o.refusal, o.detail), (STEP_GPU, stop, 0, [0xa867_0001, 0]));
+        let stop = nanopc_t6_gpu::Stop::UnsupportedGpu as u32;
+        assert_eq!((o.step, o.stop, o.refusal, o.detail), (STEP_GPU, stop, 0, [0xb002_0000, 0]));
         // Z1's own record comes out whole, the hand-over state included
-        assert_eq!((z1.stop, z1.ident.gpu_id), (nanopc_t6_gpu::Stop::NotG610, 0xa867_0001));
+        assert_eq!((z1.stop, z1.ident.gpu_id), (nanopc_t6_gpu::Stop::UnsupportedGpu, 0xb002_0000));
         assert_eq!(z1.pd_before, PdGpuRegs::read(&T6::handed_over(blob.clone()), B.pmu));
         assert!(t6.writes().iter().all(|w| w.0 != GPU + MCU_CONTROL && w.0 != GPU + GPU_CMD));
 

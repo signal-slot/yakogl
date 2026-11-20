@@ -6,9 +6,15 @@
 //! panthor gives a VM's tables to io-pgtable as `ARM_64_LPAE_S1`, the Arm
 //! VMSAv8-64 stage-1 format, with a 4 KiB granule (panthor_mmu.c
 //! `panthor_vm_create`; `AS_TRANSCFG_ADRMODE_AARCH64_4K` in
-//! `panthor_vm_active`), not panfrost's `ARM_MALI_LPAE`. With the G610's
-//! 48-bit VA (`MMU_FEATURES` 0x2830) that is four levels of 512 eight-byte
-//! descriptors, each table one 4 KiB page; the root's physical address is
+//! `panthor_vm_active`), not panfrost's `ARM_MALI_LPAE`. The input size is
+//! the GPU's: panthor gives io-pgtable `ias` = `GPU_MMU_FEATURES_VA_BITS`
+//! and `oas` = `GPU_MMU_FEATURES_PA_BITS` of the `MMU_FEATURES` it read
+//! (panthor_mmu.c `panthor_vm_create`), and `AS_TRANSCFG`'s input size from
+//! the same VA bits (`panthor_vm_active`). [`Shape`] is that: with the
+//! G610's 48-bit VA (`MMU_FEATURES` 0x2830) four levels of 512 eight-byte
+//! descriptors, each table one 4 KiB page; with fewer bits fewer levels or a
+//! smaller root, as the VMSAv8-64 walk for that input size has (39 bits:
+//! three levels, the root at level 1). The root's physical address is
 //! `AS_TRANSTAB` as it is (io-pgtable's `arm_lpae_s1_cfg.ttbr`).
 //!
 //! io-pgtable-arm.c is GPL only: what is here are the architecture's
@@ -28,11 +34,72 @@ pub const ENTRIES: usize = 512;
 pub type Table = [u64; ENTRIES];
 
 /// The VA and PA widths of the G610 (`MMU_FEATURES` 0x2830: bits 7:0 VA,
-/// 15:8 PA; panthor_regs.h `GPU_MMU_FEATURES_VA_BITS`/`_PA_BITS`).
+/// 15:8 PA; panthor_regs.h `GPU_MMU_FEATURES_VA_BITS`/`_PA_BITS`): the
+/// widths of [`Tables::new`]. The code that runs on a GPU takes its widths
+/// from the GPU ([`Shape::from_mmu_features`], [`Tables::with_shape`]).
 pub const VA_BITS: u32 = 48;
 pub const PA_BITS: u32 = 40;
-/// Levels for 48 bits of VA with 9 bits a level over a 12-bit page.
+/// The most levels a walk has: 48 bits of VA, 9 bits a level over a 12-bit
+/// page.
 pub const LEVELS: usize = 4;
+
+/// An address space's widths, from `MMU_FEATURES`, and the walk they make.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shape {
+    pub va_bits: u32,
+    pub pa_bits: u32,
+}
+
+impl Shape {
+    /// The G610's (`MMU_FEATURES` 0x2830).
+    pub const VA48_PA40: Shape = Shape { va_bits: VA_BITS, pa_bits: PA_BITS };
+    /// The widths a table here serves. 48 is the most a 4 KiB-granule
+    /// stage-1 walk without LPA2 takes (bits 47:12 of a descriptor are the
+    /// address, [`desc::ADDR`]); 32 is the least that holds the MCU's VM,
+    /// which panthor makes 4 GiB (panthor_fw.c `panthor_fw_init`,
+    /// `panthor_vm_create(ptdev, true, 0, SZ_4G, ...)`).
+    pub const MIN_BITS: u32 = 32;
+    pub const MAX_BITS: u32 = 48;
+
+    /// `MMU_FEATURES` bits 7:0 (VA) and 15:8 (PA); `None` when either is
+    /// outside [`Shape::MIN_BITS`]..=[`Shape::MAX_BITS`].
+    pub const fn from_mmu_features(mmu_features: u32) -> Option<Shape> {
+        let va_bits = mmu_features & 0xff;
+        let pa_bits = (mmu_features >> 8) & 0xff;
+        const fn ok(b: u32) -> bool {
+            b >= Shape::MIN_BITS && b <= Shape::MAX_BITS
+        }
+        if ok(va_bits) && ok(pa_bits) {
+            Some(Shape { va_bits, pa_bits })
+        } else {
+            None
+        }
+    }
+
+    /// Levels of the walk: `DIV_ROUND_UP(va_bits - 12, 9)`, as io-pgtable's
+    /// `ARM_LPAE_S1` computes them from `ias` with a 4 KiB granule; the root
+    /// is at level `4 - levels`.
+    pub const fn levels(self) -> usize {
+        (self.va_bits as usize - 12).div_ceil(9)
+    }
+
+    /// Descriptors the root uses: the VA bits left above the lower levels
+    /// (`2^(va_bits - 12 - 9 * (levels - 1))`); 512 at 48 and 39 bits, 2 at
+    /// 40. The root is one page either way.
+    pub const fn root_entries(self) -> usize {
+        1 << (self.va_bits as usize - 12 - 9 * (self.levels() - 1))
+    }
+
+    /// The index of `va` in the table at `depth` (0 is the root).
+    pub const fn index(self, va: u64, depth: usize) -> usize {
+        let i = ((va >> (12 + 9 * (self.levels() - 1 - depth) as u32)) & 0x1ff) as usize;
+        if depth == 0 {
+            i & (self.root_entries() - 1)
+        } else {
+            i
+        }
+    }
+}
 
 /// Descriptor bits (VMSAv8-64 stage 1, 4 KiB granule).
 pub mod desc {
@@ -106,8 +173,8 @@ pub const fn table_desc(pa: u64) -> u64 {
     (pa & desc::ADDR) | desc::TABLE
 }
 
-/// The index of `va` at `level` (0 is the root): bits 47:39, 38:30, 29:21,
-/// 20:12.
+/// The index of `va` at `level` of a 48-bit walk (0 is the root): bits
+/// 47:39, 38:30, 29:21, 20:12 ([`Shape::index`] for another width).
 pub const fn index(va: u64, level: usize) -> usize {
     ((va >> (12 + 9 * (LEVELS - 1 - level) as u32)) & 0x1ff) as usize
 }
@@ -117,11 +184,11 @@ pub const fn index(va: u64, level: usize) -> usize {
 #[repr(u32)]
 pub enum PtRefusal {
     /// The pool is empty, or its physical address is not 4 KiB aligned or
-    /// does not fit [`PA_BITS`] with all its pages.
+    /// does not fit the PA bits with all its pages.
     BadPool = 1,
     /// A VA, PA or size is not 4 KiB aligned, or the size is 0.
     Unaligned = 2,
-    /// The VA range leaves [`VA_BITS`], or the PA range [`PA_BITS`].
+    /// The VA range leaves the VA bits, or the PA range the PA bits.
     OutOfRange = 3,
     /// Another table is needed and the pool has none left.
     PoolFull = 4,
@@ -136,30 +203,49 @@ pub struct Tables<'a> {
     pub(crate) pages: &'a mut [Table],
     pub(crate) pa: u64,
     pub(crate) used: usize,
+    pub(crate) shape: Shape,
 }
 
-/// What [`Tables::walk`] read: the descriptor at each level, up to the
-/// first that is not a table, and the address `va` translates to.
+/// What [`Tables::walk`] read: the descriptor at each level from the root,
+/// up to the first that is not a table, and the address `va` translates
+/// to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Walk {
     pub desc: [u64; LEVELS],
-    /// Levels read (1..=4).
+    /// Levels read (1..=the shape's levels).
     pub levels: u32,
     pub pa: Option<u64>,
 }
 
 impl<'a> Tables<'a> {
     /// Take `pages` at physical `pa` and make page 0 the root, every
-    /// descriptor of every page invalid.
+    /// descriptor of every page invalid; the G610's widths
+    /// ([`Shape::VA48_PA40`]).
     pub fn new(pages: &'a mut [Table], pa: u64) -> Result<Tables<'a>, PtRefusal> {
+        Tables::with_shape(pages, pa, Shape::VA48_PA40)
+    }
+
+    /// [`Tables::new`] for the widths `shape` (the GPU's `MMU_FEATURES`).
+    pub fn with_shape(pages: &'a mut [Table], pa: u64, shape: Shape) -> Result<Tables<'a>, PtRefusal> {
         let end = pa.checked_add(pages.len() as u64 * PAGE);
-        if pages.is_empty() || !pa.is_multiple_of(PAGE) || end.is_none_or(|e| e > 1 << PA_BITS) {
+        if pages.is_empty() || !pa.is_multiple_of(PAGE) || end.is_none_or(|e| e > 1 << shape.pa_bits) {
             return Err(PtRefusal::BadPool);
         }
         for t in pages.iter_mut() {
             t.fill(0);
         }
-        Ok(Tables { pages, pa, used: 1 })
+        Ok(Tables { pages, pa, used: 1, shape })
+    }
+
+    /// Tables built before in `pages` at `pa`, `used` of them in use (the
+    /// root first), taken up again to map more; nothing is cleared.
+    pub fn reopen(pages: &'a mut [Table], pa: u64, used: usize, shape: Shape) -> Tables<'a> {
+        Tables { pages, pa, used, shape }
+    }
+
+    /// The widths the tables are built for.
+    pub fn shape(&self) -> Shape {
+        self.shape
     }
 
     /// `AS_TRANSTAB`: the root's physical address.
@@ -195,7 +281,7 @@ impl<'a> Tables<'a> {
             return Err(PtRefusal::Unaligned);
         }
         let in_range = |base: u64, bits: u32| base.checked_add(size).is_some_and(|e| e <= 1 << bits);
-        if !in_range(va, VA_BITS) || !in_range(pa, PA_BITS) {
+        if !in_range(va, self.shape.va_bits) || !in_range(pa, self.shape.pa_bits) {
             return Err(PtRefusal::OutOfRange);
         }
         for off in (0..size).step_by(PAGE as usize) {
@@ -203,11 +289,12 @@ impl<'a> Tables<'a> {
                 return Err(PtRefusal::AlreadyMapped);
             }
         }
+        let (sh, last) = (self.shape, self.shape.levels() - 1);
         for off in (0..size).step_by(PAGE as usize) {
             let v = va + off;
             let mut t = 0usize;
-            for level in 0..LEVELS - 1 {
-                let i = index(v, level);
+            for depth in 0..last {
+                let i = sh.index(v, depth);
                 let d = self.pages[t][i];
                 t = if d & desc::VALID != 0 {
                     self.page_of(d)?
@@ -221,24 +308,26 @@ impl<'a> Tables<'a> {
                     n
                 };
             }
-            self.pages[t][index(v, LEVELS - 1)] = page_desc(pa + off, prot);
+            self.pages[t][sh.index(v, last)] = page_desc(pa + off, prot);
         }
         Ok(())
     }
 
     /// Walk `va` from the root as the GPU would: follow table descriptors
-    /// through levels 0-2, then the page at level 3.
+    /// through the levels above the last (levels 0-2 at 48 bits), then the
+    /// page at level 3.
     pub fn walk(&self, va: u64) -> Walk {
         let mut w = Walk::default();
         let mut t = 0usize;
-        for level in 0..LEVELS {
-            let d = self.pages[t][index(va, level)];
+        let (sh, levels) = (self.shape, self.shape.levels());
+        for level in 0..levels {
+            let d = self.pages[t][sh.index(va, level)];
             w.desc[level] = d;
             w.levels = level as u32 + 1;
             if d & desc::VALID == 0 {
                 return w;
             }
-            if level == LEVELS - 1 {
+            if level == levels - 1 {
                 if d & 0b11 == desc::PAGE {
                     w.pa = Some((d & desc::ADDR) | (va & (PAGE - 1)));
                 }
@@ -347,6 +436,68 @@ mod tests {
     }
 
     #[test]
+    fn the_shape_is_the_walk_mmu_features_asks_for() {
+        let sh = |f| Shape::from_mmu_features(f).map(|s| (s.va_bits, s.pa_bits, s.levels(), s.root_entries()));
+        // the G610's 0x2830: four levels, a full root
+        assert_eq!(sh(0x2830), Some((48, 40, 4, 512)));
+        assert_eq!(Shape::from_mmu_features(0x2830), Some(Shape::VA48_PA40));
+        // 40 bits: still four levels, two root descriptors; 39: three levels
+        assert_eq!(sh(0x2828), Some((40, 40, 4, 2)));
+        assert_eq!(sh(0x2827), Some((39, 40, 3, 512)));
+        assert_eq!(sh(0x2020), Some((32, 32, 3, 4)));
+        for f in [0x2831, 0x281f, 0x1f30, 0x3130, 0] {
+            assert_eq!(sh(f), None, "{f:#x}");
+        }
+        // the 48-bit shape indexes as the 48-bit `index` does
+        let va = 0x0000_8040_2010_1234u64;
+        assert_eq!([0, 1, 2, 3].map(|l| Shape::VA48_PA40.index(va, l)), [0, 1, 2, 3].map(|l| index(va, l)));
+        // 39 bits: bits 38:30, 29:21, 20:12
+        let s39 = Shape::from_mmu_features(0x2827).unwrap();
+        assert_eq!([0, 1, 2].map(|l| s39.index(0x40_2010_1234, l)), [0x100, 0x100, 0x101]);
+    }
+
+    #[test]
+    fn a_39_bit_space_maps_in_three_levels_and_refuses_what_leaves_it() {
+        let s39 = Shape::from_mmu_features(0x2827).unwrap();
+        let mut p = pool(8);
+        let mut t = Tables::with_shape(&mut p, POOL_PA, s39).unwrap();
+        t.map(0x0400_0000, 0x1050_0000, 0x1_0000, RW_CACHED).unwrap();
+        assert_eq!(t.used(), 3);
+        assert_eq!(
+            t.walk(0x0400_1234),
+            Walk {
+                desc: [POOL_PA + 0x1003, POOL_PA + 0x2003, 0x0060_0000_1050_1f47, 0],
+                levels: 3,
+                pa: Some(0x1050_1234)
+            }
+        );
+        // the last page below 2^39 maps; the 48-bit tables' 0x80_0000_0000 does not
+        t.map((1 << 39) - PAGE, 0x1060_0000, PAGE, RW_CACHED).unwrap();
+        assert_eq!(t.walk((1 << 39) - PAGE).pa, Some(0x1060_0000));
+        assert_eq!(t.map(1 << 39, 0x1061_0000, PAGE, RW_CACHED), Err(PtRefusal::OutOfRange));
+        let mut p48 = pool(8);
+        let mut t48 = Tables::new(&mut p48, POOL_PA).unwrap();
+        assert_eq!(t48.map(1 << 39, 0x1061_0000, PAGE, RW_CACHED), Ok(()));
+        assert_eq!(t48.used(), 4);
+    }
+
+    #[test]
+    fn a_narrower_pa_refuses_a_pool_or_page_above_it() {
+        let s = Shape::from_mmu_features(0x2028).unwrap();
+        assert_eq!(s.pa_bits, 32);
+        assert!(Tables::with_shape(&mut pool(2), 1 << 32, s).is_err());
+        assert!(Tables::new(&mut pool(2), 1 << 32).is_ok());
+        let mut p = pool(8);
+        let mut t = Tables::with_shape(&mut p, POOL_PA, s).unwrap();
+        assert_eq!(t.map(0x0400_0000, 1 << 32, PAGE, RW_CACHED), Err(PtRefusal::OutOfRange));
+        assert_eq!(t.map(0x0400_0000, (1 << 32) - PAGE, PAGE, RW_CACHED), Ok(()));
+        // 40 VA bits: the second root descriptor holds 2^39 and above
+        assert_eq!(t.walk(0x0400_0000).levels, 4);
+        t.map(1 << 39, 0x1070_0000, PAGE, RW_CACHED).unwrap();
+        assert_eq!(p[0][..3], [POOL_PA + 0x1003, POOL_PA + 0x4003, 0]);
+    }
+
+    #[test]
     fn a_table_outside_the_pool_is_not_followed() {
         let mut p = pool(4);
         {
@@ -354,7 +505,7 @@ mod tests {
             t.map(0x0400_0000, 0x1050_0000, PAGE, RW_CACHED).unwrap();
         }
         p[0][0] = table_desc(0x2000_0000);
-        let mut t = Tables { pages: &mut p, pa: POOL_PA, used: 4 };
+        let mut t = Tables::reopen(&mut p, POOL_PA, 4, Shape::VA48_PA40);
         assert_eq!(t.walk(0x0400_0000).pa, None);
         assert_eq!(t.walk(0x0400_0000).levels, 1);
         assert_eq!(t.map(0x0400_1000, 0x1050_1000, PAGE, RW_CACHED), Err(PtRefusal::ForeignTable));

@@ -105,7 +105,7 @@ use crate::gpu::mali::csf::{self, Cs, CsfRefusal, Csg, Iface, McuMemory, Ringbuf
 use crate::gpu::mali::fw;
 use crate::gpu::mali::heap::{self, Allocation, HeapError, HeapMemory, HeapObject, HeapParams, HeapPool};
 use crate::gpu::mali::mmu::{self, FlushOp};
-use crate::gpu::mali::pgtable::{Prot, Table, Tables, PAGE, VA_BITS};
+use crate::gpu::mali::pgtable::{Prot, Shape, Table, Tables, PAGE};
 use crate::gpu::mali::sched::job::mov48;
 use crate::gpu::mali::sched::{
     self, Ended, Group, GroupVm, Job, Queue, Started, SyncObj64, GROUP_AS, QUEUE_IFACE_SIZE, QUEUE_OUTPUT_OFFSET,
@@ -489,7 +489,9 @@ fn region_of(regions: &[Region], va: u64, len: u64) -> Option<(usize, &Region)> 
 /// the regions, their memory, every range of the frame inside one region
 /// of the right mapping and none overlapping another.
 pub fn check_frame(f: &Frame, vm: &[GroupBacking]) -> Result<(), (FrameRefusal, u64)> {
-    let top = 1u64 << VA_BITS;
+    // the widest VA a table serves; a GPU with fewer VA bits refuses the
+    // region at the group VM's map (`PtRefusal::OutOfRange`, STEP_VM_MAP)
+    let top = 1u64 << Shape::MAX_BITS;
     if f.regions.is_empty() {
         return Err((FrameRefusal::Range, 0));
     }
@@ -1011,6 +1013,12 @@ pub fn group_up_with(
         o.stopped(STEP_IDENT, 1, u64::from(id.as_present));
         return None;
     }
+    // both address spaces' tables take the GPU's widths (Z3 has checked
+    // them already, on the identity Z1 read)
+    let Some(shape) = id.mmu_shape() else {
+        o.stopped(STEP_IDENT, 2, u64::from(id.mmu_features));
+        return None;
+    };
 
     // AS0: the user pages, then the suspend buffers
     o.suspend_size = csg.suspend_size;
@@ -1036,7 +1044,7 @@ pub fn group_up_with(
             return None;
         }
         // Z3's tables, reopened: its pages in use kept, the rest still zero
-        let mut t = Tables { pages: &mut *pool, pa: tables_pa, used };
+        let mut t = Tables::reopen(&mut *pool, tables_pa, used, shape);
         let user = Prot { write: true, exec: false, cached: false };
         let suspend = Prot { write: true, exec: false, cached: true };
         if let Err(why) = t.map(u64::from(q.va), q.pa, u64::from(QUEUE_IFACE_SIZE), user) {
@@ -1066,7 +1074,7 @@ pub fn group_up_with(
 
     // AS1: the regions, each as panthor would bind it
     let root = {
-        let mut t = match Tables::new(mem.vm_pool, mem.vm_tables_pa) {
+        let mut t = match Tables::with_shape(mem.vm_pool, mem.vm_tables_pa, shape) {
             Ok(t) => t,
             Err(why) => {
                 o.stopped(STEP_VM_MAP, why as u32, mem.vm_tables_pa);
@@ -1093,7 +1101,7 @@ pub fn group_up_with(
         }
         t.root_pa()
     };
-    let transcfg = mmu::transcfg(VA_BITS, false);
+    let transcfg = mmu::transcfg(shape.va_bits, false);
     if let Err((why, v)) = mmu::as_enable(m, b.gpu, GROUP_AS, root, transcfg, MEMATTR_LIVE, delay_us) {
         o.stopped(STEP_VM_ENABLE, why as u32, u64::from(v));
         return None;
@@ -2101,7 +2109,7 @@ pub(crate) mod tests {
 
         // AS0 maps the user pages uncached at the queue's memory, Z3's
         // sections still there
-        let t = Tables { pages: &mut pool, pa: TABLES_PA, used: o.as0_tables_used as usize };
+        let t = Tables::reopen(&mut pool, TABLES_PA, o.as0_tables_used as usize, Shape::VA48_PA40);
         assert_eq!(t.walk(u64::from(QUEUE_MCU_VA) + 0x1008).pa, Some(QUEUE.pa + 0x1008));
         assert_eq!(t.walk(0x0400_0000).pa, Some(o.fw.shared_pa[0] as u64));
         // the suspend buffers after the user pages, 7 pages each (25600
@@ -2410,7 +2418,7 @@ pub(crate) mod tests {
         assert_eq!(z.heap_ctx.get(), Some(0x8000_0001_5000));
         // the group VM maps the pool and the chunk on their regions' backings
         let vm = z.backings();
-        let t = Tables { pages: &mut vm_pool, pa: VM_TABLES_PA, used: o.vm_tables_used as usize };
+        let t = Tables::reopen(&mut vm_pool, VM_TABLES_PA, o.vm_tables_used as usize, Shape::VA48_PA40);
         for (va, region) in [
             (0x8000_0001_5000, REGION_HEAP_POOL),
             (0x8000_0001_6ff8, REGION_HEAP_POOL),
@@ -2470,10 +2478,10 @@ pub(crate) mod tests {
     fn a_z3_stop_is_named_with_z3_s_step_and_nothing_of_z4_runs() {
         let blob = synth::small();
         let mut z = Z4::new(blob.clone());
-        z.gpu_id = Some(0xa867_0001);
+        z.gpu_id = Some(0xb002_0000);
         let o = run(&z);
         assert_eq!((o.step, o.refusal, o.detail), (STEP_FW, nanopc_t6_fw::STEP_GPU, 0));
-        assert_eq!((o.fw.stop, o.fw.detail), (nanopc_t6_gpu::Stop::NotG610 as u32, [0xa867_0001, 0]));
+        assert_eq!((o.fw.stop, o.fw.detail), (nanopc_t6_gpu::Stop::UnsupportedGpu as u32, [0xb002_0000, 0]));
         let as1 = GPU + mmu_as(GROUP_AS);
         let doorbells = [GPU + csf::doorbell(0), GPU + csf::doorbell(1)];
         assert!(z.log.borrow().iter().all(|&(a, _)| !(as1..as1 + 0x40).contains(&a) && !doorbells.contains(&a)));

@@ -34,7 +34,7 @@ static const char *const stop_name[] = {
 	[YD_T6_GPU_STOP_CLOCK] = "the GPU clock has no rate, the supply is below its OPP or its PLL "
 				 "did not lock",
 	[YD_T6_GPU_STOP_PD] = "PD_GPU did not come on",
-	[YD_T6_GPU_STOP_NOT_G610] = "GPU_ID is not 0xa8670005",
+	[YD_T6_GPU_STOP_UNSUPPORTED_GPU] = "GPU_ID names no arch-10 Mali (G710, G510, G310, G610)",
 	[YD_T6_GPU_STOP_RESET] = "the soft reset did not complete",
 	[YD_T6_GPU_STOP_L2] = "the L2 did not come up",
 	[YD_T6_GPU_STOP_CLOCK_SET_REFUSED] = "the GPU clock is on no OPP rate and the CPLL is not "
@@ -65,7 +65,7 @@ static unsigned int progress(uint32_t s)
 	case YD_T6_GPU_STOP_PD:
 	case YD_T6_GPU_STOP_TAKE_OVER:
 		return 5;
-	case YD_T6_GPU_STOP_NOT_G610:
+	case YD_T6_GPU_STOP_UNSUPPORTED_GPU:
 		return 6;
 	case YD_T6_GPU_STOP_RESET:
 		return 7;
