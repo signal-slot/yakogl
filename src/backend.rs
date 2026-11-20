@@ -1009,6 +1009,12 @@ pub struct GlesTextureBind {
     pub format: u8,
     /// [`GlesTexType`].
     pub type_: u8,
+    /// GL_TEXTURE_BASE_LEVEL of the bound texture (ES 3.0.6 3.8.10; for an
+    /// immutable texture clamped to its last level), the level a size query
+    /// (`textureSize`) answers for. Every other field still describes level
+    /// 0; a backend that applies the base level minifies from there. It sits
+    /// in what was padding, and 0 (the GL default) changes nothing.
+    pub base_level: u8,
     /// Images in the stack: 6 for a cube, 1 for plain 2D.
     pub layers: u16,
     pub base_gpu: u64,
@@ -1148,6 +1154,7 @@ impl GlesTextureBind {
         unit: 0,
         format: 0,
         type_: GLES_TEXTYPE_2D,
+        base_level: 0,
         layers: 0,
         base_gpu: 0,
         width: 0,

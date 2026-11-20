@@ -688,7 +688,7 @@ fn a_2d_array_shadow_at_base_level_0_has_its_level_0_size() {
 #[test]
 fn a_2d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Tex2d, 1), (8, 8, 1, 1));
 }
 
 /// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x8 `sampler3D` hands
@@ -698,7 +698,7 @@ fn a_2d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_
 #[test]
 fn a_3d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (8, 8, 4, 1));
 }
 
 /// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x5 `sampler2DArray`
@@ -709,7 +709,7 @@ fn a_3d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_
 #[test]
 fn a_2d_array_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, 1), (8, 8, 1, 5));
 }
 
 /// Pins today's behaviour: with BASE_LEVEL 1 the 16x16 `samplerCube` hands
@@ -718,7 +718,7 @@ fn a_2d_array_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_le
 #[test]
 fn a_cube_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Cube, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Cube, 1), (8, 8, 1, 1));
 }
 
 /// Pins today's behaviour: with BASE_LEVEL 1 the size-only
@@ -729,5 +729,5 @@ fn a_cube_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_
 #[test]
 fn a_2d_array_shadow_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::ArrayShadow, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::ArrayShadow, 1), (8, 8, 1, 5));
 }
