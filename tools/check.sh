@@ -1101,6 +1101,11 @@ TEST_TREE_PATHS=(
   # remakes it when V3D_SHC is set
   tools/v3d/es100_counts_71.tsv tools/v3d/es100_ref71.sh
   tools/pco_shc/usc_blobs.txt                    # tests/pvr_ld_encode.rs: the programs' words
+  # the V3D 7.1 tests (tests/v3d71_*.rs) compare with the Pi 5's dumps and
+  # the shader lists, and read the documents and sources they cite
+  tools/v3d/pi5 tools/v3d/gltest-shaders71
+  driver/docs/rpi5-v3d71-facts.md docs/notes/pre-study-rpi5.md
+  src/v3d/zskeep71.rs src/v3d/backend.rs src/v3d/ffi.rs src/shaderc/online/v3d/select.rs
 )
 # The hash of those files (their blob ids; a file changed or added in the
 # working tree by its content). The library's own unit tests (src/lib.rs)
