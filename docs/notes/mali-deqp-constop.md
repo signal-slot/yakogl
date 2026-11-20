@@ -849,3 +849,58 @@ run decides, and the fixture moves in the same commit as the lowering.
 `tools/mali/corpus-verdicts.txt` and `cases.txt` change only if a corpus verdict
 moves. The `tests.rs` pins that name the three errors are in 10.2(e), 10.5(e)
 and 10.6(e).
+
+## 11. What landed (lower-constop, at 3497799a)
+
+**Item lower-constop, plan #377.** The spike patches the item was written
+for were on the tip already: the constop lowering as `0fd576ea` (steps 1 to
+4 of section 10, the one-compare part of step 5, step 6) and the uniarray
+one as `74dabf88`. At `3497799a` seven `deqp_constop_*` tests were still
+ignored. This item adds step 7 and leaves the rest.
+
+**Step 7 (H1) landed.** `nir.rs`, the vertex walk's generic `IrOp::Alu`
+arm: a `+` or `*` of two constant lanes in an operation the front end
+classes mediump (`Module::prec_of`) folds through `fold16`, which rounds
+each constant to half, does the operation on the halves and rounds the
+result. That is lower_precision followed by `nir_opt_constant_folding` at
+16 bits. `mat3sub_vs`'s `in0 - in1` and the sum of its columns give x =
+`0x9000` (-2^-11), y = `0xb800`, z = `0x3265`. The fp32 fold gave -2.98e-8,
+which `vectorise`'s `f16` (`nir_fs.rs:8417`) refused at the relink, and
+0.20000002. The link moves the colour into the fragment shader as Mesa's
+FAU words `0xb8009000`, `0x3c003265`. When the operands or the result do
+not fit a normal fp16 (`fold16` errs), the old fp32 fold stays.
+`constop_mat3sub_vs` is byte-equal and un-ignored. pan_shc's SPIR-V path
+folds at fp32 (`0xb8000000`, `0x3c003266`), which supports the cause. So
+`cases.txt` has no row for it, only a comment: its fragment region is
+"equal words, facts differ".
+
+**Left, still ignored** (pins in `REFUSED`, unchanged):
+
+| Test | Stops at | What it needs |
+|---|---|---|
+| `ce_atan_separate_fs` | `ArithConstant` | R7: our `atan` expansion folds to `0xc016cbd6`, Mesa's GLSL body to `0xc016cbe4` |
+| `loops_while_basic_highp_float_fs`, `op_abs_highp_float_fs` | `MixedPrecision` | the highp program's fp32 and fp16 mix (mixprec) |
+| `matrix_preinc_mediump_mat3_fs` | `ColourForm` | a packed mat3 varying read across slots: Mesa converts the pairs, `MKVEC.v2i16 r1, r1^.h1, r2.h0` across them, `FADD_IMM.v2f16 #0x3C003C00` |
+| `nz_shared_vs` | differs at `vs.position` word 2 | Mesa's `a_position * -0.0` lanes: x is the constant -0.0, y and z share one `CSEL` (`-0.0 : 0.5`), w is `+0.0 : 1.0`, and there is no `FMAX` clamp of `1/w`. Ours selects per lane and keeps the sign rule of section 10.6 |
+| `op_add_assign_effect_mediump_vec3_fs` | `FsOperandForm` (`prod(Mk, AddA)`, `nir_fs.rs` `select`) | `in0.zxy + in1.yzx` of two vec4 varyings: Mesa converts xy as a pair and z alone, and makes each sum lane alone (`FADD.v2f16 r1, r1^.h00, r2.h11`, three of them), then `MKVEC.v2i16`. Our `vectorise` pairs the swizzled lanes as `Leaf::Lanes` (the case-78 rule for loads the link keeps whole) and refuses the sum. The fix is to tell that apart from case 78 |
+
+**glmark2 verdicts these steps would move: none.** `mali_glmark2_corpus`
+passes, and `MALI_GLMARK2_WRITE=1` leaves
+`tests/fixtures/mali_glmark2_verdicts.txt` byte-identical. The constop
+refusals glmark2 still meets at the tip are these (found by instrumenting
+the sites on the corpus once; nothing of that is committed). They are left
+to lower-loops-1, which takes the fixture:
+
+| Fixture line | Shader | Site | Refusal |
+|---|---|---|---|
+| 15, 19, 21, 23, 25 | shading fs 994f, cel fea0, bump fs d442, 487d, 77c5 | `nir_fs.rs:1429` (`Fs::op`, a mediump `Fmul` of two constants outside a pair with a computed lane: a mediump `normalize` of a constant) | `ConstantFold` |
+| 17, 78 | phong fs 8a64, refract fs 3fae | `nir_fs.rs:1433` (`fmul(fneg(a), fneg(b))`) | `ArithConstant` |
+| 59 | jellyfish vs 08a2 | `nir.rs:2414` (a constant times a constant product, the vertex walk) | `ArithConstant` |
+
+No remaining `deqp_constop_*` reference stops at one of these sites, so
+none of them unblocks a test of this file. The lines section 10.10 named
+have moved since it was written. `:61` (terrain fs 1637) now stops at
+`Arithmetic`, not `NegZeroShared`; on the way `fold_const16`
+(`nir_fs.rs:1053`) declines two folds, and the walk takes another path. `:27` (effect2d 3c3d) stops at the texture look-up rule.
+`gm2_arithconst_3/4` (`tests/mali_arith_const.rs`) are byte-equal at the
+tip.

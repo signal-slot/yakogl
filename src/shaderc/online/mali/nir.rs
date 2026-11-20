@@ -4425,6 +4425,25 @@ fn walk<'s>(
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
         let width = m.comps_of(ValueId(id.0)) as usize;
         let mut out = [Val::Undef; 4];
+        /* a uniform array read at an index the walk folded to a constant
+         * (an unrolled loop's counter, [`VsLoop::Unroll`]): Mesa's
+         * unrolling makes the deref's index a constant before
+         * `nir_lower_uniforms_to_ubo`, so the read is the constant-index one
+         * (deqp_uniarray_loop_float_vs, byte-equal to float_const_vs; the
+         * fragment walk's rule, nir_fs.rs `walk_nodes`); the index clamped
+         * as the IR reads it */
+        let folded;
+        let op = match *op {
+            IrOp::LoadUniformIdx { base_dw, stride_dw, len, index, comps } if len > 0 => match lane(w, index, 0) {
+                Val::Const(k) => {
+                    let k = (k as i32).clamp(0, i32::from(len) - 1) as u16;
+                    folded = IrOp::LoadUniform { dword_off: base_dw + k * stride_dw, comps };
+                    &folded
+                }
+                _ => op,
+            },
+            _ => op,
+        };
         match *op {
             IrOp::ConstF32(bits) => out = bits.map(Val::Const),
             /* a 32-bit integer constant is its bits (NIR's `load_const`
@@ -4653,6 +4672,22 @@ fn walk<'s>(
                     if !reduces && (0..super::nir_fs::ir_arity(a)).any(|k| x(k) == Val::Undef) {
                         *o = Val::Undef;
                         continue;
+                    }
+                    /* a mediump sum or product of two constants: fp16 at
+                     * each step, every constant rounded to half and every
+                     * result too (lower_precision, then
+                     * `nir_opt_constant_folding` at 16 bits; [`fold16`]).
+                     * deqp_constop_mat3sub_vs's `in0 - in1` and the sum of
+                     * its columns: x is -2^-11 (`0x9000`) where fp32 gives
+                     * -2.98e-8, which no fp16 holds. A result fp16 holds
+                     * only as a subnormal keeps the fp32 fold */
+                    if let (AluOp::Fadd | AluOp::Fmul, Val::Const(p), Val::Const(q)) = (a, x(0), x(1)) {
+                        if m.prec_of(ValueId(id.0)) == Prec::Medium {
+                            if let Ok(c) = fold16(a, p, q) {
+                                *o = Val::Const(c);
+                                continue;
+                            }
+                        }
                     }
                     *o = match a {
                         AluOp::Fadd => vs_fadd(&mut vs, m, &s, x(0), x(1))?,

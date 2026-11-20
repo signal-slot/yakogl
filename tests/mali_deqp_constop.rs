@@ -99,8 +99,10 @@ fn constop_loops_while_basic_highp_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_while_basic_highp_float_fs");
 }
 
+/// H1: the mediump `in0 - in1` and the sum of its columns folded at fp16,
+/// each constant and each result rounded to half (`0xb8009000`,
+/// `0x3c003265`, moved into the fragment shader by the link).
 #[test]
-#[ignore = "refused: a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly), lowered by lower-constop"]
 fn constop_mat3sub_vs() {
     mali_ref::assert_matches("deqp_constop_mat3sub_vs");
 }
@@ -175,10 +177,6 @@ const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp floa
 const REFUSED: &[(&str, &str)] = &[
     ("deqp_constop_ce_atan_separate_fs", "a constant product in a shape Mesa's algebraic rules move or fold"),
     ("deqp_constop_loops_while_basic_highp_float_fs", MIXED),
-    (
-        "deqp_constop_mat3sub_vs",
-        "a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly)",
-    ),
     (
         "deqp_constop_matrix_preinc_mediump_mat3_fs",
         "a gl_FragColor lane other than the varying's own lane or a constant",

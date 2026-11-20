@@ -368,6 +368,38 @@ indexed lanes would also need the flat link rule of `kept_uniform`),
 (`compare_float`'s `abs` and `?:`, Mesa's FMAX of the abs values and one
 FCMP; `constop`).
 
+## 9. What landed (lower-constop, at 3497799a)
+
+Section 8's spike is on the tip as `74dabf88`. Before this item, 15 of 23
+references were byte-equal and 8 were ignored. This item adds one.
+
+- **`loop_float_vs`, byte-equal and un-ignored.** Plan #367's
+  lower-int-loops unrolls the vertex loop (`VsLoop::Unroll`). The
+  counter then reaches `u_arr[i]`'s `LoadUniformIdx` as a constant, and
+  `nir::uniform_idx` refused that, because it takes only an int
+  uniform's index. The vertex walk (`nir.rs`, before its `match *op`) now
+  does what the fragment walk does (`nir_fs.rs`, `walk_nodes`). A
+  `LoadUniformIdx` whose index lane is a `Val::Const` becomes the
+  constant-index `LoadUniform` at `base_dw + k * stride_dw`, with `k`
+  clamped to the array as the IR reads it. That is Mesa's unrolling,
+  which makes the deref constant before `nir_lower_uniforms_to_ubo`. The
+  bytes equal `float_const_vs`'s, as the references are equal (section 7).
+  `cases.txt` gains its row: pan_shc's fp32 array sum differs (`mediump`).
+
+Left (pins unchanged):
+
+| Test | Stops at | What it needs |
+|---|---|---|
+| `dyn_vec2_vs`, `dyn_vec3_vs` | `UniformIndexed` (`nir::uniform_idx`: float and vec4 shapes only) | a vertex fp16 element read at a run-time index: `LSHIFT_OR.i32` by the byte constant `0x3020100`'s `.b22` (2 or 3), `IADD_IMM #0x10`, `LD_PKA.i32`/`.i48`, the `FADD.v2f16` sums, then per lane `F16_TO_F32` and `FMA.f32 r, r, 0x0, r`, and the varying made flat (`src_flat32`, section 8's `kept_uniform` rule) |
+| `dyn_vec4_vs` | `UniformPrecision` (unitype) | the same with `LD_PKA.i64` |
+| `struct_member_vs`, `struct_member_fs` | `UniformType` / `FsUniform` | the int member `s.c` as a value (intval) |
+| `struct`, `api_float` | `ColourForm` / `FsUniform` | `compare_float`'s `abs` and `?:` (Mesa's `FMAX` of the abs values and one `FCMP`) |
+
+No glmark2 verdict moves (`mali_glmark2_corpus`, fixture byte-identical).
+`tests/mali_deqp_unitype.rs`'s `vsmat3_light` still stops at the mediump
+mat3-array uniform rule (`a vertex shader uniform that is not highp`),
+which is unitype's, so its pin stays.
+
 ## Open
 
 - ~~The exact generated GLSL of A-F is not read~~. The `indexing` and
