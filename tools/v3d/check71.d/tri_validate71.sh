@@ -20,6 +20,8 @@
 # Exit status: 0 when every program passed, 1 when one was rejected or the build
 # failed (the instruction and message are printed: the named refusal).
 # Convention: tools/v3d/check71.d/README.md.
+# Run as `sh tri_validate71.sh` too: a POSIX shell hands it to bash before any bash syntax.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 cd "$(dirname "$0")/../../.." || exit 1
 

@@ -30,6 +30,8 @@
 # build-v3d as the v3d rows of tools/check.sh. FRAME_CHECK_PI5_DIR replaces
 # tools/v3d/pi5 (for trying (d) by hand). Convention:
 # tools/v3d/check71.d/README.md.
+# Run as `sh frame_check.sh` too: a POSIX shell hands it to bash before any bash syntax.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 cd "$(dirname "$0")/../../.." || exit 1
 

@@ -13,6 +13,8 @@
 # Reference: tools/v3d/mesa_ref.sh (build/v3d-check/mesa), or MESA_V3D_TREE
 # with build-v3d as the v3d rows of tools/check.sh. Convention:
 # tools/v3d/check71.d/README.md.
+# Run as `sh shim71.sh` too: a POSIX shell hands it to bash before any bash syntax.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
 cd "$(dirname "$0")/../../.." || exit 1
 
