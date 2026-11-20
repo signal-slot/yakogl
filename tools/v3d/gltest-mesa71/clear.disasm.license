@@ -1,0 +1,7 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+
+Mesa 26.2.1 v3d_shc statistics and 7.1 disassembly of the QPU words it emits
+for our gl_test programs, written by gen.py. It has no comment header because
+tools/v3d/check71.d/gltest_mesa71.sh compares it with Mesa's disassembler
+line for line.
