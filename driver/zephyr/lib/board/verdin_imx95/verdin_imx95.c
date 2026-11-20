@@ -5,15 +5,12 @@
  *
  *   reset     verdin_imx95_reset(): PSCI SYSTEM_RESET over SMC to TF-A, the
  *             way every route of docs/standalone-boot.md gives the board
- *             back (U-Boot, then Linux)
+ *             back (U-Boot, then Linux); if it returns, WDOG3 resets the
+ *             board
  *   lifetime  a timer that takes that reset CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S
  *             after boot, whatever the sample does
- *   watchdog  STUB (verdin_imx95_wdog_stub): none armed. The module's
- *             Linux enables WDOG3 with its external reset output
- *             (imx95-verdin.dtsi), and Toradex's U-Boot is built with a
- *             watchdog (verdin-imx95_defconfig: CONFIG_WDT,
- *             CONFIG_ULP_WATCHDOG, 30 s); whether that one still runs after
- *             "go" is not known, and this image does not feed it.
+ *   watchdog  WDOG3, armed at PRE_KERNEL_1 and fed up to the lifetime
+ *             (verdin_imx95_wdog.c)
  *
  * Nothing here is i.MX 95 specific beyond the names: PSCI is TF-A's. Built,
  * not run on a board yet.
@@ -21,7 +18,6 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <errno.h>
 #include <stdint.h>
 
 #include "verdin_imx95.h"
@@ -45,20 +41,20 @@ FUNC_NORETURN void verdin_imx95_reset(const char *why)
 
 	printk("verdin_imx95: %s: PSCI SYSTEM_RESET at %lld ms\n", why, (long long)k_uptime_get());
 	rc = psci_call(PSCI_SYSTEM_RESET);
-	printk("verdin_imx95: PSCI SYSTEM_RESET returned %lld: halted (no watchdog armed)\n",
-	       (long long)rc);
+	/* Interrupts off from here: the feeder stops, and WDOG3 bites. */
 	(void)arch_irq_lock();
+	if (verdin_imx95_wdog_timeout_ms() != 0u) {
+		printk("verdin_imx95: PSCI SYSTEM_RESET returned %lld: halted; WDOG3 resets the "
+		       "board within %u ms\n",
+		       (long long)rc, verdin_imx95_wdog_timeout_ms());
+	} else {
+		printk("verdin_imx95: PSCI SYSTEM_RESET returned %lld: halted with WDOG3 not "
+		       "armed; only a power cycle ends this\n",
+		       (long long)rc);
+	}
 	for (;;) {
 		__asm__ volatile("wfi");
 	}
-}
-
-int verdin_imx95_wdog_stub(void)
-{
-	printk("verdin_imx95: STUB: no watchdog armed (the i.MX 95 WDOG is not driven "
-	       "by this image); the lifetime timer resets through PSCI at %d s\n",
-	       CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S);
-	return -ENOTSUP;
 }
 
 static void lifetime_expired(struct k_timer *t)
@@ -72,7 +68,6 @@ static K_TIMER_DEFINE(lifetime, lifetime_expired, NULL);
 
 static int verdin_imx95_init(void)
 {
-	(void)verdin_imx95_wdog_stub();
 	k_timer_start(&lifetime, K_SECONDS(CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S), K_NO_WAIT);
 	return 0;
 }

@@ -23,7 +23,7 @@
  * - The SCMI channel is the board's one (verdin_imx95_scmi.c), which the
  *   display's requests share.
  *
- * The watchdog feed is the board glue's (none armed yet: verdin_imx95.c).
+ * The watchdog is the board glue's (WDOG3, verdin_imx95_wdog.c).
  */
 #include <zephyr/devicetree.h>
 #include <zephyr/init.h>
@@ -78,8 +78,8 @@ int osal_zephyr_mali_board_up(const struct osal_zephyr_mali_init *fw,
 
 void osal_zephyr_mali_board_feed(void)
 {
-	/* no watchdog (verdin_imx95_wdog_stub); the board layer's alive mark
-	 * when there is one */
+	/* the board layer's alive mark, when there is one: WDOG3's feeder
+	 * (verdin_imx95_wdog.c) reads it */
 #ifdef CONFIG_YAKOGL_BOARD
 	board_watchdog_feed();
 #endif

@@ -170,7 +170,8 @@ endif()
 set(YAKOGL_DRIVERS_CRATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../rust")
 # The DK's I2C, DSI and ADV7535 shims call ffi::mp25_* and the yd_env helpers.
 if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YAKOGL_BOARD_RECORD_RUST OR
-   CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535)
+   CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535 OR
+   CONFIG_YAKOGL_VERDIN_IMX95)
   if(NOT CONFIG_ARM64)
     message(FATAL_ERROR "yakogl-drivers: libyakogl_drivers.a is built for aarch64 only")
   endif()
@@ -226,6 +227,11 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     # GPU power-on (board::nanopc_t6_gpu, gpu::mali) behind samples' calls of
     # yd_t6_gpu_up
     list(APPEND _yd_features rk3588 mali)
+  endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95)
+    # ip::wdog32 behind lib/board/verdin_imx95/verdin_imx95_wdog.c (WDOG3),
+    # in every image for the board
+    list(APPEND _yd_features imx95)
   endif()
   if(CONFIG_YAKOGL_VERDIN_IMX95 AND CONFIG_YAKOGL_GPU_MALI)
     # The Verdin iMX95's bring-up, yd_imx95_osal_up (ffi::imx95: the SCMI

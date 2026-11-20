@@ -372,7 +372,7 @@ rsource "nanopc_t6/Kconfig"
 rsource "stm32mp2/Kconfig"
 
 # The Verdin iMX95 (i.MX 95, A55) glue, outside the board layer above, and its
-# board layer with the X4 display and no watchdog yet (verdin_imx95/Kconfig).
+# board layer with the X4 display, and WDOG3 (verdin_imx95/Kconfig).
 rsource "verdin_imx95/Kconfig"
 
 # An opt-in RAM ring that mirrors printk (common/ramlog.c; the byte format is
