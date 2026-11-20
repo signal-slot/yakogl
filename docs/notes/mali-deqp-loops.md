@@ -968,3 +968,466 @@ reference (`gm2_cf_loop_uni_vs`) and no dEQP shape; (b) must keep
 expectation is drawn for `tmp_array` only, the matrix, uniform-array and
 varying-array cases are inferred; the cap is a deliberate deviation in no
 reference.
+
+## 9. At 9ac31f30: remaining shapes and lowering steps
+
+Plan #387 item loops-ref. A study plus references: nothing under `src/`
+changed, no existing reference or test was edited. It adds
+`tools/mali/testdata/deqp_loops2_*` (127 references, section 9.7),
+`tests/mali_deqp_loops2.rs` (pins each one's refusal) and this section. Every
+number below that comes from the host measure is **HOST-ONLY**: it is a
+compile or link outcome of `deqp-gles2` against the Mali back end on the
+host, never a render verdict (`tools/mali/deqp-host-measure.sh` header).
+
+### 9.1 Measure
+
+```sh
+DEQP_WORK=$CONNECTED_DEPS_DIR/VK-GL-CTS tools/mali/deqp-host-measure.sh --out <dir>
+```
+
+CTS `93bca01` (`tools/cts/deps.toml`) with the yakogl target; the three
+target files were written by hand with the contents of
+`tools/cts/cts-yakogl-target.patch` (`git apply` was not available in the
+session). The script takes the cases the board slices
+`tools/cts/log/2026-11-15-t6-gles2-S{1..4}-37305608` refused at compile
+(10,597), runs them all (its `--filter` is a case-name substring, so the loop
+texts cannot be selected before the run) and reads each case's first refusal
+from the `.qpa`. The cases below are those whose **first host refusal is a
+loop text**; the shaders of each case were taken from the same `.qpa`.
+
+| text (`MaliError`) | at 37305608 (board slices, section 0) | at 9ac31f30 (host) |
+|---|---:|---:|
+| `LoopVertex` "a loop in a vertex shader" | 497 (392 NS + 105 Fail) | **241** (212 NS + 29 Fail) |
+| `LoopMediump` "a loop Mesa keeps (a run-time bound) in a mediump fragment shader ..." | 268 | **281** |
+| `GuardMediump` "a break or continue behind a run-time condition ..." | 6 | **12** |
+| `LoopForm` "a loop past Mesa's unroll limits ..." | 3 | **3** |
+| total | 774 | **537** (507 NS + 30 Fail) |
+
+Of the 774 cases the board's loop texts blocked, 507 still stop at a loop
+text; the rest moved on: 98 to `UniformType` (the unitype family), 79 to
+`constant operation on ... not a finite normal float` (constop), 60 compile
+with no refusal at all, 9 to varylink, 9 to the constant fold, 8 to
+uniarray, 4 to intval. 30 cases that other texts blocked now first stop at a
+loop (21 intval, 5 varylink, 4 locals). 011bade0 (glmark2's vertex loops) is
+the first vertex loops that compile (`nir.rs` `vs_kept_begin`: one kept loop
+with fp32 carried lanes and a head test on an `int` uniform, plus the counted
+unroll); most of the vertex cases that left the count did so for the texts
+that come before the loop in the walk (the unitype, constop and other rows
+above), not because a loop shape was lowered.
+
+**Loops hidden behind another text (HOST-ONLY, not in the 537).** The vertex
+cases `shaders.loops.*_{uniform,dynamic}_iterations.*_vertex` with an `int`
+counter or bound (97 cases: `basic_*_int`, `single_statement`,
+`sequence`, `select_iteration_count`, `101_iterations`, `vector_counter`, ...)
+stop at the unitype text (`a vertex shader uniform that is not highp (Mesa's
+fp16 uniform) ...` / `a uniform other than a float, ...`) before the walk
+reaches the loop; another 4 stop at control flow (`do_while ... conditional_body_fragment`)
+and 3 at mixprec. The same holds for 216 `shaders.indexing.*loop*` cases
+(constop 82, unitype 38, FragColor lane 24, arithmetic 20, varylink 10,
+intval 10, uniarray 8, mixprec 2, and 22 that compile). When unitype lands,
+the first group falls onto `LoopVertex` (mostly step S8 of section 9.5): the
+loop count of that part is **at least 97 more cases**, so section 9.5's
+vertex steps are larger than their rows say.
+
+### 9.2 The shapes and their counts (HOST-ONLY)
+
+One row per (stage, shape); the three bound columns count cases by the
+bound kind of the dEQP generator (`for_constant_iterations`,
+`..._uniform_...`, `..._dynamic_...`; for the indexing and other groups the
+count is in the "uniform" column, the bound being `ui_four` or the group's
+own). "Mesa keeps / no loop" is read from the shaderdb line of Mesa's
+program for **every** case of the row (all 537 were drawn; the 5 `struct.uniform` ones only as far as the compile, section 9.6): the
+number of cases whose Mesa program has a loop (`N loops` in any of the
+position, varying and fragment programs) and the number that Mesa unrolls
+or deletes completely. Shape bodies of L1: `basic_{highp,mediump,lowp}_{int,float}`,
+`empty_body`, `single_statement`, `compound_statement`, `sequence_statement`,
+`pre_increment`, `post_increment`, `function_call_{return,inout}`,
+`vector_counter`, `sequence`, `only_continue`, `unconditional_continue`,
+`single_iteration`, `no_iterations`. L2: `nested`, `nested_sequence`,
+`nested_tricky_dataflow_{1,2}`. L4: `conditional_{break,continue}`,
+`double_continue`, `mixed_break_continue`, `infinite_with_conditional_break`,
+`infinite_with_unconditional_break_{first,last}`, `unconditional_break`.
+
+| stage | shape | const | uniform | dynamic | cases | Mesa keeps / no loop | NS / Fail | text |
+|---|---|---:|---:|---:|---:|---|---|---|
+| fs | L1 one counted loop, plain body (L1, bodies below) |  | 59 | 59 | 118 | 106 / 12 | 118 / 0 | LoopMediump 118 |
+| fs | L2 nested or sequenced loops (L2) |  | 12 | 12 | 24 | 24 / 0 | 24 / 0 | LoopMediump 24 |
+| fs | L3 `if` in the body (L3) |  | 2 | 2 | 4 | 4 / 0 | 4 / 0 | LoopMediump 4 |
+| fs | L4 `break`/`continue` (L4) |  | 16 | 16 | 32 | 28 / 4 | 32 / 0 | LoopMediump 20, GuardMediump 12 |
+| fs | L5 bound a select of a bool uniform (L5) | 3 | 3 | 3 | 9 | 9 / 0 | 9 / 0 | LoopMediump 9 |
+| fs | L6 101 iterations (L6) | 3 | 3 | 3 | 9 | 9 / 0 | 8 / 1 | LoopMediump 6, LoopForm 3 |
+| fs | idx indexing.matrix_subscript |  | 18 |  | 18 | 0 / 18 | 18 / 0 | LoopMediump 18 |
+| fs | idx indexing.tmp_array |  | 28 |  | 28 | 4 / 24 | 28 / 0 | LoopMediump 28 |
+| fs | idx indexing.uniform_array |  | 4 |  | 4 | 0 / 4 | 4 / 0 | LoopMediump 4 |
+| fs | idx indexing.varying_array |  | 4 |  | 4 | 0 / 4 | 4 / 0 | LoopMediump 4 |
+| fs | idx indexing.vector_subscript |  | 30 |  | 30 | 30 / 0 | 30 / 0 | LoopMediump 30 |
+| fs | other discard |  | 5 |  | 5 | 4 / 1 | 5 / 0 | LoopMediump 5 |
+| fs | other return |  | 3 |  | 3 | 2 / 1 | 3 / 0 | LoopMediump 3 |
+| fs | other scoping |  | 2 |  | 2 | 0 / 2 | 2 / 0 | LoopMediump 2 |
+| fs | other struct |  | 6 |  | 6 | 4 / 2 | 6 / 0 | LoopMediump 6 |
+| vs | L1 one counted loop, plain body (L1, bodies below) | 6 | 15 | 15 | 36 | 24 / 12 | 34 / 2 | LoopVertex 36 |
+| vs | L2 nested or sequenced loops (L2) | 12 | 12 | 12 | 36 | 24 / 12 | 32 / 4 | LoopVertex 36 |
+| vs | L3 `if` in the body (L3) | 3 | 3 | 3 | 9 | 6 / 3 | 8 / 1 | LoopVertex 9 |
+| vs | L4 `break`/`continue` (L4) | 24 | 24 | 24 | 72 | 30 / 42 | 67 / 5 | LoopVertex 72 |
+| vs | L6 101 iterations (L6) | 3 |  |  | 3 | 3 / 0 | 2 / 1 | LoopVertex 3 |
+| vs | idx indexing.matrix_subscript |  | 12 |  | 12 | 0 / 12 | 12 / 0 | LoopVertex 12 |
+| vs | idx indexing.tmp_array |  | 16 |  | 16 | 0 / 16 | 16 / 0 | LoopVertex 16 |
+| vs | idx indexing.varying_array |  | 16 |  | 16 | 0 / 16 | 16 / 0 | LoopVertex 16 |
+| vs | idx indexing.vector_subscript |  | 18 |  | 18 | 18 / 0 | 18 / 0 | LoopVertex 18 |
+| vs | other functions |  | 7 |  | 7 | 2 / 5 | 1 / 6 | LoopVertex 7 |
+| vs | other invariance |  | 6 |  | 6 | 0 / 6 | 0 / 6 | LoopVertex 6 |
+| vs | other return |  | 7 |  | 7 | 2 / 5 | 4 / 3 | LoopVertex 7 |
+| vs | other struct |  | 3 |  | 3 | 1 / 2 | 2 / 1 | LoopVertex 3 |
+| | **sum** | | | | **537** | | | |
+
+Sum 537 (fs 296: LoopMediump 281, GuardMediump 12, LoopForm 3; vs 241). Of
+the 537, Mesa keeps a loop in 334 and unrolls or deletes the loop in 203
+(fs 72, vs 131): **those 203 need no loop code**, only the decision that
+the loop is not a loop (section 9.4). The 12 GuardMediump cases are all
+`shaders.loops.*` L4: `do_while_{uniform,dynamic}_iterations.{conditional_break,
+conditional_continue,double_continue,infinite_with_conditional_break}` (8)
+and `{for,while}_{uniform,dynamic}_iterations.infinite_with_conditional_break` (4);
+Mesa keeps each as one loop (`fs_do_uni_conditional_break`: 20 instructions,
+1 loop). The 3 LoopForm cases are the constant `101_iterations` fragment
+loops (Mesa keeps them: 17-18 instructions, 1 loop; `fs_wh_con_101_iterations`).
+The 4 fs `L3` rows are `for`/`while` only: the `do_while` form of
+`conditional_body` first stops at `ControlFlow` (another family).
+
+### 9.3 Against the earlier references and pins
+
+- **Existing references** (`deqp_loops_*`, section 7, pinned in
+  `tests/mali_deqp_loops.rs`): of the 532 drawable cases, 80 have Mesa words
+  **identical** to one of them (`vs_dowhile_const` 20, `vs_nested_const` 17,
+  `fs_for_uni` 7, `vs_for_const` 6, `fs_float_uni` 4, `fs_dowhile_uni` 3,
+  `fs_inf_break` 3, `fs_idx_dyn` 2, `vs_idx_dyn` 2, `vs_idx_static` 2,
+  `fs_101` 2, `vs_float_uni` 2, `fs_double_continue` 2, `fs_select` 2,
+  `fs_uncond_break` 2, `fs_vec_dyn`, `fs_cond_break`, `fs_mixed`,
+  `vs_vector` 1 each). **43 of them (42 vertex, 1 fragment: `discard.dynamic_loop_never`) are
+  words of the three vertex constant references, which compile byte-equal today** (`vs_for_const`, `vs_while_const`,
+  `vs_dowhile_const` pass in `mali_deqp_loops.rs`): their dEQP bodies
+  (`only_continue`, `infinite_with_unconditional_break_first`,
+  `nested_sequence`, ..., a `discard_dynamic_loop_never`) differ from the
+  references' only in a form the vertex unroll walker refuses (a `break` or
+  `continue` as the first or last statement, a nested or sequenced
+  loop). The unroll's walker needs those forms, not new words (step S1).
+- **Their pins moved since 37305608.** At the tip the reference refusals
+  are: `vs_for_uni`, `vs_dowhile_uni`, `vs_select`, `vs_vector` at the
+  unitype texts (the hidden loops above), `vs_idx_static` at constop,
+  `vs_float_uni`, `vs_idx_dyn`, `vs_nested_const` at `LoopVertex`, the
+  fragment ones at `LoopMediump` (except `fs_dowhile_if` `ControlFlow`,
+  `fs_inf_break` `GuardMediump`, `fs_101` `LoopForm`).
+  `fs_uncond_break` and `fs_idx_dyn` are pinned `LoopMediump` although Mesa
+  has no loop for them (the decision, step S4/S2).
+- **The new references** (`deqp_loops2_*`, 127, section 9.7) add one
+  reference for every (stage, shape, bound, loop type) cell of 9.2 that no
+  other reference's words equal: 204 of the 532 cases have words identical
+  to a new reference, 80 to an old one, and the remaining 248 sit in a cell
+  (stage, body class L1-L6, bound kind, loop type) with a reference and
+  differ from it in the body's rotation count, the counter's precision or
+  the loop type (`for` against `while` only changes the words
+  when the body's `yzwx` count does). Every drawable case is covered one
+  way or the other. The 5 `struct.uniform` loop cases are not drawable
+  (section 9.6).
+- Confirmed by the draws: section 7's inference that **only the
+  `tmp_array` and the other array subscripts lose their loop**:
+  `matrix_subscript` (fs 18, vs 12), `uniform_array` (4) and `varying_array`
+  (fs 4, vs 16) have no loop in Mesa's program either; **`vector_subscript`
+  keeps it** (fs 30, vs 18; `vs_idx_vec_w_dynsub` even carries a loop in
+  the **position** program, 29 instructions, 1 loop); and
+  `tmp_array` with a `const_write_dynamic_loop_read` keeps one loop
+  (`fs_idx_tmp_vec4_cd`: 141 instructions, 1 loop; 4 cases).
+
+### 9.4 What Mesa does (from the shaderdb of the references)
+
+Instruction counts are Mesa's `shaderdb`; the position program is the
+24-word pass-through in every reference except
+`vs_idx_vec_w_dynsub` (29 words, a loop) and the `vs_inv_*` ones (58-71,
+the invariant position). "L" is the number of loops of the program.
+
+- **Fragment, a loop Mesa keeps** (224 of the 296): one `loop {}` per source
+  loop (`for`, `while` and `do/while` give the same loop, the `do/while`
+  with its test moved before the body and the exit value's pair taken
+  before the rotation: `fs_do_uni_*` is one instruction longer, 18 against
+  17). The carried `mediump vec4` is **two 16-bit `vec2` phis** across the
+  back edge: before the loop two `V2F32_TO_V2F16` narrow the varying, each
+  pass is `MKVEC.v2i16` (two a pass for `yzwx`), the counter is a 32-bit
+  `IADD_IMM` and the exit is `ICMP_OR.s32.ge` plus `BRANCHZ`. A **dynamic**
+  bound (`one * ui_n`, `one = int(v_one + 0.5)`) adds
+  `LD_VAR_BUF_IMM`, `FADD.f32`, `FADD.v2f16` (+0.5), `F16_TO_S32.rtz`
+  before the loop and an `IMUL.i32` of the uniform in the loop **header**
+  (Mesa does not hoist it): `fs_for_dyn_basic_mediump_int` is 23 instructions
+  against `fs_for_uni_basic_mediump_int`'s 17 (the varying
+  program has 20 instructions, not 15, for `a_one`). Counts: plain 17-21, nested 23 (2L),
+  `nested_sequence` 32 (3L), a `break`/`continue` 19-26 (the `continue` is
+  `MUX.v2i16` selects, the `break` is OR-ed into the exit mask: section 7),
+  `select_iteration_count` 19-20 (a `CSEL` bound), `101_iterations` 17-18
+  (kept: 101 passes past the limit of 32), a float counter 17-21
+  (`FADD.v2f16`/`FCMP_OR.v2f16`), the vector subscript 25-58 (an
+  `ICMP_OR.u32.eq` ladder of selects inside the loop).
+- **Fragment, no loop** (72): `empty_body` and `only_continue` (the loop is
+  deleted: 8 instructions, `fs_for_uni_empty_body`), `unconditional_break`
+  (`wrapper_unroll`, one guarded pass), the array subscripts of
+  `indexing.*` (partial unroll by the array's length, then the leftover loop
+  is dead: `fs_idx_tmp_float_dd` 38, `fs_idx_mat4_dd` 60, `fs_idx_uni_vec4`
+  34, `fs_idx_var_vec4_sd` 44 instructions, all 0 loops), `scoping.valid.while_*`
+  and two `struct.local` forms.
+- **Vertex, a loop Mesa keeps** (110 of the 241): the loop is in the
+  **varying** program (the position program stays 24 words): plain
+  `for` with a uniform or dynamic bound 24-27 instructions, 1 loop (the
+  float counter of `vs_for_uni_basic_lowp_float`), `conditional_body` 28,
+  `conditional_break` 26, `conditional_continue` 28, `mixed` 30,
+  nested 30-36 (2L), `nested_sequence` 39 (3L), `101_iterations` constant 24
+  (kept, `vs_do_con_101_iterations`, `vs_wh_con_101_iterations`), the
+  vector-subscript loops 36-61, and four of the `functions`/`return`
+  cases (`vs_fn_after_seq` 14, `vs_fn_mixed` 20, `vs_ret_dyn` 27).
+- **Vertex, unrolled or deleted** (131): every constant bound of at most 32
+  passes (45 cases, `vs_do_con_nested`: 11 instructions, 0 loops, a lane
+  permutation folded into the store order, as `vs_for_const`), the
+  uniform-bound loops Mesa still unrolls (`unconditional_break` 20: wrapper
+  unroll; `only_continue` and `infinite_with_unconditional_break_first`
+  delete the loop; 3 plain and 18 L4 cases), the array subscripts (44:
+  `vs_idx_tmp_vec4_dd` 73, `vs_idx_mat4_dldl` 58, `vs_idx_var_vec4_dd` 83),
+  `invariance.*.loop_{1,2}` (48-63) and the `return` / `functions` cases
+  that leave no loop (`vs_ret_static` 4).
+
+### 9.5 Lowering map: eleven one-session steps, ranked by cases
+
+Cases are the 537 above, split by what the lowering must do (the rows sum
+to 537). "Forecast" is an upper bound of **cases that stop first at a loop
+text and would leave it**, HOST-ONLY: the next refusal of those cases is not
+measured (a case's partner shader's is: none of the 537 has a partner
+refusal other than the loop's), so a case may stop at the next text; the
+board's pass count is for the board rerun. Numbers in parentheses are
+Fail cases (dEQP requires those).
+
+| rank | step | cases | dEQP groups | what changes |
+|---:|---|---:|---|---|
+| 1 | **S3** fragment kept loop, plain body, uniform or dynamic bound (the `for`/`while`/`do_while` of 9.4) | 128 | `loops.{for,while,do_while}_{uniform,dynamic}_iterations.{basic_*,single_statement,...}_fragment` 106, `conditional_body` 4, `select_iteration_count` 9, `101_iterations` 9 | `walk_kept_loop` without the `!prec.highp` return (section 8.3(b)), 16-bit two-lane phis, the `LoopForm` decision for 101, `CSEL` bound, dynamic bound (`int(v_one + 0.5) * ui_n`: intval's) |
+| 2 | **S2** array subscripts that Mesa unrolls and deletes | 94 | `indexing.{tmp_array,matrix_subscript,uniform_array,varying_array}.*dynamic_loop*` fs 50, vs 44 | a third `kept_loop` answer: partially unroll by the array's length, drop the guards on `ui_four` (section 8.4(c)); the static subscripts of study-uniarray |
+| 3 | **S1** vertex counted loops Mesa unrolls (with jumps, nested, `return`) | 87 (27 Fail) | `loops.*_vertex` 69, `functions.control_flow.*` 5, `invariance.*.loop_*` 6, `return.return_in_static/infinite_loop` 5, `struct.uniform.loop_*` 2 | the vertex unroll walker takes `break`/`continue` as first or last statement, an `if` in the body, nested or sequenced loops, `return`; **42 of these have words equal to references that already compile** (9.3). No kept loop, no vertex block |
+| 4 | **S7** fragment vector-subscript loops and the other kept ones in `discard`/`return`/`struct` | 44 | `indexing.vector_subscript.*dynamic_loop*` 30, `indexing.tmp_array.*const_write_dynamic_loop_read` 4, `discard.dynamic_loop_*` 4, `return.return_in_dynamic_loop_*` 2, `struct.{local,uniform}.dynamic_loop_*` 4 | S3's loop plus an `IndexedLocal` ladder (`ICMP_OR.u32.eq` into `MUX.v2i16`: section 8.4(c)) |
+| 5 | **S10** vertex kept loop with `break`/`continue`/`if` | 36 | `loops.*_{uniform,dynamic}_iterations.{conditional_*,double_continue,mixed_*,infinite_*,conditional_body}_vertex` | S8 plus the exit mask and `MUX` forms of section 7 |
+| 6 | **S8** vertex kept loop, plain body | 32 | `loops.*_{uniform,dynamic}_iterations.basic_*_float_vertex` 24 (the int ones: behind unitype, 97 more), `101_iterations_vertex` 3, `return_in_dynamic_loop_*_vertex` 3, `functions.control_flow` 2 | extend 011bade0's vertex kept loop (`nir.rs` `vs_kept_begin`/`vs_kept_head`/`vs_kept_end`): 16-bit carried lanes (`bits != 32` refuses), the float counter's head test (only `Icmp` is taken), the `LOOP_CAP` limit of a 101 bound, an output stored in the body |
+| 7 | **S5** fragment kept loop with `break`/`continue` | 28 | `loops.*_iterations.{conditional_*,double_continue,mixed_*,infinite_*}_fragment` (12 of them GuardMediump) | S3 plus the second-exit forms (section 8.4(b)); `kept_loop`'s head `if (c) break;` |
+| 8 | **S6** fragment nested or sequenced kept loops | 24 | `loops.*_iterations.{nested,nested_sequence,nested_tricky_dataflow_1,2}_fragment` | S3 recursive: an outer loop's phis around the inner's |
+| 9 | **S9** vertex nested or sequenced kept loops | 24 | `loops.*_{uniform,dynamic}_iterations.{nested,...}_vertex` | S8 with nested regions (`vs.nloops` against `MAX_LOOPS`) |
+| 10 | **S4** fragment loops Mesa deletes or unrolls (decision only) | 22 | `loops.*.empty_body`/`only_continue` 12, `unconditional_break` 4, `scoping.valid.while_*` 2, `struct.local` 2, `discard`/`return` 2 | `kept_loop` says unrolled/deleted (section 8.3(b)1(i)); **no new code** |
+| 11 | **S11** vertex vector-subscript loops | 18 | `indexing.vector_subscript.*dynamic_loop*_vertex` | S8 plus the index ladder; one program (`vs_idx_vec_w_dynsub`) has the loop in the **position** program |
+
+Sum: 128 + 94 + 87 + 44 + 36 + 32 + 28 + 24 + 24 + 22 + 18 = **537**. The rank is
+by cases; the **order of work** differs by dependency:
+
+1. **S4 and S3 together** (150 cases): S4 is the decision, S3 the first
+   fragment kept loop. They bring the 16-bit phi rows, the dynamic bound and
+   the `LoopForm`/`CSEL` fixes that S5-S7 reuse. 128 of the 150 are NotSupported,
+   so the board count moves by the NotSupported to Pass or Fail change.
+2. **S1** (87, 28 of them Fail): independent of the rest (no block, no
+   kept loop), starts from 43 cases whose words already compile. It is
+   the only step with Fail cases of dEQP's required forms, so it comes first
+   if the owner's pass count is the Fail one.
+3. **S2** (94): the array rule, one decision and the static subscripts.
+4. **S5, S6, S7** (96) on S3.
+5. **S8** (extending the existing vertex kept loop, 32) then **S9, S10, S11**
+   (78): the other vertex kept loops. Unitype's 97 hidden cases come on top of S8-S10 when it lands (section 9.1).
+
+Per step the checks are the references of 9.7: a case's words are
+compared with the reference of its cell, then (kept loops) with `CapEdit`.
+
+### 9.6 What cannot be compared byte for byte, and why
+
+- **Every kept loop** (99 of the 127 references: fs 56, vs 43): our walk adds
+  the hidden pass counter (`LOOP_CAP`, `mali-loop-board-failures.md`), which
+  Mesa's words do not have. `mali_ref::assert_matches` cannot take it; the
+  reference is compared with `CapEdit` in `src/shaderc/online/mali/tests.rs`
+  and here only the compile is asserted. A deliberate deviation, as for
+  `fs_for_uni`.
+- **The 5 `struct.uniform` loop cases** (fs `dynamic_loop_{nested_,}struct_array`
+  2, vs 3): `tools/mali/gl_ref.py` does not set struct-member uniforms, so
+  the draw fails and there is no expectation. Their Mesa shaderdb is known
+  (the unrolled `loop_nested_struct_array_vertex`, the kept
+  dynamic ones); a reference needs `gl_ref.py` taught the member names.
+- **The loop in the position program** (`vs_idx_vec_w_dynsub`, 29
+  instructions, 1 loop): `mali_ref` compares both programs, but the kept
+  loop there has no precedent but glmark2's `gm2_cf_loop_uni_vs`; compare it
+  with `CapEdit` too.
+- **The reference is the case's own shaders, drawn once.** `--uniform-values`
+  sets each `int` uniform to 16 and each `bool` true where its component is
+  even: it does not change the words (section 7), but the FAU words of the
+  expectation carry those values, so a test must expect 0 for the uniform
+  words as `deqp_loops_*` do. A texture-reading case (`fs_disc_texture`) is
+  drawn with gl_ref's texture; its sampler descriptor is the board's own and
+  is not a loop question.
+- **Not a reference but a measurement**: `deqp-host-measure.sh` has no
+  render; a case that compiles gets its verdict from the board rerun.
+
+### 9.7 The references
+
+`tools/mali/testdata/deqp_loops2_<name>.{vert,frag,expect.json}` and the
+`.license` sidecars of the two shaders. The shaders are the cases' own, taken
+verbatim from the `.qpa` of the host measure (CTS `93bca01`); a name
+reads `<stage with the loop>_<type: for|wh|do>_<bound: uni|con|dyn>_<body>`
+(`wh` = `while`, `do` = `do_while`, `uni` an int uniform, `con` a literal, `dyn`
+`one * ui_n`), or `idx`/`ret`/`fn`/`inv`/`disc`/`scope`/`struct` for the other
+groups. Each was drawn with
+
+```sh
+tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
+    tools/mali/testdata/deqp_loops2_<name>.vert tools/mali/testdata/deqp_loops2_<name>.frag <out>/deqp_loops2_<name> \
+    --uniform-values
+python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_loops2_<name>.trace --draw \
+    > tools/mali/testdata/deqp_loops2_<name>.expect.json
+```
+
+on Mesa 26.2.1 built by `drm_shim_ref.sh build` (G610). `tests/mali_deqp_loops2.rs`
+asserts each pair's exact first refusal (`refusals_pinned`) and that the list
+and the directory agree (`references_listed`); no pair compiles today. A
+step that lowers one moves its entry and adds the compare. The columns:
+Mesa's instruction count of the position / varying / fragment program (the
+loops in parentheses), the number of the 532 drawn cases whose Mesa words
+equal this reference's (the reference included), and the refusal at the tip.
+
+| reference | dEQP case (`functional.shaders.`) | Mesa instrs (pos / vary / frag) | cases with the same words | refusal |
+|---|---|---|---:|---|
+| `fs_disc_always` | `discard.dynamic_loop_always` | 24 / 11 / 16 (1L) | 1 | LoopMediump |
+| `fs_disc_dyn` | `discard.dynamic_loop_uniform` | 24 / 11 / 17 (1L) | 1 | LoopMediump |
+| `fs_disc_dynamic` | `discard.dynamic_loop_dynamic` | 24 / 15 / 20 (1L) | 1 | LoopMediump |
+| `fs_disc_texture` | `discard.dynamic_loop_texture` | 24 / 15 / 25 (1L) | 1 | LoopMediump |
+| `fs_do_con_select_iteration_count` | `loops.do_while_constant_iterations.select_iteration_count_fragment` | 24 / 15 / 20 (1L) | 1 | LoopMediump |
+| `fs_do_dyn_101_iterations` | `loops.do_while_dynamic_iterations.101_iterations_fragment` | 24 / 20 / 23 (1L) | 1 | LoopMediump |
+| `fs_do_dyn_basic_highp_float` | `loops.do_while_dynamic_iterations.basic_highp_float_fragment` | 24 / 20 / 21 (1L) | 1 | LoopMediump |
+| `fs_do_dyn_conditional_break` | `loops.do_while_dynamic_iterations.conditional_break_fragment` | 24 / 20 / 26 (1L) | 1 | GuardMediump |
+| `fs_do_dyn_nested` | `loops.do_while_dynamic_iterations.nested_fragment` | 24 / 20 / 31 (2L) | 1 | LoopMediump |
+| `fs_do_dyn_select_iteration_count` | `loops.do_while_dynamic_iterations.select_iteration_count_fragment` | 24 / 20 / 24 (1L) | 1 | LoopMediump |
+| `fs_do_uni_101_iterations` | `loops.do_while_uniform_iterations.101_iterations_fragment` | 24 / 15 / 18 (1L) | 1 | LoopMediump |
+| `fs_do_uni_basic_highp_float` | `loops.do_while_uniform_iterations.basic_highp_float_fragment` | 24 / 15 / 18 (1L) | 1 | LoopMediump |
+| `fs_do_uni_basic_mediump_float` | `loops.do_while_uniform_iterations.basic_mediump_float_fragment` | 24 / 15 / 18 (1L) | 2 | LoopMediump |
+| `fs_do_uni_conditional_break` | `loops.do_while_uniform_iterations.conditional_break_fragment` | 24 / 15 / 20 (1L) | 1 | GuardMediump |
+| `fs_do_uni_conditional_continue` | `loops.do_while_uniform_iterations.conditional_continue_fragment` | 24 / 15 / 22 (1L) | 2 | GuardMediump |
+| `fs_do_uni_nested` | `loops.do_while_uniform_iterations.nested_fragment` | 24 / 15 / 25 (2L) | 1 | LoopMediump |
+| `fs_do_uni_select_iteration_count` | `loops.do_while_uniform_iterations.select_iteration_count_fragment` | 24 / 15 / 20 (1L) | 1 | LoopMediump |
+| `fs_for_con_select_iteration_count` | `loops.for_constant_iterations.select_iteration_count_fragment` | 24 / 15 / 19 (1L) | 2 | LoopMediump |
+| `fs_for_dyn_101_iterations` | `loops.for_dynamic_iterations.101_iterations_fragment` | 24 / 20 / 23 (1L) | 1 | LoopMediump |
+| `fs_for_dyn_basic_mediump_float` | `loops.for_dynamic_iterations.basic_mediump_float_fragment` | 24 / 20 / 21 (1L) | 4 | LoopMediump |
+| `fs_for_dyn_basic_mediump_int` | `loops.for_dynamic_iterations.basic_mediump_int_fragment` | 24 / 20 / 23 (1L) | 6 | LoopMediump |
+| `fs_for_dyn_conditional_body` | `loops.for_dynamic_iterations.conditional_body_fragment` | 24 / 20 / 27 (1L) | 1 | LoopMediump |
+| `fs_for_dyn_conditional_break` | `loops.for_dynamic_iterations.conditional_break_fragment` | 24 / 20 / 26 (1L) | 1 | LoopMediump |
+| `fs_for_dyn_nested` | `loops.for_dynamic_iterations.nested_fragment` | 24 / 20 / 30 (2L) | 1 | LoopMediump |
+| `fs_for_dyn_select_iteration_count` | `loops.for_dynamic_iterations.select_iteration_count_fragment` | 24 / 20 / 24 (1L) | 2 | LoopMediump |
+| `fs_for_uni_101_iterations` | `loops.for_uniform_iterations.101_iterations_fragment` | 24 / 15 / 17 (1L) | 1 | LoopMediump |
+| `fs_for_uni_basic_highp_float` | `loops.for_uniform_iterations.basic_highp_float_fragment` | 24 / 15 / 17 (1L) | 2 | LoopMediump |
+| `fs_for_uni_compound_statement` | `loops.for_uniform_iterations.compound_statement_fragment` | 24 / 15 / 21 (1L) | 2 | LoopMediump |
+| `fs_for_uni_conditional_body` | `loops.for_uniform_iterations.conditional_body_fragment` | 24 / 15 / 21 (1L) | 1 | LoopMediump |
+| `fs_for_uni_empty_body` | `loops.for_uniform_iterations.empty_body_fragment` | 24 / 15 / 8 | 13 | LoopMediump |
+| `fs_for_uni_function_call_inout` | `loops.for_uniform_iterations.function_call_inout_fragment` | 24 / 15 / 17 (1L) | 8 | LoopMediump |
+| `fs_for_uni_nested` | `loops.for_uniform_iterations.nested_fragment` | 24 / 15 / 23 (2L) | 1 | LoopMediump |
+| `fs_for_uni_nested_sequence` | `loops.for_uniform_iterations.nested_sequence_fragment` | 24 / 15 / 32 (3L) | 1 | LoopMediump |
+| `fs_for_uni_nested_tricky_dataflow_1` | `loops.for_uniform_iterations.nested_tricky_dataflow_1_fragment` | 24 / 15 / 30 (2L) | 1 | LoopMediump |
+| `fs_for_uni_nested_tricky_dataflow_2` | `loops.for_uniform_iterations.nested_tricky_dataflow_2_fragment` | 24 / 15 / 24 (2L) | 1 | LoopMediump |
+| `fs_for_uni_sequence` | `loops.for_uniform_iterations.sequence_fragment` | 24 / 15 / 26 (2L) | 1 | LoopMediump |
+| `fs_for_uni_single_iteration` | `loops.for_uniform_iterations.single_iteration_fragment` | 24 / 15 / 17 (1L) | 1 | LoopMediump |
+| `fs_idx_mat4_dd` | `indexing.matrix_subscript.mat4_dynamic_loop_write_dynamic_read_fragment` | 24 / 15 / 60 | 1 | LoopMediump |
+| `fs_idx_mat4_sd` | `indexing.matrix_subscript.mat4_static_write_dynamic_loop_read_fragment` | 24 / 15 / 43 | 1 | LoopMediump |
+| `fs_idx_tmp_float_dd` | `indexing.tmp_array.float_dynamic_loop_write_dynamic_read_fragment` | 24 / 15 / 38 | 1 | LoopMediump |
+| `fs_idx_tmp_float_dldl` | `indexing.tmp_array.float_dynamic_loop_write_dynamic_loop_read_fragment` | 24 / 15 / 22 | 2 | LoopMediump |
+| `fs_idx_tmp_vec4_cd` | `indexing.tmp_array.vec4_const_write_dynamic_loop_read_fragment` | 24 / 0 / 141 (1L) | 1 | LoopMediump |
+| `fs_idx_tmp_vec4_sd` | `indexing.tmp_array.vec4_static_write_dynamic_loop_read_fragment` | 24 / 15 / 35 | 1 | LoopMediump |
+| `fs_idx_uni_float` | `indexing.uniform_array.float_dynamic_loop_read_fragment` | 24 / 0 / 30 | 1 | LoopMediump |
+| `fs_idx_uni_vec4` | `indexing.uniform_array.vec4_dynamic_loop_read_fragment` | 24 / 0 / 34 | 1 | LoopMediump |
+| `fs_idx_var_vec4_sd` | `indexing.varying_array.vec4_static_write_dynamic_loop_read` | 24 / 75 / 44 | 1 | LoopMediump |
+| `fs_idx_vec_direct_w` | `indexing.vector_subscript.vec4_direct_write_dynamic_loop_subscript_read_fragment` | 24 / 15 / 25 (1L) | 1 | LoopMediump |
+| `fs_idx_vec_static_w` | `indexing.vector_subscript.vec4_static_loop_subscript_write_dynamic_loop_subscript_read_fragment` | 24 / 15 / 28 (1L) | 1 | LoopMediump |
+| `fs_idx_vec_w_direct` | `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_direct_read_fragment` | 24 / 15 / 33 (1L) | 1 | LoopMediump |
+| `fs_idx_vec_w_dynsub` | `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_dynamic_subscript_read_fragment` | 24 / 15 / 58 (1L) | 1 | LoopMediump |
+| `fs_ret_dyn` | `return.return_in_dynamic_loop_dynamic_fragment` | 24 / 15 / 21 (1L) | 1 | LoopMediump |
+| `fs_ret_dynamic_loop_never` | `return.return_in_dynamic_loop_never_fragment` | 24 / 15 / 17 (1L) | 1 | LoopMediump |
+| `fs_scope_while` | `scoping.valid.while_condition_variable_hides_local_variable_fragment` | 24 / 3 / 14 | 2 | LoopMediump |
+| `fs_struct_local` | `struct.local.dynamic_loop_struct_array_fragment` | 24 / 11 / 22 | 1 | LoopMediump |
+| `fs_wh_con_101_iterations` | `loops.while_constant_iterations.101_iterations_fragment` | 24 / 15 / 17 (1L) | 1 | LoopForm |
+| `fs_wh_dyn_101_iterations` | `loops.while_dynamic_iterations.101_iterations_fragment` | 24 / 20 / 23 (1L) | 1 | LoopMediump |
+| `fs_wh_dyn_basic_highp_float` | `loops.while_dynamic_iterations.basic_highp_float_fragment` | 24 / 20 / 20 (1L) | 2 | LoopMediump |
+| `fs_wh_dyn_conditional_body` | `loops.while_dynamic_iterations.conditional_body_fragment` | 24 / 20 / 30 (1L) | 1 | LoopMediump |
+| `fs_wh_dyn_conditional_break` | `loops.while_dynamic_iterations.conditional_break_fragment` | 24 / 20 / 25 (1L) | 1 | LoopMediump |
+| `fs_wh_dyn_nested` | `loops.while_dynamic_iterations.nested_fragment` | 24 / 20 / 30 (2L) | 1 | LoopMediump |
+| `fs_wh_uni_101_iterations` | `loops.while_uniform_iterations.101_iterations_fragment` | 24 / 15 / 17 (1L) | 1 | LoopMediump |
+| `fs_wh_uni_compound_statement` | `loops.while_uniform_iterations.compound_statement_fragment` | 24 / 15 / 20 (1L) | 2 | LoopMediump |
+| `fs_wh_uni_conditional_body` | `loops.while_uniform_iterations.conditional_body_fragment` | 24 / 15 / 24 (1L) | 1 | LoopMediump |
+| `fs_wh_uni_conditional_break` | `loops.while_uniform_iterations.conditional_break_fragment` | 24 / 15 / 19 (1L) | 1 | LoopMediump |
+| `fs_wh_uni_conditional_continue` | `loops.while_uniform_iterations.conditional_continue_fragment` | 24 / 15 / 24 (1L) | 1 | LoopMediump |
+| `fs_wh_uni_double_continue` | `loops.while_uniform_iterations.double_continue_fragment` | 24 / 15 / 24 (1L) | 1 | LoopMediump |
+| `fs_wh_uni_nested` | `loops.while_uniform_iterations.nested_fragment` | 24 / 15 / 23 (2L) | 1 | LoopMediump |
+| `vs_do_con_101_iterations` | `loops.do_while_constant_iterations.101_iterations_vertex` | 24 / 24 (1L) / 8 | 2 | LoopVertex |
+| `vs_do_con_nested` | `loops.do_while_constant_iterations.nested_vertex` | 24 / 11 / 8 | 24 | LoopVertex |
+| `vs_do_dyn_basic_highp_float` | `loops.do_while_dynamic_iterations.basic_highp_float_vertex` | 24 / 26 (1L) / 8 | 1 | LoopVertex |
+| `vs_do_dyn_conditional_body` | `loops.do_while_dynamic_iterations.conditional_body_vertex` | 24 / 34 (1L) / 8 | 1 | LoopVertex |
+| `vs_do_dyn_conditional_break` | `loops.do_while_dynamic_iterations.conditional_break_vertex` | 24 / 32 (1L) / 8 | 1 | LoopVertex |
+| `vs_do_dyn_nested_sequence` | `loops.do_while_dynamic_iterations.nested_sequence_vertex` | 24 / 45 (3L) / 8 | 1 | LoopVertex |
+| `vs_do_uni_basic_highp_float` | `loops.do_while_uniform_iterations.basic_highp_float_vertex` | 24 / 24 (1L) / 8 | 1 | LoopVertex |
+| `vs_do_uni_basic_mediump_float` | `loops.do_while_uniform_iterations.basic_mediump_float_vertex` | 24 / 24 (1L) / 8 | 2 | LoopVertex |
+| `vs_do_uni_conditional_body` | `loops.do_while_uniform_iterations.conditional_body_vertex` | 24 / 28 (1L) / 8 | 1 | LoopVertex |
+| `vs_do_uni_conditional_break` | `loops.do_while_uniform_iterations.conditional_break_vertex` | 24 / 26 (1L) / 8 | 1 | LoopVertex |
+| `vs_do_uni_conditional_continue` | `loops.do_while_uniform_iterations.conditional_continue_vertex` | 24 / 28 (1L) / 8 | 2 | LoopVertex |
+| `vs_do_uni_infinite_with_conditional_break` | `loops.do_while_uniform_iterations.infinite_with_conditional_break_vertex` | 24 / 24 (1L) / 8 | 3 | LoopVertex |
+| `vs_do_uni_nested` | `loops.do_while_uniform_iterations.nested_vertex` | 24 / 31 (2L) / 8 | 1 | LoopVertex |
+| `vs_fn_after_seq` | `functions.control_flow.return_after_loop_sequence_vertex` | 24 / 14 (1L) / 13 | 1 | LoopVertex |
+| `vs_fn_mixed` | `functions.control_flow.mixed_return_break_continue_vertex` | 24 / 20 (1L) / 13 | 1 | LoopVertex |
+| `vs_fn_return_in_loop` | `functions.control_flow.return_in_loop_vertex` | 24 / 4 / 13 | 5 | LoopVertex |
+| `vs_for_dyn_basic_mediump_float` | `loops.for_dynamic_iterations.basic_mediump_float_vertex` | 24 / 27 (1L) / 8 | 4 | LoopVertex |
+| `vs_for_dyn_conditional_body` | `loops.for_dynamic_iterations.conditional_body_vertex` | 24 / 33 (1L) / 8 | 1 | LoopVertex |
+| `vs_for_dyn_conditional_break` | `loops.for_dynamic_iterations.conditional_break_vertex` | 24 / 32 (1L) / 8 | 1 | LoopVertex |
+| `vs_for_dyn_nested` | `loops.for_dynamic_iterations.nested_vertex` | 24 / 36 (2L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_basic_lowp_float` | `loops.for_uniform_iterations.basic_lowp_float_vertex` | 24 / 24 (1L) / 8 | 4 | LoopVertex |
+| `vs_for_uni_conditional_body` | `loops.for_uniform_iterations.conditional_body_vertex` | 24 / 28 (1L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_conditional_break` | `loops.for_uniform_iterations.conditional_break_vertex` | 24 / 26 (1L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_conditional_continue` | `loops.for_uniform_iterations.conditional_continue_vertex` | 24 / 28 (1L) / 8 | 2 | LoopVertex |
+| `vs_for_uni_mixed_break_continue` | `loops.for_uniform_iterations.mixed_break_continue_vertex` | 24 / 30 (1L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_nested` | `loops.for_uniform_iterations.nested_vertex` | 24 / 30 (2L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_nested_sequence` | `loops.for_uniform_iterations.nested_sequence_vertex` | 24 / 39 (3L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_nested_tricky_dataflow_1` | `loops.for_uniform_iterations.nested_tricky_dataflow_1_vertex` | 24 / 36 (2L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_nested_tricky_dataflow_2` | `loops.for_uniform_iterations.nested_tricky_dataflow_2_vertex` | 24 / 31 (2L) / 8 | 1 | LoopVertex |
+| `vs_for_uni_unconditional_break` | `loops.for_uniform_iterations.unconditional_break_vertex` | 24 / 20 / 8 | 2 | LoopVertex |
+| `vs_idx_mat4_dldl` | `indexing.matrix_subscript.mat4_dynamic_loop_write_dynamic_loop_read_vertex` | 24 / 58 / 7 | 1 | LoopVertex |
+| `vs_idx_tmp_vec4_dd` | `indexing.tmp_array.vec4_dynamic_loop_write_dynamic_read_vertex` | 24 / 73 / 7 | 1 | LoopVertex |
+| `vs_idx_tmp_vec4_dldl` | `indexing.tmp_array.vec4_dynamic_loop_write_dynamic_loop_read_vertex` | 24 / 50 / 7 | 1 | LoopVertex |
+| `vs_idx_var_vec4_dd` | `indexing.varying_array.vec4_dynamic_loop_write_dynamic_read` | 24 / 83 / 114 | 1 | LoopVertex |
+| `vs_idx_var_vec4_dldl` | `indexing.varying_array.vec4_dynamic_loop_write_dynamic_loop_read` | 24 / 83 / 44 | 1 | LoopVertex |
+| `vs_idx_vec_dldl` | `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_dynamic_loop_subscript_read_vertex` | 24 / 46 (2L) / 8 | 1 | LoopVertex |
+| `vs_idx_vec_w_direct` | `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_direct_read_vertex` | 24 / 36 (1L) / 8 | 1 | LoopVertex |
+| `vs_idx_vec_w_dynsub` | `indexing.vector_subscript.vec4_dynamic_loop_subscript_write_dynamic_subscript_read_vertex` | 29 (1L) / 61 (1L) / 8 | 1 | LoopVertex |
+| `vs_inv_highp_1` | `invariance.highp.loop_1` | 70 / 63 / 15 | 1 | LoopVertex |
+| `vs_inv_lowp_loop_1` | `invariance.lowp.loop_1` | 43 / 30 / 15 | 1 | LoopVertex |
+| `vs_inv_mediump_1` | `invariance.mediump.loop_1` | 58 / 48 / 15 | 1 | LoopVertex |
+| `vs_inv_mediump_2` | `invariance.mediump.loop_2` | 71 / 52 / 15 | 1 | LoopVertex |
+| `vs_ret_dyn` | `return.return_in_dynamic_loop_dynamic_vertex` | 24 / 27 (1L) / 8 | 1 | LoopVertex |
+| `vs_ret_dynamic_loop_never` | `return.return_in_dynamic_loop_never_vertex` | 24 / 24 (1L) / 8 | 1 | LoopVertex |
+| `vs_ret_infinite` | `return.return_in_infinite_loop_vertex` | 24 / 11 / 8 | 20 | LoopVertex |
+| `vs_ret_static` | `functions.control_flow.return_in_nested_loop_vertex` | 24 / 4 / 13 | 5 | LoopVertex |
+| `vs_ret_static_dyn` | `return.return_in_static_loop_dynamic_vertex` | 24 / 15 / 8 | 1 | LoopVertex |
+| `vs_ret_static_loop_always` | `return.return_in_static_loop_always_vertex` | 24 / 11 / 8 | 2 | LoopVertex |
+| `vs_ret_static_loop_never` | `return.return_in_static_loop_never_vertex` | 24 / 11 / 8 | 1 | LoopVertex |
+| `vs_wh_con_101_iterations` | `loops.while_constant_iterations.101_iterations_vertex` | 24 / 24 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_dyn_basic_highp_float` | `loops.while_dynamic_iterations.basic_highp_float_vertex` | 24 / 26 (1L) / 8 | 2 | LoopVertex |
+| `vs_wh_dyn_conditional_body` | `loops.while_dynamic_iterations.conditional_body_vertex` | 24 / 36 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_dyn_conditional_break` | `loops.while_dynamic_iterations.conditional_break_vertex` | 24 / 31 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_dyn_nested_sequence` | `loops.while_dynamic_iterations.nested_sequence_vertex` | 24 / 44 (3L) / 8 | 1 | LoopVertex |
+| `vs_wh_uni_conditional_body` | `loops.while_uniform_iterations.conditional_body_vertex` | 24 / 31 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_uni_conditional_break` | `loops.while_uniform_iterations.conditional_break_vertex` | 24 / 26 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_uni_conditional_continue` | `loops.while_uniform_iterations.conditional_continue_vertex` | 24 / 31 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_uni_double_continue` | `loops.while_uniform_iterations.double_continue_vertex` | 24 / 31 (1L) / 8 | 1 | LoopVertex |
+| `vs_wh_uni_nested` | `loops.while_uniform_iterations.nested_vertex` | 24 / 30 (2L) / 8 | 1 | LoopVertex |
+| `vs_wh_uni_unconditional_continue` | `loops.while_uniform_iterations.unconditional_continue_vertex` | 24 / 24 (1L) / 8 | 1 | LoopVertex |
+
+### 9.8 Caveats
+
+- Counts are **HOST-ONLY**: the host measure compiles and links, it does not
+  render. The board's rerun is the authority on pass counts.
+- The shape row of a case is read from its name and its first refusal; the
+  next refusal after the loop is not measured (it cannot be until the loop
+  is lowered), so every "forecast" is an upper bound.
+- The 97 hidden vertex loops (9.1) and the 216 `indexing.*loop*` cases behind
+  other texts are the other half of the loop mass; they are counted when their
+  first text lifts, and are not in the 537 or in the step table.
+- The 127 references are one per cell of 9.2; a case that differs from its
+  cell's reference (the `while` against the `for` of a body with a
+  different `yzwx` count) is found by the case's own words only when a
+  step needs it: `deqp-host-measure.sh --filter <case>` followed by the
+  commands of 9.7 on the case's `.qpa` shaders makes it.

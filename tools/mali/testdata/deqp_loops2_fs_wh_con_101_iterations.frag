@@ -1,0 +1,12 @@
+varying mediump vec4 v_coords;
+uniform mediump int ui_zero, ui_one, ui_two, ui_three, ui_four, ui_five, ui_six;
+uniform mediump int ui_oneHundredOne;
+
+void main()
+{
+    mediump vec4 coords = v_coords;
+    mediump vec4 res = coords;
+    	mediump int i = 0;
+    while(i++ < 101) res = res.yzwx;
+    gl_FragColor = vec4(res.rgb, 1.0);
+}
