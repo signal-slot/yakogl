@@ -14,7 +14,9 @@
  * function it follows for V3D_VERSION 71; the packets are packed by Mesa's
  * own generated 7.1 packers (v3d_packet_v71_pack.h, through v3d_cl.h's
  * v3d_cl_emit). tools/v3d/check71.d/job71.sh compares the clear and the
- * triangle with Mesa's own jobs on the board (tools/v3d/pi5/clear.clif, triangle.clif).
+ * triangle with Mesa's own jobs on the board (tools/v3d/pi5/clear.clif, triangle.clif),
+ * and the jobs of the gl_test shapes with Mesa's on the drm-shim at 7.1.10
+ * (tools/v3d/pi5/gl_*.clif), naming each difference that remains.
  *
  * At 4.2 this file is empty.
  */
@@ -833,23 +835,39 @@ static void emit_rt_part3(struct v3d_cl *cl, uint32_t n, uint64_t top_bits)
 	v3d_cl_put(cl, b, sizeof(b), n < V3D_JOB71_MAX_RTS && top_bits >> 56 == 0);
 }
 
-/* The buffer number of the target's depth buffer and of its separate
- * stencil (v3dx_rcl.c zs_buffer_from_pipe_bits). */
-static uint32_t zs_buffer(const struct v3d_job71_target *t)
+/* The buffer number a load or store of `aspects` (V3D_JOB71_ZS_* bits, 0:
+ * every aspect) of the target's depth buffer moves (v3dx_rcl.c
+ * zs_buffer_from_pipe_bits: DEPTH | STENCIL ZSTENCIL, DEPTH Z, STENCIL
+ * STENCIL). Only a D24S8 `zs` without a separate stencil holds a stencil.
+ * False for an aspect the buffer does not hold. The load and store buffer
+ * numbers are the same values (v3d_packet.xml "Load/Store buffer"). */
+static bool zs_buffer(const struct v3d_job71_target *t, uint32_t aspects, uint32_t *buffer)
 {
-	if (t->s.address || t->zs.format != V3D_OUTPUT_IMAGE_FORMAT_D24S8)
-		return V3D_LOAD_BUFFER_Z;
-	return V3D_LOAD_BUFFER_ZSTENCIL;
+	const bool has_stencil = !t->s.address && t->zs.format == V3D_OUTPUT_IMAGE_FORMAT_D24S8;
+	if (aspects == 0)
+		aspects = V3D_JOB71_ZS_DEPTH | (has_stencil ? V3D_JOB71_ZS_STENCIL : 0);
+	if (aspects > (V3D_JOB71_ZS_DEPTH | V3D_JOB71_ZS_STENCIL) ||
+	    ((aspects & V3D_JOB71_ZS_STENCIL) && !has_stencil))
+		return false;
+	if (aspects == (V3D_JOB71_ZS_DEPTH | V3D_JOB71_ZS_STENCIL))
+		*buffer = V3D_LOAD_BUFFER_ZSTENCIL;
+	else if (aspects == V3D_JOB71_ZS_DEPTH)
+		*buffer = V3D_LOAD_BUFFER_Z;
+	else
+		*buffer = V3D_LOAD_BUFFER_STENCIL;
+	return true;
 }
 
 /* v3dx_rcl.c v3d_rcl_emit_generic_per_tile_list, written into `list`: the
  * loads (v3d_rcl_emit_loads: the RTs in order, then a separate stencil, then
- * Z or Z/S), the branch to the binned primitives, the stores
- * (v3d_rcl_emit_stores: the RTs in order, then Z or Z/S, then the separate
- * stencil; a list with nothing to store stores buffer NONE), and the 7.1
- * clear of the tile buffer for the next tile, CLEAR_RENDER_TARGETS. */
+ * Z, Z/S or the D24S8's stencil: `zs_load_buf`), the branch to the binned
+ * primitives, the stores (v3d_rcl_emit_stores: the RTs in order, then Z, Z/S
+ * or stencil (`zs_store_buf`), then the separate stencil; a list with nothing
+ * to store stores buffer NONE), and the 7.1 clear of the tile buffer for the
+ * next tile, CLEAR_RENDER_TARGETS. */
 static void emit_tile_list(const struct v3d_job71 *j, const struct v3d_job71_clear *c,
-			   struct v3d_cl *list, uint32_t *start, uint32_t *end)
+			   uint32_t zs_load_buf, uint32_t zs_store_buf, struct v3d_cl *list,
+			   uint32_t *start, uint32_t *end)
 {
 	const struct v3d_job71_target *t = &j->t;
 	*start = v3d_cl_gpu_next(list);
@@ -881,7 +899,7 @@ static void emit_tile_list(const struct v3d_job71 *j, const struct v3d_job71_cle
 	}
 	if (t->zs.address && c->zs_load) {
 		v3d_cl_emit(list, LOAD_TILE_BUFFER_GENERAL, zl) {
-			zl.buffer_to_load = zs_buffer(t);
+			zl.buffer_to_load = zs_load_buf;
 			zl.memory_format = t->zs.memory_format;
 			zl.input_image_format = t->zs.format;
 			zl.height_in_ub_or_stride = t->zs.height_in_ub;
@@ -916,7 +934,7 @@ static void emit_tile_list(const struct v3d_job71 *j, const struct v3d_job71_cle
 	if (t->zs.address && c->zs_store) {
 		stores++;
 		v3d_cl_emit(list, STORE_TILE_BUFFER_GENERAL, zs) {
-			zs.buffer_to_store = zs_buffer(t);
+			zs.buffer_to_store = zs_store_buf;
 			zs.memory_format = t->zs.memory_format;
 			zs.output_image_format = t->zs.format;
 			zs.height_in_ub_or_stride = t->zs.height_in_ub;
@@ -963,12 +981,20 @@ bool v3d_job71_end(struct v3d_job71 *j, const struct v3d_job71_clear *c, uint32_
 		j->broken = true;
 		return false;
 	}
+	/* the Z/S buffer numbers of the load and the store: an aspect the
+	 * buffer does not hold is the same kind of mistake */
+	uint32_t zs_load_buf = 0, zs_store_buf = 0;
+	if ((c->zs_load && !zs_buffer(t, c->zs_load_aspects, &zs_load_buf)) ||
+	    (c->zs_store && !zs_buffer(t, c->zs_store_aspects, &zs_store_buf))) {
+		j->broken = true;
+		return false;
+	}
 
 	/* v3dX(bcl_epilogue): no TF, no primitive counts */
 	v3d_cl_emit(j->bcl, FLUSH, flush);
 
 	uint32_t list_start, list_end;
-	emit_tile_list(j, c, j->ind, &list_start, &list_end);
+	emit_tile_list(j, c, zs_load_buf, zs_store_buf, j->ind, &list_start, &list_end);
 	if (tile_list_start)
 		*tile_list_start = list_start;
 	if (tile_list_end)
