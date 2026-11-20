@@ -66,7 +66,11 @@ struct v3d_tex_layout;
 /* TEXTURE_SHADER_STATE at 7.1 (V3D71_TEXTURE_SHADER_STATE_length) and
  * SAMPLER_STATE (V3D71_SAMPLER_STATE_length). Both records are 32-byte
  * aligned, as Mesa allocates them (v3dx_state.c:816, :1003-1005): P0 and P1
- * OR their flags into the address's low bits. */
+ * OR their flags into the address's low bits. The record a TMU reads needs
+ * less: a sampler is 8-byte aligned (P1's flags are bits 0..2), and Mesa's own
+ * 7.1 references place theirs so (tools/v3d/pi5/gl_*.clif: sampler states at
+ * 0x...78, 0x...e8, 0x...68), the texture state 32-byte (P0 flags 0..3 plus the
+ * record's 24 bytes). Keeping 32 for both is the safe choice. */
 #define V3D_TEX71_STATE_BYTES 24
 #define V3D_TEX71_SAMPLER_BYTES 24
 #define V3D_TEX71_RECORD_ALIGN 32
