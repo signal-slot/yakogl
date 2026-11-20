@@ -47,14 +47,16 @@
  *                  uncached, and each job's FLUSH_CACHE2 cleans the GPU's
  *                  caches
  *
- * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank, present (the board
- * has no display on Zephyr yet). A tiler out-of-memory event grows the
+ * Absent: mmu_map, gpu_read/write, reg_*, wait_vblank, present (a board
+ * with a screen shows its windows itself, board_show()). A tiler out-of-memory event grows the
  * heap, up to CONFIG_YAKOGL_MALI_HEAP_CHUNKS; a GPU fault, fatal or the
  * job timeout loses the kicks in flight and restarts the group; what needs
  * a GPU reset stops the OSAL (board::nanopc_t6_osal, "Recovery").
  *
  * Memory: one .noinit block of the image, whose mapping init makes uncached
- * ("The GPU's memory" below).
+ * ("The GPU's memory" below). The carve-out's last
+ * CONFIG_YAKOGL_MALI_WINDOW_BYTES are the board's window memory
+ * (osal_zephyr_mali_window_mem), never allocated.
  */
 
 #include <stdarg.h>
@@ -90,6 +92,7 @@
  * buffers; 1 MiB is far over what the firmware asks (t6_submit). */
 #define MALI_QUEUE_MEM (1024u * 1024u)
 #define MALI_CARVE CONFIG_YAKOGL_MALI_CARVEOUT_BYTES
+#define MALI_WINDOW CONFIG_YAKOGL_MALI_WINDOW_BYTES
 #define MALI_CHUNKS CONFIG_YAKOGL_MALI_HEAP_CHUNKS
 #define MALI_CHUNKS_INITIAL CONFIG_YAKOGL_MALI_HEAP_INITIAL_CHUNKS
 /* The group VM's tables, 4 KiB pages only: one level-3 table per 2 MiB of
@@ -101,6 +104,8 @@ BUILD_ASSERT(MALI_CARVE % PAGE == 0, "the carve-out is whole pages");
 BUILD_ASSERT(MALI_CHUNKS_INITIAL >= 1 && MALI_CHUNKS_INITIAL <= MALI_CHUNKS,
 	     "the heap starts with 1 to YAKOGL_MALI_HEAP_CHUNKS chunks");
 BUILD_ASSERT(MALI_CARVE <= YD_T6_OSAL_CARVE_MAX, "the carve-out is at most YD_T6_OSAL_CARVE_MAX");
+BUILD_ASSERT(MALI_WINDOW % PAGE == 0 && MALI_WINDOW < MALI_CARVE,
+	     "the board's window memory is whole pages at the carve-out's end, not all of it");
 
 /* The GPU's memory: one block of the image's .noinit, which lies after
  * .bss and so is not in zephyr.bin. (A __nocache static is in the file:
@@ -177,6 +182,27 @@ static struct yd_t6_fw_backing backing(size_t off, size_t size)
 	};
 }
 
+int osal_zephyr_mali_window_mem(uintptr_t *phys, void **cpu, size_t *bytes)
+{
+	uint8_t *at = mali_mem + OFF_CARVE + MALI_CARVE - MALI_WINDOW;
+	int rc;
+
+	*phys = 0;
+	*cpu = NULL;
+	*bytes = 0;
+	if (MALI_WINDOW == 0)
+		return -ENOTSUP;
+	/* zeroed and uncached once; z_init's call is then a no-op, so what
+	 * the board wrote into its windows before eglInitialize stays */
+	rc = mem_uncache();
+	if (rc)
+		return rc;
+	*phys = k_mem_phys_addr(at);
+	*cpu = at;
+	*bytes = MALI_WINDOW;
+	return 0;
+}
+
 /* The Rust waits poll through this (Z3's bring-up, the 5 s job timeout):
  * the board glue wants its feed (on the NanoPC-T6 t6_watchdog_feed(), at
  * most CONFIG_YAKOGL_NANOPC_T6_ALIVE_S apart), so every delay feeds it, in
@@ -246,6 +272,7 @@ static int z_init(void *platform_arg)
 	mem.vm_pool_pages = MALI_VM_POOL_PAGES;
 	mem.vm_tables_pa = k_mem_phys_addr(mali_mem + OFF_VM_POOL);
 	mem.heap_initial_chunks = MALI_CHUNKS_INITIAL;
+	mem.carve_reserved = MALI_WINDOW;
 
 	osal_zephyr_mali_board_feed();
 	rc = osal_zephyr_mali_board_up(arg, &mem, clean, delay_us, on_handover, &z1, &o);
