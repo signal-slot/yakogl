@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! A mock System Manager for the host tests of [`super::gpu_power`] and
-//! [`super::display_power`] (tests only): a host model of the part of NXP's
+//! A mock System Manager for the host tests of [`super::gpu_power`],
+//! [`super::display_power`] and [`super::dsi_power`] (tests only): a host model of the part of NXP's
 //! SM those sequences reach, with the permission checks of its SCMI handlers
 //! (rpc_scmi_power.c `PowerStateSet`: SET; rpc_scmi_perf.c
 //! `PerformanceLevelSet`: PRIV; rpc_scmi_clock.c `ClockConfigSet`: SET,
 //! `ClockRateSet` and `ClockParentSet`: EXCLUSIVE, and INVALID_PARAMETERS
 //! for a rate on a gate, dev_sm_clock.c `DEV_SM_ClockRateSet`) and the
 //! AP-NS agent's permissions of Toradex's verdin-imx95 configuration
-//! (`configs/verdin-imx95/config_scmi.h`: PD 13 and 14, perf 9 and 12,
-//! clocks 18, 19, 80 and 174 at ALL; DISPAPB/DISPAXI/DISPOCRAM 75, 76, 78
-//! and GPUAPB/GPU 83, 84 not granted). Every request is recorded as
+//! (`configs/verdin-imx95/config_scmi.h`: PD 3, 13 and 14, perf 9, 11
+//! and 12, clocks 18, 19, 66, 67, 68, 80, 155 and 174 at ALL; CAMAPB 62,
+//! DISPAPB/DISPAXI/DISPOCRAM 75, 76, 78 and GPUAPB/GPU 83, 84 not
+//! granted). Every request is recorded as
 //! (protocol, message, payload words).
 //!
 //! Rates, as the SM's clock code makes them (dev_sm_clock.c,
@@ -25,7 +26,11 @@
 //! - a clock root (80) is its parent divided by an integer 1..=256,
 //!   rounded down, at most 350 MHz (`ES_MAX_HZ_DISP1PIX`); its parents are
 //!   OSC24M (2), AUDIOPLL1 (15) and VIDEOPLL1 (19) (fsl_clock.c
-//!   `CLOCK_ROOT_DISP1PIX` mux table), any other is INVALID_PARAMETERS.
+//!   `CLOCK_ROOT_DISP1PIX` mux table), any other is INVALID_PARAMETERS;
+//! - the MIPI PHY roots (66, 67, 68) run at their parent's rate (divider
+//!   1), their parents OSC24M (2, the reset mux), AUDIOPLL1 (15) and
+//!   VIDEOPLL1 (19) (fsl_clock.c:264-277); TPM6 (155) at 24 MHz, its reset
+//!   parent the oscillator (:689).
 
 use super::sm::TOKEN;
 use crate::firmware::scmi::{self, Transport};
@@ -63,6 +68,14 @@ const CLK_VIDEOPLL1_VCO: u32 = 18;
 const CLK_VIDEOPLL1: u32 = 19;
 const CLK_DISP1PIX: u32 = 80;
 const CLK_GPU_CGC: u32 = 174;
+const PD_CAMERA: u32 = 3;
+const PERF_CAM: u32 = 11;
+const CLK_CAMAPB: u32 = 62;
+const CLK_MIPIPHYCFG: u32 = 66;
+const CLK_MIPIPHYPLLBYPASS: u32 = 67;
+const CLK_MIPIPHYPLLREF: u32 = 68;
+const CLK_TPM6: u32 = 155;
+const MIPI_ROOTS: [u32; 3] = [CLK_MIPIPHYCFG, CLK_MIPIPHYPLLBYPASS, CLK_MIPIPHYPLLREF];
 
 pub struct Sm {
     pub clk_perm: BTreeMap<u32, u8>,
@@ -107,21 +120,37 @@ impl Sm {
                 (CLK_VIDEOPLL1_VCO, PERM_ALL),
                 (CLK_VIDEOPLL1, PERM_ALL),
                 (CLK_DISP1PIX, PERM_ALL),
+                (CLK_MIPIPHYCFG, PERM_ALL),
+                (CLK_MIPIPHYPLLBYPASS, PERM_ALL),
+                (CLK_MIPIPHYPLLREF, PERM_ALL),
+                (CLK_TPM6, PERM_ALL),
+                (CLK_CAMAPB, PERM_NONE),
             ]),
-            pd_perm: BTreeMap::from([(PD_GPU, PERM_ALL), (PD_DISPLAY, PERM_ALL)]),
-            perf_perm: BTreeMap::from([(PERF_GPU, PERM_ALL), (PERF_DISP, PERM_ALL)]),
+            pd_perm: BTreeMap::from([(PD_GPU, PERM_ALL), (PD_DISPLAY, PERM_ALL), (PD_CAMERA, PERM_ALL)]),
+            perf_perm: BTreeMap::from([(PERF_GPU, PERM_ALL), (PERF_DISP, PERM_ALL), (PERF_CAM, PERM_ALL)]),
             levels: BTreeMap::from([
                 (PERF_GPU, vec![(24_000, 0), (500_000, 1), (800_000, 2), (1_000_000, 3)]),
                 (PERF_DISP, vec![(24_000, 0), (400_000, 1), (666_667, 2), (800_000, 3)]),
+                (PERF_CAM, vec![(24_000, 0), (400_000, 1), (666_667, 2), (800_000, 3)]),
             ]),
             page: 8,
             pd_on: BTreeSet::new(),
             pd_held: BTreeSet::new(),
-            level: BTreeMap::from([(PERF_DISP, 3)]),
+            level: BTreeMap::from([(PERF_DISP, 3), (PERF_CAM, 3)]),
             clk_on: BTreeSet::new(),
             rate_offset: 0,
-            rate: BTreeMap::from([(CLK_VIDEOPLL1_VCO, 0), (CLK_VIDEOPLL1, 0), (CLK_DISP1PIX, 24_000_000)]),
-            parent: BTreeMap::from([(CLK_DISP1PIX, CLK_OSC24M)]),
+            rate: BTreeMap::from([
+                (CLK_VIDEOPLL1_VCO, 0),
+                (CLK_VIDEOPLL1, 0),
+                (CLK_DISP1PIX, 24_000_000),
+                (CLK_TPM6, 24_000_000),
+            ]),
+            parent: BTreeMap::from([
+                (CLK_DISP1PIX, CLK_OSC24M),
+                (CLK_MIPIPHYCFG, CLK_OSC24M),
+                (CLK_MIPIPHYPLLBYPASS, CLK_OSC24M),
+                (CLK_MIPIPHYPLLREF, CLK_OSC24M),
+            ]),
             log: Vec::new(),
         }
     }
@@ -159,6 +188,10 @@ impl Sm {
                 let want = *self.rate.get(&CLK_DISP1PIX).unwrap_or(&0);
                 Self::root_rate(prate, want)
             }
+            c if MIPI_ROOTS.contains(&c) => match self.parent[&c] {
+                CLK_OSC24M => 24_000_000,
+                p => self.rate_of(p),
+            },
             _ => *self.rate.get(&clk).unwrap_or(&0),
         }
     }
@@ -266,7 +299,9 @@ impl Sm {
                 if Self::perm(&self.clk_perm, w[0]) < PERM_EXCLUSIVE {
                     return (scmi::STATUS_DENIED, vec![]);
                 }
-                if w[0] != CLK_DISP1PIX || ![CLK_OSC24M, CLK_AUDIOPLL1, CLK_VIDEOPLL1].contains(&w[1]) {
+                if !(w[0] == CLK_DISP1PIX || MIPI_ROOTS.contains(&w[0]))
+                    || ![CLK_OSC24M, CLK_AUDIOPLL1, CLK_VIDEOPLL1].contains(&w[1])
+                {
                     return (scmi::STATUS_INVALID_PARAMETERS, vec![]);
                 }
                 self.parent.insert(w[0], w[1]);
@@ -312,4 +347,40 @@ pub fn writes(log: &[Req]) -> Vec<Req> {
         (C, CLOCK_PARENT_SET),
     ];
     log.iter().filter(|r| set.contains(&(r.0, r.1))).cloned().collect()
+}
+
+/// The DSI side's power-on ([`super::dsi_power::power_on`] with
+/// `Config::VERDIN`: the CAM level read, the PHY clocks' parents set).
+pub fn dsi_on() -> Vec<Req> {
+    vec![
+        req(P, scmi::PROTOCOL_VERSION, &[]),
+        req(F, scmi::PROTOCOL_VERSION, &[]),
+        req(C, scmi::PROTOCOL_VERSION, &[]),
+        req(P, scmi::POWER_STATE_SET, &[0, 3, 0]),
+        req(P, scmi::POWER_STATE_GET, &[3]),
+        req(F, scmi::PERF_LEVEL_GET, &[11]),
+        req(C, CLOCK_PARENT_SET, &[66, 2]),
+        req(C, CLOCK_PARENT_GET, &[66]),
+        req(C, CLOCK_PARENT_SET, &[68, 2]),
+        req(C, CLOCK_PARENT_GET, &[68]),
+        req(C, CLOCK_PARENT_SET, &[67, 19]),
+        req(C, CLOCK_PARENT_GET, &[67]),
+        req(C, scmi::CLOCK_CONFIG_SET, &[66, 1, 0]),
+        req(C, scmi::CLOCK_RATE_GET, &[66]),
+        req(C, scmi::CLOCK_CONFIG_SET, &[68, 1, 0]),
+        req(C, scmi::CLOCK_RATE_GET, &[68]),
+        req(C, scmi::CLOCK_CONFIG_SET, &[155, 1, 0]),
+        req(C, scmi::CLOCK_RATE_GET, &[155]),
+    ]
+}
+
+/// The DSI side's power-off.
+pub fn dsi_off() -> Vec<Req> {
+    vec![
+        req(C, scmi::CLOCK_CONFIG_SET, &[155, 0, 0]),
+        req(C, scmi::CLOCK_CONFIG_SET, &[68, 0, 0]),
+        req(C, scmi::CLOCK_CONFIG_SET, &[66, 0, 0]),
+        req(P, scmi::POWER_STATE_SET, &[0, 3, 0x4000_0000]),
+        req(P, scmi::POWER_STATE_GET, &[3]),
+    ]
 }
