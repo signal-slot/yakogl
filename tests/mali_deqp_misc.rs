@@ -31,10 +31,11 @@ fn misc_cmp_ine0_hp() {
     mali_ref::assert_matches("deqp_misc_cmp_ine0_hp");
 }
 
+/// Drawn without `--uniform-values` (gl_ref.py sets no `bool` uniform): the
+/// FAU word of `ref_out0` is 0.
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) (the bool uniform read as its own mask, not lowered)"]
 fn misc_cmp_notequal_vec2() {
-    mali_ref::assert_matches("deqp_misc_cmp_notequal_vec2");
+    mali_ref::assert_matches_unset("deqp_misc_cmp_notequal_vec2");
 }
 
 #[test]
@@ -62,7 +63,6 @@ fn misc_constmat_mat4_mediump() {
 }
 
 #[test]
-#[ignore = "refused: a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID), lowered by lower-misc"]
 fn misc_fragcoord_xyz() {
     mali_ref::assert_matches("deqp_misc_fragcoord_xyz");
 }
@@ -87,12 +87,10 @@ fn misc_spill_mediump_mat4_mat4() {
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_misc_cmp_notequal_vec2", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("deqp_misc_constmat_mat2_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat2_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_fragcoord_xyz", "a built-in input (gl_FragCoord, gl_FrontFacing, gl_PointCoord, gl_VertexID, gl_InstanceID)"),
     ("deqp_misc_invariant_position", "an invariant output (Mesa keeps its arithmetic exact, unfused)"),
     ("deqp_misc_spill_lowp_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
     ("deqp_misc_spill_mediump_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
