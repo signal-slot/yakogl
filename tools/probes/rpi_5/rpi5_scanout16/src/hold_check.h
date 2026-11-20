@@ -1,24 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
 /*
- * rpi5_scanout16: the decision logic of the long hold (docs/notes/rpi5-display.md
+ * rpi5_scanout16: the long hold's decision logic (docs/notes/rpi5-display.md
  * section 4, Q2: does the firmware redraw into its plane or change its display
- * list?). The probe writes its text and pattern, then reads without writing
- * for about 20 s; this file decides what the reads say. Pure functions on
- * values: stdint/stddef/stdbool only, no Zephyr, host-tested by
- * test/hold_check_test.c (hold_check_selftest.sh).
+ * list while we hold without writing?). Pure functions, no I/O, no Zephyr:
+ * stdint/stddef/stdbool only, host-tested by test/hold_check_test.c.
  *
- * A hold is a series of samples about HC_SAMPLE_MS apart. Sample 0 is the
- * baseline taken right after our write; every later sample is compared to it.
- * Per sample the first failing check names the reason, in the order of
- * enum hc_reason (unclocked, PV disabled, FRCNT stalled, pointer, list, plane);
- * across samples the first sample that fails wins.
- *
- * Register layouts are those of driver/zephyr/lib/board/rpi5_scanout/
- * scanout_alive.h (STATUS.FRCNT 21:16, :61-64; all ones is an unclocked block,
- * :19-23; PV_CONTROL.EN and PV_V_CONTROL.VIDEN, :78-82). They are repeated here
- * as numbers so this header stands alone; the test checks them against
- * scanout_alive.h.
+ * Register layout is that of driver/zephyr/lib/board/rpi5_scanout/
+ * scanout_alive.h (STATUS.FRCNT 21:16, PV_CONTROL.EN bit 0, PV_V_CONTROL.VIDEN
+ * bit 0); the constants are repeated here so this header stands alone.
+ * pattern.h has no hash function (only a checksum field that names FNV-1a),
+ * so the FNV-1a 32-bit hash is defined here.
  */
 #ifndef RPI5_SCANOUT16_HOLD_CHECK_H
 #define RPI5_SCANOUT16_HOLD_CHECK_H
@@ -27,109 +19,91 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define HC_SAMPLE_MS		250u	/* the spacing of the samples */
-#define HC_WDOG_MARGIN_MS	10000u	/* the hold ends this long before the watchdog */
-#define HC_FRCNT_SHIFT		16u
-#define HC_FRCNT_MASK		0x3fu
-#define HC_FRCNT_MOD		64u
-#define HC_ALL_ONES		0xffffffffu
-#define HC_PV_CONTROL_EN	(1u << 0)
-#define HC_PV_VCONTROL_VIDEN	(1u << 0)
+#define HOLD_FNV_BASIS 0x811c9dc5u
+#define HOLD_FNV_PRIME 0x01000193u
 
-/* --- (a) FNV-1a, 32 bit (the checksum of pattern.h's pattern_report) ------ */
+#define HOLD_FRCNT_SHIFT 16u /* scanout_alive.h:61 */
+#define HOLD_FRCNT_MASK 0x3fu
+#define HOLD_PV_CONTROL_EN (1u << 0)
+#define HOLD_PV_VCONTROL_VIDEN (1u << 0)
+#define HOLD_UNCLOCKED 0xffffffffu /* scanout_alive.h:19 */
+#define HOLD_WDOG_MARGIN_MS 10000u
 
-#define HC_FNV_BASIS		0x811c9dc5u
-#define HC_FNV_PRIME		0x01000193u
-
-static inline uint32_t hc_fnv1a_update(uint32_t h, const volatile uint8_t *p, size_t n)
+/* (a) FNV-1a 32-bit, continuing from h (start with HOLD_FNV_BASIS). */
+static inline uint32_t hold_fnv1a_n(uint32_t h, const volatile uint8_t *p, size_t n)
 {
-	while (n--) {
-		h ^= *p++;
-		h *= HC_FNV_PRIME;
+	for (size_t i = 0; i < n; i++) {
+		h ^= p[i];
+		h *= HOLD_FNV_PRIME;
 	}
 	return h;
 }
 
-static inline uint32_t hc_fnv1a(const volatile void *buf, size_t n)
+static inline uint32_t hold_fnv1a(const volatile void *buf, size_t n)
 {
-	return hc_fnv1a_update(HC_FNV_BASIS, (const volatile uint8_t *)buf, n);
+	return hold_fnv1a_n(HOLD_FNV_BASIS, (const volatile uint8_t *)buf, n);
 }
 
-/* --- (b) the strided-row hash --------------------------------------------- */
-
-/* The row read as the i-th of nrows spread evenly over h rows (0 .. h-1). */
-static inline uint32_t hc_row_at(uint32_t i, uint32_t nrows, uint32_t h)
+/* The row index of the i-th of n rows spread evenly over h rows. */
+static inline uint32_t hold_row_at(uint32_t i, uint32_t n, uint32_t h)
 {
-	return nrows ? (uint32_t)(((uint64_t)i * h) / nrows) : 0u;
+	return n ? (uint32_t)(((uint64_t)i * h) / n) : 0u;
 }
 
-/* FNV-1a over nrows whole rows of pitch bytes, spread evenly over h rows. */
-static inline uint32_t hc_rows_hash(const volatile uint8_t *plane, uint32_t pitch,
-				    uint32_t h, uint32_t nrows)
+/* (b) Hash of n whole rows (pitch bytes each) spread evenly over h rows. */
+static inline uint32_t hold_rows_hash(const volatile void *plane, uint32_t pitch,
+				      uint32_t h, uint32_t n)
 {
-	uint32_t hash = HC_FNV_BASIS;
+	const volatile uint8_t *b = (const volatile uint8_t *)plane;
+	uint32_t acc = HOLD_FNV_BASIS;
 
-	for (uint32_t i = 0; i < nrows; i++)
-		hash = hc_fnv1a_update(hash, plane + (size_t)hc_row_at(i, nrows, h) * pitch,
-				       pitch);
-	return hash;
+	if (n > h)
+		n = h;
+	for (uint32_t i = 0; i < n; i++)
+		acc = hold_fnv1a_n(acc, b + (size_t)hold_row_at(i, n, h) * pitch, pitch);
+	return acc;
 }
 
-/* How many of the h rows differ between two planes (whole rows of pitch bytes). */
-static inline uint32_t hc_rows_changed(const volatile uint8_t *a, const volatile uint8_t *b,
-				       uint32_t pitch, uint32_t h)
-{
-	uint32_t rows = 0;
+/* (c) Mismatches of a plane against an expected-pixel callback. */
+typedef uint32_t (*hold_expect_fn)(uint32_t x, uint32_t y, void *ctx);
 
-	for (uint32_t y = 0; y < h; y++) {
-		const volatile uint8_t *ra = a + (size_t)y * pitch;
-		const volatile uint8_t *rb = b + (size_t)y * pitch;
-
-		for (uint32_t i = 0; i < pitch; i++) {
-			if (ra[i] != rb[i]) {
-				rows++;
-				break;
-			}
-		}
-	}
-	return rows;
-}
-
-/* --- (c) mismatches against an expected-pixel callback -------------------- */
-
-/* The raw pixel value expected at (x, y), e.g. pattern_pixel() inside a band
- * and the text band's rendering elsewhere. */
-typedef uint32_t (*hc_expect_fn)(void *ctx, uint32_t x, uint32_t y);
-
-struct hc_mismatch {
-	uint32_t checked;	/* pixels looked at */
-	uint32_t count;		/* of those, differing from the expected value */
-	uint32_t first_x;	/* of the first mismatch in row-major order, */
-	uint32_t first_y;	/* valid only if count != 0 */
-	uint32_t rows;		/* distinct rows with at least one mismatch */
+struct hold_mismatch {
+	uint32_t count;   /* pixels differing */
+	uint32_t first_x; /* of the first (row-major); valid if count > 0 */
+	uint32_t first_y;
+	uint32_t rows;    /* distinct rows with at least one mismatch */
 };
 
-/* bpp_bytes is 2 (RGB565) or 4; the pixels are little-endian. */
-static inline struct hc_mismatch hc_mismatch_scan(const volatile uint8_t *plane, uint32_t pitch,
-						  uint32_t w, uint32_t h, uint32_t bpp_bytes,
-						  hc_expect_fn expect, void *ctx)
+static inline uint32_t hold_load_px(const volatile uint8_t *p, uint32_t bpp)
 {
-	struct hc_mismatch m = { 0, 0, 0, 0, 0 };
+	uint32_t v = 0;
+
+	for (uint32_t i = 0; i < bpp; i++)
+		v |= (uint32_t)p[i] << (8u * i);
+	return v;
+}
+
+/* bpp is 2 or 4 bytes; pixels little-endian; bpp 2 compares the low 16 bits. */
+static inline struct hold_mismatch hold_mismatch_scan(const volatile void *plane,
+						      uint32_t pitch, uint32_t w, uint32_t h,
+						      uint32_t bpp, hold_expect_fn expect,
+						      void *ctx)
+{
+	const volatile uint8_t *b = (const volatile uint8_t *)plane;
+	struct hold_mismatch m = { 0, 0, 0, 0 };
 
 	for (uint32_t y = 0; y < h; y++) {
-		const volatile uint8_t *row = plane + (size_t)y * pitch;
 		bool hit = false;
 
 		for (uint32_t x = 0; x < w; x++) {
-			const volatile uint8_t *p = row + (size_t)x * bpp_bytes;
-			uint32_t got = 0;
+			uint32_t got = hold_load_px(b + (size_t)y * pitch + (size_t)x * bpp, bpp);
+			uint32_t want = expect(x, y, ctx);
 
-			for (uint32_t b = 0; b < bpp_bytes; b++)
-				got |= (uint32_t)p[b] << (8u * b);
-			m.checked++;
-			if (got == expect(ctx, x, y))
+			if (bpp < 4)
+				want &= (1u << (8u * bpp)) - 1u;
+			if (got == want)
 				continue;
-			if (!m.count) {
+			if (m.count == 0) {
 				m.first_x = x;
 				m.first_y = y;
 			}
@@ -142,175 +116,158 @@ static inline struct hc_mismatch hc_mismatch_scan(const volatile uint8_t *plane,
 	return m;
 }
 
-/* --- (d) FRCNT progress --------------------------------------------------- */
-
-static inline uint32_t hc_frcnt(uint32_t status)
+/* (d) FRCNT of a STATUS value. */
+static inline uint32_t hold_frcnt(uint32_t status)
 {
-	return (status >> HC_FRCNT_SHIFT) & HC_FRCNT_MASK;
+	return (status >> HOLD_FRCNT_SHIFT) & HOLD_FRCNT_MASK;
 }
 
-/* Frames passed from status a to the later status b, modulo 64 (0 = stalled;
- * a whole 64 frames in one interval also reads 0, 250 ms is 15 frames at 60 Hz). */
-static inline uint32_t hc_frcnt_delta(uint32_t a, uint32_t b)
+/* FRCNT must advance (mod 64) between every two samples. Returns -1 when it
+ * does, else the index of the first sample equal to its predecessor's. */
+static inline int hold_frcnt_stall(const uint32_t *status, unsigned int n)
 {
-	return (hc_frcnt(b) - hc_frcnt(a)) & (HC_FRCNT_MOD - 1u);
+	for (unsigned int i = 1; i < n; i++)
+		if (hold_frcnt(status[i]) == hold_frcnt(status[i - 1]))
+			return (int)i;
+	return -1;
 }
 
-/* --- (e) (f) one register sample ------------------------------------------ */
-
-/* All ones from a register: the block is unclocked or unpowered. */
-static inline bool hc_unclocked(uint32_t reg)
+/* (e) An all-ones read is an unclocked or unpowered block. */
+static inline bool hold_unclocked(uint32_t reg)
 {
-	return reg == HC_ALL_ONES;
+	return reg == HOLD_UNCLOCKED;
 }
 
-static inline bool hc_pv_running(uint32_t pv_control, uint32_t pv_vcontrol)
+/* (f) PV enabled and its video enable set. */
+static inline bool hold_pv_enabled(uint32_t pv_control, uint32_t pv_vcontrol)
 {
-	return (pv_control & HC_PV_CONTROL_EN) && (pv_vcontrol & HC_PV_VCONTROL_VIDEN);
+	return (pv_control & HOLD_PV_CONTROL_EN) && (pv_vcontrol & HOLD_PV_VCONTROL_VIDEN);
 }
 
-/* --- (g) the deadline clamp ----------------------------------------------- */
-
-struct hc_clamp {
-	uint32_t end_ms;	/* when the hold ends, on the same clock as start_ms */
-	uint32_t hold_ms;	/* end_ms - start_ms */
-	bool clamped;		/* the hold is shorter than wanted: report it */
-};
-
-/* hold_end_ms = min(start_ms + want_ms, hold_s * 1000 - 10000). The watchdog
- * deadline counts from boot (rpi_wdog.c:82-97), so start_ms is the uptime when
- * the hold starts. A limit at or before start_ms leaves no hold (end = start). */
-static inline struct hc_clamp hc_clamp_hold(uint32_t start_ms, uint32_t want_ms, uint32_t hold_s)
+/* (g) hold_end_ms = min(start + want, hold_s*1000 - 10000), the watchdog
+ * deadline being counted from boot. *clamped is set when shorter than wanted.
+ * A deadline at or before start gives start (no hold). */
+static inline uint32_t hold_clamp_end(uint32_t start_ms, uint32_t want_ms, uint32_t hold_s,
+				      bool *clamped)
 {
 	uint64_t want_end = (uint64_t)start_ms + want_ms;
-	uint64_t total = (uint64_t)hold_s * 1000u;
-	uint64_t limit = total > HC_WDOG_MARGIN_MS ? total - HC_WDOG_MARGIN_MS : 0u;
+	uint64_t wd = (uint64_t)hold_s * 1000u;
+	uint64_t limit = wd > HOLD_WDOG_MARGIN_MS ? wd - HOLD_WDOG_MARGIN_MS : 0u;
 	uint64_t end = want_end < limit ? want_end : limit;
-	struct hc_clamp c;
 
 	if (end < start_ms)
 		end = start_ms;
-	c.end_ms = (uint32_t)end;
-	c.hold_ms = (uint32_t)(end - start_ms);
-	c.clamped = end < want_end;
-	return c;
+	if (clamped)
+		*clamped = end < want_end;
+	return (uint32_t)end;
 }
 
-/* --- (h) the hold verdict ------------------------------------------------- */
-
-enum hc_reason {
-	HC_PASS = 0,
-	HC_UNCLOCKED,		/* a register read all ones */
-	HC_PV_DISABLED,		/* PV_CONTROL.EN or PV_V_CONTROL.VIDEN clear */
-	HC_FRCNT_STALLED,	/* FRCNT did not advance since the sample before */
-	HC_PTR_CHANGED,		/* the channel's list pointer is not the baseline's */
-	HC_LIST_CHANGED,	/* the display list words are not the baseline's */
-	HC_PLANE_CHANGED,	/* the plane hash is not the baseline's */
+/* (h) The combined verdict. */
+enum hold_reason {
+	HOLD_PASS = 0,
+	HOLD_UNCLOCKED_FAIL,  /* a register read all ones */
+	HOLD_PV_DISABLED,     /* PV EN or VIDEN clear */
+	HOLD_FRCNT_STALLED,   /* FRCNT did not advance */
+	HOLD_POINTER_CHANGED, /* the channel's list pointer register moved */
+	HOLD_LIST_CHANGED,    /* the display list's words changed */
+	HOLD_PLANE_CHANGED,   /* the plane's bytes changed */
 };
 
-static inline const char *hc_reason_name(enum hc_reason r)
+enum hold_redraw {
+	HOLD_REDRAW_NO = 0,
+	HOLD_REDRAW_A, /* the plane changed before our write */
+	HOLD_REDRAW_B, /* the plane changed during the hold */
+};
+
+struct hold_sample {
+	uint32_t status;       /* DISPx_STATUS */
+	uint32_t dl_ptr;       /* the list pointer register read */
+	uint32_t list_hash;    /* FNV-1a over the list words */
+	uint32_t plane_hash;   /* hold_rows_hash of the plane */
+	uint32_t rows_touched; /* rows differing from the reference, when plane_hash does */
+	uint32_t pv_control;
+	uint32_t pv_vcontrol;
+};
+
+struct hold_verdict {
+	bool pass;
+	enum hold_reason reason;
+	int index;             /* failing sample, -1 for none */
+	uint32_t rows_touched; /* for HOLD_PLANE_CHANGED */
+	enum hold_redraw redraw;
+};
+
+static inline const char *hold_reason_name(enum hold_reason r)
 {
 	switch (r) {
-	case HC_PASS:
+	case HOLD_PASS:
 		return "pass";
-	case HC_UNCLOCKED:
+	case HOLD_UNCLOCKED_FAIL:
 		return "unclocked";
-	case HC_PV_DISABLED:
-		return "pv disabled";
-	case HC_FRCNT_STALLED:
-		return "frcnt stalled";
-	case HC_PTR_CHANGED:
-		return "pointer changed";
-	case HC_LIST_CHANGED:
-		return "list changed";
-	case HC_PLANE_CHANGED:
-		return "plane changed";
+	case HOLD_PV_DISABLED:
+		return "pv-disabled";
+	case HOLD_FRCNT_STALLED:
+		return "frcnt-stalled";
+	case HOLD_POINTER_CHANGED:
+		return "pointer-changed";
+	case HOLD_LIST_CHANGED:
+		return "list-changed";
+	case HOLD_PLANE_CHANGED:
+		return "plane-changed";
 	}
 	return "?";
 }
 
-/* What the probe reads at one point of the hold. */
-struct hc_sample {
-	uint32_t status;	/* DISPx_STATUS */
-	uint32_t dl_ptr;	/* the channel's list pointer register (DISPx_LPTRS or _DL) */
-	uint32_t pv_control;
-	uint32_t pv_vcontrol;
-	uint32_t list_hash;	/* FNV-1a of the display list words */
-	uint32_t plane_hash;	/* hc_rows_hash() of the plane */
-	uint32_t rows_touched;	/* rows that differ from the baseline (hc_rows_changed), 0 if unknown */
-};
-
-struct hc_hold {
-	enum hc_reason reason;	/* HC_PASS, or the first failure */
-	uint32_t index;		/* the sample that failed (0 is the baseline); 0 on pass */
-	uint32_t rows_touched;	/* of that sample, for HC_PLANE_CHANGED */
-};
-
-/* Judge samples s[0..n-1]; s[0] is the baseline. */
-static inline struct hc_hold hc_judge_hold(const struct hc_sample *s, uint32_t n)
+static inline const char *hold_redraw_name(enum hold_redraw r)
 {
-	struct hc_hold r = { HC_PASS, 0, 0 };
+	return r == HOLD_REDRAW_A ? "yes-A" : r == HOLD_REDRAW_B ? "yes-B" : "no";
+}
 
-	for (uint32_t i = 0; i < n; i++) {
-		const struct hc_sample *c = &s[i];
-		enum hc_reason why = HC_PASS;
+/* ref is the state right after our write; s[0..n) the hold's samples. Per
+ * sample the checks run in the order unclocked, PV, FRCNT (against the
+ * previous sample, the reference for sample 0), pointer, list, plane; the
+ * first sample and check that fails name the verdict. before_write_changed:
+ * the plane already differed from what the firmware left before our write
+ * (redraw phase A). The redraw verdict is independent of the reason: A when
+ * set, else B when any sample's plane hash differs from ref. */
+static inline struct hold_verdict hold_judge(const struct hold_sample *ref,
+					     const struct hold_sample *s, unsigned int n,
+					     bool before_write_changed)
+{
+	struct hold_verdict v = { true, HOLD_PASS, -1, 0, HOLD_REDRAW_NO };
+	bool plane_moved = false;
 
-		if (hc_unclocked(c->status) || hc_unclocked(c->dl_ptr) ||
-		    hc_unclocked(c->pv_control) || hc_unclocked(c->pv_vcontrol))
-			why = HC_UNCLOCKED;
-		else if (!hc_pv_running(c->pv_control, c->pv_vcontrol))
-			why = HC_PV_DISABLED;
-		else if (i && !hc_frcnt_delta(s[i - 1].status, c->status))
-			why = HC_FRCNT_STALLED;
-		else if (i && c->dl_ptr != s[0].dl_ptr)
-			why = HC_PTR_CHANGED;
-		else if (i && c->list_hash != s[0].list_hash)
-			why = HC_LIST_CHANGED;
-		else if (i && c->plane_hash != s[0].plane_hash)
-			why = HC_PLANE_CHANGED;
-		if (why != HC_PASS) {
-			r.reason = why;
-			r.index = i;
-			r.rows_touched = c->rows_touched;
-			return r;
+	for (unsigned int i = 0; i < n; i++) {
+		const struct hold_sample *prev = i ? &s[i - 1] : ref;
+		enum hold_reason r = HOLD_PASS;
+
+		if (s[i].plane_hash != ref->plane_hash)
+			plane_moved = true;
+		if (!v.pass)
+			continue;
+		if (hold_unclocked(s[i].status) || hold_unclocked(s[i].pv_control) ||
+		    hold_unclocked(s[i].pv_vcontrol) || hold_unclocked(s[i].dl_ptr))
+			r = HOLD_UNCLOCKED_FAIL;
+		else if (!hold_pv_enabled(s[i].pv_control, s[i].pv_vcontrol))
+			r = HOLD_PV_DISABLED;
+		else if (hold_frcnt(s[i].status) == hold_frcnt(prev->status))
+			r = HOLD_FRCNT_STALLED;
+		else if (s[i].dl_ptr != ref->dl_ptr)
+			r = HOLD_POINTER_CHANGED;
+		else if (s[i].list_hash != ref->list_hash)
+			r = HOLD_LIST_CHANGED;
+		else if (s[i].plane_hash != ref->plane_hash)
+			r = HOLD_PLANE_CHANGED;
+		if (r != HOLD_PASS) {
+			v.pass = false;
+			v.reason = r;
+			v.index = (int)i;
+			v.rows_touched = s[i].rows_touched;
 		}
 	}
-	return r;
-}
-
-/* Did the firmware redraw: 'A' between the adopt and our write (the plane's
- * hash read at the adopt differs from the one read just before our write, with
- * nothing of ours in between), 'B' during the hold (plane changed), else 0. A is
- * the earlier and wins when both happened. */
-static inline char hc_redraw_phase(uint32_t hash_adopt, uint32_t hash_before_write,
-				   enum hc_reason hold_reason)
-{
-	if (hash_adopt != hash_before_write)
-		return 'A';
-	return hold_reason == HC_PLANE_CHANGED ? 'B' : 0;
-}
-
-struct hc_verdict {
-	bool pass;		/* the hold passed (a redraw in phase A does not fail it) */
-	enum hc_reason reason;
-	uint32_t index;
-	uint32_t rows_touched;
-	bool redraw;
-	char redraw_phase;	/* 'A', 'B' or 0 */
-};
-
-static inline struct hc_verdict hc_verdict_make(const struct hc_sample *s, uint32_t n,
-						uint32_t hash_adopt, uint32_t hash_before_write)
-{
-	struct hc_hold h = hc_judge_hold(s, n);
-	struct hc_verdict v;
-
-	v.pass = h.reason == HC_PASS;
-	v.reason = h.reason;
-	v.index = h.index;
-	v.rows_touched = h.rows_touched;
-	v.redraw_phase = hc_redraw_phase(hash_adopt, hash_before_write, h.reason);
-	v.redraw = v.redraw_phase != 0;
+	v.redraw = before_write_changed ? HOLD_REDRAW_A
+		   : plane_moved       ? HOLD_REDRAW_B
+				       : HOLD_REDRAW_NO;
 	return v;
 }
 
