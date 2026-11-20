@@ -646,7 +646,20 @@ An unknown stays an unknown. Each is a question with what would answer it.
     The HDMI port is a mini-HDMI "supporting a single display ... at up to 1080p
     at 60 Hz" (`rpidoc:zero/zero-models.adoc:55-56`).
 - **Q9. Can the vc4 drm-shim give the bytes of the lists and records on the
-  host?** Answer: build it and run item 1 of section 5.
+  host?** Yes, with a recorder in front of it (2026-11-20, `repo:tools/vc4/`).
+  The shim has no `DRM_VC4_SUBMIT_CL` entry at all (`vc4_noop.c`
+  `driver_ioctls`), so it answers the submit `-EINVAL`; `VC4_DEBUG=cl` prints
+  only the binner list, as text. `repo:tools/vc4/vc4_submit_rec.c`, an
+  `LD_PRELOAD` library loaded before the shim, writes each submit's
+  `struct drm_vc4_submit_cl` (user pointers zeroed), binner list, shader
+  records, uniforms, handle table and the BOs it names as raw bytes, then
+  passes the ioctl on. Shader code comes from `CREATE_SHADER_BO`'s data (the
+  shim keeps none), other BOs through Mesa's own mapping. The clear,
+  Gouraud-triangle and flat-triangle draws of `repo:tools/v3d/gl_ref.py` are
+  stored in `repo:tools/vc4/testdata/`; a second run is byte-identical, and
+  every binner-list opcode is one of `vc4_packet.h`'s. What the shim cannot
+  give is the render control list: the kernel builds it from the submit's
+  surface fields (`kernel/vc4_render_cl.c`).
 - **Q10. Are vertex-stage texture look-ups supported?** `vc4_screen.c:159-160`
   sets one sampler count for both stages; the ES 2.0 minimum is zero. We did
   not find the decision. Answer: `ntq_emit_tex` (`vc4_program.c:400`), the
@@ -686,7 +699,7 @@ week or more in units of that port, not calendar promises.
 | # | Item | Size | Check |
 |---|---|---|---|
 | 0 | Read the Linux files at the tag, the Broadcom guide and the Raspberry Pi sources raw; update the unknowns (done, second pass; the guide pages not read fall inside items 2 and 3) | S | each Q has a cited answer or a named board test |
-| 1 | `tools/vc4/`: Mesa vc4 + drm-shim build script, `vc4_shc`, a list recorder | M | clean build; stored reference words and lists |
+| 1 | `tools/vc4/`: Mesa vc4 + drm-shim build script, `vc4_shc`, a list recorder (done 2026-11-20: `drm_shim_ref.sh` build/run/shc, `vc4_submit_rec.c`, `vc4_shc.c` with `mesa-vc4_shc.patch`, the clear, triangle and flat submits and both programs' words in `testdata/`, `ref_selftest.py`; `tools/vc4/README.md`. Not covered: the render list, textures, points and lines, the gl_test corpus, which item 2 runs) | M | clean build; stored reference words and lists |
 | 2 | QPU ISA model, encoder, decoder, round trip (`src/shaderc/online/vc4/`) | M | round trip over the corpus and `vc4_qpu_disasm.c` vectors |
 | 3 | Packet and record encoders for binner and render lists; golden test | M | byte equality with item 1 |
 | 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only. **2026-11-20: upstream Zephyr has both (section 9); the item is now how our workspace gets them** | M | image builds in a gate row |

@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Draw a clear, or a clear and one triangle, through Mesa's GL driver, so the
-driver builds and submits one V3D job (the GL side of tools/v3d/drm_shim_ref.sh).
+driver builds and submits one job (the GL side of tools/v3d/drm_shim_ref.sh and
+tools/vc4/drm_shim_ref.sh).
 
-    tools/v3d/gl_ref.py <libdir> clear|triangle [--size WxH]
+    tools/v3d/gl_ref.py <libdir> clear|triangle|flat [--size WxH]
 
 <libdir> holds the libEGL.so.1 and libGLESv2.so.2 to use. The program runs on an
 EGL surfaceless display (EGL_PLATFORM_SURFACELESS_MESA, an OpenGL ES 2.0
@@ -19,6 +20,9 @@ runs on the drm-shim, where no job ever completes.
             shader and an interpolated-colour fragment shader, the pair of
             tools/shaders/passthrough.vert and interp_color.frag in GLSL ES
             1.00) with fixed vertices and colours, glDrawArrays(GL_TRIANGLES).
+  flat      the same clear, then the same triangle in one colour: a vertex
+            shader that passes the position only and a fragment shader that
+            writes the uniform u_color, set to (1, 0.5, 0, 1) with glUniform4f.
 
 The vertex data is fixed in this file so that the job's bytes are the same on
 every run. Prints the renderer and glGetError; exits non-zero on any EGL or GL
@@ -50,6 +54,14 @@ FS = b"""precision mediump float;
 varying vec4 v_color;
 void main() { gl_FragColor = v_color; }
 """
+FLAT_VS = b"""attribute vec4 a_pos;
+void main() { gl_Position = a_pos; }
+"""
+FLAT_FS = b"""precision mediump float;
+uniform vec4 u_color;
+void main() { gl_FragColor = u_color; }
+"""
+FLAT_COLOR = (1.0, 0.5, 0.0, 1.0)
 # clip-space positions and colours of the three vertices (vec4 each)
 POSITIONS = (-0.75, -0.75, 0.0, 1.0, 0.75, -0.75, 0.0, 1.0, 0.0, 0.75, 0.0, 1.0)
 COLORS = (1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0)
@@ -65,7 +77,7 @@ def main():
         except (ValueError, IndexError):
             size = ()
         del args[i:i + 2]
-    if len(args) != 2 or args[1] not in ("clear", "triangle") or len(size) != 2:
+    if len(args) != 2 or args[1] not in ("clear", "triangle", "flat") or len(size) != 2:
         print(__doc__, file=sys.stderr)
         return 2
     libdir, case = args
@@ -107,7 +119,7 @@ def main():
     gl.glClearColor(C.c_float(0), C.c_float(0), C.c_float(1), C.c_float(1))
     gl.glClear(GL_COLOR_BUFFER_BIT)
 
-    if case == "triangle":
+    if case in ("triangle", "flat"):
         def shader(kind, src):
             sh = gl.glCreateShader(kind)
             p = C.c_char_p(src)
@@ -122,10 +134,12 @@ def main():
             return sh
 
         prog = gl.glCreateProgram()
-        gl.glAttachShader(prog, shader(GL_VERTEX_SHADER, VS))
-        gl.glAttachShader(prog, shader(GL_FRAGMENT_SHADER, FS))
+        flat = case == "flat"
+        gl.glAttachShader(prog, shader(GL_VERTEX_SHADER, FLAT_VS if flat else VS))
+        gl.glAttachShader(prog, shader(GL_FRAGMENT_SHADER, FLAT_FS if flat else FS))
         gl.glBindAttribLocation(prog, 0, b"a_pos")
-        gl.glBindAttribLocation(prog, 1, b"a_color")
+        if not flat:
+            gl.glBindAttribLocation(prog, 1, b"a_color")
         gl.glLinkProgram(prog)
         ok = C.c_int()
         gl.glGetProgramiv(prog, GL_LINK_STATUS, C.byref(ok))
@@ -137,9 +151,14 @@ def main():
         pos = (C.c_float * 12)(*POSITIONS)
         col = (C.c_float * 12)(*COLORS)
         gl.glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, pos)
-        gl.glVertexAttribPointer(1, 4, GL_FLOAT, 0, 0, col)
+        if not flat:
+            gl.glVertexAttribPointer(1, 4, GL_FLOAT, 0, 0, col)
         gl.glEnableVertexAttribArray(0)
-        gl.glEnableVertexAttribArray(1)
+        if not flat:
+            gl.glEnableVertexAttribArray(1)
+        if flat:
+            loc = gl.glGetUniformLocation(prog, b"u_color")
+            gl.glUniform4f(loc, *(C.c_float(v) for v in FLAT_COLOR))
         gl.glDrawArrays(GL_TRIANGLES, 0, 3)
     gl.glFlush()
     err = gl.glGetError()

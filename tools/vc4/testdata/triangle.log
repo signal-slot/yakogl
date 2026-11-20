@@ -1,0 +1,131 @@
+MESA: info: MESA_SHADER_FRAGMENT prog 1/2 QPU:
+MESA: info: 0x100049e0203e303e nop nop, r0, r0 ; fmul r0, vary, ra15
+MESA: info: 0x10024862213e317e fadd r1, r0, r5 ; fmul r2, vary, ra15
+MESA: info: 0x114258c0819e7549 fadd r3, r2, r5 ; mov ra0.8a, r1
+MESA: info: 0x115059c0809e701b nop nop, r0, r0 ; mov ra0.8b, r3
+MESA: info: 0x100049e0203e303e nop nop, r0, r0 ; fmul r0, vary, ra15
+MESA: info: 0x10024862213e317e fadd r1, r0, r5 ; fmul r2, vary, ra15
+MESA: info: 0x116258c0819e7549 fadd r3, r2, r5 ; mov ra0.8c, r1
+MESA: info: 0x117059c0809e701b nop nop, r0, r0 ; mov ra0.8d, r3
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x10020ba715027d80 mov tlb_color_all, ra0 ; nop nop, r0, r0
+MESA: info: 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x500009e7009e7000 sig_unlock_score nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 
+MESA: info: MESA_SHADER_VERTEX prog 0/1 QPU:
+MESA: info: 0xe0024c6700801a00 load_imm vr_setup, nop, 0x00801a00 (0.000000)
+MESA: info: 0x100049e220c20037 nop nop, r0, r0 ; fmul r2, vpm_read, uni
+MESA: info: 0x100049c020c20037 nop nop, r0, r0 ; fmul rb0, vpm_read, uni
+MESA: info: 0x100059c120c20037 nop nop, r0, r0 ; fmul ra1, vpm_read, uni
+MESA: info: 0x100208e715c27d80 mov r3, vpm_read ; nop nop, r0, r0
+MESA: info: 0x10021d27159e76c0 mov sfu_recip, r3 ; nop nop, r0, r0
+MESA: info: 0xe0025c6700001a00 load_imm vw_setup, nop, 0x00001a00 (0.000000)
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100049e0209e701c nop nop, r0, r0 ; fmul r0, r3, r4
+MESA: info: 0xd0020867029e1e00 sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0
+MESA: info: 0x100049e3209e7021 nop nop, r0, r0 ; fmul r3, r4, r1
+MESA: info: 0x100049e0209e7013 nop nop, r0, r0 ; fmul r0, r2, r3
+MESA: info: 0x10124021279c003b ftoi ra0.16a, r0, r0 ; fmul r1, rb0, r3
+MESA: info: 0x1022402227067273 ftoi ra0.16b, r1, r1 ; fmul r2, ra1, r3
+MESA: info: 0x1002082715c27d80 mov r0, vpm_read ; nop nop, r0, r0
+MESA: info: 0x10020c2715027d80 mov vpm, ra0 ; nop nop, r0, r0
+MESA: info: 0x10024c2181c205f6 fadd vpm, r2, uni ; mov r1, vpm_read
+MESA: info: 0x100248b095c27d9b mov r2, vpm_read ; mov vpm, r3
+MESA: info: 0x100248f095c27d80 mov r3, vpm_read ; mov vpm, r0
+MESA: info: 0x10020c27159e7240 mov vpm, r1 ; nop nop, r0, r0
+MESA: info: 0x10020c27159e7480 mov vpm, r2 ; nop nop, r0, r0
+MESA: info: 0x10020c27159e76c0 mov vpm, r3 ; nop nop, r0, r0
+MESA: info: 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 
+MESA: info: MESA_SHADER_COORD prog 0/2 QPU:
+MESA: info: 0xe0024c6700401a00 load_imm vr_setup, nop, 0x00401a00 (0.000000)
+MESA: info: 0x100208e715c27d80 mov r3, vpm_read ; nop nop, r0, r0
+MESA: info: 0x100208a715c27d80 mov r2, vpm_read ; nop nop, r0, r0
+MESA: info: 0x1002006715c27d80 mov ra1, vpm_read ; nop nop, r0, r0
+MESA: info: 0xe0025c6700001a00 load_imm vw_setup, nop, 0x00001a00 (0.000000)
+MESA: info: 0x10024c2095c276f6 mov vpm, r3 ; mov r0, vpm_read
+MESA: info: 0x10024c34959e7480 mov vpm, r2 ; mov sfu_recip, r0
+MESA: info: 0x10024c2235060d97 mov vpm, ra1 ; fmul r2, r2, uni
+MESA: info: 0x10020c27159e7000 mov vpm, r0 ; nop nop, r0, r0
+MESA: info: 0x100049e0209e7004 nop nop, r0, r0 ; fmul r0, r0, r4
+MESA: info: 0xd0020867029e1e00 sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0
+MESA: info: 0x100049c0209e7021 nop nop, r0, r0 ; fmul rb0, r4, r1
+MESA: info: 0x100049e02082701e nop nop, r0, r0 ; fmul r0, r3, uni
+MESA: info: 0x100049e1209c0007 nop nop, r0, r0 ; fmul r1, r0, rb0
+MESA: info: 0x10124023279c0257 ftoi ra0.16a, r1, r1 ; fmul r3, r2, rb0
+MESA: info: 0x10224022270606f7 ftoi ra0.16b, r3, r3 ; fmul r2, ra1, uni
+MESA: info: 0x100049e3209c0017 nop nop, r0, r0 ; fmul r3, r2, rb0
+MESA: info: 0x10020c2715027d80 mov vpm, ra0 ; nop nop, r0, r0
+MESA: info: 0x10020c2701827780 fadd vpm, r3, uni ; nop nop, r0, r0
+MESA: info: 0x10020c27159c0fc0 mov vpm, rb0 ; nop nop, r0, r0
+MESA: info: 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 
+MESA: info: BCL:
+MESA: info: 0x00000000 0x00000000: 0x70 Tile Binning Mode Configuration
+MESA: info:     Tile Allocation memory address: 0
+MESA: info:     Tile Allocation memory size: 0
+MESA: info:     Tile State Data Array Address: 0
+MESA: info:     Width (in tiles): 1
+MESA: info:     Height (in tiles): 1
+MESA: info:     Multisample Mode (4x): 0 /* false */
+MESA: info:     Tile Buffer 64-bit Color Depth: 0 /* false */
+MESA: info:     Auto-initialise Tile State Data Array: 0 /* false */
+MESA: info:     Tile Allocation Initial Block Size: 0 /* block size 32 */
+MESA: info:     Tile Allocation Block Size: 0 /* block size 32 */
+MESA: info:     Double-buffer in non-ms mode: 0 /* false */
+MESA: info: 0x00000010 0x00000010: 0x06 Start Tile Binning
+MESA: info: 0x00000011 0x00000011: 0x38 Primitive List Format
+MESA: info:     Primitive Type: 2 /* Triangles List */
+MESA: info:     Data Type: 1 /* 16-bit index */
+MESA: info: 0x00000013 0x00000013: 0x66 Clip Window
+MESA: info:     Clip Window Left Pixel Coordinate: 0
+MESA: info:     Clip Window Bottom Pixel Coordinate: 0
+MESA: info:     Clip Window Width in pixels: 64
+MESA: info:     Clip Window Height in pixels: 64
+MESA: info: 0x0000001c 0x0000001c: 0x60 Configuration Bits
+MESA: info:     Enable Forward Facing Primitive: 1 /* true */
+MESA: info:     Enable Reverse Facing Primitive: 1 /* true */
+MESA: info:     Clockwise Primitives: 0 /* false */
+MESA: info:     Enable Depth Offset: 0 /* false */
+MESA: info:     Antialiased Points and Lines: 0 /* false */
+MESA: info:     Coverage Read Type: 0
+MESA: info:     Rasteriser Oversample Mode: 0
+MESA: info:     Coverage Pipe Select: 0 /* false */
+MESA: info:     Coverage Read Mode: 0
+MESA: info:     Depth-Test Function: 7 /* ALWAYS */
+MESA: info:     Z updates enable: 0 /* false */
+MESA: info:     Early Z enable: 0 /* false */
+MESA: info:     Early Z updates enable: 1 /* true */
+MESA: info: 0x00000020 0x00000020: 0x65 Depth Offset
+MESA: info:     Depth Offset Factor: 0
+MESA: info:     Depth Offset Units: 0
+MESA: info: 0x00000025 0x00000025: 0x62 Point size
+MESA: info:     Point Size: 1.000000
+MESA: info: 0x0000002a 0x0000002a: 0x63 Line width
+MESA: info:     Line width: 1.000000
+MESA: info: 0x0000002f 0x0000002f: 0x69 Clipper XY Scaling
+MESA: info:     Viewport Half-Width in 1/16th of pixel: 512.000000
+MESA: info:     Viewport Half-Height in 1/16th of pixel: 512.000000
+MESA: info: 0x00000038 0x00000038: 0x6a Clipper Z Scale and Offset
+MESA: info:     Viewport Z Scale (Zc to Zs): 0.500000
+MESA: info:     Viewport Z Offset (Zc to Zs): 0.500000
+MESA: info: 0x00000041 0x00000041: 0x67 Viewport Offset
+MESA: info:     Viewport Centre X-coordinate: 32.000000
+MESA: info:     Viewport Centre Y-coordinate: 32.000000
+MESA: info: 0x00000046 0x00000046: 0x61 Flat Shade Flags
+MESA: info:     Flat-shading Flags: 0
+MESA: info: 0x0000004b 0x0000004b: 0x40 GL Shader State
+MESA: info:     Address: 2
+MESA: info:     Number of attribute arrays: 2
+MESA: info:     Extended shader record: 0 /* false */
+MESA: info: 0x00000050 0x00000050: 0x21 Vertex Array Primitives
+MESA: info:     Primitive mode: 4 /* TRIANGLES */
+MESA: info:     Length: 3
+MESA: info:     Index of First Vertex: 0
+DRM_SHIM: unhandled driver DRM ioctl 0 (0x0) (0xc0b06440)
+MESA: warning: Draw call returned Success.  Expect corruption.
