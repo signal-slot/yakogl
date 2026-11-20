@@ -7,4 +7,4 @@
 
 pub mod gpu_power;
 #[cfg(test)]
-mod gpu_power_tests;
+pub(crate) mod gpu_power_tests;

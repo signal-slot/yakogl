@@ -54,6 +54,11 @@ mod hdmi;
 /// `yakogl,samsung-dsim`; ip::lcdifv3, ip::samsung_dsim): src/ffi/imx8mp_dsi.rs.
 #[cfg(any(feature = "imx8mp", test))]
 mod imx8mp_dsi;
+/// The Verdin iMX95's Mali bring-up, `yd_imx95_osal_up` (board::imx95_gpu:
+/// the SCMI power-on, then the Mali OSAL whose ops are ffi::rk3588's
+/// `yd_t6_osal_*`): src/ffi/imx95.rs.
+#[cfg(any(all(feature = "imx95", feature = "rk3588", feature = "mali"), test))]
+mod imx95;
 /// The i.MX WDOG self-arm (ip::imx_wdog; the shim is
 /// driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c): src/ffi/imx_wdog.rs.
 #[cfg(any(feature = "imx8mp", test))]
