@@ -98,11 +98,12 @@ class Single(Env):
         r = self.run_tool("print", img, "--no-such-option")
         self.assertEqual(r.returncode, 2)
         self.assertIn(b"unrecognized arguments: --no-such-option", r.stderr)
-        # An option after -n is not a name, and `--` is not taken as one.
-        for tail in (["-n", "-x"], ["-n", "--", "boot_targets"]):
-            r = self.run_tool("print", img, *tail)
-            self.assertEqual(r.returncode, 2, tail)
-            self.assertIn(b"unrecognized arguments", r.stderr)
+        # An option after -n is not a name. (`--` is not pinned: argparse
+        # 3.12.3 leaves it in the leftovers, which refuses it, and 3.14.4
+        # takes it as the end of the options and the name after it as a name.)
+        r = self.run_tool("print", img, "-n", "-x")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn(b"unrecognized arguments", r.stderr)
 
     def test_print_layout_options_are_not_names(self):
         # The value of a layout option is its own, before or after the
