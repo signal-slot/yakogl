@@ -27,6 +27,7 @@
 #include "../rpi5_scanout/edid.h"
 #include "../rpi5_scanout/fb_flush.h"
 #include "../rpi5_scanout/fb_query.h"
+#include "../rpi5_scanout/fbcon565.h"
 #include "../rpi5_scanout/fw_clk.h"
 #include "../rpi5_scanout/fw_info.h"
 #include "../rpi5_scanout/fw_stop.h"
@@ -58,6 +59,7 @@
 #include "../rpi5_scanout/edid.h"
 #include "../rpi5_scanout/fb_flush.h"
 #include "../rpi5_scanout/fb_query.h"
+#include "../rpi5_scanout/fbcon565.h"
 #include "../rpi5_scanout/fw_clk.h"
 #include "../rpi5_scanout/fw_info.h"
 #include "../rpi5_scanout/fw_stop.h"
@@ -92,6 +94,7 @@ int main(void)
 	touched = (intptr_t)&edid_build_request; /* edid.h */
 	touched = (intptr_t)&fb_flush_range; /* fb_flush.h */
 	touched = (intptr_t)&fbq_build_query; /* fb_query.h */
+	touched = (intptr_t)&yd5_fc565_pack; /* fbcon565.h */
 	touched = (intptr_t)&yd5_fwclk_build_query; /* fw_clk.h */
 	touched = (intptr_t)&fw_info_request; /* fw_info.h */
 	touched = (intptr_t)&fw_stop_plan; /* fw_stop.h */
