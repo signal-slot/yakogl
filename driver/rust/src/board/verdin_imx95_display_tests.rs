@@ -23,13 +23,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::vec::Vec;
 
-const FB: Framebuffer = Framebuffer { addr: 0x9000_0000, stride: 1280 * 4 };
+pub(crate) const FB: Framebuffer = Framebuffer { addr: 0x9000_0000, stride: 1280 * 4 };
 
 /// The display blocks to the display model, everything else to the DSI
 /// model; the display's writes also go into the joined log.
-struct Joined {
-    display: Display,
-    soc: Soc,
+pub(crate) struct Joined {
+    pub(crate) display: Display,
+    pub(crate) soc: Soc,
 }
 
 fn display_block(a: usize) -> bool {
@@ -62,14 +62,14 @@ impl Mmio for Joined {
     }
 }
 
-struct Rig {
-    log: Log,
-    m: Joined,
-    sm: LogSm,
-    env: LogEnv,
+pub(crate) struct Rig {
+    pub(crate) log: Log,
+    pub(crate) m: Joined,
+    pub(crate) sm: LogSm,
+    pub(crate) env: LogEnv,
 }
 
-fn rig() -> Rig {
+pub(crate) fn rig() -> Rig {
     let log: Log = Rc::new(RefCell::new(Vec::new()));
     let sm = Rc::new(RefCell::new(Sm::verdin()));
     let cfg = Config::verdin(FB);

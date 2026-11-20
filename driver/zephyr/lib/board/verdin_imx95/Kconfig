@@ -16,7 +16,9 @@ config YAKOGL_VERDIN_IMX95
 	  prints no "board: watchdog armed" line, so tools/board.sh refuses
 	  it). With YAKOGL_GPU_MALI, verdin_imx95_mali.c is the Mali OSAL's
 	  board half: the CSF firmware, the GPU's power-on over SCMI to the
-	  System Manager and its bring-up (yd_imx95_osal_up).
+	  System Manager and its bring-up (yd_imx95_osal_up), over the
+	  board's one raw SCMI channel (verdin_imx95_scmi.c), which the
+	  display shares.
 
 if YAKOGL_VERDIN_IMX95
 
@@ -38,7 +40,29 @@ config YAKOGL_BOARD_VERDIN_IMX95
 	def_bool YAKOGL_BOARD && YAKOGL_VERDIN_IMX95
 	help
 	  The board layer (yakogl_board.h) on the Verdin iMX95's A55
-	  (board_verdin_imx95.c): no window or screen yet (board_window()
-	  refuses with a line that says so); record: the yk-record line on
-	  the console UART; reset: verdin_imx95_reset(); no watchdog
+	  (board_verdin_imx95.c): the windows in the Mali carve-out's window
+	  memory (YAKOGL_MALI_WINDOW_BYTES), the screen with
+	  YAKOGL_VERDIN_IMX95_DISPLAY; record: the yk-record line on the
+	  console UART; reset: verdin_imx95_reset(); no watchdog
 	  (YAKOGL_VERDIN_IMX95).
+
+config YAKOGL_VERDIN_IMX95_DISPLAY
+	bool "The Toradex 10.1\" DSI display on X4 is the board layer's screen"
+	default y
+	depends on YAKOGL_BOARD_VERDIN_IMX95 && YAKOGL_GPU_MALI
+	depends on DT_HAS_YAKOGL_IMX95_DSI_DISPLAY_ENABLED
+	select YAKOGL_DRV_DISPLAY_RUST
+	select I2C
+	select GPIO
+	select PINCTRL
+	help
+	  verdin_imx95_display.c: board_show() puts the window on the
+	  Toradex Capacitive Touch Display 10.1" DSI (1280x800) on the
+	  Mallow's X4, cold, in the order of driver/docs/imx95-display.md
+	  section 4(b) (yd_imx95_display_up / _flip / _down of the drivers
+	  crate, feature imx95). The blocks and the bridge are the
+	  x4_display node (the board layer's app.overlay); the bridge's
+	  I2C is Zephyr's nxp,lpi2c driver on LPI2C3, its EN Zephyr's
+	  nxp,pcal6416 driver on the module's expander (LPI2C2, line 3),
+	  both buses and the expander initialised at the first show after
+	  their SCMI clocks are on. The SCMI channel is the GPU's.

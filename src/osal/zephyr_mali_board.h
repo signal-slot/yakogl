@@ -42,6 +42,16 @@ int osal_zephyr_mali_board_up(const struct osal_zephyr_mali_init *fw,
 			      void (*on_handover)(const struct yd_t6_gpu_up *h),
 			      struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *o);
 
+/* The board's window memory: the carve-out's last
+ * CONFIG_YAKOGL_MALI_WINDOW_BYTES, which the OSAL's allocator never hands
+ * out and the GPU reaches through map_phys. Its physical address, the CPU's
+ * view (Normal non-cacheable, zeroed once: the OSAL's memory is made so at
+ * the first of this call and init, so neither the CPU nor the GPU needs a
+ * cache operation for it) and its size. Callable before eglInitialize
+ * (board_window()); main only. -ENOTSUP when the option is 0, or the
+ * error of making the memory uncached. */
+int osal_zephyr_mali_window_mem(uintptr_t *phys, void **cpu, size_t *bytes);
+
 /* "Still making progress": the board's watchdog feed, called by the OSAL in
  * every delay (its waits poll) and around the bring-up. Any context. */
 void osal_zephyr_mali_board_feed(void);

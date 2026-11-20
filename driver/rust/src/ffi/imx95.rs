@@ -8,6 +8,8 @@
 //! After it the OSAL ops are the `yd_t6_osal_*` entries, which touch the GPU
 //! and the OSAL's memory only.
 
+#[cfg(feature = "mali")]
+use super::imx95_display::CScmi;
 use super::rk3588::{ident_words, lo_hi, YdT6GpuUp};
 use crate::board::imx95_gpu::{self, GpuUp};
 use core::mem::{offset_of, size_of};
@@ -91,25 +93,6 @@ impl From<&GpuUp> for YdT6GpuUp {
             refusal: g.refusal,
             detail: lo_hi(g.detail),
             ..YdT6GpuUp::default()
-        }
-    }
-}
-
-/// The board's SCMI channel to the System Manager: `xfer(tx, tx_len, rx,
-/// rx_cap)` sends the command `tx` (header and payload, as built) and
-/// writes the whole reply to `rx` (header, status, return values); it
-/// returns the reply's length in bytes, or a negative errno.
-#[cfg(feature = "mali")]
-struct CScmi(extern "C" fn(*const u8, usize, *mut u8, usize) -> i32);
-
-#[cfg(feature = "mali")]
-impl crate::firmware::scmi::Transport for CScmi {
-    fn transfer(&mut self, tx: &[u8], rx: &mut [u8]) -> Result<usize, i32> {
-        let n = (self.0)(tx.as_ptr(), tx.len(), rx.as_mut_ptr(), rx.len());
-        if n < 0 {
-            Err(n)
-        } else {
-            Ok(n as usize)
         }
     }
 }

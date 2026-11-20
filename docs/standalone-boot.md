@@ -579,10 +579,15 @@ yet. What exists is a build. `tools/check.sh` builds `examples/triangle` for
 image (Mali-G310, built only), -Werror on our C files`), from the board
 `driver/boards/toradex/verdin_imx95`, which is derived from Zephyr's
 `imx95_evk` A55 board at the workspace pin, and the board glue
-`driver/zephyr/lib/board/verdin_imx95`. The image has no display, arms no
-watchdog, and does not bring up the GPU; each of these is a stub that says
-so on the console. The route below is the documented one, and the open
-questions at the end are what a first session must answer.
+`driver/zephyr/lib/board/verdin_imx95`. The image brings the GPU up over
+SCMI behind `eglInitialize`, renders the triangle into a window in the Mali
+carve-out, and shows it on the Toradex Capacitive Touch Display 10.1" DSI
+on the Mallow's X4 (`board_show()`: the window, 1024x600, is copied into a
+1280x800 screen buffer at the panel's top left, and the first show brings
+the display up cold, `driver/docs/imx95-display.md` section 4(b)). It arms
+no watchdog: that is a stub that says so on the console. The route below is
+the documented one, and the open questions at the end are what a first
+session must answer.
 
 ### The boot chain
 
@@ -682,6 +687,20 @@ The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
    `yd_imx95_osal_up`). What the board answers on day one: the SM's
    replies over the channel after U-Boot's `go`, the G310's identity words,
    the firmware's GLB version.
+7. **The X4 display** is in the image, not run: the board layer's first
+   `board_show()` turns the LPI2C2 and LPI2C3 clocks on over SCMI,
+   initialises Zephyr's `nxp,lpi2c` buses and the module's PCAL6416A
+   (`nxp,pcal6416`; all three are `zephyr,deferred-init` in the board's
+   devicetree, nothing touches them at boot), drives `GPIO_10_DSI`
+   (expander line 3) low, puts TPM6 channel 2 on its pad, and runs
+   `yd_imx95_display_up`: the twelve steps of `driver/docs/imx95-display.md`
+   section 4(b) over the same SCMI channel as the GPU
+   (`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_display.c`,
+   `verdin_imx95_scmi.c`). The console then has one `verdin_imx95: display
+   up: ...` line (pixel clock, lane rate, the bridge's `IRQ_STAT`) or
+   `verdin_imx95: display stopped: ...` after the line that names the step.
+   What the board answers on day one: that line, then whether the panel
+   shows the triangle at its top left on black.
 
 ## On the boards
 

@@ -235,6 +235,12 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     # rk3588 feature; no RK3588 power-on is linked (nothing references it).
     list(APPEND _yd_features imx95 rk3588 mali)
   endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)
+    # The Verdin iMX95's picture on X4, yd_imx95_display_* (ffi::imx95_display
+    # over board::verdin_imx95_display; driver/zephyr/lib/board/verdin_imx95/
+    # verdin_imx95_display.c).
+    list(APPEND _yd_features imx95)
+  endif()
   if(CONFIG_YAKOGL_STM32MP2_GPU)
     # soc::stm32mp2's GPU power C ABI (gpu_ffi.rs over gpu::vivante's
     # identity table) behind lib/board/stm32mp2/include/stm32mp2_gpu.h
