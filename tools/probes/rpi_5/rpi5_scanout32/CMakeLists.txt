@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # rpi5_scanout32: stage 2 of docs/notes/rpi5-display.md (our own 32 bpp
 # XRGB8888 plane after word 32 of the firmware's display list, swapped in at
-# vblank). This skeleton only reads: the HVS version, channel 0 and the
-# firmware's list. See README.md.
+# vblank between buffers A and B, then the firmware's list restored
+# byte-equal). See README.md.
 #
 #   west build -p always -b rpi_5 -d build/rpi5_scanout32 yakogl/tools/probes/rpi_5/rpi5_scanout32 \
 #     -- -DYAKOGL_WERROR=ON
