@@ -24,3 +24,15 @@ mod display_tests;
 mod gpu_power_tests;
 #[cfg(test)]
 pub(crate) mod sm_mock;
+
+// The DSI output: CAMERA power and clocks over SCMI (dsi_power), the DSI
+// host's i.MX 95 side (dsi, combo_phy); board::verdin_imx95_dsi drives them.
+pub mod combo_phy;
+#[cfg(test)]
+mod combo_phy_tests;
+pub mod dsi;
+#[cfg(test)]
+pub(crate) mod dsi_model;
+pub mod dsi_power;
+#[cfg(test)]
+mod dsi_power_tests;
