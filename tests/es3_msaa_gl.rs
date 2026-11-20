@@ -12,8 +12,10 @@
 //! The capability-on half runs on a second stand-in table that says
 //! `max_samples` 4 (`context_ms4`): GL_MAX_SAMPLES 4, renderbuffers stored
 //! with 4, completeness on the real counts, FBO draws of 4 samples
-//! (gl-msaa-cap). The `#[ignore]`d tests are the resolve blit; each ignore
-//! reason names `gl-msaa-resolve` and the note's (b) item.
+//! (gl-msaa-cap), and the resolve blit (gl-msaa-resolve). That table's
+//! `finish` stands in for the job-end resolve of note (b)7: it writes the
+//! resolved colour into the renderbuffer's memory then, and not before, so a
+//! blit that copied without waiting for the job would read zeros.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_msaa_gl
@@ -71,9 +73,68 @@ struct Seen {
 
 static SEEN: Mutex<Vec<Seen>> = Mutex::new(Vec::new());
 
+/// The 4x targets drawn since the last `finish`: (`target_gpu`, w, h).
+static PENDING: Mutex<Vec<(u64, u32, u32)>> = Mutex::new(Vec::new());
+
+/// The colour the stand-in's job-end resolve leaves in an RGBA8 target.
+const RESOLVED: [u8; 4] = [0x40, 0x80, 0xc0, 0xff];
+
 unsafe extern "C" fn b_draw(d: *const GlesDraw) -> i32 {
     let d = &*d;
     SEEN.lock().unwrap().push(Seen { draws: d.index_count != 0, samples: d.samples });
+    if d.samples > 1 {
+        PENDING.lock().unwrap().push((d.target_gpu, d.target_w, d.target_h));
+    }
+    0
+}
+
+/// Note (b)7 in the stand-in: when the jobs are complete, `rb.mem` of every
+/// 4x renderbuffer drawn holds the resolved colour, and not before (a copy
+/// that did not wait reads the zeros the storage was made with).
+unsafe extern "C" fn b_finish_resolve() -> i32 {
+    for (gpu, w, h) in core::mem::take(&mut *PENDING.lock().unwrap()) {
+        /* the stand-in OSAL's gpu address is the CPU pointer; RGBA8 rows of w*4 */
+        let px = core::slice::from_raw_parts_mut(gpu as *mut [u8; 4], (w * h) as usize);
+        px.fill(RESOLVED);
+    }
+    0
+}
+
+/// What `depth_resolve` / `stencil_resolve` were asked for: (id, w, h).
+static DS_READS: Mutex<Vec<(u32, u32, u32)>> = Mutex::new(Vec::new());
+/// One `ds_write`: (id, plane, x, y, w, h, the first element as bits).
+type DsWrite = (u32, u32, u32, u32, u32, u32, u32);
+/// What `ds_write` was handed.
+static DS_WRITES: Mutex<Vec<DsWrite>> = Mutex::new(Vec::new());
+
+/// The depth the stand-in keeps for every object: one sample a pixel (note (b)8).
+const DEPTH: f32 = 0.375;
+const STENCIL: u8 = 0x5a;
+
+unsafe extern "C" fn b_depth_resolve(id: u32, dst: *mut f32, w: u32, h: u32, pitch: u32) -> i32 {
+    DS_READS.lock().unwrap().push((id, w, h));
+    core::slice::from_raw_parts_mut(dst, (pitch * h) as usize).fill(DEPTH);
+    0
+}
+unsafe extern "C" fn b_stencil_resolve(id: u32, dst: *mut u8, w: u32, h: u32, pitch: u32) -> i32 {
+    DS_READS.lock().unwrap().push((id, w, h));
+    core::slice::from_raw_parts_mut(dst, (pitch * h) as usize).fill(STENCIL);
+    0
+}
+#[allow(clippy::too_many_arguments)]
+unsafe extern "C" fn b_ds_write(
+    id: u32,
+    plane: u32,
+    src: *const c_void,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    _pitch: u32,
+) -> i32 {
+    let first =
+        if plane == backend::DS_PLANE_STENCIL { *(src as *const u8) as u32 } else { (*(src as *const f32)).to_bits() };
+    DS_WRITES.lock().unwrap().push((id, plane, x, y, w, h, first));
     0
 }
 
@@ -143,7 +204,16 @@ static BACKEND: YakoglBackend = YakoglBackend {
 };
 
 /// [`BACKEND`] with the multisample capability on: it keeps 4 samples.
-static BACKEND_MS4: YakoglBackend = YakoglBackend { max_samples: 4, ..BACKEND };
+static BACKEND_MS4: YakoglBackend = YakoglBackend { max_samples: 4, finish: Some(b_finish_resolve), ..BACKEND };
+
+/// [`BACKEND_MS4`] that also keeps depth/stencil planes per object and reads
+/// them back one sample a pixel (note (b)8).
+static BACKEND_MS4_DS: YakoglBackend = YakoglBackend {
+    depth_resolve: Some(b_depth_resolve),
+    stencil_resolve: Some(b_stencil_resolve),
+    ds_write: Some(b_ds_write),
+    ..BACKEND_MS4
+};
 
 /// One context for the whole file; the tests take turns on it.
 static LOCK: Mutex<()> = Mutex::new(());
@@ -175,6 +245,9 @@ fn context_on(table: &'static YakoglBackend) -> MutexGuard<'static, ()> {
         glFinish();
     }
     SEEN.lock().unwrap().clear();
+    PENDING.lock().unwrap().clear();
+    DS_READS.lock().unwrap().clear();
+    DS_WRITES.lock().unwrap().clear();
     // SAFETY: plain GL call.
     while unsafe { glGetError() } != GL_NO_ERROR {}
     g
@@ -332,18 +405,24 @@ fn program() {
     }
 }
 
-/// Draw one triangle and hand back what the back end was given for it.
-fn draw() -> Seen {
+/// Draw one triangle over the bound framebuffer, the job left unfinished.
+fn draw_unfinished() {
     static TRI: [f32; 12] = [-1.0, -1.0, 0.0, 1.0, 3.0, -1.0, 0.0, 1.0, -1.0, 3.0, 0.0, 1.0];
-    SEEN.lock().unwrap().clear();
     // SAFETY: TRI is static and outlives the draw.
     unsafe {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, TRI.as_ptr() as *const c_void);
         glEnableVertexAttribArray(0);
         glDrawArrays(GL_TRIANGLES, 0, 3);
-        glFinish();
     }
+}
+
+/// Draw one triangle and hand back what the back end was given for it.
+fn draw() -> Seen {
+    SEEN.lock().unwrap().clear();
+    draw_unfinished();
+    // SAFETY: plain GL call.
+    unsafe { glFinish() };
     assert_eq!(err(), GL_NO_ERROR);
     let s = core::mem::take(&mut *SEEN.lock().unwrap());
     s.into_iter().rev().find(|s| s.draws).expect("the draw reached the back end")
@@ -352,26 +431,58 @@ fn draw() -> Seen {
 /// glBlitFramebuffer of colour from `read` to `draw_fb` over the given
 /// rectangles; the GL error.
 fn blit(read: GLuint, draw_fb: GLuint, src: [GLint; 4], dst: [GLint; 4]) -> GLenum {
+    blit_with(read, draw_fb, src, dst, GL_COLOR_BUFFER_BIT, GL_NEAREST)
+}
+
+/// glBlitFramebuffer from `read` to `draw_fb` with any mask and filter; the
+/// GL error.
+fn blit_with(
+    read: GLuint,
+    draw_fb: GLuint,
+    src: [GLint; 4],
+    dst: [GLint; 4],
+    mask: GLbitfield,
+    filter: GLenum,
+) -> GLenum {
     // SAFETY: plain GL calls on names this test made.
     unsafe {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, read);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw_fb);
         glReadBuffer(GL_COLOR_ATTACHMENT0);
         while glGetError() != GL_NO_ERROR {}
-        glBlitFramebuffer(
-            src[0],
-            src[1],
-            src[2],
-            src[3],
-            dst[0],
-            dst[1],
-            dst[2],
-            dst[3],
-            GL_COLOR_BUFFER_BIT,
-            GL_NEAREST,
-        );
+        glBlitFramebuffer(src[0], src[1], src[2], src[3], dst[0], dst[1], dst[2], dst[3], mask, filter);
     }
     err()
+}
+
+/// The 8x8 RGBA8 pixels of colour attachment 0 of single-sample `fb`, row
+/// by row from the bottom.
+fn pixels(fb: GLuint) -> Vec<[u8; 4]> {
+    let mut px = vec![[0x11u8; 4]; 64];
+    // SAFETY: room for 8x8 RGBA/UNSIGNED_BYTE pixels (rows of 32 bytes).
+    unsafe {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fb);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px.as_mut_ptr() as *mut c_void);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    px
+}
+
+/// A 4x RGBA8 framebuffer drawn into, its job submitted but not finished.
+fn drawn_4x() -> Fbo {
+    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    program();
+    draw_unfinished();
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(PENDING.lock().unwrap().len(), 1, "the 4x draw's job is pending");
+    src
+}
+
+/// Is pixel (x, y) of an 8x8 image inside rectangle `r` (x0, y0, x1, y1)?
+fn inside(i: usize, r: [GLint; 4]) -> bool {
+    let (x, y) = ((i % 8) as GLint, (i / 8) as GLint);
+    x >= r[0] && x < r[2] && y >= r[1] && y < r[3]
 }
 
 const FULL: [GLint; 4] = [0, 0, 8, 8];
@@ -478,7 +589,7 @@ fn read_pixels_from_a_one_sample_fbo_today() {
     assert_eq!(read(&mut px), GL_NO_ERROR);
 }
 
-/* ---- the capability on (gl-msaa-cap); the resolve ignored until gl-msaa-resolve */
+/* ---- the capability on (gl-msaa-cap, gl-msaa-resolve) ---------------------- */
 
 /// Note (b)1: GL_MAX_SAMPLES is the back end's `max_samples`, 4.
 #[test]
@@ -570,56 +681,88 @@ fn fbo_draw_is_four_samples() {
     // changes when the renderbuffer is respecified, the id does not.
 }
 
-/// Note (b)9: a 4x read framebuffer resolves by glBlitFramebuffer into a
-/// single-sample draw framebuffer of the same size and format.
+/// Note (b)7/(b)9: a 4x read framebuffer resolves by glBlitFramebuffer into a
+/// single-sample draw framebuffer of the same size and format. The draw's job
+/// is still pending: the blit flushes and waits for it, then copies the
+/// resolved colour the back end left in `rb.mem`.
 #[test]
-#[ignore = "gl-msaa-resolve, note (b)9: glBlitFramebuffer resolves a multisample read to a single-sample draw"]
 fn resolve_blit_works() {
     let _g = context_ms4();
-    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
+    assert!(PENDING.lock().unwrap().is_empty(), "the blit waited for the 4x job");
+    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED), "the resolved colour, every pixel");
 }
 
 /// ES 3.0 4.3.3: a resolve cannot scale: the source and destination
-/// rectangles must have the same size.
+/// rectangles must have the same size, and a flip is not the same bounds.
+/// The argument errors outrank it. Nothing is copied.
 #[test]
-#[ignore = "gl-msaa-resolve, note (b)9: a scaled resolve is GL_INVALID_OPERATION"]
 fn scaled_resolve_is_invalid_operation() {
     let _g = context_ms4();
-    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
     assert_eq!(blit(src.fb, dst.fb, FULL, [0, 0, 4, 4]), GL_INVALID_OPERATION, "shrink");
     assert_eq!(blit(src.fb, dst.fb, [0, 0, 4, 4], FULL), GL_INVALID_OPERATION, "enlarge");
     assert_eq!(blit(src.fb, dst.fb, FULL, [8, 8, 0, 0]), GL_INVALID_OPERATION, "flipped");
+    assert_eq!(blit(src.fb, dst.fb, FULL, [8, 0, 0, 8]), GL_INVALID_OPERATION, "mirrored in x");
+    let c = GL_COLOR_BUFFER_BIT;
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, [0, 0, 4, 4], c, GL_LINEAR), GL_INVALID_OPERATION, "LINEAR");
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, [0, 0, 4, 4], c, GL_RGBA), GL_INVALID_ENUM, "the filter first");
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, [0, 0, 4, 4], c | 0x2, GL_NEAREST), GL_INVALID_VALUE, "the mask first");
+    assert_eq!(PENDING.lock().unwrap().len(), 1, "a refused blit waits for nothing");
+    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
 }
 
-/// ES 3.0 4.3.3: the formats of the colour buffers must match.
+/// ES 3.0 4.3.3: the formats of the colour buffers must be identical, the
+/// argument errors outranking it. The sRGB encoding is folded away first, as
+/// Mesa does (blit.c `compatible_resolve_formats`: "Blits between linear and
+/// sRGB formats are also allowed").
 #[test]
-#[ignore = "gl-msaa-resolve, note (b)9: a format-mismatched resolve is GL_INVALID_OPERATION"]
 fn format_mismatched_resolve_is_invalid_operation() {
     let _g = context_ms4();
     let src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    for f in [GL_RGB565, GL_RGB8, GL_RGBA4, GL_RGB5_A1, GL_RGB10_A2] {
+        let dst = framebuffer(0, &[f]).unwrap();
+        assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_INVALID_OPERATION, "RGBA8 into {f:#x}");
+        let e = blit_with(src.fb, dst.fb, FULL, FULL, GL_COLOR_BUFFER_BIT, GL_RGBA);
+        assert_eq!(e, GL_INVALID_ENUM, "the filter outranks it, {f:#x}");
+    }
+    let srgb = framebuffer(0, &[GL_SRGB8_ALPHA8]).unwrap();
+    assert_eq!(blit(src.fb, srgb.fb, FULL, FULL), GL_NO_ERROR, "linear into sRGB");
+    let src = framebuffer(4, &[GL_SRGB8_ALPHA8]).unwrap();
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR, "sRGB into linear");
+    assert_eq!(blit(src.fb, srgb.fb, FULL, FULL), GL_NO_ERROR, "sRGB into sRGB");
     let dst = framebuffer(0, &[GL_RGB565]).unwrap();
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_INVALID_OPERATION);
+    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_INVALID_OPERATION, "sRGB into RGB565");
 }
 
 /// ES 3.0 4.3.3: the source and destination rectangles of a resolve must be
-/// the same region, not only the same size.
+/// the same region, not only the same size; the same region copies only it.
 #[test]
-#[ignore = "gl-msaa-resolve, note (b)9: a region-mismatched resolve is GL_INVALID_OPERATION"]
 fn region_mismatched_resolve_is_invalid_operation() {
     let _g = context_ms4();
-    let src = framebuffer(4, &[GL_RGBA8]).unwrap();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
     assert_eq!(blit(src.fb, dst.fb, [0, 0, 4, 4], [4, 4, 8, 8]), GL_INVALID_OPERATION, "same size, moved");
-    assert_eq!(blit(src.fb, dst.fb, [0, 0, 4, 4], [0, 0, 4, 4]), GL_NO_ERROR, "same region");
+    let e = blit_with(src.fb, dst.fb, [0, 0, 4, 4], [4, 4, 8, 8], GL_COLOR_BUFFER_BIT | 0x2, GL_NEAREST);
+    assert_eq!(e, GL_INVALID_VALUE, "the mask outranks it");
+    assert_eq!(PENDING.lock().unwrap().len(), 1, "a refused blit waits for nothing");
+    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
+    let region = [2, 1, 6, 5];
+    assert_eq!(blit(src.fb, dst.fb, region, region), GL_NO_ERROR, "same region");
+    for (i, p) in pixels(dst.fb).iter().enumerate() {
+        let want = if inside(i, region) { RESOLVED } else { [0; 4] };
+        assert_eq!(*p, want, "pixel ({}, {})", i % 8, i / 8);
+    }
 }
 
 /// ES 3.0 4.3.3: a draw framebuffer with sample buffers is GL_INVALID_OPERATION,
-/// from a single-sample read and from a 4x one.
+/// from a single-sample read and from a 4x one, the argument errors
+/// outranking it.
 #[test]
-#[ignore = "gl-msaa-resolve, note (b)9: a blit into a 4x draw framebuffer is GL_INVALID_OPERATION"]
 fn blit_into_a_4x_draw_framebuffer_is_invalid_operation() {
     let _g = context_ms4();
     let ms = framebuffer(4, &[GL_RGBA8]).unwrap();
@@ -627,4 +770,51 @@ fn blit_into_a_4x_draw_framebuffer_is_invalid_operation() {
     let ms2 = framebuffer(4, &[GL_RGBA8]).unwrap();
     assert_eq!(blit(single.fb, ms.fb, FULL, FULL), GL_INVALID_OPERATION, "1x to 4x");
     assert_eq!(blit(ms2.fb, ms.fb, FULL, FULL), GL_INVALID_OPERATION, "4x to 4x");
+    let e = blit_with(single.fb, ms.fb, FULL, FULL, GL_COLOR_BUFFER_BIT, GL_RGBA);
+    assert_eq!(e, GL_INVALID_ENUM, "the filter outranks it");
+}
+
+/// Note (b)8: a 4x depth/stencil renderbuffer resolves through the existing
+/// `depth_resolve` / `stencil_resolve` entries, one sample a pixel, into a
+/// single-sample one through `ds_write`.
+#[test]
+fn depth_stencil_resolve_reads_one_sample_a_pixel() {
+    let _g = context_on(&BACKEND_MS4_DS);
+    let with_ds = |samples: GLsizei| {
+        let mut fbo = framebuffer(samples, &[GL_RGBA8]).unwrap();
+        let (e, rb) = storage(samples, GL_DEPTH24_STENCIL8);
+        assert_eq!(e, GL_NO_ERROR);
+        fbo.rbs.push(rb);
+        // SAFETY: a renderbuffer this test made, on the bound framebuffer.
+        unsafe { glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rb) };
+        assert_eq!(status(), GL_FRAMEBUFFER_COMPLETE, "{samples} samples");
+        fbo
+    };
+    let src = with_ds(4);
+    let dst = with_ds(0);
+    let ds = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, [0, 0, 4, 4], ds, GL_NEAREST), GL_INVALID_OPERATION, "scaled");
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, ds, GL_LINEAR), GL_INVALID_OPERATION, "LINEAR");
+    assert!(DS_READS.lock().unwrap().is_empty() && DS_WRITES.lock().unwrap().is_empty(), "no copy");
+    assert_eq!(blit_with(src.fb, dst.fb, FULL, FULL, ds, GL_NEAREST), GL_NO_ERROR);
+    let reads = DS_READS.lock().unwrap().clone();
+    /* a write of no pixels is the "can it be written" probe (dst_writable) */
+    let writes: Vec<_> = DS_WRITES.lock().unwrap().iter().copied().filter(|w| w.4 * w.5 != 0).collect();
+    /* the copy reads the source's plane, and the destination's for the
+     * pixels it keeps; every read is the whole 8x8 plane */
+    assert!(reads.iter().all(|r| (r.1, r.2) == (8, 8)), "8x8: {reads:?}");
+    let dst_id = writes.first().expect("a plane written").0;
+    let src_ids: Vec<u32> = reads.iter().map(|r| r.0).filter(|&id| id != dst_id).collect();
+    assert!(src_ids.len() == 2 && src_ids[0] == src_ids[1], "depth and stencil of the 4x object: {reads:?}");
+    let src_id = src_ids[0];
+    let mut planes: Vec<(u32, u32)> = writes.iter().map(|w| (w.1, w.6)).collect();
+    planes.sort();
+    assert_eq!(
+        planes,
+        vec![(backend::DS_PLANE_DEPTH, DEPTH.to_bits()), (backend::DS_PLANE_STENCIL, STENCIL as u32)],
+        "{writes:?}"
+    );
+    for w in &writes {
+        assert!(w.0 != src_id && (w.2, w.3, w.4, w.5) == (0, 0, 8, 8), "the whole plane of the other object: {w:?}");
+    }
 }
