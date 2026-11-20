@@ -4,7 +4,9 @@
 #
 # xbuild71: the driver/src/v3d C files the Zephyr build compiles cross-compile
 # for aarch64 without a warning, in both board configurations the V3D
-# generations ride on.
+# generations ride on. The cortex-a76 configuration compiles the 7.1-only
+# files at -DV3D_CL_VER=71 on top (see FILES71 below); the cortex-a72 one
+# stays the 4.2 file set and flags, unchanged.
 #
 # The file list, the include directories and the defines are the Zephyr
 # module's own (zephyr/CMakeLists.txt, CONFIG_YAKOGL_GPU_V3D branch):
@@ -27,6 +29,19 @@
 # the 7.1 code of v3d_hw.c and v3d_regs.h compiles warning-free for the Pi 5's
 # core, with the same defines and include set its build will pass it, and that
 # the Pi 4 configuration stays as clean as it is.
+#
+# FILES71: the 7.1-only translation units, compiled only for cortex-a76, each
+# with -DV3D_CL_VER=71 — the define tools/v3d/check71.d/triangle71.sh gives
+# v3d_frame.c together with v3d_frame71_tri.c (the 7.1 clear-then-triangle
+# frame: v3d_frame71_tri.c calls through v3d_frame.c's v3d_frame71_* steps, so
+# the two must be seen at 71 in one build), and what v3d_tex71.c is by itself
+# (the 7.1 texture shader state and sampler packer; its header refuses any
+# other V3D_CL_VER and defaults to 71, as tools/v3d/check71.d/tex71.sh builds
+# it). v3d_frame.c is compiled twice for cortex-a76: once from FILES without
+# the define, as the Zephyr list has it, and once at 71 here. The frame pair
+# is what the Pi 5 triangle images build with V3D_CL_VER 71 and -Werror
+# (tools/probes/rpi_5/rpi5_triangle/probe.cmake), so a warning here is a
+# broken image row there.
 #
 # Compiler: aarch64-zephyr-elf-gcc from ZEPHYR_SDK_INSTALL_DIR (the SDK's
 # newlib is its C library), else clang --target=aarch64-none-elf if it can
@@ -54,7 +69,13 @@ FILES=(
   driver/src/v3d/v3d_frame.c
   driver/src/v3d/v3d_hw.c
 )
-for f in "${FILES[@]}" tools/v3d/hostshim/zephyr/kernel.h \
+# the cortex-a76 configuration's additions, each built -DV3D_CL_VER=71
+FILES71=(
+  driver/src/v3d/v3d_frame.c
+  driver/src/v3d/v3d_frame71_tri.c
+  driver/src/v3d/v3d_tex71.c
+)
+for f in "${FILES[@]}" "${FILES71[@]}" tools/v3d/hostshim/zephyr/kernel.h \
          tools/v3d/hostshim/zephyr/sys/sys_io.h tools/v3d/hostshim/zephyr/logging/log.h; do
   [ -f "$f" ] || { echo "$name: $f missing (run from the repository root), 1 failed"; exit 1; }
 done
@@ -137,8 +158,22 @@ for cfg in 42 71; do
       failed=$((failed + 1))
     fi
   done
+  if [ "$cfg" = 71 ]; then
+    for f in "${FILES71[@]}"; do
+      b=$(basename "$f" .c)
+      if "${CC[@]}" "${STD[@]}" -mcpu="$mcpu" "${INC[@]}" "${DEFS[@]}" \
+        -DV3D_CL_VER=71 -c "$f" -o "$out/$b.cl71.$cfg.o" 2>"$out/$b.cl71.$cfg.err"; then
+        rm -f "$out/$b.cl71.$cfg.err"
+        echo "ok      $b  $cfg (-mcpu=$mcpu -DV3D_CL_VER=71)"
+      else
+        echo "FAIL    $b  $cfg (-mcpu=$mcpu -DV3D_CL_VER=71):"
+        tail -n 20 "$out/$b.cl71.$cfg.err" | sed 's/^/    /'
+        failed=$((failed + 1))
+      fi
+    done
+  fi
 done
 
-echo "$name: ${#FILES[@]} files x 2 configurations, $failed failed"
+echo "$name: ${#FILES[@]} files x 2 configurations + ${#FILES71[@]} at -DV3D_CL_VER=71 for cortex-a76, $failed failed"
 [ "$failed" -eq 0 ] || exit 1
 exit 0
