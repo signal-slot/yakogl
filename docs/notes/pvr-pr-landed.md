@@ -10,6 +10,34 @@ render" in docs/notes/pvr-render-pool.md; this note is not a replacement of
 it. Nothing here was run on hardware. Paths are relative to the repository
 root; `render.rs` is driver/rust/src/gpu/pvr/render.rs.
 
+## Summary as of 2026-11-21 (plan #301, issue #2 of signal-slot/yakogl)
+
+The rest of this note is the 2026-10-30 reading of parts 1 and 4 and is
+kept as written; its "open" items 1 and the "not landed" rows of the
+test table are overtaken by the frame side below. The current status is the
+paragraph "Status, 2026-11-21" in docs/notes/pvr-render-pool.md; the facts:
+
+- **Implemented**, behind `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER` (default
+  n, driver/zephyr/Kconfig): parts 1 and 4 (`f73eded7`) and the frame side:
+  `src/pvr/spm.rs` (`14fbb630`), the PR EOT data slot (`5671bcf0`), the
+  `frag_pr` block (`62b08d4b`), the load shader under `tools/pco_shc`
+  (`cfb0a032`), `src/pvr/pr_zs.rs` (`6f550632`), the 3D_PR built from
+  `frag_pr` (`f1b3f8d7`), and the backend filling `frag_pr` and
+  `pds_pr_bgnd` (`1311a675`). Stated gaps: `pds_pr_bgnd` is not written into
+  the 3D_PR command; the Z/S words of `pr_zs.rs` have no `frag_pr` field.
+- **Measured on the board** (parts 1 and 4 only, before the frame side):
+  `tools/cts/log/2026-10-31-pr-neg175/` (case 175 knob off TIMEOUT cause 4;
+  knob on PASS, one partial render, HWR 0),
+  `tools/cts/log/2026-10-31-pr-negative/` (case 217 knob off, 256 layers:
+  NOT EXERCISED), `tools/cts/log/2026-11-02-pr-217probe/` (crossing between
+  976 and 1220 layers; knob on at the 512 cap: stop cause 2, partial renders
+  0; knob on without cap: one partial render, depth equal, colour mostly the
+  clear).
+- **Known blocker:** case 217 at the 512-page cap ends in the at-maximum stop
+  (cause 2, `ccb.rs` `at_maximum`, not gated by the knob) with the knob on.
+- **Not yet measured with the frame side landed: case 175/217 knob on,
+  regression set knob off and on (board-regress).**
+
 Every behaviour below exists only with the knob
 (`CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, driver/zephyr/Kconfig:69, off by
 default: driver/src/pvr_render.c:430-433). pvr_render.c:602 copies it to

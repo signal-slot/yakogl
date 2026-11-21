@@ -2954,32 +2954,49 @@ and the DDK are cited only. The reading this builds on is the section
 above. The frame side (Z/S, SPM EOT, background load) is read in "The PR
 frame side, read (Mesa 26.2.1)" below.
 
-**Status, 2026-11-01 (plan #148, issue #3).**
-- **Landed: parts 1 and 4** (freelist grow, FENCE_PR, 3D_PR and its UPDATE,
-  the RTA arrays and the HWRT clear). Verified on the AM62P by neg175-board
-  (2026-10-31, `tools/cts/log/2026-10-31-pr-neg175/`, commit `d1b24389`):
-  - knob off: the refused grow at A = 0 ends in the 10 s stop, cause 4,
-    "partial renders 0", case 175 TIMEOUT, as in the three runs of
-    0ea4c598 (15 frames, 707 quads);
-  - knob on: case 175 PASS in both runs, one firmware partial render
-    (`UPDATE_STATS element=1`), HWR 0, no stop, no timeout, and the HWRT
-    words 32-34 are written by the knob. It reads no pixels: the 3D_PR is
-    still a byte copy of the frame's 3D command.
-- **Case 217 (forcedpr), first board run, knob off** (2026-10-31,
-  `tools/cts/log/2026-10-31-pr-negative/`): 256 layers of 512x512
-  rectangles completed in 2.4 s with requests 0, no stop, no partial render:
-  "NOT EXERCISED". 256 layers do not exhaust 512 pages, so the known negative
-  was not reproduced by that case. The case now sweeps the layer count in the
-  run (256, 512, 1024, 2048, 4093, one kick each, ending at the first step
-  that asks for a grow), reads the depth back across the boundary, and
-  compares once at the last step. Not yet run on the board.
-- **Pending: the frame side.** In review: spm-calc (SPM scratch size and PR
-  PBE words), kick-abi (`frag_pr` block), bgload-shader (the load shader).
-  Not started: pr-frame-colour (SPM colour scratch per RT size, PR PBE
-  words, PR EOT into `frag_pr`), bgload-pds (the load shader's table entry,
-  the PR background-object PDS program, `pds_pr_bgnd`), pr-zs (PR depth and
-  stencil, the six remaining firmware PINs). Until those land a partial
-  render of a frame with live colour is not checked pixel for pixel.
+**Status, 2026-11-21 (plan #301, issue #2 of signal-slot/yakogl, the old
+#3).**
+- **Implemented, behind `CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER`, default n**
+  (`driver/zephyr/Kconfig`; with it off every command and word is today's):
+  - parts 1 and 4: FENCE_PR, 3D_PR and its UPDATE, the geometry timeline
+    word, the RTA arrays and the HWRT clear (`f73eded7`);
+  - the frame side, in landing order: the SPM scratch size and PR PBE words
+    (`src/pvr/spm.rs`, `14fbb630`); the PR EOT data slot and its builder
+    (`5671bcf0`); the kick's zeroed `frag_pr` block (`62b08d4b`); the
+    background-object load shader generated on the host with Mesa's pco
+    (`tools/pco_shc`, `cfb0a032`); the depth/stencil word builder
+    (`src/pvr/pr_zs.rs`, `6f550632`); the 3D_PR built from the kick's
+    `frag_pr` with the knob on (`f1b3f8d7`); the backend filling `frag_pr`
+    (SPM colour scratch, PR PBE, PR EOT) and `pds_pr_bgnd`, the load
+    shader's entry and the six remaining pins (`1311a675`).
+  - Gaps the code itself states: `pds_pr_bgnd` is computed but not yet
+    written into the 3D_PR command (comment at `PvrRenderFragPr`,
+    driver/rust/src/gpu/pvr/render.rs), and `pr_zs.rs` has no field in the
+    kick's `frag_pr` block (the driver copies the frame's Z/S words, right
+    for an unswapped frame: `docs/notes/pvr-pr-zs.md`). A frame the load
+    shader cannot reload keeps `frag_pr` zero.
+- **Measured on the AM62P so far** (as each README states it):
+  - `tools/cts/log/2026-10-31-pr-neg175/` (commit `d1b24389`, parts 1 and 4
+    only): case 175 knob off TIMEOUT, stop cause 4, partial renders 0 (two
+    runs); knob on PASS in both runs, one firmware partial render, no stop,
+    HWR 0. It reads no pixels.
+  - `tools/cts/log/2026-10-31-pr-negative/` (case 217, knob off): 256 layers
+    completed with requests 0, no stop, no partial render: NOT EXERCISED, the
+    known negative was not reproduced.
+  - `tools/cts/log/2026-11-02-pr-217probe/` (case 217; the crossing lies
+    between 976 and 1220 layers, so the prediction below of 2013 to 2514 was
+    about twice too high; default 1220): knob off stop cause 2
+    (pr-verdict OK); knob on with the cap at 512 the same stop, partial
+    renders 0, pr-verdict FAIL; knob on without grow reserve and cap: one
+    grow request refused, one partial render, kick complete, 0 recoveries,
+    depth read-back equal, colour mostly the clear (FAIL pixels). All
+    three records predate the frame side (`62b08d4b` on).
+- **Known blocker:** case 217 at the 512-page cap ends in the at-maximum stop
+  (cause 2; `driver/rust/src/gpu/pvr/ccb.rs`, `at_maximum`, not gated by the
+  knob) with the knob on, before any partial render can happen. It needs a
+  driver change.
+- **Not yet measured with the frame side landed: case 175/217 knob on,
+  regression set knob off and on (board-regress).**
 - **Parameter demand per layer, and the crossing for the board sessions**
   (computed from the numbers this note records, not measured for 217):
   - the list: 512 pages of 4 KiB = 2048 KiB, no grow possible (cap 512);
