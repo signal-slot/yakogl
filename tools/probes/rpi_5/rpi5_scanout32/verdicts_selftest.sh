@@ -26,6 +26,16 @@
 #   redact     IPv4, host:port, IPv6, MAC, device path and tty name in
 #              printed lines never reach the output; 0x values do
 #   usage      argument count, unreadable file -> exit 2; empty log -> 1
+#   hw*        hardware-written words: hwskip=none on both lines and a pass
+#              log without hwskip= (older probe) -> PASS as before; a skipped
+#              word (4:skip) changing, named hw=skip -> PASS 'except hw words
+#              off 4'; EXPECT likewise; an undeclared word changing -> FAIL
+#              naming word, entry and offset (also under a probe PASS, and
+#              for the END word, entry none); a word claimed hw=skip with an
+#              empty set -> FAIL; our slot's read-back with a written-back
+#              word -> PASS declared, FAIL undeclared; snapshot and restore
+#              sets differing, a PASS not saying which words were left out,
+#              a count line with undeclared words no line names -> FAIL
 # `sh verdicts_selftest.sh` works too: it re-runs itself under bash.
 [ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -u
@@ -33,8 +43,8 @@ unset LC_ALL LANGUAGE
 export LANG=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 V=$HERE/verdicts.sh
-fail=0
-ok()  { printf '  ok    %s\n' "$1"; }
+fail=0 nok=0
+ok()  { printf '  ok    %s\n' "$1"; nok=$((nok + 1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fail=$((fail + 1)); }
 check() { case "$out" in *"$1"*) ok "$2" ;; *) bad "$2: '$1' not in output" ;; esac; }
 nope()  { case "$out" in *"$1"*) bad "$2: '$1' appeared in output" ;; *) ok "$2" ;; esac; }
@@ -93,6 +103,46 @@ mk "$T/redact.log" 'uart bridge arm.example.invalid:40001 on /dev/''tty''AMA0 fo
     'u3 restore: FAIL (word 7 differs; 100.64''.7.9:443 over /dev/''tty''USB3, link local fe80::1, eth de:ad:be:ef:12:34, nic aa-bb-cc-dd-ee-ff, unit serial-getty@ttyS2.service)' \
     'rpi5_scanout32: FAIL (arm.example.invalid:40001 timed out)'
 : > "$T/empty.log"
+
+# hardware-written words
+SNAPN='u3 snapshot: list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=none'
+RSN='u3 restore: PASS byte-equal list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=none'
+SNAPH='u3 snapshot: list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=4:skip'
+RSH='u3 restore: PASS byte-equal except hw words off 4 (1 differed: 1 skip, 0 expect) list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=4:skip'
+SNAPE='u3 snapshot: list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=4:expect'
+RSE='u3 restore: PASS byte-equal except hw words off 4 (1 differed: 0 skip, 1 expect) list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=4:expect'
+D676S='dlswap restore-diff word 676 entry 0 off 4 was 0xc0c0c0c0 now 0xc0c1c0c0 hw=skip'
+D676E='dlswap restore-diff word 676 entry 0 off 4 was 0xc0c0c0c0 now 0xc0c1c0c0 hw=expect'
+D677='dlswap restore-diff word 677 entry 0 off 5 was 0x00000000 now 0x00000001 hw=no'
+CNTS='dlswap restore-diffs total=1 undeclared=0 skip=1 expect=0 shown=1 hwskip=4:skip'
+CNTE='dlswap restore-diffs total=1 undeclared=0 skip=0 expect=1 shown=1 hwskip=4:expect'
+CNT0='dlswap restore-diffs total=0 undeclared=0 skip=0 expect=0 shown=0 hwskip=none'
+RB36S='dlswap readback-diff word 36 entry 0 off 4 was 0xc0c0c0c0 now 0x0badc0de hw=skip (swap 2, after)'
+RB36N='dlswap readback-diff word 36 entry 0 off 4 was 0xc0c0c0c0 now 0x0badc0de hw=no (swap 2, after)'
+BODY=("$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM")
+mk "$T/hwnone.log" "$SNAPN" "${BODY[@]}" "$CNT0" "$RSN" "$TM"
+mk "$T/hwskip.log" "$SNAPH" "${BODY[@]}" "$D676S" "$CNTS" "$RSH" "$TM"
+mk "$T/hwexpect.log" "$SNAPE" "${BODY[@]}" "$D676E" "$CNTE" "$RSE" "$TM"
+mk "$T/hwundecl.log" "$SNAPH" "${BODY[@]}" "$D676S" "$D677" \
+    'dlswap restore-diffs total=2 undeclared=1 skip=1 expect=0 shown=2 hwskip=4:skip' \
+    'u3 restore: FAIL restore: list word differs list-ptr=0x000002a0 want 0x000002a0 (word-differs) hash=0x11111111 hwskip=4:skip undeclared=1' \
+    'rpi5_scanout32: FAIL (the firmware'\''s list was not restored byte-equal)'
+mk "$T/hwlie.log" "$SNAPH" "${BODY[@]}" "$D677" "$RSH" "$TM"
+mk "$T/hwend.log" "$SNAPH" "${BODY[@]}" \
+    'dlswap restore-diff word 704 entry none off none was 0x80000000 now 0x00000000 hw=no' "$RSH" "$TM"
+mk "$T/hwclaim.log" "$SNAPN" "${BODY[@]}" "$D676S" "$RSN" "$TM"
+mk "$T/hwslot.log" "$SNAPH" "${BODY[@]}" "$RB36S" \
+    'dlswap readback-diffs total=1 undeclared=0 skip=1 expect=0 shown=1 hwskip=4:skip (swap 2, after)' "$CNTS" "$RSH" "$TM"
+mk "$T/hwslotbad.log" "$SNAPN" "${BODY[@]}" "$RB36N" \
+    'dlswap readback-diffs total=1 undeclared=1 skip=0 expect=0 shown=1 hwskip=none (swap 2, after)' "$CNT0" "$RSN" \
+    'rpi5_scanout32: FAIL (swap 2: slot-word-differs (slot word 4))'
+mk "$T/hwmismatch.log" "$SNAPH" "${BODY[@]}" "$CNT0" "$RSN" "$TM"
+mk "$T/hwtext.log" "$SNAPH" "${BODY[@]}" "$CNTS" \
+    'u3 restore: PASS byte-equal list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=4:skip' "$TM"
+mk "$T/hwcount.log" "$SNAPH" "${BODY[@]}" "$D676S" \
+    'dlswap restore-diffs total=12 undeclared=3 skip=9 expect=0 shown=8 hwskip=4:skip' "$RSH" "$TM"
+mk "$T/hwbadset.log" 'u3 snapshot: list-ptr=0x000002a0 heade=672 words=40 hash=0xdeadbeef hwskip=4:maybe' \
+    "${BODY[@]}" 'u3 restore: PASS byte-equal except hw words off 4 (0 differed) hash=0xdeadbeef hwskip=4:maybe' "$TM"
 
 run() { out=$(bash "$V" "$1" 2>&1); rc=$?; }
 
@@ -203,8 +253,55 @@ run "$T/empty.log"
 want_rc 1 "empty log"
 check "no expected verdict line was seen at all" "empty log says nothing was seen"
 
+# ---- hardware-written words ----------------------------------------------------
+run "$T/pass.log"
+check "firmware list restored byte-equal)" "no hwskip= (older probe): PASS text unchanged"
+nope "except hw words" "no hwskip=: nothing left out"
+run "$T/hwnone.log"
+want_rc 0 "hwskip=none"
+check "firmware list restored byte-equal)" "hwskip=none: plain byte-equal PASS"
+run "$T/hwskip.log"
+want_rc 0 "4:skip, word 676 changed"
+check "restored byte-equal except hw words off 4 (hwskip=4:skip))" "skip: PASS names the words left out"
+check "[6] u3 restore: PASS byte-equal except hw words off 4" "skip: the restore line is shown"
+run "$T/hwexpect.log"
+want_rc 0 "4:expect, word 676 changed"
+check "except hw words off 4 (hwskip=4:expect)" "expect: PASS names the expected word"
+run "$T/hwundecl.log"
+want_rc 3 "undeclared word 677"
+check "restore word 677 (entry 0 off 5) changed 0x00000000 -> 0x00000001, not a declared hardware-written word (hwskip=4:skip)" "undeclared: word, entry, offset and values named"
+nope "restore word 676" "undeclared: the skipped word 676 is not a reason"
+check "q4: yes" "undeclared: q4 still judged from the swaps"
+run "$T/hwlie.log"
+want_rc 3 "undeclared word under a probe PASS"
+check "restore word 677 (entry 0 off 5) changed" "a PASS line does not hide an undeclared word"
+run "$T/hwend.log"
+want_rc 3 "END word changed"
+check "restore word 704 (entry none off none) changed 0x80000000 -> 0x00000000" "END word (no entry) named"
+run "$T/hwclaim.log"
+want_rc 3 "hw=skip with an empty set"
+check "restore word 676 (entry 0 off 4) changed 0xc0c0c0c0 -> 0xc0c1c0c0, not a declared hardware-written word (hwskip=none)" "a skip not in the set is a FAIL"
+run "$T/hwslot.log"
+want_rc 0 "our slot's word 36 written back, 4:skip"
+check "verdicts: PASS" "slot: a declared written-back word passes"
+run "$T/hwslotbad.log"
+want_rc 3 "our slot's word 36 written back, empty set"
+check "our slot word 36 (entry 0 off 4) changed 0xc0c0c0c0 -> 0x0badc0de, not a declared hardware-written word (hwskip=none)" "slot: the undeclared word named"
+run "$T/hwmismatch.log"
+want_rc 3 "sets differ"
+check "restore hwskip=none but the snapshot has hwskip=4:skip" "snapshot and restore sets must agree"
+run "$T/hwtext.log"
+want_rc 3 "PASS without 'except'"
+check "restore PASS with hwskip=4:skip does not say 'byte-equal except hw words off ...'" "a PASS must say what it left out"
+run "$T/hwcount.log"
+want_rc 3 "undeclared only counted"
+check "a restore-diffs line counts 3 undeclared word(s) changed" "count line beyond the cap judged"
+run "$T/hwbadset.log"
+want_rc 3 "malformed set"
+check "malformed hwskip=4:maybe" "a malformed set is named"
+
 if [ $fail -eq 0 ]; then
-    echo "verdicts_selftest: all checks passed"
+    echo "verdicts_selftest: all $nok checks passed"
 else
     echo "verdicts_selftest: $fail failed"
     exit 1

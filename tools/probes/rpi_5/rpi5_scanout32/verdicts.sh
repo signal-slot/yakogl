@@ -275,6 +275,95 @@ if [ "$rst" = "PASS" ]; then
     fi
 fi
 
+# ---- hardware-written words (swap-hwword) ------------------------------------
+# The probe may leave declared words of a plane entry out of the byte-equal
+# compare (RPI5_SCANOUT32_HW_WORDS, README "Hardware-written words"). These
+# lines then carry the set and every differing word:
+#
+#   u3 snapshot: ... hwskip=<set>       u3 restore: ... hwskip=<set>
+#       <set> is 'none' or '<off>:skip|expect' items joined by ','; a line
+#       without hwskip= (an older probe) is 'none'. The two must agree.
+#   dlswap restore-diff word <n> entry <e> off <k> was 0x.. now 0x.. hw=<m>
+#   dlswap readback-diff word <n> entry <e> off <k> was 0x.. now 0x.. hw=<m>
+#       one per differing word of the firmware's span at a restore, or of
+#       our slot at a read-back; <e>/<k> 'none' for a word in no entry
+#   dlswap restore-diffs|readback-diffs total=<n> undeclared=<n> ... hwskip=<set>
+#       the count lines (diff lines past the probe's cap are only counted)
+#
+# A differing word passes only when its offset is in the declared set with
+# the same mode (hw=skip|expect); any other differing word is a FAIL naming
+# it, also when 'u3 restore:' says PASS, and so is a count line with
+# undeclared > 0 that no named line explains. A restore PASS with a
+# non-empty set must say 'byte-equal except hw words off <offs>'.
+hw_set() { grep -oE '(^| )hwskip=[^ )]+' <<< "$1" | head -n 1 | sed -E 's/^ ?hwskip=//'; }
+hws=$(hw_set "${SEEN[6]}")
+hwn=$(hw_set "${SEEN[1]}")
+[ -n "$hws" ] || hws=none
+[ -n "$hwn" ] || hwn=none
+declare -A DECL=()
+if [ "$hws" != "$hwn" ]; then
+    other+=("restore hwskip=$hws but the snapshot has hwskip=$hwn")
+fi
+if [ "$hws" != none ]; then
+    if ! grep -qE '^[0-9]+:(skip|expect)(,[0-9]+:(skip|expect))*$' <<< "$hws"; then
+        other+=("malformed hwskip=$hws")
+    else
+        IFS=, read -r -a hw_items <<< "$hws"
+        for it in "${hw_items[@]}"; do DECL[$((10#${it%%:*}))]=${it#*:}; done
+    fi
+fi
+hw_bad_restore=0 hw_bad_readback=0
+while IFS= read -r l; do
+    kind=$(sed -E 's/^dlswap (restore|readback)-diff .*/\1/' <<< "$l")
+    w=$(sed -E 's/.* word ([0-9]+) .*/\1/' <<< "$l")
+    e=$(sed -E 's/.* entry ([^ ]+) .*/\1/' <<< "$l")
+    o=$(sed -E 's/.* off ([^ ]+) .*/\1/' <<< "$l")
+    was=$(sed -nE 's/.* was (0x[[:xdigit:]]+) .*/\1/p' <<< "$l")
+    now=$(sed -nE 's/.* now (0x[[:xdigit:]]+) .*/\1/p' <<< "$l")
+    m=$(sed -nE 's/.* hw=([a-z]+).*/\1/p' <<< "$l")
+    d=""
+    [[ "$o" =~ ^[0-9]+$ ]] && d=${DECL[$((10#$o))]:-}
+    if [ -z "$d" ] || [ "$m" != "$d" ]; then
+        if [ "$kind" = restore ]; then
+            hw_bad_restore=1
+            what="restore word $w"
+        else
+            hw_bad_readback=1
+            what="our slot word $w"
+        fi
+        other+=("$what (entry $e off $o) changed $was -> $now, not a declared hardware-written word (hwskip=$hws)")
+    fi
+done < <(grep -E '^dlswap (restore|readback)-diff word [0-9]+ entry [^ ]+ off [^ ]+ ' "$TMP")
+while IFS= read -r l; do
+    kind=$(sed -E 's/^dlswap (restore|readback)-diffs .*/\1/' <<< "$l")
+    u=$(sed -nE 's/.* undeclared=([0-9]+).*/\1/p' <<< "$l")
+    ch=$(hw_set "$l")
+    if [ -n "$ch" ] && [ "$ch" != "$hws" ]; then
+        other+=("a $kind-diffs line has hwskip=$ch, the restore line hwskip=$hws")
+    fi
+    if [ "${u:-0}" -gt 0 ]; then
+        if [ "$kind" = restore ] && [ "$hw_bad_restore" -eq 0 ]; then
+            other+=("a restore-diffs line counts $u undeclared word(s) changed")
+            hw_bad_restore=1
+        elif [ "$kind" = readback ] && [ "$hw_bad_readback" -eq 0 ]; then
+            other+=("a readback-diffs line counts $u undeclared slot word(s) changed")
+            hw_bad_readback=1
+        fi
+    fi
+done < <(grep -E '^dlswap (restore|readback)-diffs total=' "$TMP")
+if [ "$rst" = "PASS" ]; then
+    if [ "$hws" != none ] && ! grep -q 'byte-equal except hw words off ' <<< "${SEEN[6]}"; then
+        other+=("restore PASS with hwskip=$hws does not say 'byte-equal except hw words off ...'")
+    fi
+    if [ "$hws" = none ] && grep -q 'except hw words' <<< "${SEEN[6]}"; then
+        other+=("restore PASS leaves hw words out but carries no hwskip set")
+    fi
+fi
+hw_note=""
+if [ "$hws" != none ]; then
+    hw_note=" except hw words off $(sed -E 's/:(skip|expect)//g' <<< "$hws") (hwskip=$hws)"
+fi
+
 grep -qE '^rpi5_scanout32: FAIL' <<< "${SEEN[7]}" && other+=("the probe's own line is FAIL")
 
 if [ -n "$swap_fail" ]; then
@@ -284,7 +373,7 @@ else
 fi
 
 if [ ${#other[@]} -eq 0 ]; then
-    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, FRCNT advanced, firmware list restored byte-equal)"
+    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, FRCNT advanced, firmware list restored byte-equal${hw_note})"
     exit 0
 fi
 r=""

@@ -31,6 +31,17 @@
  * entry past the memory still FW_WALK; (i) a changed word inside the window
  * named by the restore, one past it not compared.
  *
+ * Hardware-written words (swap-hwword): the set's text form (parse, format,
+ * refusals); an invalid set in cfg refused before any access; at the
+ * restore, with the empty set a changed word 676 (entry 0 off 4) fails as
+ * before and is named by a restore-diff line, with 4:skip it passes ("byte-
+ * equal except hw words off 4"), with 4:expect it is reported, an undeclared
+ * word beside it (677, off 5) fails named, the END word is in no entry, and
+ * in a window every entry's offset 4 is covered; at our slot's read-back the
+ * HVS writing word 36 (our entry off 4) back fails as LIST_READ with the
+ * empty set and is skipped with 4:skip, off 5 still fails, our list END is
+ * in no entry.
+ *
  * Build: tools/v3d/check71.d/hvs6_dlist_swap.sh. Prints one line per check,
  * then "hvs6_dlist_swap_mock: N of N checks, 0 failed"; exits nonzero on a
  * failure.
@@ -85,6 +96,8 @@ struct hvs {
 	uint32_t ctrl1_writes, other_writes;
 	uint32_t nreads, oob_reads; /* list-memory reads, and reads past MEMW */
 	uint32_t olptrs[3];         /* LPTRS of the other channels (read only) */
+	int64_t stick_word;         /* a write to this word stores stick_val (HVS write-back) */
+	uint32_t stick_val;
 };
 
 static void logev(struct hvs *h, enum ev k, uint32_t off, uint32_t val)
@@ -134,7 +147,7 @@ static void m_write(void *ctx, uint32_t off, uint32_t val)
 		uint32_t w = (off - HVS6_DLIST_OFFSET) / 4u;
 
 		if (w < MEMW)
-			h->mem[w] = val;
+			h->mem[w] = (int64_t)w == h->stick_word ? h->stick_val : val;
 		else
 			h->other_writes++;
 		return;
@@ -201,6 +214,7 @@ static void model_init(struct hvs *h, uint32_t fw_head)
 	h->tpf = 3;
 	h->corrupt_word = -1;
 	h->our_start = 0xffffffffu;
+	h->stick_word = -1;
 }
 
 static struct hvs6s_io model_io(struct hvs *h)
@@ -769,13 +783,13 @@ static void case_board_noend(void)
 }
 
 /* A collecting sink, to check the lines of a refused snapshot. */
-static char lines_buf[16][200];
+static char lines_buf[32][256];
 static size_t lines_n;
 
 static void collect(void *ctx, const char *text)
 {
 	(void)ctx;
-	if (lines_n < 16)
+	if (lines_n < 32)
 		(void)snprintf(lines_buf[lines_n], sizeof(lines_buf[0]), "%s", text);
 	lines_n++;
 	printf("        %s\n", text);
@@ -783,7 +797,7 @@ static void collect(void *ctx, const char *text)
 
 static int has_line(const char *prefix)
 {
-	for (size_t i = 0; i < lines_n && i < 16; i++)
+	for (size_t i = 0; i < lines_n && i < 32; i++)
 		if (strncmp(lines_buf[i], prefix, strlen(prefix)) == 0)
 			return 1;
 	return 0;
@@ -1231,6 +1245,250 @@ static void case_noend_restore(void)
 	name_check(t, e == HVS6S_OK && r.diff_word == -1, "(i) word 928, past the window, is not compared");
 }
 
+/* ---- hardware-written words (swap-hwword) ------------------------------ */
+
+static int has_sub(const char *sub)
+{
+	for (size_t i = 0; i < lines_n && i < 32; i++)
+		if (strstr(lines_buf[i], sub))
+			return 1;
+	return 0;
+}
+
+static void run_lines(struct hvs *h, struct hvs6s_cfg *c, struct hvs6s_snap *s,
+		      struct hvs6s_report *r, enum hvs6s_err *e)
+{
+	struct hvs6s_io io = model_io(h);
+	struct hvs6s_emit em = { collect, NULL };
+
+	*e = hvs6s_run(&io, c, s, r);
+	lines_n = 0;
+	(void)hvs6s_lines(s, r, &em);
+}
+
+/* The set's text form. */
+static void case_hw_parse(void)
+{
+	struct hvs6s_hw_set h;
+	char b[48];
+	const char *t = "hw-parse";
+	static const char *const bad[] = {
+		"4", "4:", ":skip", "x:skip", "4:skipx", "4:skip,", ",4:skip", " 4:skip", "4:Skip",
+		"63:skip", "4:skip,4:expect", "1:skip,2:skip,3:skip,4:skip,5:skip", "none,4:skip",
+		"99999999999:skip",
+	};
+	int all_bad = 1;
+
+	name_check(t, hvs6s_hw_parse("", &h) == 0 && h.n == 0, "'' is the empty set");
+	name_check(t, hvs6s_hw_parse("none", &h) == 0 && h.n == 0, "'none' is the empty set");
+	name_check(t, hvs6s_hw_parse("4:skip", &h) == 0 && h.n == 1 && h.w[0].off == 4 &&
+		      h.w[0].mode == HVS6S_HW_SKIP,
+		   "'4:skip': offset 4 SKIP");
+	name_check(t, hvs6s_hw_parse("0:expect,62:skip,7:expect,5:skip", &h) == 0 && h.n == 4 &&
+		      h.w[0].off == 0 && h.w[0].mode == HVS6S_HW_EXPECT && h.w[1].off == 62 &&
+		      h.w[3].mode == HVS6S_HW_SKIP,
+		   "four items, offsets 0 and 62 the bounds");
+	name_check(t, strcmp(hvs6s_hw_format(&h, b, sizeof(b)), "0:expect,62:skip,7:expect,5:skip") == 0,
+		   "format gives the same text back");
+	h.n = 0;
+	name_check(t, strcmp(hvs6s_hw_format(&h, b, sizeof(b)), "none") == 0 &&
+		      strcmp(hvs6s_hw_format(NULL, b, sizeof(b)), "none") == 0,
+		   "the empty set formats as 'none'");
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		h.n = 3;
+		if (hvs6s_hw_parse(bad[i], &h) != -1 || h.n != 0) {
+			all_bad = 0;
+			printf("        accepted: '%s'\n", bad[i]);
+		}
+	}
+	name_check(t, all_bad, "malformed, out of range, duplicate and five-item texts refused, set empty");
+	name_check(t, hvs6s_hw_parse(NULL, &h) == -1 && hvs6s_hw_parse("4:skip", NULL) == -1,
+		   "NULL text or set refused");
+}
+
+/* An invalid set in cfg refuses the run before any access. */
+static void case_hw_badcfg(void)
+{
+	struct hvs h;
+	struct hvs6s_io io;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	const char *t = "hw-badcfg";
+
+	model_board(&h, BHEAD, 1);
+	io = model_io(&h);
+	c.hw.n = HVS6S_HW_MAX + 1u;
+	name_check(t, hvs6s_run(&io, &c, &s, &r) == HVS6S_ERR_ARG && h.nlog == 0 && h.nreads == 0,
+		   "five offsets: HVS6S_ERR_ARG, nothing read or written");
+	c.hw = (struct hvs6s_hw_set){ 2, { { 4, HVS6S_HW_SKIP }, { 4, HVS6S_HW_EXPECT } } };
+	name_check(t, hvs6s_run(&io, &c, &s, &r) == HVS6S_ERR_ARG && h.nlog == 0,
+		   "an offset twice: HVS6S_ERR_ARG, nothing written");
+	c.hw = (struct hvs6s_hw_set){ 1, { { 63, HVS6S_HW_SKIP } } };
+	name_check(t, hvs6s_run(&io, &c, &s, &r) == HVS6S_ERR_ARG && h.nlog == 0,
+		   "offset 63 (past any entry): HVS6S_ERR_ARG");
+	c.hw = (struct hvs6s_hw_set){ 1, { { 4, HVS6S_HW_NO } } };
+	name_check(t, hvs6s_run(&io, &c, &s, &r) == HVS6S_ERR_ARG && h.nlog == 0,
+		   "mode NO in the set: HVS6S_ERR_ARG");
+}
+
+/* The firmware's span at the restore: empty set, SKIP, EXPECT, undeclared. */
+static void case_hw_restore(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	uint32_t w;
+	const char *t = "hw-restore";
+
+	/* empty set: word 676 (entry 0 off 4) changing fails, named */
+	model_board(&h, BHEAD, 1);
+	w = h.mem[BHEAD + 4u];
+	h.corrupt_word = BHEAD + 4u;
+	h.our_start = 32;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 676 && r.diff_want == w &&
+		      r.rdiff.total == 1 && r.rdiff.undeclared == 1 && r.rdiff.hw_words == 0,
+		   "empty set: a changed word 676 is RESTORE_WORD, as before");
+	name_check(t, has_line("dlswap restore-diff word 676 entry 0 off 4 was 0xc0c0c0c0 now 0xc0c1c0c0 hw=no") &&
+		      has_line("dlswap restore-diffs total=1 undeclared=1 skip=0 expect=0 shown=1 hwskip=none") &&
+		      has_line("dlswap restore-words FAIL word 676 want=0xc0c0c0c0 got=0xc0c1c0c0 hwskip=none"),
+		   "empty set: restore-diff names word 676, entry 0, off 4, hw=no; count line");
+	name_check(t, has_sub("snapshot ok") && has_sub("hwskip=none"), "snapshot line carries hwskip=none");
+
+	/* SKIP: the same change passes, named and counted */
+	model_board(&h, BHEAD, 1);
+	h.corrupt_word = BHEAD + 4u;
+	h.our_start = 32;
+	(void)hvs6s_hw_parse("4:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.restore_equal && r.diff_word == -1 && r.rdiff.total == 1 &&
+		      r.rdiff.skip == 1 && r.rdiff.undeclared == 0 && r.rdiff.hw_words == 1,
+		   "4:skip: word 676 changing passes the restore");
+	name_check(t, has_line("dlswap restore-diff word 676 entry 0 off 4 was 0xc0c0c0c0 now 0xc0c1c0c0 hw=skip") &&
+		      has_line("dlswap restore-diffs total=1 undeclared=0 skip=1 expect=0 shown=1 hwskip=4:skip") &&
+		      has_line("dlswap restore-words ok fw 672..704 byte-equal except hw words off 4 (1 differed) hwskip=4:skip") &&
+		      has_line("dlswap result ok"),
+		   "4:skip: the word named hw=skip, PASS says 'byte-equal except hw words off 4'");
+	name_check(t, has_sub("snapshot ok") && has_sub("hwskip=4:skip"), "snapshot line carries hwskip=4:skip");
+
+	/* SKIP declared, nothing changes: still says what was left out */
+	model_board(&h, BHEAD, 1);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.rdiff.total == 0 &&
+		      has_line("dlswap restore-words ok fw 672..704 byte-equal except hw words off 4 (0 differed)"),
+		   "4:skip, no change: 'byte-equal except hw words off 4 (0 differed)'");
+
+	/* EXPECT: compared, reported, not failing */
+	model_board(&h, BHEAD, 1);
+	h.corrupt_word = BHEAD + 4u;
+	h.our_start = 32;
+	(void)hvs6s_hw_parse("4:expect", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.rdiff.expect == 1 && r.rdiff.skip == 0 &&
+		      has_sub("restore-diff word 676 entry 0 off 4") && has_sub("hw=expect"),
+		   "4:expect: the change reported hw=expect, the run ok");
+
+	/* undeclared word beside a declared one: FAIL, named */
+	model_board(&h, BHEAD, 1);
+	h.corrupt_word = BHEAD + 5u;
+	h.our_start = 32;
+	(void)hvs6s_hw_parse("4:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 677 && r.rdiff.undeclared == 1 &&
+		      has_sub("restore-diff word 677 entry 0 off 5") && has_sub("off 5 was") &&
+		      has_line("dlswap restore-words FAIL word 677"),
+		   "4:skip, word 677 (off 5) changed: RESTORE_WORD naming 677, hw=no");
+
+	/* the END word is in no entry: 0:skip does not cover it */
+	model_board(&h, BHEAD, 1);
+	h.corrupt_word = BHEAD + 32u;
+	h.our_start = 32;
+	(void)hvs6s_hw_parse("0:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 704 &&
+		      has_line("dlswap restore-diff word 704 entry none off none"),
+		   "0:skip: a changed END word (704, in no entry) still fails, 'entry none off none'");
+
+	/* every entry of a window: entry 3's offset 4 (word 772) */
+	model_noend(&h, BHEAD, 12);
+	h.corrupt_word = BHEAD + 32u * 3u + 4u;
+	h.our_start = 32;
+	(void)hvs6s_hw_parse("4:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && s.fw_noend && r.rdiff.skip == 1 && r.rdiff.hw_words == 8 &&
+		      has_sub("restore-diff word 772 entry 3 off 4"),
+		   "no END: word 772 (entry 3 off 4 of the window) skipped; 8 entries' word 4 declared");
+	model_noend(&h, BHEAD, 12);
+	h.corrupt_word = BHEAD + 32u * 3u + 5u;
+	h.our_start = 32;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 773,
+		   "no END: word 773 (entry 3 off 5) is not declared: named");
+}
+
+/* Our slot's read-back in hvs6s_swap: the HVS writes word 4 of our entry. */
+static void case_hw_readback(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "hw-readback";
+
+	model_board(&h, BHEAD, 1);
+	h.stick_word = 36;
+	h.stick_val = 0x0badc0deu;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_LIST_READ && r.list_bad_word == 4 && !r.swapped &&
+		      r.ldiff.total == 1 && r.ldiff.undeclared == 1,
+		   "empty set: word 36 (our entry off 4) reads back otherwise: LIST_READ, word 4");
+	name_check(t, count_writes(&h, hvs6s_lptrs_reg(CH)) == 1 && r.restored && r.restore_equal,
+		   "empty set: LPTRS never swapped, the restore ran and is equal");
+	name_check(t, has_line("dlswap readback-diff word 36 entry 0 off 4 was 0xc0c0c0c0 now 0x0badc0de hw=no") &&
+		      has_line("dlswap readback-diffs total=1 undeclared=1"),
+		   "empty set: readback-diff names word 36, entry 0, off 4, hw=no");
+
+	model_board(&h, BHEAD, 1);
+	h.stick_word = 36;
+	h.stick_val = 0x0badc0deu;
+	(void)hvs6s_hw_parse("4:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.swapped && r.lptrs_ok && r.settle_ok && r.ldiff.skip == 1 &&
+		      r.ldiff.undeclared == 0 && r.restore_equal,
+		   "4:skip: the written-back word 36 does not stop the swap");
+	name_check(t, has_line("dlswap readback-diff word 36 entry 0 off 4 was 0xc0c0c0c0 now 0x0badc0de hw=skip") &&
+		      has_line("dlswap readback-diffs total=1 undeclared=0 skip=1 expect=0 shown=1 hwskip=4:skip"),
+		   "4:skip: readback-diff hw=skip and its count line");
+
+	model_board(&h, BHEAD, 1);
+	h.stick_word = 37;
+	h.stick_val = 0x77u;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_LIST_READ && r.list_bad_word == 5 && !r.swapped &&
+		      has_sub("readback-diff word 37 entry 0 off 5"),
+		   "4:skip, word 37 (off 5) differs: LIST_READ naming word 5");
+
+	/* our list END (word 41) is in no entry; the inner END (40) is off 8 */
+	model_board(&h, BHEAD, 1);
+	h.stick_word = 41;
+	h.stick_val = 0;
+	(void)hvs6s_hw_parse("0:skip,8:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_LIST_READ && r.list_bad_word == 9 &&
+		      has_sub("readback-diff word 41 entry none off none"),
+		   "0:skip,8:skip: our list END (41, no entry) differing still fails");
+	model_board(&h, BHEAD, 1);
+	h.stick_word = 40;
+	h.stick_val = 0;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.ldiff.skip == 1 && has_sub("readback-diff word 40 entry 0 off 8"),
+		   "0:skip,8:skip: the inner END (40, off 8) differing is skipped");
+}
+
 int main(void)
 {
 	case_pass();
@@ -1254,6 +1512,10 @@ int main(void)
 	case_noend_place();
 	case_noend_chan();
 	case_noend_restore();
+	case_hw_parse();
+	case_hw_badcfg();
+	case_hw_restore();
+	case_hw_readback();
 	printf("hvs6_dlist_swap_mock: %d of %d checks, %d failed\n", total - failed, total, failed);
 	return failed ? 1 : 0;
 }

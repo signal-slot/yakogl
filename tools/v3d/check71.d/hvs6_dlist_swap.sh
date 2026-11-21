@@ -8,7 +8,9 @@
 # channel's LPTRS swapped as the last single write, the read-back and FRCNT
 # results, and the byte-equal restore of exactly the firmware's words and
 # LPTRS, against a model of one D0 channel, including the board's layout
-# (HEADE=672)
+# (HEADE=672), and the declared hardware-written words (SKIP/EXPECT by
+# plane-entry offset, every differing word named, at the restore and at our
+# slot's read-back)
 # (driver/zephyr/lib/board/test/hvs6_dlist_swap_mock.c), with -std=c11
 # -Wall -Wextra -Werror and AddressSanitizer + UBSan; the header also
 # compiles alone under -std=c11 -pedantic.

@@ -26,6 +26,38 @@ endif()
 target_compile_definitions(app PRIVATE RPI5_SCANOUT32_BUILD="${RPI5_SCANOUT32_BUILD}")
 message(STATUS "rpi5_scanout32 build: ${RPI5_SCANOUT32_BUILD}")
 
+# Hardware-written words of a plane entry (README "Hardware-written words"):
+# "<off>:skip|expect" items joined by ',', offsets 0..62 from an entry's
+# start, at most 4, each once; empty (the default) compares every word.
+#   -DRPI5_SCANOUT32_HW_WORDS="4:skip"
+set(RPI5_SCANOUT32_HW_WORDS "" CACHE STRING
+    "hardware-written plane-entry words, e.g. 4:skip or 4:skip,7:expect (empty: none)")
+if(NOT RPI5_SCANOUT32_HW_WORDS STREQUAL "")
+  if(NOT RPI5_SCANOUT32_HW_WORDS MATCHES "^[0-9]+:(skip|expect)(,[0-9]+:(skip|expect))*$")
+    message(FATAL_ERROR "RPI5_SCANOUT32_HW_WORDS '${RPI5_SCANOUT32_HW_WORDS}': "
+                        "want <off>:skip|expect[,<off>:skip|expect...]")
+  endif()
+  string(REPLACE "," ";" hw_items "${RPI5_SCANOUT32_HW_WORDS}")
+  list(LENGTH hw_items hw_n)
+  if(hw_n GREATER 4)
+    message(FATAL_ERROR "RPI5_SCANOUT32_HW_WORDS: ${hw_n} items, at most 4")
+  endif()
+  set(hw_seen "")
+  foreach(it IN LISTS hw_items)
+    string(REGEX REPLACE ":.*" "" hw_off "${it}")
+    if(hw_off GREATER 62)
+      message(FATAL_ERROR "RPI5_SCANOUT32_HW_WORDS: offset ${hw_off} over 62")
+    endif()
+    math(EXPR hw_off "${hw_off}")
+    if(hw_off IN_LIST hw_seen)
+      message(FATAL_ERROR "RPI5_SCANOUT32_HW_WORDS: offset ${hw_off} twice")
+    endif()
+    list(APPEND hw_seen ${hw_off})
+  endforeach()
+endif()
+target_compile_definitions(app PRIVATE RPI5_SCANOUT32_HW_WORDS="${RPI5_SCANOUT32_HW_WORDS}")
+message(STATUS "rpi5_scanout32 hardware-written words: '${RPI5_SCANOUT32_HW_WORDS}'")
+
 target_sources(app PRIVATE src/main.c)
 # rpi_wdog.h lives with the rpi4 board code; the header-only decoders in
 # rpi5_scanout (hvs6_dlist.h, ...) have no source of their own.
