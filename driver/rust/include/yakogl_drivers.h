@@ -1367,6 +1367,9 @@ struct yd_pvr_km {
 /* What the driver chooses for the FWIF structures (gpu::pvr::fwinit). */
 #define YD_PVR_FWINIT_ASSERT_ON_HWR (1u << 0) /* halt, do not reset, on a HWR */
 #define YD_PVR_FWINIT_CTXSWITCH_OFF (1u << 1) /* no context switching */
+/* = gpu::pvr::fwinit::FWINIT_PARTIAL_RENDER: the partial-render knob is on;
+ * unmask the firmware's SPM and MAIN debug trace groups. */
+#define YD_PVR_FWINIT_PARTIAL_RENDER (1u << 2)
 struct yd_pvr_fwinit {
 	uint32_t pm_latency_ms;         /* RGXFWIF_RUNTIME_CFG.ui32ActivePMLatencyms */
 	uint32_t core_clock_hz;         /* the core (and SOC) clock the firmware is told */

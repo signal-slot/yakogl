@@ -39,6 +39,7 @@
 #include <yakogl_drv/yd_env.h>
 #include "pvr_internal.h"
 #include "pvr_drv.h"
+#include "pvr_render.h"
 
 LOG_MODULE_DECLARE(gpu_pvr, CONFIG_YAKOGL_DRV_GPU_PVR_LOG_LEVEL);
 
@@ -413,7 +414,13 @@ static int pvr_fw_build_structs(void)
 	const struct yd_pvr_fwinit cfg = {
 		.pm_latency_ms = pvr_fw_pm_latency_ms,
 		.core_clock_hz = PVR_CORE_CLOCK_HZ,
+		/* The partial-render knob (pvr_render_partial_render, from
+		 * CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER; static-initialised,
+		 * never written later) also unmasks the firmware's SPM/MAIN
+		 * trace groups. */
 		.flags = 0
+			 | (pvr_render_partial_render
+				    ? YD_PVR_FWINIT_PARTIAL_RENDER : 0)
 #ifdef PVR_ASSERT_ON_HWR
 			 | YD_PVR_FWINIT_ASSERT_ON_HWR
 #endif
