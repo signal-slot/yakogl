@@ -4621,7 +4621,14 @@ fn walk_if16(
     let then_colour = core::mem::replace(&mut f.colour, saved_colour);
     let else_start = f.nir.n;
     let else_flow = walk_nodes(f, m, else_, vals, locals, prec, false, join, None)?;
-    if then_flow != Flow::Next || else_flow != Flow::Next || (then_colour != f.colour && !cmp16) {
+    /* the colours agree where one side's lane is an undef (a varying the
+     * vertex shader never writes, [`super::link::FsConsts::undef`]):
+     * `nir_opt_undef` takes the other side's (deqp_varylink_unwritten) */
+    let agree = match (then_colour, f.colour) {
+        (Some(a), Some(b)) => (0..4).all(|k| a[k] == b[k] || a[k] == Val::Undef || b[k] == Val::Undef),
+        (a, b) => a == b,
+    };
+    if then_flow != Flow::Next || else_flow != Flow::Next || (!agree && !cmp16) {
         return Err(MaliError::ControlFlow);
     }
     /* `nir_opt_peephole_select` takes sides of ALU work alone, at most
@@ -5468,9 +5475,17 @@ fn walk_nodes(
                  * constant ([`super::link::FsConsts`]): the load is of
                  * the other lanes alone, when one is left */
                 let konst = |c: usize| prec.consts.get(v, c as u8);
-                let n = if (0..comps as usize).all(|c| konst(c).is_some()) { None } else { Some(f.input(v, at)?) };
+                /* a lane the vertex shader never writes is an undef
+                 * ([`super::link::FsConsts::undef`]): no load of it */
+                let undef = |c: usize| prec.consts.undef(v, c as u8);
+                let n = if (0..comps as usize).all(|c| konst(c).is_some() || undef(c)) {
+                    None
+                } else {
+                    Some(f.input(v, at)?)
+                };
                 for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
                     *o = match (konst(c), n) {
+                        _ if undef(c) => Val::Undef,
                         (Some(bits), _) => Val::Const(bits),
                         (None, Some(n)) => Val::Lane(n, c as u8),
                         (None, None) => return Err(MaliError::Defect(Defect::IrIndex)),
