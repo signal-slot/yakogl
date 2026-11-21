@@ -531,44 +531,61 @@ the option of README section 2b on; the Pass/Fail/NotSupported moves against
 
 ### (d3) What each group compares, and the depth/stencil resolve destination
 
-Read from VK-GL-CTS `93bca01861b0e3ef3c387027a9791e6d065f900c`. Paths are
-under `modules/gles3/functional/` unless they start with `framework/`.
-Thresholds are 8-bit channel steps.
+Read from VK-GL-CTS `93bca01861b0e3ef3c387027a9791e6d065f900c`; every
+`file:line` below was checked against that tree (clone at the deps cache,
+`vk-gl-cts-93bca01`). Paths are under `modules/gles3/functional/` unless they
+start with `framework/`. Thresholds are 8-bit channel steps.
+`getFormatThreshold` is `es3fFboTestUtil.cpp:1167-1180`: per channel
+`ceil(255 * 2 / (2^bits - 1))` from the format's mantissa bits
+(`calculateU8ConversionError`, `:1153-1165`; 1 for a channel with no bits), so
+RGBA8 gives 2 and the `RGBA(12,12,12,12)` floor decides for it.
+`tcu::compareThreshold` is `framework/common/tcuRGBA.hpp:206`,
+`tcu::bilinearCompare` is `framework/common/tcuImageCompare.cpp:1555`,
+`tcu::pixelThresholdCompare` is `:1530`.
 
 | group | rule and threshold | against | file:line |
 |---|---|---|---|
-| `fbo.msaa.*`, colour only | `tcu::bilinearCompare`, per-channel threshold `max(getFormatThreshold(colorFormat), RGBA(12,12,12,12))` | a reference render of the same `render()` on `sglr::ReferenceContext` | `es3fFboMultisampleTests.cpp:241-246`, `:249-254` (colour-only picks `colorCompare`); reference render `es3fFboTestCase.cpp:106-117` |
-| `fbo.msaa.*`, with depth/stencil | `FboTestCase::compare`: `tcu::fuzzyCompare` with threshold `0.05f`, passes when the fuzzy difference is `<= 0.05` | the same reference render | `es3fFboTestCase.cpp:125-129`; `framework/common/tcuImageCompare.cpp:229-237`; dispatch `es3fFboMultisampleTests.cpp:249-254` |
-| `fbo.msaa.renderbuffer_resize.*` | every pixel of the 40x40 resolve `compareThreshold(color, green, max(getFormatThreshold(GL_RGBA8), RGBA(12,12,12,12)))` | fixed colour (green, the last clear) | `es3fFboMultisampleTests.cpp:340-346` |
-| `multisample.fbo_max_samples.num_samples_*` | the image must hold `numSamples + 1` distinct colours, two colours equal when within `RGBA(3,3,3,3)`; fewer after the iteration cap is Fail (a quality warning only for a target of 2048 or more with at least half the samples) | no reference: counts colours | `es3fMultisampleTests.cpp:611-627`, `:635-658`; sample count from `glGetInternalformativ(GL_SAMPLES)` at `:451` |
-| `multisample.fbo_max_samples.common_edge_*` | `isPixelRegionUnicolored`: every pixel of a region within `RGBA(3,3,3,3)` of one colour | fixed: the region's own first colour | `es3fMultisampleTests.cpp:120-155` (compare at `:139-144`); the error image uses a centre pixel as the colour, `:157-171`; used at `:1004` |
-| `multisample.fbo_max_samples.sample_coverage_invert`, `constancy_*`, `proportionality_*` | `pixelThresholdCompare` with `RGBA(0)`: bit-identical | a second render of the same case (no reference render) | `es3fMultisampleTests.cpp:1215-1216`, `:1644-1646` |
-| `multisample.fbo_max_samples.depth`, `.stencil` | `SampleDepthCase` and `SampleStencilCase` are `NumSamplesCase`s: the distinct-colour count above | colour count | `es3fMultisampleTests.cpp:1047-1062` |
-| `rasterization.fbo.rbo_multisample_max.*` | `verifyTriangleGroupRasterization` (triangles, fill rules; STRICT: no missing or unexpected pixel), `verifyLineGroupRasterization` (lines), `verifyPointGroupRasterization` (points); see below | an analytic coverage map, not a render | `es3fRasterizationTests.cpp:495`, `:629`, `:776` |
+| `fbo.msaa.*`, colour only | `tcu::bilinearCompare`, per-channel threshold `max(getFormatThreshold(colorFormat), RGBA(12,12,12,12))` | a reference render of the same `render()` on `sglr::ReferenceContext` | `es3fFboMultisampleTests.cpp:241-247` (`colorCompare`), dispatch `:249-255` (colour-only picks `colorCompare`); reference render `es3fFboTestCase.cpp:106-117`, compare call `:119` |
+| `fbo.msaa.*`, with depth/stencil | `FboTestCase::compare`: `tcu::fuzzyCompare` with threshold `0.05f`, passes when the fuzzy difference is `<= 0.05` | the same reference render | `es3fFboTestCase.cpp:125-129`; `framework/common/tcuImageCompare.cpp:478-481` (the `Surface` overload) into `:229-237` (`difference <= threshold` at `:237`); dispatch `es3fFboMultisampleTests.cpp:249-255` |
+| `fbo.msaa.renderbuffer_resize.*` | every pixel of the 40x40 (`W2 = H2 = 40`, `:288`) resolve `compareThreshold(color, green, max(getFormatThreshold(GL_RGBA8), RGBA(12,12,12,12)))` | fixed colour (green, the last clear `:322`) | `es3fFboMultisampleTests.cpp:340-348`; the 10x10 storage is reallocated to 40x40 after a clear, `:314-322`; the blit is `:330`; every step must raise no GL error (`:303`, `:324`, `:332`, `:338`) and the multisample FBO must stay complete (`:317`, `:321`) |
+| `multisample.fbo_max_samples.num_samples_*` | the image must hold `numSamples + 1` distinct colours, two colours equal when within `RGBA(3,3,3,3)`; fewer after the iteration cap is Fail (a quality warning only for a target of 2048 or more with at least half the samples) | no reference: counts colours | `es3fMultisampleTests.cpp:611-627`, `:635-658` (Fail `:656`, warning `:652-654`), Pass `:668-674`; sample count from `glGetInternalformativ(GL_SAMPLES)` at `:451` (only when the case's FBO sample count is 0, `:444-452`) |
+| `multisample.fbo_max_samples.common_edge_*` | `isPixelRegionUnicolored`: every pixel of a region within `RGBA(3,3,3,3)` of one colour | fixed: the region's own first colour | `es3fMultisampleTests.cpp:120-155` (compare at `:139-144`, first colour `:146-150`); the error image uses a centre pixel as the colour, `:157-171` (`:164`); used at `:1004`, Fail `:1014-1023` |
+| `multisample.fbo_max_samples.sample_coverage_invert` | `pixelThresholdCompare` with `RGBA(0)`: bit-identical | a render of the same pattern with `GL_SAMPLE_COVERAGE` off, not a reference render (`CoverageMaskInvertCase`: pattern drawn plain `:1622-1624`, then drawn twice with coverage and its inverted mask `:1631-1639`, additive blend `:1613-1615`) | `es3fMultisampleTests.cpp:1565-1577`, `:1644-1646` |
+| `multisample.fbo_max_samples.stencil` | `SampleStencilCase` is a plain `MultisampleCase`, not a `NumSamplesCase`: it first needs the colour buffer to clear to exactly black (`clr != RGBA::black()` is a Fail, `:1189-1201`), then `pixelThresholdCompare` with `RGBA(0)`: bit-identical | the first image of the same case (pattern with stencil `GL_REPLACE` `:1154-1171`, redrawn as a full quad with `GL_EQUAL` `:1180-1209`) | `es3fMultisampleTests.cpp:1117-1127`, `:1215-1216` |
+| `multisample.fbo_max_samples.depth` | `SampleDepthCase` is a `NumSamplesCase` (FBO with depth, `FboParams(n, true, false)`, `:1063`): the distinct-colour count above; 50 intersecting black or white triangles with `GL_LESS` | colour count | `es3fMultisampleTests.cpp:1047-1065`, `:1067-1082`, `:1084-1107`; `NumSamplesCase` `:558-675` |
+| `multisample.fbo_max_samples.proportionality_*` | not a pixel compare: the red sum of the image must not fall from frame to frame (`:1371-1377`), be exactly 0 on the first frame (`:1381-1386`) and exactly `0xff * numPixels` on the last (`:1388-1394`) | counts, no reference | `es3fMultisampleTests.cpp:1361-1396`; Pass `:1400-1410` |
+| `multisample.fbo_max_samples.constancy_*` | any pixel with `getGreen() > 0` after the red quad overdraws the green one is a Fail | counts, no reference | `es3fMultisampleTests.cpp:1500-1543`; Pass `:1545-1550` |
+| `rasterization.fbo.rbo_multisample_max.*` | `verifyTriangleGroupRasterization` (triangles, fill rules; STRICT: no missing or unexpected pixel), `verifyLineGroupRasterization` (lines), `verifyPointGroupRasterization` (points); see below | an analytic coverage map, not a render | `es3fRasterizationTests.cpp:495`, `:629`, `:776`; the group is `:2540-2541` in the table `:2536-2542`, its member list `:2551-2618` |
 
 How the rasterization verifier decides
 (`framework/common/tcuRasterizationVerifier.cpp`): the multisampled case
-(`numSamples != 0`) is chosen at `:2961` (triangles), `:3164-3170`
-(lines: `verifyMultisampleLineGroupRasterization`, a line is two triangles)
-and `:3240-3244` (points: always the multisample path). A pixel with
+(`numSamples != 0`) is chosen at `:2961` (triangles, `verifyTriangleGroupRasterization`
+`:2947`), `:3164-3170` (lines, `verifyLineGroupRasterization` `:3161`:
+`verifyMultisampleLineGroupRasterization`, defined `:1005`, a line is two
+triangles) and `:3240-3245` (points, `verifyPointGroupRasterization` `:3240`: always the
+multisample path, `verifyMultisamplePointGroupRasterization` `:1439`). The
+triangle case passes no mode, so it takes the default `VERIFICATIONMODE_STRICT`
+of the declaration (`tcuRasterizationVerifier.hpp:183-185`). A pixel with
 reference coverage NONE must match black within `compareColors` (`:3071-3078`);
-PARTIAL accepts anything (`:3080-3107`, "anything goes"); FULL must match white
-(`:3109-3121`). `compareColors` allows `1 << (8 - bits)` per channel
-(`:93-101`), 1 for an 8-bit channel. STRICT fails on one missing or
+PARTIAL accepts anything (`:3080-3107`, "anything goes" at `:3099`); FULL must match white
+(`:3109-3121`). `compareColors` (`:93`) allows `1 << (8 - bits)` per channel
+(`:95-97`), compared with `<=` (`:99-101`): 1 for an 8-bit channel. STRICT fails on one missing or
 unexpected pixel; WEAK allows 10 (`weakVerificationThreshold`, `:2959`,
 `:3128-3132`). The parameters the test passes are `args.numSamples` from
-`GL_RENDERBUFFER_SAMPLES` of the attachment (`es3fRasterizationTests.cpp:307-308`),
-`subpixelBits` and the colour bits of the pixel format
-(`:617-622`). The result is read after a `glBlitFramebuffer` into a
-single-sample RGBA8 renderbuffer (`:281-294`, the resolve of this note); a
+`GL_RENDERBUFFER_SAMPLES` of the attachment (`es3fRasterizationTests.cpp:302-308`,
+the window's `getNumSamples()` for the default target `:303`),
+`subpixelBits` (`GL_SUBPIXEL_BITS`, `:315`) and the colour bits of the pixel format
+(triangles `:487-491`, lines `:617-621`, points `:768-772`). The result is read after a `glBlitFramebuffer` into a
+single-sample RGBA8 renderbuffer (the blit target is built `:276-298`,
+`:281-294`; the resolve of this note); a
 wrong resolve therefore shows up as a Fail in every case, not only edge
 pixels. The `rbo_multisample_max` request is the `glGetInternalformativ`
-maximum of the colour format (`:194-197`, with no NotSupported path); the
-`_4` rows throw NotSupported when that maximum is below 4 (`:198-200`).
+maximum of the colour format (`:191-197`, `SAMPLE_COUNT_MAX = -2` at `:114`, with no NotSupported path); the
+`_4` rows throw NotSupported when that maximum is below 4 (`:198-201`).
 With `max` 4 both groups draw the same 4x render, so one implementation moves both.
 For wide lines the case is lenient with samples above 1: a failing
 `verifyLineGroupRasterization` at `lineWidth != 1` becomes pass and is
-reported as a compatibility warning (`:632-636`, `:649-651`). This means
+reported as a compatibility warning (`:631-636`, `:649-651`). This means
 the 2 `lines_wide` rows of the RC8 file (Fail today) cannot fail on the
 verifier alone once `GL_RENDERBUFFER_SAMPLES` reads above 1; their present
 Fail at 1 sample is not explained by the verifier read here.
@@ -576,16 +593,22 @@ Fail at 1 sample is not explained by the verifier read here.
 (b) For an `fbo.msaa` case with depth or stencil the resolve destination is
 a **second, single-sample FBO with its own depth/stencil renderbuffer**
 (`glRenderbufferStorageMultisample(..., samples = 0, ...)`,
-`es3fFboMultisampleTests.cpp:98-127`), not the colour texture. Depth is
-attached for a depth format, stencil for a stencil one (`:124-127`). The
+`es3fFboMultisampleTests.cpp:102-131`: `samples = ndx ? 0 : m_numSamples`
+at `:107`, the storage at `:111` and `:117`), not the colour texture. Depth is
+attached for a depth format, stencil for a stencil one (`:124-127`); a
+`checkFramebufferStatus` on both FBOs (`:129-130`) means a back end that
+cannot make the 4x FBO complete fails there (an unsupported status is
+NotSupported, `es3fFboTestCase.cpp:96-101`). The 4x FBO is filled before the
+blit by a depth and stencil clear (`:137`), a gradient quad (`:142`) and 8
+random quads with `GL_ALWAYS` and stencil `GL_INCR` (`:144-172`). The
 blit is one `glBlitFramebuffer` of the whole size, scale 1, `GL_NEAREST`,
 with `GL_COLOR_BUFFER_BIT` plus `GL_DEPTH_BUFFER_BIT` and
-`GL_STENCIL_BUFFER_BIT` as the format has them (`:178-185`). The case
+`GL_STENCIL_BUFFER_BIT` as the format has them (`:178-183`). The case
 never reads depth or stencil back: it renders 8 flat quads with
 `GL_LESS`, depth writes off and colour mask blue at depths `-1 + k * 0.25`
 (`:187-210`) and 4 full-screen quads with `GL_EQUAL` on stencil values 0 to
 3 and colour mask green (`:212-236`) into the resolve FBO, then reads the
-colour. So the resolved depth and stencil are checked only through those 8 depth
+colour (`:238`). So the resolved depth and stencil are checked only through those 8 depth
 and 4 stencil steps, against the reference render with the 0.05 fuzzy
 threshold (`es3fFboTestCase.cpp:125-129`), which accepts a one-step
 difference at a few edge pixels but not a whole region moved a step. Any one
