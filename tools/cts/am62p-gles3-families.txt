@@ -5,28 +5,91 @@
 #   <family-id> TAB <comma-separated case globs> [TAB <message regex>]
 # Globs (fnmatch, case sensitive) match the full case name; the optional regex
 # (re.search) must also match the row's message. The first matching line wins,
-# so the specific rules come first. Seeded from RC1-RC18 of
-# docs/es3-cts-failures.md; modest on purpose, the triage refines it.
-# Cases no line matches stay 'unassigned' and fail --check.
+# so the specific rules come first. A NoResult row has an empty message, so a
+# rule with a regex never matches it; those rows are assigned by glob alone.
+# Names follow RC1-RC18 of docs/es3-cts-failures.md (AM62P section) and the
+# investigations; each family says what it rests on. "host-done" means built
+# and pinned on the host, awaiting the board rerun. No rule is a guess: a
+# group no document names is 'uninvestigated-<group>'.
 #
-# no result
+# ---- NoResult (the case never ran) ----
+# image 7's ResourceError on a large draw; passes since ffee428a (RC16).
+# Its mat4/mat4x2/mat4x3 matrixcompmult/outerproduct/transpose cases are meant
+# to fail later with the tile-buffer spill family below (inv-matprec); on the
+# ad2b5ed list they never ran, so they stay here.
+tilebuf-spill-int-targets	dEQP-GLES3.functional.shaders.builtin_functions.precision.matrixcompmult.*mat4*,dEQP-GLES3.functional.shaders.builtin_functions.precision.outerproduct.*mat4*,dEQP-GLES3.functional.shaders.builtin_functions.precision.transpose.*mat4*	.
+RC16-resourceerror-image7	dEQP-GLES3.functional.shaders.builtin_functions.precision.*
+# the 11 texture.filtering.3d cases that did not start: the watchdog of #1285.
+#1285-watchdog	dEQP-GLES3.functional.texture.filtering.3d.*	^$
+#
+# ---- NotSupported: the message names the cause ----
+ns-ext-draw-buffers-indexed	dEQP-GLES3.*	GL_EXT_draw_buffers_indexed|GL_KHR_blend_equation_advanced
+ns-ext-texture-srgb-r8-rg8	dEQP-GLES3.*	GL_EXT_texture_sRGB_R8|GL_EXT_texture_sRGB_RG8
+ns-astc-not-required-es30	dEQP-GLES3.*	ASTC not supported
+ns-etc2-eac-formats-host-done	dEQP-GLES3.*	Compressed texture format not supported
+ns-ext-multiview	dEQP-GLES3.*	Multiview is not supported
+ns-program-binary-host-done	dEQP-GLES3.functional.shader_api.program_binary.*	Not supported
+ns-pbo-renderbuffer-float-formats	dEQP-GLES3.functional.pbo.renderbuffer.*	not supported
+ns-ext-color-buffer-float	dEQP-GLES3.*	Unsupported attachment format|requires GL_EXT_color_buffer_float
+ns-default-fb-no-multisample	dEQP-GLES3.functional.multisample.default_framebuffer.*	No multisample buffers
+ns-samples-above-max-samples	dEQP-GLES3.functional.multisample.fbo_4_samples.*,dEQP-GLES3.functional.multisample.fbo_8_samples.*,dEQP-GLES3.functional.fbo.msaa.*,dEQP-GLES3.functional.fbo.completeness.samples.*,dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_4.*	Maximum sample count|Sample count not supported|Unsupported number of samples|requires 4x msaa
+# ---- 3D textures (#1285) ----
 #1285-watchdog	dEQP-GLES3.functional.texture.filtering.3d.*
-noresult-reset	dEQP-GLES3.*	never ran
-# 3D textures, 2D arrays, swizzle
-RC15-3d	dEQP-GLES3.functional.texture.mipmap.3d.*,dEQP-GLES3.functional.texture.vertex.3d.*
-RC18-swizzle-wrapr	dEQP-GLES3.functional.texture.swizzle.*
-RC6-2darray	dEQP-GLES3.functional.texture.filtering.2d_array.*,dEQP-GLES3.functional.texture.mipmap.2d_array.*
-RC5-shadow	dEQP-GLES3.functional.texture.shadow.*
-RC9-sglr-compile	dEQP-GLES3.functional.texture.specification.*,dEQP-GLES3.functional.texture.units.*	Compile failed at sglrGLContext
-RC2-sized-formats	dEQP-GLES3.functional.texture.format.*,dEQP-GLES3.functional.texture.compressed.*
-# colour render targets
+# ---- the sglr compile refusal, fixed on the host ----
+sglr-compile-host-done	dEQP-GLES3.*	sglrGLContext\.cpp:863
+# ---- shaders ----
+# 24 precision int/uint cases: the program was refused before 3efd7b30 (an
+# integer output from an ALU result), builds now; host read-back is black.
+shprec-A-int-uint-fixed-host	dEQP-GLES3.functional.shaders.precision.int.*,dEQP-GLES3.functional.shaders.precision.uint.*
+# 16 common.round/roundeven highp cases (inv-shprec): fixed on the host.
+shprec-B-round-roundeven-highp-fixed-host	dEQP-GLES3.functional.shaders.builtin_functions.common.round.*,dEQP-GLES3.functional.shaders.builtin_functions.common.roundeven.*
+# modf vec3/vec4 write two RGBA32UI targets past the four output registers
+# (docs/notes/pvr-int-mixed-targets.md section 3: tile buffers would).
+tilebuf-spill-int-targets	dEQP-GLES3.functional.shaders.builtin_functions.common.modf.vec3_*,dEQP-GLES3.functional.shaders.builtin_functions.common.modf.vec4_*
+RC1-int-mix	dEQP-GLES3.functional.shaders.builtin_functions.common.modf.*
+# derivate on a 4-sample RGBA8 renderbuffer is RC8 / #339 (RC1's float-target note).
+RC8-blit-msaa	dEQP-GLES3.functional.shaders.derivate.*.msaa4.*
+uninvestigated-shaders-derivate-basic	dEQP-GLES3.functional.shaders.derivate.*
+RC13-fragdepth-compile	dEQP-GLES3.functional.shaders.fragdepth.*	ompile
+RC13-compile	dEQP-GLES3.functional.shaders.uniform_block.*,dEQP-GLES3.functional.shaders.texture_functions.*,dEQP-GLES3.functional.uniform_api.*	ompile|link
+# texture_functions that compiled but drew wrong, and 38 texturesize rows
+uninvestigated-shaders-texture-functions	dEQP-GLES3.functional.shaders.texture_functions.*
+uninvestigated-shaders-qualification-order	dEQP-GLES3.functional.shaders.qualification_order.*
+metamorphic-bubblesort-nondeterministic	dEQP-GLES3.functional.shaders.metamorphic.*
+RC13-compile	dEQP-GLES3.functional.shaders.*	ompile|link
+# ---- fragment_out ----
+RC7-srgb	dEQP-GLES3.functional.fragment_out.*.fixed.*
+RC1-int-mix	dEQP-GLES3.functional.fragment_out.*.int.*,dEQP-GLES3.functional.fragment_out.*.uint.*
+RC1-float-target	dEQP-GLES3.functional.fragment_out.*.float.*
+RC14-mrt	dEQP-GLES3.functional.fragment_out.random.*
+# ---- fbo ----
 RC7-srgb	dEQP-GLES3.*srgb8_alpha8*
-RC1-int-mix	dEQP-GLES3.functional.fragment_out.*.int.*,dEQP-GLES3.functional.fragment_out.*.uint.*,dEQP-GLES3.functional.shaders.builtin_functions.common.modf*
-RC14-mrt	dEQP-GLES3.functional.draw_buffers_indexed.*,dEQP-GLES3.functional.fragment_out.random.*,dEQP-GLES3.functional.implementation_limits.max_draw_buffers,dEQP-GLES3.functional.implementation_limits.max_color_attachments
-# framebuffer, blit, multisample
 RC17-fbo-completeness	dEQP-GLES3.functional.fbo.completeness.*
 RC8-blit-msaa	dEQP-GLES3.functional.fbo.blit.*,dEQP-GLES3.functional.fbo.msaa.*,dEQP-GLES3.functional.multisample.*,dEQP-GLES3.functional.rasterization.fbo.rbo_multisample_max.*
-# limits and state
+RC1-int-mix	dEQP-GLES3.functional.fbo.color.*,dEQP-GLES3.functional.fbo.render.*,dEQP-GLES3.functional.fbo.invalidate.*,dEQP-GLES3.functional.fbo.depth.*
+# ---- texture ----
+RC15-3d	dEQP-GLES3.functional.texture.mipmap.3d.*,dEQP-GLES3.functional.texture.vertex.3d.*
+RC18-swizzle-wrapr	dEQP-GLES3.functional.texture.swizzle.*
+RC6-2darray	dEQP-GLES3.functional.texture.filtering.2d_array.*,dEQP-GLES3.functional.texture.mipmap.2d_array.*,dEQP-GLES3.functional.texture.vertex.2d_array.*,dEQP-GLES3.functional.texture.shadow.2d_array.*
+RC5-shadow-host-done	dEQP-GLES3.functional.texture.shadow.*
+RC2-sized-formats	dEQP-GLES3.functional.texture.format.*,dEQP-GLES3.functional.texture.compressed.*
+uninvestigated-texture-specification	dEQP-GLES3.functional.texture.specification.*
+uninvestigated-texture-units	dEQP-GLES3.functional.texture.units.*
+uninvestigated-texture-mipmap	dEQP-GLES3.functional.texture.mipmap.*
+# ---- small groups (docs/es3-cts-failures.md Appendix A) ----
+# T4: layout locations at link, 381b0f09, host-done.
+T4-attribute-location-host-done	dEQP-GLES3.functional.attribute_location.*
+# T2 packed int2_10_10_10 in a buffer (20), T3 integer fill of narrow ivec4/uvec4 (21).
+T2-vertex-arrays-packed-host-done	dEQP-GLES3.functional.vertex_arrays.single_attribute.*.int2_10_10_10.*
+T3-vertex-arrays-int-fill-host-done	dEQP-GLES3.functional.vertex_arrays.single_attribute.output_types.*
+# T6: hardware instance divisors, 4f4310a6 (pvr-instance-divisor), host-done.
+T6-instanced-divisor-host-done	dEQP-GLES3.functional.instanced.*
+RC14-mrt	dEQP-GLES3.functional.draw_buffers_indexed.*,dEQP-GLES3.functional.implementation_limits.max_draw_buffers,dEQP-GLES3.functional.implementation_limits.max_color_attachments
 RC10-limits-state	dEQP-GLES3.functional.state_query.*,dEQP-GLES3.functional.implementation_limits.*,dEQP-GLES3.functional.shader_api.program_binary.*
-# compiler
-RC13-compile	dEQP-GLES3.functional.shaders.*,dEQP-GLES3.functional.uniform_api.*	ompile|link
+# G8: negative_api rows fixed on the host (bc200f21, aad36fee); the table says
+# read_pixels_fbo_format_mismatch and blit_framebuffer_multisample are RC8 / #339.
+G8-negative-api-host-done	dEQP-GLES3.functional.negative_api.*
+RC3-transform-feedback-lifetime	dEQP-GLES3.functional.lifetime.*
+uninvestigated-draw-random	dEQP-GLES3.functional.draw.*
+uninvestigated-rasterization-flatshading	dEQP-GLES3.functional.rasterization.flatshading.*
+uninvestigated-rasterization-interpolation-quality	dEQP-GLES3.functional.rasterization.*
