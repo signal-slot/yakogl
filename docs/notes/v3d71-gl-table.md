@@ -65,17 +65,21 @@ type for both.
 
 ## 3. What P10 needs from the 7.1 table (texture state)
 
-Not built in P9; recorded so the table's shape leaves room for it.
+Not built in P9; recorded so the table's shape leaves room for it. The pure
+modules below are merged since (not yet hooked into a 7.1 table: `src/v3d/mod.rs`
+has no `mod` line for them; each test includes its module with `#[path]`).
 
-| Item | 4.2 | 7.1 | Citation |
-|---|---|---|---|
-| TMU Config Parameter 2 | `LOD Query` bit 24, bits 25-31 pad | adds `DIM query` (25) and `Write conversion` (26), pad shrinks to 5 bits. `textureSize` and `textureQueryLod` use the new bits; the uniform words 44-47 rule of `notes/v3d-texture-size-words.md` is unchanged in intent | `X:1560-1574` (4.2), `X:1575-1590` (7.1) |
-| Texture Shader State | `sRGB` (bit 3), `Reverse Standard Border Color` (5), array stride 26 bits at 32 | `Transfer func` 3 bits at bit 2 (none, sRGB, PQ, HLG, BT.1886 variants), `Reverse` kept, **`R/B swap` at bit 32**, array stride **24 bits at 33** (64-byte units), chroma pointers | 4.2: `X:1592-1632`; 7.1: `X:1633-1707` (`:1625`, `:1627` the 4.2/shared bits; `:1691-1692` stride and swap; `:1697-1699` transfer function) |
-| Revision split | one layout | **7.1.2 has no R/B swap bit** and its stride starts at bit 32; Mesa uses the 7.1.5 definition for all. The table therefore refuses revisions below 7.1.5 (section 4) rather than carrying two layouts | `X:1686-1690` |
-| Driver structs | `v3d_tex.*` | `v3d_tex71.h:82-107` (`transfer_func` :96, `r_b_swap` and `reverse` :102, `array_stride_64` :106), unsupported-state refusals `v3d_tex71.h:118-123` (`v3d_tex71_pack_state`, :124) | |
-| Texture data formats | no BSTC | new values 46 to 63 (BSTC, `rgba10x6`, BT.1886); not needed before ES 3 compressed formats | `pre-study-rpi5.md:193` (`X:271-284`) |
-| Mip chain | TFU 4.2 | TFU with `IOC` (item 6). Whether this Pi 5's TFU works at all is unproven: its identity reads `TFU: no` (`tools/v3d/pi5/v3d_ident.txt:3`), section 6 | section 2, 6 |
-| Cube map (U8) | non-seamless on 4.2 (`docs/v3d-noseamless-cube.md`) | seamless filtering is the first cube case; U8 stays open until the board answers | `pre-study-rpi5.md` U8 |
+| Item | 4.2 | 7.1 | Citation | Module and test |
+|---|---|---|---|---|
+| TMU Config Parameter 2 | `LOD Query` bit 24, bits 25-31 pad | adds `DIM query` (25) and `Write conversion` (26), pad shrinks to 5 bits. `textureSize` and `textureQueryLod` use the new bits; the uniform words 44-47 rule of `notes/v3d-texture-size-words.md` is unchanged in intent | `X:1560-1574` (4.2), `X:1575-1590` (7.1) | `src/v3d/texstate71.rs:249` (`TmuConfig2`), `:277` (`tmu_config2_word`); `tests/v3d71_texstate.rs:104` checks the bits against the CLE |
+| Texture Shader State | `sRGB` (bit 3), `Reverse Standard Border Color` (5), array stride 26 bits at 32 | `Transfer func` 3 bits at bit 2 (none, sRGB, PQ, HLG, BT.1886 variants), `Reverse` kept, **`R/B swap` at bit 32**, array stride **24 bits at 33** (64-byte units), chroma pointers | 4.2: `X:1592-1632`; 7.1: `X:1633-1707` (`:1625`, `:1627` the 4.2/shared bits; `:1691-1692` stride and swap; `:1697-1699` transfer function) | `src/v3d/texstate71.rs:167` (`texture_state`: none or sRGB only, other values refused by name `:202-203`), `:232-238` (`pack_words`: transfer at bit 2, R/B swap at 32, stride at 33), `:29` (`ARRAY_STRIDE_BITS`); `tests/v3d71_texstate.rs:73` (CLE bits), `:200` (RGBA8 2D anchor), `:248` (sRGB anchor), `:257` (2D array) |
+| Revision split | one layout | **7.1.2 has no R/B swap bit** and its stride starts at bit 32; Mesa uses the 7.1.5 definition for all. The table therefore refuses revisions below 7.1.5 (section 4) rather than carrying two layouts | `X:1686-1690` | `src/v3d/texstate71.rs:157` (`check_revision`); `tests/v3d71_texstate.rs:270` (refusals) |
+| Driver structs | `v3d_tex.*` | `v3d_tex71.h:82-107` (`transfer_func` :96, `r_b_swap` and `reverse` :102, `array_stride_64` :106), unsupported-state refusals `v3d_tex71.h:118-123` (`v3d_tex71_pack_state`, :124) | | field names checked against the header by `tests/v3d71_texstate.rs:163` and `tests/v3d71_gl_tex.rs:490`; C side `tools/v3d/check71.d/tex71.sh` (`tools/v3d/tex71_check.c`) |
+| GL texture to record | `texture.rs` | GL target, format, levels to the layout (level 0 on 4 KiB, cube face stride) and the record | | `src/v3d/texture71.rs:451` (`compose`), `:320` (`layout`); `tests/v3d71_gl_tex.rs:353` (composed records equal Mesa's `gl_tex2d`, `gl_texfmt`, `gl_cube`, `gl_mipgen` dumps), `:397` (layout), `:427` (GL state to record) |
+| Texture data formats | no BSTC | new values 46 to 63 (BSTC, `rgba10x6`, BT.1886); not needed before ES 3 compressed formats. Per-GL-format TMU answers (transfer function, R/B swap source, swizzle) are tabulated | `pre-study-rpi5.md:193` (`X:271-284`) | `src/v3d/format71.rs:467` (`tmu_format71`), `:49` (`Transfer`); `tests/v3d71_fmt.rs:206` (every GL format answers with its Mesa row), `:240` (sRGB set) |
+| Sampler state | `v3d_tex.*` sampler | border colour as 32-bit words, filters, wrap, anisotropy, shadow compare | | `src/v3d/sampler71.rs:256` (`sampler71`), `:323` (`pack`); `tests/v3d71_sampler.rs:45` (CLE positions), `:154` (trilinear), `:195` (border) |
+| Mip chain | TFU 4.2 | TFU with `IOC` (item 6). **Board answer: the TFU works on the Pi 5** although its identity reads `TFU: no` (`tools/v3d/pi5/v3d_ident.txt:3`): `rpi5_tfu` PASS, one mip-chain job, levels 1-6 equal the 2x2 box filter, done by `TFUC` in 10 us, `IOC` 0x00086061, `HUB_IDENT1` 0x00081117 bit 17 = 0 (`tools/cts/RESULTS.md:729`; `tools/probes/rpi_5/rpi5_tfu/README.md:147-165`). Bit 17 does not gate the TFU on 7.x. `glGenerateMipmap` on 7.1 therefore goes through the TFU | section 2 item 6, section 6 | plan: `src/v3d/tfuplan71.rs:130` (`plan`; `ioc_mm` `:96`, `IOC_NUMMM_SHIFT` `:13`); `tests/v3d71_tfuplan.rs:65` (256x256 full chain, `ioc_mm` = 1 \| 8<<4 `:70`), `:100` (refusals), `:25` (constants equal the C header); C words: `tools/v3d/check71.d/tfu71.sh` (`tools/v3d/tfu71_check.c:579`, `IOC` 0x00086061) |
+| Cube map (U8) | non-seamless on 4.2 (`docs/v3d-noseamless-cube.md`) | seamless filtering is the first cube case; the record has no cube or seamless field, so the table predicts a seamless TMU and refuses a non-seamless request; U8 stays open until the board answers | `pre-study-rpi5.md` U8; `docs/notes/v3d71-cube-seamless.md` | `src/v3d/sampler71.rs:14-17,141-142`; `tests/v3d71_sampler.rs:274` (`seamless_cube`); six faces in `tests/v3d71_texstate.rs:229` |
 
 ## 4. Build selection (decision)
 
@@ -222,21 +226,15 @@ row after the board session, not before.
 
 ## 6. Open
 
-- `IOC` and the mip path run only in P10; the encoders are checked on the
-  host, not on the board. Whether the Pi 5 has a usable TFU is itself open:
-  its identity reads `TFU: no` (`tools/v3d/pi5/v3d_ident.txt:3`), HUB_IDENT1
-  bit 17 (`WITH_TFU`, `tools/v3d/ident71.py:17,100`), clear in the Pi 5's
-  `0x00081117` (`tools/v3d/pi5/v3d_regs.txt:3`) and set in the Pi 4's
-  `0x000e1124` where the TFU works (`driver/docs/rpi4-v3d.md:161`). The
-  repository does not say what the bit means on 7.x: Linux and Mesa carry a
-  full 7.1 TFU submit path (`driver/docs/rpi5-v3d71-facts.md:177-180,186`) and
-  our 4.2 `v3d_tfu_run` refuses the BCM2712 only because its job's register
-  block is the 0x400 one, not because the TFU is absent
-  (`driver/src/v3d/v3d_hw.c:530-533`). So the TFU is unproven on the Pi 5
-  until the `tools/probes/rpi_5/rpi5_tfu` probe (one 7.1 TFU mip-chain job,
-  being added) runs on the board: `glGenerateMipmap` on 7.1 goes through the
-  TFU if that passes and is otherwise refused by name.
-  `tools/cts/RESULTS.md` has no TFU row today, and none is claimed here.
+- `IOC` and the mip path: the board has answered. `rpi5_tfu` PASS
+  (`tools/cts/RESULTS.md:729`, `tools/probes/rpi_5/rpi5_tfu/README.md:147-165`):
+  the 7.1.10 TFU runs the `IOC` job although `HUB_IDENT1` bit 17 (`WITH_TFU`,
+  `tools/v3d/ident71.py:17,100`) reads 0 in `0x00081117`
+  (`tools/v3d/pi5/v3d_regs.txt:3`; the Pi 4's `0x000e1124` has it set,
+  `driver/docs/rpi4-v3d.md:161`). The bit therefore does not say whether a
+  7.x TFU exists; the table must not gate the TFU on it. What stays open is
+  the GL path: the plan (`src/v3d/tfuplan71.rs:130`) is host-tested, but
+  `glGenerateMipmap` through the 7.1 table is item `mip71`.
 - Seamless cube filtering (U8) and the transfer-function column of section 3
   need the board.
 
@@ -261,5 +259,5 @@ are not cited.
 | No default-attribute BO (item 3) | `M:common/v3d_device_info.h:114-121` | `v3d_job71.c:637`, `:692-696`; `src/v3d/attr71.rs:16-21`, `:139-142` (`tests/v3d71_attr.rs`) |
 | 8 targets, 7680 px (item 4) | `M:common/v3d_limits.h:44`, `:63`; `M:common/v3d_device_info.c:82-83` | `src/v3d/rt71.rs:40-47`, `:236-254` (`tests/v3d71_rt.rs:309-313`); `v3d_job71.h:66-67`, `v3d_job71.c:191-195`; `job71.sh` `multi` |
 | `Clear Render Targets` (item 5) | `X:485`; Mesa `v3dx_rcl.c:331-340`, `:646-655` | `v3d_job71.c:962`, `:1092`; `src/v3d/rt71.rs:49-51`; `src/v3d/frame71.rs:262`, `:594` (`tests/v3d71_frame.rs`) |
-| TFU `IOC` 0x00086061 (item 6) | `rpi5-v3d71-facts.md:70`, `:186`; Mesa `v3dx_tfu.c:165-202`; `tools/v3d/pi5/gl_mipgen.stdout:2` | `driver/src/v3d/v3d_tfu71.h:48-53`, `v3d_tfu71.c:171-181`; `tools/v3d/tfu71_check.c:579`; `check71.d/tfu71.sh:44,72` |
+| TFU `IOC` 0x00086061 (item 6) | `rpi5-v3d71-facts.md:70`, `:186`; Mesa `v3dx_tfu.c:165-202`; `tools/v3d/pi5/gl_mipgen.stdout:2` | `driver/src/v3d/v3d_tfu71.h:48-53`, `v3d_tfu71.c:171-181`; `tools/v3d/tfu71_check.c:579`; `check71.d/tfu71.sh:44,72`; board: `tools/cts/RESULTS.md:729` (`rpi5_tfu` PASS, same word) |
 | G1 (D24S8 Z-only / stencil-only) | Mesa `zs_buffer_from_pipe_bits`; `tools/v3d/pi5/gl_writemask.clif`, `gl_fbods.clif` | `v3d_job71.c:838-859`, `v3d_job71.h:236-238`; `check71.d/job71.sh:28-33`, `:214-216`; `tools/v3d/job71_check.c:1143,1185` |
