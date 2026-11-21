@@ -1644,6 +1644,16 @@ fn compile_stage<'s>(
             let highp = |name: &str| fp32(name);
             select::UboLayout::fs16(m, &f.nir, &highp)
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
+        } else if nir_fs::multi16(&f) {
+            /* a mediump shader's look-ups beside another at computed
+             * coordinates (TEX_MULTI, gm2_texmulti_1..3: desktop blur's
+             * passes): the varying lanes converted as `nir_lower_mediump_io`
+             * does, then a highp shader's program with each coordinate a
+             * pair and the colour's fp16 lanes paired */
+            let highp = |name: &str| fp32(name);
+            nir_fs::convert_inputs16(&mut f)
+                .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else {
             /* the fp16 uniform block (LowerPrecisionFloat16Uniforms); a
              * uniform declared highp is Mesa's fp32 one, refused */

@@ -19,11 +19,12 @@
 //! moves the last sum's constant into the compare: `flt(fadd(a, #b), #c)`
 //! is `flt(a, c - b)`, at any depth.
 //!
-//! The gm2_constfold references stop before any constant fold now: their
-//! look-ups at `TextureCoord + vec2(c, 0.0)` are a mediump computed
-//! coordinate of two lanes (Mesa's one `FADD_IMM.v2f16` of the varying and
-//! the packed constant pair), TEX_COORD for a lone look-up and TEX_MULTI
-//! beside another (plan #367 lower-fma). They are pinned at that refusal.
+//! The gm2_constfold references' look-ups at `TextureCoord + vec2(c, 0.0)`
+//! are a mediump computed coordinate of two lanes (Mesa's one
+//! `FADD_IMM.v2f16` of the varying and the packed constant pair). Beside
+//! another look-up they compile since plan #367 lower-fma (TEX_MULTI,
+//! tests/mali_tex_multi.rs: gm2_constfold_1..3 byte-equal); the others are
+//! pinned at their refusals.
 //!
 //! Each pair is built as glCompileShader and glLinkProgram build it
 //! (`tests/mali_ref/mod.rs`) and compared in every region. The references
@@ -61,23 +62,17 @@ fn gm2_negzero_deep_3_matches_its_reference() {
     mali_ref::assert_matches_unset("gm2_negzero_deep_3");
 }
 
-/// The gm2_constfold references stop at their look-ups' mediump computed
-/// coordinates of two lanes, before any fold on 0.0: TEX_MULTI where a
-/// look-up is beside another (desktop blur's passes, the effect2d Laplace
-/// kernel and its -0.0 weight, the non-separable blur), TEX_COORD for the
-/// lone taps.
+/// gm2_constfold_1..3 (desktop blur's separable pass, the effect2d Laplace
+/// kernel and its -0.0 weight) compile through TEX_MULTI's route and are
+/// byte-equal (tests/mali_tex_multi.rs, plan #367 lower-fma). The others
+/// stop before any fold on 0.0: the non-separable blur at its `t * K1 * K1`
+/// (the constant-product gap), the lone taps at their mediump computed
+/// coordinates of two lanes (TEX_COORD).
 #[test]
 fn gm2_constfold_stop_at_their_coordinates() {
-    let multi = "a fragment shader texture look-up beside another";
+    let product = "a constant product in a shape Mesa's algebraic rules move or fold";
     let coord = "a texture coordinate other than a vec2 varying read whole or two constants";
-    let pins = [
-        ("gm2_constfold_1", multi),
-        ("gm2_constfold_2", multi),
-        ("gm2_constfold_3", multi),
-        ("gm2_constfold_4", multi),
-        ("gm2_constfold_5", coord),
-        ("gm2_constfold_6", coord),
-    ];
+    let pins = [("gm2_constfold_4", product), ("gm2_constfold_5", coord), ("gm2_constfold_6", coord)];
     let moved: Vec<String> = pins.iter().filter_map(|(n, t)| mali_ref::refusal_change(n, t)).collect();
     assert!(moved.is_empty(), "{}", moved.join("\n"));
 }

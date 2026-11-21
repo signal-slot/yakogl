@@ -226,8 +226,9 @@ gm2_locals_vsum   gm2_locals_vsum.vert   gm2_locals_vsum.frag   triangles vs.pos
 # #367 lower-const-fold: the CONST_FOLD shapes of desktop blur and the effect2d Laplace kernel (gm2_constfold_*, 516cc7b1)
 # and NEG_ZERO's compare of a deep value (terrain fs 1637's `step(h, vec4(0.0))`; gm2_negzero_deep_*), drawn without
 # --uniform-values (docs/notes/mali-algebraic-folds.md section 9). Our compiler is byte-equal to gm2_negzero_deep_1..3
-# (tests/mali_const_fold.rs); gm2_constfold_1..6 are refused at their look-ups' two-lane mediump computed coordinates
-# (TEX_MULTI, TEX_COORD). pan_shc's SPIR-V path has no lower_precision: the mediump fragment programs of gm2_constfold_*
+# (tests/mali_const_fold.rs); since #367 lower-fma it is byte-equal to gm2_constfold_1..3 (tests/mali_tex_multi.rs),
+# gm2_constfold_4 is refused at its `t * K1 * K1` (ARITH_CONST) and _5, _6 at their lone look-ups' two-lane mediump
+# computed coordinates (TEX_COORD). pan_shc's SPIR-V path has no lower_precision: the mediump fragment programs of gm2_constfold_*
 # differ (`mediump`). For gm2_negzero_deep_1 and _3 spirv_to_nir lowers GLSL.std.450 Step as `flt(x, edge) ? 0.0 : 1.0`,
 # where the GLSL path's is `b2f(fge(x, edge))` (`FCMP_OR.f32.lt` and the select's arms swapped), and _3's sums meet the
 # compare rules (nir_opt_algebraic.py:866-871) in another order (`unanalysed`).
@@ -250,3 +251,14 @@ gm2_fcoord16_3  gm2_fcoord16_3.vert gm2_fcoord16_3.frag triangles vs.position=eq
 gm2_fcoord16_4  gm2_fcoord16_4.vert gm2_fcoord16_4.frag triangles vs.position=equal fs.fragment=differs:mediump:14:557146fc58ec
 gm2_fcoord16_5  gm2_fcoord16_5.vert gm2_fcoord16_5.frag triangles vs.position=equal fs.fragment=differs:mediump:10:e0cfa62d1b00
 gm2_fcoord16_6  gm2_fcoord16_6.vert gm2_fcoord16_6.frag triangles vs.position=equal fs.fragment=differs:mediump:27:abc604931c71
+# #367 lower-fma: fragment look-ups beside another at a mediump computed coordinate (TEX_MULTI, desktop blur fs 68af/7f17
+# and terrain fs 8c86/bbba/bdfd/e043; docs/notes/mali-tex-multi.md), drawn with --uniform-values. Our compiler is
+# byte-equal to gm2_texmulti_1..3 and, through the same route, to gm2_constfold_1..3 (tests/mali_tex_multi.rs);
+# gm2_texmulti_4..6 (a uniform step, terrain's tilt-shift) stay refused (TEX_MULTI). pan_shc's SPIR-V path has no
+# lower_precision: every fragment program computes its coordinates and colour at fp32 (`mediump`).
+gm2_texmulti_1  gm2_texmulti_1.vert gm2_texmulti_1.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:19:f610b32a1e6b
+gm2_texmulti_2  gm2_texmulti_2.vert gm2_texmulti_2.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:26:ad8e8767642e
+gm2_texmulti_3  gm2_texmulti_3.vert gm2_texmulti_3.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:49:993f2eb7dcfc
+gm2_texmulti_4  gm2_texmulti_4.vert gm2_texmulti_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:76:a673af719157
+gm2_texmulti_5  gm2_texmulti_5.vert gm2_texmulti_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:56:6771e91161ea
+gm2_texmulti_6  gm2_texmulti_6.vert gm2_texmulti_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:31:47300629587a
