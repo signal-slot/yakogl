@@ -299,7 +299,7 @@ sha256 = "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
 name = "MP2_QEMU"
 path = "qemu/bin/qemu-system-aarch64"
 marker = "qemu/bin/qemu-system-aarch64"
-note = "the qemu-system-aarch64 of driver/tools/uboot-mp2/qemu/run.sh (the uboot-mp2 qemu row of tools/check.sh reads $MP2_QEMU, else qemu-system-aarch64 on PATH; a skip is a gap): upstream QEMU 10.0.3, aarch64-softmmu only, built without root. glib, pcre2, pixman and libslirp (user-mode network and TFTP) are built static from their pinned releases into the same prefix first, so the host needs no -dev packages for them. The run cache (U-Boot source, build, run files) is MP2_QEMU_CACHE, default $CONNECTED_DEPS_DIR/uboot-mp2-qemu (driver/tools/uboot-mp2/qemu/README.md)"
+note = "the qemu-system-aarch64 of driver/tools/uboot-mp2/qemu/run.sh (the uboot-mp2 qemu row of tools/check.sh reads $MP2_QEMU, else qemu-system-aarch64 on PATH; a skip is a gap): upstream QEMU 10.0.3, aarch64-softmmu only, built without root. glib, pcre2, pixman, libfdt (dtc 1.7.2) and libslirp (user-mode network and TFTP) are built static from their pinned releases into the same prefix first, so the host needs no -dev packages for them. The run cache (U-Boot source, build, run files) is MP2_QEMU_CACHE, default $CONNECTED_DEPS_DIR/uboot-mp2-qemu (driver/tools/uboot-mp2/qemu/README.md)"
 build = '''
 rm -rf "$DEPS/qemu.part" "$DEPS/qemu.part.work"
 P="$DEPS/qemu.part"
@@ -318,9 +318,13 @@ ninja -C "$W/pixman-build" install
 tar -xzf "$DEPS/downloads/libslirp-v4.9.1.tar.gz" -C "$W"
 meson setup "$W/slirp-build" "$W/libslirp-v4.9.1" --prefix="$P" --libdir=lib --default-library=static --buildtype=release
 ninja -C "$W/slirp-build" install
+tar -xJf "$DEPS/downloads/dtc-1.7.2.tar.xz" -C "$W"
+meson setup "$W/dtc-build" "$W/dtc-1.7.2" --prefix="$P" --libdir=lib --default-library=static --buildtype=release -Dwerror=false -Dtools=false -Dyaml=disabled -Dpython=disabled -Dvalgrind=disabled -Dtests=false
+ninja -C "$W/dtc-build" install
+rm -f "$P"/lib/libfdt.so*
 tar -xJf "$DEPS/downloads/qemu-10.0.3.tar.xz" -C "$W"
 mkdir "$W/qemu-build"
-( cd "$W/qemu-build" && "$W/qemu-10.0.3/configure" --prefix="$P" --target-list=aarch64-softmmu --enable-slirp --disable-docs --disable-tools --disable-guest-agent --disable-user --disable-gtk --disable-sdl --disable-vnc --disable-opengl --disable-curses --disable-kvm --disable-werror --disable-download --enable-fdt=internal && make -j"$(nproc)" && make install )
+( cd "$W/qemu-build" && "$W/qemu-10.0.3/configure" --prefix="$P" --target-list=aarch64-softmmu --enable-slirp --disable-docs --disable-tools --disable-guest-agent --disable-user --disable-gtk --disable-sdl --disable-vnc --disable-opengl --disable-curses --disable-kvm --disable-werror --disable-download --extra-cflags="-I$P/include" --extra-ldflags="-L$P/lib" && make -j"$(nproc)" && make install )
 rm -rf "$W" "$DEPS/qemu"
 mv "$P" "$DEPS/qemu"
 '''
@@ -330,6 +334,10 @@ packages.portage = ["sys-devel/gcc", "dev-build/make", "dev-build/meson", "dev-b
 [[dep.inputs]]
 url = "https://download.qemu.org/qemu-10.0.3.tar.xz"
 sha256 = "5c891267b1534a774465db8b1a0dfcb0c5e6d7ecb6f71345625adf4e0889945b"
+
+[[dep.inputs]]
+url = "https://www.kernel.org/pub/software/utils/dtc/dtc-1.7.2.tar.xz"
+sha256 = "92d8ca769805ae1f176204230438fe52808f4e1c7944053c9eec0e649b237539"
 
 [[dep.inputs]]
 url = "https://download.gnome.org/sources/glib/2.84/glib-2.84.3.tar.xz"
