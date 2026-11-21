@@ -548,6 +548,82 @@ pub fn pixel_clock_within_tolerance(pll: &Pll, lanes: u32, bpp: u32, pixel_khz: 
     (min..=max).contains(&px)
 }
 
+/// The non-burst low-power gap, in pixels: `delay_to_lp` of
+/// `dw_mipi_dsi_stm_phy_141_mode_valid` (`:1218-1219`),
+/// `DIV_ROUND_UP((data_hs2lp + data_lp2hs) * lanes * BITS_PER_BYTE / 2, bpp)`.
+/// The `/ 2` is on the 1.41 path only (the MP1's `:1118-1119` has none) and
+/// is an integer division before the round-up.
+pub fn delay_to_lp(h: &HsTransition, lanes: u32, bpp: u32) -> u32 {
+    ((u32::from(h.data_hs2lp) + u32::from(h.data_lp2hs)) * lanes * 8 / 2).div_ceil(bpp)
+}
+
+/// What `dw_mipi_dsi_stm_phy_141_mode_valid` returns other than `MODE_OK`
+/// (`:1127-1226`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModeStatus {
+    Bad,
+    ClockHigh,
+    ClockLow,
+    HsyncNarrow,
+    Hsync,
+    Error,
+}
+
+/// `dw_mipi_dsi_stm_phy_141_mode_valid` (`:1127-1226`): the lane rate
+/// within 80-2500 Mbit/s (`:1140-1151`) and, for a non-burst link, the pixel
+/// clock within 5 per mille (`:1153-1187`), the sync packets that fit
+/// (`:1189-1208`) and `delay_to_lp` fitting in the front or the back porch
+/// (`:1210-1222`).
+pub fn mode_valid(
+    mode: &crate::video::VideoMode,
+    lanes: u32,
+    format: MipiFormat,
+    mode_flags: u32,
+    ref_khz: u32,
+) -> Result<(), ModeStatus> {
+    let bpp = format.bpp();
+    let burst = mode_flags & flags::MODE_VIDEO_BURST != 0;
+    let lane_kbps = lane_kbps_for(mode.pixel_clock_hz / 1000, bpp, lanes, burst);
+    if lane_kbps > LANE_MAX_KBPS {
+        return Err(ModeStatus::ClockHigh);
+    }
+    if lane_kbps < LANE_MIN_KBPS {
+        return Err(ModeStatus::ClockLow);
+    }
+    if burst {
+        return Ok(());
+    }
+    let pll = search(ref_khz, lane_kbps / 2).map_err(|_| ModeStatus::Error)?; // :1164
+    let pixel_khz = mode.pixel_clock_hz / 1000;
+    let px = u64::from(pll.pixel_clock_hz(lanes, bpp));
+    if px < u64::from(pixel_khz) * u64::from(1000 - CLOCK_TOLERANCE_PERMILLE) {
+        return Err(ModeStatus::ClockLow); // :1183
+    }
+    if px > u64::from(pixel_khz) * u64::from(1000 + CLOCK_TOLERANCE_PERMILLE) {
+        return Err(ModeStatus::ClockHigh); // :1186
+    }
+    // sync packets are DSI short packets of 4 bytes (:1190)
+    let short_px = (4 * 8u32).div_ceil(bpp);
+    let (hfp, hsync, mut hbp) = (mode.hfront, mode.hsync, mode.hback);
+    if hsync < short_px {
+        return Err(ModeStatus::HsyncNarrow); // :1197
+    }
+    if mode_flags & flags::MODE_VIDEO_SYNC_PULSE != 0 {
+        if hbp < short_px {
+            return Err(ModeStatus::HsyncNarrow); // :1202
+        }
+        hbp -= short_px; // :1204
+    } else {
+        hbp += hsync - short_px; // :1207
+    }
+    let h = hs_transition(lane_kbps / 1000); // :1210, the requested rate
+    let gap = delay_to_lp(&h, lanes, bpp);
+    if hfp < gap && hbp < gap {
+        return Err(ModeStatus::Hsync); // :1221
+    }
+    Ok(())
+}
+
 fn rd(m: &impl Mmio, base: usize, off: u32) -> u32 {
     m.read32(base + off as usize)
 }
@@ -758,6 +834,8 @@ impl Phy for StmDsiPhy {
             return Err(-EINVAL);
         }
         ccf(self.ref_hz / 1000)?;
+        // ST's bridge calls mode_valid before mode_set (:1127-1226)
+        mode_valid(&link.mode, link.lanes, format, link.flags, self.ref_hz / 1000).map_err(|_| -EINVAL)?;
         let pll = search(self.ref_hz / 1000, kbps / 2)?;
         self.pll = Some((pll, format.coding()));
         Ok(pll.lane_mbps())
@@ -1337,5 +1415,80 @@ mod tests {
         let release_ev = tr.iter().position(|e| *e == W(h::PHY_RSTZ, 0xf)).unwrap();
         let cmd_ev = tr.iter().rposition(|e| *e == W(h::MODE_CFG, h::ENABLE_CMD_MODE)).unwrap();
         assert!(tr[release_ev..cmd_ev].contains(&Wait(34_000)));
+    }
+
+    fn cea(clock_hz: u32, h: [u32; 4], v: [u32; 4]) -> crate::video::VideoMode {
+        crate::video::VideoMode {
+            pixel_clock_hz: clock_hz,
+            hactive: h[0],
+            hfront: h[1],
+            hsync: h[2],
+            hback: h[3],
+            vactive: v[0],
+            vfront: v[1],
+            vsync: v[2],
+            vback: v[3],
+            hsync_high: true,
+            vsync_high: true,
+            de_high: true,
+        }
+    }
+
+    /// Display note, open question 7: 1080p60 on four lanes at 891 Mbit/s
+    /// uses `HSTT(900, 115, 58, 88, 35)` (`:967`), and `delay_to_lp` =
+    /// `DIV_ROUND_UP((35 + 88) * 4 * 8 / 2, 24)` = 82 pixels (`:1218-1219`).
+    #[test]
+    fn delay_to_lp_1080p60_four_lanes_is_82_pixels() {
+        let mode = cea(148_500_000, [1920, 88, 44, 148], [1080, 4, 5, 36]);
+        let mbps = lane_kbps_for(148_500, 24, 4, false) / 1000;
+        assert_eq!(mbps, 891);
+        let h = hs_transition(mbps);
+        assert_eq!(h, t(900, 115, 58, 88, 35));
+        assert_eq!(delay_to_lp(&h, 4, 24), 82);
+        // hfp 88 clears it, hbp 148 - 2 (HSE packet) = 146 too (:1204)
+        assert_eq!(mode_valid(&mode, 4, MipiFormat::Rgb888, flags::ADV7535, REF_HZ / 1000), Ok(()));
+    }
+
+    /// Open question 7: 720p60 on three lanes at 594 Mbit/s uses
+    /// `HSTT(600, 82, 46, 64, 27)` (`:961`); `delay_to_lp` =
+    /// `DIV_ROUND_UP((27 + 64) * 3 * 8 / 2, 24)` = 46, against hfp 110.
+    #[test]
+    fn delay_to_lp_720p60_three_lanes_is_46_pixels() {
+        let mode = cea(74_250_000, [1280, 110, 40, 220], [720, 5, 5, 20]);
+        let mbps = lane_kbps_for(74_250, 24, 3, false) / 1000;
+        assert_eq!(mbps, 594);
+        let h = hs_transition(mbps);
+        assert_eq!(h, t(600, 82, 46, 64, 27));
+        assert_eq!(delay_to_lp(&h, 3, 24), 46);
+        assert_eq!(mode_valid(&mode, 3, MipiFormat::Rgb888, flags::ADV7535, REF_HZ / 1000), Ok(()));
+    }
+
+    /// `:1221`: a mode whose front and back porches are both shorter than
+    /// the gap is `MODE_HSYNC`; the sync width and the clock checks come
+    /// first (`:1183-1208`).
+    #[test]
+    fn mode_valid_refuses_what_st_refuses() {
+        // 1080p60 gap is 82: porches 80 and 80 (+ sync) fail only on the gap
+        let tight = cea(148_500_000, [1920, 80, 44, 82], [1080, 4, 5, 36]);
+        assert_eq!(mode_valid(&tight, 4, MipiFormat::Rgb888, flags::ADV7535, 27_000), Err(ModeStatus::Hsync));
+        // hsync below the 4-byte packet (2 px at 24 bpp): :1197
+        let narrow = cea(148_500_000, [1920, 88, 1, 148], [1080, 4, 5, 36]);
+        assert_eq!(mode_valid(&narrow, 4, MipiFormat::Rgb888, flags::ADV7535, 27_000), Err(ModeStatus::HsyncNarrow));
+        // 2.5 Gbit/s limit: :1147
+        let fast = cea(600_000_000, [1920, 88, 44, 148], [1080, 4, 5, 36]);
+        assert_eq!(mode_valid(&fast, 4, MipiFormat::Rgb888, flags::ADV7535, 27_000), Err(ModeStatus::ClockHigh));
+        // 80 Mbit/s limit: :1150
+        let slow = cea(10_000_000, [640, 16, 96, 48], [480, 10, 2, 33]);
+        assert_eq!(mode_valid(&slow, 4, MipiFormat::Rgb888, flags::ADV7535, 27_000), Err(ModeStatus::ClockLow));
+    }
+
+    /// `mipi_dsi_pixel_format_to_bpp`: the loosely packed RGB666 is 24 bits
+    /// on the link, only RGB666_PACKED is 18, in the host too.
+    #[test]
+    fn host_and_wrapper_agree_on_the_bits_per_pixel() {
+        assert_eq!(HostFormat::Rgb666.bpp(), MipiFormat::Rgb666.bpp());
+        assert_eq!(HostFormat::Rgb666.bpp(), 24);
+        assert_eq!(HostFormat::Rgb666Packed.bpp(), 18);
+        assert_eq!(HostFormat::Rgb565.bpp(), 16);
     }
 }
