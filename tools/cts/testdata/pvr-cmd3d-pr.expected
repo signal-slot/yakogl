@@ -1,0 +1,81 @@
+record 1: c3d, 80 words, 3D_PR
+  dw0  00000007  sCmn.ui32FrameNum
+  dw1  00ff1230  sHWRTData
+  dw2  00000000  asPRBuffer[ZSBUFFER]  [none]
+  dw3  00ff4560  asPRBuffer[MSAABUFFER]  [set]
+  dw4  a0000004  usc_pixel_output_ctrl
+  dw5  a0000005  usc_clear_register[0]
+  dw6  a0000006  usc_clear_register[1]
+  dw7  a0000007  usc_clear_register[2]
+  dw8  a0000008  usc_clear_register[3]
+  dw9  a0000009  isp_bgobjdepth
+  dw10 a000000a  isp_bgobjvals
+  dw11 a000000b  isp_aa
+  dw12 a000000c  isp_ctl
+  dw13 a000000d  event_pixel_pds_info
+  dw14 a000000e  view_idx
+  dw15 000000c0  event_pixel_pds_data  (PR EOT data address)
+  dw16 a0000010  isp_oclqry_stride
+  dw17 a0000011  (unplaced)
+  dw18 a0000012  isp_scissor_base.lo
+  dw19 a0000013  isp_scissor_base.hi
+  dw20 a0000014  isp_dbias_base.lo
+  dw21 a0000015  isp_dbias_base.hi
+  dw22 a0000016  isp_oclqry_base.lo
+  dw23 a0000017  isp_oclqry_base.hi
+  dw24 a0000018  isp_zlsctl.lo  (PR Z/S)
+  dw25 a0000019  isp_zlsctl.hi  (PR Z/S)
+  dw26 a000001a  isp_zload_store_base.lo  (PR Z/S)
+  dw27 a000001b  isp_zload_store_base.hi  (PR Z/S)
+  dw28 a000001c  isp_stencil_load_store_base.lo  (PR Z/S)
+  dw29 a000001d  isp_stencil_load_store_base.hi  (PR Z/S)
+  dw30 000000b0  pbe_word[0][0].lo  (PR PBE)
+  dw31 000000b1  pbe_word[0][0].hi  (PR PBE)
+  dw32 000000b2  pbe_word[0][1].lo  (PR PBE)
+  dw33 000000b3  pbe_word[0][1].hi  (PR PBE)
+  dw34 a0000022  pbe_word[1][0].lo  (PR PBE)
+  dw35 a0000023  pbe_word[1][0].hi  (PR PBE)
+  dw36 a0000024  pbe_word[1][1].lo  (PR PBE)
+  dw37 a0000025  pbe_word[1][1].hi  (PR PBE)
+  dw38 a0000026  pbe_word[2][0].lo  (PR PBE)
+  dw39 a0000027  pbe_word[2][0].hi  (PR PBE)
+  dw40 a0000028  pbe_word[2][1].lo  (PR PBE)
+  dw41 a0000029  pbe_word[2][1].hi  (PR PBE)
+  dw42 a000002a  pbe_word[3][0].lo  (PR PBE)
+  dw43 a000002b  pbe_word[3][0].hi  (PR PBE)
+  dw44 a000002c  pbe_word[3][1].lo  (PR PBE)
+  dw45 a000002d  pbe_word[3][1].hi  (PR PBE)
+  dw46 a000002e  (unplaced)
+  dw47 a000002f  (unplaced)
+  dw48 a0000030  (unplaced)
+  dw49 a0000031  (unplaced)
+  dw50 a0000032  (unplaced)
+  dw51 a0000033  (unplaced)
+  dw52 a0000034  (unplaced)
+  dw53 a0000035  (unplaced)
+  dw54 a0000036  (unplaced)
+  dw55 a0000037  (unplaced)
+  dw56 a0000038  (unplaced)
+  dw57 a0000039  (unplaced)
+  dw58 a000003a  (unplaced)
+  dw59 a000003b  (unplaced)
+  dw60 a000003c  (unplaced)
+  dw61 a000003d  (unplaced)
+  dw62 a000003e  (unplaced)
+  dw63 a000003f  (unplaced)
+  dw64 000000d0  pds_pr_bgnd[0].lo  (unpinned)
+  dw65 00000000  pds_pr_bgnd[0].hi  (unpinned)
+  dw66 000000d1  pds_pr_bgnd[1].lo  (unpinned)
+  dw67 00000000  pds_pr_bgnd[1].hi  (unpinned)
+  dw68 000000d2  pds_pr_bgnd[2].lo  (unpinned)
+  dw69 00000000  pds_pr_bgnd[2].hi  (unpinned)
+  dw70 a0000046  pds_bgnd[0].lo
+  dw71 a0000047  pds_bgnd[0].hi
+  dw72 a0000048  pds_bgnd[1].lo
+  dw73 a0000049  pds_bgnd[1].hi
+  dw74 a000004a  pds_bgnd[2].lo
+  dw75 a000004b  pds_bgnd[2].hi
+  dw76 000801a0  flags  [GETVISRESULTS+DEPTHBUFFER+STENCILBUFFER+SPMSCRATCHBUFFER(PR)]
+  dw77 a000004d  (zls stride, RTAs only)
+  dw78 a000004e  (sls stride, RTAs only)
+  dw79 a000004f  execute_count
