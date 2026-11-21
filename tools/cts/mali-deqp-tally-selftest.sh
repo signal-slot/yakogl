@@ -12,13 +12,15 @@
 # replaces the Lost rows of the slice it names (rerun/ pair); a rerun of a
 # non-Lost case or of a slice not given fails. A slice with refusals.tsv
 # (refusals/) gives each named case its own refusal as the cause; a row naming
-# a case the slice does not hold fails. --check-doc with --log takes the
+# a case the slice does not hold fails. A replaces= slice (replaces/) swaps
+# whole chunks of the slices it names; a missing case or an absent slice
+# fails. --check-doc with --log takes the
 # slices from the block's own "Slices:" line; a block without it fails.
 # Nothing here is a real run.
 set -u
 
 HERE=$(dirname "$0")
-WANT=57
+WANT=65
 OUT=$(python3 -I "$HERE/mali-deqp-tally.py" --self-test 2>&1)
 RC=$?
 printf '%s\n' "$OUT"

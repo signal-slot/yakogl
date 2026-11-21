@@ -64,6 +64,24 @@ other duplicate is RULE cover-duplicate; a reruns naming a slice not given,
 the slice itself, or forming a cycle is RULE rerun-target, for every name in
 the list.
 
+A second optional key replaces a whole chunk, whatever its status:
+
+  replaces=<dir name>[,<dir name>...]   (one or more earlier slices, each
+               among the slices given)
+
+Every chunk label the slice ran replaces the chunk of the same label in each
+named slice: all that chunk's cases (Pass, Fail, Lost, ...) drop out of the
+tally and the cover, and the later slice's cases stand in their place. It is
+how a partial rerun of some rows of a tree (from a newer commit) is combined
+with the whole tree. A case of a replaced chunk that the replacing slice's
+chunk lacks is RULE replace-cover; a label the named slice has no chunk for
+replaces nothing; the chunks' `cases` counts must add up to the results (they
+map chunks to cases). A replaces naming a slice not given, or the slice
+itself, is RULE replace-target. The key combines with reruns= in one slice
+(replaced rows first, then the Lost rows of the reruns); a case in a chunk
+neither key reaches is still RULE cover-duplicate. The markdown block's
+commit list holds the commit of every slice given, replaced or not.
+
 The cause of a non-Pass case, in a slice with refusals.tsv: its own refusal
 when the file names the case ("refused, <vertex|fragment> shader: <why>"),
 else dEQP's Result text with names and numbers folded. In a slice without
@@ -174,9 +192,16 @@ def rerun_names(s):
             if n.strip()]
 
 
+def replace_names(s):
+    """The slice names of s's replaces key (comma-separated), in order."""
+    return [n.strip() for n in s["meta"].get("replaces", "").split(",")
+            if n.strip()]
+
+
 def order_reruns(slices):
-    """Slices with every rerun after the slice it reruns, plus the errors of
-    a reruns key that names no given slice, itself, or a cycle."""
+    """Slices with every rerun (and replacing slice) after the slice it
+    reruns or replaces, plus the errors of a reruns or replaces key that
+    names no given slice, itself, or a cycle."""
     errs = []
     by_name = {s["name"]: s for s in slices}
     done = []
@@ -195,6 +220,15 @@ def order_reruns(slices):
                 elif r == s["name"]:
                     errs.append("RULE rerun-target: %s: reruns itself" % r)
                     bad = True
+            for r in replace_names(s):
+                if r not in by_name:
+                    errs.append("RULE replace-target: %s: replaces %r is not "
+                                "a slice given" % (s["name"], r))
+                    bad = True
+                elif r == s["name"]:
+                    errs.append("RULE replace-target: %s: replaces itself" % r)
+                    bad = True
+                rs = rs + [r]
             if not bad:
                 if not all(r in names for r in rs):
                     continue
@@ -209,6 +243,46 @@ def order_reruns(slices):
     return done, errs
 
 
+def chunk_rows(s):
+    """{label: [result indexes]} from the chunks' `cases` counts, in order,
+    or None when the counts do not add up to the results."""
+    out = {}
+    pos = 0
+    for _ln, f, _w in s["chunks"]:
+        if not f[2].isdigit():
+            return None
+        n = int(f[2])
+        out.setdefault(f[1], []).extend(range(pos, pos + n))
+        pos += n
+    return out if pos == len(s["results"]) else None
+
+
+def replace_rows(s, p, errs):
+    """The result indexes of slice p that slice s replaces: every chunk of p
+    whose label s ran. Cases of those chunks that s lacks are RULE
+    replace-cover errors."""
+    mine = chunk_rows(s)
+    theirs = chunk_rows(p)
+    if mine is None or theirs is None:
+        bad = s["name"] if mine is None else p["name"]
+        errs.append("RULE replace-cover: %s: the chunks' cases counts do not "
+                    "add up to results.tsv (needed by replaces in %s)"
+                    % (bad, s["name"]))
+        return set()
+    out = set()
+    for lab, idx in mine.items():
+        if lab not in theirs:
+            continue
+        have = {s["results"][i][1][0] for i in idx}
+        for i in theirs[lab]:
+            out.add(i)
+            c = p["results"][i][1][0]
+            if c not in have:
+                errs.append("RULE replace-cover: %s: chunk %s replaces %s "
+                            "but lacks %s" % (s["name"], lab, p["name"], c))
+    return out
+
+
 def resolve(slices):
     """(ordered slices, superseded {slice name: set of result indexes},
     {(slice name, result index): earlier 'where'} for the duplicates no
@@ -217,8 +291,18 @@ def resolve(slices):
     owner = {}
     superseded = {s["name"]: set() for s in ordered}
     dups = {}
+    by_name = {s["name"]: s for s in ordered}
     for s in ordered:
         rs = rerun_names(s)
+        for pn in replace_names(s):
+            p = by_name.get(pn)
+            if p is None or p is s:
+                continue
+            for pi in replace_rows(s, p, errs):
+                superseded[pn].add(pi)
+                c = p["results"][pi][1][0]
+                if owner.get(c, (None, None))[0] is p:
+                    del owner[c]
         for i, (_ln, f, _w) in enumerate(s["results"]):
             prev = owner.get(f[0])
             if prev is not None:
@@ -651,6 +735,37 @@ def self_test():
          "--no-git", mp, r2x, r2y, b("rerun2unknown"))
     must("rerun list naming the slice itself", "rerun-target",
          "--check-cover", "--no-git", mp, r2x, r2y, b("rerun2self"))
+    # replaces: a later slice replaces whole chunks, whatever their status
+    rp = os.path.join(FIXTURES, "replaces")
+
+    def rpair(k):
+        return [os.path.join(rp, k, "2026-11-08-t6-gles2-%s-00000000" % s)
+                for s in ("S1", "S2")]
+    rc, _o, _e = run("--check-cover", "--no-git", mp, *rpair("ok"))
+    chk("replaces: a chunk of Fail rows replaced, cover holds", rc == 0)
+    chk("replaces: argument order does not matter",
+        run("--check-cover", "--no-git", mp, *reversed(rpair("ok")))[0] == 0)
+    rc, o, _e = run("--tally", "--no-git", *rpair("ok"))
+    chk("replaces tally: total 8, 5 Pass, 2 Fail, 1 Lost, replaced rows gone",
+        rc == 0 and re.search(r"^TOTAL +8$", o, re.M) is not None
+        and re.search(r"^Pass +5$", o, re.M) is not None
+        and re.search(r"^Fail +2$", o, re.M) is not None
+        and re.search(r"^Lost +1$", o, re.M) is not None)
+    rc, o, _e = run("--tally", "--markdown", "--no-git", *rpair("ok"))
+    chk("replaces markdown: counts of the replaced tree",
+        rc == 0 and "| **Total** | **8** |" in o and "| Pass | 5 |" in o)
+    must("replaces: a case the replacing chunk lacks", "replace-cover",
+         "--check-cover", "--no-git", mp, *rpair("miss"))
+    must("replaces: a slice not given", "replace-target", "--check-cover",
+         "--no-git", mp, *rpair("absent"))
+    rc, _o, _e = run("--check-cover", "--no-git", mp, *rpair("combo"))
+    chk("replaces with reruns: Lost row rerun and a chunk replaced", rc == 0)
+    rc, o, _e = run("--tally", "--no-git", *rpair("combo"))
+    chk("replaces with reruns tally: total 8, 6 Pass, 2 Fail, no Lost",
+        rc == 0 and re.search(r"^TOTAL +8$", o, re.M) is not None
+        and re.search(r"^Pass +6$", o, re.M) is not None
+        and re.search(r"^Fail +2$", o, re.M) is not None
+        and re.search(r"^Lost ", o, re.M) is None)
     rc, _o, e = run("--check-cover", "--no-git", mp, os.path.join(FIXTURES, "nope"))
     chk("unreadable slice exits 2", rc == 2)
     # --per-case: the refusal line inside a case's output is its cause
