@@ -9,7 +9,7 @@
 //! The instruction set as data ([`isa_tables`], generated from Mesa's pco
 //! declarations by `tools/pco-isa/`), a [`decode`]r that reads a USC binary
 //! into instruction groups, an [`encode`]r that writes them back, and a
-//! [`listing`] disassembler. The gate is in [`roundtrip`]: every one of the
+//! [`listing`] disassembler. The gate is in `roundtrip`: every one of the
 //! 2,476 blobs of the PowerVR offline table decodes into instructions and
 //! re-encodes byte for byte.
 //!
