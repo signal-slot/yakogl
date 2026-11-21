@@ -25,18 +25,25 @@
 //! keeps as components of a vector operation (`rnd_vs_uniform_flat`,
 //! `rnd_vs_vecop_fs_uniform`).
 //!
-//! Every other reference is refused, so its test is `#[ignore]`d with its
-//! reference's pinned first refusal: the pair as an operand of an
-//! operation (`rnd_fs_ck_madd`, `rnd_fs_ck_product`, `rnd_fs_zk_tree`) and a
-//! computed lane and 0.0 (`rnd_fs_uniform_tz_ck`). `rnd_vs_vecop_kept` was
-//! refused at the partial-varying link until the program's vertex shader
-//! was built for what its fragment shader reads
+//! `rnd_vs_vecop_kept` was refused at the partial-varying link until the
+//! program's vertex shader was built for what its fragment shader reads
 //! (`docs/notes/mali-product-route.md`): byte-equal since.
-//! `refusals_pinned` asserts each ignored
-//! reference's exact refusal text today — `MaliError::message` without its
-//! `Valhall: ` prefix and its ` is not lowered yet` suffix — so a refusal
-//! that moves breaks its pin. An ignored test that would compile now fails
-//! the pin, and its test is what starts running.
+//!
+//! Three more are byte-equal since plan #377's spike-colourpair-rest
+//! (`docs/notes/mali-deqp-colourpair.md`, "Lowering"): a constant then a
+//! load's lane as a product's operand (`rnd_fs_ck_product`), a uniform's
+//! sum and 0.0 and a constant then a uniform's component as words of the
+//! colour (`rnd_fs_uniform_tz_ck`), and a mixed constructor's constant
+//! lanes across two 16-bit pairs, each its own lane's rule
+//! (`rnd_fs_zk_tree`). `rnd_fs_ck_madd` compiles to Mesa's operations and
+//! values since then, with other words ([`FS_DIFFERS`]): Mesa makes the
+//! product's two constant pairs with `IADD_IMM`, we push them to the FAU.
+//!
+//! No reference is refused now ([`REFUSALS`] is empty); `refusals_pinned`
+//! asserts each ignored reference's state today — a refusal's
+//! `MaliError::message` without its `Valhall: ` prefix and its ` is not
+//! lowered yet` suffix, or the stage that differs — so a state that moves
+//! breaks its pin, and its test is what starts running.
 //!
 //! What each byte-compare covers once lowered: the base references compare
 //! every region (their lowering is a link rule, the vertex varying program
@@ -51,22 +58,15 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
-/// The two pinned refusal texts, in `MaliError::message`'s middle form:
-/// without the `Valhall: ` prefix and without the ` is not lowered yet`
-/// suffix (`MaliError::ColourPair` and `MaliError::ColourZeroHalf`,
-/// `src/shaderc/online/mali/mod.rs:523` and `:527-529`).
-const CP: &str = "a colour pair of a constant then a varying lane";
-const LZ: &str = "a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32)";
-
-/// Every reference and its pinned first refusal at this tip, the table
-/// behind [`refusals_pinned`]. Each ignored test's `#[ignore]` reason names
-/// the same text.
-const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_colourpair_rnd_fs_ck_madd", CP),
-    ("deqp_colourpair_rnd_fs_ck_product", CP),
-    ("deqp_colourpair_rnd_fs_uniform_tz_ck", LZ),
-    ("deqp_colourpair_rnd_fs_zk_tree", CP),
-];
+/// Every refused reference and its pinned first refusal at this tip, the
+/// table behind [`refusals_pinned`], in `MaliError::message`'s middle form
+/// (without the `Valhall: ` prefix and the ` is not lowered yet` suffix):
+/// none since spike-colourpair-rest. A lowering that refuses one again
+/// adds it here, its test `#[ignore]`d with the same text
+/// (`MaliError::ColourPair`'s "a colour pair of a constant then a varying
+/// lane", `MaliError::ColourZeroHalf`'s "a colour pair of a varying lane and
+/// 0.0 (Mesa's U16_TO_U32)").
+const REFUSALS: &[(&str, &str)] = &[];
 
 /// The references that compile with other words than Mesa's, in the vertex
 /// program alone: the mediump attributes' lanes are added at fp16 in Mesa
@@ -74,6 +74,15 @@ const REFUSALS: &[(&str, &str)] = &[
 /// family's vertex side). Their constant colour lanes are stored as Mesa
 /// stores them, and their fragment programs are Mesa's.
 const DIFFERS: &[&str] = &["deqp_colourpair_ck_lane_mediump", "deqp_colourpair_rnd_vs_mediump_kept"];
+
+/// The references that compile with other words than Mesa's in the
+/// fragment program, the same operations on the same values:
+/// `rnd_fs_ck_madd`'s products by the constant pairs `(0.25, 1.0)` and
+/// `(-1.0, -2.0)`, which Mesa makes with `IADD_IMM.i32 r1, 0x0,
+/// #0x3C003400` and `#0xC000BC00` (the FAU holds the colour's `-3.0` and
+/// `-1.5` alone) and we push to the FAU (`MOV.i32 r1, u3.w0`). Why Mesa
+/// does not push them is not established (docs/notes/mali-deqp-colourpair.md).
+const FS_DIFFERS: &[&str] = &["deqp_colourpair_rnd_fs_ck_madd"];
 
 /// Byte-compares `fs.fragment` of a reference, leaving the vertex regions
 /// out: the vertex program of a `rnd_fs_*` reference is a plain attribute
@@ -126,13 +135,12 @@ fn rnd_fs_ck_lz() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
+#[ignore = "differs: Mesa makes the product's constant pairs with IADD_IMM, we push them to the FAU; pinned by refusals_pinned"]
 fn rnd_fs_ck_madd() {
     assert_fs_matches("deqp_colourpair_rnd_fs_ck_madd");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_ck_product() {
     assert_fs_matches("deqp_colourpair_rnd_fs_ck_product");
 }
@@ -143,13 +151,11 @@ fn rnd_fs_kword_ck() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32), left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_uniform_tz_ck() {
     assert_fs_matches("deqp_colourpair_rnd_fs_uniform_tz_ck");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane, left by lower-varylink (docs/notes/mali-deqp-colourpair.md, \"Lowering\")"]
 fn rnd_fs_zk_tree() {
     assert_fs_matches("deqp_colourpair_rnd_fs_zk_tree");
 }
@@ -223,6 +229,17 @@ fn refusals_pinned() {
                     moved.push(format!("{name}: now byte-equal; un-ignore its test"));
                 } else if d.iter().any(|m| m.starts_with("fs")) {
                     moved.push(format!("{name}: its fragment program differs now:\n{}", d.join("\n")));
+                }
+            }
+            Err(e) => moved.push(format!("{name}: now refused: {e}")),
+        }
+    }
+    for name in FS_DIFFERS {
+        let r = mali_ref::Reference::load(name);
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(pair) => {
+                if !mali_ref::differences(&r, &pair).iter().any(|m| m.starts_with("fs")) {
+                    moved.push(format!("{name}: its fragment program is byte-equal now; un-ignore its test"));
                 }
             }
             Err(e) => moved.push(format!("{name}: now refused: {e}")),
