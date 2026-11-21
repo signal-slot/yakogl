@@ -1402,10 +1402,20 @@ pub unsafe extern "C" fn glClearBufferfv(buffer: GLenum, drawbuffer: GLint, valu
      * points take the context themselves. */
     match buffer {
         GL_COLOR => {
-            /* ES 3.0 4.2.3: the float form clears a fixed or float buffer */
-            if clear_image_kind(c, drawbuffer).is_some_and(|k| k != ColorKind::Float) {
-                c.set_error(GL_INVALID_OPERATION, FUNC);
-                return;
+            /* ES 3.0 4.2.3: the float form clears a fixed or float buffer,
+             * one of another kind being GL_INVALID_OPERATION, and a draw
+             * buffer that is GL_NONE or has no image is no error and clears
+             * nothing, as in the integer forms (`clear_color_integer`).
+             * Until 2026-11-21 only Some(non-float) was refused here, so
+             * glClearBufferfv of a GL_NONE draw buffer still cleared that
+             * render target through with_clear_target. */
+            match clear_image_kind(c, drawbuffer) {
+                Some(ColorKind::Float) => {}
+                Some(_) => {
+                    c.set_error(GL_INVALID_OPERATION, FUNC);
+                    return;
+                }
+                None => return,
             }
             let save = c.clear_color;
             // SAFETY: value points at four GLfloats (GL contract), unaligned.

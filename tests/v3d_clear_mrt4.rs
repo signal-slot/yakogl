@@ -935,7 +935,6 @@ fn masked_clearbuffer_of_drawbuffer_3_is_a_quad_of_rt3_alone() {
 /// nothing (ES 3.0.6 section 4.2.3): no quad, no clear of any RT, no error;
 /// unscissored and scissored.
 #[test]
-#[ignore = "v3d-clear4: glClearBufferfv clears a GL_NONE draw buffer: clear_image_kind is None there and src/gl/es3.rs:1392 only refuses Some(non-float), so with_clear_target(3) still clears RT 3 (the integer forms return at es3.rs:1362)"]
 fn clearbufferfv_of_a_none_drawbuffer_3_does_nothing() {
     let _g = rig();
     for (what, scissor) in [("unscissored", None), ("scissored", Some(BOX))] {
