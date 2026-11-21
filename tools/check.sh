@@ -208,7 +208,10 @@ scope_of_path() {
   src/shaderc/online/mali/* | src/mali/* | tools/mali/* | tests/mali_*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
-  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_rt_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
+  # the generator of both i.MX register maps: the i.MX 8M Plus's row
+  # (vivante) and the i.MX 95's (drivers)
+  tools/hal-nxp/*) echo "vivante drivers" ;;
+  src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_rt_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
   # gl_FragDepth's shape test (tests/es3_fragdepth_cases.rs) pins its verdicts
   # on both GPUs: a change there reaches both fragdepth rows, and nothing else
   tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
@@ -4247,14 +4250,17 @@ step "clippy  yakogl-drivers" cargo clippy -p yakogl-drivers --all-features --al
 # and this row did not see it). So clippy each feature set an image or a
 # knob builds, alone, with -D warnings: none, each SoC, the PowerVR rgxlayer
 # alone and as the AM62P builds it, with each opt-in knob and both, the
-# i.MX 8M Plus GC7000 side, and the NanoPC-T6's (rk3588, mali: the watchdog
-# glue, the GPU power-on, the Z3 firmware). The V3D has no feature in this
+# i.MX 8M Plus GC7000 side, the NanoPC-T6's (rk3588, mali: the watchdog
+# glue, the GPU power-on, the Z3 firmware), the i.MX 95's GPU power-on
+# over SCMI (imx95), and the Verdin iMX95's Mali image (imx95, rk3588,
+# mali: yd_imx95_osal_up over the T6's OSAL). The V3D has no feature in this
 # crate (its driver is C, driver/src/v3d). A new feature or knob joins this
 # list.
 drivers_clippy_arms() {
   local f
   for f in "" imx8mp am62p pvr am62p,pvr am62p,pvr,pvr-fine-wait am62p,pvr,pvr-kick-times \
-    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali; do
+    am62p,pvr,pvr-fine-wait,pvr-kick-times am62p,pvr,pvr-grow-scene imx8mp,vivante rk3588,mali imx95 \
+    imx95,rk3588,mali; do
     echo "== yakogl-drivers features [$f]"
     cargo clippy -p yakogl-drivers --no-default-features --features "$f" --all-targets -- -D warnings ||
       { echo "clippy refused yakogl-drivers features [$f]"; return 1; }
@@ -4303,11 +4309,13 @@ scope drivers pvr vivante
 # builds core for it; with neither the row is a gap. The feature sets an image
 # builds: all SoC drivers; the AM62P's (the GPU's rgxlayer and the display
 # path); the i.MX 8M Plus GC7000 kernel side (gpu::vivante); the NanoPC-T6's
-# (rk3588, mali, as driver/zephyr/CMakeLists.txt builds it); and
+# (rk3588, mali, as driver/zephyr/CMakeLists.txt builds it); the i.MX 95's
+# GPU power-on over SCMI (imx95, soc::imx95) and the Verdin iMX95's Mali
+# image (imx95, rk3588, mali); and
 # none (only the SoC-independent I2C driver, ip::sn65dsi8x).
 drivers_softfloat_check() {
   local t=aarch64-unknown-none-softfloat f
-  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali ""; do
+  for f in imx8mp,am62p,pvr,vivante am62p,pvr imx8mp,vivante rk3588,mali imx95 imx95,rk3588,mali ""; do
     if rustup target list --installed 2>/dev/null | grep -qx "$t"; then
       cargo check -p yakogl-drivers --no-default-features --features "$f" --target "$t" || return 1
     else
@@ -4512,13 +4520,18 @@ zephyr_nanopc_t6_image() {
 # tools/probes/nanopc_t6/<name> by default; <name> also names the row's own
 # copy of the header.
 zephyr_nanopc_t6_fw_image() {
+  mali_csffw_header "$1" "$2" || return 1
+  zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$2}" "${4:-nanopc_$2}"
+}
+# mali_csffw_header <fw> <name>: driver/src/fw/mali_csffw_blob.h made from
+# <fw> when it is there, as above (<name> names this row's own copy).
+mali_csffw_header() {
   local f="$1" probe="$2" h=driver/src/fw/mali_csffw_blob.h t="build/zephyr-werror/mali_csffw_blob.$2.h"
   if [ -f "$f" ]; then
     mkdir -p build/zephyr-werror
     bash driver/tools/mkmalifw.sh "$f" "$t" || return 1
     cmp -s "$t" "$h" || { mkdir -p "${h%/*}" && cp "$t" "$h.$probe.new" && mv "$h.$probe.new" "$h"; } || return 1
   fi
-  zephyr_werror_image nanopc_t6 "${3:-tools/probes/nanopc_t6/$probe}" "${4:-nanopc_$probe}"
 }
 # gl_test on the NanoPC-T6's Mali (driver/samples/zephyr/gl_test, boards/
 # nanopc_t6.conf): it builds with the firmware embedded (its link checks that
@@ -4549,6 +4562,144 @@ zephyr_nanopc_t6_gltest_image() {
     echo "zephyr.bin is $size bytes, not under the carve-out's ${carve:-?}: the file holds the GPU's memory"
     return 1
   }
+}
+# examples/triangle on the Verdin iMX95 (i.MX 95, Mali-G310; the board
+# driver/boards/toradex/verdin_imx95, the glue driver/zephyr/lib/board/
+# verdin_imx95): built only, no board yet (docs/standalone-boot.md, "Toradex
+# Verdin iMX95"). It builds for the Mali with the board layer and the CSF
+# firmware embedded (the T6's file, $1, made into the header as
+# zephyr_nanopc_t6_fw_image does), and the image is what that section's
+# U-Boot route would load: the RAM footprint (the AArch64 header's
+# image_size) inside zephyr,sram; the GPU's bring-up in it (the firmware's
+# line and the SCMI power-on's lines, once each; no "STUB:" line about the
+# GPU); the X4 display's screen in it (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY,
+# the board layer's display lines once each, verdin_imx95_display.c, and no
+# "no display yet" refusal); and WDOG3's
+# (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c): its armed line
+# and the board layer's "board: watchdog armed" once each, its arming entry
+# (ip::wdog32's yd_wdog32_arm) linked, and no "STUB:" line about the watchdog;
+# and the record without a console (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM,
+# verdin_imx95_record.c): its sink line once and the BBM store
+# (yd_imx95_bbm_record_store, soc::imx95::bbm) linked, the record
+# tools/board.sh imx95 reads back from Linux (docs/standalone-boot.md).
+zephyr_verdin_imx95_triangle_image() {
+  local dir=build/zephyr-werror/verdin_imx95-triangle bin footprint window line n
+  mali_csffw_header "$1" verdin_imx95-triangle || return 1
+  zephyr_werror_image verdin_imx95/mimx9596/a55 examples/triangle verdin_imx95-triangle || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no X4 display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM=y$' "$dir/zephyr/.config" ||
+    { echo "the image keeps no record in the BBM GPRs (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM)"; return 1; }
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+  for line in 'verdin_imx95: WDOG3 armed: CS 0x%08x' 'board: watchdog armed' \
+    'verdin_imx95: CSF firmware %u bytes embedded' \
+    'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: ' \
+    'verdin_imx95: display up: ' 'verdin_imx95: display stopped: ' \
+    'verdin_imx95: record sink: BBM GPR4..7 over SCMI (%s)'; do
+    n=$(strings -n 20 "$bin" | grep -cF "$line") || true
+    [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
+  done
+  n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: STUB: .*\(Mali\|watchdog\)') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries a Mali or watchdog STUB line"; return 1; }
+  n=$(strings -n 20 "$bin" | grep -c 'verdin_imx95: no display yet') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries the no-display refusal"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_wdog32_arm$' ||
+    { echo "zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_bbm_record_store$' ||
+    { echo "zephyr.elf does not link yd_imx95_bbm_record_store (the record's BBM sink)"; return 1; }
+}
+# Every Zephyr image under tools/probes/verdin_imx95/ (a directory with a
+# CMakeLists.txt and a prj.conf: imx95_wdog, imx95_scmi, imx95_ident,
+# imx95_fw, imx95_dsi_ids as present; tools/probes/verdin_imx95/README.md),
+# built for the Verdin iMX95's A55 with -Werror on our C files: built only,
+# the board is not in the farm. One row for all of them, so a new probe needs
+# no new row. imx95_fw embeds the CSF firmware ($1, made into the header as
+# the triangle row does). Each image carries the WDOG3 arming of the board
+# glue (yd_wdog32_arm linked, "board: watchdog armed" once) and its probe's
+# verdict lines; imx95_wdog alone is built with the feeding off.
+zephyr_verdin_imx95_probe_images() {
+  local d name n=0 dir bin c
+  mali_csffw_header "$1" verdin_imx95-probes || return 1
+  for d in tools/probes/verdin_imx95/*/; do
+    d=${d%/}
+    [ -f "$d/CMakeLists.txt" ] && [ -f "$d/prj.conf" ] || continue
+    name=${d##*/}
+    dir=build/zephyr-werror/verdin_imx95-$name
+    bin=$dir/zephyr/zephyr.bin
+    zephyr_werror_image verdin_imx95/mimx9596/a55 "$d" "verdin_imx95-$name" ||
+      { echo "verdin_imx95 probe $name did not build"; return 1; }
+    nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_wdog32_arm$' ||
+      { echo "$name: zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
+    c=$(strings -n 20 "$bin" | grep -cF 'board: watchdog armed') || true
+    [ "$c" = 1 ] || { echo "$name: zephyr.bin carries 'board: watchdog armed' ${c:-0} times, not once"; return 1; }
+    c=$(strings -n 8 "$bin" | grep -cE "^$name: (PASS|FAIL)") || true
+    [ "${c:-0}" -gt 0 ] || { echo "$name: zephyr.bin carries no '$name: PASS' or '$name: FAIL' line"; return 1; }
+    if [ "$name" = imx95_wdog ]; then
+      grep -q '^# CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED is not set$' "$dir/zephyr/.config" ||
+        { echo "imx95_wdog is built with WDOG3 fed: its pass is the unfed reset"; return 1; }
+    elif grep -q '^# CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED is not set$' "$dir/zephyr/.config"; then
+      echo "$name is built with WDOG3 unfed: only imx95_wdog may be"; return 1
+    fi
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] || { echo "no verdin_imx95 probe image under tools/probes/verdin_imx95/"; return 1; }
+}
+# gl_test on the Verdin iMX95's Mali-G310 (driver/samples/zephyr/gl_test with
+# verdin_imx95.conf after the board layer's app.conf, ../common/
+# verdin_imx95.cmake; src/main_mali.c, the T6's main): built only, no board
+# yet (docs/notes/pre-study-imx95.md, B5). It builds with the firmware
+# embedded ($1, as the triangle row), and the image is a read-back image the
+# U-Boot route would load: the board layer on, the X4 display off
+# (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY not y, no display line in the file), the
+# RAM footprint (the AArch64 header's image_size) inside zephyr,sram, the file
+# smaller than the carve-out (the OSAL's memory is .noinit, not in zephyr.bin),
+# the build line, the GPU's bring-up lines and WDOG3's armed line once each,
+# and the record's BBM sink (board-sh's verdin_imx95_record.c) linked.
+zephyr_verdin_imx95_gltest_image() {
+  local dir=build/zephyr-werror/verdin_imx95-gl_test bin footprint size window carve line n
+  mali_csffw_header "$1" verdin_imx95-gl_test || return 1
+  zephyr_werror_image verdin_imx95/mimx9596/a55 gl_test verdin_imx95-gl_test || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  grep -q '^CONFIG_YAKOGL_BOARD_VERDIN_IMX95=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no board layer (CONFIG_YAKOGL_BOARD_VERDIN_IMX95)"; return 1; }
+  # the record's sink: board_finish() stores the last record through
+  # board_sink_store(), which verdin_imx95_record.c makes the BBNSM GPR4..7
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no BBM record sink (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM)"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_bbm_record_store$' ||
+    { echo "zephyr.elf does not link yd_imx95_bbm_record_store (the record's BBM sink)"; return 1; }
+  if grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config"; then
+    echo "the read-back image brings the X4 display up (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y)"
+    return 1
+  fi
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  size=$(stat -c %s "$bin")
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+  carve=$(sed -n 's/^CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=//p' "$dir/zephyr/.config")
+  [ -n "$carve" ] && [ "$size" -lt "$carve" ] || {
+    echo "zephyr.bin is $size bytes, not under the carve-out's ${carve:-?}: the file holds the GPU's memory"
+    return 1
+  }
+  for line in 'vi95_gl_test: build %s' 'verdin_imx95: WDOG3 armed: CS 0x%08x' 'board: watchdog armed' \
+    'verdin_imx95: CSF firmware %u bytes embedded' \
+    'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: '; do
+    n=$(strings -n 20 "$bin" | grep -cF "$line") || true
+    [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
+  done
+  n=$(strings -n 20 "$bin" | grep -cF 'verdin_imx95: display up: ') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin carries the display's bring-up line: the panel is in the image"; return 1; }
 }
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
@@ -4678,6 +4829,23 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  nanopc_t6 gl_test image (Mali), -Werror on our C files, fits the kexec window" \
       zephyr_nanopc_t6_gltest_image "$mali_csffw"
+    # examples/triangle on the Verdin iMX95's A55 (Mali-G310): built only,
+    # with the same firmware embedded: the same gap without it.
+    scope mali drivers samples
+    needs_mali_csffw
+    step "zephyr  verdin_imx95 examples/triangle image (Mali-G310, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_triangle_image "$mali_csffw"
+    # The Verdin iMX95's first-session probes (tools/probes/verdin_imx95):
+    # imx95_fw embeds the same firmware, the same gap without it.
+    needs_mali_csffw
+    step "zephyr  verdin_imx95 probe images (tools/probes/verdin_imx95/*, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_probe_images "$mali_csffw"
+    # gl_test on the Verdin iMX95's Mali-G310 (read-back, no display): the
+    # same firmware, the same gap.
+    scope mali gltest drivers samples
+    needs_mali_csffw
+    step "zephyr  verdin_imx95 gl_test image (Mali-G310, read-back, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_gltest_image "$mali_csffw"
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
@@ -4918,6 +5086,18 @@ if command -v python3 >/dev/null 2>&1; then
     step "gen     driver/rust imx8mp regs.rs == gen_regs.py on hal_nxp 1e91007b" hal_nxp_regs_regenerate
   else
     gap "imx8mp regs.rs: no hal_nxp at $hal_nxp_dir (set HAL_NXP_DIR): the generated registers were NOT checked"
+  fi
+  # driver/rust/src/soc/imx95/regs.rs: the i.MX 95 display's registers
+  # (soc::imx95::dpu, ::display, ::combo_phy), the same generator and pin.
+  scope drivers
+  if [ -d "$hal_nxp_dir/mcux/mcux-sdk-ng/devices/i.MX/i.MX95/periph" ]; then
+    hal_nxp_imx95_regs_regenerate() {
+      python3 tools/hal-nxp/gen_regs.py --soc imx95 "$hal_nxp_dir" | cmp - driver/rust/src/soc/imx95/regs.rs
+    }
+    scope drivers
+    step "gen     driver/rust imx95 regs.rs == gen_regs.py --soc imx95 on hal_nxp 1e91007b" hal_nxp_imx95_regs_regenerate
+  else
+    gap "imx95 regs.rs: no hal_nxp at $hal_nxp_dir (set HAL_NXP_DIR): the generated registers were NOT checked"
   fi
   # driver/rust/src/soc/am62p/ti_pr114866.rs: the four D-PHY / DSI facts the
   # AM62Px TRM does not state, generated from TI's Zephyr driver vendored

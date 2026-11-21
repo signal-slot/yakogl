@@ -664,7 +664,7 @@ run by `tools/board.sh nanopc-t6 run` and judged by their own summary lines.
   later). The model, the record and the verdict were corrected from that
   run, and the drain was added to measure the publish, before this run.
 - gl_test: the image (`driver/samples/zephyr/gl_test`,
-  `main_nanopc_t6.c`) is the library as a product has it: the GL core,
+  `main_mali.c`, then `main_nanopc_t6.c`) is the library as a product has it: the GL core,
   the in-process shader compiler and the Mali back end on the Zephyr
   OSAL over our own kernel side (the driver Z4 ran, no panthor), with
   the board's firmware file embedded (282624 bytes, sha256

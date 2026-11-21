@@ -1,0 +1,148 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2024-2025 NXP
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Toradex Verdin iMX95 on the Mallow carrier, Cortex-A55 cluster, one core.
+ * Derived from Zephyr's boards/nxp/imx95_evk/imx95_evk_mimx9596_a55.dts at
+ * the workspace pin (zephyr af17c0c8aa2a): the SoC, its SCMI channel to the
+ * System Manager (MU2, the shared memory at 0x445b1000), the GIC and the
+ * console UART are the EVK's; the EVK's Ethernet, CAN, I2C expanders and
+ * WDOG4 are left out. What is the module's comes from mainline Linux
+ * (torvalds/linux 65e4fd942f72): imx95-verdin.dtsi and
+ * imx95-verdin-mallow.dtsi.
+ *
+ * - Console: LPUART1, the Verdin UART_3 (Linux's stdout-path "serial2" =
+ *   &lpuart1, "used as the Linux console"; Mallow enables it as it is), at
+ *   115200 baud as Linux's. Its pins are verdin_imx95-pinctrl.dtsi's.
+ * - Memory: DRAM starts at 0x80000000; Toradex's U-Boot
+ *   (include/configs/verdin-imx95.h, u-boot ece349ade297) keeps the first
+ *   256 MiB for the firmware (M7, TF-A and OP-TEE at 0x8a000000, the vrings
+ *   at 0x88000000) and probes 2, 4, 8 or 16 GiB. The image is linked and
+ *   loaded at 0xd0000000, the address of the pin's imx95_evk A55 board and
+ *   of its U-Boot "go" route, clear of the U-Boot environment's load
+ *   addresses (0x90400000 to 0x9c800000 and the ramdisk above it) and of
+ *   U-Boot itself, which relocates below 4 GiB. 256 MiB, as the
+ *   NanoPC-T6's window: the GL image with the Mali OSAL's .noinit carve-out
+ *   (zephyr/Kconfig, YAKOGL_MALI_CARVEOUT_BYTES) needs about 81 MiB. Below
+ *   4 GiB on every module size.
+ * - GPU: the Mali-G310 node as Linux's imx95.dtsi has it (gpu@4d900000).
+ *   Nothing in Zephyr drives it: the Mali OSAL reads its register block
+ *   from here (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c).
+ *   Its clocks and power domain are the System Manager's, through SCMI.
+ * - I2C: LPI2C2, the module's CTRL_I2C at 400 kHz, with the NXP PCAL6416A
+ *   I/O expander at 0x20 (Linux's som_gpio_expander; its line 3 is
+ *   GPIO_10_DSI, the X4 display's enable), and LPI2C3, the Verdin
+ *   I2C_2_DSI at 100 kHz (X4's bus), as imx95-verdin.dtsi has them. All
+ *   three are zephyr,deferred-init: nothing touches them at boot. The
+ *   display's board glue turns the two LPI2C clocks on over SCMI and then
+ *   initialises them (driver/zephyr/lib/board/verdin_imx95/
+ *   verdin_imx95_display.c); an image without it leaves them alone. The
+ *   expander is not reset at its init (no-auto-reset): its other lines
+ *   (USB enables, the Ethernet PHY's reset) keep what U-Boot left.
+ *
+ * Not run on a board yet.
+ */
+
+/dts-v1/;
+
+#include <nxp/nxp_mimx95_19x19_a55.dtsi>
+#include "verdin_imx95-pinctrl.dtsi"
+
+/* Linux's dt-bindings ids that the pin's headers lack (torvalds/linux
+ * 65e4fd942f72, arch/arm64/boot/dts/freescale/imx95-clock.h and
+ * imx95-power.h): the GPU's clock gate (the "core" clock of the Mali node)
+ * and its power domain. IMX95_CLK_GPUAPB ("coregroup") is in the pin's
+ * imx95_clock.h with Linux's value. */
+#define VERDIN_IMX95_CLK_GPU_CGC (IMX95_CCM_NUM_CLK_SRC + 123 + 10)
+#define VERDIN_IMX95_PD_GPU 14
+
+/ {
+	model = "Toradex Verdin iMX95 on Mallow (A55)";
+	compatible = "toradex,verdin-imx95", "fsl,mimx95";
+
+	chosen {
+		zephyr,console = &lpuart1;
+		zephyr,shell-uart = &lpuart1;
+		/* the sram node is in DDR */
+		zephyr,sram = &dram;
+	};
+
+	/* As the pin's imx95_evk A55 board: the cpu nodes it does not run on
+	 * are disabled (one core, no SMP). */
+	cpus {
+		cpu@0 {
+			status = "disabled";
+		};
+
+		cpu@100 {
+			status = "disabled";
+		};
+
+		cpu@200 {
+			status = "disabled";
+		};
+
+		cpu@300 {
+			status = "disabled";
+		};
+
+		cpu@400 {
+			status = "disabled";
+		};
+	};
+
+	dram: memory@d0000000 {
+		reg = <0xd0000000 DT_SIZE_M(256)>;
+	};
+
+	/* Linux imx95.dtsi: "nxp,imx95-mali", "arm,mali-valhall-csf";
+	 * interrupts "job", "mmu", "gpu" are GIC SPI 289, 290, 288. */
+	gpu: gpu@4d900000 {
+		compatible = "arm,mali-valhall-csf";
+		reg = <0x4d900000 0x480000>;
+		interrupts = <GIC_SPI 289 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_SPI 290 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>,
+			     <GIC_SPI 288 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+		interrupt-names = "job", "mmu", "gpu";
+		clocks = <&scmi_clk VERDIN_IMX95_CLK_GPU_CGC>,
+			 <&scmi_clk IMX95_CLK_GPUAPB>;
+		clock-names = "core", "coregroup";
+		power-domains = <&scmi_devpd VERDIN_IMX95_PD_GPU>;
+		status = "okay";
+	};
+};
+
+&lpuart1 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&lpuart1_default>;
+	pinctrl-names = "default";
+};
+
+&lpi2c2 {
+	clock-frequency = <I2C_BITRATE_FAST>;
+	pinctrl-0 = <&lpi2c2_default>;
+	pinctrl-names = "default";
+	zephyr,deferred-init;
+	status = "okay";
+
+	som_gpio_expander: gpio@20 {
+		compatible = "nxp,pcal6416";
+		reg = <0x20>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		ngpios = <16>;
+		no-auto-reset;
+		zephyr,deferred-init;
+		status = "okay";
+	};
+};
+
+&lpi2c3 {
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	pinctrl-0 = <&lpi2c3_default>;
+	pinctrl-names = "default";
+	zephyr,deferred-init;
+	status = "okay";
+};

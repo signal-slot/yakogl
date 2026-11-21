@@ -37,9 +37,10 @@ tools/cts/
   imx8mp-full-tree.txt         the whole GLES2 tree for the i.MX8MP, 29 entries
   imx8mp-full-tree-29460f96.results.tsv  the committed reference tally of that tree (2026-10-03)
   imx8mp-gltest-build.sh       one gl_test image in the sweep configuration
-  deqp-tree-images.sh          stage 2 for a labelled tree table, one image per row (Pi 4, NanoPC-T6)
+  deqp-tree-images.sh          stage 2 for a labelled tree table, one image per row (Pi 4, NanoPC-T6, Verdin iMX95)
   pi4-deqp-images.sh           stage 2, Pi 4 (deqp-tree-images.sh rpi_4b)
   t6-deqp-images.sh            stage 2, NanoPC-T6 Zephyr (deqp-tree-images.sh nanopc_t6, mali-gles2-tree.txt)
+  imx95-deqp-images.sh         stage 2, Verdin iMX95 Zephyr (deqp-tree-images.sh verdin_imx95/mimx9596/a55, mali-gles2-tree.txt)
   pi4-full-tree.txt            the whole GLES2 tree for the Pi 4, 29 images
   pi4-gles3-tree.txt           the whole GLES3 tree for the Pi 4, 91 images
   check-deqp-images.py         do the image recipes still build what conformance needs (2d)
@@ -1093,6 +1094,53 @@ export DEQP_WORK=<stage 1: cts-build-zephyr.sh with BOARD=nanopc_t6>
 tools/cts/t6-deqp-images.sh tools/cts/mali-gles2-tree.txt build/t6-img
 TREE_IMAGE_DIR=build/t6-img tools/board.sh nanopc-t6 tree tools/cts/mali-gles2-tree.txt records/nanopc-t6/<tree>
 ```
+
+The Verdin iMX95's (Mali-G310) tree is the T6's rows, `mali-gles2-tree.txt`
+as it is, built by the same builder (`imx95-deqp-images.sh` is
+`deqp-tree-images.sh verdin_imx95/mimx9596/a55`: `-DYAKOGL_WERROR=ON`, the same
+firmware refusal, the build string `VI95_DEQP_BUILD`). Its stage 1 is its own
+(Cortex-A55 flags), a `deps.toml` entry like the other boards':
+
+```sh
+driver/tools/mkmalifw.sh <mali_csffw.bin>      # the G610's file is the G310's
+tools/cts/deps-env.sh --build DEQP_WORK --board verdin_imx95
+export DEQP_WORK=$(tools/cts/deps-env.sh --layout)/deqp-stage1-verdin_imx95
+tools/cts/imx95-deqp-images.sh tools/cts/mali-gles2-tree.txt build/vi95-img
+```
+
+The image build knows nothing of the boot route (the T6's kexec out of
+Armbian, the Verdin's U-Boot `go`); running the images is the board's run
+script, which has to provide (no `tools/board.sh` entry for the board yet):
+
+- the start: `zephyr.bin` loaded at 0xd0000000 (`zephyr,sram` of
+  `verdin_imx95_mimx9596_a55.dts`, 256 MiB) and entered there as
+  `docs/standalone-boot.md`, "Toradex Verdin iMX95", has it (U-Boot's
+  `dcache off; icache off; go 0xd0000000`); the image's RAM footprint (the
+  AArch64 header's `image_size`, at offset 16 of the file) must fit the
+  256 MiB: 88.8 MiB for gl_test, 191.0 MiB for a dEQP row (`zephyr.bin`
+  4.4 MiB and 12.1 MiB; rows T6S1R08, T6S4R01 and T6S1R06 built on
+  2026-11-21, the same size each);
+- the record: the console (LPUART1, 115200) carries every line, as on the
+  T6. A run ends with `deqp: summary: ...`, `deqp: OK|FAILED (rc=N)`, then
+  the board layer's `deqp: PASS|FAIL`, the `yk-record` line and
+  `verdin_imx95: board: run over: PSCI SYSTEM_RESET at N ms` (gl_test: the
+  same with `gl_test: all: ...` and `gl_test: OK|FAILED (rc=N)`). A hang ends
+  in `verdin_imx95: WDOG3 feeding stopped at ...` and WDOG3's reset within
+  60 s; the lifetime in `verdin_imx95: lifetime over: PSCI SYSTEM_RESET`.
+  The run bound is the image's lifetime plus WDOG3's 60 s: 600 s + 60 s for
+  a dEQP row (`deqp/verdin_imx95.conf`), 300 s + 60 s for gl_test;
+- the reset-surviving record: both images end in the board layer's
+  `board_finish()`, whose `board_sink_store()` is `verdin_imx95_record.c`
+  (`CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM`, on by default): the record's four
+  words go into the BBNSM GPR4..7 over SCMI, and `tools/board.sh imx95`
+  reads them back from Linux (`tools/imx95_bbm_record.sh`); whether they
+  survive the reset is U2 of `docs/notes/pre-study-imx95.md`. The gl_test
+  row checks the sink is linked. A per-case running tally for a console-less run would hang
+  off `deqp_log.c` where the i.MX8M Plus's SNVS tally does
+  (`deqp_snvs_progress`); neither is written here;
+- the image's identity: the `.built` line's `build=` (from
+  `VI95_DEQP_BUILD`), and the `vi95_deqp: build <describe>` line the image
+  prints first (`vi95_gl_test: build ...` for gl_test).
 
 A dEQP image costs its lifetime (`CONFIG_V3D_DEQP_LIFETIME_S`, 240 s) plus
 the boots, whatever its case count: images D and E took 5 min 24 s and

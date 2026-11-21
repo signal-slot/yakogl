@@ -1,0 +1,73 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2024-2026 NXP
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * The Verdin iMX95's pins this image uses, through the System Manager's SCMI
+ * pin control (protocol 0x19). From Zephyr's
+ * boards/nxp/imx95_evk/imx95_evk-pinctrl.dtsi at af17c0c8aa2a (its
+ * lpuart1_default group, kept as it is): the module routes Verdin UART_3,
+ * the debug console, to the same pads, UART1_RXD and UART1_TXD (SODIMM 147
+ * and 149), with pad setting 0x31e in mainline Linux's imx95-verdin.dtsi
+ * (pinctrl_uart1): pull-up, FSEL "slightly fast", DSE x4, which is this
+ * group's.
+ *
+ * The display's pins on X4, from the same file's groups (their pad words
+ * spelled as this binding's properties: 0x40001b9e is SION, hysteresis,
+ * open drain, pull-up, FSEL "fast", DSE x4; 0x11e is FSEL "slightly fast",
+ * DSE x4):
+ * - lpi2c2_default: CTRL_I2C, the on-module bus of the PCAL6416A I/O
+ *   expander (pinctrl_lpi2c2: I2C2_SCL, I2C2_SDA).
+ * - lpi2c3_default: I2C_2_DSI (SODIMM 55 and 53), X4's bus with the
+ *   SN65DSI83 (pinctrl_lpi2c3: GPIO_IO29 SCL, GPIO_IO28 SDA).
+ * - tpm6_default: PWM_3_DSI (SODIMM 19), the backlight (pinctrl_tpm6:
+ *   GPIO_IO19 as TPM6 channel 2).
+ */
+
+#include <nxp/nxp_imx/mimx9596avzxn-pinctrl.dtsi>
+
+&pinctrl {
+	lpuart1_default: lpuart1_default {
+		group0 {
+			pinmux = <&iomuxc_uart1_rxd_lpuart_rx_lpuart1_rx>,
+				 <&iomuxc_uart1_txd_lpuart_tx_lpuart1_tx>;
+			bias-pull-up;
+			slew-rate = "slightly_fast";
+			drive-strength = "x4";
+		};
+	};
+
+	lpi2c2_default: lpi2c2_default {
+		group0 {
+			pinmux = <&iomuxc_i2c2_scl_lpi2c_scl_lpi2c2_scl>,
+				 <&iomuxc_i2c2_sda_lpi2c_sda_lpi2c2_sda>;
+			drive-open-drain;
+			bias-pull-up;
+			input-schmitt-enable;
+			input-enable;
+			slew-rate = "fast";
+			drive-strength = "x4";
+		};
+	};
+
+	lpi2c3_default: lpi2c3_default {
+		group0 {
+			pinmux = <&iomuxc_gpio_io29_lpi2c_scl_lpi2c3_scl>,
+				 <&iomuxc_gpio_io28_lpi2c_sda_lpi2c3_sda>;
+			drive-open-drain;
+			bias-pull-up;
+			input-schmitt-enable;
+			input-enable;
+			slew-rate = "fast";
+			drive-strength = "x4";
+		};
+	};
+
+	tpm6_default: tpm6_default {
+		group0 {
+			pinmux = <&iomuxc_gpio_io19_tpm_ch_tpm6_ch2>;
+			slew-rate = "slightly_fast";
+			drive-strength = "x4";
+		};
+	};
+};

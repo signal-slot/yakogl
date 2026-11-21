@@ -13,6 +13,9 @@
 #   west build -b verdin_am62p/am62p54/a53 examples/triangle
 #   west build -b verdin_imx8mp/mimx8ml8/a53 examples/triangle
 #   west build -b rpi_4b examples/triangle
+#   west build -b verdin_imx95/mimx9596/a55 examples/triangle   (builds, with
+#     the GPU's bring-up, the X4 DSI display and WDOG3:
+#     driver/zephyr/lib/board/verdin_imx95)
 
 get_filename_component(YAKOGL_EXAMPLES "${CMAKE_CURRENT_LIST_DIR}" ABSOLUTE)
 get_filename_component(PVR_REPO "${YAKOGL_EXAMPLES}/../driver" ABSOLUTE)
@@ -27,8 +30,9 @@ set(_yk_layer_verdin_am62p am62p)
 set(_yk_layer_verdin_imx8mp imx8mp)
 set(_yk_layer_rpi_4b rpi4)
 set(_yk_layer_stm32mp257f_dk stm32mp2)
+set(_yk_layer_verdin_imx95 verdin_imx95)
 if(NOT DEFINED _yk_layer_${_yk_board_name})
-  message(FATAL_ERROR "examples: ${BOARD} is not a board of the board layer (verdin_am62p, verdin_imx8mp, rpi_4b, stm32mp257f_dk)")
+  message(FATAL_ERROR "examples: ${BOARD} is not a board of the board layer (verdin_am62p, verdin_imx8mp, rpi_4b, stm32mp257f_dk, verdin_imx95)")
 endif()
 set(_yk_board_dir "${PVR_REPO}/zephyr/lib/board/${_yk_layer_${_yk_board_name}}")
 if(BOARD MATCHES "/direct$")

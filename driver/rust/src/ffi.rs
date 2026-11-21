@@ -22,6 +22,8 @@ pub use hdmi::*;
 pub use imx8mp::*;
 #[cfg(any(feature = "imx8mp", test))]
 pub use imx8mp_dsi::*;
+#[cfg(any(feature = "imx95", test))]
+pub use imx95_wdog::*;
 #[cfg(any(feature = "imx8mp", test))]
 pub use imx_wdog::*;
 #[cfg(any(feature = "stm32mp2", test))]
@@ -54,6 +56,27 @@ mod hdmi;
 /// `yakogl,samsung-dsim`; ip::lcdifv3, ip::samsung_dsim): src/ffi/imx8mp_dsi.rs.
 #[cfg(any(feature = "imx8mp", test))]
 mod imx8mp_dsi;
+/// The Verdin iMX95's Mali bring-up, `yd_imx95_osal_up` (board::imx95_gpu:
+/// the SCMI power-on, then the Mali OSAL whose ops are ffi::rk3588's
+/// `yd_t6_osal_*`): src/ffi/imx95.rs.
+#[cfg(any(all(feature = "imx95", feature = "rk3588", feature = "mali"), test))]
+mod imx95;
+/// The Verdin iMX95's record sink, the BBNSM GPR4..7 over SCMI
+/// (soc::imx95::bbm; the glue is
+/// driver/zephyr/lib/board/verdin_imx95/verdin_imx95_record.c):
+/// src/ffi/imx95_bbm.rs.
+#[cfg(any(feature = "imx95", test))]
+mod imx95_bbm;
+/// The Verdin iMX95's picture on X4, `yd_imx95_display_up` / `_flip` / `_down`
+/// (board::verdin_imx95_display), and the SCMI channel's Rust side both
+/// halves share: src/ffi/imx95_display.rs.
+#[cfg(any(feature = "imx95", test))]
+mod imx95_display;
+/// The Verdin iMX95's WDOG3 (ip::wdog32; the glue is
+/// driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c):
+/// src/ffi/imx95_wdog.rs.
+#[cfg(any(feature = "imx95", test))]
+mod imx95_wdog;
 /// The i.MX WDOG self-arm (ip::imx_wdog; the shim is
 /// driver/zephyr/lib/board/imx8mp/gc_wdog_arm.c): src/ffi/imx_wdog.rs.
 #[cfg(any(feature = "imx8mp", test))]

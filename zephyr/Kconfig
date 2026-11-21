@@ -74,9 +74,10 @@ config YAKOGL_GPU_V3D
 	  is refused by name.
 
 config YAKOGL_GPU_MALI
-	bool "Arm Mali-G610 (NanoPC-T6, RK3588)"
+	bool "Arm Mali-G610 (NanoPC-T6, RK3588); Mali-G310 (Verdin iMX95, built only)"
 	depends on YAKOGL_SHADERC_ONLINE
-	depends on YAKOGL_NANOPC_T6
+	depends on YAKOGL_NANOPC_T6 || YAKOGL_VERDIN_IMX95
+	select YAKOGL_DRV_DISPLAY_RUST if YAKOGL_VERDIN_IMX95
 	help
 	  The Mali backend (src/mali): CSF command streams and the frame
 	  descriptors, submitted by the OSAL in src/osal/zephyr_mali.c over our
@@ -92,6 +93,13 @@ config YAKOGL_GPU_MALI
 	  most 16 times in an image; each restart prints one UART line. Errors
 	  that need a GPU reset, or one past the 16, leave the OSAL dead: every
 	  later kick is -EIO. board::nanopc_t6_osal ("Recovery") lists them.
+	  On the Verdin iMX95 (i.MX 95, Mali-G310) the same OSAL runs over
+	  the board's half
+	  (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c): the
+	  same CSF firmware embedded (the arch 10.12 file is the arch 10.8
+	  bytes), the GPU powered over SCMI to the System Manager, then the
+	  T6's bring-up from GPU_ID on (yd_imx95_osal_up). Built and
+	  host-tested; not run on a board yet.
 
 endchoice
 
@@ -412,6 +420,20 @@ config YAKOGL_MALI_CARVEOUT_BYTES
 	  vertex buffers and surfaces take the rest. At most 256 MiB
 	  (board::nanopc_t6_osal::MAX_CARVE_PAGES). The image's RAM must hold
 	  it besides the kernel.
+
+config YAKOGL_MALI_WINDOW_BYTES
+	int "Mali carve-out: bytes at its end kept for the board's windows"
+	depends on YAKOGL_GPU_MALI
+	range 0 268435456
+	default 0
+	help
+	  The last this many bytes of YAKOGL_MALI_CARVEOUT_BYTES are never
+	  handed out by the OSAL's allocator (yd_t6_osal_mem.carve_reserved):
+	  they are the board layer's window and screen buffers
+	  (osal_zephyr_mali_window_mem, src/osal/zephyr_mali_board.h), which
+	  the GPU reaches through map_phys like any range of the carve-out.
+	  Whole pages, less than the carve-out (build asserts). 0: none, and
+	  board_window() has no memory on a Mali board.
 
 config YAKOGL_MALI_HEAP_CHUNKS
 	int "Mali tiler heap: 2 MiB chunks at most"

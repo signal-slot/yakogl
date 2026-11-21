@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Generate driver/rust/src/soc/imx8mp/regs.rs from hal_nxp's i.MX8MP PERI headers.
+"""Generate a SoC's regs.rs from hal_nxp's PERI headers.
 
     tools/hal-nxp/gen_regs.py <hal_nxp checkout> > driver/rust/src/soc/imx8mp/regs.rs
+    tools/hal-nxp/gen_regs.py --soc imx95 <hal_nxp checkout> > driver/rust/src/soc/imx95/regs.rs
     tools/hal-nxp/gen_regs.py --self-test
 
-The input is NXP's CMSIS peripheral access layer for the i.MX 8M Plus,
-`mcux/mcux-sdk-ng/devices/i.MX/i.MX8MP/periph/PERI_<BLOCK>.h` in Zephyr's
+The input is NXP's CMSIS peripheral access layer for the SoC (SOCS: the
+i.MX 8M Plus, the default, and the i.MX 95),
+`mcux/mcux-sdk-ng/devices/i.MX/<SoC>/periph/PERI_<BLOCK>.h` in Zephyr's
 hal_nxp module, read unmodified (BSD-3-Clause, NXP; see NOTICE). From each
 header it takes the register layout typedef (`<BLOCK>_Type`: register offsets,
 and for arrays of register groups their base, step and count) and the
@@ -21,8 +23,14 @@ that changed (a hal_nxp update) stops the generator, so regenerating against a
 newer hal_nxp is a deliberate act: update the revision and the hashes, review
 the diff of regs.rs, commit both. tools/check.sh regenerates and compares.
 
-Only the blocks the Rust drivers use are generated (BLOCKS). Adding one is one
-entry: its name, optionally the registers to keep (None = all), and its hash.
+Only the blocks the Rust drivers use are generated (BLOCKS, IMX95_BLOCKS).
+Adding one is one entry: its name, optionally the registers to keep (None =
+all), and its hash.
+
+The i.MX 95 headers name every field with its unit in lower case
+(`DISPLAY_SEERIS_DISENG_FRAMEGEN0_FGCHSTAT_diseng_framegen0_PrimSyncStat_MASK`);
+for that SoC the unit prefix the field shares with its register's name is
+dropped (`PRIMSYNCSTAT`), the rest is as NXP wrote it.
 
 Python 3 standard library only.
 """
@@ -106,6 +114,76 @@ PINNED = {
     "PERI_MIPI_DSI.h": "94fceb991685e5a7607789ef28fb9e2f537bdd7287fbdb8b0f5e522c5db62c46",
 }
 
+# The i.MX 95 display (soc::imx95::dpu, driver/docs/imx95-display.md): one
+# plane of the DPU ("Seeris") to display stream 0 -- FetchLayer0's sublayer 0
+# over ConstFrame0 in LayerBlend1, ExtDst0, DomainBlend0, FrameGen0, the
+# polarity of the stream (Dither0's configuration block), the Signature0 CRC
+# window 0, the domain mask and interrupt status of ExtDst0 -- and the display
+# block control (engine clock select, interleaver mode, pixel link) and the
+# pixel interleaver. The Seeris header is one typedef of 2,122 registers;
+# only these are kept.
+IMX95_BLOCKS = {
+    "DISPLAY_SEERIS": [
+        "COMCTRL_IPIDENTIFIER", "IRQ_INTERRUPTSTATUS0", "IRQ_INTERRUPTCLEAR0",
+        "DOMAINMASK_EXTDST0_DOMAIN_MASK0",
+        "PIXENG_CONSTFRAME0_STATICCONTROL", "PIXENG_CONSTFRAME0_FRAMEDIMENSIONS",
+        "PIXENG_CONSTFRAME0_CONSTANTCOLOR",
+        "PIXENG_EXTDST0_STATICCONTROL",
+        "PIXENG_EXTDST0CFG_EXTDST0_STATIC", "PIXENG_EXTDST0CFG_EXTDST0_DYNAMIC",
+        "PIXENG_EXTDST0CFG_EXTDST0_TRIGGER", "PIXENG_EXTDST0CFG_EXTDST0_STATUS",
+        "PIXENG_LAYERBLEND1_STATICCONTROL", "PIXENG_LAYERBLEND1_CONTROL", "PIXENG_LAYERBLEND1_BLENDCONTROL",
+        "PIXENG_LAYERBLEND1_POSITION", "PIXENG_LAYERBLEND1CFG_LAYERBLEND1_DYNAMIC",
+        "PIXENG_FETCHLAYER0_STATICCONTROL", "PIXENG_FETCHLAYER0_SHDLDREQCONTROL",
+        "PIXENG_FETCHLAYER0_BURSTBUFFERMANAGEMENT", "PIXENG_FETCHLAYER0_BASEADDRESS0",
+        "PIXENG_FETCHLAYER0_BASEADDRESSMSB0", "PIXENG_FETCHLAYER0_SOURCEBUFFERATTRIBUTES0",
+        "PIXENG_FETCHLAYER0_SOURCEBUFFERDIMENSION0", "PIXENG_FETCHLAYER0_COLORCOMPONENTBITS0",
+        "PIXENG_FETCHLAYER0_COLORCOMPONENTSHIFT0", "PIXENG_FETCHLAYER0_LAYEROFFSET0",
+        "PIXENG_FETCHLAYER0_CONSTANTCOLOR0", "PIXENG_FETCHLAYER0_LAYERPROPERTY0",
+        "PIXENG_FETCHLAYER0_FRAMEDIMENSIONS", "PIXENG_FETCHLAYER0_FRAMERESAMPLING",
+        "PIXENG_FETCHLAYER0_CONTROL",
+        "DISENG_DOMAINBLEND0_STATICCONTROL", "DISENG_DOMAINBLEND0_CONTROLTRIGGER",
+        "DISENG_DOMAINBLEND0_BLENDCONTROL",
+        "DISENG_FRAMEGEN0_FGSTCTRL", "DISENG_FRAMEGEN0_HTCFG1", "DISENG_FRAMEGEN0_HTCFG2",
+        "DISENG_FRAMEGEN0_VTCFG1", "DISENG_FRAMEGEN0_VTCFG2", "DISENG_FRAMEGEN0_PKICKCONFIG",
+        "DISENG_FRAMEGEN0_SKICKCONFIG", "DISENG_FRAMEGEN0_PACFG", "DISENG_FRAMEGEN0_SACFG",
+        "DISENG_FRAMEGEN0_FGINCTRL", "DISENG_FRAMEGEN0_FGINCTRLPANIC", "DISENG_FRAMEGEN0_FGCCR",
+        "DISENG_FRAMEGEN0_FGENABLE", "DISENG_FRAMEGEN0_FGSLR", "DISENG_FRAMEGEN0_FGENSTS",
+        "DISENG_FRAMEGEN0_FGTIMESTAMP", "DISENG_FRAMEGEN0_FGCHSTAT", "DISENG_FRAMEGEN0_FGCHSTATCLR",
+        "DISENG_SIG0_STATICCONTROL", "DISENG_SIG0_PANICCOLOR", "DISENG_SIG0_SHADOWLOAD",
+        "DISENG_SIG0_CONTINUOUSMODE", "DISENG_SIG0_STATUS", "DISENG_SIG0_CONTROL_WINDOW0",
+        "DISENG_SIG0_UPPERLEFT_WINDOW0", "DISENG_SIG0_LOWERRIGHT_WINDOW0",
+        "DISENG_SIG0_CRC_R_WINDOW0", "DISENG_SIG0_CRC_G_WINDOW0", "DISENG_SIG0_CRC_B_WINDOW0",
+        "DISENG_DITHER0CFG_POLARITYCTRL0",
+    ],
+    "DISPLAY_BLK_CTRL_DISPLAYMIX": ["DISPLAY_ENGINES_CLOCK_CONTROL", "PIXEL_INTERLEAVER_CONTROL", "PIXEL_LINK_CTRL"],
+    "DISPLAY_INTERLEAVER": None,
+    # The DSI output's camera-mix CSRs (soc::imx95::combo_phy): the pixel
+    # link format, the pixel link select and the PHY reference, the combo
+    # D-PHY's mode, frequency and test-mode registers.
+    "CAMERA_DSI_STREAM_CSR": ["DSI_HOST_CONFIGURATION"],
+    "CAMERA_DSI_MASTER_CSR": ["DSI_CLOCK_GATING_CONTROL", "DSI_PIXEL_LINK_CONTROL", "DSI_CLOCK_SETTING"],
+    "CAMERA_DSI_OR_CSI_PHY_CSR": [
+        "COMBO_PHY_MODE_CONTROL", "COMBO_PHY_FREQ_CONTROL", "COMBO_PHY_TEST_MODE_CONTROL",
+        "COMBO_PHY_TEST_MODE_STATUS",
+    ],
+}
+
+IMX95_PINNED = {
+    "PERI_DISPLAY_SEERIS.h": "fd2429314cc9282d0c64904865bba5993db81f013c97686cb36f735b34c2963b",
+    "PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h": "629a22a0281e80751eb307de6c741520611fd6875f6fb99e5eb4a01714d00c5b",
+    "PERI_DISPLAY_INTERLEAVER.h": "1daabf4ddf8199dcb31e28f2d0584549c0594af2c401b7451b9e3edc888c74fc",
+    "PERI_CAMERA_DSI_STREAM_CSR.h": "707569eed5c914c316377a55063f9b8b5997a9cf221e2382a3e60415f72c4c7c",
+    "PERI_CAMERA_DSI_MASTER_CSR.h": "68f7fd4cacac4e032a325d0dc888b6ab30c45bc8fae7b4cf686ad821bb82ac43",
+    "PERI_CAMERA_DSI_OR_CSI_PHY_CSR.h": "0e187f5fabdd0e7c48d1d81a71b8ffe0f7165e04c3a0443301404f680ab7f179",
+}
+
+# soc -> (name in the output's header, periph dir, blocks, pins, strip the
+# fields' unit prefix)
+SOCS = {
+    "imx8mp": ("i.MX 8M Plus", PERIPH_DIR, BLOCKS, PINNED, False),
+    "imx95": ("i.MX 95", "mcux/mcux-sdk-ng/devices/i.MX/i.MX95/periph", IMX95_BLOCKS, IMX95_PINNED, True),
+}
+
 
 class GenError(Exception):
     pass
@@ -128,7 +206,19 @@ SHIFT = re.compile(r"^#define\s+(\w+)_SHIFT\s+\((\d+)U\)")
 DOC = re.compile(r"^\s*\*\s+(0b[01]+\.\..*?)\s*$")
 
 
-def parse(block, text):
+def strip_unit(field, reg):
+    """`field` without the lower-case unit prefix it shares with `reg`'s name
+    (`diseng_sig0_En_Window0` of `DISENG_SIG0_CONTROL_WINDOW0`: `En_Window0`);
+    the field unchanged when nothing is left or nothing is shared."""
+    low = reg.lower() + "_"
+    cut = 0
+    for i, c in enumerate(field):
+        if c == "_" and low.startswith(field[:i + 1]):
+            cut = i + 1
+    return field[cut:] if cut < len(field) else field
+
+
+def parse(block, text, strip=False):
     """-> (registers, arrays, fields).
 
     registers: [(name, offset)] of plain registers;
@@ -246,7 +336,10 @@ def parse(block, text):
                 j += 1
         # NXP names some fields in lower case (the 8-bit HDMI blocks); Rust
         # constants are upper case, and no two fields may then collide.
-        pending[m.group(1)] = (reg, full[len(reg) + 1:].upper(), int(m.group(2), 16), doc)
+        name = full[len(reg) + 1:]
+        if strip:
+            name = strip_unit(name, reg)
+        pending[m.group(1)] = (reg, name.upper(), int(m.group(2), 16), doc)
     seen = set()
     for reg, field, _, _ in pending.values():
         if (reg, field) in seen:
@@ -278,35 +371,36 @@ def emit_fields(out, reg, fields, indent):
     out.append(f"{pad}}}")
 
 
-def generate(hal):
+def generate(hal, soc="imx8mp"):
+    title, periph_dir, blocks, pinned, strip = SOCS[soc]
     out = [
         "// SPDX-License-Identifier: BSD-3-Clause",
         "// GENERATED by tools/hal-nxp/gen_regs.py. DO NOT EDIT.",
         "//",
-        "// Register offsets and fields of the i.MX 8M Plus, from NXP's CMSIS",
-        f"// peripheral headers in Zephyr's hal_nxp module ({PERIPH_DIR}),",
+        f"// Register offsets and fields of the {title}, from NXP's CMSIS",
+        f"// peripheral headers in Zephyr's hal_nxp module ({periph_dir}),",
         f"// revision {HAL_NXP_REVISION}:",
     ]
-    for name in BLOCKS:
-        out.append(f"//   PERI_{name}.h  sha256 {PINNED['PERI_' + name + '.h']}")
+    for name in blocks:
+        out.append(f"//   PERI_{name}.h  sha256 {pinned['PERI_' + name + '.h']}")
     out += [
         "// Copyright 1997-2016 Freescale Semiconductor, Inc.; Copyright 2016-2026 NXP.",
         "// The field value lists are NXP's text from the same headers.",
         "",
         "#![allow(clippy::identity_op)]",
     ]
-    for block, keep in BLOCKS.items():
+    for block, keep in blocks.items():
         fname = f"PERI_{block}.h"
-        path = os.path.join(hal, PERIPH_DIR, fname)
+        path = os.path.join(hal, periph_dir, fname)
         try:
             data = open(path, "rb").read()
         except OSError as e:
             raise GenError(f"cannot read {path}: {e}")
         digest = hashlib.sha256(data).hexdigest()
-        if digest != PINNED[fname]:
-            raise GenError(f"{fname}: sha256 {digest} is not the pinned {PINNED[fname]} "
+        if digest != pinned[fname]:
+            raise GenError(f"{fname}: sha256 {digest} is not the pinned {pinned[fname]} "
                            f"(hal_nxp {HAL_NXP_REVISION}); update the pin on purpose")
-        registers, arrays, fields, bits = parse(block, data.decode("utf-8"))
+        registers, arrays, fields, bits = parse(block, data.decode("utf-8"), strip)
         kept = set(keep) if keep is not None else None
         if kept is not None:
             known = {n for n, _ in registers} | {n for a in arrays for n, _ in a[4]}
@@ -411,6 +505,11 @@ def self_test():
             ok = False
         except GenError:
             pass
+    # the i.MX 95's unit prefix: dropped where the register's name has it
+    ok &= strip_unit("diseng_sig0_En_Window0", "DISENG_SIG0_CONTROL_WINDOW0") == "En_Window0"
+    ok &= strip_unit("pixeng_extdst0cfg_extdst0_powerdown", "PIXENG_EXTDST0CFG_EXTDST0_STATIC") == "powerdown"
+    ok &= strip_unit("DSIP_CLK0_SEL", "DISPLAY_ENGINES_CLOCK_CONTROL") == "DSIP_CLK0_SEL"
+    ok &= strip_unit("irq_", "IRQ_X") == "irq_"
     print("gen_regs self-test:", "ok" if ok else "FAILED")
     return 0 if ok else 1
 
@@ -418,11 +517,16 @@ def self_test():
 def main(argv):
     if argv[1:] == ["--self-test"]:
         return self_test()
-    if len(argv) != 2:
+    args = argv[1:]
+    soc = "imx8mp"
+    if len(args) == 3 and args[0] == "--soc" and args[1] in SOCS:
+        soc = args[1]
+        args = args[2:]
+    if len(args) != 1:
         print(__doc__.split("\n\n")[1], file=sys.stderr)
         return 2
     try:
-        sys.stdout.write(generate(argv[1]))
+        sys.stdout.write(generate(args[0], soc))
     except GenError as e:
         print(f"gen_regs: {e}", file=sys.stderr)
         return 1

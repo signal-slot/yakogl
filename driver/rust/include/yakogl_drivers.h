@@ -230,6 +230,68 @@ struct yd_imx_wdog_arm {
 int yd_imx_wdog_arm(uintptr_t wdog_base, uintptr_t ccm_base, uint32_t timeout_ms,
 		    uint32_t ext_reset, struct yd_imx_wdog_arm *out);
 
+/* ---- NXP WDOG32 (ip::wdog32; the Verdin iMX95's verdin_imx95_wdog.c) -----
+ * yd_wdog32_arm: one call at PRE_KERNEL_1, interrupts off: the WDOG32 at
+ * base (the glue's mapping of WDOG3, 0x42490000) unlocked, written with
+ * Linux's CS for fsl,imx93-wdt (32-bit commands, LPO / 256 = 125 Hz,
+ * UPDATE, WAIT, STOP; INT when ext_reset != 0) and EN, TOVAL for timeout_ms
+ * (whole 8 ms ticks, 8 ms .. 524.28 s), refreshed and read back. polls
+ * bounds each wait (ULK, RCS) in reads of CS. 0, -EIO when the WDOG32
+ * refused (refusal says why), -EINVAL for a NULL out or base.
+ * yd_wdog32_refresh: one write of the refresh word to CNT. Any context. */
+
+#define YD_WDOG32_WAS_RUNNING (1u << 0) /* CS.EN was set: an earlier stage started it */
+
+#define YD_WDOG32_REFUSED_TIMEOUT         1 /* not a whole 8 ms tick in 8 ms .. 524.28 s */
+#define YD_WDOG32_REFUSED_UNLOCK          2 /* CS.ULK did not show within the polls */
+#define YD_WDOG32_REFUSED_RECONFIG        3 /* CS.RCS did not show within the polls */
+#define YD_WDOG32_REFUSED_CS_READ_BACK    4 /* CS read back other than written */
+#define YD_WDOG32_REFUSED_TOVAL_READ_BACK 5 /* TOVAL read back other than written */
+
+struct yd_wdog32_arm {
+	uint32_t cs_found;    /* CS as found, before any write */
+	uint32_t toval_found; /* TOVAL as found */
+	uint32_t cs_now;      /* CS read back (on a refusal: the read it is about) */
+	uint32_t toval_now;   /* TOVAL read back (0 when not read) */
+	uint32_t flags;       /* YD_WDOG32_* */
+	uint32_t refusal;     /* 0 or YD_WDOG32_REFUSED_* */
+	uint32_t timeout_ms;  /* from the read-back TOVAL; 0 on a refusal */
+	uint32_t ulk_polls;   /* reads of CS that saw ULK still clear */
+	uint32_t rcs_polls;   /* reads of CS that saw RCS still clear */
+};
+
+int yd_wdog32_arm(uintptr_t base, uint32_t timeout_ms, uint32_t ext_reset, uint32_t polls,
+		  struct yd_wdog32_arm *out);
+void yd_wdog32_refresh(uintptr_t base);
+
+/* ---- The Verdin iMX95's record in the BBNSM GPR4..7 (soc::imx95::bbm,
+ * ffi::imx95_bbm; the glue is verdin_imx95_record.c) --------------------------
+ * yd_imx95_bbm_record_store: the record's four words w[0..3] into GPR4..7
+ * over the System Manager's BBM protocol (0x81, BBM_GPR_SET 0x3), through
+ * scmi (verdin_imx95_scmi.h's form: the command out, the whole reply in, its
+ * length or a negative errno): GPR4 cleared first, then w1..w3 into
+ * GPR5..7, then w0 into GPR4. yd_imx95_bbm_record_load: GPR4..7 into w
+ * (BBM_GPR_GET 0x4). 0; -EIO when a message was not answered with SUCCESS
+ * (out says which); -EINVAL for a NULL argument (nothing sent). */
+#define YD_IMX95_BBM_RECORD_GPR 4 /* soc::imx95::bbm::RECORD_GPR: w0's GPR */
+
+struct yd_imx95_bbm {
+	uint32_t gpr;       /* the GPR whose message failed */
+	uint32_t msg;       /* 3 BBM_GPR_SET, 4 BBM_GPR_GET */
+	int32_t rc;         /* the transport's errno, else 0 */
+	int32_t status;     /* the SM's SCMI status of a refusal, else 0 */
+	uint32_t malformed; /* 1: the reply did not answer the command */
+};
+_Static_assert(sizeof(struct yd_imx95_bbm) == 20, "ffi::imx95_bbm YdImx95Bbm");
+_Static_assert(offsetof(struct yd_imx95_bbm, rc) == 8, "ffi::imx95_bbm YdImx95Bbm");
+
+int yd_imx95_bbm_record_store(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx,
+					  size_t rx_cap),
+			      const uint32_t w[4], struct yd_imx95_bbm *out);
+int yd_imx95_bbm_record_load(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx,
+					 size_t rx_cap),
+			     uint32_t w[4], struct yd_imx95_bbm *out);
+
 /* ---- RK3588 board glue (ip::dw_wdt, soc::rk3588, aarch64; nanopc_t6.c) ----
  * yd_dw_wdt_arm: WDT0's two CRU gates opened (CLKGATE_CON(15) bits 0, 1),
  * then the DW_apb_wdt armed for the period of `top` (2^(16 + top) cycles of
@@ -857,6 +919,112 @@ int yd_t6_osal_up(uintptr_t cru, uintptr_t pmu, uintptr_t spi2, uintptr_t qos, u
 		  const struct yd_t6_osal_mem *mem, int (*clean)(uintptr_t addr, size_t len),
 		  void (*delay_us)(uint32_t us), void (*on_handover)(const struct yd_t6_gpu_up *h),
 		  struct yd_t6_gpu_up *z1, struct yd_t6_submit_up *out);
+/* yd_imx95_osal_up: the same OSAL brought up on the i.MX 95 (Verdin iMX95,
+ * Mali-G310; board::imx95_gpu, ffi::imx95; features imx95 rk3588 mali): the
+ * GPU powered over SCMI to the System Manager (soc::imx95::gpu_power: the
+ * protocol versions, the GPU's performance levels, power domain 14 on, the
+ * fastest level at or below rate_hz, 0 for 800 MHz, clock gate 174 on and
+ * its rate read; no SoC register is written from the A55), then GPU_ID, the
+ * soft reset, the L2, the CSF firmware and the group exactly as
+ * yd_t6_osal_up's. scmi sends one command (tx: header and payload as built)
+ * and writes the whole reply to rx (header, status, return values, at most
+ * rx_cap = YD_IMX95_SCMI_MAX_MSG bytes); it returns the reply's length or a
+ * negative errno. gpu is the GPU's block (0x4d900000) mapped for gpu_len
+ * bytes, at least YD_IMX95_GPU_MAP_MIN (its doorbells up to the group's).
+ * on_handover sees z1 once the SM has powered the GPU, before its first
+ * register is read. z1 holds the GPU's part (identity, reset, L2) and the
+ * stop: YD_IMX95_GPU_STOP_SCMI for the power-on, YD_T6_GPU_STOP_* for the
+ * GPU's own steps; its RK3588 words are 0. power holds what the SM answered.
+ * Returns and out as yd_t6_osal_up's; after it the OSAL ops below. */
+#define YD_IMX95_GPU_STOP_SCMI 15 /* the SCMI power-on stopped: refusal and detail as power's */
+#define YD_IMX95_GPU_MAP_MIN 0xa0000 /* board::imx95_gpu::GPU_MAP_MIN; ffi::imx95 pins it */
+#define YD_IMX95_SCMI_MAX_MSG 128 /* firmware::scmi::MAX_MSG: the most bytes of a reply */
+
+struct yd_imx95_gpu_power {
+	uint32_t on;              /* 1: every SCMI message of the power-on answered as asked */
+	uint32_t requested_hz[2]; /* the rate asked for */
+	uint32_t level_index;     /* the performance level set and read back, and its kHz */
+	uint32_t level_khz;
+	uint32_t rate_hz[2];      /* CLOCK_RATE_GET of the gate after the enable */
+	/* where it stopped (board::imx95_gpu::scmi_error_code): 0 none, 1 the
+	 * transport (detail lo: its errno), 2 the SM refused (status), 3 a reply
+	 * header that is not the request's, 4 a short reply, 5 a protocol major
+	 * not written for, 6 a GET that does not read back the SET, 7 the
+	 * levels' reply, 8 no level at or below the rate, 9 the gate's rate 0 or
+	 * above the level's */
+	uint32_t refusal;
+	uint32_t message;         /* protocol << 8 | message id of the stop (0x1104 POWER_STATE_SET) */
+	int32_t status;           /* the SCMI status of refusal 2 (-3 DENIED) */
+	uint32_t detail[2];
+};
+_Static_assert(sizeof(struct yd_imx95_gpu_power) == 48, "ffi::imx95 YdImx95GpuPower");
+_Static_assert(offsetof(struct yd_imx95_gpu_power, refusal) == 28, "ffi::imx95 YdImx95GpuPower");
+_Static_assert(offsetof(struct yd_imx95_gpu_power, detail) == 40, "ffi::imx95 YdImx95GpuPower");
+
+int yd_imx95_osal_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+		     uint64_t rate_hz, uintptr_t gpu, size_t gpu_len, const void *blob,
+		     size_t blob_len, uint32_t timer_hz, const struct yd_t6_osal_mem *mem,
+		     int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
+		     void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
+		     struct yd_imx95_gpu_power *power, struct yd_t6_submit_up *out);
+
+/* The Verdin iMX95 probes (tools/probes/verdin_imx95; ffi::imx95, features
+ * imx95 rk3588 mali, board::imx95_gpu):
+ *   yd_imx95_gpu_power_on   soc::imx95::gpu_power's power-on alone (the
+ *                           versions, the levels, PD 14 on, the level for
+ *                           rate_hz, 0 for 800 MHz, gate 174 on and its rate
+ *                           read); no GPU register is touched. 0 (power->on
+ *                           1), -EIO (power says where it stopped), -EINVAL
+ *   yd_imx95_gpu_power_off  gate 174 off, PD 14 off and read back off; the
+ *                           level is left. 0 (power all zero), -EIO (power
+ *                           says where), -EINVAL. No GPU read after it
+ *   yd_imx95_fw_up          the pre-study's B3: yd_t6_fw_up's run (Z1, Z2,
+ *                           the load, the MCU's boot, the global
+ *                           configuration, one PING) with the power-on over
+ *                           SCMI in place of the RK3588's, then CSG 0's
+ *                           control block read back into csg0; no group is
+ *                           started. Arguments as yd_t6_fw_up's with scmi and
+ *                           rate_hz as yd_imx95_osal_up's; z1 and power as
+ *                           yd_imx95_osal_up writes them. 0, -EIO (out->step
+ *                           says where), -EINVAL */
+struct yd_imx95_fw_csg0 {
+	uint32_t read;               /* 1: the words below were read after the boot */
+	uint32_t features;           /* CSG 0's control block (panthor_fw_csg_control_iface) */
+	uint32_t suspend_size;
+	uint32_t protm_suspend_size;
+	uint32_t stream_num;
+	uint32_t refusal;            /* not read: the discovery's CsfRefusal, 0 when no boot ran */
+	uint32_t detail;
+};
+_Static_assert(sizeof(struct yd_imx95_fw_csg0) == 28, "ffi::imx95 YdImx95FwCsg0");
+_Static_assert(offsetof(struct yd_imx95_fw_csg0, suspend_size) == 8, "ffi::imx95 YdImx95FwCsg0");
+_Static_assert(offsetof(struct yd_imx95_fw_csg0, refusal) == 20, "ffi::imx95 YdImx95FwCsg0");
+
+int yd_imx95_gpu_power_on(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			  uint64_t rate_hz, struct yd_imx95_gpu_power *power);
+int yd_imx95_gpu_power_off(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			   struct yd_imx95_gpu_power *power);
+int yd_imx95_fw_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+		   uint64_t rate_hz, uintptr_t gpu, size_t gpu_len, const void *blob, size_t blob_len,
+		   const struct yd_t6_fw_backing *backings, uint32_t n_backings, void *pool,
+		   uint32_t pool_pages, uint64_t tables_pa, uint32_t timer_hz,
+		   int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
+		   void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
+		   struct yd_imx95_gpu_power *power, struct yd_t6_fw_up *out,
+		   struct yd_imx95_fw_csg0 *csg0);
+
+/* yd_imx95_scmi_survey: the read-only SCMI survey of the probe imx95_scmi
+ * (soc::imx95::survey; feature imx95): the base protocol's discovery, every
+ * listed protocol's version and attributes, then the GPU's and the
+ * display's power domains (14, 13, 3), performance domains (9, 12, 11) and
+ * clocks, one fact a line ("key = value", no newline) to line(). Sends
+ * only messages that read. counts gets facts, refused (a non-zero SCMI
+ * status), broken (the transport or the reply's form). 0, -EIO (the base
+ * version was not answered: the channel is dead; one line said so),
+ * -EINVAL. */
+#define YD_IMX95_SURVEY_LINE_MAX 160 /* soc::imx95::survey::LINE_MAX */
+int yd_imx95_scmi_survey(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			 void (*line)(const char *s, size_t len), uint32_t counts[3]);
 int yd_t6_osal_alloc(size_t size, struct osal_gpu_mem *out);
 int yd_t6_osal_free(struct osal_gpu_mem *mem);
 void yd_t6_osal_frame_open(bool open);
@@ -868,6 +1036,100 @@ int yd_t6_osal_shutdown(void);
 int yd_t6_osal_gpu(struct osal_mali_gpu *out);
 int yd_t6_osal_heap(struct osal_mali_heap *out);
 int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
+
+/* yd_imx95_display_*: the Verdin iMX95's picture on X4, the Toradex 10.1"
+ * DSI display (ffi::imx95_display over board::verdin_imx95_display, the
+ * twelve steps of driver/docs/imx95-display.md section 4(b); feature
+ * imx95). `scmi` is yd_imx95_osal_up's channel (one per image, shared with
+ * the GPU's power-on). `bases` holds where the image mapped each block, at
+ * least YD_IMX95_*_SIZE bytes from YD_IMX95_*_PHYS (Device memory). `env`
+ * serves the bridge: I2C bus YD_IMX95_DISPLAY_BRIDGE_BUS is the SN65DSI83
+ * (0x2C on LPI2C3), GPIO line YD_IMX95_DISPLAY_LINE_EN its EN (the module's
+ * PCAL6416A at 0x20 on LPI2C2, line 3), the waits busy. `fb` is the
+ * physical address of a YD_IMX95_DISPLAY_WIDTH x _HEIGHT XRGB8888 buffer,
+ * rows `stride` bytes apart (a multiple of 4, at least WIDTH x 4); the DPU
+ * has no IOMMU and does not snoop the CPU's caches.
+ *   up    0, -EBUSY (already up), -EINVAL (a missing block, buffer or
+ *         callback: nothing sent or written), -EIO (a step stopped: `stop`
+ *         names the side, the error is one log line through env; final),
+ *         -ENODEV (after a stopped up or a down)
+ *   flip  another buffer of the up's stride from the next frame, waited
+ *         for (ExtDst0's shadow load, at most three frames): 0 (also for
+ *         the buffer already shown), -EINVAL (not fetchable: nothing
+ *         written), -ETIMEDOUT (no shadow load; logged), -ENODEV (not up)
+ *   down  backlight, bridge, DSI host and PHY, CAMERA, then stream 0 and
+ *         DISPLAY: 0, -EIO (logged), -ENODEV (not up)
+ * One thread only. */
+#define YD_IMX95_DPU_PHYS            0x4b400000 /* soc::imx95::dpu::DPU_BASE */
+#define YD_IMX95_DPU_SIZE            0x400000
+#define YD_IMX95_DISPLAY_CSR_PHYS    0x4b010000 /* soc::imx95::display::CSR_BASE */
+#define YD_IMX95_DISPLAY_CSR_SIZE    0x10000
+#define YD_IMX95_INTERLEAVER_PHYS    0x4b0d0000 /* soc::imx95::display::INTERLEAVER_BASE */
+#define YD_IMX95_INTERLEAVER_SIZE    0x20000
+#define YD_IMX95_DSI_PHYS            0x4acf0000 /* soc::imx95::combo_phy::DSI_BASE */
+#define YD_IMX95_DSI_SIZE            0x10000
+#define YD_IMX95_DSI_STREAM_CSR_PHYS 0x4ad00000 /* combo_phy::STREAM_CSR_BASE */
+#define YD_IMX95_DSI_STREAM_CSR_SIZE 0x10000
+#define YD_IMX95_DSI_MASTER_CSR_PHYS 0x4ad10000 /* combo_phy::MASTER_CSR_BASE */
+#define YD_IMX95_DSI_MASTER_CSR_SIZE 0x10000
+#define YD_IMX95_COMBO_PHY_CSR_PHYS  0x4ad20000 /* combo_phy::PHY_CSR_BASE */
+#define YD_IMX95_COMBO_PHY_CSR_SIZE  0x1000
+#define YD_IMX95_CSI1_PHYS           0x4ad40000 /* combo_phy::CSI1_BASE (its PHY test interface) */
+#define YD_IMX95_CSI1_SIZE           0x10000
+#define YD_IMX95_TPM6_PHYS           0x42510000 /* board::verdin_imx95_dsi::TPM6_BASE */
+#define YD_IMX95_TPM6_SIZE           0x1000
+#define YD_IMX95_DISPLAY_WIDTH       1280 /* board::verdin_imx95_dsi::PANEL */
+#define YD_IMX95_DISPLAY_HEIGHT      800
+#define YD_IMX95_DISPLAY_BRIDGE_BUS  0 /* ip::sn65dsi8x::BUS */
+#define YD_IMX95_DISPLAY_LINE_EN     0 /* ip::sn65dsi8x::LINE_EN */
+/* struct yd_imx95_display's state and stop */
+#define YD_IMX95_DISPLAY_NEW         0
+#define YD_IMX95_DISPLAY_UP          1
+#define YD_IMX95_DISPLAY_FAILED      2
+#define YD_IMX95_DISPLAY_DOWN        3
+#define YD_IMX95_DISPLAY_STOP_DPU    1 /* soc::imx95::display: power, pixel clock, DPU, flip */
+#define YD_IMX95_DISPLAY_STOP_DSI    2 /* board::verdin_imx95_dsi: CAMERA, host, PHY, bridge, PWM */
+
+struct yd_imx95_display_bases {
+	uintptr_t dpu, csr, interleaver;              /* DPU, display CSR, interleaver */
+	uintptr_t dsi, stream, master, phy_csr, csi1; /* DW host, camera mix CSRs, CSI-1 */
+	uintptr_t tpm;                                /* TPM6, the backlight */
+};
+
+/* All zero before the first up; the caller keeps it. */
+struct yd_imx95_display {
+	uint64_t fb;            /* the buffer the DPU scans */
+	uint32_t stride;        /* every buffer's */
+	uint32_t state;         /* YD_IMX95_DISPLAY_NEW .. _DOWN */
+	uint32_t width, height; /* the mode shown */
+	uint32_t pix_hz[2];     /* DISP1PIX as the System Manager made it, lo first */
+	uint32_t level;         /* the DISP performance level */
+	uint32_t sync_us;       /* FrameGen0's wait for sync */
+	uint32_t lane_kbps;     /* the DSI lane rate the PHY PLL makes */
+	uint32_t link_irq_stat; /* the bridge's IRQ_STAT after video on: 0 is a clean link */
+	uint32_t host_version;  /* the DW host's VERSION */
+	uint32_t backlight;     /* level of 255 */
+	uint32_t flips;         /* flips that changed the address */
+	uint32_t flip_us;       /* the last flip's wait */
+	uint32_t stop;          /* 0, YD_IMX95_DISPLAY_STOP_DPU or _DSI */
+	uint32_t reserved;
+};
+_Static_assert(sizeof(struct yd_imx95_display_bases) == 72, "ffi::imx95_display YdImx95DisplayBases");
+_Static_assert(offsetof(struct yd_imx95_display_bases, tpm) == 64, "ffi::imx95_display YdImx95DisplayBases");
+_Static_assert(sizeof(struct yd_imx95_display) == 72, "ffi::imx95_display YdImx95Display");
+_Static_assert(offsetof(struct yd_imx95_display, stride) == 8, "ffi::imx95_display YdImx95Display");
+_Static_assert(offsetof(struct yd_imx95_display, pix_hz) == 24, "ffi::imx95_display YdImx95Display");
+_Static_assert(offsetof(struct yd_imx95_display, stop) == 64, "ffi::imx95_display YdImx95Display");
+
+int yd_imx95_display_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			const struct yd_imx95_display_bases *bases, const struct yd_env *env,
+			uint64_t fb, uint32_t stride, struct yd_imx95_display *d);
+int yd_imx95_display_flip(const struct yd_imx95_display_bases *bases, const struct yd_env *env,
+			  uint64_t fb, struct yd_imx95_display *d);
+int yd_imx95_display_down(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx,
+					size_t rx_cap),
+			  const struct yd_imx95_display_bases *bases, const struct yd_env *env,
+			  struct yd_imx95_display *d);
 
 /* D2, the display a crash kexec left running, adopted (board::nanopc_t6_display
  * over ip::vop2 and ip::rk_iommu; feature rk3588): read what Linux left
@@ -2008,6 +2270,12 @@ _Static_assert(offsetof(struct yd_imx_wdog_arm, wcr_now) == 4, "yd_imx_wdog_arm.
 _Static_assert(offsetof(struct yd_imx_wdog_arm, flags) == 8, "yd_imx_wdog_arm.flags");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, refusal) == 12, "yd_imx_wdog_arm.refusal");
 _Static_assert(offsetof(struct yd_imx_wdog_arm, timeout_ms) == 16, "yd_imx_wdog_arm.timeout_ms");
+_Static_assert(sizeof(struct yd_wdog32_arm) == 36, "struct yd_wdog32_arm");
+_Static_assert(offsetof(struct yd_wdog32_arm, cs_now) == 8, "yd_wdog32_arm.cs_now");
+_Static_assert(offsetof(struct yd_wdog32_arm, flags) == 16, "yd_wdog32_arm.flags");
+_Static_assert(offsetof(struct yd_wdog32_arm, refusal) == 20, "yd_wdog32_arm.refusal");
+_Static_assert(offsetof(struct yd_wdog32_arm, timeout_ms) == 24, "yd_wdog32_arm.timeout_ms");
+_Static_assert(offsetof(struct yd_wdog32_arm, rcs_polls) == 32, "yd_wdog32_arm.rcs_polls");
 _Static_assert(sizeof(struct yd_mp2_wdt) == 16, "struct yd_mp2_wdt");
 _Static_assert(offsetof(struct yd_mp2_wdt, value) == 0, "yd_mp2_wdt.value");
 _Static_assert(offsetof(struct yd_mp2_wdt, cmd) == 8, "yd_mp2_wdt.cmd");

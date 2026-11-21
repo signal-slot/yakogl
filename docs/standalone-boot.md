@@ -570,6 +570,225 @@ and Z4 only after Z3. Z4's kernel side is `driver/rust/src/gpu/mali/sched.rs`,
   `MALI_CSFFW`; `CONTRIBUTING.md` has the details. Without it the firmware
   rows are a gap.
 
+## Toradex Verdin iMX95
+
+The Verdin iMX95 (NXP i.MX 95, six Cortex-A55, Mali-G310) on the Mallow
+carrier. **Nothing in this section has been run by us**: there is no board
+yet. What exists is a build. `tools/check.sh` builds `examples/triangle` for
+`verdin_imx95/mimx9596/a55` (row `zephyr  verdin_imx95 examples/triangle
+image (Mali-G310, built only), -Werror on our C files`), from the board
+`driver/boards/toradex/verdin_imx95`, which is derived from Zephyr's
+`imx95_evk` A55 board at the workspace pin, and the board glue
+`driver/zephyr/lib/board/verdin_imx95`. The image arms WDOG3 (below),
+brings the GPU up over SCMI behind `eglInitialize`, renders the triangle
+into a window in the Mali carve-out, and shows it on the Toradex Capacitive
+Touch Display 10.1" DSI on the Mallow's X4 (`board_show()`: the window,
+1024x600, is copied into a 1280x800 screen buffer at the panel's top left,
+and the first show brings the display up cold,
+`driver/docs/imx95-display.md` section 4(b)). The route below is the
+documented one, and the open questions at the end are what a first session
+must answer.
+
+### The boot chain
+
+The sources are U-Boot's `doc/board/toradex/verdin-imx95.rst` and
+`board/toradex/verdin-imx95/` (u-boot `ece349ade297`), and the pin's
+`boards/nxp/imx95_evk/doc/index.rst` (zephyr `af17c0c8aa2a`).
+
+- The boot core is the Cortex-M33, not an A55. Its boot ROM, with the
+  EdgeLock Enclave (the ELE firmware container `mx95b0-ahab-container.img`),
+  loads the OEI, which trains the DDR (LPDDR4X firmware `lpddr4x*v202409.bin`),
+  then the **System Manager** (`m33_image.bin`, Toradex's `imx-sm-toradex`,
+  `config=verdin-imx95`). The System Manager configures isolation, starts the
+  A55, and from then on serves clocks, power domains, pins and sensors to the
+  other cores over SCMI. It keeps running for the whole life of the board,
+  whatever the A55 runs.
+- On the A55: U-Boot SPL, then TF-A BL31 (`nxp-imx/imx-atf`, `lf_v2.12`,
+  `PLAT=imx95`), then U-Boot proper ("SPL ---> ATF (TF-A) ---> U-Boot proper").
+  All of these are one `flash.bin` in the eMMC's boot partition (`mmc dev 0
+  1`, written from offset 0; the env's `update_uboot`). U-Boot's console is
+  LPUART1 (`serial@44380000`, Verdin UART_3), the same UART our image uses.
+- What must be on the board: that `flash.bin`, as Toradex ships the module.
+  Nothing of ours replaces any of it. Our image is one file that U-Boot
+  loads, as on the other two Verdins.
+
+### How U-Boot would start the image
+
+- The image is `zephyr.bin` with an AArch64 Image header, linked and loaded at
+  **0xd0000000** (`zephyr,sram`, 256 MiB, in
+  `verdin_imx95_mimx9596_a55.dts`), the address of the pin's `imx95_evk` A55
+  board and of its documented U-Boot route ("Option 2": `fatload mmc 1:1
+  0xd0000000 zephyr.bin`, then `dcache off; icache flush; go 0xd0000000`).
+- Toradex's U-Boot keeps the first 256 MiB of DRAM for the firmware (DRAM
+  from 0x80000000, its own from 0x90000000; TF-A and OP-TEE at 0x8a000000,
+  64 MiB) and uses 0x90400000 (`kernel_addr_r`, `loadaddr`) to 0x9c800000
+  (`ramdisk_addr_r`) for its loads; it relocates itself below 4 GiB. 0xd0000000
+  to 0xdfffffff is clear of those and below 4 GiB on every module size (U-Boot
+  probes 2, 4, 8 or 16 GiB; its doc shows an 8 GB module).
+- The product form is then the other Verdins' (above): `ext4load mmc <dev>:<part>
+  0xd0000000 /zephyr.bin && dcache off && icache off && go 0xd0000000`, and
+  the test form `BOARD_BOOT=uboot-mmc`: the one-shot hook of
+  `tools/uboot-netboot-lib.sh` in front of the board's `bootcmd` (mainline's is
+  `bootflow scan -b`), the file staged by Linux under `/var/yakogl`. `go`, not
+  `booti`, for the reason in "What the image does on a `go` entry": `booti`
+  moves an image with `text_offset` 0 to the start of DRAM. The runner is
+  `tools/board.sh imx95` (`BOARD_BOOT=uboot-tftp`, its default, or
+  `uboot-mmc`): the other Verdins' hook and sequence with `NB_MMC=0:1`,
+  `MMC_PART=/dev/mmcblk0p1` (the AM62P's; `mmc_where` refuses another mount),
+  the window `0xd0000000`..`0xe0000000` (the DTS's `zephyr,sram`), the
+  marker `verdin_imx95: WDOG3 armed`, and the record of the next section.
+- The development route `kexec-dev` (`driver/tools/kexec-zephyr`, as on the
+  Verdin iMX8M Plus and the NanoPC-T6) carries over in its form: Linux loads
+  the image at 0xd0000000 with `kexec_load` and jumps. The Verdin iMX95's
+  Linux has a CMA pool that may cover that address (`linux,cma`: 960 MiB
+  allocated from 0x80000000 to 0xff000000, `imx95-verdin.dtsi`); a
+  `crashkernel=` reservation there, as the iMX8M Plus's
+  `crashkernel=64M@0x60000000`, would be the clean form. Not tried.
+- At the end of a run the image resets through PSCI `SYSTEM_RESET` (TF-A,
+  which asks the System Manager), the way back to U-Boot and Linux. A
+  software timer takes that reset after `CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S`
+  (the board layer's `YAKOGL_BOARD_LIFETIME_S`, 300 s, in an image with the
+  layer; else 60 s).
+- The watchdog is **WDOG3**, the A55 non-secure agent's
+  (`verdin_imx95_wdog.c` over the yakogl-drivers crate's `ip::wdog32`). The
+  image arms it first thing (`PRE_KERNEL_1` 0, before any other init hook)
+  for 60 s, with Linux's configuration for this module (`CS.INT` on, which
+  the System Manager's fault is), prints `verdin_imx95: WDOG3 armed: ...` and
+  `board: watchdog armed`, and a 1 s timer feeds it up to the lifetime and
+  while the board layer's alive window holds. A refusal resets through PSCI
+  at once; a PSCI reset that returns halts with interrupts off and WDOG3
+  bites. Its timeout is the System Manager's `FAULT_WDOG3` with
+  `reaction=sys_reset`, which on Toradex's System Manager pulls `WDOG_ANY`
+  to reset the PMIC: the whole board, System Manager included, boots again
+  as from power-on into U-Boot and Linux, and no SCMI power vote of the image
+  (the GPU's) survives. Sources and the comparison with WDOG4 and the System
+  Manager: `docs/notes/pre-study-imx95.md`, section 1.6.
+
+### The record without a console
+
+The Mallow has no console the farm can read yet (pre-study U7), and the
+i.MX8MP's sink, the SNVS LPGPR, has no counterpart the A55 can write: on
+the i.MX 95 the battery-backed block (BBNSM) belongs to the System
+Manager. The SM lends four of its eight general purpose registers: its BBM
+protocol (NXP vendor protocol 0x81) has BBM_GPR_SET (0x3: index, value;
+EXCLUSIVE needed) and BBM_GPR_GET (0x4: index -> value; GET needed;
+imx-sm-toradex 3aa8a77a `sm/rpc/scmi/rpc_scmi_bbm.c:746-829`), and
+Toradex's `verdin-imx95` configuration gives the A55's non-secure agent
+GPR4..7 at ALL (`configs/verdin-imx95.cfg:756-759`, generated
+`configs/verdin-imx95/config_scmi.h:453-456`) and none of GPR0..3, where
+the SM's own board code keeps its shutdown record, read and cleared at each
+SM boot (`boards/tdx-common/sm/brd_sm_tdx_common.c:52-53, 363-461`). Nothing
+in the SM touches GPR4..7 otherwise (`devices/MIMX95/sm/dev_sm_bbm.c:158-210`
+writes them only on request).
+
+- **The format** is the one record of every board
+  (`driver/rust/src/board/record.rs`): the four words of the image's last
+  `yk-record:` line, w0 (the `YK` magic) in GPR4, w3 in GPR7, so
+  `yakogl-tools record` decodes them as it decodes the SNVS words and the
+  console line. The store keeps the record's rule: GPR4 cleared first, then
+  w1..w3, then w0, so a store cut off half way never shows the new magic over
+  old words, and a reader that finds the magic can trust the rest.
+- **The writer** is the board layer's sink
+  (`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_record.c`,
+  `CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM`, on with the layer); the messages
+  are the drivers crate's (`soc::imx95::bbm`, `yd_imx95_bbm_record_store`),
+  over the board's one SCMI channel. The layer stores with interrupts locked,
+  from any context, where the channel's lock cannot be waited for; on this
+  one core nobody can start an exchange then, so the store goes out at once
+  when nobody is in one (`verdin_imx95_scmi_idle`), else it waits as pending
+  for the next store, for `POST_KERNEL` (a breadcrumb stored before the
+  channel was up) or for `verdin_imx95_reset`, which flushes it first and,
+  from a thread, waits for the lock. The console line is printed either way;
+  a refusal prints one `verdin_imx95: record not stored in the BBM GPRs`
+  line with the GPR and the SM's status.
+- **The reader**: Linux's BBM driver knows BBM_GPR_GET but exports only the
+  RTC and the button (`drivers/firmware/arm_scmi/vendors/imx/imx-sm-bbm.c:338`,
+  `include/linux/scmi_imx_protocol.h:25`, at Linux 65e4fd94 and in
+  linux-toradex `toradex_6.18-2.1.x-imx` 851ac0f9 alike), and the GPRs sit
+  behind the SM, not in `/dev/mem`. So `tools/imx95_bbm_record.sh` sends the
+  same messages itself through the kernel's SCMI raw interface
+  (`/sys/kernel/debug/scmi/<n>/raw/message`,
+  `Documentation/ABI/testing/debugfs-scmi-raw`): `read` prints
+  `w0 w1 w2 w3`, `clear` zeroes GPR4 first, `probe` says whether the
+  interface is there. That interface exists only with
+  `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT` and, so that the normal SCMI drivers keep
+  running, `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX`; neither `imx_v8_defconfig`
+  nor `defconfig` of Toradex's tree sets them. `board.sh` pipes the script to
+  the board's `sh` as root (nothing is staged), clears the record before the
+  boot and keeps it as `bbm.txt` in the run directory after it, read as the
+  i.MX8MP's `snvs.txt` is. Without the interface a run reads the console
+  instead when `BOARD_UART` is set (`rec_sink=console only` in `meta.txt`) and
+  refuses (rc 3) when it is not. The image reads no selector, so `SEL` is
+  refused.
+- **Tests**: `driver/rust/src/soc/imx95/bbm_tests.rs` runs the store and the
+  load over the mock SM with AP-NS's rights (the order, the words decoded as
+  the console line's, DENIED and a store cut off half way);
+  `tools/imx95_bbm_record_selftest.sh` runs the reader against a fake SM (the
+  header words the Rust test pins, `read` and `clear` under `sh`, dash and
+  busybox); `tools/board_selftest.sh` runs `board.sh imx95` dry and replays
+  its verdicts from `bbm.txt` and from the console.
+- **For the board** (B1, B3): whether the board's kernel has the raw
+  interface (`board.sh imx95 status` runs `probe`); whether GPR4..7 outlive
+  WDOG3's fault, which resets the PMIC through `WDOG_ANY`, and PSCI
+  `SYSTEM_RESET` (the BBNSM is in the battery-backed domain; what powers it on
+  the Verdin through a PMIC reset is not read); and that the SM on the module
+  grants GPR4..7 as its source does (U1: a DENIED shows as the refusal line).
+
+### Open questions for sign-off
+
+1. **Can U-Boot start our image with the System Manager still serving
+   SCMI?** The System Manager runs on the M33 on its own, so it is still
+   there after `go`; the image's first SCMI messages (the LPUART1 pins and
+   clock, at `PRE_KERNEL`) go through the same channel U-Boot used (MU2,
+   shared memory at 0x445b1000; the same channel in Linux's `imx95.dtsi`).
+   To check on the board: that U-Boot leaves no message pending on that
+   channel, and that the System Manager's configuration for this module
+   (`imx-sm-toradex`, `verdin-imx95`) gives the A55 non-secure agent the
+   LPUART1 pins and clock and, for the GPU later, power domain 14 and the
+   GPU clocks.
+2. **The watchdog.** The image arms WDOG3 itself (above), so it does not
+   depend on U-Boot's (`CONFIG_WDT`, `CONFIG_ULP_WATCHDOG`, 30 s), which is
+   probably still counting at `go`. To check on the board: the armed line's
+   `CS`/`TOVAL` found (running with `TOVAL` 0xea6 if U-Boot left it so), the
+   poll counts and time of the arming, and a proof run that arms and never
+   feeds: WDOG3's timeout must reach the System Manager's fault (with
+   `CS.INT` set) and reset the board through `WDOG_ANY` back into Linux.
+3. **Caches at `go`.** The pin's EVK route uses `dcache off; icache flush`,
+   the other Verdins' `dcache off; icache off`. Either must leave the MMU off
+   at entry; which one this U-Boot needs is unmeasured.
+4. **The eMMC device and partition U-Boot reads**, and where Linux can stage
+   the file (Torizon's `/var` on the other Verdins). U-Boot's `mmc 0` is the
+   eMMC (`update_uboot`); the rest is unknown.
+5. **The SoC package.** The board takes the 19x19 package's pin list
+   (`mimx9596avzxn-pinctrl.dtsi`, as `imx95_evk`); every pad the module's
+   Linux uses is in it and in the 15x15 one, so the console does not depend
+   on it, but the module's part is not confirmed.
+6. **The Mali-G310's bring-up** is in the image, not run: the CSF firmware
+   is the T6's file (`MALI_CSFFW`; panthor loads
+   `arm/mali/arch<major>.<minor>/mali_csffw.bin` by the GPU_ID's
+   architecture, and linux-firmware's `arch10.12` file, the G310's, is the
+   `arch10.8` bytes, `docs/notes/pre-study-imx95.md`), the GPU is powered
+   over SCMI to the System Manager (`docs/notes/imx95-gpu-power.md`), and
+   from `GPU_ID` on the bring-up is the T6's
+   (`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_mali.c`,
+   `yd_imx95_osal_up`). What the board answers on day one: the SM's
+   replies over the channel after U-Boot's `go`, the G310's identity words,
+   the firmware's GLB version.
+7. **The X4 display** is in the image, not run: the board layer's first
+   `board_show()` turns the LPI2C2 and LPI2C3 clocks on over SCMI,
+   initialises Zephyr's `nxp,lpi2c` buses and the module's PCAL6416A
+   (`nxp,pcal6416`; all three are `zephyr,deferred-init` in the board's
+   devicetree, nothing touches them at boot), drives `GPIO_10_DSI`
+   (expander line 3) low, puts TPM6 channel 2 on its pad, and runs
+   `yd_imx95_display_up`: the twelve steps of `driver/docs/imx95-display.md`
+   section 4(b) over the same SCMI channel as the GPU
+   (`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_display.c`,
+   `verdin_imx95_scmi.c`). The console then has one `verdin_imx95: display
+   up: ...` line (pixel clock, lane rate, the bridge's `IRQ_STAT`) or
+   `verdin_imx95: display stopped: ...` after the line that names the step.
+   What the board answers on day one: that line, then whether the panel
+   shows the triangle at its top left on black.
+
 ## On the boards
 
 In order; stop at the first step that prints something else.
@@ -632,6 +851,23 @@ In order; stop at the first step that prints something else.
 2. `forever`: **a person** at the board.
    `BOARD_PERSON_PRESENT=1 tools/board.sh pi4 default <zephyr.bin> forever`,
    reboot, watch the panel or the UART; undo with the card in a PC.
+
+### Verdin iMX95
+
+Not run yet; the order the first session takes (pre-study B1, B2, B3):
+
+1. `tools/board.sh imx95 status`: the hook variables and `install: absent`,
+   the staging directory's mount (`/dev/mmcblk0p1` expected), then
+   `raw: /sys/kernel/debug/scmi/<n>/raw` or `no SCMI raw interface` and the
+   BBM record. Without the interface the console (`BOARD_UART`) is the only
+   record until the kernel has `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX`.
+2. `tools/board.sh imx95 install`, then `status`: `install: ok`.
+3. `BOARD_BOOT=uboot-mmc tools/board.sh imx95 probe <logdir>`: `rc=0
+   verdict=probe_ok boot=uboot-mmc row boot_verdict=probe_ok`, as on the
+   i.MX8MP.
+4. `BOARD_BOOT=uboot-mmc tools/board.sh imx95 run <zephyr.bin> <logdir>`:
+   `boot_verdict=cycled` and the image's record from `bbm.txt`
+   (`result=record:<KIND>`), or from the console with `BOARD_UART` set.
 
 ### NanoPC-T6
 

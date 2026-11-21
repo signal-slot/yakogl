@@ -170,7 +170,8 @@ endif()
 set(YAKOGL_DRIVERS_CRATE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../rust")
 # The DK's I2C, DSI and ADV7535 shims call ffi::mp25_* and the yd_env helpers.
 if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YAKOGL_BOARD_RECORD_RUST OR
-   CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535)
+   CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOGL_DRV_ADV7535 OR
+   CONFIG_YAKOGL_VERDIN_IMX95)
   if(NOT CONFIG_ARM64)
     message(FATAL_ERROR "yakogl-drivers: libyakogl_drivers.a is built for aarch64 only")
   endif()
@@ -226,6 +227,31 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     # GPU power-on (board::nanopc_t6_gpu, gpu::mali) behind samples' calls of
     # yd_t6_gpu_up
     list(APPEND _yd_features rk3588 mali)
+  endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95)
+    # ip::wdog32 behind lib/board/verdin_imx95/verdin_imx95_wdog.c (WDOG3),
+    # in every image for the board
+    list(APPEND _yd_features imx95)
+  endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95 AND CONFIG_YAKOGL_GPU_MALI)
+    # The Verdin iMX95's bring-up, yd_imx95_osal_up (ffi::imx95: the SCMI
+    # power-on of soc::imx95::gpu_power, then board::nanopc_t6_osal's group
+    # over gpu::mali), and the Mali OSAL's ops (src/osal/zephyr_mali.c), the
+    # yd_t6_osal_* entries, which still live in ffi::rk3588 under the
+    # rk3588 feature; no RK3588 power-on is linked (nothing references it).
+    list(APPEND _yd_features imx95 rk3588 mali)
+  endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95_GPU_PROBE)
+    # The Verdin iMX95's GPU probes without the OSAL (tools/probes/
+    # verdin_imx95: imx95_ident, imx95_fw): yd_imx95_gpu_power_on / _off
+    # and yd_imx95_fw_up (ffi::imx95, board::imx95_gpu over the T6's Z3).
+    list(APPEND _yd_features imx95 rk3588 mali)
+  endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)
+    # The Verdin iMX95's picture on X4, yd_imx95_display_* (ffi::imx95_display
+    # over board::verdin_imx95_display; driver/zephyr/lib/board/verdin_imx95/
+    # verdin_imx95_display.c).
+    list(APPEND _yd_features imx95)
   endif()
   if(CONFIG_YAKOGL_STM32MP2_GPU)
     # soc::stm32mp2's GPU power C ABI (gpu_ffi.rs over gpu::vivante's

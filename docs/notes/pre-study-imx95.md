@@ -380,6 +380,7 @@ Reset and watchdog, which decide how an image of ours ends:
   read (U4). Our image should arm WDOG3, as Linux does on the Verdin
   (L: `imx95-verdin.dtsi:747-751`), so a hang ends in the same full reset
   that the i.MX8MP's WDOG1 gives (repo: `docs/standalone-boot.md:270-277`).
+  It does: section 1.6.
 
 What can start our image, and which route signs off:
 
@@ -394,6 +395,92 @@ Zephyr's own route for the EVK, a `flash.bin` whose TF-A starts Zephyr
 with no U-Boot (Z: `boards/nxp/imx95_evk/doc/index.rst:121-129`), is that
 direct route built with NXP's EVK firmware. It does not apply to the
 Verdin as it is (Toradex's OEI and SM differ).
+
+### 1.6 The watchdog
+
+Which watchdog the A55 image arms, and what its timeout does. Sources: SMT
+(the configuration and the board code), L, Z, mainline U-Boot `ece349ade297`
+(`UB:`, the revision of the U-Boot files in the board's directory; TU is the
+U-Boot the module ships, its watchdog driver not compared).
+
+- **Who owns what.** The "A55 non-secure EENV" section of
+  `configs/verdin-imx95.cfg` (SMT, agent `AP-NS`, the one U-Boot, Linux and
+  our image talk to) lists `WDOG3 OWNER` and `WDOG4 OWNER` (:898-899). The
+  logical machine `LM2 name="AP"` (:443) carries the faults: `FAULT_WDOG3
+  OWNER, reaction=sys_reset` and `FAULT_WDOG4 OWNER, reaction=lm_reset`
+  (:552-553; generated: `configs/verdin-imx95/config_lmm.h:221-222`). The
+  `WDOG_ANY` pin is the SM's own (`PIN_WDOG_ANY OWNER` in LM0, :320).
+- **What a WDOG3 timeout does.** The SM takes WDOG3's interrupt as the fault
+  (`devices/MIMX95/sm/dev_sm_handlers.c:396-399`, `WDOG3_IRQHandler` ->
+  `FaultHandler(DEV_SM_FAULT_WDOG3)`), so the WDOG3 must be armed with
+  `CS.INT` set: Linux sets it for `fsl,ext-reset-output` (L:
+  `drivers/watchdog/imx7ulp_wdt.c:292, 337`, at torvalds/linux `4dd10fbb`),
+  which the Verdin's `wdog3` has, and U-Boot sets it on every i.MX 9 (UB:
+  `drivers/watchdog/ulp_wdog.c:96-101`). The reaction `sys_reset` is
+  `LMM_SystemReset` (`sm/lmm/lmm_fault.c:79-80`): every LM is notified, the
+  reason is saved (`DEV_SM_SystemShutdownRecSet`, `sm/lmm/lmm_sys.c:267`),
+  and `SM_SYSTEMRESET` runs (:275), which on Toradex's boards is
+  `BRD_SM_SystemReset` (`boards/tdx-verdin-imx95/sm/brd_sm.h:76`): it drives
+  `WDOG_ANY` low as a GPIO "to reset PMIC", waits 2 ms, and falls back to the
+  SoC's warm reset, the M33's `SYSRESETREQ` (`boards/tdx-common/sm/
+  brd_sm_tdx_common.c:480-504`; `devices/MIMX95/sm/dev_sm_system.c:172-179`,
+  `drivers/fsl_reset.c:675-679`). So the whole board, M33 and SM included,
+  starts again as from power-on: ROM, OEI, SM, SPL, TF-A, U-Boot, and
+  U-Boot's `bootcmd`, which is Linux. Nothing of the image's SCMI requests
+  survives: the SM's power and clock votes (the GPU's power domain and
+  clocks our image turns on, the display's later) live in the SM's RAM,
+  which restarts, and the PMIC reset drops the rails. The board returns to
+  its normal boot without help, as the Verdin iMX8M Plus does through
+  `WDOG_B`.
+- **Why not WDOG4.** Its reaction is `lm_reset` of the AP machine
+  (`LMM_SystemLmReset`, `sm/lmm/lmm_sys.c:641`): the M33 and the SM keep
+  running, and which A55 boot path, and which votes, an LM reset leaves is
+  not read (U4). Zephyr's `imx95_evk` arms WDOG4 (Z:
+  `boards/nxp/imx95_evk/imx95_evk_mimx9596_a55.dts:17, 129`), which suits an
+  EVK with no Linux to return to, not this board.
+- **Why not the SM.** SCMI has no watchdog protocol, and NXP's vendor
+  protocols in the SM (`sm/rpc/scmi/`) have none either. AP-NS has the
+  system protocol for notifications only (`SYS NOTIFY`, :603; AP-S, TF-A, has
+  `SYS ALL`, :524), so even a reset request goes through PSCI to TF-A, as
+  our images' normal end already does (section 1.5). `LMM_1 ALL` (:597) is
+  the M7's machine, not the A55's.
+- **What Linux uses.** `&wdog3 { fsl,ext-reset-output; status = "okay"; }`
+  (L: `imx95-verdin.dtsi:747-751`; the node, `fsl,imx93-wdt` at
+  `0x42490000`, `imx95.dtsi:791-799`, `timeout-sec = <40>`). Mainline U-Boot
+  takes the same node (`bootph-all`; `CONFIG_DEFAULT_DEVICE_TREE=
+  "freescale/imx95-verdin-wifi-dev"`, `CONFIG_WDT=y`, `CONFIG_ULP_WATCHDOG=y`,
+  `CONFIG_WATCHDOG_TIMEOUT_MSECS=30000`, `CONFIG_SPL_WATCHDOG=y`: UB
+  `configs/verdin-imx95_defconfig:13, 26, 68, 185-186`), and the driver
+  model starts it unless `WATCHDOG_AUTOSTART` is off (not set there; default
+  y, UB `drivers/watchdog/Kconfig:14-20`). `go` does not stop it (UB
+  `cmd/boot.c` has no watchdog call). So WDOG3 is probably already counting U-Boot's
+  30 s when our image starts; the image does not rely on it.
+- **The counter.** The LPO (32 kHz) through the 256 prescaler: 125 ticks a
+  second, `TOVAL` 16 bits, at most 524 s (L: `imx7ulp_wdt.c:408-411`,
+  `imx93_wdt_hw`; UB: `ulp_wdog.c:210`). Zephyr's `nxp_mimx95_a55.dtsi`
+  describes the same (Z: :175-197, `clk-source = <1>`, `clk-divider =
+  <256>`).
+
+What the image does (`driver/zephyr/lib/board/verdin_imx95/
+verdin_imx95_wdog.c` over `driver/rust/src/ip/wdog32.rs`): at
+`PRE_KERNEL_1` 0, before any other init hook and with interrupts off, it
+unlocks WDOG3 in whichever command width it finds, writes Linux's `CS`
+(32-bit commands, LPO, prescaler, `UPDATE`, `WAIT`, `STOP`, `INT`) with `EN`
+and `TOVAL` for 60 s, refreshes it and reads both back; a refusal resets
+through PSCI at once. A 1 s timer refreshes it until the lifetime
+(`CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S`) and while the board layer's alive
+window holds; the normal end stays the PSCI `SYSTEM_RESET` (section 1.5).
+Zephyr's own driver for the node (`wdt_mcux_wdog32`) is not used: it arms at
+`POST_KERNEL` only (its setup sleeps, Z: `drivers/watchdog/
+wdt_mcux_wdog32.c:84, 111, 289`), and it sets `CS.INT` only with a callback
+whose ISR on the A55 clears the flag the SM's fault is (:174, 205).
+
+What only the board can say: that WDOG3's timeout reaches the SM's fault
+with `INT` set and resets the board through `WDOG_ANY` (a proof run that
+arms and never feeds); whether U-Boot left WDOG3 running at `go` (the armed
+line's "was running" and `TOVAL` found, 0xea6 for U-Boot's 30 s); the
+`ULK`/`RCS` poll counts and the arming's time; and that Linux comes back
+after the bite.
 
 ## 2. The open-source stack (survey)
 
@@ -450,7 +537,7 @@ Torizon images and the U-Boot-from-eMMC sign-off (`docs/standalone-boot.md`,
 | The one-shot and the counted default | yes | none |
 | `board.sh <board>` entry (`BOOTS`, `NB_MMC`, `YAKO_ADDR`, `LOAD_END`, `MARKER`, record sink) | new entry | `YAKO_ADDR` must lie in AP-NS's executable DDR and outside U-Boot, TF-A and the M7's reservations (section 1.5): for example `0xD0000000`, the EVK board's link address (Z: `imx95_evk_mimx9596_a55.dts:50-52`), which is below 2 GB above DRAM start on every SKU |
 | The image arms its own watchdog (`docs/standalone-boot.md:255-277`) | yes, as a rule | WDOG3 (system reset), not WDOG4 (section 1.5); whether U-Boot leaves a watchdog running is a B1 read |
-| The result without a console (the i.MX8MP's SNVS record, `driver/rust/src/board/record.rs`) | the idea, not the block | the BBSM is the SM's (SMT: cfg :211); AP-NS owns the BBSM GPRs 4..7 (cfg :756-759; `devices/MIMX95/configtool/bbsmmix.cfg:45-48`), reachable through SCMI. Whether they survive the full reset and how they are read from Linux is U2 |
+| The result without a console (the i.MX8MP's SNVS record, `driver/rust/src/board/record.rs`) | the idea and the format, not the block | the BBSM is the SM's (SMT: cfg :211); AP-NS owns the BBSM GPRs 4..7 (cfg :756-759; `devices/MIMX95/configtool/bbsmmix.cfg:45-48`), reachable through SCMI. Built (H4): the same four record words in GPR4..7 over BBM_GPR_SET, read from Linux through the kernel's SCMI raw interface (`docs/standalone-boot.md`, "The record without a console"). Whether they survive the full reset, and whether the board's kernel has that interface, is U2 |
 | The direct boot (`docs/notes/imx8mp-direct-boot.md`) | the design | the container layout differs (section 1.5) |
 | `driver/boards/toradex/` board pattern (an `extend` of a Zephyr board, `driver/boards/toradex/verdin_imx8mp/board.yml:13-17`) | the pattern | no Zephyr board to extend (section 4): a full board over the pin's SoC |
 
@@ -481,9 +568,9 @@ Items the five parallel documents do not cover:
 | # | Item | Check |
 | --- | --- | --- |
 | H1 | The firmware: record in `tools/cts/deps.toml` that `MALI_CSFFW` serves the G310 too (the arch 10.12 file is the same bytes, section 2), so no second entry is needed | the note in `deps.toml` cites FW's commit and hash; `driver/tools/mkmalifw.sh`'s header unchanged |
-| H2 | `tools/board.sh` entry `imx95` (or `verdin-imx95`): `BOOTS="uboot-tftp uboot-mmc"`, `NB_MMC=0:1`, `MMC_PART=/dev/mmcblk0p1`, `YAKO_ADDR`/`LOAD_END` from the board's DTS, `MARKER` of the WDOG3 self-arm, the record sink from H4 | `tools/board_selftest.sh` passes with the entry (it checks `board.sh` without a board) |
-| H3 | WDOG3 self-arm for the image (the i.MX8MP's `gc_wdog_arm` pattern, `docs/standalone-boot.md:270-277`), with PSCI reset as the refusal path | a build of the board image that links it; the arming line is the `MARKER` |
-| H4 | The record without a console: the SCMI BBM GPR calls for GPR4..7 from Zephyr, and their read from Linux (Linux has `scmi_bbm`, L: `imx95-verdin.dtsi:29, 623`) | a design paragraph in `docs/standalone-boot.md` and a host test of the record format over a mocked SCMI; the board check is B3 |
+| H2 | `tools/board.sh` entry `imx95` (or `verdin-imx95`): `BOOTS="uboot-tftp uboot-mmc"`, `NB_MMC=0:1`, `MMC_PART=/dev/mmcblk0p1`, `YAKO_ADDR`/`LOAD_END` from the board's DTS, `MARKER` of the WDOG3 self-arm, the record sink from H4 | `tools/board_selftest.sh` passes with the entry (it checks `board.sh` without a board). Done: `tools/board.sh imx95` (`uboot-tftp` the default, `uboot-mmc`; `0xd0000000`..`0xe0000000`, the DTS's `zephyr,sram`; `MARKER='verdin_imx95: WDOG3 armed'`; the record `bbm.txt` through `tools/imx95_bbm_record.sh`, or the console with `BOARD_UART`; install and uninstall of the other Verdins' hook); the selftest runs every verb on it and replays its verdicts |
+| H3 | WDOG3 self-arm for the image (the i.MX8MP's `gc_wdog_arm` pattern, `docs/standalone-boot.md:270-277`), with PSCI reset as the refusal path | a build of the board image that links it; the arming line is the `MARKER`. Built: section 1.6; the image prints `board: watchdog armed` |
+| H4 | The record without a console: the SCMI BBM GPR calls for GPR4..7 from Zephyr, and their read from Linux (Linux has `scmi_bbm`, L: `imx95-verdin.dtsi:29, 623`) | a design paragraph in `docs/standalone-boot.md` and a host test of the record format over a mocked SCMI; the board check is B3. Done: `soc::imx95::bbm` (the messages; `bbm_tests.rs` over the mock SM with AP-NS's GPR rights), the sink `verdin_imx95_record.c` (`CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM`), the reader `tools/imx95_bbm_record.sh` (its selftest against a fake SM). Linux's BBM driver exports no GPR (only the RTC and the button), so the reader needs `CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX` in the board's kernel: a B1 read |
 | H5 | The direct-boot container: how to replace `u-boot-hash.bin` in mkimage's second container with our loader (MK: `soc.mak:281-300`), against Toradex's OEI and SM | designed: `docs/notes/imx95-direct-boot.md` (the chain, the options, the fallback, the board steps D1-D6); `tools/imx95-mkboot.py` builds and checks the image, `tools/imx95_mkboot_selftest.py` tests it; nothing runs until B7 |
 
 ## 6. What needs the board
@@ -495,6 +582,11 @@ Day one, in order:
 | B1 | At Toradex's U-Boot prompt (a person or a bridge on X11): `version`, `fuse read 2 2 2` (GPU, DSI and LVDS presence, section 1.1), `printenv` (the env to back up before the hook, `bootcmd`, the watchdog state), `mmc list`, `bdinfo`. Then boot the stock Linux once and record `/proc/iomem`, `/proc/interrupts`, Panthor's probe lines and the firmware it loads, `findmnt -T /var` | the module's fuses, DRAM and env recorded in the board's issue; U-Boot's commands confirmed |
 | B2 | Our image through the hook (`BOARD_BOOT=uboot-mmc board.sh … run`): SCMI base protocol (agent name "AP-NS", protocol list), `PD_GPU` on, the GPU clocks, then **the GPU identity read by our code** (`mali::ident`) | `GPU_ID`, `CORE_FEATURES`, `SHADER_PRESENT`, `L2_FEATURES`, `TILER_FEATURES`, `MMU_FEATURES`, `COHERENCY_FEATURES` printed and stored in the record |
 | B3 | The firmware (the T6's Z3 path with the same file) | **the firmware's first answer**: the GLB version (1.5.0 expected, since the bytes are the T6's) and the CS features word |
+
+The images for B1 to B3, each with one verdict line, and B1's Linux reading
+are in `tools/probes/verdin_imx95/` (its README: `imx95_wdog` first, then
+`imx95_scmi`, `imx95_ident`, `imx95_fw`; `linux_day_one/` for B1's Linux
+half).
 
 Then the measurements that say the port is alive:
 
@@ -512,7 +604,7 @@ Then the measurements that say the port is alive:
 | # | Question | What answers it |
 | --- | --- | --- |
 | U1 | Is the SM on the lab's module built from Toradex's `verdin-imx95` configuration as read here (the Yocto pin `cc7a8d2d` or later; the configuration is the same at both), or an older build with other rights? | B1: the SM's version line on its console (UART_4), or SCMI base `DISCOVER_AGENT` from our image (B2) |
-| U2 | Is there a reset-surviving record for a console-less run? The BBSM GPRs 4..7 belong to AP-NS through SCMI; do they survive a WDOG3 system reset, and can Linux read them? | H4 then B3; until then a person or a bridge on X11 |
+| U2 | Is there a reset-surviving record for a console-less run? The BBSM GPRs 4..7 belong to AP-NS through SCMI; do they survive a WDOG3 system reset, and can Linux read them? | H4 (built): Linux reads them only through the SCMI raw debugfs interface, which neither `imx_v8_defconfig` nor `defconfig` of Toradex's kernel tree enables (`CONFIG_ARM_SCMI_RAW_MODE_SUPPORT_COEX`; linux-toradex `toradex_6.18-2.1.x-imx` 851ac0f9; Torizon's own kernel fragments not read); B1 reads the board's kernel (`board.sh imx95 status`), B3 the survival. Until then a person or a bridge on X11 (`BOARD_UART`) |
 | U3 | Which i.MX 95 part does Toradex fit, and is any SKU fused without the GPU or the DSI? | Toradex's data sheet (not read); B1's `fuse read` on the lab's module |
 | U4 | What does an LM reset (WDOG4, or PSCI without Toradex's patch) do on this board: does the A55 side come back through U-Boot to Linux? | not needed if the image uses WDOG3 and PSCI full reset; else B-day test with a person |
 | U5 | Who releases `GPURESET` on the i.MX 95, given that the A55 cannot write the GPU blk-ctrl and the SM does not write it? | `docs/notes/imx95-gpu-power.md`; B2 |
@@ -538,9 +630,9 @@ Host items:
 | P3 | SCMI GPU power with mock (`docs/notes/imx95-gpu-power.md`, parallel) | S | — | sequence pinned in a test |
 | P4 | Mesa comparison (`docs/notes/mali-g310-vs-g610.md`, parallel) | S | — | the difference table |
 | P5 | H1 firmware note in `deps.toml` | XS | — | committed |
-| P6 | H3 WDOG3 self-arm | S | P1 | builds; arming line defined |
-| P7 | H4 record over SCMI BBM GPRs | S | P1 | host test of the format; design in `docs/standalone-boot.md` |
-| P8 | H2 `board.sh` entry | S | P6, P7 | `tools/board_selftest.sh` green |
+| P6 | H3 WDOG3 self-arm (section 1.6) | S | P1 | builds; arming line defined (done: the gate row requires it) |
+| P7 | H4 record over SCMI BBM GPRs | S | P1 | host test of the format; design in `docs/standalone-boot.md` (done: `bbm_tests.rs`, `tools/imx95_bbm_record_selftest.sh`; the board's kernel interface is U2) |
+| P8 | H2 `board.sh` entry | S | P6, P7 | `tools/board_selftest.sh` green (done: `board.sh imx95`) |
 | P9 | Display design (`driver/docs/imx95-display.md`, parallel) | M | — | the document and its probe's build row |
 
 Board items:
@@ -551,10 +643,10 @@ Board items:
 | B2 | Identity and power from our image | S | P1-P3, P6, P8, B1 | `mali::ident` stored in the record |
 | B3 | Firmware boot; first record read back from Linux | S | B2, P7 | GLB answer and the record |
 | B4 | First frame (Z4 analogue) | M | B3, P2, P4 | read-back pixels as predicted |
-| B5 | `gl_test` on read-back to 50/50 | M | B4 | row in `tools/cts/RESULTS.md` |
+| B5 | `gl_test` on read-back to 50/50 (the image builds: `driver/samples/zephyr/gl_test` for `verdin_imx95/mimx9596/a55`, panel off, gate row `zephyr  verdin_imx95 gl_test image`) | M | B4 | row in `tools/cts/RESULTS.md` |
 | B6 | Display bring-up on the Mallow's DSI panel | L | P9, B2 | first clear, then the first triangle |
 | B7 | Sign-off: `default <image> N` from the eMMC, then the direct route (steps D1-D6 of `docs/notes/imx95-direct-boot.md`) | S | B5 | both routes recorded |
-| B8 | dEQP-GLES2 tree as on the T6 | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
+| B8 | dEQP-GLES2 tree as on the T6 (the images build: the T6's `mali-gles2-tree.txt` rows by `tools/cts/imx95-deqp-images.sh`, stage 1 `deps-env.sh --build DEQP_WORK --board verdin_imx95`) | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
 
 Order logic: B1 comes first on the board because the fuses and the SM
 version (U1, U3) can turn the plan, and it needs nothing of ours. P6-P8
@@ -562,3 +654,22 @@ are the only host items that gate B2 beyond the parallel work: without
 the watchdog and a record, a console-less board strands on the first
 hang. B6 does not block B5: as on the T6, read-back carries the GL work
 until the display exists.
+
+Host state of B5 and B8 (2026-11-21): both images build with
+`-DYAKOGL_WERROR=ON` and wait for the board. gl_test is the T6's sample and
+main (`src/main_mali.c`) with the board layer's files and
+`gl_test/verdin_imx95.conf` (X4 panel off unless
+`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`): RAM footprint 88.8 MiB of the
+256 MiB at 0xd0000000, `zephyr.bin` 4.4 MiB. A dEQP-GLES2 row image (the
+T6's rows as they are; T6S1R08, T6S4R01 and T6S1R06 built) takes 191.0 MiB
+with a 64 MiB GL carve-out plus the window memory, `zephyr.bin` 12.1 MiB:
+the memory layout holds it unchanged. What the run script has to provide
+(start, end lines, bounds, the record hook) is in `tools/cts/README.md`,
+section 5; the record over the BBM GPRs (P7, `verdin_imx95_record.c`) is
+the board layer's `board_sink_store()`, which both images reach through
+`board_finish()`.
+The G310's own limits reach neither image's expectations: gl_test and dEQP
+read every limit through GL. What still carries a G610 constant is the back
+end (`src/mali/frame.rs` `TIB_BUDGET` and `MEASURED_TILER_LEVELS`,
+`src/mali/backend.rs`'s renderer name), `docs/notes/mali-g310-vs-g610.md`
+section 5.

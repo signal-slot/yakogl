@@ -22,7 +22,7 @@ pub mod dw_hdmi_qp;
 #[cfg(any(feature = "imx8mp", test))]
 pub mod dw_hdmi_tx;
 /// The Synopsys DesignWare MIPI DSI host controller.
-#[cfg(any(feature = "stm32mp2", test))]
+#[cfg(any(feature = "stm32mp2", feature = "imx95", test))]
 pub mod dw_mipi_dsi;
 /// The DesignWare APB watchdog, armed by an image that no earlier stage
 /// armed (the RK3588's WDT0).
@@ -72,6 +72,12 @@ pub mod stm32_i2c;
 pub mod stm32_ltdc;
 #[cfg(any(feature = "am62p", test))]
 pub mod ti_dss7;
+#[cfg(any(feature = "imx95", test))]
+pub mod tpm_pwm;
 /// The RK3588's VOP2: one Esmart window on one video port, for HDMI.
 #[cfg(any(feature = "rk3588", test))]
 pub mod vop2;
+/// The NXP WDOG32 (the i.MX 95's WDOG3), armed by an image that U-Boot may
+/// have left running with its own timeout.
+#[cfg(any(feature = "imx95", test))]
+pub mod wdog32;

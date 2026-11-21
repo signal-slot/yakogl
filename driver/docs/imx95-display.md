@@ -2,8 +2,17 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Verdin iMX95 on Mallow: the picture from Zephyr
 
-Status: design (2026-11-20; the display fixed 2026-11-21), host reading
-only. No i.MX 95 display code exists and nothing here was run on a board.
+Status: design (2026-11-20; the display fixed 2026-11-21), implemented
+for route (b) and host-tested, not run on a board. The cold X4 path of
+section 4(b) is `soc::imx95::{display_power, display, dpu, dsi_power,
+combo_phy, dsi}` and `board::verdin_imx95_{dsi, display}` in
+`driver/rust` (host tests against a mock System Manager, a display model, a
+DSI model and the bridge model, the twelve steps in their order), behind
+`yd_imx95_display_up` / `_flip` / `_down` (`ffi::imx95_display`); the
+Verdin's Zephyr board layer shows `examples/triangle`'s window with it
+(`driver/zephyr/lib/board/verdin_imx95/verdin_imx95_display.c`, the I2C and
+the expander through Zephyr's drivers, U19), built by the gate's Verdin
+iMX95 row. Nothing here was run on a board.
 The board is fixed by the owner: a Toradex Verdin iMX95 module on a Toradex
 Mallow carrier, with a **Toradex Capacitive Touch Display 10.1" DSI on the
 Mallow's X4 (MIPI DSI) connector** and no LVDS panel on X12 (owner,
@@ -287,7 +296,7 @@ needs no adapter; it is also the one path validated by the upstream port
 | `ip::adv7535` | the STM32MP257F-DK | no (NXP's EVK adapter only) |
 | `ip::lcdifv3`, `ip::samsung_dsim`, `ip::cdns_dsi`, `ip::ti_dss7` | i.MX8MP, AM62P | no: different controller and DSI host |
 | LT8912B | none in the tree | only for the DSI-to-HDMI adapter, which does not fit the Mallow's X4 |
-| an LPI2C, a PCAL6416A and a TPM PWM driver | none in Rust (`ip::stm32_i2c`, `ip::imx_pwm` are other blocks) | needed: LPI2C3 for the bridge, LPI2C2 for the module's I/O expander that holds the bridge enable, TPM6 for the backlight (section 4(b)). The bridge driver already reaches I2C and GPIOs through `Env::i2c_write`, `i2c_write_read`, `gpio_set` (`driver/rust/src/env.rs:54-55`, served by the C side), so Zephyr's own LPI2C, PCA-series GPIO and TPM drivers would do, if they build for this A55 board (U19) |
+| an LPI2C, a PCAL6416A and a TPM PWM driver | none in Rust (`ip::stm32_i2c`, `ip::imx_pwm` are other blocks) | LPI2C3 for the bridge, LPI2C2 for the module's I/O expander that holds the bridge enable, TPM6 for the backlight (section 4(b)). The bridge driver reaches I2C and GPIOs through `Env::i2c_write`, `i2c_write_read`, `gpio_set` (`driver/rust/src/env.rs:54-55`, served by the C side): Zephyr's `nxp,lpi2c` and PCA-series GPIO (`nxp,pcal6416`) drivers serve them on this A55 board (U19, answered by the build); the TPM PWM is ours (`ip::tpm_pwm`) |
 
 The X12 LVDS path would have needed no bridge code; the X4 path reuses the
 bridge and the DSI host and adds the combo D-PHY.
@@ -522,7 +531,7 @@ steps inside it):
 | Step | What | Registers | Permissive source |
 |---|---|---|---|
 | 1 | SCMI: power DISPLAY (13) and CAMERA (3) on; read perf DISP (12) and CAM (11) (ODV expected); VIDEOPLL1_VCO 3,360 MHz, VIDEOPLL1 420 MHz; DISP1PIX parent VIDEOPLL1, 70 MHz; MIPIPHYCFG and MIPIPHYPLLREF parent 24M, 24 MHz; MIPIPHYPLLBYPASS parent VIDEOPLL1; enable DISP1PIX, 66, 67, 68, LPI2C2/3, TPM6 | (SCMI) | `firmware::scmi` + MU transport + CLOCK_PARENT_SET |
-| 2 | Expander: `GPIO_10_DSI` output low (bridge in reset, display off) for at least 10 ms; backlight PWM at 0 | PCAL6416A over LPI2C2; TPM6 | (U19) |
+| 2 | Expander: `GPIO_10_DSI` output low (bridge in reset, display off) for at least 10 ms; backlight PWM at 0 | PCAL6416A over LPI2C2; TPM6 | Zephyr's `gpio_pca_series.c` (U19) |
 | 3 | Display CSR: `DSIP_CLK0_SEL` 0 (CCM); interleaver control `Mode` 0 (bypass) | 0x4B010000, 0x4B010004 | `PERI_DISPLAY_BLK_CTRL_DISPLAYMIX.h` |
 | 4 | Pixel interleaver channel 0, as for LVDS | `PERI_DISPLAY_INTERLEAVER.h:411-421` | |
 | 5 | DPU configured, not started: one plane, LayerBlend1 over ConstFrame0, ExtDst0, DomainBlend0, FrameGen0 1280 x 800 in 1404 x 840 | `PERI_DISPLAY_SEERIS.h` | `fsl_dpu.c`; `display_socionext_dpu.c:256-327` |
@@ -687,6 +696,10 @@ Under the board's Linux, over ssh, nothing written:
 | M3 | `dmesg` SCMI and System Manager lines (protocol versions, firmware build); `/sys/kernel/debug/clk/clk_summary` rows for `dispapb`, `dispaxi`, `dispocram`, `disp1pix`, `videopll1`, `videopll1_vco`, `mipiphycfg`, `mipiphypllref`, `mipiphypllbypass`, `camapb`; `/sys/kernel/debug/pm_genpd/pm_genpd_summary` for display and camera; `/proc/config.gz` for `KEXEC`, `CRASH_DUMP`; `/proc/iomem` for a crash reservation | what the System Manager lets the AP set; whether (a) can run |
 | M4 | only if M2 shows a running panel and M3 the display domain on: one 32-bit read each of DPU `COMCTRL_IPIDENTIFIER` (0x4B400000); FetchLayer0 0x4B5D0008-0x4B5D004C and FetchYUV0's first block; ExtDst0 0x4B510008-0x4B510014; FrameGen0 0x4B6B0008-0x4B6B00A0; Signature0 0x4B6D0008-0x4B6D0028 and 0x4B6D0400-0x4B6D0408; display CSR 0x4B010000-0x4B010020; interleaver 0x4B0D0000, +0x20, +0x50; with CAMERA on: DSI stream CSR 0x4AD00000-0x4AD0000C, DSI master CSR 0x4AD10000-0x4AD10008, combo PHY CSR 0x4AD20100-0x4AD20110 (U13, U16), DW host 0x4ACF0000-0x4ACF0110 (`VERSION` for U18, the timing and PHY words) | the golden dump, with an allow list as the T6's and X2's (`driver/docs/nanopc-t6-display-allow.txt`) |
 
+M1 to M4 are one script, `tools/probes/verdin_imx95/linux_day_one/day_one.sh`
+(its README; M4's read list and gates are the `#@read` lines of
+`driver/docs/imx95-display-allow.txt`).
+
 Under U-Boot, at its prompt: `dm tree` (no `video` device expected),
 `bdinfo` (DRAM banks, where a buffer may live). No register reads: U-Boot
 has not powered the display domain.
@@ -698,6 +711,11 @@ Under Zephyr (the first probe image, later):
 | Z0 | SCMI base discovery (agent id, expected 2 "AP-NS"; protocols); power state of domains 13 and 3; the perf DISP and CAM levels (expected 3, ODV); rate and state of clocks 75, 76, 78, 80, 18, 19, 62, 66, 67, 68; `CLOCK_GET_PERMISSIONS` on 18, 19, 66-68, 80 (expected all) and 75 (expected none) | does our image reach the System Manager, and is the display domain on? |
 | Z1 | only if Z0 says DISPLAY is on: FrameGen0/1 enable and status, the fetch unit's address, stride and size | after a crash kexec: **a scanout to adopt?** |
 | Z2 | the cold X4 path of section 4(b), step by step (a stop-after per step, as the i.MX8MP's `STOP_AFTER`), with the read-backs of "Proof without a camera"; the bridge's test pattern first, then our stream | **our own picture** |
+
+Z0 is the probe `tools/probes/verdin_imx95/imx95_scmi` (read only, all
+three domains and the clocks the port uses; `check.sh` compares it with
+Toradex's configuration); the DSI side's identity before Z2 (U13, U16, U18,
+U19, U21) is `imx95_dsi_ids`.
 
 Which result picks which route:
 
@@ -729,6 +747,6 @@ Which result picks which route:
 | U16 | `COMBO_PHY_MODE_CONTROL` with the four lane enables (0xF3, Linux) or without (0x03, Zephyr), `COMBO_PHY_TEST_MODE_CONTROL.turndisable_0`, and the CSI-1 clock-lane termination bypass (Linux only): which are needed for TX? | M4 reads 0x4AD20100 and 0x4AD20108 under Linux; the CSI-1 test register is behind its test interface (as U14) |
 | U17 | Does the zero-margin link (420 Mbit/s for 70 MHz x 24 / 4) give a stable picture through the DW host, where the i.MX8MP's DSIM needed 2.6 %? | M2 (Linux's picture is stable, a person looks); Z2's error counters over a minute |
 | U18 | The i.MX 95 DW host's `VERSION` (`ip::dw_mipi_dsi::probe` accepts 1.30, 1.31, 1.41); hal writes `PHY_TMR_RD_CFG`, so 1.31 or later | M4 read of 0x4ACF0000 |
-| U19 | The PCAL6416A's register map (output and configuration ports) and whether Zephyr's LPI2C, PCA-series GPIO and TPM PWM drivers build for this A55 board; NXP's PCAL6416A data sheet was not read | the data sheet; a Zephyr build |
+| U19 | Answered by the build at the workspace pin (zephyr af17c0c8aa2a): the A55's `nxp_mimx95_a55.dtsi` has LPI2C1-8 (`nxp,lpi2c`, clocks from the SCMI clock protocol) and the SCMI pin control (`nxp,imx95-pinctrl`), and `i2c_mcux_lpi2c.c`, `gpio_pca_series.c` (`nxp,pcal6416`, whose part table is the expander's register map) and `pinctrl_imx_scmi.c` build into the Verdin's image. Two gaps, handled in the board glue: the dtsi has no TPM node (the backlight is `ip::tpm_pwm`, only its pad is Zephyr's), and the LPI2C driver neither enables its SCMI clock nor waits for one, so the buses and the expander are `zephyr,deferred-init` and the first show turns LPI2C2/3 on over SCMI before it initialises them. Still open: that the SM leaves those clocks to AP-NS as read (`tsm:`), and the expander's answer on the board | Z2 (the first show's lines) |
 | U20 | Bridge `LVDS_FMT` (0x18): 0x18 (our plan; the i.MX8MP's Linux dump of the same panel) or 0x78 (NXP's driver from the panel's active-low syncs)? An LVDS panel with DE likely ignores it | M2 `i2cdump` of 0x2C |
 | U21 | The display's power-up after `GPIO_10_DSI` rises: how long until the bridge answers on I2C (the AM62P's adapter needed about 50 ms, `ip::sn65dsi8x` retries for a second) | Z2's ID retry count |

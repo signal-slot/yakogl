@@ -17,6 +17,8 @@
 //! The C side reaches both through `ffi::board`.
 
 pub mod imx8mp;
+#[cfg(any(all(feature = "imx95", feature = "rk3588", feature = "mali"), test))]
+pub mod imx95_gpu;
 pub mod nanopc_t6;
 #[cfg(any(feature = "rk3588", test))]
 pub mod nanopc_t6_display;
@@ -41,6 +43,14 @@ pub mod nanopc_t6_submit;
 pub mod record;
 pub mod rpi4;
 pub mod rpi_fb;
+#[cfg(any(feature = "imx95", test))]
+pub mod verdin_imx95_display;
+#[cfg(test)]
+pub(crate) mod verdin_imx95_display_tests;
+#[cfg(any(feature = "imx95", test))]
+pub mod verdin_imx95_dsi;
+#[cfg(test)]
+mod verdin_imx95_dsi_tests;
 
 #[cfg(test)]
 mod tests {

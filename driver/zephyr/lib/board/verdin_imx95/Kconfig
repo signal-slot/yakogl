@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# The Verdin iMX95 (i.MX 95, Cortex-A55) board glue: every image built for
+# the board (driver/boards/toradex/verdin_imx95), outside the board layer
+# YAKOGL_BOARD, as YAKOGL_NANOPC_T6 and YAKOGL_STM32MP2 are. Built, not run
+# on a board yet (docs/standalone-boot.md, "Toradex Verdin iMX95").
+
+config YAKOGL_VERDIN_IMX95
+	def_bool BOARD_VERDIN_IMX95
+	help
+	  verdin_imx95.c: the end of a run, verdin_imx95_reset()
+	  (verdin_imx95.h: PSCI SYSTEM_RESET to TF-A), and a lifetime timer
+	  that takes it after YAKOGL_VERDIN_IMX95_LIFETIME_S.
+	  verdin_imx95_wdog.c: WDOG3, armed at PRE_KERNEL_1 for 60 s
+	  (ip::wdog32 in the yakogl-drivers crate, feature imx95) and fed by
+	  a 1 s timer up to the lifetime and while the board layer's alive
+	  window holds; its timeout resets the whole board through the
+	  System Manager (docs/notes/pre-study-imx95.md, "The watchdog").
+	  With YAKOGL_GPU_MALI, verdin_imx95_mali.c is the Mali OSAL's
+	  board half: the CSF firmware, the GPU's power-on over SCMI to the
+	  System Manager and its bring-up (yd_imx95_osal_up), over the
+	  board's one raw SCMI channel (verdin_imx95_scmi.c), which the
+	  display shares.
+
+if YAKOGL_VERDIN_IMX95
+
+config YAKOGL_VERDIN_IMX95_LIFETIME_S
+	int "Seconds of uptime after which the glue resets the board through PSCI"
+	default YAKOGL_BOARD_LIFETIME_S if YAKOGL_BOARD
+	default 60
+	range 5 3600
+	help
+	  The board layer's lifetime when the image has the layer
+	  (YAKOGL_BOARD_LIFETIME_S), else 60 s. A timer of the system clock;
+	  WDOG3's feeding stops at the same uptime, so a PSCI reset that
+	  returns, or a hang with interrupts locked, ends in WDOG3's reset
+	  at most 60 s later.
+
+config YAKOGL_VERDIN_IMX95_WDOG_FEED
+	bool "Feed WDOG3 up to the lifetime"
+	default y
+	help
+	  y: verdin_imx95_wdog.c's 1 s timer refreshes WDOG3 while the
+	  uptime is under the lifetime and the board layer's alive window
+	  holds. n: WDOG3 is armed at PRE_KERNEL_1 as always and never
+	  refreshed, so it resets the board one timeout (60 s) after the
+	  arming: the probe imx95_wdog
+	  (tools/probes/verdin_imx95/imx95_wdog), whose pass is that reset.
+
+config YAKOGL_VERDIN_IMX95_SCMI
+	bool "The raw SCMI channel without the GPU or the display"
+	help
+	  verdin_imx95_scmi.c (verdin_imx95_scmi(), the board's one raw
+	  SCMI channel to the System Manager) in an image that has neither
+	  the Mali OSAL nor the X4 display, which bring it themselves: the
+	  probes under tools/probes/verdin_imx95.
+
+config YAKOGL_VERDIN_IMX95_GPU_PROBE
+	bool "The GPU's probe entries without the Mali OSAL"
+	select YAKOGL_VERDIN_IMX95_SCMI
+	help
+	  The drivers crate with the features imx95, rk3588 and mali, for an
+	  image that calls yd_imx95_gpu_power_on / _off or yd_imx95_fw_up
+	  (ffi::imx95) but is not a GL image: the probes imx95_ident and
+	  imx95_fw (tools/probes/verdin_imx95).
+
+endif # YAKOGL_VERDIN_IMX95
+
+config YAKOGL_BOARD_VERDIN_IMX95
+	def_bool YAKOGL_BOARD && YAKOGL_VERDIN_IMX95
+	help
+	  The board layer (yakogl_board.h) on the Verdin iMX95's A55
+	  (board_verdin_imx95.c): the windows in the Mali carve-out's window
+	  memory (YAKOGL_MALI_WINDOW_BYTES), the screen with
+	  YAKOGL_VERDIN_IMX95_DISPLAY; record: the yk-record line on the
+	  console UART and, with YAKOGL_VERDIN_IMX95_RECORD_BBM, the BBNSM
+	  GPR4..7; reset: verdin_imx95_reset(); watchdog: WDOG3
+	  (YAKOGL_VERDIN_IMX95).
+
+config YAKOGL_VERDIN_IMX95_RECORD_BBM
+	bool "The board layer's last record in the BBNSM GPR4..7 over SCMI"
+	default y
+	depends on YAKOGL_BOARD_VERDIN_IMX95
+	help
+	  verdin_imx95_record.c is the board layer's sink (board_sink_store):
+	  every record the layer stores (the yk-record line's four words)
+	  also goes into the battery-backed GPR4..7 through the System
+	  Manager's BBM protocol (BBM_GPR_SET, yd_imx95_bbm_record_store of
+	  the drivers crate, soc::imx95::bbm), where Linux reads it after the
+	  reset (tools/imx95_bbm_record.sh): the result of a run without a
+	  console (docs/standalone-boot.md, "The record without a console").
+	  Toradex's System Manager gives the A55's non-secure agent those
+	  four GPRs. Off: the console line is the only sink.
+
+config YAKOGL_VERDIN_IMX95_DISPLAY
+	bool "The Toradex 10.1\" DSI display on X4 is the board layer's screen"
+	default y
+	depends on YAKOGL_BOARD_VERDIN_IMX95 && YAKOGL_GPU_MALI
+	depends on DT_HAS_YAKOGL_IMX95_DSI_DISPLAY_ENABLED
+	select YAKOGL_DRV_DISPLAY_RUST
+	select I2C
+	select GPIO
+	select PINCTRL
+	help
+	  verdin_imx95_display.c: board_show() puts the window on the
+	  Toradex Capacitive Touch Display 10.1" DSI (1280x800) on the
+	  Mallow's X4, cold, in the order of driver/docs/imx95-display.md
+	  section 4(b) (yd_imx95_display_up / _flip / _down of the drivers
+	  crate, feature imx95). The blocks and the bridge are the
+	  x4_display node (the board layer's app.overlay); the bridge's
+	  I2C is Zephyr's nxp,lpi2c driver on LPI2C3, its EN Zephyr's
+	  nxp,pcal6416 driver on the module's expander (LPI2C2, line 3),
+	  both buses and the expander initialised at the first show after
+	  their SCMI clocks are on. The SCMI channel is the GPU's.
