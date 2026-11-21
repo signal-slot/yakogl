@@ -264,3 +264,76 @@ section 4 asked for.
   a vertex shader at the link's attribute locations is not lowered yet`).
   They compile the way `glBindAttribLocation` + `glLinkProgram` do
   (`compile_bound`, as `tests/mali_deqp_defects.rs`).
+
+## 7. Measured sites at `31a4a6c1`
+
+Plan #387, item `misc2-sites`. Tip: `31a4a6c1184a5cc5a18c6be9eb2bb024b29842ac`.
+Method: a scratch test (not committed) loaded each `deqp_misc2_*` pair through
+`mali_ref::compile_pair`, as `tests/mali_deqp_misc2.rs` does (features
+`host-test,gpu-mali,shaderc-online,no-shader-table`). Every
+`MaliError::{Rebalance,Invariant,AlgebraicForm,AttributeNumbering}` in
+`glsl.rs`, `nir.rs` and `nir_fs.rs` printed `file!():line!()` when built
+(temporary, reverted; `git status` clean, nothing under `src/` committed). The
+site is the last one printed before the refusal text returned. Steps are
+section 4's. Line numbers are at `31a4a6c1` (the `nir.rs` ones moved from
+section 2's `:5264` to `:5303`).
+
+| Reference | Refusal text (start) | Site | Step of section 4 |
+|---|---|---|---|
+| `invariant_cse` | an invariant output (Mesa keeps its arithmetic exact, unfused) | `nir.rs:5303`: `m.outputs.iter().any(is_invariant) && !invariant_copies(m)`, before any lane is walked | 3 (after 2) |
+| `invariant_posonly` | the same | `nir.rs:5303` | 2 |
+| `rebalance_funcsum_fs` | three or more additions or multiplications in a chain | `glsl.rs:1275`, `visit`: `Reduction::Unknown if self.chain(v) >= 3` (the `sum(v)` chain of four lanes) | 4 |
+| `rebalance_invariant` | the same | `glsl.rs:1275`. The `Rebalance` comes first, so the `Invariant` of `nir.rs:5303` is not reached | 4 (after 2 and 3) |
+| `rebalance_random_fs` | the same | `glsl.rs:1379`, `dsw`: `nord != nids`, a span of the tree's ids whose node count differs from its instructions | 4 |
+| `rebalance_random_vs` | the same | `glsl.rs:1379` | 4 |
+| `algebraic_random13` | a shape Mesa's algebraic rules rewrite without a reference | `nir_fs.rs:1491`: the `fadd` factoring arm, `fmul(a, b) + fmul(a, c)` whose constants' sum is not 1.0 | 5 |
+| `algebraic_random46` | the same | `nir_fs.rs:1491` | 5 |
+| `attrnum_zero_lanes` | a vertex shader whose attribute numbering waits for a fold ... | `nir.rs:3991`: the late-fold check `depends & !vs.output_inputs != 0` (a lane's constant differs between the first and the second walk, and it depends on an attribute no output lane of the first reads) | 1 |
+| `attrnum_dead_attrs` | the same | `nir.rs:3991` | 1 |
+
+Notes on reading the table:
+
+- `glsl.rs:2566` and `:2571` (`post_order`) also printed in
+  `rebalance_random_*`, seven times each, but they are `ok_or(MaliError::
+  Rebalance)`, whose argument is built eagerly. Nothing failed there. The
+  refusal is `:1379` only.
+- `nir.rs:3972` (the walk of the second pass failing) is not the site of
+  any of the ten: both `attrnum_*` references get through the second walk
+  and stop at the comparison of `:3991`.
+- Both `algebraic_*` references stop at the same arm (`:1491`), not at
+  `:3208`, `:6289`, `:9703` or `:12764`. Which two products the arm factors
+  in each shader was not read (the shaders were not traced further). A
+  lowering of step 5 starts at this arm.
+
+### `x * -0.0` (the open check of step 1)
+
+Result, read from the `vs.varying` text of
+`deqp_misc2_attrnum_dead_attrs.expect.json` (its `v_color.x` is `j * e *
+float(-0.0)` with `j = 2.375`, `e` an attribute): **Mesa folds `x * -0.0`
+to a constant `+0.0`, like `x * 0.0`.** The first varying store (lane x) is
+`IADD_IMM.i32 r4, 0x0, #0x0`, stored with no attribute load and no `FMA`. The
+word is `+0.0` (all bits zero), not `-0.0` (`0x80000000`). The sign of the
+zero is not kept, because GLSL ES lets the compiler ignore signed zeros and
+NaN here. So the rule of step 1 is the same for the `-0.0` references:
+`fmul(x, ±0.0) → +0.0`, with the result `+0.0` whatever the sign of the zero
+and of `x`. Compare `attrnum_zero_lanes`, whose x, y, w lanes are `+0.0`
+by the same rule (`IADD_IMM #0x0`) and whose z is the constant `#0x3E800000`.
+
+Facts about the same disassembly that step 1 has to reproduce:
+
+- The other lanes of `dead_attrs` are constants folded the same way: lane z
+  (`-1.0 * 1.0 * h`, `h = float(0.75 * i)` = -0.1875) is `IADD_IMM #0x3E400000`
+  (0.1875). Lane y (`4.0 * d * f`) is `LD_ATTR_IMM` `index:0x2`, `FMA.f32 r0,
+  0x44000000.h1, r0^`, `LD_ATTR_IMM` `index:0x4`, `FMA.f32 r0, r0^, r1^`. Lane
+  w (`-1.5 * i * g`) is `LD_ATTR_IMM` `index:0x1`, `FMA.f32 r1, u5.w1, r1^`
+  (`u5.w1` = 0.375). Three attributes are loaded, with indices 1, 2 and 4.
+- The attributes `b`, `c` (read only by dead code) and `e` (read only through
+  the `* -0.0` product) have no load. The indices are not 1, 2, 3: the gap at
+  3 shows Mesa still numbers some attribute not loaded. Which numbering rule
+  gives 1, 2, 4 for `g`, `d`, `f` is not read from these two references and has to be
+  settled by the lowering of step 1 (compare `max_cond_mat4`'s
+  location-order indices in section 6).
+- Only two references carry this text here (`attrnum_zero_lanes` and
+  `attrnum_dead_attrs`), covering all eight cases (5 and 3, section 2). The `-0.0`
+  question concerns `attrnum_dead_attrs` alone: `attrnum_zero_lanes` has
+  only `0`, `0.0` and `false`.
