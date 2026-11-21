@@ -73,6 +73,14 @@ uint32_t verdin_imx95_wdog_timeout_ms(void)
 	return s_arm_rc == 0 ? s_arm.timeout_ms : 0u;
 }
 
+const struct yd_wdog32_arm *verdin_imx95_wdog_arm(int *rc)
+{
+	if (rc != NULL) {
+		*rc = s_arm_rc;
+	}
+	return &s_arm;
+}
+
 static int wdog_arm(void)
 {
 	uint64_t t0, t1;
@@ -126,9 +134,18 @@ static int wdog_report(void)
 	       s_arm.cs_found, s_arm.cs_now,
 	       (s_arm.flags & YD_WDOG32_WAS_RUNNING) ? "was running" : "was stopped",
 	       s_arm.toval_found, s_arm.toval_now, s_arm.timeout_ms, s_arm.ulk_polls,
-	       s_arm.rcs_polls, us, CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S);
+	       s_arm.rcs_polls, us,
+	       IS_ENABLED(CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED)
+		       ? CONFIG_YAKOGL_VERDIN_IMX95_LIFETIME_S
+		       : 0);
 	printk(BOARD_WDOG_ARMED_LINE);
-	k_timer_start(&s_feeder, K_SECONDS(1), K_SECONDS(1));
+	if (IS_ENABLED(CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED)) {
+		k_timer_start(&s_feeder, K_SECONDS(1), K_SECONDS(1));
+	} else {
+		printk("verdin_imx95: WDOG3 is not fed (CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED=n): it "
+		       "resets the board %u ms after the arming\n",
+		       s_arm.timeout_ms);
+	}
 	return 0;
 }
 SYS_INIT(wdog_report, POST_KERNEL, 0);

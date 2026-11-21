@@ -8,7 +8,7 @@
 
 use super::bbm::{self, BBM_GPR_GET, BBM_GPR_SET, PROTO_BBM, RECORD_GPR};
 use super::sm::{Fault, Status};
-use super::sm_mock::{req, Sm, B, PERM_NONE};
+use super::sm_mock::{req, Sm, BBM, PERM_NONE};
 use crate::board::record::{self, kind, Class};
 use crate::firmware::scmi::{self, Transport};
 
@@ -43,11 +43,11 @@ fn store_clears_the_magic_then_writes_w1_to_w3_then_w0() {
     assert_eq!(
         sm.log,
         vec![
-            req(B, BBM_GPR_SET, &[4, 0]),
-            req(B, BBM_GPR_SET, &[5, w[1]]),
-            req(B, BBM_GPR_SET, &[6, w[2]]),
-            req(B, BBM_GPR_SET, &[7, w[3]]),
-            req(B, BBM_GPR_SET, &[4, w[0]]),
+            req(BBM, BBM_GPR_SET, &[4, 0]),
+            req(BBM, BBM_GPR_SET, &[5, w[1]]),
+            req(BBM, BBM_GPR_SET, &[6, w[2]]),
+            req(BBM, BBM_GPR_SET, &[7, w[3]]),
+            req(BBM, BBM_GPR_SET, &[4, w[0]]),
         ]
     );
     assert_eq!(sm.gpr[4..8], w);
@@ -62,7 +62,7 @@ fn load_reads_gpr4_to_7_and_gives_the_console_lines_words() {
     bbm::store(&mut sm, &w).unwrap();
     sm.log.clear();
     let got = bbm::load(&mut sm).unwrap();
-    assert_eq!(sm.log, (4..8).map(|g| req(B, BBM_GPR_GET, &[g])).collect::<Vec<_>>());
+    assert_eq!(sm.log, (4..8).map(|g| req(BBM, BBM_GPR_GET, &[g])).collect::<Vec<_>>());
     assert_eq!(got, w);
     // the same record the image prints as its yk-record line, and a verdict
     let mut line = String::new();

@@ -967,6 +967,64 @@ int yd_imx95_osal_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, 
 		     int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
 		     void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
 		     struct yd_imx95_gpu_power *power, struct yd_t6_submit_up *out);
+
+/* The Verdin iMX95 probes (tools/probes/verdin_imx95; ffi::imx95, features
+ * imx95 rk3588 mali, board::imx95_gpu):
+ *   yd_imx95_gpu_power_on   soc::imx95::gpu_power's power-on alone (the
+ *                           versions, the levels, PD 14 on, the level for
+ *                           rate_hz, 0 for 800 MHz, gate 174 on and its rate
+ *                           read); no GPU register is touched. 0 (power->on
+ *                           1), -EIO (power says where it stopped), -EINVAL
+ *   yd_imx95_gpu_power_off  gate 174 off, PD 14 off and read back off; the
+ *                           level is left. 0 (power all zero), -EIO (power
+ *                           says where), -EINVAL. No GPU read after it
+ *   yd_imx95_fw_up          the pre-study's B3: yd_t6_fw_up's run (Z1, Z2,
+ *                           the load, the MCU's boot, the global
+ *                           configuration, one PING) with the power-on over
+ *                           SCMI in place of the RK3588's, then CSG 0's
+ *                           control block read back into csg0; no group is
+ *                           started. Arguments as yd_t6_fw_up's with scmi and
+ *                           rate_hz as yd_imx95_osal_up's; z1 and power as
+ *                           yd_imx95_osal_up writes them. 0, -EIO (out->step
+ *                           says where), -EINVAL */
+struct yd_imx95_fw_csg0 {
+	uint32_t read;               /* 1: the words below were read after the boot */
+	uint32_t features;           /* CSG 0's control block (panthor_fw_csg_control_iface) */
+	uint32_t suspend_size;
+	uint32_t protm_suspend_size;
+	uint32_t stream_num;
+	uint32_t refusal;            /* not read: the discovery's CsfRefusal, 0 when no boot ran */
+	uint32_t detail;
+};
+_Static_assert(sizeof(struct yd_imx95_fw_csg0) == 28, "ffi::imx95 YdImx95FwCsg0");
+_Static_assert(offsetof(struct yd_imx95_fw_csg0, suspend_size) == 8, "ffi::imx95 YdImx95FwCsg0");
+_Static_assert(offsetof(struct yd_imx95_fw_csg0, refusal) == 20, "ffi::imx95 YdImx95FwCsg0");
+
+int yd_imx95_gpu_power_on(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			  uint64_t rate_hz, struct yd_imx95_gpu_power *power);
+int yd_imx95_gpu_power_off(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			   struct yd_imx95_gpu_power *power);
+int yd_imx95_fw_up(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+		   uint64_t rate_hz, uintptr_t gpu, size_t gpu_len, const void *blob, size_t blob_len,
+		   const struct yd_t6_fw_backing *backings, uint32_t n_backings, void *pool,
+		   uint32_t pool_pages, uint64_t tables_pa, uint32_t timer_hz,
+		   int (*clean)(uintptr_t addr, size_t len), void (*delay_us)(uint32_t us),
+		   void (*on_handover)(const struct yd_t6_gpu_up *h), struct yd_t6_gpu_up *z1,
+		   struct yd_imx95_gpu_power *power, struct yd_t6_fw_up *out,
+		   struct yd_imx95_fw_csg0 *csg0);
+
+/* yd_imx95_scmi_survey: the read-only SCMI survey of the probe imx95_scmi
+ * (soc::imx95::survey; feature imx95): the base protocol's discovery, every
+ * listed protocol's version and attributes, then the GPU's and the
+ * display's power domains (14, 13, 3), performance domains (9, 12, 11) and
+ * clocks, one fact a line ("key = value", no newline) to line(). Sends
+ * only messages that read. counts gets facts, refused (a non-zero SCMI
+ * status), broken (the transport or the reply's form). 0, -EIO (the base
+ * version was not answered: the channel is dead; one line said so),
+ * -EINVAL. */
+#define YD_IMX95_SURVEY_LINE_MAX 160 /* soc::imx95::survey::LINE_MAX */
+int yd_imx95_scmi_survey(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap),
+			 void (*line)(const char *s, size_t len), uint32_t counts[3]);
 int yd_t6_osal_alloc(size_t size, struct osal_gpu_mem *out);
 int yd_t6_osal_free(struct osal_gpu_mem *mem);
 void yd_t6_osal_frame_open(bool open);
