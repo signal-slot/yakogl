@@ -18,25 +18,20 @@
 //! shows the frame the back end chose: the intersection or not.
 //!
 //! ES 3.0 4.4.4.2 allows attachments of different sizes and 4.4.1 renders
-//! their intersection (docs/notes/v3d-mrt-sizes.md). Today `extra_targets`
-//! (src/v3d/backend.rs) refuses a draw whose attachments past the first differ
-//! in size from the first, by name, "colour attachments of different sizes",
-//! and RT 1..3's stride is RT 0's (`begin_job`). So:
-//!
-//! - today, pinned: four equal attachments (the baseline: completeness, job,
-//!   strides, clear, draw and read-back of attachment 3); every mix with
-//!   attachment 3 the smallest, the largest, wider-lower, or all four
-//!   different is complete, and the draw and the clear are refused by name
-//!   (one GL error, nothing recorded, attachment 3 reads back untouched); a
-//!   GL_NONE slot is not a size; the context works after;
-//! - expected, `#[ignore]`d until the v3d-mrt-sizes change: the frame is the
-//!   intersection, RT 3 (`rt[2]`) keeps its own address and pitch, a fused
-//!   clear and a draw fill the common area of attachment 3 and leave the rest
-//!   of it alone.
+//! their intersection (docs/notes/v3d-mrt-sizes.md). `extra_targets`
+//! (src/v3d/backend.rs) makes the job's frame the intersection of the
+//! written attachments, and `begin_job` stores each RT at its own pitch.
+//! Pinned: four equal attachments (the baseline: completeness, job, strides,
+//! clear, draw and read-back of attachment 3); every mix with attachment 3
+//! the smallest, the largest, wider-lower, or all four different is
+//! complete, and its draw, fused clear and scissored clear are taken at the
+//! intersection, RT 3 (`rt[2]`) at its own address and pitch, the common
+//! area of each attachment filled and the rest of it left alone; a GL_NONE
+//! slot and an attachment that is not a draw buffer are not a size; a resize
+//! of attachment 3 between two draws starts another job.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt4_sizes_v3d
-//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt4_sizes_v3d -- --ignored
 //! ```
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
 
@@ -725,12 +720,9 @@ const WIDER3: Mix = Mix { name: "attachment 3 wider and lower", rbs: [A, A, A, D
 const ALL_DIFFERENT: Mix = Mix { name: "all four different", rbs: [A, B, C, E] };
 const MIXES: [&Mix; 4] = [&SMALLEST3, &LARGEST3, &WIDER3, &ALL_DIFFERENT];
 
-/// The refusal's name, as `extra_targets` words it.
+/// The refusal `extra_targets` named before the v3d-mrt-sizes change; no log
+/// line names it now.
 const REFUSAL: &str = "colour attachments of different sizes";
-
-/// The error this V3D refusal reaches the application as (`refuse_unsupported`
-/// answers -ENOTSUP, `submit_draw` maps it to GL_INVALID_OPERATION).
-const REFUSAL_ERROR: GLenum = GL_INVALID_OPERATION;
 
 /// What `glClearColor(0.25, 0.5, 0.75, 1)` leaves in an RGBA8 store.
 const CLEARED: [u8; 4] = [64, 128, 191, 255];
@@ -740,15 +732,14 @@ fn stride(w: GLsizei, bpp: u32) -> u32 {
     target_pitch(w as u32) * bpp
 }
 
-/// Refused as the application sees it today: one error, one refused draw,
-/// nothing recorded; a "draw refused" log line, when there is one, names
-/// this refusal.
-fn assert_refused(what: &str, s: &Seen) {
-    assert_eq!(s.errs, [REFUSAL_ERROR], "{what}: {:?}", s.log);
-    assert_eq!(s.refused, 1, "{what}: one refused draw");
-    assert!(s.jobs.is_empty() && s.draws.is_empty() && s.clears.is_empty(), "{what}: nothing recorded");
-    for l in s.log.iter().filter(|l| l.contains("draw refused")) {
-        assert!(l.ends_with(REFUSAL), "{what}: {l}");
+/// Not refused: no error, no refused draw, no store past an allocation, and
+/// no log line names the old size refusal.
+fn assert_taken(what: &str, s: &Seen) {
+    assert!(s.errs.is_empty() && s.refused == 0, "{what}: {:x?} {:?}", s.errs, s.log);
+    assert_eq!(s.overruns, 0, "{what}: a store left its allocation");
+    assert!(!s.jobs.is_empty(), "{what}: recorded: {:?}", s.log);
+    for l in &s.log {
+        assert!(!l.contains(REFUSAL), "{what}: {l}");
     }
 }
 
@@ -788,7 +779,7 @@ fn assert_filled(what: &str, px: &[u8], w: u32, fw: u32, fh: u32, fill: [u8; 4])
 
 /* ---- four equal attachments: the baseline ---------------------------------- */
 
-/// Four 64x64 RGBA8 attachments are complete and drawn today: one job at
+/// Four 64x64 RGBA8 attachments are complete and drawn: one job at
 /// 64x64 with four render targets, RT 0's stride and RT 1..3's all 64 pixels
 /// x 4 bytes, each at its own address (RT 3 is `rt[2]`); attachment 3 reads
 /// back what the draw wrote.
@@ -828,7 +819,7 @@ fn a_clear_of_four_equal_attachments_clears_attachment_3() {
     drop(fbo);
 }
 
-/* ---- completeness and today's refusal, every mix --------------------------- */
+/* ---- completeness and the scissored clear, every mix ------------------------ */
 
 /// Every mix is a complete framebuffer (ES 3.0 4.4.4.2: sizes may differ;
 /// `Fbo::new` asserts GL_FRAMEBUFFER_COMPLETE and no error), and the GL
@@ -846,41 +837,12 @@ fn every_mix_of_four_sizes_is_complete() {
     }
 }
 
-/// The draw into each mix is refused by name today, one GL error and nothing
-/// recorded, and attachment 3 reads back untouched (all zero).
+/// The scissored clear of each mix reaches `extra_targets` like any draw and
+/// is no longer refused for the sizes: it is taken (the several-attachment
+/// clear quad, `clear_mrt`) in a job at the intersection, RT 3 at its own
+/// pitch.
 #[test]
-fn a_draw_into_each_mix_is_refused_by_name_today() {
-    let _g = rig();
-    for m in MIXES {
-        let fbo = Fbo::new(&m.rbs, None, None);
-        program(4);
-        let s = scene(triangle);
-        assert_refused(m.name, &s);
-        let r = m.rbs[3];
-        assert_filled(m.name, &read_attachment(3, r.1 as u32, r.2 as u32), r.1 as u32, 0, 0, [0; 4]);
-        drop(fbo);
-    }
-}
-
-/// The fused glClear over each mix is refused by the same name, attachment 3
-/// untouched.
-#[test]
-fn a_clear_of_each_mix_is_refused_by_name_today() {
-    let _g = rig();
-    for m in MIXES {
-        let fbo = Fbo::new(&m.rbs, None, None);
-        let s = scene(clear_colour);
-        assert_refused(m.name, &s);
-        let r = m.rbs[3];
-        assert_filled(m.name, &read_attachment(3, r.1 as u32, r.2 as u32), r.1 as u32, 0, 0, [0; 4]);
-        drop(fbo);
-    }
-}
-
-/// The scissored clear reaches `extra_targets` before the clear quad, so it
-/// is refused for the sizes too.
-#[test]
-fn a_scissored_clear_of_each_mix_is_refused_by_name_today() {
+fn a_scissored_clear_of_each_mix_is_taken_at_the_intersection() {
     let _g = rig();
     for m in MIXES {
         let fbo = Fbo::new(&m.rbs, None, None);
@@ -892,25 +854,31 @@ fn a_scissored_clear_of_each_mix_is_refused_by_name_today() {
             }
             clear_colour();
         });
-        assert_refused(m.name, &s);
+        // SAFETY: plain GL call.
+        unsafe { glDisable(GL_SCISSOR_TEST) };
+        assert_taken(m.name, &s);
+        assert_eq!(s.jobs.len(), 1, "{}: one job: {:?}", m.name, s.log);
+        assert_eq!((s.jobs[0].width, s.jobs[0].height), m.common(), "{}: the intersection", m.name);
+        assert_eq!(s.jobs[0].rt[2].stride, stride(m.rbs[3].1, 4), "{}: RT 3's own pitch", m.name);
         drop(fbo);
     }
 }
 
-/// After the refusal the context stays usable: four equal attachments on the
-/// next framebuffer draw as one job.
+/// A draw into a mix, then into four equal attachments: each is its own job
+/// at its own frame (the intersection, then the whole 64x64).
 #[test]
-fn the_context_works_after_the_refusal() {
+fn equal_attachments_after_a_mix_draw_at_their_size() {
     let _g = rig();
     let fbo = Fbo::new(&SMALLEST3.rbs, None, None);
     program(4);
     let s = scene(triangle);
-    assert_refused(SMALLEST3.name, &s);
+    let j = assert_one_job(SMALLEST3.name, &s, 4, 1);
+    assert_eq!((j.width, j.height), SMALLEST3.common());
     drop(fbo);
     let fbo = Fbo::new(&[A, A, A, A], None, None);
     program(4);
     let s = scene(triangle);
-    let j = assert_one_job("4 x 64x64 after the refusal", &s, 4, 1);
+    let j = assert_one_job("4 x 64x64 after a mix", &s, 4, 1);
     assert_eq!((j.width, j.height), (64, 64));
     drop(fbo);
 }
@@ -954,48 +922,31 @@ fn a_gl_none_slot_beside_attachment_3_is_not_a_size() {
 }
 
 /// The same framebuffer with draw buffer 2 named: the 32x48 attachment is a
-/// size again and the draw is refused.
+/// size again: the frame is 32x48, RT 2 and RT 3 at their own pitches, and
+/// attachment 3 is filled in the common area only.
 #[test]
-fn naming_the_small_slot_makes_its_size_count_today() {
+fn naming_the_small_slot_makes_its_size_count() {
     let _g = rig();
     let fbo = Fbo::new(&[A, A, C, A], None, None);
     program(4);
     let s = scene(triangle);
-    assert_refused("64x64 x2 + 32x48 + 64x64", &s);
+    let j = assert_one_job("64x64 x2 + 32x48 + 64x64", &s, 4, 1);
+    assert_eq!((j.width, j.height), (32, 48));
+    assert_eq!(j.rt[1].stride, stride(32, 4), "RT 2's own pitch");
+    assert_eq!(j.rt[2].stride, stride(64, 4), "RT 3's own pitch");
+    assert_filled("RT 3", &read_attachment(3, 64, 64), 64, 32, 48, DRAW[3]);
     drop(fbo);
 }
 
-/// Two draws into four 64x64 attachments with attachment 3 re-stored at 32x48
-/// between them: the first draw is one job, the second is refused, and the
-/// first job is what was recorded.
-#[test]
-fn a_resize_of_attachment_3_between_two_draws_refuses_the_second_today() {
-    let _g = rig();
-    let fbo = Fbo::new(&[A, A, A, A], None, None);
-    program(4);
-    let s = scene(|| {
-        triangle();
-        fbo.resize(3, C);
-        triangle();
-    });
-    drop(fbo);
-    assert_eq!(s.errs, [REFUSAL_ERROR], "{:?}", s.log);
-    assert_eq!(s.refused, 1);
-    assert_eq!((s.jobs.len(), s.draws.len(), s.clears.len()), (1, 1, 1), "the first draw's job: {:?}", s.log);
-    assert_eq!((s.jobs[0].width, s.jobs[0].height), (64, 64));
-}
-
-/* ---- expected: the intersection, RT 3 its own address and pitch ------------
+/* ---- the intersection, RT 3 its own address and pitch ----------------------
  *
- * What the v3d-mrt-sizes change must give (docs/notes/v3d-mrt-sizes.md (e))
- * for four targets. Ignored until then. */
+ * docs/notes/v3d-mrt-sizes.md (e), for four targets. */
 
 /// The draw into each mix is one job of four render targets at the
 /// intersection, each RT at its own pitch (RT 3 is `rt[2]`), no store past an
 /// allocation; attachment 3 reads back the draw inside the common area and
 /// is untouched outside it.
 #[test]
-#[ignore = "v3d-mrt-sizes: refused today (docs/notes/v3d-mrt-sizes.md (f) 1, (e) 1-2)"]
 fn a_draw_into_each_mix_fills_the_intersection() {
     let _g = rig();
     for m in MIXES {
@@ -1022,7 +973,6 @@ fn a_draw_into_each_mix_fills_the_intersection() {
 /// intersection, none loaded, no quad; attachment 3 reads back the clear
 /// colour inside the common area and is untouched outside it.
 #[test]
-#[ignore = "v3d-mrt-sizes: refused today (docs/notes/v3d-mrt-sizes.md (f) 5, (d) Clear)"]
 fn a_fused_clear_of_each_mix_clears_the_intersection() {
     let _g = rig();
     for m in MIXES {
@@ -1045,7 +995,6 @@ fn a_fused_clear_of_each_mix_clears_the_intersection() {
 /// between them: the intersection changed, so the second draw is another job
 /// at 32x48 with RT 3's new pitch; no error.
 #[test]
-#[ignore = "v3d-mrt-sizes: refused today (docs/notes/v3d-mrt-sizes.md (f) 7, (e) 2)"]
 fn a_job_is_not_continued_across_a_resize_of_attachment_3() {
     let _g = rig();
     let fbo = Fbo::new(&[A, A, A, A], None, None);

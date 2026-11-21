@@ -1078,7 +1078,10 @@ y-scale word).
 **Built (steps 1-3, 2026-09-26; the board run, step 4, pending):** the compiler
 (838b59e9), the job builder (7952287f) and the backend (the step-3 commit). The
 backend takes up to four colour attachments. Each one past the first must be RGBA8
-at RT 0's size; anything else is refused by name. The job's RT count is the
+(since then: any format with a TLB row); anything else is refused by name. Their
+sizes may differ (ES 3.0 4.4.4.2): the job's frame is their intersection (4.4.1),
+each RT stored inside it at its own pitch, and a frame smaller than RT 0 gives RT 0
+no render image (docs/notes/v3d-mrt-sizes.md). The job's RT count is the
 draw's `num_targets`. A program that writes a location with no attachment slot is
 refused ("a colour output with no attachment slot") and counted. So is a colour
 clear the quad would do on several attachments, because the quad writes RT 0 only.

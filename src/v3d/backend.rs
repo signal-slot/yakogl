@@ -739,8 +739,15 @@ fn bin_pool_used(g: &mut V3dState) -> ArenaUse {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Target {
     gpu: u64,
+    /// The frame: the intersection of the colour attachments the draw writes
+    /// (ES 3.0 4.4.1, docs/notes/v3d-mrt-sizes.md), RT 0's own size when they
+    /// are all equal. The job's `width`/`height`, its tiles and clip window.
     w: u32,
     h: u32,
+    /// The frame is smaller than RT 0 (an attachment past the first is
+    /// smaller): the job stores only part of RT 0, so it has no render image
+    /// (`rt_for_render`), RT 0 is stored raster alone.
+    cut: bool,
     /// The row pitch in pixels ([`crate::backend::draw_pitch`]): the raster
     /// load's and store's stride (v3d_job.c, `height_in_ub_or_stride` =
     /// `t.stride`). Part of the job's identity.
@@ -762,11 +769,14 @@ struct Target {
     /// `stencil_id`): the owners of its buffers.
     ds_owners: [u32; 2],
     /// Render targets the draw's framebuffer has (0 and 1: RT 0 alone), and
-    /// the GPU address of RT 1..3 (0: a GL_NONE draw buffer), each at RT 0's
-    /// size in its own format (`rt_format`). Part of the job's identity:
-    /// another set is another job.
+    /// the GPU address of RT 1..3 (0: a GL_NONE draw buffer), each in its own
+    /// format (`rt_format`), stored inside the frame at its own pitch
+    /// (`rt_w`). Part of the job's identity: another set is another job.
     rts: u8,
     rt: [u32; 3],
+    /// RT 1..3's own widths in pixels (0 for a GL_NONE slot): each one's
+    /// raster stride is `target_pitch(rt_w) * bytes`.
+    rt_w: [u32; 3],
     /// RT 1..3's surface formats (`GLES_SURF_*`; RGBA8888 for a GL_NONE
     /// slot and past `rts`).
     rt_format: [u8; 3],
@@ -780,6 +790,7 @@ impl Target {
         gpu: 0,
         w: 0,
         h: 0,
+        cut: false,
         pitch: 0,
         no_alpha: false,
         bgr: false,
@@ -789,6 +800,7 @@ impl Target {
         ds_owners: [0; 2],
         rts: 0,
         rt: [0; 3],
+        rt_w: [0; 3],
         rt_format: [GLES_SURF_RGBA8888; 3],
         msaa: false,
     };
@@ -2059,7 +2071,9 @@ fn rt_for_render(g: &mut V3dState, target: &Target) -> Option<usize> {
         return None;
     }
     let bytes = u64::from(pitch) * u64::from(target.bpp()) * u64::from(h);
-    let found = rt_find(g, gpu, w, h, pitch).filter(|_| !bgr && !rgb565 && !msaa);
+    /* a frame smaller than RT 0 stores part of it: no image (the job's
+     * raster store alone), and an image of RT 0 goes back first (below) */
+    let found = rt_find(g, gpu, w, h, pitch).filter(|_| !bgr && !rgb565 && !msaa && !target.cut);
     for i in 0..RT_IMAGES {
         if Some(i) != found && g.rt_images[i].overlaps(gpu, bytes) {
             rt_level0_back(g, i);
@@ -2721,14 +2735,15 @@ fn begin_job(g: &mut V3dState, target: Target) -> i32 {
         stride: pitch * target.bpp(),
         tile_alloc,
         rgb565,
-        /* RT 1..3 of the draw's framebuffer, each in its own format at RT
-         * 0's size and pitch (a GL_NONE one has address 0: configured,
-         * never stored) */
+        /* RT 1..3 of the draw's framebuffer, each in its own format at its
+         * own pitch, stored inside the frame (a GL_NONE one has address 0:
+         * configured, never stored) */
         rts: u32::from(target.rts),
         rt: core::array::from_fn(|i| {
             let a = target.rt[i];
             let bytes = state::rt_row(target.rt_format[i]).bytes;
-            V3dJobRt { address: a, stride: if a != 0 { target_pitch(w) * bytes } else { 0 }, ..V3dJobRt::default() }
+            let stride = if a != 0 { target_pitch(target.rt_w[i]) * bytes } else { 0 };
+            V3dJobRt { address: a, stride, ..V3dJobRt::default() }
         }),
         msaa,
         ms_address: ms.map_or(0, |i| g.msbufs[i].address),
@@ -6698,34 +6713,55 @@ pub unsafe extern "C" fn v3d_draw(draw: *const GlesDraw) -> i32 {
 const UNKNOWN_EXTRA_FORMAT: state::Refusal =
     "a colour attachment past the first of a format the backend does not render";
 
+/// [`extra_targets`]'s answer: the render targets the job configures.
+struct ExtraTargets {
+    /// How many (0: RT 0 alone).
+    rts: u8,
+    /// RT 1..3's addresses (0: a GL_NONE slot), own widths and formats.
+    rt: [u32; 3],
+    rt_w: [u32; 3],
+    formats: [u8; 3],
+    /// The frame: the intersection of RT 0 (`target_w/h`) and every written
+    /// attachment past it (ES 3.0 4.4.1).
+    frame: (u32, u32),
+}
+
 /// The draw's colour attachments past the first (multiple render targets,
 /// docs/online-shaderc/v3d-backend.md): how many render targets the job
-/// configures, RT 1..3's addresses and their surface formats. The job
-/// builder takes them at RT 0's size in any format with a TLB row
-/// (`state::rt_format`); anything else is refused by name.
-fn extra_targets(d: &GlesDraw) -> Result<(u8, [u32; 3], [u8; 3]), state::Refusal> {
+/// configures, RT 1..3's addresses, widths and surface formats, and the
+/// frame, the intersection of their sizes (ES 3.0 4.4.4.2 allows unequal
+/// attachments, 4.4.1 renders their common area; docs/notes/v3d-mrt-sizes.md).
+/// The job builder takes them in any format with a TLB row
+/// (`state::rt_format`), each stored inside the frame at its own pitch;
+/// anything else is refused by name.
+fn extra_targets(d: &GlesDraw) -> Result<ExtraTargets, state::Refusal> {
     let n = d.num_targets.min(GLES_MAX_TARGETS as u8);
-    let mut rt = [0u32; 3];
-    let mut formats = [GLES_SURF_RGBA8888; 3];
+    let mut x = ExtraTargets {
+        rts: 0,
+        rt: [0; 3],
+        rt_w: [0; 3],
+        formats: [GLES_SURF_RGBA8888; 3],
+        frame: (d.target_w, d.target_h),
+    };
     if n <= 1 {
-        return Ok((0, rt, formats));
+        return Ok(x);
     }
+    x.rts = n;
     for (i, t) in d.targets[1..n as usize].iter().enumerate() {
         if t.gpu == 0 {
-            continue; /* a GL_NONE draw buffer: configured, never stored */
-        }
-        if (t.w, t.h) != (d.target_w, d.target_h) {
-            return Err("colour attachments of different sizes");
+            continue; /* a GL_NONE draw buffer: configured, never stored, no size */
         }
         /* any format with a TLB row (state::rt_format): RGBA8, the ES 3.0
          * integer and float ones; the sRGB surface has none */
         if state::rt_format(t.format).is_none() {
             return Err(UNKNOWN_EXTRA_FORMAT);
         }
-        rt[i] = gpu32(t.gpu).ok_or("a colour attachment outside the V3D's 32-bit address space")?;
-        formats[i] = t.format;
+        x.rt[i] = gpu32(t.gpu).ok_or("a colour attachment outside the V3D's 32-bit address space")?;
+        x.rt_w[i] = t.w;
+        x.formats[i] = t.format;
+        x.frame = (x.frame.0.min(t.w), x.frame.1.min(t.h));
     }
-    Ok((n, rt, formats))
+    Ok(x)
 }
 
 /// `v3d_draw` without the stamp bookkeeping.
@@ -6775,15 +6811,23 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
     if d.target_w > MAX_TARGET || d.target_h > MAX_TARGET {
         return refuse_unsupported(g, "a target larger than the tile memory is sized for (4096x4096)");
     }
-    let (rts, rt, rt_format) = match extra_targets(d) {
+    let ExtraTargets { rts, rt, rt_w, formats: rt_format, frame: (fw, fh) } = match extra_targets(d) {
         Ok(x) => x,
         Err(why) if why == UNKNOWN_EXTRA_FORMAT => return refuse(g, why),
         Err(why) => return refuse_unsupported(g, why),
     };
+    if fw == 0 || fh == 0 {
+        return refuse(g, "an empty target (0 pixels on a side)");
+    }
+    /* the frame is the attachments' intersection: the job's size, its
+     * tiles and clip window (v3d_job.c clamps the viewport and scissor to
+     * it), so a draw or a TLB clear writes the common area of every RT,
+     * each at its own address and pitch, and nothing past the smallest */
     let target = Target {
         gpu: addr as u64,
-        w: d.target_w,
-        h: d.target_h,
+        w: fw,
+        h: fh,
+        cut: (fw, fh) != (d.target_w, d.target_h),
         pitch: crate::backend::draw_pitch(d),
         no_alpha: d.target_alpha_bits == 0,
         bgr: d.target_format == GLES_SURF_XRGB8888,
@@ -6793,6 +6837,7 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
         ds_owners: [d.depth_id, d.stencil_id],
         rts,
         rt,
+        rt_w,
         rt_format,
         msaa: d.samples == 4,
     };

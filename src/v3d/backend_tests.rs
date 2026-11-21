@@ -3899,9 +3899,8 @@ fn a_draw_on_three_attachments_configures_three_render_targets() {
 /// attachment slot" while the GL core stopped at the hole); RT 1 has no
 /// address, which the job builder neither loads nor stores (job_check part
 /// 12), and RT 2 is attachment 2's memory. The fused glClear clears every
-/// RT. Revert check: without the gpu 0 skip in extra_targets the draw is
-/// refused as "colour attachments of different sizes" (the empty slot's
-/// 0x0 against RT 0's 64x64).
+/// RT. Revert check: without the gpu 0 skip in extra_targets the empty
+/// slot's 0x0 is a size and the frame is empty (refused).
 #[test]
 fn a_none_draw_buffer_is_configured_and_never_given_an_address() {
     let rig = Rig::new();
@@ -3982,8 +3981,9 @@ fn a_program_reading_a_texture_size_gets_the_bindings_size() {
 }
 
 /// What the job builder cannot take is refused by name before anything is
-/// recorded: an attachment of another size, one of a format with no TLB
-/// row (a surface number none names), and 4x of several attachments. A
+/// recorded: an attachment of a format with no TLB row (a surface number
+/// none names), and 4x of several attachments. Attachments of different
+/// sizes are drawn at their intersection (tests/es3_mrt4_sizes_v3d.rs). A
 /// colour clear the quad would do (scissored) is not among them any more:
 /// it is drawn (`a_scissored_clear_of_mixed_attachments_is_one_quad_of_every_class`).
 #[test]
@@ -3991,10 +3991,6 @@ fn attachments_the_job_builder_cannot_take_are_refused_by_name() {
     let rig = Rig::new();
     rig.init();
     let p = program_writing(0b11);
-    let mut d = mrt_draw(&rig, &p, 2);
-    d.targets[1].w = 32;
-    assert_eq!(draw(&d), -ENOTSUP);
-    assert_eq!(rig.logs_with("colour attachments of different sizes"), 1);
     let mut d = mrt_draw(&rig, &p, 2);
     d.targets[1].format = 99;
     assert_eq!(draw(&d), -EINVAL);
@@ -4534,9 +4530,6 @@ fn a_backend_gap_is_enotsup_and_counted() {
         assert_eq!(rig.logs_with(why), 1, "{why}: named");
     };
     let two = program_writing(0b11);
-    let mut d = mrt_draw(&rig, &two, 2);
-    d.targets[1].w = 32;
-    gap(&d, "colour attachments of different sizes");
     let mut d = rig.draw();
     (d.target_w, d.target_h) = (MAX_TARGET + 1, 16);
     gap(&d, "a target larger than the tile memory is sized for (4096x4096)");
