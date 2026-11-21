@@ -514,6 +514,61 @@ gate_t0=$SECONDS
 #   rgx-target      build/pvr-check/rgx-target
 #   v3d-mesa        build/v3d-check/mesa and build/v3d-check/tmp
 JOBS=${YAKOGL_CHECK_JOBS:-1}
+
+# The disk. A full walk filled a 193 GB host that had about 110 GB in use
+# (walk-fit, 2026-11: the walk needed more than the about 84 GB free). So the gate keeps
+# less (docs/ci.md 3.6):
+#   - cargo's incremental caches stay as the caller has them: the gate
+#     image's target directory is warm with main's incremental build, and the
+#     test-ok keys hash the test binaries' bytes, which CARGO_INCREMENTAL=0
+#     changes (every workspace crate rebuilt beside the old artefacts, every
+#     binary run again). A host short of room sets CARGO_INCREMENTAL=0 and
+#     removes <target>/debug/incremental itself;
+#   - a directory only some rows read goes when its last reader ends
+#     (prune_after_row, below; each call names that row): the artefact row's
+#     <target>/check-artefact, build/pvr-check/rgx-target after the km_check
+#     row, and each Zephyr image under build/zephyr-werror after the row that
+#     built it. YAKOGL_CHECK_PRUNE=0 keeps them (a warm rerun on a host with
+#     the room). Never pruned: the test-ok store and build/precompiled/*.rs
+#     (cache keys read them) and build/glmark2-host/shaders (later test rows
+#     read it);
+#   - a heavy row (its label starts with clippy, test or zephyr) starts only
+#     when the filesystems of the cargo target directory and of build/ each
+#     have YAKOGL_CHECK_MIN_FREE_GB (default 8) GiB free. Below that the row
+#     fails, naming the bytes free and needed: a full disk is a failure of
+#     the host, never a gap or a skip.
+PRUNE=${YAKOGL_CHECK_PRUNE:-1}
+MIN_FREE_GB=${YAKOGL_CHECK_MIN_FREE_GB:-8}
+[[ $MIN_FREE_GB =~ ^[0-9]+$ ]] || { echo "check.sh: YAKOGL_CHECK_MIN_FREE_GB '$MIN_FREE_GB' is not a count"; exit 2; }
+# disk_free_kb <path>: the free KiB of the filesystem that holds <path> (or
+# its nearest existing parent).
+disk_free_kb() {
+  local p
+  p=$(realpath -m "$1")
+  while [ ! -e "$p" ]; do p=$(dirname "$p"); done
+  df -Pk "$p" | awk 'NR == 2 { print $4 }'
+}
+# disk_check: 0 when every filesystem a heavy row writes has MIN_FREE_GB
+# free; otherwise it prints what is free and what is needed, and returns 1.
+disk_check() {
+  local p kb need=$((MIN_FREE_GB * 1024 * 1024))
+  for p in "${CARGO_TARGET_DIR:-target}" build; do
+    kb=$(disk_free_kb "$p")
+    [[ $kb =~ ^[0-9]+$ ]] || { echo "check.sh: df could not read the free space of $p"; return 1; }
+    if [ "$kb" -lt "$need" ]; then
+      echo "check.sh: not enough free disk: $(realpath -m "$p") has $((kb * 1024)) bytes free, this row needs $((need * 1024)) (YAKOGL_CHECK_MIN_FREE_GB=$MIN_FREE_GB GiB): the row was NOT run, and it fails. Free disk on the host (docs/ci.md 3.6)."
+      return 1
+    fi
+  done
+}
+# prune_after_row <path>...: from inside a row's command, the paths are
+# removed when the command has ended, whatever its verdict (run_row), and the
+# row's log says so. Only for a path no later row reads: the caller names
+# that last reader in a comment. With the pool, a path on a `uses` lane is
+# pruned by the lane's last row. Nothing with YAKOGL_CHECK_PRUNE=0.
+prune_after_row() {
+  [ "$PRUNE" = 0 ] || [ -z "${ROW_SEQ-}" ] || printf '%s\n' "$@" >> "$ROWS/$ROW_SEQ.prune"
+}
 [[ $JOBS =~ ^[1-9][0-9]*$ ]] || { echo "check.sh: --jobs/YAKOGL_CHECK_JOBS '$JOBS' is not a count"; exit 2; }
 
 # The compiler slots. Every compiler a row starts (rustc, clippy-driver, and
@@ -733,8 +788,12 @@ run_row() (
     : > "$ROWS/$n.done"
     exit 0
   fi
+  heavy=0
+  case "$(cat "$ROWS/$n.label")" in "clippy "* | "test "* | "zephyr "*) heavy=1 ;; esac
   if [ -e "$ROWS/$n.verdict" ]; then
     : # row_cached could not make the key: the verdict is written
+  elif [ "$heavy" -eq 1 ] && ! disk_check > "$ROWS/$n.out" 2>&1; then
+    echo fail > "$ROWS/$n.verdict"
   elif "$@" > "$ROWS/$n.out" 2>&1 3> "$ROWS/$n.notes"; then
     # clippy exits 0 even with warnings, so the warning count is what decides.
     #
@@ -754,6 +813,15 @@ run_row() (
     echo gap > "$ROWS/$n.verdict"
   else
     echo fail > "$ROWS/$n.verdict"
+  fi
+  # prune_after_row's paths, before n.done: a later row on the lane starts
+  # after them.
+  if [ -s "$ROWS/$n.prune" ]; then
+    while IFS= read -r p; do
+      [ -e "$p" ] || continue
+      kb=$(du -sk "$p" 2>/dev/null | cut -f1)
+      rm -rf -- "$p" && echo "prune  $p ($((${kb:-0} / 1024)) MiB): this row was its last reader" >> "$ROWS/$n.notes"
+    done < "$ROWS/$n.prune"
   fi
   [ -n "$key" ] && [ "$(cat "$ROWS/$n.verdict")" = ok ] && row_record "$n"
   echo $((SECONDS - t0)) > "$ROWS/$n.time"
@@ -1053,8 +1121,13 @@ test_env_key() {
     {
       rustc -vV
       echo "cc: $(cc --version 2>/dev/null | head -1)"
+      # MP2_QEMU's line is left out: no test binary runs that QEMU (only the
+      # "uboot-mp2 qemu" row, which has no key) and no test reads the name,
+      # so the entry's arrival (2026-11) kept every recorded key.
       tools/cts/deps-env.sh --check 2>&1 | while read -r st name marker; do
-        if [ -f "${marker-}" ]; then
+        if [ "${name-}" = MP2_QEMU ]; then
+          continue
+        elif [ -f "${marker-}" ]; then
           echo "$st $name $marker sha256=$(sha256sum < "$marker" | cut -c1-64)"
         else
           echo "$st $name ${marker-}"
@@ -1539,6 +1612,30 @@ if [ "${1-}" = "--keyed-row" ]; then
   step "keyed   $*" "$@"
   summary
 fi
+# The DK one-shot scripts in real U-Boot v2023.10 on QEMU (driver/tools/
+# uboot-mp2/qemu/run.sh). Optional: without qemu-system-aarch64 (MP2_QEMU,
+# which the layout's MP2_QEMU entry sets, else PATH, else the Zephyr SDK host
+# tools: run.sh's mp2_qemu_bin), an aarch64
+# cross compiler or a host tool it prints "run.sh: skip: <why>" and exits 0;
+# the row turns that into a gap (a skip is not a pass), and a run that did not
+# print "run.sh: N ok, 0 failed" fails. run_row reads the gap marker only
+# when the command fails, so the row returns 77 after writing it, as
+# v3d71_checks does (a return of 0 here counted the skip as ok).
+mp2_qemu_row() {
+  local out status
+  out=$(driver/tools/uboot-mp2/qemu/run.sh 2>&1)
+  status=$?
+  printf '%s\n' "$out"
+  [ "$status" -eq 0 ] || return "$status"
+  if printf '%s\n' "$out" | grep -q '^run.sh: skip:'; then
+    : > "$ROWS/$ROW_SEQ.gap"
+    return 77
+  fi
+  printf '%s\n' "$out" | grep -Eq '^run.sh: [0-9]+ ok, 0 failed' || {
+    echo "uboot-mp2 qemu: no 'run.sh: N ok, 0 failed' line"
+    return 1
+  }
+}
 # --pool-demo <dir> [nolanes]: rows that pass, warn, fail, a gap, and a
 # writer and a reader of one path, through the pool and the summary
 # (tools/check_pool_selftest.sh). `nolanes` leaves out their `uses` lines,
@@ -1562,6 +1659,24 @@ if [ "${1-}" = "--pool-demo" ]; then
   # YAKOGL_DEMO_ROW: one more row, a command of the caller's
   # (tools/check_pool_selftest.sh runs a probe of the jobserver in it).
   [ -z "${YAKOGL_DEMO_ROW-}" ] || step "demo    ${YAKOGL_DEMO_ROW_NAME:-extra}" sh -c "$YAKOGL_DEMO_ROW"
+  summary
+fi
+# --disk-demo <dir>: the disk rules above and the uboot-mp2 qemu row's skip,
+# through run_row and the summary (tools/check_pool_selftest.sh): a heavy
+# row (label "test ...") and a light one under YAKOGL_CHECK_MIN_FREE_GB, a
+# row that prunes <dir>/pruned and the row after it, which finds it gone (or,
+# with YAKOGL_CHECK_PRUNE=0, still there), and mp2_qemu_row (with MP2_QEMU
+# naming no QEMU, the caller's, it is a gap).
+if [ "${1-}" = "--disk-demo" ]; then
+  demo=${2:?usage: tools/check.sh --disk-demo <dir>}
+  step "test    heavy demo" true
+  step "demo    light" true
+  demo_prune() { mkdir -p "$demo/pruned" && : > "$demo/pruned/f" && prune_after_row "$demo/pruned"; }
+  uses w:demo-pruned
+  step "demo    prunes" demo_prune
+  uses r:demo-pruned
+  step "demo    after the prune" sh -c "if [ '$PRUNE' = 0 ]; then test -e '$demo/pruned/f'; else test ! -e '$demo/pruned'; fi"
+  step "demo    uboot-mp2 qemu" mp2_qemu_row
   summary
 fi
 
@@ -2750,6 +2865,10 @@ if command -v cc >/dev/null 2>&1; then
   # (fwinit-step7.diff). tools/pvr/km/README.md explains each.
   pvr_km_check() {
     local out d=build/pvr-check/km s a=build/pvr-check/rgx-target/debug/libyakogl_drivers.a
+    # build/pvr-check/rgx-target's last reader is this row ("run pvr
+    # km_check"): the rgxlayer_check row before it is the only other one, and
+    # their `uses w:rgx-target` keeps that order in the pool.
+    prune_after_row build/pvr-check/rgx-target
     mkdir -p "$d" || return 1
     cargo build -q -p yakogl-drivers --features pvr --target-dir build/pvr-check/rgx-target || return 1
     # shellcheck disable=SC2046  # the flag is one word
@@ -3863,7 +3982,8 @@ mesa_reference_symbols() {
 # are built in YAKOGL_CHECK_ARTEFACT_JOBS (default 4) target directories of
 # their own at once, <target>/check-artefact/<k>, each archive in the
 # directory of its place in the list modulo that count, so a directory
-# builds the same configurations every run and stays warm. Measured
+# builds the same configurations every run (and stays warm when
+# YAKOGL_CHECK_PRUNE=0; by default the row prunes them, the disk above). Measured
 # 2026-10-12 without a compiler cache: one archive 39 s cold; two at once in
 # two directories 51 s.
 # artefact_worker <k> <jobs> <dir> <out> <entry>...: the entries at k, k+jobs, ...
@@ -3914,6 +4034,10 @@ check_no_mesa_reference() {
   fi
   dir=$(cargo metadata --no-deps --format-version 1 |
     python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')/check-artefact || return 1
+  # Its last reader is this row ("no Mesa reference in the artefact"): no
+  # other row builds or reads under check-artefact, so it goes when the row
+  # ends (YAKOGL_CHECK_PRUNE=0 keeps the directories warm).
+  prune_after_row "$dir"
   out=$(mktemp "${TMPDIR:-/tmp}/check-artefact.XXXXXX") || return 1
   # No more workers than compiler slots: a worker past the first waits for a
   # token, and a serial run has one slot less in the FIFO than it has slots.
@@ -4127,26 +4251,8 @@ scope tools
 step "tools   mp2_uboot_console.py: typed one-shot and phase scan" python3 -I tools/mp2_uboot_console.py --self-test
 scope tools
 step "tools   uboot_env.py on the DK's environment layout" python3 -I tools/uboot_env_mp2_selftest.py
-# The DK one-shot scripts in real U-Boot v2023.10 on QEMU (driver/tools/
-# uboot-mp2/qemu/run.sh). Optional: without qemu-system-aarch64, an aarch64
-# cross compiler or a host tool it prints "run.sh: skip: <why>" and exits 0;
-# the row turns that into a gap (a skip is not a pass), and a run that did not
-# print "run.sh: N ok, 0 failed" fails.
-mp2_qemu_row() {
-  local out status
-  out=$(driver/tools/uboot-mp2/qemu/run.sh 2>&1)
-  status=$?
-  printf '%s\n' "$out"
-  [ "$status" -eq 0 ] || return "$status"
-  if printf '%s\n' "$out" | grep -q '^run.sh: skip:'; then
-    : > "$ROWS/$ROW_SEQ.gap"
-    return 0
-  fi
-  printf '%s\n' "$out" | grep -Eq '^run.sh: [0-9]+ ok, 0 failed' || {
-    echo "uboot-mp2 qemu: no 'run.sh: N ok, 0 failed' line"
-    return 1
-  }
-}
+# The DK one-shot scripts in real U-Boot v2023.10 on QEMU: mp2_qemu_row,
+# defined before the demos (--disk-demo runs its gap case).
 scope tools
 step "tools   uboot-mp2 qemu: DK one-shot scripts in U-Boot v2023.10 (skip is a gap)" mp2_qemu_row
 # The board lock every board runner takes (driver/tools/kexec-zephyr/
@@ -4372,6 +4478,12 @@ zephyr_werror_image() {
     *) src="$root/driver/samples/zephyr/$sample" ;;
   esac
   mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS") || return 1
+  # The image's last reader is the row that builds it: its checks after the
+  # build (the present check below, and zephyr_triangle_rust_image's,
+  # zephyr_precompiled_only_image's, zephyr_direct_images', the nanopc_t6 and
+  # stm32mp2 functions' nm, strings and .config reads) run inside that row,
+  # and no later row reads build/zephyr-werror. The build log ($dir.log) stays.
+  prune_after_row "$dir"
   mkdir -p build/zephyr-werror
   if ! (cd "$ZEPHYR_WS" && PATH="$ZEPHYR_WS/.venv/bin:$PATH" ZEPHYR_BASE="$ZEPHYR_WS/zephyr" \
     west build -p always -b "$board" -d "$root/$dir" "$src" -- \

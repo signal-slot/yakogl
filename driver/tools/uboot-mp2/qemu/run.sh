@@ -5,8 +5,10 @@
 # run.sh: run the DK one-shot scripts (../mp2-mmc.cmd, ../mp2-net.cmd) in
 # mainline U-Boot v2023.10 on QEMU's virt machine (README.md in this
 # directory). Optional: prints "run.sh: skip: <why>" and exits 0 when
-# qemu-system-aarch64 (PATH, or MP2_QEMU), an aarch64 cross compiler or a host
+# qemu-system-aarch64 (mp2_qemu_bin below), an aarch64 cross compiler or a host
 # tool is missing. The summary line is "run.sh: N ok, M failed".
+# `run.sh --which-qemu` prints the QEMU a run would use and exits 0, or exits 1
+# printing nothing (tools/setup-gate-host.sh --check asks it).
 #
 # Environment: MP2_QEMU (the QEMU binary), MP2_QEMU_MEM (default 2G: virt RAM
 # starts at 0x40000000, so 2 GiB holds the DK window 0xa0000000..0xb0000000),
@@ -18,8 +20,34 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 skip() { echo "run.sh: skip: $*"; exit 0; }
 
-qemu=${MP2_QEMU:-$(command -v qemu-system-aarch64 || true)}
-[ -n "$qemu" ] && [ -x "$qemu" ] || skip "qemu-system-aarch64 not on PATH (or set MP2_QEMU)"
+# The QEMU: MP2_QEMU when it is set and not empty (the only one then: a name that does not run
+# is a skip, never another QEMU), else qemu-system-aarch64 on PATH, else the
+# Zephyr SDK host tools' (sysroots/x86_64-pokysdk-linux/usr/bin/) in the places
+# build-uboot.sh's mp2_qemu_cross looks for the SDK: ZEPHYR_SDK_INSTALL_DIR,
+# $CONNECTED_DEPS_DIR/zephyr-sdk-*, and the dependency layout's zephyr-sdk-*
+# (tools/cts/deps-env.sh --layout; its MP2_QEMU entry installs them at
+# zephyr-sdk-hosttools-0.10, and deps-env.sh prints MP2_QEMU for it).
+mp2_qemu_bin() {
+	local d q layout
+	if [ -n "${MP2_QEMU:-}" ]; then
+		if [ -x "$MP2_QEMU" ]; then echo "$MP2_QEMU"; fi
+		return 0
+	fi
+	if command -v qemu-system-aarch64 > /dev/null; then command -v qemu-system-aarch64; return 0; fi
+	layout=$("$here/../../../../tools/cts/deps-env.sh" --layout 2> /dev/null || true)
+	for d in ${ZEPHYR_SDK_INSTALL_DIR:+"$ZEPHYR_SDK_INSTALL_DIR"} \
+		${CONNECTED_DEPS_DIR:+"$CONNECTED_DEPS_DIR"/zephyr-sdk-*} ${layout:+"$layout"/zephyr-sdk-*}; do
+		q=$d/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-aarch64
+		if [ -x "$q" ]; then echo "$q"; return 0; fi
+	done
+}
+qemu=$(mp2_qemu_bin)
+if [ "${1-}" = --which-qemu ]; then
+	[ -n "$qemu" ] || exit 1
+	echo "$qemu"
+	exit 0
+fi
+[ -n "$qemu" ] || skip "no qemu-system-aarch64: MP2_QEMU='${MP2_QEMU-}' (unset: PATH, then the Zephyr SDK host tools under ZEPHYR_SDK_INSTALL_DIR, \$CONNECTED_DEPS_DIR/zephyr-sdk-* or the layout's zephyr-sdk-*; tools/cts/deps-env.sh --build MP2_QEMU)"
 # shellcheck source=build-uboot.sh
 . "$here/build-uboot.sh"
 cross=$(mp2_qemu_cross)
@@ -36,7 +64,7 @@ uboot=$(bash "$here/build-uboot.sh") || rc=$?
 [ "$rc" -eq 0 ] || { echo "run.sh: build-uboot.sh failed ($rc)"; exit 1; }
 uboot=$(echo "$uboot" | tail -n 1)
 echo "run.sh: U-Boot $uboot"
-echo "run.sh: QEMU $("$qemu" --version | head -n 1)"
+echo "run.sh: QEMU $qemu: $("$qemu" --version | head -n 1)"
 
 run=$(mktemp -d "$cache/run.XXXXXX")
 cleanup() { if [ "${MP2_QEMU_KEEP:-}" != 1 ] && [ "$rc" -eq 0 ]; then rm -rf "$run"; fi; }

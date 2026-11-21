@@ -202,12 +202,15 @@ jobs:
         # one program of the Mesa build every runner already made pco_shc
         # from (the same tarball, patches and options; about a minute, once:
         # the runners were prepared before the entry existed, and a missing
-        # entry refuses the job below). Every other entry is a tree a host
+        # entry refuses the job below). So is MP2_QEMU, the Zephyr SDK host
+        # tools' QEMU of the "uboot-mp2 qemu" row: installed (about 15 s, no
+        # download) from the script in ZEPHYR_SDK_INSTALL_DIR, which every
+        # runner has. Every other entry is a tree a host
         # is prepared with, never built here. The LLVM directories go on
         # PATH first: that build runs clang and llvm-spirv.
         run: |
           for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && export PATH="$d:$PATH"; done
-          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4
+          tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE LZ4 MP2_QEMU
           tools/cts/deps-env.sh --check
           tools/cts/deps-env.sh >> "$GITHUB_ENV"
           {

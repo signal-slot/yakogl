@@ -73,6 +73,10 @@
 # looked for in check.sh's order, only when PCO_SHC names an executable (the
 # row's own condition; PCO_SHC itself is one of the workspaces above, out of
 # scope here), and --install only prints the build that makes it.
+# --check also reports qemu-system-aarch64, as driver/tools/uboot-mp2/qemu/
+# run.sh finds it (check.sh's "uboot-mp2 qemu" row is a gap without it): the
+# layout's MP2_QEMU entry provides it (deps-env.sh --build MP2_QEMU, which
+# --install's --build-missing makes), not a distribution package.
 #
 # --install also makes the dependency entries (the gate's workspaces
 # included) and prints the gate's environment:
@@ -325,6 +329,22 @@ check_dtc() {
     return
   }
   line ok dtc "${out%%$'\n'*}"
+}
+
+# qemu-system-aarch64: tools/check.sh's "uboot-mp2 qemu" row runs the DK's
+# one-shot scripts in U-Boot on it, and is a gap without it. Looked for by
+# run.sh itself (--which-qemu), so in its order: $MP2_QEMU when set (the
+# layout's MP2_QEMU entry, which deps-env.sh prints), else PATH, else the
+# Zephyr SDK host tools under ZEPHYR_SDK_INSTALL_DIR,
+# $CONNECTED_DEPS_DIR/zephyr-sdk-* or the layout's zephyr-sdk-*.
+check_qemu() {
+  local q out
+  q=$("$(dirname "$0")/../driver/tools/uboot-mp2/qemu/run.sh" --which-qemu 2>/dev/null) &&
+    out=$("$q" --version 2>&1) || {
+    line missing qemu-system-aarch64 "MP2_QEMU='${MP2_QEMU-}', else PATH, else the Zephyr SDK host tools: none runs (tools/cts/deps-env.sh --build MP2_QEMU): the uboot-mp2 qemu row would be a gap"
+    return
+  }
+  line ok qemu-system-aarch64 "$q: ${out%%$'\n'*}"
 }
 
 # aarch64 C compiler: tools/v3d/check71.d/xbuild71.sh cross-compiles the v3d71
@@ -586,6 +606,7 @@ run_checks() {
   check_glslang
   check_lz4
   check_dtc
+  check_qemu
   check_xcc
   check_pkgconfig
   check_mali_csffw
@@ -610,10 +631,18 @@ run() {
 
 # apt: the packages tools/check.sh needs, plus (below) the packages of every
 # entry of tools/cts/deps.toml, so an entry's packages reach this script
-# without a second edit.
-apt_packages=(clang libclang-dev python3-yaml glslang-tools pkg-config libexpat1-dev zlib1g-dev)
+# without a second edit. libssl-dev, bison, flex, fdisk and e2fsprogs are the
+# "uboot-mp2 qemu" row's: its U-Boot host build (driver/tools/uboot-mp2/qemu/
+# README.md: the tools link OpenSSL's libcrypto, kconfig and dtc need bison
+# and flex) and its SD image (sfdisk, mke2fs -d), which the dependency layout
+# does not carry. Its QEMU is not here: the layout's MP2_QEMU entry is (the
+# Zephyr SDK host tools, with their own libraries and option ROMs), and its
+# cross compiler is ZEPHYR_SDK_INSTALL_DIR's.
+apt_packages=(clang libclang-dev python3-yaml glslang-tools pkg-config libexpat1-dev zlib1g-dev
+  libssl-dev bison flex fdisk e2fsprogs)
 # Gentoo-like: the same tools as portage categories.
-emerge_packages=(sys-devel/clang sys-libs/clang dev-python/pyyaml virtual/pkgconfig dev-libs/expat sys-libs/zlib media-libs/glslang)
+emerge_packages=(sys-devel/clang sys-libs/clang dev-python/pyyaml virtual/pkgconfig dev-libs/expat sys-libs/zlib media-libs/glslang
+  dev-libs/openssl sys-devel/bison sys-devel/flex sys-apps/util-linux sys-fs/e2fsprogs)
 
 # add_dep_packages <array name> <family>: append deps.toml's packages of the
 # family to the array, each once.
@@ -661,12 +690,20 @@ install_distro() {
       return 0
     fi
     if sudo -n true 2>/dev/null; then
+      # The package lists first, only when something is to be installed: an
+      # image's lists are as old as the image, and a package updated since
+      # (libssl-dev gets security updates) is a 404 from them. A list that
+      # fails to update is not the end: the install says whether its
+      # package was there. Both wait for a dpkg lock a fresh machine's
+      # unattended upgrades hold, and nothing asks a question.
+      run sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 update -q ||
+        echo "apt-get update failed: installing from the lists as they are"
       # shellcheck disable=SC2086 # the names are one per line, no spaces
-      run sudo -n apt-get install -y $missing && return 0
+      run sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=600 install -y $missing && return 0
       return 1
     fi
     echo "no passwordless sudo here; owner command:"
-    echo "  sudo apt-get install -y $(printf '%s\n' $missing | paste -sd' ')"
+    echo "  sudo apt-get update && sudo apt-get install -y $(printf '%s\n' $missing | paste -sd' ')"
     return 1
   fi
   if command -v emerge >/dev/null 2>&1 || [ -d /var/db/portage ]; then
@@ -678,7 +715,8 @@ install_distro() {
     return 1
   fi
   echo "no apt-get or emerge found: install clang, libclang, PyYAML, glslang,"
-  echo "pkg-config, expat and zlib with this distribution's package manager."
+  echo "pkg-config, expat, zlib, the OpenSSL headers, bison, flex, sfdisk and"
+  echo "mke2fs with this distribution's package manager."
   return 1
 }
 

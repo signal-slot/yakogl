@@ -55,9 +55,10 @@
 #
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
-# MALI_CSFFW (one pinned file), LZ4 (one small program) and DEQP_GLES3_TEST_DIR
-# (one directory at a pinned commit), fetched by .github/workflows/gate.yml
-# when a runner lacks them (their notes).
+# MALI_CSFFW (one pinned file), LZ4 (one small program), DEQP_GLES3_TEST_DIR
+# (one directory at a pinned commit) and MP2_QEMU (installed from a script the
+# SDK entry already holds), fetched by .github/workflows/gate.yml when a
+# runner lacks them (their notes).
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -315,6 +316,25 @@ mv "$DEPS/mali-csffw/mali_csffw.bin.part" "$DEPS/mali-csffw/mali_csffw.bin"
 [[dep.inputs]]
 url = "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/930ef9046e3848df688d98b7d5e68154b031dc66/arm/mali/arch10.8/mali_csffw.bin"
 sha256 = "a27847ea11f8efb3136340c3ba8aab413ae25145eeb4a7f64ff5edd829a2405b"
+
+[[dep]]
+name = "MP2_QEMU"
+path = "zephyr-sdk-hosttools-0.10/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-aarch64"
+marker = "zephyr-sdk-hosttools-0.10/yakogl-installed"
+requires = ["ZEPHYR_SDK_INSTALL_DIR"]
+note = "the qemu-system-aarch64 (QEMU 10.0.2) of the Zephyr SDK host tools 0.10, which tools/check.sh's \"uboot-mp2 qemu\" row runs the DK's one-shot scripts in U-Boot on (driver/tools/uboot-mp2/qemu/README.md, QEMU); without it that row is a gap. Installed from the standalone script the SDK 1.0.1 minimal bundle carries (ZEPHYR_SDK_INSTALL_DIR/hosttools/, from the tarball pinned there), so no download of its own; it brings its own loader, libraries and option ROMs (efi-e1000.rom). The installer relocates the binaries to the directory it installs into, so it installs in place, not in a .part directory: the marker is written after the QEMU ran, and a failed install removes the directory. The gate workflow builds this entry when a runner lacks it (.github/workflows/gate.yml)"
+build = '''
+script="$DEPS/zephyr-sdk-1.0.1/hosttools/zephyr-sdk-x86_64-hosttools-standalone-0.10.sh"
+[ -f "$script" ] || { echo "MP2_QEMU: no $script (the Zephyr SDK 1.0.1 minimal bundle carries it: deps-env.sh --build ZEPHYR_SDK_INSTALL_DIR)" >&2; exit 1; }
+dir="$DEPS/zephyr-sdk-hosttools-0.10"
+rm -rf "$dir"
+trap 'rc=$?; [ "$rc" -eq 0 ] || rm -rf "$dir"' EXIT
+bash "$script" -y -d "$dir" > /dev/null
+"$dir/sysroots/x86_64-pokysdk-linux/usr/bin/qemu-system-aarch64" --version | head -n 1
+: > "$dir/yakogl-installed"
+'''
+packages.apt = ["python3", "file", "xz-utils"]
+packages.portage = ["app-arch/xz-utils", "sys-apps/file"]
 
 # With a board.
 

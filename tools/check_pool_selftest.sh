@@ -16,7 +16,9 @@
 # jobserver" in the shared target directory, where every later build of the
 # unit replays it), and a diagnostic of that kind that cargo stored earlier is
 # removed before the rows run -- tested on the file a real cargo wrote, and the
-# live case stays red (a probe whose jobserver cannot be opened).
+# live case stays red (a probe whose jobserver cannot be opened). And the
+# disk (--disk-demo): the free-disk check of a heavy row, the prune after a
+# row, and the uboot-mp2 qemu row's skip counted as a gap.
 set -u
 # grep, sort and the tools the rows call print localized messages: compare C.
 export LC_ALL=C LANG=C LANGUAGE=C
@@ -196,7 +198,31 @@ exec 6>&-
 out=$(TMPDIR="$abs/tmp" probe 'true')
 checks=$((checks + 1))
 [ ! -d "$dir/tmp/yakogl-check-js.999999999.held" ] || { echo "FAIL sweep: a directory with a free lock was not removed"; fails=$((fails + 1)); }
-PLANNED=32
+# The disk (check.sh's --disk-demo): a heavy row on a disk below
+# YAKOGL_CHECK_MIN_FREE_GB fails, naming the bytes free and needed, and a light
+# row still runs; a pruned directory is gone for the row after its last reader
+# and stays with YAKOGL_CHECK_PRUNE=0; the uboot-mp2 qemu row's skip (no QEMU)
+# is a gap, never ok. With one job and with four.
+disk() {
+  mkdir -p "$dir/disk"
+  env -u YAKOGL_CHECK_JOBS -u MAKEFLAGS -u CARGO_MAKEFLAGS MP2_QEMU="$abs/no-qemu" YAKOGL_CHECK_MEM_PER_COMPILER_MB=1 \
+    "$@" tools/check.sh --jobs "$jobs" --disk-demo "$dir/disk" 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
+}
+for jobs in 1 4; do
+  out=$(disk YAKOGL_CHECK_MIN_FREE_GB=0)
+  expect "disk, jobs $jobs: a heavy row runs when the check is off" '^ok    test    heavy demo' "$out"
+  expect "disk, jobs $jobs: the prune is in the row's log" "^prune  $dir/disk/pruned \([0-9]+ MiB\): this row was its last reader" "$out"
+  expect "disk, jobs $jobs: the row after the prune finds it gone" '^ok    demo    after the prune' "$out"
+  expect "disk, jobs $jobs: the uboot-mp2 qemu skip is a gap" '^gap   demo    uboot-mp2 qemu' "$out"
+  expect "disk, jobs $jobs: the counts" '^check.sh: 4 ok, 0 failed, 1 gap\(s\)' "$out"
+  out=$(disk YAKOGL_CHECK_MIN_FREE_GB=100000 YAKOGL_CHECK_PRUNE=0)
+  expect "disk, jobs $jobs: a heavy row below the threshold fails" '^FAIL  test    heavy demo' "$out"
+  expect "disk, jobs $jobs: it names the bytes free and needed" '^check.sh: not enough free disk: .* has [0-9]+ bytes free, this row needs 107374182400000 ' "$out"
+  expect "disk, jobs $jobs: a light row still runs" '^ok    demo    light' "$out"
+  expect "disk, jobs $jobs: YAKOGL_CHECK_PRUNE=0 keeps the directory" '^ok    demo    after the prune' "$out"
+  expect "disk, jobs $jobs: the counts below the threshold" '^check.sh: 3 ok, 1 failed, 1 gap\(s\)' "$out"
+done
+PLANNED=52
 echo "check_pool_selftest: $checks checks run (planned $PLANNED), $fails failed"
 [ "$checks" -eq "$PLANNED" ] || { echo "FAIL the planned count $PLANNED is not the count run $checks"; fails=$((fails + 1)); }
 [ "$fails" -eq 0 ]

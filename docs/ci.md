@@ -482,6 +482,58 @@ runners that does not allow public repositories. `gate.yml` uses no
 `ubuntu-latest` on pushes to main and by dispatch only, so no fork reaches
 it.
 
+### 3.6 The disk (2026-11-20)
+
+A full walk filled a 193 GB host that had about 110 GB in use (plan #344's
+walk-fit: the walk needed more than the about 84 GB free). `tools/check.sh` now keeps
+less on disk:
+
+- `CARGO_INCREMENTAL` is left as the caller has it. The gate image's
+  target directory is warm with main's incremental build, and a test
+  binary's "passed on main" key is the sha256 of its bytes, which
+  `CARGO_INCREMENTAL=0` changes: a run that turned it off rebuilt every
+  workspace crate beside the old artefacts and ran every binary again (an
+  earlier version of this change did, and its pull request's gate went
+  red). A host short of room that does not keep a warm target directory
+  runs `CARGO_INCREMENTAL=0 tools/check.sh` after removing
+  `<target>/debug/incremental` (no row reads it then).
+- A directory only some rows read goes when its last reader ends
+  (`prune_after_row`; each call names that row): the artefact row's
+  `<target>/check-artefact` (four release target directories), after the
+  "no Mesa reference in the artefact" row; `build/pvr-check/rgx-target`
+  after the "run pvr km_check" row; each Zephyr image under
+  `build/zephyr-werror/<image>` after the row that built it (its `.log`
+  stays). The row's log prints a `prune` line with the size. Never pruned:
+  the test-ok store and `build/precompiled/*.rs` (cache keys read them),
+  `build/glmark2-host/shaders` (later test rows read it).
+  `YAKOGL_CHECK_PRUNE=0` keeps them all, for a warm rerun on a host with
+  the room: the artefact row then starts warm, as before.
+- A heavy row (its label starts with `clippy`, `test` or `zephyr`) starts
+  only when the filesystems of the cargo target directory
+  (`CARGO_TARGET_DIR`, else `target`) and of `build/` each have
+  `YAKOGL_CHECK_MIN_FREE_GB` GiB free (default 8; 0 turns the check off).
+  Below that the row fails with `check.sh: not enough free disk: <path> has
+  N bytes free, this row needs M`: a full disk is the host's failure, never
+  a gap or a skip.
+
+`tools/check_pool_selftest.sh` pins the three through `check.sh
+--disk-demo`, and with them the "uboot-mp2 qemu" row's skip: without
+`qemu-system-aarch64` that row is a gap. It was counted ok until 2026-11
+(its function returned 0 after writing the gap marker, and `run_row` reads
+the marker only when the command fails). The QEMU comes from the
+dependency layout: its `MP2_QEMU` entry (`tools/cts/deps.toml`) installs
+the Zephyr SDK 0.10 host tools from the script `ZEPHYR_SDK_INSTALL_DIR`
+already holds, `deps-env.sh` exports `MP2_QEMU`, and `gate.yml` builds the
+entry on a runner that lacks it. `run.sh` looks at `$MP2_QEMU`, else
+`PATH`, else the SDK host tools under `ZEPHYR_SDK_INSTALL_DIR`,
+`$CONNECTED_DEPS_DIR/zephyr-sdk-*` or the layout's `zephyr-sdk-*`;
+`tools/setup-gate-host.sh --check` asks `run.sh --which-qemu`, so it reports
+the same QEMU. The entry's `--check` line is left out of the test binaries'
+environment key (no test runs that QEMU), so its arrival kept every key
+recorded on main. `--install-packages` carries only what the row needs
+that the layout cannot give: the U-Boot host build's OpenSSL headers,
+bison and flex, and sfdisk and mke2fs for its SD image.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;

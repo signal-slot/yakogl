@@ -32,8 +32,14 @@ U-Boot (a few minutes); later runs take about a minute.
 - QEMU: any `qemu-system-aarch64` with `virt`, `sdhci-pci`, `sd-card`,
   `e1000` and user-mode networking (slirp). Tested with 10.0.2 from the Zephyr
   SDK host tools (`zephyr-sdk-x86_64-hosttools-standalone-0.10.sh -y -d DIR`;
-  the binary is `DIR/sysroots/x86_64-pokysdk-linux/usr/bin/`): put its
-  directory on `PATH` or set `MP2_QEMU`.
+  the binary is `DIR/sysroots/x86_64-pokysdk-linux/usr/bin/`). `run.sh`
+  takes `MP2_QEMU` when it is set (and only it), else `qemu-system-aarch64`
+  on `PATH`, else that binary under `ZEPHYR_SDK_INSTALL_DIR`,
+  `$CONNECTED_DEPS_DIR/zephyr-sdk-*` or the dependency layout's
+  `zephyr-sdk-*`. The layout's `MP2_QEMU` entry (`tools/cts/deps-env.sh
+  --build MP2_QEMU`) installs them at `zephyr-sdk-hosttools-0.10` from the
+  script the SDK 1.0.1 bundle carries, and `deps-env.sh` prints `MP2_QEMU`
+  for it. `run.sh --which-qemu` prints the one a run would use.
 - Cross compiler: `CROSS_COMPILE`, else the first of `aarch64-linux-gnu-`,
   `aarch64-none-elf-` on `PATH`, else the Zephyr SDK's `aarch64-zephyr-elf-`
   under `ZEPHYR_SDK_INSTALL_DIR` or `$CONNECTED_DEPS_DIR/zephyr-sdk-*`. The
