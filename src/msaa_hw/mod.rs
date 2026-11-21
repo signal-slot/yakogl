@@ -9,6 +9,9 @@
 //! (docs/notes/es3-msaa-renderbuffers.md (c), (f), (f5)). Nothing calls it yet.
 //! `gc` is the GC7000UL's (i.MX8MP, `src/vivante`): scratch geometry, RS
 //! resolve words and the measured arm-19 state ((c3), (f3)).
+//! `pvr` is the PowerVR's (AM62P, `src/pvr`): the ISP 4x mode, tiles in
+//! flight, the PBE downscale resolve and the sample-store geometry ((c1), (f2)).
 
 pub mod gc;
 pub mod mali;
+pub mod pvr;
