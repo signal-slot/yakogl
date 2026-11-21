@@ -55,7 +55,8 @@ pub type Req = (u8, u8, Vec<u32>);
 pub const P: u8 = scmi::PROTO_POWER;
 pub const F: u8 = scmi::PROTO_PERF;
 pub const C: u8 = scmi::PROTO_CLOCK;
-pub const B: u8 = super::bbm::PROTO_BBM;
+pub const B: u8 = scmi::PROTO_BASE;
+pub const BBM: u8 = super::bbm::PROTO_BBM;
 
 pub fn req(p: u8, m: u8, w: &[u32]) -> Req {
     (p, m, w.to_vec())
@@ -224,9 +225,9 @@ impl Sm {
             (P, scmi::PROTOCOL_VERSION) => (OK, vec![0x30001]),
             (F, scmi::PROTOCOL_VERSION) => (OK, vec![0x40000]),
             (C, scmi::PROTOCOL_VERSION) => (OK, vec![0x30000]),
-            (B, scmi::PROTOCOL_VERSION) => (OK, vec![0x10000]),
-            (B, scmi::PROTOCOL_ATTRIBUTES) => (OK, vec![self.gpr.len() as u32]),
-            (B, super::bbm::BBM_GPR_SET) => {
+            (BBM, scmi::PROTOCOL_VERSION) => (OK, vec![0x10000]),
+            (BBM, scmi::PROTOCOL_ATTRIBUTES) => (OK, vec![self.gpr.len() as u32]),
+            (BBM, super::bbm::BBM_GPR_SET) => {
                 if w.len() < 2 {
                     return (scmi::STATUS_PROTOCOL_ERROR, vec![]);
                 }
@@ -239,7 +240,7 @@ impl Sm {
                 self.gpr[w[0] as usize] = w[1];
                 (OK, vec![])
             }
-            (B, super::bbm::BBM_GPR_GET) => {
+            (BBM, super::bbm::BBM_GPR_GET) => {
                 if w.is_empty() {
                     return (scmi::STATUS_PROTOCOL_ERROR, vec![]);
                 }
@@ -349,9 +350,51 @@ impl Sm {
                 Some(&p) => (OK, vec![p]),
                 None => (scmi::STATUS_NOT_SUPPORTED, vec![]),
             },
+            // The base protocol's discovery, for the survey (`super::survey`):
+            // version 2.1, the NXP SM's vendor and the AP-NS agent (2); the
+            // protocol list is the three this mock serves, two to a reply,
+            // so the survey asks again with a skip.
+            (B, scmi::PROTOCOL_VERSION) => (OK, vec![0x20001]),
+            (B, scmi::PROTOCOL_ATTRIBUTES) => (OK, vec![3 | 6 << 8]),
+            (B, scmi::BASE_DISCOVER_VENDOR) => (OK, name16(b"NXP")),
+            (B, 0x7) if w[0] == 0xffff_ffff => {
+                let mut v = vec![2];
+                v.extend(name16(b"AP-NS"));
+                (OK, v)
+            }
+            (B, 0x6) => {
+                let all = [P, F, C];
+                let rest = &all[(w[0] as usize).min(all.len())..];
+                let k = rest.len().min(2);
+                let mut packed = 0u32;
+                for (i, p) in rest[..k].iter().enumerate() {
+                    packed |= u32::from(*p) << (8 * i);
+                }
+                (OK, if k == 0 { vec![0] } else { vec![k as u32, packed] })
+            }
+            // CLOCK_GET_PERMISSIONS: state from SET, parent and rate from
+            // EXCLUSIVE (the mock's reading of the handlers' checks above).
+            (C, 0xf) => {
+                let p = Self::perm(&self.clk_perm, w[0]);
+                let mut v = 0u32;
+                if p >= PERM_SET {
+                    v |= 1 << 31;
+                }
+                if p >= PERM_EXCLUSIVE {
+                    v |= 1 << 30 | 1 << 29;
+                }
+                (OK, vec![v])
+            }
             _ => (scmi::STATUS_NOT_SUPPORTED, vec![]),
         }
     }
+}
+
+/// A 16-byte SCMI name as four words, NUL-padded.
+fn name16(s: &[u8]) -> Vec<u32> {
+    let mut b = [0u8; 16];
+    b[..s.len()].copy_from_slice(s);
+    (0..4).map(|i| u32::from_le_bytes([b[4 * i], b[4 * i + 1], b[4 * i + 2], b[4 * i + 3]])).collect()
 }
 
 impl Transport for Sm {
@@ -383,6 +426,7 @@ pub fn writes(log: &[Req]) -> Vec<Req> {
         (C, scmi::CLOCK_CONFIG_SET),
         (C, scmi::CLOCK_RATE_SET),
         (C, CLOCK_PARENT_SET),
+        (BBM, super::bbm::BBM_GPR_SET),
     ];
     log.iter().filter(|r| set.contains(&(r.0, r.1))).cloned().collect()
 }
