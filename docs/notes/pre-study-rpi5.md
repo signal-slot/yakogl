@@ -201,6 +201,9 @@ register layout moves. 4.2 keeps format and mip count in `ICFG` and `IOA`
 shift 16, `IFORMAT` shift 23), and can write raster output, which 4.2 cannot
 (`MESA/src/broadcom/common/v3d_tfu.h`; `v3dx_tfu.c:58-60`, `:165-202`). Our
 `driver/src/v3d/v3d_regs.h` has `ICFG`, `IOA`, `IOS` but no `IOC`.
+Board answer (`rpi5_tfu`, build `5857cc88`, 2026-11-21): the 7.1.10 TFU runs a
+7-level mip-chain job with `IOC` `0x00086061` (0 px wrong, done by `TFUC`),
+though `HUB_IDENT1` `0x00081117` has bit 17 (WITH_TFU) clear.
 
 CSD (compute): 7.1 has no `PROPAGATE_NANS` bit in `cfg[5]`, and from 7.1.6 the
 batch count is not minus one (`v3dx_draw.c:1519-1535`). We use no compute for

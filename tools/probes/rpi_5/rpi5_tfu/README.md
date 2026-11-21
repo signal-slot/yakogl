@@ -144,6 +144,26 @@ That session records the verdict here, in `tools/cts/RESULTS.md`'s Pi 5
 section, and in `docs/notes/pre-study-rpi5.md` where it answers a question
 there.
 
+## On the board (2026-11-21)
+
+Built from origin/main `5857cc88` (image sha256 `0e963ee6`), run once with
+`tools/board.sh pi5 run`: `rc=0 verdict=done boot_verdict=complete
+result=legacy:v3d_tfu_pass resets=0 back_after=222s`; `get_throttled`
+`0x0` before and after; the stock boot files were restored (cleanup line in
+`meta.txt`).
+
+```
+v3d_tfu: PASS (levels 0-6 checked, 0 px wrong: level 0 exact, levels 1-6 (1365 px) within 2 of the 2x2 box (max 0); done by TFUC in 10 us; IOC 0x00086061; HUB_IDENT1 0x00081117 bit 17 0)
+```
+
+Raw identity words: `HUB_IDENT0..3 0x42554856 0x00081117 0x00001900
+0x00020a10`, `CTL_IDENT0..2 0x07443356 0x81001431 0xc0078101`,
+`MMU_DEBUG_INFO 0x20804664`. Job: `ICFG 0x00040000 IIA 0x00100000 IIS
+0x00000040 IOC 0x00086061 IOA 0x00106000 IOS 0x00400040`, `TFUC` set
+(`CVTCT 0 -> 1`). So the TFU works on 7.1.10 although its identity says
+"TFU: no"; levels 1-6 matched the box filter exactly (max 0). Level 0
+exact, 0 of 10816 bytes outside the levels changed.
+
 ## Limits
 
 - One format (RGBA8) and one size (64x64), from a raster source. Mesa's
