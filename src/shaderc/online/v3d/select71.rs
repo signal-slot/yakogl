@@ -12,7 +12,7 @@
 //!
 //! Operation for operation, a [`VOp`] becomes the [`Op71`] with the same Mesa
 //! enum value ([`add_op71`], [`mul_op71`]) and the same meaning, except in
-//! the note's five places:
+//! the note's five places and one more:
 //!
 //! 1. `Operand::R5`, `ldvary`'s C term, becomes [`Src71::LdvaryC`]: at 7.1 it
 //!    lands in rf0 (`emit_fragment_varying`, nir_to_vir.c:1054-1057).
@@ -30,6 +30,18 @@
 //! 5. An operation reading two small immediates reads the second from a new
 //!    `ldunif` of its value: one small immediate per instruction at 7.1
 //!    (qpu_validate.c:204-218).
+//! 6. (Not in the note.) A clamp to [0, 1] that 4.2 builds as
+//!    `fmax(x, 0.0)` then `fmin(t, 1.0)` (or the other way round), with `t`
+//!    read only there, becomes one `fmov x.sat`: Mesa's `fsat`, the FMOV
+//!    with V3D_QPU_UNPACK_SAT at 7.1 (nir_to_vir.c:1863-1895; NIR folds the
+//!    pair to `fsat` first, nir_opt_algebraic.py). One operation on either
+//!    unit for two on the add unit. Any other `fmax(x, 0.0)` becomes
+//!    `fmov x.max0` (Mesa's `fclamp_pos`, V3D_QPU_UNPACK_MAX0, same lines):
+//!    either unit, and no small immediate to keep a load or THRSW signal out
+//!    of its word (Mesa's 7.1 output over tools/v3d/qpu_corpus_71.txt has
+//!    no FMAX with the immediate 0 and 61 distinct words with `.max0`). The
+//!    forms differ only for a NaN `x` (GLSL's `clamp` and `max` of a NaN are
+//!    undefined) and in the sign of a zero.
 //!
 //! The SFU operations (select.rs [`is_sfu`]: an add operation with a register
 //! destination, already so at 4.2) become [`Op71::Sfu`]. A 4.2 form with no
@@ -265,10 +277,93 @@ fn viewport_pairs<'a>(ops: &[VOp], vregs: u32, ar: &Arena<'a>) -> Result<Viewpor
     Ok(Viewport { drop, ftoin_of })
 }
 
+/// Rule 6's match: the indices of each clamp's first half to drop, and for
+/// each second half the register it then saturates (`fmov x.sat`).
+/// `u32::MAX`: not part of a clamp.
+struct Sat<'a> {
+    drop: &'a mut [bool],
+    sat_of: &'a mut [u32],
+}
+
+/// The small-immediate operand's value and the register operand of a
+/// two-operand `op`, either way round.
+fn imm_and_reg(a: Operand, b: Operand) -> Option<(u32, V)> {
+    match (a, b) {
+        (Operand::SmallImm(i), Operand::V(v)) | (Operand::V(v), Operand::SmallImm(i)) => Some((small_imm_value(i)?, v)),
+        _ => None,
+    }
+}
+
+/// Rule 6: `fmin(fmax(x, 0.0), 1.0)` and `fmax(fmin(x, 1.0), 0.0)`, the
+/// clamp to [0, 1] that 4.2 builds from two add operations, where the inner
+/// result is read only by the outer one, nothing writes `x` between them
+/// and no control flow separates them.
+fn sat_pairs<'a>(ops: &[VOp], vregs: u32, ar: &Arena<'a>) -> Result<Sat<'a>, Select71Error> {
+    const ZERO: u32 = 0;
+    const ONE: u32 = 0x3f80_0000;
+    let n = vregs as usize;
+    let def_at = ar.alloc_filled(n, u32::MAX)?;
+    let defs = ar.alloc_filled(n, 0u32)?;
+    let uses = ar.alloc_filled(n, 0u32)?;
+    for (i, op) in ops.iter().enumerate() {
+        if let Some(V(v)) = op.def() {
+            if (v as usize) < n {
+                def_at[v as usize] = i as u32;
+                defs[v as usize] += 1;
+            }
+        }
+        for o in op.uses() {
+            if let Some(V(v)) = o.vreg() {
+                if (v as usize) < n {
+                    uses[v as usize] += 1;
+                }
+            }
+        }
+    }
+    let drop = ar.alloc_filled(ops.len(), false)?;
+    let sat_of = ar.alloc_filled(ops.len(), u32::MAX)?;
+    for (i, op) in ops.iter().enumerate() {
+        let VOp::Add { op: outer, dst: Dst::V(_), a, b } = *op else { continue };
+        let (bound, inner, inner_bound) = match outer {
+            AddOp::Fmin => (ONE, AddOp::Fmax, ZERO),
+            AddOp::Fmax => (ZERO, AddOp::Fmin, ONE),
+            _ => continue,
+        };
+        let Some((k, V(t))) = imm_and_reg(a, b) else { continue };
+        let t = t as usize;
+        if k != bound || t >= n || defs[t] != 1 || uses[t] != 1 {
+            continue;
+        }
+        let j = def_at[t] as usize;
+        if j >= i || drop[j] || sat_of[j] != u32::MAX {
+            continue;
+        }
+        let VOp::Add { op: o, dst: Dst::V(_), a: ia, b: ib } = ops[j] else { continue };
+        let Some((k2, x)) = imm_and_reg(ia, ib) else { continue };
+        if o != inner || k2 != inner_bound {
+            continue;
+        }
+        /* x is read at i now, not at j: no write of it, and no control
+         * flow, in between (CondMov and Copy write their dst) */
+        let writes_x = |op: &VOp| {
+            op.def() == Some(x)
+                || matches!(*op, VOp::CondMov { dst, .. } | VOp::Copy { dst, .. } if dst == x)
+                || matches!(op, VOp::LoopHead | VOp::BackEdge { .. } | VOp::FwdBranch { .. } | VOp::Label(_))
+        };
+        if ops[j + 1..i].iter().any(writes_x) {
+            continue;
+        }
+        drop[j] = true;
+        sat_of[i] = x.0;
+    }
+    Ok(Sat { drop, sat_of })
+}
+
 /// Lower `sel`'s operations to 7.1 ones.
 pub fn select71<'a>(sel: &Selected<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
     let ops = sel.ops;
     let vp = if sel.fragment { None } else { Some(viewport_pairs(ops, sel.vregs, a)?) };
+    let sat = sat_pairs(ops, sel.vregs, a)?;
     /* Rule 4: the closing vpmwt. */
     let end = match ops.last() {
         Some(VOp::Add { op: AddOp::Vpmwt, .. }) if !sel.fragment => ops.len() - 1,
@@ -287,6 +382,23 @@ pub fn select71<'a>(sel: &Selected<'_>, a: &Arena<'a>) -> Result<Selected71<'a>,
                     _ => Dst::None,
                 })?;
                 out.push(a, Op71::Add { op: AddOp71::Ftoin, dst, a: Src71::V(V(vp.ftoin_of[i])), b: Src71::None })?;
+                continue;
+            }
+        }
+        /* Rule 6: the clamp to [0, 1] */
+        if sat.drop[i] {
+            continue;
+        }
+        if sat.sat_of[i] != u32::MAX {
+            let VOp::Add { dst, .. } = *op else { unreachable!("sat_pairs matches add operations") };
+            let x = Src71::Unpacked(V(sat.sat_of[i]), Unpack71::Sat);
+            out.push(a, Op71::Mul { op: MulOp71::Fmov, dst: dst71(dst)?, a: x, b: Src71::None })?;
+            continue;
+        }
+        if let VOp::Add { op: AddOp::Fmax, dst: dst @ Dst::V(_), a: x, b: y } = *op {
+            if let Some((0, v)) = imm_and_reg(x, y) {
+                let x = Src71::Unpacked(v, Unpack71::Max0);
+                out.push(a, Op71::Add { op: AddOp71::Fmov, dst: dst71(dst)?, a: x, b: Src71::None })?;
                 continue;
             }
         }
@@ -708,7 +820,22 @@ fn region_edges(
 /// themselves. chain71 keeps the result only when it compiles to fewer words
 /// at no fewer threads.
 pub fn interleave71<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
-    let order = order71(sel.ops, sel.vregs, a)?;
+    interleave71_with(sel, false, a)
+}
+
+/// [`interleave71`] with 7.1's signal field in its slot model: a word's
+/// small immediate is its signal (v3d71_sig_map, qpu_pack.c:164-199: SMIMM_A
+/// .. SMIMM_D each stand alone, no LDUNIF, LDUNIFRF, LDVARY, LDTMU or WRTMUC
+/// beside them), so an operation with a small immediate and one with a load
+/// signal take different words, as sched71 packs them. Whether the plan
+/// gives fewer words depends on where the THRSW then merges, which the slot
+/// model does not see: chain71 builds both orders and keeps the shorter.
+pub fn interleave71_sig<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
+    interleave71_with(sel, true, a)
+}
+
+fn interleave71_with<'a>(sel: &Selected71<'_>, sig_imm: bool, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
+    let order = order71_with(sel.ops, sel.vregs, sig_imm, a)?;
     let out = a.alloc_filled(sel.ops.len(), Op71::Thrsw)?;
     for (o, &i) in out.iter_mut().zip(order.iter()) {
         *o = sel.ops[i as usize];
@@ -718,7 +845,14 @@ pub fn interleave71<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected7
 
 /// [`interleave71`]'s order: position k of the new order holds operation
 /// `order[k]` of `ops`.
+#[cfg(test)]
 fn order71<'a>(ops: &[Op71], v: u32, a: &Arena<'a>) -> Result<&'a [u32], ArenaError> {
+    order71_with(ops, v, false, a)
+}
+
+/// The order of [`interleave71`] (`sig_imm` false) or
+/// [`interleave71_sig`] (true).
+fn order71_with<'a>(ops: &[Op71], v: u32, sig_imm: bool, a: &Arena<'a>) -> Result<&'a [u32], ArenaError> {
     let n = ops.len();
     let res = Res { flags: v, unif: v + 1, rf0: v + 2, side: v + 3 };
     let nres = v as usize + 4;
@@ -774,6 +908,11 @@ fn order71<'a>(ops: &[Op71], v: u32, a: &Arena<'a>) -> Result<&'a [u32], ArenaEr
                 let mut need = shapes[j].slots;
                 if need & SLOT_EITHER != 0 {
                     need = (need & !SLOT_EITHER) | if used & SLOT_MUL == 0 { SLOT_MUL } else { SLOT_ADD };
+                }
+                /* a small immediate is a signal of its own at 7.1: no load
+                 * signal beside it (v3d71_sig_map, qpu_pack.c:164-199) */
+                if sig_imm && need & (SLOT_SIG | SLOT_IMM) != 0 {
+                    need |= SLOT_SIG | SLOT_IMM;
                 }
                 if need & used != 0 {
                     continue;
@@ -1143,6 +1282,95 @@ void main() { gl_FragColor = vec4(inversesqrt(v_color.x), exp2(v_color.y), 0.0, 
         );
     }
 
+    /// Rule 6's operands: the immediates 0.0 and 1.0, a load of `x` and an
+    /// add operation `op` on a register and an immediate, either way round.
+    fn imm(bits: u32) -> Operand {
+        Operand::SmallImm(super::super::isa::small_imm_index(bits).unwrap())
+    }
+    fn clamp_half(op: AddOp, dst: u32, x: u32, bits: u32, imm_first: bool) -> VOp {
+        let (a, b) = if imm_first { (imm(bits), Operand::V(V(x))) } else { (Operand::V(V(x)), imm(bits)) };
+        VOp::Add { op, dst: Dst::V(V(dst)), a, b }
+    }
+    const ONE: u32 = 0x3f80_0000;
+    fn load_x() -> VOp {
+        VOp::Ldunif { dst: V(0), u: Uniform::constant(0x4000_0000) }
+    }
+    fn tlb(v: u32) -> VOp {
+        VOp::Add { op: AddOp::Vfpack, dst: Dst::Tlb, a: Operand::V(V(v)), b: Operand::V(V(v)) }
+    }
+    fn fmov(dst: u32, x: u32, u: Unpack71, mul: bool) -> Op71 {
+        let (dst, a) = (Dst71::V(V(dst)), Src71::Unpacked(V(x), u));
+        if mul {
+            Op71::Mul { op: MulOp71::Fmov, dst, a, b: Src71::None }
+        } else {
+            Op71::Add { op: AddOp71::Fmov, dst, a, b: Src71::None }
+        }
+    }
+
+    #[test]
+    fn a_clamp_to_0_1_becomes_one_fmov_sat_either_way_round() {
+        for imm_first in [false, true] {
+            /* fmin(fmax(x, 0), 1) */
+            let ops = [
+                load_x(),
+                clamp_half(AddOp::Fmax, 1, 0, 0, imm_first),
+                clamp_half(AddOp::Fmin, 2, 1, ONE, !imm_first),
+                tlb(2),
+            ];
+            let l = lower_one(&ops, 3).unwrap();
+            assert_eq!(l.len(), 3, "{l:?}");
+            assert_eq!(l[1], fmov(2, 0, Unpack71::Sat, true), "{l:?}");
+            /* fmax(fmin(x, 1), 0) */
+            let ops = [
+                load_x(),
+                clamp_half(AddOp::Fmin, 1, 0, ONE, imm_first),
+                clamp_half(AddOp::Fmax, 2, 1, 0, !imm_first),
+                tlb(2),
+            ];
+            let l = lower_one(&ops, 3).unwrap();
+            assert_eq!(l.len(), 3, "{l:?}");
+            assert_eq!(l[1], fmov(2, 0, Unpack71::Sat, true), "{l:?}");
+        }
+        /* fmin(fmax(x, 0), 0.5) is no clamp to [0, 1]: max0, then the fmin */
+        let ops =
+            [load_x(), clamp_half(AddOp::Fmax, 1, 0, 0, false), clamp_half(AddOp::Fmin, 2, 1, 0x3f00_0000, false)];
+        let l = lower_one(&ops, 3).unwrap();
+        assert_eq!(l[1], fmov(1, 0, Unpack71::Max0, false), "{l:?}");
+        assert!(matches!(l[2], Op71::Add { op: AddOp71::Fmin, .. }), "{l:?}");
+    }
+
+    #[test]
+    fn a_clamp_stays_two_operations_when_its_inner_value_is_read_again_or_x_moves() {
+        /* the fmax's result is read again */
+        let ops = [load_x(), clamp_half(AddOp::Fmax, 1, 0, 0, true), clamp_half(AddOp::Fmin, 2, 1, ONE, false), tlb(1)];
+        let l = lower_one(&ops, 3).unwrap();
+        assert_eq!(l.len(), 4, "{l:?}");
+        assert_eq!(l[1], fmov(1, 0, Unpack71::Max0, false), "{l:?}");
+        assert!(matches!(l[2], Op71::Add { op: AddOp71::Fmin, dst: Dst71::V(V(2)), .. }), "{l:?}");
+        /* x is written between the two halves (a conditional move) */
+        let ops = [
+            load_x(),
+            clamp_half(AddOp::Fmin, 1, 0, ONE, true),
+            VOp::CondMov { dst: V(0), src: imm(ONE), cond: super::super::isa::Cond::IfA },
+            clamp_half(AddOp::Fmax, 2, 1, 0, false),
+            tlb(2),
+        ];
+        let l = lower_one(&ops, 3).unwrap();
+        assert_eq!(l.len(), 5, "{l:?}");
+        assert!(matches!(l[1], Op71::Add { op: AddOp71::Fmin, .. }), "{l:?}");
+        assert_eq!(l[3], fmov(2, 1, Unpack71::Max0, false), "{l:?}");
+        /* a branch target between them */
+        let ops = [
+            load_x(),
+            clamp_half(AddOp::Fmax, 1, 0, 0, true),
+            VOp::Label(0),
+            clamp_half(AddOp::Fmin, 2, 1, ONE, false),
+            tlb(2),
+        ];
+        let l = lower_one(&ops, 3).unwrap();
+        assert!(!l.iter().any(|o| matches!(o, Op71::Mul { a: Src71::Unpacked(_, Unpack71::Sat), .. })), "{l:?}");
+    }
+
     #[test]
     fn payload_r5_and_unpacks_take_their_71_form() {
         let ops = [
@@ -1369,9 +1597,11 @@ void main() { gl_FragColor = vec4(inversesqrt(v_color.x), exp2(v_color.y), 0.0, 
             let order = order71(l.ops, l.vregs, &a).expect("scratch");
             same_meaning(l.ops, order);
             moved += order.iter().enumerate().filter(|&(k, &i)| k != i as usize).count();
-            let il = interleave71(l, &a).expect("scratch");
-            assert_eq!(il.ops.len(), l.ops.len());
-            assert_eq!((il.fragment, il.vregs), (l.fragment, l.vregs));
+            same_meaning(l.ops, order71_with(l.ops, l.vregs, true, &a).expect("scratch"));
+            for il in [interleave71(l, &a).expect("scratch"), interleave71_sig(l, &a).expect("scratch")] {
+                assert_eq!(il.ops.len(), l.ops.len());
+                assert_eq!((il.fragment, il.vregs), (l.fragment, l.vregs));
+            }
         };
         match vs {
             None => with_fs(fs, |_, l| check(&l.expect("lowers"))),
@@ -1455,5 +1685,29 @@ void main() { gl_FragColor = v_a + v_b; }
         let pos = |i: u32| order.iter().position(|&x| x == i).unwrap();
         assert!(pos(2) < pos(3), "the C read after the ldunif that overwrites rf0: {order:?}");
         assert!(pos(4) < pos(5), "a load before the TLBU write's uniform: {order:?}");
+    }
+
+    /// `ldunif ; fmul ; ldunif ; mov 0`: the plain order plans the
+    /// small-immediate move into the first load's word, which no 7.1 word
+    /// holds; the signal-aware order plans it after the second load.
+    #[test]
+    fn a_small_immediate_and_a_load_signal_take_different_words() {
+        let u = Uniform::constant(0x3f80_0000);
+        let ops = [
+            Op71::Ldunif { dst: V(0), u },
+            Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(1)), a: Src71::V(V(0)), b: Src71::V(V(0)) },
+            Op71::Ldunif { dst: V(2), u },
+            Op71::Add { op: AddOp71::Mov, dst: Dst71::V(V(3)), a: Src71::SmallImm(0), b: Src71::None },
+            Op71::Add { op: AddOp71::Vfpack, dst: Dst71::Tlb, a: Src71::V(V(1)), b: Src71::V(V(2)) },
+            Op71::Add { op: AddOp71::Vfpack, dst: Dst71::Tlb, a: Src71::V(V(3)), b: Src71::V(V(3)) },
+        ];
+        let mut buf = std::vec![0u8; 1 << 16];
+        let a = Arena::new(&mut buf);
+        let plain = order71(&ops, 4, &a).unwrap();
+        same_meaning(&ops, plain);
+        assert_eq!(plain, [0, 3, 1, 2, 4, 5]);
+        let sig = order71_with(&ops, 4, true, &a).unwrap();
+        same_meaning(&ops, sig);
+        assert_eq!(sig, [0, 1, 2, 3, 4, 5]);
     }
 }

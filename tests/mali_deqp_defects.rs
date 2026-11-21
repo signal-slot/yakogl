@@ -138,10 +138,12 @@ fn overflow_change(test: &str) -> Option<String> {
 
 /// The compiler's process-wide state takes one pair at a time
 /// (`mali_ref::compile_pair` holds its own lock; this one covers
-/// [`compile_bound`] and the pin's calls).
+/// [`compile_bound`] and the pin's calls). Named `COMPILING`, the
+/// serialiser src/test_rules.rs recognises in a file that calls
+/// `forget_compiled`.
 fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
-    static ONE: Mutex<()> = Mutex::new(());
-    ONE.lock().unwrap_or_else(|p| p.into_inner())
+    static COMPILING: Mutex<()> = Mutex::new(());
+    COMPILING.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 fn log_text(log: &[c_char]) -> String {
