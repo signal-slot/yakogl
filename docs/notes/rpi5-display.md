@@ -181,8 +181,23 @@ side, under ssh before the Zephyr run, supplies the references
    builds with `CONFIG_CACHE_MANAGEMENT=y`; record in
    `tools/probes/rpi_5/rpi5_mbox/README.md`.
 2. **Does the firmware redraw into its plane after hand-over, and does it
-   keep the list?** Seen unchanged for 100 ms only (`dd:524-530`); the
-   open question of `dd:469-471` is a longer run.
+   keep the list?** The plane half is answered; the list half is still open.
+   `rpi5_scanout16` ran once on 2026-11-21 (tryboot, image from `2b88a9f6`,
+   record in `tools/probes/rpi_5/rpi5_scanout16/README.md`). The verdict was
+   `verdicts: PASS (plane adopted, both read-backs match, frcnt 48 -> 51
+   advanced, EN and VIDEN set)` and the Q2 line was `q2: yes, list changed (1
+   list words changed in 240012 ms)`.
+   *Plane: no redraw.* The probe wrote the 1920x1080 RGB565 plane at
+   0x3f800000. It hashed the same in all 24 samples of a 240 s hold, and
+   readback 2 was byte-equal over all 4147200 bytes. LPTRS (0x2a0) and both
+   valves' words did not change.
+   *List: open.* The hash of the 64 words read from LPTRS.HEADE (word 672,
+   no END among them) took eight different values, recurring in a cycle, and
+   at the end one word differed from the adopted snapshot. The probe does not
+   print which word that was or its values. So it is still unknown whether the
+   firmware edits its list or the HVS writes a status or context word back into
+   the plane entry. Stage 2's byte-equal restore of the firmware's list
+   (`rpi5_scanout32`) has to know which of the two it is.
 3. **Which pixel valve feeds HDMI0, and does the firmware run it at two
    pixels per clock?** Linux reads 1920 active pixels, the firmware's valve
    960 (`dd:559-562`). Matters only for option (ii) and for any plane resize.
@@ -196,7 +211,10 @@ side, under ssh before the Zephyr run, supplies the references
 6. **HDMI0 or HDMI1, and a board without a sink.** The firmware drove HDMI0
    with hotplug seen on one port only (`dd:517-530`); with no sink or the other
    port the picture of the firmware may not exist, and option (ii) becomes
-   necessary.
+   necessary. On 2026-11-21 the boot loader again saw hotplug on HDMI0 and
+   none on HDMI1, and logged `FB0 ... 1920x1080 stride 3840 base 0x3f800000`.
+   That is the plane `rpi5_scanout16` adopted. The case with no sink, or a sink
+   on the other port, is still open.
 7. **Is a 32 MiB 3840x2160 buffer ever wanted?** The board layer must take the
    granted size from the answer and refuse by name a window that does not fit
    the image's `sram0` (`dd:442-451`).
