@@ -1131,9 +1131,12 @@ script, which has to provide (no `tools/board.sh` entry for the board yet):
   The run bound is the image's lifetime plus WDOG3's 60 s: 600 s + 60 s for
   a dEQP row (`deqp/verdin_imx95.conf`), 300 s + 60 s for gl_test;
 - the reset-surviving record: both images end in the board layer's
-  `board_finish()`, whose `board_sink_store()` (`board_verdin_imx95.c`) is
-  the hook for a record that survives the reset (today a no-op: the UART line
-  is the sink). A per-case running tally for a console-less run would hang
+  `board_finish()`, whose `board_sink_store()` is `verdin_imx95_record.c`
+  (`CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM`, on by default): the record's four
+  words go into the BBNSM GPR4..7 over SCMI, and `tools/board.sh imx95`
+  reads them back from Linux (`tools/imx95_bbm_record.sh`); whether they
+  survive the reset is U2 of `docs/notes/pre-study-imx95.md`. The gl_test
+  row checks the sink is linked. A per-case running tally for a console-less run would hang
   off `deqp_log.c` where the i.MX8M Plus's SNVS tally does
   (`deqp_snvs_progress`); neither is written here;
 - the image's identity: the `.built` line's `build=` (from
