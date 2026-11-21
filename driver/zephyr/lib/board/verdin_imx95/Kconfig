@@ -36,6 +36,34 @@ config YAKOGL_VERDIN_IMX95_LIFETIME_S
 	  returns, or a hang with interrupts locked, ends in WDOG3's reset
 	  at most 60 s later.
 
+config YAKOGL_VERDIN_IMX95_WDOG_FEED
+	bool "Feed WDOG3 up to the lifetime"
+	default y
+	help
+	  y: verdin_imx95_wdog.c's 1 s timer refreshes WDOG3 while the
+	  uptime is under the lifetime and the board layer's alive window
+	  holds. n: WDOG3 is armed at PRE_KERNEL_1 as always and never
+	  refreshed, so it resets the board one timeout (60 s) after the
+	  arming: the probe imx95_wdog
+	  (tools/probes/verdin_imx95/imx95_wdog), whose pass is that reset.
+
+config YAKOGL_VERDIN_IMX95_SCMI
+	bool "The raw SCMI channel without the GPU or the display"
+	help
+	  verdin_imx95_scmi.c (verdin_imx95_scmi(), the board's one raw
+	  SCMI channel to the System Manager) in an image that has neither
+	  the Mali OSAL nor the X4 display, which bring it themselves: the
+	  probes under tools/probes/verdin_imx95.
+
+config YAKOGL_VERDIN_IMX95_GPU_PROBE
+	bool "The GPU's probe entries without the Mali OSAL"
+	select YAKOGL_VERDIN_IMX95_SCMI
+	help
+	  The drivers crate with the features imx95, rk3588 and mali, for an
+	  image that calls yd_imx95_gpu_power_on / _off or yd_imx95_fw_up
+	  (ffi::imx95) but is not a GL image: the probes imx95_ident and
+	  imx95_fw (tools/probes/verdin_imx95).
+
 endif # YAKOGL_VERDIN_IMX95
 
 config YAKOGL_BOARD_VERDIN_IMX95
