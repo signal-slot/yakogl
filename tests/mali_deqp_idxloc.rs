@@ -4,22 +4,25 @@
 //! whose first refusal is a loop text and which index a local array, a
 //! vector, a matrix, a uniform or a varying array at the loop's counter
 //! (steps S2, S7 and S11 of `docs/notes/mali-loops-lowering.md`; plan #387
-//! item idxloc-ref). One reference per shape of
-//! `docs/notes/mali-deqp-idxloc.md`, for a type no `deqp_loops*_idx_*`
-//! reference covers. Each was drawn on Mesa's drm-shim with
-//! `tools/mali/deqp_ref.sh --instrument shim`; the sources are rebuilt from
-//! the dEQP generator's templates (each `.license` says which lines no
-//! verbatim `.qpa` copy in the tree shows).
+//! item idxloc-ref), and the four `struct` loops of S7. One reference per
+//! shape of `docs/notes/mali-deqp-idxloc.md`, for a type no
+//! `deqp_loops*_idx_*` reference covers. Each was drawn on Mesa's drm-shim
+//! with `tools/mali/deqp_ref.sh --instrument shim`; the sources are rebuilt
+//! from the dEQP generators (`es2fShaderIndexingTests.cpp`,
+//! `es2fShaderStructTests.cpp`), as each `.license` says.
 //!
 //! No reference compiles at the tip: [`refusals_pinned`] asserts each pair's
 //! exact first refusal, the loop text. The note gives the refusal measured
 //! after the loop (the loop folded by hand) per shape. The lowering that
 //! lifts one moves its entry from [`REFUSALS`] to [`MATCHED`] in the same
-//! commit. Mesa keeps a loop in four of them (`fs_tmp_float_cd`,
-//! `fs_vec2_dl_static`, `fs_vec3_component_dl`, `vs_vec3_dl_component`):
-//! those carry the pass counter the walk adds, so compare them with
-//! `CapEdit` as `tests/mali_deqp_loops.rs` says; the other ten have no
-//! loop in Mesa's words and are plain [`mali_ref::assert_matches`].
+//! commit. Mesa keeps a loop in eight of them (`fs_tmp_float_cd`,
+//! `fs_vec2_dl_static`, `fs_vec3_component_dl`, `vs_vec3_dl_component` and
+//! the four `fs_struct_*`): those carry the pass counter the walk adds, so
+//! compare them with `CapEdit` as `tests/mali_deqp_loops.rs` says; the other
+//! ten have no loop in Mesa's words and are plain
+//! [`mali_ref::assert_matches`]. `fs_struct_uni_nested_array` has
+//! struct-member uniforms: its compare needs its name in `mali_ref`'s
+//! `STRUCT_VALUES`.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_idxloc
@@ -39,6 +42,10 @@ const LOOP_VERTEX: &str = "a loop in a vertex shader";
 const REFUSALS: &[(&str, &str)] = &[
     ("fs_mat2_dd", LOOP_MEDIUMP),
     ("fs_mat3_dl_sl", LOOP_MEDIUMP),
+    ("fs_struct_loop_assign", LOOP_MEDIUMP),
+    ("fs_struct_nested_array", LOOP_MEDIUMP),
+    ("fs_struct_nested_loop_assign", LOOP_MEDIUMP),
+    ("fs_struct_uni_nested_array", LOOP_MEDIUMP),
     ("fs_tmp_float_cd", LOOP_MEDIUMP),
     ("fs_tmp_vec2_dl_sl", LOOP_MEDIUMP),
     ("fs_tmp_vec3_sl_dl", LOOP_MEDIUMP),
