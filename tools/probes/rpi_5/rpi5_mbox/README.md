@@ -88,6 +88,16 @@ order:
   itself, so its line says `status n/a` and its rc says whether that word was
   0x80000000.
 
+After the seven, five framebuffer GET tags go out, the clear way only (the
+way that answered on the board): `GET_PHYSICAL_WIDTH_HEIGHT` (0x00040003),
+`GET_VIRTUAL_WIDTH_HEIGHT` (0x00040004), `GET_DEPTH` (0x00040005),
+`GET_PIXEL_ORDER` (0x00040006) and `GET_PITCH` (0x00040008). The ids are the
+firmware wiki's mailbox property page's, and `rpi_mbox.c:186-191` has the same
+ones (its setters are these plus 0x8000). They show the geometry of the plane
+the firmware left running, a second source for `rpi5_scanout16`. No
+allocate, release, blank, `SET_*` or `TEST_*` tag is ever sent, so the running
+mode cannot change.
+
 The image only reads. `rpi5_clear`'s first request (`SET_CLOCK_STATE`) is not
 sent, and `rpi_mbox.c` is not changed.
 
@@ -121,6 +131,19 @@ rpi5_mbox: memory tag <id> status <hex> answered <hex> value <hex> way display (
   `-ENODEV`.
 - `<id>`: the tag; for a clock, `0x00030002:<clock id>`.
 
+The five framebuffer tags print the same `tag` line, `way clear` only, and a
+two-word answer (physical, virtual) adds the second word as `value2`:
+
+```
+rpi5_mbox: tag 0x00040003 status 0x80000000 answered 0x80000008 value <w> value2 <h> rc 0 way clear (...)
+rpi5_mbox: fb geometry <w>x<h> depth <d> pitch <p> order <rgb|bgr|other> (virtual <w>x<h>)
+rpi5_mbox: fb geometry not answered (physical <yes|no>, virtual .., depth .., order .., pitch ..)
+```
+
+The geometry line needs physical size, depth, order and pitch answered. The
+`regs` lines come first, as for every request. These lines are information:
+they are not in the `answered:` counts or the end line.
+
 Every line is printed even when an earlier step failed. A word that was not
 read prints as 0xffffffff, with a line saying why.
 
@@ -149,14 +172,20 @@ Prints, always in this order and always all of them: `cache:` (the image's
 the value), `q1:` (`cache maintenance`, `not reproduced`, `no way answered`
 or `unknown`), `end:` (the image's end line, or `missing`), and
 `rpi5_mbox verdict: PASS (GET_THROTTLED answered by ...)` or `FAIL (...)`.
-Exit 0 PASS, 1 FAIL, 2 usage. The rule is section 3's: PASS when
-`GET_THROTTLED` is answered. A log cut short still gets all eleven lines.
+Between `q1:` and `end:` comes `fb:`, information only: the image's `fb
+geometry` line with the count of tags answered (`tags answered n of 5`),
+`no geometry line (...)` when only some tag lines are there, or `missing (no
+framebuffer tag line in the log)` for a log without them (the older logs).
+It never changes another line or the exit status. Exit 0 PASS, 1 FAIL, 2
+usage. The rule is section 3's: PASS when `GET_THROTTLED` is answered. A log
+cut short still gets all twelve lines.
 
 `verdicts_selftest.sh` (`sh tools/probes/rpi_5/rpi5_mbox/verdicts_selftest.sh`)
 feeds it canned logs and checks every line it prints: all answered; every way
 `-EIO` with code 0, as on 2026-11-19; the cache case (display `-EIO`, the
 answer in memory, clear and board answered); an answer in memory only; one
-request missing; a log truncated inside request 3; a log cut before any
+request missing; the framebuffer tags answered, not answered, cut before the
+geometry line and beside a failing run (and absent from the older logs); a log truncated inside request 3; a log cut before any
 request (its `cache:` line is then `missing`); `cache management off` and the
 timestamped CR form of `on`; usage. The gate gives it a row
 (`tools/check_selftests.py`), and `zephyr_rpi5_probe_images` builds the image.

@@ -14,6 +14,11 @@
 #   rpi5_mbox verdict: <id> <name>: <state> (display <s>, memory <s>, clear <s>, board <s>)[ value ...]
 #                         one line per request, seven, in the image's order
 #   rpi5_mbox verdict: q1: <cause> (...)
+#   rpi5_mbox verdict: fb: <the image's `fb geometry` line, or what the tag lines say, or missing>
+#                         information only (the five read-only framebuffer GET
+#                         tags, 0x00040003 4 5 6 8): never changes the verdict
+#                         lines above or the PASS/FAIL below; a missing line is
+#                         said, not failed
 #   rpi5_mbox verdict: end: <the image's end line, or missing>
 #   rpi5_mbox verdict: PASS (GET_THROTTLED answered by <ways>) | FAIL (<reason>)
 #
@@ -22,6 +27,9 @@
 #   rpi5_mbox: cache management <on|off>
 #   rpi5_mbox: tag <id> status <hex|n/a> answered <hex> value <hex> rc <n> way <display|clear|board> ...
 #   rpi5_mbox: memory tag <id> status <hex> answered <hex> value <hex> way display ...
+#
+#   rpi5_mbox: fb geometry <w>x<h> depth <d> pitch <p> order <rgb|bgr|other> (...)
+#   rpi5_mbox: fb geometry not answered (...)
 #
 # A way is answered (`yes`) when its rc is 0 (not for `memory`, which has
 # none), its status is 0x80000000 (`n/a` for board, which keeps that word) and
@@ -91,6 +99,10 @@ BEGIN {
     split("get_throttled get_firmware_revision clock_core clock_disp clock_hdmi-hsm clock_hdmi-bvb clock_v3d", names, " ")
     for (i = 1; i <= n; i++)
         known[ids[i]] = i
+    nfb = split("0x00040003 0x00040004 0x00040005 0x00040006 0x00040008", fbids, " ")
+    for (i = 1; i <= nfb; i++)
+        fbknown[fbids[i]] = 1
+    geom = ""
     nways = split("display memory clear board", ways, " ")
     endline = ""
     cache = ""
@@ -106,6 +118,18 @@ BEGIN {
 /^rpi5_mbox: (done|FAIL) \(/ {
     endline = $0
     sub(/^rpi5_mbox: /, "", endline)
+    next
+}
+/^rpi5_mbox: fb geometry / {
+    geom = $0
+    sub(/^rpi5_mbox: fb geometry /, "", geom)
+    next
+}
+/^rpi5_mbox: tag 0x000400[0-9a-f][0-9a-f] / {
+    if (!($3 in fbknown) || field("way") != "clear")
+        next
+    fbseen[$3] = 1
+    fbyes[$3] = (field("rc") == "0" && tolower(field("status")) == "0x80000000" && bit31(field("answered")))
     next
 }
 /^rpi5_mbox: (memory )?tag / {
@@ -200,6 +224,17 @@ END {
     else
         q = "no way answered (display, clear and board 0 of " n ": transport, base or firmware; see the regs lines)"
     printf "rpi5_mbox verdict: q1: %s\n", q
+    nfs = nfy = 0
+    for (i = 1; i <= nfb; i++) {
+        if (fbids[i] in fbseen) nfs++
+        if (fbyes[fbids[i]]) nfy++
+    }
+    if (geom != "")
+        printf "rpi5_mbox verdict: fb: geometry %s (tags answered %d of %d)\n", geom, nfy, nfb
+    else if (nfs > 0)
+        printf "rpi5_mbox verdict: fb: no geometry line (tags answered %d of %d, %d line(s) seen)\n", nfy, nfb, nfs
+    else
+        printf "rpi5_mbox verdict: fb: missing (no framebuffer tag line in the log)\n"
     if (endline != "")
         printf "rpi5_mbox verdict: end: %s\n", endline
     else
