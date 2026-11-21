@@ -10,9 +10,28 @@
 //!   `shaders.invariance.highp.common_subexpression_0` verbatim (its first
 //!   program); `invariant_posonly`, that case's invariant `gl_Position`
 //!   alone, with a constant varying and a constant colour (our text).
+//! - `MaliError::Rebalance` (a chain of three or more additions or
+//!   multiplications): `rebalance_funcsum_fs`
+//!   (`shaders.functions.misc.multi_arg_float_fragment`, a `sum()` of four
+//!   lanes through a function; its `_vertex` twin is arith-ref's
+//!   `deqp_arith_other_x_vs_mediump`, the same pair and words, pinned in
+//!   `tests/mali_deqp_arith.rs`), `rebalance_invariant`
+//!   (`shaders.invariance.highp.common_subexpression_1`, the chain under an
+//!   invariant `gl_Position`), `rebalance_random_fs` / `_vs`
+//!   (`shaders.random.all_features.{fragment.24,vertex.35}`).
+//! - `MaliError::AlgebraicForm`, the two `shaders.random` cases:
+//!   `algebraic_random13` / `algebraic_random46`
+//!   (`shaders.random.comparison_ops.fragment.{13,46}`).
+//! - `MaliError::AttributeNumbering`: `attrnum_zero_lanes`
+//!   (`shaders.random.scalar_conversion.vertex.97`, attribute lanes times a
+//!   constant 0) and `attrnum_dead_attrs`
+//!   (`shaders.random.basic_expression.vertex.49`, attributes read only by
+//!   dead code or through a constant -0.0 product).
 //!
-//! The other texts of the item already have references of other items'
-//! tests, or no dEQP source could be drawn here: the note says which.
+//! Every dEQP pair is verbatim from the `.qpa` of
+//! `tools/mali/deqp-host-measure.sh` (`.license` sidecars). The other texts
+//! of the item already have references of other items' tests, or no Mesa
+//! reference could be drawn here: the note says which and why.
 //!
 //! None compiles at the tip: each test is ignored with its refusal quoted;
 //! the lowering removes the `ignore` and the reference's entry in
@@ -37,11 +56,74 @@ fn misc2_invariant_posonly() {
     mali_ref::assert_matches("deqp_misc2_invariant_posonly");
 }
 
+#[test]
+#[ignore = "refused: three or more additions or multiplications in a chain"]
+fn misc2_rebalance_funcsum_fs() {
+    mali_ref::assert_matches("deqp_misc2_rebalance_funcsum_fs");
+}
+
+#[test]
+#[ignore = "refused: three or more additions or multiplications in a chain"]
+fn misc2_rebalance_invariant() {
+    mali_ref::assert_matches("deqp_misc2_rebalance_invariant");
+}
+
+#[test]
+#[ignore = "refused: three or more additions or multiplications in a chain"]
+fn misc2_rebalance_random_fs() {
+    mali_ref::assert_matches("deqp_misc2_rebalance_random_fs");
+}
+
+#[test]
+#[ignore = "refused: three or more additions or multiplications in a chain"]
+fn misc2_rebalance_random_vs() {
+    mali_ref::assert_matches("deqp_misc2_rebalance_random_vs");
+}
+
+#[test]
+#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference"]
+fn misc2_algebraic_random13() {
+    mali_ref::assert_matches("deqp_misc2_algebraic_random13");
+}
+
+#[test]
+#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference"]
+fn misc2_algebraic_random46() {
+    mali_ref::assert_matches("deqp_misc2_algebraic_random46");
+}
+
+#[test]
+#[ignore = "refused: a vertex shader whose attribute numbering waits for a fold"]
+fn misc2_attrnum_zero_lanes() {
+    mali_ref::assert_matches("deqp_misc2_attrnum_zero_lanes");
+}
+
+#[test]
+#[ignore = "refused: a vertex shader whose attribute numbering waits for a fold"]
+fn misc2_attrnum_dead_attrs() {
+    mali_ref::assert_matches("deqp_misc2_attrnum_dead_attrs");
+}
+
 const INVARIANT: &str = "an invariant output (Mesa keeps its arithmetic exact, unfused)";
+const REBALANCE: &str =
+    "three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree)";
+const ALGEBRAIC: &str = "a shape Mesa's algebraic rules rewrite without a reference";
+const ATTRNUM: &str =
+    "a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations";
 
 /// Every ignored reference above and the refusal the compiler gives it now.
-const REFUSALS: &[(&str, &str)] =
-    &[("deqp_misc2_invariant_cse", INVARIANT), ("deqp_misc2_invariant_posonly", INVARIANT)];
+const REFUSALS: &[(&str, &str)] = &[
+    ("deqp_misc2_invariant_cse", INVARIANT),
+    ("deqp_misc2_invariant_posonly", INVARIANT),
+    ("deqp_misc2_rebalance_funcsum_fs", REBALANCE),
+    ("deqp_misc2_rebalance_invariant", REBALANCE),
+    ("deqp_misc2_rebalance_random_fs", REBALANCE),
+    ("deqp_misc2_rebalance_random_vs", REBALANCE),
+    ("deqp_misc2_algebraic_random13", ALGEBRAIC),
+    ("deqp_misc2_algebraic_random46", ALGEBRAIC),
+    ("deqp_misc2_attrnum_zero_lanes", ATTRNUM),
+    ("deqp_misc2_attrnum_dead_attrs", ATTRNUM),
+];
 
 /// The references that compile byte-equal (their tests run): none yet.
 const MATCHED: &[&str] = &[];
