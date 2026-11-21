@@ -18,6 +18,7 @@
 #      side can gain a setting the other lacks. The dry run reads no board or
 #      toolchain environment (GLMARK2_SRC only names a path in the printed
 #      line); --allow-local lets it print on a topic branch.
+# The knob differs only between each -off/-on pair (every other setting equal).
 # Also: README.md here has its SPDX header and names every fragment.
 #
 # Exit 0 when every check passes, 1 otherwise (each failure is one line).
@@ -26,7 +27,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../.." && pwd)
 SESSION=$REPO/tools/cts/pr-session.sh
 KCONFIGS=(driver/zephyr/Kconfig driver/samples/zephyr/glmark2/Kconfig driver/samples/zephyr/gl_test/Kconfig)
-EXPECTED=(gl_test-175-off.conf gl_test-175-on.conf glmark2-d320c8a5-off.conf glmark2-d320c8a5-on.conf)
+EXPECTED=(gl_test-175-off.conf gl_test-175-on.conf gl_test-217-off.conf gl_test-217-on.conf
+    gl_test-217-runC-off.conf gl_test-217-runC-on.conf glmark2-d320c8a5-off.conf glmark2-d320c8a5-on.conf)
+KNOB=YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
 
 fails=0
 passes=0
@@ -94,6 +97,10 @@ for f in "${EXPECTED[@]}"; do
     case "$f" in
     gl_test-175-off.conf) image=gltest opts=(--knob off) ;;
     gl_test-175-on.conf) image=gltest opts=(--knob on) ;;
+    gl_test-217-off.conf) image=gltest opts=(--knob off --cap-pages 512 --cases 217) ;;
+    gl_test-217-on.conf) image=gltest opts=(--knob on --cap-pages 512 --cases 217) ;;
+    gl_test-217-runC-off.conf) image=gltest opts=(--knob off --cap-pages 0 --cases 217) ;;
+    gl_test-217-runC-on.conf) image=gltest opts=(--knob on --cap-pages 0 --cases 217) ;;
     glmark2-d320c8a5-off.conf) image=glmark2 opts=(--knob off --glmark2 --one-in-flight) ;;
     glmark2-d320c8a5-on.conf) image=glmark2 opts=(--knob on --glmark2 --one-in-flight) ;;
     esac
@@ -113,8 +120,12 @@ for f in "${EXPECTED[@]}"; do
     # board's, not the session's: they are documented in README.md, not in a
     # fragment, and are not compared here.
     board_arg() { case "$1" in YAKOGL_AM62P_RTI_SELF_ARM | SOC_AM62PX_A53_FEED_INHERITED_WDT) return 0 ;; esac; return 1; }
+    # case 217's own settings, which pr-session.sh has no option for
+    extra_ok() { case "$f:$1" in gl_test-217-*:GL_TEST_FORCEDPR_LAYERS | gl_test-217-runC-*:YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE) return 0 ;; esac; return 1; }
     for sym in "${!frag[@]}"; do
-        if [ -z "${want[$sym]+x}" ]; then
+        if [ -z "${want[$sym]+x}" ] && extra_ok "$sym"; then
+            ok "$f: CONFIG_$sym=${frag[$sym]} (case 217's own setting)"
+        elif [ -z "${want[$sym]+x}" ]; then
             bad "$f: CONFIG_$sym=${frag[$sym]} is not among pr-session.sh ${opts[*]}'s -D options"
         elif [ "${want[$sym]}" = "${frag[$sym]}" ]; then
             ok "$f: CONFIG_$sym=${frag[$sym]} as pr-session.sh ${opts[*]}"
@@ -126,7 +137,25 @@ for f in "${EXPECTED[@]}"; do
         board_arg "$sym" && continue
         [ -n "${frag[$sym]+x}" ] || bad "$f: pr-session.sh ${opts[*]} passes CONFIG_$sym=${want[$sym]}, which the fragment lacks"
     done
+    case "$f" in gl_test-217-runC-*) [ "${frag[YAKOGL_DRV_GPU_PVR_FL_PROBE_NO_RESERVE]:-}" = y ] || bad "$f: run C needs FL_PROBE_NO_RESERVE=y" ;; esac
+    case "$f" in gl_test-217-*) [ "${frag[GL_TEST_FORCEDPR_LAYERS]:-}" = 1220 ] || bad "$f: layers are not 1220" ;; esac
     unset frag want
+done
+
+# the knob differs only between the off and on pairs: every other line equal
+for pair in gl_test-175 gl_test-217 gl_test-217-runC glmark2-d320c8a5; do
+    a=$HERE/${pair}-off.conf
+    b=$HERE/${pair}-on.conf
+    [ -f "$a" ] && [ -f "$b" ] || continue
+    da=$(grep -vE '^[[:space:]]*(#|$)' "$a" | grep -v "^CONFIG_$KNOB=" | LC_ALL=C sort)
+    db=$(grep -vE '^[[:space:]]*(#|$)' "$b" | grep -v "^CONFIG_$KNOB=" | LC_ALL=C sort)
+    ka=$(grep -c "^CONFIG_$KNOB=n$" "$a")
+    kb=$(grep -c "^CONFIG_$KNOB=y$" "$b")
+    if [ "$da" = "$db" ] && [ "$ka" = 1 ] && [ "$kb" = 1 ]; then
+        ok "$pair: off and on differ only in CONFIG_$KNOB (n, y)"
+    else
+        bad "$pair: off and on differ in more than CONFIG_$KNOB (n in off, y in on)"
+    fi
 done
 
 # README.md: SPDX header, every fragment named
