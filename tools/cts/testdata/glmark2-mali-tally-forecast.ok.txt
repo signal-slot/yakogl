@@ -1,0 +1,6 @@
+# synthetic host verdicts that agree with testdata/glmark2-mali-tally/clean (every
+# scene ok on the board): two scenes predicted clean, nothing refused, no flag
+0 build:use-vbo=false fs 4748: ok
+0 build:use-vbo=false vs ace2: ok
+26 terrain fs d697: ok
+26 terrain vs 18bc: ok

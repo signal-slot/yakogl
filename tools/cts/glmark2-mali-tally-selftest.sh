@@ -246,6 +246,43 @@ check "baseline: --forward-only without --baseline is usage, exit 2" rc_is 2 tal
 check "baseline: a missing baseline directory exits 1" rc_is 1 tally --baseline "$T/nope" "$T/clean"
 check "baseline: --baseline needs a value" rc_is 2 tally --baseline
 
+# --host-verdicts: the host's compile prediction against the board's verdict per scene
+HV="$T/../glmark2-mali-tally-forecast.verdicts.txt"
+FC="$T/../glmark2-mali-tally-forecast"
+check "forecast: without the option the output is unchanged" \
+  same "$T/faults.table.expected" table "$T/faults"
+check "forecast: faults run, table and forecast lines match" \
+  same "$FC.faults.expected" table --host-verdicts "$HV" "$T/faults"
+check "forecast: the default table comes first, unchanged" \
+  sh -c "head -n \$(wc -l < '$T/faults.table.expected') '$FC.faults.expected' | cmp -s - '$T/faults.table.expected'"
+check "forecast: faults, summary 8 clean, 3 refused, 22 without a line, 6 flagged" \
+  grep -q '^forecast: host predicts 8 clean, 3 refused, 22 without a line; 6 flagged$' "$FC.faults.expected"
+check "forecast: predicted clean, board failing is flagged (terrain gpu-fault)" \
+  grep -q '^forecast \[terrain\] <default>: host clean; board gpu-fault; FLAG predicted clean, board failing' "$FC.faults.expected"
+check "forecast: predicted refused, board failing is consistent, no flag" \
+  grep -Eq '^forecast \[conditionals\] fragment-steps=5:vertex-steps=0: host refused: fs 6c61: .*; board fail$' "$FC.faults.expected"
+check "forecast: predicted refused, board clean is a stale fixture (ideas)" \
+  grep -q '^forecast \[ideas\] speed=duration: host refused: vs 51b2: .*FLAG predicted refused, board clean (a stale fixture)' "$FC.faults.expected"
+check "forecast: a scene without a line has no prediction and no flag" \
+  grep -q '^forecast \[buffer\] .*update-method=map: host no prediction; board oom$' "$FC.faults.expected"
+check "forecast: clean run, only the three refused scenes are stale" \
+  same "$FC.clean.expected" table --host-verdicts "$HV" "$T/clean"
+check "forecast: clean run, 3 flagged" \
+  grep -q '^forecast: host predicts 8 clean, 3 refused, 22 without a line; 3 flagged$' "$FC.clean.expected"
+check "forecast: flags alone exit 0 without --strict" rc_is 0 tally --host-verdicts "$HV" "$T/faults"
+check "forecast: --strict exits 5 when a scene is flagged" rc_is 5 tally --host-verdicts "$HV" --strict "$T/faults"
+check "forecast: --strict still prints the table and forecast" grep -q '^forecast: host predicts ' "$WORK/out"
+check "forecast: --strict exits 0 when nothing is flagged" rc_is 0 tally --host-verdicts "$T/../glmark2-mali-tally-forecast.ok.txt" --strict "$T/clean"
+check "forecast: --strict without --host-verdicts is usage, exit 2" rc_is 2 tally --strict "$T/clean"
+check "forecast: another output mode keeps its stdout, the forecast on stderr" \
+  sh -c "python3 -I '$TALLY' --table '$TABLE' --host-verdicts '$HV' --picture-lines '$T/clean' 2>'$WORK/ferr' | cmp -s - '$T/clean.picture-lines.expected' && grep -q '^forecast: host predicts 8 clean' '$WORK/ferr'"
+printf '0 nosuch:scene vs aaaa: ok\n' >"$WORK/hv-unknown.txt"
+check "forecast: an unknown scene exits 1" rc_is 1 tally --host-verdicts "$WORK/hv-unknown.txt" "$T/clean"
+printf 'not a verdict line\n' >"$WORK/hv-bad.txt"
+check "forecast: a malformed line exits 1" rc_is 1 tally --host-verdicts "$WORK/hv-bad.txt" "$T/clean"
+check "forecast: a missing file exits 1" rc_is 1 tally --host-verdicts "$T/nope.txt" "$T/clean"
+check "forecast: --host-verdicts needs a value" rc_is 2 tally --host-verdicts
+
 # malformed input exits 1, usage 2
 for m in log status kmsg; do
   check "malformed-$m exits 1" rc_is 1 tally "$T/malformed-$m"
