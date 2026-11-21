@@ -4123,6 +4123,10 @@ enum VsLoop {
         end: usize,
         pass: usize,
         first: usize,
+        /// The trip count Mesa guesses from an array the counter
+        /// subscripts (nir_fs.rs `guessed_trips`): the head test is taken
+        /// while the counter is below it, its run-time bound dropped.
+        guess: Option<u32>,
     },
     /// A loop Mesa keeps: its state is the walk's `kept` ([`KeptLoop`]).
     Kept,
@@ -4399,16 +4403,24 @@ fn walk<'s>(
                 }) else {
                     return Err(MaliError::Defect(Defect::IrIndex));
                 };
-                lp = if super::nir_fs::ir_folds(m, head.val, &w.locals, 0) {
-                    VsLoop::Unroll { end: end as usize, pass: 0, first: vs.n }
+                let guess = super::nir_fs::guessed_trips(m, m.nodes_of(body));
+                lp = if super::nir_fs::ir_folds(m, head.val, &w.locals, 0) || guess.is_some() {
+                    VsLoop::Unroll { end: end as usize, pass: 0, first: vs.n, guess }
                 } else {
                     kept_loop = Some(vs_kept_begin(&mut vs, m, body, &mut w.locals)?);
                     VsLoop::Kept
                 };
                 continue;
             }
-            Step::Head(c) => {
-                let c = lane(w, c, 0);
+            Step::Head(src) => {
+                let mut c = lane(w, src, 0);
+                if let (VsLoop::Unroll { guess: Some(trips), .. }, false, Some(&IrOp::Alu(AluOp::Ilt, [a, _, _]))) =
+                    (lp, matches!(c, Val::Const(_)), m.def(src.val))
+                {
+                    if let Val::Const(i) = lane(w, a, 0) {
+                        c = Val::Const(if (i as i32) < trips as i32 { u32::MAX } else { 0 });
+                    }
+                }
                 match (lp, kept_loop.as_mut()) {
                     /* the counter's test, folded: past the last pass the
                      * loop is left, the rest of that pass dead */
