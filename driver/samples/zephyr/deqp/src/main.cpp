@@ -106,6 +106,80 @@ static const char *case_argument(void)
     }
     return "--deqp-case=" CONFIG_DEQP_CASE;
 }
+#elif defined(CONFIG_DEQP_CASE_SLOT)
+/*
+ * The patch slot (Kconfig DEQP_CASE_SLOT; the STM32MP257F-DK, whose board
+ * layer has no selector): a block in the image that a host tool writes
+ * after the build, before the runner stages the image
+ * (tools/cts/mp2-deqp-slot.py; the layout is pinned there and must stay the
+ * same). Little-endian, in .rodata and so in zephyr.bin:
+ *   magic[24]  "yakogl-deqp-case-slot/1", NUL-terminated (offset 0)
+ *   size       uint32: DEQP_CASE_SLOT_SIZE, the filter's room (24)
+ *   selector   int32: -1 none, else the index into DEQP_CASE_TABLE (28)
+ *   length     uint32: 0 none, else the filter's length in bytes (32)
+ *   filter     DEQP_CASE_SLOT_SIZE bytes (36): a --deqp-case value (patterns
+ *              separated by ','), NUL-terminated
+ * The filter wins over the selector, the selector over DEQP_CASE. A slot
+ * that does not hold together (no NUL at filter[length], an index past the
+ * table) is named on the console and runs DEQP_CASE.
+ */
+struct deqp_case_slot {
+    char magic[24];
+    uint32_t size;
+    int32_t selector;
+    uint32_t length;
+    char filter[CONFIG_DEQP_CASE_SLOT_SIZE];
+};
+static_assert(offsetof(struct deqp_case_slot, filter) == 36,
+              "the slot layout tools/cts/mp2-deqp-slot.py writes");
+
+__attribute__((used)) static const struct deqp_case_slot deqp_slot = {
+    "yakogl-deqp-case-slot/1", CONFIG_DEQP_CASE_SLOT_SIZE, -1, 0, {0}};
+
+/* The --deqp-case argument: the slot's filter, the DEQP_CASE_TABLE entry its
+ * selector names, or DEQP_CASE. */
+static const char *case_argument(void)
+{
+    static char arg[sizeof("--deqp-case=") + MAX(2048, CONFIG_DEQP_CASE_SLOT_SIZE)];
+    const struct deqp_case_slot *slot = &deqp_slot;
+    const char *table = CONFIG_DEQP_CASE_TABLE;
+
+    /* the compiler must read the bytes the host tool wrote, not fold the
+     * initializer above */
+    __asm__ volatile("" : "+r"(slot));
+    int want = slot->selector;
+    uint32_t len = slot->length;
+
+    if (len > 0) {
+        if (len < sizeof(slot->filter) && slot->filter[len] == '\0' &&
+            strlen(slot->filter) == len) {
+            snprintf(arg, sizeof(arg), "--deqp-case=%s", slot->filter);
+            printk("deqp: slot filter, %u bytes\n", (unsigned)len);
+            return arg;
+        }
+        printk("deqp: slot filter length %u does not hold together, running DEQP_CASE\n",
+               (unsigned)len);
+        return "--deqp-case=" CONFIG_DEQP_CASE;
+    }
+    if (want >= 0) {
+        for (int i = 0; *table; i++) {
+            const char *end = strchr(table, ';');
+            size_t n = end ? (size_t)(end - table) : strlen(table);
+
+            if (i == want && n > 0 && n < sizeof(arg) - sizeof("--deqp-case=")) {
+                snprintf(arg, sizeof(arg), "--deqp-case=%.*s", (int)n, table);
+                printk("deqp: selector %d\n", want);
+                return arg;
+            }
+            if (!end)
+                break;
+            table = end + 1;
+        }
+        printk("deqp: slot selector %d names no DEQP_CASE_TABLE entry, running DEQP_CASE\n",
+               want);
+    }
+    return "--deqp-case=" CONFIG_DEQP_CASE;
+}
 #endif
 
 /*
@@ -124,7 +198,7 @@ extern "C" int pvr_debug_set_draw_targets(int n);
 
 extern "C" int main(void)
 {
-#ifdef CONFIG_GC_COMMON_RESULT_SNVS
+#if defined(CONFIG_GC_COMMON_RESULT_SNVS) || defined(CONFIG_DEQP_CASE_SLOT)
     const char *argv[] = {
         "deqp",
         case_argument(),
@@ -154,7 +228,7 @@ extern "C" int main(void)
     int rc = 0;
 
     qpRedirectOut(nullptr, deqp_fatal_redirect);
-#ifdef CONFIG_GC_COMMON_RESULT_SNVS
+#if defined(CONFIG_GC_COMMON_RESULT_SNVS) || defined(CONFIG_DEQP_CASE_SLOT)
     printk("deqp: case filter '%s'\n", argv[1] + sizeof("--deqp-case=") - 1);
 #else
     printk("deqp: case filter '%s'\n", CONFIG_DEQP_CASE);

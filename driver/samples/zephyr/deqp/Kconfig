@@ -14,6 +14,27 @@ config DEQP_CASE_TABLE
 	  serves many groups or single cases. An empty table, no selector, or
 	  an index past the end runs DEQP_CASE.
 
+config DEQP_CASE_SLOT
+	bool "A patch slot in the image picks the case filter (no SNVS record)"
+	depends on !GC_COMMON_RESULT_SNVS
+	help
+	  For a board without the SNVS selector (the STM32MP257F-DK: its
+	  board layer has none). The image carries a fixed block in .rodata,
+	  found by its magic, that tools/cts/mp2-deqp-slot.py writes in
+	  zephyr.bin after the build: either a DEQP_CASE_TABLE index (as the
+	  SNVS selector) or a --deqp-case filter of its own (patterns
+	  separated by ','). An image whose slot is not written runs
+	  DEQP_CASE, as before. Off on every other board.
+
+config DEQP_CASE_SLOT_SIZE
+	int "Bytes the patch slot keeps for a case filter"
+	depends on DEQP_CASE_SLOT
+	range 256 65536
+	default 16384
+	help
+	  The filter's room in the slot, its NUL included. The default holds
+	  a few hundred full case names separated by ','.
+
 config DEQP_REPORT_ES2
 	bool "YakoGL reports OpenGL ES 2.0 (the dEQP-GLES2 image)"
 	default y
