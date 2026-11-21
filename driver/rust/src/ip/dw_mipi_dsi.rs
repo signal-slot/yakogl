@@ -218,8 +218,10 @@ impl Format {
     /// `mipi_dsi_pixel_format_to_bpp`.
     pub const fn bpp(self) -> u32 {
         match self {
-            Format::Rgb888 => 24,
-            Format::Rgb666 | Format::Rgb666Packed => 18,
+            // Linux: RGB888 and the loosely packed RGB666 are 24 bits on the
+            // link, only the packed RGB666 is 18 (include/drm/drm_mipi_dsi.h)
+            Format::Rgb888 | Format::Rgb666 => 24,
+            Format::Rgb666Packed => 18,
             Format::Rgb565 => 16,
         }
     }
