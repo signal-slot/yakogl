@@ -43,10 +43,14 @@
 //!   carries the same four targets, target 3 stored as without the call (its
 //!   clear colour reaches memory, seen by glReadPixels).
 //!
-//! The `#[ignore]`d case is the discard Mesa's PowerVR driver applies
-//! (`pvr_setup_pbe_state` marks an invalidated surface): it needs the GL core
-//! to pass the invalidation on and a `GlesDraw` field for it (plan #186's
-//! route, as tests/es3_mrt4_invalidate_v3d.rs names for the V3D).
+//! The two `#[ignore]`d cases are ES 3.0 4.5's answer (Mesa's PowerVR driver
+//! drops only the load of an invalidated surface): (a) a render pass that
+//! draws after the invalidation does not load target 3 but still stores it
+//! (PBE state and EOT emit kept); (b) an invalidation with no later draw may
+//! drop the store. Both need the GL core to pass the invalidation on and a
+//! `GlesDraw` field for it (plan #186's route, as
+//! tests/es3_mrt4_invalidate_v3d.rs names for the V3D); today's
+//! load-and-store is the passing pin before them.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_mrt4_blit_pvr
@@ -740,19 +744,60 @@ fn invalidating_attachment3_changes_what_the_next_draw_stores_in_no_way() {
     assert_eq!(read(&f, Fmt::Rgba8, 3), vec![[0, 0, 255, 255]; (W * W) as usize], "attachment 3 after the clear");
 }
 
-/// The discard Mesa's PowerVR driver applies to an invalidated surface
-/// (`pvr_setup_pbe_state` / `pvr_arch_pbe_pack_state`): the next render must
-/// not store attachment 3. Ignored: the invalidation is a validated no-op in
-/// src/gl/framebuffer.rs (`invalidate_framebuffer`, plan #186) and GlesDraw
-/// has no field for it, so the fourth PBE emit stores it anyway (the named
-/// limit tests/es3_mrt4_invalidate_v3d.rs gives for the V3D).
+/// Today's answer for a render pass that draws after invalidating
+/// GL_COLOR_ATTACHMENT3: nothing reaches the back end, so target 3 is loaded
+/// as without the call (the draw record is identical) and stored (its PBE
+/// emit's address is set, its clear colour reaches memory).
 #[test]
-#[ignore = "defect: glInvalidateFramebuffer reaches no back-end field, so the draw after an invalidation of GL_COLOR_ATTACHMENT3 still stores target 3"]
-fn an_invalidated_attachment3_is_not_stored_by_the_next_draw() {
+fn today_a_draw_after_invalidating_attachment3_loads_and_stores_it() {
+    let _g = context();
+    let f = fbo_rbs(4);
+    draw_buffers(&ALL4);
+    let (base, after) = stores_with_and_without(&[GL_COLOR_ATTACHMENT3]);
+    assert_ne!(after.targets[3].0, 0, "target 3 is stored: {after:?}");
+    assert_eq!(after, base, "and the pass is the one without the invalidation, so target 3 is loaded too");
+    assert_eq!(read(&f, Fmt::Rgba8, 3), vec![[0, 0, 255, 255]; (W * W) as usize]);
+}
+
+/// ES 3.0 4.5: after glInvalidateFramebuffer the contents are undefined, so
+/// the next render pass may skip LOADING target 3, but a pass that draws must
+/// still STORE it or the new pixels are lost (Mesa's PowerVR driver drops
+/// only the load). Expected: the invalidation reaches the back end (the draw
+/// differs from the one without it: no background-object load for target 3;
+/// `GlesDraw` has no load field to read it from today) and target 3 keeps its
+/// PBE state and EOT emit. Ignored: glInvalidateFramebuffer is a no-op in
+/// src/gl/framebuffer.rs (`invalidate_framebuffer`, plan #186) and GlesDraw
+/// has no invalidate field (the limit tests/es3_mrt4_invalidate_v3d.rs names
+/// for the V3D).
+#[test]
+#[ignore = "defect: glInvalidateFramebuffer is a no-op in src/gl/framebuffer.rs and GlesDraw has no invalidate field, so the draw after an invalidation of GL_COLOR_ATTACHMENT3 still loads target 3"]
+fn a_draw_after_invalidating_attachment3_skips_its_load_and_keeps_its_store() {
     let _g = context();
     let _f = fbo_rbs(4);
     draw_buffers(&ALL4);
     let (base, after) = stores_with_and_without(&[GL_COLOR_ATTACHMENT3]);
-    assert_ne!(after.targets[3].0, 0, "and today it is stored ({base:?} -> {after:?})");
-    assert_eq!(after.targets[3].0, 0, "a discarded target would reach the back end as 0 / an unstored target");
+    assert_ne!(after.targets[3].0, 0, "target 3 is still stored ({base:?} -> {after:?})");
+    assert_ne!(after, base, "the invalidation must reach the back end so target 3 is not loaded");
+}
+
+/// An invalidation with no draw after it before the frame ends may drop the
+/// store of target 3 (nothing was drawn into it). Ignored for the same
+/// reason: glInvalidateFramebuffer is a no-op in src/gl/framebuffer.rs and
+/// GlesDraw has no invalidate field, so the back end hears nothing.
+#[test]
+#[ignore = "defect: glInvalidateFramebuffer is a no-op in src/gl/framebuffer.rs and GlesDraw has no invalidate field, so an invalidation with no later draw reaches the back end as nothing"]
+fn an_invalidation_with_no_later_draw_may_drop_the_store() {
+    let _g = context();
+    let _f = fbo_rbs(4);
+    draw_buffers(&ALL4);
+    clear_and_finish();
+    let m = mark();
+    let gone = GONE.lock().unwrap().len();
+    assert_eq!(inv(GL_FRAMEBUFFER, &[GL_COLOR_ATTACHMENT3]), GL_NO_ERROR);
+    // SAFETY: plain GL call.
+    unsafe { glFinish() };
+    assert!(
+        !since(m).is_empty() || GONE.lock().unwrap().len() != gone,
+        "the invalidation must reach the back end so the frame's end can drop target 3's store"
+    );
 }
