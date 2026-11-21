@@ -90,18 +90,18 @@ gpu-vivante = []
 # the frame builder in driver/src/v3d/ (docs/online-shaderc/v3d-backend.md,
 # "M6"). The only shader back end for this GPU is the in-process compiler:
 # there is no offline table, so it needs `shaderc-online` and takes no
-# table (`no-shader-table` in the host tests; src/lib.rs says so at compile time rather than building
+# table (the feature implies `no-shader-table`; src/lib.rs says so at compile time rather than building
 # a library that cannot compile a shader). Like the GC7000, `struct shc_shader`
 # grows a V3D half (`ShcShader::v3d`).
-gpu-v3d = []
+gpu-v3d = ["no-shader-table"]
 # The NanoPC-T6's Arm Mali-G610 (RK3588, Valhall arch 10; `mali/`): a
 # skeleton. The descriptor packers are generated from Mesa's v10.xml
 # (src/mali/genxml/v10.rs, tools/mali/gen_pack_rs.py); the backend refuses
 # every draw and the shader back end every compile, each by name, until
 # their milestones land (driver/docs/nanopc-t6-mali.md). As on the V3D, the
 # only shader back end is the in-process compiler: it needs `shaderc-online`
-# and takes no table (`no-shader-table` in the host tests).
-gpu-mali = []
+# and takes no table (the feature implies `no-shader-table`).
+gpu-mali = ["no-shader-table"]
 # The Vivante depth canary (the C's CONFIG_YAKOGL_VIVANTE_DEPTH_GUARD): a
 # guard either side of the depth surface, filled with a pattern, so what the
 # pixel engine writes outside the surface can be read back. Bring-up only.
