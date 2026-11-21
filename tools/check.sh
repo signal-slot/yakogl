@@ -2356,6 +2356,8 @@ step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_t
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_tiled_ts
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_buffer_rename.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_buffer_rename
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_drift_link_with.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gl_es2ctx_drift_link_with
 step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_current_attrib.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,report-es2 --test gl_es2ctx_sweep_current_attrib
 step "test    host-test,gpu-vivante,report-es2 (tests/gl_es2ctx_sweep_program_hint.rs)" \
@@ -2378,6 +2380,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_more_clears
 step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_buffer_rename.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_buffer_rename
+step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_drift_link_with.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test gl_es2ctx_drift_link_with
 # The NanoPC-T6's Mali-G610 (`gpu-mali`): its backend builds each frame in
 # the OSAL's buffers and submits it through the Mali OSAL interface
 # (src/osal/mali.rs; on the host, a mock of it), and its shader back end
