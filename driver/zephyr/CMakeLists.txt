@@ -241,6 +241,12 @@ if(CONFIG_YAKOGL_DRV_DISPLAY_RUST OR CONFIG_YAKOGL_DRV_GPU_PVR_RUST OR CONFIG_YA
     # rk3588 feature; no RK3588 power-on is linked (nothing references it).
     list(APPEND _yd_features imx95 rk3588 mali)
   endif()
+  if(CONFIG_YAKOGL_VERDIN_IMX95_GPU_PROBE)
+    # The Verdin iMX95's GPU probes without the OSAL (tools/probes/
+    # verdin_imx95: imx95_ident, imx95_fw): yd_imx95_gpu_power_on / _off
+    # and yd_imx95_fw_up (ffi::imx95, board::imx95_gpu over the T6's Z3).
+    list(APPEND _yd_features imx95 rk3588 mali)
+  endif()
   if(CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)
     # The Verdin iMX95's picture on X4, yd_imx95_display_* (ffi::imx95_display
     # over board::verdin_imx95_display; driver/zephyr/lib/board/verdin_imx95/
