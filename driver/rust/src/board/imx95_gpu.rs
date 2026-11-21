@@ -31,7 +31,10 @@ use crate::gpu::mali::{self, Ident, L2On, ProbeStop, Reset};
 use crate::mmio::Mmio;
 use crate::soc::imx95::gpu_power::{self, Config, Error, Up};
 
-use super::nanopc_t6_fw::Power;
+use super::nanopc_t6_fw::{fw_up_on, FwUp, Power, STEP_CLEAN, STEP_NONE, STEP_VERSION};
+use super::nanopc_t6_sections::{Backing, McuMem, Placement};
+use crate::gpu::mali::pgtable::Table;
+use crate::gpu::mali::{csf, fw};
 
 /// The GPU's register block (imx95.dtsi `gpu@4d900000`, NXP's
 /// `GPU_BASE`), and its size there. The doorbells are at 0x80000 and up, as
@@ -182,6 +185,68 @@ impl<T: Transport> Power for Imx95Power<T> {
 
     fn stopped(g: &GpuUp) -> Option<(u32, u32, u64)> {
         (g.stop != Stop::None).then_some((g.stop as u32, g.refusal, g.detail))
+    }
+}
+
+/// CSG 0's control block as the firmware wrote it (the pre-study's B3:
+/// the suspend sizes the group's buffers need), read back after
+/// [`fw_up`]'s boot through the interface ([`csf::discover`], reads only).
+/// The C side's `struct yd_imx95_fw_csg0`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Csg0 {
+    /// 1 when the words below were read.
+    pub read: u32,
+    pub features: u32,
+    pub suspend_size: u32,
+    pub protm_suspend_size: u32,
+    pub stream_num: u32,
+    /// When not read: the [`csf::CsfRefusal`] of the discovery (or 0 when
+    /// the boot had not run) and the value it is about.
+    pub refusal: u32,
+    pub detail: u32,
+}
+
+/// The pre-study's B3 on the i.MX 95: Z1 over SCMI ([`Imx95Power`]), Z2's
+/// AS0 and the firmware's boot, as [`fw_up_on`] runs them on the NanoPC-T6
+/// (the arguments are its), then CSG 0's control block read back
+/// ([`Csg0`]) once the boot ran. Nothing is started after the `PING`: no
+/// group, no queue.
+#[allow(clippy::too_many_arguments)]
+pub fn fw_up<T: Transport>(
+    m: &impl Mmio,
+    gpu: usize,
+    power: &mut Imx95Power<T>,
+    blob: &[u8],
+    backings: &[Backing],
+    pool: &mut [Table],
+    tables_pa: u64,
+    timer_hz: u32,
+    clean: &impl Fn(usize, usize) -> i32,
+    delay_us: &mut impl FnMut(u32),
+    on_handover: &mut impl FnMut(&GpuUp),
+    z1: &mut GpuUp,
+) -> (FwUp, Csg0) {
+    let o = fw_up_on(m, gpu, power, blob, backings, pool, tables_pa, timer_hz, clean, delay_us, on_handover, z1);
+    let booted = matches!(o.step, STEP_NONE | STEP_CLEAN | STEP_VERSION);
+    (o, if booted { csg0(m, blob, backings, clean) } else { Csg0::default() })
+}
+
+/// CSG 0's control block, through the interface the boot found.
+fn csg0(m: &impl Mmio, blob: &[u8], backings: &[Backing], clean: &impl Fn(usize, usize) -> i32) -> Csg0 {
+    let Ok(img) = fw::parse(blob) else { return Csg0::default() };
+    let Ok(placement) = Placement::new(img.sections(), backings) else { return Csg0::default() };
+    let mem = McuMem::new(&placement, clean);
+    match csf::discover(m, &mem, &img).and_then(|i| i.csg(m, 0)) {
+        Ok(g) => Csg0 {
+            read: 1,
+            features: g.features,
+            suspend_size: g.suspend_size,
+            protm_suspend_size: g.protm_suspend_size,
+            stream_num: g.stream_num,
+            ..Csg0::default()
+        },
+        Err((why, v)) => Csg0 { refusal: why as u32, detail: v, ..Csg0::default() },
     }
 }
 

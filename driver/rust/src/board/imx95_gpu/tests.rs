@@ -286,3 +286,77 @@ fn the_gpu_stops_keep_the_t6_numbers() {
     assert!((0..=14).all(|n| n != Stop::Scmi as u32));
     assert_eq!((GPU_BASE, GPU_SIZE, IRQ_JOB, IRQ_MMU, IRQ_GPU), (0x4d90_0000, 0x48_0000, 289, 290, 288));
 }
+
+/// B3 (the pre-study's, imx95_fw): the power-on over SCMI, the firmware's
+/// boot, then CSG 0's control block read back. After the `PING` no GPU
+/// register is written: no group is started.
+#[test]
+fn the_firmware_boot_reads_back_csg0_and_starts_no_group() {
+    use crate::board::nanopc_t6_submit::tests::BOARD_SUSPEND_SIZE;
+    let b = Imx95::new(Sm::verdin());
+    let blob = synth::small();
+    let mut pool: Vec<Table> = vec![[0u64; ENTRIES]; 16];
+    let mut z1 = GpuUp::default();
+    let mut power = Imx95Power::new(Chan(&b), Config::VERDIN);
+    let (fw, c) = fw_up(
+        &b,
+        GPU,
+        &mut power,
+        &blob,
+        &backings(&blob),
+        &mut pool,
+        TABLES_PA,
+        24_000_000,
+        &|a, n| b.z.t6.clean(a, n),
+        &mut |_| {},
+        &mut |_| {},
+        &mut z1,
+    );
+    assert_eq!((fw.step, fw.version, fw.ping_acked, fw.gpu_id), (FW_STEP_NONE, 0x0105_0000, 1, G310_GPU_ID));
+    assert_eq!(fw.group_num, 8);
+    assert_eq!(
+        c,
+        Csg0 {
+            read: 1,
+            features: c.features,
+            suspend_size: BOARD_SUSPEND_SIZE,
+            protm_suspend_size: BOARD_SUSPEND_SIZE,
+            stream_num: fw.csg0[2],
+            refusal: 0,
+            detail: 0
+        }
+    );
+    // the last GPU write is the PING's doorbell; nothing after the boot
+    let log = b.log();
+    let last_w = log.iter().rposition(|e| matches!(e, Ev::W(..))).unwrap();
+    assert!(matches!(log[last_w], Ev::W(a, _) if a == crate::gpu::mali::csf::doorbell(0)), "{:?}", log[last_w]);
+}
+
+/// A refused power-on: no boot, so nothing is read back.
+#[test]
+fn a_refused_power_on_reads_back_no_csg() {
+    let mut sm = Sm::verdin();
+    sm.pd_perm.insert(PD_GPU, crate::soc::imx95::sm_mock::PERM_NONE);
+    let b = Imx95::new(sm);
+    let blob = synth::small();
+    let mut pool: Vec<Table> = vec![[0u64; ENTRIES]; 16];
+    let mut z1 = GpuUp::default();
+    let mut power = Imx95Power::new(Chan(&b), Config::VERDIN);
+    let (fw, c) = fw_up(
+        &b,
+        GPU,
+        &mut power,
+        &blob,
+        &backings(&blob),
+        &mut pool,
+        TABLES_PA,
+        24_000_000,
+        &|a, n| b.z.t6.clean(a, n),
+        &mut |_| {},
+        &mut |_| {},
+        &mut z1,
+    );
+    assert_eq!((fw.step, z1.stop), (STEP_GPU, Stop::Scmi));
+    assert_eq!(c, Csg0::default());
+    assert!(!b.log().iter().any(|e| matches!(e, Ev::R(_) | Ev::W(..))), "a GPU register was touched");
+}
