@@ -121,7 +121,7 @@ files (#1509): 580 became 79.
 |---|---|
 | `Cargo.toml` (workspace) | `Apache-2.0`; the `yakogl` package `Apache-2.0 AND MIT` |
 | `capi/Cargo.toml` | `Apache-2.0 AND MIT` |
-| `driver/rust/Cargo.toml` | `Apache-2.0 AND BSD-3-Clause AND MIT` (BSD-3-Clause: NXP register data, NOTICE 10) |
+| `driver/rust/Cargo.toml` | `Apache-2.0 AND BSD-3-Clause AND MIT` (BSD-3-Clause: NXP register data, NOTICE 9) |
 | `tools/precompile`, `tools/yakogl-tools` | inherit the workspace (`Apache-2.0`) |
 | `driver/samples/zephyr/{slint,triangle,cluster}/check` | `Apache-2.0` |
 | `tools/slint/bevy_gl_rec`, `examples/nostd/nostd-workspace.Cargo.toml` | no `license` field (sample manifests, not published; owner decision whether to add one) |
