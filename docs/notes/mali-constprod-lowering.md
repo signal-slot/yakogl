@@ -273,3 +273,113 @@ constants, leaving every other arm as it is.
   `atan` body.
 - The G310 needs nothing separate: the references are the G610's
   (`mali-g310-vs-g610.md`).
+
+## 8. Step 0 at c0142485
+
+Step 0 of section 4, done without a compiler change. Method: every
+`tools/mali/testdata/deqp_constprod_*` reference (31) and the eleven
+`deqp_fmaloc_fma_*` ones that `mali-lowering-schedule.md` section 4a gives to
+constprod (42 in all) went through `mali_ref::Reference::load` and
+`mali_ref::compile_pair`, as `tests/mali_deqp_constprod.rs` does (features
+`host-test,gpu-mali,shaderc-online,no-shader-table`). The site is a throwaway
+`eprintln!("SITE file:line")` at every `MaliError::{ArithConstant,
+FusedMultiplyAdd, AlgebraicForm}` construction in `glsl.rs`, `nir.rs` and
+`nir_fs.rs` (the one `ok_or` made lazy), reverted and not committed; the probe
+test was not committed either. Each reference printed exactly one `SITE`
+line, the one of its error, so no earlier site was passed over. `K1` to `K8`
+are the schedule's names for `S1` to `S8` of section 4.
+
+Texts: `A` = "a constant product in a shape Mesa's algebraic rules move or fold
+..." (`ArithConstant`), `F` = "a fused multiply-add other than a matrix
+product's (a built-in function's) ..." (`FusedMultiplyAdd`), `G` = "a shape
+Mesa's algebraic rules rewrite without a reference ..." (`AlgebraicForm`).
+Every site below is **measured at c0142485**; "= note" means the file:line of
+section 1 is the measured one.
+
+| reference | text | site (measured) | step | vs section 1 |
+|---|---|---|---|---|
+| `litfirst_vs` | A | `glsl.rs:1681` | K1 | = note |
+| `litfirst_array_vs` | A | `glsl.rs:1681` | K1 | = note (a "probe" row: confirmed) |
+| `neglit_pair_vs` | A | `glsl.rs:1609` | K2 | = note |
+| `neglit_pair_fs` | A | `glsl.rs:1609` | K2 | **differs**: the note says `nir_fs.rs:1433`; the pair is refused earlier, in the GLSL rewrite pass, before the fragment walk |
+| `chainlit_vs` | A | `glsl.rs:1681` | K2 | = note |
+| `chainlit_fs` | A | `glsl.rs:1681` | K2 | = note |
+| `constchain_degrees_vs` | A | `nir.rs:2414` | K3 | = note |
+| `constchain_attrib_vs` | A | `nir.rs:2414` | K3 | = note |
+| `constchain_loop_vs` | A | `nir.rs:2414` | K3 | = note (a "probe" row: confirmed) |
+| `constchain_fs` | A | `nir.rs:2414` | K3 | = note (a "probe" row: confirmed) |
+| `reassoc_mixed_vs` | A | `glsl.rs:1492` | K3 | = note |
+| `foldcall_reflect_fs` | A | `nir_fs.rs:3803` | K4 | = note |
+| `foldcall_acos_fs` | A | `nir_fs.rs:3803` | K4 | = note |
+| `fma_foldcall_acos_vs` | F | `nir.rs:4816` | K4 | line only (note `:4781`) |
+| `fma_foldcall_atan_vs` | F | `nir.rs:4816` | K4 | line only |
+| `fma_foldcall_reflect_vs` | F | `nir.rs:4816` | K4 | line only |
+| `fma_foldcall_refract_vs` | F | `nir.rs:4816` | K4 | line only |
+| `fma_foldcall_mod_vs` | F | `nir.rs:2649` | K4 | = note |
+| `fma_trig_acos_vs` | F | `nir.rs:4816` | K5 | line only |
+| `fma_trig_atan2_vs` | F | `nir.rs:4816` | K5 | line only |
+| `fma_random_trig_vs` | F | `nir.rs:4816` | K5 | line only |
+| `fma_matmul_const_vs` | F | `nir.rs:4816` | K6 (after K4) | line only |
+| `fma_matmul_dynamic_vs` | F | `nir.rs:4816` | K6 | line only |
+| `fma_matmul_mat_vs` | F | `nir.rs:4816` | K6 | line only |
+| `fma_mulassign_vs` | F | `nir.rs:4816` | K6 | line only |
+| `fma_geom_reflect_vs` | F | `nir.rs:4816` | K7 | line only |
+| `fma_geom_refract_vs` | F | `nir.rs:4816` | K7 | line only |
+| `fma_invariance_vs` | F | `nir.rs:4816` | K7 | line only |
+| `litfirst_mat_vs` | A | `glsl.rs:1681` | K8 | = note |
+| `litfirst_mat_fs` | A | `glsl.rs:1681` | K8 | = note |
+| `alg_constmat_fs` | G | `nir_fs.rs:1491` | K8 | = note |
+| `fmaloc_fma_asin` | F | `nir.rs:4816` | K5 | not in section 1 |
+| `fmaloc_fma_atan` | F | `nir.rs:4816` | K5 | not in section 1 |
+| `fmaloc_fma_atan2` | F | `nir.rs:4816` | K5 | not in section 1 |
+| `fmaloc_fma_attrmat_vec` | F | `nir.rs:4816` | K6 | not in section 1 |
+| `fmaloc_fma_attrmat_unimat` | F | `nir.rs:4816` | K6 | not in section 1 |
+| `fmaloc_fma_constmat_vec` | F | `nir.rs:4816` | K6 | not in section 1 |
+| `fmaloc_fma_constmat_mat` | F | `nir.rs:4816` | K6 (constant product: after K4's routing, like `fma_matmul_const_vs`) | not in section 1 |
+| `fmaloc_fma_const_matmat` | F | `nir.rs:4816` | K4 (constant fold) | not in section 1 |
+| `fmaloc_fma_const_asin` | F | `nir.rs:4816` | K4 | not in section 1 |
+| `fmaloc_fma_const_reflect` | F | `nir.rs:4816` | K4 | not in section 1 |
+| `fmaloc_fma_reflect_float` | F | `nir.rs:4816` | K7 | not in section 1 |
+
+(The step of the eleven `fmaloc_fma_*` rows is by shape, from
+`mali-deqp-fmaloc.md` section 3's descriptions; their site is measured.)
+
+What the sites say:
+
+- **One difference of substance:** `neglit_pair_fs` is refused at
+  `glsl.rs:1609`, not `nir_fs.rs:1433`. K2's `glsl.rs` change reaches both
+  `neglit_pair` references; the `nir_fs.rs:1433` arm (`neg(x) && neg(y)`)
+  is not reached by the reference and K2 must pin it with another shape or
+  leave it.
+- **The other differences are line shifts only:** `nir.rs:4781` of section 1
+  is `nir.rs:4816` at this tip (same `AluOp::Ffma => return
+  Err(FusedMultiplyAdd)` catch-all); no `file` changed. All 31 + 11
+  references are refused at one of eight sites: `glsl.rs` 1492, 1609, 1681;
+  `nir.rs` 2414, 2649, 4816; `nir_fs.rs` 1491, 3803.
+- **The three "probe" rows are confirmed, none reaches another site:**
+  `constchain_loop_vs` and `constchain_fs` are both at `nir.rs:2414`;
+  `litfirst_array_vs` at `glsl.rs:1681`. (The site says where the first
+  refusal is, not that the shader compiles after K1/K3: a later site may
+  appear then, as for every row.)
+- **Counts by site:** `nir.rs:4816` 25 (14 + 11 `fmaloc_fma_*`), `glsl.rs:1681`
+  6, `nir.rs:2414` 4, `glsl.rs:1609` 2, `nir_fs.rs:3803` 2, and one each
+  `glsl.rs:1492`, `nir.rs:2649`, `nir_fs.rs:1491`.
+
+**S3: is the `reassociate_constant` transcription needed?** `glsl.rs` already
+has `reassociate_constant` and the non-mixed `reassociate_operands`
+(`glsl.rs:1456-1500`). The measured refusal of `reassoc_mixed_vs` is its
+`mixed` arm (`glsl.rs:1492`: the reassociation across a change of width),
+which the existing rule declines by an error instead of transcribing. So
+the existing rule does not suffice for that reference: K3 needs the mixed
+branch of `reassociate_constant`, nothing more of the function. The four
+`nir.rs:2414` references are another thing: the site is the `is_const_product`
+guard of `Nir::alu`, a refusal placed there because the GLSL pass was
+presumed to have folded what Mesa folds; their Mesa words keep the constants
+(section 1), so for them K3 removes or narrows the guard and does not
+transcribe anything. Whether the guard can go without turning a shape that
+Mesa folds into "compiled, not Mesa's" is not shown by the sites: it needs
+the K3 byte-compare of each of the four, and a guard that stays for the shapes
+`glsl.rs:1456` leaves unfolded.
+
+Not done here (outside step 0): no reference was lowered or bytes compared;
+no site beyond the first refusal of each reference was measured.
