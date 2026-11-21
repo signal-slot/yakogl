@@ -825,25 +825,35 @@ renderbuffers: `fbo.msaa` 34, ... no item yet.")
 > renderbuffer and resolves in `glBlitFramebuffer` (`tests/es3_msaa_gl.rs`),
 > each back end draws and resolves a 4x FBO and leaves the resolved image in
 > the renderbuffer's storage (PowerVR, V3D, GC7000UL, Mali: host-tested,
-> `<status per back end>`); board runs follow the three board sessions. Item
+> status per back end in Status below); board runs follow the three board sessions. Item
 > plan #339.
 
-### Status comment for issue #2 (text to post; agents do not run `gh`)
+### Status
 
-> msaa-note (plan #339): `docs/notes/es3-msaa-renderbuffers.md` at `<commit>`.
-> It extends `v3d-msaa-es3.md` to the PowerVR, V3D, GC7000UL and Mali and fixes
-> what the other items implement: (a) `YakoglBackend::max_samples: u32` (0 =
-> single-sampled, the default) set to 4 only through the cargo feature
-> `msaa-fbo` (off) on a back end whose 4x host test passes; board images stay off
-> until a board session. (b) the GL core reports 4 for any request 1..=max,
-> allocates only `rb.mem`, `GlesDraw.samples` = the framebuffer's count, the
-> back end keeps the samples keyed by `GlesDraw::target_id`/`target_gen` (new,
-> `ds_object_id` of the renderbuffer and its `storage_gen`), drops them in
-> `attachment_gone` (extended, no new entry; also called from invalidate) and
-> leaves the resolved image in `rb.mem` at the end of every job; blit,
-> read-back and sampling read resolved pixels; ES 3.0 has no implicit
-> resolve of an FBO. (c) per back end, with the PowerVR's, GC7000UL's and
-> Mali's one-slot stores becoming pools. (d) about 83 dEQP rows per back end,
-> 2-3 with the GL core alone. Open: the size cap, GC7000UL 4x window config under
-> the feature, the start of an unclear GC job, one colour attachment on three
-> back ends. Not run: any board.
+Landed (sha8 on the integration tip):
+
+- `max_samples` field of `YakoglBackend`, 0 on every back end: `8eb22b62`.
+- GL-core caps and completeness: `GL_MAX_SAMPLES` and the internalformat sample
+  queries ask `src/gl/msaa.rs` (`2830b218`, `f3ed1fea`); real renderbuffer
+  counts, `GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` and the draw sample count
+  behind `max_samples` (`5e2a9ad5`).
+- Resolve blit: CPU reference resolve per format (`45b44924`), rectangle
+  resolve on the stored surface layout (`c1288b0c`), the multisample resolve
+  in `glBlitFramebuffer` (`2b367d46`).
+- Blit errors (scaled, format- and region-mismatched, ms-to-ms, error order):
+  `2a28f992`.
+- `src/msaa_store.rs`, the per-attachment sample store keyed by
+  `(target_id, gen)`: `d560e749`.
+- `src/msaa_hw`: Valhall (Mali) 4x descriptor and writeback resolve words
+  `fb51ce43`; GC7000UL 4x scratch, RS resolve format and state words
+  `9273dfba`. Pure, not wired.
+- V3D job builder: per-RT 4x sample buffers and typed 4x targets: `4bcb55c3`.
+- `gl_test` case 223 `msaarbo`, built, not run: `080b6f9e`.
+
+Not landed:
+
+- The 4x FBOs and their resolve on PowerVR, V3D, GC7000UL and Mali; the
+  capability is 0 everywhere.
+- The gate rows for the `msaa-fbo` feature and `tests/es3_msaa_v3d.rs`.
+- The host dEQP rerun (d2) of `fbo.msaa`, `multisample.fbo_max_samples` and
+  `rasterization.fbo.rbo_multisample_max` per back end.
