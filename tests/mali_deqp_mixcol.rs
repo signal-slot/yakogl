@@ -35,6 +35,11 @@ const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lo
 const CK: &str = "Valhall: a colour pair of a constant then a varying lane is not lowered yet";
 const LZ: &str = "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet";
 
+/// The references that compile byte-equal (their tests run): `hp_mat`, a
+/// shader with no default precision whose floats are all declared highp
+/// (mod.rs `FsPrecision::implicit_highp`).
+const MATCHED: &[&str] = &["hp_mat"];
+
 /// Every reference (without the `deqp_mixcol_` prefix) and the whole
 /// `MaliError` message the compiler refuses its pair with now.
 const REFUSALS: &[(&str, &str)] = &[
@@ -42,7 +47,6 @@ const REFUSALS: &[(&str, &str)] = &[
      * narrows each where it meets a mediump value (FADD.f32 .h0) */
     ("hp_scale", MIX),
     ("hp_bool", MIX),
-    ("hp_mat", MIX),
     ("hp_param", MIX),
     ("hp_loop", MIX),
     ("hp_seq", MIX),
@@ -78,7 +82,6 @@ fn mixcol_hp_bool() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (hp_mat)"]
 fn mixcol_hp_mat() {
     mali_ref::assert_matches("deqp_mixcol_hp_mat");
 }
@@ -185,7 +188,7 @@ fn refusals_pinned() {
         .filter_map(|n| n.strip_prefix("deqp_mixcol_")?.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut listed: Vec<&str> = REFUSALS.iter().map(|(n, _)| *n).collect();
+    let mut listed: Vec<&str> = REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
     listed.sort_unstable();
     assert_eq!(on_disk, listed, "a deqp_mixcol_* reference has no entry in REFUSALS");
     let mut changed = Vec::new();

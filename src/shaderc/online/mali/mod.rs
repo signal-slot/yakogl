@@ -1058,6 +1058,14 @@ pub struct FsPrecision {
     /// into this shader, at this shader's varying locations
     /// ([`link::FsConsts`]; none for a shader compiled alone).
     pub consts: link::FsConsts,
+    /// `highp` comes from the declarations alone: no default float
+    /// precision, every float declared highp ([`FsPrecision::of`]). The
+    /// highp path does not take every such shader yet (a varying read bare
+    /// by an operation before its load is placed: deqp_arith_matrix
+    /// _storeout_fs_highp's `IrIndex`, which a `precision highp float` gives
+    /// at the tip too), so one it refuses is compiled under the rule before
+    /// it ([`FsPrecision::of_explicit`]) and keeps that refusal.
+    pub implicit_highp: bool,
 }
 
 impl FsPrecision {
@@ -1071,6 +1079,26 @@ impl FsPrecision {
 
     /// The precision of fragment shader `src`, whose IR is `m`.
     pub fn of<'s>(m: &ir_mod::Module<'_>, src: &'s str, scratch: &Arena<'s>) -> Result<FsPrecision, MaliError> {
+        Self::of_with(m, src, scratch, true)
+    }
+
+    /// [`FsPrecision::of`] without the implicit highp of a shader with no
+    /// default precision ([`FsPrecision::implicit_highp`]): the rule that
+    /// was in force before it, which the compile falls back to.
+    pub fn of_explicit<'s>(
+        m: &ir_mod::Module<'_>,
+        src: &'s str,
+        scratch: &Arena<'s>,
+    ) -> Result<FsPrecision, MaliError> {
+        Self::of_with(m, src, scratch, false)
+    }
+
+    fn of_with<'s>(
+        m: &ir_mod::Module<'_>,
+        src: &'s str,
+        scratch: &Arena<'s>,
+        implicit: bool,
+    ) -> Result<FsPrecision, MaliError> {
         use super::ast::{BaseType, Decl, DeclId, Precision, StorageQualifier};
         let defect = |_| MaliError::Defect(Defect::IrIndex);
         let pre = super::pp::preprocess(scratch, src).map_err(defect)?;
@@ -1091,12 +1119,46 @@ impl FsPrecision {
                 _ => {}
             }
         }
-        let highp = at_main.unwrap_or(dflt) == Precision::High;
+        /* no default float precision, and every float the shader declares
+         * (a varying, a local or a constant at least) declared highp: each
+         * operation is highp, which lower_precision leaves at fp32, so the
+         * shader is the highp path's (dEQP's `const highp mat2 in0`, `varying
+         * highp float v_coords`, `highp mat2 res`:
+         * deqp_misc_constmat_mat2_highp's `FMA.f32` and `FADD.f32 .h0`) */
+        let no_default = implicit
+            && at_main.unwrap_or(dflt) == Precision::Default
+            && !ast.decls.iter().any(|d| matches!(d, Decl::Precision { base: BaseType::Float, .. }));
+        let all_highp = no_default && {
+            let mut named = 0usize;
+            /* a matrix varying's lanes on the highp path load and store in
+             * an order no reference has pinned yet (deqp_fclane_mat_vec_lanes,
+             * _mat_elem_pairs, _mat_cols_sum, _mat4_swz_sum): such a shader
+             * stays refused as mixed */
+            let all = ast.decls.iter().all(|d| match *d {
+                Decl::Var { storage: StorageQualifier::Varying, ty, .. } if matches!(ty.base, BaseType::Mat(..)) => {
+                    false
+                }
+                Decl::Var { storage, ty, .. } if float(&ty.base) => {
+                    named += usize::from(storage != StorageQualifier::Uniform);
+                    ty.precision == Precision::High
+                }
+                Decl::Function { ret, .. } if float(&ret.base) => ret.precision == Precision::High,
+                _ => true,
+            });
+            all && named > 0 && ast.params.iter().all(|p| !float(&p.ty.base) || p.ty.precision == Precision::High)
+        };
+        let highp = at_main.unwrap_or(dflt) == Precision::High || all_highp;
         let other = |p: Precision| p != Precision::Default && (p == Precision::High) != highp;
         /* a function defined under the other default computes at its width */
         let mixed =
             [Precision::Low, Precision::Medium, Precision::High].into_iter().any(|p| at_fns[p as usize] && other(p));
-        let mut f = FsPrecision { highp, mixed, frag_coord_highp: pre.version >= 300, ..FsPrecision::default() };
+        let mut f = FsPrecision {
+            highp,
+            mixed,
+            frag_coord_highp: pre.version >= 300,
+            implicit_highp: all_highp && at_main.unwrap_or(dflt) != Precision::High,
+            ..FsPrecision::default()
+        };
         let mut dflt = Precision::Default;
         for d in ast.top_level() {
             match *d {
@@ -1801,7 +1863,14 @@ fn compile_lowered<'s>(
     } else {
         FsPrecision::default()
     };
-    let sc = compile_module_on(&l.module, decls.uniforms, fs, None, &[], order, scratch).map_err(refused)?;
+    let sc = match compile_module_on(&l.module, decls.uniforms, fs, None, &[], order, scratch) {
+        Err(_) if fs.implicit_highp => {
+            let fs = FsPrecision { consts, ..FsPrecision::of_explicit(&l.module, src, scratch).map_err(refused)? };
+            compile_module_on(&l.module, decls.uniforms, fs, None, &[], order, scratch)
+        }
+        r => r,
+    }
+    .map_err(refused)?;
     let sh = record(stage, &l, &sc, scratch, keep)?;
     let blocks = (l.reflection.blocks, l.reflection.block_members, [l.reflection.uniforms, &[][..]]);
     Ok((sh, blocks))

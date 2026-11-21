@@ -5,12 +5,12 @@
 //! small refusals — comparison forms, the mediump/lowp vertex `mat4 * mat4`
 //! over 32 work registers, mediump `gl_FragCoord.z`, the factored constant
 //! matrix products, an invariant `gl_Position`; see
-//! `docs/notes/mali-deqp-misc.md`). One test per reference. Five compile
+//! `docs/notes/mali-deqp-misc.md`). One test per reference. Nine compile
 //! byte-equal and run: `cmp_fne_hp`, `cmp_ine0_hp`, `cmp_notequal_vec2`,
-//! `fragcoord_xyz` and `invariant_position` (a copy, which has no
-//! arithmetic to keep exact). The others are refused, each test ignored with
-//! its refusal quoted; the lowering removes the `ignore` and the
-//! reference's entry in `REFUSALS` together. `refusals_pinned` runs now: it
+//! the four `constmat_*`, `fragcoord_xyz` and `invariant_position` (a copy,
+//! which has no arithmetic to keep exact). The two `spill_*` are refused,
+//! each test ignored with its refusal quoted; the lowering removes the
+//! `ignore` and the reference's entry in `REFUSALS` together. `refusals_pinned` runs now: it
 //! asserts each ignored reference's exact current refusal (the vertex
 //! shader's when it refuses, else the fragment shader's).
 //!
@@ -38,25 +38,21 @@ fn misc_cmp_notequal_vec2() {
 }
 
 #[test]
-#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product), lowered by lower-misc"]
 fn misc_constmat_mat2_highp() {
     mali_ref::assert_matches("deqp_misc_constmat_mat2_highp");
 }
 
 #[test]
-#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product), lowered by lower-misc"]
 fn misc_constmat_mat2_mediump() {
     mali_ref::assert_matches("deqp_misc_constmat_mat2_mediump");
 }
 
 #[test]
-#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product), lowered by lower-misc"]
 fn misc_constmat_mat4_highp() {
     mali_ref::assert_matches("deqp_misc_constmat_mat4_highp");
 }
 
 #[test]
-#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product), lowered by lower-misc"]
 fn misc_constmat_mat4_mediump() {
     mali_ref::assert_matches("deqp_misc_constmat_mat4_mediump");
 }
@@ -85,12 +81,14 @@ fn misc_spill_mediump_mat4_mat4() {
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_misc_constmat_mat2_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_constmat_mat2_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_constmat_mat4_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_constmat_mat4_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_spill_lowp_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
-    ("deqp_misc_spill_mediump_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
+    (
+        "deqp_misc_spill_lowp_mat4_mat4",
+        "a program needing more than the split file's 32 work registers (the full file, spilling)",
+    ),
+    (
+        "deqp_misc_spill_mediump_mat4_mat4",
+        "a program needing more than the split file's 32 work registers (the full file, spilling)",
+    ),
 ];
 
 #[test]

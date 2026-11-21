@@ -894,6 +894,9 @@ pub const ADMITTED: u128 = {
         | prod(HalfSwapped, FmaA)
         | prod(Splat, AddB)
         | prod(Splat, MulB)
+        /* a lane first in a product of two lanes (deqp_misc_constmat_mat4
+         * _mediump: `FMA.v2f16 r1, r0.h00, u2.w0, 0x0.neg`) */
+        | prod(Splat, MulA)
         | prod(Splat, FmaB)
         | prod(Mk, AddB)
         | prod(Mk, FmaC)
@@ -1483,12 +1486,21 @@ impl<'s> Fs<'s> {
              * (nir_opt_algebraic.py's factoring), the constants' sum
              * folded and `fmul(a, 1.0)` `a`: cflow_68_armselect's `v * 0.5
              * + w * 0.5` once both arms' selects are one (no `FMA` in
-             * Mesa's program). A sum of other constants has no reference */
+             * Mesa's program). Another sum is folded at fp16 ([`fold_const16`],
+             * lower_precision narrowed the constants first) and the product
+             * is `fmul(a, b + c)`, `a` first, under the rules of a constant
+             * (-1.0 an fneg, 0.0 the constant): deqp_misc_constmat_mat2
+             * _mediump's `res[0][1] + res[1][1]`, `FMA.v2f16 r0, r0^.h00,
+             * u2.w1, 0x0.neg` by `0x3c663c66` (0.7 + 0.4), and the mat4's
+             * `FMA.v2f16 r1, r0.h00, u2.w0` by `0x32664400` (four 1.0) */
             (AluOp::Fadd, _) if self.factor(x, y).is_some() => {
                 let (a, b, c) = self.factor(x, y).ok_or(MaliError::Defect(Defect::IrIndex))?;
-                match f32::from_bits(b) + f32::from_bits(c) {
-                    1.0 => Ok(a),
-                    _ => Err(MaliError::AlgebraicForm),
+                let r = fold_const16(AluOp::Fadd, b, c).map_err(|_| MaliError::AlgebraicForm)?;
+                match r {
+                    F32_ONE => Ok(a),
+                    F32_MINUS_ONE => self.neg(a, at),
+                    0 | F32_NEG_ZERO => Ok(Val::Const(0)),
+                    _ => self.node(Alu::Fmul, [a, Val::Const(r), Val::Undef], at),
                 }
             }
             /* `fadd(a, a)` is `fmul(a, 2.0)` (nir_opt_algebraic.py:274): an
@@ -1505,6 +1517,16 @@ impl<'s> Fs<'s> {
         let Val::Lane(n, _) = v else { return None };
         match self.nir.nodes[n as usize] {
             NirNode { kind: Kind::Alu(Alu::B2f), bits: 16, src: [m, ..], .. } => Some(m),
+            _ => None,
+        }
+    }
+
+    /// `v` is a product of a non-constant `a` with a constant: Some(`a`).
+    fn prod_of(&self, v: Val) -> Option<Val> {
+        match self.alu_of(v)? {
+            (Alu::Fmul, [a, Val::Const(_), _]) | (Alu::Fmul, [Val::Const(_), a, _]) if !matches!(a, Val::Const(_)) => {
+                Some(a)
+            }
             _ => None,
         }
     }
@@ -3198,7 +3220,16 @@ impl<'s> Fs<'s> {
                      * unrolled loop, whose passes' sums of products the
                      * reassociation above folds as they are (s6_discloop's
                      * byte-equal `fmul u_w, 10.0`) */
-                    None if x == y && self.loops == 0 => self.op32(Alu::Fmul, [x, Val::Const(F32_TWO), u], at),
+                    /* a product with a constant, though, is two products in
+                     * NIR (the lanes of two vector products CSE'd here), so
+                     * the distributive law takes it first, the graph's
+                     * `fadd(fmul(a, b), fmul(a, c))` ([`nir::Nir::alu`]):
+                     * deqp_misc_constmat_mat4_highp's `res[0].x + res[1].y`
+                     * of `1.0 * v` twice, then `v * 4.0` (`FMA.f32 r1, r0,
+                     * 0x44000000.h1, 0x0.neg`) */
+                    None if x == y && self.loops == 0 && self.prod_of(x).is_none() => {
+                        self.op32(Alu::Fmul, [x, Val::Const(F32_TWO), u], at)
+                    }
                     None => self.op32(Alu::Fadd, [x, y, u], at),
                 }
             }
@@ -3870,6 +3901,35 @@ impl<'s> Fs<'s> {
             if i > 0 && s[..arity].contains(&Val::Undef) {
                 break;
             }
+            /* `fadd(fmul(a, 0.0), fmul(#c, a))` of a zero product the walk
+             * folded ([`zero_product`]): the link's vector factoring makes it
+             * `fmul(a, c)`, `a` first, an instruction of its own (the vector
+             * product's lane is no scalar to CSE with): deqp_misc_constmat
+             * _mat4_highp's `y` and `z`, `FMA.f32 r2, r0, u2.w0, 0x0.neg` */
+            if a == AluOp::Fadd {
+                let factored = (0..2).find_map(|k| {
+                    let p = zero_product(self, m, vals, srcs[k], i, 0)?;
+                    match self.alu_of(s[1 - k]) {
+                        Some((Alu::Fmul, [q, Val::Const(c), _]) | (Alu::Fmul, [Val::Const(c), q, _]))
+                            if q == p && !matches!(c, 0 | F32_NEG_ZERO) =>
+                        {
+                            Some((p, c))
+                        }
+                        _ => None,
+                    }
+                });
+                if let Some((p, c)) = factored {
+                    let n = self.nir.push_node(NirNode {
+                        kind: Kind::Alu(Alu::Fmul),
+                        src: [p, Val::Const(c), Val::Undef],
+                        bits: 32,
+                        width: 1,
+                    })?;
+                    self.origin[n as usize] = id as u16;
+                    *o = Val::Lane(n, 0);
+                    continue;
+                }
+            }
             *o = self.lane32(m, a, srcs, s, id)?;
         }
         Ok(out)
@@ -4239,6 +4299,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     f.mixed |= !highp_locals_copy(m, &prec) || (f.fc_copy && f.frag16.is_some());
     f.ir_vals = vals;
     f.mark_live();
+    lone_negations(&mut f, m);
     /* a highp `log2` read by anything but a `pow` ([`Fs::lane32`]'s
      * `Flog2`, made for the `pow` that reads it): no reference */
     let lone_log = (0..f.nir.n).any(|k| {
@@ -5932,7 +5993,35 @@ fn walk_nodes(
                             matches!((lane(vals, s[0], i), lane(vals, s[1], i)), (Val::Const(_), Val::Const(_)))
                         });
                     for i in lanes.clone() {
-                        let (x, y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
+                        let (mut x, mut y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
+                        let mut rule = rule;
+                        /* `fadd(fmul(a, 0.0), fmul(a, #c))` where the pair walk
+                         * folded the zero product to 0.0 (or a sum of zero
+                         * products, [`zero_product`]): at the link the vector
+                         * sum is factored first (nir_opt_algebraic.py:246 on
+                         * the vec4 operations, before the mediump split), so
+                         * the lane is `fmul(a, 0.0 + c)`, `a` first
+                         * (deqp_misc_constmat_mat4_mediump's `y` and `z`,
+                         * `FMA.v2f16 r1, r0.h00, u2.w0, 0x0.neg`, `FMA.v2f16
+                         * r0, r0^.h00, u2.w1, 0x0.neg`) */
+                        if a == AluOp::Fadd {
+                            for k in 0..2 {
+                                let other = [x, y][1 - k];
+                                if !matches!([x, y][k], Val::Const(_)) {
+                                    continue;
+                                }
+                                let Some(p) = zero_product(f, m, vals, s[k], i, 0) else { continue };
+                                if f.prod_of(other) == Some(p) {
+                                    let z = f.node(Alu::Fmul, [p, Val::Const(0), Val::Undef], at)?;
+                                    if k == 0 {
+                                        x = z;
+                                    } else {
+                                        y = z;
+                                    }
+                                    rule = Rule::None;
+                                }
+                            }
+                        }
                         out[i] = f.op(a, x, y, at, rule, Some(vec_neg))?;
                         /* an identity on some lanes of the operation only:
                          * at the link the operation is still an fp16 one
@@ -7453,6 +7542,102 @@ fn uniform_load(m: &Module<'_>, dword: u16) -> Result<(u16, u16), MaliError> {
     Ok(if total == 16 { (u.dword_off + (dword - u.dword_off) / 4 * 4, 4) } else { (u.dword_off, total) })
 }
 
+/// Lane `i` of IR source `s` is a 0.0 the pair walk folded from a product
+/// of a value with 0.0, or a sum of such products of one value: Some(the
+/// value), the `a` of `fmul(a, 0.0)` that the link's vector factoring still
+/// sees (nir_opt_algebraic.py:246 runs on the vec4 operations before the
+/// mediump split).
+fn zero_product(f: &Fs<'_>, m: &Module<'_>, vals: &[[Val; 4]], s: ir::Src, i: usize, depth: u8) -> Option<Val> {
+    let c = s.swizzle[i] as usize & 3;
+    let at = |s: ir::Src, c: usize| vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[c] as usize & 3]);
+    let zero = |v: Val| matches!(v, Val::Const(0 | F32_NEG_ZERO));
+    let v = vals.get(s.val.0 as usize)?[c];
+    /* a zero product the walk kept (`fmul(a, 0.0)` in a pair with another
+     * constant) */
+    if let Some((Alu::Fmul, [p, q, _])) = f.alu_of(v) {
+        return match (p, q) {
+            (z, p) | (p, z) if zero(z) && matches!(p, Val::Lane(..)) => Some(p),
+            _ => None,
+        };
+    }
+    if depth > 8 || !zero(v) {
+        return None;
+    }
+    match m.def(s.val)? {
+        /* a local's lane: the last whole store before the read, in a body
+         * without control flow (the matrix `res` of the constmat cases) */
+        ir::Op::LoadLocal { local, index: None, .. } => {
+            if m.nodes.iter().any(|nd| matches!(nd, Node::If { .. } | Node::Loop { .. })) {
+                return None;
+            }
+            let st = (0..s.val.0 as usize).rev().find_map(|j| match m.instrs[j] {
+                ir::Op::StoreLocal { local: l, index, src, write_mask } if l == *local => {
+                    Some((index, src, write_mask))
+                }
+                _ => None,
+            })?;
+            let (None, src, mask) = st else { return None };
+            if mask >> c & 1 == 0 {
+                return None;
+            }
+            let mut sw = [0u8; 4];
+            sw[0] = src.swizzle[c];
+            zero_product(f, m, vals, ir::Src { val: src.val, swizzle: sw }, 0, depth + 1)
+        }
+        ir::Op::Alu(AluOp::Fmul, zs) => match (at(zs[0], c), at(zs[1], c)) {
+            (z, p) | (p, z) if zero(z) && matches!(p, Val::Lane(..)) => Some(p),
+            _ => None,
+        },
+        ir::Op::Alu(AluOp::Fadd, zs) => {
+            let p = zero_product(f, m, vals, zs[0], c, depth + 1)?;
+            (zero_product(f, m, vals, zs[1], c, depth + 1)? == p).then_some(p)
+        }
+        _ => None,
+    }
+}
+
+/// `fmul(a, -1.0)` of a 16-bit lane whose vector IR operation has no other
+/// lane read: `nir_opt_shrink_vectors` leaves it scalar, and
+/// nir_opt_algebraic.py:296 then makes it `fneg(a)`. A vector product whose
+/// other lanes are read keeps its constant vector (the pair walk's
+/// `Rule::Negate` holds for a pair whose lanes are all -1.0 only).
+/// deqp_misc_constmat_mat2_mediump: `res[1] = in0[1] * v` with `in0[1] =
+/// (-1.0, 0.4)`, its `y` read by the factored `res[0][1] + res[1][1]` alone,
+/// so `res[1][0]` is `FADD.v2f16 r2, r0.neg.h00, 0x0.neg`. The same of a
+/// highp shader's 32-bit lane (deqp_misc_constmat_mat2_highp: `FADD.f32
+/// r0.h0, r0^.neg, 0x0.neg`, the fneg folded into the colour's narrowing).
+fn lone_negations(f: &mut Fs<'_>, m: &Module<'_>) {
+    let bits = if f.prec.highp { 32 } else { 16 };
+    for k in 0..f.nir.n {
+        if f.live[k / 64] >> (k % 64) & 1 == 0 {
+            continue;
+        }
+        let NirNode { kind: Kind::Alu(Alu::Fmul), bits: b, width: 1, src: [x, y, _], .. } = f.nir.nodes[k] else {
+            continue;
+        };
+        if b != bits {
+            continue;
+        }
+        let a = match (x, y) {
+            (a, Val::Const(F32_MINUS_ONE)) | (Val::Const(F32_MINUS_ONE), a) if matches!(a, Val::Lane(..)) => a,
+            _ => continue,
+        };
+        if matches!(f.alu_of(a), Some((Alu::Fneg, _))) {
+            continue;
+        }
+        let o = f.origin[k] as usize;
+        let Some(lanes) = f.ir_vals.get(o).copied() else { continue };
+        let w = width_of(m, ir::ValueId(o as u32)).min(4);
+        let me = Val::Lane(k as u16, 0);
+        let other_read = lanes[..w].iter().any(|&l| l != me && matches!(l, Val::Lane(..)) && f.read(l));
+        if w < 2 || !lanes[..w].contains(&me) || other_read {
+            continue;
+        }
+        f.nir.nodes[k].kind = Kind::Alu(Alu::Fneg);
+        f.nir.nodes[k].src = [a, Val::Undef, Val::Undef];
+    }
+}
+
 /// `nir_opt_shrink_vectors` for the uniform loads of a highp shader: each
 /// keeps the lanes up to the highest one read (the vertex stage's `shrink`,
 /// nir.rs; a load the colour alone reads counts its stores, pushed before
@@ -8623,6 +8808,16 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
             let t = vectorise(f, pr, sa[1], sb[1], pair, ubo)?;
             let e = vectorise(f, pr, sa[2], sb[2], pair, ubo)?;
             P::Op(Alu::Bcsel, [mask, t, e])
+        }
+        /* a product and an fneg: `nir_opt_vectorize` pairs only one
+         * operation, so each lane is its own and the word is packed
+         * (deqp_misc_constmat_mat2_mediump's `(v * 0.6, -v)`: `FMA.v2f16
+         * r1, u2.w0, r0.h00, 0x0.neg`, `FADD.v2f16 r2, r0.neg.h00, 0x0.neg`,
+         * then `MKVEC.v2i16 r1, r1^.h0, r2^.h0`) */
+        (Some((Alu::Fmul, _)), Some((Alu::Fneg, _))) | (Some((Alu::Fneg, _)), Some((Alu::Fmul, _))) => {
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Pack { x, y })
         }
         (Some((Alu::Fadd, sa)), Some((Alu::Fadd, sb))) => {
             let x = vectorise(f, pr, sa[0], sb[0], pair, ubo)?;
