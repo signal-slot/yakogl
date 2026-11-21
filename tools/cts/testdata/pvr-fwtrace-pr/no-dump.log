@@ -1,0 +1,4 @@
+[00:10:01.000,000] <inf> pvr: FWT| === FW trace: log_type=0x00000000 size=12000 dw ===
+[00:10:01.000,000] <inf> pvr: FWT| T0-SPM> [123450] Force Z-Load for partial render
+[00:10:01.000,000] <inf> pvr: FWT| T0-SPM> [123451] PR ZLoad address 0x00000000400e9e80
+[00:10:01.000,000] <inf> pvr: FWT| T0-SPM> [123452] PR ZStore address 0x00000000400e9e80
