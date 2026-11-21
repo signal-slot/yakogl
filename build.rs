@@ -55,13 +55,18 @@ fn main() {
 /// compiled into this build. Two builds take it: one that asks for it as its
 /// shader table (`mesa-reference-table`, the measurement images), and the host
 /// tests (`host-test`), which compare our compiler with it, unless they ask
-/// for no table (`no-shader-table`). No other build compiles it, so no other
+/// for no table (`no-shader-table`) or build for a GPU that has none
+/// (`gpu-v3d`, `gpu-mali`: no Mesa reference exists for them, so a host-test
+/// build of them is the same as one with `no-shader-table`; the explicit
+/// `mesa-reference-table` still sets the cfg there, and src/lib.rs refuses it
+/// by name). No other build compiles it, so no other
 /// product build can link a Mesa-built row (tools/check.sh, "no Mesa
 /// reference in the artefact").
 fn mesa_reference() {
     println!("cargo::rustc-check-cfg=cfg(mesa_reference)");
     let on = |f: &str| env::var_os(format!("CARGO_FEATURE_{f}")).is_some();
-    if on("MESA_REFERENCE_TABLE") || (on("HOST_TEST") && !on("NO_SHADER_TABLE")) {
+    let no_table_gpu = on("GPU_V3D") || on("GPU_MALI");
+    if on("MESA_REFERENCE_TABLE") || (on("HOST_TEST") && !on("NO_SHADER_TABLE") && !no_table_gpu) {
         println!("cargo:rustc-cfg=mesa_reference");
     }
 }
