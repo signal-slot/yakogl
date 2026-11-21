@@ -336,15 +336,20 @@ same samples through `XYZW`.
     one log line naming the masks): uneven masks under glEnable(GL_BLEND)
     with both integer and non-integer targets, because one BLEND_ENABLES
     and one BLEND_CFG serve every RT (G3).
-  - *Open: clears still write all four store channels.* A glClear /
-    glClearBuffer of such a texture clears the whole wide store, on the
-    TLB clear words and the quad path alike
-    (`docs/notes/v3d-int-clear.md`), so its hidden blue and alpha
-    channels hold the application's values until plan item
-    `v3d-int-clear-narrow`; the clear cases wait ignored in
-    `tests/es3_v3d_int_rg_clear.rs` (`v3d-int-clear-test-scaffold`). The
-    read-back fills 0, 0, 1 regardless, and no test asserts a hidden
-    channel of the store after a clear.
+  - *Clears keep the absent channels at 0, 0, 1.* Since `ab0222cf`
+    (plan #383 item `v3d-int-clear-narrow`) the GL core narrows a colour
+    clear of such a texture before the back end sees it:
+    `int_clear_channels` (`src/gl/draw.rs:2977`, gated by
+    `NARROW_INT_CLEAR` `:2958`, `gpu-v3d` only) gives the channels the
+    clear keeps, and the TLB clear words and the clear quad alike write
+    0 (G, B) and 1 (A) into the store's other channels
+    (`docs/notes/v3d-int-clear.md`). A glClear whose targets disagree
+    (such a texture beside an RGBA8 renderbuffer) is refused by name
+    (GL_INVALID_OPERATION, "clear refused: draw buffer ..", `:2998`);
+    a glClearBuffer of the texture's draw buffer alone is narrowed.
+    Pinned by `tests/es3_v3d_int_rg_clear.rs` (attachment 0, a 2D-array
+    layer, level 1) and `tests/es3_v3d_int_rg_clear_layers.rs` (cube
+    faces, 3D slices).
   Tests (host only): `tests/es3_v3d_fbo_int_rg.rs` (header: `cargo test
   --no-default-features --features
   host-test,gpu-v3d,shaderc-online,no-shader-table --test
@@ -354,6 +359,10 @@ same samples through `XYZW`.
   and clears and reads back with 0, 0, 1; beside an RGBA8 / RGBA8UI
   renderbuffer a disagreeing-mask draw is taken with a mask per target
   and an agreeing one with the one mask.
+  `tests/es3_v3d_fbo_int_rg_layers.rs` (same feature set) does the same for
+  cube faces and 3D slices. `tests/es3_blit_int_tex.rs` pins
+  glBlitFramebuffer between such textures as copied (`ca583834`, `d5ff3ea4`;
+  the absent channels as 0, 0, 1).
   `tests/es3_v3d_int_rg_mrt_mask.rs` (same feature set) decodes the
   COLOR_WRITE_MASKS word the real `v3d_job.c` builds for each format at
   attachment 1 beside RGBA8 and RGBA32UI, at attachment 0 beside RGBA8,
@@ -365,9 +374,23 @@ same samples through `XYZW`.
   16-bit formats); its header names the gate rows that run the file (the
   gpu-powervr, gpu-vivante and V3D rows, with and without `report-es2`).
   dEQP's `fbo.completeness.renderable.texture.color0.*`, `fbo.color.*`
-  and `fbo.render.*` cases on these formats now reach the wide store;
-  the host dEQP and board counts are plan #383's fbo items, not this
-  note.
+  and `fbo.render.*` cases on these formats now reach the wide store.
+  Host dEQP-GLES3 `fbo` (HOST-ONLY: the linux OSAL reads black, no
+  picture is compared; `MODULE=gles3 GPU=v3d tools/cts/host-deqp-run.sh
+  dEQP-GLES3.functional.fbo.`, VK-GL-CTS `93bca01`, 2,028 cases, all
+  began) before the plan (`fa85a835`) against main `786cfacd`: Pass
+  561 to 573, Fail 1,212 to 1,200, NotSupported 255 both;
+  `--compare` gives 12 changed cases, all Fail to Pass (the twelve
+  `completeness.renderable.texture.color0.<R/RG int>`, "Framebuffer
+  checked is incomplete, expected complete"), none newly failing.
+  INCOMPLETE_ATTACHMENT failures go from 116 to 8 and "checked is
+  incomplete" from 12 to 0; no R / RG integer case is incomplete after
+  (120 before). The other 108 move from INCOMPLETE_ATTACHMENT to
+  "Image comparison failed", the host's black read-back: `color.tex2d`,
+  `tex2darray`, `tex3d`, `texcube` 12 each, `color.repeated_clear` 24,
+  `invalidate.format`, `render.recreate_color`, `render.resize` 12
+  each. The 8 still incomplete are `invalidate.{sub,whole}.unbind_blit_msaa_*`
+  (no integer format). The board counts are the next Pi 4 tree run's.
 - **G3 One blend state and one colour mask for every render target.**
   When this note was written BLEND_ENABLES carried `mask = 1`, enabling
   RT 0 only; `684ef106` matched Mesa, which enables every RT when RT 0
