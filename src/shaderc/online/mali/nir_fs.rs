@@ -8294,6 +8294,10 @@ struct Pairs {
     /// of the pair): (low lane, high lane, node).
     cache: [(Val, Val, u8); 16],
     ncache: usize,
+    /// The pairs whose [`vectorise`] is under way ([`pair_node`]), outermost
+    /// first: one asked for again is a cycle.
+    open: [(Val, Val); 16],
+    nopen: usize,
     /// The colour lane the next [`lane_tree`] call stands for (taken by
     /// it): the lane of a vector operation it is ([`Fs::pair_lane`]).
     hint: Option<usize>,
@@ -9330,6 +9334,34 @@ fn mixed_word(f: &Fs<'_>, a: Val, b: Val) -> Option<(Val, (u8, u8))> {
     }
 }
 
+/// The node of the pair of lanes (`a`, `b`) [`lane_tree`] takes a half of:
+/// the cached one (`nir_opt_cse` of the pair), else [`vectorise`]'s. A pair
+/// asked for again while its own [`vectorise`] is still open is a cycle:
+/// `vectorise` of a computed lane then a constant goes back through
+/// `lane_tree` to the same pair (`vec4(2.0) * b * vec4(0.0, 0.0, b, 0.0)`,
+/// tools/mali/testdata/deqp_defects_lanecycle_reduced;
+/// docs/notes/mali-deqp-defects.md fix C). It is refused as
+/// `Defect(LaneCycle)`, never followed until the stack overflows; so is
+/// nesting deeper than [`Pairs::open`] holds.
+fn pair_node(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
+    if let Some(k) = (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
+        return Ok(pr.cache[k].2);
+    }
+    if pr.nopen >= pr.open.len() || pr.open[..pr.nopen].contains(&(a, b)) {
+        return Err(MaliError::Defect(Defect::LaneCycle));
+    }
+    pr.open[pr.nopen] = (a, b);
+    pr.nopen += 1;
+    let x = vectorise(f, pr, a, b, pair, ubo);
+    pr.nopen -= 1;
+    let x = x?;
+    if pr.ncache < pr.cache.len() {
+        pr.cache[pr.ncache] = (a, b, x);
+        pr.ncache += 1;
+    }
+    Ok(x)
+}
+
 /// Lane `v` of the colour alone ([`lane_word`]) as nodes of one lane: the
 /// fmuls and fadds of texels and constants, an fadd of a product fused as
 /// [`vectorise`] fuses it (texmore_2.stderr: `%9 = fmul %6.z, 0.25`,
@@ -9347,17 +9379,7 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
         let h = i / 2;
         if 2 * h + 1 < w {
             let (a, b) = (lanes[2 * h], lanes[2 * h + 1]);
-            let x = match (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
-                Some(k) => pr.cache[k].2,
-                None => {
-                    let x = vectorise(f, pr, a, b, h as u8, ubo)?;
-                    if pr.ncache < pr.cache.len() {
-                        pr.cache[pr.ncache] = (a, b, x);
-                        pr.ncache += 1;
-                    }
-                    x
-                }
-            };
+            let x = pair_node(f, pr, a, b, h as u8, ubo)?;
             return lone_node(pr, P::Leaf(Leaf::Part { x, h: (i % 2) as u8 }), place);
         }
     }
@@ -9366,17 +9388,7 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
     if let Val::Lane(n, _) = v {
         if let Some((lo, hi)) = pr.mate.get(n as usize).copied().flatten() {
             let (a, b) = (Val::Lane(lo, 0), Val::Lane(hi, 0));
-            let x = match (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
-                Some(k) => pr.cache[k].2,
-                None => {
-                    let x = vectorise(f, pr, a, b, pair, ubo)?;
-                    if pr.ncache < pr.cache.len() {
-                        pr.cache[pr.ncache] = (a, b, x);
-                        pr.ncache += 1;
-                    }
-                    x
-                }
-            };
+            let x = pair_node(f, pr, a, b, pair, ubo)?;
             return lone_node(pr, P::Leaf(Leaf::Part { x, h: u8::from(n == hi) }), place);
         }
     }
@@ -9835,6 +9847,8 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         n: 0,
         cache: [(Val::Undef, Val::Undef, 0); 16],
         ncache: 0,
+        open: [(Val::Undef, Val::Undef); 16],
+        nopen: 0,
         hint: None,
         mate: [None; MAX_NODES],
     };
