@@ -17,6 +17,7 @@ design the code follows; there are no run logs or session diaries.
 | `notes/v3d71-cube-seamless.md` | Mesa's 7.1 cube-map and seamless reading (packets, driver, CI): what the 7.1 table sets for a cube, the U8 prediction, and the case board71-tex runs. |
 | `notes/pre-study-rpi5.md` | The Pi 5 pre-study (BCM2712, VideoCore VII, V3D 7.1): the host reading of Mesa, Linux and the firmware, and the P and U steps stage 5 cites from it. |
 | `notes/pre-study-imx95.md` | The Toradex Verdin iMX95 on Mallow pre-study (NXP i.MX 95, Mali-G310): the module's variants, the boot chain and the U-Boot sign-off route, the System Manager's rights for our agent, the firmware, and the host and board items in order. |
+| `notes/imx95-direct-boot.md` | The Verdin iMX95 direct boot (pre-study H5, B7): the boot chain and its containers as Toradex's imx-boot has them, what checks what on an open part, where our image can replace U-Boot proper (the recommended BL33 slot), the boot partition fallback and the way back, `tools/imx95-mkboot.py`, and the board steps. |
 | `notes/v3d71-backend.md` | The 7.1 online-compiler back end (P8): the design that fixes the file names, types and function signatures the later items implement. |
 | `notes/v3d71-clear-frame.md` | The 7.1 clear-only frame packet by packet and the 7.1 tile sizes: the specification the frame builder follows for the first clears on the board (H5, M1-M4). |
 | `notes/v3d71-triangle-frame.md` | The 7.1 clear-then-triangle frame (M5): what the job holds packet by packet, and the BCM2712 D0 shader record it needs. |
