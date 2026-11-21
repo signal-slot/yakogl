@@ -451,3 +451,8 @@ They are not licensed differently by this; `docs/source-form.md` lists each
 one and how it is to be replaced by a permissive driver or rewritten from
 documentation, and `third_party/README.md` describes how upstream code is to be
 kept in its upstream form.
+
+## Security
+
+Report vulnerabilities as [SECURITY.md](SECURITY.md) describes, not in public
+issues.
