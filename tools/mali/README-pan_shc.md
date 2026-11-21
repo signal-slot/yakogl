@@ -183,15 +183,23 @@ not the reference's; also a reference that does not parse), `REFUSED` (with
 the step, its return code and the log that names the refusal) or `NOREF`
 (compiled, no reference), a digest of the compiled words and facts, and the
 detail. A directory with no pair, a pair with no row and a share that fails
-end the measure with exit 1. A reference drawn without `--uniform-values`
-has every uniform 0; a stage passes when it matches either draw. The words
-are compared as they are: an attribute index other than Mesa's (`LD_ATTR` of
-an inactive attribute's neighbour) is a difference. It runs the Mali test
-`the_product_route_is_measured_against_the_references` with
-`YAKOGL_MALI_ROUTE_DIR` set, in N processes (default 8,
-`YAKOGL_MALI_ROUTE_SHARD`); without that variable the test is the tool's
-self-test in the Mali test row. A row of the gate runs `measure` over
-`testdata`, so the command itself is run on every Mali change.
+end the measure with exit 1; a program that kills the measure's process (the
+`lanecycle` stack overflow of `tests/mali_deqp_defects.rs`) is `REFUSED` with
+`crash: ...` and the rest of its share goes on. A reference drawn without
+`--uniform-values` has every uniform 0; a stage passes when it matches either
+draw. The words are compared as they are: an attribute index other than
+Mesa's (`LD_ATTR` of an inactive attribute's neighbour) is a difference. The
+comparison is the integration tests' own, `tests/mali_ref/mod.rs`
+(`differences`; a uniform word is read by its GL type, `gl_DepthRange` and a
+mat3's packed count as the tests read them, issue #8783), and the program is
+built the same way (`route`: the same entry points in the same order). It
+runs `the_measure_reads_a_list` of `tests/mali_ref_selftest.rs` with
+`YAKOGL_MALI_MEASURE_LIST` set, in N processes (default 8); without that
+variable the test is the measure's self-test in the Mali reference test row.
+A row of the gate runs `measure` over `testdata`, so the command itself is
+run on every Mali change. `tools/mali/corpus_check.py` runs the same measure
+over the dEQP-GLES2 must-pass programs and glmark2's
+(`docs/notes/mali-compiler-road-to-es2.md`, section 6).
 
 `compare` (`route_cells.py`) prints the cells main -> tip and the two landing
 rules: rule 1, a program main compiles equal to Mesa is refused or different

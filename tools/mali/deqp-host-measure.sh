@@ -11,7 +11,8 @@
 # the refusal text and its shape from the refusing shader's source.
 #
 #   tools/mali/deqp-host-measure.sh [--out DIR] [--cts DIR] [--jobs N] [--chunk N]
-#                                   [--slice DIR]... [--filter STR] [--stage all|build|deqp|lib|run|extract]
+#                                   [--slice DIR]... [--cases FILE] [--filter STR]
+#                                   [--stage all|build|deqp|lib|run|extract]
 #
 # What it measures, and what it cannot
 # ------------------------------------
@@ -39,7 +40,10 @@
 #   run      the case list from the slices' refusals.tsv (the cases whose
 #            text holds "online shaderc: the code generator refused"), in
 #            fresh-process chunks as host-deqp-run.sh runs them (a chunk whose
-#            process stops early goes on in a fresh process), logs in OUT
+#            process stops early goes on in a fresh process), logs in OUT;
+#            --cases FILE runs the cases of FILE instead (one per line, in
+#            mustpass order, board.tsv empty: tools/mali/corpus_check.py
+#            runs the whole must-pass list so)
 #   extract  measure.tsv, summary.md, shapes/ and the other outputs below
 #
 # Output (OUT, default $TMPDIR/deqp-host-measure-<commit>; TMPDIR else /tmp):
@@ -76,7 +80,7 @@ usage() {
 	exit 2
 }
 
-out= cts=${DEQP_WORK:-} stage=all filter=
+out= cts=${DEQP_WORK:-} stage=all filter= caselist=
 jobs=${JOBS:-$(( $(nproc) > 1 ? $(nproc) - 1 : 1 ))}
 chunk=${CHUNK:-100}
 slices=()
@@ -88,6 +92,7 @@ while [ $# -gt 0 ]; do
 	--chunk) chunk=${2:?--chunk needs a number}; shift 2 ;;
 	--slice) slices+=("${2:?--slice needs a directory}"); shift 2 ;;
 	--filter) filter=${2:?--filter needs a string}; shift 2 ;;
+	--cases) caselist=${2:?--cases needs a file}; shift 2 ;;
 	--stage) stage=${2:?--stage needs all|build|run|extract}; shift 2 ;;
 	-h | --help) sed -n '5,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "$me: unknown argument '$1'" >&2; usage ;;
@@ -369,20 +374,27 @@ run_cases() {
 	local s n
 	rm -rf "$out"
 	mkdir -p "$out"
-	for s in "${slices[@]}"; do
-		[ -f "$s/refusals.tsv" ] && [ -f "$s/results.tsv" ] ||
-			{ echo "$me: $s is not a slice (no refusals.tsv and results.tsv)" >&2; exit 1; }
-	done
-	# board.tsv: case, status, refusal text, for every case whose refusal is
-	# a compile refusal (link refusals quote the compile refusal too).
-	awk -F'\t' -v OFS='\t' -v want="$REFUSED" '
-		FNR == 1 {next}
-		FILENAME ~ /results\.tsv$/ {st[$1] = $2; next}
-		index($2, want) {ref[$1] = $2}
-		END {for (c in ref) print c, (c in st ? st[c] : "?"), ref[c]}' \
-		$(for s in "${slices[@]}"; do echo "$s/results.tsv" "$s/refusals.tsv"; done) | sort > "$out/board.tsv"
-	# in mustpass order
-	awk -F'\t' 'FNR == NR {want[$1] = 1; next} ($0 in want)' "$out/board.tsv" "$MUSTPASS" > "$out/cases.txt"
+	if [ -n "$caselist" ]; then
+		# the given cases, in mustpass order; no board record
+		: > "$out/board.tsv"
+		awk 'FNR == NR {want[$1] = 1; next} ($0 in want)' "$caselist" "$MUSTPASS" > "$out/cases.txt"
+		slices=()
+	else
+		for s in "${slices[@]}"; do
+			[ -f "$s/refusals.tsv" ] && [ -f "$s/results.tsv" ] ||
+				{ echo "$me: $s is not a slice (no refusals.tsv and results.tsv)" >&2; exit 1; }
+		done
+		# board.tsv: case, status, refusal text, for every case whose refusal is
+		# a compile refusal (link refusals quote the compile refusal too).
+		awk -F'\t' -v OFS='\t' -v want="$REFUSED" '
+			FNR == 1 {next}
+			FILENAME ~ /results\.tsv$/ {st[$1] = $2; next}
+			index($2, want) {ref[$1] = $2}
+			END {for (c in ref) print c, (c in st ? st[c] : "?"), ref[c]}' \
+			$(for s in "${slices[@]}"; do echo "$s/results.tsv" "$s/refusals.tsv"; done) | sort > "$out/board.tsv"
+		# in mustpass order
+		awk -F'\t' 'FNR == NR {want[$1] = 1; next} ($0 in want)' "$out/board.tsv" "$MUSTPASS" > "$out/cases.txt"
+	fi
 	if [ -n "$filter" ]; then
 		grep -F -- "$filter" "$out/cases.txt" > "$out/cases.filtered" || true
 		mv "$out/cases.filtered" "$out/cases.txt"
@@ -394,7 +406,7 @@ run_cases() {
 	{
 		echo "tip=$COMMIT"
 		echo "cts=$(git -C "$cts" rev-parse HEAD 2>/dev/null || echo "$CTS_COMMIT")"
-		echo "command=$0 --out $out --cts $cts --jobs $jobs --chunk $chunk${filter:+ --filter $filter}"
+		echo "command=$0 --out $out --cts $cts --jobs $jobs --chunk $chunk${caselist:+ --cases $caselist}${filter:+ --filter $filter}"
 		echo "slices=${slices[*]}"
 		echo "library=$LIB (osal-linux gpu-mali shaderc-online no-shader-table report-es2)"
 	} > "$out/commit"
