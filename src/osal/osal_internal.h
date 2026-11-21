@@ -186,6 +186,7 @@ struct osal_mali_gpu {
 	uint32_t tiler_features; /* TILER_FEATURES (bits 11:8 max_levels) */
 	uint32_t cs_reg_count;   /* registers of one command stream */
 	uint32_t unpreserved_cs_reg_count; /* of those, the kernel's */
+	uint32_t core_features;  /* CORE_FEATURES (bits 7:0 the model's variant) */
 };
 struct osal_mali_heap {
 	uint64_t ctx_gpu;         /* the heap context HEAP_SET names */

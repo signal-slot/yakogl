@@ -115,6 +115,8 @@ fn the_osal_comes_up_and_answers_the_two_queries() {
     assert_eq!(g.gpu_id, crate::gpu::mali::G610_GPU_ID);
     // the G610's 96 registers of which the firmware keeps 92 (csf.rs's test)
     assert_eq!((g.cs_reg_count, g.unpreserved_cs_reg_count), (96, 4));
+    // CORE_FEATURES as read: variant 0, Mesa's G610 row (src/mali/model.rs)
+    assert_eq!(g.core_features & 0xff, 0);
     let h = r.osal.heap().unwrap();
     assert_eq!((h.ctx_gpu, h.first_chunk_gpu, h.chunk_size), (HEAP_POOL_VA, HEAP_CHUNK_VA, HEAP_CHUNK_SIZE));
     assert_eq!(r.osal.fences(), (0, 0));

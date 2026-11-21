@@ -163,7 +163,7 @@ const _: () = assert!(HEAP_POOL_VA + HEAP_POOL_SIZE <= HEAP_CHUNK_VA);
 const _: () = assert!(QUEUE_VA + QUEUE_VM_BYTES <= HEAP_POOL_VA);
 
 /// `OsalMaliGpu` of src/osal/mali.rs (`struct osal_mali_gpu`), which this
-/// crate cannot import: the same fields at the same offsets, 16 bytes.
+/// crate cannot import: the same fields at the same offsets, 20 bytes.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct OsalMaliGpu {
@@ -171,9 +171,10 @@ pub struct OsalMaliGpu {
     pub tiler_features: u32,
     pub cs_reg_count: u32,
     pub unpreserved_cs_reg_count: u32,
+    pub core_features: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<OsalMaliGpu>() == 16);
+const _: () = assert!(core::mem::size_of::<OsalMaliGpu>() == 20);
 
 /// The memory the OSAL runs on, each part mapped uncached for the CPU: the
 /// queue's AS0 memory (user pages, suspend buffers; at
@@ -711,7 +712,7 @@ impl Osal {
         self.n_held
     }
 
-    /// `OSAL_QUERY_MALI_GPU`: `GPU_ID` and `TILER_FEATURES` read after Z3,
+    /// `OSAL_QUERY_MALI_GPU`: `GPU_ID`, `TILER_FEATURES` and `CORE_FEATURES` read after Z3,
     /// CS 0's work registers and the ones the firmware does not keep
     /// (csf.rs: `cs_features_work_regs`, `UNPRESERVED_REG_COUNT`).
     pub fn gpu_info(&self) -> Option<OsalMaliGpu> {
@@ -721,6 +722,7 @@ impl Osal {
             tiler_features: u.id.tiler_features,
             cs_reg_count: csf::cs_features_work_regs(u.cs.features),
             unpreserved_cs_reg_count: csf::UNPRESERVED_REG_COUNT,
+            core_features: u.id.core_features,
         })
     }
 
