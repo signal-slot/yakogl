@@ -20840,6 +20840,8 @@ out:
 #include "gl_test_es3_w128tex.inc"
 #include "gl_test_tsprobe.inc"
 
+#include "gl_test_dtpu.inc"
+
 /* ---- case 222: the texture unit samples the D24S8 depth surface (dtpu) -----
  *
  * The board experiment of docs/notes/gc-depth-sample.md (plan #328, #1204;
@@ -20872,37 +20874,15 @@ out:
  * word A * 65536 + R * 256 + G is n * 2^17 or n * 2^17 - 1 and within 2 of
  * P0's kd (the raw view addresses the surface), 7 P3 against n + 32 (and
  * 0xffffff where n + 32 >= 128), 8 no GL error in the arms (got: the first).
- * The verdict line names the row of the note's table. GC7000 with the test
+ * The verdict line names the row of the note's table. The outcome of every
+ * check (3..8), not only the first failing one, is also kept as a PERF page:
+ * selector GC_RESULT_PERF_SEL | 0xb0 (gl_test_dtpu.inc, gc-depth-sample.md
+ * "Reading the dtpu page"). GC7000 with the test
  * knobs only, SKIP by name elsewhere; the in-process compiler (the sweep
  * image, prj_sweep.conf). Not in the set: a board experiment, run by number.
  * ------------------------------------------------------------------------- */
 #if defined(GL_TEST_VIVANTE) && defined(GL_TEST_KNOBS)
 extern int gc_debug_set_depth_tpu(int mode);
-
-#define DTPU_NONE ((uint32_t)(TW * TH))
-
-/* the decoded 24-bit depth of a P0 / P1 / P3 pixel: R * 65536 + G * 256 + B */
-static uint32_t dtpu_kd(uint32_t px)
-{
-	return (px & 0xffu) << 16 | ((px >> 8) & 0xffu) << 8 | ((px >> 16) & 0xffu);
-}
-
-/* the depth bits of a P2 pixel (the raw word's): A * 65536 + R * 256 + G */
-static uint32_t dtpu_word(uint32_t px)
-{
-	return (px >> 24) << 16 | (px & 0xffu) << 8 | ((px >> 8) & 0xffu);
-}
-
-static uint32_t dtpu_dist(uint32_t a, uint32_t b)
-{
-	return a > b ? a - b : b - a;
-}
-
-/* n = x + y + 1 at top-down index i (GL y = TH - 1 - row) */
-static uint32_t dtpu_n(uint32_t i)
-{
-	return i % TW + (TH - 1 - i / TW) + 1;
-}
 
 /* Case 177's ramp, `dz` deeper in clip z, into the depth texture of `fbo`
  * cleared to 1 */
@@ -20990,10 +20970,12 @@ static int case_dtpu(void)
 	GLuint dprog, kprog, rprog, d = 0, fbo = 0;
 	GLenum status, err, first_err = GL_NO_ERROR;
 	bool es2, ok = true;
+	uint32_t pw[3], bad[5];
 	int was;
 
 	if (!zonly_supported(222, "dtpu", &es2))
 		return -3;
+	dtpu_forget();
 	free_all_objects();
 	while (glGetError() != GL_NO_ERROR)
 		;
@@ -21038,21 +21020,12 @@ static int case_dtpu(void)
 	first_err = first_err != GL_NO_ERROR ? first_err : err;
 	gc_debug_set_depth_tpu(was);
 
-	for (uint32_t i = 0; i < DTPU_NONE; i++) {
-		const uint32_t n = dtpu_n(i), k = n << 17, kd0 = dtpu_kd(p0[i]), w = dtpu_word(p2[i]);
-		const uint32_t n3 = n + 32, k3 = n3 < 128 ? n3 << 17 : 0xffffffu;
-
-		if (bad3 == DTPU_NONE && dtpu_dist(kd0, k) > 3)
-			bad3 = i;
-		if (bad4 == DTPU_NONE && p1[i] != p0[i])
-			bad4 = i;
-		if (bad5 == DTPU_NONE && dtpu_dist(dtpu_kd(p1[i]), kd0) > 255)
-			bad5 = i;
-		if (bad6 == DTPU_NONE && ((w != k && w != k - 1) || dtpu_dist(w, kd0) > 2))
-			bad6 = i;
-		if (bad7 == DTPU_NONE && dtpu_dist(dtpu_kd(p3[i]), k3) > 3)
-			bad7 = i;
-	}
+	dtpu_scan(p0, p1, p2, p3, bad);
+	bad3 = bad[0];
+	bad4 = bad[1];
+	bad5 = bad[2];
+	bad6 = bad[3];
+	bad7 = bad[4];
 	/* the words the PE wrote, by the raw view (depth bits, stencil byte), at
 	 * the note's three points */
 	for (int j = 0; j < 3; j++) {
@@ -21074,6 +21047,10 @@ static int case_dtpu(void)
 	ok &= expect_u32("dtpu: P2 (8888) is the word", bad6, DTPU_NONE);	 /* check 6 */
 	ok &= expect_u32("dtpu: P3 no wait, coherent", bad7, DTPU_NONE);	 /* check 7 */
 	ok &= expect_u32("dtpu: no GL error in the arms", first_err, GL_NO_ERROR); /* check 8 */
+	dtpu_encode(bad3, bad4, bad5, bad6, bad7, (uint32_t)first_err, pw);
+	dtpu_keep(pw);
+	pr_info("gl_test: dtpu: page 0x%02x %08x %08x %08x\n", DTPU_PAGE_TAG, (unsigned)pw[0], (unsigned)pw[1],
+		(unsigned)pw[2]);
 	pr_info("gl_test: dtpu: verdict: %s\n",
 		bad3 != DTPU_NONE ? "no verdict: the reference (check 3) failed" :
 		bad4 == DTPU_NONE && bad7 == DTPU_NONE ? "D24X8 samples the linear surface exactly (check 4)" :

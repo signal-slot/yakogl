@@ -188,6 +188,9 @@ extern unsigned int gl_test_tsprobe_arm;
 extern void (*gl_test_probe_progress)(uint32_t where);
 extern uint32_t (*gl_test_probe_timeouts)(void);
 #endif
+/* case 222 dtpu's page of every check (gl_test_dtpu.inc): selector
+ * GC_RESULT_PERF_SEL | 0xb0 */
+int gl_test_dtpu_page(unsigned int tag, uint32_t *w);
 
 /* A colour as six bits: the marker, then one bit per channel at half scale.
  * Enough to tell red from green from blue, which is what a texture or a mip
@@ -330,6 +333,26 @@ static int msaa_page_tag(void)
 }
 
 /*
+ * Case 222 dtpu's page (gl_test_dtpu.inc, gc-depth-sample.md "Reading the
+ * dtpu page"): the selector GC_RESULT_PERF_SEL | 0xb0 runs case 222 alone and
+ * ends with the outcome of its checks 3..8 as a PERF record. 1 when the
+ * selector is that one and this image runs case 222 (alone, or in its sweep
+ * range), else 0.
+ */
+static int dtpu_page_sel(void)
+{
+	if (gc_result_selector() != (int)GC_RESULT_PERF_SEL + 0xb0) {
+		return 0;
+	}
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+	return CONFIG_GC_GL_TEST_SWEEP_FIRST <= 222 &&
+	       222 < CONFIG_GC_GL_TEST_SWEEP_FIRST + GC_RESULT_SWEEP_CASES;
+#else
+	return CONFIG_GC_GL_TEST_CASE == 222;
+#endif
+}
+
+/*
  * KICK_DIFF pages for cases 2 and 10 (#5, #10; gl_test.c, the block above
  * gl_test_kick_diff_page; docs/notes/gc-kick-diff.md): the
  * selector GC_RESULT_PERF_SEL | list << 8 | tag, tag 0xe0 | case (0xe2 case
@@ -450,6 +473,21 @@ static void report_result(int rc)
 		}
 	}
 #endif
+
+	if (dtpu_page_sel()) {
+		uint32_t w[3];
+
+		if (gl_test_dtpu_page(0xb0, w) == 0) {
+			LOG_INF("gc_gl_test: case 222 dtpu page 0xb0");
+			gc_result_write_tag(GC_RESULT_PERF, 0xb0, w[0], w[1], w[2]);
+			return;
+		}
+		LOG_ERR("gc_gl_test: no dtpu page (case 222 did not reach its arms)");
+#ifdef CONFIG_GC_GL_TEST_SWEEP
+		return;   /* the sweep's own record stays the verdict */
+#endif
+		the_case = 222;
+	}
 
 	if (kd_page >= 0) {
 		uint32_t w[3];
@@ -605,6 +643,10 @@ int main(void)
 			if (msaa_page_tag() >= 0) {
 				/* a case 16 probe page: case 16 alone, as its own index */
 				only = 16 - CONFIG_GC_GL_TEST_SWEEP_FIRST;
+			}
+			if (dtpu_page_sel()) {
+				/* the dtpu page: case 222 alone */
+				only = 222 - CONFIG_GC_GL_TEST_SWEEP_FIRST;
 			}
 			{
 				int kd_list, kd = kick_diff_tag(&kd_list);
