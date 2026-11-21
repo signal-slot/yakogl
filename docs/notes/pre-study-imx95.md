@@ -665,8 +665,9 @@ T6's rows as they are; T6S1R08, T6S4R01 and T6S1R06 built) takes 191.0 MiB
 with a 64 MiB GL carve-out plus the window memory, `zephyr.bin` 12.1 MiB:
 the memory layout holds it unchanged. What the run script has to provide
 (start, end lines, bounds, the record hook) is in `tools/cts/README.md`,
-section 5; the record over the BBM GPRs (P7) plugs into the board layer's
-`board_sink_store()`, which both images reach through `board_finish()`.
+section 5; the record over the BBM GPRs (P7, `verdin_imx95_record.c`) is
+the board layer's `board_sink_store()`, which both images reach through
+`board_finish()`.
 The G310's own limits reach neither image's expectations: gl_test and dEQP
 read every limit through GL. What still carries a G610 constant is the back
 end (`src/mali/frame.rs` `TIB_BUDGET` and `MEASURED_TILER_LEVELS`,
