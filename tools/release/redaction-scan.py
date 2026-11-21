@@ -900,7 +900,8 @@ def self_test():
         scanner = "tools/release/redaction-scan.py"
         xml_h = "driver/src/vivante/hw/state.xml.h"
         regs = "driver/rust/src/soc/imx8mp/regs.rs"
-        pad = "tools/y.sh"
+        snap = "docs/release/snapshot.md"
+        pad ="tools/y.sh"
         rules = [
             ("home-path", pad, "drop", ["/ho", "me/..."], ["/ho", "me/.cache"]),
             ("login-at-host", pad, "drop", ["root", "@BOARD"], ["root", "@BOARD2"]),
@@ -925,6 +926,15 @@ def self_test():
              ["pub const LAB7", ": u32"]),
             ("lab-host", regs, "drop", ["/// 0b1..Map LAB7", "_PHY to A53 domain"],
              ["ssh lab7", " first"]),
+            # The VM-lab tool's name in the owner's open question of
+            # docs/release/snapshot.md (a lab host shares it): the three
+            # phrasings of that question drop; the name elsewhere stays.
+            ("lab-host", snap, "drop", ["`git grep -il -e ", tool, " -e ccfarm`"],
+             ["ssh ", tool, " first"]),
+            ("lab-host", snap, "drop", ["(4 name `", tool, "`, 53 `ccfarm` or"],
+             ["the host `", tool, "` runs it"]),
+            ("lab-host", snap, "drop", ["Is the VM-lab tool `", tool, "` public?"],
+             ["Is the lab host `", tool, "` public?"]),
             ("lab-layout", scanner, "drop", ["$HOME", "/com/github/org"],
              ["~", "/com/github/org"]),
             ("email", pad, "drop", ["someone", "@host.invalid"],

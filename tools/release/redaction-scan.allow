@@ -35,6 +35,11 @@ drop | lab-host | * | \bccfarm\b | the name of the farm tool
 # identifiers.  Only the uppercase prefix with its `_PHY` suffix in that one
 # file; the bare name stays a finding there too.
 drop | lab-host | driver/rust/src/soc/imx8mp/regs.rs | (?<![A-Za-z0-9])[A-Z]{3}[0-9]_PHY(?![A-Za-z0-9]) | NXP register identifier (a PHY's power-domain field) in a generated file, not a host name
+# docs/release/snapshot.md asks the owner whether the VM-lab tool's name is
+# public; a lab host shares that name.  Only the question's three phrasings
+# in that one file (its grep command, its count, the question itself); the
+# name anywhere else in the file stays a finding.
+drop | lab-host | docs/release/snapshot.md | -e [a-z]+ -e ccfarm\b|\(\d+ name `[a-z]+`, \d+ `ccfarm`|VM-lab tool `[a-z]+` | the VM-lab tool's name in the owner's open question about it, not a host
 # tools/env/* drives the pool and image tool through its public interface:
 # its CLI (`<tool> image build`, `<tool> pool apply`, `<tool> login`, `command
 # -v <tool>`), its environment variables (`<TOOL>_RECIPES`, `<TOOL>_URL`), a
