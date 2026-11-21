@@ -103,7 +103,22 @@
 #define TAG_CLOCK_RATE 0x00030002u
 #define TAG_THROTTLED  0x00030046u
 
+/* The read-only framebuffer tags, asked after the seven requests above.
+ * Ids from the firmware wiki's mailbox property page (Framebuffer: Get
+ * physical (display) width/height 0x00040003, Get virtual 0x00040004, Get
+ * depth 0x00040005, Get pixel order 0x00040006 (0 BGR, 1 RGB), Get pitch
+ * 0x00040008), checked against rpi_mbox.c:186-191, whose setter tags are the
+ * same ids with 0x00048000 and whose pitch getter is 0x00040008. Only getters
+ * are ever put in a request: nothing that allocates, releases, blanks, sets or
+ * tests, so the firmware's running mode stays as it is. */
+#define TAG_FB_PHYS  0x00040003u
+#define TAG_FB_VIRT  0x00040004u
+#define TAG_FB_DEPTH 0x00040005u
+#define TAG_FB_ORDER 0x00040006u
+#define TAG_FB_PITCH 0x00040008u
+
 #define NREQ 7u
+#define NFB  5u
 
 struct req {
 	const char *name;
@@ -120,6 +135,14 @@ static const struct req reqs[NREQ] = {
 	{ "clock hdmi-hsm", TAG_CLOCK_RATE, 2, 13 },
 	{ "clock hdmi-bvb", TAG_CLOCK_RATE, 2, 14 },
 	{ "clock v3d", TAG_CLOCK_RATE, 2, RPI_FW_CLK_V3D },
+};
+
+static const struct req fbreqs[NFB] = {
+	{ "get_physical_width_height", TAG_FB_PHYS, 2, 0 },
+	{ "get_virtual_width_height", TAG_FB_VIRT, 2, 0 },
+	{ "get_depth", TAG_FB_DEPTH, 1, 0 },
+	{ "get_pixel_order", TAG_FB_ORDER, 1, 0 },
+	{ "get_pitch", TAG_FB_PITCH, 1, 0 },
 };
 
 /* One cache line each, in .bss like rpi_mbox.c's buf. */
@@ -301,6 +324,39 @@ static bool way_clear(const char *id, const struct req *q)
 	return x.rc == 0 && answered(buf_clear, q);
 }
 
+/* A framebuffer GET tag the clear way (clean before, invalidate after: the way
+ * that answered on the board). The value words are copied to v[0..1] (the
+ * second only for a two-word answer; 0xffffffff when not answered). The line
+ * has the first word as `value` and, for two words, the second as `value2`. */
+static bool way_fb(const struct req *q, uint32_t v[2])
+{
+	struct xact x;
+	char id[16];
+	bool ok;
+
+	snprintk(id, sizeof(id), "0x%08x", q->tag);
+	build(buf_clear, q);
+	raw_xact(buf_clear, true, &x);
+	print_regs(id, "clear", &x);
+	ok = x.rc == 0 && answered(buf_clear, q);
+	v[0] = v[1] = 0xffffffffu;
+	if (ok) {
+		v[0] = buf_clear[5];
+		if (q->nval > 1)
+			v[1] = buf_clear[6];
+	}
+	if (q->nval > 1)
+		printk("rpi5_mbox: tag %s status 0x%08x answered 0x%08x value 0x%08x value2 0x%08x rc %d way "
+		       "clear (clean before %d, invalidate after %d: %s, a GET tag only)\n",
+		       id, buf_clear[1], buf_clear[4], buf_clear[5], buf_clear[6], x.rc, x.flush_rc,
+		       x.invd_rc, q->name);
+	else
+		printk("rpi5_mbox: tag %s status 0x%08x answered 0x%08x value 0x%08x rc %d way clear (clean "
+		       "before %d, invalidate after %d: %s, a GET tag only)\n",
+		       id, buf_clear[1], buf_clear[4], buf_clear[5], x.rc, x.flush_rc, x.invd_rc, q->name);
+	return ok;
+}
+
 static bool way_board(const char *id, const struct req *q, int init_rc)
 {
 	uint32_t t[5] = { q->tag, q->nval * 4u, 0, q->v0, 0 };
@@ -376,6 +432,35 @@ int main(void)
 			n_any++;
 			if (q->tag == TAG_THROTTLED)
 				throttled_ok = true;
+		}
+	}
+
+	/* The framebuffer geometry: GET tags only, information, never in the
+	 * counts or the end line. */
+	{
+		uint32_t fv[NFB][2];
+		bool fok[NFB];
+
+		for (unsigned int i = 0; i < NFB; i++) {
+			printk("rpi5_mbox: request fb %u of %u: %s\n", i + 1, NFB, fbreqs[i].name);
+			fok[i] = way_fb(&fbreqs[i], fv[i]);
+		}
+		if (fok[0] && fok[2] && fok[3] && fok[4]) {
+			if (fok[1])
+				printk("rpi5_mbox: fb geometry %ux%u depth %u pitch %u order %s (virtual %ux%u)\n",
+				       fv[0][0], fv[0][1], fv[2][0], fv[4][0],
+				       fv[3][0] == 1 ? "rgb" : (fv[3][0] == 0 ? "bgr" : "other"), fv[1][0],
+				       fv[1][1]);
+			else
+				printk("rpi5_mbox: fb geometry %ux%u depth %u pitch %u order %s (virtual not "
+				       "answered)\n",
+				       fv[0][0], fv[0][1], fv[2][0], fv[4][0],
+				       fv[3][0] == 1 ? "rgb" : (fv[3][0] == 0 ? "bgr" : "other"));
+		} else {
+			printk("rpi5_mbox: fb geometry not answered (physical %s, virtual %s, depth %s, order "
+			       "%s, pitch %s)\n",
+			       fok[0] ? "yes" : "no", fok[1] ? "yes" : "no", fok[2] ? "yes" : "no",
+			       fok[3] ? "yes" : "no", fok[4] ? "yes" : "no");
 		}
 	}
 

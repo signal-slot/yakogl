@@ -21,6 +21,9 @@
 #   cut-early    the log stops before any request (exit 1, every verdict line
 #                still printed)
 #   crlf         the "all" log with CR line ends and a timestamp prefix
+#   fbok, fbno, fbcut, fbfail   the framebuffer GET tags answered, not answered,
+#                cut before the geometry line, and beside a failing run; the
+#                logs above have none (`fb: missing`); information only
 #   usage        no argument, an unreadable file (exit 2)
 #
 # Prints one line per failed check and a last line
@@ -124,7 +127,24 @@ has() {
     }
 }
 
-# lines <name> <count>: every full run prints 1 (cache) + 7 + 3 lines
+# fb_lines <ok|no>: the five framebuffer GET tags (clear way) and the geometry line
+fb_lines() {
+    if [ "$1" = ok ]; then
+        echo "rpi5_mbox: tag 0x00040003 status 0x80000000 answered 0x80000008 value 0x00000780 value2 0x00000438 rc 0 way clear (clean before 0, invalidate after 0: get_physical_width_height, a GET tag only)"
+        echo "rpi5_mbox: tag 0x00040004 status 0x80000000 answered 0x80000008 value 0x00000780 value2 0x00000438 rc 0 way clear (clean before 0, invalidate after 0: get_virtual_width_height, a GET tag only)"
+        echo "rpi5_mbox: tag 0x00040005 status 0x80000000 answered 0x80000004 value 0x00000010 rc 0 way clear (clean before 0, invalidate after 0: get_depth, a GET tag only)"
+        echo "rpi5_mbox: tag 0x00040006 status 0x80000000 answered 0x80000004 value 0x00000001 rc 0 way clear (clean before 0, invalidate after 0: get_pixel_order, a GET tag only)"
+        echo "rpi5_mbox: tag 0x00040008 status 0x80000000 answered 0x80000004 value 0x00000f00 rc 0 way clear (clean before 0, invalidate after 0: get_pitch, a GET tag only)"
+        echo "rpi5_mbox: fb geometry 1920x1080 depth 16 pitch 3840 order rgb (virtual 1920x1080)"
+    else
+        for t in 0x00040003 0x00040004 0x00040005 0x00040006 0x00040008; do
+            echo "rpi5_mbox: tag $t status 0x00000000 answered 0x00000000 value 0x00000000 rc -5 way clear (clean before 0, invalidate after 0: x, a GET tag only)"
+        done
+        echo "rpi5_mbox: fb geometry not answered (physical no, virtual no, depth no, order no, pitch no)"
+    fi
+}
+
+# lines <name> <count>: every full run prints 1 (cache) + 7 + 4 lines (q1, fb, end, verdict)
 lines() {
     checks=$((checks + 1))
     got=$(wc -l <"$tmp/$1.out" | tr -d ' ')
@@ -136,7 +156,7 @@ ALLW="display yes, memory yes, clear yes, board yes"
 # ---- all answered
 { log ok ok ok ok; echo "rpi5_mbox: answered: display 7 of 7, memory 7 of 7, clear 7 of 7, board 7 of 7"; echo "rpi5_mbox: done (7 of 7 answered)"; echo "rpi5_mbox: feeding stopped, reset expected"; } >"$tmp/all.log"
 run all 0 "$tmp/all.log"
-lines all 11
+lines all 12
 has all "rpi5_mbox verdict: cache: on"
 has all "rpi5_mbox verdict: 0x00030046 get_throttled: answered ($ALLW) value 0x00000000"
 has all "rpi5_mbox verdict: 0x00000001 get_firmware_revision: answered ($ALLW) value 0x6735f0a2"
@@ -146,10 +166,32 @@ has all "rpi5_mbox verdict: q1: not reproduced (the display way answered 7 of 7;
 has all "rpi5_mbox verdict: end: done (7 of 7 answered)"
 has all "rpi5_mbox verdict: PASS (GET_THROTTLED answered by display clear board)"
 
+# ---- framebuffer tags: absent (the logs above), answered, not answered
+has all "rpi5_mbox verdict: fb: missing (no framebuffer tag line in the log)"
+{ log ok ok ok ok; fb_lines ok; echo "rpi5_mbox: done (7 of 7 answered)"; } >"$tmp/fbok.log"
+run fbok 0 "$tmp/fbok.log"
+lines fbok 12
+has fbok "rpi5_mbox verdict: fb: geometry 1920x1080 depth 16 pitch 3840 order rgb (virtual 1920x1080) (tags answered 5 of 5)"
+has fbok "rpi5_mbox verdict: PASS (GET_THROTTLED answered by display clear board)"
+has fbok "rpi5_mbox verdict: 0x00030002:4 clock_core: answered ($ALLW) value 0x2faf0800 (800000000 Hz)"
+{ log ok ok ok ok; fb_lines no; echo "rpi5_mbox: done (7 of 7 answered)"; } >"$tmp/fbno.log"
+run fbno 0 "$tmp/fbno.log"
+lines fbno 12
+has fbno "rpi5_mbox verdict: fb: geometry not answered (physical no, virtual no, depth no, order no, pitch no) (tags answered 0 of 5)"
+has fbno "rpi5_mbox verdict: PASS (GET_THROTTLED answered by display clear board)"
+# tag lines but no geometry line (cut inside the fb section); a failing run keeps its FAIL
+{ log ok ok ok ok; fb_lines ok | head -2; } >"$tmp/fbcut.log"
+run fbcut 0 "$tmp/fbcut.log"
+has fbcut "rpi5_mbox verdict: fb: no geometry line (tags answered 2 of 5, 2 line(s) seen)"
+{ log eio eio eio eio; fb_lines ok; echo "rpi5_mbox: FAIL (GET_THROTTLED not answered in any way; 0 of 7 answered)"; } >"$tmp/fbfail.log"
+run fbfail 1 "$tmp/fbfail.log"
+has fbfail "rpi5_mbox verdict: FAIL (GET_THROTTLED not answered)"
+has fbfail "rpi5_mbox verdict: 0x00030046 get_throttled: not answered (display no, memory no, clear no, board no)"
+
 # ---- every way -EIO with code 0 (2026-11-19)
 { log eio eio eio eio; echo "rpi5_mbox: FAIL (GET_THROTTLED not answered in any way; 0 of 7 answered)"; } >"$tmp/eio.log"
 run eio 1 "$tmp/eio.log"
-lines eio 11
+lines eio 12
 has eio "rpi5_mbox verdict: cache: on"
 has eio "rpi5_mbox verdict: 0x00030046 get_throttled: not answered (display no, memory no, clear no, board no)"
 has eio "rpi5_mbox verdict: 0x00030002:13 clock_hdmi-hsm: not answered (display no, memory no, clear no, board no)"
@@ -175,7 +217,7 @@ has memonly "rpi5_mbox verdict: q1: no way answered (memory 7 of 7: the firmware
 # ---- one request missing
 { log ok ok ok ok 0x00030002:16; echo "rpi5_mbox: done (6 of 7 answered)"; } >"$tmp/missing.log"
 run missing 0 "$tmp/missing.log"
-lines missing 11
+lines missing 12
 has missing "rpi5_mbox verdict: cache: on"
 has missing "rpi5_mbox verdict: 0x00030002:16 clock_disp: missing (display -, memory -, clear -, board -) (no line of this request in the log)"
 has missing "rpi5_mbox verdict: 0x00030002:13 clock_hdmi-hsm: answered ($ALLW) value 0x2faf0800 (800000000 Hz)"
@@ -184,7 +226,7 @@ has missing "rpi5_mbox verdict: PASS (GET_THROTTLED answered by display clear bo
 # ---- truncated inside request 3 (after its display lines)
 log ok ok ok ok | awk '/request 3 of 7/ { n = NR } n && NR > n + 3 { exit } { print }' >"$tmp/truncated.log"
 run truncated 0 "$tmp/truncated.log"
-lines truncated 11
+lines truncated 12
 has truncated "rpi5_mbox verdict: cache: on"
 has truncated "rpi5_mbox verdict: 0x00030002:4 clock_core: answered (display yes, memory yes, clear -, board -) value 0x2faf0800 (800000000 Hz)"
 has truncated "rpi5_mbox verdict: 0x00030002:5 clock_v3d: missing (display -, memory -, clear -, board -) (no line of this request in the log)"
@@ -194,7 +236,7 @@ has truncated "rpi5_mbox verdict: PASS (GET_THROTTLED answered by display clear 
 # ---- cut before any request
 head_lines | head -3 >"$tmp/early.log"
 run early 1 "$tmp/early.log"
-lines early 11
+lines early 12
 has early "rpi5_mbox verdict: cache: missing (no cache management line in the log)"
 has early "rpi5_mbox verdict: 0x00030046 get_throttled: missing (display -, memory -, clear -, board -) (no line of this request in the log)"
 has early "rpi5_mbox verdict: q1: unknown (no request line in the log)"
