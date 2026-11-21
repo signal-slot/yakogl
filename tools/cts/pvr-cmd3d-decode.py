@@ -25,9 +25,18 @@ its flag word belong to a DDK user-mode struct they do not define. Those
 offsets are the ones the driver writes (render.rs, cited per field, taken from
 the DDK capture: driver/docs/gpu-recipes/coeff_base_analysis.md section 1).
 A dword no source places prints as `(unplaced)`; a flag bit no source names
-prints as `unnamed 0x...`. pds_pr_bgnd's dword is not placed anywhere yet
-(docs/notes/pvr-render-pool.md, "Open, where pds_pr_bgnd sits"); pass
---pr-bgnd-dw N once a capture places it.
+prints as `unnamed 0x...`. pds_pr_bgnd's dword is not placed by any source
+(docs/notes/pvr-pr-bgload.md section 4); pass --pr-bgnd-dw N once a capture
+places it.
+
+3D_PR (the knob-on partial-render fragment command, render.rs `dk_pr`, built
+from PvrRenderKick.frag_pr): a 3D record whose flags dword has bit 19
+(FLAG_PR, 0x80000) is a 3D_PR; its header line says so and the partial-render
+words are named in addition (PR_WORDS below: event_pixel_pds_data = the PR EOT
+data address, the PR PBE words, the Z/S words) together with pds_pr_bgnd[3]
+(lo/hi pairs). The offsets are the ones render.rs writes (cited). No DDK
+header and no ddk_abi_pins.h PIN places pds_pr_bgnd or the flag bit
+(RGXFWIF_CMD3D is a DDK user-mode struct), so those print "(unpinned)".
 
     pvr-cmd3d-decode.py [--pr-bgnd-dw N] [LOG]
 """
@@ -97,12 +106,36 @@ CMDTA = SHARED[:2] + [
     (14, "partial-render fence value", "render.rs:1377,1387"),
 ]
 
+# The 3D_PR marker: render.rs:209 FRAG_FLAGS_SPMSCRATCHBUFFER (Linux
+# ROGUE_FRAG_FLAGS_SCRATCHBUFFER, bit 19), set by render.rs:1528 on the
+# command of a kick with a filled frag_pr. Unpinned: no vendored header names it.
+FLAG_PR = 0x80000
+
+# The 3D_PR's partial-render words: dword -> what the PR uses it for. The
+# offsets are the ones render.rs writes into `dk_pr` (render.rs:1532-1539):
+# event_pixel_pds_data dk[15] = frag_pr.eot_pds_data (docs/notes/
+# pvr-pr-eot.md); the PR PBE words at 30 + i*PBE_STRIDE_DW, two dwords each
+# (the CMD3D table above); the Z/S words are that table's isp_zlsctl,
+# isp_zload_store_base and isp_stencil_load_store_base at 24..29 (docs/notes/
+# pvr-pr-zs.md). None is a DDK-header or PIN offset (user-mode struct): the
+# driver's own, capture-derived ones.
+PR_WORDS = {15: "PR EOT data address"}
+for _i in range(MAX_RT):
+    for _k in range(4):
+        PR_WORDS[30 + _i * PBE_STRIDE_DW + _k] = "PR PBE"
+for _dw in range(24, 30):
+    PR_WORDS[_dw] = "PR Z/S"
+# pds_pr_bgnd[3] (lo/hi pairs) at dk[64..69], as the plan states it. No DDK
+# header and no ddk_abi_pins.h PIN places it (docs/notes/pvr-pr-bgload.md
+# section 4); render.rs does not write it yet. Printed "(unpinned)";
+# --pr-bgnd-dw overrides.
+PR_BGND_DW = 64
+
 # Flag bits. CMD3D.flags: DEPTHBUFFER and STENCILBUFFER from the DDK capture
 # (backend.rs:728,732; driver/src/pvr_drv.h:63-64), GETVISRESULTS
-# (backend.rs:739). No vendored header names a partial-render bit of this
-# word; the partial-render state shows in the asPRBuffer slots and, once
-# placed, pds_pr_bgnd. Geometry flags: render.rs:89-90.
-FLAGS_3D = [(0x20, "GETVISRESULTS"), (0x80, "DEPTHBUFFER"), (0x100, "STENCILBUFFER")]
+# (backend.rs:739), FLAG_PR above. Geometry flags: render.rs:89-90.
+FLAGS_3D = [(0x20, "GETVISRESULTS"), (0x80, "DEPTHBUFFER"), (0x100, "STENCILBUFFER"),
+            (FLAG_PR, "SPMSCRATCHBUFFER(PR)")]
 FLAGS_GEOM = [(0x1, "FIRSTKICK"), (0x2, "LASTKICK")]
 
 LINE = re.compile(r"\b(c3d|cmd3d|cgeom)\[\s*(\d+)\]:((?: [0-9a-fA-F]{8}){8})\s*$")
@@ -116,11 +149,21 @@ def flags_text(v, table):
     return "+".join(names) if names else "none"
 
 
+def is_pr(kind, words):
+    return kind != "cgeom" and len(words) > 76 and bool(words[76] & FLAG_PR)
+
+
 def decode(kind, words, pr_bgnd_dw):
     names = {dw: name for dw, name, _ in (CMDTA if kind == "cgeom" else CMD3D)}
+    tag = ""
+    if is_pr(kind, words):
+        for dw, what in PR_WORDS.items():
+            names[dw] = "%s  (%s)" % (names[dw], what)
+        if pr_bgnd_dw is None:
+            pr_bgnd_dw, tag = PR_BGND_DW, "  (unpinned)"
     if kind != "cgeom" and pr_bgnd_dw is not None:
         for j in range(6):
-            names[pr_bgnd_dw + j] = "pds_pr_bgnd[%d].%s" % (j // 2, ("lo", "hi")[j % 2])
+            names[pr_bgnd_dw + j] = "pds_pr_bgnd[%d].%s%s" % (j // 2, ("lo", "hi")[j % 2], tag)
     out = []
     for i, w in enumerate(words):
         name = names.get(i, "(unplaced)")
@@ -153,7 +196,8 @@ def main():
         print("pvr-cmd3d-decode: no c3d/cmd3d/cgeom word lines found", file=sys.stderr)
         return 1
     for n, (kind, words) in enumerate(recs, 1):
-        print("record %d: %s, %d words" % (n, kind, len(words)))
+        print("record %d: %s, %d words%s" % (n, kind, len(words),
+                                             ", 3D_PR" if is_pr(kind, words) else ""))
         print("\n".join(decode(kind, words, a.pr_bgnd_dw)))
     return 0
 
