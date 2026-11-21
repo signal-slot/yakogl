@@ -414,6 +414,123 @@ and are not copied here. Disable is the reset step alone (`:1200-1207`). That
 this is all the PHY needs on a board that the firmware has not already set up
 is **open**.
 
+### HVS-written words of a plane entry, and list-pointer latching
+
+Read from `rpi:` at `5bd564aa`, all under `drivers/gpu/drm/vc4/` (`vc4_plane.c`,
+`vc4_hvs.c`, `vc4_crtc.c`, `vc4_regs.h`). The driver's BCM2712 D0 path is
+`VC4_GEN_6_D`: `vc4_hvs_atomic_flush` warns above it (`vc4_hvs.c:1268`).
+Question: which words of a plane entry does the HVS itself write while it
+scans out, and when does it pick up a new list pointer? This is Q2 and Q4 of
+`docs/notes/rpi5-display.md`.
+
+**A. The entry of an unscaled, single-plane RGB plane.** `vc6_plane_mode_set`
+(`vc4_plane.c:1899`) emits the words in this order; the word number counts
+from the entry's head (the list word the pointer names). With `is_unity` the
+second position word is left out (`:2169-2174`) and no LBM or scaler words
+follow (`:2234`, the block ends at `:2296`).
+
+| Word | Content | Source | Driver writes it | HVS writes it |
+|---|---|---|---|---|
+| 0 | control word 0 (valid, address mode, unity, order, scaler modes, pixel format, and the NEXT count ORed in afterwards) | `:2144-2152`, `:2298-2299`; bits `vc4_regs.h:1359-1373` | yes | not read as such |
+| 1 | position word 0 (start x and y, h-flip) | `:2154-2159` | yes | no |
+| 2 | control word 2 (alpha, blend, CSC) | `:2161-2166` | yes | no |
+| 3 | position word 2 (source size) | `:2176-2182` | yes | no |
+| 4 | position word 3, "Context" | `:2184-2185` | writes the filler `0xc0c0c0c0` once | **yes**: the one word the vc6 writer reserves for the hardware |
+| 5 | pointer word 0 (v-flip, UPM fields, upper address bits) | `:2196-2205`; `vc4_regs.h:1397-1405` | yes, upper bits only; UPM fields are zero here | the UPM fields are only meaningful for scaled planes (`vc6_plane_allocate_upm`, `:1124`); not read as written by hardware |
+| 6 | pointer word 1 (low 32 address bits) | `:2208` | yes | no |
+| 7 | pointer word 2 (pitch) | `:2210-2218` | yes | no |
+| 8 | `SCALER6_CTL0_END` as the end-of-entry word, when it is the last plane (the caller writes the list's `SCALER_CTL0_END` instead, `vc4_hvs.c:1316`) | `:2296` | yes | no |
+
+Facts behind the table:
+
+- The only word the vc6 writer comments as a context word is position word 3
+  (word 4 above); the writer fills it with a constant filler pattern and does
+  not compute it (`vc4_plane.c:2184-2185`). The older (HVS 4/5) writer says in
+  words that this word is "Written by the HVS" (`:1664-1665`) and, in the same
+  file, reserves three "Pointer Context Word 0/1/2: Written by the HVS"
+  words per plane (`:1735-1737`). The vc6 writer has no pointer-context
+  words at all: after the position words the pointer words are the address,
+  its upper byte and the pitch only (`:2190-2219`). Whether position word 3 is
+  written by the HVS on D0 is therefore **inferred from the same name and the
+  same filler**, not stated for D0.
+- The async (cursor-style) update never rewrites the whole entry: it
+  copies only position word 0, position word 2 and pointer word 0 (and the pointer
+  word 1 after it, `:2464-2465`), with the comment that a full rewrite
+  "would smash the context data that the HVS is currently using"
+  (`:2539-2556`; the vc6 branch `:2452-2465`). Its eligibility check lets
+  exactly those words, and the LBM word if there is one, differ
+  (`:2584-2604`). So Linux treats every other word as either constant or
+  hardware-owned, and the HVS's own working state (the context) is not in
+  any of the words it allows to differ.
+- The HVS's header comment says the entries live in context RAM and that the
+  HVS keeps "data during the frame rendering" in the same RAM; the driver
+  therefore never frees or reuses an entry the hardware still points at
+  (`vc4_hvs.c:747-765`). This places the writes inside the entry's own words,
+  not in a separate area.
+- For this entry the LBM word is absent: a reserved slot exists only when the
+  plane is not unity or is YUV (`:2232-2243`), and `vc4_plane_allocate_lbm`
+  fills it (`:1102`).
+- The driver's `NEXT` count equals the entry's word count (`:2298-2299`). The
+  firmware entry observed on the board has `NEXT` = 32 in control word 0
+  (`0x600cc004`: bits 29:24 = `0x20`) while eight words have a meaning. The
+  firmware's entry may therefore be longer than Linux's (a 32-word stride),
+  with more hardware-owned words after word 7.
+
+**B. When a list pointer is picked up.**
+
+- Linux writes `LPTRS` `HEADE` (bits 11:0, `vc4_regs.h:588-591`) with one plain
+  register write in `vc4_hvs_install_dlist` (`vc4_hvs.c:1151-1175`; the vc6 branch
+  `:1166-1169`). It reads nothing back, waits for nothing and sets no
+  "update pending" bit.
+- It calls the install in two places only: `vc4_hvs_atomic_enable` before it
+  initialises the channel (`:1218-1234`), and `vc4_hvs_atomic_flush`
+  when the CRTC was and stays active (`:1343-1346`). The latter runs from the
+  atomic-commit tail with no wait for a vblank: the new entries are first copied into the
+  list RAM (`:1283-1316`), then the pointer is written. Nothing in `vc4_hvs.c`
+  or `vc4_crtc.c` times the write to a vblank. So Linux writes the pointer
+  under a running scanout, at any time.
+- There is no latch bit in the HVS register headers read: the per-channel
+  registers `vc4_regs.h:588-612` are `LPTRS` (head, `HEADE`), `COB`, `STATUS`
+  (EMPTY, FRCNT, OFIELD, MODE, YLINE), and `SCALER6_DISPX_DL` with the field
+  `LACT` ("last active" list pointer, bits 11:0, `vc4_regs.h:616-619`). `grep` for a
+  latch, "pending" or a strobe on `LPTRS` finds none.
+- The driver detects the pickup by reading the active pointer, not by a
+  latch: `vc4_hvs_update_dlist` records the new start as `current_dlist`
+  (`vc4_hvs.c:1177-1204`), and the vblank interrupt completes the flip only
+  when `DISPX_DL.LACT` equals it (`vc4_crtc.c:832-855`, vc6 branch `:845-847`;
+  called from `vc4_crtc_handle_vblank`, `:870-881`). So the hardware has
+  adopted the new list at a frame boundary no later than the first vblank at
+  which `LACT` equals the new head; that is the only synchronisation the driver
+  relies on.
+
+**What the reading could not settle.**
+
+- Which words the D0 HVS writes. Only position word 3 is named, by its filler
+  and by analogy to the older writer; no header or comment for D0 lists the
+  hardware's own words. The firmware's longer entry (`NEXT` 32) is not described
+  in the source.
+- Whether a pointer written mid-frame is latched at the next line, the next
+  end of frame or only when the channel re-reads its head. Linux's completion
+  check implies "by the next vblank" at the latest and says nothing of a
+  glitch-free mid-frame swap. Nothing says that two writes in one frame are
+  safe.
+- Whether `SCALER6_DISPX_STATUS` FRCNT or `DISPX_DL.LACT` change at the moment of the latch.
+
+**Prediction, for the board to confirm** (not measured). The one word of the
+firmware's list that changes across eight values during the hold is most
+likely position word 3, which is **entry word 4** (list word 676 for the
+list at 672), because it is the one context word of an unscaled RGB entry and
+it already differs from Linux's filler (`0x800000a8`, not `0xc0c0c0c0`).
+If the firmware's entry is a 32-word stride, hardware-owned words may also
+sit after word 7 (list words 680 to 703); the changing word could be one of
+them. For `rpi5_scanout16` (Q2): print the index relative to the entry head
+and expect 4. For `rpi5_scanout32`: when the firmware's list is restored byte for
+byte, skip or expect a change of word 4 (and any word in 8 to 31 that the
+first run names), and write the new entry with word 4 as a filler. For the
+swap (Q4): write `LPTRS.HEADE` once, then poll `DISPX_DL.LACT` (and `STATUS`
+FRCNT) until it equals the new head before reusing the old buffer or list;
+do not assume a vblank-only latch.
+
 ## 11. What the generic arm64 boot protocol says (U6, in part)
 
 `linux:Documentation/arch/arm64/booting.rst` is the contract between a loader
