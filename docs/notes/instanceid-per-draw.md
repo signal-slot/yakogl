@@ -489,9 +489,9 @@ Expected verdicts:
 #### P3 host results (`4f4310a6`, HOST-ONLY, `GPU=powervr`)
 
 `tools/cts/host-deqp-run.sh` with the feature built in through
-`--lib-cmake-arg=-DYAKOGL_EXTRA_FEATURES=yakogl/pvr-instance-divisor` (the bare
-name `pvr-instance-divisor` fails: `capi/Cargo.toml` has no forwarding
-feature), the patched VK-GL-CTS at `93bca01`:
+`--lib-cmake-arg=-DYAKOGL_PVR_INSTANCE_DIVISOR=ON` (`capi/Cargo.toml` forwards
+`pvr-instance-divisor`; before that was added the run had to pass
+`-DYAKOGL_EXTRA_FEATURES=yakogl/pvr-instance-divisor`), the patched VK-GL-CTS at `93bca01`:
 
 - Before P3 (`03a923ed`): `dEQP-GLES3.functional.instanced.*` is 111 cases,
   0 Pass / 111 Fail / 0 NotSupported. Every picture verdict is Fail on the
