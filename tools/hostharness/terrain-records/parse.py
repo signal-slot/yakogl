@@ -17,7 +17,15 @@ import sys
 
 TS = re.compile(r'^\d\d:\d\d:\d\d ')
 RUN = re.compile(r'^(\d{8}-\d{4})-(.+)-([0-9a-f]{8}|probe)$')
-FPS = re.compile(r'\[terrain\][^:]*: FPS: (\d+) FrameTime: ([\d.]+) ms')
+TERRAIN = re.compile(r'\[terrain\]')
+FPS1 = re.compile(r'\[terrain\][^:]*: FPS: (\d+) FrameTime: ([\d.]+) ms')
+FPS = re.compile(r'\bFPS: (\d+) FrameTime: ([\d.]+) ms')
+OTHER_SCENE = re.compile(r'^\[[\w-]+\] ')
+BUILD = re.compile(r'sample: build tree=([0-9a-f]{7,40})(-dirty)?\b')
+LABEL = re.compile(r'^board\.sh \S+ glmark2-([0-9a-f]{8})\b')
+COUNTERS = re.compile(r'glmark2-counters: (.*?): (absent|frames (\d+)\b(.*))$')
+# Cumulative differences are printed per frame; these are levels or causes.
+LEVEL_KEYS = {'rt.live', 'rt.bytes', 'tile.untimed', 'fl.stop'}
 FRAME = re.compile(r'glmark2-frame: \[terrain\].*')
 TFU = re.compile(r'yakogl/v3d: TFU mipmap at frame (\d+): (\d+) chains')
 TILED = re.compile(r'yakogl/v3d: tiled copies for draws at frame (\d+), by reason: (.*)')
@@ -48,10 +56,34 @@ def find_runs(path):
 def parse_one(rundir, console):
     L = lines_of(console)
     r = {'console': console, 'run': rundir}
+    pending = False  # a [terrain] line seen, its FPS line not yet
     for l in L:
-        m = FPS.search(l)
+        if TERRAIN.search(l) and 'glmark2-frame' not in l and 'glmark2-counters' not in l:
+            pending = True
+        elif pending and OTHER_SCENE.match(l):
+            pending = False
+        m = FPS1.search(l) or (FPS.search(l) if pending else None)
         if m:
             r['fps'], r['ms'] = int(m.group(1)), float(m.group(2))
+            pending = False
+        m = BUILD.search(l)
+        if m:
+            r['build'] = m.group(1)[:8] + (m.group(2) or '')
+        m = COUNTERS.search(l)
+        if m and TERRAIN.search(m.group(1)):
+            if m.group(2) == 'absent':
+                r['counters'] = None
+            else:
+                n = int(m.group(3))
+                w = m.group(4).split()
+                c = {}
+                for k, v in zip(w[0::2], w[1::2]):
+                    try:
+                        c[k] = float(v) if re.search(r'[.eE]', v) else int(v)
+                    except ValueError:
+                        c[k] = v
+                r['counters'] = c
+                r['counters_frames'] = n
         m = FRAME.search(l)
         if m:
             r['frame_line'] = m.group(0)
@@ -82,7 +114,7 @@ def parse_one(rundir, console):
     if rundir:
         m = RUN.match(os.path.basename(rundir.rstrip('/')))
         if m:
-            r['commit'] = m.group(3)
+            r['image_sha256'] = m.group(3)
         idx = os.path.join(rundir, 'INDEX.txt')
         if os.path.isfile(idx):
             for l in lines_of(idx):
@@ -93,13 +125,21 @@ def parse_one(rundir, console):
         if os.path.isfile(notes):
             for l in lines_of(notes):
                 m = re.match(r'commit ([0-9a-f]{8})', l)
-                if m:
+                if m and 'build' not in r:
                     r['commit'] = m.group(1)
     if 'verdict' not in r:
         for l in L:
             m = VERDICT.match(l)
             if m:
                 r['verdict'] = m.group(1)
+    # commit: the console's build line, else a stage note, else the label in
+    # the verdict line ('board.sh pi4 glmark2-<sha8>'); never the sha256.
+    if 'build' in r:
+        r['commit'] = r['build']
+    elif 'commit' not in r and 'verdict' in r:
+        m = LABEL.match(r['verdict'])
+        if m:
+            r['commit'] = m.group(1)
     return r
 
 
@@ -111,11 +151,38 @@ def parse(path):
     return runs[-1]  # the last run that has terrain
 
 
+def per_frame(r):
+    """Terrain's counters as {key: value}, rates divided by frames."""
+    c, n = r.get('counters'), r.get('counters_frames', 0)
+    if not c:
+        return {}
+    out = {}
+    for k, v in c.items():
+        if isinstance(v, str) or k in LEVEL_KEYS or n == 0:
+            out[k] = v
+        else:
+            out[k] = round(v / n, 3)
+            if out[k] == int(out[k]):
+                out[k] = int(out[k])
+    return out
+
+
+def counters_text(r):
+    c = r.get('counters')
+    if c is None:
+        return '- glmark2-counters (terrain, a frame): absent'
+    pf = per_frame(r)
+    return '- glmark2-counters (terrain, %d frames, a frame): %s' % (
+        r['counters_frames'], ' '.join('%s %s' % kv for kv in pf.items()) or 'none')
+
+
 def block(r, title):
     def g(k, d='absent'):
         return r.get(k, d)
     o = ['### %s' % title, '']
     o.append('- commit: %s' % g('commit'))
+    if r.get('image_sha256'):
+        o.append('- image sha256 (run name): %s' % r['image_sha256'])
     o.append('- verdict line: `%s`' % g('verdict'))
     o.append('- records path: %s' % (g('run') if r.get('run') else '(console log %s)' % r['console']))
     o.append('- terrain: %s FPS, %s ms a frame' % (g('fps'), g('ms')))
@@ -124,6 +191,7 @@ def block(r, title):
         o.append('- Pi 4 TFU mipmap (frame %s): %s chains' % (g('tfu_frame'), g('tfu_chains')))
         o.append('  - `%s`' % g('tfu_line'))
         o.append('  - `%s`' % g('tiled_line'))
+    o.append(counters_text(r))
     if 'reposts' in r or 'kick_line' in r:
         o.append('- AM62P re-post lines: %s (kicks re-posted %s, last "so far" %s)'
                  % (g('reposts', 0), g('reposted_kicks', 0), g('reposts_so_far', 0)))
@@ -147,7 +215,22 @@ def diff(a, b):
         x, y = a.get('tiled', {}).get(k), b.get('tiled', {}).get(k)
         ch = '%+d' % (y - x) if x is not None and y is not None else 'n/a'
         o.append('| tiled %s | %s | %s | %s |' % (k, x, y, ch))
+    pa, pb = per_frame(a), per_frame(b)
+    for k in sorted(set(pa) | set(pb)):
+        x, y = pa.get(k), pb.get(k)
+        ok = all(isinstance(v, (int, float)) for v in (x, y))
+        o.append('| counter %s (a frame) | %s | %s | %s |'
+                 % (k, x, y, '%+.3f' % (y - x) if ok else 'n/a'))
     return '\n'.join(o) + '\n'
+
+
+def parse_text(lines):
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        f = os.path.join(d, 'console.txt')
+        with open(f, 'w') as fh:
+            fh.write('\n'.join(lines) + '\n')
+        return parse_one(None, f)
 
 
 def selftest():
@@ -156,7 +239,17 @@ def selftest():
     a = parse(os.path.join(here, 'pi4-after'))
     m = parse(os.path.join(here, 'am62p'))
     chk = [
-        (p['commit'], '0123abcd'), (p['fps'], 6), (p['ms'], 161.8),
+        (p['commit'], 'a1b2c3d4'), (p['image_sha256'], '0123abcd'),
+        (a['commit'], 'e5f6a7b8-dirty'), (m['commit'], '9a8b7c6d'),
+        (p['counters']['jobs'], 549), (p['counters_frames'], 61),
+        (per_frame(p)['jobs'], 9), (per_frame(p)['rt.live'], 4),
+        (per_frame(m)['kicks'], 52.672), (m['counters']['reposts'], 61),
+        (parse_text(['[terrain] <d>:', 'x', ' FPS: 5 FrameTime: 9.5 ms'])['fps'], 5),
+        (parse_text(['[terrain] <d>: FPS: 5 FrameTime: 9.5 ms'])['ms'], 9.5),
+        (parse_text(['glmark2-counters: [terrain] <d>: absent'])['counters'], None),
+        (parse_text(['glmark2-counters: [shadow] <d>: frames 2 jobs 4']).get('counters', 'none'), 'none'),
+        ('image sha256' in block(p, 'x'), True),
+        (p['fps'], 6), (p['ms'], 161.8),
         (p['us_swap'], 154200), (p['tfu_frame'], 461), (p['tfu_chains'], 58),
         (p['tiled']['first-sample'], 77), (p['verdict'].split()[4], 'verdict=done'),
         (a['ms'], 33.3), (a['tfu_frame'], 461),

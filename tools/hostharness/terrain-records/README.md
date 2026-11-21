@@ -17,16 +17,29 @@ Given two, it prints both blocks and a table of the changes (second - first).
 
 Fields, with the line each comes from (`absent` if the line is not there):
 
-- commit: the run name's `<sha8>`.
+- commit: the console's `sample: build tree=<sha8>[-dirty] table=...` line
+  (`-dirty` kept); else a stage-notes `commit <sha8>`; else the label in the
+  verdict line (`board.sh pi4 glmark2-<sha8> ...`). Never the run name's sha8,
+  which is the image's sha256: it prints on its own line, `image sha256`.
 - verdict line: `INDEX.txt`, `verdict: board.sh <board> <name> rc=.. verdict=..`
   (`tools/board.sh`, "The verdict line").
 - records path: the run directory.
-- terrain FPS and ms a frame: `[terrain] <info>: FPS: N FrameTime: X ms`;
+- terrain FPS and ms a frame: `[terrain] <info>: FPS: N FrameTime: X ms`, on
+  one line or, as on the board, with other lines between `[terrain] <info>:`
+  and ` FPS: N FrameTime: X ms` (the next `[other-scene] ` line ends the wait);
   and the `glmark2-frame: [terrain]` line (gl, swap, show, other, frame us).
 - Pi 4: the highest-frame `yakogl/v3d: TFU mipmap at frame N: C chains` and
   `tiled copies for draws at frame N, by reason: ...` lines (cumulative).
 - AM62P: the count of `render: fence N ... re-posted K kick(s) (M so far)`
   lines, and the last `pvr last completed kick per frame` line, verbatim.
 
-The counters are cumulative over the whole console, not terrain's alone.
+- `glmark2-counters: <scene info>: frames N <key> <value> ...`
+  (`docs/notes/glmark2-scene-counters.md`): terrain's line only. Values are
+  printed per frame (value / N); `rt.live`, `rt.bytes`, `tile.untimed` and
+  `fl.stop` are levels and print as they are. `absent` when the line is
+  missing or reads `glmark2-counters: <scene>: absent` (the GC7000 image). The
+  two-run table carries a `counter <key> (a frame)` row per key.
+
+The `glmark2-counters` lines in `testdata/` are made up, written to the design,
+until a GM image prints them. The other counters are cumulative over the whole console, not terrain's alone.
 `testdata/` is synthetic (no board address, host name or UART path).
