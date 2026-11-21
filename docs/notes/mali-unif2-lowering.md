@@ -381,3 +381,75 @@ uniform shapes), `shaders.random.basic_expression.combined.*` (`fs_other`),
 
 See also `docs/notes/mali-deqp-unif2.md` (shapes, counts, references),
 `mali-deqp-unitype.md`, `mali-deqp-uniarray.md` (the earlier layouts).
+
+## 9. Measured sites at a7260420
+
+Measured at the integration tip `a7260420` (2026-11-21). Method: every
+`tools/mali/testdata/deqp_unif2_*` reference, and the `deqp_uniarray_*` ones, went
+through `mali_ref::compile_pair` (the vertex and fragment shader compiled,
+relinked and linked, as `tests/mali_deqp_unif2.rs` does; features
+`host-test,gpu-mali,shaderc-online,no-shader-table`) in a scratch test that was
+not committed. The site is the `file:line` of the last `Err(MaliError::..)` /
+`ok_or(MaliError::..)` raised before the refusal, from a temporary local rewrite of
+those 376 constructors that was reverted (nothing under `src/` or `tests/` is
+changed by this section). Lines are those of `a7260420`; they drift. The text
+equals the one `tests/mali_deqp_unif2.rs` pins in every row. "Step" is
+section 6's, or the owner of section 4a of `mali-lowering-schedule.md`.
+
+| Reference | Text (short) | Site | Step |
+|---|---|---|---|
+| `unif2_arr_bool_array` | `UniformArray`, vertex | `nir.rs:1062` (`uniform_of`: `array_element` is None) | **U3** (then U6's chain, D1/U2) |
+| `unif2_arr_int_array` | `UniformArray`, vertex | `nir.rs:1062` | **U3**, then `UniformPrecision` (`mod.rs:1364`, *intval-vs16*) |
+| `unif2_arr_mat_array` | `UniformArray`, vertex | `nir.rs:1062` | **U8** |
+| `unif2_arr_struct_array` | `UniformType`, vertex | `nir.rs:4475` (`LoadUniform` of a `GL_INT` that is neither index nor compare) | *intval-vs16* (`float(int)`), then **U5** |
+| `unif2_fs_bool_uniform` | `FsUniform`, fragment | `select.rs:621` (`UboLayout::fs16`, array of `GL_BOOL`) | **U3** (then intval-rest compare, fclane lane) |
+| `unif2_fs_int_uniform` | `FsUniform`, fragment | `select.rs:621` (array of `GL_INT`) | **U3** (same prerequisites) |
+| `unif2_fs_mat_uniform` | `ColourForm` (`FragColorLane`), fragment | `nir_fs.rs:8735` (`vectorise`: two lanes of one varying that is not `whole`) | **fclane** (U9 check only) |
+| `unif2_fs_other` | `FsUniform`, fragment | `nir_fs.rs:8780` (`vectorise` `_ =>`: lanes of two different words) | **U7** |
+| `unif2_fs_struct_uniform` | `FsUniform`, fragment | `select.rs:621` (a member array of int/bool) | **U3**, then **U5** |
+| `unif2_vs_bool_uniform` | `Arithmetic`, vertex | `nir.rs:3711` (`vs_reduce` `_` arm: `bvec2 == bvec2(false, true)`) | **U6** (*intval-vs16* V3 writes the arm; 4a) |
+| `unif2_vs_int_uniform` | `UniformType`, vertex | `nir.rs:4475` | *intval-vs16* (vs16-2 int-uniform gate), then `UniformPrecision` |
+| `unif2_vs_mat_uniform` | compiles (`LOWERED`) | - | done |
+| `unif2_vs_mediump_array` | `ColourForm`, fragment | `nir_fs.rs:8799` (`vectorise` `_ =>`: a computed pair) | **fclane** (U9 check) |
+| `unif2_vs_mediump_struct` | `ColourForm`, fragment | `nir_fs.rs:8799` | **fclane** (U9 check) |
+| `unif2_vs_struct_uniform` | `UniformType`, vertex | `nir.rs:4475` | *intval-vs16*, then **U3** (`m2[3]`, `m3[3]`) and **U5** |
+
+The `deqp_uniarray_*` references the pins still refuse (seven; the other 17
+compile):
+
+| Reference | Text (short) | Site | Step |
+|---|---|---|---|
+| `uniarray_api_float` | `FsUniform`, fragment | `nir_fs.rs:8780` | the same site as `fs_other`: **U7** is the first candidate (not read past the site); `compare_float`'s abs/`FMAX` is arith/constop |
+| `uniarray_dyn_vec2_vs`, `dyn_vec3_vs` | `UniformIndexed`, vertex | `nir.rs:1244` (`uniform_idx`: shape is not float/vec4, or an fp16 element read more than once) | not U1-U8 (a lower-uniarray follow-up, `LD_PKA`) |
+| `uniarray_dyn_vec4_vs` | `UniformPrecision`, vertex | `mod.rs:1364` | not U1-U8 (unitype's fp16 uniform) |
+| `uniarray_struct` | `ColourForm`, fragment | `nir_fs.rs:8799` | **fclane** |
+| `uniarray_struct_member_fs` | `FsUniform`, fragment | `nir_fs.rs:8465` (`wide_uniform` pair that is not two words in a row) | **U5** (the int member beside an fp32 lane); not measured past the site |
+| `uniarray_struct_member_vs` | `UniformType`, vertex | `nir.rs:4475` | *intval-vs16* (`float(int)`), then **U5** |
+
+### References whose step changes
+
+The designs of sections 2 and 6 name a site for `arr_int_array`, `vs_int_uniform`
+and `vs_struct_uniform`; the measured one differs for three:
+
+- `vs_int_uniform` is first refused at `LoadUniform` (`nir.rs:4475`,
+  `UniformType`), not at the vertex layout check `UniformPrecision`
+  (`mod.rs:1364`) that section 2's row 4 names first; that one follows once the
+  gate is lifted. Both are intval-vs16's; the step is unchanged.
+- `arr_int_array` is refused at `nir.rs:1062` first (U3's array rule); its
+  `UniformPrecision` follows. Unchanged.
+- `unif2_fs_other` and `uniarray_api_float` are refused at the same
+  `vectorise` arm (`nir_fs.rs:8780`): **U7** may unblock `api_float` as well,
+  which section 6 does not say (`api_float` is `constop`'s in its test ignore).
+- `fs_mat_uniform` is the only fclane row refused at `nir_fs.rs:8735` (two
+  lanes of one varying, mechanism differs from the `8799` rows); U9 is a check
+  only for all four.
+
+No reference moves to another U step; every one of the 15 keeps the step section
+3 gave it, and `vs_mat_uniform` stays the only one that compiles.
+The line numbers of section 2 (`nir.rs:1046-1089`, `4455`, `3612`,
+`mod.rs:1352-1366`, `select.rs:579-668`, `nir_fs.rs:7436`, `8764-8786`) have
+drifted: today `uniform_of` is `nir.rs:1055-1062`, the `LoadUniform` guard
+`nir.rs:4474-4475`, the `vs_reduce` fall-through `nir.rs:3711`, `fs16`'s
+fall-through `select.rs:621`, `vectorise`'s uniform arm `nir_fs.rs:8768-8784`.
+Caveat: "the last site raised" can in principle be a probe that was caught; the
+text matched the pinned text in all 14 refused rows, so none was.
