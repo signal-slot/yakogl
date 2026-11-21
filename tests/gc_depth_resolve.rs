@@ -12,6 +12,14 @@
 //! sides of that change is the "bit-identical" check. Texels outside the
 //! surface and the pitch's padding must stay as they were.
 //!
+//! A SUPER_TILED surface (W12a groundwork: only `select_in` with
+//! `Layout::SuperTiled` makes one) is filled through
+//! `depth_format::write_super_tiled` and resolved through
+//! `depth_format::read_super_tiled`; its floats must be the linear resolve's
+//! of the same values, bit for bit. A plane copied between a super-tiled and
+//! a linear surface (`copy_plane`) and depth texels seeded into a super-tiled
+//! one (`seed_depth`) are checked word by word.
+//!
 //! The timing test prints the cost of one 1024 x 1024 resolve (the shadow
 //! and refract textures of glmark2); it asserts nothing about time. Run it
 //! with `--release` and `--nocapture`:
@@ -23,13 +31,15 @@
 #![cfg(all(feature = "host-test", feature = "gpu-vivante", feature = "shaderc-online"))]
 
 use core::ffi::c_void;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 use std::time::Instant;
 use yakogl::backend::GlesDraw;
 use yakogl::ds_retention::DepthTexels;
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
+use yakogl::vivante::depth_format::{self, PeDepthFormat};
 use yakogl::vivante::ds_cache::{self, DsKey};
+use yakogl::vivante::layout::{self, Layout};
 
 /// Host memory for every allocation; `select` makes exactly one per surface.
 static ALLOCS: Mutex<BTreeMap<u64, Box<[u64]>>> = Mutex::new(BTreeMap::new());
@@ -116,14 +126,13 @@ fn with_surface(w: u32, h: u32, case: impl FnOnce(&mut [u32], u32)) {
 /// [`with_surface`] at `guard` bytes into the allocation (8-byte aligned
 /// here, as on the board): the pixel bytes and the row stride in bytes.
 fn with_surface_at(guard: usize, w: u32, h: u32, case: impl FnOnce(&mut [u8], u32)) {
-    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    // SAFETY: the guard serialises the tests; the tables are statics.
-    unsafe {
-        osal_set_ops(&OSAL);
-        yakogl::backend::g_backend = &yakogl::vivante::backend::yakogl_backend_vivante;
-        assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
-    }
-    ds_cache::select(KEY, w, h, guard, 1, None, |_| false, || 0).expect("a surface");
+    with_surface_in(Layout::Linear, guard, w, h, case)
+}
+
+/// [`with_surface_at`] for a surface selected in `layout` (`select_in`).
+fn with_surface_in(layout: Layout, guard: usize, w: u32, h: u32, case: impl FnOnce(&mut [u8], u32)) {
+    let _g = init();
+    ds_cache::select_in(layout, KEY, w, h, guard, 1, None, |_| false, || 0).expect("a surface");
     ds_cache::drawn(KEY, 1, false, [true, false], [None, None]);
     /* the surface: 64-aligned width in words, 64-aligned rows (ds_cache.rs `select`) */
     let (stride, rows) = (w.div_ceil(64) * 64 * 4, h.div_ceil(64) * 64);
@@ -150,6 +159,36 @@ fn resolve_at(guard: usize, dst: &mut [f32], w: u32, h: u32, pitch: u32) -> i32 
     unsafe { ds_cache::resolve_depth(ID, dst.as_mut_ptr(), w, h, pitch, guard, |_| 0) }
 }
 
+/// The test lock held, the OSAL and the Vivante back end set up.
+fn init() -> std::sync::MutexGuard<'static, ()> {
+    let g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    // SAFETY: the guard serialises the tests; the tables are statics.
+    unsafe {
+        osal_set_ops(&OSAL);
+        yakogl::backend::g_backend = &yakogl::vivante::backend::yakogl_backend_vivante;
+        assert_eq!(yakogl::vivante::backend::gc_init(), 0, "gc_init");
+    }
+    g
+}
+
+/// The (w, h, pitch) asks of the tests below on a 90 x 70 surface (128 words
+/// a row, 128 rows; some asks hold more than that).
+const CASES: [(u32, u32, u32); 13] = [
+    (90, 70, 90),
+    (90, 70, 97),
+    (128, 128, 129),
+    (1, 1, 1),
+    (150, 140, 160),
+    (3, 5, 64),
+    (89, 70, 89),
+    (91, 33, 95),
+    (7, 3, 9),
+    (5, 2, 5),
+    (2, 4, 3),
+    (127, 70, 127),
+    (129, 1, 131),
+];
+
 /// Every texel of the resolve is the rule's value of the word at its place;
 /// a texel outside the surface and the pitch's padding keep their sentinel.
 ///
@@ -160,22 +199,7 @@ fn resolve_at(guard: usize, dst: &mut [f32], w: u32, h: u32, pitch: u32) -> i32 
 /// on a 128-word surface takes the stride's limit.
 #[test]
 fn every_texel_is_the_rule_of_its_word() {
-    /* a 90 x 70 surface is 128 words a row and 128 rows; some asks hold more than that */
-    for (w, h, pitch) in [
-        (90u32, 70u32, 90u32),
-        (90, 70, 97),
-        (128, 128, 129),
-        (1, 1, 1),
-        (150, 140, 160),
-        (3, 5, 64),
-        (89, 70, 89),
-        (91, 33, 95),
-        (7, 3, 9),
-        (5, 2, 5),
-        (2, 4, 3),
-        (127, 70, 127),
-        (129, 1, 131),
-    ] {
+    for (w, h, pitch) in CASES {
         with_surface(90, 70, |words, tw| {
             for (i, v) in words.iter_mut().enumerate() {
                 *v = pattern(i);
@@ -338,6 +362,253 @@ fn depth_texels_need_no_copy_from_a_surface_of_another_stride() {
     assert_eq!(resolve(&mut dst, w, h, w), 0);
     assert!(dst.iter().zip(&texels).all(|(a, b)| a.to_bits() == b.to_bits()), "the resolve answers the texels");
     yakogl::vivante::backend::gc_shutdown();
+}
+
+/// The depth values a case writes: D24S8 a 24-bit value a texel (the
+/// extremes at the first texels), Z16 a 16-bit one (`k / 65535`, the values
+/// of a `DEPTH_COMPONENT16` attachment).
+fn case_depths(z16: bool, h: u32, pitch: u32) -> Vec<f32> {
+    (0..h * pitch)
+        .map(|i| match (i, z16) {
+            (0, _) => 0.0,
+            (1, _) => 1.0,
+            (2, false) => yakogl::ds_retention::unorm24_depth(0x80_0000),
+            (_, false) => yakogl::ds_retention::unorm24_depth(pattern(i as usize) >> 8),
+            (_, true) => ((pattern(i as usize) & 0xffff) as f64 / 65535.0) as f32,
+        })
+        .collect()
+}
+
+/// The resolve of a `w` x `h` / `pitch` ask on a 90 x 70 surface in `layout`
+/// whose words start as the pattern (each pixel's at its place in the
+/// layout) and whose depth `fill` then writes into the pixel bytes.
+fn resolve_in(layout: Layout, (w, h, pitch): (u32, u32, u32), fill: impl FnOnce(&mut [u8], u32)) -> Vec<f32> {
+    let mut dst = vec![7.5f32; (h * pitch) as usize];
+    with_surface_in(layout, GUARD, 90, 70, |px, stride| {
+        let (tw, rows) = (stride / 4, px.len() as u32 / stride);
+        for y in 0..rows {
+            for x in 0..tw {
+                let at = layout::offset(layout, x, y, 4, stride);
+                px[at..at + 4].copy_from_slice(&pattern((y * tw + x) as usize).to_ne_bytes());
+            }
+        }
+        fill(px, stride);
+        assert_eq!(resolve(&mut dst, w, h, pitch), 0, "{layout:?} {w}x{h}/{pitch}");
+    });
+    dst
+}
+
+/// W12a groundwork. A super-tiled surface whose depth
+/// `depth_format::write_super_tiled` wrote resolves (through
+/// `depth_format::read_super_tiled`) to the floats the linear resolve gives
+/// for the same values written row after row, bit for bit, at every case of
+/// [`CASES`], for D24S8 values and for Z16 ones; texels outside the surface
+/// and the pitch's padding keep their sentinel in both. Inside, the floats
+/// are the values written, as 24-bit depths (`depth_unorm24`).
+///
+/// Revert check: with `resolve_depth` refusing a super-tiled surface (before
+/// W12a) the resolve answers 1; reading it row-linear answers other floats.
+#[test]
+fn a_super_tiled_surface_resolves_bit_exact_with_the_linear_one() {
+    use yakogl::ds_retention::{depth_unorm24, unorm24_depth};
+    for z16 in [false, true] {
+        for case @ (w, h, pitch) in CASES {
+            let src = case_depths(z16, h, pitch);
+            let tiled = resolve_in(Layout::SuperTiled, case, |px, stride| {
+                depth_format::write_super_tiled(PeDepthFormat::D24S8, px, stride, w, h, &src, pitch)
+            });
+            let linear = resolve_in(Layout::Linear, case, |px, stride| {
+                let (cols, rows) = (w.min(stride / 4), h.min(px.len() as u32 / stride));
+                for y in 0..rows {
+                    for x in 0..cols {
+                        let at = (y * stride + x * 4) as usize;
+                        let old = u32::from_ne_bytes(px[at..at + 4].try_into().unwrap());
+                        let d = depth_unorm24(src[(y * pitch + x) as usize]);
+                        px[at..at + 4].copy_from_slice(&((d << 8) | (old & 0xff)).to_ne_bytes());
+                    }
+                }
+            });
+            for y in 0..h {
+                for x in 0..pitch {
+                    let i = (y * pitch + x) as usize;
+                    let what = format!("z16 {z16} {w}x{h}/{pitch} at ({x}, {y})");
+                    assert_eq!(tiled[i].to_bits(), linear[i].to_bits(), "{what}");
+                    let inside = x < w && x < 128 && y < 128;
+                    let want = if inside { unorm24_depth(depth_unorm24(src[i])) } else { 7.5 };
+                    assert_eq!(tiled[i].to_bits(), want.to_bits(), "{what}");
+                    if inside && !z16 {
+                        assert_eq!(tiled[i].to_bits(), src[i].to_bits(), "{what}: a 24-bit depth as written");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Z16 itself (a `DEPTH_COMPONENT16` surface, which ds_cache does not make
+/// yet: depth_format.rs): `read_super_tiled` of halves written through
+/// `write_super_tiled` answers, at every case of [`CASES`], the linear rule
+/// of the same halves (`half / 65535`), bit for bit, and the values written.
+#[test]
+fn a_super_tiled_z16_surface_reads_bit_exact_with_the_linear_rule() {
+    let stride = layout::stride(Layout::SuperTiled, 90, 2, false);
+    let rows = layout::aligned_height(Layout::SuperTiled, 70, false);
+    for (w, h, pitch) in CASES {
+        let src = case_depths(true, h, pitch);
+        let mut surface = vec![0u8; (stride * rows) as usize];
+        depth_format::write_super_tiled(PeDepthFormat::D16, &mut surface, stride, w, h, &src, pitch);
+        let mut dst = vec![7.5f32; (h * pitch) as usize];
+        depth_format::read_super_tiled(PeDepthFormat::D16, &surface, stride, w, h, &mut dst, pitch);
+        for y in 0..h {
+            for x in 0..pitch {
+                let i = (y * pitch + x) as usize;
+                let inside = x < w && x < stride / 2 && y < rows;
+                let want = if inside {
+                    let at = layout::offset(Layout::SuperTiled, x, y, 2, stride);
+                    let half = u16::from_le_bytes([surface[at], surface[at + 1]]);
+                    (half as f64 / 65535.0) as f32
+                } else {
+                    7.5
+                };
+                assert_eq!(dst[i].to_bits(), want.to_bits(), "{w}x{h}/{pitch} at ({x}, {y})");
+                if inside {
+                    assert_eq!(dst[i].to_bits(), src[i].to_bits(), "{w}x{h}/{pitch} at ({x}, {y}): as written");
+                }
+            }
+        }
+    }
+}
+
+/// The GPU addresses of the allocations now.
+fn allocated() -> BTreeSet<u64> {
+    ALLOCS.lock().unwrap_or_else(|e| e.into_inner()).keys().copied().collect()
+}
+
+/// The pixel bytes (`bytes` past the guard) of the one surface allocated
+/// since `before` ([`allocated`]).
+fn new_surface(before: &BTreeSet<u64>, bytes: usize) -> *mut u8 {
+    let mut allocs = ALLOCS.lock().unwrap_or_else(|e| e.into_inner());
+    let size = (bytes + 2 * GUARD).div_ceil(8);
+    let mut new = allocs.iter_mut().filter(|(gpu, m)| !before.contains(*gpu) && m.len() == size);
+    let (_, m) = new.next().expect("the new surface");
+    assert!(new.next().is_none(), "one new surface");
+    // SAFETY: the allocation holds guard + bytes + guard bytes.
+    unsafe { (m.as_mut_ptr() as *mut u8).add(GUARD) }
+}
+
+/// W12a groundwork (`copy_plane`). The depth of object ID drawn in a
+/// super-tiled surface, then attached with another stencil object to a draw
+/// in a linear surface of the same stride: each pixel's depth bits move to
+/// its place in the linear surface, whose stencil bits stay (its zeroed
+/// memory); attached with a third stencil object to a super-tiled draw, they
+/// move back to their super-tiled places. The GPU is made idle for each
+/// copy, and each resolve answers the first surface's floats.
+///
+/// Revert check: before W12a both draws were refused (-ENOTSUP, another
+/// layout).
+#[test]
+fn a_plane_is_copied_super_tiled_to_linear_and_back() {
+    let _g = init();
+    let (w, h) = (90u32, 70u32);
+    let (stride, rows) = (128 * 4u32, 128u32);
+    let bytes = (stride * rows) as usize;
+    let at = |l: Layout, x: u32, y: u32| layout::offset(l, x, y, 4, stride);
+    let word = |px: *const u8, a: usize| {
+        assert!(a + 4 <= bytes);
+        // SAFETY: four bytes inside a live surface's pixels.
+        u32::from_ne_bytes(unsafe { core::slice::from_raw_parts(px.add(a), 4) }.try_into().unwrap())
+    };
+    let keys = [0x65u32, 0x66, 0x67].map(|s| DsKey { stencil_id: s, ..KEY });
+    let layouts = [Layout::SuperTiled, Layout::Linear, Layout::SuperTiled];
+
+    let before = allocated();
+    ds_cache::select_in(layouts[0], keys[0], w, h, GUARD, 1, None, |_| false, || 0).expect("the first surface");
+    let first = new_surface(&before, bytes);
+    {
+        // SAFETY: the surface's pixel bytes, no other view of them alive.
+        let px = unsafe { core::slice::from_raw_parts_mut(first, bytes) };
+        for y in 0..rows {
+            for x in 0..stride / 4 {
+                let a = at(Layout::SuperTiled, x, y);
+                px[a..a + 4].copy_from_slice(&pattern((y * 128 + x) as usize).to_ne_bytes());
+            }
+        }
+    }
+    let src = case_depths(false, h, w);
+    {
+        // SAFETY: as above.
+        let px = unsafe { core::slice::from_raw_parts_mut(first, bytes) };
+        depth_format::write_super_tiled(PeDepthFormat::D24S8, px, stride, w, h, &src, w);
+    }
+    ds_cache::drawn(keys[0], 1, false, [true, true], [None, None]);
+    let want: Vec<u32> = (0..rows * 128).map(|i| word(first, at(Layout::SuperTiled, i % 128, i / 128))).collect();
+
+    for (k, (key, l)) in keys.iter().zip(layouts).enumerate().skip(1) {
+        let before = allocated();
+        let finishes = core::cell::Cell::new(0);
+        let finish = || {
+            finishes.set(finishes.get() + 1);
+            0
+        };
+        let kick = 1 + k as u32;
+        ds_cache::select_in(l, *key, w, h, GUARD, kick, None, |_| false, finish).expect("copied across layouts");
+        assert_eq!(finishes.get(), 1, "surface {k}: the GPU made idle for the copy");
+        let px = new_surface(&before, bytes);
+        for y in 0..rows {
+            for x in 0..stride / 4 {
+                let got = word(px, at(l, x, y));
+                assert_eq!(got, want[(y * 128 + x) as usize] & 0xffff_ff00, "surface {k} ({l:?}) at ({x}, {y})");
+            }
+        }
+        let mut dst = vec![7.5f32; (h * w) as usize];
+        assert_eq!(resolve(&mut dst, w, h, w), 0);
+        assert!(dst.iter().zip(&src).all(|(a, b)| a.to_bits() == b.to_bits()), "surface {k}: the first one's depth");
+    }
+    yakogl::vivante::backend::gc_shutdown();
+}
+
+/// W12a groundwork (`seed_depth`). Depth texels a draw carries become the
+/// depth of a super-tiled surface: each word at its super-tiled place takes
+/// the texel's 24-bit depth (the bytes `depth_format::write_super_tiled`
+/// writes), its stencil byte stays, pixels past the texels stay, and the
+/// resolve and `depth_format::read_super_tiled` answer the texels bit for
+/// bit.
+///
+/// Revert check: before W12a the draw was refused (-ENOTSUP).
+#[test]
+fn depth_texels_become_a_super_tiled_surface_depth() {
+    with_surface_in(Layout::SuperTiled, GUARD, 90, 70, |px, stride| {
+        for (i, s) in px.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            *s = pattern(i).to_ne_bytes();
+        }
+        let (w, h, pitch) = (90u32, 70u32, 97u32);
+        let texels = case_depths(false, h, pitch);
+        let mut via_format = px.to_vec();
+        depth_format::write_super_tiled(PeDepthFormat::D24S8, &mut via_format, stride, w, h, &texels, pitch);
+        let d = GlesDraw {
+            depth_id: ID,
+            ds_w: w,
+            ds_h: h,
+            depth_texels: texels.as_ptr(),
+            depth_texels_pitch: pitch,
+            ..GlesDraw::ZERO
+        };
+        // SAFETY: `texels` holds `h` rows of `pitch` floats.
+        let seed = unsafe { DepthTexels::of(&d) };
+        ds_cache::select_in(Layout::SuperTiled, KEY, w, h, GUARD, 2, seed, |_| false, || 0).expect("the surface");
+        assert!(*px == via_format[..], "the bytes write_super_tiled writes, the rest as they were");
+        let mut dst = vec![7.5f32; (h * pitch) as usize];
+        assert_eq!(resolve(&mut dst, w, h, pitch), 0);
+        let mut read = vec![7.5f32; (h * pitch) as usize];
+        depth_format::read_super_tiled(PeDepthFormat::D24S8, px, stride, w, h, &mut read, pitch);
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * pitch + x) as usize;
+                assert_eq!(dst[i].to_bits(), texels[i].to_bits(), "resolve ({x}, {y})");
+                assert_eq!(read[i].to_bits(), texels[i].to_bits(), "read_super_tiled ({x}, {y})");
+            }
+        }
+    });
 }
 
 /// What the 1024 x 1024 resolve costs (printed, not asserted).
