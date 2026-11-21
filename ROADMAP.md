@@ -213,5 +213,22 @@ Linux's debugfs (`tools/v3d/pi5/`); and the first clear (M1 to M4,
 pixels wrong. The first triangle (M5), `gl_test`, dEQP-GLES2, the display
 and the benchmarks have not run on the board.
 
-The other candidate boards (#321, #322, #327, #332, #336, #341) are issues
-only; the tree holds no board record for them.
+STM32MP257F-DK (STM32MP257F, 2x Cortex-A35, Vivante GCNANOULTRA31_VIP2,
+model 0x8000 revision 0x6205; issues #7 and #1281): the bring-up under
+Zephyr, our image started by the board's own U-Boot off the microSD as a
+one-shot through `tools/board-stm32mp2.sh`; steps 1 to 4 are recorded in
+commit `226cd9a2` and `docs/notes/stm32mp257f-dk-bringup.md` ("Board
+verdicts"). On 2026-11-21 the return trial printed its banner and the board
+came back to ST's Linux by itself: `verdict=done rc=0` after a PSCI
+SYSTEM_RESET (47 s, record `20261121-1054-mp2_hello-405d515b`), and
+`verdict=watchdog_reset rc=0` after a hang caught by OP-TEE's watchdog (89
+s, `20261121-1055-mp2_hello_hang-832dda7e`). U-Boot hands over at EL2 with
+the MMU and both caches off, x0 = 1, x3 = the load address, CNTFRQ 40 MHz,
+PSCI 1.1. `mp2_gpu` (`20261121-1107-mp2_gpu-9e520020`) then powered the GPU
+over SCMI through OP-TEE plus the RCC gate and read model 0x8000, revision
+0x6205, product 0x80003, eco 0, customer 0x15; `HI_INTR_ENBL` read back
+0xffffffff and the reset reached idle. `gc_fence`, `gc_clear`,
+`gc_triangle`, `gl_test`, dEQP and the display have not run on the board.
+
+The other candidate boards (#321, #327, #332, #336, #341) are issues only;
+the tree holds no board record for them.
