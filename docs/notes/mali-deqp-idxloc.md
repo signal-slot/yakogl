@@ -4,7 +4,7 @@
 
 **HOST-ONLY.** Plan #387 item idxloc-ref (issue #7, ROADMAP stage 5). This is
 a study with references. Nothing under `src/` changed. It adds
-`tools/mali/testdata/deqp_idxloc_*` (14 references), `tests/mali_deqp_idxloc.rs`
+`tools/mali/testdata/deqp_idxloc_*` (18 references), `tests/mali_deqp_idxloc.rs`
 (it pins each reference's refusal) and this note. Every count is a compile or
 link outcome on the host at tip `4714317e`, never a render verdict.
 
@@ -53,9 +53,10 @@ S7 and S11; section 8 asks this question),
 
 ## 1. Method
 
-- **The cases.** No `.qpa` of the measure is in the tree, and this host cannot
-  reach the CTS source, so the shaders were rebuilt from the generator's
-  templates (`es2fShaderIndexingTests.cpp`, VK-GL-CTS `93bca01`).
+- **The cases.** No `.qpa` of the measure is in the tree, so the shaders were
+  rebuilt from the generators (`es2fShaderIndexingTests.cpp`,
+  `es2fShaderStructTests.cpp`, VK-GL-CTS `93bca01`, fetched from the
+  Khronos repository at that commit).
   - The rebuild (a scratch Python script under `$CONNECTED_DEPS_DIR/idxloc`,
     not committed) writes all 208 `shaders.indexing.*` cases whose write or
     read is a `dynamic_loop`. The 208 are: `tmp_array` 64 (with the
@@ -66,10 +67,14 @@ S7 and S11; section 8 asks this question),
     `deqp_loops_*idx_dyn`, `deqp_unif2_vs_int_uniform`,
     `deqp_varylink2_loop_{uniform,bcast}` and
     `deqp_shapes/loops_fs_kept_for_index`.
-  - Three forms have no verbatim copy to check against: a vector's
-    component write and read (`tmp.x = coords.x`), and float and vec3
-    varying arrays. Each reference built from them says so in its
-    `.license`.
+  - Every other template line was checked against the generator source.
+    The only difference is the alignment spaces of a vector's
+    `dynamic_subscript` write (`tmp[ui_zero]  = `), which no case of the
+    156 and no reference uses. Whitespace does not change a compile.
+  - The six fragment `struct.{local,uniform}.*dynamic_loop*` cases were
+    rebuilt from `es2fShaderStructTests.cpp` (its `LineStream` templates).
+    The rebuild of `struct.local.dynamic_loop_struct_array_fragment` is
+    byte-identical to `deqp_loops2_fs_struct_local`.
 - **The four measures**, per case, all with `tests/mali_ref`'s `compile_pair`
   (compile, relink, link) in a scratch test (not committed):
   - **orig**: the case's own pair. This gives the first refusal at the tip.
@@ -116,7 +121,7 @@ S7 and S11; section 8 asks this question),
 | `shaders.indexing.*`, vertex, `LoopVertex` | 62 | rebuilt, measured case by case |
 | `discard.dynamic_loop_{always,uniform,dynamic,texture}` | 4 | `deqp_loops2_fs_disc_*` (the cases' own pairs) |
 | `return.return_in_dynamic_loop_{dynamic,never}_fragment` | 2 | `deqp_loops2_fs_ret_*` |
-| `struct.{local,uniform}.dynamic_loop_*` (S7's 4) | 4 | **not measured**: the four cases are not named in the loop notes, and their sources are not on this host. `deqp_loops2_fs_struct_local` (`struct.local.dynamic_loop_struct_array_fragment`, an S4 case: Mesa has no loop) was measured as the nearest shape |
+| `struct.local.{dynamic_loop_assignment,nested_dynamic_loop_assignment,dynamic_loop_nested_struct_array}_fragment`, `struct.uniform.dynamic_loop_nested_struct_array_fragment` (S7's 4) | 4 | rebuilt from `es2fShaderStructTests.cpp`, measured case by case. They are the four of the six fragment `struct` dynamic-loop cases whose Mesa program keeps a loop. The other two (`struct.{local,uniform}.dynamic_loop_struct_array_fragment`, no loop in Mesa) are S4's |
 | **sum** | **156** | |
 
 The 146 per group (fragment / vertex): `tmp_array` 28 / 16, `matrix_subscript`
@@ -181,9 +186,9 @@ on `LoopVertex` in it.
 |---|---:|---|---|---|
 | `discard` in a kept loop | 4 | kept loop, 16-25 words (`deqp_loops2_fs_disc_*`) | `Discard` 3 ("a discard other than a highp fragment shader's `if (a < b) discard;`..."), `TexCoord` 1 (`dynamic_loop_texture`) | `Discard` 3, `ControlFlow` 1 |
 | `return` in a kept loop | 2 | kept loop, 17/21 words (`deqp_loops2_fs_ret_*`) | `OperandForm` 2 ("a fragment shader operand of a form or in a place no reference draws") | `ControlFlow` |
-| `struct` (S7's 4) | 4 | not drawn (section 2). The nearest, `deqp_loops2_fs_struct_local`, is a `CSEL.u32.eq` ladder, 22 words, no loop | proxy `FragColorLane` | `ControlFlow` |
+| `struct` (S7's 4) | 4 | kept loop, each in registers (no scratch): `deqp_idxloc_fs_struct_loop_assign` 25 words (sel 4), `fs_struct_nested_loop_assign` 24 (sel 3), `fs_struct_nested_array` 74 (sel 23), `fs_struct_uni_nested_array` 91 (7 forward branches: the uniform loads) | `ControlFlow` 2 (the `if (i == ui_one)` of the two `assignment` forms, still an `if` after the unroll), `FragColorLane` 1 (`nested_struct_array`), `UniformType16` 1 (`uniform.dynamic_loop_nested_struct_array`: "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int ...") | `ControlFlow` |
 
-These 10 index no local array, except the struct arrays. They are S7's
+These 10 index no local array, except `struct.local.dynamic_loop_nested_struct_array` (a local struct array) and the uniform struct array. They are S7's
 loop-control work, not an indexing step. They are listed for the 156 only.
 
 ## 4. What the measures say about the lowering
@@ -254,9 +259,11 @@ vs16-2 and the constant-product steps. IL-5 last.
 `tests/mali_deqp_idxloc.rs` pins the first refusal of each `deqp_idxloc_*`
 pair at the tip (`refusals_pinned`). It checks that the list and the
 directory agree (`references_listed`). It keeps the byte compares
-`#[ignore]`d (`compares`). Four of the fourteen have a kept loop in Mesa
+`#[ignore]`d (`compares`). Eight of the eighteen have a kept loop in Mesa
 (`fs_tmp_float_cd`, `fs_vec2_dl_static`, `fs_vec3_component_dl`,
-`vs_vec3_dl_component`): compare them with `CapEdit`.
+`vs_vec3_dl_component` and the four `fs_struct_*`): compare them with
+`CapEdit`. `fs_struct_uni_nested_array` sets struct-member uniforms: its
+compare needs its name in `tests/mali_ref`'s `STRUCT_VALUES`.
 
 | reference | case (`functional.shaders.indexing.`) | shape | Mesa words (pos / vary / frag) | refusal at the tip |
 |---|---|---|---|---|
@@ -274,6 +281,10 @@ directory agree (`references_listed`). It keeps the byte compares
 | `vs_var_float_dl_s` | `varying_array.float_dynamic_loop_write_static_read` | V1 | 24 / 21 / 12 | LoopVertex |
 | `vs_mat2_dl_d` | `matrix_subscript.mat2_dynamic_loop_write_dynamic_read_vertex` | V3 | 24 / 30 / 7 | LoopVertex |
 | `vs_vec3_dl_component` | `vector_subscript.vec3_dynamic_loop_subscript_write_component_read_vertex` | V4 | 24 / 33 (1 L) / 8 | LoopVertex |
+| `fs_struct_loop_assign` | `struct.local.dynamic_loop_assignment_fragment` (`functional.shaders.`) | S7 struct | 24 / 15 / 25 (1 L) | LoopMediump |
+| `fs_struct_nested_loop_assign` | `struct.local.nested_dynamic_loop_assignment_fragment` (`functional.shaders.`) | S7 struct | 24 / 15 / 24 (1 L) | LoopMediump |
+| `fs_struct_nested_array` | `struct.local.dynamic_loop_nested_struct_array_fragment` (`functional.shaders.`) | S7 struct | 24 / 15 / 74 (1 L) | LoopMediump |
+| `fs_struct_uni_nested_array` | `struct.uniform.dynamic_loop_nested_struct_array_fragment` (`functional.shaders.`) | S7 struct | 24 / - / 91 (1 L) | LoopMediump |
 
 V2 has no new reference: `deqp_loops2_vs_idx_{tmp_vec4,mat4,var_vec4}_dldl`
 cover its three groups.
@@ -287,7 +298,6 @@ cover its three groups.
   V1, the forms where Mesa's guards vanish. For the others it is the data
   path alone: a case can still stop at whatever the lowering emits for the
   guards.
-- Five of the rebuilt forms (section 1) have no verbatim `.qpa` copy to check
-  against. A different dEQP line would change the reference's words, not
-  the shape or the measured texts.
-- The 4 S7 `struct` cases are counted, not measured (section 2).
+- The sources are the generators' output rebuilt by hand (section 1), not
+  `.qpa` copies. 28 rebuilt pairs are byte-identical to verbatim copies, and
+  every other line was read against the generator source.
