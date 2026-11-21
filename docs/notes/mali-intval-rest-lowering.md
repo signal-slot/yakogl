@@ -466,42 +466,56 @@ check first that it already fuses `ICMP_OR` of two `ne`: the vertex
 later refusal: `tri_int.frag`'s `ine` is the named one in `mali-deqp-intval.md`
 section 7).
 
-## 7. References still to generate, and how
+## 7. References drawn (intval4-ref), and what they showed
 
-None of these is drawn; each is one pair (`.vert`/`.frag`) written after the
-dEQP template of the named case, drawn once on the shim:
+Drawn by plan #387 item `intval4-ref` with Mesa 26.2.1's G610 drm-shim built
+by `tools/mali/drm_shim_ref.sh build` (LLVM 21), one pair each through
+`tools/mali/deqp_ref.sh <vert> <frag> tools/mali/testdata/deqp_intval4_<name> --instrument shim`
+(`--uniform-values` is part of the shim instrument). The pairs are not the
+cases' own `.qpa` text (no CTS run was made here, the checkout holds only
+`data/`): they are written after the dEQP-GLES2 generator templates the earlier
+references quote verbatim (`deqp_intval3_*`, `deqp_unif2_*`), in the same
+spelling, so a `random` or hand-written shape says so. They are pinned by
+`tests/mali_deqp_intval4.rs` (`REFUSED` / `LOWERED` / `DIFFERS`, one `#[ignore]`d
+byte-compare per reference not yet matched, `refusals_pinned`).
 
-```sh
-tools/mali/drm_shim_ref.sh run $CONNECTED_DEPS_DIR/mesa-shim \
-    tools/mali/testdata/deqp_intrest_<name>.vert tools/mali/testdata/deqp_intrest_<name>.frag out/deqp_intrest_<name> --uniform-values
-tools/mali/pan_ref_diff.py extract out/deqp_intrest_<name>.trace --draw > tools/mali/testdata/deqp_intrest_<name>.expect.json
-# the per-pass NIR (order of compares): NIR_DEBUG=print_fs in the environment of `run`, read from out/...stdout
-```
+Rows already held by an existing reference were **skipped** (no new draw).
 
-(`$CONNECTED_DEPS_DIR/mesa-shim` is the build directory of `drm_shim_ref.sh
-build`; on the host this note was written on `$CONNECTED_DEPS_DIR/mesa-pan`
-holds the 26.2.1 source only, no `inst`, so nothing was drawn here. The probe
-shaders of section 2.2 are not committed; the dEQP sources are the cases', from
-the CTS pin `93bca01861b0e3ef3c387027a9791e6d065f900c`.)
-
-| # | name | shape (dEQP case) | for step | needed because |
+| # | name | shape (dEQP case) | for step | drawn |
 |--:|---|---|--:|---|
-| 1 | `ne_int_fs` | `binary_operator.not_equal.mediump_int_fragment` | 1 | the `ine` row at mediump |
-| 2 | `notequal_ivec3_fs` | `int_compare.notEqual.mediump_ivec3_fragment` | 1 | vector `ine` per lane, colour `vec3(res)` (compare `opfs_cmp_ivec3`) |
-| 3 | `ne_ivec2_fs` | `binary_operator.not_equal.mediump_ivec2_fragment` | 1 | whole-vector `!=`: the `ior` accumulator chain in the fragment |
-| 4 | `bool_of_int_fs` | `conversions.scalar_to_scalar.int_to_bool_fragment` (or the `bool(int)` of a `random` case) and a `bvec2(ivec2)` | 1 | `i2b` |
-| 5 | `not_eq_int_fs` | `!(i == 2)` of a run-time int (a `random` shape) | 1 | hazard 5.4(1) |
-| 6 | `logical_and_fs`, `logical_or_fs` | `binary_operator.logical_and.bool_fragment`, `..logical_or..` | 2 | the fmin/fmax rule in the fragment; the colour select |
-| 7 | `and_icmp_fs` | `(i > 1) && (i < 3)` (random) | 2 | 32-bit `iand` of int compares |
-| 8 | `uni_bool_and_or_fs` | `uniform bool u_a, u_b; u_a && u_b`, `u_a || u_b`, `u_a != u_b` | 2, 3 | `LSHIFT_AND` / `LSHIFT_OR` of two bool words |
-| 9 | `uapi_{int,ivec2,ivec3,ivec4,bool,bvec2,bvec3,bvec4}_fs` | the `uniform_api` `compare_*` harness, scalar `u_var`, constants of mixed sign, `--uniform-values` | 3 | every type form of `fs_int_uniform` / `fs_bool_uniform` (only the 3-array of `int`/`bool` is drawn); 8 pairs, the chain orders (5.4(2)) |
-| 10 | `bvec4_cmp_fs`, `bvec3_cmp_fs` | `bool_compare.{equal,notEqual,all}.bvec{3,4}_fragment` | after `irindex-fix` | width 4 of `ball` / `bany` |
-| 11 | `sel_int_fs`, `sel_ivec2_fs` | `selection.mediump_int_fragment`, `..ivec2..` | 4 | `bcsel` of ints |
+| 1 | `ne_int_fs` | `binary_operator.not_equal.mediump_int_fragment` | 1 | `deqp_intval4_ne_int_fs` (refused: integer/boolean) |
+| 2 | `notequal_ivec3_fs` | `int_compare.notEqual.mediump_ivec3_fragment` | 1 | held by `deqp_intval3_opfs_notequal_ivec3_mediump` (and `deqp_intval_opfs_cmp_ivec3`) |
+| 3 | `ne_ivec2_fs` | `binary_operator.not_equal.mediump_ivec2_fragment` | 1 | `deqp_intval4_ne_ivec2_fs` (refused: integer/boolean) |
+| 4 | `bool_of_int_fs` | `conversions.scalar_to_scalar.int_to_bool_fragment` | 1 | held by `deqp_intval3_reslib_int_to_bool_fs` |
+| 4 | `bvec2(ivec2)` | `conversions.vector_to_vector.ivec2_to_bvec2_fragment` | 1 | `deqp_intval4_bvec2_of_ivec2_fs` (refused: integer/boolean); width 4 is held by `deqp_intval3_reslib_ivec4_to_bvec4_fs` |
+| 5 | `not_eq_int_fs` | `!(i == 2)` of a run-time int (a `random` shape) | 1 | `deqp_intval4_not_eq_int_fs` (**DIFFERS**: compiles, other words than Mesa's, hazard 5.4(1)) |
+| 6 | `logical_and_fs` | `binary_operator.logical_and.bool_fragment` | 2 | held by `deqp_intval3_opfs_logical_and_bool` |
+| 6 | `logical_or_fs` | `binary_operator.logical_or.bool_fragment` | 2 | `deqp_intval4_logical_or_fs` (refused: integer/boolean) |
+| 7 | `and_icmp_fs` | `(i > 1) && (i < 3)` (random) | 2 | `deqp_intval4_and_icmp_fs` (refused: integer/boolean) |
+| 8 | `uni_bool_and_or_fs` | `uniform bool u_a, u_b`: `&&`, `\|\|`, `!=` (hand-written, no dEQP case) | 2, 3 | `deqp_intval4_uni_bool_and_or_fs` (refused: integer/boolean) |
+| 9 | `uapi_{int,ivec2,ivec3,ivec4,bool,bvec2,bvec3,bvec4}_fs` | the `uniform_api` `compare_*` harness, scalar `u_var`, constants of mixed sign | 3 | `deqp_intval4_uapi_<type>_fs`, all 8 (refused today with the **gl_FragColor lane** text, not the integer/boolean one: the compare product `result *= compare_*(...)` reaches the colour first) |
+| 10 | `bvec4_cmp_fs` | `bool_compare.{equal,notEqual,all}.bvec4_fragment`, one pair with `all(equal)` and `any(notEqual)` | after `irindex-fix` | `deqp_intval4_bvec4_cmp_fs` (refused: `Defect(IrIndex)`) |
+| 10 | `bvec3_cmp_fs` | the same at width 3 | after `irindex-fix` | `deqp_intval4_bvec3_cmp_fs` (**LOWERED**: already compiles byte-equal at the tip) |
+| 11 | `sel_int_fs`, `sel_ivec2_fs` | `selection.mediump_int_fragment`, `..ivec2..` | 4 | `deqp_intval4_sel_int_fs`, `deqp_intval4_sel_ivec2_fs` (refused: the fragment **arithmetic** text, not integer/boolean: the `bcsel` of ints reaches `Arithmetic` first) |
 
-(22 pairs in all: rows 1-5 are 6 (row 4 is two), 6 is 2, 7 and 8 one each, 9
-is 8, 10 and 11 two each; per step 6 + 4 + 8 + 2, and 2 after `irindex-fix`.
-Drawing is one session's first hour, as in `mali-deqp-intval.md` section 5,
-which drew 25.)
+(22 pairs in all: 19 drawn, 3 held by existing references:
+`notequal_ivec3_fs`, `bool_of_int_fs` and `logical_and_fs`. Two of the rows'
+shapes are mine where the table was loose: the `bool_compare` pairs are one
+pair per width with `all(equal(a, b))` and `any(notEqual(a, b))` instead of three
+separate dEQP cases, and `bvec2(ivec2)` is the reslib template at width 2.)
+
+**Hazards found while drawing.**
+
+- `not_eq_int_fs` (`!(i == 2)`, run-time int) **compiles but differs** from
+  Mesa: a `DIFFERS` entry, a hazard for step 1 (it is the 5.4(1) shape; the
+  lowering must make it byte-equal and move it to `LOWERED`).
+- `uapi_*_fs` and `sel_*_fs` are refused by other texts first (gl_FragColor
+  lane, fragment arithmetic): the integer/boolean lowering alone does not
+  unblock them, steps of `fclane-lower` / `arith-lower` are also needed. Their
+  `refusals_pinned` entries will change text when intval-rest lands; the
+  byte-compare then needs the later steps.
+- `bvec3_cmp_fs` is already byte-equal, but `bvec4_cmp_fs` hits `IrIndex`
+  (`irindex-fix`): the width-4 difference is the `irindex` defect, not intval.
 
 ## 8. What each step leaves to `intval-vs16`, shares with loops and fclane
 

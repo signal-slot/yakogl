@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The frag shader of a plan #387 item intval4-ref pair, written after the dEQP-GLES2 generator template (VK-GL-CTS 93bca01, NOTICE 5) that docs/notes/mali-intval-rest-lowering.md section 7 names.
