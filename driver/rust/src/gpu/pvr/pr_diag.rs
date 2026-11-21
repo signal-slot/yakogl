@@ -186,6 +186,68 @@ pub fn fmt_addr(w: &mut dyn Write, r: Option<(&str, u64)>) -> fmt::Result {
     }
 }
 
+/// One command image: a header line `render: stall: <kind>: <n> words`, then
+/// its word lines in the form tools/cts/pvr-cmd3d-decode.py parses.
+fn cmd_section(w: &mut dyn Write, kind: &str, words: &[u32]) -> fmt::Result {
+    writeln!(w, "render: stall: {}: {} words", kind, words.len())?;
+    for n in 0..cmd_word_lines(words) {
+        cmd_words_decodable(w, kind, words, n)?;
+        w.write_char('\n')?;
+    }
+    Ok(())
+}
+
+/// The whole knob-on partial-render section of a stall dump. Every line starts
+/// `render: stall: ` (tools/cts/pr-verdict.py counts them as stall lines) and
+/// ends in a newline. The caller passes what it has already read; `None` means
+/// it could not read that buffer. Lines, in order:
+///
+/// 1. `FW assert <path>:<line> <info>`, `FW assert none` (buffer read, no
+///    assert) or `FW assert unread`;
+/// 2. the HWRT line of [`fmt_hwrt_pr_state`], or `HWRT unread` (also when the
+///    buffer is shorter than an HWRTDATA);
+/// 3. `c3d: <n> words` and its `c3d[ i]:` word lines;
+/// 4. with `c3d_pr`, `pr c3d: <n> words` and `pr c3d[ i]:` word lines
+///    (pvr-cmd3d-decode.py reads them as one more `c3d` record);
+/// 5. one `addr 0x<16 hex> <name>+0x<off>|unmapped` line per address.
+pub fn fmt_pr_stall(
+    w: &mut dyn Write,
+    assert_bytes: Option<&[u8]>,
+    hwrt_bytes: Option<&[u8]>,
+    c3d: &[u32],
+    c3d_pr: Option<&[u32]>,
+    addrs: &[u64],
+    ranges: &[(&str, u64, u64)],
+) -> fmt::Result {
+    match assert_bytes {
+        None => writeln!(w, "render: stall: FW assert unread")?,
+        Some(b) => match assert_buf(b) {
+            Some(a) => {
+                fmt_assert(w, &a)?;
+                w.write_char('\n')?;
+            }
+            None => writeln!(w, "render: stall: FW assert none")?,
+        },
+    }
+    match hwrt_bytes.and_then(hwrt_pr_state) {
+        Some(s) => {
+            fmt_hwrt_pr_state(w, &s)?;
+            w.write_char('\n')?;
+        }
+        None => writeln!(w, "render: stall: HWRT unread")?,
+    }
+    cmd_section(w, "c3d", c3d)?;
+    if let Some(pr) = c3d_pr {
+        cmd_section(w, "pr c3d", pr)?;
+    }
+    for &a in addrs {
+        write!(w, "render: stall: addr 0x{:016x} ", a)?;
+        fmt_addr(w, name_addr(a, ranges))?;
+        w.write_char('\n')?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,5 +370,79 @@ mod tests {
         assert_eq!(name_addr(0, &R), None);
         assert_eq!(out(|w| fmt_addr(w, name_addr(0x2010, &R))), "hwrt+0x10");
         assert_eq!(out(|w| fmt_addr(w, name_addr(0xfff, &R))), "unmapped");
+    }
+
+    fn stall(a: Option<&[u8]>, h: Option<&[u8]>, c: &[u32], pr: Option<&[u32]>, addrs: &[u64]) -> String {
+        out(|w| fmt_pr_stall(w, a, h, c, pr, addrs, &R))
+    }
+
+    #[test]
+    fn stall_full_exact() {
+        let a = file_info(b"rgxta3d.c", b"oom", 99);
+        let h = hwrt(HWRTDATA_PARTIAL_RENDERED);
+        let c: Vec<u32> = (0..9).collect();
+        let pr = [0xdeadbeefu32, 1];
+        let got = stall(Some(&a), Some(&h), &c, Some(&pr), &[0x1010, 0x5000]);
+        let mut rta = String::new();
+        for i in 0..RTA_CTL_WORDS {
+            rta += &format!("{}{:08x}", if i == 0 { "" } else { " " }, 0x100 + i);
+        }
+        let want = format!(
+            "render: stall: FW assert rgxta3d.c:99 oom\n\
+             render: stall: HWRT state=3 flags=0x{:08x} PARTIAL_RENDERED cleanup submitted=5 executed=4 rta_ctl={}\n\
+             render: stall: c3d: 9 words\n\
+             render: stall: c3d[ 0]: 00000000 00000001 00000002 00000003 00000004 00000005 00000006 00000007\n\
+             render: stall: c3d[ 8]: 00000008\n\
+             render: stall: pr c3d: 2 words\n\
+             render: stall: pr c3d[ 0]: deadbeef 00000001\n\
+             render: stall: addr 0x0000000000001010 fw_heap+0x10\n\
+             render: stall: addr 0x0000000000005000 unmapped\n",
+            HWRTDATA_PARTIAL_RENDERED, rta
+        );
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn stall_missing_buffers() {
+        let got = stall(None, None, &[7], None, &[]);
+        assert_eq!(
+            got,
+            "render: stall: FW assert unread\nrender: stall: HWRT unread\n\
+             render: stall: c3d: 1 words\nrender: stall: c3d[ 0]: 00000007\n"
+        );
+        // A short HWRT image reads as unread too; no c3d prints only the header.
+        let h = hwrt(0);
+        let got = stall(None, Some(&h[..HWRTDATA_SIZE - 1]), &[], None, &[]);
+        assert_eq!(got, "render: stall: FW assert unread\nrender: stall: HWRT unread\nrender: stall: c3d: 0 words\n");
+    }
+
+    #[test]
+    fn stall_empty_assert_and_unmapped_addr() {
+        let a = file_info(b"", b"stale", 7);
+        let got = stall(Some(&a), None, &[], Some(&[]), &[0xfff]);
+        assert_eq!(
+            got,
+            "render: stall: FW assert none\nrender: stall: HWRT unread\nrender: stall: c3d: 0 words\n\
+             render: stall: pr c3d: 0 words\nrender: stall: addr 0x0000000000000fff unmapped\n"
+        );
+    }
+
+    /// The word lines match pvr-cmd3d-decode.py's LINE pattern: `c3d[` (also
+    /// inside `pr c3d[`), the index, then exactly 8 hex words. The script
+    /// ignores a short last line, so a full 80-word image is all full lines.
+    #[test]
+    fn stall_lines_match_decoder_shape() {
+        let c: Vec<u32> = (0..80).collect();
+        let got = stall(None, None, &c, Some(&c), &[]);
+        let words: Vec<&str> = got.lines().filter(|l| l.contains("c3d[")).collect();
+        assert_eq!(words.len(), 20);
+        for (i, l) in words.iter().enumerate() {
+            let rest = l.rsplit("c3d[").next().unwrap();
+            let (idx, vals) = rest.split_once("]:").unwrap();
+            assert_eq!(idx.trim().parse::<usize>().unwrap(), 8 * (i % 10));
+            assert_eq!(vals.split_whitespace().count(), 8);
+            assert!(vals.split_whitespace().all(|x| x.len() == 8));
+        }
+        assert!(got.lines().all(|l| l.starts_with("render: stall: ")));
     }
 }
