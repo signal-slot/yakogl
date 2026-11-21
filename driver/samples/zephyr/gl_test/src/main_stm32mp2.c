@@ -13,6 +13,23 @@
  * board whatever the suite is doing. board_finish() ends the run with the
  * record and PSCI SYSTEM_RESET back into ST's Linux.
  *
+ * The regression set is the i.MX8MP's (main_imx8mp.c): case 7, the runner's
+ * SET_ORDER (50 cases) on one context, minus CONFIG_GL_TEST_MP2_SKIP. The
+ * i.MX8MP leaves its list empty; the DK's GCNanoUltra31 has the same shader
+ * and register limits (src/vivante/profile.rs: 512 instructions, 64 temps,
+ * 320 constants, 16 varyings, one pixel pipe), so nothing else is left out.
+ * Left out, "10" (prims): its frame 2 draws a 3 px wide LINE_LOOP
+ * (glLineWidth(3)), and the part has WIDELINE_TRIANGLE_EMU (profile.rs:138,
+ * reported range 1.0..1.0) -- wide lines wait for the Q11 decision
+ * (pre-study P9, Q11). Case 16 (msaa) skips itself by name without a 4x
+ * config, as on the i.MX8MP. Wide-line cases outside the set (103 maskdepth,
+ * 231, 233, 235) are not walked here either; ask for one by number.
+ * No case here needs a display window: gl_test_run() is called with panel 0
+ * and draws to its own targets, so board_window()'s -ENOTSUP does not matter.
+ *
+ * A reader's selector (board_selector(), the i.MX8MP's SNVS index; -1 on
+ * the DK today) from 1 to 999 except 7 runs that one case alone instead.
+ *
  * What runs: CONFIG_GL_TEST_MP2_CASE (7, the regression set, by default),
  * or with CONFIG_GL_TEST_MP2_SET_HEAD only the first
  * CONFIG_GL_TEST_MP2_SET_HEAD_CASES cases of the regression set, in its
@@ -49,6 +66,7 @@ int gl_test_run(int gl_case, int pretransform, unsigned int ppp_ctrl, int debug,
 int gl_test_set_list(const int *cases, unsigned n, unsigned *stored);
 unsigned gl_test_set_cases(const int **cases);
 
+extern const char *gl_test_skip;
 extern unsigned int gl_test_passed, gl_test_total, gl_test_skipped;
 extern int gl_test_first_fail, gl_test_second_fail, gl_test_first_skip;
 extern volatile int gl_test_check_no, gl_test_first_bad_check;
@@ -96,8 +114,15 @@ static int run(void)
 {
 	const struct device *gpu = DEVICE_DT_GET_ONE(vivante_gc);
 	int gl_case = CONFIG_GL_TEST_MP2_CASE;
-	bool one = gl_case != 7;
+	int sel = board_selector();
+	bool one;
 	int rc;
+
+	if (sel >= 1 && sel <= 999) {
+		gl_case = sel;
+	}
+	one = gl_case != 7;
+	gl_test_skip = CONFIG_GL_TEST_MP2_SKIP;
 
 #ifdef CONFIG_GL_TEST_MP2_SET_HEAD
 	{
@@ -118,7 +143,8 @@ static int run(void)
 		printk(NAME ": the first %u case(s) of the regression set, from case %d\n", n, set[0]);
 	}
 #endif
-	printk(NAME ": case %d on the STM32MP257F-DK's GPU (lifetime %u ms)\n", gl_case,
+	printk(NAME ": case %d on the STM32MP257F-DK's GPU%s%s (lifetime %u ms)\n", gl_case,
+	       CONFIG_GL_TEST_MP2_SKIP[0] ? ", skipping " : "", CONFIG_GL_TEST_MP2_SKIP,
 	       mp2_lifetime_ms());
 
 	board_progress(YK_RECORD_WHERE_STAGE | YK_RECORD_STAGE_MAIN);

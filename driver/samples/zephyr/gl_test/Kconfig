@@ -177,6 +177,15 @@ config GL_TEST_MP2_CASE
 	  runner, driver/tools/pvrlab/runner). Ignored with
 	  GL_TEST_MP2_SET_HEAD.
 
+config GL_TEST_MP2_SKIP
+	string "Cases the regression set leaves out (decimal, comma separated)"
+	default "10"
+	help
+	  Skipped cases count as neither pass nor failure. Default "10"
+	  (prims): its 3 px wide LINE_LOOP needs wide lines, which the
+	  part's WIDELINE_TRIANGLE_EMU core waits on (Q11). "" runs the
+	  i.MX8MP's whole set.
+
 config GL_TEST_MP2_SET_HEAD
 	bool "Run only the first cases of the regression set"
 	help
