@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vert shader of a plan #387 item intval5-ref pair, written after the dEQP-GLES2 uniform_api / operator generator templates (VK-GL-CTS 93bca01) that docs/notes/mali-intval-rest-lowering.md section 12 names.

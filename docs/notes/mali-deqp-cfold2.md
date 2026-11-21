@@ -120,12 +120,24 @@ construct is the unrolled counter of `zero_operand_icmp`/`_inot`.
 
 ### 3.1 `light_amount.*` (intval5-ref)
 
-Still no reference: item `intval5-ref` could not build Mesa's drm-shim on its
-machine (the build command was refused), so the statement above stands. To do:
-`gl_ref.py` now sets struct-array uniforms member by member
-(`tools/mali/README-deqp_ref.md`, "Struct uniforms"), so the "does not set a
-Light uniform" stop may be gone; draw the `light_amount.1dir` pair
-(`es2fLightAmountTest.cpp`) as `deqp_intval5_light_amount_{icmp,inot}`.
+Drawn by item `intval5-ref` (the "has no reference" statement above is
+superseded): `deqp_intval5_light_amount_2_2` and `deqp_intval5_light_amount_0_16`,
+`tools/shaders/es100/light_amount_{2_2,0_16}.vert` with `light_amount.frag`,
+Mesa 26.2.1 G610 shim, pinned by `tests/mali_deqp_intval5.rs`. `gl_ref.py`
+sets the struct array now (`README-deqp_ref.md`, "Struct uniforms"), so the old
+"does not set a Light uniform" stop is gone; both shapes (2 directional + 2 omni,
+0 + 16) draw. The unrolled counter's compare and `inot` are folded away by Mesa:
+the fragment program is the same 8 words for both (`LD_VAR_BUF_IMM.f32.slot0.v3`,
+`V2F32_TO_V2F16 r0, r0^, r1^`, `FADD.f32 r1.h0, r2^, 0x0.neg`, `MKVEC.v2i16 r1,
+r1^.h0, u2.w0.h0` for the constant alpha, ATEST/BLEND), and the vertex shader's
+position region has 40 words in both (the varying region 98 words for 2 + 2 and
+455 for 0 + 16). No integer compare (`ICMP`, `CSEL`) survives into either vertex region,
+so the 16 cases need the constant fold of the unrolled counter (step A), not an
+integer lowering. Both refuse at the tip with the "constant operation on or to a
+value that is not a finite normal float" text. Caveat: a plain array of struct
+members' uniform values are not what the dEQP case sets (all are the
+`--uniform-values` sequence), so only the words, not the FAU values, are the
+case's.
 
 ## 4. Lowering order (one-session steps, reusing constop's folds)
 

@@ -590,15 +590,25 @@ of `measure.tsv`.
 - The ES 2 shader sources are not in the tree (`$CONNECTED_DEPS_DIR/VK-GL-CTS-gles3`
   holds `gles3` data only); the host measure builds them from the CTS pin.
 
-## 11. The "(no reference)" marks, mapped (intval5-ref, partial)
+## 12. The "(no reference)" marks, mapped to references (intval5-ref)
 
-Plan #387 item `intval5-ref`. **The Mesa drm-shim was not built on the
-machine of this item** (`tools/mali/drm_shim_ref.sh build ...` was refused as a
-command needing approval, and `$CONNECTED_DEPS_DIR/mesa-shim` does not exist),
-so **no `deqp_intval5_*` reference and no `tests/mali_deqp_intval5.rs` was
-drawn**. This section only maps each mark to what exists, using the words of
-the section 7 references (`deqp_intval4_*`, Mesa 26.2.1's disassembly), and
-names what is still to draw.
+Plan #387 item `intval5-ref`. Each mark is mapped to the reference that
+settles it: an existing `deqp_intval3_*` / `deqp_intval4_*` one (section 7) or
+one of the 13 drawn here, `tools/mali/testdata/deqp_intval5_*`, pinned by
+`tests/mali_deqp_intval5.rs`. They were drawn with the Mesa 26.2.1 G610
+drm-shim (built into `$CONNECTED_DEPS_DIR/mesa-shim` with `drm_shim_ref.sh
+build`), `tools/mali/deqp_ref.sh <vert> <frag> <prefix> --instrument shim`.
+The pairs are hand-written after the dEQP `uniform_api` / operator templates
+(the `uni.vert` passthrough with `v_vtxOut = 1.0`, or the `a_in0` varying one),
+not the cases' own `.qpa` text. **None of them compiles at the tip**: five are
+refused with the integer/boolean text (`c_bool3`, `c_bool_not`, `c_int3`,
+`c_int_two`, `mask1632`), six with the gl_FragColor-lane text (the compare
+product reaches the colour first: `c_bvec2/3/4`, `c_int_k`, `c_int_lt`,
+`c_ivec4`) and the two `light_amount` ones with the constant-operation text.
+The comment in the test header says so; `refusals_pinned` holds each text.
+`gl_ref.py` set every uniform to the sequence 16, 32, 48 (ints) or true/false
+alternately (bools); the words below do not depend on the values except where
+the table says a constant is folded.
 
 | mark (line) | pattern | reference that settles it | Mesa's words, and the correction to the prediction |
 |---|---|---|---|
@@ -606,7 +616,10 @@ names what is still to draw.
 | 224 (4.1) | `!(i == 2)` | `deqp_intval4_not_eq_int_fs` | The prediction holds: Mesa emits one word, `ICMP_OR.u32.ne.m1 r0, r0^, 0x3020100.b2, 0x0` (`ine`); ours is two. |
 | 307 (4.4) | `\|\|` of fp16 compares | `deqp_intval4_logical_or_fs` | `a > 0.0 \|\| b > 0.0`: `FADD.f32 r0.h0, x, 0x0.neg` per lane, `FMAX.v2f16 r0, r0^.h00, r1^.h00`, `FCMP_OR.v2f16.lt.f1 r0, 0x0, r0^.h00, 0x0`: the constant-first rule gives `fmax` for `ior`, as predicted; **the colour mask's compare mode is `.f1`, not `.m1`**. The `&&` (`fmin`) is held by `deqp_intval3_opfs_logical_and_bool`. |
 | 307 (4.4) | `&&` of two int compares | `deqp_intval4_and_icmp_fs` | `(i > 1) && (i < 3)`: `ICMP_OR.s32.lt.m1 r1, r0, 0x3020100.b3, 0x0` (`i < 3`) first, then `ICMP_AND.s32.lt.m1 r0, 0x1000000.b3, r0^, r1^` (`1 < i`, constant 1 as byte 3 of `0x1000000`): the accumulator chain of 4.2, **second compare first**. |
-| 307 (4.4) | 16-bit mask `&&` 32-bit mask | **none drawn** | still to draw (`bool(v.x > 0.0) && (int(v.y) < 1)`) |
-| 335 (4.7), 136, 404 | three-mask `iand` of separate uniforms (`c_int3`, `c_bool3`); `c_ivec4`, `c_bvec4`, `c_int1` (k = 4), `c_int_lt`, `c_bool_one`, `c_bool_not`, `c_int_two`, `c_bvec2` | **none drawn** (`deqp_unif2_fs_int_uniform`, `_fs_bool_uniform` hold the array form, with wrong FAU values) | still to draw. `deqp_intval4_uni_bool_and_or_fs` gives the scalar bool words: `LSHIFT_AND.i32 r1, u2.w0, r0.b00, u2.w1` (`&&`), `LSHIFT_OR.i32` (`\|\|`), and **`ICMP_OR.u32.ne.m1 r0, u2.w0, u2.w1, r0^` for `u_a != u_b` (`ine` of the words, not a `.not` chain)**, after `MOV.i32.discard r0, 0x0`. |
-| 52, 404 | bvec3/bvec4 compares | `deqp_intval4_bvec3_cmp_fs` (LOWERED), `_bvec4_cmp_fs` (`Defect(IrIndex)`) | width-3/4 uniform chains still to draw |
+| 307 (4.4) | 16-bit mask `&&` 32-bit mask | `deqp_intval5_mask1632` (`(v.x > 0.0) && (int(v.y) < 1)`) | **Mesa has a word for it**: `FADD.f32.discard r0.h0, x, 0x0.neg`, `F32_TO_S32.rtz r1, y`, `ICMP_OR.s32.lt.m1 r1, r1^, 0x1000000.b3, 0x0` (32-bit mask), `FCMP_OR.v2f16.lt.m1 r0, 0x0, r0^.h00, 0x0` (16-bit mask), then **`LSHIFT_AND.v2i16 r0, r0^.h00, 0x0.b00, r1^`**: the 16-bit mask's `.h00` and the 32-bit mask whole. So `mask_op` :2232's refused mix is `LSHIFT_AND.v2i16` (not `.i32`), the 16-bit side first. |
+| 335 (4.7) | three-mask `iand` of uniforms | `deqp_intval5_c_int3` (`(u_a == -9) && (u_b == 2) && (u_c == -2)`), `deqp_intval5_c_bool3` (`u_a && u_b && u_c`) | `c_int3`: `MOV.i32.discard r0, 0x0`; `ICMP_OR.u32.eq.m1 r0, u2.w1, 0x3020100.b2, r0^` (**`u_b == 2` first**); `MOV.i32 r1, u3.w1`; `ICMP_AND.u32.eq.m1 r0, u2.w0, r1^, r0^` (**`u_c == -2` second**, -2 a FAU word in a register); `MOV.i32 r1, u4.w0`; `ICMP_OR.u32.eq.m1 r1, u3.w0, r1^, 0x0` (`u_a == -9` last); `LSHIFT_AND.i32 r0, r0^, 0x0.b00, r1^`. The order is b, c, a, the same as the unif2 array reference: not program order, and now measured for scalar uniforms too (4.7). `c_bool3`: `MOV.i32.discard r0, 0x0`; `LSHIFT_AND.i32 r0, u2.w0, r0^.b00, u2.w1`; `LSHIFT_AND.i32 r0, r0^, 0x0.b00, u3.w0` (as `fs_bool_uniform`). |
+| 136, 404 (5.4 2) | `c_ivec4`, `c_bvec4`, `c_bvec2`, and width 3 | `deqp_intval5_c_ivec4` (`u == ivec4(-1, 8, -4, 10)`), `_c_bvec4`, `_c_bvec3`, `_c_bvec2` (`u == bvecN(true, false, true, false)`) | `c_ivec4` is **not lane order**: `MOV.i32.discard r0, u4.w0` (-4); `ICMP_OR.u32.eq.m1 r0, u3.w0, r0^, 0x0` (lane z); `ICMP_AND.u32.eq.m1 r0, u3.w1, 0xB0A0908.b2, r0^` (lane w, 10); **`MOV.i32 r1, 0x0` after those two**; `ICMP_OR.u32.eq.m1 r2, u2.w1, 0xB0A0908.b0, r1` (lane y, 8); `LSHIFT_AND.i32 r0, r0^, 0x0.b00, r2^`; `ICMP_OR.u32.eq.m1 r1, u2.w0, 0xFFFFFFFF, r1^` (lane x, -1 the inline constant); `LSHIFT_AND.i32 r0, r0^, 0x0.b00, r1^`. `c_bvec2`: `LSHIFT_OR.i32.discard r0, 0x0, 0x0.b00, u2.w1.not` then `LSHIFT_AND.i32 r0, r0^, 0x0.b00, u2.w0` (the `false` lane's word with `.not`, first). `c_bvec3`: the same, then `LSHIFT_AND.i32 r0, u3.w0, 0x0.b00, r0^`, then `LSHIFT_AND.i32 r0, r0^, 0x0.b00, u2.w0`. `c_bvec4`: `LSHIFT_OR.discard r0, .., u3.w1.not`; `LSHIFT_AND r0, r0^, .., u3.w0`; `LSHIFT_OR r1, .., u2.w1.not`; `LSHIFT_AND r0, r0^, .., r1^`; `LSHIFT_AND r0, r0^, .., u2.w0`. There is **no `MOV r1, 0x0`** in the bool chains (the section 5.4 note guessed one); the bool chains have no zero accumulator, only `.not`. The predicted `.not` forms hold. |
+| 136, 404 (5.4 3, 4) | `c_int1` constants 4 and up, `c_int_lt` | `deqp_intval5_c_int_k` (`u == 4`, `u == 9`, `u == 17`), `deqp_intval5_c_int_lt` (`u_a < u_b`, `u_a >= 3`) | The byte-immediate table covers 16+ too: `ICMP_OR.u32.eq.m1 r1, u2.w0, 0x7060504.b0, r0` (4), `0xB0A0908.b1` (9), `0x13121110.b1` (17); the accumulator is the zero register `r0` (`MOV.i32.discard r0, 0x0`, read without `^` until its last use). `c_int_lt`: `ICMP_OR.s32.lt.m1 r1, u2.w0, u2.w1, r0` and `ICMP_OR.s32.ge.m1 r0, u2.w0, 0x3020100.b3, r0^`: **`>=` stays `ge` (not `lt` swapped), the compares are signed (`.s32`) and two FAU words need no `MOV`** (u2.w0, u2.w1 are one instruction's two words). |
+| 136 | `c_int_two`, `c_bool_not`, `c_bool_one` | `deqp_intval5_c_int_two` (`(u_a == 2) && (u_b == -3)`), `deqp_intval5_c_bool_not` (`!u_a && u_b`, `!u_b`) | `c_int_two`: `MOV.i32.discard r0, u3.w0` (**-3 first, the constant in a register**), `ICMP_OR.u32.eq.m1 r0, u2.w1, r0^, 0x0` (`u_b`), `ICMP_AND.u32.eq.m1 r0, u2.w0, 0x3020100.b2, r0^` (`u_a == 2`): again not program order. `c_bool_not`: `LSHIFT_OR.i32.discard r0, 0x0, 0x0.b00, u2.w0.not`, `LSHIFT_AND.i32 r0, r0^, 0x0.b00, u2.w1` for `!u_a && u_b`; `float(!u_b)` is **`MUX.v2i16 r1, 0x3C000000.h11, 0x0, r1^.h00` (the arms swapped, no `.not`)**. `c_bool_one` (`float(u_a)` alone) is the `MUX.v2i16` of 4.6, no new word. |
+| 52, 404 | bvec3/bvec4 harness compares | `deqp_intval4_bvec3_cmp_fs` (LOWERED), `_bvec4_cmp_fs` (`Defect(IrIndex)`) | unchanged (section 7) |
 | 393 (M4) | int `bcsel` | `deqp_intval4_sel_int_fs` | `FCMP_OR.v2f16.lt.m1` of the condition, `S16_TO_S32` of its mask, **`CSEL.u32.eq r0, r0^, 0x0, r2^, r1^`** (the two arms from `F32_TO_S32.rtz`), `S32_TO_F32`, `FADD.f32 r0.h0, r0^, 0x0.neg`, colour as `FMA.v2f16 .. 0x38000000.h11, 0x38000000.h11`: the int select is `CSEL`, not `MUX`. |
