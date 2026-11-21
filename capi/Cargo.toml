@@ -68,6 +68,10 @@ report-es2 = ["yakogl/report-es2"]
 # The test knobs (the yakogl crate's own feature): what the gl_test
 # and deqp images take; a product image never does.
 test-knobs = ["yakogl/test-knobs"]
+# The PowerVR back end's hardware instance divisors (the yakogl crate's own
+# feature, P3), opt-in: Kconfig YAKOGL_PVR_INSTANCE_DIVISOR and the CMake
+# option of the same name.
+pvr-instance-divisor = ["yakogl/pvr-instance-divisor"]
 # The gl_test runner (driver/tools/pvrlab/runner): the walker of
 # tools/pvrlab/gl_test.c, which that file's gl_test_run calls, so every
 # build that links gl_test.c takes it (the gl_test images through Kconfig

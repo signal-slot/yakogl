@@ -490,8 +490,8 @@ Expected verdicts:
 
 `tools/cts/host-deqp-run.sh` with the feature built in through
 `--lib-cmake-arg=-DYAKOGL_EXTRA_FEATURES=yakogl/pvr-instance-divisor` (the bare
-name `pvr-instance-divisor` fails: `capi/Cargo.toml` has no forwarding
-feature), the patched VK-GL-CTS at `93bca01`:
+name `pvr-instance-divisor` works from the commit that added the forwarding
+feature `capi/Cargo.toml`; the `4f4310a6` runs predate it), the patched VK-GL-CTS at `93bca01`:
 
 - Before P3 (`03a923ed`): `dEQP-GLES3.functional.instanced.*` is 111 cases,
   0 Pass / 111 Fail / 0 NotSupported. Every picture verdict is Fail on the
