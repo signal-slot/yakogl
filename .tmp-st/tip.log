@@ -1,0 +1,271 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (ja_JP.UTF-8): No such file or directory
+
+
+== 16. cts-refusals.py on the tokened format (testdata/refusals)
+  ok    refusals: reports "assignment to this is not lowered yet"
+  ok    refusals: reports "the code generator refused this fragment shader: Select(OutOfScratch)"
+  ok    refusals: reports "on cases dEQP FAILED (real gaps)        : 4"
+  ok    refusals: reports "on cases dEQP NOT SUPPORTED (excused)   : 1"
+  ok    refusals: reports "on cases dEQP PASSED (correct refusals) : 1"
+  ok    refusals: reports "Usc(Record(MatrixAttrib { index: 0 }))"
+  ok    refusals: reports "no implicit conversion in GLSL ES 1.00"
+  ok    refusals: splits one message by construct (. and [])
+
+
+== 17. check-deqp-images.py --config on fixture .config files (testdata/deqp-config)
+  ok    config am62p-sweep.config: a conformance image passes
+  ok    config am62p-ms4.config: a conformance image passes
+  ok    config imx8mp-sweep.config: a conformance image passes
+  ok    config pi4-sweep.config: a conformance image passes
+  ok    config bad-compiler-missing.config: refused, the message names YAKOGL_SHADERC_ONLINE
+  ok    config bad-shaderc-offline.config: refused, the message names YAKOGL_SHADERC_OFFLINE
+  ok    config bad-precompiled-only.config: refused, the message names YAKOGL_SHADERC_PRECOMPILED_ONLY
+  ok    config bad-precompiled-tier.config: refused, the message names YAKOGL_PRECOMPILED_SHADERS
+  ok    config bad-report-es3.config: refused, the message names YAKOGL_REPORT_ES2
+  ok    config bad-gles3-report.config: refused, the message names DEQP_REPORT_ES2
+  ok    config am62p-gles3.config: a conformance image passes
+  ok    config bad-gles3-report.config: refused, the message names YAKOGL_REPORT_ES2
+  ok    config am62p-sweep.config: refused, the message names YAKOGL_REPORT_ES2
+  ok    config bad-sweep-ms4-name.config: refused, the message names DEQP_GL_CONFIG_NAME
+  ok    config bad-ms4-name-missing.config: refused, the message names DEQP_GL_CONFIG_NAME
+  ok    config pi4-gles3-sweep.config: a conformance image passes
+  ok    config pi4-gles3-sweep.config: refused, the message names YAKOGL_REPORT_ES2
+  ok    config pi4-sweep.config: refused, the message names REPORT_ES2
+
+
+== 19. check-gles3-tree.py: self-test, then the GLES3 tables against gles3-mustpass.txt
+  ok    check-gles3-tree.py --self-test
+  ok    am62p-gles3-tree.txt: tools/cts/am62p-gles3-tree.txt: 46 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images
+  ok    pi4-gles3-tree.txt: tools/cts/pi4-gles3-tree.txt: 100 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images
+  ok    imx8mp-gles3-tree.txt: tools/cts/imx8mp-gles3-tree.txt: 133 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images
+
+== 20. images-selftest.sh: the image builders against a fake west
+  ok    images-selftest.sh: 190 checks passed
+
+== 20b. deps-selftest.sh: deps.toml, deps-env.sh --check / --build
+  ok    deps-selftest.sh: 67 checks passed
+
+== 21. cts-summary.py --by-message (testdata/by-message.qpa)
+  skip  no VK-GL-CTS log parser under $CTS
+
+
+== 22. common-tally.py: the GM row per scene, and its --prev diff (testdata/glmark2-*)
+  ok    GM row: reports "GM glmark2 rc=0 verdict=done result=record:GLMARK2"
+  ok    GM row: reports "glmark2 cell amber; scenes in the console 2, clean 1, with known-bad lines 1"
+  ok    GM row: reports "scene [terrain] <default>: amber, 17 lines (gl-error 16, incomplete-texture 1)"
+  ok    GM row: reports "scene [terrain] <default>: gl-error 0 -> 16, incomplete-texture 0 -> 1, tiled-copy 2 -> 0"
+  ok    GM row: reports "scene [refract] <default>: out-of-memory 1 -> 0, tiled-copy 3 -> 0"
+  ok    GM row: exit 0 (amber is the cell; the verdict is done)
+
+== 22a. common-tally.py: the no-glmark2-mem remark only on a console without the lines
+  ok    GM row, glmark2-mem lines without a scene name: both scenes read
+  ok    GM row: no "no glmark2-mem lines" remark on a console that has them
+  ok    GM row: the remark stays on a console without glmark2-mem lines
+
+== 22b. common-tally.py --gm-table / --gm-diff (testdata/glmark2-speed-*)
+  ok    gm-table: reports "[terrain] <default>                                 6    166.67     9.12  61 of 61"
+  ok    gm-table: reports "[conditionals] fragment-steps=0:vertex-steps=0     58     17.24     0.61  581 of 581"
+  ok    gm-table: reports "score 183; 5 scenes, 5 with an FPS, 492.35 ms/frame summed (5 from FrameTime, 0 from 1000/FPS)"
+  ok    gm-diff: reports "[build] <default>          10.00      9.80     -0.20    -2.0%"
+  ok    gm-diff: reports "[shadow] <default>         50.00     40.00    -10.00   -20.0%  *"
+  ok    gm-diff: reports "[terrain] <default>       125.00    125.00     +0.00    +0.0%"
+  ok    gm-diff: reports "[refract] <default>            -    100.00         -        -  no FPS"
+  ok    gm-diff: reports "[jellyfish] <default>          -     25.00         -        -  only in B"
+  ok    gm-diff: reports "scenes moved by more than 5%: 1 of 5 (marked *)"
+  ok    gm-diff: reports "score A 150, B 160 (+6.7%)"
+  ok    gm-diff: a 2% move is not marked
+  ok    gm-diff late FPS: reports "[build] use-vbo=false                   6.38      6.25     -0.13    -2.0%"
+  ok    gm-diff late FPS: reports "[shading] shading=gouraud               4.41      4.00     -0.41    -9.3%  *"
+  ok    gm-diff late FPS: reports "[shading] shading=blinn-phong-inf       4.58      4.58     +0.00    +0.0%"
+  ok    gm-diff late FPS: reports "[terrain] <default>                   181.65    125.00    -56.65   -31.2%  *"
+  ok    gm-diff late FPS: reports "[shadow] <default>                    175.74     50.00   -125.74   -71.5%  *"
+  ok    gm-diff late FPS: reports "[refract] <default>                   403.80    200.00   -203.80   -50.5%  *"
+  ok    gm-diff late FPS: reports "[jellyfish] <default>                  50.00     40.00    -10.00   -20.0%  * (A: 1000/FPS) (B: 1000/FPS)"
+  ok    gm-diff late FPS: reports "[ideas] speed=duration                     -         -         -        -  no FPS"
+  ok    gm-diff late FPS: reports "scenes moved by more than 5%: 5 of 9 (marked *)"
+  ok    gm-diff late FPS: reports "ms/frame: A 7 from FrameTime, 1 from 1000/FPS; B 7 from FrameTime, 1 from 1000/FPS"
+  ok    gm-table late FPS: reports "[refract] <default>                    3    403.80   390.00  30 of 30    FrameTime"
+  ok    gm-table late FPS: reports "[jellyfish] <default>                 20     50.00        -  -           1000/FPS"
+  ok    gm-table late FPS: reports "score 150; 9 scenes, 8 with an FPS, 830.19 ms/frame summed (7 from FrameTime, 1 from 1000/FPS)"
+  ok    gm-table: a file without scene lines is a usage error (exit 2)
+
+== 22b2. common-tally.py --gm-table: a glued header, a scene run twice, a failed run first
+  ok    gm-table glued-header: reports "[build] use-vbo=false:interleave=true    157      6.38"
+  ok    gm-table glued-header: reports "[shading] shading=gouraud                227      4.41"
+  ok    gm-table twice-before-frame: reports "[build] use-vbo=false       157      6.38     2.73  1 of 1568"
+  ok    gm-table twice-before-frame: reports "[build] use-vbo=false #2    100     10.00     9.00  7 of 1000"
+  ok    gm-table failed-then-fps: reports "[build] use-vbo=false #2    157      6.38     2.73  1 of 1568"
+
+
+== 22c. common-tally.py: the glmark2 pictures against the reference table (testdata/glmark2-picture-*)
+  ok    pictures match: reports "glmark2 cell green; scenes in the console 3"
+  ok    pictures match: reports "glmark2 pictures against column pi4: 3 scenes, match 3"
+  ok    pictures match: reports "scene [terrain] <default>: picture match (crc16 4321, reference 1234)"
+  ok    pictures mismatch: reports "glmark2 cell amber; scenes in the console 3"
+  ok    pictures mismatch: reports "glmark2 pictures against column pi4: 3 scenes, match 2, mismatch 1"
+  ok    pictures mismatch: reports "scene [terrain] <default>: picture mismatch (probe c 7a2020 vs 7a9ec0 (off 160); mean 90 60 50 vs 90 120 100 (off 60))"
+  ok    pictures all-black: reports "glmark2 cell failed; scenes in the console 3"
+  ok    pictures all-black: reports "glmark2 pictures against column pi4: 3 scenes, match 2, black 1"
+  ok    pictures all-black: reports "scene [shadow] <default>: picture black (all black, the reference is not)"
+  ok    pictures absent: reports "glmark2 cell amber; scenes in the console 3"
+  ok    pictures absent: reports "scene [terrain] <default>: picture absent (the readback failed)"
+  ok    pictures unreadable: reports "glmark2 cell amber; scenes in the console 3"
+  ok    pictures unreadable: reports "glmark2 pictures against column pi4: 3 scenes, match 1, absent 1, unreadable 1"
+  ok    pictures unreadable: reports "scene [terrain] <default>: picture unreadable (does not parse: 800x600; probes c 7a9ec0ff, tl 5f8fd0ff,"
+  ok    pictures unreadable: reports "scene [shadow] <default>: picture absent (the readback failed)"
+  ok    pictures mismatch: the row exits 0 (amber is the cell; the verdict is done)
+  ok    --gm-pictures: exit 0 on a match, 1 on a mismatch
+  ok    pictures no-reference: reports "glmark2 pictures against column am62p: 3 scenes, match 0, no-reference 3"
+  ok    pictures no-reference: reports "scene [jellyfish] <default>: picture no reference"
+  ok    --gm-picture-lines: 3 table lines for the pi4 column
+  ok    glmark2-pictures.txt: a host column of 33 scenes (the parse is checked by --self-test)
+
+== 22d. common-tally.py: the i.MX8MP GM row from glmark2-pages.txt (testdata/imx8mp-pages)
+  ok    pages row: reports "glmark2 cell amber; scenes in glmark2-pages.txt 30, with an FPS 28, 515.67 ms/frame summed"
+  ok    pages row: reports "not in record: FrameTime, the gl / swap / show / frame means, the glmark2-mem lines, the GL error lines"
+  ok    pages row: reports "glmark2 pictures against column imx8mp: 4 scenes, match 0, mismatch 2, absent 1, not-in-record 1"
+  ok    pages row: reports "scene [terrain] <default>: picture mismatch (probe c 6080a0 vs "
+  ok    pages row: reports "scene [jellyfish] <default>: picture absent (the readback failed)"
+  ok    pages row: reports "scene [conditionals] fragment-steps=0:vertex-steps=0: picture not in record (page P0 of scene 25 missing)"
+  ok    pages row: verdict done
+  ok    pages table: reports "[terrain] <default>"
+  ok    pages table: reports "score not in record; 30 scenes, 28 with an FPS, 515.67 ms/frame summed (0 from FrameTime, 28 from 1000/FPS)"
+  ok    pages table: reports "not in record  not in record 1000/FPS"
+  ok    pages table: reports "FrameTime, the gl / swap / show / frame means and the GL error lines are not in record"
+  ok    pages table: terrain 6 FPS, 166.67 ms/frame
+  ok    pages diff: reports "scenes moved by more than 5%: 0 of 30"
+  ok    pages diff: reports "ms/frame: A 0 from FrameTime, 28 from 1000/FPS; B 0 from FrameTime, 28 from 1000/FPS"
+  ok    pages diff: reports "score A not in record, B not in record"
+  ok    pages pictures: reports "glmark2 pictures against column imx8mp: 4 scenes, match 0, mismatch 2, absent 1, not-in-record 1"
+  ok    pages run-dir: reports "glmark2 cell amber; scenes in glmark2-pages.txt 30"
+  ok    pages without: reports "glmark2 cell green (record only); per-scene lines absent (no console)"
+
+
+== 23. tree-diff-selftest.sh: tree-diff.py on its fixtures (testdata/tree-diff)
+  ok    tree-diff-selftest.sh: 17 check(s) passed
+
+
+== 24. license_audit.py --self-test (tools/testdata/license_audit)
+  ok    license_audit.py --self-test: 4 fixture check(s) passed
+
+== 25. license_audit.py --fail-on missing-spdx,... over the repository
+  ok    license audit: missing-spdx 0, unknown-id 0, undecided 0
+
+== 26. glmark2-fb.py --self-test
+  ok    glmark2-fb.py: clean, damaged and disagreeing dumps judged
+
+== 27. readme-glmark2-check.py (testdata/readme-glmark2)
+  ok    one commit, a row per board (short and long hash): exit 0, output has '^ok:'
+  ok    unknown ref skips the ancestor check with a warning: exit 0, output has 'warning: ancestor check skipped'
+  ok    boards name different commits: exit 1, output has 'name 2 commits'
+  ok    a board is missing from the README: exit 1, output has 'no glmark2 row for Raspberry Pi 4'
+  ok    RESULTS has no row citing the commit: exit 1, output has 'Raspberry Pi 4 glmark2 row does not cite'
+  ok    README without the table is a parse error: exit 2, output has '^error:'
+  ok    --scenes: figures and a record dir for each board: exit 0, output has '^ok:'
+  ok    --scenes: a row without the three figures or a record dir fails: exit 1, output has 'i.MX8MP glmark2 row has no .terrain <n> ms. figure'
+  ok    --scenes: a scene figure is missing: exit 1, output has 'Raspberry Pi 4 glmark2 row has no .shadow <n> ms'
+  ok    --scenes: a non-numeric figure: exit 1, output has 'i.MX8MP glmark2 row has a non-numeric shadow figure .n/a.'
+  ok    --scenes: a record directory is missing: exit 1, output has 'i.MX8MP glmark2 row cites no record directory'
+== 28. glmark2-ms.py (testdata/glmark2-ms)
+  ok    pi4: table as expected, exit 0
+  ok    pi4: --cells as expected, exit 0
+  ok    imx8mp: table as expected, exit 0
+  ok    imx8mp: --cells as expected, exit 0
+  ok    am62p: table as expected, exit 0
+  ok    am62p: --cells as expected, exit 0
+  ok    split: table as expected, exit 0
+  ok    split: --cells as expected, exit 0
+  ok    a cut-off FrameTime: exit 1, output has 'FAIL: damaged scene line'
+  ok    a started scene with no result: exit 1, output has 'FAIL: scene started, no result line'
+  ok    no glmark2 output: exit 2, output has '^error: no glmark2 output'
+
+== 29. pr-verdict.py --selftest
+  ok    pr-verdict.py: pass, knob-off stop and HWR > 0 logs judged
+
+== 30. imx8mp-console-scan-selftest.sh: the console scanner on a synthetic log
+  ok    imx8mp-console-scan-selftest.sh: 22 checks passed
+
+== 31. gles3-notpass.py --self-test
+  ok    gles3-notpass.py: the not-pass TSV reproduced from fixtures
+
+== 32. imx8mp-gles3-merge-selftest.sh
+  ok    imx8mp-gles3-merge-selftest.sh: synthetic slices merged, missing entries and resets refused
+
+== 33. imx8mp-gles3-pipeline-selftest.sh
+  ok    imx8mp-gles3-pipeline-selftest.sh: slice records through the record layout into --check, --notpass and --totals
+
+== 34. imx8mp-gles3-gen-selftest.sh
+  ok    imx8mp-gles3-gen-selftest.sh: the table regenerated unchanged, a trial --split still checks
+
+== 35. imx8mp-gles3-wrap-selftest.sh
+  ok    imx8mp-gles3-wrap-selftest.sh: the board wrapper on a stub board.sh, the tree check on broken copies
+
+== 36. gles3-triage-selftest.sh
+  ok    gles3-triage-selftest.sh: real and synthetic not-pass lists grouped into issue drafts
+
+== 37. imx8mp-gles3-preflight-selftest.sh
+  ok    imx8mp-gles3-preflight-selftest.sh: the session preflight on a fake layout, refusals named, read-only
+
+== 38. imx8mp-gles3-report-selftest.sh
+  ok    imx8mp-gles3-report-selftest.sh: slice records drafted into the RESULTS, STATUS and ROADMAP lines
+
+== 39. imx8mp-gles3-sessions-selftest.sh
+  ok    imx8mp-gles3-sessions-selftest.sh: case counts, board-second estimates, the risk flag and contiguous session ranges
+
+== 40. mali-deqp-tally-selftest.sh
+  ok    mali-deqp-tally-selftest.sh: NanoPC-T6 slices covered, tallied and the doc block matched
+
+== 41. check-pi4-gles3-log.py --self-test
+  ok    check-pi4-gles3-log.py --self-test: 7 of 7 cases ok
+
+== 42. pi4-gles3-acceptance-selftest.sh
+  ok    pi4-gles3-acceptance-selftest.sh: 10 checks passed
+
+== 43. mali-deqp-e2e-selftest.sh
+  ok    mali-deqp-e2e-selftest.sh: 27 checks passed, no FAIL or XFAIL
+
+== 44. mali-gles2-tree.txt covers gles2-mustpass.txt once
+  ok    mali-gles2-tree.txt: 17165 cases matched once
+
+== 45. glmark2-picdiff.py --self-test
+  ok    glmark2-picdiff.py: synthetic pairs compared
+
+== 46. mali-slice-redact-selftest.sh
+  ok    mali-slice-redact-selftest.sh: 17 checks passed, no FAIL or XFAIL
+
+== 47. mali-slice-readme-selftest.sh
+  ok    mali-slice-readme-selftest.sh: 23 checks passed, no FAIL or XFAIL
+
+== 48. mali-rerun-tree-selftest.sh
+  ok    mali-rerun-tree-selftest.sh: 12 checks passed, no FAIL or XFAIL
+
+== 49. mali-rerun-e2e-selftest.sh
+  ok    mali-rerun-e2e-selftest.sh: 16 checks passed, no FAIL or XFAIL
+
+== 50. mali-fail-triage-selftest.sh
+  ok    mali-fail-triage-selftest.sh: 11 checks passed, no FAIL or XFAIL
+
+== 51. mali-deqp-build-selftest.sh
+  ok    mali-deqp-build-selftest.sh: 29 checks passed, no FAIL or XFAIL
+
+== 52. mali-family-tree-selftest.sh
+  ok    mali-family-tree-selftest.sh: 16 checks passed, no FAIL or XFAIL
+
+== 58. es2-tree-gate-selftest.sh
+  ok    es2-tree-gate-selftest.sh: 11 cases passed, no FAIL
+
+== 53. pi4-console-scan.py --self-test
+  ok    pi4-console-scan.py: recoveries, hangs, resets and run times read from fixture consoles
+
+== 54. pi4-session-readme.py --self-test
+  ok    pi4-session-readme.py: a session README with its commit line, counts and verdicts
+
+== 55. pi4-gles3-preflight-selftest.sh
+  ok    pi4-gles3-preflight-selftest.sh: the Pi 4 session preflight on a fake layout, refusals named, read-only
+
+== 56. pi4-session-tally-selftest.sh
+  ok    pi4-session-tally-selftest.sh: a Pi 4 session directory tallied, aborts named, unknown labels refused
+
+== 57. licence audit --fail-on list: check.sh, check 25, checklist row 7
+  ok    licence audit --fail-on: one list per place, equal, with undecided (missing-spdx,unknown-id,third-party-mismatch,generated-mismatch,unused-license,undecided)
+== all checks passed
