@@ -2645,18 +2645,23 @@ fn the_interpreter_runs_mesas_7_1_code_as_the_ir_says() {
     assert_eq!(tried + n_nt, pairs.len());
     assert!(disagree.is_empty(), "{} 7.1 pairs disagree", disagree.len());
     let es2 = cfg!(feature = "report-es2");
-    // Pinned, measured 2026-11-08 on b585deb5 with the fixture of Mesa
-    // 26.2.1's v3d_shc --device 71 (rev 7). Every pair the harness tries
-    // stops in sim71 at its VS's or CS's thread end (SIM71_UNMODELLED), so
-    // none agrees yet and nothing is compared: the pins say so until sim71
-    // reads Mesa's thread end as Mesa's validator does.
+    // Pinned, measured 2026-11-21 on 5cb80624 with the fixture of Mesa
+    // 26.2.1's v3d_shc --device 71 (rev 7), once sim71 reads Mesa's thread
+    // end (`stvpmv ; thrsw`, an op with no destination) as Mesa's validator
+    // does. Before, every tried pair stopped there (191, 164 in report-es2).
+    // The pairs that now reach their FS stop only on SIM71_UNMODELLED; the
+    // 8 (4) that moved to "not tried" are the harness's (SIM71_NOT_TRIED).
     assert_eq!(
         (pairs.len(), tried, agree.len(), n_un, n_nt),
-        if es2 { (242, 164, 0, 164, 78) } else { (242, 191, 0, 191, 51) },
+        if es2 { (242, 160, 116, 44, 82) } else { (242, 183, 136, 47, 59) },
         "the 7.1 population moved; re-derive the pins"
     );
-    assert_eq!(retried.len(), if es2 { 0 } else { 2 }, "the 7.1 positive-input retries moved: {retried:?}");
-    assert_eq!((total, sampled.len()), (0, 0), "the 7.1 compared values or texture pairs moved");
+    assert_eq!(retried.len(), if es2 { 2 } else { 4 }, "the 7.1 positive-input retries moved: {retried:?}");
+    assert_eq!(
+        (total, sampled.len()),
+        if es2 { (26126, 28) } else { (30606, 36) },
+        "the 7.1 compared values or texture pairs moved"
+    );
     let unmodelled_by = by_reason(&unmodelled);
     let want: Vec<(String, usize)> = SIM71_UNMODELLED
         .iter()
@@ -2694,34 +2699,53 @@ fn by_reason(m: &BTreeMap<String, Vec<String>>) -> Vec<(String, usize)> {
 
 /// Where the interpreter stops on Mesa's 7.1 code: (reason without the
 /// instruction index, pairs, pairs in a report-es2 build, why). Not fixed
-/// here (sim71.rs is another item's); each is a skip with its cause.
+/// here (sim71.rs is another item's); each is a skip with its cause. The
+/// thread end's `stvpmv ; thrsw` (every VS and CS) is no longer one: sim71
+/// asks whether an op has a destination (add_op_args & ARG_D), as
+/// qpu_validate.c:373-421 and verify71 do.
 const SIM71_UNMODELLED: &[(&str, usize, usize, &str)] = &[
     (
-        "CS: an ALU register-file write at the thread end",
-        8,
-        6,
-        "as the VS row: the coordinate shader ends with the same `stvpmv ; thrsw` (the 8 pairs whose VS gets through)",
+        "FS: add Vfpack: a denormal operand",
+        1,
+        0,
+        "gltest/intrt.frag (a GLSL ES 3.00 pair): a VFPACK operand is a denormal, which sim.rs f32_unpack \
+         refuses as unmodelled",
     ),
     (
-        "VS: an ALU register-file write at the thread end",
-        183,
-        158,
-        "sim71::alu_rf_writes takes every non-NOP op as writing its waddr, also one with no destination \
-         (add_op_args without ARG_D): Mesa ends a VS with `stvpmv ; thrsw`, the STVPMV's waddr field 0 \
-         and not magic, which qpu_validate.c:373-420 accepts because STVPMV writes nothing. With that \
-         op excluded (measured, not applied) 136 of 183 tried pairs agree and none disagrees; the rest \
-         stop on the FMOV unpacks Max0 (34) and Sat (12) and on intrt.frag's denormal VFPACK (1)",
+        "FS: mul Fmov: input unpack Max0",
+        34,
+        34,
+        "the mul ALU's FMOV takes only 4.2's unpacks in sim71 (unpacks42); 7.1's clamps Sat, Nsat and Max0 \
+         are modelled for the add ALU's FMOV only (float_unpack)",
     ),
+    ("FS: mul Fmov: input unpack Sat", 12, 10, "as the Max0 row: the mul ALU's FMOV with the Sat clamp"),
 ];
 
 /// The 7.1 pairs this harness does not try, by reason (as for 4.2: the
-/// front end, the fixture's uniform lists and the streams the harness
-/// builds; nothing here is the interpreter's).
+/// front end, the fixture's uniform lists, the streams the harness builds
+/// and what the IR evaluator cannot judge; nothing here is sim71's).
 const SIM71_NOT_TRIED: &[(&str, usize)] = &[
     ("Mesa lists frag uniform u_fade 2 times", 1),
     ("Mesa lists frag uniform u_q 2 times", 1),
     ("Mesa lists vert uniform axis 2 times", 1),
     ("Mesa lists vert uniform u_bias 4 times", 1),
+    (
+        "evaluator (FS): a loop ran 10000 iterations: it does not terminate \
+         (the interpreter stopped: did not end in 1,000,000 instructions)",
+        1,
+    ),
+    (
+        "evaluator (FS): the evaluator has no derivatives \
+         (the interpreter stopped: add Fdx: the quad lane layout is not modelled (Env::quads))",
+        1,
+    ),
+    (
+        "evaluator (FS): the evaluator samples only a float texture (no shadow or integer sampler) \
+         (the interpreter ran to the end)",
+        2,
+    ),
+    ("frag QUNIFORM_UNIFORM dword 0 maps to no uniform", 3),
+    ("frag QUNIFORM_UNIFORM dword 4 maps to no uniform", 1),
     ("front end: desktop GLSL source; this is an OpenGL ES compiler", 44),
     ("state uniform FB_PNTC_Y_TRANSFORM", 2),
     ("vert QUNIFORM_UNIFORM dword 4 maps to no uniform", 1),
@@ -2730,6 +2754,12 @@ const SIM71_NOT_TRIED_ES2: &[(&str, usize)] = &[
     ("Mesa lists frag uniform u_fade 2 times", 1),
     ("Mesa lists frag uniform u_q 2 times", 1),
     ("Mesa lists vert uniform u_bias 4 times", 1),
+    (
+        "evaluator (FS): the evaluator has no derivatives \
+         (the interpreter stopped: add Fdx: the quad lane layout is not modelled (Env::quads))",
+        1,
+    ),
+    ("frag QUNIFORM_UNIFORM dword 0 maps to no uniform", 3),
     ("front end: GLSL ES 3.00 source; this build reports OpenGL ES 2.0", 28),
     ("front end: desktop GLSL source; this is an OpenGL ES compiler", 44),
     ("state uniform FB_PNTC_Y_TRANSFORM", 2),
