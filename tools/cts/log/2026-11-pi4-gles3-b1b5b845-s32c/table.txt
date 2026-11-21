@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-21, S32c1..S32c4: deqp-uart-tally.py --table over the four consoles, in the table's order (README.md)
+== mustpass: 4 cases in these records' case filters (42806 outside them, not run, left out); 4 with a result (4 case lines seen)
+group                           pass   fail   n.s.     QW  other   none
+shaders                            0      0      0      0      4      0
+TOTAL                              0      0      0      0      4      0
+== the totals above are the result lines seen; the image's own counters, beside them:
+  2026-11-pi4-gles3-b1b5b845-s32c: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 1 result lines seen
+  2026-11-pi4-gles3-b1b5b845-s32c: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 1 result lines seen
+  2026-11-pi4-gles3-b1b5b845-s32c: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 1 result lines seen
+  2026-11-pi4-gles3-b1b5b845-s32c: deqp: summary 1 cases begun, 1 with a result; deqp: done 0 passed, 1 failed, 0 not supported, 0 warnings; 1 result lines seen
+== not Pass, by name
+ResourceError dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_fragment
+ResourceError dEQP-GLES3.functional.shaders.texture_functions.texturesize.sampler2dshadow_vertex
+ResourceError dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercubeshadow_fragment
+ResourceError dEQP-GLES3.functional.shaders.texture_functions.texturesize.samplercubeshadow_vertex
