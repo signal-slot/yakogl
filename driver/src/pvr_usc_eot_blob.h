@@ -22,6 +22,8 @@
  *   pvr_usc_eot2_words         capture_usc eot 2
  *   pvr_usc_eot3_words         capture_usc eot 3
  *   pvr_usc_eot4_words         capture_usc eot 4
+ *   pvr_usc_eot2_tb1_words     capture_usc eot 2 1
+ *   pvr_usc_eot3_tb12_words    capture_usc eot 3 1 2
  *   pvr_usc_eot2_tb_words      capture_usc eot 3 1
  *   pvr_usc_eot3_tb_words      capture_usc eot 3 2
  *   pvr_usc_eot4_tb_words      capture_usc eot 4 3
@@ -99,6 +101,27 @@ static const uint32_t pvr_usc_eot4_words[] = {
 /* Spilled emits one program has at most, one tile buffer each. */
 #define PVR_USC_EOT_TB_MAX_SPILLS 3
 
+static const uint32_t pvr_usc_eot2_tb1_words[] = {
+   0xc000a046u, 0x01804080u, 0xff000088u, 0xff688002u,
+   0x13409286u, PVR_USC_EOT_TB_ADDR_LO, 0xff400000u, 0x13409286u,
+   PVR_USC_EOT_TB_ADDR_HI, 0xff410000u, 0xe8008636u, 0x360061c0u,
+   0x4281c000u, 0x87008235u, 0x85000000u, 0xa056ff0cu,
+   0xc104e100u, 0x000c8780u, 0x8003ff00u, 0xfff1ff6au,
+   0xc280a048u, 0x03804082u, 0xff000088u, 0xfffffff2u,
+};
+static const uint32_t pvr_usc_eot3_tb12_words[] = {
+   0xc000a046u, 0x01804080u, 0xff000088u, 0xff688002u,
+   0x13409286u, PVR_USC_EOT_TB_ADDR_LO, 0xff400000u, 0x13409286u,
+   PVR_USC_EOT_TB_ADDR_HI, 0xff410000u, 0xe8008636u, 0x360061c0u,
+   0x4281c000u, 0x87008235u, 0x85000000u, 0xa056ff0cu,
+   0xc104e100u, 0x000c8780u, 0x8002ff00u, 0xa046ff6au,
+   0x4082c000u, 0x00880380u, 0x8002ff00u, 0x9286ff68u,
+   0x00001340u, 0x0000e177u, 0x9286ff40u, 0xbdef1340u,
+   0x00000000u, 0x8636ff41u, 0x61c0e800u, 0xc0003600u,
+   0x82354281u, 0x00008700u, 0xff0c8500u, 0xe100a056u,
+   0x8780c104u, 0xff00000cu, 0xff6a8004u, 0xfffffff2u,
+   0xc280a048u, 0x05804084u, 0xff000088u, 0xfffffff2u,
+};
 static const uint32_t pvr_usc_eot2_tb_words[] = {
    0xc000a046u, 0x01804080u, 0xff000088u, 0xff688002u,
    0x13409286u, PVR_USC_EOT_TB_ADDR_LO, 0xff400000u, 0x13409286u,
