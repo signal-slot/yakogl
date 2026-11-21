@@ -19,7 +19,7 @@
 //! * Which sections are present. An ISS byte carries no discriminator at all,
 //!   so its presence cannot be read off the bytes. Mesa's variant selectors
 //!   (`pco_igrp_iss_variant`, `pco_igrp_src_variant`, `pco_igrp_dest_variant`)
-//!   settle it structurally, and [`sections_present`] is that rule.
+//!   settle it structurally, and `sections_present` is that rule.
 //!
 //! Every parse is required to be unique: a group that decodes two ways is a
 //! decoder defect, and [`decode_group`] returns [`DecodeError::Ambiguous`]
