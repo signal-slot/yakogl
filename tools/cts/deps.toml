@@ -410,7 +410,8 @@ case "$BOARD_NAME" in
   imx8mp) zboard=verdin_imx8mp/mimx8ml8/a53 ;;
   rpi_4b) zboard=rpi_4b ;;
   nanopc_t6) zboard=nanopc_t6 ;;
-  *) echo "DEQP_WORK: name a board (--board am62p | imx8mp | rpi_4b | nanopc_t6)" >&2; exit 2 ;;
+  verdin_imx95) zboard=verdin_imx95/mimx9596/a55 ;;
+  *) echo "DEQP_WORK: name a board (--board am62p | imx8mp | rpi_4b | nanopc_t6 | verdin_imx95)" >&2; exit 2 ;;
 esac
 repo=$PWD
 if [ ! -d "$DEPS/VK-GL-CTS/.git" ]; then
