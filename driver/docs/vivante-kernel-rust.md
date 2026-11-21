@@ -160,8 +160,8 @@ the row gives them (`None` matches any); a row also names the one
   0x6200 and = 0x6204, product 0x70003 (galcore's rule); 8 streams, every
   value unchanged;
 - STM32MP257F-DK, `GCNANOULTRA31_VIP2`: model 0x8000, revision 0x6205,
-  product 0x80003, eco 0, customer not matched (issue #1281 did not read
-  it); Mesa st `gc_feature_database.h:4720`, Linux `etnaviv_hwdb.c:199-216`:
+  product 0x80003, eco 0, customer not matched (the board read 0x15 on
+  2026-11-21, see the GC8000 section); Mesa st `gc_feature_database.h:4720`, Linux `etnaviv_hwdb.c:199-216`:
   temps 64, threads 512, 2 shader cores, 512 instructions, 320 constants, 1
   pixel pipe, **16 streams**, 16 varyings, vertex output buffer 0x400, vertex
   cache 0x10, MMU v2, security and security AHB. The other candidate rows of
@@ -314,10 +314,12 @@ Still open (not measured):
 ## The STM32MP257F-DK's GC8000
 
 The same Rust kernel side also targets the STM32MP257F-DK's GPU (Cortex-A35
-image, plan #322, issues #7 and #1281). Nothing below was run on the DK by
-this document's author; the one board fact it quotes, the identity, is what
-Linux read there (issue #1281, as the pre-study records it). How it differs
-from the i.MX8MP's GC7000UL:
+image, plan #322, issues #7 and #1281). The identity, the power-up, the idle
+and the RCC reset were read on the DK on 2026-11-21 with `mp2_gpu` (the
+list under "Read on the board" below; records in
+`docs/notes/stm32mp257f-dk-bringup.md`, "Step 4" and "Board verdicts",
+commits 226cd9a2 and 2da6568d). Everything else here is still unrun on the
+DK. How it differs from the i.MX8MP's GC7000UL:
 
 - **Identity.** model 0x8000, revision 0x6205, product 0x80003, eco 0; the
   table-driven row is `hw::DB_STM32MP257F`, `GCNANOULTRA31_VIP2`, customer not
@@ -348,20 +350,42 @@ from the i.MX8MP's GC7000UL:
   power through `stm32mp2_gpu.h` (31e07d90, `driver/samples/zephyr/gc_fence/README.md`,
   `gc_clear/README.md`). That commit's message says "Not run on a board".
 
-Still unverified on the board (pre-study, "What needs the board" and its
-open questions; issue #1281):
+Read on the board (2026-11-21, `mp2_gpu` from U-Boot's `go`, image
+`9e520020`, run `20261121-1107-mp2_gpu-9e520020`; the bring-up note's
+"Step 4: `mp2_gpu`: PASS" and "Q1, Q6 and Q8"; verdict lines `verdict
+gpu-identity`, `gpu-intr`, `gpu-idle`):
 
-1. Power-up through SCMI and RCC from our own image: that OP-TEE accepts the
-   requests without a panic (Q3), the reset bit's polarity (`rcc.rs:18`), and
-   that the reset reaches idle.
-2. CHIP_MODEL/CHIP_REV read from U-Boot's `go`, and HI_INTR_ENBL reading
-   back.
-3. The customer id (the row says 0x15, Q1), the core clock rate (Q3,
-   `app.overlay:8-10`), the arch timer rate (Q6) and the state U-Boot hands
-   over (Q8).
-4. SPI 183 reaching the A35 and the fence interrupt arriving (Q6).
-5. The carveout's memory attributes and coherence with the A35 (Q14).
-6. Everything past `gc_clear`: the triangle, the GL sample and the display.
+1. Identity: `identity ...: GC8000 rev 0x6205 product 0x80003 customer 0x15
+   eco 0`, model 0x8000, features 0xe0687ca5, minor0 0xc9799eff, minor1
+   0xfefbfadb, `table=1 streams=16`. The customer id is **0x15** (Q1; the
+   row above does not match it). `mp2_gpu: verdict PASS model=0x8000
+   rev=0x6205 product=0x80003 eco=0x0 customer=0x15 intr=ok idle=ok`.
+2. `HI_INTR_ENBL` wrote 0xffffffff and read back 0xffffffff (then 0).
+3. Idle: `IDLE_STATE` read 0x7fffffff after one read, both at power-up and in
+   the reset-to-idle path (`reset: rcc 0x00000007 held, 0x00000006 released;
+   idle 0x7fffffff after 1 reads`).
+4. `RCC_GPUCFGR` polarity: bit 0 set means the reset is asserted. It read
+   0x6 at entry, 0x7 with the reset held, 0x6 after the release. The bit
+   needed several reads after the release before it cleared in the first run
+   (rc=-5, `a=0x7`); the fix (a053c4aa, 2da6568d) waits a bounded number of
+   reads, `rcc::RELEASE_READS`, and logs the count (1 in the re-run).
+   Bit 2 reads set at entry and is not explained yet (bit 1 is the gate).
+5. SCMI and OP-TEE: capability 0x8074, PERFORMANCE domain 1 at 800000 kHz
+   (read, set, read back), POWER domain 0 on (set, read back); every SCMI
+   status was 0 and there was no OP-TEE panic (Q3 for the power path).
+6. Arch timer `CNTFRQ_EL0` 40 MHz (Q6) and the U-Boot hand-over (EL2, caches
+   off, x0 = 1; Q8), from the same boots.
+7. Nothing at or above 0x800 was read from the CPU, as the rule requires.
+
+Still unverified on the board (nothing has run past the identity and the
+reset yet):
+
+1. SPI 183 reaching the A35 and the fence retiring with its interrupt
+   arriving (Q6; `gc_fence`).
+2. The clear reading back through the resolve engine (`gc_clear`).
+3. The core clock rate beyond the SCMI level read (`app.overlay:8-10`).
+4. The carveout's memory attributes and coherence with the A35 (Q14).
+5. Everything that draws: the triangle, the GL sample and the display.
 
 ## Board runs, and what is left
 
