@@ -43,8 +43,22 @@ the chain's record (`mp2_display: chain ...`, `mode ...`, `ltdc ...`,
   `i2c`, and the probe's `format`, `size`, `pattern`, `write`, `chain`)
 
 It also compares its bar line with the crate's `yd_mp25_fill_color_bars`
-(`mp2_display: bars: ...`, a note only). The LTDC's frame CRC is not in the
-C ABI, so PASS rests on the frame flags, the picture on the KVM.
+(`mp2_display: bars: ...`, a note only).
+
+Before the result line it checks the picture with the LTDC's frame CRC
+(`stm32_ltdc_crc_enable`, `stm32_ltdc_frame_crc`), one `mp2_display: crc: <what>
+0x<crc>` line per read: four reads of the unchanged buffer must be equal
+(`base`, `again`), two bytes of line 0 inverted through `display_write()` must
+change the CRC (`changed`), and the restored line must give the first value
+back (`restored`). Verdict, one line:
+
+- `mp2_display: crc: stable+changing ok`
+- `mp2_display: crc: FAIL <why>` (the result is then `mp2_display: FAIL: crc
+  <err>`)
+- `mp2_display: crc: unavailable` (-ENODEV/-ENOTSUP: no CRC unit; not a failure)
+
+The chain keeps scanning out during the check, so the hold shows the restored
+picture. PASS rests on the frame flags and the CRC; the colours on the KVM.
 
 It then keeps scanning out for `CONFIG_MP2_DISPLAY_HOLD_S` seconds (default
 60), one frame checked a second (`mp2_display: hold: <n> frames ok, <m>

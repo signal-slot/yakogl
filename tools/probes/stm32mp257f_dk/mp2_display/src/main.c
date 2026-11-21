@@ -14,9 +14,15 @@
  * second), so the runner's MP2_HOLD_S and the KVM can see the picture. The
  * board layer (stm32mp2.c) resets the board through PSCI at its lifetime.
  *
- * The LTDC's frame CRC (ip::stm32_ltdc) is not in the C ABI
- * (yakogl_mp25_display.h): the frame check is the LTDC's line interrupt and
- * error flags.
+ * Before the result line the LTDC's frame CRC checks the picture itself
+ * (stm32_ltdc_crc_enable / stm32_ltdc_frame_crc), logged as "mp2_display:
+ * crc:" lines: constant while the buffer is unchanged, different with two
+ * pixels of line 0 changed, back to the first value once restored; verdict
+ *   mp2_display: crc: stable+changing ok
+ *   mp2_display: crc: FAIL <why>      (the result becomes FAIL)
+ *   mp2_display: crc: unavailable     (-ENODEV: no CRC unit; no failure)
+ * The chain keeps scanning out throughout, so the hold that follows the
+ * result line shows the restored picture. The KVM still judges the colours.
  */
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -112,6 +118,92 @@ static void compare_bars(unsigned int w)
 	printk("mp2_display: bars: equal to the crate's\n");
 }
 
+#define CRC_READS 4
+
+static int crc_read(const struct device *dev, const char *what, uint32_t *crc)
+{
+	int err = stm32_ltdc_frame_crc(dev, crc);
+
+	if (err == 0) {
+		printk("mp2_display: crc: %s 0x%08x\n", what, *crc);
+	}
+	return err;
+}
+
+static bool crc_unavailable(int err)
+{
+	return err == -ENODEV || err == -ENOTSUP || err == -ENOSYS;
+}
+
+/* 0 on ok or unavailable, else the error (verdict printed). The buffer's
+ * line 0 is written with its first two bytes inverted and then restored,
+ * through display_write() (the driver's cache handling for the CPU pattern). */
+static int crc_check(const struct device *dev, const struct display_buffer_descriptor *desc)
+{
+	uint32_t base, c, isr = 0;
+	int err;
+
+	err = stm32_ltdc_crc_enable(dev, true);
+	if (err == 0) {
+		err = crc_read(dev, "base", &base);
+	}
+	if (crc_unavailable(err)) {
+		printk("mp2_display: crc: unavailable\n");
+		return 0;
+	}
+	if (err) {
+		printk("mp2_display: crc: FAIL read %d\n", err);
+		return err;
+	}
+	for (int i = 1; i < CRC_READS; i++) {
+		err = crc_read(dev, "again", &c);
+		if (err) {
+			printk("mp2_display: crc: FAIL read %d\n", err);
+			return err;
+		}
+		if (c != base) {
+			printk("mp2_display: crc: FAIL unstable 0x%08x vs 0x%08x\n", c, base);
+			return -EIO;
+		}
+	}
+
+	line[0] ^= 0xff;
+	line[1] ^= 0xff;
+	err = display_write(dev, 0, 0, desc, line);
+	(void)stm32_ltdc_wait_frame(dev, &isr);
+	if (err == 0) {
+		err = crc_read(dev, "changed", &c);
+	}
+	line[0] ^= 0xff;
+	line[1] ^= 0xff;
+	if (err) {
+		(void)display_write(dev, 0, 0, desc, line);
+		printk("mp2_display: crc: FAIL changed-read %d\n", err);
+		return err;
+	}
+	if (c == base) {
+		(void)display_write(dev, 0, 0, desc, line);
+		printk("mp2_display: crc: FAIL unchanged with changed pixels 0x%08x\n", c);
+		return -EIO;
+	}
+
+	err = display_write(dev, 0, 0, desc, line);
+	(void)stm32_ltdc_wait_frame(dev, &isr);
+	if (err == 0) {
+		err = crc_read(dev, "restored", &c);
+	}
+	if (err) {
+		printk("mp2_display: crc: FAIL restore %d\n", err);
+		return err;
+	}
+	if (c != base) {
+		printk("mp2_display: crc: FAIL restored 0x%08x, was 0x%08x\n", c, base);
+		return -EIO;
+	}
+	printk("mp2_display: crc: stable+changing ok\n");
+	return 0;
+}
+
 static int show(const struct device *dev, const char **fmt_name, unsigned int *w,
 		unsigned int *h, int *frames)
 {
@@ -197,6 +289,10 @@ static int show(const struct device *dev, const char **fmt_name, unsigned int *w
 			printk("mp2_display: frame %d: isr 0x%x\n", *frames, isr);
 			return fail("frame", err);
 		}
+	}
+	err = crc_check(dev, &desc);
+	if (err) {
+		return fail("crc", err);
 	}
 	return 0;
 }

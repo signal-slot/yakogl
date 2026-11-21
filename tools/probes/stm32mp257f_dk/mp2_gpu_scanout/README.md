@@ -51,10 +51,18 @@ request is on the console (`gc_power: ...`, `display_power: ...`).
    `0x00RRGGBB`, the LTDC's format 0 (ARGB8888) reads it unchanged ("GPU
    buffer format" in the note);
 5. waits 60 frames, each with no transfer or underrun error
-   (`stm32_ltdc_wait_frame`). The LTDC's frame CRC is not in the driver's C
-   ABI (`driver/include/yakogl_drv/stm32_ltdc.h`), so there is no CRC check: PASS rests on
-   the read-back, the flip's read-back of the scanned address and the frame
-   flags; the picture on the KVM.
+   (`stm32_ltdc_wait_frame`);
+6. checks the picture with the LTDC's frame CRC (`stm32_ltdc_crc_enable`,
+   `stm32_ltdc_frame_crc`), one `mp2_gpu_scanout: crc: <what> 0x<crc>` line
+   per read: four reads of the unchanged buffer must be equal (`base`,
+   `again`), corner pixel (0,0) of the buffer inverted and cleaned must change
+   the CRC (`changed`), the restored pixel must give the first value back
+   (`restored`). Verdict `crc: stable+changing ok`, `crc: FAIL <why>` (the
+   result is then `FAIL: crc <err>`) or `crc: unavailable` (-ENODEV: no CRC
+   unit; not a failure).
+
+PASS rests on the read-back, the flip's read-back of the scanned address, the
+frame flags and the CRC; the picture on the KVM.
 
 `PASS` comes only after both the read-back and the scan-out succeeded. The
 probe then keeps scanning out for `CONFIG_MP2_GPU_SCANOUT_HOLD_S` seconds

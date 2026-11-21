@@ -23,8 +23,13 @@
  *      layer flipped to bo.phys (stm32_ltdc_set_fb, which waits for the
  *      reload);
  *   5. MP2_GPU_SCANOUT_FRAMES frames must come with no transfer or underrun
- *      error (stm32_ltdc_wait_frame). The LTDC's frame CRC is not in the
- *      driver's C ABI (yakogl_drv/stm32_ltdc.h), so there is no CRC check.
+ *      error (stm32_ltdc_wait_frame);
+ *   6. the LTDC's frame CRC checks the picture (stm32_ltdc_crc_enable,
+ *      stm32_ltdc_frame_crc), logged as "mp2_gpu_scanout: crc:" lines: constant
+ *      while the buffer is unchanged, different with the corner pixel (0,0)
+ *      inverted (cleaned to memory), back to the first value once restored;
+ *      verdict "crc: stable+changing ok", "crc: FAIL <why>" (the result
+ *      becomes FAIL) or "crc: unavailable" (-ENODEV, no failure).
  *
  * Why the format and the address need no conversion: the PE's X8R8G8B8 is
  * the word 0x00RRGGBB, the LTDC's format 0 (ARGB8888, constant alpha) reads
@@ -384,6 +389,84 @@ static void print_record(const struct stm32_ltdc_status *st)
 	}
 }
 
+#define CRC_READS 4
+
+static int crc_read(const struct device *dev, const char *what, uint32_t *crc)
+{
+	int err = stm32_ltdc_frame_crc(dev, crc);
+
+	if (err == 0) {
+		printk(NAME ": crc: %s 0x%08x\n", what, *crc);
+	}
+	return err;
+}
+
+static bool crc_unavailable(int err)
+{
+	return err == -ENODEV || err == -ENOTSUP || err == -ENOSYS;
+}
+
+/* Corner pixel (0,0) of the scanned buffer inverted and restored, cleaned
+ * to memory each time like the render's flush. 0 on ok or unavailable. */
+static int crc_check(const struct device *dev, struct gc_target *buf)
+{
+	volatile uint32_t *px = (volatile uint32_t *)buf->cpu;
+	uint32_t base, c, orig = *px, isr = 0;
+	int err;
+
+	err = stm32_ltdc_crc_enable(dev, true);
+	if (err == 0) {
+		err = crc_read(dev, "base", &base);
+	}
+	if (crc_unavailable(err)) {
+		printk(NAME ": crc: unavailable\n");
+		return 0;
+	}
+	if (err) {
+		printk(NAME ": crc: FAIL read %d\n", err);
+		return err;
+	}
+	for (int i = 1; i < CRC_READS; i++) {
+		err = crc_read(dev, "again", &c);
+		if (err) {
+			printk(NAME ": crc: FAIL read %d\n", err);
+			return err;
+		}
+		if (c != base) {
+			printk(NAME ": crc: FAIL unstable 0x%08x vs 0x%08x\n", c, base);
+			return -EIO;
+		}
+	}
+
+	*px = orig ^ 0x00ffffffu;
+	gc_render_cache_flush(buf->cpu, 64);
+	(void)stm32_ltdc_wait_frame(dev, &isr);
+	err = crc_read(dev, "changed", &c);
+	*px = orig;
+	gc_render_cache_flush(buf->cpu, 64);
+	if (err) {
+		printk(NAME ": crc: FAIL changed-read %d\n", err);
+		return err;
+	}
+	if (c == base) {
+		printk(NAME ": crc: FAIL unchanged with a changed pixel 0x%08x\n", c);
+		return -EIO;
+	}
+
+	(void)stm32_ltdc_wait_frame(dev, &isr);
+	err = crc_read(dev, "restored", &c);
+	if (err) {
+		printk(NAME ": crc: FAIL restore %d\n", err);
+		return err;
+	}
+	if (c != base) {
+		printk(NAME ": crc: FAIL restored 0x%08x, was 0x%08x\n", c, base);
+		return -EIO;
+	}
+	printk(NAME ": crc: stable+changing ok\n");
+	return 0;
+}
+
 /* The whole run; 0 on PASS (the line printed), else the FAIL line's errno. */
 static int run(const struct device *dev)
 {
@@ -471,6 +554,10 @@ static int run(const struct device *dev)
 			printk(NAME ": frame %d: isr 0x%x\n", frames, isr);
 			return fail("frame", rc);
 		}
+	}
+	rc = crc_check(dev, &out);
+	if (rc) {
+		return fail("crc", rc);
 	}
 	printk(NAME ": PASS: %ux%u pitch %u phys 0x%llx %d frames\n", s_w, s_h, pitch,
 	       (unsigned long long)out_bo.phys, frames);
