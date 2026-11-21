@@ -14,6 +14,10 @@
  * control drivers) take the same lock. The reply's length is read from the
  * shared memory's header first, since Zephyr's read takes only the length it
  * is told (a refusal's reply is shorter than the answer asked for).
+ * The record sink (verdin_imx95_record.c) stores with interrupts locked,
+ * where no lock can be waited for: verdin_imx95_scmi_unlocked, only while
+ * verdin_imx95_scmi_idle says no exchange is in progress (one core: with
+ * interrupts locked nobody can start one).
  */
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/firmware/scmi/protocol.h>
@@ -24,6 +28,7 @@
 #include <zephyr/sys/device_mmio.h>
 #include <zephyr/sys/sys_io.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -43,26 +48,40 @@ BUILD_ASSERT(DT_REG_SIZE(SHMEM_NODE) >= sizeof(struct scmi_shmem_layout) + 8,
 
 static mm_reg_t vi95_shmem;
 
-int verdin_imx95_scmi(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap)
+/* The channel's protocol, or NULL before the channel is up. */
+static struct scmi_protocol *vi95_proto(void)
 {
 	const struct device *clk = DEVICE_DT_GET(CLK_NODE);
 	struct scmi_protocol *proto = clk->data;
+
+	if (vi95_shmem == 0 || !device_is_ready(clk) || !proto || !proto->tx ||
+	    !proto->tx->ready)
+		return NULL;
+	return proto;
+}
+
+/* One exchange; the channel's lock taken here when `lock` is true, else the
+ * caller's guarantee that nobody is in an exchange (verdin_imx95_scmi_idle
+ * with interrupts locked). */
+static int vi95_xfer(bool lock, const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap)
+{
+	struct scmi_protocol *proto = vi95_proto();
 	struct scmi_message msg, reply;
 	uint32_t hdr, len = 0;
 	uint32_t waited = 0;
-	int ret;
+	int ret = 0;
 
 	if (tx_len < 4 || tx_len % 4 != 0 || rx_cap < 4)
 		return -EINVAL;
-	if (vi95_shmem == 0 || !device_is_ready(clk) || !proto || !proto->tx ||
-	    !proto->tx->ready)
+	if (!proto)
 		return -ENODEV;
 	memcpy(&hdr, tx, sizeof(hdr));
 	msg.hdr = hdr;
 	msg.len = tx_len - 4;
 	msg.content = (void *)(tx + 4);
 
-	ret = k_mutex_lock(&proto->tx->lock, K_USEC(VI95_SCMI_TIMEOUT_US));
+	if (lock)
+		ret = k_mutex_lock(&proto->tx->lock, K_USEC(VI95_SCMI_TIMEOUT_US));
 	if (ret < 0)
 		return ret;
 	ret = scmi_transport_send_message(proto->transport, proto->tx, &msg, true);
@@ -86,12 +105,33 @@ int verdin_imx95_scmi(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_c
 			ret = scmi_transport_read_message(proto->transport, proto->tx, &reply);
 		}
 	}
-	k_mutex_unlock(&proto->tx->lock);
+	if (lock)
+		k_mutex_unlock(&proto->tx->lock);
 	if (ret < 0)
 		return ret;
 	/* the read checked that the reply's header is the command's */
 	memcpy(rx, &hdr, sizeof(hdr));
 	return (int)len;
+}
+
+int verdin_imx95_scmi(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap)
+{
+	return vi95_xfer(true, tx, tx_len, rx, rx_cap);
+}
+
+bool verdin_imx95_scmi_idle(void)
+{
+	struct scmi_protocol *proto = vi95_proto();
+
+	/* nobody holds the lock (Zephyr's SCMI clients and verdin_imx95_scmi
+	 * take it around every exchange), and no message is in flight */
+	return proto && proto->tx->lock.lock_count == 0 &&
+	       scmi_transport_channel_is_free(proto->transport, proto->tx);
+}
+
+int verdin_imx95_scmi_unlocked(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_cap)
+{
+	return vi95_xfer(false, tx, tx_len, rx, rx_cap);
 }
 
 /* The shared memory's own mapping, for the reply's length: once, before

@@ -11,7 +11,10 @@
 //! (`configs/verdin-imx95/config_scmi.h`: PD 3, 13 and 14, perf 9, 11
 //! and 12, clocks 18, 19, 66, 67, 68, 80, 155 and 174 at ALL; CAMAPB 62,
 //! DISPAPB/DISPAXI/DISPOCRAM 75, 76, 78 and GPUAPB/GPU 83, 84 not
-//! granted). Every request is recorded as
+//! granted), and NXP's BBM vendor protocol 0x81 for the record
+//! ([`super::bbm`]: rpc_scmi_bbm.c `BbmGprSet` EXCLUSIVE, `BbmGprGet` GET,
+//! NOT_FOUND from `SM_NUM_GPR` = 8 on; AP-NS holds GPR4..7 at ALL,
+//! config_scmi.h:453-456, GPR0..3 not granted). Every request is recorded as
 //! (protocol, message, payload words).
 //!
 //! Rates, as the SM's clock code makes them (dev_sm_clock.c,
@@ -38,6 +41,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// SM permission levels (rpc_scmi_config.h).
 pub const PERM_NONE: u8 = 0;
+pub const PERM_GET: u8 = 1;
 pub const PERM_SET: u8 = 3;
 pub const PERM_PRIV: u8 = 4;
 pub const PERM_EXCLUSIVE: u8 = 5;
@@ -51,6 +55,7 @@ pub type Req = (u8, u8, Vec<u32>);
 pub const P: u8 = scmi::PROTO_POWER;
 pub const F: u8 = scmi::PROTO_PERF;
 pub const C: u8 = scmi::PROTO_CLOCK;
+pub const B: u8 = super::bbm::PROTO_BBM;
 
 pub fn req(p: u8, m: u8, w: &[u32]) -> Req {
     (p, m, w.to_vec())
@@ -99,6 +104,10 @@ pub struct Sm {
     pub rate: BTreeMap<u32, u64>,
     /// Parents of the roots.
     pub parent: BTreeMap<u32, u32>,
+    /// The BBNSM's GPR0..7 (`DEV_SM_NUM_GPR`) and the agent's permission on
+    /// each.
+    pub gpr: [u32; 8],
+    pub gpr_perm: BTreeMap<u32, u8>,
     pub log: Vec<Req>,
 }
 
@@ -151,6 +160,8 @@ impl Sm {
                 (CLK_MIPIPHYPLLBYPASS, CLK_OSC24M),
                 (CLK_MIPIPHYPLLREF, CLK_OSC24M),
             ]),
+            gpr: [0; 8],
+            gpr_perm: BTreeMap::from([(4, PERM_ALL), (5, PERM_ALL), (6, PERM_ALL), (7, PERM_ALL)]),
             log: Vec::new(),
         }
     }
@@ -213,6 +224,33 @@ impl Sm {
             (P, scmi::PROTOCOL_VERSION) => (OK, vec![0x30001]),
             (F, scmi::PROTOCOL_VERSION) => (OK, vec![0x40000]),
             (C, scmi::PROTOCOL_VERSION) => (OK, vec![0x30000]),
+            (B, scmi::PROTOCOL_VERSION) => (OK, vec![0x10000]),
+            (B, scmi::PROTOCOL_ATTRIBUTES) => (OK, vec![self.gpr.len() as u32]),
+            (B, super::bbm::BBM_GPR_SET) => {
+                if w.len() < 2 {
+                    return (scmi::STATUS_PROTOCOL_ERROR, vec![]);
+                }
+                if w[0] as usize >= self.gpr.len() {
+                    return (scmi::STATUS_NOT_FOUND, vec![]);
+                }
+                if Self::perm(&self.gpr_perm, w[0]) < PERM_EXCLUSIVE {
+                    return (scmi::STATUS_DENIED, vec![]);
+                }
+                self.gpr[w[0] as usize] = w[1];
+                (OK, vec![])
+            }
+            (B, super::bbm::BBM_GPR_GET) => {
+                if w.is_empty() {
+                    return (scmi::STATUS_PROTOCOL_ERROR, vec![]);
+                }
+                if w[0] as usize >= self.gpr.len() {
+                    return (scmi::STATUS_NOT_FOUND, vec![]);
+                }
+                if Self::perm(&self.gpr_perm, w[0]) < PERM_GET {
+                    return (scmi::STATUS_DENIED, vec![]);
+                }
+                (OK, vec![self.gpr[w[0] as usize]])
+            }
             (P, scmi::POWER_STATE_SET) => {
                 if Self::perm(&self.pd_perm, w[1]) < PERM_SET {
                     return (scmi::STATUS_DENIED, vec![]);

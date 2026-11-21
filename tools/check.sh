@@ -4555,7 +4555,11 @@ zephyr_nanopc_t6_gltest_image() {
 # "no display yet" refusal); and WDOG3's
 # (driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c): its armed line
 # and the board layer's "board: watchdog armed" once each, its arming entry
-# (ip::wdog32's yd_wdog32_arm) linked, and no "STUB:" line about the watchdog.
+# (ip::wdog32's yd_wdog32_arm) linked, and no "STUB:" line about the watchdog;
+# and the record without a console (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM,
+# verdin_imx95_record.c): its sink line once and the BBM store
+# (yd_imx95_bbm_record_store, soc::imx95::bbm) linked, the record
+# tools/board.sh imx95 reads back from Linux (docs/standalone-boot.md).
 zephyr_verdin_imx95_triangle_image() {
   local dir=build/zephyr-werror/verdin_imx95-triangle bin footprint window line n
   mali_csffw_header "$1" verdin_imx95-triangle || return 1
@@ -4564,6 +4568,8 @@ zephyr_verdin_imx95_triangle_image() {
   grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
   grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config" ||
     { echo "the image has no X4 display (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)"; return 1; }
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM=y$' "$dir/zephyr/.config" ||
+    { echo "the image keeps no record in the BBM GPRs (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM)"; return 1; }
   footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
   window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
   [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
@@ -4573,7 +4579,8 @@ zephyr_verdin_imx95_triangle_image() {
   for line in 'verdin_imx95: WDOG3 armed: CS 0x%08x' 'board: watchdog armed' \
     'verdin_imx95: CSF firmware %u bytes embedded' \
     'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: ' \
-    'verdin_imx95: display up: ' 'verdin_imx95: display stopped: '; do
+    'verdin_imx95: display up: ' 'verdin_imx95: display stopped: ' \
+    'verdin_imx95: record sink: BBM GPR4..7 over SCMI (%s)'; do
     n=$(strings -n 20 "$bin" | grep -cF "$line") || true
     [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
   done
@@ -4583,6 +4590,8 @@ zephyr_verdin_imx95_triangle_image() {
   [ "${n:-0}" = 0 ] || { echo "zephyr.bin still carries the no-display refusal"; return 1; }
   nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_wdog32_arm$' ||
     { echo "zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_bbm_record_store$' ||
+    { echo "zephyr.elf does not link yd_imx95_bbm_record_store (the record's BBM sink)"; return 1; }
 }
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
