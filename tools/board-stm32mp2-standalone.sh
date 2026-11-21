@@ -6,7 +6,7 @@
 # own microSD (docs/notes/stm32mp257f-dk-standalone.md, section 7: the contract
 # this runner follows; docs/standalone-boot.md for the Verdins' shape).
 #
-#   tools/board-stm32mp2-standalone.sh [--dry-run] status | install | uninstall
+#   tools/board-stm32mp2-standalone.sh [--dry-run] status | printenv | install | uninstall
 #   tools/board-stm32mp2-standalone.sh [--dry-run] default <image> <1-9|forever>
 #   tools/board-stm32mp2-standalone.sh [--dry-run] nodefault
 #   tools/board-stm32mp2-standalone.sh guard path <path> | guard name <name>
@@ -37,37 +37,45 @@
 #              LIFETIME_S=0 product build under a count (its line 'no
 #              lifetime of its own (product build)': it never resets, so the
 #              count would never run out). Then, read-only: /boot on the SD
-#              card, the staged script equal to this commit's build,
-#              tools/mp2s_guard.py --for standalone, tools/mp2s_fwenv_check.py
-#              (sent to the board's python3 on stdin), both environment
-#              copies' CRCs and fw_printenv equal to the partition read,
+#              card, the staged script equal to this commit's build, the
+#              card's u-boot-env partition (found in lsblk of that card, never
+#              by /dev/disk/by-partlabel, which may name the eMMC's) read
+#              with head and both copies' CRCs checked on the host,
+#              tools/mp2s_guard.py --for standalone on its active copy,
 #              tools/fwu_metadata.py (the booted bank accepted), the free
 #              space. Then tools/mp2s_env_plan.py (its write guard) and
-#              tools/mp2s_env_capacity.py compute and size the edit; the
-#              staged default.bin; one fw_setenv -s - of mp2s_ver, mp2s_left,
-#              mp2s_prefixes and boot_prefixes over the SD's u-boot-env;
-#              the read-back (fw_printenv and the partition, through
-#              mp2s_env_plan.py verify); on a mismatch the values before it
-#              go back at once. Reboots nothing.
+#              tools/mp2s_env_capacity.py compute and size the edit, which
+#              is checked again (plan_check: only the four names, only one
+#              copy's bytes); the staged default.bin; one dd of that one
+#              copy (ENV_SIZE bytes, the inactive copy with flags + 1, as
+#              U-Boot's saveenv writes it) over the SD's u-boot-env; the
+#              read-back of the partition from the card, byte for byte and
+#              through mp2s_env_plan.py verify; on a mismatch the copy's
+#              bytes from before go back at once. Reboots nothing.
 #   nodefault  the same reads; mp2s_env_plan.py nodefault against the default
-#              record; one fw_setenv that puts boot_prefixes back and deletes
-#              mp2s_*, read back; removes default.bin; compares /boot with the
-#              install record when the manifest tool is there. Safe to repeat.
+#              record; one dd of the copy that puts boot_prefixes back and
+#              deletes mp2s_*, read back; removes default.bin; compares /boot
+#              with the install record when the manifest tool is there. Safe
+#              to repeat.
 #   uninstall  nodefault, then removes the stage directory, then requires
 #              'mp2s-boot: same' between /boot and the install record.
+#
+# fw_printenv and fw_setenv are never used: the DK's Linux has no
+# /etc/fw_env.config, so both stop with "Cannot initialize environment"
+# (#1281). The environment is edited on the host by tools/uboot_env.py.
 #
 # Everything sent to the board is built from fixed strings and from names that
 # passed name_ok (^[A-Za-z0-9][A-Za-z0-9._-]*$) or a device regex: the remote
 # command line is a root shell's, so a name is never trusted, and every path in
 # it goes through printf %q as well. Environment values never go on a command
-# line: fw_setenv reads them on stdin. "nodefault" and "uninstall" never take a
-# name from a listing: the staged image's name is the fixed default.bin (the
-# contract has no file-name variable in the environment).
+# line: the copy's bytes go to dd on stdin. "nodefault" and "uninstall" never
+# take a name from a listing: the staged image's name is the fixed default.bin
+# (the contract has no file-name variable in the environment).
 #
 # What may be written: files under /boot/yakogl/standalone on the card's bootfs
-# (guard_path) and, through fw_setenv, the variables mp2s_ver, mp2s_left,
+# (guard_path) and, by one dd of one copy, the variables mp2s_ver, mp2s_left,
 # mp2s_prefixes and boot_prefixes of the u-boot-env partition of the SD card
-# /boot is on (dev_guard before each write, fwset_guard on every line). Never
+# /boot is on (dev_guard before each write, plan_check on the image). Never
 # the eMMC (mmcblk0), never fsbla1, fsbla2, metadata1, metadata2, fip-a, fip-b,
 # vendorfs, rootfs or userfs; the FWU metadata partitions are only read.
 #
@@ -125,7 +133,7 @@ NEVER_LABELS="fsbla1 fsbla2 metadata1 metadata2 fip-a fip-b vendorfs rootfs user
 EMMC_RE='^/dev/mmcblk0(p[0-9]+)?$'
 PART_RE='^/dev/mmcblk[0-9]+p[0-9]+$'
 OUR_FILES="boot.scr.uimg boot.scr.uimg.sha256 boot-sha256.txt u-boot-env.bin default.bin"
-ENV_NAMES="mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"   # all fw_setenv may name
+ENV_NAMES="mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"   # all a write may change
 ENV_SIZE=0x2000
 SU=${MP2_SUDO-sudo -n }
 PY=(python3 -I)
@@ -187,16 +195,24 @@ read_guard() {
     { [[ $dev =~ $PART_RE ]] && ! [[ $dev =~ $EMMC_RE ]] && [ "${dev%p*}" = "$CARD" ]; } || die "REFUSED: '$dev' is not a partition of the SD card"
     [ "$(awk -v d="$dev" '$1 == d { print $2 }' <<<"$TABLE" | head -1)" = "$want" ] || die "REFUSED: $dev is not labelled $want"
 }
-# fwset_guard FILE: every line of a fw_setenv script names one of ENV_NAMES
-fwset_guard() {
-    local l n ok
-    [ -s "$1" ] || die "REFUSED: an empty environment write"
-    while IFS= read -r l || [ -n "$l" ]; do
-        n=${l%%=*}
-        ok=0
-        for v in $ENV_NAMES; do [ "$n" = "$v" ] && [ "$l" != "$n" ] && ok=1; done
-        [ "$ok" = 1 ] || die "REFUSED: the environment write would name '$n': only $ENV_NAMES are written"
-    done <"$1"
+# plan_check VERB: before any write, the planned image $T/part-planned.bin
+# differs from the partition read ($T/part.bin) only in the names of
+# ENV_NAMES (mp2s_env_plan.py verify, its write guard), every other
+# variable's value is the same (uboot_env.py print of both), and only one
+# copy's bytes change (changed_copy sets WOFF)
+plan_check() {
+    local verb=$1 out
+    if [ "$DRY" = 1 ]; then
+        host "${PY[@]}" "$HERE/mp2s_env_plan.py" verify part.bin part-planned.bin --expect "$verb"
+        WOFF=$((ENVLAY[4]))
+        return 0
+    fi
+    out=$("${PY[@]}" "$HERE/mp2s_env_plan.py" verify "$T/part.bin" "$T/part-planned.bin" --expect "$verb" "${ENVLAY[@]}" 2>&1) || die "REFUSED: mp2s_env_plan.py verify of the planned write: $out: nothing was changed"
+    local re
+    re="^(${ENV_NAMES// /|})="
+    cmp -s <(grep -Ev "$re" "$T/env-before.txt") <("${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$T/part-planned.bin" | grep -Ev "$re") ||
+        die "REFUSED: the planned write would change a variable other than $ENV_NAMES: nothing was changed"
+    changed_copy "$T/part.bin" "$T/part-planned.bin"
 }
 
 # ---- the board -----------------------------------------------------------------------
@@ -321,35 +337,38 @@ build_script() {
     note "script: boot.scr.uimg sha256 $SCRSUM (driver/tools/mp2-standalone/build.sh, checked by mp2s_uimg_check.py)"
 }
 
-# read_env: fw_printenv ($T/env-before.txt) and the partition ($T/part.bin),
-# both CRCs valid, and fw_printenv reads the partition read here (ENVLAY)
+# part_read OUT: the card's u-boot-env partition, read from the card (the
+# page cache dropped first), into the host file OUT. ENVDEV comes from lsblk
+# of the SD card /boot is on (board_facts), never from /dev/disk/by-partlabel,
+# which on the DK may name the eMMC's partition of the same label.
+part_read() {
+    read_guard "$ENVDEV" u-boot-env
+    bfile "$1" "${SU}sh -c 'echo 3 > /proc/sys/vm/drop_caches' && ${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")"
+}
+# read_env: the partition ($T/part.bin), both CRCs valid, and the active
+# copy's variables in the NAME=VALUE form of fw_printenv ($T/env-before.txt).
+# The DK's Linux has no /etc/fw_env.config, so fw_printenv and fw_setenv
+# cannot be used there ("Cannot initialize environment", #1281): the runner
+# reads and writes the partition itself (ENVLAY: copy 1 at the partition's
+# last ENV_SIZE bytes, copy 2 before it; 0x7e000 and 0x7c000 on the card).
 read_env() {
     local sz out
-    bfile "$T/env-before.txt" "${SU}fw_printenv" || die "fw_printenv failed on the board"
-    bfile "$T/part.bin" "${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")" || die "cannot read $ENVDEV"
+    part_read "$T/part.bin" || die "cannot read $ENVDEV"
     if [ "$DRY" = 1 ]; then
         ENVLAY=(--redundant --size "$ENV_SIZE" --offset 0x7e000 --offset2 0x7c000)
         host "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" check part.bin
+        host "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print part.bin
         return 0
     fi
     sz=$(stat -c %s "$T/part.bin")
     { [ "$sz" -ge $((2 * ENV_SIZE)) ] && [ "$sz" -lt 1048576 ]; } || die "REFUSED: $ENVDEV is $sz bytes: not the u-boot-env partition this runner knows"
     ENVLAY=(--redundant --size "$ENV_SIZE" --offset $((sz - ENV_SIZE)) --offset2 $((sz - 2 * ENV_SIZE)))
     out=$("${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" check "$T/part.bin" 2>&1) || die "REFUSED: an environment copy's CRC fails on $ENVDEV: $out"
-    "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$T/part.bin" | sort >"$T/part.txt" || die "cannot print $ENVDEV's environment"
-    sort "$T/env-before.txt" | cmp -s - "$T/part.txt" || die "REFUSED: fw_printenv does not show the environment of $ENVDEV: fw_env.config does not point at the card's u-boot-env"
+    note "$ENVDEV: $(grep '^active' <<<"$out")"
+    "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$T/part.bin" >"$T/env-before.txt" || die "cannot print $ENVDEV's environment"
 }
-# env_val NAME FILE: NAME's value in a fw_printenv text
+# env_val NAME FILE: NAME's value in a NAME=VALUE text
 env_val() { sed -n "s/^$1=//p" "$2" | head -1; }
-
-# fwenv_check: fw_env.config reaches only the card's u-boot-env (the tool
-# goes to the board's python3 on stdin; nothing is copied there)
-fwenv_check() {
-    local out
-    if [ "$DRY" = 1 ]; then echo "DRY board\$ python3 -I - --root /   # < tools/mp2s_fwenv_check.py"; return 0; fi
-    out=$(b "python3 -I - --root /" <"$HERE/mp2s_fwenv_check.py" 2>&1) || die "REFUSED: tools/mp2s_fwenv_check.py on the board: $out"
-    note "$out"
-}
 # fwu_check: ST's firmware update is not in its trial state (both metadata
 # copies read, never written)
 fwu_check() {
@@ -368,8 +387,11 @@ fwu_check() {
 # boot_listing OUT: the sha256 listing of every file under /boot, taken on the
 # board, made a manifest on the host
 boot_listing() {
-    bfile "$T/listing.txt" "${SU}sh -c 'cd /boot && find . -type f -print0 | sort -z | xargs -0 sha256sum'" || die "cannot list /boot"
+    # find -exec, not xargs -0: the DK's xargs is BusyBox's, which has no -0,
+    # and the pipeline then lists nothing with exit 0
+    bfile "$T/listing.txt" "${SU}sh -c 'cd /boot && find . -type f -exec sha256sum -- {} + | LC_ALL=C sort -k 2'" || die "cannot list /boot"
     if [ "$DRY" = 1 ]; then host "${PY[@]}" "$MANIFEST" record --from listing.txt -o "${1##*/}"; return 0; fi
+    grep -q '^[0-9a-f]\{64\}  \./boot\.scr\.uimg$' "$T/listing.txt" || die "REFUSED: the /boot listing is empty or has no ./boot.scr.uimg: the listing command failed on the board"
     "${PY[@]}" "$MANIFEST" record --from "$T/listing.txt" -o "$1" || die "mp2s_boot_manifest.py could not read the /boot listing"
 }
 manifest_there() {
@@ -405,37 +427,60 @@ stage_file() {
     fi
 }
 
-# env_write SCRIPT WHAT: the one fw_setenv over the SD card's u-boot-env
-env_write() {
-    fwset_guard "$1"
-    dev_guard "$ENVDEV" u-boot-env "$TABLE" "$CARD"
-    change_in "$1" "$2" "${SU}fw_setenv -s -"
+# changed_copy BEFORE PLANNED: sets WOFF to the offset of the one copy in
+# which PLANNED differs from BEFORE (uboot_env.py writes the inactive copy
+# only). Refused unless the images have the same size, differ, and every
+# differing byte lies inside copy 1 or inside copy 2, not both.
+changed_copy() {
+    local a=$1 p=$2 o1 o2 sz lo hi
+    sz=$((ENVLAY[2]))
+    o1=$((ENVLAY[4]))
+    o2=$((ENVLAY[6]))
+    [ "$(stat -c %s "$a")" = "$(stat -c %s "$p")" ] || die "REFUSED: the planned environment image is not the partition's size: nothing was changed"
+    read -r lo hi < <(cmp -l -- "$a" "$p" | awk 'NR == 1 { lo = $1 } { hi = $1 } END { if (NR) print lo - 1, hi - 1 }')
+    [ -n "${lo:-}" ] || die "REFUSED: the planned environment write changes nothing: nothing was changed"
+    if [ "$lo" -ge "$o1" ] && [ "$hi" -lt $((o1 + sz)) ]; then WOFF=$o1
+    elif [ "$lo" -ge "$o2" ] && [ "$hi" -lt $((o2 + sz)) ]; then WOFF=$o2
+    else die "REFUSED: the planned environment write reaches beyond one copy (bytes $lo..$hi): nothing was changed"; fi
 }
-# env_readback EXPECTED_IMAGE VERB: fw_printenv and the partition after the
-# write equal what mp2s_env_plan.py computed; else the values before it go
-# back (rc 4), or NEEDS A PERSON (rc 5)
-env_readback() {
-    local want=$1 verb=$2 v out
-    bfile "$T/env-after.txt" "${SU}fw_printenv" || true
-    bfile "$T/part-after.bin" "${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")" || true
-    if [ "$DRY" = 1 ]; then host "${PY[@]}" "$HERE/mp2s_env_plan.py" verify part.bin part-after.bin --expect "$verb"; return 0; fi
-    "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$want" | sort >"$T/want.txt"
-    if sort "$T/env-after.txt" | cmp -s - "$T/want.txt" &&
-        out=$("${PY[@]}" "$HERE/mp2s_env_plan.py" verify "$T/part.bin" "$T/part-after.bin" --expect "$verb" "${ENVLAY[@]}" 2>&1); then
-        note "read back: $out"
+# env_write SRC WHAT: the one environment write: the copy at WOFF of the host
+# image SRC goes to the same ENV_SIZE bytes of the SD card's u-boot-env with
+# dd (conv=notrunc,fsync); no other byte of the partition is written
+env_write() {
+    local src=$1 what=$2 sz seek
+    sz=$((ENVLAY[2]))
+    { [ "$WOFF" = $((ENVLAY[4])) ] || [ "$WOFF" = $((ENVLAY[6])) ]; } || die "REFUSED: $WOFF is not the offset of an environment copy"
+    [ $((WOFF % sz)) = 0 ] || die "REFUSED: copy offset $WOFF is not a multiple of $sz"
+    seek=$((WOFF / sz))
+    dev_guard "$ENVDEV" u-boot-env "$TABLE" "$CARD"
+    if [ "$DRY" = 1 ]; then
+        echo "DRY board\$ ${SU}dd of=$ENVDEV bs=$sz seek=$seek count=1 iflag=fullblock conv=notrunc,fsync status=none   # < the copy at $(printf 0x%x "$WOFF") of ${src##*/}: $what"
         return 0
     fi
-    note "the environment write did not read back as planned: the values before it go back now"
-    : >"$T/restore.txt"
-    for v in $ENV_NAMES; do
-        if grep -q "^$v=" "$T/env-before.txt"; then grep -m1 "^$v=" "$T/env-before.txt"; else echo "$v="; fi
-    done >>"$T/restore.txt"
-    env_write "$T/restore.txt" "the values before the write"
-    bfile "$T/env-restored.txt" "${SU}fw_printenv" || true
-    if sort "$T/env-restored.txt" | cmp -s - <(sort "$T/env-before.txt"); then
+    dd if="$src" of="$T/copy.bin" bs="$sz" skip="$seek" count=1 status=none || die "cannot cut the copy out of $src: nothing was changed"
+    [ "$(stat -c %s "$T/copy.bin")" = "$sz" ] || die "the copy cut out of $src is not $sz bytes: nothing was changed"
+    change_in "$T/copy.bin" "$what" "${SU}dd of=$(printf '%q' "$ENVDEV") bs=$sz seek=$seek count=1 iflag=fullblock conv=notrunc,fsync status=none"
+}
+# env_readback PLANNED VERB: the partition read back from the card equals
+# PLANNED byte for byte and mp2s_env_plan.py verify accepts the change; else
+# the copy's bytes from before go back (rc 4), or NEEDS A PERSON (rc 5)
+env_readback() {
+    local want=$1 verb=$2 out
+    part_read "$T/part-after.bin" || true
+    if [ "$DRY" = 1 ]; then host "${PY[@]}" "$HERE/mp2s_env_plan.py" verify part.bin part-after.bin --expect "$verb"; return 0; fi
+    if cmp -s -- "$want" "$T/part-after.bin" &&
+        out=$("${PY[@]}" "$HERE/mp2s_env_plan.py" verify "$T/part.bin" "$T/part-after.bin" --expect "$verb" "${ENVLAY[@]}" 2>&1); then
+        "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$T/part-after.bin" >"$T/env-after.txt"
+        note "read back from $ENVDEV: $out"
+        return 0
+    fi
+    note "the environment write did not read back as planned: the copy's bytes from before go back now"
+    env_write "$T/part.bin" "the copy as it was before the write"
+    part_read "$T/part-restored.bin" || true
+    if cmp -s -- "$T/part.bin" "$T/part-restored.bin"; then
         die "$verb: the environment did not read back; it is as it was before, nothing of it is left changed" 4
     fi
-    echo "$TAG: NEEDS A PERSON: the environment is neither as planned nor as before. Before it was:" >&2
+    echo "$TAG: NEEDS A PERSON: the environment is neither as planned nor as before. The partition before is in $STATE/u-boot-env.bin (install) and was:" >&2
     grep -E '^(mp2s_ver|mp2s_left|mp2s_prefixes|boot_prefixes)=' "$T/env-before.txt" >&2
     exit 5
 }
@@ -490,8 +535,23 @@ undo_default() {
 cmd_status() {
     [ $# -eq 0 ] || usage
     need_board
+    mktmp
     b "ls -l -- $(printf '%q' "$STAGE_DIR")"
-    b "${SU}fw_printenv mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"
+    board_facts
+    read_env
+    if [ "$DRY" = 1 ]; then return 0; fi
+    grep -E '^(mp2s_ver|mp2s_left|mp2s_prefixes|boot_prefixes)=' "$T/env-before.txt"
+}
+# printenv: read-only, the active copy of the SD card's u-boot-env in the
+# NAME=VALUE form of fw_printenv, on stdout and nothing else (the session's
+# before/after record; fw_printenv cannot read it on the DK)
+cmd_printenv() {
+    [ $# -eq 0 ] || usage
+    need_board
+    mktmp
+    board_facts >&2
+    read_env >&2
+    [ "$DRY" = 1 ] || cat -- "$T/env-before.txt"
 }
 cmd_install() {
     [ $# -eq 0 ] || usage
@@ -534,6 +594,9 @@ do_nodefault() {
     rec="$T/default-prefixes.txt"
     if [ "$DRY" = 0 ] && ! grep -q '^mp2s_' "$T/env-before.txt" && [[ $(env_val boot_prefixes "$T/env-before.txt") != /yakogl/standalone/* ]]; then
         note "no default is set in the environment: no environment write"
+        # the count ran out on the board (the script restored boot_prefixes):
+        # the host's default record is stale now
+        rm -f -- "$STATE/default-prefixes.txt"
     else
         if [ "$DRY" = 1 ]; then
             echo "DRY host\$ the default record: state/default-prefixes.txt, else boot_prefixes of the pristine u-boot-env.bin"
@@ -547,17 +610,9 @@ do_nodefault() {
             note "no default record on this host: boot_prefixes of the pristine u-boot-env.bin is the record"
         fi
         host "${PY[@]}" "$HERE/mp2s_env_plan.py" nodefault "$T/part.bin" "$T/part-planned.bin" --record "$rec" "${ENVLAY[@]}" | sed "s/^/  /" || die "REFUSED by mp2s_env_plan.py nodefault (above): nothing was changed"
-        if [ "$DRY" = 1 ]; then
-            printf '%s\n' 'boot_prefixes=<the record>' mp2s_ver= mp2s_left= mp2s_prefixes= >"$T/nodefault.txt"
-        else
-            : >"$T/nodefault.txt"
-            [[ $(env_val boot_prefixes "$T/env-before.txt") == /yakogl/standalone/* ]] && printf 'boot_prefixes=%s\n' "$(cat "$rec")" >>"$T/nodefault.txt"
-            for v in mp2s_ver mp2s_left mp2s_prefixes; do
-                grep -q "^$v=" "$T/env-before.txt" && echo "$v=" >>"$T/nodefault.txt"
-            done
-        fi
+        plan_check nodefault
         CUT="the environment write may be cut short: tools/board-stm32mp2-standalone.sh nodefault again"
-        env_write "$T/nodefault.txt" "boot_prefixes back to the default record; deletes mp2s_ver, mp2s_left and mp2s_prefixes"
+        env_write "$T/part-planned.bin" "boot_prefixes back to the default record; deletes mp2s_ver, mp2s_left and mp2s_prefixes"
         env_readback "$T/part-planned.bin" nodefault
         [ "$DRY" = 1 ] || rm -f -- "$STATE/default-prefixes.txt"
     fi
@@ -628,7 +683,6 @@ cmd_default() {
     else
         host "${PY[@]}" "$HERE/mp2s_guard.py" --for standalone --printenv env-before.txt
     fi
-    fwenv_check
     fwu_check
     bget free 1000000000 "df -B1 --output=avail /boot | tail -n 1" || die "cannot read bootfs's free space"
     free=${free//[[:space:]]/}
@@ -643,7 +697,7 @@ cmd_default() {
     fi
     host "${PY[@]}" "$HERE/mp2s_env_capacity.py" --image "$T/part.bin" --size "${ENVLAY[2]}" --offset "${ENVLAY[4]}" --offset2 "${ENVLAY[6]}" \
         mp2s_ver=1 "mp2s_left=$n" "mp2s_prefixes=$cur" "boot_prefixes=/yakogl/standalone/ $cur" | sed "s/^/  /" || die "REFUSED by mp2s_env_capacity.py: the edit does not fit both environment copies"
-    printf '%s\n' mp2s_ver=1 "mp2s_left=$n" "mp2s_prefixes=$cur" "boot_prefixes=/yakogl/standalone/ $cur" >"$T/default.txt"
+    plan_check default
     if [ "$DRY" = 0 ]; then
         mkdir -p -- "$STATE" && cp -- "$T/default-prefixes.txt" "$STATE/default-prefixes.txt" || die "cannot keep the default record in $STATE: nothing was changed"
         note "the default record: boot_prefixes=$cur (kept in $STATE/default-prefixes.txt)"
@@ -651,7 +705,7 @@ cmd_default() {
     CUT="default.bin may be staged, the environment is not written: harmless; tools/board-stm32mp2-standalone.sh nodefault removes it"
     stage_file "$img" "$STAGED" default
     CUT="the environment write may be done: tools/board-stm32mp2-standalone.sh nodefault (from Linux), or, without Linux, the count runs out by itself"
-    env_write "$T/default.txt" "$(paste -sd ' ' "$T/default.txt")"
+    env_write "$T/part-planned.bin" "mp2s_ver=1 mp2s_left=$n mp2s_prefixes=$cur boot_prefixes=/yakogl/standalone/ $cur"
     env_readback "$T/part-planned.bin" default
     if [ "$n" = forever ]; then note "default set forever; nothing was rebooted."; else note "default set for $n boots; nothing was rebooted."; fi
 }
@@ -666,6 +720,7 @@ cmd_guard() {
 
 case "$VERB" in
 status) cmd_status "$@" ;;
+printenv) cmd_printenv "$@" ;;
 install) cmd_install "$@" ;;
 uninstall) cmd_uninstall "$@" ;;
 default) cmd_default "$@" ;;

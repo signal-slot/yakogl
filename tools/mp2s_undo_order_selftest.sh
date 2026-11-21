@@ -28,7 +28,11 @@ r nodefault >"$tmp/nodefault.txt"
 r default "$tmp/img" 2 >"$tmp/default2.txt"
 BOARD_PERSON_PRESENT=1 r default "$tmp/img" forever >"$tmp/forever.txt"
 for v in install uninstall nodefault default2 forever; do expect "runner $v" 0 "$tmp/$v.txt"; done
-grep -q 'fw_setenv' "$tmp/default2.txt" && grep -q 'tee' "$tmp/default2.txt" || bad "default2 has no change line"
+grep -q 'dd of=' "$tmp/default2.txt" && grep -q 'tee' "$tmp/default2.txt" || bad "default2 has no change line"
+python3 -I "$tool" "$tmp/default2.txt" | grep -q 'ok: 2 change(s)' && ok "default2: the dd of the environment counts as a change" || bad "default2: the dd of the environment is not counted"
+# the environment write ahead of its undo
+{ grep 'dd of=' "$tmp/default2.txt"; cat "$tmp/default2.txt"; } >"$tmp/early-dd.txt"
+expect "the dd before its undo" 1 "$tmp/early-dd.txt"
 
 # the change lines moved ahead of their undo
 for v in install uninstall nodefault default2; do
@@ -45,7 +49,7 @@ expect "default without undo" 1 "$tmp/noundo.txt"
 { cat "$tmp/install.txt"; echo 'DRY board$ sudo -n mv -- /boot/a /boot/b'; } >"$tmp/unknown.txt"
 expect "unknown change" 1 "$tmp/unknown.txt"
 # reads alone pass
-printf 'DRY board$ sudo -n fw_printenv mp2s_left\nDRY board$ ls -l -- /boot/yakogl/standalone\n' >"$tmp/status.txt"
+printf 'DRY board$ sudo -n fw_printenv mp2s_left\nDRY board$ ls -l -- /boot/yakogl/standalone\nDRY board$ sh -c '"'"'echo 3 > /proc/sys/vm/drop_caches'"'"' && head -c 1048576 -- /dev/mmcblk1p7   # > host:part.bin\n' >"$tmp/status.txt"
 expect "reads only" 0 "$tmp/status.txt"
 # an empty transcript is a usage error, not a pass
 : >"$tmp/empty.txt"

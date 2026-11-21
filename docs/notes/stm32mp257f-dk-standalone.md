@@ -2,19 +2,37 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # STM32MP257F-DK: standalone boot from its own storage (design, 2026-11-13)
 
-Status: **design, written on the host from ST's source. Nothing here has run on
-the board.** Facts only the board can give are marked `TODO(board-env-read)`
-(a read-only look at the board) or `TODO(board-run)` (the first run records
-them). The "Board run" section at the end is empty until then.
+Status: **design, written on the host from ST's source, and run once on the
+board on 2026-11-21: `default <mp2_hello> 2` end to end** (section "Board
+run" at the end). The facts the board gave replace the old
+`TODO(board-env-read)` and `TODO(board-run)` placeholders, each marked
+"board, 2026-11-21" (the table "What the board answered" lists them).
 
 Merged since the design: the product script and its selftest
 (`driver/tools/mp2-standalone/`), the QEMU harness, ST's default environment
-as a fixture, the runner's safety core (`tools/board-stm32mp2-standalone.sh`:
-its payload is **not wired**, `PAYLOAD_READY=0`, so `install`, `default` and
-`nodefault` refuse with exit 3 after their checks), the read-only helpers
-(`tools/mp2s_*`, `tools/efi_varfile.py`, `tools/uboot_env.py`), the
-`mp2_wdt` probe and the `mp2_product` image (their READMEs). Tools still in
-review appear as `(pending)` placeholders.
+as a fixture, the runner (`tools/board-stm32mp2-standalone.sh`, payload wired,
+`PAYLOAD_READY=1`), the read-only helpers (`tools/mp2s_*`,
+`tools/efi_varfile.py`, `tools/uboot_env.py`, `tools/fwu_metadata.py`), the
+`mp2_wdt` probe and the `mp2_product` image (their READMEs).
+
+**The environment from Linux (board, 2026-11-21).** The DK's OpenSTLinux has
+no `/etc/fw_env.config`, so `fw_printenv` stops with "Cannot initialize
+environment" and `fw_setenv` (the same program) cannot write. No tool of this
+design calls either. The runner reads the `u-boot-env` partition of the SD
+card `/boot` is on, found in `lsblk -rno PATH,PARTLABEL -- <the SD disk>`,
+with `head -c`. It never uses `/dev/disk/by-partlabel/u-boot-env`, because
+the eMMC carries a partition of the same label. `tools/uboot_env.py` reads
+the image on the host: copy 1 at the partition's last 0x2000 bytes (0x7e000),
+copy 2 before it (0x7c000), and the active copy is the one with the higher
+flags. On the board copy 2 was active (flags 0x05) before the run. The edit
+is made on the host (`tools/mp2s_env_plan.py`), and only the inactive copy
+changes, with flags + 1, as `saveenv` does. That one 8 KiB copy goes back
+with `dd of=<partition> bs=8192 seek=<copy> count=1 iflag=fullblock
+conv=notrunc,fsync`. The partition is then read back from the card, with the
+page cache dropped, and compared byte for byte. `board-stm32mp2-standalone.sh
+printenv` prints the active copy in `fw_printenv`'s `NAME=VALUE` form for the
+session's before and after records. `tools/mp2s_comeback.sh` reads the same
+partition in its one ssh session.
 
 Goal (plan #362, ROADMAP stage 5, issues #7 and #1281): the stage-5 criterion
 "a standalone boot from its own storage" (`docs/standalone-boot.md`) on the
@@ -102,7 +120,10 @@ anything:
   booted SDMMC, `ST/arch/arm/mach-stm32mp/stm32mp2/cpu.c:208-221`) is never
   needed. ST's stock script calls the card `mmc0`
   (`meta-st/recipes-bsp/u-boot/stm32mp-extlinux/boot.scr.cmd:37-39`).
-  `TODO(board-env-read)`: the live `boot_instance`.
+  Board, 2026-11-21: `boot_instance=0`, and U-Boot prints `Boot over mmc0!`
+  and `Scanning mmc 0:8...`, so bootfs is U-Boot's `mmc 0:8`. In Linux the
+  same card is `mmcblk2` (type `SD`), the eMMC is `mmcblk0` (type `MMC`), and
+  `/boot` is `mmcblk2p8`.
 
 **How Linux stages the file.** The method is the one the Verdin runner and
 `board-stm32mp2.sh` use:
@@ -153,9 +174,14 @@ files on the card are in `mmc0_extlinux/` and `mmc1_extlinux/`, not
 
 From then on every boot finds `/mmc0_extlinux/<board>_extlinux.conf` first.
 The root `/boot.scr.uimg` is not on the path again unless the environment is
-reset to the defaults. `TODO(board-env-read)`: the live `boot_prefixes`,
-`boot_syslinux_conf`, `boot_scripts`, `boot_extlinux`, `boot_targets` and the
-listing of `/boot`.
+reset to the defaults. Board, 2026-11-21: `boot_prefixes=/mmc0_`,
+`boot_syslinux_conf=extlinux/extlinux.conf`, `boot_scripts=boot.scr.uimg
+boot.scr`, `boot_targets=mmc0`, and `boot_extlinux` begins with `run
+scan_coprofw;run scan_overlays;`. `bootcmd=run bootcmd_stm32mp`,
+`altbootcmd=run bootcmd_stm32mp`, and there is no `bootcount`. `/boot` holds
+25 files: `Image.gz`, ST's root `boot.scr.uimg`, `mmc0_extlinux/`,
+`mmc1_extlinux/`, the device trees and overlays, the splash images and
+`st-image-resize-initrd`. The loop found `/mmc0_extlinux/extlinux.conf`.
 
 **Our route.** `default` puts one entry **in front of** the saved
 `boot_prefixes`:
@@ -181,9 +207,19 @@ it (`ST/common/cli_hush.c:3211-3228`, `:3279`), and the loop goes on. Hush
 builds the `for` list once, at the loop's first pass
 (`cli_hush.c:1824-1835`). So when our script changes `boot_prefixes` and
 exits, the loop still goes on to `/mmc0_`, and ST's extlinux boots Linux on
-that same boot. `TODO(board-run)`: the console shows our `exit`, `SCRIPT
-FAILED: continuing...` and then ST's extlinux on the same boot (or in the
-QEMU run of the `qemu-run` item first).
+that same boot. Board, 2026-11-21, on the third boot of `default
+<image> 2`:
+
+```
+## Executing script at 90100000
+mp2s: undo: setenv mp2s_left 0; saveenv; boot   (or a PC: delete yakogl/standalone/boot.scr.uimg)
+mp2s: default used up, booting Linux
+Saving Environment to MMC... Writing to redundant MMC(0)... OK
+SCRIPT FAILED: continuing...
+Found /mmc0_extlinux/extlinux.conf
+```
+
+ST's extlinux then booted OpenSTLinux on that same boot.
 
 What makes this the right route:
 
@@ -342,10 +378,13 @@ including the loop's working variables at the moment of the save
 script saves at the same point of the loop (`boot.scr.cmd:67`), so the stored
 environment already holds these names since the board's first boot. The loop
 sets each of them before it uses it (`config_distro_bootcmd.h:28-43`,
-`:533`, `:541-549`, `:519`). `TODO(board-run)`: the runner's before/after
-`fw_printenv` diff. The expected result is that `boot_prefixes` and every
-`bootcmd*` are back as recorded, there are no `mp2s_*`, and the only other
-differences are among the names in this paragraph.
+`:533`, `:541-549`, `:519`). Board, 2026-11-21: the diff of the
+environment before `default` against the one after the count ran out
+(`tools/mp2s_env_diff.py`) reads `mp2s-env: restored`. `boot_prefixes` and
+every `bootcmd*` are as before, and there are no `mp2s_*`. The only other
+differences are `filesize` and `api_address`. `api_address` is not a loop
+variable but U-Boot's API signature address (`CONFIG_API`), set at every
+boot and saved with the rest.
 
 **`env_check`.** `bootcmd_stm32mp` runs `env_check` before the loop
 (`stm32mp25_st_common.h:31`). It is `if env info -p -d -q; then env save; fi`
@@ -383,8 +422,8 @@ calls the helpers named (all read-only):
 - **No other route is armed.** `tools/mp2s_guard.py --for standalone` exits 3
   while any `yako_*` or `mp2z_*` is in the environment or `boot_prefixes`
   already contains `/yakogl/standalone/`, and 2 when the environment cannot be
-  read. A second `default` is refused by the runner's own `fw_printenv
-  mp2s_left` check, because the guard allows `mp2s_*`.
+  read. A second `default` is refused by the runner's own `mp2s_left`
+  check of the partition it read, because the guard allows `mp2s_*`.
 - **Both environment copies' CRCs check** (`tools/uboot_env.py check`) and
   `boot_prefixes` is present in the stored environment. A stored environment
   holds all variables, defaults included (`env_export`), so it is always
@@ -402,8 +441,8 @@ calls the helpers named (all read-only):
   it reverts ST's active bank (`ST/lib/fwu_updates/fwu.c:74-95`, `:740-742`).
   N image boots that never reach Linux would spend ST's trial. The runner
   reads the metadata partition read-only and refuses unless the booted bank
-  is accepted (0xFC): `tools/fwu_metadata.py` (pending, item `fwu-meta`).
-  `TODO(board-env-read)`: the metadata's `bank_state` on the board. The trial
+  is accepted (0xFC): `tools/fwu_metadata.py check`.
+  Board, 2026-11-21: `fwu: bank 0 accepted`. The trial
   counter is the u16 EFI variable `TrialStateCtr`
   (GUID 8be4df61-93ca-11d2-aa0d-00e098032b8c, the EFI global variable GUID;
   `ST/lib/fwu_updates/fwu.c:42-45`), present only while a trial runs. It lives in
@@ -412,8 +451,10 @@ calls the helpers named (all read-only):
   reads a copy of that file read-only and prints `fwu-trial: counter <n>` or
   `fwu-trial: absent` (exit 0; 2 a bad file; 64 usage; selftest:
   `tools/testdata/efi_varfile_selftest.sh`). A counter that is present
-  refuses `default`. Whether the file is on bootfs is
-  `TODO(board-env-read)`, and the `/boot` sha256 comparison would show it.
+  refuses `default`. Board, 2026-11-21: there is no `ubootefi.var` on bootfs
+  (`find /boot -name ubootefi.var` finds nothing), and U-Boot prints `No EFI
+  system partition` and `Failed to persist EFI variables`, so no trial
+  counter can persist across boots.
 - **Skeleton: the undo lines are printed**, then the staged `default.bin` is
   written (`.part`, then rename) and the single environment write follows.
   With `PAYLOAD_READY=0` the runner stops before the first write with exit 3
@@ -473,8 +514,8 @@ begins with `/yakogl/standalone/ ` and `mp2s_prefixes` is set, it sets
 `boot_prefixes` back to `mp2s_prefixes` and checks that the value equals the
 default record byte for byte. Otherwise it leaves `boot_prefixes` alone,
 because ST's script or ours has already set it. It then deletes `mp2s_*` and
-reads everything back with `fw_printenv`. If the read-back differs, it writes
-the pre-edit environment image back at once. Finally it removes
+reads the partition back from the card. If the read-back differs, it writes
+the copy's pre-edit bytes back at once. Finally it removes
 `default.bin`. It is safe to repeat.
 
 **The stock files, byte for byte.** No step writes, renames or replaces any
@@ -483,7 +524,7 @@ of ST's files under `/boot`: `Image.gz`, the device trees, `boot.scr.uimg`,
 `/boot/yakogl/standalone/`. `status`, `nodefault` and `uninstall` compare the
 sha256 of every file under `/boot` with the install record. The only
 difference may be `yakogl/standalone/`, which is gone after `uninstall`.
-`TODO(board-env-read)`: whether `ubootefi.var` is on bootfs (section 3). If a
+There is no `ubootefi.var` on bootfs (board, 2026-11-21; section 3). If a
 stock file differs, the runner stops with NEEDS A PERSON and prints the list.
 It never "repairs" ST's files. The pristine environment image is a person's
 last resort (written back with `dd` from Linux, or with the card in a PC). The
@@ -638,7 +679,7 @@ These are in the shape of `tools/board.sh`'s Verdin verbs
 | verb | refuses when | writes | prints first (the undo) |
 |---|---|---|---|
 | `install` | a CRC fails, `/boot` is not the SD's bootfs, `yakogl/standalone/` holds anything but our files | the files of the table above except `default.bin`; **no environment write** | `UNDO: tools/board-stm32mp2-standalone.sh uninstall` |
-| `default <image> <N\|forever>` | not installed or script sha256 differs; a default set; `yako_once`/`mp2z_*` present; image check fails (header, window, size, marker); FWU trial state; `forever` without `BOARD_PERSON_PRESENT=1`; N not 1-9 | `default.bin`, then one environment write: `mp2s_ver=1`, `mp2s_left=N\|forever`, `mp2s_prefixes=<live>`, `boot_prefixes=/yakogl/standalone/ <live>`; read back with `fw_printenv`, the pre-edit image back on a mismatch. Reboots nothing | `UNDO, from Linux: ... nodefault`; for N: `UNDO, without Linux: none needed: after N boots the script restores boot_prefixes and boots Linux`; for `forever`: the two person lines of section 5 |
+| `default <image> <N\|forever>` | not installed or script sha256 differs; a default set; `yako_once`/`mp2z_*` present; image check fails (header, window, size, marker); FWU trial state; `forever` without `BOARD_PERSON_PRESENT=1`; N not 1-9 | `default.bin`, then one environment write: `mp2s_ver=1`, `mp2s_left=N\|forever`, `mp2s_prefixes=<live>`, `boot_prefixes=/yakogl/standalone/ <live>`, as one `dd` of the inactive copy; the partition read back byte for byte, the copy's pre-edit bytes back on a mismatch. Reboots nothing | `UNDO, from Linux: ... nodefault`; for N: `UNDO, without Linux: none needed: after N boots the script restores boot_prefixes and boots Linux`; for `forever`: the two person lines of section 5 |
 | `nodefault` | a CRC fails; the live `mp2s_prefixes` differs from the default record | section 5 | `nothing to undo: nodefault only removes` |
 | `uninstall` | a default set (it says: `nodefault` first) | removes `/boot/yakogl/standalone/`, then the `/boot` comparison | `UNDO: tools/board-stm32mp2-standalone.sh install` |
 | `status` | | nothing | |
@@ -651,8 +692,9 @@ needing no `BOARD_HOST`. The environment: `BOARD_HOST`, `BOARD_PERSON_PRESENT`,
 `MP2_NO_WATCHDOG`, `MP2_SUDO`, `MP2_KNOWN_HOSTS`. Other verbs: `guard path
 <path> | name <name>` (the write guard, `ok` or a refusal), `selftest`
 (`tools/board_stm32mp2_standalone_selftest.sh`). `status` lists the stage
-directory and runs `fw_printenv mp2s_ver mp2s_left mp2s_prefixes
-boot_prefixes`. `uninstall` reads `mp2s_left` first.
+directory and prints `mp2s_ver`, `mp2s_left`, `mp2s_prefixes` and
+`boot_prefixes` from the partition. `printenv` prints the active copy. Both
+only read. `uninstall` reads `mp2s_left` first.
 
 The undo lines `default` prints, as the skeleton words them:
 
@@ -702,7 +744,7 @@ are open, and each is reported with its issue text:
 | what fails | what happens |
 |---|---|
 | staging or its read-back | the file is removed; the environment is not touched; no reboot |
-| the runner's environment write or its `fw_printenv` read-back | the pre-edit image goes back at once; no reboot |
+| the runner's environment write or its read-back of the partition | the copy's pre-edit bytes go back at once; no reboot |
 | both environment copies bad at boot | U-Boot uses the defaults and `env_check` saves them; our prefix is gone; ST's root `boot.scr.uimg` restores ST's values and boots Linux |
 | our script missing, corrupt, or the wrong version | `SCRIPT FAILED: continuing...`; the next prefix is ST's; Linux |
 | `saveenv` in the script | nothing is loaded; `exit`; Linux |
@@ -736,14 +778,16 @@ note's section 10:
   - `Power-on reset` or `Brownout reset` means the supply;
   - `IWDG system reset` means the watchdog, which is expected after a hang.
 
-## What the board has to answer (index of the placeholders)
+## What the board answered (the former placeholders)
 
-| marker | what to read or record |
+All answered on 2026-11-21:
+
+| question | answer, and where |
 |---|---|
-| `TODO(board-env-read)` | `fw_printenv boot_prefixes boot_syslinux_conf boot_scripts boot_extlinux boot_targets boot_instance bootcmd`; the listing and sha256 of `/boot` (section 2) |
-| `TODO(board-env-read)` | the FWU metadata's `bank_state` and the booted bank, read-only; whether `ubootefi.var` is on bootfs (section 3) |
-| `TODO(board-run)` | one boot showing `mp2s: ...`, `SCRIPT FAILED: continuing...`, then ST's extlinux on the same boot (section 2) |
-| `TODO(board-run)` | the `fw_printenv` diff before `default` and after the count ran out (section 3) |
+| the live `boot_prefixes`, `boot_syslinux_conf`, `boot_scripts`, `boot_extlinux`, `boot_targets`, `boot_instance`, `bootcmd`; the listing of `/boot` | sections 1 and 2 |
+| the FWU metadata's bank state; whether `ubootefi.var` is on bootfs | bank 0 accepted; no `ubootefi.var` (section 3) |
+| one boot showing `mp2s: ...`, `SCRIPT FAILED: continuing...`, then ST's extlinux on the same boot | the third boot of the run (section 2) |
+| the environment diff before `default` and after the count ran out | `mp2s-env: restored`; only `filesize` and `api_address` differ (section 3) |
 
 ## Board session procedure
 
@@ -762,9 +806,12 @@ IMG=<build dir>/zephyr/zephyr.bin       # mp2_hello, built as its README says
 ssh() { command ssh -o BatchMode=yes -o ConnectTimeout=10 "$BOARD_HOST" "$@"; }
 ```
 
-A line marked `(pending)` is a tool that is not merged yet. Its name is the
-planned one, and until it merges the step is read by eye from the same files.
-**Any non-zero exit before step 4 ends the session with nothing changed.**
+All the tools named here are merged. `tools/mp2s_session.sh IMAGE` runs the
+same steps as one driver. **Any non-zero exit before step 4 ends the session
+with nothing changed.** On the farm the console is served by the lease's
+serial MCP server, which holds the device. A second reader then finds it busy
+(`mp2s_console_watch.py watch` exits 4), and the record is read through the
+MCP server instead (step 3).
 
 ### Step 1: Build, host only
 
@@ -781,7 +828,7 @@ runner is told so on purpose with `MP2_NO_WATCHDOG=1` in step 4.
 ### Step 2: Preflight, read-only on the board
 
 ```
-ssh "${MP2_SUDO-sudo -n }fw_printenv" > "$LOG/env-before.txt"
+tools/board-stm32mp2-standalone.sh printenv > "$LOG/env-before.txt"   # the SD's u-boot-env, read-only
 python3 -I tools/mp2s_guard.py --for standalone --printenv "$LOG/env-before.txt"
 ```
 
@@ -801,18 +848,19 @@ space of bootfs, and ST's firmware-update trial counter:
 ```
 FREE=$(ssh "df -B1 --output=avail /boot | tail -n 1")
 python3 -I tools/mp2s_image_check.py "$IMG" --free-bytes "$FREE"
-python3 -I tools/efi_varfile.py --fwu "$LOG/ubootefi.var"    # must print: fwu-trial: absent
-tools/fwu_metadata.py (pending)                              # the booted bank is accepted
+ssh "find /boot -name ubootefi.var"                          # nothing on the DK: no EFI trial counter
+python3 -I tools/fwu_metadata.py check M1 M2                 # metadata1/2 of the SD (lsblk), read with head: the booted bank is accepted
 python3 -I tools/mp2s_bootfs_check.py --findmnt F --lsblk F --blkid F --disk-type F   # /boot is the microSD's bootfs
-python3 -I tools/mp2s_fwenv_check.py                       # on the DK, or --root <mounted rootfs>: fw_env.config reaches only the microSD
-tools/mp2s_boot_manifest.py record (pending)                 # sha256 of every file under /boot
+ssh "cd /boot && find . -type f -exec sha256sum -- {} + | LC_ALL=C sort -k 2" > "$LOG/boot-before.txt"
+python3 -I tools/mp2s_boot_manifest.py record --from "$LOG/boot-before.txt" -o "$LOG/manifest-before.txt"
 ```
 
-`"$LOG/ubootefi.var"` is a read-only copy of the file; where it lives is
-`TODO(board-env-read)`. `fwu-trial: counter <n>` ends the session, because `default` would
-spend ST's trial. Until the manifest tool merges, the record is
-`ssh "find /boot -type f -print0 | sort -z | xargs -0 sha256sum" > "$LOG/boot-before.txt"`.
-The preflight of `default` itself (section 3) repeats the image, guard and
+If an `ubootefi.var` ever appears, `tools/efi_varfile.py --fwu` on a copy of
+it must print `fwu-trial: absent`: a counter ends the session, because
+`default` would spend ST's trial. The `/boot` listing uses `find -exec`, not
+`find -print0 | sort -z | xargs -0`: the DK's `xargs` is BusyBox's, which has
+no `-0`, and that pipeline lists nothing and still exits 0 (board,
+2026-11-21). The preflight of `default` itself (section 3) repeats the image, guard and
 capacity checks; the session runs them first to see a refusal before anything is
 sent.
 
@@ -824,6 +872,11 @@ python3 -I tools/mp2s_console_watch.py watch "$BOARD_UART" "$LOG/raw.log" "$LOG/
 ```
 
 It only reads: a byte sent at U-Boot's autoboot prompt would stop the default.
+Where the lease's serial MCP server holds the console, take its current
+offset before the reboot and read from there with `serial_expect`
+(`boots left 1`, `boots left 0`, `login:`) and `serial_read`. Write the
+lines into `$LOG/raw.log`, stamp them for `scan`, and never write to the
+console.
 `--boots 2` is the number of **image** boots; the log then has 2+1 boot cycles
 (three BL2 banners), and the tool ends `--linger` s after Linux starts in the
 third. A record is read by BL2's `NOTICE:  BL2` line (one boot cycle each), `boots left <n>`, `*** Booting Zephyr`, `PSCI SYSTEM_RESET at <n> ms` and `Starting kernel ...` / `Linux version`; for `default <image> 2` it wants 3 cycles: the first two with the image and its end, `boots left` 1 and 0, the third with Linux and no image. Exit 0 is the verdict `ok`, 1 another verdict, 4 the console is busy or
@@ -836,9 +889,9 @@ in step 6.
 ```
 tools/board-stm32mp2-standalone.sh install                 # prints "UNDO: ... uninstall" first
 MP2_NO_WATCHDOG=1 tools/board-stm32mp2-standalone.sh --dry-run default "$IMG" 2 | tee "$LOG/dry.txt"
-tools/mp2s_undo_order.py "$LOG/dry.txt" (pending)          # every UNDO line comes before its change
+python3 -I tools/mp2s_undo_order.py "$LOG/dry.txt"         # every UNDO line comes before its change
 MP2_NO_WATCHDOG=1 tools/board-stm32mp2-standalone.sh default "$IMG" 2 | tee "$LOG/default.txt"
-ssh "${MP2_SUDO-sudo -n }fw_printenv mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"
+tools/board-stm32mp2-standalone.sh status                   # the four names, from the partition
 ```
 
 The undo lines (section 7) are read before the change. After `default`, the read-back
@@ -866,11 +919,11 @@ reset resource is not used to retry (step 8).
 
 ```
 grep -aE '^[[:alnum:]-]+ login: ?$' "$LOG/raw.log"           # OpenSTLinux is back: a login prompt
-tools/mp2s_record_check.py "$LOG/console.log" (pending)      # boots left 1, image, boots left 0, image, Linux
-tools/mp2s_reset_reason.py "$LOG/raw.log" (pending)          # BL2 'Reset reason:' per boot, supply first
-tools/mp2s_comeback.sh                                        # Linux is back: ssh, mounts, no mp2s_*
-ssh "${MP2_SUDO-sudo -n }fw_printenv" > "$LOG/env-after.txt"
-tools/mp2s_env_diff.py "$LOG/env-before.txt" "$LOG/env-after.txt" (pending)
+python3 -I tools/mp2s_record_check.py "$LOG/console.log" --count 2   # boots left 1, image, boots left 0, image, Linux
+python3 -I tools/mp2s_reset_reason.py "$LOG/raw.log"         # BL2 'Reset reason:' per boot, supply first
+tools/mp2s_comeback.sh --before-boot-id "$(cat "$LOG/boot-id-before.txt")"   # Linux is back: ssh, mounts, no mp2s_*
+tools/board-stm32mp2-standalone.sh printenv > "$LOG/env-after.txt"
+python3 -I tools/mp2s_env_diff.py "$LOG/env-before.txt" "$LOG/env-after.txt"
 python3 -I tools/mp2s_guard.py --for oneshot --printenv "$LOG/env-after.txt"
 python3 -I tools/efi_varfile.py --fwu "$LOG/ubootefi-after.var"   # still: fwu-trial: absent
 ```
@@ -886,14 +939,18 @@ reset` or `Brownout reset` is the supply; `IWDG system reset` is the watchdog.
 ```
 tools/board-stm32mp2-standalone.sh nodefault               # removes default.bin; safe to repeat
 tools/board-stm32mp2-standalone.sh uninstall               # removes /boot/yakogl/standalone/
-tools/mp2s_boot_manifest.py compare (pending)              # /boot equals the record, byte for byte
-ssh "find /boot -type f -print0 | sort -z | xargs -0 sha256sum" > "$LOG/boot-after.txt"
-cmp "$LOG/boot-before.txt" "$LOG/boot-after.txt"           # until the manifest tool merges
-python3 -I tools/mp2s_redact_check.py (pending) "$LOG"/*   # before any log is quoted
+ssh "cd /boot && find . -type f -exec sha256sum -- {} + | LC_ALL=C sort -k 2" > "$LOG/boot-after.txt"
+cmp "$LOG/boot-before.txt" "$LOG/boot-after.txt"           # /boot equals the record, byte for byte
+python3 -I tools/mp2s_boot_manifest.py compare-records "$LOG/boot-before.txt" "$LOG/boot-after.txt"
+python3 -I tools/mp2s_redact_check.py "$LOG"/*             # before any log is quoted
 ```
 
 `nodefault` and `uninstall` print their undo first. A difference in ST's files
-is never repaired: it is a stop (below).
+is never repaired: it is a stop (below). `uninstall` removes
+`/boot/yakogl/standalone/` only, because `/boot/yakogl/` is shared with the
+one-shot runners' paths. If `/boot/yakogl/` did not exist before `install`
+and is empty now, `rmdir /boot/yakogl` puts back the directory listing too
+(the sha256 listing holds files only).
 
 ### Step 8: Stop rules
 
@@ -917,27 +974,74 @@ is never repaired: it is a stop (below).
 
 ## Board run
 
-*(Empty: filled in by plan #362's `board-run` item on the three DK resources.
-No board address, host name, UART path, serial or credential.)*
+2026-11-21, `resource:stm32mp257f-dk` with its console and reset resources.
+OpenSTLinux Starter Package v26.06.10 on the microSD; TF-A
+v2.10-stm32mp2-r2.0, OP-TEE 4.0.0, U-Boot 2023.10-stm32mp-r3.1. No person was
+present: no `forever`, and the reset resource was not used. The board's
+address and console path came from the lease and appear nowhere here.
 
-What goes here:
+1. **The image and the build.** `mp2_hello`, built as its README says at the
+   commit this run was made from (it prints `mp2_hello: build 9a02debd`), run
+   with `MP2_NO_WATCHDOG=1`. `zephyr.bin` is 41224 bytes, sha256
+   `99cf83cf4de250ee1ff8bb30d69cf738449cf943f03d45840ea6d86ff740a755`, and its
+   header `image_size` is 638976 bytes. The script built by
+   `driver/tools/mp2-standalone/build.sh` (`boot.scr.uimg`, 5525 bytes) has
+   sha256 `3a4679c55c40e442db4caa30fe030954a76f60f45b9a0b441efff403492898bc`.
+2. **Before.** The environment as in sections 1 and 2 (`boot_prefixes=/mmc0_`,
+   73 variables, both CRCs valid, copy 2 active with flags 0x05). `/boot`
+   held 25 files, and there was no `/boot/yakogl/`. `fwu: bank 0 accepted`.
+   No `ubootefi.var`. bootfs had 35328000 bytes free. The guard said `allow`
+   and the edit fit with the 256-byte margin.
+3. **`install`, then `default <image> 2`.** `install` printed `UNDO: ...
+   uninstall` first and wrote no environment. The dry run of `default`
+   passes `mp2s_undo_order.py` (2 changes, each after its undo). `default`
+   printed both undo lines, then: `wrote copy 1 ... with flags 0x06 (copy 2,
+   flags 0x05, was active and is left alone)`, `read back from
+   /dev/mmcblk2p7: verify default: ok`, and `default set for 2 boots;
+   nothing was rebooted.` `status` then read `boot_prefixes=/yakogl/standalone/
+   /mmc0_`, `mp2s_ver=1`, `mp2s_left=2` and `mp2s_prefixes=/mmc0_`.
+   `mp2s_env_diff.py --expect-default 2` said `mp2s-env: default set`.
+4. **The console, from `systemctl reboot` on.** Three boots. Each began with
+   BL2's `Reset reason: System reset (SYSRST) (0x2074). Warm boot.`:
+   - boot 1: `Found U-Boot script /yakogl/standalone/boot.scr.uimg`, the undo
+     line, `Saving Environment to MMC... Writing to redundant MMC(0)... OK`,
+     `mp2s: default /yakogl/standalone/default.bin, boots left 1`, `mp2s:
+     loaded a108 bytes at 0xa0000000, RAM footprint 0x9c000 ...`, `mp2s: go
+     0xa0000000`, then the image: `MP2:A EL2`, `mp2-handover: v=1 el=2 ...
+     x0=0x1 ... pc=0xa000370c cntfrq=40000000 ... psci=0x10001`,
+     `*** Booting Zephyr OS build af17c0c8aa2a ***`, `mp2_hello: PASS:
+     counted 5 s in 5018 ms`, `mp2: mp2_hello done: PSCI SYSTEM_RESET at
+     5022 ms`;
+   - boot 2: the same with `Writing to MMC(0)... OK` and `boots left 0`, and
+     the image again to its `PSCI SYSTEM_RESET at 5022 ms`;
+   - boot 3: `mp2s: default used up, booting Linux`, `Writing to redundant
+     MMC(0)... OK`, `SCRIPT FAILED: continuing...`, `Found
+     /mmc0_extlinux/extlinux.conf`, `Starting kernel ...`, then the
+     OpenSTLinux login prompt.
 
-1. **The image and the build:** `mp2_hello` (built as
-   `tools/probes/stm32mp257f_dk/mp2_hello/README.md` says, run with
-   `MP2_NO_WATCHDOG=1`), its sha256 and size; the commit of
-   `driver/tools/mp2-standalone/` and its script's sha256.
-2. **Before:** `fw_printenv` (the `TODO(board-env-read)` names above), the
-   `/boot` listing and sha256, and the FWU bank state.
-3. **`default <image> 2`:** what the runner printed (the undo lines first),
-   the read-back, and that nothing was rebooted.
-4. **The console from the reboot on:**
-   - `mp2s: default ..., boots left 1`, the image's lines and its reset (BL2
-     `Reset reason:`);
-   - `boots left 0`, the image and its reset;
-   - `default used up, booting Linux`, `SCRIPT FAILED: continuing...`, ST's
-     extlinux, OpenSTLinux.
-5. **After:** `fw_printenv` and its diff against the before (`boot_prefixes`
-   back, no `mp2s_*`), the `/boot` sha256 comparison, then `nodefault` and
-   `uninstall`.
-6. **Failures:** each boot's `Reset reason:`, the supply check, and the undo
-   taken. A new defect gets a new issue text, not a line here.
+   The two saves alternate between the copies as section 3 says, and U-Boot
+   petted the IWDG (`WDT: Started watchdog with servicing every 1000ms (32s
+   timeout)`). `mp2s_console_watch.py scan --boots 2`: `verdict: ok (3
+   cycle(s))`. `mp2s_record_check.py --count 2`: `VERDICT: PASS 2 image
+   boot(s) then Linux`. `mp2s_reset_reason.py`: 0 supply, 0 watchdog. From
+   the reboot to the login prompt took about 2.5 minutes.
+5. **After.** `mp2s_comeback.sh --before-boot-id`: `comeback: ok
+   OpenSTLinux ... /boot on /dev/mmcblk2p8 (ext4, disk type SD) ... no mp2s_*
+   and no /yakogl/standalone/ prefix, new boot`. The environment against the
+   one before reads `mp2s-env: restored`: `filesize` and `api_address` alone
+   differ (section 3), and copy 2 is active again. `mp2s_guard.py --for
+   oneshot`: `allow`. `nodefault` wrote no environment (`no default is set`),
+   removed `default.bin` and said `mp2s-boot: allowed`. `uninstall` removed
+   the stage directory and said `mp2s-boot: same: 25 files`. The `/boot`
+   listing after is byte for byte the one taken before `install` (`cmp`, and
+   `compare-records`: `mp2s-boot: same`). The empty `/boot/yakogl/` was then
+   removed with `rmdir` (step 7).
+6. **Failures.** None of the run. Every reset was `System reset (SYSRST)`
+   (PSCI or systemd), so there was no supply or watchdog event. What the run
+   found in the tools, fixed in the same change: the runner, the session
+   driver and the comeback check used `fw_printenv`/`fw_setenv`, which cannot
+   work on the DK; the `/boot` listing's `xargs -0` listed nothing under
+   BusyBox; the console watch counted the three `NOTICE:  BL2:` lines of one
+   boot as three cycles; `mp2s_undo_order.py` did not count the `dd` write as
+   a change; and `nodefault` after a count that ran out on the board left the
+   host's default record behind.

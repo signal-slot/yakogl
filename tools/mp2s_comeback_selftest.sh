@@ -41,6 +41,7 @@ TARGET=tester@${FHOST}
 BOOTID=11111111-2222-3333-4444-555555555555
 OLDID=99998888-7777-6666-5555-444433332222
 FAKE_OUT=$W/answers FAKE_LOG=$W/ssh.log
+FIX=$HERE/testdata/mp2s-env/pristine.bin
 
 cat >"$W/bin/ssh" <<'EOF'
 #!/bin/sh
@@ -56,7 +57,7 @@ export PATH="$W/bin:$PATH"
 # the canned readings, as the key=value fields the tool's own remote prints
 reset() {
     B_ID=$BOOTID B_UP=42 B_KERNEL=6.6.78 B_MOUNT=/dev/mmcblk1p8 B_FSTYPE=ext4
-    B_TYPE=SD B_ROOT=/dev/mmcblk1p9 B_RC=0 B_MP2S= B_PFX='/ /boot/'
+    B_TYPE=SD B_ROOT=/dev/mmcblk1p9 B_RC=0 B_MP2S= B_PFX='/ /boot/' B_BADCRC=0
 }
 mk() { # write $FAKE_OUT from the current B_ fields
     local m=$B_MOUNT r=$B_ROOT
@@ -69,11 +70,32 @@ mk() { # write $FAKE_OUT from the current B_ fields
         echo "boot_mount=$m"
         echo "boot_type=$B_TYPE"
         echo "root_mount=$r"
-        echo "env_rc=$B_RC"
-        echo "env_mp2s=$B_MP2S"
-        echo "env_pfx=$B_PFX"
+        echo "env_dev=/dev/mmcblk1p7"
+        [ "$B_RC" = 0 ] && echo "env_b64=$(mkenv | base64 -w 0)"
         echo end=1
     } >"$FAKE_OUT"
+}
+# mkenv: the card's u-boot-env partition as the board would send it: 512 KiB,
+# copy 1 at 0x7e000 and copy 2 at 0x7c000, made from tools/testdata/mp2s-env/
+# pristine.bin with boot_prefixes=$B_PFX and each name of $B_MP2S set; with
+# B_BADCRC=1 both copies' CRCs are broken
+mkenv() {
+    local sets=() n
+    [ -n "$B_PFX" ] && sets+=("boot_prefixes=$B_PFX")
+    for n in $B_MP2S; do sets+=("$n=1"); done
+    if [ ${#sets[@]} -gt 0 ]; then
+        python3 -I "$HERE/uboot_env.py" --redundant --size 0x2000 set "$FIX" "$W/env.bin" "${sets[@]}" >/dev/null || return 1
+    else
+        cp "$FIX" "$W/env.bin"
+    fi
+    head -c 524288 /dev/zero >"$W/part.bin"
+    dd if="$W/env.bin" of="$W/part.bin" bs=8192 skip=0 seek=63 count=1 conv=notrunc status=none
+    dd if="$W/env.bin" of="$W/part.bin" bs=8192 skip=1 seek=62 count=1 conv=notrunc status=none
+    if [ "${B_BADCRC:-0}" = 1 ]; then
+        printf 'XXXX' | dd of="$W/part.bin" bs=1 seek=$((0x7e000)) conv=notrunc status=none
+        printf 'XXXX' | dd of="$W/part.bin" bs=1 seek=$((0x7c000)) conv=notrunc status=none
+    fi
+    cat "$W/part.bin"
 }
 
 N=0 F=0
@@ -128,8 +150,12 @@ reset; B_ROOT=; mk; run_tool
 expect 1 'an unmounted / FAILs'
 has 'the reason' '/ not mounted'
 reset; B_RC=1; mk; run_tool
-expect 1 'a failing fw_printenv FAILs'
+expect 1 'an unreadable u-boot-env partition FAILs'
 has 'the variables are not taken as unset' 'not taken as unset'
+has 'the reason' 'could not be read'
+reset; B_BADCRC=1; mk; run_tool
+expect 1 'a u-boot-env whose CRCs fail FAILs'
+has 'the reason' 'CRC fails'
 reset; B_MP2S='mp2s_left mp2s_prefixes mp2s_ver'; mk; run_tool
 expect 1 'left mp2s_* FAILs'
 has 'the names are listed' 'mp2s_* left in the environment: mp2s_left mp2s_prefixes mp2s_ver'
@@ -178,8 +204,9 @@ if [ "$(wc -l <"$FAKE_LOG")" = 1 ]; then ok 'exactly one ssh call per check'; el
 for o in StrictHostKeyChecking=yes UpdateHostKeys=no BatchMode=yes; do
     if grep -qF -- "$o" "$FAKE_LOG"; then ok "the ssh options carry $o"; else bad "ssh option $o" "$(cat "$FAKE_LOG")"; fi
 done
-if grep -qF -- 'sudo -n fw_printenv' "$FAKE_LOG"; then ok 'MP2_SUDO defaults to sudo -n as the standalone runner does'; else bad 'MP2_SUDO default' "$(cat "$FAKE_LOG")"; fi
-if grep -qE '(^|[^A-Za-z0-9_])(fw_setenv|saveenv|reboot|poweroff|shutdown|modprobe|insmod|systemctl|tailscale|sshd|mount|umount|rm|mv|dd|tee|chmod|chown|mkdir|truncate|unlink|mmcblk0)([^A-Za-z0-9_]|$)' "$FAKE_LOG"; then
+if grep -qF -- 'sudo -n head -c 1048576' "$FAKE_LOG"; then ok 'MP2_SUDO defaults to sudo -n as the standalone runner does'; else bad 'MP2_SUDO default' "$(cat "$FAKE_LOG")"; fi
+if grep -qF -- 'by-partlabel' "$FAKE_LOG"; then bad 'the partition comes from lsblk of the disk' "$(cat "$FAKE_LOG")"; else ok 'the partition comes from lsblk of the disk, never by-partlabel'; fi
+if grep -qE '(^|[^A-Za-z0-9_])(fw_printenv|fw_setenv|saveenv|reboot|poweroff|shutdown|modprobe|insmod|systemctl|tailscale|sshd|mount|umount|rm|mv|dd|tee|chmod|chown|mkdir|truncate|unlink|mmcblk0)([^A-Za-z0-9_]|$)' "$FAKE_LOG"; then
     bad 'only reads reach the board' "$(cat "$FAKE_LOG")"
 else
     ok 'only reads reach the board: no write verb, no service call, no sshd or tailscale question, no mmcblk0'
@@ -187,15 +214,15 @@ fi
 reset; mk; : >"$W/log2"
 env_run BOARD_HOST="$TARGET" MP2_SUDO= FAKE_OUT="$FAKE_OUT" FAKE_LOG="$W/log2" "$TOOL"
 expect 0 'MP2_SUDO= runs'
-if grep -qF -- 'fw_printenv' "$W/log2" && ! grep -qF -- 'sudo' "$W/log2"; then
-    ok 'MP2_SUDO= sends fw_printenv bare'
+if grep -qF -- 'head -c 1048576' "$W/log2" && ! grep -qF -- 'sudo' "$W/log2"; then
+    ok 'MP2_SUDO= sends the partition read bare'
 else
     bad 'MP2_SUDO empty' "$(cat "$W/log2")"
 fi
 reset; mk; : >"$W/log3"
 env_run BOARD_HOST="$TARGET" 'MP2_SUDO=doas ' FAKE_OUT="$FAKE_OUT" FAKE_LOG="$W/log3" "$TOOL"
 expect 0 'MP2_SUDO with another prefix runs'
-if grep -qF -- 'doas fw_printenv' "$W/log3"; then ok 'MP2_SUDO travels into the one remote command'; else bad 'MP2_SUDO prefix' "$(cat "$W/log3")"; fi
+if grep -qF -- 'doas head -c 1048576' "$W/log3"; then ok 'MP2_SUDO travels into the one remote command'; else bad 'MP2_SUDO prefix' "$(cat "$W/log3")"; fi
 
 # 7. a board reading that itself carries a host name and addresses: the
 # verdict must mask them (the fake target, its user, and the fixture

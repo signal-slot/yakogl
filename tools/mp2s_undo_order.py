@@ -8,17 +8,18 @@
 Reads the transcript of tools/board-stm32mp2-standalone.sh --dry-run (stdin
 or FILE) and checks docs/notes/stm32mp257f-dk-standalone.md, sections 5 and 7:
 each change to the board (a `DRY board$` line that makes or removes a file
-under /boot, or runs fw_setenv) must be preceded by the undo line of that
+under /boot, or writes the u-boot-env partition with dd of=) must be
+preceded by the undo line of that
 change:
 
   mkdir of the stage directory  <- "UNDO: ... standalone.sh uninstall"
   rm -rf of the stage directory <- "UNDO: ... standalone.sh install"
   default.bin written, or the environment written with mp2s_left=
                                 <- "UNDO, from Linux ...: ... nodefault"
-  nodefault's fw_setenv / rm of default.bin
+  nodefault's dd of= the u-boot-env / rm of default.bin
                                 <- "nothing to undo: nodefault only removes"
 
-Reads (fw_printenv, ls) are not changes. A change of a kind this checker does
+Reads (head of the partition, sha256sum, ls) are not changes. A change of a kind this checker does
 not know fails: a new change needs its undo named here first.
 
 Exit 0 ok, 1 an undo missing or late, 2 usage or an empty transcript.
@@ -33,7 +34,7 @@ UNDO = [
     ("nodefault", re.compile(r"\bnothing to undo: nodefault only removes\b")),
 ]
 BOARD = re.compile(r"^DRY board\$ (.*)$")
-WRITER = re.compile(r"(?:^|[\s;&|])(mkdir|tee|mv|rm|fw_setenv)\b")
+WRITER = re.compile(r"(?:^|[\s;&|])(mkdir|tee|mv|rm|fw_setenv|dd(?=\s[^#]*\bof=))\b")
 
 
 def kind(cmd):
@@ -46,7 +47,7 @@ def kind(cmd):
         return "install"
     if "rm" in words and "-rf" in code:
         return "uninstall"
-    if "fw_setenv" in words:
+    if "fw_setenv" in words or "dd" in words:
         return "default" if "mp2s_left=" in cmd else "nodefault"
     if "rm" in words and "default.bin" in code:
         return "nodefault"

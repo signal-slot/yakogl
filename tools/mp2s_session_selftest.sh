@@ -7,11 +7,13 @@
 # (MP2S_SSH is a stub over its ssh shim, which is also first in PATH for
 # tools/mp2s_comeback.sh),
 # the runner is a stub (MP2S_RUNNER) that edits the fake's environment as
-# default and nodefault would, and the console watch is a stub (MP2S_WATCH)
+# default and nodefault would and answers printenv from it (the session's only
+# environment read: the real runner reads the card's partition, because the
+# DK has no fw_env.config), and the console watch is a stub (MP2S_WATCH)
 # that waits for the fake's reboot, does what the counted default's last boot
 # does to the environment and the boot id, writes a canned console log and
 # answers with the real `mp2s_console_watch.py scan` exit. The guard, image,
-# bootfs, fwenv, FWU, comeback, record, env and manifest checks are the real
+# bootfs, FWU, comeback, record, env and manifest checks are the real
 # tools. Covers: PASS; FAIL record (no 'boots left 0'); FAIL env (not
 # restored); FAIL console (the watch timed out: no Linux); FAIL console before
 # the runner (busy console); FAIL precheck; --dry-run touches nothing; the
@@ -81,6 +83,7 @@ echo "runner $* person=${BOARD_PERSON_PRESENT-unset} nowd=${MP2_NO_WATCHDOG-unse
 fb() { "$FB/bin/ssh" stub "$@"; }
 case "$1" in
 install | uninstall) echo "runner: $1 done" ;;
+printenv) fb "sudo -n fw_printenv" ;;
 default)
     pfx=$(fb "sudo -n fw_printenv -n boot_prefixes") || exit 1
     printf '%s' "$pfx" > "$STATE/pfx"
@@ -183,7 +186,9 @@ check "good run: BOARD_PERSON_PRESENT never reaches the runner" "$(! called 'per
 check "good run: MP2_NO_WATCHDOG=1 for mp2_hello" "$(t called '^runner default .*nowd=1')"
 check "good run: one reboot, no write outside the fake's rules" "$([ "$(grep -cx reboot "$T/fb/writes.log")" = 1 ] && no_violation; echo $?)"
 check "good run: the real bootfs, fwenv, FWU and comeback checks ran" \
-    "$(in_out '^ok: ' && in_out '^fwenv: ok' && in_out '^comeback: ' && ! in_out 'skip tools/'; echo $?)"
+    "$(in_out '^ok: ' && in_out '^comeback: ok' && ! in_out 'skip tools/'; echo $?)"
+check "good run: no fw_printenv sent to the board by the session" "$(! grep -q fw_printenv "$STATE/ssh-calls"; echo $?)"
+check "good run: the environment is read through the runner's printenv" "$(count_is '^runner printenv' "$STATE/calls" 4; echo $?)"
 check "good run: nodefault and uninstall once, at the end" \
     "$(count_is '^runner nodefault' "$STATE/calls" 1 && count_is '^runner uninstall' "$STATE/calls" 1; echo $?)"
 check "good run: env restored, /boot the same" "$(in_out '^mp2s-env: restored' && in_out '^mp2s-boot: same'; echo $?)"
@@ -209,7 +214,7 @@ check "watch timeout: the board is left alone (no nodefault)" "$(! called '^runn
 # host: the session sees it end at once, so a long settle costs nothing here
 MP2S_WATCH_SETTLE=120 scenario "$T/tools" good.log busy
 check "busy console: FAIL console" "$(t last_is 'mp2s-session: FAIL console')"
-check "busy console: runner never called, no reboot" "$(! called '^runner' && ! grep -q reboot "$T/fb/writes.log"; echo $?)"
+check "busy console: runner never called but its read-only printenv, no reboot" "$(! grep -v '^runner printenv' "$STATE/calls" &&! grep -q reboot "$T/fb/writes.log"; echo $?)"
 
 # the guard refuses before anything changes: a default left behind in boot_prefixes
 rm -rf "$T/fb" "$T/rec" "$STATE" && mkdir -p "$STATE" && "$HERE/mp2s_fakeboard.sh" init "$T/fb" > /dev/null
@@ -221,20 +226,20 @@ env FB="$T/fb" PATH="$T/fb/bin:$BASE_PATH" MP2S_FAKE_ROOT="$T/fb" MP2S_SSH="$T/s
 OUT_SHOWN=
 check "guard refusal: FAIL precheck" "$(t last_is 'mp2s-session: FAIL precheck')"
 check "guard refusal: no watch, no runner, no board write" \
-    "$(absent "$STATE/watch-calls" && empty "$STATE/calls" "$T/fb/writes.log"; echo $?)"
+    "$(absent "$STATE/watch-calls" && empty "$T/fb/writes.log" && ! grep -v '^runner printenv' "$STATE/calls"; echo $?)"
 
 # a missing helper: its skip line, its check not reported, the run still passes
 mk_tools "$T/tools-min"
-for h in mp2s_boot_manifest.py mp2s_comeback.sh fwu_metadata.py mp2s_bootfs_check.py mp2s_fwenv_check.py; do
+for h in mp2s_boot_manifest.py mp2s_comeback.sh fwu_metadata.py mp2s_bootfs_check.py; do
     rm "$T/tools-min/$h"
 done
 scenario "$T/tools-min" good.log ok
 check "missing helpers: PASS on the merged guards alone" "$(t last_is 'mp2s-session: PASS')"
 check "missing helpers: one exact skip line each" \
-    "$(for h in mp2s_boot_manifest.py mp2s_comeback.sh fwu_metadata.py mp2s_bootfs_check.py mp2s_fwenv_check.py; do
+    "$(for h in mp2s_boot_manifest.py mp2s_comeback.sh fwu_metadata.py mp2s_bootfs_check.py; do
         grep -qx "mp2s-session: skip tools/$h: not present" "$T/out" || exit 1; done; echo 0)"
 check "missing helpers: no output of a skipped check" \
-    "$(! in_out '^fwenv: ' && ! in_out '^comeback: ' && ! in_out '^mp2s-boot: '; echo $?)"
+    "$(! in_out '^comeback: ' && ! in_out '^mp2s-boot: '; echo $?)"
 
 # --dry-run: prints every command, touches nothing
 rm -rf "$T/fb" "$T/rec" "$STATE" && mkdir -p "$STATE" && "$HERE/mp2s_fakeboard.sh" init "$T/fb" > /dev/null

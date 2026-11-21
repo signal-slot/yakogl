@@ -20,7 +20,7 @@
         Scan verdicts on synthetic logs and a passive watch on a pseudo-
         terminal (the watcher must read everything and send nothing).
 
-A boot cycle starts at TF-A's "NOTICE:  BL2" line. In a cycle the scan looks
+A boot cycle starts at TF-A's "NOTICE:  BL2: v<version>" line. In a cycle the scan looks
 for: "boots left <n>" (the product script's count), "*** Booting Zephyr"
 (the image), "PSCI SYSTEM_RESET at <n> ms" (the image's end) and Linux
 ("Starting kernel ..." / "Linux version"). Verdict "ok": exactly N+1 cycles,
@@ -45,7 +45,10 @@ import mp2_uboot_console as _c  # noqa: E402
 LINGER = 20.0
 TIMEOUT = 1800.0
 
-BL2_RX = re.compile(r"NOTICE:\s+BL2\b")
+# BL2's version banner only: the DK's BL2 prints three "NOTICE:  BL2:" lines
+# per boot ("BL2: v2.10-...", "BL2: Built : ...", "BL2: Booting BL31"), and
+# counting each would make one boot three cycles (seen on the board run)
+BL2_RX = re.compile(r"NOTICE:\s+BL2: v\d")
 LEFT_RX = re.compile(r"boots left (\d+)")
 IMAGE_RX = re.compile(r"\*\*\* Booting Zephyr")
 END_RX = re.compile(r"PSCI SYSTEM_RESET at \d+ ms")
@@ -153,7 +156,9 @@ def watch(addr, raw_path, st_path, boots=None, timeout=TIMEOUT, linger=LINGER):
 
 
 def _cyc(left, image, linux):
-    t = ["NOTICE:  BL2: v2.10", "U-Boot 2023.10"]
+    # the three BL2 notices the DK prints per boot: one cycle, not three
+    t = ["NOTICE:  BL2: v2.10-stm32mp2-r2.0(debug)", "NOTICE:  BL2: Built : 16:16:36",
+         "NOTICE:  BL2: Booting BL31", "U-Boot 2023.10"]
     if left is not None:
         t.append("mp2z: boots left %d" % left)
     if image:

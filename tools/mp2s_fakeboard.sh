@@ -843,6 +843,9 @@ MAPS = [(B + "/boot" + E, root + "/boot"),
         (B + "/sys/class/block" + E, root + "/sys/class/block"),
         (B + "/sys/block" + E, root + "/sys/block"),
         (B + r"/dev/mmcblk(?=\d)", root + "/dev/mmcblk"),
+        # `cd /dev && head -- ./<name>` (tools/mp2s_comeback.sh reads the
+        # partition lsblk named, a name known only at run time)
+        (r"(?<![\w/.-])(?<=cd )/dev(?=\s*(?:&&|;|$))", root + "/dev"),
         (B + "/proc/sys/vm/drop_caches" + E, root + "/proc/sys/vm/drop_caches"),
         (B + "/proc/sys/kernel/random/boot_id" + E, root + "/proc/sys/kernel/random/boot_id"),
         (B + "/proc/self/mountinfo" + E, root + "/proc/self/mountinfo"),
@@ -989,7 +992,11 @@ def scan(toks):
                     break
                 if a not in ("-H", "-L", "-P"):
                     paths.append(a)
-            targets.extend(paths or ["."])
+            # -delete writes the search paths; an -exec command is judged
+            # by its own verb below (sha256sum reads, rm writes), so a
+            # read-only `find . -type f -exec sha256sum -- {} +` passes
+            if "-delete" in args:
+                targets.extend(paths or ["."])
             if "-exec" in args or "-execdir" in args or "-ok" in args or "-okdir" in args:
                 k = max(args.index(a) for a in args if a in ("-exec", "-execdir", "-ok", "-okdir"))
                 sub = []

@@ -9,13 +9,14 @@
 #   tools/mp2s_session.sh [--dry-run] IMAGE
 #
 # Steps, in order:
-#   precheck  read-only: fw_printenv into tools/mp2s_guard.py --for standalone;
+#   precheck  read-only: the runner's printenv (the active copy of the SD
+#             card's u-boot-env, read from the partition) into
+#             tools/mp2s_guard.py --for standalone;
 #             tools/mp2s_image_check.py IMAGE against the free space of /boot;
 #             the device /boot is on (never mmcblk0), then, each when present:
-#             tools/mp2s_bootfs_check.py, tools/mp2s_fwenv_check.py (sent to
-#             the board's python3 on stdin) and tools/fwu_metadata.py check on
+#             tools/mp2s_bootfs_check.py and tools/fwu_metadata.py check on
 #             the card's metadata1 and metadata2 (read, never written)
-#   capture   fw_printenv, the sha256 of every file under /boot and the boot id,
+#   capture   the runner's printenv, the sha256 of every file under /boot and the boot id,
 #             before; tools/mp2s_boot_manifest.py parses the listing
 #   console   the passive console watch, started before anything can reboot;
 #             one that ends at once (busy console) stops the session here
@@ -26,7 +27,7 @@
 #   record    tools/mp2s_record_check.py on the stamped log, and a login prompt
 #             in the raw log
 #   undo      the runner's nodefault, then uninstall
-#   env       fw_printenv again; tools/mp2s_env_diff.py BEFORE AFTER and
+#   env       the runner's printenv again; tools/mp2s_env_diff.py BEFORE AFTER and
 #             tools/mp2s_guard.py --for oneshot
 #   manifest  the /boot listing again; tools/mp2s_boot_manifest.py
 #             compare-records (else cmp)
@@ -34,6 +35,11 @@
 # present` and its check does not run (and is never reported as passed).
 # Then one line per step (`mp2s-session: step <name>: ok|FAIL|not run`) and
 # `mp2s-session: PASS` or `mp2s-session: FAIL <step>` last.
+#
+# fw_printenv is never used: the DK's Linux has no /etc/fw_env.config, so it
+# stops with "Cannot initialize environment" (#1281). Every environment read
+# is the runner's printenv verb, which reads the u-boot-env partition of the
+# SD card /boot is on (found in lsblk of that card, never by partlabel).
 #
 # Stop rules (the note's step 8): nothing is retried, no reset resource is
 # used, `forever` is never run. A failure while the board is in Linux with
@@ -140,6 +146,12 @@ bcap() {
     [ "$DRY" = 1 ] && return 0
     "${SSH[@]}" "$BOARD_HOST" "$2" > "$1" </dev/null
 }
+# rcap FILE: the runner's printenv (stdout only) into FILE
+rcap() {
+    show "${RUNNER[*]} printenv > $1"
+    [ "$DRY" = 1 ] && return 0
+    "${RUNNER[@]}" printenv > "$1"
+}
 # b CMD: a board command (one string), its stdout to ours
 b() {
     show "ssh \$BOARD_HOST '$1'"
@@ -194,10 +206,8 @@ fi
 echo "# record directory: $REC"
 
 # (1) precheck, read-only on the board: a refusal changes nothing
-show "ssh \$BOARD_HOST '${SUDO}fw_printenv' | ${PY[*]} $HERE/mp2s_guard.py --for standalone"
-if [ "$DRY" != 1 ]; then
-    "${SSH[@]}" "$BOARD_HOST" "${SUDO}fw_printenv" </dev/null | "${PY[@]}" "$HERE/mp2s_guard.py" --for standalone || fail precheck
-fi
+rcap "$REC/env-precheck.txt" || fail precheck
+hrun "${PY[@]}" "$HERE/mp2s_guard.py" --for standalone --printenv "$REC/env-precheck.txt" || fail precheck
 bcap "$REC/df.txt" "df -B1 --output=avail /boot | tail -n 1" || fail precheck
 if [ "$DRY" = 1 ]; then
     FREE=FREE_BYTES
@@ -226,12 +236,6 @@ if have mp2s_bootfs_check.py; then
     hrun "${PY[@]}" "$HERE/mp2s_bootfs_check.py" --findmnt "$REC/findmnt.txt" --lsblk "$REC/lsblk.txt" \
         --blkid "$REC/blkid.txt" --disk-type "$REC/disk-type.txt" || fail precheck
 fi
-if have mp2s_fwenv_check.py; then
-    show "ssh \$BOARD_HOST 'python3 -I - --root /' < $HERE/mp2s_fwenv_check.py"
-    if [ "$DRY" != 1 ]; then
-        "${SSH[@]}" "$BOARD_HOST" "python3 -I - --root /" < "$HERE/mp2s_fwenv_check.py" || fail precheck
-    fi
-fi
 if have fwu_metadata.py; then
     for m in metadata1 metadata2; do
         if [ "$DRY" = 1 ]; then
@@ -247,8 +251,11 @@ fi
 ST[precheck]=ok
 
 # (2) capture, before
-bcap "$REC/env-before.txt" "${SUDO}fw_printenv" || fail capture
-bcap "$REC/boot-before.txt" "cd /boot && find . -type f -print0 | sort -z | xargs -0 ${SUDO}sha256sum" || fail capture
+rcap "$REC/env-before.txt" || fail capture
+# find -exec, not xargs -0: the DK's xargs is BusyBox's (no -0), and that
+# pipeline lists nothing with exit 0; an empty listing is a failure here
+bcap "$REC/boot-before.txt" "cd /boot && find . -type f -exec ${SUDO}sha256sum -- {} + | LC_ALL=C sort -k 2" || fail capture
+if [ "$DRY" != 1 ] && ! grep -q '  \./boot\.scr\.uimg$' "$REC/boot-before.txt"; then say "the /boot listing is empty or has no ./boot.scr.uimg"; fail capture; fi
 bcap "$REC/boot-id-before.txt" "cat /proc/sys/kernel/random/boot_id" || fail capture
 if have mp2s_boot_manifest.py; then
     hrun "${PY[@]}" "$HERE/mp2s_boot_manifest.py" record --from "$REC/boot-before.txt" -o "$REC/manifest-before.txt" || fail capture
@@ -279,7 +286,7 @@ UNDO_OK=1
 echo "# the runner gets MP2_NO_WATCHDOG=$MP2_NO_WATCHDOG and no BOARD_PERSON_PRESENT"
 hcap "$REC/install.txt" "${RUNNER[@]}" install || fail runner
 hcap "$REC/default.txt" "${RUNNER[@]}" default "$IMG" "$COUNT" || fail runner
-bcap "$REC/env-default.txt" "${SUDO}fw_printenv" || fail runner
+rcap "$REC/env-default.txt" || fail runner
 hrun "${PY[@]}" "$HERE/mp2s_env_diff.py" "$REC/env-before.txt" "$REC/env-default.txt" --expect-default "$COUNT" || fail runner
 UNDO_OK=0   # from here the board may be mid-boot until it answers again
 b "${SUDO}systemctl reboot"
@@ -322,11 +329,11 @@ hcap "$REC/nodefault.txt" "${RUNNER[@]}" nodefault || { UNDO_OK=0; fail undo; }
 hcap "$REC/uninstall.txt" "${RUNNER[@]}" uninstall || { UNDO_OK=0; fail undo; }
 UNDO_OK=0
 ST[undo]=ok
-bcap "$REC/env-after.txt" "${SUDO}fw_printenv" || fail env
+rcap "$REC/env-after.txt" || fail env
 hcap "$REC/env-diff.txt" "${PY[@]}" "$HERE/mp2s_env_diff.py" "$REC/env-before.txt" "$REC/env-after.txt" || fail env
 hrun "${PY[@]}" "$HERE/mp2s_guard.py" --for oneshot --printenv "$REC/env-after.txt" || fail env
 ST[env]=ok
-bcap "$REC/boot-after.txt" "cd /boot && find . -type f -print0 | sort -z | xargs -0 ${SUDO}sha256sum" || fail manifest
+bcap "$REC/boot-after.txt" "cd /boot && find . -type f -exec ${SUDO}sha256sum -- {} + | LC_ALL=C sort -k 2" || fail manifest
 if have mp2s_boot_manifest.py; then
     hcap "$REC/boot-compare.txt" "${PY[@]}" "$HERE/mp2s_boot_manifest.py" compare-records \
         "$REC/boot-before.txt" "$REC/boot-after.txt" || fail manifest
