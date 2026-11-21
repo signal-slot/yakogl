@@ -64,7 +64,12 @@ w1 = stage << 8 | status 2 (1 the GPU device, 2 gc_render_init, 3 the
 allocation, 4 the clear's submit, 5 its wait, 6 the read-back), w2 = the
 clears completed, w3 = W << 16 | H.
 
-Built for the Verdin iMX8M Plus A53 and the STM32MP257F-DK A35 with `-Werror`; not run on a board yet.
+Built for the Verdin iMX8M Plus A53 and the STM32MP257F-DK A35 with `-Werror`.
+Ran on the STM32MP257F-DK on 2026-11-21 (build `6612c6cb`, first run, no
+fix): `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`,
+`gc_clear: PASS`, record `594b020a 00000001 00000002 01000080`
+(`docs/notes/stm32mp257f-dk-bringup.md`, "gc_clear"). Not run on the
+i.MX8MP yet.
 The C sample of the same name ran on the Verdin iMX8M Plus on 2026-09-20
 with the C kernel side (probes only); it was removed with the per-GPU
 samples (5a496fd5).

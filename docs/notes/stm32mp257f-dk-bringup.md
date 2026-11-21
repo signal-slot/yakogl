@@ -4,8 +4,8 @@
 
 Opened 2026-11-12 from the host-side studies, main `fb51ce43` (plan #349,
 roadmap stage 5, issues #7 and #1281; the pre-study's rows P6 and P7,
-`docs/notes/pre-study-stm32mp257f-dk.md:902-903`). **Steps 1-4 have run on
-the board (2026-11-21, "Board verdicts" below); steps 5-8 have not**:
+`docs/notes/pre-study-stm32mp257f-dk.md:902-903`). **Steps 1-6 have run on
+the board (2026-11-21, "Board verdicts" below); steps 7-8 have not**:
 `tools/cts/RESULTS.md` has no DK row and `tools/cts/log/` has no DK
 directory at this tip. Every value in the step sections is marked
 *expected* (a host source gives it) or *derived* (a study's reasoning, cited);
@@ -390,8 +390,8 @@ runner record directory name) and folds the findings into the pre-study
 | 2 return trial, watchdog-caught hang | gpu-identity | **PASS** 2026-11-21, `20261121-1055-mp2_hello_hang-832dda7e`: `verdict=watchdog_reset rc=0`, back after 89 s |
 | 3 layer + OP-TEE watchdog armed | gpu-identity | **PASS** 2026-11-21, `20261121-1058-mp2_identify-58f413f3`: `verdict=done rc=0`, back after 59 s |
 | 4 power + identity (`mp2_gpu`) | gpu-identity | **PASS** 2026-11-21 after one fix (`a053c4aa`), `20261121-1107-mp2_gpu-9e520020`: `verdict=done rc=0`, back after 59 s; the first run (`20261121-1059-mp2_gpu-e0ee66cb`) `verdict=failed rc=4` |
-| 5 `gc_fence` | fence-clear | **not run yet** |
-| 6 `gc_clear` | fence-clear | **not run yet** |
+| 5 `gc_fence` | fence-clear | **PASS** 2026-11-21, `20261121-1855-gc_fence-55ae8385`: `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us`, back after 58 s (runner rc=6: its own post-cycle fault, below; the board was fine) |
+| 6 `gc_clear` | fence-clear | **PASS** 2026-11-21, `20261121-1859-gc_clear-e1a37b77`: `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`, back after 45 s |
 | 7 `gc_triangle` | triangle-run | **not run yet** |
 | 8 `gl_test` case 1 (`gc_gl_triangle`) | gl-triangle-run | **not run yet** |
 
@@ -525,6 +525,113 @@ the assert and the release (the "reset held" read). Whether the release
 needs a minimum assert time or only lagged once is open; the poll keeps
 the step correct either way and logs the count.
 
+### How steps 5-6 were run and judged (2026-11-21)
+
+Images built at `6612c6cb` (banner `sample: build tree=6612c6cb`) for
+`stm32mp257f_dk/stm32mp257fxx/a35` with `-DYAKOGL_WERROR=ON`, unchanged
+defaults (`gc_power: ahb-reset-release off`), one-shot off the card's U-Boot
+through the runner-owned `preboot`, `MP2_NO_CONSOLE=1` as in steps 1-4, the
+console read through connected's serial tools and saved as
+`console.mcp.txt` in each record (the `optee msg` hex dumps and BL2's
+image-load `INFO` lines left out). Both runs were first time, no fix to the
+board layer or the driver, and the power path read exactly as in step 4:
+capability `0x8074`, every SCMI status 0, level 800000 kHz, `rcc gpucfgr
+0x00000006 at entry`, `0x00000007 (reset held)`, released after 1 read, idle
+`0x7fffffff` after 1 read, identity GC8000 0x6205 customer 0x15.
+
+The runner's own end of the `gc_fence` run was wrong, not the board: Linux
+numbered the card `mmcblk2` before the reboot and `mmcblk0` after it, the
+runner kept the device it had resolved before the reboot, its post-cycle
+read of `yako_once` failed (`dd: failed to open '/dev/mmcblk2p7'`), and its
+"disarm" then wrote the pre-arm environment to `/dev/mmcblk2p7`, which no
+longer named a device: `dd` created a 512 KiB regular file on devtmpfs (RAM,
+gone at the next boot), read it back, and recorded `disarmed=on exit`. No
+storage was written (U-Boot had already cleared `yako_once`), but with the
+eMMC taking the stale number the same path would have written the eMMC. The
+`gc_clear` run used a local, uncommitted copy of the runner that resolves the
+card again after the new boot and writes only onto a block device
+(`card_after=/dev/mmcblk2`: the number flipped back); the defect and that fix
+are the runner's issue (`tools/board-stm32mp2.sh`, not this note's).
+After both runs the environment partition was written back from the
+session's pristine image and read back with sha256 `4150e472…` (the
+session's baseline, no `preboot`, no `yako_*`), `/boot/yakogl` was removed,
+and the 25 files of `/boot` read back with the same sha256 as before the
+session.
+
+`dk_verdict.py` on the saved text prints `gc-irq connected=FAIL
+route=absent` for both runs. That is the parser, not the board: the Zephyr
+minimal log prints `I: irq 215 connected` and the parser strips only the
+full log prefix. With `I: ` stripped it prints `gc-irq route=PASS:ours
+igroupr=mismatch` and still counts the run failed, because it treats
+`mismatch` as bad, while the board layer's own comment (`gc_irq_mp2.c:11-13`)
+expects `GICD_IGROUPRn` to read RAZ from non-secure EL1. The verdict lines
+below are the parser's output on `console.mcp.txt` as saved.
+
+### gc_fence: PASS, the fence retires through SPI 183
+
+- `I: carveout: 0xfa800000 (64 MiB) at 0xac000000`: the CPU maps the
+  `gpu-reserved` carveout Normal non-cacheable (`gc_render.c:79-89`,
+  `K_MEM_ARM_NORMAL_NC`), no cache maintenance anywhere; the GPU's MMU v2
+  maps the same 64 MiB flat (`mmu: MTLB at 0xfa800000, carveout
+  0xfa800000+65536K identity-mapped in 16 slave tables`, `mmu: on (PTA
+  0xfa801000 entry 0 -> MTLB 0xfa800000, safe page 0xfa802000)`), and the
+  front end runs its idle loop at `0xfa844000` (`WAIT 24414 cycles`). This
+  works for the ring, the page tables and the fence (Q10, Q14: what works is
+  non-cacheable on the CPU and flat in the GPU's MMU; a cacheable mapping
+  with clean/invalidate was not tried).
+- The interrupt: `I: irq 215 connected`, then
+  `gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0xa0 group=0 pend=0 active=0 gicd_ctlr=0x1 typer=0xfc2c secext=1 gicc_ctlr=0x41 pmr=0xf0 route=ours`
+  and `gc_irq: igroupr=0x00000000 (GICD_IGROUPR6) bit23=0 expect=1 mismatch`.
+  **SPI 183 is routed to the A35 in group 1**: enable, priority and target
+  read back as written, and the fence's interrupt arrived. `GICD_IGROUPR6`
+  reads 0 from the non-secure side (RAZ, GIC-400 with the security
+  extensions, `secext=1`), so `group=0` and `mismatch` are the view, not the
+  group; `mismatch` with `route=ours` is the expected pair on this board.
+  `cfg=1` has the trigger bit (bit 1 of the field) clear: level-sensitive,
+  as configured; why bit 0 reads 1 was not looked into.
+- 0x3A8: `W: AHB_CONTROL (0x3a8) reads 0xdeaddeac: the interconnect's
+  pattern for an address no slave decodes`; `hw init: … AHB_CONTROL
+  0xdeaddeae (absent: no slave at that address) INTR_ENBL 0xffffffff`;
+  `gc diag: after-reset 3a8=0xdeaddeac 10c=0x01590880`, `after-init
+  3a8=0xdeaddeae 10c=0x015d0880`. **Nothing decodes 0x3A8 in the GPU's
+  non-secure window on this board** (no bit 0 to release), so the
+  galcore-init-diff's suspect 1 does not apply and the
+  `YAKOGL_STM32MP2_GC_AHB_RESET_RELEASE` opt-in is not needed. The fence
+  retires without it. The reset took one attempt (`reset-attempt n=1
+  004=0x7fffffff 000=0x00070100`).
+- The result: `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us
+  (completed 1, wait 0)` and `gc_fence: PASS`, record `yk-record: 594b0206
+  00000001 00000001 01001049` (kind APP, status 1, seqno 1, irqs 1, 0x1049 =
+  4169 us from submit to the wait's return, which includes the wait's 1 ms
+  polling step). The interrupt arrived 21 us after the submit
+  (`gpu_busy_ns`). The image ended `mp2: board: run over: PSCI SYSTEM_RESET
+  at 874 ms`; the next BL2 printed `Reset reason: System reset (SYSRST)
+  (0x2074). Warm boot.`
+  - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 pc=0xa000539c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+  - `verdict gc-irq connected=FAIL route=absent` (the parser's prefix defect above; with `I: ` stripped: `verdict gc-irq route=PASS:ours igroupr=mismatch`)
+  - `verdict gc-fence model=PASS retired=PASS irq=PASS:1 final=PASS record=PASS:kind=2`
+  - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+  - `board-stm32mp2.sh stm32mp257f-dk gc_fence rc=6 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s` (rc 6: the runner's stale card above)
+
+### gc_clear: PASS, both clears read back through the resolve engine
+
+- The same bring-up lines as `gc_fence`, then `gc_clear: target 256x128
+  stride 1024 at GPU 0xfa860000`, two clears (submit, wait, read-back
+  records `594b0504`-`594b0509`), and `gc_clear: 256x128 wrong pixels 0
+  (clear 1 0, clear 2 0, guard 0)`, `gc_clear: PASS`, record `yk-record:
+  594b020a 00000001 00000002 01000080` (kind APP, status 1, 2 clears, 256 <<
+  16 | 128). Every pixel of both colours was right and both guard rows kept
+  their poison: the resolve engine wrote the GPU's view of the carveout, and
+  the CPU read the GPU's writes through its non-cacheable mapping with no
+  maintenance (Q14: GPU-to-CPU visibility works with that mapping). End
+  `PSCI SYSTEM_RESET at 894 ms`, then `Reset reason: System reset (SYSRST)
+  (0x2074). Warm boot.`
+  - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa000599c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+  - `verdict gc-irq connected=FAIL route=absent` (as for `gc_fence`)
+  - `verdict gc-clear model=PASS readback=PASS:0 final=PASS record=PASS:kind=2`
+  - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+  - `board-stm32mp2.sh stm32mp257f-dk gc_clear rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=45s`
+
 ### Q1, Q6 and Q8, as the board read them (2026-11-21)
 
 - **Q6, `CNTFRQ_EL0`: 40000000 (40 MHz)**, the same in all five boots of
@@ -549,8 +656,9 @@ the step correct either way and logs the count.
 
 - Q1 customer id (step 4 prints it; expected 0x15, never read;
   pre-study `:134-136,816`);
-- Q6 `CNTFRQ_EL0` from a CPU (steps 1-3 print `cntfrq=`; expected 40 MHz) and
-  SPI 183's route to the A35 (step 5's `gc_irq` line) (pre-study `:479-480,821`);
+- Q6 `CNTFRQ_EL0` from a CPU (steps 1-3 print `cntfrq=`; read 40 MHz) and
+  SPI 183's route to the A35 (step 5's `gc_irq` line: `route=ours`, the
+  fence's interrupt arrived) (pre-study `:479-480,821`);
 - Q8 what U-Boot hands over at `go` (EL2, MMU/caches off, x0 = 0 with x1
   non-null; steps 1-4 print `mp2-handover:`) and whether the SMC interface to
   OP-TEE stays open (steps 3-4) (pre-study `:823`, `stm32mp2.c:43-45`);
@@ -559,8 +667,11 @@ the step correct either way and logs the count.
   (step 3), the REE_KERNEL login question (step 4) (pre-study `:595-601,818`);
 - the `RCC_GPUCFGR` reset bit's polarity, unconfirmed from RM0457
   (`rcc.rs:18-21`): step 4's reset-to-idle is the answer;
-- Q14, the carveout's coherence with the A35 (step 7's CPU read-back of
-  GPU-written memory; pre-study `:829`);
+- Q14, the carveout's coherence with the A35 (pre-study `:829`): steps 5-6
+  show a Normal non-cacheable CPU mapping with no maintenance works for the
+  ring, the MMU tables and a resolve-engine write read back by the CPU; step
+  7's CPU read-back of 3D-pipe output is the next reading, and a cacheable
+  mapping was not tried;
 - whether the ST row behaves like the i.MX8MP's end to end — steps 5-8 are
   the fence, resolve-engine and 3D-pipe proof before any CTS row (pre-study
   `:801-807`).
