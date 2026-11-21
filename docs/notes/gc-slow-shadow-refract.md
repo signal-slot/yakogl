@@ -379,3 +379,56 @@ A baseline outside these values rejects this note's ranking.
 - The `.s` was produced by this host's toolchain. The board image's
   toolchain may differ in version, but `+strict-align` is the target's, so
   the byte loads do not depend on the version.
+
+## Plan #355: host state and what the X2 must measure
+
+Written at `a54d9357`. Every figure is a host count or cited from a note;
+**no X2 millisecond exists** (`x2-glmark2-slow-scenes.md`). Issues #1204 and
+#15's scene rows are filled by X2 sessions only.
+
+### What landed
+
+- `9cdeff6d` (W1-W5: `src/vivante/tiled_rt.rs`, `early_z.rs`) behind the knob
+  `gc_tiled_rt`, default off (`src/vivante/backend.rs:455`); `342c286a` and
+  `ad0e070e` after it (see `gc-slow-terrain.md`, same section).
+- `tests/gc_scene_kicks_tiled.rs` counts knob off and on per scene.
+- Plan #328's wide depth-resolve loads are in `src/vivante/ds_cache.rs:742-777`
+  (`resolve_row`, `as_chunks::<4>` with `from_ne_bytes`). The 350 to 1000 ms
+  of cause 1 above was estimated for the byte loads before them; the host
+  cannot say what remains. That is the first X2 number to read.
+
+### The measured cause, as the host gives it
+
+- **The knob takes neither scene.** `tiled_rt_spec`
+  (`src/vivante/backend.rs:736-750`) and `tiled_rt.rs:140-147` accept a
+  4-byte colour target with the depth test on; the harness's shadow and refract
+  passes (1600x1200) render with a depth **texture**, which `ds_cache::pe_private`
+  (`src/vivante/ds_cache.rs:263-270`) refuses (`tests/gc_scene_kicks_tiled.rs:44-46`).
+- **Counts, a frame, knob off and on, identical** (`:26-42`, `Lag`): shadow
+  2 kicks, 1 wait outside the swap, 1 CPU depth resolve, RS other 3, 3 draws;
+  refract 3 kicks, 1 wait, 1 resolve, RS other 4, 12 draws; RS tile-in, copy
+  back and early-depth draws 0 in both. The ceilings are 3 and 4 kicks
+  (`:80-87`).
+- **What dominates stays:** the CPU depth resolve of a 1600x1200 depth
+  texture (cause 1, above; 1.92 M texels), and the GPU work of 10 to 25 ms
+  (shadow) and 15 to 40 ms (refract), neither moved by W4/W5. The lever is
+  depth-sample-gc (`gc-depth-sample-wire.md`; `gc-depth-sample.md`).
+
+### Predicted gain
+
+`gc-slow-host-counts.md:541-601`: **0 ms** for both. Even if early depth took
+the depth pass, the cited range is 0 to 1 ms (shadow) and 0 to 2 ms
+(refract). Reading rule: a difference within the spread of repeated runs is
+the prediction; a slowdown of 0.2 to 1 ms (800x600) or 1 to 4 ms (1600x1200)
+a job would be a tiled shadow the host does not show.
+
+### Rows the X2 sessions fill
+
+Empty until a session runs; one table per scene (shadow, refract).
+
+| row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
+|---|---|---|---:|---|---|
+| before | 72972ba4 | n/a (not built) | | | |
+| tip | | off | | | |
+| tip | | on | | | |
+| D (on minus off) | | | | | |
