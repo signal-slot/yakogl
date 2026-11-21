@@ -73,7 +73,17 @@ The image never programs the pixel valve, HDMI or PHY. In two stages:
 2. **A 32 bpp plane for GL, our own list after the bootloader's.** Build
    one unscaled XRGB8888 plane with `hvs6w_write_plane` (`hvs6_dlist_write.h:83`),
    place it at or above word 32 with `dlist_place`/`dlist_swap`
-   (`dlist_alloc.h:88-133`; floor per `rpi:vc4_hvs.c:1570-1583`), and point
+   (`dlist_alloc.h:88-133`; floor per `rpi:vc4_hvs.c:1570-1583`) and only
+   where it overlaps neither the firmware's list span nor the words below it
+   that the probe has not shown unused. The firmware's list does not start at
+   word 0: it starts at channel 0's `DISPX_LPTRS.HEADE`, read at run time
+   (HEADE = 672 (s32dumprun, read-only skeleton run); field mask
+   `hvs6_chan.h:94`). The span is `[HEADE, END word)`; the byte-equal snapshot
+   and restore cover exactly that span. The rule is enforced by
+   `swap_placement_ok` (`tools/probes/rpi_5/rpi5_scanout32/src/swap_check.h:89-99`:
+   no overlap, `word+len <= 4096`, unknown lengths refused) and judged again by
+   `verdicts.sh` (`tools/probes/rpi_5/rpi5_scanout32/verdicts.sh:257-258`, the
+   snapshot's mandatory `heade=` field at `:137`). Then point
    channel 0's `DISP_DL`/list pointer at it. This edits only the HVS, not the
    wire; the pixel valve and HDMI stay as the firmware left them. Double
    buffering is then a list swap at vertical blank (`dlist_swap`), not a
@@ -139,7 +149,7 @@ ran. The three probes below are proposals, named as they would sit under
 |---|---|---|---|
 | `rpi5_mbox` (first, cheapest) | Only the mailbox: `GET_THROTTLED`, `GET_FIRMWARE_REVISION`, then the five clock-rate queries, with raw status and response codes | `rpi5_mbox: tag <id> status <hex> answered <hex> value <hex>` per request | `GET_THROTTLED` is answered. Explains the `-EIO` of `dd:531-538` before anyone judges route B |
 | `rpi5_scanout16` (frame 1) | Z0/Z1 snapshot as in `rpi5_display`, adopt the plane, 16 bpp `fbcon` text on the top rows and a pattern below, hold, read back twice, stop feeding | `u3 plane: …`, `u3 adopt-readback: PASS`, `rpi5_scanout16: text rows <n> changed`, frame counter before and after | the plane is adopted, the pattern and text read back byte-equal twice, `STATUS.FRCNT` advances, `PV_CONTROL.EN` and `VIDEN` set (`dd:412-434`) |
-| `rpi5_scanout32` (stage 2) | builds the XRGB8888 plane, places it after word 32, swaps channel 0's pointer at vblank, alternates two buffers, then restores the firmware's list | `u3 dlist: placed word <n> len <n>`, `u3 plane: addr=… fmt=XRGB8888`, `FRCNT` per swap, `u3 restore: PASS` | the list names our buffer, `FRCNT` advances through each swap, the firmware's list is restored byte-equal at the end, the watchdog returns the board |
+| `rpi5_scanout32` (stage 2) | builds the XRGB8888 plane, takes the firmware's list start from `LPTRS.HEADE` and places it at or above word 32 clear of the firmware span (`swap_check.h:89`, `verdicts.sh:257`), swaps channel 0's pointer at vblank, alternates two buffers, then restores the firmware's list | `u3 snapshot: … heade=<n> words=<n> …`, `u3 dlist: placed word <n> len <n>`, `u3 plane: addr=… fmt=XRGB8888`, `FRCNT` per swap, `u3 restore: PASS` | the list names our buffer, `FRCNT` advances through each swap, the firmware's list is restored byte-equal at the end, the watchdog returns the board |
 | `rpi5_gl_scanout` (after the GL probes) | renders with the 7.1 job (the `rpi5_triangle` path) into a render target, converts or copies it into the plane, reads it back | `rpi5_gl_scanout: 4096 px, 0 wrong` and the plane readback line | the plane holds the rendered image byte-equal |
 
 Observation. The Pi 5 has **no display-observation device**: the farm lists no
@@ -178,7 +188,7 @@ side, under ssh before the Zephyr run, supplies the references
    960 (`dd:559-562`). Matters only for option (ii) and for any plane resize.
 4. **Can channel 0's list pointer be changed under a running scanout without
    a visible glitch, and is the vblank the safe point?** Not read anywhere
-   (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate.
+   (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate. The probe now prints `heade=` in its snapshot line.
 5. **Do the disp (16) and HSM (13) clocks matter to HVS register reads?** The
    HSM rate was never answered, so HDMI registers were skipped
    (`dd:541-543`); the HVS ones were read with the disp clock unknown
