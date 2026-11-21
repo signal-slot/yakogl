@@ -25,12 +25,16 @@ records at the tip.
   `e9901869a`); i.MX8MP 17,318 at `0fbe61a3`; Pi 4 17,126 at `46f93767`.
 - glmark2-es2 on the AM62P reads 468: 33 scenes, 0 failed, 0 GL errors
   (2026-11-01, record `99156df8`; shadow 10.62, refract 35.09 and
-  terrain 83.06 ms a frame). The README table stays #1196's one-commit
-  table.
+  terrain 83.06 ms a frame). Common-set re-runs since: i.MX8MP 42 (33
+  scenes, 0 failed, 0 GL errors, main `f87dde43`, 2026-11-07) and Pi 4
+  195 (33 scenes, 0 failed, 0 GL errors, main `141ddcd5`, 2026-11-21,
+  `1c08b363`); the figures are the "Common set" rows of
+  `tools/cts/RESULTS.md`. The README table stays #1196's one-commit table.
 - `gl_test` on the common set: the AM62P 49 of 50 — case 20 `etc` fails
   its first check alone, a stale expectation, its other 16 checks pass
   (record `99156df8`); the i.MX8MP 49 of 49 run, case 16 skipped, from
-  main `f87dde43` (`8737e5a3`).
+  main `f87dde43` (`8737e5a3`); the Pi 4 13 of 13 from main `141ddcd5`
+  (`1c08b363`).
 - `gl_test` on the NanoPC-T6 (its own Linux, panthor): 165 of 256 cases
   pass, twice with identical verdict lines, on main `1a22bd38e`
   (`ba200dda`); the previous record read 161 at `0decb5f7`
@@ -53,9 +57,36 @@ records at the tip.
   record lines, the target read back 2048 red and 2048 blue of 4096
   pixels, 26 ms in all (the image of main `ef86672bf`; a kexec
   development run, the U-Boot sign-off form not run, `14ea040a`).
-- dEQP-GLES3 on the Pi 4: rows 0-15, sixteen images, from main
-  `b1b5b845`: 8,350 mustpass cases all with a result, 7,346 pass, 558
-  fail, 446 not supported, 0 GPU recoveries (`d498d5ad`).
+- dEQP-GLES3 (ES 3.0) is partial. The `tools/cts/RESULTS.md` rows read: the
+  AM62P's whole tree 36,552 of 42,810 pass (`ad2b5ed`, 2026-10-14; 2,880
+  fail, 2,195 not supported, 185 quality warnings, 998 without a result);
+  the Pi 4 nine of 91 images at `925dbca9`, 4,917 cases, 3,943 pass, 643
+  fail, 331 not supported, 0 GPU recoveries; the i.MX8MP not run on the
+  board. A later Pi 4 record, rows 0-15 (sixteen images) from main
+  `b1b5b845`, read 8,350 cases all with a result, 7,346 pass, 558 fail,
+  446 not supported, 0 GPU recoveries (`d498d5ad`); it is a log record,
+  not yet a RESULTS.md row. Failures by cause: `docs/es3-cts-failures.md`.
+- dEQP-GLES2 on the NanoPC-T6 on Zephyr (kexec-started, a development
+  result): the 76 rows of `tools/cts/mali-gles2-tree.txt`, one image per
+  row, from main `de2f2c103`, 2026-11-17: all 76 images reached their
+  `deqp: done` line; of the 17,165 mustpass cases 6,644 pass, 9,545 fail,
+  973 not supported, 3 quality warnings (the "Mali: NanoPC-T6 on Zephyr"
+  row of `tools/cts/RESULTS.md`; the Armbian tree above stays 5,456 Pass).
+  9,482 of the failures are the online compiler naming a shader form it
+  refuses.
+- Raspberry Pi 5 (BCM2712, V3D 7.1.10) on Zephyr, probe images started by
+  the Pi firmware's tryboot (`tools/probes/rpi_5/`; the "V3D 7.1" section
+  of `tools/cts/RESULTS.md`): the identity registers equal Linux's (43
+  fields, 0 differ, build `8eb2b3cf`), the first clear passes (0 of 8192
+  pixels wrong), the first triangle passes with Mesa's shaders and with
+  our own 7.1 compiler's (0 of 4096 pixels wrong, build `0c58c457`,
+  2026-11-20), one TFU mip-chain job reads back within 2 (`5857cc88`),
+  the property mailbox answers 7 of 7 with cache maintenance (`0e7742f0`),
+  and the first frame on the firmware's HDMI plane reads back byte for
+  byte (`2b88a9f6`, 2026-11-21; registers and bytes only, no camera). No
+  GLES result on the Pi 5: `gpu-v3d` still selects the V3D 4.2 back end.
+- STM32MP257F-DK: no board result yet (`tools/cts/RESULTS.md` has no DK
+  row); what exists is host-tested code and probes, under Added.
 - dEQP-GLES2 on the NanoPC-T6 (Mali-G610, panthor, the board's own
   Armbian): the whole mustpass tree at main `37305608`, 2026-11-15, one
   boot, four slices under `tools/cts/log/2026-11-15-t6-gles2-S<n>-37305608/`:
@@ -65,20 +96,35 @@ records at the tip.
   the first tally (`ce050715`, 5,260 Pass) 224 cases newly pass and 28 that
   passed are refused; most of the rest are refusals by the online compiler
   (`docs/es2-cts-failures.md` section M).
-- The full gate reads 222 ok, 0 failed, 0 gap(s) at `c66bea9f`
-  (`4946e879`); green means that one commit and is re-run on the commit
-  to publish.
+- The last green full gate reads 222 ok, 0 failed, 0 gap(s) at `c66bea9f`
+  (2026-11-11, `4946e879`); green means that one commit. The full run at
+  `760aad3d` (2026-11-14) is not green: 9 rows failed on the redaction
+  scan's fixture values, fixed at `31608f8e`, and a full disk cut the rest;
+  the gate is re-run on the commit to publish (checklist line 12).
 
 ### Added
 
 - V3D: ES 3.0 texture and QPU work for the Raspberry Pi 4: 3D textures and
   2D-array textures (the layout and slice offsets in `v3d_tex.c`, uploaded
-  at their `texture.rs` offsets; the by-name draw refusal of the two
+  at their `src/v3d/texture.rs` offsets; the by-name draw refusal of the two
   types was lifted at `8ae0a44b`), `texelFetch` and
   the `*Offset` look-ups in the QPU compiler, swizzle and wrap R taken from
   `GlesTextureBind`, and an integer clear program for a scissored or masked
   clear of an integer colour target. Also the V3D 7.1 (Raspberry Pi 5)
-  QPU model, encoder and decoder, host-side only (#210).
+  QPU model, encoder and decoder (#210); the Pi 5 path since is the next
+  entry.
+- V3D 7.1 (Raspberry Pi 5), host-tested pieces and board probes, not yet a
+  GL back end (`src/v3d/backend.rs` is still V3D 4.2 only; `admit71.rs` is
+  not wired into it): the 7.1 job builder (`driver/src/v3d/v3d_job71.c`,
+  `887ee9fc`), texture and TFU builders (`v3d_tex71.c`, `v3d_tfu71.c`),
+  the record, packet and format values checked against Mesa in
+  `src/v3d/*71.rs` (`record71.rs`, `draw71.rs`, `frame71.rs`, `rt71.rs`,
+  `texture71.rs`, `uniform71.rs` and others), the 7.1 QPU compiler's
+  chain, scheduler and simulator under `src/shaderc/online/v3d/*71.rs`,
+  a Zephyr OSAL (`src/osal/zephyr_v3d71.c`, `cf568748`), and the probe
+  images of `tools/probes/rpi_5/` that ran on the board (Results; plan in
+  `docs/notes/pre-study-rpi5.md`, `driver/docs/rpi5-v3d71-facts.md`). The
+  display route is `docs/notes/rpi5-display.md`.
 - V3D: a `GLES_SURF_RGB10_A2` render surface with its TLB words, and the GL
   core's side of `GL_RGB10_A2` (own surface, bits, CPU mipmap chain). The
   V3D reports the format: `GLES_TEXFMT_RGB10A2` joined
@@ -96,8 +142,11 @@ records at the tip.
   `eot4_tb`..`eot4_tb3` with the last one to three targets from tile
   buffers, each spilled emit patched with its own buffer's address), three
   tile buffers, and four PBE pairs in the render kick (344 bytes, `frag_pr`
-  at 232 and 112 bytes). Draws still write at most three targets
-  (`PVR_RENDER_MAX_RT`); the capacity is `PVR_RENDER_EOT_MAX_RT` (RC14).
+  at 232 and 112 bytes). The render layer writes up to four targets
+  (`PVR_RENDER_MAX_RT`, `PVR_RENDER_EOT_MAX_RT`; RC14, `b72adb59`); the
+  driver's static end-of-tile PDS program moves three PBE states unless the
+  driver is brought up for four (`PVR_RENDER_EOT_PDS_PAIRS`), and the back
+  end draws four targets when `draw_targets()` is 4 (`e329c01a`).
 - PowerVR: the groundwork of the firmware's partial render (#2, #3), all
   off by default: the render kick's zeroed `frag_pr` block
   (`PvrRenderFragPr`, 96 bytes), the SPM scratch size and PBE store words
@@ -115,7 +164,9 @@ records at the tip.
   past location 0), and the frame builder draws into several colour targets
   and keeps a split 4x frame's samples. Each is checked byte for byte
   against Mesa's drm-shim output.
-- NanoPC-T6 bring-up, not on Zephyr's GPU path yet: the MCU firmware's
+- NanoPC-T6 on Zephyr, kexec-started from the board's Linux (a development
+  result, the U-Boot sign-off not run; the `gl_test` regression set and a
+  dEQP-GLES2 tree run over it, Results): the MCU firmware's
   section list, CSF interface and boot over a host model (Z3); the
   `board::nanopc_t6_fw` probe with a `#[repr(C)]` record and its C entry
   `yd_t6_fw_up` (declared in `yakogl_drivers.h`); and Z4, the CSG/CS
@@ -263,6 +314,52 @@ records at the tip.
   outputs from ALU results, conversions and MRT beside a float output;
   and the V3D compiler's uniform block reads past dword 1536
   (`b8c3f49b`).
+- Mali (`gpu-mali`): the online compiler (`src/shaderc/online/mali/`) has
+  grown a product route that builds and measures a program as
+  `glLinkProgram` does (`74ad6cc5`), dEQP-shaped lowerings for integer and
+  boolean values, constant folds, mixed-precision compare chains and
+  vertex look-ups (`ab9cde96`, `0fd576ea`, `c81b75ea`, `3c4099a6`), up to
+  256 locals (`74308a71`) and glmark2's vertex and fragment forms (for
+  example `f648ee05`); each is checked byte for byte against Mesa's
+  output, and the notes are `docs/notes/mali-*.md`
+  (`docs/notes/mali-compiler-road-to-es2.md` is the road to ES 2.0). The
+  GPU's own registers say what differs between Valhall CSF parts, and the
+  G310 (i.MX 95) is read that way (`22a93678`,
+  `docs/notes/mali-g310-vs-g610.md`). What the compiler still refuses is
+  the NanoPC-T6 Results above and `docs/es2-cts-failures.md` section M.
+- PowerVR: hardware instance divisors up to 0xffff behind the
+  `pvr-instance-divisor` feature (`4f4310a6`, `3ef0bbef`); 4x multisample
+  renderbuffers for the ES 3.0 formats, `max_samples` 4 (`d5231f8a`,
+  `docs/notes/es3-msaa-renderbuffers.md`); uniform-block members read with
+  `ld` from the stage's block address (`b85960c2`, `fad0558a`); integer
+  attachments drawn beside float or differently laid-out ones, cleared and
+  reloaded with the rest (`90452224`, `55afa134`, `1e374558`); the ES 3.0
+  uniform-block limits reported (`5e6b27ef`); three 16F colour outputs
+  compile per target (`f3409705`).
+- GL core: `GL_EXT_color_buffer_float` and `GL_EXT_color_buffer_half_float`
+  follow what the back end can draw, the first only under the
+  `color-buffer-float` feature (`02c623ba`, `48cb7272`, `c558647b`); the V3D
+  draws, clears and reads back float colour targets under it (`e59119a1`,
+  `tests/es3_color_buffer_float.rs`) and draws R and RG integer textures
+  as colour attachments (`379438ee`, `48f6017c`);
+  `glBlitFramebuffer` copies depth, stencil and integer colour between
+  textures, cube faces, array layers and the window (`ca583834`,
+  `af043255`, `0b8d04df`, `60569582`); `glLinkProgram` captures the
+  program binary, one format listed (`5e94999a`); records and programs take
+  more than 255 active uniforms (`3cbecbb9`).
+- GC7000: the ten narrow texture classes 30-39 are sampled (`102310ff`),
+  RGBA32F is stored in the 128-bit class (`681b728b`); an opt-in, off by
+  default, releases the 0x3a8 secure-AHB soft reset as galcore does
+  (`ac2fe51f`, Kconfig switch `718826a9` for the STM32MP257F-DK).
+- STM32MP257F-DK, beside the display chain above: a runner of its own
+  (`tools/board-stm32mp2-standalone.sh` and the `tools/mp2s_*` host
+  checks, `dbd6099a`, `cc8166cc`), the DK's Zephyr image rows in the gate
+  (`db9483e9`), the LTDC frame CRC in the C ABI (`f1a868ce`), the probes of
+  `tools/probes/stm32mp257f_dk/`, and the notes
+  `docs/notes/pre-study-stm32mp257f-dk.md`,
+  `docs/notes/stm32mp257f-dk-uboot-boot.md` and
+  `docs/notes/stm32mp257f-dk-standalone-boot.md`. Nothing of it has a
+  board result in `tools/cts/RESULTS.md` yet.
 
 ### Changed
 
@@ -286,15 +383,17 @@ records at the tip.
   `libyakogl.a` links with `--whole-archive` again on such a nightly.
 - Vivante: a render-target change no longer ends the GC kick
   (`e299852c`).
-- GL core: `GL_MAX_SAMPLES` answers from `src/gl/msaa.rs`, the back-end
-  max fixed at 0 (`2830b218`); `glUniform*ui` on a non-uint uniform of a
+- GL core: `GL_MAX_SAMPLES` answers from `src/gl/msaa.rs` and the back
+  end's `max_samples` (`2830b218`, `5e2a9ad5`; the field was added at
+  `8eb22b62`, 0 on `gpu-v3d`, `gpu-vivante` and `gpu-mali`, 4 on the
+  PowerVR since `d5231f8a`); `glUniform*ui` on a non-uint uniform of a
   GLSL ES 3.00 program is `GL_INVALID_OPERATION` (`bc200f21`); and
   `glTexSubImage2D/3D` refuse `GL_FLOAT` into a texture with no float
   format (`bece11ec`).
 - Vivante: a program that writes `gl_FragDepth` turns early Z off through
   the early-depth rule (`b3f42d14`); dedup's PE room holds the tiled
   target's TS words (`be0c1527`).
-- V3D: `texture.rs` pins the sampler compare state of all eight GL
+- V3D: `src/v3d/texture.rs` pins the sampler compare state of all eight GL
   functions and the non-depth bypass (`753dedbf`).
 
 ### Fixed
