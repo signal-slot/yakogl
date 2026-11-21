@@ -107,6 +107,15 @@ if(CONFIG_YAKOGL_BOARD OR CONFIG_GC_COMMON_RESULT_SNVS)
   endif()
 endif()
 
+# The opt-in printk RAM ring (common/ramlog.c, CONFIG_YAKOGL_RAMLOG).
+if(CONFIG_YAKOGL_RAMLOG)
+  zephyr_library_named(yakogl_board_ramlog)
+  zephyr_library_sources(common/ramlog.c)
+  if(YAKOGL_WERROR)
+    zephyr_library_compile_options(-Werror)
+  endif()
+endif()
+
 if(CONFIG_YAKOGL_BOARD)
   zephyr_library_named(yakogl_board)
   zephyr_library_sources(common/board.c common/sample_glue.c)
