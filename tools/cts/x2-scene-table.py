@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """x2-scene-table.py - the X2 slow-scene table: one row a scene run, ms a frame.
 
-    tools/cts/x2-scene-table.py [--help] <dir>...
+    tools/cts/x2-scene-table.py [--help] [--before <sha8>] <dir>...
 
 <dir>... is a run record directory (the <YYYYMMDD-HHMM>-<name>-<sha8>/ directory
 tools/board.sh run leaves under the outdir tools/cts/x2-glmark2-scenes.sh is given)
@@ -37,6 +37,12 @@ verdict     INDEX.txt's `verdict: ` line verbatim: board.sh's line, with the run
             (`stop: no INDEX.txt` when the file is absent) and a note below the
             table names the stop rows: the run stopped before its verdict was
             written and its row is no measurement.
+
+--before <sha8> adds a second table below the first, the gain: for each scene, the
+rows of the commit <sha8> (the before) against every row of another commit (the
+after) with a measured ms a frame: before ms, after ms, before / after. A scene
+with no row for <sha8>, or none for another commit, is named in a "no pair for:"
+note. <sha8> must be 8 lowercase hex digits.
 
 Everything read from a record is redacted before it prints: an IPv4 address becomes
 192.0.2.n and a /dev/tty... path becomes <uart-path> (tools/board.sh already
@@ -260,12 +266,47 @@ def read_run(recdir):
             "ms": ms, "fps": fps, "verdict": verdict, "stop": stop}
 
 
+def print_gain(runs, before):
+    """the gain table: each scene's before rows (commit <before>) against its other rows.
+    Scene names come from a record's meta.txt: every one goes through cell()/redact()."""
+    by_scene = {}
+    for r in runs:
+        if r["ms"] is not None:
+            by_scene.setdefault(r["scene"], []).append(r)
+    print("\n| scene | before commit | after commit | gc_tiled_rt | before ms | after ms | before / after |")
+    print("|---|---|---|---|---|---|---|")
+    unpaired = []
+    for scene in sorted(set(r["scene"] for r in runs), key=str.lower):
+        rows = by_scene.get(scene, [])
+        befores = [r for r in rows if r["sha8"] == before]
+        afters = [r for r in rows if r["sha8"] != before]
+        if not befores or not afters:
+            unpaired.append(scene)
+            continue
+        b = befores[0]
+        for a in afters:
+            ratio = "%.2f" % (b["ms"] / a["ms"]) if a["ms"] else "-"
+            print("| %s | %s | %s | %s | %.3f | %.3f | %s |"
+                  % (cell(scene), b["sha8"], a["sha8"], a["knob"], b["ms"], a["ms"], ratio))
+    if unpaired:
+        print("\nx2-scene-table: no pair for: %s (a measured row of %s and of another commit "
+              "are both needed)." % (", ".join(cell(s) for s in unpaired), before))
+
+
 def main(argv):
     args = []
-    for a in argv:
+    before = None
+    it = iter(argv)
+    for a in it:
         if a in ("-h", "--help"):
             sys.stdout.write(__doc__)
             return 0
+        if a == "--before":
+            before = next(it, None)
+            if before is None or not re.fullmatch(r"[0-9a-f]{8}", before):
+                sys.stderr.write("x2-scene-table: --before needs <sha8> (8 lowercase hex digits)\n")
+                return 2
+            continue
         if a.startswith("-"):
             sys.stderr.write("x2-scene-table: unknown option %s\n" % a)
             return 2
@@ -302,6 +343,8 @@ def main(argv):
         print("\nx2-scene-table: stop: %d record(s) printed no verdict line: %s. "
               "Those rows are not measurements: the run stopped before board.sh wrote its verdict."
               % (len(stops), names))
+    if before:
+        print_gain(runs, before)
     return 0
 
 
