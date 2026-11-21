@@ -140,6 +140,8 @@ mkimg "$S/img/pi5.bin" 4194304 'board: PM watchdog resets the SoC ~50 s after bo
 mkimg "$S/img/am62p.bin" 4194304 'rti_arm: armed preload 0xef'
 mkimg "$S/img/am62p-deqp.bin" 4194304 'rti_arm: armed preload 0xef deqp: summary'
 mkimg "$S/img/imx8mp.bin" 4194304 'gc_wdog_arm: armed'
+mkimg "$S/img/imx95.bin" 4194304 'verdin_imx95: WDOG3 armed: CS 0x%08x TOVAL 0x%04x'
+mkimg "$S/img/imx95-huge.bin" $((256 * 1024 * 1024 + 4096)) 'verdin_imx95: WDOG3 armed: CS 0x%08x'
 mkimg "$S/img/x2.bin" 4194304 'gc_wdog_arm: armed'
 mkimg "$S/img/stm32mp257f-dk.bin" 4194304 'gc_wdog_arm: armed'
 mkimg "$S/img/nanopc-t6.bin" 4194304 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000'
@@ -165,6 +167,8 @@ am62p:kexec-dev:kexec_run.sh
 imx8mp:uboot-tftp:sync; sudo -n systemctl reboot
 imx8mp:uboot-mmc:sync; sudo -n systemctl reboot
 imx8mp:kexec-dev:kexec-zephyr 0x60000000 --crash
+imx95:uboot-tftp:sync; sudo -n systemctl reboot
+imx95:uboot-mmc:sync; sudo -n systemctl reboot
 x2:kexec-dev:/tmp/yakogl-kexec/kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x60000000 --crash
 nanopc-t6:kexec-dev:bash driver/tools/kexec-zephyr/nanopc-t6.sh
 pi5:tryboot:sudo reboot "0 tryboot"'
@@ -207,6 +211,63 @@ for boot in uboot-tftp uboot-mmc; do
         eval '[ "$rc" = 0 ] && grep -q "scan every /proc/<pid>/fd for /dev/ttyFAKE9" <<<"$out" && grep -q "stty -F /dev/ttyFAKE9" <<<"$out" &&
               grep -q "read /dev/ttyFAKE9 .* into <rundir>/console.txt" <<<"$out" && ! grep -q "am62p_netboot_uart.py" <<<"$out"'
 done
+# the Verdin iMX95 (uboot-tftp, uboot-mmc): the record is the BBM GPR4..7,
+# cleared before the boot and read after it by tools/imx95_bbm_record.sh piped
+# to the board's sh; the console is opt-in (BOARD_UART), as on the i.MX8MP
+for boot in uboot-tftp uboot-mmc; do
+    out=$(BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+    rc=$?
+    check "imx95 $boot run: rc 0, the BBM record cleared before the stage and the reboot, read after the cycle" \
+        eval '[ "$rc" = 0 ] && grep -qF "sudo -n sh -s -- clear   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
+              grep -qF "sudo -n sh -s -- read   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
+              [ "$(grep -n -- "-- clear" <<<"$out" | cut -d: -f1)" -lt "$(grep -n "systemctl reboot" <<<"$out" | cut -d: -f1)" ] &&
+              [ "$(grep -n "systemctl reboot" <<<"$out" | cut -d: -f1)" -lt "$(grep -n -- "-- read" <<<"$out" | cut -d: -f1)" ] &&
+              ! grep -q "/sys/bus/nvmem\|snvs" <<<"$out"'
+    check "imx95 $boot run, no BOARD_UART: no probe, capture, stty or fd scan; the bound 600 s in all" \
+        eval '! grep -q "am62p_netboot_uart.py" <<<"$out" && ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out" &&
+              grep -q "<= 600 s" <<<"$out"'
+    out=$(BOARD_UART=bridge.invalid:1 BOARD_BOOT=$boot dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+    rc=$?
+    check "imx95 $boot run, BOARD_UART host:port: probe and TCP capture, no stty, no fd scan" \
+        eval '[ "$rc" = 0 ] && grep -q "am62p_netboot_uart.py probe bridge.invalid:1" <<<"$out" &&
+              grep -q "am62p_netboot_uart.py capture bridge.invalid:1 <rundir>/console.raw <rundir>/console.ts" <<<"$out" &&
+              ! grep -q "stty" <<<"$out" && ! grep -q "/proc/<pid>/fd" <<<"$out"'
+done
+out=$(BOARD_BOOT=uboot-tftp dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+check "imx95 uboot-tftp run: the canary in NETBOOT_TFTP_LOG first, the server's log of the image read into tftp.txt" \
+    eval 'grep -q "canary must be in the log" <<<"$out" && grep -q "/TFTP_LOG > <rundir>/tftp.txt" <<<"$out"'
+out=$(SEL=0x8003 dry imx95 run "$S/img/imx95.bin" "$S/logs" 2>&1)
+rc=$?
+check "imx95 run with SEL: rc 2 (the image reads no selector), nothing written, no reboot" \
+    eval '[ "$rc" = 2 ] && grep -q "reads no selector" <<<"$out" && ! grep -q "fw_setenv\|systemctl reboot" <<<"$out"'
+out=$(dry imx95 run "$S/img/imx95-huge.bin" "$S/logs" 2>&1)
+rc=$?
+check "imx95 run of an image past 0xd0000000 + 256 MiB (zephyr,sram): rc 3, refused before the board" \
+    eval '[ "$rc" = 3 ] && grep -q "does not fit 0xd0000000..0xe0000000" <<<"$out" && ! grep -q "^DRY board" <<<"$out"'
+out=$(dry imx95 run "$S/img/imx8mp.bin" "$S/logs" 2>&1)
+rc=$?
+check "imx95 run of an image without WDOG3's armed line: rc 3, REFUSED naming WDOG3" \
+    eval '[ "$rc" = 3 ] && grep -q "REFUSED: .*verdin_imx95: WDOG3 armed.*WDOG3" <<<"$out"'
+out=$(BOARD_BOOT=kexec-dev dry imx95 status 2>&1)
+rc=$?
+check "imx95 has no kexec-dev: rc 2" [ "$rc" = 2 ]
+out=$(BOARD_BOOT=uboot-mmc dry imx95 status 2>&1)
+check "imx95 status: the hook, the staging directory, then the raw interface and the BBM record" \
+    eval 'grep -q "fw_printenv" <<<"$out" && grep -qF "sudo -n sh -s -- probe   # stdin: tools/imx95_bbm_record.sh" <<<"$out" &&
+          grep -qF "sudo -n sh -s -- read   # stdin: tools/imx95_bbm_record.sh" <<<"$out"'
+out=$(BOARD_BOOT=uboot-mmc dry imx95 install 2>&1)
+check "imx95 install: yako_addr 0xd0000000, ext4load from mmc 0:1, go at the load address with the caches off" \
+    eval 'grep -q "^    yako_addr=0xd0000000$" <<<"$out" &&
+          grep -qF "yako_mmc=if ext4load mmc 0:1 \${yako_addr} \${yako_file}; then echo yakogl-netboot: go \${yako_addr}; dcache off; icache off; go \${yako_addr}; fi" <<<"$out"'
+check "imx95 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
+# the window is the board's DTS's zephyr,sram (the dram node): a window changed
+# there alone would leave board.sh refusing an image that fits, or passing one
+# that runs past what the image links
+reg=$(sed -n 's/^\t\treg = <\(0x[0-9a-f]*\) DT_SIZE_M(\([0-9]*\))>;$/\1 \2/p' \
+    <(awk '/^\tdram: memory@/ { n = 1 } n && /reg = / { print; exit }' "$REPO/driver/boards/toradex/verdin_imx95/verdin_imx95_mimx9596_a55.dts"))
+win=$(awk '/^imx95\)/ { n = 1 } n && /YAKO_ADDR=0x[0-9a-f]+; LOAD_END=0x[0-9a-f]+$/ { print $1, $2; exit }' "$B")
+check "imx95: board.sh's YAKO_ADDR and LOAD_END ('$win') are the DTS's dram reg ('$reg')" \
+    eval '[ -n "$reg" ] && [ "$win" = "YAKO_ADDR=$(printf "0x%08x" "${reg% *}"); LOAD_END=$(printf "0x%08x" $(( ${reg% *} + (${reg#* } << 20) )))" ]'
 # the Armadillo-X2 (kexec-dev only): root logs in, so no command goes through
 # sudo; the loader and the record tool are copied to the tmpfs; the record is
 # LPGPR1..3 through snvs_lpgpr, LPGPR0 (U-Boot's boot count) written back as read
@@ -396,7 +457,7 @@ check "am62p: no /dev/pvrgpu command in run or kexec-dev status (pvrgpu.ko retir
 
 # uboot-mmc (docs/standalone-boot.md): U-Boot loads the image from the eMMC,
 # where Linux staged it; no TFTP server, no network
-for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1; do
+for bm in am62p:0:1:/dev/mmcblk0p1 imx8mp:2:1:/dev/mmcblk2p1 imx95:0:1:/dev/mmcblk0p1; do
     IFS=: read -r board mdev mpart mlinux <<<"$bm"
     out=$(BOARD_BOOT=uboot-mmc dry "$board" run "$S/img/$board.bin" "$S/logs" 2>&1)
     check "$board uboot-mmc run: staged in /var/yakogl on $mlinux, read back from the eMMC, no TFTP canary" \
@@ -449,7 +510,7 @@ done
 # a real uboot-mmc user sets no NETBOOT_* at all (the dry run fills them in
 # only for uboot-tftp): every verb of the backend must run under set -u
 # without them (2026-10-04: the AM62P probe died on NETBOOT_SERVER)
-for board in am62p imx8mp; do
+for board in am62p imx8mp imx95; do
     out=$(for v in "probe $S/logs" "run $S/img/$board.bin $S/logs" status install uninstall disarm nodefault "default $S/img/$board.bin 2"; do
         # shellcheck disable=SC2086  # the verb and its arguments
         env -u NETBOOT_SERVER -u NETBOOT_TFTP_ROOT -u NETBOOT_TFTP_LOG -u NETBOOT_ROUTE BOARD_BOOT=uboot-mmc \
@@ -1151,6 +1212,36 @@ check "imx8mp uboot-mmc probe: back, the one-shot cleared, the record untouched 
 mkrun "$d" board=imx8mp boot=uboot-mmc name=probe probe=1 back=1 rc_cycle=6 up=40 "rec0=00000000 00000000 00000000 00000000"
 check "imx8mp uboot-mmc probe: yako_once still set after the cycle (the hook never ran) -> not ok, rc 6" \
     says imx8mp "$d" "rc=6 verdict=probe_failed"
+# the Verdin iMX95: the same verdicts from the BBM record (bbm.txt), and from
+# the console's yk-record lines when the kernel had no raw interface
+d="$S/imx95/20261121-1200-v1-0123abcd"
+mkrun "$d" board=imx95 boot=uboot-mmc name=v1 probe=0 back=1 up=40 t_reboot=100 t_back=200 "rec0=00000000 00000000 00000000 00000000"
+echo "594b0201 00000001 00000078 00000007" > "$d/bbm.txt"
+check "imx95 uboot-mmc: an APP pass record in bbm.txt -> done, a row, boot_verdict cycled, the record shown, uptime" \
+    eval 'says imx95 "$d" "rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:APP resets=absent record=594b0201,00000001,00000078,00000007 " &&
+          says imx95 "$d" " uptime=40s"'
+check "imx95: the i.MX8MP's snvs.txt is not the record (an APP pass there, bbm.txt cleared -> no_record)" \
+    eval 'echo "594b0202 00000001 00000001 00000000" > "$d/snvs.txt"; echo "00000000 00000000 00000000 00000000" > "$d/bbm.txt";
+          says imx95 "$d" "rc=4 verdict=no_record"'
+echo "594b0201 00000002 00000001 00000000" > "$d/bbm.txt"
+check "imx95 uboot-mmc: an APP fail record -> failed rc 4" says imx95 "$d" "rc=4 verdict=failed"
+rm -f "$d/bbm.txt" "$d/snvs.txt"
+check "imx95 uboot-mmc: no record read and no console -> no_record rc 4" says imx95 "$d" "rc=4 verdict=no_record"
+printf '%s\n' "12:00:01 verdin_imx95: WDOG3 armed: CS 0x00002120" "12:00:09 yk-record: 594b0201 00000001 00000078 00000007" > "$d/console.txt"
+mkrun "$d" board=imx95 boot=uboot-mmc name=v1 probe=0 back=1 up=40 t_reboot=100 t_back=200 "rec0=00000000 00000000 00000000 00000000" "rec0=" \
+    "rec_sink=console only: imx95_bbm_record: no SCMI raw interface"
+check "imx95 uboot-mmc without the raw interface: the console's yk-record line -> done" \
+    says imx95 "$d" "rc=0 verdict=done boot=uboot-mmc row boot_verdict=cycled result=record:APP"
+d="$S/imx95/20261121-1200-probe-probe"
+mkrun "$d" board=imx95 boot=uboot-mmc name=probe probe=1 back=1 up=40 "rec0=00000000 00000000 00000000 00000000"
+echo "00000000 00000000 00000000 00000000" > "$d/bbm.txt"
+check "imx95 uboot-mmc probe: back, the one-shot cleared, the record untouched -> probe_ok rc 0" says imx95 "$d" "rc=0 verdict=probe_ok"
+d="$S/imx95/20261121-1200-t1-0123abcd"
+mkrun "$d" board=imx95 boot=uboot-tftp name=t1 probe=0 back=1 up=40 t_reboot=100 t_back=200 "rec0=00000000 00000000 00000000 00000000"
+echo "1791000000.000 tftp: done peer=x file=yakogl/t1.bin bytes=4194304 sha256=0 seconds=1.500 mib_per_s=2.7" > "$d/tftp.txt"
+echo "594b0201 00000001 00000078 00000007" > "$d/bbm.txt"
+check "imx95 uboot-tftp: fetched (the server's log) and an APP pass -> done, tftp=done:4194304B/1.500s" \
+    says imx95 "$d" "rc=0 verdict=done boot=uboot-tftp row boot_verdict=fetched result=record:APP .* tftp=done:4194304B/1.500s uptime=40s"
 
 # a live run derives console.txt from the bridge's console.ts (board.sh's own console_from_ts)
 eval "$(sed -n '/^console_from_ts() {/,/^}/p' "$B")"

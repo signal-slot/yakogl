@@ -20,14 +20,14 @@
 #   tools/board.sh [--dry-run] stm32mp257f-dk run <image> <logdir> [name] | probe <logdir> | disarm | uboot-status
 #      (the DK's U-Boot one-shot verbs, BOARD_BOOT uboot-mmc|uboot-tftp: tools/board-stm32mp2-uboot.sh;
 #       uboot-status is that runner's status, probe is the same read)
-#      board = pi4 | pi5 | am62p | imx8mp | x2 | nanopc-t6 | stm32mp257f-dk
+#      board = pi4 | pi5 | am62p | imx8mp | imx95 | x2 | nanopc-t6 | stm32mp257f-dk
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
 # Only the boot backend differs between the boards; everything else is one
 # sequence. The backends: tryboot (pi4, pi5; the firmware boots the image once
-# from the SD card), uboot-tftp (am62p, imx8mp, the default there; U-Boot
-# fetches the image over TFTP once: tools/uboot-netboot-lib.sh,
-# tools/tftp_oneshot.py), uboot-mmc (am62p, imx8mp; the same one-shot, but
+# from the SD card), uboot-tftp (am62p, imx8mp, imx95, the default there;
+# U-Boot fetches the image over TFTP once: tools/uboot-netboot-lib.sh,
+# tools/tftp_oneshot.py), uboot-mmc (am62p, imx8mp, imx95; the same one-shot, but
 # U-Boot loads the image from the eMMC, where Linux staged it: the standalone
 # boot, docs/standalone-boot.md) and kexec-dev
 # (am62p, imx8mp, x2, nanopc-t6; driver/tools/kexec-zephyr). A kexec-dev run is a development
@@ -50,6 +50,16 @@
 # line and INDEX.txt, and for a probe image (tools/probes/nanopc_t6) the
 # verdict of driver/tools/kexec-zephyr/t6-verdict.sh. The boot loader
 # backend (uboot-mmc) is not here yet.
+# imx95 is the Toradex Verdin iMX95 (i.MX 95, Mali-G310) on the Mallow, under
+# Torizon: the i.MX8MP's U-Boot routes with the same hook, the image loaded
+# and entered at 0xd0000000 (its zephyr,sram), WDOG3 the watchdog the image
+# arms. Its record is the image's last yk-record in the battery-backed BBNSM
+# GPR4..7, which the image writes over SCMI to the System Manager and Linux
+# reads back after the reset through the kernel's SCMI raw interface
+# (tools/imx95_bbm_record.sh, piped to the board's sh; docs/standalone-boot.md,
+# "The record without a console"). A kernel without that interface leaves
+# the console (BOARD_UART) as the only record: a run refuses without one of
+# the two. Not run on a board yet (docs/notes/pre-study-imx95.md, B1-B3).
 # stm32mp257f-dk is the STM32MP257F-DK (ST's U-Boot 2023.10, booted after
 # TF-A v2.10 BL2/BL31 and OP-TEE 4.0): its run belongs to its own runner,
 # tools/board-stm32mp2-uboot.sh (mp2_uboot, below), typed at ST's U-Boot
@@ -93,23 +103,24 @@
 #      hook installed, no one-shot pending, no default set, no kexec loaded;
 #      the staging directory on the eMMC partition U-Boot reads, its free
 #      space, no leftover; uptime, the M7, no client running, the crash window);
-#   3. clears the result sink (i.MX8MP: the SNVS record, plus SEL's selector);
+#   3. clears the result sink (i.MX8MP: the SNVS record, plus SEL's selector;
+#      i.MX 95: the BBM GPR record);
 #   4. stages the image (/boot/firmware + tryboot.txt | the TFTP root |
 #      /var/yakogl on the eMMC | ~/kexec) and reads it back by sha256 (the
 #      eMMC copy after dropping the page cache);
 #   5. starts the console capture (Pi 4 UART or serial bridge | AM62P serial
-#      bridge; the i.MX8MP has none, its TFTP log and SNVS record are read
-#      afterwards);
+#      bridge; the i.MX8MP and the i.MX 95 only with BOARD_UART set, their
+#      TFTP log and record are read afterwards);
 #   6. boots (tryboot reboot | the U-Boot one-shot and a reboot | kexec);
 #   7. waits for the image's end (a result `yk-record:` line, or the sample's
 #      own end line) or the bound, then for Linux from a new boot;
-#   8. reads the records (yk-record: lines, the SNVS record) and decodes them
+#   8. reads the records (yk-record: lines, the SNVS or BBM record) and decodes them
 #      with `yakogl-tools record`;
 #   9. prints one verdict line (below) and writes the run's INDEX.txt;
 #  10. cleans up (the staged image, tryboot.txt, the one-shot: yako_once gone).
 #
 # "default <image> <boots|forever>" makes the image the board's boot (the
-# product form, docs/standalone-boot.md). am62p, imx8mp: it is staged as
+# product form, docs/standalone-boot.md). am62p, imx8mp, imx95: it is staged as
 # /var/yakogl/default.bin and yako_default names it, so U-Boot loads it from
 # the eMMC at power-on. With a count (1-9) U-Boot boots it that many times and
 # then deletes the default and boots Linux: an image that ends in a watchdog
@@ -150,7 +161,8 @@
 # Records: run writes <logdir>/<YYYYMMDD-HHMM>-<name>-<sha8>/ with meta.txt
 # (what the run measured, key=value), console.txt ("HH:MM:SS line"), the
 # backend's own files (console.raw and console.ts from a serial bridge,
-# tftp.txt and snvs.txt on the i.MX8MP, kexec.log) and INDEX.txt (the runner's
+# tftp.txt and snvs.txt on the i.MX8MP, tftp.txt and bbm.txt on the i.MX 95,
+# kexec.log) and INDEX.txt (the runner's
 # build, the image's sha256 and build line, board, backend, times, the verdict
 # line, the decoded records, every file with its sha256 and line count;
 # records/README.md). Addresses in the copies are redacted (IPv4 -> 192.0.2.n,
@@ -218,6 +230,8 @@
 #                      tftp/uboot-mmc run probes it and captures the console into
 #                      the run directory (console.raw/.ts/.txt; read it with
 #                      tools/cts/imx8mp-console-scan.py), unset: no capture;
+#                      imx95: optional in the same way (U-Boot's and the
+#                      image's LPUART1); unset, the record is the BBM GPRs'
 #                      x2: optional in the same way (UART2, the board's own
 #                      USB serial adapter), for a kexec-dev run; nanopc-t6:
 #                      required for a run (the runner refuses without it): the
@@ -240,8 +254,8 @@
 #                      (uboot-mmc needs no server, TFTP root, log or route)
 #   RUN_BOUND, RETURN_BOUND  seconds to the image's end and to Linux after it
 #                      (pi4 420/300, pi5 420/420 (a reboot takes ~150 s to ssh), am62p U-Boot 420/180 (780/180 for a dEQP image:
-#                      600 s RTI bound + 60 s + 120 s boot), imx8mp U-Boot 600
-#                      in all, am62p kexec-dev 1500/600, imx8mp and x2 kexec-dev
+#                      600 s RTI bound + 60 s + 120 s boot), imx8mp and imx95
+#                      U-Boot 600 in all, am62p kexec-dev 1500/600, imx8mp and x2 kexec-dev
 #                      1500 in all; nanopc-t6: not read, the runner's bound is
 #                      the image's own, from its watchdog marker)
 #   BOARD_END_RE       extended regex of the image's last line (pi4: PI4_END_RE
@@ -252,6 +266,7 @@
 #                      (default tools/cts/gles2-mustpass.txt; a dEQP-GLES3
 #                      tree names tools/cts/gles3-mustpass.txt)
 #   SEL                i.MX8MP, x2: the selector written into the cleared record
+#                      (imx95: refused, the image reads no selector)
 #   LOCK_WAIT, HOLD_MAX  see board_lock.sh
 #   YAKOGL_TOOLS       the yakogl-tools binary (default: built with cargo here)
 set -uo pipefail
@@ -302,7 +317,8 @@ UART_VAR=           # the Pis' own name for BOARD_UART (PI4_UART, PI5_UART)
 GPU_DEV=
 RESET_RE=
 SU='sudo -n '       # the prefix of a root command on the board (x2: root logs in, none)
-REC_SINK=           # where the SNVS record is read: nvmem (imx8mp), devmem (x2), none
+REC_SINK=           # where the record is read: nvmem (imx8mp), devmem (x2), bbm (imx95), none
+REC_FILE=snvs.txt   # the run directory's copy of the record (imx95: bbm.txt)
 X2_DIR=
 case "$BOARD" in
 pi4)
@@ -399,6 +415,31 @@ imx8mp)
     END_RE_DEFAULT=
     LEGACY_RE=
     TREE_RETRIES_DEFAULT=60
+    ;;
+imx95)
+    # The Toradex Verdin iMX95 on the Mallow (docs/standalone-boot.md,
+    # "Toradex Verdin iMX95"; docs/notes/pre-study-imx95.md H2). Not run on a
+    # board yet: NB_MMC, MMC_PART and the hook's "dcache off; icache off"
+    # before go are the other Verdins' and are B1's to confirm.
+    BOOTS="uboot-tftp uboot-mmc"
+    # the eMMC is U-Boot's mmc 0 (Toradex's env: update_uboot writes "mmc dev
+    # 0 1"), Torizon's root on its partition 1, Linux's mmcblk0 (as on the
+    # AM62P); mmc_where reads the mount from the board and refuses another
+    NB_MMC=0:1; MMC_PART=/dev/mmcblk0p1
+    # driver/boards/toradex/verdin_imx95/verdin_imx95_mimx9596_a55.dts
+    # zephyr,sram (&dram): 256 MiB at 0xd0000000, the link, load and go address
+    YAKO_ADDR=0xd0000000; LOAD_END=0xe0000000
+    # driver/zephyr/lib/board/verdin_imx95/verdin_imx95_wdog.c, the WDOG3
+    # self-arm's line ("verdin_imx95: WDOG3 armed: CS 0x%08x ..."); an image
+    # with the board layer carries "board: watchdog armed" too
+    MARKER='verdin_imx95: WDOG3 armed'
+    NB_WATCHDOG=WDOG3
+    REC_SINK=bbm
+    REC_FILE=bbm.txt
+    NO_CONSOLE_WHY="BOARD_UART was not set"
+    END_RE_DEFAULT=
+    LEGACY_RE=
+    TREE_RETRIES_DEFAULT=0
     ;;
 x2)
     # The Armadillo-X2: the same SoC and GPU as the Verdin i.MX8MP, under
@@ -979,7 +1020,7 @@ verdict_line() {
                 no_magic) verdict=bad_record ;;
                 *) verdict=classify_failed ;;
                 esac
-            elif [ "$BOARD" = imx8mp ]; then
+            elif [ "$BOARD" = imx8mp ] || [ "$BOARD" = imx95 ]; then
                 verdict=no_record
             else
                 sc=$(single_case "$console")
@@ -1037,8 +1078,10 @@ verdict_line() {
     # what the run could not measure, its own outcome beside the verdict (kind GLMARK2)
     if [ -n "${unsup:-}" ] && [ "$unsup" != absent ]; then V_LINE+=" unsupported=$unsup"; fi
     if [ "${lost:-0}" -gt 0 ] 2>/dev/null; then V_LINE+=" lost=$lost"; fi
-    if [ "$BOARD" = imx8mp ] && [ "$boot" = uboot-tftp ]; then V_LINE+=" tftp=$tftp uptime=${up:-?}s"; fi
-    if [ "$BOARD" = imx8mp ] && [ "$boot" = uboot-mmc ]; then V_LINE+=" uptime=${up:-?}s"; fi
+    case "$BOARD:$boot" in
+    imx8mp:uboot-tftp | imx95:uboot-tftp) V_LINE+=" tftp=$tftp uptime=${up:-?}s" ;;
+    imx8mp:uboot-mmc | imx95:uboot-mmc) V_LINE+=" uptime=${up:-?}s" ;;
+    esac
     if [ "$ROW" = DEV ]; then V_LINE+=" (kexec-dev: a development run, never a row)"; fi
     V_SCAN=$scan
     return 0
@@ -1072,6 +1115,8 @@ write_index() {
             yrec $rec 2>&1 | sed 's/^/  /'
         elif [ -s "$dir/console.txt" ] && grep -aq 'yk-record: ' "$dir/console.txt"; then
             ytools record --log "$dir/console.txt" 2>&1 | sed 's/^/  /'
+        elif [ "$REC_SINK" = bbm ]; then
+            echo "  none (no BBM record was read)"
         elif [ -n "$REC_SINK" ]; then
             echo "  none (no SNVS record was read)"
         else
@@ -1308,15 +1353,54 @@ yrec() {
 rec_args() {
     if [ "$REC_SINK" = devmem ] && [ $# = 4 ] && [ "$4" = 00000000 ]; then echo "$1 $2 $3"; else echo "$*"; fi
 }
-# rec_file DIR: the record of the run DIR (its snvs.txt) through rec_args; empty when none
+# rec_file DIR: the record of the run DIR (its REC_FILE: snvs.txt, the i.MX 95's
+# bbm.txt) through rec_args; empty when none
 rec_file() {
     local w
-    w=$(cat "$1/snvs.txt" 2>/dev/null)
+    w=$(cat "$1/$REC_FILE" 2>/dev/null)
     # shellcheck disable=SC2086  # the words
     [ -z "$w" ] || rec_args $w
 }
 # snvs_read: the four words, "w0 w1 w2 w3", empty when the read failed
 snvs_read() { b "sudo -n od -A n -t x4 $NV" 2>/dev/null | xargs; }
+
+# ---- the i.MX 95 record: the BBNSM GPR4..7 over the SCMI raw interface -----------
+# The image keeps its last record in the battery-backed GPRs through the System
+# Manager (verdin_imx95_record.c); Linux reads and clears them with the same
+# BBM messages through the kernel's SCMI raw debugfs interface:
+# tools/imx95_bbm_record.sh, piped to the board's sh as root (nothing staged).
+# BBM_OFF=1: this kernel has no raw interface and the console (BOARD_UART) is
+# the run's record instead.
+BBM_OFF=0
+bbm_sh() { b "sudo -n sh -s -- $1   # stdin: tools/imx95_bbm_record.sh" < "$HERE/imx95_bbm_record.sh"; }
+# bbm_clear: the record zeroed (w0 first) and read back; without the raw
+# interface, the console stands in when BOARD_UART is set, else a refusal
+bbm_clear() {
+    local got rc=0
+    [ -z "${SEL:-}" ] || die "SEL: the i.MX 95 image reads no selector (board_selector is -1); unset SEL" 2
+    rec0_set
+    if [ "$DRY" = 1 ]; then
+        bbm_sh clear
+        echo "    (tools/imx95_bbm_record.sh: BBM_GPR_SET GPR4..7 = 0, GPR4 first, then the four read back: '$REC0')"
+        return 0
+    fi
+    got=$(bbm_sh clear 2>"$TMP/bbm.err") || rc=$?
+    if [ "$rc" = 3 ]; then
+        if [ "${UCAP:-0}" = 1 ]; then
+            BBM_OFF=1
+            meta rec0 ""
+            meta rec_sink "console only: $(tr '\n' ' ' < "$TMP/bbm.err")"
+            note "no BBM record from Linux ($(cat "$TMP/bbm.err")): the console capture is the record" >&2
+            return 0
+        fi
+        die "the record cannot be read back: $(cat "$TMP/bbm.err"). Set BOARD_UART to read the console instead"
+    fi
+    [ "$rc" = 0 ] || die "cannot clear the BBM record (rc $rc): $(cat "$TMP/bbm.err")"
+    [ "$got" = "$REC0" ] || die "BBM record read back '$got', not '$REC0'"
+    meta rec_sink "BBM GPR4..7 (SCMI raw)"
+}
+# bbm_read: the four words, "w0 w1 w2 w3", empty when the read failed
+bbm_read() { [ "$BBM_OFF" = 1 ] || bbm_sh read 2>/dev/null | xargs; }
 
 # ---- the Armadillo-X2 record: LPGPR1..3 through /dev/mem (snvs_lpgpr.c) -----------
 # The X2's U-Boot keeps its boot count in LPGPR0, so an X2 image stores w0..w2
@@ -1727,9 +1811,9 @@ run_uboot() {
     # a TFTP-only variable on the eMMC path, as on a board)
     # the i.MX8MP captures the console only when BOARD_UART is set (opt-in)
     UCAP=0
-    if [ "$BOARD" = imx8mp ] && [ -n "${BOARD_UART:-}" ]; then UCAP=1; fi
+    case "$BOARD" in imx8mp | imx95) [ -n "${BOARD_UART:-}" ] && UCAP=1 ;; esac
     if [ "$DRY" = 1 ]; then
-        [ "$BOARD" = imx8mp ] || BOARD_UART=${BOARD_UART:-BRIDGE:PORT}
+        case "$BOARD" in imx8mp | imx95) ;; *) BOARD_UART=${BOARD_UART:-BRIDGE:PORT} ;; esac
         if [ "$BOOT" = uboot-tftp ]; then
             NETBOOT_SERVER=${NETBOOT_SERVER:-HOST_IP}
             NETBOOT_TFTP_ROOT=${NETBOOT_TFTP_ROOT:-/TFTP_ROOT}; NETBOOT_TFTP_LOG=${NETBOOT_TFTP_LOG:-/TFTP_LOG}
@@ -1768,9 +1852,9 @@ run_uboot() {
     note "$NAME: route $route source $src token $TOKEN"
 
     # 2. the TFTP server answers on port 69 at the address U-Boot will use (on
-    #    the i.MX8MP its log is the one given); then the board
+    #    the i.MX8MP and the i.MX 95 its log is the one given); then the board
     [ "$src" = net ] && nb_tftp_canary "$NETBOOT_SERVER" "$NETBOOT_TFTP_ROOT" "$TOKEN"
-    if [ "$BOARD" = imx8mp ] && [ "$src" = net ]; then
+    if [ "$BOARD" != am62p ] && [ "$src" = net ]; then
         if [ "$DRY" = 1 ]; then
             echo "DRY host\$ grep 'done .*file=yakogl/canary-$TOKEN ' $NETBOOT_TFTP_LOG   # the canary must be in the log"
         else
@@ -1778,7 +1862,7 @@ run_uboot() {
                 die "NETBOOT_TFTP_LOG=$NETBOOT_TFTP_LOG has no 'done' line for the canary: it is not the log of the server on $NETBOOT_SERVER:69"
         fi
     fi
-    # the i.MX8MP console (opt-in): the bridge or the device is probed before the board is touched
+    # the i.MX8MP's and the i.MX 95's console (opt-in): the bridge or the device is probed before the board is touched
     [ "$UCAP" = 1 ] && pi4_uart_free
     take_lock
     bget st 'systemctl is-system-running --wait >/dev/null 2>&1; cat /proc/uptime' || die "the board's Linux does not answer"
@@ -1811,8 +1895,10 @@ run_uboot() {
         fi
     fi
 
-    # 3. the i.MX8MP record: cleared (and the selector), read back
+    # 3. the i.MX8MP record: cleared (and the selector), read back; the
+    #    i.MX 95's in the BBM GPRs
     [ "$BOARD" = imx8mp ] && snvs_clear
+    [ "$REC_SINK" = bbm ] && bbm_clear
 
     # From here on any exit runs uboot_on_exit: it disarms an armed env and
     # removes an eMMC copy whose boot never came (MMC_STAGED, REBOOTED).
@@ -1838,7 +1924,7 @@ run_uboot() {
         fi
     fi
 
-    # 5. the capture, before anything can print (AM62P; the i.MX8MP only with BOARD_UART set)
+    # 5. the capture, before anything can print (AM62P; the i.MX8MP and the i.MX 95 only with BOARD_UART set)
     if [ "$UCAP" = 1 ]; then imx8mp_capture_start "$src" "$file"; fi
     if [ "$BOARD" = am62p ]; then
         # the typed route's one command line (TFTP only): the installed hook's
@@ -1907,7 +1993,10 @@ run_uboot() {
         b 'sudo -n fw_printenv -n yako_once   # must print nothing'
         if [ "$BOARD" = imx8mp ]; then
             b "sudo -n od -A n -t x4 $NV"
-            [ "$src" = net ] && echo "DRY host\$ grep ' file=$file ' $NETBOOT_TFTP_LOG > <rundir>/tftp.txt"
+        fi
+        [ "$REC_SINK" = bbm ] && bbm_sh read
+        if [ "$BOARD" != am62p ] && [ "$src" = net ]; then
+            echo "DRY host\$ grep ' file=$file ' $NETBOOT_TFTP_LOG > <rundir>/tftp.txt"
         fi
         [ "$src" = mmc ] && [ "$PROBE" = 0 ] && b "sudo -n rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory (yakogl-tools record)"
@@ -1951,13 +2040,13 @@ run_uboot() {
     fi
     [ -n "$rcc" ] && meta rc_cycle "$rcc"
     stop_cap
-    if [ "$BOARD" = imx8mp ]; then
+    if [ "$BOARD" = imx8mp ] || [ "$BOARD" = imx95 ]; then
         if [ "$src" = net ]; then
             grep -F " file=$file " "$NETBOOT_TFTP_LOG" > "$RD/tftp.txt" 2>/dev/null
             [ -s "$RD/tftp.txt" ] || rm -f "$RD/tftp.txt"
         fi
-        snvs_read > "$RD/snvs.txt"
-        [ -s "$RD/snvs.txt" ] && [ "$(wc -w < "$RD/snvs.txt")" = 4 ] || rm -f "$RD/snvs.txt"
+        if [ "$BOARD" = imx8mp ]; then snvs_read > "$RD/$REC_FILE"; else bbm_read > "$RD/$REC_FILE"; fi
+        [ -s "$RD/$REC_FILE" ] && [ "$(wc -w < "$RD/$REC_FILE")" = 4 ] || rm -f "$RD/$REC_FILE"
         if [ "$UCAP" = 1 ] && uart_is_bridge; then console_from_ts; fi
     else
         console_from_ts
@@ -2479,6 +2568,13 @@ cmd_status() {
         nb_status
         b "ls -l $STAGE_DIR 2>/dev/null; findmnt -n -v -o SOURCE,TARGET,FSROOT -T /var"
         ;;
+    esac
+    # the i.MX 95's record: the raw interface, then the BBM GPR words
+    if [ "$REC_SINK" = bbm ]; then
+        bbm_sh probe
+        bbm_sh read
+    fi
+    case "$BOOT" in
     tryboot)
         b 'cat /proc/sys/kernel/random/boot_id; who; df -B1 --output=avail /boot/firmware | tail -1; ls -l /boot/firmware/yakogl-*.bin /boot/firmware/pi4run-*.bin 2>/dev/null; cat /boot/firmware/tryboot.txt 2>/dev/null'
         ;;
@@ -2634,7 +2730,7 @@ cmd_default() {
         [ $# -eq 2 ] || usage
         IMG=$1 BOOTS_N=$2
         case "$BOARD:$BOOTS_N" in
-        pi4:forever | pi5:forever | am62p:forever | imx8mp:forever) ;;
+        pi4:forever | pi5:forever | am62p:forever | imx8mp:forever | imx95:forever) ;;
         pi4:* | pi5:*) die "$BOARD: the firmware has no boot count: 'forever' only, with a person (docs/standalone-boot.md)" 2 ;;
         *:[1-9]) ;;
         *) die "boots must be 1-9 or forever, not '$BOOTS_N'" 2 ;;
