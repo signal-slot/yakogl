@@ -10,6 +10,7 @@
 #
 #   tools/cts/pr-session.sh <name> --knob off|on [--cap-pages N] [--one-in-flight]
 #                           [--cases 'list'] [--glmark2] [--allow-local] [--dry-run]
+#   tools/cts/pr-session.sh <name> --leg 217-off|217-on [--allow-local] [--dry-run]
 #
 # <name>         names the session: results go to
 #                tools/cts/log/<YYYY-MM-DD>-pr-<name>/
@@ -24,6 +25,19 @@
 #                context (CONFIG_GL_TEST_CASES). Default 175 (refusehang).
 # --glmark2      after gl_test, build and run the glmark2 image too, with the
 #                same knob and cap (GLMARK2_SRC as tools/cts/common-images.sh).
+# --leg L        a case-217 leg of acceptance c2 (the forced partial render with
+#                pixel read-back, 512-page cap): 217-off is knob off, cap 512,
+#                case 217, built with tools/cts/pr-configs/gl_test-217-off.conf
+#                (-DEXTRA_CONF_FILE) and judged `pr-verdict.py --expect stop`
+#                (must reproduce the stop, cause 2 or 4); 217-on is knob on,
+#                same, gl_test-217-on.conf, judged `--expect pr` (PASS, partial
+#                renders >= 1, pixel read-back). --leg sets knob, cap and cases;
+#                --knob, if given, must agree; --cap-pages must be 512 if
+#                given; --cases/--glmark2/--one-in-flight are refused. The
+#                fragment is refused with a clear message when missing (a dry
+#                run only warns). The watchdog arguments are the ordinary
+#                legs'. The exit status is pr-verdict's. PR_CONFIGS_DIR
+#                overrides the fragments' directory (the selftest uses it).
 # --allow-local  build a HEAD that is not on origin/main (the log says so);
 #                without it the session refuses
 # --dry-run      print the build and run commands, build and run nothing; the
@@ -48,11 +62,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 die() { echo "pr-session.sh: $1" >&2; exit "${2:-2}"; }
 usage() {
-    echo "usage: tools/cts/pr-session.sh <name> --knob off|on [--cap-pages N] [--one-in-flight] [--cases 'list'] [--glmark2] [--allow-local] [--dry-run]" >&2
+    echo "usage: tools/cts/pr-session.sh <name> --knob off|on [--cap-pages N] [--one-in-flight] [--cases 'list'] [--glmark2] [--allow-local] [--dry-run]
+       tools/cts/pr-session.sh <name> --leg 217-off|217-on [--allow-local] [--dry-run]" >&2
     exit 2
 }
 
-KNOB= CAP=0 ONE=0 CASES=175 GLM=0 LOCAL=0 DRY=0
+KNOB= CAP= ONE=0 CASES= GLM=0 LOCAL=0 DRY=0 LEG= CASES_SET=0
 [ $# -ge 1 ] || usage
 case "$1" in -*) usage ;; esac
 NAME=$1
@@ -64,8 +79,10 @@ while [ $# -gt 0 ]; do
     --knob=*) KNOB=${1#--knob=}; shift ;;
     --cap-pages) [ $# -ge 2 ] || usage; CAP=$2; shift 2 ;;
     --cap-pages=*) CAP=${1#--cap-pages=}; shift ;;
-    --cases) [ $# -ge 2 ] || usage; CASES=$2; shift 2 ;;
-    --cases=*) CASES=${1#--cases=}; shift ;;
+    --cases) [ $# -ge 2 ] || usage; CASES=$2; CASES_SET=1; shift 2 ;;
+    --cases=*) CASES=${1#--cases=}; CASES_SET=1; shift ;;
+    --leg) [ $# -ge 2 ] || usage; LEG=$2; shift 2 ;;
+    --leg=*) LEG=${1#--leg=}; shift ;;
     --one-in-flight) ONE=1; shift ;;
     --glmark2) GLM=1; shift ;;
     --allow-local) LOCAL=1; shift ;;
@@ -73,6 +90,27 @@ while [ $# -gt 0 ]; do
     *) usage ;;
     esac
 done
+FRAG=
+if [ -n "$LEG" ]; then
+    case "$LEG" in
+    217-off) LKNOB=off ;;
+    217-on) LKNOB=on ;;
+    *) die "--leg takes 217-off or 217-on, not '$LEG'" ;;
+    esac
+    [ -z "$KNOB" ] || [ "$KNOB" = "$LKNOB" ] || die "--leg $LEG is knob $LKNOB; --knob $KNOB disagrees"
+    [ -z "$CAP" ] || [ "$CAP" = 512 ] || die "--leg $LEG uses the 512-page cap; --cap-pages $CAP disagrees"
+    [ "$CASES_SET" = 0 ] || die "--leg $LEG runs case 217 only; drop --cases"
+    [ "$GLM" = 0 ] && [ "$ONE" = 0 ] || die "--leg $LEG is a gl_test leg; drop --glmark2/--one-in-flight"
+    KNOB=$LKNOB CAP=512 CASES=217
+    FRAG=${PR_CONFIGS_DIR:-$HERE/pr-configs}/gl_test-$LEG.conf
+    if [ ! -f "$FRAG" ]; then
+        MSG="Kconfig fragment tools/cts/pr-configs/gl_test-$LEG.conf is missing (pr-217-configs adds it); nothing was built"
+        [ "$DRY" = 1 ] || die "$MSG"
+        echo "pr-session.sh: warning: $MSG" >&2
+    fi
+fi
+CAP=${CAP:-0}
+CASES=${CASES:-175}
 case "$KNOB" in off) KCFG=n ;; on) KCFG=y ;; *) die "--knob off|on is required" ;; esac
 [[ $CAP =~ ^[0-9]+$ ]] || die "--cap-pages takes a number, not '$CAP'"
 CASES=$(tr -s ' ,' ',' <<< "$CASES" | sed 's/^,//; s/,$//')
@@ -98,6 +136,7 @@ CMD="pr-session.sh $NAME --knob $KNOB"
 [ "$CAP" = 0 ] || CMD+=" --cap-pages $CAP"
 [ "$ONE" = 0 ] || CMD+=" --one-in-flight"
 CMD+=" --cases '$CASES'"
+if [ -n "$LEG" ]; then CMD="pr-session.sh $NAME --leg $LEG"; fi
 [ "$GLM" = 0 ] || CMD+=" --glmark2"
 [ "$LOCAL" = 0 ] || CMD+=" --allow-local"
 
@@ -112,6 +151,7 @@ LABELS=(gltest)
 SAMPLES=(gl_test)
 EXTRA_0="-DCONFIG_GL_TEST_CASES=\"$CASES\""
 EXTRA_1=
+[ -z "$FRAG" ] || EXTRA_0+=" -DEXTRA_CONF_FILE=$FRAG"
 # glmark2's arguments, from GLMARK2_SRC as it is when called: again after the
 # layout is read below, so the build takes the layout's tree, not the caller's
 glm_extra() {
@@ -131,6 +171,10 @@ build_cmd() { # build_cmd I: the west command of image I
 run_cmd() { echo "tools/board.sh am62p run $BUILD/$1/zephyr/zephyr.bin $BUILD/run-$1 pr-$NAME-$1"; }
 
 echo "pr-session.sh: $ONMAIN"
+# the verdict's arguments: a leg names its case and what it expects
+PVEXP=()
+[ -z "$LEG" ] || { PVEXP=(--expect pr); [ "$KNOB" = on ] || PVEXP=(--expect stop); }
+pv_cmd() { echo "python3 tools/cts/pr-verdict.py ${PVEXP[*]} $1 ${LEG:+217}"; }
 echo "pr-session.sh: session $NAME at $H8, knob $KNOB, cap $CAP, cases $CASES, glmark2 $GLM, one-in-flight $ONE"
 if [ "$DRY" = 1 ]; then
     echo "pr-session.sh: dry run: nothing is built or run"
@@ -138,7 +182,7 @@ if [ "$DRY" = 1 ]; then
     echo "MODS=\$(tools/cts/zephyr-modules.sh \$ZEPHYR_WS)"
     for i in "${!LABELS[@]}"; do build_cmd "$i"; done
     for l in "${LABELS[@]}"; do run_cmd "$l"; done
-    echo "python3 tools/cts/pr-verdict.py $OUT/<label>.log   # when the file exists"
+    echo "$(pv_cmd "$OUT/<label>.log")   # when the file exists"
     echo "results: $OUT/"
     exit 0
 fi
@@ -190,7 +234,7 @@ for i in "${!LABELS[@]}"; do
     echo "pr-session.sh\$ $(run_cmd "$l")"
     tools/board.sh am62p run "$BUILD/$l/zephyr/zephyr.bin" "$BUILD/run-$l" "pr-$NAME-$l" | tee "$BUILD/run-$l.out"
     VERDICTS+=("$l: $(grep -a 'verdict=' "$BUILD/run-$l.out" | tail -1)")
-    grep -aq 'verdict=done' "$BUILD/run-$l.out" || rc=1
+    [ -n "$LEG" ] || grep -aq 'verdict=done' "$BUILD/run-$l.out" || rc=1
     # the serial log, redacted again as board.sh does (its copy already is)
     if [ -f "$BUILD/run-$l/console.txt" ]; then
         cp "$BUILD/run-$l/console.txt" "$OUT/$l.log"
@@ -211,7 +255,9 @@ PV=
 if [ -f tools/cts/pr-verdict.py ]; then
     for l in "${LABELS[@]}"; do
         [ -f "$OUT/$l.log" ] || continue
-        PV+="### $l"$'\n'"$(python3 tools/cts/pr-verdict.py "$OUT/$l.log" 2>&1)"$'\n'
+        PV+="### $l"$'\n'"$(python3 -I tools/cts/pr-verdict.py "${PVEXP[@]}" "$OUT/$l.log" ${LEG:+217} 2>&1)"$'\n'
+        # a leg's exit status is the verdict's
+        if [ -n "$LEG" ]; then python3 -I tools/cts/pr-verdict.py "${PVEXP[@]}" "$OUT/$l.log" 217 > /dev/null 2>&1 || rc=1; fi
     done
 else
     PV="tools/cts/pr-verdict.py is absent: no partial-render verdict lines"$'\n'
