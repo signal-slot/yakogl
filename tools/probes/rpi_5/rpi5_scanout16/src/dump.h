@@ -7,7 +7,7 @@
  * MODE) and DL (LACT) of channels 0..2, and PV_CONTROL.EN and
  * PV_V_CONTROL.VIDEN of each valve. A block that did not map still prints its
  * lines: a read of an unmapped block returns 0xffffffff. No register is
- * written.
+ * written. The mappings are kept (dump_hvs, dump_pv_va[]) for main.c's reads.
  */
 #ifndef RPI5_SCANOUT16_DUMP_H
 #define RPI5_SCANOUT16_DUMP_H
@@ -29,6 +29,10 @@
  * same bit SA_PV_VCONTROL_VIDEN; the dump keeps its own). */
 #define DUMP_PV_VIDEN (1u << 0)
 
+/* The blocks dump_all() mapped: 0 when one did not map. */
+static mm_reg_t dump_hvs;
+static mm_reg_t dump_pv_va[2];
+
 static inline uint32_t dump_rd(mm_reg_t base, uint32_t size, uint32_t off)
 {
 	return base != 0 && off < size ? sys_read32(base + off) : DUMP_ALL_ONES;
@@ -40,6 +44,7 @@ static inline int dump_pv(unsigned int n, uint64_t pa, uint32_t size)
 	uint32_t ctl, vctl;
 
 	device_map(&va, (uintptr_t)pa, size, K_MEM_CACHE_NONE);
+	dump_pv_va[n & 1u] = va;
 	ctl = dump_rd(va, size, SA_PV_CONTROL);
 	vctl = dump_rd(va, size, SA_PV_V_CONTROL);
 	printk("rpi5_scanout16: dump pv%u %s at 0x%llx: PV_CONTROL 0x%08x EN %u "
@@ -59,6 +64,7 @@ static inline int dump_all(void)
 	unsigned int ch;
 
 	device_map(&hvs, (uintptr_t)DUMP_HVS_BASE, DUMP_HVS_SIZE, K_MEM_CACHE_NONE);
+	dump_hvs = hvs;
 	rc = hvs == 0 ? 1 : 0;
 	printk("rpi5_scanout16: dump hvs %s at 0x%llx, %u bytes\n",
 	       hvs != 0 ? "mapped" : "NOT mapped", (unsigned long long)DUMP_HVS_BASE,
