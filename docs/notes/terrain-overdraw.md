@@ -6,12 +6,10 @@ Plan #329, item `terrain-overdraw` (Pi 4; #1209). `v3d-early-z.md` gives the
 early-Z gain on terrain's job 3 as `4.3 ms x (overdraw - 1)` and says nobody
 has measured the overdraw.
 
-**Status: the measurement was written but not run.** The tool and method are
-in `tools/hostharness/terrain-overdraw/`; the sandbox that ran this item
-refused to execute any program it had built (every run of the compiled binary
-or of `run.sh` came back "requires approval"; compiling with g++ worked, with
-no warnings). So this note has **no overdraw figure, no mean and no gain in
-ms**, and none is invented here. Run the command below and fill the table.
+**Result: overdraw 1.030 (mean of six frames, 1.023 to 1.036). Implied
+Pi 4 early-Z gain by `v3d-early-z.md`'s formula: 4.3 ms x 0.0302 = 0.13 ms a
+frame (0.10 to 0.16), 0.4 % of the 34.8 ms frame. Not worth building for
+speed.** Measured on the host with a software rasteriser (below); no board.
 
 ## Method
 
@@ -46,9 +44,8 @@ glmark2's sources at `22c527cb` (`$CONNECTED_DEPS_DIR/glmark2-src`):
    covered`. Early Z skips the `rasterized - passed` fragments. The
    `v3d-early-z.md` formula uses `overdraw - 1` (every non-first fragment
    skipped, the upper bound); `passed_per_covered - 1` is what an exact
-   early Z still shades beyond one fragment per pixel, so the exact gain
-   is `4.3 ms x (overdraw - passed_per_covered) / 1`-scaled by the same
-   rule: report both and take the formula's figure as the ceiling.
+   early Z still shades beyond one fragment per pixel. Both are reported;
+   the formula's figure is the ceiling.
 
 Limits: float noise and depth are the host's, not the V3D's (a few texels of
 height may differ, so read the overdraw to about two digits); window y is
@@ -64,24 +61,42 @@ tools/hostharness/terrain-overdraw/run.sh        # frames at t = 0 1 2.5 5 7.5 1
 
 ## Result
 
-Not measured (above). Fill in from `$TMPDIR/terrain-overdraw/overdraw.txt`:
+`run.sh` output (`overdraw.txt`; the float-depth run is identical to the
+digit):
 
-| t (s) | rasterized | covered | overdraw | passed / covered |
-|---|---|---|---|---|
-| 0 | | | | |
-| 1 | | | | |
-| 2.5 | | | | |
-| 5 | | | | |
-| 7.5 | | | | |
-| 10 | | | | |
-| mean | | | | |
+| t (s) | rasterized | covered | overdraw | passed / covered | gain 4.3 x (o - 1) |
+|---|---|---|---|---|---|
+| 0 | 449,497 | 433,711 | 1.0364 | 1.0000 | 0.157 ms |
+| 1 | 446,899 | 432,822 | 1.0325 | 1.0000 | 0.140 ms |
+| 2.5 | 443,272 | 431,464 | 1.0274 | 1.0000 | 0.118 ms |
+| 5 | 436,650 | 424,169 | 1.0294 | 1.0000 | 0.126 ms |
+| 7.5 | 441,576 | 427,845 | 1.0321 | 1.0000 | 0.138 ms |
+| 10 | 437,028 | 427,105 | 1.0232 | 1.0000 | 0.100 ms |
+| mean | | | **1.0302** | 1.0000 | **0.130 ms** |
 
-Implied Pi 4 gain: `4.3 ms x (mean overdraw - 1)`. For scale, `v3d-early-z.md`
-gives 0 at overdraw 1.0, 1.3 ms at 1.3 and 1.7 ms at 1.4.
+Reading it:
+
+* The terrain covers about 430,000 of the 480,000 pixels (the rest is sky);
+  only about 3 % of the fragments are second or later fragments of a pixel.
+* `passed / covered` is 1.0000: the draw order (i outer, j inner, front to
+  back from the camera at (-1200, 800, 1200)) means nearly every later
+  fragment fails LEQUAL. Those are exactly the fragments early Z would skip,
+  so the formula's `overdraw - 1` is also the exact count here.
+* Cost base: `v3d-early-z.md` uses 480,000 px x 9 samples = 4.3 M. With the
+  measured ~430,000 covered pixels the base is 3.9 M samples and the gain
+  0.12 ms; either way about 0.1 ms.
+* The 1.3 to 1.4 overdraw that `v3d-terrain-gpu.md` assumed (1.3 to 1.7 ms) is
+  ruled out: the gain sits at the bottom of `v3d-early-z.md`'s 0 to 1.7 ms
+  range. Early Z for job 3 stays a legal but ~0.13 ms item; do not build it
+  for #1209.
+
+Limits are as in Method: host float noise and 24-bit depth (the float-depth
+run gives the same counts), no binner clipping. Read the overdraw to two
+digits: 1.03.
 
 ## AM62P
 
-Not moot by measurement here. PowerVR does hidden-surface removal per tile,
+Moot by architecture, not measured here. PowerVR does hidden-surface removal per tile,
 so opaque overlapped fragments are rejected before shading whatever the draw
 order and the shader cost of the hidden ones is not paid; an early-Z change
 would have no counterpart there. That is the architecture's behaviour, not
