@@ -10,6 +10,7 @@
   python3 -I tools/cts/glmark2-mali-tally.py --causes <rundir>
   python3 -I tools/cts/glmark2-mali-tally.py [--allow-verdict-mismatch] ... <runner-dir>
   python3 -I tools/cts/glmark2-mali-tally.py --baseline <rundir> [--forward-only] ... <rundir>
+  python3 -I tools/cts/glmark2-mali-tally.py --host-verdicts FILE [--strict] ... <rundir>
 
 It plays for glmark2 the part tools/cts/mali-deqp-tally.py plays for dEQP-GLES2.
 The run is one glmark2-es2 process per scene (tools/cts/mali-glmark2-build.sh's
@@ -138,12 +139,24 @@ to stderr, so that mode's output is unchanged. --forward-only (needs --baseline)
 status 4 when some scene moved back. Without --baseline nothing changes. No raw log of the
 a57d8104 record is in the tree; pass its record directory when it is restored.
 
+--host-verdicts <file> (the format of tests/fixtures/mali_glmark2_verdicts.txt: lines
+"<n> <scene> <vs|fs> <hash>: ok|<refusal>", the scene in glmark2's -b form) compares the run with
+the host's compile prediction: a scene is predicted clean when every one of its shaders is ok,
+else refused with its first refusal. After the default table, one line "forecast <scene>: host
+clean|refused: ...; board <verdict>" per scene, marked FLAG when the host predicts clean and the
+board ran the scene and it is not ok (a draw or setup cause, or a regression), or when the host
+predicts refused and the board shows it ok (a stale fixture); a scene with no line in the file
+is "no prediction", a not-run scene is never flagged. Then "forecast: host predicts N clean, M
+refused, K without a line; F flagged". With another output mode the forecast goes to stderr.
+--strict (needs --host-verdicts) makes the exit status 5 when some scene is flagged. Without
+the option nothing changes.
+
 Nothing printed carries a board address: IPv4 addresses, user@host logins and
 UART device paths read from the run are replaced by <addr>, <login>, <uart>.
 
 Exit status: 0 the tally was produced, 1 malformed input, 2 usage, 3 a runner
 directory whose verdicts disagree with the tally's (without the flag), 4 --forward-only and
-a scene moved back.
+a scene moved back, 5 --strict and a scene flagged by --host-verdicts.
 """
 
 import importlib.util
@@ -868,9 +881,63 @@ def render_delta(t, base):
     return out, back
 
 
+VERDICT_LINE_RE = re.compile(r"^(\d+) (\S+) (vs|fs) ([0-9a-f]+): (.*)$")
+
+
+def read_host_verdicts(path, scenes):
+    """{info: None (every shader of the scene compiles) | 'vs ace2: refusal' (the first)} of a
+    tests/fixtures/mali_glmark2_verdicts.txt-format file; a scene it has no line for is absent"""
+    by_info = {info: slug for slug, info in scenes}
+    text = CT.read_text(path)
+    if text is None:
+        raise Malformed("%s: unreadable" % path)
+    out = {}
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.startswith("#"):
+            continue
+        m = VERDICT_LINE_RE.match(line.strip())
+        if not m:
+            raise Malformed("%s:%d is not '<n> <scene> <vs|fs> <hash>: ok|<refusal>'" % (path, n))
+        info = runner_info(m.group(2))
+        if info not in by_info:
+            raise Malformed("%s:%d: %s is no scene of glmark2-host-ref.sh --list" % (path, n, m.group(2)))
+        out.setdefault(info, None)
+        if m.group(5) != "ok" and out[info] is None:
+            out[info] = "%s %s: %s" % (m.group(3), m.group(4), m.group(5))
+    return out
+
+
+def render_forecast(t, host):
+    """(lines, flags): per scene what the host predicts against the board's verdict. Flags:
+    predicted clean and the board ran it and it is not ok (a draw or setup cause, or a
+    regression); predicted refused and the board shows it ok (a stale fixture)"""
+    out, clean, refused, none, flags = [], 0, 0, 0, 0
+    for r in t["rows"]:
+        if r["info"] not in host:
+            none += 1
+            out.append("forecast %s: host no prediction; board %s" % (r["info"], r["verdict"]))
+            continue
+        first = host[r["info"]]
+        clean += first is None
+        refused += first is not None
+        flag = ""
+        if r["verdict"] != "not-run":
+            if first is None and r["verdict"] != "ok":
+                flag = "; FLAG predicted clean, board failing (a draw or setup cause, or a regression)"
+            elif first is not None and r["verdict"] == "ok":
+                flag = "; FLAG predicted refused, board clean (a stale fixture)"
+        flags += bool(flag)
+        out.append("forecast %s: host %s; board %s%s" % (
+            r["info"], "clean" if first is None else "refused: " + redact(first[:160]), r["verdict"], flag))
+    out.append("forecast: host predicts %d clean, %d refused, %d without a line; %d flagged"
+               % (clean, refused, none, flags))
+    return out, flags
+
+
 def main(argv):
     mode, column, table, args, allow = None, "mali", PICTURES, [], False
     baseline, forward_only = None, False
+    host_path, strict = None, False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -880,7 +947,9 @@ def main(argv):
             allow = True
         elif a == "--forward-only":
             forward_only = True
-        elif a in ("--column", "--table", "--baseline"):
+        elif a == "--strict":
+            strict = True
+        elif a in ("--column", "--table", "--baseline", "--host-verdicts"):
             i += 1
             if i >= len(argv):
                 print("glmark2-mali-tally: %s needs a value" % a, file=sys.stderr)
@@ -889,6 +958,8 @@ def main(argv):
                 column = argv[i]
             elif a == "--baseline":
                 baseline = argv[i]
+            elif a == "--host-verdicts":
+                host_path = argv[i]
             else:
                 table = argv[i]
         elif a.startswith("--"):
@@ -897,12 +968,13 @@ def main(argv):
         else:
             args.append(a)
         i += 1
-    if len(args) != 1 or (forward_only and baseline is None):
+    if len(args) != 1 or (forward_only and baseline is None) or (strict and host_path is None):
         print(__doc__, file=sys.stderr)
         return 2
     try:
         t = tally(args[0], column, table)
         base = tally(baseline, column, table) if baseline is not None else None
+        host = read_host_verdicts(host_path, scene_list()) if host_path is not None else None
     except (Malformed, SystemExit) as e:
         # SystemExit: common-tally's read_picture_table on a malformed table
         print("glmark2-mali-tally: malformed: %s" % e, file=sys.stderr)
@@ -922,17 +994,24 @@ def main(argv):
     delta, back = render_delta(t, base) if base else ([], 0)
     if delta and mode is None:
         out = out + delta
+    fc, flags = render_forecast(t, host) if host is not None else ([], 0)
+    if fc and mode is None:
+        out = out + fc
     print("\n".join(out))
     sys.stdout.flush()
     if delta and mode is not None:
         print("\n".join(delta), file=sys.stderr)
+    if fc and mode is not None:
+        print("\n".join(fc), file=sys.stderr)
     for r, rv in t["mismatch"]:
         print("glmark2-mali-tally: %sscene %s: runner verdict %s, tally verdict %s (%s)"
               % ("allowed: " if allow else "", r["info"], rv, r["verdict"], r["cause"] or "-"),
               file=sys.stderr)
     if t["mismatch"] and not allow:
         return 3
-    return 4 if forward_only and back else 0
+    if forward_only and back:
+        return 4
+    return 5 if strict and flags else 0
 
 
 if __name__ == "__main__":

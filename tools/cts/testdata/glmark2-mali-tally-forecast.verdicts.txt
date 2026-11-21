@@ -1,0 +1,26 @@
+# synthetic host verdicts for glmark2-mali-tally-selftest.sh (not a real corpus; the
+# format of tests/fixtures/mali_glmark2_verdicts.txt: <n> <scene> <vs|fs> <hash>: ok|<refusal>)
+# a subset of the scenes: 8 predicted clean, ideas, conditionals 5/0 and loop
+# fragment-loop=false refused; every other scene has no line (no prediction)
+0 build:use-vbo=false fs 4748: ok
+0 build:use-vbo=false vs ace2: ok
+1 build:use-vbo=true fs 4748: ok
+1 build:use-vbo=true vs ace2: ok
+20 desktop:blur-radius=5:effect=blur:passes=1:separable=true:windows=4 fs 7f17: ok
+20 desktop:blur-radius=5:effect=blur:passes=1:separable=true:windows=4 vs ace2: ok
+21 desktop:effect=shadow:windows=4 fs cf4b: ok
+21 desktop:effect=shadow:windows=4 vs ace2: ok
+24 ideas:speed=duration fs 1aca: ok
+24 ideas:speed=duration vs 51b2: Mali(Valhall: synthetic vertex control flow refusal)
+25 jellyfish fs 8ee5: ok
+25 jellyfish vs 08a2: ok
+26 terrain fs d697: ok
+26 terrain vs 18bc: ok
+27 shadow fs cf4b: ok
+27 shadow vs 7215: ok
+28 refract fs 3fae: ok
+28 refract vs 7215: ok
+30 conditionals:fragment-steps=5:vertex-steps=0 fs 6c61: Mali(Valhall: synthetic fragment arithmetic refusal)
+30 conditionals:fragment-steps=5:vertex-steps=0 vs a5b5: ok
+32 loop:fragment-loop=false:fragment-steps=5:vertex-steps=5 fs 3678: Mali(Valhall: synthetic loop refusal)
+32 loop:fragment-loop=false:fragment-steps=5:vertex-steps=5 vs 3cb0: ok
