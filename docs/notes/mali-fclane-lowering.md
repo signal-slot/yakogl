@@ -451,3 +451,84 @@ nothing from other items; C needs the compare lowering; E the integer one.
   `mali-partial-varyings.md`, `mali-deqp-varylink.md`, `mali-deqp-intval.md`,
   `mali-deqp-families.md` section 18.
 - Run: `cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_fclane`.
+
+## 8. Measured sites at a7260420
+
+Section 3's sites were quoted at `3497799a` and its section 7 warns they
+drift. Measured again at the tip `a7260420` (plan #387, item fclane-sites):
+every `deqp_fclane_*` and `deqp_fclane2_*` reference was compiled through
+`mali_ref::compile_pair` in a scratch test (features `host-test,gpu-mali,
+shaderc-online,no-shader-table`), with every `Err(MaliError::ColourForm)` in
+`nir_fs.rs` temporarily routed through a helper that printed `line!()`. The
+instrument and the scratch test were removed; nothing under `src/` or
+`tests/` changed. No `ColourForm` site other than the three of section 3
+fired. All 26 references are refused with the one text `Valhall: a
+gl_FragColor lane other than the varying's own lane or a constant is not
+lowered yet`.
+
+`nir_fs.rs` has no commit since `3497799a` in `git log 3497799a..HEAD`, which
+is why the line numbers still hold: **8735** (`vectorise`, the `else` of two
+load lanes that are no pair), **8799** (`vectorise`, the final `_` arm),
+**9525** (`lane_tree`'s last arm, no `B2f`). The mechanism column is the
+section 4 letter of the note (for `fclane2_*`, the letter of the shape
+`bcast_compare` they extend, by site: not read word by word).
+
+| Reference | Site | Mechanism | Differs from the note? |
+|---|---:|:-:|---|
+| `fclane_bcast_compare_array` | 8799 | C | no |
+| `fclane_bcast_compare_bool` | 9525 | C | no |
+| `fclane_bcast_compare_float` | 9525 | C | no |
+| `fclane_bcast_compare_int` | 9525 | C | no |
+| `fclane_bcast_const` | 9525 | C | no |
+| `fclane_mat4_swz_sum` | 8799 | A | no |
+| `fclane_mat_cols_sum` | 8799 | A | no |
+| `fclane_mat_elem_pairs` | 8735 | A | no |
+| `fclane_mat_vec_lanes` | 8735 | A | no |
+| `fclane_op_pair_other` | 8799 | E | no |
+| `fclane_op_pair_x` | 8799 | A | no |
+| `fclane_op_pair_xyz` | 8735 | A | no |
+| `fclane_op_pair_xyzw` | 8735 | A | no |
+| `fclane_op_pair_yz` | 8799 | A | no |
+| `fclane_rnd_vec4` | 8799 | D | no |
+| `fclane_struct_fields` | 8799 | B | no |
+| `fclane_tex_coord_ramp` | 8799 | D | no |
+| `fclane_tex_zw_lane` | 8799 | B | no |
+| `fclane_varying_merged` | **8799** | B | **yes: the note says 8735** |
+| `fclane_vec3_local` | 8735 | D | no |
+| `fclane2_struct_array_float` | 8799 | C | new row (like `bcast_compare_array`) |
+| `fclane2_struct_arrmember_float` | 8799 | C | new row (like `bcast_compare_array`) |
+| `fclane2_struct_basic_float` | 8799 | C | new row (like `bcast_compare_array`) |
+| `fclane2_struct_nested_float` | 8799 | C | new row (like `bcast_compare_array`) |
+| `fclane2_struct_basic_bool` | 9525 | C | new row (like `bcast_compare_bool`) |
+| `fclane2_struct_basic_int` | 9525 | C | new row (like `bcast_compare_bool`) |
+
+Per site: 8735 five references (`mat_elem_pairs`, `mat_vec_lanes`,
+`op_pair_xyz`, `op_pair_xyzw`, `vec3_local`); 8799 fifteen (eleven
+`fclane_*`: `bcast_compare_array`, `mat4_swz_sum`, `mat_cols_sum`,
+`op_pair_other`, `op_pair_x`, `op_pair_yz`, `rnd_vec4`, `struct_fields`,
+`tex_coord_ramp`, `tex_zw_lane`, `varying_merged`; and four `fclane2_*`);
+9525 six (`bcast_compare_bool`, `_float`, `_int`, `bcast_const`, two
+`fclane2_*`). 5 + 15 + 6 = 26.
+
+### 8.1 Corrected step
+
+- **`varying_merged`** (section 5.2, step 2, mechanism B, first bullet): the
+  refusal is at 8799, not 8735. The colour `v_color` is a plain `gl_FragColor
+  = v_color` of a vec4 whose w lane the link merged with x, so the pair
+  `(z, w)` is not two lanes of one load: it reaches `vectorise`'s final arm.
+  The step the note gives (`Leaf::Pack { x: Splat, y: Half-low }`, the
+  `index()` map for the merged lane) is unchanged; only the arm that gets the
+  new case is the final `_` arm, not the 8735 `else`. The operands of the
+  pair at 8799 were not printed (only the line), so which of the two
+  halves is the merged lane is still read from the note, not measured.
+- Section 3's table row at 8735 lists `varying_merged ((0,2),(0,3))`: drop it
+  from that row and add it to the 8799 row.
+- The six `fclane2_*` references are not in section 3 or 4. By site they
+  belong to mechanism C: 9525 for `struct_basic_bool` and `struct_basic_int`
+  (the `B2f` of a struct-member compare), 8799 for the four float ones (the
+  `Bcsel`, 1.0 pair of `bcast_compare_array`). The per-mechanism counts of
+  section 4 (A 406, B 36, C 233, D 138, E 8, total 821) are unchanged: the
+  94 must-pass cases of `fclane2_*` (`tests/mali_deqp_fclane2.rs`) are a
+  separate count (`mali-deqp-fclane.md` marks them HOST-ONLY and the
+  per-reference split is not measured here), so mechanism C would be 327
+  with them if they are not already inside the 229 of `bcast_compare_*`.
