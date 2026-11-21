@@ -118,3 +118,49 @@ The per-scene expectations from the host profile stay in
 changes only terrain's streams (`tests/gc_scene_kicks_tiled_rt.rs`;
 `gc-tiled-wire.md`, "Status"): shadow and refract render the same streams
 off and on, so session A's on run of those two is a control, not a gain.
+
+## Stop, 2026-11-21 (plan #355)
+
+**No X2 measurement was made. The rows below are stop rows, not
+measurements: no run, no image, no jump, the board was not touched.**
+
+Cause: the X2 (farm resource `armadillo-x2`) has been turned off on the farm
+since 2026-11-17, so no session could lease or reach it. Behind that stands
+the earlier cause of the 2026-11-11 stop, which also still holds until it is
+checked again from a leased worker: the task machine could not reach the board
+by name and had no persisted key (see above). Plan #355's acceptance c5
+accepts this written stop.
+
+Commits that would be measured:
+
+- before: `72972ba4`;
+- tip of the day: `c3122ede` (`git rev-parse origin/main` as the refs of this
+  task's clone show it; the integration tip the work started from is
+  `e07d066a`). Session A uses one commit of `origin/main` that carries
+  `gc_tiled_rt`, knob off and on.
+
+Commands to run when the board returns (the order and checks of
+`gc-tiled-wire.md`, "Session A: the run sheet": reachability from the leased
+worker first, then `tools/board.sh x2 status`):
+
+```sh
+tools/cts/x2-glmark2-scenes.sh --commit 72972ba4 <outdir> terrain shadow refract
+tools/cts/x2-glmark2-scenes.sh --commit origin/main <outdir> terrain shadow refract
+# session A: the same commit, knob on
+tools/cts/x2-glmark2-scenes.sh --commit origin/main --conf CONFIG_GLMARK2_GC_TILED_RT=y <outdir> terrain shadow refract
+tools/cts/x2-scene-table.py <outdir>
+```
+
+`x2-glmark2-scenes.sh` runs `tools/board.sh x2 run` (kexec-dev) per scene.
+
+Stop rows (ms a frame `-`; the form of the stop rows of `x2-scene-table.py`,
+no `gc_tiled_rt` knob in the older image):
+
+| commit | gc_tiled_rt | scene | ms a frame | FPS | verdict line |
+|---|---|---|---|---|---|
+| 72972ba4 | - | terrain | - | - | verdict= stop: board turned off, no verdict line |
+| 72972ba4 | - | shadow | - | - | verdict= stop: board turned off, no verdict line |
+| 72972ba4 | - | refract | - | - | verdict= stop: board turned off, no verdict line |
+| c3122ede | off | terrain | - | - | verdict= stop: board turned off, no verdict line |
+| c3122ede | off | shadow | - | - | verdict= stop: board turned off, no verdict line |
+| c3122ede | off | refract | - | - | verdict= stop: board turned off, no verdict line |
