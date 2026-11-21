@@ -66,6 +66,9 @@
 #    the u-boot-env partition alone. The stock card's shape (copy 2 all zero)
 #    installs and runs: the edits land in copy 1, U-Boot's saveenv then makes
 #    copy 2 valid and active, and the next arm writes copy 1 with flags 0x04.
+#    The fake board's xargs refuses -0 as the DK's BusyBox one does, so
+#    install's boot-file record must not need it; a backup left with an empty
+#    record counts as a first install.
 #    An SD card numbered mmcblk1 is accepted (status reads it). A card whose
 #    environment has a preboot of its own: install stops with rc 7 before
 #    any write or backup.
@@ -106,7 +109,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=205
+WANT_CHECKS=207
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -797,6 +800,10 @@ manifest > "$S/boot-before.txt"
 # answering), "hang" holds the ssh session 20 s and does nothing
 printf '#!/bin/sh\necho "Cannot initialize environment" >&2\nexit 1\n' > "$F/bin/fw_printenv"
 ln -s fw_printenv "$F/bin/fw_setenv"
+# the DK's xargs is BusyBox's (v1.36.1, /usr/bin/xargs -> busybox.nosuid),
+# built without -0: it stops with "invalid option -- '0'", which on the board
+# (2026-11-21) left install with an empty boot-sha256.txt
+printf '#!/bin/sh\nfor a; do case "$a" in -0 | --null) echo "xargs: invalid option -- '"'"'0'"'"'" >&2; exit 1 ;; esac; done\nexec /usr/bin/xargs "$@"\n' > "$F/bin/xargs"
 cat > "$F/bin/uboot_saveenv" <<EOF
 #!/usr/bin/env python3
 # uboot_saveenv PARTITION NAME...: U-Boot's setenv NAME (unset) and saveenv:
@@ -900,6 +907,10 @@ check "live install: the pristine image is kept on the host (mode 600) and on th
     eval 'p=$(ls "$S"/backup/*-u-boot-env.bin 2>/dev/null | head -1); [ -n "$p" ] && cmp -s "$p" "$S/env.bin" && [ "$(stat -c %a "$p")" = 600 ] && cmp -s "$F/boot/yakogl/backup/u-boot-env.bin" "$S/env.bin"'
 check "live install: boot-sha256.txt lists the five stock files and checks" \
     eval '[ "$(wc -l < "$F/boot/yakogl/backup/boot-sha256.txt")" = 5 ] && (cd "$F/boot" && sha256sum -c --quiet yakogl/backup/boot-sha256.txt)'
+check "live install: no board command needs GNU xargs -0 (the DK's xargs is BusyBox's)" \
+    eval '! grep -q "xargs -0" "$F/ssh.log"'
+check "live install: a backup left with an empty boot-sha256.txt (a cut-off first install) counts as a first install" \
+    eval 'grep -q "test -s /boot/yakogl/backup/boot-sha256.txt; then echo kept" "$F/ssh.log"'
 check "live install: the bytes outside the two copies of the partition are untouched" \
     eval 'cmp -s <(head -c $((0x7c000)) "$S/env.bin") <(head -c $((0x7c000)) "$PART")'
 : > "$F/ssh.log"
