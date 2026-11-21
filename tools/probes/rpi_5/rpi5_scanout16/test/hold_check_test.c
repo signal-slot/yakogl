@@ -229,6 +229,52 @@ static void test_judge(void)
 	CHECK(strcmp(hold_redraw_name(HOLD_REDRAW_B), "yes-B") == 0);
 }
 
+static void test_q2(void)
+{
+	uint32_t ref[64], cur[64], idx[HOLD_Q2_CAP], v[HOLD_BURST_FRAMES];
+
+	for (uint32_t i = 0; i < 64; i++)
+		ref[i] = cur[i] = 0xb0b0b0b0u + i;
+
+	/* nothing changing */
+	CHECK(hold_diff_words(ref, cur, 64, idx, HOLD_Q2_CAP) == 0);
+
+	/* one entry word (the context word, offset 4) changing */
+	cur[4] ^= 1;
+	CHECK(hold_diff_words(ref, cur, 64, idx, HOLD_Q2_CAP) == 1 && idx[0] == 4);
+	CHECK(hold_entry_off(4, 8) == 4 && hold_ctx_off(true) == 4 && hold_ctx_off(false) == 5);
+
+	/* a word outside the 8-word entry */
+	cur[4] = ref[4];
+	cur[32] ^= 0x10;
+	CHECK(hold_diff_words(ref, cur, 64, idx, HOLD_Q2_CAP) == 1 && idx[0] == 32);
+	CHECK(hold_entry_off(32, 8) == -1 && hold_entry_off(7, 8) == 7 && hold_entry_off(8, 8) == -1);
+
+	/* more changed words than the cap: the total is still counted */
+	for (uint32_t i = 0; i < 20; i++)
+		cur[i] = ~ref[i];
+	CHECK(hold_diff_words(ref, cur, 64, idx, HOLD_Q2_CAP) == 21 && idx[7] == 7);
+	CHECK(hold_diff_words(ref, cur, 10, idx, HOLD_Q2_CAP) == 10);
+
+	/* per-frame: changing at every frame step */
+	for (uint32_t f = 0; f < HOLD_BURST_FRAMES; f++)
+		v[f] = 0x800000a8u + (f & 1u);
+	CHECK(hold_transitions(v, HOLD_BURST_FRAMES) == HOLD_BURST_FRAMES - 1u);
+	CHECK(hold_per_frame(v, HOLD_BURST_FRAMES));
+	/* changed once in 16 frames: a rare edit */
+	for (uint32_t f = 0; f < HOLD_BURST_FRAMES; f++)
+		v[f] = f < 9 ? 1u : 2u;
+	CHECK(hold_transitions(v, HOLD_BURST_FRAMES) == 1 && !hold_per_frame(v, HOLD_BURST_FRAMES));
+	/* constant, and a series too short to say */
+	for (uint32_t f = 0; f < HOLD_BURST_FRAMES; f++)
+		v[f] = 5u;
+	CHECK(hold_transitions(v, HOLD_BURST_FRAMES) == 0 && !hold_per_frame(v, HOLD_BURST_FRAMES));
+	CHECK(!hold_per_frame(v, 1) && !hold_per_frame(v, 0));
+
+	/* both bursts fit inside the watchdog's margin */
+	CHECK(2u * HOLD_BURST_MS <= HOLD_WDOG_MARGIN_MS);
+}
+
 int main(void)
 {
 	test_hash();
@@ -237,6 +283,7 @@ int main(void)
 	test_regs();
 	test_clamp();
 	test_judge();
+	test_q2();
 	printf("hold_check_test: %d checks, %d failed\n", checks, failed);
 	return failed ? 1 : 0;
 }

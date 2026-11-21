@@ -335,6 +335,30 @@ int main(int argc, char **argv)
 		write_log(path, lines, NULL);
 	}
 
+	/* the Q2 list-word lines */
+	{
+		char b[160];
+
+		frame16_fmt_q2_word(b, sizeof(b), 676, 672, 4, 0x800000a8u, 0x800000a9u);
+		CHECK(strcmp(b, "rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x800000a8 now "
+				"0x800000a9") == 0);
+		frame16_fmt_q2_word(b, sizeof(b), 704, 672, -1, 0x20000000u, 1u);
+		CHECK(strcmp(b, "rpi5_scanout16: q2 word 704 off 32 entry-off none was 0x20000000 "
+				"now 0x00000001") == 0);
+		frame16_fmt_q2_more(b, sizeof(b), 12);
+		CHECK(strcmp(b, "rpi5_scanout16: q2 12 more changed words left out") == 0);
+		frame16_fmt_q2_entry(b, sizeof(b), 8, 4);
+		CHECK(strcmp(b, "rpi5_scanout16: q2 entry words 8 ctx-off 4") == 0);
+		frame16_fmt_q2(b, sizeof(b), true, 676, 4, 0x800000a8u, 0x800000a9u, true);
+		CHECK(strcmp(b, "u3 q2: word 676 entry-off 4 was 0x800000a8 now 0x800000a9 "
+				"per-frame yes") == 0);
+		frame16_fmt_q2(b, sizeof(b), true, 704, -1, 0x20000000u, 1u, false);
+		CHECK(strcmp(b, "u3 q2: word 704 entry-off none was 0x20000000 now 0x00000001 "
+				"per-frame no") == 0);
+		frame16_fmt_q2(b, sizeof(b), false, 0, 0, 0, 0, false);
+		CHECK(strcmp(b, "u3 q2: no list word changed") == 0);
+	}
+
 	free(plane);
 	free(exp);
 	printf("frame16_test: %d checks, %d failed\n", checks, failed);

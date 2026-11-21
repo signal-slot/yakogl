@@ -198,6 +198,7 @@ else
     say "  missing: none"
 fi
 
+Q2SAY=""
 # the Q2 answer, from the hold line alone
 if [ -n "${SEEN[10]:-}" ]; then
     h=${SEEN[10]}
@@ -215,21 +216,61 @@ if [ -n "${SEEN[10]:-}" ]; then
     if [ $changed = 1 ] && [ $hwords -eq 0 ]; then contra="list=changed with words=0"; fi
     if [ $changed = 0 ] && [ $hwords -ne 0 ]; then contra="list=kept with words=$hwords"; fi
     if [ $hms -eq 0 ]; then
-        say "q2: unclear (a hold of 0 ms holds nothing)"
+        Q2SAY="q2: unclear (a hold of 0 ms holds nothing)"
     elif [ -n "$contra" ]; then
-        say "q2: unclear ($contra)"
+        Q2SAY="q2: unclear ($contra)"
     elif [ $redrawn = 1 ] && [ $changed = 1 ]; then
-        say "q2: yes, redrawn and list changed ($hbytes plane bytes, $hwords list words in $hms ms)"
+        Q2SAY="q2: yes, redrawn and list changed ($hbytes plane bytes, $hwords list words in $hms ms)"
     elif [ $redrawn = 1 ]; then
-        say "q2: yes, redrawn ($hbytes plane bytes changed in $hms ms)"
+        Q2SAY="q2: yes, redrawn ($hbytes plane bytes changed in $hms ms)"
     elif [ $changed = 1 ]; then
-        say "q2: yes, list changed ($hwords list words changed in $hms ms)"
+        Q2SAY="q2: yes, list changed ($hwords list words changed in $hms ms)"
     else
-        say "q2: no (the firmware neither redrew the plane nor changed its list in $hms ms)"
+        Q2SAY="q2: no (the firmware neither redrew the plane nor changed its list in $hms ms)"
     fi
 else
-    say "q2: unanswered (no hold line)"
+    Q2SAY="q2: unanswered (no hold line)"
 fi
+
+# the list half of Q2: the word the hold named and what it is. Grounds: a
+# plane entry is CTL0, POS0, CTL2, POS1 (not when unity), POS2, POS3, then the
+# pointer words (driver/zephyr/lib/board/rpi5_scanout/hvs6_dlist.h, "Word
+# indexes within an entry"); POS3 is the context word the HVS keeps per-plane
+# state in (driver/docs/rpi5-v3d71-facts.md section 10; the probe prints its
+# offset as 'q2 entry words <n> ctx-off <k>'). So:
+#   hvs-writeback  the word changes with the frame (per-frame yes: a status or
+#                  context word the HVS writes back, not something firmware
+#                  edits every frame), or sits at the context offset
+#   firmware-edit  per-frame no, and the word is not at the context offset
+#   unknown        no 'u3 q2:' line (a truncated log), or per-frame no inside
+#                  the entry with no context offset printed: the data does not
+#                  decide
+# Appended to the q2: line below; the exit status never depends on it.
+q2list=""
+if [ -n "${SEEN[10]:-}" ]; then
+    sumline=$(grep -E '^u3 q2: ' "$TMP" | head -n 1)
+    ctxline=$(grep -E '^rpi5_scanout16: q2 entry words [0-9]+ ctx-off [0-9]+' "$TMP" | head -n 1)
+    ctxoff=""
+    [ -n "$ctxline" ] && ctxoff=$(sed -E 's/.* ctx-off ([0-9]+).*/\1/' <<< "$ctxline")
+    q2re='^u3 q2: word ([0-9]+) entry-off (none|[0-9]+) was (0x[0-9a-fA-F]+) now (0x[0-9a-fA-F]+) per-frame (yes|no)([[:space:]]|$)'
+    if [[ "$sumline" =~ ^u3\ q2:\ no\ list\ word\ changed([[:space:]]|$) ]]; then
+        q2list="; no list word changed"
+    elif [[ "$sumline" =~ $q2re ]]; then
+        qw=${BASH_REMATCH[1]}; qo=${BASH_REMATCH[2]}; qa=${BASH_REMATCH[3]}
+        qn=${BASH_REMATCH[4]}; qp=${BASH_REMATCH[5]}
+        if [ "$qp" = yes ]; then qc=hvs-writeback
+        elif [ "$qo" != none ] && [ -n "$ctxoff" ] && [ "$qo" = "$ctxoff" ]; then qc=hvs-writeback
+        elif [ "$qo" != none ] && [ -z "$ctxoff" ]; then qc=unknown
+        else qc=firmware-edit; fi
+        q2list="; word $qw entry-off $qo was $qa now $qn per-frame $qp: $qc"
+    else
+        q2list="; list word unknown (no 'u3 q2:' line)"
+    fi
+fi
+case "$Q2SAY" in
+    "q2: unanswered"*|"q2: unclear"*) say "$Q2SAY" ;;
+    *) say "$Q2SAY$q2list" ;;
+esac
 
 if [ "$nseen" -ne "$N" ]; then
     say "verdicts: incomplete (the run did not print all $N expected verdict lines)"

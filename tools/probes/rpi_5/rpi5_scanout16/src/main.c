@@ -115,6 +115,17 @@ static uint32_t list_at;       /* the list's first word in list memory */
 static uint32_t list_n;        /* its words, walked to the END */
 static uint32_t list_ref[LIST_MAX];
 static uint32_t list_lptrs;    /* plane_ch's LPTRS when the list was read */
+static uint32_t list_got;      /* words of list_ref read (the Q2 snapshot, up to LIST_MAX) */
+static uint32_t list_heade;    /* plane_ch's LPTRS.HEADE when the list was read */
+static uint32_t q2_entry_n;    /* the first plane entry's words, and its POS3 context offset */
+static uint32_t q2_ctx_off;
+/* Q2's list half: every word that differed from the snapshot at any read, the
+ * last value read of it, and whether a per-frame burst saw it change. */
+static bool q2_ever[LIST_MAX];
+static bool q2_pf[LIST_MAX];
+static uint32_t q2_last[LIST_MAX];
+static uint32_t q2_frames[HOLD_BURST_FRAMES][LIST_MAX];
+static uint32_t q2_frcnt[HOLD_BURST_FRAMES];
 
 static struct frame16_plane fp;  /* the adopted plane (base NULL: none) */
 static struct frame16_plane xp;  /* the expected image */
@@ -217,6 +228,8 @@ static bool read_list(unsigned int ch, struct hvs6_plane *pl)
 		list_n = got;
 	}
 	list_at = head;
+	list_got = got;
+	list_heade = lptrs & HVS6_LPTRS_HEADE_MASK;
 	list_lptrs = lptrs;
 	printk("rpi5_scanout16: ch%u list read from word %u: %u words, END %s; LPTRS 0x%08x "
 	       "DL 0x%08x\n", ch, head, list_n, end ? "found" : "NOT found (walk stopped there)",
@@ -229,6 +242,8 @@ static bool read_list(unsigned int ch, struct hvs6_plane *pl)
 		printk("rpi5_scanout16: ch%u first plane NOT decoded (hvs6 error %d)\n", ch, rc);
 		return false;
 	}
+	q2_entry_n = pl->nwords;
+	q2_ctx_off = hold_ctx_off(pl->unity);
 	return true;
 }
 
@@ -407,6 +422,105 @@ static uint32_t list_words_changed(void)
 		n += list_rd(list_at + i) != list_ref[i];
 	}
 	return n;
+}
+
+/* ---- Q2's list half: named changed words and per-frame bursts ------------- */
+
+static void q2_word_line(uint32_t i, uint32_t was, uint32_t now)
+{
+	char b[160];
+
+	(void)frame16_fmt_q2_word(b, sizeof(b), list_at + i, list_heade,
+				  hold_entry_off(i, q2_entry_n), was, now);
+	printk("%s\n", b);
+}
+
+/* Print each word that differs from the snapshot (at most HOLD_Q2_CAP). */
+static void q2_sample(const char *tag)
+{
+	uint32_t cur[LIST_MAX], idx[HOLD_Q2_CAP], total, shown;
+
+	for (uint32_t i = 0; i < list_got; i++) {
+		cur[i] = list_rd(list_at + i);
+		if (cur[i] != list_ref[i]) {
+			q2_ever[i] = true;
+		}
+		q2_last[i] = cur[i];
+	}
+	total = hold_diff_words(list_ref, cur, list_got, idx, HOLD_Q2_CAP);
+	shown = total < HOLD_Q2_CAP ? total : HOLD_Q2_CAP;
+	printk("rpi5_scanout16: q2 %s: %u list words differ from the snapshot\n", tag, total);
+	for (uint32_t k = 0; k < shown; k++) {
+		q2_word_line(idx[k], list_ref[idx[k]], cur[idx[k]]);
+	}
+	if (total > shown) {
+		char b[96];
+
+		(void)frame16_fmt_q2_more(b, sizeof(b), total - shown);
+		printk("%s\n", b);
+	}
+}
+
+/* One read of the list per FRCNT change, HOLD_BURST_FRAMES times (each wait is
+ * at most FRCNT_WAIT_MS), then the words that differ from the snapshot or
+ * between two frames printed per frame with FRCNT. */
+static void q2_burst(const char *tag)
+{
+	uint32_t sel[HOLD_Q2_CAP], nsel = 0, extra = 0;
+	uint32_t prev = chan_rd(scan_ch, HVS6_REG_STATUS);
+
+	for (uint32_t f = 0; f < HOLD_BURST_FRAMES; f++) {
+		int64_t until = k_uptime_get() + FRCNT_WAIT_MS;
+		uint32_t st = chan_rd(scan_ch, HVS6_REG_STATUS);
+
+		while (hold_frcnt(st) == hold_frcnt(prev) && !hold_unclocked(st) &&
+		       k_uptime_get() < until) {
+			st = chan_rd(scan_ch, HVS6_REG_STATUS);
+		}
+		prev = st;
+		q2_frcnt[f] = hold_frcnt(st);
+		for (uint32_t i = 0; i < list_got; i++) {
+			q2_frames[f][i] = list_rd(list_at + i);
+		}
+	}
+	for (uint32_t i = 0; i < list_got; i++) {
+		uint32_t v[HOLD_BURST_FRAMES];
+		bool moves = false;
+
+		for (uint32_t f = 0; f < HOLD_BURST_FRAMES; f++) {
+			v[f] = q2_frames[f][i];
+			moves = moves || v[f] != list_ref[i];
+		}
+		moves = moves || hold_transitions(v, HOLD_BURST_FRAMES) != 0;
+		if (!moves) {
+			continue;
+		}
+		q2_ever[i] = true;
+		q2_last[i] = v[HOLD_BURST_FRAMES - 1];
+		if (hold_per_frame(v, HOLD_BURST_FRAMES)) {
+			q2_pf[i] = true;
+		}
+		if (nsel < HOLD_Q2_CAP) {
+			sel[nsel++] = i;
+		} else {
+			extra++;
+		}
+	}
+	if (nsel == 0) {
+		printk("rpi5_scanout16: q2 burst %s: no list word differs from the snapshot or "
+		       "between %u frames\n", tag, HOLD_BURST_FRAMES);
+		return;
+	}
+	for (uint32_t f = 0; f < HOLD_BURST_FRAMES; f++) {
+		printk("rpi5_scanout16: q2 burst %s frame %u FRCNT %u:", tag, f, q2_frcnt[f]);
+		for (uint32_t k = 0; k < nsel; k++) {
+			printk(" w%u=0x%08x", list_at + sel[k], q2_frames[f][sel[k]]);
+		}
+		printk("\n");
+	}
+	if (extra != 0) {
+		printk("rpi5_scanout16: q2 burst %s: %u more moving words left out\n", tag, extra);
+	}
 }
 
 int main(void)
@@ -660,9 +774,13 @@ int main(void)
 						     (const volatile uint8_t *)&list_ref[i], 4u);
 		}
 		ref.dl_ptr = list_lptrs;
+		q2_burst("reference");
 		start = k_uptime_get_32();
-		end = hold_clamp_end(start, RPI5_SCANOUT16_HOLD_MS, RPI_WDOG_HOLD_S, &clamped);
+		end =hold_clamp_end(start, RPI5_SCANOUT16_HOLD_MS, RPI_WDOG_HOLD_S, &clamped);
 		want = end - start;
+		if (want > 2u * HOLD_BURST_MS) {
+			want -= HOLD_BURST_MS; /* the closing burst runs inside the hold */
+		}
 		nsamp = want / HOLD_SAMPLE_MS;
 		if (nsamp == 0 && want != 0) {
 			nsamp = 1;
@@ -689,7 +807,10 @@ int main(void)
 			       k_uptime_get_32() - start, hold_frcnt(hs[i].status), hs[i].dl_ptr,
 			       hs[i].list_hash, hs[i].plane_hash, hs[i].rows_touched,
 			       hs[i].pv_control, hs[i].pv_vcontrol);
+			q2_sample("sample");
 		}
+		q2_burst("end");
+		q2_sample("end");
 		held_ms = k_uptime_get_32() - start;
 	}
 	hv = hold_judge(&ref, hs, nsamp, before_changed);
@@ -725,6 +846,25 @@ int main(void)
 	printk("%s\n", line);
 	(void)frame16_fmt_pv(line, sizeof(line), pvc, pvv);
 	printk("%s\n", line);
+
+	/* ---- the Q2 summary ---- */
+	if (adopted) {
+		uint32_t w = 0;
+		bool any = false;
+
+		for (uint32_t i = 0; i < list_got && !any; i++) {
+			if (q2_ever[i]) {
+				w = i;
+				any = true;
+			}
+		}
+		(void)frame16_fmt_q2_entry(line, sizeof(line), q2_entry_n, q2_ctx_off);
+		printk("%s\n", line);
+		(void)frame16_fmt_q2(line, sizeof(line), any, list_at + w,
+				     hold_entry_off(w, q2_entry_n), list_ref[w], q2_last[w],
+				     q2_pf[w]);
+		printk("%s\n", line);
+	}
 
 	/* ---- line [10] ---- */
 	if (adopted) {
