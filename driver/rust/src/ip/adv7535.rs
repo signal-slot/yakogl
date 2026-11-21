@@ -3,22 +3,33 @@
 //! The ADV7535 HDMI transmitter, configured over I2C with a DSI input; follows
 //! Linux drm/bridge/adv7511/adv7511_drv.c and adv7533.c.
 //!
-//! Source: mainline Linux master, fetched 2026-11-12 from
+//! Source: ST's Linux, tag `v6.6-stm32mp-r3.1` (the DK's kernel), checked
+//! 2026-11-21 against
 //! `drivers/gpu/drm/bridge/adv7511/{adv7511_drv.c,adv7533.c,adv7511.h}`.
 //! `drv:N` is a line of adv7511_drv.c, `dsi:N` of adv7533.c, `hdr:N` of
-//! adv7511.h in that fetch. The ADV7535 is `adv7535_chip_info` (drv:1444):
-//! `has_dsi`, `hpd_override_enable`, `max_lane_freq_khz = 891000`,
-//! `max_mode_clock_khz = 148500`, no `link_config`.
+//! adv7511.h in r3.1; the `drv:` numbers below that were taken from mainline
+//! master before this check are approximate where a line is not named in the
+//! tests. r3.1 has no `adv7535_chip_info`: the ADV7535 is `type == ADV7535`
+//! (hpd override drv:357,384,683; DSI paths drv:376,400,922,934,1107,1341),
+//! its limits are in adv7533_mode_valid (dsi:111-117): 148500 kHz and
+//! 891000 kHz per lane; no `link_config` (drv:1237).
 //!
 //! Linux's order, which [`Bridge`] follows: probe (drv:1210 [`Bridge::init`]),
-//! then per enable `adv7511_bridge_atomic_enable` (drv:779): power_on (drv:345,
-//! which runs adv7533_dsi_power_on), set_config_csc, mode_set, infoframes.
+//! then per enable: mode_fixup (dsi:123, the DSI lanes), mode_set (drv:706,
+//! 0x4a, 0x17), power_on (drv:345: `__adv7511_power_on`, `regcache_sync`, then
+//! adv7533_dsi_power_on, which programs the timing generator FIRST, dsi:70),
+//! with set_config_csc and the AVI infoframe from get_edid (drv:582).
 //!
 //! Deviations, all deliberate:
 //! - no regcache: Linux replays its cached registers after power-up
-//!   (`regcache_sync`, drv:351) because the chip loses them on power-down or
-//!   a cable pull; here the caller powers up and configures again
-//!   ([`Bridge::start`]) after either.
+//!   (`regcache_sync`, drv:351: the register patch first, regcache.c:377,
+//!   then the cached values) because the chip loses them on power-down or a
+//!   cable pull; here [`Bridge::power_up`] replays the main-map patch and the
+//!   three secondary addresses, and [`Bridge::start`] configures the rest
+//!   again after either.
+//! - no AVI/audio difference is made: r3.1 writes an AVI frame without a VIC
+//!   or aspect (hdmi_avi_infoframe_init, drv:232) and no 0x71/0x74; this
+//!   driver adds the VIC (a sink wants it) and mainline master's 0x71/0x74.
 //! - polled: no interrupt line; `adv7511_wait_for_edid` (drv:494) has the
 //!   same polling branch.
 //! - a DDC error ends the EDID read with `-EIO` (Linux counts it as "read
@@ -101,6 +112,8 @@ pub mod reg {
     pub const INT_ENABLE1: u8 = 0x95;
     /// ADV7511_REG_INT(0) / (1) = 0x96 / 0x97, write 1 to clear.
     pub const INT0: u8 = 0x96;
+    /// ADV7511_INT0_HPD (hdr:105), acknowledged by adv7511_hpd (drv:405-417).
+    pub const INT0_HPD: u8 = 1 << 7;
     pub const INT0_EDID_READY: u8 = 1 << 2;
     pub const INT1: u8 = 0x97;
     pub const INT1_DDC_ERROR: u8 = 1 << 7;
@@ -144,6 +157,18 @@ pub const MAX_LANE_FREQ_KHZ: u32 = 891_000;
 pub const MAX_MODE_CLOCK_KHZ: u32 = 148_500;
 /// MIPI_DSI_FMT_RGB888 (adv7533_attach_dsi, dsi:151).
 pub const DSI_BPP: u32 = 24;
+
+/// adv7533_mode_fixup (dsi:130-133): the DSI lanes the part is run with for a
+/// mode, whatever adi,dsi-lanes says (both ADV7533 and ADV7535): 4 above
+/// 80000 kHz, else 3. The DSI host must be (re)attached with this count;
+/// adv7533_mode_valid still checks against the devicetree count.
+pub fn dsi_lanes(mode: &VideoMode) -> u8 {
+    if mode.pixel_clock_hz / 1000 > 80_000 {
+        4
+    } else {
+        3
+    }
+}
 
 /// ADV7511_{EDID,PACKET,CEC}_I2C_ADDR_DEFAULT (the addresses probe passes to
 /// i2c_new_ancillary_device, drv:1291,1303,1099).
@@ -345,6 +370,11 @@ impl<'a, E: Env> Bridge<'a, E> {
     /// for a powered part, which needs the interrupt status, is not taken).
     pub fn hpd(&self) -> Result<bool, i32> {
         let up = self.read(BUS_MAIN, reg::STATUS)? & reg::STATUS_HPD != 0;
+        // adv7511_hpd (drv:405-417), called by detect (drv:637): a pending
+        // HPD interrupt is acknowledged (write 1 to clear)
+        if self.read(BUS_MAIN, reg::INT0)? & reg::INT0_HPD != 0 {
+            self.write(BUS_MAIN, reg::INT0, reg::INT0_HPD)?;
+        }
         self.update(BUS_MAIN, reg::POWER2, reg::POWER2_HPD_OVERRIDE, reg::POWER2_HPD_OVERRIDE)?;
         Ok(up)
     }
@@ -357,12 +387,23 @@ impl<'a, E: Env> Bridge<'a, E> {
         self.update(BUS_MAIN, reg::POWER2, reg::POWER2_HPD_OVERRIDE, reg::POWER2_HPD_OVERRIDE)
     }
 
-    /// adv7511_power_on (drv:345): the core, then adv7533_dsi_power_on
-    /// (dsi:66-90): lanes << 4 (0x1C), the timing generator reset 0xCB, 0x8B,
-    /// 0xCB or disabled with 0x0B (0x27), 0x03 <- 0x89 (enable hdmi),
-    /// 0x55 <- 0 (test mode off), the CEC fixed registers again.
-    pub fn power_up(&self, cfg: &Config) -> Result<(), i32> {
+    /// adv7511_power_on (drv:345): the core, the register replay, then
+    /// adv7533_dsi_power_on (dsi:66-93): the timing generator image (when
+    /// used), lanes << 4 (0x1C; `cfg.lanes` is what the DSI host runs, see
+    /// [`dsi_lanes`]), the generator reset 0xCB, 0x8B, 0xCB or disabled
+    /// with 0x0B (0x27), 0x03 <- 0x89 (enable hdmi), 0x55 <- 0 (test mode
+    /// off), the CEC fixed registers again.
+    pub fn power_up(&self, cfg: &Config, mode: &VideoMode) -> Result<(), i32> {
         self.power_on_core()?;
+        // regcache_sync (drv:351): the patch first, then the cached addresses
+        self.patch(BUS_MAIN, &DSI_FIXED_REGISTERS)?;
+        self.write(BUS_MAIN, reg::EDID_I2C_ADDR, cfg.edid_addr << 1)?;
+        self.write(BUS_MAIN, reg::PACKET_I2C_ADDR, cfg.packet_addr << 1)?;
+        self.write(BUS_MAIN, reg::CEC_I2C_ADDR, cfg.cec_addr << 1)?;
+        if cfg.use_timing_gen {
+            // dsi:70-71: before the lane count and the generator reset
+            self.patch(BUS_DSI_CEC, &timing_gen(mode, cfg.lanes))?;
+        }
         self.write(BUS_DSI_CEC, 0x1c, cfg.lanes << 4)?;
         if cfg.use_timing_gen {
             for v in [0xcb, 0x8b, 0xcb] {
@@ -463,6 +504,8 @@ impl<'a, E: Env> Bridge<'a, E> {
     /// converter off (adv7511_set_colormap, drv:147), the 4:2:2 / YCbCr
     /// output bits cleared, HDMI or DVI mode.
     fn set_config_csc(&self, sink: &Sink) -> Result<(), i32> {
+        // adv7511_packet_disable(AVI) first (drv:260)
+        self.update(BUS_MAIN, reg::PACKET_ENABLE1, reg::PACKET_ENABLE1_AVI, 0)?;
         self.update(BUS_MAIN, reg::CSC_UPPER1, reg::CSC_UPDATE_MODE, reg::CSC_UPDATE_MODE)?;
         self.update(BUS_MAIN, reg::CSC_UPPER0, reg::CSC_ENABLE, 0)?;
         self.update(BUS_MAIN, reg::CSC_UPPER1, reg::CSC_UPDATE_MODE, 0)?;
@@ -471,19 +514,15 @@ impl<'a, E: Env> Bridge<'a, E> {
         self.update(BUS_MAIN, reg::HDMI_CFG, reg::HDMI_CFG_MODE_MASK, mode)
     }
 
-    /// adv7511_mode_set (drv:657) for a non-embedded-sync input: the low
-    /// refresh rate (0x4A bits 3:2 for a non-ADV7511, drv:741), the sync
-    /// polarity inversion (0x17 bits 6:5, drv:743; both 0: the input is
-    /// configured pass-through, DSI regenerates the syncs), and
-    /// adv7533_dsi_config_timing_gen when the generator is used (drv:752).
-    fn mode_set(&self, cfg: &Config, mode: &VideoMode, sink: &Sink) -> Result<(), i32> {
+    /// adv7511_mode_set (drv:706, before power_on) for a non-embedded-sync
+    /// input: the low refresh rate (0x4A bits 3:2 for a non-ADV7511,
+    /// drv:785), the sync polarity inversion (0x17 bits 6:5, drv:788; both 0:
+    /// the link config is pass-through, DSI regenerates the syncs). The
+    /// timing generator is programmed by [`Bridge::power_up`] (dsi:70).
+    fn mode_set(&self, sink: &Sink) -> Result<(), i32> {
         let lr = low_refresh_rate(sink.refresh_hz);
         self.update(BUS_MAIN, reg::INFOFRAME_UPDATE, reg::LOW_REFRESH_MASK, lr << 2)?;
-        self.update(BUS_MAIN, reg::SYNC_POLARITY, reg::SYNC_POLARITY_MASK, 0)?;
-        if cfg.use_timing_gen {
-            self.patch(BUS_DSI_CEC, &timing_gen(mode, cfg.lanes))?;
-        }
-        Ok(())
+        self.update(BUS_MAIN, reg::SYNC_POLARITY, reg::SYNC_POLARITY_MASK, 0)
     }
 
     /// adv7511_bridge_hdmi_write_avi_infoframe (drv:929) or, in DVI mode,
@@ -510,9 +549,13 @@ impl<'a, E: Env> Bridge<'a, E> {
             ylog!(self.env, Err, "adv7535: {} Hz on {} lanes is outside the part", mode.pixel_clock_hz, cfg.lanes);
             return Err(-EINVAL);
         }
-        self.power_up(cfg)?;
+        // dsi:123-143: the lanes follow the mode, not the devicetree
+        let cfg = &Config { lanes: dsi_lanes(mode), ..*cfg };
+        self.power_up(cfg, mode)?;
         self.set_config_csc(sink)?;
-        self.mode_set(cfg, mode, sink)?;
+        // Linux runs mode_set before power_on and replays it from the
+        // regcache; without a cache it is written once the part is up
+        self.mode_set(sink)?;
         self.infoframes(sink)?;
         ylog!(
             self.env,
@@ -707,25 +750,109 @@ mod tests {
         assert_eq!(f.reg(BUS_MAIN, reg::PACKET_ENABLE1), reg::PACKET_ENABLE1_AVI);
         assert!(w.contains(&(BUS_MAIN, reg::INFOFRAME_UPDATE, 0x40)));
         assert_eq!(f.reg(BUS_MAIN, reg::INFOFRAME_UPDATE), 0);
-        // timing generator (dsi:42-63): 4 lanes -> /3 << 3 = 0x18,
+        // timing generator (dsi:41-63): 74.25 MHz is below 80 MHz, so
+        // mode_fixup (dsi:130-133) runs 3 lanes whatever cfg says -> /4 << 3
+        // = 0x20,
         // htotal 1650 = 0x672 -> 0x67 0x20, hsw 40 -> 0x02 0x80, hfp 110 ->
         // 0x06 0xe0, hbp 220 -> 0x0d 0xc0, vtotal 750 = 0x2ee -> 0x2e 0xe0,
         // vsw 5 -> 0x00 0x50, vfp 5, vbp 20 -> 0x01 0x40
-        assert_eq!(f.reg(BUS_DSI_CEC, 0x16), 0x18);
+        assert_eq!(f.reg(BUS_DSI_CEC, 0x16), 0x20);
         let tg: Vec<u8> = (0x28..=0x37).map(|r| f.reg(BUS_DSI_CEC, r)).collect();
         assert_eq!(
             tg,
             [0x67, 0x20, 0x02, 0x80, 0x06, 0xe0, 0x0d, 0xc0, 0x2e, 0xe0, 0x00, 0x50, 0x00, 0x50, 0x01, 0x40]
         );
-        // dsi power on (dsi:70-89) is the exact CEC-map prefix of the sequence
+        // dsi power on (dsi:66-93) is the exact CEC-map sequence: the timing
+        // generator image first (dsi:70), then 0x1c = lanes << 4 (3 lanes)
         let dsi: Vec<(u8, u8)> = w.iter().filter(|e| e.0 == BUS_DSI_CEC).map(|e| (e.1, e.2)).collect();
-        assert_eq!(&dsi[..6], &[(0x1c, 0x40), (0x27, 0xcb), (0x27, 0x8b), (0x27, 0xcb), (0x03, 0x89), (0x55, 0x00)]);
-        assert_eq!(&dsi[6..6 + 5], &DSI_CEC_FIXED_REGISTERS);
-        assert_eq!(dsi[11], (0x16, 0x18)); // then the timing generator
-                                           // order: power, dsi, csc/hdmi, timing, infoframe
-        assert!(at(BUS_MAIN, reg::POWER) < at(BUS_DSI_CEC, 0x1c));
+        assert_eq!(dsi[0], (0x16, 0x20));
+        assert_eq!(dsi[16], (0x37, 0x40));
+        assert_eq!(&dsi[17..23], &[(0x1c, 0x30), (0x27, 0xcb), (0x27, 0x8b), (0x27, 0xcb), (0x03, 0x89), (0x55, 0x00)]);
+        assert_eq!(&dsi[23..28], &DSI_CEC_FIXED_REGISTERS);
+        // order: power, dsi, csc/hdmi, infoframe
+        assert!(at(BUS_MAIN, reg::POWER) < at(BUS_DSI_CEC, 0x16));
         assert!(at(BUS_DSI_CEC, 0x55) < at(BUS_MAIN, reg::HDMI_CFG));
         assert!(at(BUS_MAIN, reg::SYNC_POLARITY) < at(BUS_MAIN, 0x52));
+    }
+
+    /// adv7533_mode_fixup (dsi:130-133): 4 lanes above 80000 kHz, else 3, for
+    /// the ADV7535 too and whatever adi,dsi-lanes says; 0x1c and the clock
+    /// divider (dsi:42-43) follow it.
+    #[test]
+    fn lanes_follow_the_mode_below_and_above_80_mhz() {
+        let at = |hz| VideoMode { pixel_clock_hz: hz, ..mode_720p60() };
+        assert_eq!(dsi_lanes(&at(27_000_000)), 3);
+        assert_eq!(dsi_lanes(&at(80_000_000)), 3); // `> 80000`, not `>=`
+        assert_eq!(dsi_lanes(&at(80_001_000)), 4);
+        assert_eq!(dsi_lanes(&at(148_500_000)), 4);
+        // 4 lanes: clock_div_by_lanes[2] = 3 -> 0x18, 0x1c = 0x40
+        let f = Fake::new();
+        Bridge::new(&f).start(&Config::new(4), &at(148_500_000), &SINK).unwrap();
+        assert_eq!((f.reg(BUS_DSI_CEC, 0x16), f.reg(BUS_DSI_CEC, 0x1c)), (0x18, 0x40));
+        // 3 lanes below, though the devicetree said 4: /4 << 3 = 0x20, 0x30
+        let f = Fake::new();
+        Bridge::new(&f).start(&Config::new(4), &at(74_250_000), &SINK).unwrap();
+        assert_eq!((f.reg(BUS_DSI_CEC, 0x16), f.reg(BUS_DSI_CEC, 0x1c)), (0x20, 0x30));
+        // mode_valid still counts the devicetree lanes (dsi:117)
+        assert!(!mode_valid(&at(148_500_000), 2));
+    }
+
+    /// adv7533_dsi_power_on (dsi:70-93) puts the timing generator image
+    /// before 0x1c and the generator reset.
+    #[test]
+    fn timing_generator_comes_before_the_lane_count() {
+        let f = Fake::new();
+        Bridge::new(&f).start(&Config::new(4), &mode_720p60(), &SINK).unwrap();
+        let w = f.writes();
+        let at = |bus, r| w.iter().position(|e| e.0 == bus && e.1 == r).unwrap();
+        assert!(at(BUS_DSI_CEC, 0x28) < at(BUS_DSI_CEC, 0x1c));
+        assert!(at(BUS_DSI_CEC, 0x37) < at(BUS_DSI_CEC, 0x27));
+        assert!(at(BUS_DSI_CEC, 0x1c) < at(BUS_DSI_CEC, 0x27));
+    }
+
+    /// regcache_sync (drv:351, regcache.c:377) replays the main-map patch and
+    /// the cached addresses on every power-up after a power-off.
+    #[test]
+    fn power_up_replays_the_main_patch_and_addresses() {
+        let f = Fake::new();
+        let b = Bridge::new(&f);
+        b.init(&Config::new(4)).unwrap();
+        f.clear();
+        b.start(&Config::new(4), &mode_720p60(), &SINK).unwrap();
+        let w = f.writes();
+        for &(r, v) in &DSI_FIXED_REGISTERS {
+            assert!(w.contains(&(BUS_MAIN, r, v)), "patch {r:#x}");
+        }
+        for e in [(BUS_MAIN, 0x43, 0x7e), (BUS_MAIN, 0x45, 0x70), (BUS_MAIN, 0xe1, 0x78)] {
+            assert!(w.contains(&e));
+        }
+    }
+
+    /// adv7511_hpd (drv:405-417): a pending HPD interrupt is cleared by
+    /// writing the bit back.
+    #[test]
+    fn hpd_acknowledges_the_interrupt() {
+        let f = Fake::new();
+        f.regs.borrow_mut()[0][reg::INT0 as usize] = reg::INT0_HPD | reg::INT0_EDID_READY;
+        assert_eq!(Bridge::new(&f).hpd(), Ok(true));
+        assert!(f.writes().contains(&(BUS_MAIN, reg::INT0, reg::INT0_HPD)));
+        assert_eq!(f.reg(BUS_MAIN, reg::INT0), reg::INT0_EDID_READY);
+        // none pending: no write to INT0
+        let f = Fake::new();
+        Bridge::new(&f).hpd().unwrap();
+        assert!(!f.writes().iter().any(|e| e.1 == reg::INT0));
+    }
+
+    /// adv7511_set_config_csc (drv:260) disables the AVI packet before it
+    /// rewrites the frame.
+    #[test]
+    fn avi_packet_is_disabled_before_the_csc_and_frame() {
+        let f = Fake::new();
+        Bridge::new(&f).start(&Config::new(4), &mode_720p60(), &SINK).unwrap();
+        let w = f.writes();
+        let p = |r, v| w.iter().position(|e| e.1 == r && e.2 == v && e.0 == BUS_MAIN).unwrap();
+        assert!(p(reg::PACKET_ENABLE1, 0) < p(reg::CSC_UPPER1, reg::CSC_UPDATE_MODE));
+        assert!(p(reg::CSC_UPPER1, reg::CSC_UPDATE_MODE) < p(reg::PACKET_ENABLE1, reg::PACKET_ENABLE1_AVI));
     }
 
     #[test]
@@ -739,7 +866,7 @@ mod tests {
         assert_eq!(f.reg(BUS_MAIN, reg::HDMI_CFG) & 2, 0);
         assert_eq!(f.reg(BUS_MAIN, reg::PACKET_ENABLE1) & reg::PACKET_ENABLE1_AVI, 0);
         assert_eq!(f.reg(BUS_MAIN, reg::INFOFRAME_UPDATE) & 0x0c, 3 << 2);
-        assert_eq!(f.reg(BUS_DSI_CEC, 0x1c), 0x20);
+        assert_eq!(f.reg(BUS_DSI_CEC, 0x1c), 0x30); // 27 MHz: 3 lanes (dsi:130)
         assert_eq!(f.reg(BUS_DSI_CEC, 0x27), 0x0b);
         // no timing generator writes: 0x16 and 0x28.. keep their reset value
         assert_eq!(f.reg(BUS_DSI_CEC, 0x16), 0);
@@ -773,6 +900,7 @@ mod tests {
             f.ev.borrow().clone(),
             vec![
                 Ev::R(BUS_MAIN, reg::STATUS, 1),
+                Ev::R(BUS_MAIN, reg::INT0, 1),
                 Ev::R(BUS_MAIN, reg::POWER2, 1),
                 Ev::W(BUS_MAIN, reg::POWER2, 0x40),
                 Ev::R(BUS_MAIN, reg::DDC_STATUS, 1),

@@ -1168,12 +1168,12 @@ mod tests {
         assert_eq!((adv.reg(0x71), adv.reg(0x74)), (2, 1));
         assert_eq!(adv.reg(0x44) & 0x10, 0x10, "AVI packet enabled");
         // CEC/DSI map: lanes << 4, receiver on, test pattern off, the
-        // timing generator for 1650x750 on four lanes.
-        assert_eq!(adv.cec(0x1c), 0x40);
+        // timing generator for 1650x750; 74.25 MHz runs 3 lanes (adv7533_mode_fixup, dsi:130).
+        assert_eq!(adv.cec(0x1c), 0x30);
         assert_eq!(adv.cec(0x27), 0xcb);
         assert_eq!(adv.cec(0x03), 0x89);
         assert_eq!(adv.cec(0x55), 0x00);
-        assert_eq!(adv.cec(0x16), 0x18);
+        assert_eq!(adv.cec(0x16), 0x20);
         let tg: Vec<u8> = (0x28..=0x37).map(|r| adv.cec(r)).collect();
         assert_eq!(
             tg,
