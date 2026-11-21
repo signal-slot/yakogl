@@ -1109,7 +1109,7 @@ cmd_install() {
         echo "DRY host\$ mkdir -p $bdir && cp <env.bin> $PRISTINE"
         echo "DRY host\$ python3 tools/uboot_env.py ... set <env.bin> <env.new> 'preboot=$PREBOOT' 'yako_hook=$YAKO_HOOK' 'yako_mmc=$YAKO_MMC' yako_addr=$YAKO_ADDR yako_part=$BOOT_PART 'yako_bootcmd_prev=<bootcmd without the hook>'   # bootcmd is ST's: never written; preboot only where the environment has none (another preboot: rc 7, nothing written)"
         printf 'preboot=%s\nyako_addr=%s\nyako_part=%s\n' "$PREBOOT" "$YAKO_ADDR" "$BOOT_PART" > "$TMP/expect"
-        b "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && ${SU}cp <env.bin> $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && cd /boot && find . -path ./yakogl -prune -o -type f -print0 | sort -z | xargs -0 ${SU}sha256sum > $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt"
+        b "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && ${SU}cp <env.bin> $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && cd /boot && find . -path ./yakogl -prune -o -type f -exec ${SU}sha256sum {} + | LC_ALL=C sort -k2 > $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt"
         env_write "<env.new>" "install"
         note "install (dry run): hook state read as '$st'; nothing was changed"
         return 0
@@ -1122,12 +1122,12 @@ cmd_install() {
     cp "$TMP/env.bin" "$PRISTINE" || die "cannot keep the pristine image at $PRISTINE"
     chmod 600 "$PRISTINE"
     local first
-    bget first "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && if test -e $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin; then echo kept; else echo first; fi" ||
+    bget first "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && if test -e $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && test -s $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt; then echo kept; else echo first; fi" ||
         die "cannot create $STAGE_DIR/$BACKUP_SUB on the card"
     if [ "$first" = first ]; then
         fgw timeout 120 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}sh -c 'cat > $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && sync'" < "$TMP/env.bin" ||
             die "cannot keep the pristine image on the card"
-        b "cd /boot && find . -path ./yakogl -prune -o -type f -print0 | sort -z | xargs -0 ${SU}sha256sum > $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt && sync" ||
+        b "cd /boot && find . -path ./yakogl -prune -o -type f -exec ${SU}sha256sum {} + | LC_ALL=C sort -k2 > $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt && sync" ||
             die "cannot record the stock boot files' sha256"
     else
         note "the card keeps the first install's pristine image and stock-file record ($STAGE_DIR/$BACKUP_SUB)"
