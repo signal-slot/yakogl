@@ -70,6 +70,16 @@ RC1-int-mix	dEQP-GLES3.functional.fbo.color.*,dEQP-GLES3.functional.fbo.render.*
 # ---- texture ----
 RC15-3d	dEQP-GLES3.functional.texture.mipmap.3d.*,dEQP-GLES3.functional.texture.vertex.3d.*
 RC18-swizzle-wrapr	dEQP-GLES3.functional.texture.swizzle.*
+# QualityWarning rows (185 in the TSV: 90 shadow.2d, 90 shadow.cube, 5 projected lines).
+# The nmn rows (18 per target, case name has nearest_mipmap_nearest) tie to the shadow
+# NEAREST_MIPMAP_NEAREST filter-word defect (fix item fix-shadow-nmn); the other PCF rows
+# (72 per target) are the PowerVR's percentage-closer filtering precision against dEQP's
+# tcuTexCompareVerifier thresholds. All 180 shadow rows are QualityWarning, none else.
+qw-shadow-2d-nmn	dEQP-GLES3.functional.texture.shadow.2d.*nearest_mipmap_nearest*
+qw-shadow-2d-pcf	dEQP-GLES3.functional.texture.shadow.2d.*
+qw-shadow-cube-nmn	dEQP-GLES3.functional.texture.shadow.cube.*nearest_mipmap_nearest*
+qw-shadow-cube-pcf	dEQP-GLES3.functional.texture.shadow.cube.*
+qw-line-interp-projected	dEQP-GLES3.functional.rasterization.*	projected coordinat
 RC6-2darray	dEQP-GLES3.functional.texture.filtering.2d_array.*,dEQP-GLES3.functional.texture.mipmap.2d_array.*,dEQP-GLES3.functional.texture.vertex.2d_array.*,dEQP-GLES3.functional.texture.shadow.2d_array.*
 RC5-shadow-host-done	dEQP-GLES3.functional.texture.shadow.*
 RC2-sized-formats	dEQP-GLES3.functional.texture.format.*,dEQP-GLES3.functional.texture.compressed.*
