@@ -41,6 +41,34 @@ tool samples a small window 20% of the way from each apex to the centroid
 from `--background` (default black) and, when a colour is given, match it
 within `--tol`. Prints `triangle: PASS|FAIL: ...`.
 
+## GPU triangle of mp2_gpu_scanout (triangle.py)
+
+```
+triangle.py SHOT.png|SHOT.ppm
+triangle_selftest.sh
+```
+
+Judges the picture `gc_triangle` renders and `mp2_gpu_scanout` scans out
+(acceptance c5): clear colour 0x102030, one Gouraud triangle with a red
+vertex at the top centre, green bottom left, blue bottom right. It takes no
+absolute coordinates, so a scaled, letterboxed or smaller-than-the-mode
+picture still passes: it classifies pixels by dominant channel and checks the
+shape of the three colour centroids inside their bounding box. It reuses
+colorbars.py's PNG/PPM reader (imported, not copied). Exit 0/1/2 as above.
+
+| Output | Meaning |
+|---|---|
+| `triangle: PASS: red apex top, ...` | the triangle is there, right way up and with R/B right |
+| `FAIL: no triangle: no red, green or blue pixels` | blank (cleared only), black or no-signal screen |
+| `FAIL: red and blue swapped` | pixel-format mistake (the scan-out layer's RGB order) |
+| `FAIL: wrong shape: ...` | flipped, mirrored or otherwise misplaced vertices |
+| `FAIL: too much colour` | colour bars or another full-screen pattern, not the triangle |
+| `FAIL: missing vertex colour: ...` | a vertex colour absent |
+
+`triangle_selftest.sh` checks it on synthetic images (the triangle at 320x180,
+1280x720, scaled, smaller and pillarboxed; R/B swapped; flipped; blank; black;
+no-signal; colour bars; a missing file) and prints `selftest: N ok, M failed`.
+
 ## Self-test
 
 `selftest.sh` writes synthetic PNG/PPM files with the tool's own writer
