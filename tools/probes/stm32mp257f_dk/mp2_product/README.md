@@ -46,8 +46,8 @@ never resets by itself and runs for as long as the heartbeat holds. **Only
 `default <image> forever` with `BOARD_PERSON_PRESENT=1` may carry such an
 image.** Under a counted default it would never reset, so the count would
 never run out and the board would be stranded. Neither the runner nor
-`tools/mp2s_image_check.py` refuses that case yet (see the plan #362
-report).
+`tools/mp2s_image_check.py` refuses that case yet; the lifetime marker
+below is what a checker can read.
 
 This lifetime is the image's own, not the board layer's
 `CONFIG_YAKOGL_STM32MP2_LIFETIME_S`. The layer's lifetime has no off switch
@@ -76,6 +76,22 @@ tools/mp2s_image_check.py <image> --free-bytes <bootfs free> \
 A product image of its own carries the same literal only if it refreshes
 the watchdog as this one does.
 
+## The lifetime marker
+
+The image also carries a constant string (`s_lifetime_marker` in
+`src/main.c`, marked `__used` and printed once at start, so the linker's section
+garbage collection keeps it) whose exact bytes are
+
+```
+yakogl-lifetime-s=<N>\0
+```
+
+where `<N>` is `CONFIG_MP2_PRODUCT_LIFETIME_S` in decimal and no other
+byte follows but the NUL: `yakogl-lifetime-s=120` for the default build,
+`yakogl-lifetime-s=0` for the indefinite product build. A host checker
+reads it from the file, for example
+`grep -a -o 'yakogl-lifetime-s=[0-9]*' zephyr.bin`.
+
 ## What it prints
 
 This is the expected output. No board run has happened yet.
@@ -86,6 +102,7 @@ MP2:A EL2
 mp2: no watchdog armed by this image; PSCI SYSTEM_RESET at 3600 s of uptime at the latest
 *** Booting Zephyr OS build ... ***
 mp2_product: build <git describe>
+mp2_product: yakogl-lifetime-s=120
 mp2_product: stm32mp257f_dk, console usart2 at 115200 baud, image at 0xa0000000, timer <CNTFRQ> Hz
 mp2_product: PSCI version 0x10001, lifetime 120 s (PSCI SYSTEM_RESET), layer's at 3600000 ms
 mp2_product: fid 0xbc000000, timeout 32 s, PET every 5 s while the heartbeat (1000 ms) advances
