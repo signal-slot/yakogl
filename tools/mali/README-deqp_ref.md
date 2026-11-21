@@ -95,3 +95,39 @@ drawn before this (`deqp_unif2_*struct*`, `deqp_uniarray_struct*`,
 `differences` still assumes that for any program with a struct-member row,
 so a byte-compare of a `deqp_fclane2_*` reference needs it to compute the
 values above first. The tests: `python3 -I tools/mali/test_gl_ref.py`.
+
+## Checking the G310
+
+`tools/mali/g310_check.sh` repeats the G310-against-G610 check of
+`docs/notes/mali-g310-vs-g610.md` (section 2, and the recheck over the dEQP
+references) for the committed `deqp_*.expect.json`:
+
+```sh
+tools/mali/g310_check.sh                          # every deqp_*.expect.json
+tools/mali/g310_check.sh --since <git rev>        # added or changed since <rev>
+tools/mali/g310_check.sh 'deqp_arith_*' deqp_fclane_x   # a glob or names
+```
+
+For each reference it draws the `.vert`/`.frag` pair on Mesa 26.2.1's
+unmodified drm-shim with `--gpu g610` under the first option set
+(`--uniform-values`, none, `--prim points` with and without it) whose
+`pan_ref_diff.py extract --draw` (`--attributes` when the committed file has
+`attributes`) equals the committed file, `trace` aside. The same set is
+drawn with `--gpu g310v2`, and the extracts are compared with
+`pan_ref_diff.py diff-ref` (words, FAU, `work_reg_count`, `preload`, VA,
+`secondary_offset`, attributes). One line per reference:
+
+| Line | Meaning |
+|---|---|
+| `IDENTICAL <name>` | the G310v2 extract equals the G610's |
+| `DIFFERS <name> <fields>` | the fields that differ (`fs.fragment.words`, ...) |
+| `NO-OPTION-SET <name>` | no pair, or no option set reproduces the committed G610 reference (e.g. needs instances or matrix columns); skipped, not a pass |
+
+The last line is `N identical, M differ, K skipped`; the exit status is 1 if
+any differ. The shim is `$CONNECTED_DEPS_DIR/mesa-pan-shim` (or `--build-dir`),
+built with `drm_shim_ref.sh build` when absent (tens of minutes the first
+time; the tarball is checked against `third_party/mesa-26.2.1/UPSTREAM`).
+`--scratch <dir>` makes the scratch directories (traces, deleted after
+each reference) under `<dir>` instead of the system temporary directory.
+Not part of `tools/check.sh`. The unit tests:
+`python3 -I tools/mali/test_g310_check.py`.
