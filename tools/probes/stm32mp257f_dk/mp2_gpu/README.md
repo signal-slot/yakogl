@@ -75,19 +75,28 @@ mp2_gpu: optee smc 0x32000012 ...
 mp2_gpu: optee msg < 01000000040000000...
 mp2_gpu: scmi < 004c0400000000000000...
 ...
-mp2_gpu: rcc gpucfgr 0x00000002
+mp2_gpu: rcc gpucfgr 0x00000006 at entry
+mp2_gpu: rcc gpucfgr 0x00000007 (reset held)
+mp2_gpu: rcc gpucfgr 0x00000006
+mp2_gpu: rcc reset released after 1 reads
 mp2_gpu: gpu idle 0x7fffffff after 1 reads
 ...
-mp2_gpu: powered: level N (found N), rcc 0x00000002, idle 0x7fffffff after 1 reads
-mp2_gpu: identity 0x...: GC8000 rev 0x6205 product 0x80003 customer 0x... eco 0 (built ...)
+mp2_gpu: powered: level 800000000 (found 800000000), rcc 0x00000006, idle 0x7fffffff after 1 reads
+mp2_gpu: identity 0x14010000: GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0 (built 20200106 16282900)
 ...
-mp2_gpu: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x... date=0x... time=0x... features=0x... table=1 streams=16
+mp2_gpu: model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 date=0x20200106 time=0x16282900 features=0xe0687ca5 table=1 streams=16
 mp2_gpu: gpu intr_enbl wrote 0xffffffff read 0xffffffff, then 0
-mp2_gpu: rcc gpucfgr 0x00000003 (reset held)
-mp2_gpu: rcc gpucfgr 0x00000002
+mp2_gpu: rcc gpucfgr 0x00000007 (reset held)
+mp2_gpu: rcc gpucfgr 0x00000006
+mp2_gpu: rcc reset released after 1 reads
 mp2_gpu: gpu idle 0x7fffffff after 1 reads
-mp2_gpu: reset: rcc 0x00000003 held, 0x00000002 released; idle 0x7fffffff after 1 reads
-mp2_gpu: verdict PASS model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x... intr=ok idle=ok
+mp2_gpu: reset: rcc 0x00000007 held, 0x00000006 released; idle 0x7fffffff after 1 reads
+mp2_gpu: verdict PASS model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 intr=ok idle=ok
 ```
 
-Not yet run on the board.
+These are the board's lines (2026-11-21, image 9e520020, record
+`20261121-1107-mp2_gpu-9e520020`; the bring-up note's step 4). Bit 2 of
+`RCC_GPUCFGR` reads set at entry (presumably the low-power enable, not
+written by the probe), so the values are 0x6/0x7 rather than 0x2/0x3. The
+RCC reset is read until it clears (`rcc::RELEASE_READS`): the first run
+read once right after the release and saw 0x00000007.

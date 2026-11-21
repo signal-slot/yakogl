@@ -4,9 +4,10 @@
 
 Opened 2026-11-12 from the host-side studies, main `fb51ce43` (plan #349,
 roadmap stage 5, issues #7 and #1281; the pre-study's rows P6 and P7,
-`docs/notes/pre-study-stm32mp257f-dk.md:902-903`). **No step below has run on
-the board yet**: `tools/cts/RESULTS.md` has no DK row and `tools/cts/log/` has
-no DK directory at this tip. Every value in this note is marked
+`docs/notes/pre-study-stm32mp257f-dk.md:902-903`). **Steps 1-4 have run on
+the board (2026-11-21, "Board verdicts" below); steps 5-8 have not**:
+`tools/cts/RESULTS.md` has no DK row and `tools/cts/log/` has no DK
+directory at this tip. Every value in the step sections is marked
 *expected* (a host source gives it) or *derived* (a study's reasoning, cited);
 a board item replaces a step's line in "Board verdicts" with the reading, and
 the current results then move to `tools/cts/RESULTS.md` and
@@ -385,14 +386,164 @@ runner record directory name) and folds the findings into the pre-study
 
 | step | board item | verdict |
 | --- | --- | --- |
-| 1 return trial, ends | return-trial | **not run yet** |
-| 2 return trial, watchdog-caught hang | return-trial | **not run yet** |
-| 3 layer + OP-TEE watchdog armed | board-smoke | **not run yet** |
-| 4 power + identity (`mp2_gpu`) | gpu-identity | **not run yet** |
+| 1 return trial, ends | gpu-identity | **PASS** 2026-11-21, `20261121-1054-mp2_hello-405d515b`: `verdict=done rc=0`, back after 47 s |
+| 2 return trial, watchdog-caught hang | gpu-identity | **PASS** 2026-11-21, `20261121-1055-mp2_hello_hang-832dda7e`: `verdict=watchdog_reset rc=0`, back after 89 s |
+| 3 layer + OP-TEE watchdog armed | gpu-identity | **PASS** 2026-11-21, `20261121-1058-mp2_identify-58f413f3`: `verdict=done rc=0`, back after 59 s |
+| 4 power + identity (`mp2_gpu`) | gpu-identity | **PASS** 2026-11-21 after one fix (`a053c4aa`), `20261121-1107-mp2_gpu-9e520020`: `verdict=done rc=0`, back after 59 s; the first run (`20261121-1059-mp2_gpu-e0ee66cb`) `verdict=failed rc=4` |
 | 5 `gc_fence` | fence-clear | **not run yet** |
 | 6 `gc_clear` | fence-clear | **not run yet** |
 | 7 `gc_triangle` | triangle-run | **not run yet** |
 | 8 `gl_test` case 1 (`gc_gl_triangle`) | gl-triangle-run | **not run yet** |
+
+### How steps 1-4 were run and judged (2026-11-21)
+
+Runner `tools/board-stm32mp2.sh` at `8838d42b` (images built at `e07d066a`,
+the step 4 re-run's image at `a053c4aa`'s source, its banner
+`8838d42b-dirty`), `-DYAKOGL_WERROR=ON`, one-shot off the card's U-Boot
+through the runner-owned `preboot`. The console was reachable only through
+connected's serial tools, not as a device or bridge the runner opens, so
+every run was `MP2_NO_CONSOLE=1` (the runner's own line is
+`verdict=returned … blind`). The console text of each boot was read
+through those tools and saved verbatim (line by line; BL2's image-load
+`INFO` lines and the `optee msg` hex dumps left out) as `console.mcp.txt`
+in the record. The verdicts below are `dk_verdict.py` on that file and
+`tools/board-stm32mp2.sh tally` over a copy of the record with that file as
+`console.txt` (`<record>.mcp-tally`). The board's firmware, read from the
+console: TF-A `v2.10-stm32mp2-r2.0(debug)` (BL2 and BL31), OP-TEE
+`4.0.0-stm32mp-r3.1` (`4.0.0-dev`, revision 4.0 `2a5b1d12`), U-Boot
+`2023.10-stm32mp-r3.1`.
+
+The env baseline of this session was the card as found on 2026-11-21
+(`u-boot-env` sha256 `56bb18cf…6d822540`, both copies valid, no `preboot`
+and no `yako_*`; `/boot` 25 files, listing digest `dc6c9b99…`), not the
+2026-11-19 one (`eb893db3…`): an earlier run of this runner had installed,
+run and uninstalled, and `uninstall` unsets the variables rather than
+writing the old bytes back. Linux numbers the card `mmcblk0` or `mmcblk2`
+(the eMMC `mmcblk1` or `mmcblk0`) from boot to boot (no `mmc` aliases in
+the DT); the runner finds the card by its SD type and `/boot`, and both
+numberings occurred in this session.
+
+### The return trial (steps 1-2): PASS, the hang caught by the watchdog
+
+- Step 1, `mp2_hello`: the console shows `yakogl-mp2: hook` (preboot ran),
+  `yakogl-mp2: go 0xa0000000`, the banner, `mp2_hello: PASS: counted 5 s in
+  5018 ms` and `mp2: mp2_hello done: PSCI SYSTEM_RESET at 5022 ms`; the next
+  BL2 prints `Reset reason: System reset (SYSRST) (0x2074). Warm boot.`, so
+  a PSCI `SYSTEM_RESET` reads as SYSRST, not as a pin reset (the open point
+  of the supply section above). The board answered ssh from a new boot 47 s
+  after the reboot.
+  - `verdict return-trial banner=PASS psci-reset=PASS`
+  - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c78 pc=0xa000370c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+  - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+  - `board-stm32mp2.sh stm32mp257f-dk mp2_hello rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:mp2_hello back_after=47s`
+- Step 2, `mp2_hello` with `CONFIG_MP2_HELLO_HANG=y`: after
+  `mp2_hello: hanging on purpose with interrupts locked, the OP-TEE watchdog must reset`
+  no PSCI line follows; OP-TEE's IWDG driver panics in its pre-timeout
+  interrupt, `Panic 'Watchdog' at …/core/drivers/stm32_iwdg.c:218
+  <stm32_iwdg_it_handler>` with a five-entry call stack, and the next BL2
+  prints `Reset reason: IWDG system reset (iwdgX_out_rst) (0x2134). Warm
+  boot.`: bit 8, **`IWDG1SYSRSTF`** (the supply section's open point: the
+  watchdog that fires is IWDG1). The watchdog running here is the
+  `arm,smc-wdt` that ST's Linux leaves running across the reboot
+  (`systemd-shutdown … hardware watchdog 'arm_smc_wdt' … timeout of 32s`)
+  and that U-Boot services while it runs (`WDT: Started watchdog with
+  servicing every 1000ms (32s timeout)`); our image does not feed it. Back
+  over ssh 89 s after the reboot.
+  - `verdict hang-trial banner=PASS hang-line=PASS no-psci-reset=PASS`
+  - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c68 pc=0xa00036bc cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+  - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,IWDG1SYSRSTF,C1RSTF`
+  - `board-stm32mp2.sh stm32mp257f-dk mp2_hello_hang rc=0 verdict=watchdog_reset boot=uboot-sd row boot_verdict=hung result=none back_after=89s`
+
+### Step 3, `mp2_identify`: PASS
+
+`gc_wdog_arm: armed OP-TEE arm,smc-wdt fid 0xbc000000, timeout 32 s, PET
+every 1000 ms until 20000 ms of uptime`, `watchdog fid 0xbc000000 armed rc
+0`, time left 31 s at main and after the wait, `mp2_identify: PASS:
+watchdog armed (32 s), 3 PETs in 3041 ms`, end line at 3050 ms, back in
+59 s. **OP-TEE accepts SET_TIMEOUT then ENABLE without an INIT from our
+image** (rc 0 for both). Caveat: U-Boot's own `arm_smc_wdt` driver has
+already run in that boot (`WDT: Started watchdog …`), so the service was
+not untouched when our image called it.
+- `verdict return-trial banner=PASS psci-reset=PASS`
+- `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c68 pc=0xa0003884 cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+- `verdict identify-wdog armed=PASS pass-line=PASS`
+- `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+- `board-stm32mp2.sh stm32mp257f-dk mp2_identify rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=59s`
+
+### Step 4, `mp2_gpu`: PASS, model 0x8000 rev 0x6205, customer 0x15
+
+OP-TEE's capability exchange answered `0x0 0x8074 0x45 0x4`: **0x8074**,
+the derived value. The session to the SCMI pseudo-TA with
+`TEE_LOGIN_REE_KERNEL` opened, and every SCMI request answered status 0:
+PERFORMANCE version 0x20000, domain 1's level 800000 kHz (`0x2faf0800`)
+read, set and read back; POWER version 0x20000, domain 0 set on and read
+back on. No OP-TEE panic, no `E/TC` line; the session was closed and the
+shared page unregistered at the end.
+
+- First run (image `e0ee66cb`, `20261121-1059-mp2_gpu-e0ee66cb`): `mp2_gpu:
+  rcc gpucfgr 0x00000007`, then `verdict FAIL power-on rc=-5 kind=8 step=0
+  a=0x7 b=0x0` and a clean PSCI reset (`mp2: mp2_gpu FAIL: PSCI SYSTEM_RESET
+  at 639 ms`). `power_up` read `RCC_GPUCFGR` once, right after clearing the
+  reset bit, and the bit still read set.
+  - `verdict return-trial banner=PASS psci-reset=PASS`
+  - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa000392c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+  - `verdict gpu-identity model=FAIL:absent rev=FAIL:absent customer=absent`
+  - `verdict gpu-intr readback=FAIL:absent intr=FAIL`
+  - `verdict gpu-idle reset-idle=FAIL:absent idle=FAIL verdict=FAIL`
+  - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+  - `board-stm32mp2.sh stm32mp257f-dk mp2_gpu rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:mp2_gpu back_after=45s`
+- Fix `a053c4aa`: `power_up` and the reset-to-idle path read the register
+  until the reset bit clears (at most `rcc::RELEASE_READS`, the count
+  logged), and `power_up` also logs it at entry and with the reset held.
+- Re-run (image `9e520020`, `20261121-1107-mp2_gpu-9e520020`):
+  `rcc gpucfgr 0x00000006 at entry`, `0x00000007 (reset held)`,
+  `0x00000006`, `rcc reset released after 1 reads`, `gpu idle 0x7fffffff
+  after 1 reads`; `identity 0x14010000: GC8000 rev 0x6205 product 0x80003
+  customer 0x15 eco 0 (built 20200106 16282900)`, features `0xe0687ca5`,
+  minor0 `0xc9799eff`, minor1 `0xfefbfadb`, `table=1 streams=16`;
+  `gpu intr_enbl wrote 0xffffffff read 0xffffffff, then 0`; the reset to
+  idle `reset: rcc 0x00000007 held, 0x00000006 released; idle 0x7fffffff
+  after 1 reads`; `mp2_gpu: verdict PASS model=0x8000 rev=0x6205
+  product=0x80003 eco=0x0 customer=0x15 intr=ok idle=ok`. Nothing at or
+  above the GPU's 0x800 was read.
+  - `verdict return-trial banner=PASS psci-reset=PASS`
+  - `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa000392c cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+  - `verdict gpu-identity model=PASS:0x8000 rev=PASS:0x6205 customer=0x15`
+  - `verdict gpu-intr readback=PASS:0xffffffff intr=ok`
+  - `verdict gpu-idle reset-idle=PASS:0x7fffffff idle=ok verdict=PASS`
+  - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+  - `board-stm32mp2.sh stm32mp257f-dk mp2_gpu rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:mp2_gpu back_after=59s`
+
+The `RCC_GPUCFGR` reading: bit 1 (gate) and bit 2 read set at entry
+(0x6; bit 2 is presumably the low-power enable, which the probe does not
+write); writing bit 0 makes it read 1, clearing it makes it read 0, and the
+GPU then reaches idle. So **set = reset asserted, clear = released**
+(`rcc.rs`'s derived polarity, now read on the board). In the re-run the
+release read clear at once, so the first run's late release is not
+reproduced: what differed is that the re-run reads the register between
+the assert and the release (the "reset held" read). Whether the release
+needs a minimum assert time or only lagged once is open; the poll keeps
+the step correct either way and logs the count.
+
+### Q1, Q6 and Q8, as the board read them (2026-11-21)
+
+- **Q6, `CNTFRQ_EL0`: 40000000 (40 MHz)**, the same in all five boots of
+  our image (`mp2-handover: … cntfrq=40000000`; `timer 40000000 Hz` in the
+  banners), matching what Linux showed. The system counter read
+  144989186-147270173 ticks at `PRE_KERNEL_1` (3.6-3.7 s at 40 MHz).
+- **Q1, the customer id: 0x15** (`identity …: customer 0x15`, the first
+  read on this board; the ST row's expected 0x15). Also read: model 0x8000,
+  revision 0x6205, product 0x80003, eco 0, date 0x20200106, time
+  0x16282900, features 0xe0687ca5, minor0 0xc9799eff, minor1 0xfefbfadb.
+- **Q8, what U-Boot hands over at `go`**: EL2; SCTLR_EL2 0x30c50830, MMU,
+  D-cache and I-cache off (m=0 c=0 i=0, after the hook's `dcache off;
+  icache off`); **x0 = 0x1**, not 0 as derived (U-Boot's `go` calls the
+  entry with `argc - 1` and `argv + 1`: 1 for `go <addr>`), x1 = x2 = a
+  U-Boot stack address (0xf8099c68-0xf8099c98 across boots, the argv
+  pointer), x3 = 0xa0000000 (the load address); MPIDR 0x80000000
+  (CPU 0); PSCI version 0x10001 (1.1). OP-TEE's SMC interface stays open
+  after the hand-over: the watchdog SMCs (step 3) and the SCMI session
+  (step 4) both work.
 
 ## What these runs answer
 
