@@ -42,6 +42,15 @@
 #define LIFETIME_S   CONFIG_MP2_PRODUCT_LIFETIME_S
 #define LINE_S       60
 
+/* The lifetime marker: exactly "yakogl-lifetime-s=<N>\0", N being
+ * CONFIG_MP2_PRODUCT_LIFETIME_S in decimal ("yakogl-lifetime-s=0" is an
+ * image that runs indefinitely). A host checker reads it from the binary
+ * (README.md, "The lifetime marker"). */
+#define MP2_STR_(x) #x
+#define MP2_STR(x)  MP2_STR_(x)
+static const char s_lifetime_marker[] __used =
+	"yakogl-lifetime-s=" MP2_STR(CONFIG_MP2_PRODUCT_LIFETIME_S);
+
 BUILD_ASSERT(!IS_ENABLED(CONFIG_YAKOGL_STM32MP2_WDOG),
 	     "one client of the watchdog: the layer's stm32mp2_wdog.c is off in this image");
 BUILD_ASSERT(PET_S + MP2_WDTR_EARLY_S < TIMEOUT_S,
@@ -82,6 +91,8 @@ int main(void)
 	int rc;
 
 	printk("mp2_product: build %s\n", MP2_PRODUCT_BUILD);
+	/* Referenced here so the linker (--gc-sections) keeps the marker. */
+	printk("mp2_product: %s\n", s_lifetime_marker);
 	printk("mp2_product: %s, console usart2 at %u baud, image at 0x%lx, timer %u Hz\n",
 	       CONFIG_BOARD, (unsigned int)DT_PROP(DT_CHOSEN(zephyr_console), current_speed),
 	       (unsigned long)CONFIG_SRAM_BASE_ADDRESS,
