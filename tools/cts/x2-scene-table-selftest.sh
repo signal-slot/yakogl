@@ -221,6 +221,32 @@ run "$R" "$R/terrain/20261113-1000-terrain-nosel-72972ba4"
 n=$(row_n "$out")
 [ "$n" = 8 ] && ok "a record named beside its container is printed once" || bad "dedup: $n rows, wanted 8"
 
+# ---- the gain table (--before), scene names redacted ----------------------------------------
+G=$T/gain
+D=$G/20261113-1000-terrain-nosel-72972ba4
+mkdir -p "$D"
+printf 'name=terrain-nosel\n' > "$D/meta.txt"
+printf '[terrain] <default>: FPS: 4 FrameTime: 250.000 ms\n' > "$D/console.txt"
+printf 'verdict: board.sh x2 terrain-nosel rc=0 verdict=done\n' > "$D/INDEX.txt"
+D=$G/20261113-1100-terrain-nosel-1234abcd
+mkdir -p "$D"
+printf 'name=terrain-nosel\n' > "$D/meta.txt"
+printf '[terrain] <default>: FPS: 8 FrameTime: 125.000 ms\n' > "$D/console.txt"
+printf 'verdict: board.sh x2 terrain-nosel rc=0 verdict=done\n' > "$D/INDEX.txt"
+D=$G/20261113-1200-host_192.0.2.7_x-nosel-1234abcd
+mkdir -p "$D"
+printf 'name=198.51.100.4|/dev/ttyFIXTURE1-nosel\n' > "$D/meta.txt"
+printf 'FPS: 5\n' > "$D/console.txt"
+printf 'verdict: board.sh x2 x rc=0 verdict=done\n' > "$D/INDEX.txt"
+run --before 72972ba4 "$G"
+rc_is "gain: exit 0" 0 "$rc"
+check "gain row, 250 / 125 = 2.00" "| terrain | 72972ba4 | 1234abcd | absent | 250.000 | 125.000 | 2.00 |" "$out"
+check "gain note: the scene without a before row is named, redacted" "no pair for: 192.0.2.n\\|<uart-path>" "$out"
+absent "gain: no address printed" "198.51.100" "$out"
+absent "gain: no UART path printed" "ttyFIXTURE1" "$out"
+run --before xyz "$G"
+rc_is "bad --before: refused (exit 2)" 2 "$rc"
+
 # ---- the refusals ------------------------------------------------------------------------------
 run
 rc_is "no argument: usage (exit 2)" 2 "$rc"
