@@ -682,11 +682,22 @@ static bool emit_viewport(struct v3d_cl *bcl, const struct v3d_viewport *vp)
 	return true;
 }
 
-/* BLEND_ENABLES and BLEND_CFG (v3dx_emit.c:525-568): RT 0's blend state, no
- * independent blend, so Mesa's single emit_rt_blend with rt_mask
- * (1 << max_rts) - 1, max_rts 4; and blend_enables the same (1 << max_rts)
- * - 1 (v3d_create_blend_state, v3dx_state.c:148-156: every RT blends when
- * rt[0] does) */
+/* BLEND_ENABLES' mask (v3dx_emit.c:525-568): 0 without blending; with
+ * `rt_blend_own` the RTs that blend (v3d_create_blend_state,
+ * v3dx_state.c:148-156, over an independent blend state: integer, 32F and
+ * GL_NONE targets left out); without it every RT, (1 << max_rts) - 1 with
+ * max_rts 4 (every RT blends when rt[0] does) */
+static uint32_t blend_enables(const struct v3d_job_state *st)
+{
+	if (!st->blend_enabled)
+		return 0;
+	return st->rt_blend_own ? st->rt_blend_mask & 0xf : 0xf;
+}
+
+/* BLEND_ENABLES and BLEND_CFG (v3dx_emit.c:525-568): the enables per RT
+ * (blend_enables() above), and RT 0's one blend state, Mesa's single
+ * emit_rt_blend with rt_mask (1 << max_rts) - 1: the RTs that blend share
+ * the equation and the factors */
 static void emit_blend(struct v3d_cl *bcl, const struct v3d_job_state *st)
 {
 	if (!st->blend_enabled) {
@@ -694,7 +705,7 @@ static void emit_blend(struct v3d_cl *bcl, const struct v3d_job_state *st)
 		return;
 	}
 	v3d_cl_emit(bcl, BLEND_ENABLES, on) {
-		on.mask = 0xf;
+		on.mask = blend_enables(st);
 	}
 	v3d_cl_emit(bcl, BLEND_CFG, b) {
 		b.render_target_mask = 0xf;
@@ -766,7 +777,7 @@ static bool emit_state(struct v3d_job *j, const struct v3d_job_draw *d, struct p
 		return false;
 
 	const bool be = st->blend_enabled;
-	if (PACK(V3D_PACK_BLEND, be ? 2 : 1, be, be ? st->rgb_func : 0, be ? st->rgb_src : 0,
+	if (PACK(V3D_PACK_BLEND, be ? 2 : 1, (uint32_t)be | blend_enables(st) << 1, be ? st->rgb_func : 0, be ? st->rgb_src : 0,
 		 be ? st->rgb_dst : 0, be ? st->alpha_func : 0, be ? st->alpha_src : 0,
 		 be ? st->alpha_dst : 0))
 		emit_blend(bcl, st);

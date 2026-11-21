@@ -408,11 +408,17 @@ fn expect_taken(what: &str, want: &[u8]) -> V3dJobState {
     assert_eq!(st.colormask, u32::from(want[0]), "{what}: the job's RT 0 mask");
     let uneven = want.iter().any(|&m| m != want[0]);
     assert_eq!(s.per_target_mask, uneven, "{what}: a mask per target exactly where they differ");
-    assert_eq!(st.rt_colormask_own, uneven, "{what}: the job's own RT masks");
+    /* the job has its own RT masks where the targets' differ, and in a draw
+     * of two or three targets, whose RTs past them have no colour buffer
+     * and are masked off (state::job_state `rt_masks`, v3d-blend-rt) */
+    let own = uneven || (2..4).contains(&want.len());
+    assert_eq!(st.rt_colormask_own, own, "{what}: the job's own RT masks");
     if uneven {
         for (k, &m) in want.iter().enumerate() {
             assert_eq!(s.target_color_mask[k], m, "{what}: target {k}'s mask");
         }
+    }
+    if own {
         let packed = want[1..].iter().enumerate().map(|(k, &m)| u32::from(m) << (4 * k)).fold(0, |a, m| a | m);
         assert_eq!(st.rt_colormask, packed, "{what}: RT 1..3 in the job state");
     } else {
@@ -424,10 +430,11 @@ fn expect_taken(what: &str, want: &[u8]) -> V3dJobState {
 
 /// The COLOR_WRITE_MASKS "Mask" for targets writing `want` (a set bit
 /// disables the channel, RT n at bits 4n..4n+3): one mask for every RT
-/// where they agree, as before; else each target's own, and an RT that is no
-/// target of the draw (not in the job) none.
+/// where they agree and the draw has one target or four, as before; else
+/// each target's own, and an RT that is no target of the draw (not in the
+/// job) none.
 fn expected_wmask(want: &[u8]) -> u32 {
-    let even = want.iter().all(|&m| m == want[0]);
+    let even = want.iter().all(|&m| m == want[0]) && !(2..4).contains(&want.len());
     (0..4)
         .map(|n| {
             let m = if even { want[0] } else { want.get(n).copied().unwrap_or(0) };

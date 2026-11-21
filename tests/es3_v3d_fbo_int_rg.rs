@@ -648,7 +648,8 @@ fn r_and_rg_integer_texture_level_1_completes_and_draws() {
 ///   (draw.rs `per_target_masks`) and the draw is taken: RT 0 the format's
 ///   channels, RT 1 all four;
 /// - glColorMask on the format's channels alone: both targets need the same
-///   mask, and the draw reaches the back end with it on both targets.
+///   mask, and the draw reaches the back end with it on both targets (the
+///   job masks RTs 2 and 3 off, which have no colour buffer).
 #[test]
 fn r_and_rg_integer_texture_beside_another_target_is_drawn_with_a_mask_per_target() {
     let _g = context();
@@ -682,7 +683,10 @@ fn r_and_rg_integer_texture_beside_another_target_is_drawn_with_a_mask_per_targe
             assert_eq!(s.refused, None, "{} {what}", r.name);
             assert_eq!(s.targets.len(), 2, "{} {what}: two targets", r.name);
             assert_eq!(s.color_mask, own_mask(&r), "{} {what}: one mask, right for both", r.name);
-            assert_eq!(s.job, Some((u32::from(own_mask(&r)), false, 0)), "{} {what}: no mask of its own", r.name);
+            /* RT 1 takes the same mask; RTs 2 and 3, no colour buffer, are
+             * masked off (state::job_state `rt_masks`, v3d-blend-rt) */
+            let m = u32::from(own_mask(&r));
+            assert_eq!(s.job, Some((m, true, m)), "{} {what}: RT 1 the same mask, RTs 2-3 none", r.name);
             // SAFETY: plain GL call.
             unsafe { glColorMask(1, 1, 1, 1) };
         }

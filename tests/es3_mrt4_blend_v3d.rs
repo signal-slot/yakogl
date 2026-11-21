@@ -5,14 +5,18 @@
 //!
 //! The GL core is driven through the API into a stand-in back end that runs
 //! the V3D's own `state::job_state` on what it was handed (the harness of
-//! tests/es3_mrt_blend_v3d.rs). The job state carries ONE blend flag and ONE
-//! colour mask; `driver/src/v3d/v3d_job.c` turns them into the packets, and
-//! this file models those two emitters (`emitted_*`):
+//! tests/es3_mrt_blend_v3d.rs). The job state carries the blend flag and RT
+//! 0's colour mask, and per render target a blend-enable mask
+//! (`rt_blend_own`, `rt_blend_mask`) and colour masks (`rt_colormask_own`,
+//! `rt_colormask`); `driver/src/v3d/v3d_job.c` turns them into the packets,
+//! and this file models those emitters (`emitted_*`):
 //!
-//! - `emit_blend` (v3d_job.c:660-681): BLEND_ENABLES `mask = 1` when the flag
-//!   is set, BLEND_CFG `render_target_mask = 0xf`;
-//! - COLOR_WRITE_MASKS (v3d_job.c:746-754): `off | off << 4 | off << 8 |
-//!   off << 12`, `off = ~colormask & 0xf`, RT 3 in bits 12-15.
+//! - `emit_blend` / `blend_enables`: BLEND_ENABLES `mask` 0 without
+//!   blending, `rt_blend_mask & 0xf` with `rt_blend_own`, else 0xf; BLEND_CFG
+//!   `render_target_mask = 0xf` when blending;
+//! - COLOR_WRITE_MASKS (`emit_state`): RT n's nibble is `~mask & 0xf`, the
+//!   mask `colormask` for RT 0 and (without `rt_colormask_own`) every RT,
+//!   RT n's nibble of `rt_colormask` for RT 1..3 with it; RT 3 in bits 12-15.
 //!
 //! Mesa 26.2.1's v3d (`src/gallium/drivers/v3d/v3dx_emit.c`, not among the
 //! vendored sources: the lines are those v3d_job.c and
@@ -23,8 +27,8 @@
 //! nibble per RT, a set bit disabling a channel; a render target with no
 //! colour buffer (GL_NONE) has all four bits set.
 //!
-//! What passes today is asserted; what the code fails is the `#[ignore]`d
-//! expected test beside it, with the defect in its reason.
+//! The per-RT enables and masks are filled by `state::job_state` for a draw
+//! of several targets (`rt_masks`, item v3d-blend-rt).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt4_blend_v3d
@@ -326,22 +330,32 @@ fn expected_mask(s: &Seen) -> u32 {
     s.targets.iter().enumerate().filter(|(_, t)| t.0 != 0 && !gles_surf_is_integer(t.1)).fold(0, |m, (i, _)| m | 1 << i)
 }
 
-/// `emit_blend`'s BLEND_ENABLES `mask` (v3d_job.c:665-671).
+/// `emit_blend`'s BLEND_ENABLES `mask` (v3d_job.c `blend_enables`).
 fn emitted_blend_enables(s: &Seen) -> u32 {
-    u32::from(s.job.as_ref().expect("the V3D takes the draw").blend_enabled)
+    let j = s.job.as_ref().expect("the V3D takes the draw");
+    match (j.blend_enabled, j.rt_blend_own) {
+        (false, _) => 0,
+        (true, true) => j.rt_blend_mask & 0xf,
+        (true, false) => 0xf,
+    }
 }
 
-/// `emit_blend`'s BLEND_CFG `render_target_mask` (v3d_job.c:672-674); None
-/// when no BLEND_CFG is written.
+/// `emit_blend`'s BLEND_CFG `render_target_mask`; None when no BLEND_CFG is
+/// written.
 fn emitted_blend_cfg_rt_mask(s: &Seen) -> Option<u32> {
     s.job.as_ref().expect("the V3D takes the draw").blend_enabled.then_some(0xf)
 }
 
-/// COLOR_WRITE_MASKS `mask` (v3d_job.c:749-752): RT 0's disabled-channel
-/// nibble copied to all four.
+/// COLOR_WRITE_MASKS `mask` (v3d_job.c `emit_state`): RT 0's disabled
+/// channels from `colormask`, RT 1..3's from `rt_colormask` with
+/// `rt_colormask_own`, else RT 0's.
 fn emitted_write_masks(s: &Seen) -> u32 {
-    let off = !s.job.as_ref().expect("the V3D takes the draw").colormask & 0xf;
-    off | off << 4 | off << 8 | off << 12
+    let j = s.job.as_ref().expect("the V3D takes the draw");
+    let off = !j.colormask & 0xf;
+    (0..4).fold(0, |w, n| {
+        let rt_off = if n > 0 && j.rt_colormask_own { !(j.rt_colormask >> (4 * (n - 1))) & 0xf } else { off };
+        w | rt_off << (4 * n)
+    })
 }
 
 /// RT `rt`'s nibble of a COLOR_WRITE_MASKS word.
@@ -401,7 +415,6 @@ fn blend_cfg_mask_covers_rt3() {
 /// Mesa's BLEND_ENABLES for four blendable targets is 0b1111
 /// (v3dx_emit.c:525-568).
 #[test]
-#[ignore = "V3dJobState has one blend flag and emit_blend writes BLEND_ENABLES mask = 1: RTs 1-3 do not blend (driver/src/v3d/v3d_job.c:669-671)"]
 fn blend_enables_cover_all_four_float_targets() {
     let _g = context();
     let (_f, s) = four(&FOUR_F, &["vec4"; 4]);
@@ -409,12 +422,20 @@ fn blend_enables_cover_all_four_float_targets() {
     assert_eq!(emitted_blend_enables(&s), 0b1111, "BLEND_ENABLES (v3dx_emit.c:525-568)");
 }
 
-/// Today's BLEND_ENABLES, pinned: RT 0 alone.
+/// GL_NONE draw buffer 3 with blending: RT 3 has no colour buffer, so no
+/// blend bit (0b0111) and a fully masked nibble.
 #[test]
-fn blend_enables_are_rt0_alone_today() {
+fn draw_buffer_3_none_is_not_blended() {
     let _g = context();
-    let (_f, s) = four(&FOUR_F, &["vec4"; 4]);
-    assert_eq!(emitted_blend_enables(&s), 0b0001, "v3d_job.c:669-671");
+    let fbo = framebuffer(&FOUR_F);
+    draw_buffers(&[Some(0), Some(1), Some(2), None]);
+    program(&["vec4"; 4]);
+    blend_on();
+    let s = draw();
+    drop(fbo);
+    assert!(s.blend);
+    assert_eq!(emitted_blend_enables(&s), 0b0111, "BLEND_ENABLES (v3dx_emit.c:525-568)");
+    assert_eq!(nibble(emitted_write_masks(&s), 3), 0xf);
 }
 
 /// RGBA8UI on RT 3: the draw is taken, blending stays on (the GL core's
@@ -433,7 +454,6 @@ fn integer_rt3_is_taken_and_not_blended() {
 
 /// Mesa blends RTs 0-2 while the integer RT 3 is skipped.
 #[test]
-#[ignore = "V3dJobState has one blend flag and emit_blend writes BLEND_ENABLES mask = 1: RTs 1 and 2 do not blend (driver/src/v3d/v3d_job.c:669-671)"]
 fn integer_rt3_blends_rts_0_to_2() {
     let _g = context();
     let (_f, s) = four(&THREE_F_UI, &["vec4", "vec4", "vec4", "uvec4"]);
@@ -459,7 +479,6 @@ fn r32i_rt3_keeps_the_blend_config() {
 
 /// R32I on RT 3: RTs 0-2 should blend (0b0111).
 #[test]
-#[ignore = "V3dJobState has one blend flag and emit_blend writes BLEND_ENABLES mask = 1: RTs 1 and 2 do not blend (driver/src/v3d/v3d_job.c:669-671)"]
 fn r32i_rt3_blends_rts_0_to_2() {
     let _g = context();
     let (_f, s) = four(&THREE_F_I, &["vec4", "vec4", "vec4", "ivec4"]);
@@ -532,7 +551,6 @@ fn draw_buffer_3_none_is_taken() {
 /// Mesa masks every channel of an RT with no colour buffer: RT 3's nibble is
 /// 0xf, RT 0's stays 0 (v3dx_emit.c:571-585).
 #[test]
-#[ignore = "V3dJobState has one colour mask for all RTs and GL_NONE draw buffer 3 is not in it: RT 3's nibble is RT 0's (driver/src/v3d/v3d_job.c:749-752)"]
 fn draw_buffer_3_none_masks_rt3_writes() {
     let _g = context();
     let s = none_rt3();
