@@ -643,10 +643,10 @@ Board items:
 | B2 | Identity and power from our image | S | P1-P3, P6, P8, B1 | `mali::ident` stored in the record |
 | B3 | Firmware boot; first record read back from Linux | S | B2, P7 | GLB answer and the record |
 | B4 | First frame (Z4 analogue) | M | B3, P2, P4 | read-back pixels as predicted |
-| B5 | `gl_test` on read-back to 50/50 | M | B4 | row in `tools/cts/RESULTS.md` |
+| B5 | `gl_test` on read-back to 50/50 (the image builds: `driver/samples/zephyr/gl_test` for `verdin_imx95/mimx9596/a55`, panel off, gate row `zephyr  verdin_imx95 gl_test image`) | M | B4 | row in `tools/cts/RESULTS.md` |
 | B6 | Display bring-up on the Mallow's DSI panel | L | P9, B2 | first clear, then the first triangle |
 | B7 | Sign-off: `default <image> N` from the eMMC, then the direct route (steps D1-D6 of `docs/notes/imx95-direct-boot.md`) | S | B5 | both routes recorded |
-| B8 | dEQP-GLES2 tree as on the T6 | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
+| B8 | dEQP-GLES2 tree as on the T6 (the images build: the T6's `mali-gles2-tree.txt` rows by `tools/cts/imx95-deqp-images.sh`, stage 1 `deps-env.sh --build DEQP_WORK --board verdin_imx95`) | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
 
 Order logic: B1 comes first on the board because the fuses and the SM
 version (U1, U3) can turn the plan, and it needs nothing of ours. P6-P8
@@ -654,3 +654,21 @@ are the only host items that gate B2 beyond the parallel work: without
 the watchdog and a record, a console-less board strands on the first
 hang. B6 does not block B5: as on the T6, read-back carries the GL work
 until the display exists.
+
+Host state of B5 and B8 (2026-11-21): both images build with
+`-DYAKOGL_WERROR=ON` and wait for the board. gl_test is the T6's sample and
+main (`src/main_mali.c`) with the board layer's files and
+`gl_test/verdin_imx95.conf` (X4 panel off unless
+`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`): RAM footprint 88.8 MiB of the
+256 MiB at 0xd0000000, `zephyr.bin` 4.4 MiB. A dEQP-GLES2 row image (the
+T6's rows as they are; T6S1R08, T6S4R01 and T6S1R06 built) takes 191.0 MiB
+with a 64 MiB GL carve-out plus the window memory, `zephyr.bin` 12.1 MiB:
+the memory layout holds it unchanged. What the run script has to provide
+(start, end lines, bounds, the record hook) is in `tools/cts/README.md`,
+section 5; the record over the BBM GPRs (P7) plugs into the board layer's
+`board_sink_store()`, which both images reach through `board_finish()`.
+The G310's own limits reach neither image's expectations: gl_test and dEQP
+read every limit through GL. What still carries a G610 constant is the back
+end (`src/mali/frame.rs` `TIB_BUDGET` and `MEASURED_TILER_LEVELS`,
+`src/mali/backend.rs`'s renderer name), `docs/notes/mali-g310-vs-g610.md`
+section 5.
