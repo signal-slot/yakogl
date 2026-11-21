@@ -1,9 +1,10 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
+Implemented in COMMIT (V3D and PowerVR; see "As built" at the end).
+
 # glmark2 GM image: the per-scene counter line (design)
 
-Design only. `driver/samples/zephyr/glmark2/src/main.cpp` belongs to plan
-#328 for now, so nothing here is built. The need is in
+The need is in
 `pi4-slow-terrain.md` ("Counters a board run needs"), `am62p-slow-terrain.md`
 (same heading), `pvr-waited-kick.md` (step 3, "Print the counters") and
 `v3d-wait-poll.md` (the "waits a frame" row).
@@ -113,3 +114,24 @@ line in `main.cpp`. A counter by call site is the design: three `u32`
 Check against the board record: terrain on the Pi 4 should show `jobs 9`
 and `waits 9` a frame (`v3d-wait-poll.md`), the AM62P `kicks` about 52 a
 frame and `reposts` a frame near 0 or 1 (`pvr-waited-kick.md`).
+
+## As built
+
+`main.cpp` `print_counters()` (after `print_steps()`), snapshot `s_ctr0` read
+in `log_scene_info()`. Differences of everything except `rt.live`/`rt.bytes`
+(end value). Words as built, differences from the table above:
+
+- V3D: `jobs waits wait.ns wait.untimed copy.<name> mip.refused.<name>
+  mip.queued mip.full rt.live rt.bytes rt.direct rt.cpuwrites rt.nomem
+  rt.chains rt.back tiled.n tiled.bytes tiled.hot tile.ns a/b/c tile.untimed
+  tfu.jobs tfu.failed tex.n tex.bytes smp.packed smp.reused`, one line (no
+  `glmark2-counters2:`). `wait.ns` is `v3d_wait_time`'s (the design called it
+  `wait.ns`/`wait.n`; the export has `untimed`, not a count, so `wait.n` is
+  `wait.untimed`). `tile.ns` is the three buckets joined by `/`.
+  `tiled.*` are single values (`v3d_tiled_evictions(count, bytes, hot)`).
+- PowerVR: `kicks waits draws tiles reposts wait_timeouts`. `fl.*` words are
+  left out (word 6 duplicates `reposts`).
+- Left out: the CPU mipmap filter (`gl_mip_cpu_counters` is a Rust-only
+  `pub fn`, no C export), `depth_sample.*`, render-image evictions, and the
+  PowerVR wait call sites (no exports yet).
+- GC7000 (and any other build): `glmark2-counters: <scene>: absent`.
