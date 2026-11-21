@@ -26,4 +26,11 @@ uint32_t verdin_imx95_wdog_timeout_ms(void);
  * sink a no-op. verdin_imx95_reset calls it first. Any context. */
 void verdin_imx95_record_flush(void);
 
+struct yd_wdog32_arm;
+/* WDOG3's arming as it ran at PRE_KERNEL_1 (yakogl_drivers.h struct
+ * yd_wdog32_arm: CS and TOVAL as found and as left, whether it was
+ * running, the refusal) and its return code (0 armed). For the probes'
+ * record; any context after POST_KERNEL. */
+const struct yd_wdog32_arm *verdin_imx95_wdog_arm(int *rc);
+
 #endif /* YAKOGL_VERDIN_IMX95_H */

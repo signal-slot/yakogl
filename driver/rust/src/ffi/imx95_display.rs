@@ -338,6 +338,35 @@ pub unsafe extern "C" fn yd_imx95_display_down(
     down_on(&mut CScmi(scmi), &m, env, b, d)
 }
 
+/// The probe imx95_scmi's survey ([`crate::soc::imx95::survey::survey`]):
+/// every fact to `line` as `key = value` (UTF-8, no newline), the counts
+/// (facts, refused, broken) to `counts`. 0, `-EIO` when the base version
+/// was not answered (the channel is dead), `-EINVAL` for a null argument.
+/// Sends only messages that read.
+///
+/// # Safety
+/// `counts` is valid for writes of three words.
+#[no_mangle]
+pub unsafe extern "C" fn yd_imx95_scmi_survey(
+    scmi: Option<extern "C" fn(*const u8, usize, *mut u8, usize) -> i32>,
+    line: Option<extern "C" fn(*const u8, usize)>,
+    counts: *mut u32,
+) -> i32 {
+    use crate::soc::imx95::survey::survey;
+    let (Some(scmi), Some(line)) = (scmi, line) else { return -EINVAL };
+    if counts.is_null() {
+        return -EINVAL;
+    }
+    let r = survey(&mut CScmi(scmi), |l| line(l.as_ptr(), l.len()));
+    let (c, rc) = match r {
+        Ok(c) => (c, 0),
+        Err((_, c)) => (c, -EIO),
+    };
+    // SAFETY: the caller's contract.
+    unsafe { core::ptr::copy_nonoverlapping([c.facts, c.refused, c.broken].as_ptr(), counts, 3) };
+    rc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
