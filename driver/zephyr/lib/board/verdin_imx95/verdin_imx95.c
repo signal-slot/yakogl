@@ -11,6 +11,8 @@
  *             after boot, whatever the sample does
  *   watchdog  WDOG3, armed at PRE_KERNEL_1 and fed up to the lifetime
  *             (verdin_imx95_wdog.c)
+ *   record    before the reset, the board layer's last record into the BBM
+ *             GPRs if it is still pending (verdin_imx95_record.c)
  *
  * Nothing here is i.MX 95 specific beyond the names: PSCI is TF-A's. Built,
  * not run on a board yet.
@@ -35,10 +37,16 @@ static int64_t psci_call(uint32_t fn)
 	return (int64_t)x0;
 }
 
+/* The record sink's (verdin_imx95_record.c); nothing without it. */
+__weak void verdin_imx95_record_flush(void)
+{
+}
+
 FUNC_NORETURN void verdin_imx95_reset(const char *why)
 {
 	int64_t rc;
 
+	verdin_imx95_record_flush();
 	printk("verdin_imx95: %s: PSCI SYSTEM_RESET at %lld ms\n", why, (long long)k_uptime_get());
 	rc = psci_call(PSCI_SYSTEM_RESET);
 	/* Interrupts off from here: the feeder stops, and WDOG3 bites. */

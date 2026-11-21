@@ -21,4 +21,9 @@ FUNC_NORETURN void verdin_imx95_reset(const char *why);
  * refused (the image then resets at once). Any context. */
 uint32_t verdin_imx95_wdog_timeout_ms(void);
 
+/* The board layer's last record into the BBM GPRs if it is still pending
+ * (verdin_imx95_record.c, CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM); without the
+ * sink a no-op. verdin_imx95_reset calls it first. Any context. */
+void verdin_imx95_record_flush(void);
+
 #endif /* YAKOGL_VERDIN_IMX95_H */
