@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The fragment shader of dEQP-GLES2.functional.shaders.indexing.vector_subscript.vec3_component_write_dynamic_loop_subscript_read_fragment as dEQP-GLES2 writes it, rebuilt from the templates of es2fShaderIndexingTests.cpp (VK-GL-CTS 93bca01) for docs/notes/mali-deqp-idxloc.md, not taken from a .qpa. No verbatim .qpa copy in the tree shows the component-write lines (tmp.x = coords.x; ...); every other line is the template's as the 27 verbatim .qpa copies under tools/mali/testdata (deqp_loops2_*idx*, deqp_loops_*idx*, ...) show it byte for byte.
