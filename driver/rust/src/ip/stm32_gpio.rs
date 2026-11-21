@@ -371,6 +371,28 @@ mod tests {
     }
 
     #[test]
+    fn field_encodings_match_r3_1_pinctrl_stm32_c() {
+        // v6.6-stm32mp-r3.1 drivers/pinctrl/stm32/pinctrl-stm32.c: :186-198
+        // mode GPIO 0 / AF 2 / analog 3, :200-212 alt = function - 1 (AF n is
+        // nibble n), :1461-1477 push-pull 0, open drain 1, bias off/up/down
+        // 0/1/2, slew arg written raw into the 2-bit OSPEEDR field (:1246),
+        // :339-347 BSRR bit n sets, bit n + 16 clears.
+        assert_eq!([Mode::Input as u32, Mode::Alternate as u32, Mode::Analog as u32], [0, 2, 3]);
+        assert_eq!([OType::PushPull as u32, OType::OpenDrain as u32], [0, 1]);
+        assert_eq!([Pull::None as u32, Pull::Up as u32, Pull::Down as u32], [0, 1, 2]);
+        assert_eq!([Speed::Low as u32, Speed::Medium as u32, Speed::High as u32, Speed::VeryHigh as u32], [0, 1, 2, 3]);
+        let m = Bank::default();
+        // PB6-style output (ADV7535 reset): level first, then AFR nibble 0,
+        // MODER output.
+        configure_output(&m, B, 6, false, OType::PushPull, Speed::Low, Pull::None, CID_A35).unwrap();
+        assert_eq!(&m.log()[..3], &[(r::BSRR, 1 << 22), (r::AFRL, 0), (r::MODER, 1 << 12)]);
+        // AF15 on pin 15: top nibble of AFRH, MODER 2 << 30.
+        configure_af(&m, B, 15, 15, OType::PushPull, Speed::Low, Pull::None, CID_A35).unwrap();
+        assert_eq!(m.get(r::AFRH), 0xf << 28);
+        assert_eq!(m.get(r::MODER) >> 30, 2);
+    }
+
+    #[test]
     fn bank_bases_match_linux_dtsi() {
         // arch/arm64/boot/dts/st/stm32mp251.dtsi:2759 gpioa@44240000 ... :2879
         // gpiok@442e0000, :2960 gpioz@46200000 (pinctrl_z at :2943).

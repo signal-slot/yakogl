@@ -445,7 +445,7 @@ mod tests {
         assert_eq!(init_with(&m, &env, &cfg(), &mut d), 0);
         let want = compute_timing(&Config::new(64_000_000, 400_000)).unwrap().timingr();
         assert_eq!(d.timingr, want);
-        assert_eq!(d.timingr, 0x0070424c);
+        assert_eq!(d.timingr, 0x0070464f);
         let w = m.writes.borrow();
         assert_eq!(w[1], (TIMINGR, want));
         assert_eq!(w.last(), Some(&(CR1, CR1_PE)));

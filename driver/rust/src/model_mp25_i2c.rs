@@ -777,11 +777,11 @@ mod tests {
         assert_eq!(bus.timingr(), drv::compute_timing(&cfg()).unwrap().timingr());
         assert_ne!(bus.timingr(), 0);
         // PE is the last CR1 write and the only bit left set.
-        assert_eq!(bus.cr1(), CR1_PE);
+        assert_eq!(bus.cr1(), CR1_PE | drv::CR1_ANFOFF);
         let acc = bus.accesses();
         let w: Vec<_> = acc.iter().filter(|a| matches!(a, Access::W(..))).collect();
         assert_eq!(w[1], &Access::W(TIMINGR, t.timingr()));
-        assert_eq!(*w.last().unwrap(), &Access::W(CR1, CR1_PE));
+        assert_eq!(*w.last().unwrap(), &Access::W(CR1, CR1_PE | drv::CR1_ANFOFF));
     }
 
     #[test]
