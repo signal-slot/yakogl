@@ -5,235 +5,215 @@
 **Status: references, no compiler change** (plan #387, item `misc2-ref`;
 issues #7, #20). This note covers the ten small refusal texts of
 `mali-deqp-families.md` section 18.2 that no plan #387 item names as its
-own. For each text it gives the cases, the shapes, the references that exist
-(this item's `deqp_misc2_*` and other items'), what Mesa 26.2.1 does where a
-reference shows it, the refusing sites, and a lowering order. HOST-ONLY.
-Earlier study: `mali-deqp-misc.md` (plan #377; `Invariant`, `Spill`,
-`TooManyValues`, `TexLanes`, `AlgebraicForm`), `mali-rebalance.md`,
+own. For each text it gives the cases and shapes measured at the tip, the
+references (this item's `deqp_misc2_*` and other items'), what Mesa 26.2.1
+does where a reference shows it, the refusing sites, and a lowering order.
+HOST-ONLY. Earlier study: `mali-deqp-misc.md` (plan #377; `Invariant`,
+`Spill`, `TooManyValues`, `TexLanes`, `AlgebraicForm`), `mali-rebalance.md`,
 `mali-algebraic-folds.md`.
 
-## 1. The tip, and what was and was not measured
+## 1. The tip and the measure
 
-- Tip: the integration tip **`7b540fee`** (`7b540fee70f91c784120de3e1fca8cd8a9fa4421`).
-- **The host dEQP measure was not rerun.** `tools/mali/deqp-host-measure.sh`
-  needs VK-GL-CTS `93bca018` in `$CONNECTED_DEPS_DIR/VK-GL-CTS`. That
-  directory was missing on this host (only the sparse
-  `VK-GL-CTS-gles3` corpus checkout is there), and the documented fetch
-  (`tools/cts/deps.toml`, DEQP_WORK: a clone from GitHub, then
-  `external/fetch_sources.py`) was refused by this session's permissions.
-  A later retry fetched the commit (`git fetch --depth 1`) into
-  `$CONNECTED_DEPS_DIR/VK-GL-CTS.part` (objects only, no work tree), but
-  checking it out was not permitted, so neither `fetch_sources.py`, the
-  build nor the measure could run. To finish it: check out `FETCH_HEAD` in
-  that directory, run `external/fetch_sources.py` there, move it to
-  `$CONNECTED_DEPS_DIR/VK-GL-CTS` (`deps.toml` DEQP_WORK), then run the
-  command of section 18.
-  The per-text case counts below are therefore section 18.2's, measured at
-  `9ac31f30` (all 10,597 cases of the slices `37305608`).
-- **Why those counts stand at `7b540fee`** (an argument, not a
-  measurement): `git log 9ac31f30..7b540fee -- src/shaderc/online/mali` is
-  one commit, `6b0ee807` ("the fp32 compares of a `_vertex` case's int
-  output and `FCMP_AND.f32`"). It adds a lowering in the fragment
-  compare of shader-library `_vertex` cases. It removes no refusal of the
-  ten texts and adds none. A case could only move if its fragment shader
-  was refused earlier in its log than the text counted here, and none of
-  the ten texts' groups is a shader-library `_vertex` int-output case
-  except possibly the 2 `shaders.functions` cases of `Rebalance`, whose
-  refusal is in the vertex shader's front end (`glsl.rs`), before any
-  fragment compile.
-- **What was measured at `7b540fee`.** (a) Every `.vert`/`.frag` pair under
-  `tools/mali/testdata/` and `tools/mali/testdata/deqp_shapes/` was
-  compiled with `tests/mali_ref`'s `compile_pair`, in a scratch test that
-  was not kept. The pairs whose first refusal is one of the ten texts are
-  listed per text in section 2. (b) The two `deqp_misc2_*` references of
-  section 3 were drawn with Mesa 26.2.1's drm-shim. The build was
-  `tools/mali/drm_shim_ref.sh build` of
-  `$CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz` into
-  `$CONNECTED_DEPS_DIR/mesa-shim`. It was checked by remaking
-  `gm2_cf_ifelse_vs.expect.json` byte for byte (`cmp` silent;
-  `README-deqp_ref.md`'s self-check).
+- Tip: the integration tip **`7b540fee`**
+  (`7b540fee70f91c784120de3e1fca8cd8a9fa4421`). The measure ran on this
+  item's branch at `e02af218`. That branch adds only this item's docs and
+  testdata to `7b540fee` (`git diff --stat 7b540fee e02af218 -- src
+  Cargo.toml capi` is empty), so the compiler measured is `7b540fee`'s.
+- Command (section 18's, 4 cores):
+
+  ```sh
+  tools/mali/deqp-host-measure.sh --cts "$CONNECTED_DEPS_DIR/VK-GL-CTS" \
+      --out "$PWD/build/measure" --jobs 3 --chunk 100
+  ```
+
+  CTS `93bca01861b0e3ef3c387027a9791e6d065f900c`, fetched as `deps.toml`
+  DEQP_WORK does it (clone, check out the commit, `external/fetch_sources.py`).
+  The three files of `tools/cts/cts-yakogl-target.patch` were added
+  (uncommitted, as `cts-build.sh` does it). Cases: the 10,597 of the slices
+  `2026-11-15-t6-gles2-S{1..4}-37305608`. All began. 106 processes exited 1
+  and 2 exited 139, as at `9ac31f30`. The script reported 6,132 cases with a
+  host refusal.
+- **Result: every count of section 18.2 holds at the tip.** The ten texts
+  are the first refusal of 57 cases, the same 57 as section 18.2's per-text
+  counts. Section 18.2 and this note's first version (`ced6caff`) named
+  some cases only by group or by an older case of the same shape. The case
+  lists in section 2 are measured and replace those names.
+- The references were drawn with Mesa 26.2.1's drm-shim
+  (`tools/mali/deqp_ref.sh <vert> <frag> <out> --instrument shim`). The shim
+  was rebuilt by `deqp_ref.sh` into `$CONNECTED_DEPS_DIR/mesa-shim` from
+  `$CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz`. Self-check: a redraw of
+  `gm2_cf_ifelse_vs` is byte-equal to the committed `.expect.json` except
+  for its `trace` file name (`cmp` of the rest is silent).
 
 ## 2. Per text: cases, shapes, references, sites
 
-Cases: first refusal per case, section 18.2 at `9ac31f30` (all board
-`Fail`; `NS` 0 for every row). Sites: `grep MaliError::<variant>` at
-`7b540fee`, outside `tests.rs` and the message table.
+Cases: first refusal per case at `7b540fee` (all board `Fail`, `NS` 0).
+Stage: the shader the measure names as refused. Sites: `grep
+MaliError::<variant>` at `7b540fee`, outside `tests.rs` and the message
+table.
 
-| # (18.2) | Text (`MaliError`) | Cases vs / fs | dEQP groups | Shapes | Reference(s) at the tip, and their refusal there | Refusing sites |
+| # (18.2) | Text (`MaliError`) | Cases | Measured cases (dEQP-GLES2.functional.) | Shapes | References | Refusing sites |
 |--:|---|--:|---|---|---|---|
-| 28 | `Rebalance` | 8 / 4 = 12 | shaders.random 7, shaders.invariance 3, shaders.functions 2 | `mali-deqp-arith.md` shape 11 "chain": `other.x` vs 4 (invariance 3, functions 1), `random.chain` vs 4, `random.chain` fs 3, `other.x` fs 1 | `deqp_arith_other_x_vs_mediump` (item arith-ref, `tests/mali_deqp_arith.rs`): refuses `Rebalance` at the tip. No reference for `random.chain` or the invariance cases | `glsl.rs:51`, `:1255`, `:1270`, `:1275`, `:1310`, `:1334`, `:1338`, `:1344`, `:1346`, `:1372`, `:1379`, `:1383`, `:2566`, `:2571` |
-| 31 | `Invariant` | 9 / 0 = 9 | shaders.invariance 9 (`{highp,mediump,lowp}.common_subexpression_{0,2,3}`, `mali-deqp-misc.md` section 1) | `invariant_arith`: an invariant `gl_Position` computed with arithmetic | **new** `deqp_misc2_invariant_cse`, `deqp_misc2_invariant_posonly` (section 3); both refuse `Invariant` at the tip | `nir.rs:5264` (after the walk; `invariant_copies` lets copies through) |
-| 32 | `LinkedVertexNotLowered` | 8 / 0 = 8 | attribute_location.bind_aliasing 8 | `bind_aliasing`: two attributes bound to one location, selected by a `bool` uniform (`glsAttributeLocationTests.cpp`, `BindAliasingAttributeTest`) | none. **Skipped**: no dEQP source on this host (generated by the CTS, not in any `.qpa` committed), and `tools/mali/gl_ref.py` binds attributes to locations in declaration order (`:433`), so two attributes at one location cannot be drawn without a tool change | `mod.rs:2021`: `compile_vs_mapped_blocks` refuses every vertex shader the link asks for at mapped locations |
-| 33 | `AlgebraicForm` | 0 / 8 = 8 | shaders.matrix 6, shaders.random 2 | `constmat` (matrix.mul.const_*_{mat2,mat4}_float_fragment) 6; 2 random cases, shape unknown | `deqp_misc_constmat_{mat2,mat4}_{highp,mediump}` (`tests/mali_deqp_misc.rs`), `deqp_constprod_alg_constmat_fs` (`tests/mali_deqp_constprod.rs`): all refuse `AlgebraicForm` at the tip. The 2 random cases: **skipped**, no source | `nir_fs.rs:1491`, `:3208`, `:6289`, `:9691`, `:12750` |
-| 34 | `AttributeNumbering` | 8 / 0 = 8 | shaders.random 8 (vertex) | unknown | none. **Skipped**: seed-generated shaders, no committed pair meets the text | `nir.rs:3972` (the second, numbering walk of a `late_fold` shader refuses), `nir.rs:3991` (a varying lane's link constant depends on an attribute the first walk did not count) |
-| 38 | `FragmentTooLarge` | 0 / 4 = 4 | uniform_api.value 2, uniform_api.info_query 1, uniform_api.random 1 | unknown (uniform_api shaders that compare many uniforms) | none. **Skipped**: generated by `es2fUniformApiTests.cpp`, no committed pair meets the text | `vec16.rs:247`, `:593`, `:980`, `nir_fs.rs:8311` |
-| 40 | `Fp16Inexact` | 0 / 3 = 3 (at the relink: the moved varying of the vertex shader) | shaders.matrix 3 (`matrix.sub.const_{highp,mediump,lowp}_mat3_mat3_vertex`, `mali-deqp-constop.md`) | `mat3sub` | `deqp_constop_mat3sub_vs` (`tests/mali_deqp_constop.rs`): refuses `Fp16Inexact` at the tip; also `deqp_shapes/constop_fp16_constant` | `vec16.rs:530`, `nir.rs:2131`, `:2986`, `:3190`, `nir_fs.rs` (18 sites: `:2869` ... `:12428`) |
-| 41 | `Spill` | 2 / 0 = 2 | shaders.matrix 2 (`matrix.mul.uniform_{lowp,mediump}_mat4_mat4_vertex`) | `spill` | `deqp_misc_spill_{lowp,mediump}_mat4_mat4` (`tests/mali_deqp_misc.rs`): refuse `Spill` at the tip | `ra.rs:697` |
-| 42 | `TooManyValues` | 2 / 0 = 2 | uniform_api.random 2 (`.3`, `.79`, `mali-deqp-misc.md` section 3) | unknown | none. **Skipped**: seed-generated, no source. `deqp_shapes/misc_ir_values` (`uniform_api.random.23`, the fragment one of plan #377's count) now refuses `FsUniform` first | `nir.rs:2024`, `:4294`, `:5792`, `:5986`, `select.rs:1114`, `nir_fs.rs:4160`, `:7199`, `:10938`, `:10958`, `:12117`, `:12236` |
-| 43 | `TexLanes` | 0 / 1 = 1 | shaders.struct 1 | unknown at the tip | none. **Skipped**: `deqp_shapes/misc_texture_lanes` (`struct.uniform.sampler_array_fragment`) now refuses `FsUniform` first. Its twin `sampler_fragment`, rebuilt from that pair and the shader in `mali-deqp-misc.md` section 5, also refuses `FsUniform` (the struct member `s.a`). So the one case is neither of the two that note named, and only the measure can name it | `nir_fs.rs:8704`, `:9898`, `:9905`, `:10640` |
-| | **Total** | 37 / 20 = **57** | | | | |
+| 28 | `Rebalance` | 12 (vs 8, fs 4) | `shaders.random.all_features.vertex.{14,35,54,84}`, `.fragment.{6,24,82}`; `shaders.invariance.{highp,mediump,lowp}.common_subexpression_1`; `shaders.functions.misc.multi_arg_float_{vertex,fragment}` | `funcsum` (2): `sum(v) = v.x + v.y + v.z + v.w` through a function. `invariant_chain` (3): the `a + b + c + d + e` sum under an invariant `gl_Position`. `random` (7): seed-generated chains | **new** `deqp_misc2_rebalance_funcsum_fs`, `_invariant`, `_random_fs`, `_random_vs`. The `funcsum` vertex case is arith-ref's `deqp_arith_other_x_vs_mediump`: same pair, same words (checked, `cmp` silent apart from the `trace` name), so no second copy | `glsl.rs:51`, `:1255`, `:1270`, `:1275`, `:1310`, `:1334`, `:1338`, `:1344`, `:1346`, `:1372`, `:1379`, `:1383`, `:2566`, `:2571` |
+| 31 | `Invariant` | 9 (vs) | `shaders.invariance.{highp,mediump,lowp}.common_subexpression_{0,2,3}` | `invariant_arith`: an invariant `gl_Position` computed with arithmetic | `deqp_misc2_invariant_cse` (verbatim `highp.common_subexpression_0`), `deqp_misc2_invariant_posonly` (our text) | `nir.rs:5264` |
+| 32 | `LinkedVertexNotLowered` | 8 (vs, at the link) | `attribute_location.bind_aliasing.cond_{float,vec2,vec3,vec4,mat2,mat3,mat4}`, `.max_cond_mat4` | `bind_aliasing`: two attributes bound to one location, selected by a `bool` uniform | none. **Skipped**: the words depend on the attribute locations, and `tools/mali/gl_ref.py` binds attributes in declaration order (`:433`). Two attributes at one location cannot be drawn without a tool change | `mod.rs:2021` (`compile_vs_mapped_blocks`) |
+| 33 | `AlgebraicForm` | 8 (fs) | `shaders.matrix.mul.const_{highp,mediump,lowp}_{mat2,mat4}_float_fragment` (6); `shaders.random.comparison_ops.fragment.{13,46}` (2) | `constmat` (6); `random_cmp` (2): constant-folded globals and a negative constant times a varying lane in the colour | `constmat`: `deqp_misc_constmat_*`, `deqp_constprod_alg_constmat_fs` (other items). **new** `deqp_misc2_algebraic_random13`, `_random46` | `nir_fs.rs:1491`, `:3208`, `:6289`, `:9691`, `:12750` |
+| 34 | `AttributeNumbering` | 8 (vs) | `shaders.random.basic_expression.vertex.{49,75}`, `.conditionals.vertex.{25,75,95}`, `.scalar_conversion.vertex.{69,97}`, `.swizzle.vertex.44` | All eight: an attribute lane of `v_color` multiplied by a constant zero, so its only read goes away. `zero_lanes` (5): the zero is `0`, `0.0` or `false`. `dead_attrs` (3: `basic_expression.vertex.{49,75}`, `conditionals.vertex.75`): the zero is `-0.0`, and other attributes are read only by dead code | **new** `deqp_misc2_attrnum_zero_lanes` (`scalar_conversion.vertex.97`), `deqp_misc2_attrnum_dead_attrs` (`basic_expression.vertex.49`) | `nir.rs:3972`, `nir.rs:3991` |
+| 38 | `FragmentTooLarge` | 4 (fs) | `uniform_api.info_query.struct_in_array.mat4_mat2_fragment`, `uniform_api.value.assigned.by_pointer.{get_uniform,render}.struct_in_array.mat4_mat2_fragment`, `uniform_api.random.20` | `struct_array_compare`: `uniform structType u_var[3]` (a `mat4` and a `mat2` each), every lane compared with a constant | none. **Skipped**: `gl_ref.py --uniform-values` cannot set a struct uniform ("does not set a structType uniform (u_var[3])"). Item fclane2-struct adds that | `vec16.rs:247`, `:593`, `:980`, `nir_fs.rs:8311` |
+| 40 | `Fp16Inexact` | 3 (fs, the relinked pair) | `shaders.matrix.sub.const_{highp,mediump,lowp}_mat3_mat3_vertex` | `mat3sub` | `deqp_constop_mat3sub_vs` (constop) | `vec16.rs:530`, `nir.rs:2131`, `:2986`, `:3190`, `nir_fs.rs` (18 sites) |
+| 41 | `Spill` | 2 (vs) | `shaders.matrix.mul.uniform_{lowp,mediump}_mat4_mat4_vertex` | `spill` | `deqp_misc_spill_{lowp,mediump}_mat4_mat4` (plan #377) | `ra.rs:697` |
+| 42 | `TooManyValues` | 2 (vs) | `uniform_api.random.3`, `uniform_api.random.79` | `uniform_api_random`: about 220 lines of struct and array uniform compares in the vertex shader | none. **Skipped**: both declare struct uniforms (`structType0 u_var1`), which `gl_ref.py` cannot set | `nir.rs:2024`, `:4294`, `:5792`, `:5986`, `select.rs:1114`, `nir_fs.rs:4160`, `:7199`, `:10938`, `:10958`, `:12117`, `:12236` |
+| 43 | `TexLanes` | 1 (fs) | `shaders.struct.uniform.sampler_nested_fragment` | `struct_sampler`: `texture2D(s.b.a, v_coords.xy * s.b.b + s.a).rgb` with a sampler in a nested struct | none. **Skipped**: struct uniform `S s`, `gl_ref.py` cannot set it | `nir_fs.rs:8704`, `:9898`, `:9905`, `:10640` |
+| | **Total** | **57** | | | | |
 
-Owned elsewhere in practice. The texts are unowned in section 18.2's owner
-column. But `mali-arith-lowering.md` step 8 takes `Rebalance` (with
-`other_x_vs_mediump`). `mali-constprod-lowering.md` S8 takes the `constmat`
-factoring of `AlgebraicForm` (6 of 8). `mali-deqp-constop.md` step 7 (H1)
-takes `Fp16Inexact` (all 3). This item draws no second reference for those
-shapes. That leaves 46 cases with no lowering plan: `Invariant` 9,
-`LinkedVertexNotLowered` 8, `AttributeNumbering` 8, `FragmentTooLarge` 4,
-`Spill` 2, `TooManyValues` 2, `TexLanes` 1, `AlgebraicForm`'s random 2, and
-`Rebalance`'s 7 `random.chain` plus 3 invariance cases. Those 10 belong to arith step 8 but have no reference.
+Owned elsewhere in practice. Section 18.2 lists these texts as unowned. But
+`mali-arith-lowering.md` step 8 takes `Rebalance` (with
+`other_x_vs_mediump`, the `funcsum` vertex case). `mali-constprod-lowering.md`
+S8 takes the `constmat` factoring of `AlgebraicForm` (6 of 8).
+`mali-deqp-constop.md` step 7 (H1) takes `Fp16Inexact` (all 3). This item
+adds references for the `Rebalance` shapes that arith step 8 has none for,
+and for `AlgebraicForm`'s two random cases.
 
 ## 3. The references of this item (`tools/mali/testdata/deqp_misc2_*`)
 
-Drawn with `tools/mali/deqp_ref.sh <vert> <frag> <out> --instrument shim`
-(`drm_shim_ref.sh run ... --prim triangles --uniform-values`, then
-`pan_ref_diff.py extract --draw`). Every draw printed `glGetError 0x0`. The
-sources were checked equal (`cmp`) before the `.expect.json` was copied in.
-The NIR and disassembly quoted below are the shim's
-`BIFROST_MESA_DEBUG=shaders` output of the same draw.
+Every draw printed `glGetError 0x0`. The sources written by `deqp_ref.sh`
+were checked equal (`cmp`) to the input pair. The dEQP pairs are verbatim
+from the measure's `src/` (the program of the case's first refusal), with
+`.license` sidecars (The Khronos Group Inc.). Words per region:
 
-| Reference | Case | Source | Refusal at `7b540fee` |
-|---|---|---|---|
-| `deqp_misc2_invariant_cse` | `shaders.invariance.highp.common_subexpression_0`, its first program | verbatim: byte-equal to `deqp_shapes/misc_invariant_output` (the `.qpa` of `deqp-host-measure.sh` at `abcc9013`); `.license` sidecars (The Khronos Group Inc.) | `Invariant` |
-| `deqp_misc2_invariant_posonly` | none: the same invariant `gl_Position`, `v_unrelated = vec4(0.0)` (the case's second program's shape) and a constant mediump colour | our text, with a comment as the `gm2_*` ones | `Invariant` |
+| Reference | Case | vs.position | vs.varying | fs.fragment | Refusal at `7b540fee` |
+|---|---|--:|--:|--:|---|
+| `invariant_cse` | `shaders.invariance.highp.common_subexpression_0` | 34 | 25 | 15 | `Invariant` |
+| `invariant_posonly` | our text | 34 | 0 | 7 | `Invariant` |
+| `rebalance_funcsum_fs` | `shaders.functions.misc.multi_arg_float_fragment` | 24 | 15 | 25 | `Rebalance` |
+| `rebalance_invariant` | `shaders.invariance.highp.common_subexpression_1` | 68 | 75 | 15 | `Rebalance` |
+| `rebalance_random_fs` | `shaders.random.all_features.fragment.24` | 24 | 7 | 44 | `Rebalance` |
+| `rebalance_random_vs` | `shaders.random.all_features.vertex.35` | 24 | 19 | 7 | `Rebalance` |
+| `algebraic_random13` | `shaders.random.comparison_ops.fragment.13` | 24 | 13 | 16 | `AlgebraicForm` |
+| `algebraic_random46` | `shaders.random.comparison_ops.fragment.46` | 24 | 8 | 11 | `AlgebraicForm` |
+| `attrnum_zero_lanes` | `shaders.random.scalar_conversion.vertex.97` | 24 | 18 | 7 | `AttributeNumbering` |
+| `attrnum_dead_attrs` | `shaders.random.basic_expression.vertex.49` | 24 | 22 | 7 | `AttributeNumbering` |
 
-**What Mesa does** (position program, both references):
+**What Mesa does.** The instructions quoted are from the shim's
+`BIFROST_MESA_DEBUG=shaders` output (`drm_shim_ref.sh run`) of the same
+pair.
 
-```
-LD_ATTR_IMM.v4.f32 @r0:r1:r2:r3, r60^, r61^, index:0x0, table:0x1
-FMA.f32 r4, u3.w0, r0, 0x0.neg      ; 1.0e20 * x       (fmul, exact)
-FMA.f32 r4, r4^, r0, 0x0.neg        ; (1.0e20 * x) * x (left to right, no reassociation)
-FMA.f32 r5, u3.w0, r1, 0x0.neg      ; 1.0e20 * y
-FMA.f32 r5, r5^, r1, 0x0.neg
-FADD.f32 r4, r4^, r5^               ; the sum: an FADD, not fused into an FMA
-FMA.f32 r4, r4^, u3.w1, 0x0.neg     ; * 1.0e-20
-FADD.f32 r0, r0^, r4                ; a + s, lane by lane (x, y, z, w)
-...
-FRCP.f32 / FMAX.f32 u4.w0 / FMIN.f32 u4.w1, FMA.f32 rN, rN^, r3, 0x0.neg
-FMA.f32 r0, r0^, u0.w0, u0.w1       ; the viewport transform stays FUSED
-```
-
-- The NIR has every operation of the invariant output marked
-  `exact, preserve:inf,nan`: `glsl_to_nir` sets this on an invariant
-  assignment (`mali-deqp-misc.md` section 1). So **no `fmul`+`fadd` becomes
-  an `ffma`**. A product is `FMA.f32 a, b, 0x0.neg` (Mesa's `fmul`) and the
-  sum is a separate `FADD.f32`. The vec4 `(1e20*x*xxxx + 1e20*y*yyyy)` is
-  one scalar `s` (four equal lanes), and the four lanes of `gl_Position`
-  are `FADD.f32 a.c, s`.
-- 1.0e20 and 1.0e-20 are pushed constants (`u3.w0`, `u3.w1`). The viewport
-  clamp constants are `u4.w0`/`u4.w1`, the viewport `u0..u2`.
-- `nir_lower_viewport_transform` builds its operations without the exact
-  flag. So the transform is the usual fused `FMA.f32 rN, rN^, uK.w0, uK.w1`,
-  as `deqp_misc_invariant_position` already showed for a copy.
-- `posonly`: 34 instructions, 11 registers. Its varying program is empty (0
-  instructions: `v_unrelated` is a constant the link takes away, and the
-  fragment shader does not read it), and the fragment program is the
-  constant colour (`BLEND.f16` of `u2.w0`, `u2.w1`).
-- `cse`: the position program has the same words, except that the four
-  `FADD.f32 a.c, s` are scheduled x, z, y, w (posonly: x, y, z, w). The
-  difference is in the words, so the two references are not
-  interchangeable.
-- `cse`'s varying program (25 instructions) is the finding that matters for
-  the lowering. `v_unrelated` is **not** invariant, but its NIR operations
-  are also `exact`. The middle term `(...) * 1.0e-20 * (a.z*a.zzxz -
-  a.z*a.zzxz)` is gone from the NIR. **Inferred:** `x - x` → 0, then
-  `* 0` → 0, inexact rules on that term's own operations. `/ 1.0e20` became `* 1.0e-20`
-  (`0x1e3ce508`, made by an `IADD_IMM.i32` in the varying program, not
-  a FAU word). What is left is equal to the position's `s` term, so
-  `nir_opt_cse` merged the two and the merged instruction keeps `exact`.
-  So `v_unrelated = a.xzxz + s` is computed unfused (`FMA.f32 ..., 0x0.neg`
-  products, `FADD.f32` sum). The four lanes are stored as `x+s, z+s, x+s,
-  z+s` (four `STORE.i32.estream`, two values). **Mesa's link does not merge
-  the equal lanes here.**
-- `cse`'s fragment program (15 instructions):
-  `LD_VAR_BUF_IMM.f32 ... v4`, two `V2F32_TO_V2F16`, the `dot` with 1.0 as
-  three `FADD.v2f16`, then `MKVEC.v2i16 r2, r0^.h0, u2.w1.h1` and the
-  colour's first word `u2.w0` straight from the FAU.
+- **Invariant** (`invariant_cse`, `invariant_posonly`). Every operation of
+  the invariant output is `exact`: products are `FMA.f32 a, b, 0x0.neg`
+  (Mesa's `fmul`), sums are separate `FADD.f32`, nothing is contracted, and
+  there is no reassociation. 1.0e20 and 1.0e-20 are FAU words (`u3.w0`,
+  `u3.w1`). The viewport transform (`nir_lower_viewport_transform`, not
+  exact) stays fused: `FMA.f32 rN, rN^, uK.w0, uK.w1`. In `cse`, `nir_opt_cse`
+  merges the non-invariant `v_unrelated`'s equal term with the position's,
+  and the merged term stays `exact`. Its four lanes are stored as `x+s, z+s,
+  x+s, z+s` (four `STORE.i32.estream`, two values): Mesa's link does not
+  merge these equal lanes. `posonly`'s varying program is empty and its
+  fragment program is the constant colour. `cse` schedules the four
+  position `FADD.f32 a.c, s` as x, z, y, w; `posonly` as x, y, z, w.
+- **AttributeNumbering** (`attrnum_zero_lanes`). `v_color = vec4(bool(d),
+  float(b), c, int(b)) * vec4(0, 0, 1, a)` with `a = 0`. Mesa folds `b *
+  0.0` to 0 (GLES does not preserve NaN or signed zero here). The varying
+  program has **no `LD_ATTR`**: it stores four constants (`IADD_IMM.i32
+  ..., #0x0`, `#0x0`, `#0x3E800000` = 0.25, `#0x0`). Attribute `b` is still
+  declared, but nothing reads it. Our walk numbers attributes before that
+  fold, so it does not know `b` is gone, and refuses (`nir.rs:3972`/`:3991`).
+- **AlgebraicForm** (`algebraic_random46`). Only the last `gl_FragColor =
+  vec4(0, c * b, a, 0)` survives; the three writes before it are dead.
+  `c = 0.25 * float(-1)` folds to -0.25, which enters as a negated inline
+  constant: `FMA.v2f16 r1, 0x34000000.neg.h11, r0.h00, 0x0.neg`. Then
+  `MKVEC.v2i16 r1, 0x0.h0, r1^.h0` and `U16_TO_U32 r2, r0^.h1` pack the
+  colour `(0, -0.25*b, a, 0)`.
+- **Rebalance**. GLSL's `do_rebalance_tree` reassociates chains of three or
+  more `+` or `*` before NIR (`mali-rebalance.md`). `rebalance_invariant`
+  carries both problems: the chain and the invariant output.
+  `opt_rebalance_tree.cpp` skips invariant assignments, so the
+  `gl_Position` chain is not rebalanced and stays exact, while
+  `v_unrelated`'s chain is rebalanced.
 
 ## 4. Lowering order (one-session steps)
 
-Ranked by the cases each step can free, then by cost. A step whose
-reference or source is missing starts with the step that makes it.
+Ranked by the cases each step can free, then by cost. Only the ten texts
+are counted. A case freed from its first refusal passes only if its later
+refusals are gone too. The invariance cases' next text is `unitype`
+(measure, `next_family`), so they also wait for unif2's `u_color` step.
 
-1. **Re-measure at the tip, no compiler change.** Rerun
-   `deqp-host-measure.sh` (command in `mali-deqp-families.md` section 18)
-   with VK-GL-CTS `93bca018` in `$CONNECTED_DEPS_DIR/VK-GL-CTS`. Commit one
-   pair and one Mesa reference per shape for the texts left without one:
-   `AttributeNumbering` (8), `FragmentTooLarge` (4), `TooManyValues` (2),
-   `TexLanes` (1), `AlgebraicForm`'s 2 random cases and `Rebalance`'s
-   `random.chain` (7). Confirm this note's counts.
-2. **`Invariant`, step A (`posonly`).** Carry an `exact` flag from each
-   invariant output back through its operands, as `propagate_invariance`
-   and `glsl_to_nir` do. For an exact value: no `fmul`+`fadd` contraction
-   (an `FMA.f32 a, b, -0` then an `FADD.f32`), no inexact algebraic rule,
-   and no `do_rebalance_tree` (`opt_rebalance_tree.cpp:155-160` skips
-   invariant assignments). That last point matters for `Rebalance`'s 3
-   invariance cases too. The viewport transform stays fused. Remove the
-   refusal at `nir.rs:5264` for these trees only. Byte-compare
-   `deqp_misc2_invariant_posonly`. Keep `Invariant` for whatever
-   `exact` cannot express yet (the unit pin in `tests.rs` keeps
-   `gl_Position = p * p` refused until step B shows it).
-3. **`Invariant`, step B (`cse`).** The exact flag spreads through CSE: a
-   non-invariant varying whose expression equals an invariant one's is
-   computed exact too. Also needed: the lane order of the position adds (x,
-   z, y, w here) and the varying's four stores of two values (no merge).
-   This conflicts with our `VaryingDuplicate` refusal, which assumes Mesa's
-   link merges equal lanes. Byte-compare `deqp_misc2_invariant_cse`. The
-   dEQP cases then meet their next refusal. `mali-deqp-misc.md` section 1
-   measured it at `faeb6962`: `VaryingDuplicate` for the first program and
-   `FsUniform` (`u_color`'s mediump lanes, plan #387 unif2) for the second.
-   So the 9 cases pass only after unif2's step for `u_color`.
-4. **`LinkedVertexNotLowered` (8, plus the 6 `Defect(Encode)` cases of the
-   same group, section 18.4).** First, `gl_ref.py` needs an explicit
-   `glBindAttribLocation` list, so that two attributes can share a location.
-   Then draw the `bind_aliasing` references from step 1's pairs. Then
-   lower `compile_vs_mapped_blocks` (`mod.rs:2014-2022`): the vertex walk
-   at the link's map instead of the declaration order. This may be two
-   sessions.
-5. **`AttributeNumbering` (8).** From step 1's pairs: which fold
-   (`late_fold`) moves a varying lane's link constant onto an attribute
-   (`nir.rs:3970-3992`).
-6. **`Spill` (2).** Mesa's mediump vertex `mat4 * mat4` is `FMA.v2f16` on
-   fp16 FAU halves and fits 32 registers (`mali-deqp-misc.md`, "What
-   `lower-mixprec` did"). This is a vertex fp16 path, so it goes after
-   plan #387's `intval-vs16` / `intval-vs16-3` (the mediump vertex walk),
-   not before.
-7. **`FragmentTooLarge` (4), `TooManyValues` (2).** Table sizes of the
-   no-std arena (`vec16.rs`, `nir.rs`, `nir_fs.rs`). Mesa has no such
-   bound. Take them last, with step 1's sizes. These uniform_api shaders
-   are also dense in the unitype, uniarray and intval shapes, so raising a
-   table alone would move them to another refusal.
-8. **`TexLanes` (1).** After step 1 names the case.
+1. **`AttributeNumbering` (8): the zero-product fold.** Before the walk
+   numbers attributes, apply Mesa's `fmul x, 0.0 → 0.0` rule (with `false`
+   as 0.0) to the varying lanes, and drop the attributes that are then
+   unread. Byte-compare `attrnum_zero_lanes` (5 cases). Then
+   `attrnum_dead_attrs` (3 cases): there the zero is `-0.0`, so check in its
+   disassembly what Mesa makes of `x * -0.0` before writing the rule, and
+   drop the attributes only dead code reads. This text has no other owner.
+   One session.
+2. **`Invariant`, step A (`posonly`) (prepares 9 + 3).** Carry an `exact`
+   flag from each invariant output back through its operands. For an exact
+   value: no `fmul`+`fadd` contraction (`FMA.f32 a, b, -0` then
+   `FADD.f32`), no inexact algebraic rule, and no rebalance. The viewport
+   transform stays fused. Remove the refusal at `nir.rs:5264` for these
+   trees only. Byte-compare `invariant_posonly`.
+3. **`Invariant`, step B (`cse`) (9).** The exact flag goes through CSE
+   into a non-invariant varying that shares the term. Also needed: the
+   position adds' lane order, and four stores of two values. That
+   conflicts with our `VaryingDuplicate` refusal, which assumes Mesa's link
+   merges equal lanes. Byte-compare `invariant_cse`.
+4. **`Rebalance` (12), with arith step 8.** `do_rebalance_tree` is a GLSL
+   IR pass on `+`/`*` chains. Byte-compare `rebalance_funcsum_fs`, arith's
+   `other_x_vs_mediump`, `rebalance_random_fs`, `rebalance_random_vs`.
+   Then, after steps 2 and 3, `rebalance_invariant`, where the invariant
+   chain is not rebalanced. The `random` cases (7) may hit further texts
+   once the chain is lowered. Arith step 8 owns this step. These
+   references give it the cases its own reference does not cover.
+5. **`AlgebraicForm`'s random pair (2).** Dead colour writes and a
+   negated constant in a product (`0x3400.neg`). Byte-compare
+   `algebraic_random46` and `algebraic_random13`. Small; can go with
+   constprod S8 (`constmat`, the other 6).
+6. **`LinkedVertexNotLowered` (8, plus the 6 `Defect(Encode)` cases of
+   the same group, section 18.4).** First `gl_ref.py` needs an explicit
+   `glBindAttribLocation` list, so two attributes can share a location.
+   Then draw `bind_aliasing.cond_float`. Then lower `compile_vs_mapped_blocks`
+   (`mod.rs:2014-2022`): walk the vertex shader at the link's location map
+   instead of declaration order. Probably two sessions.
+7. **`Spill` (2).** Mesa's mediump vertex `mat4 * mat4` is `FMA.v2f16` on
+   fp16 FAU halves and fits 32 registers (`mali-deqp-misc.md`). It needs the
+   mediump vertex walk, so it goes after `intval-vs16` / `intval-vs16-3`.
+8. **`FragmentTooLarge` (4), `TooManyValues` (2), `TexLanes` (1).** All
+   seven read struct uniforms. First draw the references once fclane2-struct
+   has struct members in `gl_ref.py`
+   (`uniform_api.info_query.struct_in_array.mat4_mat2_fragment`,
+   `uniform_api.random.3`, `shaders.struct.uniform.sampler_nested_fragment`).
+   Then raise the no-std arena bounds (`vec16.rs`, `nir.rs`, `nir_fs.rs`):
+   Mesa has no such bound. These shaders are also dense in unif2's struct
+   and array shapes, so raising a table alone would move them to another
+   refusal. Take them last.
 
-Not in this order: `Rebalance`'s other.x and `random.chain` (arith step
-8), `AlgebraicForm`'s `constmat` (constprod S8) and `Fp16Inexact`
-(constop step 7). They stay with those items.
+Not in this order: `Fp16Inexact` (constop step 7) stays with that item.
 
 ## 5. Issue comment (for the person to post on #20, copy to #7)
 
 ```text
-misc2-ref (plan #387): the ten small unowned Mali refusal texts at integration tip 7b540fee.
+misc2-ref (plan #387): the ten small unowned Mali refusal texts, host dEQP measure at integration tip 7b540fee
+(tools/mali/deqp-host-measure.sh, VK-GL-CTS 93bca01, the 10,597 cases of the 37305608 slices).
 
-Counts are mali-deqp-families.md 18.2's (host measure at 9ac31f30); the only compiler commit since,
-6b0ee807, does not touch these texts. The host dEQP measure was NOT rerun: VK-GL-CTS was not in the
-dependency cache and could not be fetched in that session.
+First-refusal counts at the tip equal mali-deqp-families.md 18.2's: Rebalance 12, Invariant 9,
+LinkedVertexNotLowered 8, AlgebraicForm 8, AttributeNumbering 8, FragmentTooLarge 4, Fp16Inexact 3,
+Spill 2, TooManyValues 2, TexLanes 1 (57 cases, all board Fail). Case lists, now measured:
+docs/notes/mali-deqp-misc2.md section 2 (e.g. TexLanes is struct.uniform.sampler_nested_fragment,
+AlgebraicForm's two random cases are random.comparison_ops.fragment.13/46, Rebalance is
+functions.misc.multi_arg_float_*, invariance.*.common_subexpression_1 and random.all_features).
 
-Rebalance 12, Invariant 9, LinkedVertexNotLowered 8, AlgebraicForm 8, AttributeNumbering 8,
-FragmentTooLarge 4, Fp16Inexact 3, Spill 2, TooManyValues 2, TexLanes 1 (57 cases, all board Fail).
+New Mesa 26.2.1 references (tools/mali/testdata/deqp_misc2_*, test tests/mali_deqp_misc2.rs, 10 ignored with
+their refusal pinned; refusals_pinned passes): invariant_cse, invariant_posonly, rebalance_funcsum_fs,
+rebalance_invariant, rebalance_random_fs, rebalance_random_vs, algebraic_random13, algebraic_random46,
+attrnum_zero_lanes, attrnum_dead_attrs.
 
-New Mesa 26.2.1 references: tools/mali/testdata/deqp_misc2_invariant_cse (shaders.invariance.highp.
-common_subexpression_0, verbatim) and deqp_misc2_invariant_posonly; test tests/mali_deqp_misc2.rs
-(both ignored, refused Invariant; refusals_pinned passes). Finding: Mesa keeps every operation of an
-invariant output exact (FMA.f32 x, y, -0 products, separate FADD.f32 sums, no contraction), keeps the
-viewport transform fused, and CSE carries the exact flag into a non-invariant varying that shares the
-expression; that varying's equal lanes are stored, not merged.
+Findings: Mesa keeps an invariant output's operations exact (FMA.f32 x, y, -0 products, separate FADD.f32),
+keeps the viewport transform fused, and CSE carries exact into a non-invariant varying. AttributeNumbering
+is an attribute lane times a constant zero (all 8 cases): Mesa folds x * 0.0 to 0 and the varying program
+reads no attribute.
 
-Already referenced by other items: Rebalance other.x (deqp_arith_other_x_vs_mediump, arith step 8),
-AlgebraicForm constmat (deqp_misc_constmat_*, constprod S8), Fp16Inexact (deqp_constop_mat3sub_vs,
-constop step 7), Spill (deqp_misc_spill_*). No source here for LinkedVertexNotLowered
-(attribute_location.bind_aliasing; gl_ref.py also cannot bind two attributes to one location),
-AttributeNumbering, FragmentTooLarge, TooManyValues, TexLanes, AlgebraicForm's 2 random cases.
+Not drawn: bind_aliasing (gl_ref.py cannot bind two attributes to one location) and the
+FragmentTooLarge / TooManyValues / TexLanes shaders (struct uniforms; waiting for fclane2-struct's gl_ref.py change).
 
-Lowering order: docs/notes/mali-deqp-misc2.md section 4 (re-measure first, then Invariant A/B,
-bind_aliasing, AttributeNumbering, Spill after the mediump vertex walk, table sizes, TexLanes).
+Lowering order: note section 4 (AttributeNumbering fold first, then Invariant A/B, Rebalance with arith step 8,
+AlgebraicForm random pair, bind_aliasing, Spill after the mediump vertex walk, struct-uniform texts last).
 ```
