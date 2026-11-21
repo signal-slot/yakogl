@@ -6,9 +6,16 @@ The STM32MP257F-DK's display probe (issues #7 and #1281): LTDC -> DSI ->
 ADV7535 -> HDMI through the Zephyr display API, then eight colour bars.
 
 ```
-west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d build/mp2_display \
-  tools/probes/stm32mp257f_dk/mp2_display
+root=$PWD
+mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS")
+(cd "$ZEPHYR_WS" && PATH="$ZEPHYR_WS/.venv/bin:$PATH" ZEPHYR_BASE="$ZEPHYR_WS/zephyr" \
+  west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 \
+    -d "$root/build/zephyr-werror/mp2_display" "$root/tools/probes/stm32mp257f_dk/mp2_display" -- \
+    "-DZEPHYR_MODULES=$mods" "-DYAKOGL_DIR=$root" -DYAKOGL_WERROR=ON)
 ```
+
+From the repository root, with a west workspace in `ZEPHYR_WS` (`tools/setup-gate-host.sh`) and `ZEPHYR_SDK_INSTALL_DIR` the SDK, as `tools/check.sh` builds the probes. The image is
+`build/zephyr-werror/mp2_display/zephyr/zephyr.bin`.
 
 ## What it does
 

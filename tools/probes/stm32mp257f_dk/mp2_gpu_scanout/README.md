@@ -8,13 +8,16 @@ mode's size, copied by the resolve engine into a linear XRGB8888 buffer, and
 that buffer scanned out by the LTDC (LTDC -> DSI -> ADV7535 -> HDMI).
 
 ```
-west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 -d build/mp2_gpu_scanout \
-  tools/probes/stm32mp257f_dk/mp2_gpu_scanout
+root=$PWD
+mods=$(PATH="$ZEPHYR_WS/.venv/bin:$PATH" tools/cts/zephyr-modules.sh "$ZEPHYR_WS")
+(cd "$ZEPHYR_WS" && PATH="$ZEPHYR_WS/.venv/bin:$PATH" ZEPHYR_BASE="$ZEPHYR_WS/zephyr" \
+  west build -p always -b stm32mp257f_dk/stm32mp257fxx/a35 \
+    -d "$root/build/zephyr-werror/mp2_gpu_scanout" "$root/tools/probes/stm32mp257f_dk/mp2_gpu_scanout" -- \
+    "-DZEPHYR_MODULES=$mods" "-DYAKOGL_DIR=$root" -DYAKOGL_WERROR=ON)
 ```
 
-(from the top of this repository, with `ZEPHYR_BASE` the workspace's
-`zephyr` of `west.yml`'s pinned revision and `ZEPHYR_SDK_INSTALL_DIR` the
-SDK; `-- -DYAKOGL_WERROR=ON` makes warnings errors.)
+From the repository root, with a west workspace in `ZEPHYR_WS` (`tools/setup-gate-host.sh`) and `ZEPHYR_SDK_INSTALL_DIR` the SDK, as `tools/check.sh` builds the probes. The image is
+`build/zephyr-werror/mp2_gpu_scanout/zephyr/zephyr.bin`.
 
 ## What it does
 
