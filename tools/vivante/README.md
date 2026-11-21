@@ -21,6 +21,17 @@ ninja -C build-etnaviv src/gallium/drivers/etnaviv/etna_shc
 ```
 
 Then `ETNA_SHC=<mesa>/build-etnaviv/src/gallium/drivers/etnaviv/etna_shc python3 glsl2vivante.py`.
+
+`mesa-etna-build.sh` does all of this, and the drm-shim build of "Building it"
+below, under the dependency layout (`<layout>/mesa-etna-26.2.1`, or a
+directory it is given): the release tarball and the Python build modules
+fetched with their sha256 pinned, both patches applied, both build
+directories made, and a marker of every input written last. `--dry-run`
+prints the steps, `--check` exits 0 with `MESA_ETNA_TREE=<tree>` only on a
+complete tree (else 2 with one `gap:` line). `tools/cts/deps-env.sh` then
+prints `MESA_ETNA_TREE` for that tree; it is not a `deps.toml` entry, so a
+host without it is not refused. `mesa-etna-build_selftest.sh` checks the
+script and that line without Mesa (issues #7, #1281).
 Measured 2026-09-16, when the directory held 40 shaders (not re-measured on
 today's larger set): all 40 shaders under `tools/shaders` compile
 (`40/40 compiled`); the matrix vertex shader is 4 instructions, FemtoVG's gradient
