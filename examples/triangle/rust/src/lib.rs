@@ -7,7 +7,7 @@
 //!
 //! 1. [`triangle_scene`]: what to draw (vertices, clear colour, shader texts)
 //!    and the window's size, guard rows and fill words.
-//! 2. [`triangle_check`]: the check of the drawn window, printed line by line,
+//! 2. [`mod@triangle_check`]: the check of the drawn window, printed line by line,
 //!    and the PICTURE record's words.
 #![no_std]
 
