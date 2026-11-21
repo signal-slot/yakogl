@@ -444,6 +444,53 @@ depth-sample-gc stays blocked until a run shows checks 5 and 6.
   `first at` lines, or a case variant that reports checks 5 and 6 on
   their own.
 
+### Reading the dtpu page: checks 3 to 8 in the record, for the next X2 session [2026-11-21]
+
+The 2026-11-11 record held only check 4, the first failing check. Case 222
+now also keeps the outcome of **every** check (3 to 8, each decided on its
+own: a failing check does not stop the others) and the run can end with them
+as one PERF page, so the reader needs no console. Code:
+`driver/tools/pvrlab/gl_test_dtpu.inc` (encoding, the scan over the four
+arms' pixels, the page), `main_imx8mp.c` (`dtpu_page_sel`), host selftest
+`driver/tools/pvrlab/dtpu_record_test.c`
+(`gcc -std=c99 -Wall -Werror -O2 -Idriver/tools/pvrlab driver/tools/pvrlab/dtpu_record_test.c -o <out> && <out>`,
+"20 ok, 0 failed"). The case's own CASE record and pass/fail are unchanged.
+
+**Selector.** `GC_RESULT_PERF_SEL | 0xb0`, that is **`SEL=4272`** (`0x10b0`)
+to `tools/board.sh x2 run`, on the image built as in the 11-11 session
+(`IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 222`, sweep image;
+the build check of this item used `-DCONFIG_YAKOGL_TEST_KNOBS=y`, rc 0).
+It runs case 222 alone and ends with the page. `SEL=0` still ends with the
+CASE record. If the arms did not run (check 1 or 2 stopped the case), there
+is no page and the record is the case's CASE record (the log says "no dtpu
+page").
+
+**Page.** `yakogl-tools record --words 3` shows kind PERF, tag `0xb0` and
+the words w1, w2, w3:
+
+| word | bits | meaning |
+|---|---|---|
+| w1 | 0 | page valid |
+| w1 | 3..8 | bit *n* set = check *n* **failed** (3 P0 off the ramp, 4 P1 != P0, 5 P1 beyond 255 of P0, 6 P2 not the PE's word, 7 P3 off the deeper ramp / stale, 8 a GL error in the arms) |
+| w1 | 12..15 | verdict code: 0 no verdict (check 3 failed), 1 D24X8 exact, 2 D24X8 exact but stale without a wait (7), 3 D24X8 with fewer bits (4 fails, 5 passes), 4 D24X8 off but the raw view is the word (4 and 5 fail, 6 passes), 5 the LINEAR descriptor does not address the surface (6 fails too) |
+| w1 | 16..31 | the first GL error of the arms (0 none) |
+| w2 | 0..15, 16..31 | first differing top-down index for check 4, check 5 (P1); 4096 = none |
+| w3 | 0..15, 16..31 | first differing top-down index for check 6 (P2), check 7 (P3); 4096 = none |
+
+Index *i* = row * 64 + x, row 0 at the top; GL (x, y) = (*i* mod 64,
+63 - *i* div 64), n = x + y + 1. A rerun of the 11-11 failure reads w2 = `0x10000001`
+if check 5 passes (check 4 at index 1, no check 5 index), and its w1 verdict
+code tells at once which row of the verdict table above applies. Check 3's index is not kept (when it
+fails, the verdict is "none" and the other bits are not evidence). A run
+that is all right reads w1 = `0x00001001`, w2 = w3 = `0x10001000`.
+
+The verdict table maps one to one: w1 bit 5 clear with bit 4 set is row 2
+(fewer bits), bits 4 and 5 set with bit 6 clear is row 3 (raw view), bit 6
+also set is row 4, bit 7 set with bit 4 clear is row 5. depth-sample-gc
+unblocks on codes 1 to 4 and stays blocked on 0 and 5. Not in the page: how
+far P1 is from P0 at the first index (the console's `first at` line has it);
+a run that wants the distances needs a second page.
+
 ## (b) What would change in the GC back end
 
 Mirror of the V3D: `v3d_depth_sampled`, `depth_buffer_state`/`depth_sample`
