@@ -118,6 +118,15 @@ with `.license` files. One per construct and script shape, 19 in all.
 struct array ("does not set a Light uniform"), so `deqp_ref.sh` stops. Its
 construct is the unrolled counter of `zero_operand_icmp`/`_inot`.
 
+### 3.1 `light_amount.*` (intval5-ref)
+
+Still no reference: item `intval5-ref` could not build Mesa's drm-shim on its
+machine (the build command was refused), so the statement above stands. To do:
+`gl_ref.py` now sets struct-array uniforms member by member
+(`tools/mali/README-deqp_ref.md`, "Struct uniforms"), so the "does not set a
+Light uniform" stop may be gone; draw the `light_amount.1dir` pair
+(`es2fLightAmountTest.cpp`) as `deqp_intval5_light_amount_{icmp,inot}`.
+
 ## 4. Lowering order (one-session steps, reusing constop's folds)
 
 Each step lists its cases (an upper bound: a case can need two steps, and
