@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict gc-diag attempts=1 last-idle=0x7fffffff 3a8-reset=FAIL:3a8-bit0-set:0x00000001 10c-reset=0x00000001 3a8-init=FAIL:3a8-bit0-set:0x00000001 10c-init=0x00000001
+1 checks, 1 failed

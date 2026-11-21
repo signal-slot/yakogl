@@ -26,7 +26,7 @@ import re
 import sys
 
 CHECKS = ["return-trial", "hang-trial", "handover", "identify-wdog", "gpu-identity",
-          "gpu-intr", "gpu-idle", "gc-irq", "gc-fence", "gc-clear", "gc-triangle",
+          "gpu-intr", "gpu-idle", "gc-irq", "gc-fence", "gc-diag", "gc-clear", "gc-triangle",
           "gl-case1", "supply"]
 
 MODEL, REV = 0x8000, 0x6205
@@ -206,6 +206,32 @@ def check_gc_irq(log):
             ("igroupr", g.group(1) if g else "absent")]
 
 
+def check_gc_diag(log):
+    # hw.rs DIAG_REGS: reset-attempt n=<1..100> 004=<IDLE_STATE> 000=<CLOCK_CONTROL>;
+    # after-reset / after-init 3a8=<secure-AHB soft reset, bit 0> 10c=<AXI/bus state>.
+    rx = re.compile(r"^gc diag: reset-attempt n=(\d+) 004=(0x[0-9a-fA-F]{8}) 000=(0x[0-9a-fA-F]{8})$")
+    attempts = [m for m in (rx.match(x) for x in log.lines) if m]
+    stages = {}
+    for x in log.lines:
+        m = re.match(r"^gc diag: (after-reset|after-init) 3a8=(0x[0-9a-fA-F]{8}) "
+                     r"10c=(0x[0-9a-fA-F]{8})$", x)
+        if m:
+            stages[m.group(1)] = (m.group(2), m.group(3))
+    if not attempts and not stages:
+        return [("diag", "none")]
+    out = [("attempts", str(max(int(m.group(1)) for m in attempts)) if attempts else "absent"),
+           ("last-idle", attempts[-1].group(2) if attempts else "absent")]
+    for st in ("after-reset", "after-init"):
+        tag = "3a8-" + st[6:]
+        if st not in stages:
+            out.append((tag, "absent"))
+            continue
+        a8, bus = stages[st]
+        out.append((tag, ("FAIL:3a8-bit0-set:" if num(a8) & 1 else "PASS:") + a8))
+        out.append(("10c-" + st[6:], bus))
+    return out
+
+
 def record_field(log, kind=KIND_APP):
     _, m = log.last(r"^yk-record: ([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8})$")
     if not m:
@@ -315,7 +341,7 @@ FUNCS = {
     "handover": check_handover, "identify-wdog": check_identify_wdog,
     "gpu-identity": check_gpu_identity, "gpu-intr": check_gpu_intr,
     "gpu-idle": check_gpu_idle, "gc-irq": check_gc_irq, "gc-fence": check_gc_fence,
-    "gc-clear": check_gc_clear, "gc-triangle": check_gc_triangle,
+    "gc-diag": check_gc_diag, "gc-clear": check_gc_clear, "gc-triangle": check_gc_triangle,
     "gl-case1": check_gl_case1, "supply": check_supply,
 }
 
@@ -331,6 +357,7 @@ APPLIES = {
     "gpu-idle": lambda l: l.has(r"^mp2_gpu: "),
     "gc-irq": lambda l: l.has(r"^irq \d+ connected") or l.has(r"^gc_irq: "),
     "gc-fence": lambda l: l.has(r"^gc_fence: "),
+    "gc-diag": lambda l: l.has(r"^gc diag: "),
     "gc-clear": lambda l: l.has(r"^gc_clear: "),
     "gc-triangle": lambda l: l.has(r"^gc_triangle: "),
     "gl-case1": lambda l: l.has(r"^gl_test: "),
