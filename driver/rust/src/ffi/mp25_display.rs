@@ -1014,12 +1014,40 @@ fn sink_for(m: &VideoMode, edid_ext: bool) -> YdMp25HdmiSink {
     }
 }
 
-/// The mode for an EDID (the preferred timing) or 720p60. Returns
-/// `YD_MP25_MODE_*` and the mode and sink.
+/// The mode for an EDID or 720p60. Returns `YD_MP25_MODE_*` and the mode and
+/// sink. Order: the base block's preferred timing when the chain can drive
+/// it; else, from the CTA-861 extension blocks `edid` holds (`edid[126]`
+/// says how many follow; with fewer bytes than that they are not read), the
+/// first native SVD the chain can drive, then VIC 16 (1080p60), then VIC 4
+/// (720p60) if listed; else 720p60. A malformed extension (checksum, data
+/// block overrun) is no extension: the fallback, not an error.
 pub(crate) fn choose_mode(edid: &[u8], lanes: u8) -> (i32, VideoMode, YdMp25HdmiSink) {
-    match video::edid_preferred(edid) {
-        Ok(m) if drivable(&m, lanes) => (YD_MP25_MODE_FROM_EDID, m, sink_for(&m, edid[126] != 0)),
-        Ok(_) => (YD_MP25_MODE_FALLBACK_LIMIT, HD720_60, sink_for(&HD720_60, edid[126] != 0)),
+    let ext = edid.len() >= 128 && edid[126] != 0;
+    let base = video::edid_preferred(edid);
+    if let Ok(m) = base {
+        if drivable(&m, lanes) {
+            return (YD_MP25_MODE_FROM_EDID, m, sink_for(&m, ext));
+        }
+    }
+    if ext && edid.len() >= (usize::from(edid[126]) + 1) * 128 {
+        let (mut native, mut v16, mut v4) = (None, false, false);
+        let walked = video::edid_modes(edid, |e| {
+            if e.vic.is_none() || !drivable(&e.mode, lanes) {
+                return;
+            }
+            if e.native && native.is_none() {
+                native = Some(e.mode);
+            }
+            v16 |= e.mode == FHD1080_60;
+            v4 |= e.mode == HD720_60;
+        });
+        let pick = native.or(if v16 { Some(FHD1080_60) } else { None }).or(if v4 { Some(HD720_60) } else { None });
+        if let (Ok(()), Some(m)) = (walked, pick) {
+            return (YD_MP25_MODE_FROM_EDID, m, sink_for(&m, true));
+        }
+    }
+    match base {
+        Ok(_) => (YD_MP25_MODE_FALLBACK_LIMIT, HD720_60, sink_for(&HD720_60, ext)),
         Err(_) => (YD_MP25_MODE_FALLBACK_NO_EDID, HD720_60, sink_for(&HD720_60, false)),
     }
 }
@@ -1502,6 +1530,110 @@ mod tests {
         // 1080p60 needs 891 Mbit/s a lane: not on two lanes
         let (r, mode, _) = choose_mode(&i2cm::edid_block(EdidMode::P1080), 2);
         assert_eq!((r, mode), (YD_MP25_MODE_FALLBACK_LIMIT, HD720_60));
+    }
+
+    /// A CTA-861 extension block with one video data block of `svds`.
+    fn cea_block(svds: &[u8]) -> Vec<u8> {
+        let mut b = vec![0u8; 128];
+        b[0] = 0x02;
+        b[1] = 3;
+        b[2] = (5 + svds.len()) as u8;
+        b[4] = 0x40 | svds.len() as u8;
+        b[5..5 + svds.len()].copy_from_slice(svds);
+        b[127] = 0u8.wrapping_sub(b[..127].iter().fold(0u8, |a, &x| a.wrapping_add(x)));
+        b
+    }
+
+    /// A base block preferring 3840x2160@60 (594 MHz) with `n` extensions.
+    fn edid_4k(n: u8) -> Vec<u8> {
+        let mut e = i2cm::edid_block(EdidMode::P1080);
+        e[54..72].copy_from_slice(&[
+            0x08, 0xe8, 0x00, 0x30, 0xf2, 0x70, 0x5a, 0x80, 0xb0, 0x58, 0x8a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1e,
+        ]);
+        e[126] = n;
+        e[127] = 0u8.wrapping_sub(e[..127].iter().fold(0u8, |a, &b| a.wrapping_add(b)));
+        e
+    }
+
+    #[test]
+    fn a_cea_extension_lists_what_the_base_block_does_not() {
+        let mut e = edid_4k(1);
+        // 4K, 1080p60, 720p60
+        e.extend(cea_block(&[0x80 | 97, 16, 4]));
+        // the base block alone: 4K cannot be driven
+        assert_eq!(choose_mode(&e[..128], 4).0, YD_MP25_MODE_FALLBACK_LIMIT);
+        let (r, m, s) = choose_mode(&e, 4);
+        assert_eq!((r, m), (YD_MP25_MODE_FROM_EDID, FHD1080_60));
+        assert_eq!((s.hdmi, s.vic), (1, 16));
+        // two lanes cannot do 1080p60: 720p60 from the list, still from the EDID
+        let (r, m, s) = choose_mode(&e, 2);
+        assert_eq!((r, m, s.vic), (YD_MP25_MODE_FROM_EDID, HD720_60, 4));
+        // a native 720p60 wins over 1080p60 listed first
+        let mut e = edid_4k(1);
+        e.extend(cea_block(&[16, 0x80 | 4]));
+        assert_eq!(choose_mode(&e, 4).1, HD720_60);
+        // only 720p60 listed
+        let mut e = edid_4k(1);
+        e.extend(cea_block(&[4]));
+        assert_eq!(choose_mode(&e, 4).1, HD720_60);
+        // listed VICs the chain does not know: the fallback
+        let mut e = edid_4k(1);
+        e.extend(cea_block(&[0x80 | 97, 95]));
+        assert_eq!(choose_mode(&e, 4).0, YD_MP25_MODE_FALLBACK_LIMIT);
+        // a drivable preferred timing is still taken first
+        let mut e = i2cm::edid_block(EdidMode::P720);
+        e[126] = 1;
+        e[127] = e[127].wrapping_sub(1);
+        e.extend(cea_block(&[0x80 | 16]));
+        assert_eq!(choose_mode(&e, 4).1, HD720_60);
+    }
+
+    #[test]
+    fn a_base_only_720p_edid_picks_720p() {
+        let (r, m, s) = choose_mode(&i2cm::edid_block(EdidMode::P720), 4);
+        assert_eq!((r, m, s.hdmi, s.vic), (YD_MP25_MODE_FROM_EDID, HD720_60, 0, 4));
+    }
+
+    #[test]
+    fn a_bad_extension_falls_back_without_error() {
+        let mut e = edid_4k(1);
+        e.extend(cea_block(&[0x80 | 16]));
+        e[255] ^= 1;
+        let (r, m, _) = choose_mode(&e, 4);
+        assert_eq!((r, m), (YD_MP25_MODE_FALLBACK_LIMIT, HD720_60));
+        // a flagged extension that was not read (short buffer): the same
+        let good = edid_4k(1);
+        assert_eq!(choose_mode(&good, 4).0, YD_MP25_MODE_FALLBACK_LIMIT);
+        // a data block running past the collection
+        let mut e = edid_4k(1);
+        let mut x = cea_block(&[16]);
+        x[4] = 0x40 | 20;
+        x[127] = 0u8.wrapping_sub(x[..127].iter().fold(0u8, |a, &b| a.wrapping_add(b)));
+        e.extend(x);
+        assert_eq!(choose_mode(&e, 4).1, HD720_60);
+    }
+
+    #[test]
+    fn the_extension_through_the_i2c_model() {
+        let soc = Soc::new();
+        let mut blob = edid_4k(1);
+        blob.extend(cea_block(&[0x80 | 97, 16, 4]));
+        let (c, _adv) = rig(&soc, Adv7535Config { edid: blob, ..Adv7535Config::default() });
+        let e = env(&c);
+        let mut ad = YdMp25Adv7535Data::default();
+        let mut edid = [0u8; 256];
+        let (mut mode, mut sink) = (YdMp25Mode::default(), YdMp25HdmiSink::default());
+        // SAFETY: locals.
+        unsafe {
+            assert_eq!(yd_mp25_adv7535_init(&ADV_CFG, &mut ad, &e), 0);
+            assert_eq!(yd_mp25_adv7535_read_edid(&mut ad, &e, 0, edid.as_mut_ptr()), 0);
+            let n = usize::from(edid[126]);
+            assert_eq!(n, 1);
+            assert_eq!(yd_mp25_adv7535_read_edid(&mut ad, &e, 1, edid[128..].as_mut_ptr()), 0);
+            assert_eq!(yd_mp25_choose_mode(&ADV_CFG, edid.as_ptr(), (n + 1) * 128, &mut mode, &mut sink), 0);
+        }
+        assert_eq!(mode, YdMp25Mode::from_video(&FHD1080_60));
+        assert_eq!((sink.hdmi, sink.vic), (1, 16));
     }
 
     #[test]
