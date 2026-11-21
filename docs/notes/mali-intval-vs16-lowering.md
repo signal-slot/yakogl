@@ -493,6 +493,101 @@ is dEQP's own generated shader (`shaders.operator`'s `ShaderOperatorCase`
 `docs/notes/mali-deqp-intval3.md` before generating**, and generate only what
 it does not hold.
 
+## 7a. The references of section 7: what was generated (plan #387, `posvary-lower`)
+
+Mesa 26.2.1's drm-shim (`$CONNECTED_DEPS_DIR/mesa-shim`, built as section 1
+of `mali-deqp-irindex.md` says), `tools/mali/deqp_ref.sh <pair>.vert
+<pair>.frag tools/mali/testdata/deqp_vs16ref_<shape> --instrument shim`,
+uniform values from `gl_ref.py`. 23 references, pinned by
+`tests/mali_deqp_vs16ref.rs`. **Caveat:** the VK-GL-CTS checkout available
+(`VK-GL-CTS-gles3`) holds only `data/gles3/shaders`, not the C++ that
+generates `ShaderOperatorCase`/`ShaderUniformCase`, and no deqp-gles2 was
+built, so the pairs are written in the form of the held dEQP-derived pairs
+(`deqp_intval_opvs_*`, `deqp_arith_op_bool_*`, `deqp_arith_uniform_api_*`),
+with their template and the swizzles `zxy`/`yzx` (width 3), `wzyx`/`yzwx`
+(width 4). Each `.license` says so. The words are Mesa's for that source;
+re-draw from a `.qpa` if a case's exact swizzle ever matters.
+
+| R | reference(s) `deqp_vs16ref_*` | at the tip |
+|---|---|---|
+| R1 | `cmp_lt_mediump_vec3`, `cmp_eq_mediump_vec3`, `cmp_ne_mediump_vec3` | compile, varying region differs |
+| R2 | `or_bool` | compiles, differs (23 vs 25 words) |
+| R3 | `xor_bool` | compiles, differs (23 vs 26 words) |
+| R4 | `not_bool` | compiles, differs (20 vs 22 words) |
+| R5 | `bany_bvec3`, `ball_bvec3`, `bany_bvec4`, `ball_bvec4`, `bcmp_eq_bvec3`, `bcmp_ne_bvec3`, `bcmp_eq_bvec4`, `bcmp_ne_bvec4` | refused (arithmetic) |
+| R6 | `eq_mediump_vec4` (refused), `ne_mediump_float` (compiles, differs) | |
+| R7 | `lt_lowp_float`, `lt_mediump_float` | compile, differ |
+| R8 | `uapi_int`, `uapi_struct_int_ivec4` (refused: uniform type), `uapi_ivec3` (refused: vertex mediump uniform) | |
+| R9 | `uapi_bvec4_mix`, `uapi_bvec3_mix` | refused (arithmetic) |
+| R10 | none generated: **held** by `deqp_loops2_vs_do_dyn_conditional_break` (`i == one*ui_one`), `deqp_loops2_vs_do_uni_infinite_with_conditional_break` (`i == ui_one`), `deqp_loops2_vs_ret_infinite` (`i += ui_zero`), `deqp_loops_vs_vector` (`ivec4(0, 1, ui_three, 0)`), `deqp_loops_vs_select`, and `deqp_arith_random_bany_vs_none` / `deqp_cfold2_random_mixed_f2i` (the `uniform mediump int r`/`b` of a random shader). No dEQP vertex shape uses an int uniform as a plain value outside these (R8's compare is the only other). | held |
+
+What the words show (all are in the references' `vs.varying` text):
+
+- **`any`/`all` at width 3** (`bany_bvec3`): three fp16 compares are not made.
+  Mesa never builds bools: `any` is `FMAX.v2f16` of the three
+  *attribute values* and the result is tested once with
+  `FCMP_OR.v2f16.lt.m1 r0, 0x0, max, 0x0` (0 < max), then `S16_TO_S32` and
+  `CSEL.u32.eq ... 0x3F800000`. `all` (`ball_bvec3`) is the same with
+  `FMIN.v2f16`. The third lane's `-x` is the `FADD.f32 r1.h0, r2, 0x0.neg`
+  that the `fmin/fmax` rule of M2 produces. So the `flt(0, fmax)` rule
+  extends to width 3 as a chain `fmax(fmax(x.h1, y.h0-pair), z)`: the
+  first `FMAX.v2f16` pairs lane 1 (`r0.h11`) with the negated third lane,
+  the second pairs that with lane 0. **No `ior`/`iand` appears.**
+- **`any`/`all` at width 4** (`bany_bvec4`, `ball_bvec4`) *do* make bools:
+  two `FCMP_OR.v2f16.lt.m1` (one per register pair) and a `LSHIFT_OR.v2i16`
+  chain (`LSHIFT_AND.v2i16` for `all`) with the 0 shift: first
+  `r0.h11 | r0`, then `r0.h00 | (r1.h11 widened by IADD.v2u16)`, then
+  `| r1`: the order is lane 1 with lane 0 of pair 0, then lane 3 of pair 1,
+  then lane 2. So width 4 is a left-to-right chain over the swizzled lanes
+  `(x.y, x.x)`, `.w`, `.z`: read the order from the reference's words, not
+  from `any`'s definition (it is not lane order; the lowering must copy it).
+- **`bool_compare` `==`/`!=` at width 3/4**: per-lane
+  `FCMP_OR.v2f16.lt.m1` (the `> 0` compares), `ICMP_OR.v2u16.eq.m1`
+  (`.ne.m1` for `!=`) of lane pairs, then `LSHIFT_AND.v2i16` (`LSHIFT_OR.v2i16`
+  for `!=`) of the per-lane results: `==` is an AND chain of lane `eq`,
+  `!=` an OR chain of lane `ne`, at 16 bits, as `ior`/`iand` over 16-bit
+  masks (M3). Width 3 has 3 `ICMP_OR` and 2 `LSHIFT_AND`; width 4 has 4 and
+  3. The chain is not in lane order (lanes 1/0 of the first operand are
+  compared to lane 0 of the second first).
+- **Scalar `||`, `^^`, `!`** (R2-R4): `or_bool` is `FMAX.v2f16` of the two
+  negated attribute lanes and one `FCMP_OR.v2f16.lt.m1 0, max` (the M2 rule
+  again: `a > 0 || b > 0` is `0 < fmax(a, b)`, no integer op). `xor_bool` is
+  two `FCMP_OR.v2f16.lt.m1` and one `LSHIFT_XOR.v2i16`. `not_bool` is **not**
+  an `inot`: it flips the compare to `FCMP_OR.v2f16.ge.m1 r0, 0x0, -a`
+  (`0 >= -a`), i.e. `!(a > 0)` is `a >= 0` on the negated lane.
+- **Whole float vectors and scalars** (R1, R6, R7): a `mediump` vertex
+  `lessThan`/`equal`/`notEqual` on `vec3` and `<`/`!=` on a scalar are plain
+  fp32 `FCMP_OR.f32.<op>.f1`, one per lane, **no fp16 narrowing**; only
+  the `bvecN = greaterThan(x, 0.0)` shapes narrow. `lowp` and `mediump`
+  `less` give the same word (`lt_lowp_float` equals `lt_mediump_float`), so
+  R7 holds: lowp = mediump. The whole `vec4` `==` (`eq_mediump_vec4`) is
+  `FCMP_OR`/`FCMP_AND.f32.eq.m1` pairs and one `LSHIFT_AND.i32` chain:
+  `FCMP_AND` takes the first two lanes, then two single `eq` joined with
+  `LSHIFT_AND.i32`.
+- **Int and ivec uniform compares** (R8): `uniform int u == 0` is one
+  `ICMP_OR.u32.eq.m1 r0, u5.w1, 0x0, 0x0` straight on the uniform's FAU
+  word (the int is in a FAU word at the uniform's slot, `.w1`), then the
+  usual `CSEL` 1.0/0. `ivec3`/`ivec4` uniforms (`compare_ivecN` is the
+  product of `compare_int`) are **not** a chain of `ieq`: the compare against the all-zero constant
+  becomes `CSEL.u32.gt dst, u.wK, r, u.wK, r` (an unsigned max of the lane
+  words, so nonzero if any lane is) over the lanes, then one
+  `ICMP_OR.u32.eq.m1 ..., 0x0`. The struct's `int` member compares first and
+  its `ivec4` joins through a fourth `CSEL.u32.gt`.
+- **`bvec3`/`bvec4` uniform mixes** (R9): with the constant pattern known
+  Mesa uses the uniform words directly: `LSHIFT_OR.i32 0, 0, u.w.not` (a
+  `not` on the uniform word) for a lane compared with `false`, `LSHIFT_AND.i32`
+  chains joining them, with *no* `ICMP`. `bvec4(false, true, false, true)`:
+  one `not` per false lane, three `LSHIFT_AND.i32`s on top; `bvec3(true,
+  false, true)`: one `not`, two `LSHIFT_AND`. The pattern decides the form,
+  as R9 expected: a `true` lane contributes its word alone, a `false` lane
+  the negated word.
+
+Held-not-generated rows and their notes: R10 as above. Two cases the old table
+hoped for (`equal.bvec3_vertex` of `bool_compare`, `not_equal.mediump_float`)
+were generated too (`bcmp_eq_bvec3`, `ne_mediump_float`). `uapi_ivec3` shows
+the vertex mediump-uniform refusal that `unif2` and `vs16-2` share: its words
+are the same fp32 FAU words as the highp ones, not an fp16 uniform.
+
 ## 8. Tests at risk, and how to forecast
 
 At risk (each is pinned by exact bytes or text):
