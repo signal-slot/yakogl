@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The fragment shader of dEQP-GLES2.functional.shaders.random.texture.fragment.131 as dEQP-GLES2 (VK-GL-CTS 93bca01, NOTICE 5) writes it, verbatim from the .qpa of tools/mali/deqp-host-measure.sh (HOST-ONLY run at ca7cdc52).
