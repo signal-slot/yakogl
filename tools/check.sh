@@ -2301,6 +2301,9 @@ step "test    $V3D_ES2_CONFIG (tests/es3_mrt_gl.rs)" \
 # accepted (GL_NO_ERROR, no refused draw), through the report-es2 GL core.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_refusals
+# 4a7b5174: gl_FragData[0] read back is held in a slot; same compile/link answers.
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_fragdata.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_fragdata
 # The ES 2.0 varying and uniform limits keep their answers (the ES 3.0 raises
 # of plan #359 do not show under report-es2); the PowerVR and GC7000
 # report-es2 rows run it with the rest of tests/.
@@ -2342,6 +2345,8 @@ step "test    $V3D_ES2_CONFIG (tests/es2_program_binary_report.rs)" \
 # vivante rows, tests/v3d_* the v3d rows, tests/gl_* every row through `--test`
 # (and src/gl reaches all).
 scope vivante
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_fragdata.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_fragdata
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_more_clears
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_mipmap.rs)" \
