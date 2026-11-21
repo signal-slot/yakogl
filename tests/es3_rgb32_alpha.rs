@@ -318,11 +318,11 @@ fn check_rgb(f: &Fmt, s: &Stored, rgb: &[[u32; 3]], what: &str) {
 }
 
 /// An RGBA32* format stores the alpha it was given. GL_RGBA32F is the one
-/// sized name of the original tables that only the GC7000UL stores in its
+/// sized name of the original tables that only the GC7000UL and the PowerVR store in their
 /// 128-bit class (`sized_format` / `rgba32f_own_class`); every other back end
 /// holds it as RGBA16F (pinned here). The integer ones are 128-bit.
 fn check_rgba(f: &Fmt, s: &Stored, rgb: &[[u32; 3]], alpha: u32, what: &str) {
-    let halves = f.rgba == GL_RGBA32F && !cfg!(feature = "gpu-vivante");
+    let halves = f.rgba == GL_RGBA32F && !cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"));
     let want = if halves { backend::GLES_TEXFMT_RGBA16F } else { class_of(f) };
     assert_eq!(s.texfmt, want, "{} {what}: storage class", f.rgba);
     assert_eq!(s.texels.len(), rgb.len(), "{} {what}", f.name);
