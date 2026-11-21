@@ -1,0 +1,92 @@
+{
+ "trace": "deqp_cfold2_zero_operand_rcp_inf.trace",
+ "secondary_offset": null,
+ "regions": {
+  "vs.position": {
+   "va": "7fffffffc000",
+   "found": true,
+   "words": [
+    "005e800400000d7b",
+    "0891c20000000080",
+    "0061420259000000",
+    "0091c20000000083",
+    "0091c300000000c0",
+    "01abc20000070002",
+    "1091c40000000081",
+    "0061440299000042",
+    "0091c20000000084",
+    "0091c300000000c0",
+    "01abc20000070042",
+    "2091c40000000082",
+    "0061440219000042",
+    "0091c20000000085",
+    "0091c300000000c0",
+    "01abc00000074042",
+    "0910c247000000c0",
+    "7861420259000040"
+   ],
+   "text": [
+    "LEA_BUF_IMM.slot0 @r0:r1, r59^, table:0xD, index:0x0",
+    "MOV.i32.wait0 r2, u0.w0",
+    "STORE.i32.istream.slot1 @r2, [r0:r1], offset:0",
+    "MOV.i32 r2, u1.w1",
+    "MOV.i32 r3, 0x0",
+    "SHADDX.s64 [r2:r3], [r2:r3], [r0:r1], shift:0x0",
+    "MOV.i32.wait1 r4, u0.w1",
+    "STORE.i32.istream.slot2 @r4, [r2^:r3^], offset:0",
+    "MOV.i32 r2, u2.w0",
+    "MOV.i32 r3, 0x0",
+    "SHADDX.s64 [r2:r3], [r2^:r3^], [r0:r1], shift:0x0",
+    "MOV.i32.wait2 r4, u1.w0",
+    "STORE.i32.istream.slot0 @r4, [r2^:r3^], offset:0",
+    "MOV.i32 r2, u2.w1",
+    "MOV.i32 r3, 0x0",
+    "SHADDX.s64 [r0:r1], [r2^:r3^], [r0^:r1^], shift:0x0",
+    "IADD_IMM.i32.wait0 r2, 0x0, #0x47000000",
+    "STORE.i32.istream.slot1.end @r2, [r0^:r1^], offset:0"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x0800000000000000",
+   "fau": [
+    "42000000",
+    "42000000",
+    "3f000000",
+    "00000004",
+    "00000008",
+    "0000000c"
+   ]
+  },
+  "fs.fragment": {
+   "va": "7fffffffc100",
+   "found": true,
+   "words": [
+    "4000c00000000000",
+    "087dbc0200ead07c",
+    "6891c00000000084",
+    "4891c10000000084",
+    "787f4004333c00f0",
+    "0110f000000000c0",
+    "002fc1100000f1c0"
+   ],
+   "text": [
+    "NOP.wait0126",
+    "ATEST.wait0 @r60, r60^, 0x3F800000, atest_datum.w0",
+    "MOV.i32.discard r0, u2.w0",
+    "MOV.i32.wait r1, u2.w0",
+    "BLEND.slot0.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0",
+    "IADD_IMM.i32 r48, 0x0, #0x0",
+    "BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1"
+   ],
+   "work_reg_count": 32,
+   "preload": "0x3000000000000000",
+   "fau": [
+    "00000000",
+    "00000000",
+    "00000000",
+    "00000000",
+    "3c003c00",
+    "00000000"
+   ]
+  }
+ }
+}
