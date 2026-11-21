@@ -74,7 +74,9 @@ config YAKOGL_BOARD_STM32MP2
 	def_bool YAKOGL_BOARD && YAKOGL_STM32MP2
 	help
 	  The board layer (yakogl_board.h) on the DK's A35
-	  (board_stm32mp2.c): no window or screen yet; record: the
+	  (board_stm32mp2.c): window and screen with YAKOGL_STM32MP2_DISPLAY
+	  and the Vivante driver (a carve-out window at the LTDC's pitch,
+	  shown through the LTDC driver; -ENOTSUP without them); record: the
 	  yk-record line on USART2; reset: mp2_reset_to_linux() (PSCI
 	  SYSTEM_RESET), the watchdog OP-TEE's (YAKOGL_STM32MP2_WDOG).
 
