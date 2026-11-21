@@ -447,10 +447,26 @@ on that shader: add it as `deqp_loops3_*` or as the pin's reference, with
 
 - `plan`: `Delete` as in A0 (1); wrapper unroll: a body whose **last node is
   `Break`** (the `unconditional_break` for/while/do_while, and the infinite `for (;;)
-  { ...; break; }` last forms) is `Unroll`. `walk_passes` then already ends at
-  pass 1 on `Flow::Break` (`:4739`): the head test (a run-time `i < ui`) reaches
-  `walk_guard`/`walk_if16`; the flattened selects are `walk_if16`'s existing
-  ladder (the same `MUX.v2i16 ... r2.h00` x3 as `deqp_loops_fs_uncond_break`).
+  { ...; break; }` last forms) is `Unroll`. `walk_passes` ends at pass 1 on
+  `Flow::Break` (`:4739`), **but the head test is not handled by the existing
+  arms** (read at the tip, to confirm when written): the head `if (c) {} else
+  break;` with a `c` the walk cannot fold, in an unrolled loop, matches none of
+  `walk_nodes`' arms (`:5340-:5384`: `walk_guard` wants `then_ == [Break]`
+  and an empty else, the kept-head arm wants `f.kept`), so it reaches the last
+  `walk_if(.., IfExit::Plain, ..)` with a then side that falls through and an
+  else side that breaks, which `walk_if`'s flow match answers `LoopForm`
+  (`:4483`). S4 therefore needs **one new arm** in `walk_nodes`: the head
+  test of a wrapper-unrolled loop is `if (c) { REST }`, the rest of the pass
+  as the then side, no else; and `walk_if16`'s `sel` closure (`:4630-:4660`)
+  must take an **integer-mask** condition (`f.mask_lane(cond)`, 32-bit
+  `ICMP_OR` mask) with two different 16-bit lanes, a `Bcsel` of 16 bits
+  emitted as `MUX.v2i16 rD, a.h00, b.h11, mask.h00` (today it takes two
+  defined lanes only under a float compare, `cmp16`, and answers
+  `ControlFlow` otherwise). The words are then the ladder of
+  `deqp_loops_fs_uncond_break`: one `ICMP_OR.s32.ge.m1 r2, 0x0, u2.w0`, three
+  `MUX.v2i16 ... r2.h00`, no loop. So S4 is **decision plus these two
+  changes**, not "no new code" as 9.5 says; the same two changes are what S5's
+  `continue` selects and S3's `conditional_body` need, so S4 comes first.
 - `walk_loop` (`:4873`) and `walk_kept_loop` (`:5122`) refuse a body with no
   instruction; after A0 an empty loop is `Delete` and never gets there.
 - The remaining S4 cases (`scoping.valid.while_*`, `struct.local`, `discard`,
@@ -484,6 +500,16 @@ Composition: 61 with a uniform bound, 61 with a dynamic bound (`one * ui_n`),
    `!f.prec.highp && f.nir.nloops > 0`. The `fs16` UBO layout is what the
    other routes use. This is the route's one change; `select_highp` already
    builds blocks and jumps for highp loops (`end_block`, the `LoopRegion`s).
+   Two traps in `mod.rs:1500-1560`'s chain (read at the tip): `kept16`
+   (`nir_fs.rs:10874`) is true for **any live `IfRegion` that is neither
+   `single` nor `inot`**, and a kept loop's head `if` is such a region
+   (`brk: Some(lp)`, `walk_if` :4470-:4480), so in a mediump kept loop the
+   chain would take the `kept16` arm and `branch_forms` (`:10887`) would
+   answer `ControlFlow` to the phis, `Icmp`, `Vec2`. Put `kept_loops16`
+   **before** `kept16` and make `kept16` skip regions with `brk.is_some()`.
+   The loop route needs its own forms list (`Phi` of width 1 and 2, `Vec2`,
+   32-bit `Icmp/Iadd/Imul/Ior/Csel/F2i32`, 16-bit `Fadd/Fcmp/Bcsel`, the
+   varying's `F2f16`), as the item below says.
 3. **Pair the carried lanes** (`vectorize16`, `nir_fs.rs:11068`): it pairs ALU
    nodes only (`pairable`). Add `Phi`: two 16-bit one-lane phis of one header
    whose lanes `2k`, `2k+1` of the same local (`registration_order` makes them
@@ -565,7 +591,25 @@ Composition: 61 with a uniform bound, 61 with a dynamic bound (`one * ui_n`),
   mask `c` as an extra operand: `walk_guard`'s `rest` is the rest of the
   body, run in the same block (no else block); only the `Break`-side
   flows as `Flow::Break` are discarded. `LoopForm` `:4483` and `:4777` become dead
-  for these bodies. The `infinite_with_conditional_break` head `if (c) break;`
+  for these bodies.
+  **When the merge applies is Mesa's, not "always"** (source,
+  `opt_loop_merge_terminators`, nir_opt_loop.c:554-712): the `if (c) break;`
+  and the loop's head test are merged into one `ior` only when (1) both are
+  *basic terminators* (an `if` whose only content is the `break`, on the same
+  side: `is_basic_terminator_if`, :604-632), (2) they are **consecutive**,
+  with nothing but ALU, `load_const`, deref and `load_deref` instructions
+  between them (:670-681), and (3) **no phi follows the loop and none the
+  second `if`** (:655-659, :686-692): every value live out of the loop is the
+  same at both exits. dEQP's shapes meet all three (the break comes before the
+  rotation, or both exits read the same rotated pair), and so do the
+  head-after-body `do while` forms. The highp references that keep **two
+  real exit edges** (`intloop_loop_exit`, `intloop_divnest`: a different
+  `last`/`outer` at each exit, an exit phi) do not, and must keep
+  `walk_kept_loop`'s two-edge code (`:5236-:5290`, `MAX_BREAKS`). So the new
+  arm decides by comparing the lane tables at the two exits as `walk_kept_loop`
+  does for its exit phis (`f.table(e0)[l] != f.table(e1)[l]`): equal → OR into
+  the head's mask (before the cap's `ior`), different → the old edge. Without
+  that test the five cap tests and `intloop_divnest` change. The `infinite_with_conditional_break` head `if (c) break;`
   (`for (;;)`) is the one exit test, **no inverse compare** (`kept_loop`'s head
   polarity `then = Break`, else empty).
 - **`continue`** (`if (c) { step; continue; }` form, the front end copies the
@@ -907,6 +951,14 @@ the board rerun is the only pass count.
 - **`vs_fn_after_seq`/`vs_fn_mixed`** (S8) are functions with a return after a loop with
   constant-bound counters Mesa keeps (14 and 20 instructions); their loop form is
   not one of the eleven shapes and is the first thing S8 should draw the NIR of.
+- **S2, S7 and S11 (156 cases: 94 + 44 + 18) read local arrays at a run-time
+  index** (`arr[ui_zero]`, `tmp[ui_one]`): both walks still raise
+  `IndexedLocal` for an indexed `LoadLocal`/`StoreLocal` outside the forms
+  case 80 (`mali-indexed-locals.md`) made byte-equal (`nir_fs.rs:5630`,
+  `nir.rs:4127`, `:4546`). The loop text leaving does not make those cases
+  compile; their next refusal is not measured (loops note 9.8). Run one
+  `fs_idx_tmp_float_dd` through the walk with the loop lowered before
+  counting S2.
 - The vertex `UniformType` dependency (97 hidden cases) and the dynamic bound
   (61 fragment cases) are other items' lowering; every number above counts
   only the loop text.
