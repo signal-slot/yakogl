@@ -6,6 +6,11 @@
 # line whose text its refusals.tsv line contains (the MaliError texts of
 # src/shaderc/online/mali/mod.rs). tools/cts/mali-family-tree.py reads it.
 #
+# mali-family-tree-selftest.sh checks that every text below still occurs in
+# src/shaderc/online/mali/*.rs. A text that exists only in the 37305608
+# slices' refusals.tsv (the compiler reworded or dropped it) is marked on a
+# comment line of its own, which the parser skips: "#historical<TAB><text>".
+#
 # Left out on purpose: the refusals plan #367 holds through its glmark2
 # families (docs/notes/mali-glmark2-forecast.md section 2): ARITH_CONST ("a
 # constant product in a shape Mesa's algebraic rules move or fold"), ARITH,
