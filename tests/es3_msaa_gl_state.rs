@@ -1,23 +1,24 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! Fixed-function state during a 4x to 1x resolve blit, on the host: scissor,
-//! colour write mask, rasterizer discard, dither, and GL_NONE draw / read
-//! buffers (ES 3.0.6 4.3.3; Mesa 26.2.1 src/mesa/main/blit.c).
+//! Fixed-function state during a 4x to 1x resolve blit, on the host
+//! (docs/notes/es3-msaa-renderbuffers.md (b); ES 3.0.6 4.3.3).
 //!
-//! The scissor test applies to glBlitFramebuffer; the colour write mask and
-//! dither do not. The tests pass on what the GL core does today; where that
-//! differs from the spec the spec's behaviour is an `#[ignore]`d test beside it.
+//! The helpers and the stand-in back end are those of `tests/es3_msaa_gl.rs`
+//! (`context_ms4`: `max_samples` 4, `finish` writes the resolved colour into
+//! the renderbuffer's memory). What each state does to glBlitFramebuffer:
 //!
-//! The helpers and the stand-in back end are copied from tests/es3_msaa_gl.rs
-//! (see its header): `context_ms4` is a table with `max_samples` 4 whose
-//! `finish` writes the resolved colour into the 4x renderbuffer's memory.
+//! * the scissor test applies to the blit (cuts the destination);
+//! * the colour write mask and dither do not;
+//! * rasterizer discard: ES 3.0 says the blit is skipped; Mesa's blit.c
+//!   (26.2.1) does not look at it. The GL core ignores it today: the passing
+//!   test pins that, the `#[ignore]`d one holds the spec behaviour;
+//! * a draw buffer or the read buffer of GL_NONE makes the blit a no-op
+//!   without an error.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_msaa_gl_state
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "shaderc-online", not(feature = "report-es2")))]
-#![allow(dead_code)] /* the helpers are copied whole from es3_msaa_gl.rs */
+#![allow(dead_code)]
 
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
@@ -483,190 +484,242 @@ fn inside(i: usize, r: [GLint; 4]) -> bool {
 
 const FULL: [GLint; 4] = [0, 0, 8, 8];
 
-/* ---- the resolve under fixed-function state ------------------------------ */
+/* ---- the state during a 4x to 1x resolve ------------------------------------ */
 
-/// Puts every state this file changes back (also when a test fails).
-struct Reset;
-impl Drop for Reset {
+/// Puts the fixed-function state this file changes back (the context is
+/// shared with the next test) and leaves the window bound.
+struct State;
+
+impl State {
+    fn new() -> State {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glDisable(GL_SCISSOR_TEST);
+            glDisable(GL_RASTERIZER_DISCARD);
+            glEnable(GL_DITHER);
+            glColorMask(1, 1, 1, 1);
+            glScissor(0, 0, 8, 8);
+        }
+        State
+    }
+}
+
+impl Drop for State {
     fn drop(&mut self) {
         // SAFETY: plain GL calls.
         unsafe {
             glDisable(GL_SCISSOR_TEST);
-            glScissor(0, 0, 8, 8);
-            glColorMask(1, 1, 1, 1);
             glDisable(GL_RASTERIZER_DISCARD);
             glEnable(GL_DITHER);
+            glColorMask(1, 1, 1, 1);
+            glScissor(0, 0, 8, 8);
         }
     }
 }
 
-const ZERO: [u8; 4] = [0; 4];
-
-/// A drawn 4x source and a fresh single-sample RGBA8 destination (zeros).
+/// A fresh single-sample destination and a drawn 4x source (job pending).
 fn pair() -> (Fbo, Fbo) {
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x();
-    (src, dst)
+    (dst, src)
 }
 
-/// The scissor test applies to a blit (ES 3.0.6 4.3.3): only destination
-/// pixels inside the box are written. A box smaller than the region.
-#[test]
-fn scissor_limits_the_resolve() {
-    let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
-    // SAFETY: plain GL calls.
-    unsafe {
-        glEnable(GL_SCISSOR_TEST);
-        glScissor(2, 3, 3, 2); /* x 2..5, y 3..5 */
-    }
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    let r = [2, 3, 5, 5];
+/// Every pixel of `dst` is the resolved colour inside `r` and zero outside.
+fn only_inside(dst: &Fbo, r: [GLint; 4]) {
     for (i, p) in pixels(dst.fb).iter().enumerate() {
-        let want = if inside(i, r) { RESOLVED } else { ZERO };
-        assert_eq!(*p, want, "pixel {} {}", i % 8, i / 8);
+        let want = if inside(i, r) { RESOLVED } else { [0; 4] };
+        assert_eq!(*p, want, "pixel ({}, {})", i % 8, i / 8);
     }
 }
 
-/// An empty scissor box writes nothing (no error); one that holds the whole
-/// region changes nothing.
+/// ES 3.0.6 4.3.3: the scissor test applies to glBlitFramebuffer. A scissor
+/// box smaller than the region cuts the resolved destination.
 #[test]
-fn scissor_full_and_empty() {
+fn scissor_cuts_the_resolve() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
+    let _s = State::new();
+    let (dst, src) = pair();
     // SAFETY: plain GL calls.
     unsafe {
         glEnable(GL_SCISSOR_TEST);
-        glScissor(0, 0, 0, 0);
+        glScissor(2, 3, 3, 2);
     }
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == ZERO), "an empty box writes nothing");
-    // SAFETY: plain GL call.
-    unsafe { glScissor(0, 0, 8, 8) };
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED));
+    assert!(PENDING.lock().unwrap().is_empty(), "the blit waited for the 4x job");
+    only_inside(&dst, [2, 3, 5, 5]);
 }
 
-/// With the scissor test off the box is ignored.
+/// The scissor and a region smaller than the image: the copy is their
+/// intersection.
 #[test]
-fn scissor_box_ignored_when_disabled() {
+fn scissor_intersects_the_region() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
-    // SAFETY: plain GL call.
-    unsafe { glScissor(2, 2, 1, 1) };
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED));
+    let _s = State::new();
+    let (dst, src) = pair();
+    // SAFETY: plain GL calls.
+    unsafe {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(4, 4, 4, 4);
+    }
+    let region = [0, 0, 6, 6];
+    assert_eq!(blit(src.fb, dst.fb, region, region), GL_NO_ERROR);
+    only_inside(&dst, [4, 4, 6, 6]);
 }
 
-/// The colour write mask does not apply to a blit: every channel is written
-/// though green (and then all four) are masked off.
+/// A scissor box of no area, and one outside the image, copy nothing and are
+/// not an error.
 #[test]
-fn color_mask_does_not_apply() {
+fn empty_and_outside_scissor_copy_nothing() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
-    // SAFETY: plain GL call.
-    unsafe { glColorMask(1, 0, 1, 1) };
+    let _s = State::new();
+    let (dst, src) = pair();
+    // SAFETY: plain GL calls.
+    unsafe {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(2, 2, 0, 0);
+    }
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED), "green written despite the mask");
+    only_inside(&dst, [0, 0, 0, 0]);
     // SAFETY: plain GL call.
-    unsafe { glColorMask(0, 0, 0, 0) };
+    unsafe { glScissor(20, 20, 4, 4) };
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED));
+    only_inside(&dst, [0, 0, 0, 0]);
 }
 
-/// Dither does not apply to a blit: the resolved colour is copied exactly
-/// with it off, and with it on (its initial state).
+/// With the scissor test off the box is not looked at.
+#[test]
+fn scissor_box_without_the_test_is_ignored() {
+    let _g = context_ms4();
+    let _s = State::new();
+    let (dst, src) = pair();
+    // SAFETY: plain GL call.
+    unsafe { glScissor(2, 3, 3, 2) };
+    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
+    only_inside(&dst, FULL);
+}
+
+/// ES 3.0.6 4.3.3: only the pixel ownership and scissor tests apply to a
+/// blit; the colour write mask does not. Every channel is resolved.
+#[test]
+fn colour_mask_does_not_apply() {
+    let _g = context_ms4();
+    let _s = State::new();
+    for mask in [[0, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0], [0, 0, 0, 0]] {
+        let (dst, src) = pair();
+        // SAFETY: plain GL call.
+        unsafe { glColorMask(mask[0], mask[1], mask[2], mask[3]) };
+        assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR, "mask {mask:?}");
+        only_inside(&dst, FULL);
+    }
+}
+
+/// GL_DITHER applies to fragments written by drawing, not to a blit: the
+/// resolved colour is copied exactly with it on or off.
 #[test]
 fn dither_does_not_apply() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
-    // SAFETY: plain GL call.
-    unsafe { glDisable(GL_DITHER) };
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED));
-    // SAFETY: plain GL call.
-    unsafe { glEnable(GL_DITHER) };
-    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED));
+    let _s = State::new();
+    for on in [true, false] {
+        let (dst, src) = pair();
+        // SAFETY: plain GL calls.
+        unsafe {
+            if on {
+                glEnable(GL_DITHER)
+            } else {
+                glDisable(GL_DITHER)
+            }
+        }
+        assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
+        only_inside(&dst, FULL);
+    }
 }
 
-/// Today the GL core ignores GL_RASTERIZER_DISCARD in a blit: it copies, with
-/// no error.
+/// Today the blit does not look at GL_RASTERIZER_DISCARD (nor does Mesa's
+/// blit.c 26.2.1): the resolve is copied.
 #[test]
 fn rasterizer_discard_is_ignored_today() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
+    let _s = State::new();
+    let (dst, src) = pair();
     // SAFETY: plain GL call.
     unsafe { glEnable(GL_RASTERIZER_DISCARD) };
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == RESOLVED));
+    only_inside(&dst, FULL);
 }
 
-/// The behaviour the plan states: GL_RASTERIZER_DISCARD stops a blit (nothing
-/// written, no error). Note: Mesa 26.2.1's blit.c does not check RasterDiscard
-/// (clear.c does) and ES 3.0.6 4.3.3 does not name it, so the planner should
-/// confirm the spec text before the GL core changes.
+/// Spec behaviour (the plan's reading of ES 3.0: rasterizer discard stops
+/// the commands that generate fragments, a blit among them): nothing is
+/// copied and there is no error.
 #[test]
-#[ignore = "src/gl/blit.rs copies under GL_RASTERIZER_DISCARD; the plan reads ES 3.0 as stopping the blit (Mesa blit.c does not check it)"]
+#[ignore = "src/gl/blit.rs does not stop a blit under GL_RASTERIZER_DISCARD (draws and clears stop; Mesa's blit.c does not either)"]
 fn rasterizer_discard_stops_the_resolve() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
+    let _s = State::new();
+    let (dst, src) = pair();
     // SAFETY: plain GL call.
     unsafe { glEnable(GL_RASTERIZER_DISCARD) };
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    assert!(pixels(dst.fb).iter().all(|p| *p == ZERO), "nothing written");
+    only_inside(&dst, [0, 0, 0, 0]);
 }
 
-/// A draw buffer of GL_NONE: the resolve has nowhere to go, writes nothing
-/// and raises no error (Mesa blit.c: no draw buffers skips colour).
+/// A draw buffer of GL_NONE: the blit has no colour destination and is a
+/// no-op without an error.
 #[test]
 fn draw_buffer_none_is_a_no_op() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
-    let none = [GL_NONE];
-    // SAFETY: plain GL calls; one enum read.
+    let _s = State::new();
+    let (dst, src) = pair();
+    // SAFETY: plain GL calls on names this test made.
     unsafe {
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst.fb);
+        let none = [GL_NONE];
         glDrawBuffers(1, none.as_ptr());
     }
     assert_eq!(err(), GL_NO_ERROR);
     assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
-    let back = [GL_COLOR_ATTACHMENT0];
-    // SAFETY: plain GL calls; one enum read.
+    // SAFETY: plain GL calls.
     unsafe {
+        let a = [GL_COLOR_ATTACHMENT0];
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst.fb);
-        glDrawBuffers(1, back.as_ptr());
+        glDrawBuffers(1, a.as_ptr());
     }
-    assert!(pixels(dst.fb).iter().all(|p| *p == ZERO), "nothing written");
+    only_inside(&dst, [0, 0, 0, 0]);
 }
 
-/// A read buffer of GL_NONE on the 4x source: the same, no error.
+/// A read buffer of GL_NONE: no colour source, a no-op without an error.
 #[test]
 fn read_buffer_none_is_a_no_op() {
     let _g = context_ms4();
-    let _r = Reset;
-    let (src, dst) = pair();
-    // SAFETY: plain GL calls.
+    let _s = State::new();
+    let (dst, src) = pair();
+    // SAFETY: plain GL calls on names this test made.
     unsafe {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, src.fb);
-        glReadBuffer(GL_NONE);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst.fb);
+        glReadBuffer(GL_NONE);
         while glGetError() != GL_NO_ERROR {}
         glBlitFramebuffer(0, 0, 8, 8, 0, 0, 8, 8, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
     assert_eq!(err(), GL_NO_ERROR);
+    // SAFETY: plain GL call.
+    unsafe { glReadBuffer(GL_COLOR_ATTACHMENT0) };
+    only_inside(&dst, [0, 0, 0, 0]);
+}
+
+/// All of it at once: scissor on, a channel masked, dither off. The scissor
+/// alone decides what is written.
+#[test]
+fn scissor_with_mask_and_dither_off() {
+    let _g = context_ms4();
+    let _s = State::new();
+    let (dst, src) = pair();
     // SAFETY: plain GL calls.
     unsafe {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, src.fb);
-        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(1, 1, 5, 6);
+        glColorMask(0, 1, 1, 1);
+        glDisable(GL_DITHER);
     }
-    assert!(pixels(dst.fb).iter().all(|p| *p == ZERO), "nothing written");
+    assert_eq!(blit(src.fb, dst.fb, FULL, FULL), GL_NO_ERROR);
+    only_inside(&dst, [1, 1, 6, 7]);
 }
