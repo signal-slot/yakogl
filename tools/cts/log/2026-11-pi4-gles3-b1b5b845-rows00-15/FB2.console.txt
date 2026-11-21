@@ -64,7 +64,7 @@ v3d_deqp: the record at 210 s after boot at the latest
 V3D clock 250000000 -> 500000000 Hz (0)
 deqp: case filter 'dEQP-GLES3.functional.fbo.blit.*'
 Writing test log into deqp.qpa
-dEQP Core vulkan-cts-192.0.2.1-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
   target implementation = 'YakoGL-Zephyr'
 I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
 I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
