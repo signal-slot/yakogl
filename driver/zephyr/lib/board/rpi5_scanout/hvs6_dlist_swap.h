@@ -109,6 +109,33 @@
  *     compared byte for byte with the snapshot; the first differing word is
  *     named. Our own list's words are left in list memory, not cleared.
  *
+ * Hardware-written words (swap-hwword, plan #390): the HVS may write a word
+ * of a plane entry back while it scans it (a context or status word; Linux
+ * writes POS3 as the context word 0xc0c0c0c0, rpi:vc4_plane.c:2184-2185, and
+ * rpi5_scanout16 saw one word of the firmware's list change under a running
+ * scanout). A byte-equal restore would then fail however correct the swap
+ * was. cfg.hw (struct hvs6s_hw_set, at most HVS6S_HW_MAX entries) names
+ * offsets from the start of a plane entry, each SKIP (left out of the
+ * byte-equal compare and of the hash) or EXPECT (compared, a change reported
+ * but not failing). It is empty by default: a zeroed cfg behaves as before.
+ * Entries are found by CTL0.NEXT from the start of the reference words (the
+ * snapshot's, or the words we wrote); the END word and words after a NEXT 0
+ * are in no entry and never declared. The set applies to every entry of the
+ * firmware's span at the restore and to our own entry at hvs6s_swap's
+ * read-back. Every differing word is recorded (r->rdiff, r->ldiff:
+ * HVS6S_DIFF_MAX kept, all counted) and printed by hvs6s_lines as
+ *   dlswap restore-diff word <n> entry <e> off <k> was 0x.. now 0x.. hw=<m>
+ *   dlswap readback-diff word <n> entry <e> off <k> was 0x.. now 0x.. hw=<m>
+ * (<m> skip, expect or no; entry and off "none" outside any entry), then
+ *   dlswap restore-diffs total=.. undeclared=.. skip=.. expect=.. shown=.. hwskip=<set>
+ * (readback-diffs likewise, only when a word differed). Only an undeclared
+ * word fails (HVS6S_ERR_RESTORE_WORD, HVS6S_ERR_LIST_READ); diff_word and
+ * list_bad_word name the first undeclared one. Both compares now read every
+ * word instead of stopping at the first difference. The set's text form
+ * (hvs6s_hw_parse, hvs6s_hw_format) is "<off>:skip|expect[,...]", with ""
+ * or "none" for the empty set. cfg.hw is checked by hvs6s_cfg_ok (a bad set
+ * is HVS6S_ERR_ARG before anything is read or written).
+ *
  * The list memory sits at HVS + 0x4000 and is device memory on the Pi 5's
  * Zephyr map; the clean is then a no-op, kept so that a staged list in
  * normal memory and the A/B buffers of the caller are treated alike. The
@@ -149,6 +176,47 @@
 /* The record's prefix of every line hvs6s_lines prints. */
 #define HVS6S_TAG "dlswap"
 
+/* Hardware-written words: at most this many offsets in a set. */
+#define HVS6S_HW_MAX 4u
+/* The largest offset in an entry: CTL0.NEXT is 6 bits, entries are <= 63 words. */
+#define HVS6S_HW_OFF_MAX 62u
+/* Differing words kept (and printed) per compare; all are counted. */
+#define HVS6S_DIFF_MAX 8u
+
+enum hvs6s_hw_mode {
+	HVS6S_HW_NO = 0, /* not declared: a difference fails */
+	HVS6S_HW_SKIP,   /* left out of the compare and the hash */
+	HVS6S_HW_EXPECT, /* compared, a change reported, never failing */
+};
+
+struct hvs6s_hw_word {
+	uint32_t off; /* words from the start of a plane entry */
+	enum hvs6s_hw_mode mode;
+};
+
+/* The declared hardware-written words; n == 0 is the empty set. */
+struct hvs6s_hw_set {
+	uint32_t n;
+	struct hvs6s_hw_word w[HVS6S_HW_MAX];
+};
+
+/* One differing word. entry and off are -1 for a word in no entry. */
+struct hvs6s_diff {
+	uint32_t word; /* list-memory word */
+	int32_t entry, off;
+	uint32_t was, now;
+	enum hvs6s_hw_mode hw;
+};
+
+struct hvs6s_diffs {
+	uint32_t total;      /* differing words */
+	uint32_t undeclared; /* of those, at no declared offset: these fail */
+	uint32_t skip, expect;
+	uint32_t hw_words;   /* words of the span at a declared offset, changed or not */
+	uint32_t shown;      /* d[0..shown) */
+	struct hvs6s_diff d[HVS6S_DIFF_MAX];
+};
+
 /* Register and list-memory access. Offsets are from the HVS base. */
 struct hvs6s_io {
 	uint32_t (*read32)(void *ctx, uint32_t off);
@@ -168,6 +236,7 @@ struct hvs6s_cfg {
 	uint32_t cache_line;   /* bytes; 0 means fb_flush.h's 64 */
 	uint32_t max_polls;    /* polls allowed per FRCNT wait and read-back */
 	struct hvs6w_plane plane;
+	struct hvs6s_hw_set hw; /* hardware-written words; zeroed = empty */
 };
 
 /* What failed, first failure only; HVS6S_OK when everything passed. */
@@ -288,6 +357,7 @@ static inline uint32_t hvs6s_word_off(uint32_t word)
 /* The whole record of one run. */
 struct hvs6s_report {
 	enum hvs6s_err err;          /* the first failure */
+	struct hvs6s_hw_set hw;      /* cfg.hw as the run used it (snapshot, swap, restore copy it) */
 
 	/* place */
 	enum hvs6s_err place_err;
@@ -301,7 +371,8 @@ struct hvs6s_report {
 
 	/* swap */
 	int swapped;                 /* LPTRS was written with our start */
-	uint32_t list_bad_word;      /* list word that did not read back (index in our list) */
+	uint32_t list_bad_word;      /* first undeclared word that did not read back (index in our list) */
+	struct hvs6s_diffs ldiff;    /* every word of our list that did not read back as written */
 	uint32_t lptrs_written;
 	struct hvs6s_regs at_write;  /* sampled just before the LPTRS write */
 	struct hvs6s_regs after;     /* sampled when both results were in, or at the timeout */
@@ -321,8 +392,9 @@ struct hvs6s_report {
 	struct hvs6s_regs at_restore, after_restore;
 	int restore_lptrs_ok;
 	int restore_equal;           /* LPTRS and every kept word equal the snapshot */
-	int64_t diff_word;           /* first differing list word, -1 when none */
+	int64_t diff_word;           /* first undeclared differing list word, -1 when none */
 	uint32_t diff_want, diff_got;
+	struct hvs6s_diffs rdiff;    /* every differing word of the firmware's span */
 };
 
 static inline void hvs6s_report_init(struct hvs6s_report *r)
@@ -345,10 +417,248 @@ static inline int hvs6s_io_ok(const struct hvs6s_io *io)
 	return io && io->read32 && io->write32 && io->clean && io->barrier && io->wait;
 }
 
+static inline const char *hvs6s_hw_mode_name(enum hvs6s_hw_mode m)
+{
+	switch (m) {
+	case HVS6S_HW_NO: return "no";
+	case HVS6S_HW_SKIP: return "skip";
+	case HVS6S_HW_EXPECT: return "expect";
+	}
+	return "?";
+}
+
+/* A set is valid with at most HVS6S_HW_MAX entries, each offset at most
+ * HVS6S_HW_OFF_MAX, mode SKIP or EXPECT, no offset twice. NULL is empty. */
+static inline int hvs6s_hw_ok(const struct hvs6s_hw_set *hw)
+{
+	if (!hw)
+		return 1;
+	if (hw->n > HVS6S_HW_MAX)
+		return 0;
+	for (uint32_t i = 0; i < hw->n; i++) {
+		if (hw->w[i].off > HVS6S_HW_OFF_MAX ||
+		    (hw->w[i].mode != HVS6S_HW_SKIP && hw->w[i].mode != HVS6S_HW_EXPECT))
+			return 0;
+		for (uint32_t j = 0; j < i; j++)
+			if (hw->w[j].off == hw->w[i].off)
+				return 0;
+	}
+	return 1;
+}
+
+/* The mode declared for an entry offset; HVS6S_HW_NO when none (or hw NULL). */
+static inline enum hvs6s_hw_mode hvs6s_hw_lookup(const struct hvs6s_hw_set *hw, uint32_t off)
+{
+	if (!hw)
+		return HVS6S_HW_NO;
+	for (uint32_t i = 0; i < hw->n && i < HVS6S_HW_MAX; i++)
+		if (hw->w[i].off == off)
+			return hw->w[i].mode;
+	return HVS6S_HW_NO;
+}
+
+/*
+ * Word i of the n reference words w[], walked from w[0] entry by entry by
+ * CTL0.NEXT: 1 with its entry's index and its offset in that entry; 0 for
+ * the END word, a word after a NEXT 0, or i past n.
+ */
+static inline int hvs6s_entry_pos(const uint32_t *w, uint32_t n, uint32_t i, uint32_t *entry,
+				  uint32_t *off)
+{
+	uint32_t pos = 0, e = 0;
+
+	if (!w || i >= n)
+		return 0;
+	while (pos <= i) {
+		uint32_t nx;
+
+		if (w[pos] & HVS6_CTL0_END)
+			return 0; /* the END word, or past it */
+		nx = (w[pos] >> HVS6_CTL0_NEXT_SHIFT) & HVS6_CTL0_NEXT_MASK;
+		if (nx == 0)
+			return 0;
+		if (i < pos + nx) {
+			*entry = e;
+			*off = i - pos;
+			return 1;
+		}
+		pos += nx;
+		e++;
+	}
+	return 0;
+}
+
+/* The mode of word i of the reference words; *entry and *off its place, -1
+ * outside every entry. */
+static inline enum hvs6s_hw_mode hvs6s_hw_of(const struct hvs6s_hw_set *hw, const uint32_t *ref,
+					     uint32_t n, uint32_t i, int32_t *entry, int32_t *off)
+{
+	uint32_t e = 0, o = 0;
+
+	*entry = -1;
+	*off = -1;
+	if (!hvs6s_entry_pos(ref, n, i, &e, &o))
+		return HVS6S_HW_NO;
+	*entry = (int32_t)e;
+	*off = (int32_t)o;
+	return hvs6s_hw_lookup(hw, o);
+}
+
+static inline void hvs6s_diffs_init(struct hvs6s_diffs *d)
+{
+	*d = (struct hvs6s_diffs){0};
+}
+
+/*
+ * Word i of a compare: ref[0..n) the reference words (their entries and the
+ * expected values), now the value read, base the list-memory word of ref[0].
+ * A differing word is counted and kept in d. Returns its mode when it
+ * differs, -1 when it is equal.
+ */
+static inline int hvs6s_diff_note(const struct hvs6s_hw_set *hw, const uint32_t *ref, uint32_t n,
+				  uint32_t i, uint32_t base, uint32_t now, struct hvs6s_diffs *d)
+{
+	int32_t e = -1, o = -1;
+	enum hvs6s_hw_mode m = HVS6S_HW_NO;
+	int declared = hw && hw->n;
+
+	if (declared) {
+		m = hvs6s_hw_of(hw, ref, n, i, &e, &o);
+		if (m != HVS6S_HW_NO)
+			d->hw_words++;
+	}
+	if (ref[i] == now)
+		return -1;
+	if (!declared)
+		(void)hvs6s_hw_of(hw, ref, n, i, &e, &o); /* its place, for the record */
+	d->total++;
+	if (m == HVS6S_HW_SKIP)
+		d->skip++;
+	else if (m == HVS6S_HW_EXPECT)
+		d->expect++;
+	else
+		d->undeclared++;
+	if (d->shown < HVS6S_DIFF_MAX) {
+		d->d[d->shown] = (struct hvs6s_diff){ base + i, e, o, ref[i], now, m };
+		d->shown++;
+	}
+	return (int)m;
+}
+
+/* The set as text into b: "none", or "<off>:<mode>" items joined by ','.
+ * Returns b; 48 bytes hold any valid set ("62:expect" four times). */
+static inline const char *hvs6s_hw_format(const struct hvs6s_hw_set *hw, char *b, size_t len)
+{
+	size_t at = 0;
+
+	if (!b || !len)
+		return "";
+	b[0] = 0;
+	if (!hw || !hw->n) {
+		(void)snprintf(b, len, "none");
+		return b;
+	}
+	for (uint32_t i = 0; i < hw->n && i < HVS6S_HW_MAX && at < len; i++) {
+		int k = snprintf(b + at, len - at, "%s%u:%s", i ? "," : "", (unsigned)hw->w[i].off,
+				 hvs6s_hw_mode_name(hw->w[i].mode));
+
+		if (k < 0)
+			break;
+		at += (size_t)k;
+	}
+	return b;
+}
+
+/* Only the offsets of the set, "4,5" ("none" for the empty set). */
+static inline const char *hvs6s_hw_offs(const struct hvs6s_hw_set *hw, char *b, size_t len)
+{
+	size_t at = 0;
+
+	if (!b || !len)
+		return "";
+	b[0] = 0;
+	if (!hw || !hw->n) {
+		(void)snprintf(b, len, "none");
+		return b;
+	}
+	for (uint32_t i = 0; i < hw->n && i < HVS6S_HW_MAX && at < len; i++) {
+		int k = snprintf(b + at, len - at, "%s%u", i ? "," : "", (unsigned)hw->w[i].off);
+
+		if (k < 0)
+			break;
+		at += (size_t)k;
+	}
+	return b;
+}
+
+static inline int hvs6s_hw_word_is(const char *t, const char *w)
+{
+	size_t i = 0;
+
+	for (; w[i]; i++)
+		if (t[i] != w[i])
+			return 0;
+	return 1;
+}
+
+/*
+ * The set from its text: "" or "none" (empty), or "<off>:skip|expect" items
+ * joined by ',', decimal offsets, no spaces. 0 with *out set; -1 with *out
+ * empty for anything else (a bad item, an offset over HVS6S_HW_OFF_MAX, an
+ * offset twice, more than HVS6S_HW_MAX items).
+ */
+static inline int hvs6s_hw_parse(const char *t, struct hvs6s_hw_set *out)
+{
+	struct hvs6s_hw_set h = {0};
+
+	if (!out)
+		return -1;
+	*out = h;
+	if (!t)
+		return -1;
+	if (t[0] == 0 || (hvs6s_hw_word_is(t, "none") && t[4] == 0))
+		return 0;
+	for (;;) {
+		uint32_t off = 0;
+		int digits = 0;
+
+		while (*t >= '0' && *t <= '9') {
+			off = off * 10u + (uint32_t)(*t - '0');
+			if (off > HVS6S_HW_OFF_MAX)
+				return -1;
+			t++;
+			digits++;
+		}
+		if (!digits || *t != ':' || h.n >= HVS6S_HW_MAX)
+			return -1;
+		t++;
+		if (hvs6s_hw_word_is(t, "skip")) {
+			h.w[h.n].mode = HVS6S_HW_SKIP;
+			t += 4;
+		} else if (hvs6s_hw_word_is(t, "expect")) {
+			h.w[h.n].mode = HVS6S_HW_EXPECT;
+			t += 6;
+		} else {
+			return -1;
+		}
+		h.w[h.n].off = off;
+		h.n++;
+		if (*t == 0)
+			break;
+		if (*t != ',')
+			return -1;
+		t++;
+	}
+	if (!hvs6s_hw_ok(&h))
+		return -1;
+	*out = h;
+	return 0;
+}
+
 static inline int hvs6s_cfg_ok(const struct hvs6s_cfg *c)
 {
 	return c && c->chan < YD5_HVS6_NUM_CHANNELS && c->max_polls > 0 &&
-	       c->mem_words >= HVS6S_KEPT;
+	       c->mem_words >= HVS6S_KEPT && hvs6s_hw_ok(&c->hw);
 }
 
 static inline void hvs6s_sample(const struct hvs6s_io *io, unsigned int ch, struct hvs6s_regs *s)
@@ -640,6 +950,7 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 
 	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !r)
 		return HVS6S_ERR_ARG;
+	r->hw = c->hw;
 	n = hvs6w_write_plane(list, HVS6W_LIST_WORDS, &c->plane);
 	if (n != (int)HVS6W_LIST_WORDS)
 		return HVS6S_ERR_PLANE;
@@ -652,11 +963,24 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 
 	for (i = 0; i < r->len; i++)
 		io->write32(io->ctx, hvs6s_word_off(start + i), list[i]);
-	for (i = 0; i < r->len; i++) {
-		if (io->read32(io->ctx, hvs6s_word_off(start + i)) != list[i]) {
-			r->list_bad_word = i;
-			return HVS6S_ERR_LIST_READ;
+	/* every word read back; a declared hardware-written word that differs
+	 * is recorded, only an undeclared one refuses the swap */
+	hvs6s_diffs_init(&r->ldiff);
+	{
+		int bad = 0;
+
+		for (i = 0; i < r->len; i++) {
+			uint32_t got = io->read32(io->ctx, hvs6s_word_off(start + i));
+
+			if (hvs6s_diff_note(&c->hw, list, r->len, i, start, got, &r->ldiff) ==
+				    (int)HVS6S_HW_NO &&
+			    !bad) {
+				r->list_bad_word = i;
+				bad = 1;
+			}
 		}
+		if (bad)
+			return HVS6S_ERR_LIST_READ;
 	}
 	r->cleaned = fb_flush_range(arm, (uint64_t)r->len * 4u,
 				    c->cache_line ? c->cache_line : FB_FLUSH_LINE_A76);
@@ -729,6 +1053,7 @@ static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const stru
 	hvs6s_sample(io, c->chan, &r->at_restore);
 	io->barrier(io->ctx);
 	io->write32(io->ctx, hvs6s_lptrs_reg(c->chan), s->lptrs);
+	r->hw = c->hw;
 	r->restored = 1;
 	r->restore_frcnt_ok = hvs6s_wait_frames(io, c, hvs6s_frcnt(r->at_restore.status),
 						 HVS6S_SETTLE_FRAMES, &r->restore_polls);
@@ -739,10 +1064,14 @@ static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const stru
 	r->restore_lptrs_ok = r->after_restore.lptrs == s->lptrs;
 	if (!r->restore_lptrs_ok)
 		r->restore_equal = 0;
-	/* exactly the snapshot's words, [HEADE, HEADE + fw_len) */
-	for (i = 0; i < s->fw_len && r->diff_word < 0; i++) {
+	/* exactly the snapshot's words, [HEADE, HEADE + fw_len), every one read;
+	 * the entries are the snapshot's, the declared offsets cfg.hw's */
+	hvs6s_diffs_init(&r->rdiff);
+	for (i = 0; i < s->fw_len; i++) {
 		got = io->read32(io->ctx, hvs6s_word_off(s->fw_head + i));
-		if (got != s->fw[i]) {
+		if (hvs6s_diff_note(&c->hw, s->fw, s->fw_len, i, s->fw_head, got, &r->rdiff) ==
+			    (int)HVS6S_HW_NO &&
+		    r->diff_word < 0) {
 			r->diff_word = s->fw_head + i;
 			r->diff_want = s->fw[i];
 			r->diff_got = got;
@@ -774,6 +1103,8 @@ static inline enum hvs6s_err hvs6s_run(const struct hvs6s_io *io, const struct h
 	if (!r)
 		return HVS6S_ERR_ARG;
 	hvs6s_report_init(r);
+	if (c)
+		r->hw = c->hw;
 	e = hvs6s_snapshot(io, c, s);
 	if (e != HVS6S_OK) {
 		hvs6s_fail(r, e);
@@ -815,23 +1146,64 @@ static inline void hvs6s_regs_line(const struct hvs6s_emit *em, const char *step
 }
 
 /*
+ * The differing words of one compare, kind "restore" or "readback": one
+ * "dlswap <kind>-diff word ..." line per kept word, then the count line
+ * "dlswap <kind>-diffs total=.. undeclared=.. skip=.. expect=.. shown=..
+ * hwskip=<set>". Returns the lines emitted.
+ */
+static inline size_t hvs6s_diff_lines(const struct hvs6s_emit *em, const char *kind,
+				      const struct hvs6s_diffs *d, const struct hvs6s_hw_set *hw)
+{
+	char b[256], set[48], e[12], o[12];
+	size_t n = 0;
+
+	for (uint32_t i = 0; i < d->shown && i < HVS6S_DIFF_MAX; i++) {
+		const struct hvs6s_diff *x = &d->d[i];
+
+		if (x->entry < 0) {
+			(void)snprintf(e, sizeof(e), "none");
+			(void)snprintf(o, sizeof(o), "none");
+		} else {
+			(void)snprintf(e, sizeof(e), "%d", (int)x->entry);
+			(void)snprintf(o, sizeof(o), "%d", (int)x->off);
+		}
+		(void)snprintf(b, sizeof(b),
+			       HVS6S_TAG " %s-diff word %u entry %s off %s was 0x%08x now 0x%08x hw=%s", kind,
+			       (unsigned)x->word, e, o, (unsigned)x->was, (unsigned)x->now,
+			       hvs6s_hw_mode_name(x->hw));
+		em->line(em->ctx, b);
+		n++;
+	}
+	(void)snprintf(b, sizeof(b),
+		       HVS6S_TAG " %s-diffs total=%u undeclared=%u skip=%u expect=%u shown=%u hwskip=%s",
+		       kind, (unsigned)d->total, (unsigned)d->undeclared, (unsigned)d->skip,
+		       (unsigned)d->expect, (unsigned)d->shown, hvs6s_hw_format(hw, set, sizeof(set)));
+	em->line(em->ctx, b);
+	return n + 1;
+}
+
+/*
  * The record as lines, one per step, each printed whether the step passed,
- * failed or did not run ("skip"). Returns the lines emitted.
+ * failed or did not run ("skip"). The read-back's differing words follow the
+ * write line when one differed; the restore's, with their count line, follow
+ * restore-lptrs. r->hw, the set the run used, is named on the snapshot,
+ * restore-diffs and restore-words lines. Returns the lines emitted.
  */
 static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_report *r,
 				 const struct hvs6s_emit *em)
 {
-	char b[200];
+	char b[256], set[48], offs[24];
 	size_t n = 0;
 
 	if (!s || !r || !em || !em->line)
 		return 0;
+	(void)hvs6s_hw_format(&r->hw, set, sizeof(set));
 	if (s->taken)
 		(void)snprintf(b, sizeof(b),
-			       HVS6S_TAG " snapshot ok lptrs=0x%08x fw_head=%u fw_len=%u entries=%u end=%u%s",
+			       HVS6S_TAG " snapshot ok lptrs=0x%08x fw_head=%u fw_len=%u entries=%u end=%u%s hwskip=%s",
 			       (unsigned)s->lptrs, (unsigned)s->fw_head, (unsigned)s->fw_len,
 			       (unsigned)s->fw_entries, (unsigned)s->walk_stop,
-			       s->fw_noend ? " window=noend" : "");
+			       s->fw_noend ? " window=noend" : "", set);
 	else
 		(void)snprintf(b, sizeof(b),
 			       HVS6S_TAG " snapshot FAIL %s lptrs=0x%08x fw_head=%u entries=%u stop=%u word=0x%08x",
@@ -897,6 +1269,8 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 		em->line(em->ctx, b);
 		n++;
 	}
+	if (r->ldiff.total)
+		n += hvs6s_diff_lines(em, "readback", &r->ldiff, &r->hw);
 	if (r->restored) {
 		hvs6s_regs_line(em, "restore-after", &r->after_restore);
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-frcnt %s polls=%u",
@@ -906,13 +1280,21 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 			       r->restore_lptrs_ok ? "ok" : "FAIL", (unsigned)s->lptrs,
 			       (unsigned)r->after_restore.lptrs);
 		em->line(em->ctx, b);
-		if (r->diff_word < 0)
+		n += hvs6s_diff_lines(em, "restore", &r->rdiff, &r->hw);
+		if (r->diff_word < 0 && !r->hw.n)
 			(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-words ok fw %u..%u equal",
 				       (unsigned)s->fw_head, (unsigned)(s->fw_head + s->fw_len - 1u));
+		else if (r->diff_word < 0)
+			(void)snprintf(b, sizeof(b),
+				       HVS6S_TAG " restore-words ok fw %u..%u byte-equal except hw words off %s "
+				       "(%u differed) hwskip=%s",
+				       (unsigned)s->fw_head, (unsigned)(s->fw_head + s->fw_len - 1u),
+				       hvs6s_hw_offs(&r->hw, offs, sizeof(offs)),
+				       (unsigned)(r->rdiff.skip + r->rdiff.expect), set);
 		else
 			(void)snprintf(b, sizeof(b),
-				       HVS6S_TAG " restore-words FAIL word %u want=0x%08x got=0x%08x",
-				       (unsigned)r->diff_word, (unsigned)r->diff_want, (unsigned)r->diff_got);
+				       HVS6S_TAG " restore-words FAIL word %u want=0x%08x got=0x%08x hwskip=%s",
+				       (unsigned)r->diff_word, (unsigned)r->diff_want, (unsigned)r->diff_got, set);
 		em->line(em->ctx, b);
 		n += 4;
 	} else {

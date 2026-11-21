@@ -196,8 +196,186 @@ static void test_restore(void)
 	CHECK(v.pass);
 }
 
+/* ---- hardware-written words -------------------------------------------- */
+
+#define CTL0(next) (0x40000000u | ((uint32_t)(next) << 24))
+
+/* Two firmware entries of 10 words each (CTL0 NEXT=10) and the END: 21 words. */
+static void fw_list(uint32_t *w)
+{
+	for (unsigned int i = 0; i < 21; i++)
+		w[i] = 0xc0de0000u + i;
+	w[0] = CTL0(10);
+	w[10] = CTL0(10);
+	w[20] = SWAP_CTL0_END;
+}
+
+static uint32_t fnv(const uint32_t *w, unsigned int n)
+{
+	uint32_t h = 2166136261u;
+
+	for (unsigned int i = 0; i < n; i++)
+		for (unsigned int b = 0; b < 4u; b++)
+			h = (h ^ ((w[i] >> (8u * b)) & 0xffu)) * 16777619u;
+	return h;
+}
+
+static void test_hw_pos(void)
+{
+	uint32_t w[21], e = 99, o = 99;
+	int32_t se, so;
+	struct swap_hw_set hw = { 1, { { 4, SWAP_HW_SKIP } } };
+
+	fw_list(w);
+	CHECK(swap_entry_pos(w, 21, 0, &e, &o) && e == 0 && o == 0);
+	CHECK(swap_entry_pos(w, 21, 14, &e, &o) && e == 1 && o == 4);
+	CHECK(!swap_entry_pos(w, 21, 20, &e, &o)); /* the END word is in no entry */
+	CHECK(!swap_entry_pos(w, 21, 21, &e, &o)); /* past n */
+	CHECK(swap_hw_of(&hw, w, 21, 4, &se, &so) == SWAP_HW_SKIP && se == 0 && so == 4);
+	CHECK(swap_hw_of(&hw, w, 21, 14, &se, &so) == SWAP_HW_SKIP && se == 1 && so == 4);
+	CHECK(swap_hw_of(&hw, w, 21, 15, &se, &so) == SWAP_HW_NO && so == 5);
+	CHECK(swap_hw_of(&hw, w, 21, 20, &se, &so) == SWAP_HW_NO && se == -1 && so == -1);
+	CHECK(swap_hw_of(NULL, w, 21, 4, &se, &so) == SWAP_HW_NO && so == 4);
+	w[10] = 0; /* NEXT 0: the second entry and what follows are in no entry */
+	CHECK(!swap_entry_pos(w, 21, 14, &e, &o) && swap_entry_pos(w, 21, 9, &e, &o) && o == 9);
+	/* the board's layout: one entry of NEXT=32 at HEADE, a window without END */
+	{
+		uint32_t b[256];
+
+		for (unsigned int i = 0; i < 256; i++)
+			b[i] = (i % 32u) ? 0x1000u + i : CTL0(32);
+		CHECK(swap_entry_pos(b, 256, 255, &e, &o) && e == 7 && o == 31);
+		CHECK(swap_entry_pos(b, 256, 32 * 3 + 4, &e, &o) && e == 3 && o == 4);
+	}
+}
+
+static void test_hw_restore(void)
+{
+	uint32_t a[21], b[21];
+	struct swap_restore_verdict v, old;
+	struct swap_diffs d;
+	struct swap_hw_set none = { 0, { { 0, SWAP_HW_NO } } };
+	struct swap_hw_set skip4 = { 1, { { 4, SWAP_HW_SKIP } } };
+	struct swap_hw_set exp4 = { 1, { { 4, SWAP_HW_EXPECT } } };
+	struct swap_hw_set end0 = { 1, { { 0, SWAP_HW_SKIP } } };
+
+	/* empty set: the old verdicts, case by case */
+	fw_list(a);
+	memcpy(b, a, sizeof(a));
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &none, 672, &d);
+	CHECK(v.pass && v.reason == SWAP_RESTORE_EQUAL && d.total == 0 && d.hw_words == 0);
+	CHECK(swap_words_hash(&none, a, b, 21) == fnv(b, 21));
+	CHECK(swap_words_hash(NULL, a, b, 21) == fnv(b, 21));
+	b[14] ^= 0x100u;
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &none, 672, &d);
+	old = swap_restore_judge(a, b, 21, 0x2a0, 0x2a0);
+	CHECK(!v.pass && v.reason == old.reason && v.index == old.index && v.index == 14 &&
+	      v.want == old.want && v.got == old.got);
+	CHECK(d.total == 1 && d.undeclared == 1 && d.shown == 1 && d.d[0].word == 686 &&
+	      d.d[0].entry == 1 && d.d[0].off == 4 && d.d[0].was == a[14] && d.d[0].now == b[14] &&
+	      d.d[0].hw == SWAP_HW_NO);
+	v = swap_restore_judge_hw(a, a, 21, 0x2a0, 0x20, NULL, 672, NULL);
+	old = swap_restore_judge(a, a, 21, 0x2a0, 0x20);
+	CHECK(!v.pass && v.reason == SWAP_RESTORE_PTR_DIFF && old.reason == v.reason &&
+	      v.want == 0x2a0 && v.got == 0x20);
+
+	/* a skipped word changing: PASS, named, out of the hash */
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &skip4, 672, &d);
+	CHECK(v.pass && v.reason == SWAP_RESTORE_EQUAL && v.index == -1);
+	CHECK(d.total == 1 && d.skip == 1 && d.undeclared == 0 && d.hw_words == 2 &&
+	      d.d[0].word == 686 && d.d[0].off == 4 && d.d[0].hw == SWAP_HW_SKIP);
+	CHECK(swap_words_hash(&skip4, a, b, 21) == swap_words_hash(&skip4, a, a, 21));
+	CHECK(swap_words_hash(&none, a, b, 21) != swap_words_hash(&none, a, a, 21));
+	CHECK(swap_words_hash(&skip4, a, a, 21) != fnv(a, 21));
+	/* a skipped word with a bad pointer still fails on the pointer */
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x20, &skip4, 672, &d);
+	CHECK(!v.pass && v.reason == SWAP_RESTORE_PTR_DIFF);
+
+	/* EXPECT: compared and counted, never failing */
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &exp4, 672, &d);
+	CHECK(v.pass && d.expect == 1 && d.skip == 0 && d.d[0].hw == SWAP_HW_EXPECT);
+	CHECK(swap_words_hash(&exp4, a, b, 21) == swap_words_hash(&exp4, a, a, 21));
+
+	/* an undeclared word changing beside a skipped one: FAIL, named */
+	b[15] ^= 0x1u;
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &skip4, 672, &d);
+	CHECK(!v.pass && v.reason == SWAP_RESTORE_WORD_DIFF && v.index == 15 && v.want == a[15] &&
+	      v.got == b[15]);
+	CHECK(d.total == 2 && d.skip == 1 && d.undeclared == 1 && d.shown == 2 &&
+	      d.d[0].word == 686 && d.d[1].word == 687 && d.d[1].off == 5 &&
+	      d.d[1].hw == SWAP_HW_NO);
+	/* the END word is in no entry: off 0 declared does not cover it */
+	memcpy(b, a, sizeof(a));
+	b[20] = 0;
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &end0, 672, &d);
+	CHECK(!v.pass && v.index == 20 && d.d[0].entry == -1 && d.d[0].off == -1);
+	/* the cap: 12 words differ, 8 kept, all counted */
+	memcpy(b, a, sizeof(a));
+	for (unsigned int i = 1; i <= 12; i++)
+		b[i] ^= 0x10000u;
+	v = swap_restore_judge_hw(a, b, 21, 0x2a0, 0x2a0, &skip4, 672, &d);
+	CHECK(!v.pass && v.index == 1 && d.total == 12 && d.shown == SWAP_DIFF_MAX &&
+	      d.skip == 1 && d.undeclared == 11);
+}
+
+static void test_hw_seq(void)
+{
+	struct swap_step s[2];
+	struct swap_slot sl[2];
+	struct swap_seq_verdict v;
+	struct swap_hw_set none = { 0, { { 0, SWAP_HW_NO } } };
+	struct swap_hw_set skip4 = { 1, { { 4, SWAP_HW_SKIP } } };
+
+	memset(s, 0, sizeof(s));
+	memset(sl, 0, sizeof(sl));
+	for (int i = 0; i < 2; i++) {
+		s[i].sample = good();
+		s[i].expected_addr = s[i].plane_addr = 0x10000000ull + (uint64_t)i;
+		sl[i].start = 32 + 10u * (unsigned int)i;
+		sl[i].n = SWAP_SLOT_MAX;
+		for (unsigned int k = 0; k < SWAP_SLOT_MAX; k++)
+			sl[i].want[k] = sl[i].got[k] = 0x5a000000u + k;
+		sl[i].want[0] = sl[i].got[0] = CTL0(9);
+		sl[i].want[8] = sl[i].got[8] = SWAP_CTL0_END;
+		sl[i].want[9] = sl[i].got[9] = SWAP_CTL0_END;
+	}
+	v = swap_seq_judge_hw(s, sl, 2, &none);
+	CHECK(v.pass && v.reason == SWAP_SEQ_PASS && v.word == -1);
+	/* the HVS wrote word 4 of our entry (the POS3 context word) back */
+	sl[1].got[4] = 0x12345678u;
+	v = swap_seq_judge_hw(s, sl, 2, &none);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_SLOT_DIFF && v.index == 1 && v.word == 4 &&
+	      v.want == sl[1].want[4] && v.got == 0x12345678u);
+	v = swap_seq_judge_hw(s, sl, 2, &skip4);
+	CHECK(v.pass && v.reason == SWAP_SEQ_PASS);
+	/* an undeclared slot word beside it: named */
+	sl[1].got[6] ^= 1u;
+	v = swap_seq_judge_hw(s, sl, 2, &skip4);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_SLOT_DIFF && v.index == 1 && v.word == 6);
+	/* the old judge, and a slot not read (n 0), ignore the slot words */
+	CHECK(swap_seq_judge(s, 2).pass);
+	sl[1].n = 0;
+	CHECK(swap_seq_judge_hw(s, sl, 2, &none).pass);
+	CHECK(swap_seq_judge_hw(s, NULL, 2, NULL).pass);
+	/* the swap judge still comes first */
+	sl[1].n = SWAP_SLOT_MAX;
+	s[1].sample.status_after = s[1].sample.status_before;
+	v = swap_seq_judge_hw(s, sl, 2, &skip4);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_SWAP_FAILED && v.swap == SWAP_FRCNT_STALLED);
+	/* a wrong buffer with a clean slot is still WRONG_BUFFER */
+	s[1].sample = good();
+	sl[1].got[6] = sl[1].want[6];
+	s[1].plane_addr = 0x99;
+	v = swap_seq_judge_hw(s, sl, 2, &skip4);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_WRONG_BUFFER && v.index == 1);
+}
+
 static void test_names(void)
 {
+	CHECK(!strcmp(swap_seq_reason_name(SWAP_SEQ_SLOT_DIFF), "slot-word-differs"));
+	CHECK(!strcmp(swap_hw_mode_name(SWAP_HW_NO), "no"));
+	CHECK(!strcmp(swap_hw_mode_name(SWAP_HW_SKIP), "skip"));
+	CHECK(!strcmp(swap_hw_mode_name(SWAP_HW_EXPECT), "expect"));
 	CHECK(!strcmp(swap_reason_name(SWAP_OURS), "pointer-named-ours"));
 	CHECK(!strcmp(swap_reason_name(SWAP_NOT_LATCHED), "pointer-not-latched"));
 	CHECK(!strcmp(swap_reason_name(SWAP_FRCNT_STALLED), "frcnt-stalled"));
@@ -220,6 +398,9 @@ int main(void)
 	test_poll();
 	test_seq();
 	test_restore();
+	test_hw_pos();
+	test_hw_restore();
+	test_hw_seq();
 	test_names();
 	printf("swap_check_test: %d checks, %d failed\n", checks, failed);
 	return failed ? 1 : 0;

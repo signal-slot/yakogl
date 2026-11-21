@@ -160,6 +160,194 @@ static inline int swap_poll_first(uint32_t status_before, const uint32_t *ptr,
 	return -1;
 }
 
+/* (h) Hardware-written words (swap-hwword, plan #390), as hvs6_dlist_swap.h's
+ * struct hvs6s_hw_set: offsets from the start of a plane entry the HVS may
+ * write back while it scans the entry (a context or status word). Each is
+ * SKIP (left out of the byte-equal compare and of the hash) or EXPECT
+ * (compared, a change reported and counted, never failing). The empty set
+ * (n == 0, or a NULL pointer) is the old byte-equal judgement. Entries are
+ * found in the reference words (the snapshot's, or the words we wrote) by
+ * CTL0.NEXT from the first word; the END word and words after a NEXT 0 are
+ * in no entry and never declared. Repeated from hvs6_dlist.h:
+ *   hvs6_dlist.h:123     HVS6_CTL0_END (bit 31)
+ *   hvs6_dlist.h:125-126 HVS6_CTL0_NEXT_SHIFT 24, HVS6_CTL0_NEXT_MASK 0x3f */
+#define SWAP_CTL0_END (1u << 31)
+#define SWAP_CTL0_NEXT_SHIFT 24u
+#define SWAP_CTL0_NEXT_MASK 0x3fu
+#define SWAP_HW_MAX 4u    /* HVS6S_HW_MAX */
+#define SWAP_DIFF_MAX 8u  /* differing words kept per compare (all counted) */
+#define SWAP_SLOT_MAX 10u /* HVS6W_LIST_WORDS: our list, entry and END */
+
+enum swap_hw_mode {
+	SWAP_HW_NO = 0, /* not declared: a difference fails */
+	SWAP_HW_SKIP,
+	SWAP_HW_EXPECT,
+};
+
+struct swap_hw_word {
+	uint32_t off;
+	enum swap_hw_mode mode;
+};
+
+struct swap_hw_set {
+	unsigned int n;
+	struct swap_hw_word w[SWAP_HW_MAX];
+};
+
+static inline const char *swap_hw_mode_name(enum swap_hw_mode m)
+{
+	switch (m) {
+	case SWAP_HW_NO:
+		return "no";
+	case SWAP_HW_SKIP:
+		return "skip";
+	case SWAP_HW_EXPECT:
+		return "expect";
+	}
+	return "?";
+}
+
+static inline enum swap_hw_mode swap_hw_lookup(const struct swap_hw_set *hw, uint32_t off)
+{
+	if (!hw)
+		return SWAP_HW_NO;
+	for (unsigned int i = 0; i < hw->n && i < SWAP_HW_MAX; i++)
+		if (hw->w[i].off == off)
+			return hw->w[i].mode;
+	return SWAP_HW_NO;
+}
+
+/* Word i of ref[0..n) by CTL0.NEXT from ref[0]: true with its entry and its
+ * offset in it; false for the END word, after a NEXT 0, or past n. */
+static inline bool swap_entry_pos(const uint32_t *ref, unsigned int n, unsigned int i,
+				  uint32_t *entry, uint32_t *off)
+{
+	unsigned int pos = 0;
+	uint32_t e = 0;
+
+	if (!ref || i >= n)
+		return false;
+	while (pos <= i) {
+		uint32_t nx;
+
+		if (ref[pos] & SWAP_CTL0_END)
+			return false;
+		nx = (ref[pos] >> SWAP_CTL0_NEXT_SHIFT) & SWAP_CTL0_NEXT_MASK;
+		if (nx == 0)
+			return false;
+		if (i < pos + nx) {
+			*entry = e;
+			*off = i - pos;
+			return true;
+		}
+		pos += nx;
+		e++;
+	}
+	return false;
+}
+
+/* The mode of word i; *entry and *off -1 outside every entry. */
+static inline enum swap_hw_mode swap_hw_of(const struct swap_hw_set *hw, const uint32_t *ref,
+					   unsigned int n, unsigned int i, int32_t *entry,
+					   int32_t *off)
+{
+	uint32_t e = 0, o = 0;
+
+	*entry = -1;
+	*off = -1;
+	if (!swap_entry_pos(ref, n, i, &e, &o))
+		return SWAP_HW_NO;
+	*entry = (int32_t)e;
+	*off = (int32_t)o;
+	return swap_hw_lookup(hw, o);
+}
+
+/* One differing word; word is base + index, entry/off -1 outside entries. */
+struct swap_diff {
+	uint32_t word;
+	int32_t entry, off;
+	uint32_t was, now;
+	enum swap_hw_mode hw;
+};
+
+struct swap_diffs {
+	unsigned int total, undeclared, skip, expect;
+	unsigned int hw_words; /* words at a declared offset, changed or not */
+	unsigned int shown;    /* d[0..shown) */
+	struct swap_diff d[SWAP_DIFF_MAX];
+};
+
+/*
+ * Every word of got[0..n) against ref[0..n) (the layout and the expected
+ * values), base the list word of ref[0]. Fills *d when not NULL. Returns the
+ * undeclared differing words (the ones that fail); *first gets the index of
+ * the first of them, -1 when none (first may be NULL).
+ */
+static inline unsigned int swap_diff_words(const struct swap_hw_set *hw, const uint32_t *ref,
+					   const uint32_t *got, unsigned int n, uint32_t base,
+					   struct swap_diffs *d, int *first)
+{
+	struct swap_diffs z = { 0 };
+	struct swap_diffs *o = d ? d : &z;
+
+	*o = z;
+	if (first)
+		*first = -1;
+	for (unsigned int i = 0; i < n; i++) {
+		int32_t e, f;
+		enum swap_hw_mode m = swap_hw_of(hw, ref, n, i, &e, &f);
+
+		if (m != SWAP_HW_NO)
+			o->hw_words++;
+		if (ref[i] == got[i])
+			continue;
+		o->total++;
+		if (m == SWAP_HW_SKIP) {
+			o->skip++;
+		} else if (m == SWAP_HW_EXPECT) {
+			o->expect++;
+		} else {
+			if (first && *first < 0)
+				*first = (int)i;
+			o->undeclared++;
+		}
+		if (o->shown < SWAP_DIFF_MAX) {
+			o->d[o->shown] = (struct swap_diff){ base + i, e, f, ref[i], got[i], m };
+			o->shown++;
+		}
+	}
+	return o->undeclared;
+}
+
+/* FNV-1a over the bytes (little-endian) of w[0..n), leaving out every word
+ * at a declared offset (SKIP and EXPECT both: a hash cannot say "changed as
+ * expected"), entries from ref. The empty set hashes every word: the hash
+ * rpi5_scanout32 printed before. */
+static inline uint32_t swap_words_hash(const struct swap_hw_set *hw, const uint32_t *ref,
+				       const uint32_t *w, unsigned int n)
+{
+	uint32_t h = 2166136261u;
+	bool declared = hw && hw->n;
+
+	for (unsigned int i = 0; i < n; i++) {
+		int32_t e, f;
+
+		if (declared && swap_hw_of(hw, ref, n, i, &e, &f) != SWAP_HW_NO)
+			continue;
+		for (unsigned int b = 0; b < 4u; b++)
+			h = (h ^ ((w[i] >> (8u * b)) & 0xffu)) * 16777619u;
+	}
+	return h;
+}
+
+/* Our slot read back after a swap: the words written and the words read. */
+struct swap_slot {
+	uint32_t start;              /* list word of want[0] */
+	unsigned int n;              /* 0: not read, the slot is not judged */
+	uint32_t want[SWAP_SLOT_MAX];
+	uint32_t got[SWAP_SLOT_MAX];
+};
+
 /* (b) The sequence over buffers A/B. Per step: the swap sample, and the
  * address read back from the plane entry's pointer words (PTR0 low word plus
  * its upper byte) against the buffer expected for that step. */
@@ -174,6 +362,7 @@ enum swap_seq_reason {
 	SWAP_SEQ_SWAP_FAILED,    /* a swap_judge reason other than ours */
 	SWAP_SEQ_WRONG_BUFFER,   /* the plane entry names another buffer */
 	SWAP_SEQ_EMPTY,          /* no steps */
+	SWAP_SEQ_SLOT_DIFF,      /* an undeclared word of our slot changed */
 };
 
 struct swap_seq_verdict {
@@ -181,6 +370,8 @@ struct swap_seq_verdict {
 	enum swap_seq_reason reason;
 	int index;               /* failing step, -1 for none */
 	enum swap_reason swap;   /* the swap reason of that step */
+	int word;                /* SLOT_DIFF: the slot's word index, -1 otherwise */
+	uint32_t want, got;      /* SLOT_DIFF: written and read */
 };
 
 static inline const char *swap_seq_reason_name(enum swap_seq_reason r)
@@ -194,16 +385,24 @@ static inline const char *swap_seq_reason_name(enum swap_seq_reason r)
 		return "wrong-buffer";
 	case SWAP_SEQ_EMPTY:
 		return "empty";
+	case SWAP_SEQ_SLOT_DIFF:
+		return "slot-word-differs";
 	}
 	return "?";
 }
 
-/* Every swap must advance FRCNT and name its pointer, and the plane entry
- * must hold the step's buffer address. The first failing step names it. */
-static inline struct swap_seq_verdict swap_seq_judge(const struct swap_step *st,
-						     unsigned int n)
+/* Every swap must advance FRCNT and name its pointer, our slot (when slots
+ * is not NULL and slots[i].n is not 0) must read back as written except at
+ * hw's declared offsets, and the plane entry must hold the step's buffer
+ * address. The first failing step names it. The address is judged as
+ * before, also when a declared word is one of the pointer words. */
+static inline struct swap_seq_verdict swap_seq_judge_hw(const struct swap_step *st,
+							const struct swap_slot *slots,
+							unsigned int n,
+							const struct swap_hw_set *hw)
 {
-	struct swap_seq_verdict v = { n != 0, n ? SWAP_SEQ_PASS : SWAP_SEQ_EMPTY, -1, SWAP_OURS };
+	struct swap_seq_verdict v = { n != 0, n ? SWAP_SEQ_PASS : SWAP_SEQ_EMPTY, -1, SWAP_OURS,
+				      -1, 0, 0 };
 
 	for (unsigned int i = 0; i < n; i++) {
 		enum swap_reason r = swap_judge(&st[i].sample);
@@ -215,6 +414,21 @@ static inline struct swap_seq_verdict swap_seq_judge(const struct swap_step *st,
 			v.swap = r;
 			return v;
 		}
+		if (slots && slots[i].n) {
+			unsigned int k = slots[i].n < SWAP_SLOT_MAX ? slots[i].n : SWAP_SLOT_MAX;
+			int w = -1;
+
+			if (swap_diff_words(hw, slots[i].want, slots[i].got, k, slots[i].start, NULL,
+					    &w) != 0) {
+				v.pass = false;
+				v.reason = SWAP_SEQ_SLOT_DIFF;
+				v.index = (int)i;
+				v.word = w;
+				v.want = slots[i].want[w];
+				v.got = slots[i].got[w];
+				return v;
+			}
+		}
 		if (st[i].plane_addr != st[i].expected_addr) {
 			v.pass = false;
 			v.reason = SWAP_SEQ_WRONG_BUFFER;
@@ -223,6 +437,13 @@ static inline struct swap_seq_verdict swap_seq_judge(const struct swap_step *st,
 		}
 	}
 	return v;
+}
+
+/* The old judgement: no slots, the empty set. */
+static inline struct swap_seq_verdict swap_seq_judge(const struct swap_step *st,
+						     unsigned int n)
+{
+	return swap_seq_judge_hw(st, NULL, n, NULL);
 }
 
 /* (c) Restore of the firmware's list. */
@@ -251,6 +472,42 @@ static inline const char *swap_restore_reason_name(enum swap_restore_reason r)
 		return "pointer-differs";
 	}
 	return "?";
+}
+
+/*
+ * The restore with hardware-written words: every word compared, entries from
+ * saved[] (the snapshot), base the list word of saved[0] (HEADE). Fails on
+ * the first undeclared differing word (index, want, got name it), else on the
+ * pointer. A declared word that differs is recorded in *d (when not NULL)
+ * and never fails. With an empty set this is swap_restore_judge.
+ */
+static inline struct swap_restore_verdict swap_restore_judge_hw(const uint32_t *saved,
+								const uint32_t *readback,
+								unsigned int n,
+								uint32_t saved_ptr,
+								uint32_t read_ptr,
+								const struct swap_hw_set *hw,
+								uint32_t base,
+								struct swap_diffs *d)
+{
+	struct swap_restore_verdict v = { true, SWAP_RESTORE_EQUAL, -1, 0, 0 };
+	int first = -1;
+
+	if (swap_diff_words(hw, saved, readback, n, base, d, &first) != 0) {
+		v.pass = false;
+		v.reason = SWAP_RESTORE_WORD_DIFF;
+		v.index = first;
+		v.want = saved[first];
+		v.got = readback[first];
+		return v;
+	}
+	if (saved_ptr != read_ptr) {
+		v.pass = false;
+		v.reason = SWAP_RESTORE_PTR_DIFF;
+		v.want = saved_ptr;
+		v.got = read_ptr;
+	}
+	return v;
 }
 
 static inline struct swap_restore_verdict swap_restore_judge(const uint32_t *saved,
