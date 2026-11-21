@@ -50,7 +50,9 @@
 //!    the window, `backend.rs:3354-3360`) is a coverage loss the item may
 //!    take instead, with a host test of the stream either way.
 
-use crate::backend::{GLES_SURF_RGB565, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888};
+use crate::backend::{
+    GLES_SURF_RGB565, GLES_SURF_RGBA8888, GLES_SURF_SRGB8_A8, GLES_SURF_XRGB8888, GLES_TEXFMT_RGB565, GLES_TEXFMT_RGBA8,
+};
 use crate::gl::consts::*;
 use crate::gl::types::GLenum;
 use crate::msaa_store::SampleSize;
@@ -376,6 +378,185 @@ pub const fn pe_logic_op_4x(bytes_per_pixel: u32) -> u32 {
 /// `SINGLE_BUFFER` 1 and `UNK24` 0).
 pub const PE_LOGIC_OP_4X_MASK: u32 = PE_LOGIC_OP_UNK24_MASK | PE_LOGIC_OP_SINGLE_BUFFER_MASK;
 
+/* ---- the sample reload of a flushed 4x FBO ------------------------------- */
+//
+// A 4x FBO drawn into again after a flush: the job before it ended with the
+// RS resolve into `rb.mem` (contract (b)7), and the slot of
+// `crate::msaa_store` either still holds that job's samples or does not.
+//
+// - The slot is there and `needs_load()` is true: the scratch is used as it
+//   is, no words at all. The PE reads and writes the supertiled scratch in
+//   place (no tile buffer to load, unlike the Mali and the PowerVR), so
+//   "loading" the kept samples is binding the same scratch again.
+// - No samples (a new slot after an eviction or the first draw, or `None`
+//   from `get_or_alloc`): `rb.mem` must be broadcast into all four samples.
+//   The RS cannot do it. `RS_CONFIG` has `DOWNSAMPLE_X` / `DOWNSAMPLE_Y` and no
+//   upsample field (state_3d.xml.h:1350-1362), and etnaviv's RS blit refuses
+//   a destination with more samples than its source ("RS does not support
+//   upscaling", etnaviv_rs.c:697-702). Its CPU tile copy takes single-sampled
+//   resources only (`etna_manual_blit`, etnaviv_rs.c:594-595). etnaviv itself
+//   never reloads: its 4x renderbuffer is the 4x resource and stays one. Its
+//   only single-to-multi route is the blitter's draw: `etna_blit` falls from
+//   `ctx->blit` (the RS, etnaviv_rs.c:1010) and the copy-region path to
+//   `util_blitter_blit` (etnaviv_clear_blit.c:185-218). For a single-sampled
+//   source that draws a textured quad with the plain texel-fetch program
+//   (u_blitter.c:1002, the `src_nr_samples > 1` paths skipped), sample mask
+//   `~0` and min samples 1 (u_blitter.c:1878-1890). One fragment per pixel
+//   writes the same colour into every covered sample: the broadcast. The
+//   functions below give that draw in this crate's terms. The quad,
+//   program and sampler are `src/vivante/mipmap.rs`'s `record_level` (:134-211)
+//   with a nearest filter, drawn at 4x.
+
+/// The RS has no upsample: a 1x to 4x reload is a draw, never an
+/// `RS_CONFIG` word (etnaviv_rs.c:697-702; state_3d.xml.h:1350-1362).
+pub const RS_CAN_UPSAMPLE: bool = false;
+
+/// What a 4x draw into an FBO starts from at the beginning of a job.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SampleLoad {
+    /// The slot holds the last job's samples (`Slot::needs_load` true): draw
+    /// into its scratch as it is, nothing emitted before the draw.
+    Keep,
+    /// The job starts with a clear of the whole attachment: the clear writes
+    /// every sample, so nothing is loaded (`Slot::mark_cleared`,
+    /// src/msaa_store.rs:99-102).
+    Cleared,
+    /// No samples kept: draw `rb.mem` into all four samples first
+    /// ([`reload_draw`]), into the slot's scratch when there is a slot. With no
+    /// slot (`get_or_alloc` returned `None`), into a scratch kept for this
+    /// job only and resolved at its end as usual.
+    Broadcast,
+}
+
+/// The [`SampleLoad`] of a job, from the slot the store gave
+/// (`Some(slot.needs_load())`, or `None` when `get_or_alloc` returned
+/// `None`) and whether the job begins with a whole clear of the attachment.
+/// The store's contract: a new slot does not need a load
+/// (src/msaa_store.rs:138), and a job starts "from its clear, or from the
+/// resolved image in `rb.mem` in every sample" (:87-89). An evicted
+/// attachment "starts from that image in every sample" (:23-26). The
+/// samples-not-kept case is "drawn the same way as after an eviction"
+/// (:28-30).
+pub const fn sample_load(slot_needs_load: Option<bool>, whole_clear: bool) -> SampleLoad {
+    if whole_clear {
+        return SampleLoad::Cleared;
+    }
+    match slot_needs_load {
+        Some(true) => SampleLoad::Keep,
+        Some(false) | None => SampleLoad::Broadcast,
+    }
+}
+
+/// `GL_MULTI_SAMPLE_CONFIG` (0x3818, state.xml.h:313-322): `MSAA_SAMPLES`
+/// bits 1:0, `MSAA_ENABLES` bits 7:4.
+const GL_MULTI_SAMPLE_CONFIG_MSAA_SAMPLES_4X: u32 = 0x0000_0002; // state.xml.h:318
+const GL_MULTI_SAMPLE_CONFIG_MSAA_ENABLES_SHIFT: u32 = 4; // state.xml.h:321
+const GL_MULTI_SAMPLE_CONFIG_MSAA_ENABLES_MASK: u32 = 0x0000_00f0; // state.xml.h:320
+
+/// The `GL_MULTI_SAMPLE_CONFIG` word of the reload draw: 4x with every
+/// sample enabled. This is the blitter's sample mask `~0` (u_blitter.c:1888)
+/// through `etna_set_sample_mask` (etnaviv_state.c:74-79) and the emit, which
+/// masks it to the four enables and ORs the framebuffer's 4X
+/// (etnaviv_emit.c:358-363, etnaviv_state.c:505-506). It is also the word
+/// every 4x draw already emits (`GC_MSAA_SAMPLES_4X | msaa_enables(0xf)`,
+/// src/vivante/backend.rs:1108), so the reload adds no state of its own.
+pub const GL_MULTI_SAMPLE_CONFIG_RELOAD: u32 = GL_MULTI_SAMPLE_CONFIG_MSAA_SAMPLES_4X
+    | ((!0u32 << GL_MULTI_SAMPLE_CONFIG_MSAA_ENABLES_SHIFT) & GL_MULTI_SAMPLE_CONFIG_MSAA_ENABLES_MASK);
+
+/// The reload draw's sampler and target, the fields `gc-msaa-fbo` puts into
+/// the `GlesDraw` / `GlesTextureBind` it builds the way `record_level` does
+/// (src/vivante/mipmap.rs:143-207).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ReloadDraw {
+    /// `GlesTextureBind::format` that `rb.mem` is bound as.
+    pub tex_format: u8,
+    /// `GlesTextureBind::bgra`. 1 binds the PE's B,G,R,A bytes as they are
+    /// (mipmap.rs:36-43, :196-197), so the draw writes back the bytes it read.
+    pub bgra: u8,
+    /// `GlesDraw::target_format` of the 4x draw into the scratch.
+    pub target_format: u8,
+    /// `GlesDraw::samples`.
+    pub samples: u8,
+}
+
+/// The texture filter of the reload: nearest (`linear_filter` 0,
+/// `min_linear` 0, `mip_filter` 0, one level, CLAMP_TO_EDGE). The program
+/// `mipgen.frag` samples at `gl_FragCoord.xy * u_scale`
+/// (tools/shaders/internal/es/mipgen.frag). With [`reload_scale`] that is the
+/// centre of the pixel's own texel, so nearest returns that texel exactly.
+/// mipmap.rs uses linear (:190-191) because it averages a 2x2 box.
+pub const RELOAD_LINEAR_FILTER: u8 = 0;
+
+/// The `u_scale` uniform of `mipgen.frag` for a reload of a `w` x `h`
+/// target: one over the target's size, as `record_level` sets it for its
+/// destination (src/vivante/mipmap.rs:140). Source and destination are the
+/// same size here. `None` for an empty target.
+pub fn reload_scale(w: u32, h: u32) -> Option<[f32; 2]> {
+    if w == 0 || h == 0 {
+        return None;
+    }
+    Some([1.0 / w as f32, 1.0 / h as f32])
+}
+
+/// The reload draw of a colour surface `surf` (`GLES_SURF_*`, as `rb.mem`
+/// holds it), or `None` where there is no reload. Only the surfaces
+/// [`rs_resolve_format_of_surface`] resolves reach 4x at all.
+///
+/// - RGBA8888: bound `GLES_TEXFMT_RGBA8` with `bgra` 1 and drawn as RGBA8888,
+///   as mipmap.rs does (:147, :182, :197).
+/// - SRGB8_A8: the same bytes, bound **and drawn** as RGBA8888. The bind
+///   does not decode, and an SRGB8_A8 target would make the PE encode again
+///   (`GC_RT_CONFIG_SRGB` and `pe_logic_op_srgb`, src/vivante/backend.rs:1995,
+///   :2041). The scratch holds the same `A8R8G8B8` bytes either way, the RS
+///   format of both (`rs_resolve_format_of_surface`), so the encoded values
+///   go back unchanged.
+/// - XRGB8888: bound RGBA8 `bgra` 1, drawn XRGB8888. The X byte is read as
+///   alpha and not written (`X8R8G8B8`, etnaviv_translate.h:302-305).
+/// - RGB565: bound `GLES_TEXFMT_RGB565`, which the texture unit reads as
+///   `TEXTURE_FORMAT_R5G6B5` (src/vivante/texture.rs:271), the packing the PE
+///   writes (`PE_FORMAT_R5G6B5`, the same value as `RS_FORMAT_R5G6B5`,
+///   state_3d.xml.h:80, :88-94), `bgra` 0.
+///   TODO(record): no board run of a 565 4x target draws `rb.mem` back. The
+///   record that settles it is the gl_test 4x case redrawn after a flush
+///   without a clear, at RGB565, on the i.MX8MP (`gc-msaa-fbo`'s board
+///   check).
+/// - Every other surface: `None`.
+///
+/// Depth and stencil are not here. TODO(record): this core's depth is the
+/// `ds_cache` buffer at `ds_w * 2` (src/vivante/backend.rs:3382-3388), not a
+/// scratch slot. Whether it survives the flush is `ds_persist` (note (c3)
+/// "Depth"). Reloading it from the D24S8 resolve needs a depth-writing
+/// draw, and for stencil Mesa's own fallback (etnaviv_clear_blit.c:191-207,
+/// `etna_blit_stencil_fallback`). Neither has a record on this part. The
+/// records that settle it: a host test of the 4x `ds_cache` slot across a
+/// flush, then a board run of a 4x depth+stencil FBO redrawn after a flush.
+pub const fn reload_draw(surf: u8) -> Option<ReloadDraw> {
+    let (tex_format, bgra, target_format) = match surf {
+        GLES_SURF_RGBA8888 | GLES_SURF_SRGB8_A8 => (GLES_TEXFMT_RGBA8, 1, GLES_SURF_RGBA8888),
+        GLES_SURF_XRGB8888 => (GLES_TEXFMT_RGBA8, 1, GLES_SURF_XRGB8888),
+        GLES_SURF_RGB565 => (GLES_TEXFMT_RGB565, 0, GLES_SURF_RGB565),
+        _ => return None,
+    };
+    Some(ReloadDraw { tex_format, bgra, target_format, samples: SAMPLES_4X as u8 })
+}
+
+/// The scratch geometry of a reload is the 4x draw's own ([`scratch_pitch`],
+/// [`scratch_rows`]): the draw writes the slot's scratch at [`MS_SCALE`] with
+/// the arm-19 state ([`pe_logic_op_4x`], [`ps_input_count_4x`],
+/// [`ps_temps_4x`] of `mipgen.frag`'s program, which reads no varyings), and
+/// the viewport is the target's pixels `[0, 0, w, h]`, as every arm-19 draw
+/// (bit 3, value 8, the scaled viewport, is off: src/vivante/backend.rs:859-860).
+/// TODO(record): that `gl_FragCoord` is in pixels (not samples) for a 4x
+/// draw on this core is Mesa's model. Mesa's viewport is in pixels
+/// (etnaviv_state.c:585-598), and the extra MSAA PS input
+/// (etnaviv_shader.c:233-241) is not named. It is not measured here. The
+/// gl_test redraw case above settles it: a reload with `gl_FragCoord` in
+/// samples would read the texel at twice the coordinate and show the
+/// image's top-left quarter, scaled up.
+pub const fn reload_viewport(w: u32, h: u32) -> [i32; 4] {
+    [0, 0, w as i32, h as i32]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -645,5 +826,141 @@ mod tests {
         let four = (single & !PE_LOGIC_OP_4X_MASK) | pe_logic_op_4x(4);
         assert_eq!(four, base | 0x0500_0200);
         assert_eq!((four >> 8) & 3, 2);
+    }
+
+    /// The reload decision, by hand and as a real `MsaaStore` drives it:
+    /// kept samples are used as they are, a whole clear loads nothing, and
+    /// a new slot (first draw, eviction) or no slot at all broadcasts
+    /// `rb.mem` (src/msaa_store.rs:23-30, :87-89, :138).
+    #[test]
+    fn sample_load_follows_the_store() {
+        use crate::msaa_store::MsaaStore;
+        assert_eq!(sample_load(Some(true), false), SampleLoad::Keep);
+        assert_eq!(sample_load(Some(false), false), SampleLoad::Broadcast);
+        assert_eq!(sample_load(None, false), SampleLoad::Broadcast);
+        for s in [Some(true), Some(false), None] {
+            assert_eq!(sample_load(s, true), SampleLoad::Cleared, "{s:?}: a whole clear writes every sample");
+        }
+
+        let size = sample_size(64, 64, 4);
+        let bytes = scratch_bytes(64, 64, 4) as usize;
+        let mut t: MsaaStore<usize> = MsaaStore::new();
+        let mut freed = Vec::new();
+        let state = |t: &mut MsaaStore<usize>, id: u64, freed: &mut Vec<usize>| {
+            t.get_or_alloc(id, 1, size, |b| Some(b + id as usize), |h| freed.push(h)).map(|s| s.needs_load())
+        };
+        // First draw into id 5: a new slot, rb.mem broadcast.
+        assert_eq!(sample_load(state(&mut t, 5, &mut freed), false), SampleLoad::Broadcast);
+        // The job ends with the resolve and `mark_stored`: the next job keeps.
+        t.get_or_alloc(5, 1, size, |_| None, |_| ()).unwrap().mark_stored();
+        assert_eq!(sample_load(state(&mut t, 5, &mut freed), false), SampleLoad::Keep);
+        // Two more attachments evict id 5 (MSAA_SLOTS 2): it comes back new.
+        assert_eq!(sample_load(state(&mut t, 6, &mut freed), false), SampleLoad::Broadcast);
+        assert_eq!(sample_load(state(&mut t, 7, &mut freed), false), SampleLoad::Broadcast);
+        assert_eq!(freed, vec![bytes + 5], "id 5's scratch went to free");
+        assert_eq!(sample_load(state(&mut t, 5, &mut freed), false), SampleLoad::Broadcast);
+        // No memory: `None`, broadcast into a scratch kept for the job only.
+        let none = t.get_or_alloc(9, 1, size, |_| None, |_| ()).map(|s| s.needs_load());
+        assert_eq!(none, None);
+        assert_eq!(sample_load(none, false), SampleLoad::Broadcast);
+        // The window (id 0) is never a slot: its own rule, not this one.
+        assert!(t.get_or_alloc(0, 1, size, Some, |_| ()).is_none());
+    }
+
+    /// No RS word upsamples: RS_CONFIG has only the two downsample bits
+    /// (state_3d.xml.h:1354-1355), and the resolve word sets both.
+    #[test]
+    fn the_rs_cannot_upsample() {
+        const { assert!(!RS_CAN_UPSAMPLE) };
+        for fmt in [RS_FORMAT_A8R8G8B8, RS_FORMAT_X8R8G8B8, RS_FORMAT_R5G6B5] {
+            let c = rs_config_resolve(fmt);
+            assert_eq!(c & (RS_CONFIG_DOWNSAMPLE_X | RS_CONFIG_DOWNSAMPLE_Y), 0x60);
+        }
+    }
+
+    /// GL_MULTI_SAMPLE_CONFIG of the reload: 4X (2) with the four enables
+    /// (0xf0), the word src/vivante/backend.rs:1108 emits for every 4x draw
+    /// (`GC_MSAA_SAMPLES_4X | msaa_enables(0xf)`, state.xml.h:318, :320-322).
+    #[test]
+    fn reload_multi_sample_config_is_the_4x_draws() {
+        assert_eq!(GL_MULTI_SAMPLE_CONFIG_RELOAD, 0x0000_00f2);
+        assert_eq!(GL_MULTI_SAMPLE_CONFIG_RELOAD & 0x3, 2, "MSAA_SAMPLES 4X");
+        assert_eq!((GL_MULTI_SAMPLE_CONFIG_RELOAD >> 4) & 0xf, 0xf, "every sample enabled");
+        assert_eq!(GL_MULTI_SAMPLE_CONFIG_RELOAD & 0x8, 0, "MSAA_SAMPLES_MASK (state.xml.h:319) clear");
+    }
+
+    /// The reload draw per stored surface: exactly the surfaces the RS
+    /// resolves, each drawn in a surface whose RS format is the source's,
+    /// so the next resolve reads the bytes the reload wrote; sRGB is drawn
+    /// without encoding.
+    #[test]
+    fn reload_draw_per_surface() {
+        assert_eq!(
+            reload_draw(GLES_SURF_RGBA8888),
+            Some(ReloadDraw { tex_format: GLES_TEXFMT_RGBA8, bgra: 1, target_format: GLES_SURF_RGBA8888, samples: 4 })
+        );
+        assert_eq!(
+            reload_draw(GLES_SURF_SRGB8_A8),
+            Some(ReloadDraw { tex_format: GLES_TEXFMT_RGBA8, bgra: 1, target_format: GLES_SURF_RGBA8888, samples: 4 })
+        );
+        assert!(!gles_surf_is_srgb(reload_draw(GLES_SURF_SRGB8_A8).unwrap().target_format), "no second encode");
+        assert_eq!(
+            reload_draw(GLES_SURF_XRGB8888),
+            Some(ReloadDraw { tex_format: GLES_TEXFMT_RGBA8, bgra: 1, target_format: GLES_SURF_XRGB8888, samples: 4 })
+        );
+        assert_eq!(
+            reload_draw(GLES_SURF_RGB565),
+            Some(ReloadDraw { tex_format: GLES_TEXFMT_RGB565, bgra: 0, target_format: GLES_SURF_RGB565, samples: 4 })
+        );
+        for s in 0..=u8::MAX {
+            let r = reload_draw(s);
+            assert_eq!(r.is_some(), rs_resolve_format_of_surface(s).is_some(), "surface {s}");
+            if let Some(r) = r {
+                assert_eq!(
+                    rs_resolve_format_of_surface(r.target_format),
+                    rs_resolve_format_of_surface(s),
+                    "surface {s}"
+                );
+                assert_eq!(gles_surf_bytes_per_pixel(r.target_format), gles_surf_bytes_per_pixel(s), "surface {s}");
+                assert_eq!(u32::from(r.samples), SAMPLES_4X);
+            }
+        }
+        assert_eq!(RELOAD_LINEAR_FILTER, 0, "nearest");
+    }
+
+    /// `mipgen.frag` samples at `gl_FragCoord.xy * u_scale`; with the reload
+    /// scale every pixel centre falls inside its own texel, the one a
+    /// nearest filter returns, in f32 as the shader computes it.
+    #[test]
+    fn reload_scale_hits_each_pixels_own_texel() {
+        assert_eq!(reload_scale(0, 4), None);
+        assert_eq!(reload_scale(4, 0), None);
+        assert_eq!(reload_scale(64, 128), Some([1.0 / 64.0, 1.0 / 128.0]));
+        for n in [1u32, 3, 16, 64, 100, 127, 128, 256, 1000, 2048] {
+            let [s, _] = reload_scale(n, 1).unwrap();
+            for x in 0..n {
+                let u = (x as f32 + 0.5) * s;
+                assert_eq!((u * n as f32).floor() as u32, x, "{n}: pixel {x}");
+            }
+        }
+        assert_eq!(reload_viewport(128, 64), [0, 0, 128, 64]);
+    }
+
+    /// A broadcast reload then a resolve gives `rb.mem` back: four equal
+    /// samples average to themselves, whether the RS box filter rounds or
+    /// truncates (which one it does is not needed here). Per 8-bit channel
+    /// and per 565 field.
+    #[test]
+    fn broadcast_then_resolve_is_the_identity() {
+        let avg_trunc = |s: [u32; 4]| s.iter().sum::<u32>() / 4;
+        let avg_round = |s: [u32; 4]| (s.iter().sum::<u32>() + 2) / 4;
+        for v in 0..=255u32 {
+            assert_eq!(avg_trunc([v; 4]), v);
+            assert_eq!(avg_round([v; 4]), v);
+        }
+        for v in 0..=63u32 {
+            assert_eq!(avg_trunc([v; 4]), v);
+            assert_eq!(avg_round([v; 4]), v);
+        }
     }
 }
