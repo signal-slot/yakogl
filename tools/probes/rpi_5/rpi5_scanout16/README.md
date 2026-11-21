@@ -91,4 +91,60 @@ line answers Q2 and does not change the exit status. The host tests are
 
 ## On the board
 
-Not run yet.
+Ran on 2026-11-21 on the Pi 5 (tryboot, one run, image built with
+`-DYAKOGL_WERROR=ON` from `2b88a9f6` on origin/main, `image_sha256` fefd1ba5,
+69920 bytes, default hold 240000 ms; the PM watchdog reset the board and it
+came back to Linux by itself; `get_throttled` 0x0 before and after). The
+HDMI0 sink was attached: the boot loader saw hotplug on HDMI0 and none on
+HDMI1, chose 1920x1080 at 60 Hz, and logged its framebuffer as `FB0 ...
+1920x1080 stride 3840 base 0x3f800000`, the plane the probe found in the list.
+The run, with `BOARD_END_RE='^rpi5_scanout16: (PASS|FAIL)'`:
+
+```
+board.sh pi5 rpi5_scanout16 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout16_pass resets=0 record=absent back_after=409s
+```
+
+`verdicts.sh` on the captured console (prefix stripped), exit 0:
+
+```
+  [1] u3 scanout: running
+  [2] u3 plane: addr=0x3f800000 fmt=RGB565 pitch=3840 w=1920 h=1080
+  [3] u3 adopt-readback: PASS (1920x1080 RGB565 at 0x3f800000 adopted, cleared and read back, 4147200 bytes; plane steady before the write)
+  [4] rpi5_scanout16: text rows 16 changed
+  [5] rpi5_scanout16: pattern drawn (8 colour bars below the text)
+  [6] u3 readback 1: PASS (4147200 bytes read back byte-equal)
+  [7] u3 readback 2: PASS (4147200 bytes read back byte-equal)
+  [8] u3 frcnt: before 48 after 51
+  [9] u3 pv: control=0x7174001 en=1 viden=1
+  [10] u3 hold: 240012 ms plane=kept bytes=0 list=changed words=1
+  [11] rpi5_scanout16: PASS (plane adopted, 16 text rows and the pattern read back byte-equal twice, 240012 ms hold, FRCNT advanced, EN and VIDEN set)
+  [12] rpi5_scanout16: feeding stopped, reset expected (the PM watchdog resets the SoC, and tryboot returns the board to Linux)
+  missing: none
+q2: yes, list changed (1 list words changed in 240012 ms)
+verdicts: PASS (plane adopted, both read-backs match, frcnt 48 -> 51 advanced, EN and VIDEN set)
+```
+
+What the registers and bytes show. HVS VERSION 0x2454 (D0); channel 0
+(CTRL0 0x877f0437) and channel 1 (0x827f01df) enabled, channel 2 off; both
+valves PV_CONTROL 0x07174001, PV_V_CONTROL 0x00000003; iommu4 disabled.
+Channel 0's list starts at word 672 (LPTRS = DL = 0x2a0) with one plane
+(`0x600cc004 0x00000000 0x0000fff0 0x0437077f 0x800000a8 0x00000000
+0x3f800000 0x00000f00`, then 0xb0b0b0b0 fill and 0x20000000 at word 704); the
+64-word walk found no END. The plane hashed the same twice before the write,
+then held hash 0x17275865 in all 24 samples (every 10 s, `rows 0`), and
+readback 2 was byte-equal after 240 s: the firmware does not redraw into its
+plane. LPTRS stayed 0x2a0 and the valve words stayed the same in every sample.
+The hash of the 64 list words did change: from sample 0 on it took eight
+values, none of them the reference 0xdb5347d5, recurring in a cycle, and at
+the end one word differed from the adopted snapshot.
+The probe does not print which word it was or its values, so whether the
+firmware edits its list or the HVS writes a status or context word back into
+it is not yet known.
+
+The console lease of the farm holds the board's serial bridge (one client at
+a time), so `board.sh`'s first attempt was refused by its pre-check (`bridge is
+busy`, rc 3, nothing staged, no reboot). The run above took `BOARD_UART` from a
+local relay on the host that passed on the lease's transcript of the same
+console. The relay's copy condensed the 55 repeated 0xb0b0b0b0 list lines into
+two; every verdict line is as the board printed it. The run directory was
+outside the checkout and is not committed.
