@@ -339,3 +339,24 @@ rsource "nanopc_t6/Kconfig"
 # The STM32MP257F-DK (A35) board layer core, outside the board layer above
 # (stm32mp2/Kconfig).
 rsource "stm32mp2/Kconfig"
+
+# An opt-in RAM ring that mirrors printk (common/ramlog.c; the byte format is
+# at the top of that file): the runner turns it on at build time, no board
+# conf does.
+config YAKOGL_RAMLOG
+	bool "Mirror printk into a RAM ring at a fixed physical address"
+	depends on ARM64
+	help
+	  A blind run recovers its console text from DDR after a reset. The
+	  region is mapped Normal non-cacheable and must be free RAM that the
+	  image and the boot chain leave alone.
+
+config YAKOGL_RAMLOG_ADDR
+	hex "Physical address of the ring (header first)"
+	depends on YAKOGL_RAMLOG
+
+config YAKOGL_RAMLOG_SIZE
+	hex "Bytes of the region: 32-byte header plus ring"
+	default 0x10000
+	range 0x1000 0x10000000
+	depends on YAKOGL_RAMLOG
