@@ -78,6 +78,13 @@ pub fn analyse<'a>(
 ) -> Result<LocalLive<'a>, ArenaError> {
     let lanes = m.locals.len() * LANES;
     let (n_loops, depth) = shape(m, m.body, 0);
+    if n_loops == 0 {
+        /* No loop to ask about: no scratch at all. A program the
+         * selectors already fit only just (dEQP uniform_api.random.83 on
+         * the V3D, tests/es3_v3d_out_of_scratch.rs) must not need more
+         * because of an analysis it has no use for. */
+        return Ok(LocalLive { lanes, loops: &[], heads: &[] });
+    }
     let loops = a.alloc_filled(n_loops, u32::MAX)?;
     let heads = a.alloc_filled(n_loops * lanes, false)?;
     /* Three sets per nesting level -- an `if`'s other arm, or a loop's set
@@ -88,7 +95,17 @@ pub fn analyse<'a>(
     let live = a.alloc_filled(lanes, false)?;
     let mut w = Walk { m, lanes, values, loops, heads, seen: 0, exit_flag: &exit_flag };
     w.range(m.body, live, pool);
-    Ok(LocalLive { lanes, loops: w.loops, heads: w.heads })
+    let Walk { loops, heads, values, .. } = w;
+    /* The walk's own sets go back (latest first, so the bump pointer moves
+     * back each time): only the per-loop result outlives this call. */
+    // SAFETY: `live`, `values` and `pool` are this function's alone, and
+    // nothing reads them after the walk that has just returned.
+    unsafe {
+        a.give_back(live);
+        a.give_back(values);
+        a.give_back(pool);
+    }
+    Ok(LocalLive { lanes, loops, heads })
 }
 
 /// Sets per nesting level in the walk's pool.
