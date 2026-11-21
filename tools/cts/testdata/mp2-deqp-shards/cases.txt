@@ -1,0 +1,9 @@
+# fixture case list (a blank line, a comment and a repeated name on purpose)
+dEQP-GLES2.a.one
+dEQP-GLES2.a.two
+dEQP-GLES2.a.three
+
+dEQP-GLES2.b.four
+dEQP-GLES2.b.five
+dEQP-GLES2.a.two
+dEQP-GLES2.c.six

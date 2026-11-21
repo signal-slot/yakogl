@@ -1,0 +1,7 @@
+# name	ms (dEQP-GLES2.c.six has no row: it costs --default-ms)
+dEQP-GLES2.a.one	400
+dEQP-GLES2.a.two	500
+dEQP-GLES2.a.three	300
+dEQP-GLES2.b.four	900
+dEQP-GLES2.b.five	100
+dEQP-GLES2.zzz.unused	50
