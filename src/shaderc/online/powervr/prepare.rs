@@ -1354,7 +1354,7 @@ pub fn fusion_pairs<'a>(
 /// The source forms carry an 11-bit register index (`3b11i`), but the
 /// hardware does not honour bits 8..10 on a direct shared read. Measured on
 /// the AM62P (records/am62p/shared-size, gl_test 150): a vertex `mbyp` of
-/// sh256+k, index bits 8..10 set in the encoding, returns what sh<k> holds.
+/// sh256+k, index bits 8..10 set in the encoding, returns what `sh<k>` holds.
 /// Mesa's pco never emits such an operand: `try_legalize_large_hwreg_offsets`
 /// (src/imagination/pco/pco_legalize.c, MIT) rewrites every hardware-register
 /// operand at 256 or above, of any register class, into a `movi32` of the
