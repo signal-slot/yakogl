@@ -299,7 +299,7 @@ const RESETTERS: [&str; 1] = ["forget_compiled("];
 /// them. `online_oracle.rs` takes a process-wide mutex for the length of one
 /// compile AND the reads of its result (its `Compiled` guard holds the lock),
 /// which is the shape to copy.
-const SERIALISERS: [&str; 2] = ["COMPILING.lock", "Compiled {"];
+const SERIALISERS: [&str; 3] = ["COMPILING.lock", "Compiled {", "one_at_a_time()"];
 
 /// An integration-test binary that resets the compiler runs ONE test.
 ///
