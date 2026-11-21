@@ -538,3 +538,96 @@ Revised first step of M1 (section 4.3, M1a): find which fragment record gives
 `kau_bs26`/`bs51` stay unchanged; then `rnd13` should reach the compare with
 no packing change, and `c30`'s `e`/`n` drop out of its seven-varying layout
 (the fill then has two lanes to place, as section 2's table says).
+
+## 10. Measured sites at `a7260420`, HOST-ONLY
+
+Plan #387, item posvary-sites. Method: the 18 `deqp_posvary_*` and 8
+`deqp_varylink2_*` references through `mali_ref::compile_pair` (what
+`refusals_pinned` of `tests/mali_deqp_posvary.rs` and `PINS` of
+`tests/mali_deqp_varylink2.rs` run), feature set `host-test,gpu-mali,
+shaderc-online,no-shader-table`, with a temporary `eprintln!` of
+`file!():line!()` at every construction of `PositionLane`, `VaryingForm`,
+`VaryingNotFromAttribute` and `VaryingDuplicate`. The instrumentation and the
+scratch test were removed; nothing under `src/` or `tests/` changed. All 26
+are refused with exactly the text their test pins (no reference compiles, no
+text moved). Lines are those of `a7260420`; they drift. `P1` to `P5` are the
+steps of the table in section 8; `V1` to `V5` the steps of the table in
+`mali-deqp-varylink2.md` section 5.
+
+Reading the output: `ok_or(MaliError::VaryingForm)` at `nir.rs:5460`
+evaluates its argument eagerly, so a probe prints that line for every
+varying that has a store; it refuses only when it is the last line printed
+(the four `unwritten_*`). In every other row the site is the last line
+printed before the error.
+
+| reference | text | site | step |
+|---|---|---|---|
+| `deqp_posvary_unwritten_not_declared` | a varying lane left unwritten | `nir.rs:5460` `.ok_or(VaryingForm)`, `varyings.get(v.location)` is `None` | P1 |
+| `deqp_posvary_unwritten_declared_unused` | a varying lane left unwritten | `nir.rs:5460` | P1 |
+| `deqp_posvary_unwritten_declared_dead_read` | a varying lane left unwritten | `nir.rs:5460` | P1 |
+| `deqp_posvary_unwritten_negative_vs` | a varying lane left unwritten | `nir.rs:5460` | P1 |
+| `deqp_posvary_fract_highp_vec2` | a gl_Position lane left unwritten | `nir.rs:2120` `alu_sized`, `Undef` operand (`Ffloor` of the `Ffract` arm, `nir.rs:4904-4908`) | P2 / V1 |
+| `deqp_posvary_fract_highp_vec3` | same | `nir.rs:2120` | P2 / V1 |
+| `deqp_posvary_fract_mediump_vec2` | same | `nir.rs:2120` | P2 / V1 |
+| `deqp_posvary_fract_mediump_vec3` | same | `nir.rs:2120` | P2 / V1 |
+| `deqp_posvary_fract_lowp_vec2` | same | `nir.rs:2120` | P2 / V1 |
+| `deqp_posvary_fract_lowp_vec3` | same | `nir.rs:2120` | P2 / V1 |
+| `deqp_varylink2_fract_vec2` | a gl_Position lane left unwritten | `nir.rs:2120` | P2 / V1 |
+| `deqp_posvary_flat_sep_rnd13` | a varying lane computed from no attribute | `nir.rs:5531` `if flat && smooth` | P3 |
+| `deqp_posvary_flat_sep_kau_bs26` | same | `nir.rs:5531` | P3 |
+| `deqp_posvary_flat_sep_vec4_bs51` | same | `nir.rs:5531` | P4 |
+| `deqp_posvary_flat_lane_vec4_v86` | same | `nir.rs:5531` | P4 |
+| `deqp_posvary_flat_lane_vec4_c30` | same | `nir.rs:5531` | P4 |
+| `deqp_posvary_tex_uniform_w` | same | `nir.rs:5531` | P4 |
+| `deqp_posvary_tex_uniform_w_array` | same | `nir.rs:5531` | P4 |
+| `deqp_varylink2_vec_uniform` | same | `nir.rs:5531` | P3 or P4 / V5 |
+| `deqp_varylink2_scalar_uniform` | same | `nir.rs:5531` | P3 or P4 / V5 |
+| `deqp_posvary_loop_phi_array` | a varying lane computed from no attribute | `nir.rs:5510` the arm "no attribute behind it (a phi of uniforms)" | P5 |
+| `deqp_varylink2_loop_uniform` | same | `nir.rs:5510` | P5 / V4 |
+| `deqp_varylink2_loop_bcast` | two varying lanes of equal value | `nir.rs:5517` `seen.contains(&key)` (vertex layout) | V4 |
+| `deqp_varylink2_mat2` | two varying lanes of equal value | `nir_fs.rs:11573` `convert_inputs16`, `Some(_)` (two nodes on one place) | V3 |
+| `deqp_varylink2_swz_mixed` | two varying lanes of equal value | `nir_fs.rs:11582` `convert_inputs16`, `merged != 0 && read[n] != merged \| 1 << first` | V2 |
+| `deqp_varylink2_prec_mixed` | two varying lanes of equal value | `nir_fs.rs:11582` | V2 |
+
+Count: 4 sites at `nir.rs:5460` (P1), 7 at `nir.rs:2120` (P2 and V1), 8 at
+`nir.rs:5531` (6 posvary, 2 varylink2), 3 at `nir.rs:5510`/`5517`, 3 at
+`nir_fs.rs:11573`/`11582`. The vertex shader of `mat2`, `swz_mixed` and
+`prec_mixed` compiles; the refusal is the fragment half's
+`convert_inputs16`, with the vertex built for the fragment's reads.
+
+### 10.1 Where the posvary and varylink2 steps share a site
+
+* **P2 = V1, one edit, seven references** (`nir.rs:2120`, the `Ffract` arm's
+  `held` loop: give the lanes past the operand's width `Val::Undef`). The six
+  `fract_*` and `varylink2_fract_vec2` are refused by the same line, so one
+  session un-ignores 6 + 1 references; `varylink2_fract_vec2` is the one
+  that may then differ only in the vertex fp16 arithmetic (V1's own caveat).
+* **P3/P4 = V5, one rule, eight references** (`nir.rs:5531`, `flat && smooth`
+  of the varying layout). `vec_uniform` and `scalar_uniform` are refused
+  where `flat_sep_*`, `flat_lane_*` and `tex_uniform_w*` are: V5's "one
+  placement function in `link.rs`" is the same change as P3's `pack_lanes` and
+  P4's fill. A session that takes P3+P4 takes V5's 2 references with it; the
+  `varymerge_structsampler` of V5 was not measured here (not a
+  posvary/varylink2 reference).
+* **P5 = V4 (loop_uniform)** share `nir.rs:5510` (the phi arm): both are
+  "a loop whose only inputs are uniforms". `loop_bcast` is not there: it is
+  refused one rule later, `nir.rs:5517` (the equal-origin `seen` test), so
+  V4 has two sites and only half of it is P5's.
+* **No share:** P1 (the four `unwritten_*`, `nir.rs:5460`) and V2/V3
+  (`nir_fs.rs:11573-11582`, fragment half) are reached by one family each.
+
+So one session can take P2+V1 (7 refs, one line), and one P3+P4+V5 (8 refs,
+one rule, with P5/V4's `nir.rs:5510` arm as the natural follow-up, 2 refs).
+P1 stays alone (4), V2 and V3 stay alone (3), `loop_bcast` alone (1).
+
+### 10.2 What this changes in the earlier sections
+
+* Section 9's sites moved: `nir.rs:5492` is now `5531`, `5421` is `5460`,
+  `5471` is `5510`; `2120` is unchanged.
+* `varylink2` section 5 reads V2 (`swz_mixed`, `prec_mixed`) as a refusal of
+  the vertex shader built for the fragment's reads; the measured site is the
+  fragment half (`nir_fs.rs:11582`) and `mat2` (V3) is the neighbouring one
+  (`:11573`). The vertex half of those three compiles at the tip.
+* The `loop_phi_array` / `loop_uniform` refusal is the `Val::Lane(n, _) if
+  !vs.reads_attribute(n) && ...` arm (`nir.rs:5510`), not the `Val::Const`
+  arm (`:5495`) and not the `flat && smooth` raise.
