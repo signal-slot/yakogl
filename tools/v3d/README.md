@@ -567,6 +567,59 @@ TRIANGLES), the shader binary with `shadrec_gl_main` and two
 file it wrote, so a table regenerated to a scratch copy differs from the
 committed one only in that line; the rows are byte-identical.
 
+### Mesa 7.1 reference-count tables
+
+Four scripts run Mesa 26.2.1's `v3d_shc --device 71` (rev 7, compat_rev 0)
+over a shader set and write one table of names and numbers, never shader
+text. Each needs `V3D_SHC`, the `v3d_shc` binary (H2: Mesa 26.2.1's
+`build-v3d`, or `drm_shim_ref.sh build`); without it the script exits 3 and
+says `gap: V3D_SHC`. Each also needs `glslangValidator` and `python3`. The
+sources are translated as `glsl2v3d.py` does (glsl2vivante's
+`translate_es100_gl`, then `glslangValidator -G`). The numbers are what the
+online 7.1 back end's instruction counts are compared with. A second run
+writes the same bytes.
+
+| Table | Corpus | Columns | Read by |
+|---|---|---|---|
+| `tools/v3d/es100_counts_71.tsv` | every `.vert`/`.frag` under `tools/shaders/es100`, one row per source, each paired with a stub of the other stage | path, stage (vs\|fs), compiled (yes\|no), Mesa's reason (`ok` or the failing step), instructions, threads, uniforms (`-` when not compiled) | `tests/v3d71_online_corpus.rs` |
+| `tools/shaders/glmark2_counts_71.tsv` | every vertex/fragment pair of the glmark2-es2 corpus (GPL text, generated, never committed) | key (`<vs file>+<fs file>`, as `tests/glmark2_corpus.rs` names a pair), vs instructions, fs instructions, vs threads, fs threads, reason (`-` for the numbers when refused) | the glmark2 7.1 corpus test (`tests/shaderc71_glmark2_corpus.rs`, being added) |
+| `tools/shaders/deqp_es2_lib_counts_71.tsv` | the `expect pass` / `build_successful` version-100 programs of the dEQP-GLES2 `data/gles2/shaders/*.test` library (VK-GL-CTS 93bca01) | case (`file.group.case[_vertex\|_fragment]`), stage, compiled, reason, instructions, threads, uniforms | the dEQP-GLES2 library 7.1 test (`tests/shaderc71_es2_corpus.rs`, being added) |
+| `tools/shaders/deqp_es2_gen_counts_71.tsv` | every program a host dEQP-GLES2 run harvested (the C++-generated shaders that are not in the `.test` files); the pair dEQP linked, no stub | id (sha256 of the program, never the text), stage, compiled, reason, instructions, threads, uniforms | the harvested-programs 7.1 test (`tests/shaderc71_deqp_programs.rs`, being added) |
+
+Regenerate, from the repository root:
+
+```sh
+# es100 (default output tools/v3d/es100_counts_71.tsv)
+V3D_SHC=<v3d_shc> tools/v3d/es100_ref71.sh [--out FILE]
+
+# glmark2: the corpus first (needs GLMARK2_SRC, the glmark2 checkout or
+# archive directory; its commit goes into the table's header), then the table
+tools/hostharness/glmark2/run.sh "$GLMARK2_SRC"   # writes build/glmark2-host/shaders
+V3D_SHC=<v3d_shc> GLMARK2_SRC=<glmark2> tools/hostharness/glmark2/ref71.sh \
+  build/glmark2-host/shaders tools/shaders/glmark2_counts_71.tsv
+
+# dEQP-GLES2 .test library (--cts: a tree holding data/gles2/shaders, or that
+# directory; default $DEQP_GLES2_TEST_DIR, then
+# $CONNECTED_DEPS_DIR/VK-GL-CTS-gles2-data, then $VK_GL_CTS)
+tools/cts/es2lib-ref71.sh [--shc V3D_SHC] [--cts DIR] [--out FILE] [--jobs N]
+#   default --out tools/shaders/deqp_es2_lib_counts_71.tsv
+
+# dEQP-GLES2 harvested programs: harvest first (a whole mustpass run on the
+# host against the 4.2 library, see the script's header; its output directory
+# is HARVEST_DIR, holding index.tsv, programs/ and `commit`), then the table
+tools/cts/deqp-es2-programs.sh [--cts DIR] [--out DIR] [--jobs N] [--chunk N] \
+  [--stage all|build|run|extract]
+V3D_SHC=<v3d_shc> tools/cts/deqp-es2-programs-ref71.sh HARVEST_DIR [--out FILE] [--jobs N]
+#   default --out tools/shaders/deqp_es2_gen_counts_71.tsv
+```
+
+The four scripts read only `V3D_SHC` (not `MESA_V3D_TREE`): point it at the
+`v3d_shc` of the Mesa 26.2.1 tree built as above. The harvest directory of
+the last table is what the gate will call `DEQP_ES2_PROGRAMS` once its test
+and `tools/cts/deps.toml` entry land; the script takes it as the
+`HARVEST_DIR` argument. Until the glmark2 and dEQP tests land, only
+`es100_counts_71.tsv` has a test that reads it.
+
 ### What of 7.1 is on main
 
 The tools above, and these (commits `2671baec`, `3762ec20`, `7bd8a8e9`,
