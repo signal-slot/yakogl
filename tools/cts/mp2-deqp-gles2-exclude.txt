@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# What the STM32MP257F-DK's dEQP-GLES2 sweep leaves out of
+# mp2-deqp-gles2.txt: "<case or group.*>", a TAB, the reason. Every line has a
+# reason; tools/cts/mp2-deqp-list-check.sh enforces it.
+#
+# Limits (src/vivante/profile.rs, GCNANOULTRA31_VIP2_ST :138 against the
+# i.MX8MP's GC7000UL :101): instructions 512, temp registers 64, constants 320,
+# varyings 16, streams 16 and non_power_of_two are the same on both parts, so
+# no shader, texture or varying limit case is excluded. The only profile
+# difference that reaches GLES2 is wideline_triangle_emu: true (line_width_range
+# [1,1] until Q11), so the wide-line cases are listed here as pending Q11 and
+# move back into the run when Q11 decides.
+#
+# Arena (128 MiB, boards/stm32mp257f_dk_stm32mp257fxx_a35.conf): the full tree
+# fits (74.2% of the runner's window, the dk-image-budget study); the conf
+# only says the 2048x2048 mipmap uploads "may" end in GL_OUT_OF_MEMORY, with
+# no case named, so no group is excluded for memory until a DK run names one.
+dEQP-GLES2.functional.clipping.line.long_wide_line_clip	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_attrib_clip	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_clip	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_z_clip	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_z_clip_viewport_center	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.clipping.line.wide_line_z_clip_viewport_corner	pending Q11: wide line (width > 1) on a wide-line-emulating core
+dEQP-GLES2.functional.rasterization.interpolation.basic.line_loop_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.interpolation.basic.line_strip_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.interpolation.basic.lines_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.interpolation.projected.line_strip_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.interpolation.projected.lines_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.primitives.line_loop_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.primitives.line_strip_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.rasterization.primitives.lines_wide	pending Q11: wide line rasterization
+dEQP-GLES2.functional.implementation_limits.aliased_line_width_range	pending Q11: the reported range is what Q11 decides
+dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getboolean	pending Q11: the reported range is what Q11 decides
+dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getfloat	pending Q11: the reported range is what Q11 decides
+dEQP-GLES2.functional.state_query.floats.aliased_line_width_range_getinteger	pending Q11: the reported range is what Q11 decides
