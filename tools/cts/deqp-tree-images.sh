@@ -9,18 +9,22 @@
 # per-board names call it with their board:
 #   tools/cts/pi4-deqp-images.sh   rpi_4b     (Raspberry Pi 4, V3D)
 #   tools/cts/t6-deqp-images.sh    nanopc_t6  (NanoPC-T6, Mali-G610)
+#   tools/cts/imx95-deqp-images.sh verdin_imx95/mimx9596/a55  (Verdin iMX95,
+#                                  Mali-G310)
 # The AM62P has its own builder (am62p-deqp-images.sh): its filter files may
 # have rows without a label, and it reports on stdout (build.out).
 #
 #   tools/cts/deqp-tree-images.sh <board> [--dry-run] <table> <img-dir> [LABEL...]
 #
-# <board>    rpi_4b or nanopc_t6, the Zephyr board (the arms below)
+# <board>    rpi_4b, nanopc_t6 or verdin_imx95/mimx9596/a55, the Zephyr board
+#            (the arms below)
 # <table>    tools/cts/pi4-full-tree.txt's form: each CONFIG_DEQP_CASE line is
 #            preceded by "# image <LABEL>: ..."; a marker saying
 #            "(with texture-2048.conf)" adds -DEXTRA_CONF_FILE=texture-2048.conf.
 #            tools/cts/pi4-gles3-tree.txt is the Pi 4's dEQP-GLES3 tree
 #            (DEQP_MODULE=gles3), tools/cts/mali-gles2-tree.txt the T6's
-#            dEQP-GLES2 tree.
+#            dEQP-GLES2 tree (the Verdin iMX95 builds the same rows: the
+#            back end and its compiler are the T6's).
 # <img-dir>  one build directory per label, <img-dir>/<LABEL>/ (cmake -GNinja,
 #            ninja, the board above). A directory that exists is refused, never
 #            reused. After each image the line
@@ -51,20 +55,31 @@
 #   ZEPHYR_SDK_INSTALL_DIR as for any Zephyr sample; RUSTUP_TOOLCHAIN as for
 #               any V3D sample (rpi_4b)
 #   WEST_VENV   optional: a venv whose bin/ holds west (zephyr-modules.sh)
-# nanopc_t6 also needs driver/src/fw/mali_csffw_blob.h in this checkout (made
-# from the board's CSF firmware by driver/tools/mkmalifw.sh, never committed),
-# and builds with -DYAKOGL_WERROR=ON, as the gate's nanopc_t6 rows do.
+# The Mali boards (nanopc_t6, verdin_imx95/mimx9596/a55) also need
+# driver/src/fw/mali_csffw_blob.h in this checkout (made from the board's CSF
+# firmware by driver/tools/mkmalifw.sh, never committed; the G310's is the
+# G610's file, tools/cts/deps.toml MALI_CSFFW), and build with
+# -DYAKOGL_WERROR=ON, as the gate's Mali rows do.
+#
+# What an image is and how it is started are separate: this script builds
+# zephyr.bin and writes the .built line, nothing else. The boot route is the
+# run script's (tools/board.sh <board> tree): a kexec out of Armbian on the
+# NanoPC-T6, U-Boot's `go` at the image's load address on the Verdin iMX95
+# (0xd0000000, zephyr,sram of the board's devicetree). Nothing here depends
+# on either.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 ZBOARD=${1:-}
 # Per board: NAME prefixes every message; BOARD_ARGS go to every image's
 # cmake; BUILD_DEF is the define in build.ninja that carries the build string
-# the image prints (the .built line's build= field).
+# the image prints (the .built line's build= field); MALI_FW=1: every image
+# embeds the Mali's CSF firmware header.
 case "$ZBOARD" in
-rpi_4b) NAME=pi4-deqp-images BOARD_ARGS=() BUILD_DEF=V3D_BUILD ;;
-nanopc_t6) NAME=t6-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=T6_DEQP_BUILD ;;
-*) echo "deqp-tree-images: the board must be rpi_4b or nanopc_t6, not '$ZBOARD'" >&2; exit 2 ;;
+rpi_4b) NAME=pi4-deqp-images BOARD_ARGS=() BUILD_DEF=V3D_BUILD MALI_FW=0 ;;
+nanopc_t6) NAME=t6-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=T6_DEQP_BUILD MALI_FW=1 ;;
+verdin_imx95/mimx9596/a55) NAME=imx95-deqp-images BOARD_ARGS=(-DYAKOGL_WERROR=ON) BUILD_DEF=VI95_DEQP_BUILD MALI_FW=1 ;;
+*) echo "deqp-tree-images: the board must be rpi_4b, nanopc_t6 or verdin_imx95/mimx9596/a55, not '$ZBOARD'" >&2; exit 2 ;;
 esac
 shift
 die() { echo "$NAME: $*" >&2; exit 2; }
@@ -117,9 +132,9 @@ cmd_build() {
 	: "${ZEPHYR_WS:?set ZEPHYR_WS}"; : "${DEQP_WORK:?set DEQP_WORK (stage 1 for $ZBOARD)}"
 	[ -d "$DEQP_WORK/cts" ] && [ -f "$DEQP_WORK/build/modules/$DEQP_MODULE/libdeqp-$DEQP_MODULE-package.a" ] ||
 		die "$DEQP_WORK is not a $DEQP_MODULE stage 1 (cts-build-zephyr.sh MODULE=$DEQP_MODULE BOARD=$ZBOARD)"
-	# the Mali's CSF firmware is embedded in every nanopc_t6 image; without the
-	# header no image can build, so refuse before the first one
-	if [ "$ZBOARD" = nanopc_t6 ] && [ ! -f "$REPO/driver/src/fw/mali_csffw_blob.h" ]; then
+	# the Mali's CSF firmware is embedded in every image of a Mali board;
+	# without the header no image can build, so refuse before the first one
+	if [ "$MALI_FW" = 1 ] && [ ! -f "$REPO/driver/src/fw/mali_csffw_blob.h" ]; then
 		die "driver/src/fw/mali_csffw_blob.h missing: make it from the board's CSF firmware with driver/tools/mkmalifw.sh <mali_csffw.bin> (never commit it)"
 	fi
 	[ -n "${WEST_VENV:-}" ] && PATH=$WEST_VENV/bin:$PATH

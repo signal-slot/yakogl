@@ -163,3 +163,32 @@ of the 64 MiB `kexec_zephyr` reads: the OSAL's memory is `.noinit`
 filter gives the same sizes (the whole package is linked; only the filter
 string differs). `driver/tools/kexec-zephyr/nanopc-t6.sh` refuses an image
 over either limit before it copies anything to the board.
+
+## Verdin iMX95 (Mali-G310, built only)
+
+The NanoPC-T6's image on the Verdin iMX95: the same `src/mali_board.c`
+(the build line `vi95_deqp: build ...`, the OSAL's close line,
+`deqp: OK|FAILED (rc=N)`; the end is `mali_deqp_finish()` here, called by
+`src/main.cpp`, since the board layer's `sample_glue.c` has its own
+`pvr_sample_finish`) over the board glue and the board layer
+(`driver/zephyr/lib/board/verdin_imx95`: WDOG3, the GPU's SCMI power-on, the
+CSF firmware, which is the G610's file), ending in `board_finish()` (the
+`yk-record` line and PSCI SYSTEM_RESET). The board files are the board
+layer's `app.conf` and `app.overlay`, then `verdin_imx95.conf` here
+(`../common/verdin_imx95.cmake` merges it after `app.conf`; a
+`boards/<board>.conf` would be merged before it and lose): the carve-out at
+64 MiB for the GL side plus `app.conf`'s 8800 KiB of window memory
+(76,120,064 bytes), the board layer's lifetime 600 s and alive window 60 s,
+no hold, and the X4 panel off (`CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=n`;
+`=y` on the command line asks for it). Stage 1 is the board's own
+(`tools/cts/deps-env.sh --build DEQP_WORK --board verdin_imx95`), the tree's
+images `tools/cts/imx95-deqp-images.sh` (`tools/cts/README.md`, section 5).
+
+Memory (2026-11-21, rows T6S1R08, T6S4R01 and T6S1R06 of
+`mali-gles2-tree.txt`, built with `-DYAKOGL_WERROR=ON`): the RAM footprint
+(the AArch64 header's `image_size`) is 200,294,400 bytes (191.0 MiB) of the
+256 MiB at 0xd0000000 (`verdin_imx95_mimx9596_a55.dts`, `zephyr,sram`), so
+the image ends at 0xdbf04000 and leaves 65 MiB: the T6's image (about
+183 MiB) plus the 8800 KiB of window memory. `zephyr.bin` is 12,645,672
+bytes, the same for every row (the whole package is linked; only the filter
+string differs). The layout as configured holds it; nothing was moved.
