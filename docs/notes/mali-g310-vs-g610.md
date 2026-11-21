@@ -182,6 +182,38 @@ were compared G310 against G610 with the same `--uniform-values` draw.
 | attribute and attribute-buffer records (`--attributes`; one with the instanced draw) | 102 | 0 |
 | whole pandecode trace: every descriptor, the CS, the framebuffer and the tiler context (host pointers masked) | 869 | 0 |
 
+### Recheck over the dEQP references of plan #387, tip `7b540fee`
+
+The sample above predates the dEQP references the Mali plan added
+(`tools/mali/testdata/deqp_*`). They were redrawn at tip `7b540fee` with the
+section 2 method: the shim rebuilt unmodified from the 26.2.1 tarball, each
+reference drawn with `drm_shim_ref.sh run --gpu g610`, the first option set
+(`--uniform-values`, none, `--prim points` with and without it) whose
+`pan_ref_diff.py extract --draw` (with `--attributes` where the committed
+file has `attributes`) equals the committed `expect.json`, then the same
+draw with `--gpu g310v2` and the two extracts compared with
+`pan_ref_diff.py diff-ref` (words, FAU, `work_reg_count`, `preload`, VA,
+`secondary_offset`, attributes), plus the whole pandecode trace with host
+pointers masked. Scratch output was kept outside the tree.
+
+| Family (`deqp_<family>_*`) | References |
+| --- | --- |
+| arith 144, loops2 127, constprod 31, constop 28, loops 26, intval 25, uniarray 23, fmaloc 22, fclane 20, unitype 20, colourpair 19, mixcol 18, posvary 18, unif2 15, misc 11, negzero 9, mixprec 8, varylink2 8, varylink 7, width 1 | 580 |
+
+| Result | Count |
+| --- | --- |
+| deqp references compared (all `deqp_*.expect.json` at the tip; some overlap the first sample) | 580 |
+| G610 redraw equals the committed `expect.json` | 580 |
+| G310v2 extract identical to the G610 extract | 580 |
+| whole trace identical (host pointers masked) | 580 |
+| differing | 0 |
+
+The G310 draws reported `gl_ref: renderer Mali-G310v2 MC4 (Panfrost)`.
+The 580 include the references of plan #387's items (arith, fclane, negzero,
+posvary, unif2, mixcol, loops2, varylink2, fmaloc, constprod) and the older
+deqp ones. Only the G310v2 variant was drawn; v1-v3 share the tile buffer
+and v4-v5 the G610's, and no deqp reference is a frame probe.
+
 ### The identity reached the driver
 
 "Identical" does not mean "the switch did nothing". Three pieces of
@@ -231,6 +263,8 @@ size (pixels), the colour buffer allocation (bytes) and the hierarchy mask.
 4. **Tiler hierarchy mask.** Cause: `pan_desc.c:1784-1790`: a tile of 256
    or fewer pixels keeps level 0. Example, `ms4.*.trace`: G610 `Hierarchy
    Mask: 254`, G310v2 `255`.
+   The recheck at `7b540fee` (section 3) found no further difference: none
+   of the 580 deqp references differs in any field.
 5. **Not generated code**: the shaderdb statistics (above), `GL_RENDERER`,
    and the RGBA32F `GL_MAX_SAMPLES` (8 against 16, section 1).
 
@@ -241,7 +275,12 @@ them.
 
 ### `src/shaderc/online/mali/`
 
-No G310 path is needed:
+No G310 path is needed. The conclusion still holds at `7b540fee`: the 580
+dEQP references (plan #387's families included) have identical words, FAU,
+facts, attributes and traces on the G310v2 and the G610, so each lowering
+item serves both boards. The first sample's 869-of-869 count is unchanged;
+the recheck is a second, overlapping count, not a sum.
+
 
 - Every compiler branch that sees the product is on arch major 10,
   which the G310 shares.
