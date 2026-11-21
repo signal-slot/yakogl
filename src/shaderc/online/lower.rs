@@ -4548,7 +4548,7 @@ impl<'a> Lower<'_, 'a> {
             if matches!(name, "modf" | "frexp") {
                 return true;
             }
-            let Some((params, _)) = self.user_function(name, args) else {
+            let Some((params, ..)) = self.user_function(name, args) else {
                 /* a built-in without an `out` parameter */
                 return false;
             };
@@ -4563,8 +4563,10 @@ impl<'a> Lower<'_, 'a> {
     /// alone does not identify the body. Inlining the wrong one compiles and
     /// draws something; `sema::resolve_overload` is the same resolution the
     /// checker used to type the call, so the body inlined here is the one
-    /// whose return type the expression was given.
-    fn user_function(&self, name: &str, args: Range) -> Option<(Range, StmtId)> {
+    /// whose return type the expression was given. The third member is the
+    /// scalar type of that return type (F32 for a void or struct function),
+    /// which a result slot is declared with ([`Lower::inline_with_slot`]).
+    fn user_function(&self, name: &str, args: Range) -> Option<(Range, StmtId, ir::ScalarType)> {
         let mut tys = [super::sema::Type::UNKNOWN; MAX_PARAMS];
         let ids: &[ExprId] = &self.ast.expr_ids[args.indices()];
         if ids.len() > MAX_PARAMS {
@@ -4575,7 +4577,7 @@ impl<'a> Lower<'_, 'a> {
         }
         let d = super::sema::resolve_overload(self.ast, name, &tys[..ids.len()], true)?;
         match self.ast.decl(d) {
-            Decl::Function { params, body: Some(b), .. } => Some((*params, *b)),
+            Decl::Function { params, body: Some(b), ret, .. } => Some((*params, *b, self.scalar_of_type(ret.base))),
             _ => None,
         }
     }
@@ -4598,12 +4600,12 @@ impl<'a> Lower<'_, 'a> {
     fn inline(
         &mut self,
         name: &'a str,
-        f: (Range, StmtId),
+        f: (Range, StmtId, ir::ScalarType),
         args: Range,
         want: Want<'a>,
         out: &mut AVec<'a, Node>,
     ) -> R<'a, Ret> {
-        let (params, body) = f;
+        let (params, body, ret) = f;
         if self.inline_depth >= MAX_INLINE_DEPTH {
             return Err(self.err(name, "this call nests too deeply to inline"));
         }
@@ -4927,7 +4929,7 @@ impl<'a> Lower<'_, 'a> {
          * call. */
         let caller_ret = self.ret.take();
         self.inline_depth += 1;
-        let r = self.inline_body(name, body, want, out);
+        let r = self.inline_body(name, body, want, ret, out);
         self.inline_depth -= 1;
         while self.var_params.len() > marks {
             self.var_params.pop();
@@ -4982,14 +4984,22 @@ impl<'a> Lower<'_, 'a> {
         Ok(())
     }
 
-    /// The body of an inlined function: statements, then the return.
-    fn inline_body(&mut self, name: &'a str, body: StmtId, want: Want<'a>, out: &mut AVec<'a, Node>) -> R<'a, Ret> {
+    /// The body of an inlined function: statements, then the return. `ret`
+    /// is the scalar type of the function's return type.
+    fn inline_body(
+        &mut self,
+        name: &'a str,
+        body: StmtId,
+        want: Want<'a>,
+        ret: ir::ScalarType,
+        out: &mut AVec<'a, Node>,
+    ) -> R<'a, Ret> {
         let Stmt::Block(r) = *self.ast.stmt(body) else {
             return Err(self.err(name, "this function body is not lowered yet"));
         };
         let ids: &'a [StmtId] = &self.ast.stmt_ids[r.indices()];
         if returns_early(self.ast, ids) {
-            return self.inline_with_slot(name, ids, want, out);
+            return self.inline_with_slot(name, ids, want, ret, out);
         }
         for &id in ids {
             if let Stmt::Return(Some(e)) = *self.ast.stmt(id) {
@@ -5077,6 +5087,7 @@ impl<'a> Lower<'_, 'a> {
         name: &'a str,
         ids: &'a [StmtId],
         want: Want<'a>,
+        ret: ir::ScalarType,
         out: &mut AVec<'a, Node>,
     ) -> R<'a, Ret> {
         /* A struct or an array result is filled IN PLACE: the caller's run
@@ -5101,8 +5112,14 @@ impl<'a> Lower<'_, 'a> {
         };
         let columns = run.slots();
         let id = ir::LocalId(self.locals.len() as u32);
+        /* The slot has the function's own scalar type: an `int f()` slot
+         * declared F32 read back as a float value (a float kind under the
+         * int call's context, which has no class), and the Mali lowering
+         * keeps a mediump shader's F32 local at 16 bits
+         * (`mali::nir_fs`, the phi of a float local). A matrix, a void or a
+         * struct function stays F32 (`scalar_of_type`). */
         for _ in 0..columns {
-            self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ir::ScalarType::F32, comps), array_len: 1 })?;
+            self.push_local(ir::VarDecl { name: "", ty: ir::Type::new(ret, comps), array_len: 1 })?;
         }
         let slot = Local { name: "", id, comps, run, value: None };
         let mut run: AVec<Node> = AVec::new();
@@ -11684,6 +11701,36 @@ mod control_flow_tests {
         let mut buf2 = [0u8; 1 << 18];
         let l = ir(&mut buf2, "precision mediump float;\nvoid main() { gl_FragColor = vec4(1.0); return; }");
         assert!(matches!(l.module.nodes_of(l.module.body).last(), Some(Node::Return)));
+    }
+
+    /// An `int` function with an early return gets an I32 result slot, and
+    /// its read is an int value (no float class), not a float read under the
+    /// int call's context, which has no class
+    /// (`tools/mali/testdata/deqp_texmisc_fcm_eval_order.frag`'s `func`).
+    /// A `float` one keeps its F32 slot.
+    #[test]
+    fn an_early_returning_int_function_has_an_int_slot() {
+        let src = "precision mediump float;\nuniform int u;\n\
+                   int f(int a) { if (a > 0) return a + 1; return -1; }\n\
+                   void main() { int r = f(u); gl_FragColor = vec4(float(r)); }";
+        let mut buf = [0u8; 1 << 18];
+        let l = ir(&mut buf, src);
+        let m = &l.module;
+        let slots: std::vec::Vec<ir::ScalarType> =
+            m.locals.iter().filter(|d| d.name.is_empty()).map(|d| d.ty.scalar).collect();
+        assert!(slots.contains(&ir::ScalarType::I32), "the result slot: {slots:?}");
+        assert!(!slots.contains(&ir::ScalarType::F32), "no float slot for an int result: {slots:?}");
+        assert!(m.has_prec());
+        assert!(!m.prec.contains(&Prec::Unknown), "a value left to the Unknown rule: {:?}", m.prec);
+
+        let src = "precision mediump float;\nuniform float u;\n\
+                   float f(float a) { if (a > 0.0) return a; return -1.0; }\n\
+                   void main() { gl_FragColor = vec4(f(u)); }";
+        let mut buf = [0u8; 1 << 18];
+        let l = ir(&mut buf, src);
+        let slots: std::vec::Vec<ir::ScalarType> =
+            l.module.locals.iter().filter(|d| d.name.is_empty()).map(|d| d.ty.scalar).collect();
+        assert!(slots.contains(&ir::ScalarType::F32), "the result slot: {slots:?}");
     }
 
     /// `gl_FragColor = ...; return;` partway through `main`, with statements
