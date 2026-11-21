@@ -171,13 +171,14 @@ done
 # build exactly as before, the gles3 path's three arguments and --gles3
 # check, the stage 1 check), t6-deqp-images.sh (the same builder for
 # nanopc_t6: the dry run over mali-gles2-tree.txt, the firmware header check,
-# its cmake arguments), needed_deps against what the builders read, and
+# its cmake arguments), imx95-deqp-images.sh (the same for the Verdin
+# iMX95, its own build string), needed_deps against what the builders read, and
 # board-stage.sh x2 gles3 (its deps, its dry run, the sets still refused).
 # Its count of passed checks is pinned, so a selftest that stops checking
 # reads as a failure here, not as a pass -- and a new check in
 # images-selftest.sh without a bump here is a red row too (pull request
 # #1838 failed exactly there).
-IMAGES_SELFTEST_CHECKS=190
+IMAGES_SELFTEST_CHECKS=201
 echo
 echo "== 20. images-selftest.sh: the image builders against a fake west"
 iout=$("$HERE/images-selftest.sh" 2>&1)

@@ -10,7 +10,11 @@
 # bounded-lifetime watchdog of the rpi4 board layer. The NanoPC-T6 (Mali) adds
 # src/mali_board.c (the build line and the end of the run) over the board glue
 # of every nanopc_t6 image (driver/zephyr/lib/board/nanopc_t6: WDT0, the CSF
-# firmware, the PSCI reset back into Armbian).
+# firmware, the PSCI reset back into Armbian). The Verdin iMX95 (Mali-G310)
+# adds the same file over its board glue and board layer
+# (driver/zephyr/lib/board/verdin_imx95: WDOG3, the CSF firmware, the GPU's
+# SCMI power-on, board_finish), with the board layer's app.conf and
+# app.overlay and this sample's verdin_imx95.conf after them (below).
 #   -DDEQP_SRC=<CTS copy with cts-yakogl-zephyr.patch applied>
 #   -DDEQP_BUILD=<its stage-1 build (static libraries)>
 # tools/cts/cts-build-zephyr.sh makes both.
@@ -25,6 +29,14 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../common/yakogl_dir.cmake")
 if(BOARD MATCHES "^stm32mp257f_dk")
   set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
 endif()
+# The Verdin iMX95's A55 takes the board layer's board files as
+# examples/zephyr.cmake gives them (the Mali, its window memory, the console,
+# the MMU's tables; the X4 display's node), then verdin_imx95.conf, which
+# overrides app.conf where a conformance image differs (the carve-out, the
+# lifetime, no display unless asked). It is not boards/<board>.conf because
+# Zephyr merges that before every EXTRA_CONF_FILE, app.conf's values over
+# it; the gl_test sample does the same (../common/verdin_imx95.cmake).
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/verdin_imx95.cmake")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(deqp_zephyr)
 set(PVR_SAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -131,23 +143,31 @@ if(CONFIG_YAKOGL_GPU_V3D)
     "${PVR_REPO}/src/v3d")                   # struct v3d_clock_ops (v3d.h)
 endif()
 
-# NanoPC-T6 (Mali-G610): driver/docs/nanopc-t6-mali.md. Through YakoGL's GL
-# core, its in-process compiler and its Mali backend on the OSAL
-# src/osal/zephyr_mali.c (our own kernel side, board::nanopc_t6_osal).
+# NanoPC-T6 (Mali-G610): driver/docs/nanopc-t6-mali.md; Verdin iMX95
+# (Mali-G310): docs/notes/pre-study-imx95.md. Through YakoGL's GL core, its
+# in-process compiler and its Mali backend on the OSAL src/osal/zephyr_mali.c
+# (our own kernel side, board::nanopc_t6_osal). The build string's define is
+# the board's (T6_DEQP_BUILD, VI95_DEQP_BUILD): tools/board.sh and
+# tools/cts/deqp-tree-images.sh read it from build.ninja by that name.
 if(CONFIG_YAKOGL_GPU_MALI)
-  if(NOT CONFIG_YAKOGL_NANOPC_T6)
-    message(FATAL_ERROR "deqp: CONFIG_YAKOGL_GPU_MALI needs the nanopc_t6 board (CONFIG_YAKOGL_NANOPC_T6)")
+  if(CONFIG_YAKOGL_NANOPC_T6)
+    set(_mali_build T6_DEQP_BUILD)
+  elseif(CONFIG_YAKOGL_BOARD_VERDIN_IMX95)
+    set(_mali_build VI95_DEQP_BUILD)
+  else()
+    message(FATAL_ERROR "deqp: CONFIG_YAKOGL_GPU_MALI needs the nanopc_t6 board (CONFIG_YAKOGL_NANOPC_T6) "
+                        "or the verdin_imx95 board with the board layer (CONFIG_YAKOGL_BOARD_VERDIN_IMX95)")
   endif()
   execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
-                  OUTPUT_VARIABLE T6_DEQP_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
+                  OUTPUT_VARIABLE ${_mali_build} OUTPUT_STRIP_TRAILING_WHITESPACE
                   ERROR_QUIET RESULT_VARIABLE describe_rc)
-  if(NOT describe_rc EQUAL 0 OR T6_DEQP_BUILD STREQUAL "")
-    set(T6_DEQP_BUILD "unknown")
+  if(NOT describe_rc EQUAL 0 OR "${${_mali_build}}" STREQUAL "")
+    set(${_mali_build} "unknown")
   endif()
-  message(STATUS "deqp (nanopc_t6) build: ${T6_DEQP_BUILD}")
+  message(STATUS "deqp (${BOARD}) build: ${${_mali_build}}")
   target_sources(app PRIVATE src/mali_board.c)
-  target_compile_definitions(app PRIVATE T6_DEQP_BUILD="${T6_DEQP_BUILD}")
-  target_include_directories(app PRIVATE "${YAKOGL_DIR}/src/osal")   # osal_mali_diag_print
+  target_compile_definitions(app PRIVATE ${_mali_build}="${${_mali_build}}")
+  target_include_directories(app PRIVATE "${YAKOGL_DIR}/src/osal")   # osal_mali_diag_print, zephyr_mali_board.h
 endif()
 
 # Zero warnings in our own files with -DYAKOGL_WERROR=ON, the option gl_test
