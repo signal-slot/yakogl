@@ -10,7 +10,14 @@ Verdin) and now also drives the Vivante GC7000UL (i.MX 8M Plus) and the Broadcom
 (Raspberry Pi 4). A fourth back end, for the Arm Mali-G610 (RK3588, FriendlyElec
 NanoPC-T6), is in progress: on Zephyr it passes the regression set of `gl_test`
 off-screen as a development result, and dEQP-GLES2 has run only on the board's own
-Linux (`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"). Some
+Linux (`src/mali/`, `driver/docs/nanopc-t6-mali.md`; README.md, "Status"); its shaders
+come from our own Valhall compiler in `src/shaderc/online/mali/`. The V3D 7.1 of the
+Raspberry Pi 5 (BCM2712) is being added beside the V3D 4.2, not yet as a fifth
+`gpu-*` feature: the cargo crate has no `gpu-v3d71`. What is in the tree is its
+compiler half (the `*71.rs` files of `src/shaderc/online/v3d/`), the job builder's pure
+modules (`src/v3d/*71.rs`, which `src/v3d/mod.rs` does not declare yet) and the Zephyr
+OSAL `src/osal/zephyr_v3d71.c` (`zephyr/Kconfig`, `YAKOGL_GPU_V3D71`;
+`docs/notes/v3d71-backend.md`). Some
 sections below describe the PowerVR first, as it was built.
 
 ## Goals / non-goals
@@ -18,7 +25,7 @@ sections below describe the PowerVR first, as it was built.
 - **Source compatibility first.** Standard Khronos headers; the documented GL ES 2.0
   entry points behave per spec for the subset we implement. Apps need no source changes.
 - **Portability.** The GL core and the GPU back ends are OS-agnostic Rust (one
-  `no_std` crate with no runtime dependencies, exporting the C ABI; see "The Rust
+  `no_std` crate with no runtime dependencies (empty `[dependencies]`), exporting the C ABI; see "The Rust
   crate" below). All OS/platform coupling is behind one interface (`include/gles_osal.h`).
   Targets, in priority order: **Zephyr** (primary), **bare-metal**, then other OSes
   (**Linux**). One `.a` of portable core + one small OSAL `.o` (C) per platform.
@@ -64,7 +71,8 @@ sections below describe the PowerVR first, as it was built.
 
 Layers 1–4 and 5a are the Rust crate (built by cargo as a static library). Layer 5b
 is one small C translation unit per platform, added to the same `libyakogl.a`. Layer 5a
-has three implementations (see Shaders); the online one is the shipping back end.
+has three implementations (see Shaders); the online one is the shipping back end, and
+it has one code generator per GPU (`src/shaderc/online/{powervr,vivante,v3d,mali}/`).
 
 ## The PowerVR backend (layer 4) — already proven on silicon
 
@@ -98,7 +106,12 @@ only on the host (`pco_shc`), to make the Mesa reference table. Three back ends 
 - **`shaderc_online` (the shipping back end, the cargo feature `shaderc-online`):** our own
   `no_std`, allocation-free GLSL ES compiler in the library (`src/shaderc/online/`), so a
   shader an application writes at run time compiles on the board; dEQP-GLES2 writes
-  thousands of them. It is the only shader back end the V3D and Mali builds have.
+  thousands of them. The front end (lexer, parser, sema, IR, `lower.rs`) is shared; the
+  code generators are one directory per GPU: `powervr/` (USC), `vivante/` (GC7000),
+  `v3d/` (QPU, with the V3D 7.1 half in its `*71.rs` files) and `mali/` (Valhall; it
+  lowers through its own `src/shaderc/online/mali/{nir,bir,sched}.rs`). It is the only shader
+  back end the V3D and Mali builds have (`src/lib.rs` refuses a `gpu-v3d` or `gpu-mali`
+  build without `shaderc-online`, or with a Mesa reference table).
 - **precompiled (`src/shaderc/precompiled.rs`, the cargo feature
   `precompiled-shaders`):** app shaders compiled by our own compiler while the image is
   built (`yakogl-precompile`, `tools/precompile`) and looked up by the compiler's record
@@ -169,18 +182,26 @@ yakogl/
                                 OSAL's view of the kick
   src/v3d/{backend,state,texture,kick,ffi}.rs   the Raspberry Pi 4's V3D 4.2 backend (cargo
                                 feature gpu-v3d); src/v3d/v3d_kick.h is the OSAL's view of the kick
+  src/v3d/*71.rs               the V3D 7.1 (Raspberry Pi 5) job builder's pure modules
+                                (state packets, attributes, textures ...); not yet declared in
+                                src/v3d/mod.rs (docs/notes/v3d71-backend.md)
   src/mali/                     the NanoPC-T6's Mali-G610 backend (cargo feature gpu-mali, in
-                                progress; driver/docs/nanopc-t6-mali.md); src/osal/mali.rs its
-                                part of the OSAL contract
+                                progress; driver/docs/nanopc-t6-mali.md): arena, cs, frame,
+                                program, blend, backend, genxml/ (the descriptor packers
+                                generated from Mesa's v10.xml); src/osal/mali.rs its part of
+                                the OSAL contract
   src/osal/mod.rs               g_osal + osal_set_ops; src/osal/render.rs the kick descriptor types
-  src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_mali,baremetal,linux}.c the OSALs (C; zephyr_gc
-                                is the GC7000's, zephyr_v3d the V3D's, zephyr_mali the
+  src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_v3d71,zephyr_mali,baremetal,linux}.c the OSALs (C;
+                                zephyr_gc is the GC7000's, zephyr_v3d the V3D 4.2's,
+                                zephyr_v3d71 the V3D 7.1's, zephyr_mali the
                                 Mali-G610's); zephyr_shaderc_scratch.c
                                 (the compiler's regions) and zephyr_timing.c beside them
   src/shaderc/{mod,offline,link,sha256}.rs      offline shader back end + the shared link rule
   src/shaderc/{precompiled,record_key,packing,es100_twins}.rs  the precompiled back end,
                                 its record key, and helpers the back ends share
-  src/shaderc/online/                           the in-process compiler (`shaderc-online`)
+  src/shaderc/online/                           the in-process compiler (`shaderc-online`):
+                                the shared front end, and powervr/ vivante/ v3d/ mali/, the
+                                code generator of each GPU
   tests/reference/{blobs,vivante_blobs}.rs      the Mesa reference tables (measurement-only,
                                 `mesa-reference-table`)
   src/{gl_internal,gl_context,backend}.h, src/pvr/pvr_backend.h, src/osal/osal_internal.h
@@ -220,11 +241,13 @@ The GL core reaches the GPU only through `struct yakogl_backend`, a function tab
 depth resolves and mipmap chains; `src/backend.h` has the full table) and the GPU-agnostic types next to it: `struct gles_draw` (the
 fully resolved draw), `gles_attrib`, `gles_texture_bind`, the `GLES_PRIM_/CMP_/CULL_/SOP_`
 enums, `gles_texfmt`, `gles_surf_format` and the three heaps the core allocates in
-(`GLES_HEAP_DATA`, `GLES_HEAP_SHADER`, `GLES_HEAP_PROGRAM`). The contract is defined in
+(`GLES_HEAP_DATA` = 0, `GLES_HEAP_SHADER` = 1, `GLES_HEAP_PROGRAM` = 2, in `src/backend.rs`). The contract is defined in
 `src/backend.rs` (`YakoglBackend`, `GlesDraw`, ...; `#[repr(C)]`, the C enums as `u32`
 aliases) and `src/backend.h` is its C view. `src/backend.rs` also names the
-backend of the build (`g_backend`: `yakogl_backend_pvr`, `yakogl_backend_vivante`,
-`yakogl_backend_v3d` or `yakogl_backend_mali`, from that GPU's `src/<gpu>/backend.rs`). Everything PowerVR-specific (the options, the debug hooks,
+backend of the build (`g_backend`, a pointer to a `YakoglBackend`: the static table
+`yakogl_backend_pvr`, `yakogl_backend_vivante`, `yakogl_backend_v3d` or
+`yakogl_backend_mali`, one per `gpu-*` feature, from that GPU's `src/<gpu>/backend.rs`;
+a `host-test` build starts with it null and a test installs its own table). Everything PowerVR-specific (the options, the debug hooks,
 `pvr_backend_counters`) stays in `src/pvr/pvr_backend.h`; only the on-silicon test
 suite and the samples' diagnostics include it. Each further GPU adds `src/<gpu>/` with
 its own table and shader back end (`driver/docs/vivante-kernel-rust.md` and
@@ -243,8 +266,8 @@ wait for the object's stamp while it is pending.
 ## The Rust crate (2026-09)
 
 The GL/EGL core, the PowerVR backend and the offline shader back end were rewritten from
-C to Rust: the crate `yakogl` at the repository root (`no_std`, no dependencies,
-an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
+C to Rust: the crate `yakogl` at the repository root (`no_std`; `[dependencies]` in `Cargo.toml` is empty, so no runtime dependencies: the
+only dependency is the build-time `cc` of `build.rs`; an `rlib` without a panic handler; exactly one of `gpu-powervr` | `gpu-vivante` |
 `gpu-v3d` | `gpu-mali` picks the GPU, `osal-linux` | `osal-zephyr` | `osal-baremetal` pick the
 compile-time default of `g_osal`, `host-test` for host tests only). The static library for C is the crate `yakogl-capi` (capi/), which owns the
 panic handler. The C ABI is the product and did not
@@ -253,7 +276,7 @@ are `extern "C"` / `#[repr(C)]`.
 
 What deliberately stays C:
 
-- the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_mali,zephyr_shaderc_scratch,zephyr_timing,baremetal,linux}.c`:
+- the OSALs `src/osal/{zephyr,zephyr_gc,zephyr_v3d,zephyr_v3d71,zephyr_mali,zephyr_shaderc_scratch,zephyr_timing,baremetal,linux}.c`:
   thin glue over C APIs (Zephyr macros and inlines, board hook pointers, a variadic log),
   none of which stable Rust can define (their move to Rust is open work,
   #19);
