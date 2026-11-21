@@ -712,18 +712,16 @@ IWDG bounds a hang at ~32 s (`docs/notes/stm32mp257f-dk-uboot-boot.md`,
 `tools/board.sh [--dry-run] stm32mp257f-dk status|install|uninstall|default <image> <1-9|forever>|nodefault`
 is `exec`'d to `tools/board-stm32mp2-standalone.sh` (the standalone boot;
 `--dry-run` and the runner's exit code pass through, the runner owns the
-person gate and the locking); every other board.sh verb for the DK is refused
-with exit 2, naming `board-stm32mp2.sh` and `board-stm32mp2-uboot.sh`, which
-are the DK's one-shot runners (the older text below on board.sh's mapping
-of `run`, `probe` and `disarm` no longer applies; call the runners directly).
-`tools/board.sh stm32mp257f-dk` used to dispatch to it: `run`, `probe`, `status`
-and `disarm` map to the runner's verbs (board.sh adds the image check
-against the DK's 0xa0000000..0xb0000000 window and the board lease, takes
-no board lock — the runner's board lock would refuse one already held —
-and exits with the runner's code); `install` and `uninstall` mean nothing
-for a route that arms nothing, and `default` and `tree` are refused with a
-pointer (the bootcmd hook for the standalone boot is the previous
-section's). The runner makes its own run directory under the log directory
+person gate and the locking; `status` is that runner's). The U-Boot one-shot
+verbs `run <image> <logdir> [name]`, `probe <logdir>`, `disarm` and
+`uboot-status` (the one-shot runner's own `status`; `probe` is the same read)
+go to `tools/board-stm32mp2-uboot.sh` with `BOARD_BOOT` (`uboot-mmc`, the
+default, or `uboot-tftp`): board.sh adds the image check against the DK's
+0xa0000000..0xb0000000 window and the board lease, takes no board lock (the
+runner's board lock would refuse one already held), and exits with the
+runner's code; `tree` is refused with a pointer, and every other verb with
+exit 2 naming both runners and `board-stm32mp2.sh`. The runner `stage` verb
+is not routed (call the runner). The runner makes its own run directory under the log directory
 (`meta.txt`, `console.raw`, `console.ts`, `typed.log`, `env-before.txt` and
 `env-after.txt`, `boot-sha256.txt` and `boot-sha256.after.txt`, the two
 diffs, `verdict.txt`) and prints board.sh's verdict line in its `row` form,
