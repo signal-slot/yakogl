@@ -153,6 +153,10 @@ back into ST's Linux; its header comment has the steps).
 Kconfig (`Kconfig`, the STM32MP257F-DK menu):
 
 - `GL_TEST_MP2_CASE`: the case to run, 7 the regression set (the default).
+- `GL_TEST_MP2_SKIP` (default "10"): cases the set leaves out; the set is the
+  i.MX8MP's (case 7, `SET_ORDER`) minus this list. Only case 10 (prims,
+  a 3 px wide LINE_LOOP) is out, until the Q11 line-width decision. Set it
+  to "" for the whole set.
 - `GL_TEST_MP2_SET_HEAD` (off by default): run only the first
   `GL_TEST_MP2_SET_HEAD_CASES` cases of the regression set, in its order
   (`SET_ORDER`, `driver/tools/pvrlab/runner/src/lib.rs`), instead of
