@@ -435,3 +435,117 @@ This note: `docs/notes/mali-mixcol-lowering.md`. The references and test it
 reads: `tools/mali/testdata/deqp_mixcol_*`, `tests/mali_deqp_mixcol.rs`,
 `tests/mali_deqp_colourpair.rs`. The compiler functions named above are in
 `src/shaderc/online/mali/nir_fs.rs` and `mod.rs`.
+
+## 7. Measured sites at a7260420
+
+HOST-ONLY, a measurement of the 18 `deqp_mixcol_*` references at the tip
+`a7260420` (plan #387, item mixcol-sites). A scratch test compiled each
+pair through `tests/mali_ref::compile_pair` (features `host-test,gpu-mali,
+shaderc-online,no-shader-table`, as `tests/mali_deqp_mixcol.rs`) with
+temporary `eprintln!` markers at every `return Err(MixedPrecision |
+ColourPair | ColourZeroHalf)` and at every setter of `Fs::mixed`; the
+markers and the test were removed again, nothing under `src/` or `tests/`
+changed. Line numbers are those of `a7260420` and drift. "Site" is where
+the refusal returns; "setters" are the places that set `Fs::mixed` before
+the final check at `mod.rs:1577` (the `FsPrecision::of` flag
+`mixed: prec.mixed` at `nir_fs.rs:4170`, `highp_locals_copy` at `:4239`,
+`fp16_operand` at `:3883`). All 18 texts are the ones of
+`tests/mali_deqp_mixcol.rs` (`REFUSALS`): nothing moved since mixcol-ref.
+
+| reference | text | site | step (design) | step measured |
+|---|---|---|---|---|
+| `ck_scale` | CK | `nir_fs.rs:8792` (`vectorise`) | 1 | 1 |
+| `ck_scale_highp` | CK | `:8792`; setters `:3883` x2 and `:4239` already fired | 1 | **1 and 3**: step 1 alone ends at `mod.rs:1577` (inferred from the setters, the run stops at `:8792` first) |
+| `ck_sum` | CK | `:8792` | 2 | 2 |
+| `ck_rnd_other` | CK | `:8792` | 2 | 2 |
+| `lz_scale` | LZ | `nir_fs.rs:8757` (`vectorise`) | 1 | 1 |
+| `lz_rnd` | LZ | `:8757` | 2 | 2 |
+| `lz_rnd_other` | LZ | `:8757` | 2 | 2 |
+| `int_uniform` | MIX | `nir_fs.rs:5806` (product or sum on an fp32 value) | 4 | 4 (site confirmed) |
+| `int_uniform_struct` | MIX | `:5806` | 4 | 4 (site confirmed) |
+| `f2i_seq` | MIX | `:5806` | 4 | 4 (site confirmed) |
+| `f2i_rnd` | MIX | `:5806`, **not** the `mod.rs:1577` flag | 5 | **4, then 5**: see 7.2 |
+| `f2i_dead` | MIX | `:5806`, **not** the flag | 5 | **4, then 5**: see 7.2 |
+| `hp_scale` | MIX | `mod.rs:1577` (flag); setters `:3883`, `:4239` | 3 (needs fclane 1-3) | **3** alone, plus word changes (7.1) |
+| `hp_bool` | MIX | `mod.rs:1577`; setters `:3883` x4, `:4239` | 3 (needs fclane 2) | **3** alone, plus word changes, vertex words too (7.1) |
+| `hp_mat` | MIX | `mod.rs:1577`; setters `:4170`, `:3883` x4, `:4239` | 3 (needs fclane 3) | **3** alone, plus word changes (7.1) |
+| `hp_param` | MIX | `mod.rs:1577`; setter `:4170` only | 3 (alone) | **3** plus word changes (7.1) |
+| `hp_loop` | MIX | `mod.rs:1577`; setter `:4239` only | 3 (alone, with the loop lowering) | **3** (flag relief alone, no loop lowering) |
+| `hp_seq` | MIX | `mod.rs:1577`; setters `:3883` x2, `:4239` | 3 (alone) | **3** (flag relief alone) |
+
+### 7.1 The read-not-measured prediction of section 3, settled
+
+Section 3 predicted that after step 3 the `hp_scale`, `hp_bool` and
+`hp_mat` cases stop at `gl_FragColor lane` (fclane's text). **It is false at
+the tip.** To measure it, one run skipped the final `f.mixed` check at
+`mod.rs:1577` (a scratch environment switch, not kept). That check runs
+after the whole walk, so every walk refusal had already stood first: with it skipped, all six `hp_*` references **compile**,
+none meets a `gl_FragColor lane` or any other text. Compared byte for byte
+with their references in that run:
+
+- `hp_loop`, `hp_seq`: **byte-equal** in every region. The flag relief
+  alone lifts them; `hp_loop` needs no loop lowering (it unrolls).
+- `hp_param`: 14 words against 16. Mesa computes `FADD.f32 r1, r0, r0` and
+  narrows `FADD.f32 r1.h0, r1^.neg, 0x0.neg` at fp32; ours folds the highp
+  `+in0`/`abs` chain into `FMA.v2f16`/`FADD.v2f16` words at fp16 from the
+  first word. The walk lacks the fp32 value, not a refusal.
+- `hp_scale`: 10 words against 9 and a different FAU: ours keeps `FADD.f32
+  r0.h0, r0^, 0x0.neg` plus `FMA.v2f16 ... u2.w0` where Mesa has the negate
+  folded in the narrowing (`r0^.neg`) and a `0x38000000.h11` scale.
+- `hp_mat`: 13 words against 15: Mesa folds the highp `const mat2` columns
+  at fp32 (`FADD_IMM.f32 #0x3ECCCCCD`, `#0x3F333333`, ...) and narrows each
+  lane; ours adds the columns at fp16 (`FADD.v2f16` with FAU halves).
+- `hp_bool`: differs in the **vertex** regions too (`vs.position` FAU
+  words, `vs.varying` 18 words against 32: Mesa's `LEA_BUF_IMM` precedes the
+  `LD_ATTR_IMM` and the store addressing differs). Cause not narrowed here:
+  the vertex side of `hp_bool` is a finding for step 3's owner (it may be
+  the varylink/store-order family, not mixcol).
+
+Consequence for the plan: the 55 cases of `hp_scale`, `hp_bool`, `hp_mat`
+do **not** wait for fclane steps 1 to 3 to compile; they wait for step 3's
+own work (highp values kept at fp32 and narrowed at the mediump consumer,
+the highp constant fold at fp32) and are byte-compared like any other.
+Step 3's relief is three setters, not one: `FsPrecision::of` (`:4170`, `hp_param`,
+`hp_mat`), `highp_locals_copy` (`:4239`, five of the six) and
+`fp16_operand` (`:3883`, the highp varying read in a mediump shader:
+`hp_scale`, `hp_bool`, `hp_mat`, `hp_seq`, `ck_scale_highp`). The design
+names only the first and the second. Caveat: skipping the check is a probe,
+not a lowering; a real relief that changes how these setters judge may make
+the walk take other arms.
+
+### 7.2 Step 5's mechanism is wrong for `f2i_rnd` and `f2i_dead`
+
+Section 2.1 cause 3 and step 5 say the refusal of these two is a `f.mixed`
+flag set on a node that `mark_live` or a fold later kills, reported at
+`mod.rs:1570`. **Measured: neither sets `Fs::mixed`.** Both return
+`MixedPrecision` from the walk at `nir_fs.rs:5806`, the same arm as
+`int_uniform` and `f2i_seq`, because an operand of the product or sum (a raw
+mediump varying lane or uniform converted through `int(b)`, `int(e)`) is in
+none of the arm's accepted forms. The nodes are dead or multiplied by 0.0
+(`f2i_dead`: `a` and `d` are never read; `f2i_rnd`: `* vec4(0, 0, 1, a)`),
+so Mesa never sees the conversion, but the walk returns before any fold or
+`mark_live`. So:
+
+- step 4's `ok` extension would turn these two from a refusal into a
+  compiled shader whose words are not checked (they would hold the
+  conversions Mesa folded away); step 5's job is to make the arm not run
+  for a node the folds kill (the fold before the width question), not to
+  record a cause code for `mark_live`;
+- the "record the cause on the node" part of step 5 and step 0's cause code
+  are only needed for the `Fs::mixed` setters of the `hp_*` and
+  `ck_scale_highp` rows, where the flag is global and every one of those
+  references is live code.
+
+### 7.3 References whose step changes
+
+1. `ck_scale_highp`: 1 becomes 1 and 3.
+2. `f2i_rnd`, `f2i_dead`: 5 becomes 4 and 5, with step 5 redefined (7.2).
+3. `hp_scale`, `hp_bool`, `hp_mat`: need step 3's own word work, not fclane
+   steps 1 to 3 (7.1); `hp_bool` also differs in the vertex words.
+4. `hp_param`: step 3 does not lift it alone; its words differ (7.1).
+5. `hp_loop`, `hp_seq`: unchanged step, but the flag relief alone byte-equals
+   them, so step 3 can land with these two first.
+
+Unchanged (9): `ck_scale`, `ck_sum`, `ck_rnd_other`, `lz_scale`, `lz_rnd`,
+`lz_rnd_other`, `int_uniform`, `int_uniform_struct`, `f2i_seq`; their site
+is confirmed as the read one. Changed or refined: the 9 above (items 1 to 5).
