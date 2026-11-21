@@ -334,6 +334,61 @@ a verdict may only move forward (to `ok`), a change in place is a regression.
   shapes are the six faces: `fstex_cubeface0..3` are refused as `TexCoord` and are the host-side
   twin of `tc_cube_face`; they are the first test to flip).
 
+## 7. Measured sites at a7260420
+
+Measured, not read: a scratch test (not committed) compiled every `tools/mali/testdata/deqp_fmaloc_*`
+reference through the Mali online compiler as `tests/mali_deqp_fmaloc.rs` does (features
+`host-test,gpu-mali,shaderc-online,no-shader-table`), with every `Err(MaliError::{FusedMultiplyAdd,
+TexCoord,TexKind})` temporarily made to print its own `file:line` and, for `tc_2d_scalar`, the
+coordinate lanes' `Val`. The instrumentation was reverted; nothing under `src/` or `tests/` changed.
+All 22 references are refused, each with the text `REFUSALS` pins (none moved). Line numbers are
+those of a7260420 and drift, as section 2's did.
+
+| Reference | Text | Measured site | Step of section 4 |
+|---|---|---|---|
+| `fma_constmat_mat`, `fma_const_asin`, `fma_const_reflect`, `fma_const_matmat` | FMA | `nir.rs:4816`, the vertex walk's catch-all `AluOp::Ffma` (section 2.1 quoted 4781) | 3 `fma-const` (constprod K4, below) |
+| `fma_constmat_vec`, `fma_attrmat_vec`, `fma_attrmat_unimat` | FMA | `nir.rs:4816` | 2 `fma-matrix` (constprod K6) |
+| `fma_asin`, `fma_atan`, `fma_atan2` | FMA | `nir.rs:4816` | 5 `fma-trig` (constprod K5) |
+| `fma_reflect_float` | FMA | `nir.rs:4816` | 6 `fma-reflect-float` (constprod K7) |
+| `tc_cube_face` | TexCoord | `nir_fs.rs:6608`, the mediump implicit cube arm, as section 2.2 says | 1 `tex-cube-face` |
+| `tc_cube_const`, `tc_cube_rnd_sub` | TexCoord | `nir_fs.rs:6608` | 4 `tex-cube-misc` |
+| `tc_2d_scalar` | TexCoord | **`nir_fs.rs:9924`**, the pair builder's lone-computed check (`nd.src[0] != nd.src[1]`), not 6808 | none: see below; step 7 is void |
+| `tk_bias_uniform`, `tk_bias_varying`, `tk_proj_vec3`, `tk_proj_vec4`, `tk_rnd_bias`, `tk_rnd_proj` | TexKind | `nir_fs.rs:6786`, the generic 2D arm's non-plain look-up | none in section 4: T2 (section 6) |
+| `tk_cube_bias` | TexKind | `nir_fs.rs:6577`, the cube arm's kind check | none in section 4: T2, after step 1 |
+
+The eleven FMA references share one site. The walk reaches 4816 after `is_mat_term`, `is_fmod`,
+`is_cross`, `is_mix`/`is_smoothstep_inner` and `is_reflect` all fail; which predicate each shape
+misses is still section 2.1's reading (the scratch test did not print the source shapes). What is
+measured is that none of them is folded or accepted earlier.
+
+### `tc_2d_scalar`: the inference is refuted
+
+Section 2.2 said the bool constant `c` reaches the generic 2D arm as `Val::Undef`, so the case
+would be an `intval` shape. It does not. At the generic arm the lanes are
+`s = Val::Const(0x3F800000)` (1.0: `const bool c = bvec2(1.0, 0).x` is a folded true lane) and
+`t = Val::Lane(4, 0)` (the varying `b`). Neither is `Undef`, so the arm takes
+`TexCoord::Computed` and returns normally. The refusal comes later, at `nir_fs.rs:9924`: the
+pair builder's rule "a computed coordinate: one fp16 lane in both" requires `nd.src[0] ==
+nd.src[1]` (case 121's `vec2(c.w * 0.5)`), and here the two lanes differ (constant, varying).
+So `tc_2d_scalar` is a **coordinate-side shape with a mechanism of its own**: a computed 2D
+coordinate of two different lanes in the pair builder (`coord_lane`, `nir_fs.rs:9676`), whose
+reference has `MOV.i32 r2, 0x3F800000` and `MOV.i32 r3, r0^` at fp32 in a mediump shader.
+Section 3.2's "no coordinate work, a check after `intval`" and step 7 are wrong: nothing in
+`intval` moves this refusal. It belongs to the TexCoord family (T1), as a step beside step 1:
+one reference, one case (`shaders.random.texture.fragment.12`). Its session starts by reading
+which words Mesa gives the pair, since `coord_lane` builds none for two different lanes.
+
+### Which FMA rows belong to constprod
+
+All eleven. `mali-lowering-schedule.md` 4a gives this note's 63 FMA cases to constprod (K4 to K7)
+and leaves fmaloc T1 and T2. By reference: K4 (constant calls through the `alu_sized` route):
+`fma_const_asin`, `fma_const_reflect`, `fma_const_matmat`, and `fma_constmat_mat` (a constant
+`mat3 * mat3`; assumed, the constprod note does not name it); K5 (`acos/asin/atan/atan2` of a
+vertex value): `fma_asin`, `fma_atan`, `fma_atan2`; K6 (matrix products of attributes and
+constants): `fma_constmat_vec`, `fma_attrmat_vec`, `fma_attrmat_unimat`; K7 (scalar `reflect`):
+`fma_reflect_float`. Section 4's steps 2, 3, 5 and 6 are therefore constprod's. What stays here is
+steps 1 and 4 (cube directions), the `tc_2d_scalar` step above, and T2 (`tk_*`).
+
 ## 6. Not in this note
 
 - The `tk_*` references (bias, projection, cube bias: 27 cases) are `MaliError::TexKind`;
