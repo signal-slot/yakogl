@@ -374,4 +374,168 @@ mod tests {
         assert_eq!(Op71::CondMov { dst: V(4), src: Src71::LdvaryC, cond: Cond::None }.def(), None);
         assert!(Op71::Label(Label(0)).is_control_flow());
     }
+
+    #[test]
+    fn sfu_maps_to_its_own_add_op() {
+        // The six SFU operations are add-unit operations at 7.1, one each
+        // (Mesa 26.2.1 qpu/qpu_instr.c:788-803 v3d_qpu_instr_is_sfu).
+        let pairs = [
+            (Sfu71::Recip, AddOp71::Recip),
+            (Sfu71::Rsqrt, AddOp71::Rsqrt),
+            (Sfu71::Exp, AddOp71::Exp),
+            (Sfu71::Log, AddOp71::Log),
+            (Sfu71::Sin, AddOp71::Sin),
+            (Sfu71::Rsqrt2, AddOp71::Rsqrt2),
+        ];
+        for (s, a) in pairs {
+            assert_eq!(s.add_op(), a, "{s:?}");
+        }
+        for i in 0..pairs.len() {
+            for j in 0..i {
+                assert_ne!(pairs[i].1, pairs[j].1);
+            }
+        }
+    }
+
+    #[test]
+    fn src_vreg_only_for_registers() {
+        assert_eq!(Src71::V(V(5)).vreg(), Some(V(5)));
+        assert_eq!(Src71::Unpacked(V(6), Unpack71::Abs).vreg(), Some(V(6)));
+        assert_eq!(Src71::SmallImm(3).vreg(), None);
+        assert_eq!(Src71::Payload(2).vreg(), None);
+        assert_eq!(Src71::LdvaryC.vreg(), None);
+        assert_eq!(Src71::None.vreg(), None);
+    }
+
+    #[test]
+    fn def_of_each_op() {
+        let u = Uniform::constant(1);
+        let a = Src71::V(V(0));
+        let n = Src71::None;
+        // Register destinations define; TLB, nop, none and magic do not.
+        for (dst, want) in [
+            (Dst71::V(V(7)), Some(V(7))),
+            (Dst71::Tlb, None),
+            (Dst71::Tlbu(u), None),
+            (Dst71::Nop, None),
+            (Dst71::None, None),
+            (Dst71::Magic(10), None),
+        ] {
+            assert_eq!(Op71::Add { op: AddOp71::Add, dst, a, b: a }.def(), want, "{dst:?}");
+            assert_eq!(Op71::Mul { op: MulOp71::Mov, dst, a, b: n }.def(), want, "{dst:?}");
+        }
+        assert_eq!(Op71::Ldunif { dst: V(1), u }.def(), Some(V(1)));
+        assert_eq!(Op71::Ldvary { dst: V(2) }.def(), Some(V(2)));
+        assert_eq!(Op71::Ldtmu { dst: V(3) }.def(), Some(V(3)));
+        // Not definitions: the destination of a Copy and a CondMov is a use.
+        let none = [
+            Op71::Wrtmuc { u },
+            Op71::Thrsw,
+            Op71::Flags { unit: FlagOp71::Add(AddOp71::Add), a, b: a, pf: Pf::PushZ, uf: Uf::None },
+            Op71::Setmsf { src: a, cond: Cond::IfA },
+            Op71::Copy { dst: V(1), src: a },
+            Op71::CondMov { dst: V(1), src: a, cond: Cond::IfB },
+            Op71::LoopHead,
+            Op71::BackEdge { cond: BranchCond::Always, msfign: Msfign::None },
+            Op71::FwdBranch { cond: BranchCond::A0, msfign: Msfign::P, label: Label(1) },
+            Op71::Label(Label(1)),
+        ];
+        for op in none {
+            assert_eq!(op.def(), None, "{op:?}");
+        }
+    }
+
+    #[test]
+    fn uses_of_each_op() {
+        let a = Src71::V(V(1));
+        let b = Src71::Unpacked(V(2), Unpack71::L);
+        let n = Src71::None;
+        let d = Dst71::V(V(9));
+        assert_eq!(Op71::Add { op: AddOp71::Fadd, dst: d, a, b }.uses(), [a, b]);
+        assert_eq!(Op71::Mul { op: MulOp71::Fmov, dst: d, a: b, b: a }.uses(), [b, a]);
+        assert_eq!(
+            Op71::Flags { unit: FlagOp71::Mul(MulOp71::Fmov), a, b, pf: Pf::PushN, uf: Uf::AndZ }.uses(),
+            [a, b]
+        );
+        assert_eq!(Op71::Sfu { op: Sfu71::Exp, dst: V(4), a: b }.uses(), [b, n]);
+        assert_eq!(Op71::Setmsf { src: a, cond: Cond::IfNA }.uses(), [a, n]);
+        // A conditional move and a copy read the destination as well:
+        // the old value survives where the condition fails.
+        assert_eq!(Op71::CondMov { dst: V(4), src: a, cond: Cond::IfA }.uses(), [a, Src71::V(V(4))]);
+        assert_eq!(Op71::Copy { dst: V(5), src: Src71::LdvaryC }.uses(), [Src71::LdvaryC, Src71::V(V(5))]);
+        let u = Uniform::constant(0);
+        for op in [
+            Op71::Ldunif { dst: V(0), u },
+            Op71::Ldvary { dst: V(0) },
+            Op71::Ldtmu { dst: V(0) },
+            Op71::Wrtmuc { u },
+            Op71::Thrsw,
+            Op71::LoopHead,
+            Op71::Label(Label(0)),
+            Op71::BackEdge { cond: BranchCond::A0, msfign: Msfign::Q },
+        ] {
+            assert_eq!(op.uses(), [n, n], "{op:?}");
+        }
+    }
+
+    #[test]
+    fn implicit_rf0_writers_are_exactly_ldunif_and_ldvary() {
+        // v3d_qpu_writes_rf0_implicitly: qpu/qpu_instr.c:1030-1040.
+        let u = Uniform::constant(0);
+        let a = Src71::V(V(0));
+        let yes = [Op71::Ldunif { dst: V(0), u }, Op71::Ldvary { dst: V(0) }];
+        let no = [
+            Op71::Ldtmu { dst: V(0) },
+            Op71::Wrtmuc { u },
+            Op71::Thrsw,
+            Op71::Add { op: AddOp71::Add, dst: Dst71::V(V(0)), a, b: a },
+            Op71::Mul { op: MulOp71::Mov, dst: Dst71::V(V(0)), a, b: Src71::None },
+            Op71::Sfu { op: Sfu71::Recip, dst: V(0), a },
+            Op71::Copy { dst: V(0), src: a },
+            Op71::CondMov { dst: V(0), src: a, cond: Cond::None },
+            Op71::LoopHead,
+            Op71::Label(Label(0)),
+        ];
+        for op in yes {
+            assert!(op.writes_rf0_implicitly(), "{op:?}");
+        }
+        for op in no {
+            assert!(!op.writes_rf0_implicitly(), "{op:?}");
+        }
+    }
+
+    #[test]
+    fn control_flow_ops_are_the_four_only() {
+        let u = Uniform::constant(0);
+        let a = Src71::V(V(0));
+        for op in [
+            Op71::LoopHead,
+            Op71::BackEdge { cond: BranchCond::Always, msfign: Msfign::None },
+            Op71::FwdBranch { cond: BranchCond::AllA, msfign: Msfign::None, label: Label(2) },
+            Op71::Label(Label(2)),
+        ] {
+            assert!(op.is_control_flow(), "{op:?}");
+        }
+        for op in [
+            Op71::Thrsw,
+            Op71::Ldvary { dst: V(0) },
+            Op71::Wrtmuc { u },
+            Op71::Setmsf { src: a, cond: Cond::None },
+            Op71::Flags { unit: FlagOp71::Add(AddOp71::Sub), a, b: a, pf: Pf::None, uf: Uf::AndZ },
+        ] {
+            assert!(!op.is_control_flow(), "{op:?}");
+        }
+    }
+
+    #[test]
+    fn selected71_and_stub_helpers() {
+        assert!(NOT_YET_71.contains("7.1"));
+        let sel = empty_selected(true);
+        assert!(sel.fragment);
+        assert!(sel.ops.is_empty());
+        assert!(!empty_selected(false).fragment);
+        let ops = [Op71::Thrsw];
+        let s = Selected71 { ops: &ops, fragment: false, vregs: 3 };
+        assert_eq!((s.ops.len(), s.vregs, s.fragment), (1, 3, false));
+    }
 }
