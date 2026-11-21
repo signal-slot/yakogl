@@ -10,10 +10,13 @@
  *
  * The firmware's list is wherever channel 0's LPTRS.HEADE names, read at run
  * time (on the board it was word 672), never assumed to be words 0..31.
- * hvs6_dlist_swap.h (dlplace) finds it, walks it entry by entry to its END
- * and refuses a list with no END within HVS6S_FW_MAX words; it places our
- * list only in words that read zero, clear of words 0..31 and of the
- * firmware's span, within the list memory (mem_words, from CXM_SIZE).
+ * hvs6_dlist_swap.h (dlplace) finds it and walks it entry by entry to its
+ * END; it places our list only in words that read zero, clear of words 0..31
+ * and of the firmware's span, within the list memory (mem_words, from
+ * CXM_SIZE). With no END within HVS6S_FW_MAX words (the board, s32dumprun)
+ * the span is the fixed window [HEADE, HEADE + min(256, mem_words - HEADE))
+ * and our list goes only wholly before HEADE, clear of the other channels'
+ * LPTRS.HEADE (s32noend); the restore compares the whole window.
  *
  *   S1  the HVS VERSION word and the stepping it names, CXM_SIZE
  *   S2  channel 0's CTRL0, LPTRS, STATUS (FRCNT) and DL words, decoded, and
@@ -234,14 +237,12 @@ static struct hvs6s_snap plansnap, fwsnap;
 static struct swap_step steps[SWAPS];
 static uint32_t fw_rb[HVS6S_FW_MAX];
 
-/* The firmware's span in words for swap_check.h: the walked length to the
- * END, or, when the walk found none, the extent it read from HEADE. */
+/* The firmware's span in words for swap_check.h: the snapshot's fw_len, the
+ * walked list to its END or, with no END in view, the fixed window, so that
+ * the judge and the restore compare against the same span. */
 static uint32_t fw_words_of(const struct hvs6s_snap *s)
 {
-	if (s->fw_end_found) {
-		return s->fw_len;
-	}
-	return s->walk_stop >= s->fw_head ? s->walk_stop - s->fw_head + 1u : 0u;
+	return s->fw_len;
 }
 
 static bool snaps_equal(const struct hvs6s_snap *a, const struct hvs6s_snap *b)
@@ -447,8 +448,12 @@ int main(void)
 		       start, got, saw_end ? "at word" : "NOT found within them");
 		if (saw_end) {
 			printk(" %u (list index %u)\n", start + end_idx, end_idx);
+		} else if (next_entry < got) {
+			printk(" (entry walk stopped at list index %u, word %u = 0x%08x)\n",
+			       next_entry, start + next_entry, snap[next_entry]);
 		} else {
-			printk(" (entry walk stopped at list index %u)\n", next_entry);
+			printk(" (entry walk stopped at list index %u, word %u, past the %u words "
+			       "read)\n", next_entry, start + next_entry, got);
 		}
 	}
 
@@ -510,14 +515,17 @@ int main(void)
 		       snap_err == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(snap_err),
 		       cfg.mem_words, cxm, plansnap.lptrs, plansnap.fw_head, plansnap.fw_len,
 		       plansnap.fw_entries, plansnap.walk_stop, plansnap.walk_word,
-		       plansnap.fw_end_found ? "found" : "NOT found");
+		       plansnap.fw_end_found ? "found"
+		       : plansnap.fw_noend   ? "NOT found: fixed window kept, our list before HEADE"
+					     : "NOT found");
 	}
 	if (snap_err == HVS6S_OK) {
 		/* The hash is over the firmware's words [HEADE, HEADE + fw_len),
 		 * END included: the list the channel runs, as the restore compares. */
-		printk("u3 snapshot: list-ptr=0x%08x heade=%u words=%u hash=0x%08x\n",
+		printk("u3 snapshot: list-ptr=0x%08x heade=%u words=%u hash=0x%08x%s\n",
 		       plansnap.lptrs, plansnap.fw_head, plansnap.fw_len,
-		       words_hash(plansnap.fw, plansnap.fw_len));
+		       words_hash(plansnap.fw, plansnap.fw_len),
+		       plansnap.fw_noend ? " window=noend" : "");
 	} else {
 		uint32_t sl = plansnap.lptrs != 0 ? plansnap.lptrs : lptrs;
 
@@ -554,6 +562,10 @@ int main(void)
 					break;
 				}
 			}
+		} else if (plan.place_chan >= 0) {
+			snprintk(why, sizeof(why), "%s: channel %d's LPTRS 0x%08x (HEADE %lld)",
+				 hvs6s_err_name(place_err), plan.place_chan, plan.place_bad_val,
+				 (long long)plan.place_bad_word);
 		} else if (plan.place_bad_word >= 0) {
 			snprintk(why, sizeof(why), "%s: word %lld reads 0x%08x",
 				 hvs6s_err_name(place_err), (long long)plan.place_bad_word,
@@ -573,10 +585,12 @@ int main(void)
 		plan.start = pair;
 		plan.len = PAIR_WORDS;
 		printk("rpi5_scanout32: S6 placement check ok: words %u..%u read zero, clear of "
-		       "words 0..%u, the firmware's list %u..%u (%u entries, END at word %u) and "
+		       "words 0..%u, the firmware's %s %u..%u (%u entries, %s word %u) and "
 		       "every channel's list pointer; %u non-zero word(s) stepped past\n",
-		       pair, pair + PAIR_WORDS - 1u, HVS6S_KEPT - 1u, plansnap.fw_head,
-		       plansnap.fw_head + plansnap.fw_len - 1u, plansnap.fw_entries,
+		       pair, pair + PAIR_WORDS - 1u, HVS6S_KEPT - 1u,
+		       plansnap.fw_noend ? "window (no END, ours wholly before HEADE)" : "list",
+		       plansnap.fw_head, plansnap.fw_head + plansnap.fw_len - 1u,
+		       plansnap.fw_entries, plansnap.fw_noend ? "walk stopped at" : "END at",
 		       plansnap.walk_stop, plan.place_skipped);
 		printk("rpi5_scanout32: S6 dlswap place ok: slot A word %u, slot B word %u, %u "
 		       "words each\n", slot[0], slot[1], SLOT_WORDS);
