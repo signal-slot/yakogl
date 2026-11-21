@@ -38,6 +38,13 @@
 #   GM2_PERF=1       also sample each entry's counted frames with perf record
 #                    (implies GM2_PROFILE=1): logs/<gpu>/<i>.perf-self.txt and
 #                    .perf-children.txt, per function; GM2_PERF_FREQ=2000 Hz
+#   YAKOGL_GC_TILED_RT=1  runs with the Vivante knob gc_tiled_rt on: the
+#                    library is built with the crate feature test-knobs
+#                    (cmake -DYAKOGL_TEST_KNOBS=ON) and shim.c calls
+#                    gc_debug_set_tiled_rt(1) before the first GL call
+#                    ("gm2: gc_tiled_rt on" in each log). vivante only; use
+#                    a work directory of its own (the feature set differs).
+#                    Unset: build and run are as without this line.
 #   YAKOGL_V3D_*     the V3D's settings (src/osal/linux.c, "the V3D"); each
 #                    one not set is taken from the Pi 4's glmark2 image,
 #                    driver/samples/zephyr/glmark2/boards/rpi_4b.conf (its
@@ -53,7 +60,7 @@ VERSION=2023.01 # meson.build's project version at that commit
 
 die() { echo "glmark2/run.sh: $*" >&2; exit 1; }
 
-[ $# -ge 1 ] || { sed -n '3,47p' "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n '3,54p' "$0"; exit 2; }
 # The physical path: the tree is often reached through a symlink (the
 # dependency layout's glmark2-src, tools/cts/deps-env.sh --layout, is one), and git reports its top level resolved, so the comparison below
 # must see the same spelling on both sides.
@@ -87,6 +94,13 @@ else
     "glmark2-$COMMIT") provenance="GitHub archive glmark2-$COMMIT (not a git tree: the commit is the archive's name)" ;;
     *) die "$GM_ROOT is neither a git checkout nor the archive directory glmark2-$COMMIT" ;;
   esac
+fi
+TEST_KNOBS=OFF
+if [ "${YAKOGL_GC_TILED_RT:-0}" = 1 ]; then
+  TEST_KNOBS=ON
+  for g in "${GPUS[@]}"; do
+    [ "$g" = vivante ] || die "YAKOGL_GC_TILED_RT=1 is the Vivante's knob: run it with the gpu vivante only"
+  done
 fi
 for g in "${GPUS[@]}"; do
   case "$g" in
@@ -258,7 +272,7 @@ for g in "${GPUS[@]}"; do
   src="$ROOT" shim="$GMO/shim.o"
   [ "$g" = mali ] && src="$HERE/mali" shim="$GMO/shim-mali.o"
   cmake -S "$src" -B "$B" -DYAKOGL_OSAL=linux -DYAKOGL_GPU="$g" -DYAKOGL_SHADERC=online \
-    -DYAKOGL_REPORT_ES2=ON -DYAKOGL_CARGO_PROFILE=release -DYAKOGL_CARGO="$CARGO_BIN" > "$B.cmake.log" 2>&1 ||
+    -DYAKOGL_REPORT_ES2=ON -DYAKOGL_TEST_KNOBS="$TEST_KNOBS" -DYAKOGL_CARGO_PROFILE=release -DYAKOGL_CARGO="$CARGO_BIN" > "$B.cmake.log" 2>&1 ||
     { tail -20 "$B.cmake.log"; die "cmake ($g) failed"; }
   cmake --build "$B" --target yakogl_archive -j "$(nproc)" >> "$B.cmake.log" 2>&1 ||
     { tail -30 "$B.cmake.log"; die "building libyakogl.a ($g) failed"; }

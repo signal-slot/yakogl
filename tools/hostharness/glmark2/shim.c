@@ -1173,6 +1173,27 @@ __attribute__((constructor)) static void gccost_init(void)
 	gccost_on();
 }
 
+/* YAKOGL_GC_TILED_RT=1 (run.sh then builds the library with test-knobs): the
+ * Vivante knob gc_tiled_rt is turned on in a constructor, so before main and
+ * before the first GL call. The setter is a weak reference: the other GPUs'
+ * libraries have none, and a library built without test-knobs refuses the
+ * switch rather than run knob-off under a knob-on name. */
+extern void gc_debug_set_tiled_rt(int on) __attribute__((weak));
+
+__attribute__((constructor)) static void tiled_rt_init(void)
+{
+	const char *e = getenv("YAKOGL_GC_TILED_RT");
+
+	if (!e || strcmp(e, "1") != 0)
+		return;
+	if (!gc_debug_set_tiled_rt) {
+		fprintf(stderr, "gm2: YAKOGL_GC_TILED_RT=1 but the library has no gc_debug_set_tiled_rt\n");
+		exit(3);
+	}
+	gc_debug_set_tiled_rt(1);
+	fprintf(stderr, "gm2: gc_tiled_rt on\n");
+}
+
 #if defined(GM2_MALI)
 #include <signal.h>
 

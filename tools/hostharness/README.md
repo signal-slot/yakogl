@@ -41,6 +41,26 @@ those before looking for a regression.
 | `compare.sh` | the whole differential check for two libraries (dev and release) |
 | `allow.txt`, `allow-mesa-pds.txt` | documented differences the comparison accepts (`allow.txt` always; the others for one comparison each, named in their header) |
 | `shim/` | the two Zephyr headers `gl_test.c` includes |
+| `glmark2/` | the glmark2 scenes on the host (its own README.md) |
+
+### glmark2: the Vivante's `gc_tiled_rt` knob
+
+`glmark2/run.sh` runs with the Vivante knob `gc_tiled_rt` (tiled render
+targets and early depth, `docs/notes/gc-tiled-wire.md`) on when
+`YAKOGL_GC_TILED_RT=1` is set. The library is then built with the crate
+feature `test-knobs` (`-DYAKOGL_TEST_KNOBS=ON`; the knob's setter
+`gc_debug_set_tiled_rt` exists only with it) and `glmark2/shim.c` calls
+`gc_debug_set_tiled_rt(1)` in a constructor, before the first GL call; each
+log then carries `gm2: gc_tiled_rt on`. It is the Vivante's knob: `run.sh`
+refuses the switch with another GPU, and the shim exits 3 if the library has
+no setter. Unset (or any value but 1) the build and the run are as before.
+The two builds differ in features, so give each its own work directory:
+
+```sh
+GM2_WRITE=0 GM2_ENTRIES='^(terrain|shadow|refract)$' glmark2/run.sh "$GLMARK2_SRC" build/gc-off vivante
+YAKOGL_GC_TILED_RT=1 GM2_WRITE=0 GM2_ENTRIES='^(terrain|shadow|refract)$' \
+  glmark2/run.sh "$GLMARK2_SRC" build/gc-on vivante
+```
 
 ## Usage
 
