@@ -21,6 +21,13 @@ Earlier study: `mali-deqp-misc.md` (plan #377; `Invariant`, `Spill`,
   `VK-GL-CTS-gles3` corpus checkout is there), and the documented fetch
   (`tools/cts/deps.toml`, DEQP_WORK: a clone from GitHub, then
   `external/fetch_sources.py`) was refused by this session's permissions.
+  A later retry fetched the commit (`git fetch --depth 1`) into
+  `$CONNECTED_DEPS_DIR/VK-GL-CTS.part` (objects only, no work tree), but
+  checking it out was not permitted, so neither `fetch_sources.py`, the
+  build nor the measure could run. To finish it: check out `FETCH_HEAD` in
+  that directory, run `external/fetch_sources.py` there, move it to
+  `$CONNECTED_DEPS_DIR/VK-GL-CTS` (`deps.toml` DEQP_WORK), then run the
+  command of section 18.
   The per-text case counts below are therefore section 18.2's, measured at
   `9ac31f30` (all 10,597 cases of the slices `37305608`).
 - **Why those counts stand at `7b540fee`** (an argument, not a
