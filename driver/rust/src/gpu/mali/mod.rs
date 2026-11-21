@@ -52,6 +52,10 @@ pub mod pgtable;
 /// Registers (panthor_regs.h:13-126).
 pub const GPU_ID: usize = 0x0;
 pub const GPU_L2_FEATURES: usize = 0x4;
+/// `CORE_FEATURES` at 0x8, which panthor reads into `drm_panthor_gpu_info`'s
+/// `core_features`: bits 7:0 are the variant of the model (Mesa 26.2.1
+/// src/panfrost/lib/kmod/panthor_kmod.c:162, `core_features & 0xff`).
+pub const GPU_CORE_FEATURES: usize = 0x8;
 pub const GPU_TILER_FEATURES: usize = 0xc;
 pub const GPU_MEM_FEATURES: usize = 0x10;
 pub const GPU_MMU_FEATURES: usize = 0x14;
@@ -232,6 +236,11 @@ pub const L2_WAIT_US: u32 = 20_000;
 pub struct Ident {
     pub gpu_id: u32,
     pub l2_features: u32,
+    /// `CORE_FEATURES`: not used here; the OSAL hands it to the backend,
+    /// whose frames are sized for the model it names with `GPU_ID`
+    /// (src/mali/model.rs), as panthor hands it to Mesa (panthor_hw.c,
+    /// `gpu_info.core_features`).
+    pub core_features: u32,
     pub tiler_features: u32,
     pub mem_features: u32,
     pub mmu_features: u32,
@@ -269,6 +278,7 @@ pub fn ident(m: &impl Mmio, base: usize) -> Ident {
     Ident {
         gpu_id: m.read32(base + GPU_ID),
         l2_features: m.read32(base + GPU_L2_FEATURES),
+        core_features: m.read32(base + GPU_CORE_FEATURES),
         tiler_features: m.read32(base + GPU_TILER_FEATURES),
         mem_features: m.read32(base + GPU_MEM_FEATURES),
         mmu_features: m.read32(base + GPU_MMU_FEATURES),
@@ -672,6 +682,7 @@ mod tests {
         assert_eq!(i.gpu_id >> 16, 0xac74); // the thread's "id 0xac74"
         assert_eq!(i.model(), Ok(Model::G310));
         assert_eq!((i.shader_present, i.l2_present, i.tiler_present, i.as_present), (0x3, 1, 1, 0xff));
+        assert_eq!(i.core_features, mock::G310_ASSUMED.core_features, "the variant read from CORE_FEATURES");
         assert_eq!(i.mmu_shape(), Some(pgtable::Shape { va_bits: 48, pa_bits: 40 }));
         assert!(g.writes.borrow().is_empty());
     }

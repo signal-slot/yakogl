@@ -28,6 +28,7 @@ MIT option of its licence, the design page's decision 1). Nothing is copied.
 | `TILER_PRESENT` | the group's tiler mask and count (`sched`) | read already | panthor_sched.c `panthor_group_create` |
 | `AS_PRESENT` | the group's address space (`sched`, `nanopc_t6_submit` step 4) | read already | panthor_mmu.c:736-739 `panthor_vm_active`; panthor_sched.c `panthor_sched_init` (`hweight32(as_present & GENMASK(31, 1))`) |
 | `L2_FEATURES` line size | the heap context stride (`heap::ctx_stride`) | read already | panthor_heap.c `panthor_heap_ctx_stride` |
+| `CORE_FEATURES` (0x8) | not by the kernel side: `ident` reads it and the T6 OSAL hands it to the backend in `OSAL_QUERY_MALI_GPU` (`core_features`), whose frames are sized for the model it names with `GPU_ID` (`src/mali/model.rs`; its low byte is Mesa's variant, `src/panfrost/lib/kmod/panthor_kmod.c:162`) | not read | read into `gpu_info.core_features` and handed to user space (`DEV_QUERY`), as Mesa reads it |
 | firmware interface version, `group_num`, `stream_num` | `csf`: bounds `MIN_CSGS..=MAX_CSGS`, `MIN_CS_PER_CSG..=MAX_CS_PER_CSG` | read already | panthor_fw.c:941 (version 0 refused), :953-954 `panthor_fw_init_ifaces`, :891-892 `panthor_init_csg_iface`; panthor_sched.c `panthor_sched_init` (the slot counts) |
 
 Not used by the kernel side, as in panthor, where they only go to user space
@@ -78,6 +79,7 @@ line).
 | `GPU_ID` | 0xac740001: arch 10.12 r7, product 4, r0p0 status 1 | panthor's probe line on an i.MX 95, "mali-g310 id 0xac74 major 0x0 minor 0x0 status 0x1" (id is `GPU_ID >> 16`), in the review of "drm/panthor: Add i.MX95 support", dri-devel and linux-arm-kernel, February 2025 (<https://lists.freedesktop.org/archives/dri-devel/2025-February/493478.html> and its replies, <https://lists.infradead.org/pipermail/linux-arm-kernel/2025-February/1006422.html>). Arch 10.12 product 4 is Mesa 26.2.1's G310 (`src/panfrost/model/pan_model.c:91-95`, `PAN_PROD_ID(10, 12, 4)`) and panthor's (panthor_hw.c:25-26) |
 | `L2_FEATURES` | 0x07110306 (64-byte line) | the same thread's boot log, "Features: L2:0x7110306 Tiler:0x809 Mem:0x1" |
 | `TILER_FEATURES`, `MEM_FEATURES` | 0x809, 0x1 | the same line |
+| `CORE_FEATURES` | 0 (variant 0, G310v1) | **assumed**: the variant (v1-v5) is unknown until the board is read |
 | `MMU_FEATURES` | 0x2830 (48 VA, 40 PA) | **assumed** (the G610's) |
 | `AS_PRESENT` | 0xff | **assumed** (the G610's) |
 | `SHADER_PRESENT` | 0x3 | **assumed** (chosen to differ from the G610's) |
@@ -89,12 +91,20 @@ this. Their `MMU:`, `AS:` and `shader_present=` parts were not in the quoted
 text. The log came from an NXP BSP firmware (`mali-imx-r50.2`), so a
 mainline probe may read another version field. Mesa's G310 variants (v1-v5)
 are told apart by `GPU_CORE_FEATURES & 0xff`
-(`src/panfrost/lib/kmod/panthor_kmod.c:162`); the kernel side does not read
-that register. Every assumed value is in one place, `mock::G310_ASSUMED`, and
+(`src/panfrost/lib/kmod/panthor_kmod.c:162`): v1-v3 have half the tile
+buffer of v4-v5 and the G610 (`pan_model.c:91-99`), which sizes the frames'
+tiles. `ident` reads the register and the backend takes the variant from it
+(`src/mali/model.rs`, docs/notes/mali-g310-vs-g610.md section 5); which
+variant the i.MX 95 has is not known until the board's register is read
+(nothing public read for this page gives it). The mock's `CORE_FEATURES` is
+0 (G310v1), assumed, and decides only the mock. The G610 mock's is 0 too:
+Mesa 26.2.1 knows the RK3588's GPU as the G610, whose one row is variant 0
+(`pan_model.c:88`, matched exactly, :139-149); its upper bits are assumed.
+Every assumed value is in one place, `mock::G310_ASSUMED`, and
 is replaced on the first day on the board by panthor's probe lines under the
 NXP BSP or mainline (`Features: L2:.. Tiler:.. Mem:.. MMU:.. AS:..`,
 `shader_present=.. l2_present=.. tiler_present=..`) or by our own
-`gpu::mali::ident` dump (`MMU_FEATURES` 0x14, `AS_PRESENT` 0x18,
+`gpu::mali::ident` dump (`CORE_FEATURES` 0x8, `MMU_FEATURES` 0x14, `AS_PRESENT` 0x18,
 `SHADER_PRESENT` 0x100, `TILER_PRESENT` 0x110, `L2_PRESENT` 0x120); the
 quoted `GPU_ID` and feature words are checked the same day.
 

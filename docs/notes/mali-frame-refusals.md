@@ -58,7 +58,8 @@ listed.
 | more push words than the FAU holds | `NOT_BUILT_PUSH_COUNT` | `src/mali/frame.rs:180` | `src/mali/frame.rs:2606` |
 | uniform block names dwords the draw's storage does not hold | `NOT_BUILT_UBO_BLOCK` | `src/mali/frame.rs:184` | `src/mali/frame.rs:2612` |
 | more sysval slots than the builder takes | `NOT_BUILT_SYSVALS` | `src/mali/frame.rs:186` | `src/mali/frame.rs:2607` |
-| tiler with other than 8 hierarchy levels | `NOT_BUILT_TILER_LEVELS` | `src/mali/frame.rs:189` | `src/mali/frame.rs:2620` |
+| tiler with no hierarchy level (`TILER_FEATURES` max_levels 0) | `NOT_BUILT_TILER_LEVELS` | `src/mali/frame.rs:190` | `src/mali/frame.rs:2651` |
+| tiler bins that fit the heap chunk at no hierarchy mask | `NOT_BUILT_TILER_BINS` | `src/mali/frame.rs:195` | `src/mali/frame.rs:3788` |
 | blend shader of a target or sample count with none built (not RGBA8 at 1x/4x, e.g. RGB565, 2x; or a key the blend compiler refuses) | `NOT_BUILT_BLEND_SHADER` | `src/mali/frame.rs:209` | `src/mali/frame.rs:2586` |
 | target of other than 1 or 4 samples (`check_target()`) | `NOT_BUILT_SAMPLES` | `src/mali/frame.rs:218` | `src/mali/frame.rs:1952` |
 | blend into RGBA16F that needs a blend shader | `NOT_BUILT_FLOAT_BLEND` | `src/mali/frame.rs:226` | `src/mali/frame.rs:2582` |

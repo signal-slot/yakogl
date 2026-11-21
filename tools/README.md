@@ -491,7 +491,7 @@ patched `main-fs.glsl`.
 ## abi-layout — layout pins for the shared structs
 
 `yakogl-tools abi-layout <driver src>` (this repository's `driver/src`) measures every `#[repr(C)]`
-struct the C headers share with the crate (26 structs, 365 fields) with the host C
+struct the C headers share with the crate (26 structs, 366 fields) with the host C
 compiler (`CC`, default `cc`) and writes the numbers twice: `src/abi_layout_check.c`
 (`_Static_assert`s) and `src/abi_layout.rs` (const assertions). A change to a header
 or a Rust struct that is not mirrored on the other side fails the build; re-run the

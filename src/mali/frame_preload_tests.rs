@@ -89,6 +89,8 @@ fn build(desc_base: u64, target: Target, zs: Option<ZsMode>) -> (Vec<u8>, u64, u
             geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
             sample_positions: SAMPLES,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: TileBudget::G610,
         };
         let mut desc = Arena::new("desc", desc_base, &mut desc_m).unwrap();
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();
@@ -243,7 +245,13 @@ fn check_colour(dump: &str, source: &str, desc: u64, target: Target) {
         (PrePostFrameShaderMode::INTERSECT, PrePostFrameShaderMode::NEVER, PrePostFrameShaderMode::NEVER)
     );
     assert_eq!(modes(&o_params), modes(&m_params), "the frame shader modes");
-    assert_eq!(samples(&o_params), samples(&m_params), "the frame's samples and tile");
+    /* a 4x dump's tile is Mesa 25.0.7's: as 26.2.1 writes it (the named
+     * difference, frame_msaa_tests.rs `TILE_25_0_CAUSE`) */
+    let mut m_tile = m_params;
+    if m_tile.sample_count == 4 {
+        super::frame_msaa_tests::tile_26_2(&mut m_tile);
+    }
+    assert_eq!(samples(&o_params), samples(&m_tile), "the frame's samples and tile");
     assert_eq!(m_params.sample_count, target.samples);
     /* the render target, 128 bytes on (no ZS/CRC extension on either) */
     let rt_at = 128;
@@ -373,7 +381,13 @@ fn check_zs(dump: &str, source: &str, target: Target, mode: ZsMode) {
         (PrePostFrameShaderMode::INTERSECT, PrePostFrameShaderMode::EARLY_ZS_ALWAYS, PrePostFrameShaderMode::NEVER)
     );
     assert_eq!(modes(&o_params), modes(&m_params), "the frame shader modes");
-    assert_eq!(samples(&o_params), samples(&m_params), "the frame's samples and tile");
+    /* a 4x dump's tile is Mesa 25.0.7's: as 26.2.1 writes it (the named
+     * difference, frame_msaa_tests.rs `TILE_25_0_CAUSE`) */
+    let mut m_tile = m_params;
+    if m_tile.sample_count == 4 {
+        super::frame_msaa_tests::tile_26_2(&mut m_tile);
+    }
+    assert_eq!(samples(&o_params), samples(&m_tile), "the frame's samples and tile");
     assert_eq!(m_params.sample_count, target.samples);
     assert_eq!(
         (o_params.z_clear, o_params.s_clear, o_params.z_write_enable),

@@ -180,6 +180,14 @@ fn run(o: &Opts) -> Result<bool> {
     /* TILER_FEATURES bits 11:8, max_levels (Mesa pan_props.c:116) */
     let max_levels = (dev.gpu.tiler_features >> 8) & 0xf;
     println!("user registers {user_regs}, tiler max_levels {max_levels}");
+    /* the model's tile buffer (Mesa's pan_get_model, src/mali/model.rs) */
+    let model = yakogl::mali::model::model(dev.gpu.gpu_id, dev.gpu.core_features).ok_or_else(|| {
+        Error::Refused(format!(
+            "gpu_id {:#010x} core_features {:#x}: no model of Mesa's table",
+            dev.gpu.gpu_id, dev.gpu.core_features
+        ))
+    })?;
+    println!("model {}, tile budget {:?}", model.name, model.tile_budget());
 
     let vm = Vm::create(&dev)?;
     let group = Group::new(&vm, 64 * 1024)?;
@@ -214,8 +222,15 @@ fn run(o: &Opts) -> Result<bool> {
     let (ctx_va, desc_va, code_va, spd_va, data_va) =
         (ctx_bo.va(), desc_bo.va(), code_bo.va(), spd_bo.va(), data_bo.va());
     let mut ctx_arena = Arena::new("context", ctx_va, ctx_bo.bytes()).map_err(ae)?;
-    let ctx =
-        l1::build_context(&mut ctx_arena, heap.first_chunk_va, heap.chunk_size, geom.va(), max_levels).map_err(fe)?;
+    let ctx = l1::build_context(
+        &mut ctx_arena,
+        heap.first_chunk_va,
+        heap.chunk_size,
+        geom.va(),
+        max_levels,
+        model.tile_budget(),
+    )
+    .map_err(fe)?;
     println!(
         "context: heap descriptor {:#x} (first chunk {:#x}, size {:#x}), sample positions {:#x}, geometry buffer {:#x} ({} bytes)",
         ctx.heap, heap.first_chunk_va, heap.chunk_size, ctx.sample_positions, ctx.geometry_buffer, ctx.geometry_buffer_size

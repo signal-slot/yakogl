@@ -75,6 +75,7 @@ use super::arena::{Arena, ArenaError, Block};
 use super::cs::{CsError, Instr, Stream};
 use super::genxml::pack::PackError;
 use super::genxml::v10::*;
+pub use super::model::TileBudget;
 use core::fmt;
 
 /// Why a frame, a program or a context descriptor was not built.
@@ -187,7 +188,12 @@ pub const NOT_BUILT_SYSVALS: &str = "mali frame: a shader with more sysval slots
 pub const INVALID_ATTRIBUTE_OFFSET: &str =
     "mali frame: a vertex attribute offset above i32::MAX does not fit the Attribute descriptor's signed offset";
 pub const NOT_BUILT_TILER_LEVELS: &str =
-    "mali frame: a tiler with other than 8 hierarchy levels (TILER_FEATURES max_levels) is not built yet";
+    "mali frame: a tiler with no hierarchy level (TILER_FEATURES max_levels 0) has no hierarchy mask";
+/// The tiler bins of the frame do not fit the heap chunk even with every
+/// level Mesa may drop dropped (Mesa asserts they do,
+/// `GENX(pan_select_tiler_hierarchy_mask)`, pan_desc.c:1803-1805).
+pub const NOT_BUILT_TILER_BINS: &str =
+    "mali frame: the tiler's bin pointers do not fit the heap chunk at any hierarchy mask";
 pub const INVALID_FAU_ADDRESS: &str =
     "mali frame: a push block above 2^56 has no room for the FAU register's slot count in bits 56-63";
 pub const INVALID_SRT_ALIGN: &str =
@@ -264,8 +270,9 @@ pub const INVALID_OPEN_FRAME: &str = "mali frame: an open frame without its fram
 pub const INVALID_DEPTH_ONLY: &str =
     "mali frame: a frame with no colour surface given a colour preload, a sample store or more colour targets";
 
-/// `TILER_FEATURES` max_levels of the one board measured (0x809).
-const MEASURED_TILER_LEVELS: u32 = 8;
+/// The bin levels of a tiler (`PAN_BIN_LEVEL_COUNT`, Mesa 26.2.1
+/// pan_desc.c:21).
+const BIN_LEVELS: u32 = 12;
 
 /// The most vertex attributes a draw takes (the GL core binds 16,
 /// `GLES_MAX_ATTRIBS`).
@@ -277,10 +284,6 @@ const MAX_ATTRIBUTES: usize = 16;
 /// slot index small.
 const MAX_SYSVALS: usize = 1024;
 
-/// Mali-G610's tile buffer, halved as Mesa's `panfrost_query_optimal_tib_size`
-/// does: `MODEL(0xa867, ..., 32768, ...)` and `/ 2` (Mesa 25.0.7,
-/// src/panfrost/lib/pan_props.c:71, 199-208).
-const TIB_BUDGET: u32 = 32768 / 2;
 /// `panfrost_max_effective_tile_size` for arch 10 (pan_props.h:132-138).
 const MAX_EFFECTIVE_TILE: u32 = 32 * 32;
 /// `PAN_NUM_RESOURCE_TABLES` and the table order (pan_context.h:321-331).
@@ -367,6 +370,13 @@ pub struct Context {
     /// `TILER_FEATURES` bits 11:8 (`max_levels`, pan_props.c:116); the
     /// board reads Tiler:0x809, so 8.
     pub tiler_max_levels: u32,
+    /// The bytes of bin pointers the tiler may use: the heap chunk less its
+    /// 64-byte header (`csf_tiler_heap.chunk_size - 64`, Mesa 26.2.1
+    /// pan_csf.c:979-983), the budget of [`hierarchy_mask`].
+    pub tiler_bin_budget: u32,
+    /// The GPU model's colour and Z tile-buffer budgets, which size every
+    /// frame's tile ([`super::model`]; [`TileBudget::G610`] on the T6).
+    pub tile_budget: TileBudget,
 }
 
 /// The tiler heap descriptor, as Mesa writes it once per context
@@ -458,6 +468,7 @@ pub fn build_context(
     heap_chunk_size: u32,
     geometry_buffer: u64,
     tiler_max_levels: u32,
+    tile_budget: TileBudget,
 ) -> Result<Context, FrameError> {
     let heap = tiler_heap_descriptor(ctx, heap_first_chunk, heap_chunk_size)?;
     let positions = sample_positions(ctx)?;
@@ -467,6 +478,8 @@ pub fn build_context(
         geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
         sample_positions: positions.gpu,
         tiler_max_levels,
+        tiler_bin_budget: heap_chunk_size.saturating_sub(64),
+        tile_budget,
     })
 }
 
@@ -1953,19 +1966,34 @@ fn check_target(t: &Target) -> Result<(), FrameError> {
 }
 
 /// The effective tile size in pixels and the colour buffer allocation in
-/// bytes for a frame's colour targets (`GENX(pan_select_tile_size)`,
-/// pan_desc.c:382-399): the format's bytes a sample in the tile buffer
-/// ([`TargetFormat::tib_bytes`]), times the samples, summed over the
-/// targets (`pan_cbuf_bytes_per_pixel`, Mesa 26.2.1 pan_desc.c:569-593);
-/// the largest power-of-two tile the budget holds, clamped to the
-/// hardware's; the allocation 1 KiB-aligned. The board's Mesa writes 1024
-/// and 16384 for a 4x RGBA8 target, 1024 and 8192 for an RGBA16F one; two
-/// RGBA8 targets keep the 1024-pixel tile and allocate 8192 bytes
-/// (tools/mali/testdata/fsout_55_es3mrt.trace), three 12288
-/// (fsout_106_mrt3.trace).
-fn tile_size_of<'a>(targets: impl Iterator<Item = &'a Target>) -> (u32, u32) {
+/// bytes for a frame's colour targets and its sample count `samples`
+/// (`GENX(pan_select_tile_size)`, Mesa 26.2.1 pan_desc.c:607-648): the
+/// format's bytes a sample in the tile buffer ([`TargetFormat::tib_bytes`]),
+/// times the samples, summed over the targets (`pan_cbuf_bytes_per_pixel`,
+/// pan_desc.c:569-593); the largest power-of-two tile the model's colour
+/// budget holds (:615), bounded by the largest its Z budget holds for 4
+/// bytes of depth a sample (:617-625; `pan_zsbuf_bytes_per_pixel`,
+/// pan_desc.h:242-259, counts them whether the frame has a depth buffer or
+/// not, and every frame here keeps its depth/stencil at the frame's
+/// samples), clamped to the hardware's (:639); the allocation 1 KiB-aligned
+/// (:643). The doubling of a tile under 16 pixels (:634-635) needs more
+/// than a sixteenth of a budget a pixel (512 bytes of colour or, at 4x, of
+/// depth on a G310v1-v3), which no frame here has: a target is at most 8
+/// bytes a sample ([`TargetFormat::tib_bytes`]) and several targets are
+/// built single-sampled only (`OpenFrame::check_targets`).
+///
+/// On the G610 (budgets 16384 and 8192): one RGBA8 target 1024 pixels and
+/// 4096 bytes; two 1024 and 8192 (tools/mali/testdata/fsout_55_es3mrt.trace);
+/// three 1024 and 12288 (fsout_106_mrt3.trace); 4x RGBA8 512 and 8192, the Z
+/// bound (Mesa 26.2.1 on the board, tools/cts/log/2026-10-28-splitref; the
+/// board's Mesa 25.0.7 has no Z bound and writes 1024 and 16384,
+/// frame_msaa_tests.rs). A G310v1-v3 halves both budgets
+/// (docs/notes/mali-g310-vs-g610.md, section 3).
+fn tile_size_of<'a>(budget: TileBudget, samples: u32, targets: impl Iterator<Item = &'a Target>) -> (u32, u32) {
     let bpp: u32 = targets.map(|t| t.format.tib_bytes() * t.samples).sum();
-    let tile = (TIB_BUDGET >> log2_ceil(bpp)).min(MAX_EFFECTIVE_TILE);
+    let colour = budget.colour >> log2_ceil(bpp);
+    let z = budget.z >> log2_ceil(4 * samples);
+    let tile = colour.min(z).min(MAX_EFFECTIVE_TILE);
     (tile, (bpp * tile).div_ceil(1024) * 1024)
 }
 
@@ -2238,8 +2266,11 @@ pub fn end_frame(
      * RGBA8 at the frame's samples ("dummy/non-existent render-targets use
      * RGBA8 UNORM", `pan_cbuf_bytes_per_pixel`, pan_desc.c:569-592) */
     let dummy = Target { format: TargetFormat::Rgba8888, ..*t };
-    let (tile, cbuf_allocation) =
-        if open.no_colour { tile_size_of(core::iter::once(&dummy)) } else { tile_size_of(open.colour_targets(t)) };
+    let (tile, cbuf_allocation) = if open.no_colour {
+        tile_size_of(ctx.tile_budget, t.samples, core::iter::once(&dummy))
+    } else {
+        tile_size_of(ctx.tile_budget, t.samples, open.colour_targets(t))
+    };
     let rt_count = open.target_count();
     let mut params = FramebufferParameters {
         pre_frame_0: PrePostFrameShaderMode::NEVER,
@@ -2616,8 +2647,8 @@ fn check_draw(
     if d.attributes.iter().any(|a| a.offset > i32::MAX as u32) {
         return Err(FrameError::Invalid(INVALID_ATTRIBUTE_OFFSET));
     }
-    /* the hierarchy mask rule is measured for 8 levels only */
-    require(ctx.tiler_max_levels == MEASURED_TILER_LEVELS, NOT_BUILT_TILER_LEVELS)?;
+    /* Mesa's hierarchy mask needs a level (pan_desc.c:1803-1808) */
+    require(ctx.tiler_max_levels > 0, NOT_BUILT_TILER_LEVELS)?;
     if d.zs.uses_attachment() && !has_zs {
         return Err(FrameError::Invalid(INVALID_NO_ZS));
     }
@@ -3403,7 +3434,7 @@ fn emit_draw(
     let first = open.layout.tiler.is_none();
     let tiler = match open.layout.tiler {
         Some(b) => b,
-        None => tiler_context(desc, ctx, t, tile_size_of(open.colour_targets(t)).0)?,
+        None => tiler_context(desc, ctx, t, tile_size_of(ctx.tile_budget, t.samples, open.colour_targets(t)).0)?,
     };
 
     /* the resource tables (`panfrost_emit_resources`, pan_cmdstream.h:279-323) */
@@ -3700,33 +3731,62 @@ fn emit_draw(
     Ok(())
 }
 
+/// The bytes of bin pointers a tiler with `mask`'s levels on needs for a
+/// `width` x `height` frame (`pan_calc_bins_pointer_size`, Mesa 26.2.1
+/// pan_desc.c:1704-1742, arch 10: 8 bytes a pointer, no v12 mask): level 0
+/// has a bin a 16x16 square, each next level half as many each way.
+fn bins_pointer_size(width: u32, height: u32, mask: u32) -> u64 {
+    let (mut x, mut y) = (width.div_ceil(16), height.div_ceil(16));
+    let mut bins = 0u64;
+    for level in 0..BIN_LEVELS {
+        if mask & 1 << level != 0 {
+            bins += u64::from(x) * u64::from(y);
+        }
+        (x, y) = (x.div_ceil(2), y.div_ceil(2));
+    }
+    bins.div_ceil(8) * 8 * 8
+}
+
+/// The tiler's hierarchy mask as Mesa 26.2.1 chooses it
+/// (`GENX(pan_select_tiler_hierarchy_mask)`, pan_desc.c:1745-1812, arch 10)
+/// from `TILER_FEATURES` max_levels: every level for 8 (the G610's and the
+/// i.MX 95's 0x809), the levels spread out by a table for fewer (`0x80,
+/// 0x82, 0xa2, ...`); shifted up when the frame needs a level above them;
+/// the levels finer than the tile dropped (one for a 512- or 1024-pixel
+/// tile, none for 256); then the finest levels dropped until the bin
+/// pointers fit `budget` bytes. `None` when no mask fits (Mesa asserts one
+/// does). For the frames built here this is the Mesa 25.0.7 rule the
+/// board's dumps hold (`pan_select_tiler_hierarchy_mask`, pan_util.h:83-101):
+/// all 8 levels, level 0 off for a tile above 16x16; 254 or 255 at 64x64.
+pub(super) fn hierarchy_mask(width: u32, height: u32, max_levels: u32, tile: u32, budget: u32) -> Option<u32> {
+    const SPREAD: [u32; 8] = [0, 0x80, 0x82, 0xa2, 0xaa, 0xea, 0xee, 0xfe];
+    let max_wh = width.max(height);
+    let last_bit = 32 - max_wh.div_ceil(16).leading_zeros();
+    let (mut mask, levels) =
+        if max_levels < 8 { (SPREAD[max_levels as usize], 8) } else { ((1u32 << max_levels) - 1, max_levels) };
+    if last_bit > levels {
+        mask <<= last_bit - levels;
+    }
+    let mut disabled = 0;
+    while tile > (16 * 16) << (disabled * 2) {
+        disabled += 1;
+    }
+    mask &= !((1u32 << disabled) - 1);
+    while disabled < BIN_LEVELS {
+        if bins_pointer_size(width, height, mask) < u64::from(budget) {
+            break;
+        }
+        disabled += 1;
+        mask &= !((1u32 << disabled) - 1);
+    }
+    (mask != 0 && bins_pointer_size(width, height, mask) <= u64::from(budget)).then_some(mask)
+}
+
 /// The frame's tiler context (`csf_emit_tiler_desc`, pan_csf.c:668-697).
 fn tiler_context(desc: &mut Arena, ctx: &Context, t: &Target, tile: u32) -> Result<Block, FrameError> {
+    let hierarchy_mask = hierarchy_mask(t.width, t.height, ctx.tiler_max_levels, tile, ctx.tiler_bin_budget)
+        .ok_or(FrameError::NotBuilt(NOT_BUILT_TILER_BINS))?;
     let tiler = desc.alloc(TilerContext::LENGTH, 64)?;
-    let max_wh = t.width.max(t.height);
-    /* pan_select_tiler_hierarchy_mask (pan_util.h:83-101), Mesa 25.0.7's
-     * rule: all `max_levels` levels on, shifted up when the target needs more
-     * than that, and the first level dropped when the effective tile is
-     * larger than 16x16. Only max_levels 8 (the board's TILER_FEATURES 0x809)
-     * is built (`check_draw`), and this rule is the one that reproduces the
-     * trace's mask, so it is the one used.
-     *
-     * Mesa 26.2.1 chooses differently (read in its source, pan_desc.c:
-     * 1746-1800): a lookup table for max_levels below 8, the levels below
-     * the effective tile size dropped by a loop, and further levels dropped
-     * until the bins fit the heap's budget, `chunk_size - 64` (pan_csf.c:
-     * 981-983). For this 64x64 target at 8 levels, reading the code gives
-     * the same mask as the rule below (0xfe); that is derived, not measured
-     * on the board, and a larger target or a smaller heap can differ. */
-    let last_bit = 32 - max_wh.div_ceil(16).leading_zeros();
-    let mut hierarchy_mask = (1u32 << ctx.tiler_max_levels) - 1;
-    if last_bit > ctx.tiler_max_levels {
-        hierarchy_mask <<= last_bit - ctx.tiler_max_levels;
-    }
-    /* "For effective tile size larger than 16x16, disable first level" */
-    if tile > 16 * 16 {
-        hierarchy_mask &= !1;
-    }
     let tc = TilerContext {
         hierarchy_mask,
         fb_width: t.width,
