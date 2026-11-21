@@ -139,6 +139,12 @@ want tools/probes/nanopc_t6/t6_hello/src/main.c samples
 want driver/boards/st/stm32mp257f_dk/board.yml drivers
 want driver/soc/st/stm32mp2x_a35/soc.yml drivers
 want driver/zephyr/lib/board/stm32mp2/stm32mp2_wdog.c drivers
+# the Raspberry Pi Zero 2 W's board, SoC and controllers carried from upstream
+# Zephyr (driver/UPSTREAM.zephyr-rpi_zero_2w) and their patches
+want driver/boards/raspberrypi/rpi_zero_2w/board.yml drivers
+want driver/soc/brcm/bcm2710/soc_irq.c drivers
+want driver/patches/zephyr-rpi_zero_2w/0001-bcm2710-cpus-no-cpu-release-addr.patch drivers
+want driver/UPSTREAM.zephyr-rpi_zero_2w drivers
 want tools/probes/stm32mp257f_dk/mp2_hello/src/main.c samples
 want tools/vivante/gate_st.sh vivante
 want tools/vivante/gate_st_selftest.sh vivante
@@ -306,6 +312,14 @@ expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "
 expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"
 out=$(plan driver/zephyr/lib/board/rpi5/rpi_wdog.c)
 expect "board layer: the rpi_5 probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
+# the Raspberry Pi Zero 2 W's carried files: its image row and the row that
+# compares them with upstream's hashes
+for p in driver/boards/raspberrypi/rpi_zero_2w/rpi_zero_2w.dts driver/UPSTREAM.zephyr-rpi_zero_2w; do
+  out=$(plan "$p")
+  expect "rpi_zero_2w $p: the image row" '^plan  zephyr  rpi_zero_2w hello_world image' "$out"
+  expect "rpi_zero_2w $p: the upstream hash row" \
+    '^plan  sha256  driver/ Zephyr files for rpi_zero_2w' "$out"
+done
 # The licence audit reads every tracked file: any added or changed path reaches
 # its row, whatever scope the path has (7bd8a8e94 added data under tools/v3d
 # and no row that audits licences ran).

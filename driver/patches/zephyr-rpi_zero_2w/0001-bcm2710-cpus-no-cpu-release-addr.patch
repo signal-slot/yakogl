@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Jonathan Elliot Peace (the file patched); 2026 Signal Slot, Inc. (the change)
+#
+# dts/arm64/broadcom/bcm2710.dtsi: no cpu-release-addr in the four cpu nodes.
+#
+# Why: the pinned Zephyr's arm,cortex-a53 binding does not declare
+# cpu-release-addr, so the devicetree step stops ("'cpu-release-addr' appears
+# in /cpus/cpu@0 ... but is not declared in 'properties:'"). Upstream declared
+# it in dts/bindings/cpu/cpu.yaml for the spin-table CPU start (ee3207193d2,
+# "soc: brcm/bcm2710: enable 4-core SMP via spin-table and mailbox IPI"),
+# together with drivers/pm_cpu_ops' PM_CPU_OPS_SPIN_TABLE and the arm64 IPI
+# hook for custom interrupt controllers (fddb97c939d), none of which the pin
+# has. So the image is single-core on the pin, as CONFIG_SMP is off in the
+# board's defconfig anyway; the property is only read by that SMP path.
+# Drop this patch when the pin has ee3207193d2.
+--- a/dts/arm64/broadcom/bcm2710.dtsi
++++ b/dts/arm64/broadcom/bcm2710.dtsi
+@@ -39,28 +39,24 @@
+ 			compatible = "arm,cortex-a53";
+ 			reg = <0>;
+ 			device_type = "cpu";
+-			cpu-release-addr = <0x0 0x000000d8>;
+ 		};
+ 
+ 		cpu@1 {
+ 			compatible = "arm,cortex-a53";
+ 			reg = <1>;
+ 			device_type = "cpu";
+-			cpu-release-addr = <0x0 0x000000e0>;
+ 		};
+ 
+ 		cpu@2 {
+ 			compatible = "arm,cortex-a53";
+ 			reg = <2>;
+ 			device_type = "cpu";
+-			cpu-release-addr = <0x0 0x000000e8>;
+ 		};
+ 
+ 		cpu@3 {
+ 			compatible = "arm,cortex-a53";
+ 			reg = <3>;
+ 			device_type = "cpu";
+-			cpu-release-addr = <0x0 0x000000f0>;
+ 		};
+ 	};
+ 
