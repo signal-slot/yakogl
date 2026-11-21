@@ -7,11 +7,12 @@
 //! `deqp_unitype_*` or `deqp_uniarray_*` reference covers (the note's section
 //! 2 names the existing reference of each other shape). Drawn with
 //! `tools/mali/drm_shim_ref.sh run` and `pan_ref_diff.py extract --draw
-//! --attributes` (note, section 4). The four struct shapes
-//! (`arr_struct_array`, `fs_struct_uniform`, `vs_mediump_struct`,
-//! `vs_struct_uniform`) are drawn without `--uniform-values`, which
-//! `gl_ref.py` does not support for a struct uniform: their FAU words are
-//! Mesa's with every uniform 0, and they are refused, so no test compares them.
+//! --attributes` (note, section 4), all with `--uniform-values`. The four
+//! struct shapes (`arr_struct_array`, `fs_struct_uniform`,
+//! `vs_mediump_struct`, `vs_struct_uniform`) were first drawn when `gl_ref.py`
+//! could not set struct members (every uniform 0) and were redrawn with member
+//! values (note, section 4a: only FAU data moved); they are refused, so no test
+//! compares them.
 //!
 //! `vs_mat_uniform` compiles byte-equal ([`LOWERED`]); the rest stay
 //! `#[ignore]`d with their whole refusal ([`REFUSED`], asserted exactly by

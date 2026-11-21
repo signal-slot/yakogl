@@ -121,7 +121,7 @@ a uniform that now loads (`fs_mat` 79, `vs_mediump_array` 2,
 ## 3. Mesa's layout and loads, per new reference
 
 Drawn with `--uniform-values` (an int as its integer, a bool true where the
-value is even, floats `16*(k+1)+c`) except the struct shapes (section 4). The
+value is even, floats `16*(k+1)+c`; the struct shapes the same way, k counting members, section 4a). The
 words of the FAU and the programs are in each `.expect.json`; the load forms
 below are read from Mesa's shaderdb disassembly of each draw.
 
@@ -157,13 +157,68 @@ python3 -I tools/mali/pan_ref_diff.py extract <out>/deqp_unif2_<shape>.trace --d
 
 The sources are the `tools/mali/testdata/deqp_shapes/<family>_<shape>.{vert,frag}`
 texts, byte for byte, each with its `.license` sidecar (Khronos, the dEQP case).
-**The four struct shapes** (`arr_struct_array`, `fs_struct_uniform`,
-`vs_mediump_struct`, `vs_struct_uniform`) were drawn *without*
-`--uniform-values`: `gl_ref.py` stops with "does not set a structType uniform".
-Their FAU words are therefore Mesa's with every uniform 0, and no test compares
-them (they are refused); the lowering item for structs must first teach
-`gl_ref.py` to set a struct's members (`glGetUniformLocation("u_var.m0")`,
-`"u_var.m2[1]"`) and redraw those four.
+**The struct shapes** (`arr_struct_array`, `fs_struct_uniform`,
+`vs_mediump_struct`, `vs_struct_uniform`) were first drawn *without* member
+values (`gl_ref.py` stopped with "does not set a structType uniform", so every
+uniform was 0). They were redrawn after fclane2-struct taught `gl_ref.py` to set
+members (`--uniform-values`, `tools/mali/README-deqp_ref.md`, "Struct
+uniforms"), with the command above. `deqp_ref.sh` was not used: it extracts
+without `--attributes` and these files carry `attributes` and
+`attribute_buffers`. Nothing else was changed in the extraction.
+
+### 4a. The redraw: what moved
+
+Compared with `python3 -I`, key by key: in every one of the four, only
+`regions.*.fau` entries changed (`trace`, `secondary_offset`, `attributes`,
+`attribute_buffers`, every shader `words`, `work_reg_count`, `preload` and the
+FAU length are byte-identical). The words do not depend on the uniform values;
+only the pushed uniform data does. `deqp_uniarray_struct` (the
+`arr_array_in_struct` shape, another prefix) is not redrawn here.
+
+| Reference | Changed | What |
+|---|---|---|
+| `vs_struct_uniform` | yes | FAU 11-30 of `vs.position` and `vs.varying`, FAU 4-23 of `fs.fragment`: the 20 member words, 0 -> the integers 16, 32-35, 48, 64, 80, 96-99, 112-115, 128-131 (hex `10`, `20`-`23`, `30`, `40`, `50`, `60`-`63`, `70`-`73`, `80`-`83`). FAU 31-33 of the vertex regions did not change (below) |
+| `fs_struct_uniform` | yes | FAU 4, 6-8, 10-11, 13-14, 16, 18, 20, 22 of `fs.fragment`: 0 -> `ffffffff` (12 true bools of the 20: the drawn values are m0 true, m1 `1 0 1 0`, m2 all true, m3 elements `1 0 1 0`, i.e. 12 trues); the other 8 stay 0. Same 28-word FAU, no vertex change |
+| `vs_mediump_struct` | yes | FAU 11-15 (vertex) and 4-8 (fragment): fp32 words `41800000` (m0 = 16), `42000000`, `42040000`, `42080000`, `420c0000` (m1 = 32..35) |
+| `arr_struct_array` | yes | FAU 11-22 (vertex), 12 words: the used members as fp32 (`s[0].b[1].a` = 80 is `42a00000` ...), `s[0].c` as the integer `000000b0` (176) |
+
+The member values that the run printed for `vs_struct_uniform`
+(`gl_ref: uniform int u_var.m0 at 0 = 16`, `ivec4 u_var.m1 at 1 = 32 33 34 35`,
+..., `u_var.m3[2] at 7 = 128 ... 131`) are member k = 0..7 as 16 (k + 1) + c.
+
+**Member word order (answer to `mali-unif2-lowering.md` section 8).** For the
+int and float structs (`vs_struct_uniform`, `vs_mediump_struct`) the FAU words are the members in *declaration order*,
+depth first, a vector member its components in order, an array member an
+element after element: `vs_struct_uniform` FAU 11 = `m0`, 12-15 = `m1`, 16-18 =
+`m2[0..2]`, 19-22 = `m3[0]`, 23-26 = `m3[1]`, 27-30 = `m3[2]` (values 16, 32-35,
+48, 64, 80, 96-99, ...); `vs_mediump_struct`: `m0` at 11, `m1` lanes at 12-15.
+`fs_struct_uniform` (bools) has its 12 true words at FAU 4, 6, 7, 8, 10, 11,
+13, 14, 16, 18, 20, 22, while declaration order with the drawn values
+(`m1` = true false true false) would give 4, 5, 7, 9, 10, 11, 12, 14, 16, 18,
+20, 22: so for bool members the word order is *not* plain declaration order
+(the positions 5/6, 8/9 and 12/13 differ), and why is not established here
+(Mesa's bool default-block layout, or gl_ref.py's per-lane bool values for
+`glUniform4i`; the same count of 12 trues holds). U5 must take the bool
+member positions from this reference, not from declaration order. No padding between members (an int is a word, an ivec4
+four words), fp32 for int/ivec/bool and for mediump float members of a struct.
+`arr_struct_array` pushes only the 12 members the shader reads, and *not* in
+declaration order: its values read 80, 96, 32, 97, 128, 161, 176, 192, 225,
+256, 304, 337 (decimal of the floats and the int), i.e. `s[0].b[1].a`,
+`s[0].b[1].b[0].x`, `s[0].b[0].a`, `s[0].b[1].b[0].y`, `s[0].b[2].a`, ... .
+Only the 3rd entry (32) is out of ascending order, which the redraw shows but
+does not explain; the lowering of U5 must take the slot of a member from this
+reference (the words are identical to the zero-valued draw, so the old table of
+section 3 stands), not assume ascending order for pushed subsets. Not
+investigated further here.
+
+**`vs_struct_uniform` FAU 31-33.** The three constants that are not byte
+immediates, in this order: `fffffffb` (-5, `m2[0]`'s compare), `fffffff7` (-9,
+the `-9` of `m1`, `m2[2]` and `m3[0]`, one word for all three) and `fffffffe`
+(-2, `m2[1]`). They are identical in the old and new files (a constant does not
+depend on the uniform values) and are in both vertex regions (34 words); the
+fragment region has 28 (20 members, 8 trailing constants/zeros not in the
+member range). The other compare constants (3, 6, 1, 7, 8, -3, -6, -7, -10)
+are immediates of the instructions.
 
 ## 5. What spike 74dabf88 covers
 
