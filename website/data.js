@@ -28,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "6d360a03c21f935f9de51cf60ea4048204e42f9f",
-    "date": "2026-11-10",
+    "commit": "63ed7e30e1c86e2d62b845fcda28c1016d6afa51",
+    "date": "2026-11-21",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
