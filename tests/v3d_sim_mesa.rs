@@ -3746,7 +3746,10 @@ fn back_to_back_loop_exits_are_counted() {
 /// 2026-11-07, 2D-array and 3D look-ups, ES 3 build: es300/array.frag,
 /// texsize.frag and vol.frag add theirs (fs 7, vs 2, cs 18, no cut), and
 /// the fixture's two EXTRA_REAL pairs (texfetch.frag, texoffset.frag) vs 4
-/// and cs 12 (their fragment shaders hoist nothing).
+/// and cs 12 (their fragment shaders hoist nothing). 2026-11-17, #7104:
+/// the four fragment programs that lose a kept loop's dead copies
+/// (our_instruction_counts_are_pinned) hoist fs 1153 -> 1156 with one cut
+/// fewer (59 -> 58) in the ES 3 build, and 1074 -> 1073 in the ES 2 build.
 /// Pinned: a change to hoist or to what reaches it moves these.
 #[test]
 fn the_hoist_windows_cuts_are_counted() {
@@ -3777,7 +3780,7 @@ fn the_hoist_windows_cuts_are_counted() {
     }
     assert_eq!(
         (hoists, cuts),
-        if es2 { ([1074, 2227, 166], [48, 0, 0]) } else { ([1153, 2412, 260], [59, 0, 0]) },
+        if es2 { ([1073, 2227, 166], [48, 0, 0]) } else { ([1156, 2412, 260], [58, 0, 0]) },
         "the hoist counts moved"
     );
 }
@@ -4165,8 +4168,13 @@ const FEMTOVG_FS_COUNTS: &[(&str, usize)] = &[
 /// (sim_fixture.py): 198 programs [11063, 5631, 4635], the five pairs' own
 /// words (fs 29 + 16 + 29 + 21 + 45, vs 94, cs 105; ES 3 build only); no
 /// other program moves (chain.rs compiled_corpus_words_are_pinned).
-const OURS_TOTALS: (usize, [usize; 3]) = (198, [11063, 5631, 4635]);
-const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9807, 4840, 4039]);
+/// 2026-11-17, #7104: a kept loop carries only the local lanes live at its
+/// head or after it (prepare.rs counted_loop), and four fragment programs
+/// lose the copies of the others: es100/databreak.frag 63 -> 57,
+/// deadloop.frag and loopcarry.frag 28 -> 27, es300/divnest.frag 131 -> 107
+/// (ES 3 build only); fs 11063 -> 11031, and 9807 -> 9799 in the ES 2 build.
+const OURS_TOTALS: (usize, [usize; 3]) = (198, [11031, 5631, 4635]);
+const OURS_TOTALS_ES2: (usize, [usize; 3]) = (170, [9799, 4840, 4039]);
 
 // ---------------------------------------------------------------------------
 // Four colour targets (RC14).

@@ -33,6 +33,7 @@
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::fold::fold_float;
 use crate::shaderc::online::ir::{self, AluOp, IoKind, IoSlot, Module, Node, Op};
+use crate::shaderc::online::local_live;
 use crate::shaderc::online::powervr::unroll::Trip;
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
@@ -476,6 +477,9 @@ struct Walk<'m, 'a> {
     depth: Option<S>,
     /// The loops the unroller kept, each with its pass count (`Trip`).
     trips: &'m [Trip],
+    /// The local lanes each kept loop carries ([`local_live`]): of the lanes
+    /// a body writes, [`Walk::counted_loop`] makes a phi of these only.
+    live: local_live::LocalLive<'a>,
     /// [`crate::shaderc::LodKey::cube_noseam`]: the cube bindings whose
     /// look-ups are emulated per face (0 = none: the hardware's cube look-up).
     cube_noseam: u32,
@@ -1738,15 +1742,29 @@ impl<'m, 'a> Walk<'m, 'a> {
 
     /// A loop the unroller kept, as a counted loop (docs/online-shaderc/
     /// v3d-backend.md, "Control flow, step 2"): every lane of a local the body
-    /// writes becomes a [`SOp::Phi`] before the loop and a [`SOp::PhiNext`] at
-    /// its end; after the loop the local reads the phi. A body that can
+    /// writes and the loop carries ([`local_live`]: live at the head or after
+    /// the loop) becomes a [`SOp::Phi`] before the loop and a [`SOp::PhiNext`]
+    /// at its end; after the loop the local reads the phi. A body that can
     /// discard carries the discard flag the same way.
     fn counted_loop(&mut self, a: &Arena<'a>, body: ir::Range) -> Result<(), PrepError> {
         let trip =
             *self.trips.iter().find(|t| t.first == body.first).ok_or(PrepError::NotYet("a loop with no trip count"))?;
         /* the (local, lane)s the body writes, anywhere in it */
+        let mut all_written: AVec<'a, (u32, usize)> = AVec::new();
+        self.written_lanes(a, body, &mut all_written)?;
+        /* Of those, the lanes live at the head or after the loop
+         * (`local_live`): a lane the body writes before any read that
+         * matters, and that nothing after the loop reads, is a temporary of
+         * one pass and needs no phi. A phi of every written lane kept each
+         * temporary of an inlined function live over the whole body (#7104,
+         * found on the PowerVR, the same rule here). */
         let mut written: AVec<'a, (u32, usize)> = AVec::new();
-        self.written_lanes(a, body, &mut written)?;
+        for &(l, k) in all_written.as_slice() {
+            if self.live.carried_by_loop(body.first, l as usize * local_live::LANES + k) {
+                written.push(a, (l, k))?;
+            }
+        }
+        all_written.release(a);
         let (position0, color0, discard0, psiz0) = (self.position, self.color, self.discard, self.psiz);
         let depth0 = self.depth;
         let stored0 = self.stored.len();
@@ -2412,6 +2430,7 @@ fn walk<'m, 'a>(
         psiz: None,
         depth: None,
         trips,
+        live: local_live::analyse(m, a, |first| trips.iter().find(|t| t.first == first).and_then(|t| t.exit))?,
         cube_noseam,
         enclosing_exits: AVec::new(),
         loop_of: AVec::new(),
