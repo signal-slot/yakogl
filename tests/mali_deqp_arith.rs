@@ -26,8 +26,8 @@
 mod mali_ref;
 
 /// The references the lowering made byte-equal, without the `deqp_arith_`
-/// prefix: each has a byte-compare test below. None yet.
-const LOWERED: &[&str] = &[];
+/// prefix: each has a byte-compare test below.
+const LOWERED: &[&str] = &["matrix_div_fs_highp"];
 
 /// The references that compile with other words than Mesa's. None yet.
 const DIFFERS: &[&str] = &[];
@@ -75,7 +75,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* isok_int_round fs mediump: 146 cases of shaders.swizzles.vector_swizzles.mediump_ivec2_gggg_vertex */
     ("isok_int_round_fs_mediump", ARITH),
     /* matrix.div fs highp: 18 cases of shaders.matrix.div.const_highp_mat2_float_fragment */
-    ("matrix_div_fs_highp", ARITH),
     /* matrix.div fs mediump: 36 cases of shaders.matrix.div.const_mediump_mat2_float_fragment */
     ("matrix_div_fs_mediump", ARITH),
     /* matrix.storeout fs highp: 11 cases of shaders.matrix.add.const_highp_mat3_float_fragment */
@@ -425,7 +424,6 @@ fn isok_int_round_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (matrix.div, fs, highp; 18 cases)"]
 fn matrix_div_fs_highp() {
     mali_ref::assert_matches("deqp_arith_matrix_div_fs_highp");
 }

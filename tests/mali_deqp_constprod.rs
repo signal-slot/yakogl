@@ -21,7 +21,7 @@ mod mali_ref;
 
 /// The references that compile byte-equal, without the `deqp_constprod_`
 /// prefix: each has a byte-compare test below, not ignored.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["alg_constmat_fs"];
 
 /// The references that compile with other words than Mesa's: each has an
 /// ignored byte-compare test.
@@ -29,10 +29,6 @@ const DIFFERS: &[&str] = &[];
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
-    (
-        "alg_constmat_fs",
-        "Valhall: a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product) is not lowered yet",
-    ),
     (
         "chainlit_fs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
@@ -156,7 +152,6 @@ const REFUSED: &[(&str, &str)] = &[
 ];
 
 #[test]
-#[ignore = "refused: matrix.mul.const_highp_mat2_float_fragment (pinned by refusals_pinned)"]
 fn alg_constmat_fs() {
     mali_ref::assert_matches("deqp_constprod_alg_constmat_fs");
 }

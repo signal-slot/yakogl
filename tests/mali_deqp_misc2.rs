@@ -81,13 +81,13 @@ fn misc2_rebalance_random_vs() {
 }
 
 #[test]
-#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference"]
+#[ignore = "refused: an integer or boolean value"]
 fn misc2_algebraic_random13() {
     mali_ref::assert_matches("deqp_misc2_algebraic_random13");
 }
 
 #[test]
-#[ignore = "refused: a shape Mesa's algebraic rules rewrite without a reference"]
+#[ignore = "refused: an integer or boolean value"]
 fn misc2_algebraic_random46() {
     mali_ref::assert_matches("deqp_misc2_algebraic_random46");
 }
@@ -107,7 +107,9 @@ fn misc2_attrnum_dead_attrs() {
 const INVARIANT: &str = "an invariant output (Mesa keeps its arithmetic exact, unfused)";
 const REBALANCE: &str =
     "three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree)";
-const ALGEBRAIC: &str = "a shape Mesa's algebraic rules rewrite without a reference";
+/// The factored sum of constant products (nir_fs.rs `Fs::op`) moved these
+/// two past `AlgebraicForm`, to their next refusal.
+const INT_VALUE: &str = "an integer or boolean value";
 const ATTRNUM: &str =
     "a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations";
 
@@ -119,8 +121,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc2_rebalance_invariant", REBALANCE),
     ("deqp_misc2_rebalance_random_fs", REBALANCE),
     ("deqp_misc2_rebalance_random_vs", REBALANCE),
-    ("deqp_misc2_algebraic_random13", ALGEBRAIC),
-    ("deqp_misc2_algebraic_random46", ALGEBRAIC),
+    ("deqp_misc2_algebraic_random13", INT_VALUE),
+    ("deqp_misc2_algebraic_random46", INT_VALUE),
     ("deqp_misc2_attrnum_zero_lanes", ATTRNUM),
     ("deqp_misc2_attrnum_dead_attrs", ATTRNUM),
 ];
