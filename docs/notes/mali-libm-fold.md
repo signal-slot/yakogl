@@ -335,25 +335,73 @@ twin; the RTNE rounding of a f32 to f16 is a plain bit routine).
 
 ## 5. Which item writes it, and what pins it
 
-**CF1 writes it first** (the schedule's rule), as the part of the `cfold`
-lowering step B that folds `Fsin Fcos Flog2 Fexp2 Fpow` and `log2`/`pow`/`atan`
-constants (`mali-deqp-cfold2.md` section 4, step B; first un-ignore
-`const_call_transcendental_log2`). It adds `mesa_fold.rs` and its unit tests
-and the `mali/nir.rs` call site. N1 and N2 (`negzero-lower`) then add only the
-`glsl.rs` call site and K4 (`constprod-lower-3`) the `Ffma`/`mod` routing.
+**The file exists** (plan #387, item `libm-fold-helper`):
+`src/shaderc/online/mesa_fold.rs`, with the signatures of 4.2 and levels 1
+and 2 of 4.3 for every function. No row of 3.1 fails at level 2, so there is
+no level 3 (no glibc port). It is **not yet declared** in
+`src/shaderc/online/mod.rs`, and nothing calls it. It reaches `fmath.rs` as
+`super::fmath`, which is `online::fmath` in the crate and the root's
+`mod fmath` in the test that includes both files by `#[path]`. It is `core`
+only (checked in a `#![no_std]` scratch crate).
 
-Tests that pin it:
+**The first caller declares it.** That is CF1 (the `cfold` lowering step B in
+`mali/nir.rs`: it folds `Fsin Fcos Flog2 Fexp2 Fpow` and the `log2`/`pow`/`atan`
+constants, `mali-deqp-cfold2.md` section 4 step B; first un-ignore
+`const_call_transcendental_log2`) or `negzero-lower` (N1/N2 in `glsl.rs`),
+whichever lands first. That item adds `pub(crate) mod mesa_fold;` to
+`src/shaderc/online/mod.rs` in a commit of its own, then its call site. The
+other one adds only its call site. K4 (`constprod-lower-3`) adds the
+`Ffma`/`mod` routing.
 
-* `mesa_fold.rs` unit tests (host): every row of 3.1 and 3.2 as `assert_eq!`
-  of bits, `fold_glsl` and `fold_nir` apart for `Exp` at `5.5` (`4374b122`
-  against `4374b121`), `Log` at `42.12` (`406f64b9`, the number in
-  `mali-deqp-cfold2.md` section 4), `fma32` against `f32::mul_add` on a sweep,
-  `atan` at `1.0` through the polynomial and `fma32` (`3f490fa4`).
-* A host test (`std`, glibc) comparing `fold_glsl` and `fold_nir` with `std`
-  on a few hundred thousand arguments that **counts** the differences per
-  function and asserts the counts of section 3.3 as upper bounds (it is the
-  guard that level 2 does not drift, and the trigger for level 3 if a count is
-  raised for a function).
+What the file holds beyond 4.2, for the callers:
+
+* `fold_nir` of `Atan`, `Atan2`, `Asin`, `Acos` is NIR's expansion
+  (`nir_atan`, `nir_atan2`, `build_asin`, `nir_acos`), folded op by op with
+  `fma32` in Mesa's op order (1.4), not a libm value: NIR has no such
+  opcode. `fold_nir(Atan, 1.0)` is `3f490fa4`. `fold_nir(Tan)` is
+  `fmul(fsin, frcp(fcos))` (the `lower_fdiv` form that `rcp16` shows for f16;
+  unpinned for `tan`).
+* `fold_nir_f16` rounds after every NIR op of a chain. That covers `exp`/`log`'s
+  `fmul` by the f16 constant, `tan`'s `fmul`/`frcp`, and `nir_atan`'s
+  polynomial with f16 constants and `huge = 16384`. `asin`/`acos` are
+  promoted to f32 as `nir_asin` does.
+* `f32_to_f16` is RTNE as x86-64's F16C does it, since
+  `_mesa_float_to_float16_rtne` is `vcvtps2ph` on the reference host: a NaN
+  keeps its top payload bits and is quieted. `f16_to_f32` is exact. Also
+  `LOG2E_F32` (`3fb8aa3b`) and `LN2_F32` (`3f317218`).
+* NaN results are `core`'s `0x7fc00000`, not the host's pattern (1.5). The
+  callers refuse non-finite folds.
+* Unpinned: Bifrost's `lower_fsqrt` is set. If Mesa lowers an `fsqrt` to
+  `frcp(frsq(x))` before it folds, a NIR `Sqrt` fold would be two roundings.
+  `fold_nir(Sqrt)` and `build_asin`'s root use `sqrtf`, which every reference
+  agrees with so far.
+
+Tests that pin it, in `tests/mali_libm_fold.rs` (host;
+`cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_libm_fold`):
+
+* every row of 3.1 and 3.2 as `assert_eq!` of bits. Also `fold_glsl` and
+  `fold_nir` apart for `Exp` at `5.5` (`4374b122` against `4374b121`), `Log`
+  at `42.12` (`406f64b9`, the number in `mali-deqp-cfold2.md` section 4),
+  `fma32` against `f32::mul_add` on 1e6 operand triples (random bit patterns
+  and near-cancellations), `atan` at `1.0` through the polynomial and `fma32`
+  (`3f490fa4`), and the coefficient words of 1.4 and 3.4;
+* the f16 conversions over every f16 and their ties, and the C special values
+  of `exp`, `log`, `pow`, `atan`, `atan2`, `asin`, `acos` against `std`;
+* the count test (`std`, glibc) compares `fold_glsl` with `std` on 2e6
+  arguments per function and asserts the counts of section 3.3 as upper
+  bounds. It is the guard that level 2 does not drift, and the trigger for
+  level 3 if a count is raised for a function. One xorshift64 generator runs
+  through the rows in the table's order, with 24 random bits scaled in f32
+  (`lo + (hi - lo) * u`). That reproduces section 7's arguments, and with them
+  the counts of the first four rows exactly (sin 25,493, cos 25,810,
+  exp2 1,302, log2 437). The `pow`, `exp` and `log` rows of 3.3 came from
+  another scratch program. On this test's arguments the helper differs from
+  glibc on 1,244, 1,193 and 1,452 (bounds 1,282, 1,296, 3,480). Those are the
+  counts the f64 libm value rounded once gives on the same arguments (a
+  scratch run). `atan`, `asin`,
+  `acos`, `atan2` differ on 0. `tan` differs on 46,251, bounded by the 51,140
+  arguments where `sin` or `cos` differs. The counts are glibc 2.43's; another
+  libm moves them.
 * The byte-compare references: `mali_deqp_cfold2.rs`
   (`const_call_transcendental_{log2,pow,atan}`), `mali_deqp_arith.rs`
   (`constexpr_f{sin,cos,exp2,log2}_{fs,vs}_highp`),
