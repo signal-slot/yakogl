@@ -46,6 +46,11 @@ It needs `python3` and `sha256sum`, nothing else. It checks:
   `mkimage -l` must also read it and mkimage's build must equal
   `tools/uboot_script.py`'s; without it that is reported as skipped, and
   `MP2_REQUIRE_MKIMAGE=1` makes it a failure;
+- opt-in, off by default: with `MP2S_QEMU=1`, `QEMU_SYSTEM_AARCH64` and
+  `UBOOT_V2023_10_SRC` all set, `qemu-product/run.sh` runs too and counts as
+  one check (a `SKIP:` from it counts as a failure there, since you asked
+  for it). Without them nothing is recorded, not even a skip, so
+  `MP2_REQUIRE_MKIMAGE=1` still gives `0 skipped`;
 - section 7's lint: the commands `echo setenv test itest setexpr size load
   saveenv dcache icache go exit` only; `setenv` of `mp2s_*` and
   `boot_prefixes` only; `boot_prefixes` set only from `${mp2s_prefixes}`;

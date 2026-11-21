@@ -20,6 +20,11 @@
 #     and each of those lines is printed by the script;
 #   - mp2s_load and mp2s_window equal ../uboot-mp2/mp2-mmc.cmd's;
 #   - negative cases: mutated copies of the script that the checks must refuse.
+#   - opt-in: MP2S_QEMU=1 with QEMU_SYSTEM_AARCH64 and UBOOT_V2023_10_SRC set
+#     also runs qemu-product/run.sh (the product script in U-Boot v2023.10
+#     under QEMU) and counts its exit status as one check. Otherwise nothing
+#     is recorded: no check and no skip, so MP2_REQUIRE_MKIMAGE=1 still gives
+#     "0 skipped".
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -398,6 +403,16 @@ printf '\377' | dd of="$T/neg.scr" bs=1 seek=100 conv=notrunc status=none
 expect_fail "the header parser refuses a corrupted data byte" $PY3 "$T/uimage.py" "$T/neg.scr" "$CMD"
 $PY3 "$root/tools/uboot_script.py" build "$CMD" -o "$T/neg.scr" --name mp2-standalone --arch arm > /dev/null
 expect_fail "the header parser refuses an arm (not arm64) header" $PY3 "$T/uimage.py" "$T/neg.scr" "$CMD"
+
+# ---- 5. opt-in: the QEMU run of the product script (nothing recorded when off)
+if [ "${MP2S_QEMU:-}" = 1 ] && [ -n "${QEMU_SYSTEM_AARCH64:-}" ] && [ -n "${UBOOT_V2023_10_SRC:-}" ]; then
+	if "$here/qemu-product/run.sh" > "$T/qemu.out" 2>&1 && ! grep -q '^SKIP:' "$T/qemu.out"; then
+		ok "qemu-product/run.sh: $(tail -n 1 "$T/qemu.out")"
+	else
+		bad "qemu-product/run.sh"
+		sed 's/^/     /' "$T/qemu.out"
+	fi
+fi
 
 summary="mp2-standalone selftest: $pass ok, $fail failed, $skip skipped"
 if [ "$skip" -gt 0 ]; then
