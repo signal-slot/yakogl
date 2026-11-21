@@ -19,7 +19,7 @@ so session A cannot say whether the TS works on this board. W7 to W9 (TS
 buffers, the colour and depth fast clears, the TS-sourced resolve) are gated on
 question (iii). W12 (depth textures tiled, a TS-aware CPU resolve) is gated on
 question (ii). Mesa never runs the configuration: the back end turns the GPU
-MMU off (`driver/rust/src/gpu/vivante/hw.rs:15-16`), and Mesa's FAST_CLEAR gate
+MMU off (`driver/rust/src/gpu/vivante/hw.rs:14-16`), and Mesa's FAST_CLEAR gate
 counts MC20 (`etnaviv_screen.c:986-992`). `gc-tiled-targets.md` "Risks" says
 so.
 
@@ -30,8 +30,8 @@ Sources: `src/vivante/ts.rs` (every TS word and size, from Mesa 26.2.1),
 target, `cs_golden` mode 29, README section "A tile-status fast clear"),
 `gc-depth-sample.md` ("This back end's surface"), `driver/samples/zephyr/gl_test`
 (`main_imx8mp.c`, the case table in `driver/tools/pvrlab/gl_test.c`). Own code
-is cited at `7c2af19d`; `main_imx8mp.c` and `regs.rs` are being edited by
-items knob-plumb and w1-regs, so line numbers there can drift.
+was cited at `7c2af19d`; the `backend.rs` lines below were re-read at
+`e07d066a`. Line numbers in `backend.rs`, `main_imx8mp.c` and `regs.rs` drift.
 
 ## Answer in short
 
@@ -59,8 +59,10 @@ items knob-plumb and w1-regs, so line numbers there can drift.
 - Case numbers: the next free ones at `7c2af19d` (the case table ends at 242):
   **243 `tsprobe`**, **244 `dlayout`**. Take the next free numbers if another
   item has used them; the rest of this note says 243 and 244.
-- One image: `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 243` with
-  `GL_TEST_CASES="243,244"` (the sample's `CONFIG_GL_TEST_KNOBS=y`, so
+- One image (as built: see "Session commands" below for the real command, with
+  first case 246; the design's `GL_TEST_CASES` is not a knob of the build
+  script): `IMX8MP_BOARD=x2 tools/cts/imx8mp-gltest-build.sh <name> 246` with
+  `CONFIG_GL_TEST_GC_TS_PROBE=y` (the sample's `CONFIG_GL_TEST_KNOBS=y`, so
   `CONFIG_YAKOGL_TEST_KNOBS=y`; the hooks below exist only with the crate's
   `test-knobs` feature) and `CONFIG_GC_BOARD_WDOG_SELF_ARM=y`. The image must
   carry `gc_wdog_arm: armed` (`strings`), as every X2 image of plan #328 does.
@@ -334,7 +336,7 @@ the pair "SINGLE_BUFFER(2), no SUPER_TILED".
 
 A 64x64 depth-only draw into a framebuffer with a D24S8 renderbuffer and a
 dummy colour target (Mesa's, `etnaviv_state.c:397-407`; `ensure_no_colour_surface`,
-`backend.rs:785-797` is the back end's dummy), `GL_ALWAYS`, depth writes on,
+`backend.rs:1038-1044` is the back end's dummy), `GL_ALWAYS`, depth writes on,
 depth cleared to 1.0 by a quad first. One quad (two triangles in one plane)
 covering the target, with window depth `z(x, y) = (x + 64 y) / 8192` over the
 target, so `z` stays in `[0, 0.5)`. Every pixel then has a **unique** depth,
@@ -359,8 +361,8 @@ board decodes what the host verified.
 Mode 3 runs first: if the control does not read as today's layout, the
 decoding is wrong and the other three pages mean nothing. The hook is `gc_debug_depth_dump(mode, out)`; it needs a
 new test knob that overrides the two fields for a depth-only draw
-(`single_buffer()` and the `PE_DEPTH_CONFIG` writer, `backend.rs:573-598`,
-`:1500-1512`), default off. The hook reads the surface through the CPU view
+(`single_buffer()` and the `PE_DEPTH_CONFIG` writer, `backend.rs:813-826`,
+`:1796-1802`), default off. The hook reads the surface through the CPU view
 after `finish` (the carve-out is non-cacheable; `gc-depth-sample.md`).
 
 ### The page
@@ -390,7 +392,7 @@ decode): the same reference order, dword offsets, and `0xffff` for not
 found. Offset 2k is the low half and 2k+1 the high half of word k; words
 0 and 1 are A w2 and w3, word 2 is B w2, words 3 to 5 are C w1 to w3.
 
-Tags `0xc0..0xcb` are case 244's (page C is `0xc8..0xcb`), `0xd0..0xd7`
+Tags `0xc0..0xcb` are case 244's (page C is `0xc8..0xcb`), `0xd0..0xdb`
 are case 243's; the host item greps for a clash before taking them.
 The codes below are the low nibble of page A's w1.
 
@@ -454,7 +456,7 @@ is what the session runs.
     `submit`, waited on with `wait(fence, 2 s)`. No kick runs after a
     timeout;
   - classifies with `ts::classify`, and returns the outcome code (`F` on a
-    hang) or a `PROBE_ERR_*` (-1 arguments, -2 arm, -3 no submit or wait,
+    hang) or a `PROBE_ERR_*` (`ts.rs`; -1 arguments, -2 arm, -3 no submit or wait,
     -4 allocation, -5 address above 4 GiB, -6 no CPU view, -7 finish,
     -8 submit refused) for a step that could not run.
 
@@ -575,7 +577,7 @@ grep -E 'CONFIG_GL_TEST_GC_TS_PROBE=y|CONFIG_GC_GL_TEST_DEADLINE_SECONDS=60' \
 SEL=0x10d0 tools/board.sh --dry-run x2 run "$img/zephyr.bin" records/x2/dry
 ```
 
-Then one boot a page, in the order of item 4 above, each into its own
+Then one boot a page, in the order of item 4 below, each into its own
 record directory. A `HANG` or `GUARD` page stops the session (no retry), and
 so does a board that does not come back. Never `NETBOOT_NO_WATCHDOG=1`:
 
@@ -666,7 +668,7 @@ read only) and checks w1 and w2 against the record.
      matching code for each of the four maps.
 3. **probe-cases-build** (after 1 and 2 and after knob-plumb has merged, since it
    edits `driver/samples/zephyr/gl_test/src/main_imx8mp.c` and `Kconfig`; `driver/tools/pvrlab/gl_test.c`
-   cases 243 and 244, their names in the case table, `gl_test_tsprobe_page`,
+   cases 243 and 244 (built as 246 and 247, `gl_test_tsprobe.inc`), their names in the case table, `gl_test_tsprobe_page`,
    the selector decoding in `main_imx8mp.c`, `GC_GL_TEST_DEADLINE_SECONDS`
    60 in the image's config; about 2 h). Item x2-gltest-build (ready) is the
    model for the host build check (`west build` for `armadillo_x2`; `strings`
@@ -678,10 +680,11 @@ read only) and checks w1 and w2 against the record.
    - The image built from an `origin/main` commit with items 1 to 3, carrying
      `gc_wdog_arm: armed`; `tools/board.sh x2 run` (kexec-dev), `SEL` =
      `0x1000 | tag`. Order: `0xd0`; if its code is `YES`, `0xd4` (the K3 page);
-     then `0xd2`, `0xd1`, `0xd3` as the table above allows; then case 244:
-     `0xc3` (the control), `0xc0`, `0xc1`, `0xc2`, and the B page of every
-     mode (`0xc4..0xc7`) and its C page
-     (`0xc8..0xcb`). The whole session is at most 16 boots; a `HANG` or
+     then `0xd2`, `0xd1`, `0xd3` as the table above allows; then case 244
+     (built as 247, modes 1 and 3 only; `0xc0` and `0xc2` SKIP):
+     `0xc3` (the control), `0xc1`, and the B page of each (`0xc7`, `0xc5`) and
+     its C page (`0xcb`, `0xc9`), as "Session commands" lists. The whole
+     session is at most 18 boots; a `HANG` or
      `GUARD` stops it. Never `NETBOOT_NO_WATCHDOG=1`; no eMMC boot partition, no U-Boot environment,
      no swupdate; nothing installed or persisted.
    - The record goes under `records/x2/<YYYYMMDD-HHMM>-tsprobe-<sha8>/`
