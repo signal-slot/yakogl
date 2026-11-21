@@ -152,6 +152,224 @@ Counts are the first-refusal cases of the shape in the stage named, precision sp
 - **X1 (75)**: `constexpr.flog2` vs 12; `constexpr.{fsin,fexp2}` fs and vs 9 and 8 each; `constexpr.fceil` vs 4; `constexpr.fcos` fs 4, vs 4; `constexpr.fsign` vs 4; `constexpr.{ball,bany}` fs 3, vs 3 each; `other.ball` fs 1.
 - **X2 (325)**: `uniform_api.bool_compare` vs 179; `isok_int_round` fs 146.
 
+### 3.2 Measured sites at c0142485
+
+Section 6 said the sites were read, not measured. They are now measured at the integration tip `c0142485`
+(`rpi5_scanout16/32: no literal IPv4 ...`). **Method** (no compiler change): a scratch copy of the tree
+(a throw-away `git worktree`, not committed) in which every `Err(MaliError::Arithmetic | FsOperandForm | Rebalance)`
+construction in `glsl.rs`, `nir.rs`, `nir_fs.rs` and `vec16.rs` also printed its `file:line` (line numbers unchanged,
+so they are the tip's), and a scratch test that loads each of the 144 `deqp_arith_*` references and calls
+`mali_ref::compile_pair` like `tests/mali_deqp_arith.rs` (features `host-test,gpu-mali,shaderc-online,no-shader-table`).
+The site is the last construction printed before the refusal returned. Results: 144 of 144 refuse, none compiles, and
+the refusal text of every one is the one `tests/mali_deqp_arith.rs` pins (`ARITH` 123, `OPERAND` 20, `CHAIN` 1:
+the column "Text"). The per-step reference counts of the section 3 table **do not change** (12, 17, 21, 14, 26, 6, 20, 12, 1,
+13, 2 = 144; the step column below is computed from the shape rules of 3.1 and gives exactly these), but 36 references
+sit at a site other than the one section 2's arm table names. Line numbers are of the tip and drift with every compiler commit: re-measure
+with the same instrumentation before relying on them.
+
+**Sites and who is there** (the arm names are section 2's):
+
+| Site | Arm | Refs | Steps of those refs |
+|---|---|---:|---|
+| `nir_fs.rs:3551` | `Fs::alu32`, a product whose constant is not 2.0 (`pow32_of`/square case) | 1 | X1 |
+| `nir_fs.rs:3553` | `Fs::alu32` catch-all (op without an fp32 row) | 4 | X1 |
+| `nir_fs.rs:6023` | mediump walk, `Fceil` of a varying lane | 2 | 3 |
+| `nir_fs.rs:6101` | mediump walk, `Frcp` of a non-constant | 14 | 1a (12), 7 (2: `atan`) |
+| `nir_fs.rs:6133` | mediump walk, `Fmax\|Fmin` with a non-constant second operand | 6 | 4 |
+| `nir_fs.rs:6236` | mediump walk, `Bcsel` of non-constant arms | 12 | 5 (6), 7 (6: `atan2`, `faceforward`, `refract`) |
+| `nir_fs.rs:6260` | mediump walk, `Fsin\|Fcos\|Flog2` | 16 | 1b |
+| `nir_fs.rs:6297` | mediump walk, `Fexp2` of a `Val::Const` operand | 1 | 1b |
+| `nir_fs.rs:6344` | mediump walk, `Frsq\|Fsqrt` of an operand that is neither computed nor a varying | 2 | 3 |
+| `nir_fs.rs:6376` | mediump walk, catch-all `ir::Op::Alu(..)` | 15 | 3 (10), 7 (4: `acos`, `asin`), X2 (1: `isok_int_round`) |
+| `nir_fs.rs:8476` | pair-tree builder, exp2 lane-index check | 2 | 4 |
+| `nir_fs.rs:9430` | pair-tree builder, `B2f` of a compare mask | 1 | 4 |
+| `nir_fs.rs:9892` | pair-tree builder, `prods & !ADMITTED` / uniform-splat root | 17 | 4 |
+| `nir.rs:3571` | `vs_clamp`, no constant operand | 7 | 2 (3, highp), 6 (4, mediump) |
+| `nir.rs:3618` | `vs_reduce`, reduced value not an `Alu` def | 4 | 6 (2), X1 (2) |
+| `nir.rs:3711` | `vs_reduce`, form outside `vsarith_86_anyall` | 10 | 6 (9), X2 (1) |
+| `nir.rs:5133` | vertex `walk`, catch-all `_ => Arithmetic` | 29 | 2 (18), 6 (5), X1 (6) |
+| `glsl.rs:1275` | `Reduction::Unknown if chain(v) >= 3` (`Rebalance`) | 1 | 8 |
+| | | **144** | |
+
+(`nir.rs:3711` holds 10: the six `op_binary_{equal,not_equal}_vs_*`, `other_ball`, `other_bany` and `random_bany` (9) are step 6,
+`uniform_api_bool_compare_vs_none` is X2.)
+
+**What differs from section 2's arm table** (the step a reference *moves to* when the site, not the shape, is read):
+
+- **Step 7 is not a leaf step.** Its 12 references first stop in arms of earlier steps: `op_angle_atan_*` (2) at the `Frcp` arm (1a);
+  `op_angle_atan2_*`, `op_geometric_faceforward_*`, `op_geometric_refract_*` (6) at the `Bcsel` arm (5, not 1a/3/4 as 3.1's
+  "needs 1a, 3 and 4" said); `op_angle_acos_*`, `op_angle_asin_*` (4) at the catch-all (3: `Fsign`/`Ffloor` of the front end's composition).
+  Step 7 therefore also depends on **5**; none of the 12 reaches the pair builder first.
+- **`vs_clamp` (`nir.rs:3571`) serves two steps.** The 3 highp `op_common_{min,max,clamp}_vs_highp` are step 2; the 4 mediump ones
+  (`op_common_{min,max,clamp}_vs_mediump`, `other_fmax_vs_mediump`) stop at the same line but their Mesa words are the fp16 forms
+  of step 6: lifting the refusal alone makes them `DIFFERS`, not `LOWERED`.
+- **Vertex catch-all `nir.rs:5133` also holds 5 mediump references** (`op_angle_tan_vs_mediump`, `op_exponential_{exp,log}_vs_mediump`,
+  `op_common_{ceil,sign}_vs_mediump`): step 2 makes them compile, but 6's fp16 read decides byte-equality (same caveat).
+  The mediump `sin cos exp2 log2 pow` references at this site are step 2's, as 3 says.
+- **The vertex `ball`/`bany` refusals are `vs_reduce`'s, not folds** (`nir.rs:3618`, `3711`): `constexpr_{ball,bany}_vs_highp` are shape X1
+  (Mesa folds them) but the compiler stops in the reduction, so `lower-constop` alone will not move them; they are the
+  `vs_reduce` of step 6. `op_bool_{all,any}_vs_none`, `other_{ball,bany}_vs_none`, `random_bany_vs_none` (step 6) are also here.
+- **The fragment constant folds stop in `Fs::alu32`** (`nir_fs.rs:3551/3553`: `constexpr_{ball,bany,fcos,fsin}_fs_highp` and
+  `constexpr_fexp2_fs_highp`) and the vertex ones at the catch-all (`constexpr_{fceil,fcos,fexp2,flog2,fsign,fsin}_vs_highp`),
+  not in `ConstantFold` (section 2 / `mali-deqp-arith.md` assumed folds): they are still X1 by shape, but the fold has to exist in the walk the shader reaches.
+- **`random_fexp2_fs_mediump` stops in the `Fexp2` arm** with a constant operand (`nir_fs.rs:6297`), not in the `Fsin|Fcos|Flog2` kernel arm: step 1b,
+  but its fix is the constant `exp2`, not the transcendental kernel.
+- **`random_frsq_fs_mediump`, `random_fsqrt_fs_mediump` stop in the `Frsq|Fsqrt` arm** (`nir_fs.rs:6344`): the operand is a uniform or constant, so the
+  refusal is that arm's operand rule (3), not a missing op.
+- **`other_storeoutput_fs_mediump` stops at `nir_fs.rs:9430`** (a `B2f` mask pair), the other 17 pair-tree references at `9892` (`ADMITTED`);
+  `op_exponential_exp2_fs_*` at `8476`. All step 4.
+- **`isok_int_round_fs_mediump`** stops at the catch-all (`6376`): an integer op, X2, as 3 says.
+- No reference stops in a different *family* (every one is one of the three texts), and none of the 144 was already compiling.
+
+Full table, one row per reference (`deqp_arith_<name>`), in file name order:
+
+| Reference (`deqp_arith_`) | Text | Site (tip) | Step | Differs from section 2 |
+|---|---|---|---|---|
+| `constexpr_ball_fs_highp` | ARITH | `nir_fs.rs:3553` | X1 | moved: `Fs::alu32`, not `ConstantFold` |
+| `constexpr_ball_vs_highp` | ARITH | `nir.rs:3618` | X1 | moved: `vs_reduce`, not `ConstantFold` |
+| `constexpr_bany_fs_highp` | ARITH | `nir_fs.rs:3553` | X1 | moved: `Fs::alu32`, not `ConstantFold` |
+| `constexpr_bany_vs_highp` | ARITH | `nir.rs:3618` | X1 | moved: `vs_reduce`, not `ConstantFold` |
+| `constexpr_fceil_vs_highp` | ARITH | `nir.rs:5133` | X1 | moved: vertex catch-all, not `ConstantFold` |
+| `constexpr_fcos_fs_highp` | ARITH | `nir_fs.rs:3553` | X1 | moved: `Fs::alu32`, not `ConstantFold` |
+| `constexpr_fcos_vs_highp` | ARITH | `nir.rs:5133` | X1 | moved: vertex catch-all, not `ConstantFold` |
+| `constexpr_fexp2_fs_highp` | ARITH | `nir_fs.rs:3551` | X1 | moved: `Fs::alu32`, not `ConstantFold` |
+| `constexpr_fexp2_vs_highp` | ARITH | `nir.rs:5133` | X1 | moved: vertex catch-all, not `ConstantFold` |
+| `constexpr_flog2_vs_highp` | ARITH | `nir.rs:5133` | X1 | moved: vertex catch-all, not `ConstantFold` |
+| `constexpr_fsign_vs_highp` | ARITH | `nir.rs:5133` | X1 | moved: vertex catch-all, not `ConstantFold` |
+| `constexpr_fsin_fs_highp` | ARITH | `nir_fs.rs:3553` | X1 | moved: `Fs::alu32`, not `ConstantFold` |
+| `constexpr_fsin_vs_highp` | ARITH | `nir.rs:5133` | X1 | moved: vertex catch-all, not `ConstantFold` |
+| `indexing_dynamic_select_fs_none` | ARITH | `nir_fs.rs:6236` | 5 |  |
+| `isok_int_round_fs_mediump` | ARITH | `nir_fs.rs:6376` | X2 | catch-all op, integer family |
+| `matrix_div_fs_highp` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `matrix_div_fs_mediump` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `matrix_storeout_fs_highp` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `matrix_storeout_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_angle_acos_fs_highp` | ARITH | `nir_fs.rs:6376` | 7 | moved: first refusal is a step-3 arm |
+| `op_angle_acos_fs_mediump` | ARITH | `nir_fs.rs:6376` | 7 | moved: first refusal is a step-3 arm |
+| `op_angle_asin_fs_highp` | ARITH | `nir_fs.rs:6376` | 7 | moved: first refusal is a step-3 arm |
+| `op_angle_asin_fs_mediump` | ARITH | `nir_fs.rs:6376` | 7 | moved: first refusal is a step-3 arm |
+| `op_angle_atan2_fs_highp` | ARITH | `nir_fs.rs:6236` | 7 | moved: first refusal is a step-5 arm |
+| `op_angle_atan2_fs_mediump` | ARITH | `nir_fs.rs:6236` | 7 | moved: first refusal is a step-5 arm |
+| `op_angle_atan_fs_highp` | ARITH | `nir_fs.rs:6101` | 7 | moved: first refusal is a step-1a arm |
+| `op_angle_atan_fs_mediump` | ARITH | `nir_fs.rs:6101` | 7 | moved: first refusal is a step-1a arm |
+| `op_angle_cos_fs_highp` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_angle_cos_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_angle_cos_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_angle_cos_vs_mediump` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_angle_sin_fs_highp` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_angle_sin_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_angle_sin_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_angle_sin_vs_mediump` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_angle_tan_fs_highp` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_angle_tan_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_angle_tan_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_angle_tan_vs_mediump` | ARITH | `nir.rs:5133` | 6 | moved: step-2 site, mediump words are step 6 |
+| `op_binary_add_assign_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_binary_add_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_binary_div_assign_fs_highp` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_binary_div_assign_fs_mediump` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_binary_div_fs_highp` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_binary_div_fs_mediump` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_binary_equal_vs_highp` | ARITH | `nir.rs:3711` | 6 |  |
+| `op_binary_equal_vs_mediump` | ARITH | `nir.rs:3711` | 6 |  |
+| `op_binary_equal_vs_none` | ARITH | `nir.rs:3711` | 6 |  |
+| `op_binary_mul_assign_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_binary_mul_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_binary_not_equal_fs_highp` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_binary_not_equal_fs_mediump` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_binary_not_equal_vs_highp` | ARITH | `nir.rs:3711` | 6 |  |
+| `op_binary_not_equal_vs_mediump` | ARITH | `nir.rs:3711` | 6 |  |
+| `op_binary_not_equal_vs_none` | ARITH | `nir.rs:3711` | 6 |  |
+| `op_binary_sub_assign_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_binary_sub_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_bool_all_vs_none` | ARITH | `nir.rs:3618` | 6 |  |
+| `op_bool_any_vs_none` | ARITH | `nir.rs:3618` | 6 |  |
+| `op_common_abs_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_common_ceil_fs_highp` | ARITH | `nir_fs.rs:6023` | 3 |  |
+| `op_common_ceil_fs_mediump` | ARITH | `nir_fs.rs:6023` | 3 |  |
+| `op_common_ceil_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_common_ceil_vs_mediump` | ARITH | `nir.rs:5133` | 6 | moved: step-2 site, mediump words are step 6 |
+| `op_common_clamp_fs_highp` | ARITH | `nir_fs.rs:6133` | 4 |  |
+| `op_common_clamp_fs_mediump` | ARITH | `nir_fs.rs:6133` | 4 |  |
+| `op_common_clamp_vs_highp` | ARITH | `nir.rs:3571` | 2 |  |
+| `op_common_clamp_vs_mediump` | ARITH | `nir.rs:3571` | 6 | moved: `vs_clamp` site of step 2, words of step 6 |
+| `op_common_floor_fs_highp` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_common_floor_fs_mediump` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_common_max_fs_highp` | ARITH | `nir_fs.rs:6133` | 4 |  |
+| `op_common_max_fs_mediump` | ARITH | `nir_fs.rs:6133` | 4 |  |
+| `op_common_max_vs_highp` | ARITH | `nir.rs:3571` | 2 |  |
+| `op_common_max_vs_mediump` | ARITH | `nir.rs:3571` | 6 | moved: `vs_clamp` site of step 2, words of step 6 |
+| `op_common_min_fs_highp` | ARITH | `nir_fs.rs:6133` | 4 |  |
+| `op_common_min_fs_mediump` | ARITH | `nir_fs.rs:6133` | 4 |  |
+| `op_common_min_vs_highp` | ARITH | `nir.rs:3571` | 2 |  |
+| `op_common_min_vs_mediump` | ARITH | `nir.rs:3571` | 6 | moved: `vs_clamp` site of step 2, words of step 6 |
+| `op_common_mix_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_common_mod_fs_highp` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_common_mod_fs_mediump` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_common_sign_fs_highp` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_common_sign_fs_mediump` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_common_sign_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_common_sign_vs_mediump` | ARITH | `nir.rs:5133` | 6 | moved: step-2 site, mediump words are step 6 |
+| `op_common_smoothstep_fs_highp` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_common_smoothstep_fs_mediump` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `op_exponential_exp2_fs_highp` | OPERAND | `nir_fs.rs:8476` | 4 |  |
+| `op_exponential_exp2_fs_mediump` | OPERAND | `nir_fs.rs:8476` | 4 |  |
+| `op_exponential_exp2_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_exp2_vs_mediump` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_exp_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_exp_vs_mediump` | ARITH | `nir.rs:5133` | 6 | moved: step-2 site, mediump words are step 6 |
+| `op_exponential_log2_fs_highp` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_exponential_log2_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_exponential_log2_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_log2_vs_mediump` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_log_fs_highp` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_exponential_log_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_exponential_log_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_log_vs_mediump` | ARITH | `nir.rs:5133` | 6 | moved: step-2 site, mediump words are step 6 |
+| `op_exponential_pow_fs_highp` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_exponential_pow_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `op_exponential_pow_vs_highp` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_exponential_pow_vs_mediump` | ARITH | `nir.rs:5133` | 2 |  |
+| `op_float_notequal_fs_highp` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_float_notequal_fs_mediump` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `op_geometric_cross_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_geometric_faceforward_fs_highp` | ARITH | `nir_fs.rs:6236` | 7 | moved: first refusal is a step-5 arm |
+| `op_geometric_faceforward_fs_mediump` | ARITH | `nir_fs.rs:6236` | 7 | moved: first refusal is a step-5 arm |
+| `op_geometric_reflect_fs_highp` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_geometric_reflect_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_geometric_refract_fs_highp` | ARITH | `nir_fs.rs:6236` | 7 | moved: first refusal is a step-5 arm |
+| `op_geometric_refract_fs_mediump` | ARITH | `nir_fs.rs:6236` | 7 | moved: first refusal is a step-5 arm |
+| `op_selection_select_fs_highp` | ARITH | `nir_fs.rs:6236` | 5 |  |
+| `op_selection_select_fs_mediump` | ARITH | `nir_fs.rs:6236` | 5 |  |
+| `op_selection_select_fs_none` | ARITH | `nir_fs.rs:6236` | 5 |  |
+| `op_unary_incdec_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `op_unary_unary_minus_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `other_ball_vs_none` | ARITH | `nir.rs:3711` | 6 |  |
+| `other_bany_vs_none` | ARITH | `nir.rs:3711` | 6 |  |
+| `other_bcsel_fs_mediump` | ARITH | `nir_fs.rs:6236` | 5 |  |
+| `other_bcsel_fs_none` | ARITH | `nir_fs.rs:6236` | 5 |  |
+| `other_ffloor_fs_none` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `other_fmax_vs_mediump` | ARITH | `nir.rs:3571` | 6 | moved: `vs_clamp` site of step 2, words of step 6 |
+| `other_frcp_fs_none` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `other_fsin_fs_none` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `other_storeoutput_fs_mediump` | OPERAND | `nir_fs.rs:9430` | 4 | moved: `B2f`-mask pair site, not `ADMITTED` |
+| `other_storeoutput_fs_none` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `other_x_vs_mediump` | CHAIN | `glsl.rs:1275` | 8 |  |
+| `random_bany_vs_none` | ARITH | `nir.rs:3711` | 6 |  |
+| `random_fcos_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `random_fexp2_fs_mediump` | ARITH | `nir_fs.rs:6297` | 1b | moved: `Fexp2` arm of a constant, not the kernel arm |
+| `random_fexp2_vs_none` | ARITH | `nir.rs:5133` | 2 |  |
+| `random_flog2_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `random_flog2_vs_none` | ARITH | `nir.rs:5133` | 2 |  |
+| `random_fne_fs_mediump` | ARITH | `nir_fs.rs:6376` | 3 |  |
+| `random_frcp_fs_mediump` | ARITH | `nir_fs.rs:6101` | 1a |  |
+| `random_frsq_fs_mediump` | ARITH | `nir_fs.rs:6344` | 3 | operand neither computed nor varying (uniform/constant) |
+| `random_fsin_fs_mediump` | ARITH | `nir_fs.rs:6260` | 1b |  |
+| `random_fsin_vs_none` | ARITH | `nir.rs:5133` | 2 |  |
+| `random_fsqrt_fs_mediump` | ARITH | `nir_fs.rs:6344` | 3 | operand neither computed nor varying (uniform/constant) |
+| `random_storeoutput_fs_mediump` | OPERAND | `nir_fs.rs:9892` | 4 |  |
+| `uniform_api_bool_compare_vs_none` | ARITH | `nir.rs:3711` | X2 |  |
+
 ## 4. Step 1 (`arith-lower-1`): the design
 
 **Scope: 1a then 1b** (366 first-refusal cases, 29 references, 167 operator-suite cases plus the 54 `matrix.div`): the two share the
@@ -299,8 +517,7 @@ composition of ops lowered in 1a, 3 and 4 plus `CSEL.u32.eq`/`LSHIFT_*.i32` (cop
 
 ## 6. What this design does not know
 
-- The site of each of the 144 references *at this tip* was not re-measured (no build here; section 2's arm table is from reading the code, the counts from
-  `mali-deqp-arith.md`). Step 1's first action is to print each reference's refusal site; a highp reference that refuses somewhere other than the arm named here moves
-  between steps (the counts per step are then those of this note's section 3 table, the mapping of reference to step the implementer's).
+- The sites of the 144 references were measured at `c0142485` (section 3.2); section 2's arm table is from reading the code, and 3.2 lists where the two differ.
+  Line numbers move with every compiler commit, so a step's first action is to rerun the instrumentation of 3.2 on the then-current tip.
 - Whether Mesa's CSE of the `sin`/`cos` kernel for `tan` and the `FMA` fusion of `mod`/`smoothstep` are already made by `Fs::op` is unchecked.
 - A first-refusal count says nothing of the next refusal of the case; `deqp-host-measure.sh` after each step gives the `next_family` column.
