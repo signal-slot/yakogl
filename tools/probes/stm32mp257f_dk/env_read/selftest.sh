@@ -124,6 +124,21 @@ dd if="$T/inactive.bin" of="$T/inact/u-boot-env.bin" bs=1 skip=$((0x7c000)) seek
 cp "$T/a/fw_printenv.txt" "$T/inact/fw_printenv.txt"
 expect "an image byte differs, fw_printenv does not" 1 $S "$T/a" "$T/inact"
 
+# the DK's case: fw_printenv fails, the partition is good
+mkdir -p "$T/fwbad"; cp -r "$T/same/." "$T/fwbad/"
+printf 'Cannot initialize environment\n' > "$T/fwbad/fw_printenv.txt"
+expect "fw_printenv error only, identical partitions" 0 $S "$T/a" "$T/fwbad"
+has "fw_printenv error: empty diff" 'fw_printenv diff: empty'
+has "fw_printenv error: flagged" 'fw_printenv unavailable'
+has "fw_printenv error: identical" 'RESULT: IDENTICAL'
+mkdir -p "$T/fwbad2"; cp -r "$T/envchg/." "$T/fwbad2/"
+printf 'Cannot initialize environment\n' > "$T/fwbad2/fw_printenv.txt"
+expect "fw_printenv error, a variable changed in the partition" 1 $S "$T/a" "$T/fwbad2"
+has "partition change: variable named" '^| bootdelay | 1 | 3 |'
+expect "fw_printenv error, single" 0 $S "$T/fwbad"
+has "single: flagged" 'fw_printenv unavailable'
+has "single: variables from the partition" '^| bootcmd | run bootcmd_stm32mp |'
+
 # ---- collect.sh against a fake ssh -----------------------------------------
 mkdir -p "$T/bin"
 cat > "$T/bin/ssh" <<'EOF'
@@ -150,6 +165,11 @@ PATH=$T/bin:$PATH BOARD_HOST=user@board MP2_SUDO= expect "collect.sh reads a fak
 expect "collected directory equals the fixture" 0 python3 -I "$sum" "$T/a" "$T/got"
 expect "collect.sh without BOARD_HOST refuses" 2 env -u BOARD_HOST bash "$col" "$T/got2"
 expect "collect.sh without an argument refuses" 2 env BOARD_HOST=x bash "$col"
+# a failing fw_printenv (the DK's) does not fail collect.sh
+sed -i 's|^    \*fw_printenv\*) cat .*|    *fw_printenv*) if [ -n "${FWFAIL:-}" ]; then echo "Cannot initialize environment" >\&2; exit 1; fi; cat "$FAKE/a/fw_printenv.txt" ;;|' "$T/bin/ssh"
+PATH=$T/bin:$PATH FWFAIL=1 BOARD_HOST=user@board MP2_SUDO= expect "collect.sh tolerates a failing fw_printenv" 0 bash "$col" "$T/got3"
+has "failing fw_printenv: error kept" 'fw_printenv failed'
+expect "failing fw_printenv: partition equals the fixture" 0 python3 -I "$sum" "$T/a" "$T/got3"
 # every command sent is one of the read-only ones
 if grep -Eq 'fw_setenv|dd of=|mount|modprobe|rmmod|insmod|tailscale|sshd|systemctl| > /dev|tee ' "$T/ssh.log"; then
     bad "no write command was sent to the board"; cat "$T/ssh.log"

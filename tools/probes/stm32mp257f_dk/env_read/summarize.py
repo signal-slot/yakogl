@@ -42,17 +42,36 @@ def text(d, name):
         return None
 
 
-def env_vars(d):
-    """fw_printenv.txt as a dict (None when missing)."""
-    t = text(d, "fw_printenv.txt")
-    if t is None:
-        return None
+def parse_vars(t):
     out = {}
     for line in t.splitlines():
         if "=" in line:
             k, v = line.split("=", 1)
             out[k] = v
     return out
+
+
+def fw_printenv_vars(d):
+    """(dict or None, status) of fw_printenv.txt, the secondary record."""
+    t = text(d, "fw_printenv.txt")
+    if t is None:
+        return None, "missing"
+    ev = parse_vars(t)
+    if not ev or "Cannot initialize environment" in t:
+        return None, "fw_printenv unavailable"
+    return ev, "ok"
+
+
+def env_vars(d):
+    """The variables of u-boot-env.bin (tools/uboot_env.py print); None when
+    the image is missing or fails its check."""
+    p = os.path.join(d, "u-boot-env.bin")
+    if not os.path.exists(p):
+        return None
+    rc, out = uboot_env("print", p)
+    if rc:
+        return None
+    return parse_vars(out)
 
 
 def uboot_env(*args):
@@ -119,11 +138,15 @@ def single(d):
     ev = env_vars(d)
     bad = 0
     if ev is None:
-        print("env_read: %s has no fw_printenv.txt" % d, file=sys.stderr)
+        print("env_read: %s has no readable u-boot-env.bin" % d, file=sys.stderr)
         bad = 1
         ev = {}
-    rows("fw_printenv", ["variable", "value"],
+    rows("environment (u-boot-env partition)", ["variable", "value"],
          [(v, ev[v] if v in ev else "(unset)") for v in VARS])
+    fw, st = fw_printenv_vars(d)
+    rows("fw_printenv (secondary record)", ["item", "value"],
+         [("status", st)] + ([] if fw is None else
+          [("differs from partition", "no" if fw == ev else "YES")]))
     sha, size, rc, out, active = env_image(d)
     dev = (text(d, "u-boot-env.dev") or "").strip()
     body = [("partition size", "%d bytes (0x%x)" % (size, size)),
@@ -161,13 +184,17 @@ def compare(a, b):
     diffs = 0
     ea, eb = env_vars(a), env_vars(b)
     if ea is None or eb is None:
-        print("env_read: a directory has no fw_printenv.txt", file=sys.stderr)
+        print("env_read: a directory has no readable u-boot-env.bin", file=sys.stderr)
         return 1
     body = []
     for k in sorted(set(ea) | set(eb)):
         if ea.get(k) != eb.get(k):
             body.append((k, ea.get(k, "(unset)"), eb.get(k, "(unset)")))
+    # the heading mp2_uboot_note_check.py keys on; the verdict is the partition's
     print("## fw_printenv diff: %s\n" % ("empty" if not body else "%d variable(s)" % len(body)))
+    print("(variables from u-boot-env.bin via tools/uboot_env.py)\n")
+    for tag, d in (("before", a), ("after", b)):
+        print("fw_printenv %s: %s\n" % (tag, fw_printenv_vars(d)[1]))
     if body:
         rows("changed", ["variable", "before", "after"], body)
         diffs += len(body)

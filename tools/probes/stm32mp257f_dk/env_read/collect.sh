@@ -16,7 +16,8 @@
 #   MP2_KNOWN_HOSTS  a known_hosts file of its own (the host key is checked
 #                    and never recorded)
 # Files written into OUTDIR (read by summarize.py):
-#   fw_printenv.txt  the whole environment as fw_printenv prints it
+#   fw_printenv.txt  fw_printenv's output (stdout and stderr; may be only an
+#                    error on the DK: secondary record)
 #   boot-mount.txt   /boot's source device and file system (findmnt)
 #   partitions.txt   lsblk of the card /boot is on, then /proc/partitions
 #   u-boot-env.bin   the whole u-boot-env partition (dd if=, bs=64k)
@@ -56,7 +57,10 @@ rm -f "$OUT/.lsblk-labels"
 [[ $ENV_DEV =~ $PART_RE ]] || die "no u-boot-env partition on $DISK (the card /boot is on)"
 { [ "${ENV_DEV%p*}" = "$DISK" ] && [ "$ENV_DEV" != "$BOOT_DEV" ]; } || die "$ENV_DEV is not a separate partition of $DISK"
 echo "$ENV_DEV" > "$OUT/u-boot-env.dev"
-rd 60 fw_printenv.txt "${SU}fw_printenv"
+# fw_printenv is a secondary record: on the DK it fails ("Cannot initialize
+# environment"). Its output, errors included, is kept and its exit code is
+# not an error; summarize.py takes the variables from u-boot-env.bin.
+timeout 60 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}fw_printenv" > "$OUT/fw_printenv.txt" 2>&1 || echo "$TAG: fw_printenv failed (kept as fw_printenv.txt); the partition is the record" >&2
 rd 120 u-boot-env.bin "${SU}dd if=$ENV_DEV bs=64k status=none"
 rd 60 boot-ls.txt 'ls -lR /boot'
 rd 60 boot-sizes.txt "cd /boot && find . -type f -printf '%s %p\\n' | sort -k2"
