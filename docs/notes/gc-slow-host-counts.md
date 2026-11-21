@@ -790,3 +790,232 @@ stands only if:
 If arm 0 is `IGNORED`, `NO_WRITE`, `FILL_MISS` or hangs, W7 to W9 stay off and
 every range above is 0; a hang also stops the session and releases the board
 (`gc-ts-probe.md`).
+
+## Predicted effect of gc_chain_open_kick (C5), gc_tiled_sample (W10) and W11b (host-derived, plan #355)
+
+Plan #355, item knobs-predict (issues #1204, #1106, #15). Docs only.
+**These are predictions made before the code exists.** `gc_chain_open_kick`
+(`gc-kick-continue.md` C5), `gc_tiled_sample` (`gc-tiled-wire.md` W10) and
+W11b (the same note: a tiled mipmap chain sampled directly, behind
+`gc_tiled_sample`) are designed and not wired. They are to be checked
+against the knob-on host counts when each lands (`tests/gc_scene_kicks*.rs`)
+and against X2 session A's ms a frame (`gc-tiled-wire.md`, "Session A: the
+run sheet"). **Every figure is a host count or arithmetic on board figures
+the notes already cite. No board measurement and no X2 number is in this
+section**; the RS rate (2 to 8 GB/s) is itself unmeasured, as in the sections
+above. Method and reading rules are those of "Predicted effect of
+gc_tiled_rt" and "Predicted effect of W7 to W9". The counts are of the shared
+harness `tests/common/gc_scenes.rs`, not of the glmark2 harness, so compare
+off with on inside this section only.
+
+### Inputs, and the commit read
+
+- Commit read: `2be14a44` (the plan's integration tip). It holds `gc_tiled_rt`
+  (W1 to W5), the render-target change that no longer ends the kick
+  (`e299852c`, gc-kick-continue C1 to C3) and mip-one-kick. It holds none of
+  C5, W10 or W11b.
+- Counted with `cargo test --no-default-features --features
+  host-test,gpu-vivante,shaderc-online,report-es2,test-knobs --test
+  gc_scene_kicks` (3 pass), `--test gc_scene_kicks_tiled_rt` (3 pass) and
+  `--test gc_scene_kicks_tiled` (shadow and refract pass; **terrain fails**
+  its knob-off row: `rs_other` 9, expected 11, the first scene run of a
+  process, the cold-run difference "How the counts were taken" above
+  describes; not looked into here). The chain and RS-copy events a frame
+  were counted by temporary `eprintln!`s in `mipmap.rs` `chain_gpu` and
+  `tiled_copy.rs` `emit_pending`, run with `--test-threads=1` and removed
+  again; nothing but this note is committed.
+- Per frame, frames 3 to 6, `Lag` and `Done` alike unless a row says so:
+
+| a frame | terrain | shadow | refract |
+|---|---:|---:|---:|
+| kicks, knob off (`gc_scene_kicks`) | 11 | 2 | 3 |
+| waits outside the swap, `Lag` (`Done` 0) | 11 | 1 | 1 |
+| CPU tiled copies, `Lag` and `Done` | 0, 0 | 0, 0 | 0, 0 |
+| CPU depth resolves (1600x1200) | 0 | 1 | 1 |
+| GPU mipmap chains (`chain_gpu` calls) | **5**: terrain and overlay 800x600 (10 levels, 9 draws each), bloom_h and bloom_v 256x256 (9 levels, 8 draws), tilt_h 800x600 (10, 9) | 0 | **1**: 1600x1200 (11 levels, 10 draws) |
+| level draws in chains | 43 (3 x 9 + 2 x 8; the harness's 51 draws are these 43 and the scene's 8 passes) | 0 | 10 |
+| pixels the levels 1 and up write (a third of level 0) | 3 x 0.16 + 2 x 0.022 = **0.52 Mpx**, 2.1 MB | 0 | **0.64 Mpx**, 2.6 MB |
+| RS copies for textures (`emit_pending`) | **2** (height and normal, 256x256x4 = 0.26 MB each, linear to tiled) | 0 | 0 |
+| RS jobs, knob off / `gc_tiled_rt` on (`gc_scene_kicks_tiled_rt`; terrain's off is the process's first, cold run) | 11 / 14 (tile-in 2 / 3, copy-back 0 / 2) | 3 / 3 | 4 / 4 |
+| draws taking a tiled shadow, `gc_tiled_rt` on | 2 | 0 | 0 |
+
+- Terrain's kicks today are the five chains' two each (the frame open that
+  `chain_gpu` submits first, and `gc_flush` at its end) and the swap's:
+  5 x 2 + 1 = 11. Refract's are its chain's two and the swap's (the harness
+  shows "kick@its chain" twice, "wait@bunny", "kick@swap"). Shadow has no
+  chain.
+- With `gc_tiled_rt` on, only terrain's 800x600 pass (depth renderbuffer) is
+  taken (`gc-tiled-wire.md`, W4: a depth test is required). Its 2 copy-backs
+  are `chain_gpu` reading level 0 linear after the terrain pass and the
+  overlay; the third tile-in is not attributed here. Only deltas of RS jobs
+  are used below, because the cold run's base (11) is 2 under the older
+  section's warm mean (13.2).
+- Costs used, all from the notes: 0.03 to 0.08 ms of GPU a kick boundary
+  (`gc-slow-stream-diff.md` finding 3, `gc-slow-terrain.md` "The board
+  timeline model"); a blocking `frame_open` wait wakes up to 1.1 ms late (the
+  1.05 ms poll, the same model); a 0.16 Mpx chain is 0.6 ms of GPU
+  (`gc-slow-terrain.md`, pass table, "400x300 .. 1x1"), so refract's 0.64 Mpx
+  is about 2.4 ms; an RS job moves 1.92 MB (800x600x4) in 0.24 to 0.96 ms and
+  0.26 MB in 0.03 to 0.13 ms (2 to 8 GB/s, bytes counted once).
+
+### gc_chain_open_kick (C5)
+
+Changes: `chain_gpu` no longer calls `gc_flush` before and after the levels
+(`mipmap.rs`), the chain's levels join the open kick, and the CPU waits for
+the chain by kick id. The draws, the RS jobs and the bytes written are the
+same; the kick boundaries and what waits on them are not.
+
+| a frame, predicted | terrain | shadow | refract |
+|---|---:|---:|---:|
+| kicks | 11 to **1** (the 10 of the chains go; the swap's stays; `gc_scene_kicks` names the same, "C5 takes it to 1") | 2, **0 change** (no chain) | 3 to **2** (clear, distance pass and chain in one kick, submitted by the depth resolve at the bunny; the window's at the swap; the file's "C5 to 2") |
+| waits outside the swap, `Lag` | 11 to **0** (a slot reused is the previous frame's, finished at the swap) | 1, 0 change | 1, 0 change (the resolve's `wait_kick`) |
+| RS jobs | 0 change | 0 | 0 |
+| CPU untile or copy bytes | **0 change**: 0 already (no CPU tiled copy, no CPU mipmap filter) | 0 | 0 |
+| draws, bytes written | 0 change | 0 | 0 |
+
+Estimated ms a frame (negative is faster), **host-derived**:
+
+- **Terrain: -0.3 to -6 ms, centre about -1.5.** The floor is 10 kick
+  boundaries at 0.03 to 0.08 ms of GPU = 0.3 to 0.8 ms. The rest is the
+  starvation behind `frame_open`'s waits: `gc-slow-terrain.md` models 5 to 7
+  blocking waits a frame at 52 kicks, each followed by the 1.05 ms poll. At
+  11 kicks and 4 slots I assume 3 to 5 of the 11 counted waits block, each
+  up to 1.1 ms late: 0 to 5.5 ms. At 52 kicks the model's whole "one kick a
+  chain" step was 7.1 ms and mip-one-kick took most of it, so nothing above
+  6 ms is expected. Of a frame of about 250 ms that is 0.1 to 2.4 %.
+- **Shadow: 0 ms**: no chain, no kick changes.
+- **Refract: -0.1 to +2.4 ms, sign not decided.** One kick boundary less is
+  -0.03 to -0.08 ms. But the chain's GPU time (about 2.4 ms, above) now sits
+  in the same kick as the depth the CPU resolve waits for. Today the chain's
+  own kick runs while the CPU resolves (the resolve waits for the distance
+  pass's kick only); with C5 the resolve's `wait_kick` covers the chain. If
+  that overlap is real, the chain's 2.4 ms joins the critical path. Of a
+  frame of about 500 ms (`gc-tiled-targets.md`) that is under 0.5 %.
+
+Assumptions: C1 to C3 stay as at `2be14a44` (a target change does not end
+the kick); the level draws need no flush beyond the `F07 F10 S St S` each
+already has (`gc-slow-stream-diff.md` finding 2 (a)); no CPU reader of a
+chain's storage falls in a frame (`gc_return_mipmap_chain` is not called in
+these frames, `gc-slow-terrain.md` "The mipmap path on the board"), so the
+open kick is not submitted early.
+
+Reading rule: terrain's saving is mostly inside the spread of repeated runs
+(the "does nothing" band of the gc_tiled_rt section, -3 to +0.7 ms), so read
+it from the counters first: kicks 11 to 1 and `frame_open` waits (PERF page
+1 v1, waits per 100 frames) falling to near 0. A terrain D of -6 ms or less
+is more than the model: look for a third effect. A refract D above +2.4 ms
+is not the chain's overlap: look at the resolve.
+
+### gc_tiled_sample, W10: a single-level tiled shadow sampled directly
+
+Changes: a 2D texture with one level and a shadow in step is sampled from the
+shadow (TILED, `gc-tiled-wire.md` W10), and the W4 rule widens to such a
+texture even with no depth test (W4's text: "height and normal are 256x256,
+which is RS-sized"). `tiled_copy`'s vertex-stage copy is then not made for
+it, and the shadow's frame-end resolve is lazy (no CPU reader in these
+frames). **It is assumed to need `gc_tiled_rt` on**; every comparison here is
+against `gc_tiled_rt` on, not off.
+
+Which textures it reaches in the harness: terrain's `height_map` and
+`normal_map` (single level, 256x256). Not terrain, bloom_h, bloom_v and
+tilt_h (mipmapped: W11b), not shadow's depth texture and not refract's depth
+and mipmapped colour (W12, W11b).
+
+| a frame, predicted, against `gc_tiled_rt` on | terrain | shadow | refract |
+|---|---:|---:|---:|
+| kicks | 11, 0 change | 2, 0 | 3, 0 |
+| RS jobs, linear to tiled | 3 to **1** (the two maps' RS copies go) | 0 | 0 |
+| RS jobs, tiled to linear | 2, 0 change (the maps' lazy resolves are not needed) | 0 | 0 |
+| RS jobs, all | 16.2 to **14.2** (against knob off, 13.2: +1) | 3, 0 | 4, 0 |
+| RS bytes | -0.52 MB (2 x 0.26) | 0 | 0 |
+| CPU untile or copy bytes | **0 change**, 0 today | 0 | 0 |
+| draws taking a tiled shadow | 2 to 4 (the two maps' passes join) | 0 | 0 |
+
+Estimated ms a frame, **host-derived**:
+
+- **Terrain: -0.26 to -0.07 ms**: two 0.26 MB RS jobs at 2 to 8 GB/s. Only
+  the vertex-stage copies go; the terrain pass's tile-in and both copy-backs
+  of `gc_tiled_rt` stay for W11b. For scale the CPU copy of such a map was
+  2.2 to 3 ms (`gc-slow-terrain.md`), and tiled-copy-rs already took it. Not
+  modelled: a TILED sampler's cache locality. The order table of
+  `gc-tiled-wire.md` gives W10 "terrain 4 to 6 ms, the part tiled-copy-rs
+  has not already taken"; these counts leave no such part at `2be14a44`.
+- **Shadow: 0 ms**, **refract: 0 ms**: the knob reaches neither (shadow has no
+  colour target; refract's colour is mipmapped and its depth a texture).
+
+Assumptions: `wanted_vs` is false for a shadowed texture, so the RS copy is
+dropped, not made as well; the maps' passes qualify without depth under the
+widened rule; no CPU reader of a map falls in a frame.
+
+Reading rule: terrain's D from W10 alone is far inside the spread. Read the
+counters (RS copies, PERF page 3 v3 KiB written, down 0.5 MB) and the picture
+(the two maps shape the terrain: a wrong tiled sample is visibly wrong).
+Shadow and refract must not move at all.
+
+### W11b: a tiled mipmap chain sampled directly
+
+Changes (after W10, behind `gc_tiled_sample`): `chain_gpu` records the levels
+into a tiled chain and the sampler reads it tiled; the chain is untiled on
+the CPU only for a CPU reader (`gc_return_mipmap_chain`, `storage_current`).
+So level 0 need not be resolved to linear before the chain, the next pass
+samples the chain with no resolve, and `gc_tiled_rt`'s two copy-backs of
+terrain's 800x600 target go.
+
+| a frame, predicted, against W10 on | terrain | shadow | refract |
+|---|---:|---:|---:|
+| kicks | 11, 0 change | 2, 0 | 3, 0 |
+| chains, level draws | 5, 43; 0 change (drawn into a tiled chain) | 0 | 1, 10; 0 change |
+| RS jobs, tiled to linear | 2 to **0** (terrain pass and overlay copy-backs) | 0 | 0 |
+| RS jobs, linear to tiled | 1, to **0 or 1** (the third tile-in, not attributed above, stays if it is the first draw into a target the shadow does not yet hold) | 0 | 0 |
+| RS jobs, all, against W10 14.2 | **12.2 to 11.2** (against knob off, 13.2: -1 to -2) | 3, 0 | 4, 0 |
+| RS bytes | -3.84 MB, up to -5.76 MB (1.92 MB a job) | 0 | 0 |
+| CPU untile or copy bytes | **0 change**, 0 today (the untile is lazy) | 0 | 0 |
+
+Estimated ms a frame, **host-derived**:
+
+- **Terrain: -0.5 to -2.9 ms** against W10 (two or three 1.92 MB jobs at 2 to
+  8 GB/s: 0.48 to 1.92 ms, 0.72 to 2.88 ms with the tile-in). That is the
+  cost `gc_tiled_rt` added ("Predicted effect of gc_tiled_rt": +0.7 to +3 ms
+  for 3 RS jobs) taken back. Against knob off, W10 and W11b together leave
+  the RS work at about -0.3 to -0.1 ms (the two maps' copies) and 0 to +0.96
+  ms (the tile-in, if it stays), and the early-depth gain (-0.75 to -1.6 ms)
+  stands: **about -2 to -0.1 ms**, a narrower range than W4/W5 alone
+  (-0.9 to +2.3). Not modelled: the sampler's cache locality over tiled
+  levels (`gc-tiled-wire.md` W11).
+- **Shadow: 0 ms**, no chain. **Refract: 0 ms**: its colour chain waits for
+  W12 (`gc-tiled-wire.md` W11b: the pass has a depth texture, so no shadow),
+  and the harness counts `draws_tiled_shadow` 0 in it with the knob on.
+
+Assumptions: W11b follows W10; the chain's level 0 is the W4 shadow of the
+terrain pass, so no resolve is wanted before it; the overlay's draw into the
+same target finds its shadow still held (no second tile-in); levels smaller
+than 16x4 are drawn tiled and untiled by the CPU only on a CPU read (the
+design's rule), so they cost no job.
+
+Reading rule: terrain's D is inside the spread; read the RS counters (tiled
+to linear 2 to 0) and compare with `gc_tiled_rt` on alone. A copy-back left
+after W11b means a CPU reader or a refused chain: the knob's log lines say
+which.
+
+### Across the three scenes
+
+| scene | gc_chain_open_kick (C5) | gc_tiled_sample (W10) | W11b |
+|---|---|---|---|
+| terrain, kicks / RS jobs / CPU bytes | 11 to 1 / 0 / 0 | 0 / -2 / 0 | 0 / -2 to -3 / 0 |
+| terrain, ms a frame | -0.3 to -6 | -0.26 to -0.07 | -0.5 to -2.9 |
+| shadow | 0 / 0 / 0, 0 ms | 0, 0 ms | 0, 0 ms |
+| refract, kicks / RS jobs / CPU bytes | 3 to 2 / 0 / 0 | 0 | 0 |
+| refract, ms a frame | -0.1 to +2.4 | 0 | 0 |
+
+- No knob changes a CPU untile or copy byte in these frames: they are 0
+  today. They change kicks (C5), RS jobs and RS bytes (W10, W11b).
+- No knob touches the dominant term: shadow's and refract's CPU depth resolve
+  (350 to 1000 ms by `gc-slow-shadow-refract.md` cause 1; depth-sample-gc and
+  W12) and terrain's 140 to 205 ms of fragment shading
+  (`gc-slow-terrain.md`). Every range above is under 3 % of a frame, so a
+  session A pair inside the spread is the expected answer, and the counters
+  decide whether a knob did what it should.
+- To be checked when they exist: the knob-on rows of `gc_scene_kicks*.rs`
+  (kicks, waits, RS jobs: the integer rows must come out exactly), then
+  session A's ms a frame (the ranges). A row that does not come out is
+  recorded where the knob landed, with this prediction beside it.
