@@ -697,9 +697,7 @@ pub fn differences_with(r: &Reference, pair: &Pair, members: bool) -> Vec<String
      * deqp_unitype_vsstruct_*); so is one loaded with
      * [`Reference::load_unset`] (`uniform_values` false) */
     let member = |r: &(String, u16, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
-    let values = r.uniform_values
-        && (members
-            || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
+    let values = r.uniform_values && (members || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
     let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
     let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 
@@ -935,7 +933,8 @@ pub fn measure(vs: &str, fs: &str, json: Option<&str>, rule: Rule) -> Measure {
     };
     let diff = |uniform_values| {
         let r = reference(uniform_values);
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| differences_with(&r, &pair, true))).map_err(|e| panic_line(&*e))
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| differences_with(&r, &pair, true)))
+            .map_err(|e| panic_line(&*e))
     };
     let first = diff(true);
     let second = if rule == Rule::Either { Some(diff(false)) } else { None };
