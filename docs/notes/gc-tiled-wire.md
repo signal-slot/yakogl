@@ -127,9 +127,9 @@ Where the code differs from the design below:
     allocation (`ds_cache.rs:277-278`) already fits that layout.
   - Early depth is then Mesa's rule (`early_z.rs`), applied only to draws into
     such a shadow.
-  - Gain: terrain 0 to 14 ms a frame (up to 19 ms at 0.8 ns an instruction),
-    `gc-tiled-targets.md` step 5. Cost: one 800x600 RS copy a frame, at a rate
-    nobody has measured.
+  - Gain: terrain 0.75 to 1.6 ms a frame (`gc-terrain-overdraw.md`: 2.5 % of
+    the fragments). Cost: three 800x600 RS copies, +0.7 to +3 ms on the host
+    model (`gc-slow-host-counts.md`), at a rate nobody has measured.
 - **Tile status (TS) and fast clear come after that (W7 to W9), behind the
   board probe.** The probe is item gt-tiled-probe (`gc-tiled-targets.md`
   step 0 (iii)): it shows whether TS works with the MMU off.
@@ -602,7 +602,7 @@ agree with `layout.rs`. It does not show what the hardware does.
   - terrain's ms a frame and picture value.
 
   The off/on pair measures both the RS resolve's cost and early depth's gain
-  (`gc-tiled-targets.md` step 5's 0 to 14 ms).
+  (0.75 to 1.6 ms, `gc-terrain-overdraw.md`; the reading rule is in `gc-slow-host-counts.md`).
 
 ### W6. The knob on by default (about 0.5 h; after session A)
 
@@ -705,8 +705,8 @@ agree with `layout.rs`. It does not show what the hardware does.
     is the clear code reads the clear value), gives the clear colour where the
     draw did not cover, and the drawn pixels where it did;
   - a scissored clear keeps the quad.
-- **Board check**: terrain's ms a frame (the four 800x600 target clears and
-  tilt_h's, `gc-tiled-targets.md` change 4's 1 to 5 ms); gl_test's clear cases.
+- **Board check**: terrain's ms a frame (a W4 shadow's 1.92 MB colour fill,
+  0.24 to 1.9 ms, `gc-slow-host-counts.md`; gl_test's clear cases).
 
 ### W9. Depth TS and fast depth clear for PE-private surfaces (about 2 h)
 
@@ -938,12 +938,12 @@ window goes through `gpu_idle_for_cpu`'s `finish`.
 | W1 | gc-groundwork-mod not needed | none | none |
 | W2 | W1, tiled-copy-rs | none | none |
 | W3 | gc-groundwork-mod (layout), resolve-wide, resolve-own-kick | none | none |
-| W4 | W2, W3 | session A (knob) | none by itself; costs one RS copy |
-| W5 | W4, gc-early-z | session A | terrain 0 to 14 (19) ms |
+| W4 | W2, W3 | session A (knob) | none by itself; costs three 800x600 RS copies in the host model (`gc-slow-host-counts.md`) |
+| W5 | W4, gc-early-z | session A | terrain 0.75 to 1.6 ms (`gc-terrain-overdraw.md`) |
 | W6 | session A | none | as W5 |
 | W7 | W4, gc-ts-words | gt-tiled-probe (iii) | none |
-| W8 | W7 | an X2 run | terrain 1 to 5 ms, refract 2.5 to 7.5 ms (after W11, W12) |
-| W9 | W3, W8 | an X2 run | terrain's depth clear, inside W8's figure |
+| W8 | W7 | an X2 run | terrain 0.24 to 1.9 ms as wired, -1.3 to +3.4 ms with W10 to W12; refract 0 as wired, -1.9 to +7.7 ms with W10 to W12 (`gc-slow-host-counts.md`) |
+| W9 | W3, W8 | an X2 run | terrain's depth fill 0.24 to 0.96 ms, 0.5 to 2.9 ms with W8's colour; shadow 0.96 to 3.84 ms only with W12 (`gc-slow-host-counts.md`) |
 | W10 | W4, tiled-copy-rs | an X2 run | terrain 4 to 6 ms (the part tiled-copy-rs has not already taken) |
 | W11a, W11b | W10, mip-one-kick | an X2 run | the chains' resolves, and texture-cache locality (unmodelled) |
 | W12a, W12b | gt-tiled-probe (ii), depth-sample-design | an X2 run | shadow and refract 30 to 150 ms, if the CPU resolve stays |
@@ -1200,8 +1200,8 @@ X2 numbers are development measurements (`x2-glmark2-scenes.sh:25-27`). With
   per gl_test case and arm with its CASE record. The "What is left" section
   there is replaced by them.
 - `docs/notes/gc-slow-terrain.md` and `docs/notes/gc-slow-shadow-refract.md`:
-  the off/on ms a frame for their scenes, beside the prediction, which is
-  compared and not edited. Terrain's row is W5's "0 to 14 ms".
+  the off/on ms a frame for their scenes, beside the prediction (terrain:
+  0.75 to 1.6 ms, `gc-terrain-overdraw.md`), which is compared and not edited.
 - This note: "What this note does not settle" loses the bullets session A
   answers (the RS rate for 800x600, the RA's early depth with a TILED colour
   under SINGLE_BUFFER(2), how many of terrain's fragments early depth
@@ -1220,6 +1220,6 @@ X2 numbers are development measurements (`x2-glmark2-scenes.sh:25-27`). With
   shim row writes (W8, "Compression, an open point").
 - The depth layout under SINGLE_BUFFER(2) for depth textures (gt-tiled-probe
   (ii)), and whether the CPU resolve survives depth-sample-design.
-- How many of terrain's fragments early depth rejects. That depends on
-  `make_grid`'s draw order (`gc-tiled-targets.md` step 5). The off/on pair of
-  session A measures it.
+- How many of terrain's fragments early depth rejects: `gc-terrain-overdraw.md`
+  models 0.019 to 0.030 of them in `make_grid`'s order, which the model finds
+  already at the per-pixel floor. Session A measures it on the board.
