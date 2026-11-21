@@ -962,3 +962,253 @@ the board rerun is the only pass count.
 - The vertex `UniformType` dependency (97 hidden cases) and the dynamic bound
   (61 fragment cases) are other items' lowering; every number above counts
   only the loop text.
+
+## 9. Measured sites at a7260420
+
+Plan #387 item loops-sites. Section 0 marks the compiler sites of section 3 as
+"read, not run"; this section is the run. Nothing was changed in the compiler
+or a test: a scratch test (not committed) compiled every
+`tools/mali/testdata/deqp_loops2_*` reference (127) and every
+`deqp_loops_*` one (26) with `tests/mali_ref::compile_pair` (the vertex shader,
+the fragment shader, the relink, the link, as `tests/mali_deqp_loops2.rs` does;
+features `host-test,gpu-mali,shaderc-online,no-shader-table`), with a
+temporary local edit that printed `file:line` at every construction of
+`LoopForm`, `LoopMediump`, `GuardMediump` and `LoopVertex` in `nir.rs` and
+`nir_fs.rs` (reverted; the tree is as committed). The texts agree with
+`REFUSALS` in `tests/mali_deqp_loops2.rs` for all 127 (the test passes at this
+tip). "Back" is the number of backward `BRANCH*` words in the `expect.json`
+disassembly of the stage that carries the loop (`fs.fragment`, or the
+`vs.varying` program for a vertex loop): the loops Mesa keeps; 0 for a loop
+Mesa unrolled or deleted. The step is the step of sections 4-6 whose words
+the reference's own words show (A0 = the decision function, which must run
+before the site); where a decision step is named first, the site is reached
+only after it.
+
+### 9.1 Result
+
+- **Section 3's lines are exact.** Every site measured is one of the lines
+  section 3 names (`nir_fs.rs:5115`, `:4604`, `:4733`; `nir.rs:3819`, `:4174`,
+  `:4213`, `:4382`): no drift since `5b3fb8c2` in these functions.
+- **Fragment: 67 references; 63 refuse at `5115` (`walk_kept_loop`,
+  `LoopMediump`), 3 at `4604` (`GuardMediump`), 1 at `4733` (`LoopForm`).** No other
+  fragment site of section 3.1 is reached by any reference: `4873`, `4883`,
+  `4777`, `4483`, `5122`, `5129`, `5169`, `5200`-`5266`, `5398`-`5412`, `5429`
+  and `11759` are all hidden behind `5115` (the mediump check is the first
+  statement of `walk_kept_loop`), so the "S4 empty body" site `:4873/:5122` is
+  **not** where `for_uni_empty_body`, `scope_while` and `struct_local` stop:
+  they stop at `5115` (the uniform bound makes `kept_loop` say "keep"; Mesa
+  deletes or unrolls them, S4). The correction: **A0's decision must come
+  before `5115`** for these three, not after it.
+- **Vertex: 60 references; 44 refuse at `3819` (a loop that is not
+  `vs_loop_shape`), 6 at `4213` (a float counter), 8 at `4174` (a carried
+  lane the body does not define), 2 at `4382`.**
+  The other vertex sites of section 3.2 (`3778`, `3813`, `4128`, `4184`,
+  `4205`, `4255`, `4261`, `4269`, `4362`, `4371`, `6090`/`6129`) are not
+  reached by any reference.
+- **Differences from section 3** (reference, section 3's site or step, measured):
+  1. `vs_do_con_101_iterations`, `vs_wh_con_101_iterations`: section 3.2 says
+     `:4362`/`:4371` (cost over 832, 33rd pass); measured **`:4382`** (a head
+     test that does not fold in a pass of an unrolled loop, `complex_unroll`).
+     The step is the same (S8, the kept loop), the site to remove is `4382`.
+  2. `vs_ret_dyn`, `vs_ret_dynamic_loop_never` (S8's "output stored in the
+     body", `:4128`): measured **`:3819`**: `vs_loop_shape` rejects the loop
+     before `vs_kept_begin` runs, so `:4128` is behind `3819` (S8 must first
+     widen `vs_loop_shape`).
+  3. `vs_fn_after_seq`, `vs_fn_mixed` (section 8: "not one of the eleven
+     shapes"): `3819` (`fn_after_seq`'s two sequenced loops print it twice).
+     They are not S1 but S8 by their words (14 and 20 words, one back edge).
+  4. `vs_idx_vec_w_dynsub` (section 3.2: `variant_dce`, `:6090`, now `:6129`):
+     measured **`:4174`**, the first site; `variant_dce` is behind it. Its
+     four `vs_idx_vec_*` siblings also stop at `4174`, as do the 5 `S2-vs`
+     references. S11 and S2-vs therefore open at `:4174`, not at `3819`.
+  5. The 6 float-counter references (`vs_{do,for,wh}_{uni,dyn}_basic_*_float`)
+     stop at **`:4213`** before `:4184` (the 16-bit carried lane of S8 L1):
+     no reference reaches `:4184`, so the 16-bit phi is unmeasured; the L1
+     reference shapes with an integer counter (`vs_for_uni_basic_*_int`) have
+     no `deqp_loops2_*` reference.
+  6. The 3 fragment `conditional_break`/`conditional_continue` references
+     of `do ... while` (`fs_do_dyn_conditional_break`,
+     `fs_do_uni_conditional_break`, `fs_do_uni_conditional_continue`) stop at
+     `:4604`, `GuardMediump`, as section 3.1 says (a `do` whose first control
+     node is the body's `if`): the other 5 `conditional_*`/`double_continue`
+     references (`for_dyn_conditional_break`, `wh_dyn_conditional_break`,
+     `wh_uni_conditional_break`, `wh_uni_conditional_continue`,
+     `wh_uni_double_continue`) stop at `5115` as plain kept loops, so S5
+     needs A0 for 3 of the 8 and not for the others.
+  7. `fs_wh_con_101_iterations` (and the old `loops_fs_101`) are the only
+     references at `:4733` (`LoopForm`): section 3.1 counts 3 cases, which
+     are `for`/`while`/`do` of the same shape; only the `while` has a
+     reference.
+- **How many refuse on a text other than a loop text: none of the 127
+  `deqp_loops2_*` references.** All 127 stop first at a loop text
+  (`LoopMediump` 63, `GuardMediump` 3, `LoopForm` 1, `LoopVertex` 60: 9.2), because the loop is the first
+  site in both walks. Of the 26 `deqp_loops_*` references that
+  `tests/mali_deqp_loops.rs` still refuses, 6 stop on another text now:
+  `loops_fs_dowhile_if` (`ControlFlow`, "control flow (if, a loop, a return
+  before the end)"), `loops_vs_dowhile_uni`, `loops_vs_for_uni` (a vertex
+  shader uniform that is not highp: `UniformType`'s fp16 text),
+  `loops_vs_select`, `loops_vs_vector` (a uniform other than a float, vec2,
+  vec3, vec4 or mat4), `loops_vs_idx_static` (a constant operation on a
+  value that is not a finite normal float, `ArithConstant`). They stop there
+  because those texts come before the loop in the walk; the other 20 stop at
+  a loop text.
+- **What hides behind the loop text (open point of section 8).** The next
+  refusal of a case that leaves its loop text is not measurable without the
+  lowering; these are counted from the shader sources only (a text search of
+  the `.vert`/`.frag` of the 127, not a compile): 45 of the 60 vertex
+  references declare `uniform mediump int` (the `UniformType` family:
+  intval-vs16's, section 0 item 3) and will stop there when the loop lowers;
+  the 15 that do not are the six float-counter loops, `fn_*`, `inv_*`,
+  `ret_static` and `ret_infinite`. 22 references subscript an
+  array, a matrix or a vector with a run-time index and are the candidates
+  for `IndexedLocal`: fs `idx_mat4_*`, `idx_tmp_float_*`, `idx_tmp_vec4_*`,
+  `idx_uni_*`, `idx_var_vec4_sd`, `idx_vec_*` (13) and `struct_local`; vs
+  `idx_mat4_dldl`, `idx_tmp_vec4_*`, `idx_var_vec4_*`, `idx_vec_*` (8).
+  `fs_idx_tmp_vec4_cd` is out of plan (thread-local scratch, section 8).
+  Run one of them through the walk with the loop lowered before counting
+  S2/S7/S11 (as section 8 already says).
+
+### 9.2 Per reference
+
+`Text` is the `MaliError` variant at the site. Counts by site and step:
+
+| site | text | refs | steps |
+|---|---|---:|---|
+| `nir_fs.rs:5115` | LoopMediump | 63 | S3 26, S7 10, S6 10, S2-fs 8, S5 5, S4 3, out 1 |
+| `nir_fs.rs:4604` | GuardMediump | 3 | A0 + S5 |
+| `nir_fs.rs:4733` | LoopForm | 1 | A0(4) + S3 |
+| `nir.rs:3819` | LoopVertex | 44 | S1 12, S10 19, S9 9, S8 4 |
+| `nir.rs:4213` | LoopVertex | 6 | S8 |
+| `nir.rs:4174` | LoopVertex | 8 | S2-vs 5, S11 3 |
+| `nir.rs:4382` | LoopVertex | 2 | S8 |
+| | | 127 | |
+
+| reference (`deqp_loops2_`) | site | text | back | step |
+|---|---|---|---:|---|
+| `fs_disc_always` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_disc_dyn` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_disc_dynamic` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_disc_texture` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_do_con_select_iteration_count` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_dyn_101_iterations` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_dyn_basic_highp_float` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_dyn_conditional_break` | `nir_fs.rs:4604` | GuardMediump | 1 | A0+S5 |
+| `fs_do_dyn_nested` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_do_dyn_select_iteration_count` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_uni_101_iterations` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_uni_basic_highp_float` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_uni_basic_mediump_float` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_do_uni_conditional_break` | `nir_fs.rs:4604` | GuardMediump | 1 | A0+S5 |
+| `fs_do_uni_conditional_continue` | `nir_fs.rs:4604` | GuardMediump | 1 | A0+S5 |
+| `fs_do_uni_nested` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_do_uni_select_iteration_count` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_con_select_iteration_count` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_dyn_101_iterations` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_dyn_basic_mediump_float` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_dyn_basic_mediump_int` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_dyn_conditional_body` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_dyn_conditional_break` | `nir_fs.rs:5115` | LoopMediump | 1 | S5 |
+| `fs_for_dyn_nested` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_for_dyn_select_iteration_count` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_uni_101_iterations` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_uni_basic_highp_float` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_uni_compound_statement` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_uni_conditional_body` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_uni_empty_body` | `nir_fs.rs:5115` | LoopMediump | 0 | S4 |
+| `fs_for_uni_function_call_inout` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_for_uni_nested` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_for_uni_nested_sequence` | `nir_fs.rs:5115` | LoopMediump | 3 | S6 |
+| `fs_for_uni_nested_tricky_dataflow_1` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_for_uni_nested_tricky_dataflow_2` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_for_uni_sequence` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_for_uni_single_iteration` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_idx_mat4_dd` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_mat4_sd` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_tmp_float_dd` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_tmp_float_dldl` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_tmp_vec4_cd` | `nir_fs.rs:5115` | LoopMediump | 1 | out (scratch array) |
+| `fs_idx_tmp_vec4_sd` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_uni_float` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_uni_vec4` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_var_vec4_sd` | `nir_fs.rs:5115` | LoopMediump | 0 | S2-fs |
+| `fs_idx_vec_direct_w` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_idx_vec_static_w` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_idx_vec_w_direct` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_idx_vec_w_dynsub` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_ret_dyn` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_ret_dynamic_loop_never` | `nir_fs.rs:5115` | LoopMediump | 1 | S7 |
+| `fs_scope_while` | `nir_fs.rs:5115` | LoopMediump | 0 | S4 |
+| `fs_struct_local` | `nir_fs.rs:5115` | LoopMediump | 0 | S4 |
+| `fs_wh_con_101_iterations` | `nir_fs.rs:4733` | LoopForm | 1 | A0(4)+S3 |
+| `fs_wh_dyn_101_iterations` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_wh_dyn_basic_highp_float` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_wh_dyn_conditional_body` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_wh_dyn_conditional_break` | `nir_fs.rs:5115` | LoopMediump | 1 | S5 |
+| `fs_wh_dyn_nested` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `fs_wh_uni_101_iterations` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_wh_uni_compound_statement` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_wh_uni_conditional_body` | `nir_fs.rs:5115` | LoopMediump | 1 | S3 |
+| `fs_wh_uni_conditional_break` | `nir_fs.rs:5115` | LoopMediump | 1 | S5 |
+| `fs_wh_uni_conditional_continue` | `nir_fs.rs:5115` | LoopMediump | 1 | S5 |
+| `fs_wh_uni_double_continue` | `nir_fs.rs:5115` | LoopMediump | 1 | S5 |
+| `fs_wh_uni_nested` | `nir_fs.rs:5115` | LoopMediump | 2 | S6 |
+| `vs_do_con_101_iterations` | `nir.rs:4382` | LoopVertex | 1 | S8 |
+| `vs_do_con_nested` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_do_dyn_basic_highp_float` | `nir.rs:4213` | LoopVertex | 1 | S8 |
+| `vs_do_dyn_conditional_body` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_do_dyn_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_do_dyn_nested_sequence` | `nir.rs:3819` | LoopVertex | 3 | S9 |
+| `vs_do_uni_basic_highp_float` | `nir.rs:4213` | LoopVertex | 1 | S8 |
+| `vs_do_uni_basic_mediump_float` | `nir.rs:4213` | LoopVertex | 1 | S8 |
+| `vs_do_uni_conditional_body` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_do_uni_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_do_uni_conditional_continue` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_do_uni_infinite_with_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_do_uni_nested` | `nir.rs:3819` | LoopVertex | 2 | S9 |
+| `vs_fn_after_seq` | `nir.rs:3819` | LoopVertex | 1 | S8 |
+| `vs_fn_mixed` | `nir.rs:3819` | LoopVertex | 1 | S8 |
+| `vs_fn_return_in_loop` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_for_dyn_basic_mediump_float` | `nir.rs:4213` | LoopVertex | 1 | S8 |
+| `vs_for_dyn_conditional_body` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_for_dyn_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_for_dyn_nested` | `nir.rs:3819` | LoopVertex | 2 | S9 |
+| `vs_for_uni_basic_lowp_float` | `nir.rs:4213` | LoopVertex | 1 | S8 |
+| `vs_for_uni_conditional_body` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_for_uni_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_for_uni_conditional_continue` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_for_uni_mixed_break_continue` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_for_uni_nested` | `nir.rs:3819` | LoopVertex | 2 | S9 |
+| `vs_for_uni_nested_sequence` | `nir.rs:3819` | LoopVertex | 3 | S9 |
+| `vs_for_uni_nested_tricky_dataflow_1` | `nir.rs:3819` | LoopVertex | 2 | S9 |
+| `vs_for_uni_nested_tricky_dataflow_2` | `nir.rs:3819` | LoopVertex | 2 | S9 |
+| `vs_for_uni_unconditional_break` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_idx_mat4_dldl` | `nir.rs:4174` | LoopVertex | 0 | S2-vs |
+| `vs_idx_tmp_vec4_dd` | `nir.rs:4174` | LoopVertex | 0 | S2-vs |
+| `vs_idx_tmp_vec4_dldl` | `nir.rs:4174` | LoopVertex | 0 | S2-vs |
+| `vs_idx_var_vec4_dd` | `nir.rs:4174` | LoopVertex | 0 | S2-vs |
+| `vs_idx_var_vec4_dldl` | `nir.rs:4174` | LoopVertex | 0 | S2-vs |
+| `vs_idx_vec_dldl` | `nir.rs:4174` | LoopVertex | 2 | S11 |
+| `vs_idx_vec_w_direct` | `nir.rs:4174` | LoopVertex | 1 | S11 |
+| `vs_idx_vec_w_dynsub` | `nir.rs:4174` | LoopVertex | 1 | S11 |
+| `vs_inv_highp_1` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_inv_lowp_loop_1` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_inv_mediump_1` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_inv_mediump_2` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_ret_dyn` | `nir.rs:3819` | LoopVertex | 1 | S8 |
+| `vs_ret_dynamic_loop_never` | `nir.rs:3819` | LoopVertex | 1 | S8 |
+| `vs_ret_infinite` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_ret_static` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_ret_static_dyn` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_ret_static_loop_always` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_ret_static_loop_never` | `nir.rs:3819` | LoopVertex | 0 | S1 |
+| `vs_wh_con_101_iterations` | `nir.rs:4382` | LoopVertex | 1 | S8 |
+| `vs_wh_dyn_basic_highp_float` | `nir.rs:4213` | LoopVertex | 1 | S8 |
+| `vs_wh_dyn_conditional_body` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_wh_dyn_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_wh_dyn_nested_sequence` | `nir.rs:3819` | LoopVertex | 3 | S9 |
+| `vs_wh_uni_conditional_body` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_wh_uni_conditional_break` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_wh_uni_conditional_continue` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_wh_uni_double_continue` | `nir.rs:3819` | LoopVertex | 1 | S10 |
+| `vs_wh_uni_nested` | `nir.rs:3819` | LoopVertex | 2 | S9 |
+| `vs_wh_uni_unconditional_continue` | `nir.rs:3819` | LoopVertex | 1 | S10 |
