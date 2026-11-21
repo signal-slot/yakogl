@@ -2405,6 +2405,12 @@ fn v3d_sensitivity(source: &[u8], stage: super::sema::Stage) -> LodKey {
 pub fn wide128_sensitivity(sh: &ShcShader) -> u32 {
     #[cfg(test)]
     let _serial = store::test_lock();
+    /* a row of the precompiled table carries the answer the generator got
+     * from the lines below: no front end at a table-made program's first
+     * draw */
+    if let Some(bits) = crate::shaderc::precompiled::wide128(sh) {
+        return bits;
+    }
     base_of(sh).map_or(0, |rec| wide128_sensitivity_of(rec.stage, rec.source))
 }
 

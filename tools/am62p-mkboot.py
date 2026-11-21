@@ -35,10 +35,12 @@ SPL would read the whole FIT into one buffer first.
                         --uboot u-boot-zephyr.img --size BYTES -o OUT
   am62p-mkboot.py stage2img --zephyr zephyr.bin -o OUT [--load ADDR]
                         [--compress deflate|lz4|none] [--name TEXT]
-                        [--segment FILE@ADDR ...] [--staging ADDR]
+                        [--segment FILE@ADDR[:deflate|lz4|none] ...]
+                        [--staging ADDR]
                         [--split-zeros MIN] [--clear-after BYTES]
                         [--sector N --end-sector N]
-  am62p-mkboot.py stage2check --zephyr zephyr.bin [--segment FILE@ADDR ...] IMG
+  am62p-mkboot.py stage2check --zephyr zephyr.bin
+                        [--segment FILE@ADDR[:deflate|lz4|none] ...] IMG
   am62p-mkboot.py stage2-vectors DIR
 
 `bootpart` lays out a whole eMMC boot partition (tiboot3 at 0, tispl at
@@ -77,6 +79,16 @@ Without those three options the version 1 or 2 header is written, byte for
 byte as before version 3 existed, so loaders already on boards read what
 the tool writes for them; a loader from before version 3 refuses a
 version-3 payload.
+
+The version-3 table carries the compression per segment, and so does the
+tool: `--compress` is the image's (segment 0 and its parts) and that of
+every --segment without one of its own, and `--segment FILE@ADDR:lz4`
+(or `:deflate`, `:none`) sets that segment's. LZ4 unpacks several times
+faster than deflate and stores more, so a payload that must fit a slot can
+keep deflate for the segment where the bytes matter more than the time
+(the i.MX8MP showcase: the Supervisor as LZ4 and, when the loader's slot in
+the boot image is short, the M7's image as deflate). `stage2check` with a
+suffix also checks that the segment is stored that way.
 
 `--split-zeros MIN` and `--clear-after BYTES` keep zeros out of the payload.
 The loader clears a segment's `zero bytes`, the RAM right after its image
@@ -639,12 +651,29 @@ def stage2_v3_raw(segs, entry, name, total=None, parts=1, load=None, version=STA
     return bytes(h) + bytes(body)
 
 
+COMP_BY_NAME = {"deflate": COMP_DEFLATE, "lz4": COMP_LZ4, "none": COMP_NONE}
+
+
 def parse_segment_arg(text):
-    """FILE@ADDR, as kexec_zephyr takes it."""
+    """FILE@ADDR, as kexec_zephyr takes it, or FILE@ADDR:COMPRESSION with the
+    segment's own compression (a COMP_* value; None without the suffix: the
+    payload's --compress)."""
     path, sep, addr = text.rpartition("@")
     if not sep or not path:
-        raise ValueError("--segment %r: give FILE@ADDR" % text)
-    return path, int(addr, 0)
+        raise ValueError("--segment %r: give FILE@ADDR or FILE@ADDR:deflate|lz4|none" % text)
+    addr, sep, how = addr.partition(":")
+    if sep and how not in COMP_BY_NAME:
+        raise ValueError("--segment %r: compression %r is not deflate, lz4 or none" % (text, how))
+    try:
+        return path, int(addr, 0), COMP_BY_NAME[how] if sep else None
+    except ValueError:
+        raise ValueError("--segment %r: %r is not an address" % (text, addr)) from None
+
+
+def segment_comp(seg, default):
+    """The compression of a (data, addr, label[, compression]) segment: its
+    own, or `default` when it names none."""
+    return seg[3] if len(seg) > 3 and seg[3] is not None else default
 
 
 def stage2_split(zephyr, load, min_run, max_parts):
@@ -747,6 +776,8 @@ def stage2img_segments(zephyr, load, extra, compression, name, sector=STAGE2_SEC
                        staging=STAGE2_STAGING, split_zeros=0, clear_after=0):
     """A version-3 payload: zephyr.bin at `load` (segment 0, the entry), then
     each (data, addr, label) of `extra`, every stored range sector aligned.
+    `compression` is the image's and that of every segment of `extra` that
+    does not carry its own as a fourth element (a COMP_* value).
     split_zeros (a run length, 0: off) cuts zephyr.bin at its zero runs into
     segment 0 and continuation parts (stage2_split); clear_after is the zero
     bytes after the image's last byte."""
@@ -774,7 +805,7 @@ def stage2img_segments(zephyr, load, extra, compression, name, sector=STAGE2_SEC
     table[0]["footprint"] = fp0
     segs = [(load, fp0, "segment 0 (zephyr.bin, .bss included)")]
     segs += [(t["load"], t["footprint"], "part %d of zephyr.bin" % i) for i, t in enumerate(table) if i]
-    for data, addr, label in extra:
+    for data, addr, label in (e[:3] for e in extra):
         if not data:
             raise ValueError("%s is empty" % label)
         segs.append((addr, len(data), label))
@@ -787,14 +818,15 @@ def stage2img_segments(zephyr, load, extra, compression, name, sector=STAGE2_SEC
     for (st, en), t in zip(extents, table):
         raw.append(dict(load=t["load"], image=zephyr[st:en], stored=stage2_pack(compression, zephyr[st:en]),
                         comp=compression, footprint=t["footprint"], zero=t["zero_bytes"]))
-    raw += [dict(load=addr, image=data, stored=stage2_pack(compression, data), comp=compression)
-            for data, addr, _ in extra]
+    raw += [dict(load=e[1], image=e[0], stored=stage2_pack(segment_comp(e, compression), e[0]),
+                 comp=segment_comp(e, compression)) for e in extra]
     out = stage2_v3_raw(raw, load, name, parts=len(table))
     cap = stage2_capacity(sector, end_sector)
     if len(out) - 512 > cap:
+        how = sorted({COMP_NAMES[r["comp"]] for r in raw})
         raise ValueError("the payload is %d bytes (%s), over the %d bytes of user-area sectors %d..%d after "
                          "the header: %d bytes too many"
-                         % (len(out) - 512, COMP_NAMES[compression], cap,
+                         % (len(out) - 512, " and ".join(how), cap,
                             sector + 1, end_sector - 1, len(out) - 512 - cap))
     return out
 
@@ -878,9 +910,12 @@ def stage2check_segments(img, f, stored, zephyr, load, extra, sector, end_sector
     """A version-3 payload: what the loader checks, plus: the image parts
     (segment 0 and its continuation parts) with their zero bytes are this
     zephyr.bin, and the segments after them are the `extra` (data, addr,
-    label), in order. Sets f["clear_after"], the zero bytes past the image's
-    last byte."""
+    label[, compression]), in order, each stored the way its fourth element
+    says when it has one. Sets f["clear_after"], the zero bytes past the
+    image's last byte."""
     errors = []
+    want = [segment_comp(e, None) for e in extra]
+    extra = [tuple(e[:3]) for e in extra]
     segs = f["segments"]
     parts = f["parts"]
     if f["header_bytes"] != 512:
@@ -950,9 +985,12 @@ def stage2check_segments(img, f, stored, zephyr, load, extra, sector, end_sector
             errors.append("segment 0 (zephyr.bin): the image%s is not the given file"
                           % (" (the parts and their zero runs put together)" if parts > 1 else ""))
         f["clear_after"] = at - len(zephyr)
-    for s, image, (data, addr, label) in zip(segs[parts:], images[parts:], extra):
+    for s, image, (data, addr, label), comp in zip(segs[parts:], images[parts:], extra, want):
         if image is not None and image != data:
             errors.append("%s: the image is not the given file" % label)
+        if comp is not None and s["compression"] != comp:
+            errors.append("%s: stored as %s, not %s" % (label, COMP_NAMES.get(s["compression"], "compression %d"
+                                                                              % s["compression"]), COMP_NAMES[comp]))
         if s["load"] != addr:
             errors.append("%s: load 0x%x, not 0x%x" % (label, s["load"], addr))
     if not errors:
@@ -1103,6 +1141,18 @@ def stage2_vectors(outdir):
         files["ok-v3-three-%s.img" % tag] = stage2img_segments(
             big, ZEPHYR_LOAD, [(ddr, blob_at, "ddr"), (tcm, tcm_at, "tcm")], comp, "three-" + tag)
     files["ok-v3-one.img"] = stage2img_segments(small, ZEPHYR_LOAD, [], COMP_DEFLATE, "one")
+    # a compression per segment: the image one way, each blob another
+    files["ok-v3-mixed-deflate-none.img"] = stage2img_segments(
+        big, ZEPHYR_LOAD, [(ddr, blob_at, "ddr", COMP_NONE), (tcm, tcm_at, "tcm")], COMP_DEFLATE, "mixed-dn")
+    if lz4_command():
+        files["ok-v3-mixed-lz4-deflate.img"] = stage2img_segments(
+            big, ZEPHYR_LOAD, [(ddr, blob_at, "ddr", COMP_DEFLATE), (tcm, tcm_at, "tcm", COMP_NONE)], COMP_LZ4,
+            "mixed-ld")
+        files["ok-v3-mixed-deflate-lz4.img"] = stage2img_segments(
+            big, ZEPHYR_LOAD, [(ddr, blob_at, "ddr", COMP_LZ4), (tcm, tcm_at, "tcm")], COMP_DEFLATE, "mixed-dl")
+        fm, _ = stage2_parse(files["ok-v3-mixed-lz4-deflate.img"])
+        if [s["compression"] for s in fm["segments"]] != [COMP_LZ4, COMP_DEFLATE, COMP_NONE]:
+            raise ValueError("the mixed vector's segments are not LZ4, deflate, uncompressed")
     fp = len(big) + 0x10000                          # zimage's image_size
 
     def v3(*segs, **kw):
@@ -1323,6 +1373,40 @@ def self_test():
         expect("stage2img --segment %s: stage2check clean, three segments, whole sectors" % COMP_NAMES[comp],
                errs == [] and f["version"] == 3 and f["count"] == 3 and len(im) % 512 == 0
                and all(s["stored_offset"] % 512 == 0 and s["compression"] == comp for s in f["segments"]))
+    # a compression per segment
+    mixes = [(COMP_DEFLATE, COMP_NONE, None), (COMP_NONE, COMP_DEFLATE, COMP_DEFLATE)]
+    if lz4_command():
+        mixes += [(COMP_LZ4, COMP_DEFLATE, COMP_NONE), (COMP_DEFLATE, COMP_LZ4, None), (COMP_LZ4, None, COMP_LZ4)]
+    for c0, c1, c2 in mixes:
+        ex = [(blob, 0x90000000, "blob", c1), (tcm, 0x90c00000, "tcm", c2)]
+        im = stage2img_segments(zz, ZEPHYR_LOAD, ex, c0, "mix", **slot)
+        errs, f = stage2check(im, zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"], ex, slot["staging"])
+        got = [COMP_NAMES[s["compression"]] for s in f["segments"]]
+        expect("stage2img, a compression per segment (%s): stage2check clean" % ", ".join(got),
+               errs == [] and got == [COMP_NAMES[c0 if c is None else c] for c in (c0, c1, c2)])
+    im = stage2img_segments(zz, ZEPHYR_LOAD, [(blob, 0x90000000, "blob", COMP_NONE), (tcm, 0x90c00000, "tcm")],
+                            COMP_DEFLATE, "mix", **slot)
+    plain = stage2img_segments(zz, ZEPHYR_LOAD, extra, COMP_DEFLATE, "mix", **slot)
+    f = stage2_parse(im)[0]
+    expect("a segment's own compression changes that segment only",
+           [s["stored_bytes"] for s in f["segments"]][0::2]
+           == [s["stored_bytes"] for s in stage2_parse(plain)[0]["segments"]][0::2]
+           and f["segments"][1]["stored_bytes"] == len(blob))
+    expect("a segment that names the payload's compression: the same bytes as without it",
+           stage2img_segments(zz, ZEPHYR_LOAD, [e + (COMP_DEFLATE,) for e in extra], COMP_DEFLATE, "mix", **slot)
+           == plain)
+    expect("stage2check: a segment stored another way than its --segment says is a FAIL",
+           stage2check(im, zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"],
+                       [(blob, 0x90000000, "blob", COMP_DEFLATE), (tcm, 0x90c00000, "tcm")], slot["staging"])[0] != []
+           and stage2check(im, zz, ZEPHYR_LOAD, slot["sector"], slot["end_sector"],
+                           [(blob, 0x90000000, "blob", COMP_NONE), (tcm, 0x90c00000, "tcm", COMP_DEFLATE)],
+                           slot["staging"])[0] == [])
+    expect("--segment: FILE@ADDR, FILE@ADDR:lz4, an @ in the path; refused: no address, an unknown compression",
+           parse_segment_arg("a.bin@0x90000000") == ("a.bin", 0x90000000, None)
+           and parse_segment_arg("a.bin@0x90000000:lz4") == ("a.bin", 0x90000000, COMP_LZ4)
+           and parse_segment_arg("d@x/a.bin@4096:none") == ("d@x/a.bin", 4096, COMP_NONE)
+           and refused(lambda: parse_segment_arg("a.bin")) and refused(lambda: parse_segment_arg("a.bin@0x10:zstd"))
+           and refused(lambda: parse_segment_arg("a.bin@:lz4")))
     im = stage2img_segments(zz, ZEPHYR_LOAD, extra, COMP_NONE, "multi", **slot)
     f = stage2_parse(im)[0]
     expect("stage2 v3: segment 0's footprint is the arm64 image_size, the others their length",
@@ -1480,7 +1564,8 @@ def main():
     p.add_argument("--zephyr", required=True, help="zephyr.bin of a direct image, linked at --load")
     p.add_argument("--load", type=lambda s: int(s, 0), default=ZEPHYR_LOAD)
     p.add_argument("--compress", choices=("deflate", "lz4", "none"), default="deflate",
-                   help="lz4: about 10x faster to unpack on the A53 for some 15%% more stored (needs lz4)")
+                   help="lz4: about 10x faster to unpack on the A53 for some 15%% more stored (needs lz4); "
+                   "the image's, and that of every --segment without its own")
     p.add_argument("--name", default=None, help="name in the header (default: the zephyr.bin's directory)")
     p.add_argument("--sector", type=lambda s: int(s, 0), default=STAGE2_SECTOR,
                    help="user-area sector of the header (CONFIG_BOOT_STAGE2_SECTOR)")
@@ -1500,8 +1585,10 @@ def main():
     p.add_argument("--end-sector", type=lambda s: int(s, 0), default=STAGE2_END_SECTOR)
     p.add_argument("image")
     for q in (sub.choices["stage2img"], p):
-        q.add_argument("--segment", action="append", default=[], metavar="FILE@ADDR",
-                       help="another segment at ADDR (repeatable): a version-3 payload, zephyr.bin is segment 0")
+        q.add_argument("--segment", action="append", default=[], metavar="FILE@ADDR[:COMPRESSION]",
+                       help="another segment at ADDR (repeatable): a version-3 payload, zephyr.bin is segment 0. "
+                       ":deflate, :lz4 or :none is this segment's compression (stage2img: in place of --compress; "
+                       "stage2check: checked against the header)")
         q.add_argument("--staging", type=lambda s: int(s, 0), default=STAGE2_STAGING,
                        help="the loader's CONFIG_BOOT_STAGE2_STAGING (default 0x%x): no segment may be on it"
                        % STAGE2_STAGING)
@@ -1538,11 +1625,11 @@ def main():
         zephyr = open(a.zephyr, "rb").read()
         extra = []
         for spec in a.segment:
-            path, addr = parse_segment_arg(spec)
-            extra.append((open(path, "rb").read(), addr, "%s@0x%x" % (os.path.basename(path), addr)))
+            path, addr, how = parse_segment_arg(spec)
+            extra.append((open(path, "rb").read(), addr, "%s@0x%x" % (os.path.basename(path), addr), how))
         if a.cmd == "stage2img":
             name = a.name or os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(a.zephyr))))
-            comp = {"deflate": COMP_DEFLATE, "lz4": COMP_LZ4, "none": COMP_NONE}[a.compress]
+            comp = COMP_BY_NAME[a.compress]
             bss = bss_zero_range(a.zephyr, a.load)
             if extra or a.split_zeros or a.clear_after is not None:
                 img = stage2img_segments(zephyr, a.load, extra, comp, name, a.sector, a.end_sector, a.staging,

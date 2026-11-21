@@ -459,6 +459,7 @@ fn take(plan: &Plan, made: &mut Made, origin: (Origin, Step)) -> Result<(), Stri
                 /* the sensitivity is asked once per identity (below); `--verify`
                  * asks it again of the row made alone */
                 row.sensitivity = had.sensitivity;
+                row.wide128 = had.wide128;
                 let (x, y) = (table::fingerprint(had, &plan.sources), table::fingerprint(&row, &plan.sources));
                 if x.is_err() || x != y {
                     err = Some(format!("record {} came out of two jobs different", row.ident()));
@@ -469,12 +470,14 @@ fn take(plan: &Plan, made: &mut Made, origin: (Origin, Step)) -> Result<(), Stri
     if let Some(e) = err {
         return Err(e);
     }
-    /* each new row's sampler-state sensitivity, asked of the live record as
-     * a program's first draw asks it (after the walk: the question runs the
-     * front end, which must not run inside the cache's iteration) */
+    /* each new row's sampler-state sensitivity and 128-bit plane
+     * sensitivity, asked of the live record as a program's first draw asks
+     * them (after the walk: the questions run the front end, which must not
+     * run inside the cache's iteration) */
     for (id, sh) in new {
         if let Some(row) = made.rows.get_mut(&id) {
             row.sensitivity = drive::sensitivity(&sh);
+            row.wide128 = drive::wide128(&sh);
         }
     }
     Ok(())
