@@ -1643,7 +1643,9 @@ fn stencil_op(op: backend::GlesStencilOp) -> StencilOp {
 /// ZSA (`panfrost_create_depth_stencil_state`, Mesa 26.2.1
 /// pan_cmdstream.c:4222-4296): the depth function ALWAYS and no write
 /// without the test (ES 2.0 4.1.6), a disabled face all zero, and the
-/// reference values as `panfrost_emit_depth_stencil` writes them (:879-882).
+/// reference values as `panfrost_emit_depth_stencil` writes them (:879-882),
+/// which st/mesa sets to 0 while the test is off and the write mask to 0 for
+/// the depth function EQUAL.
 /// GL's compare codes (`GLES_CMP_*`, NEVER .. ALWAYS) are the Mali's `Func`
 /// values. The back face is GL's back state: st/mesa enables `stencil[1]`
 /// only when the two differ, and Mesa then copies the front, which is the
@@ -1680,11 +1682,16 @@ fn depth_stencil_state(d: &GlesDraw) -> DepthStencilState {
             ),
         ]
     } else {
-        [StencilFace::off(d.stencil_ref), StencilFace::off(d.stencil_ref)]
+        // st/mesa memsets the pipe_stencil_ref and fills it only with the
+        // test on (st_atom_depth.c:83-84,108,119,125), so a disabled test
+        // reaches the descriptor with reference 0, front and back.
+        [StencilFace::off(0), StencilFace::off(0)]
     };
     DepthStencilState {
         depth_func: if d.depth_test { Func(d.depth_func) } else { Func::ALWAYS },
-        depth_write: d.depth_test && d.depth_write,
+        // st/mesa leaves the write mask 0 for the function EQUAL
+        // (st_atom_depth.c:88-90).
+        depth_write: d.depth_test && d.depth_write && d.depth_func != backend::GLES_CMP_EQUAL,
         stencil_test: d.stencil,
         faces,
     }
