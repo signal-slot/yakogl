@@ -25,23 +25,88 @@
 //! * the 7.1 reserved magic addresses (0..4, 10, 14..15, 19..31, 47..63;
 //!   :104-115) and the one-peripheral count without LDTMU (:333-344).
 //!
-//! Left out because Mesa applies them only below 7.1: the accumulator rules
-//! (an R4 read or write within two of a magic SFU write, :316-328; the 7.1
-//! SFU is an add operation and its magic addresses are reserved, so "SFU
-//! write too soon after SFU" counts nothing at 7.1), "LDVARY during THRSW
+//! Left out because Mesa applies them only below 7.1: "LDVARY during THRSW
 //! delay slots" (ver 42), "RF write after THREND" (ver 42; 7.1 has the rules
 //! above instead), GFXH-1625 (no TMUWT in the last instruction, ver 42,
 //! :422-426), GFXH-1633 (below 4.2, :229-248) and the "small imm a/c/d added
-//! after V3D 7.1" refusal (below 7.1). Not transcribed, as in verify.rs:
-//! the TLB-Z-write rules (:142-155, :187-197), which need Mesa's
-//! `is_tlb_z_write` mark that the words do not carry.
+//! after V3D 7.1" refusal (below 7.1). Left out because they count nothing at
+//! 7.1: the accumulator rules (an R4 read or write within two of a magic SFU
+//! write, :316-328) have no version branch, but 7.1 has no accumulators
+//! (`v3d_qpu_writes_r4` is false without them, qpu_instr.c:962-966, and an
+//! operand is a register address, not a mux), and the magic SFU addresses
+//! are reserved at 7.1, so "SFU write too soon after SFU" never counts; the
+//! LDVPM signal of the peripheral count does not exist at 7.1. Not
+//! transcribed, as in verify.rs: the TLB-Z-write rules (:142-155, :187-197),
+//! which need Mesa's `is_tlb_z_write` mark that the words do not carry.
 //!
 //! The rules marked "(ours)" are Mesa's too, but in its scheduler
 //! (qpu_schedule.c), which never builds what they refuse, so its validator
 //! does not check them; a back end of our own can, so they are checked here,
 //! each citing the place. Every program Mesa compiles for 7.1
 //! (tests/fixtures/v3d_mesa_programs_71.txt) passes all of them (the tests
-//! below).
+//! below). They are, in the order they are checked:
+//!
+//! * no branch within three instructions of a UNIFA write (:1488), no rf0
+//!   write right after an LDVARY (:699-728), no LDUNIFA within three of a
+//!   UNIFA write (:1440-1442);
+//! * one uniform-stream word per instruction, and none with an LDUNIFA
+//!   (:1513-1531);
+//! * in a branch's delay slots no uniform and no UNIFA write (:2396-2412),
+//!   and no flag write behind a conditional branch (:2482-2485, :2992);
+//! * no SFU operation in a THRSW's delay slots (:2080-2083), the 7.1
+//!   peripheral combinations (qpu_compatible_peripheral_access, :895-975),
+//!   no UNIFA write in a THRSW instruction or its slots (:2093-2108);
+//! * in the thread-end slots no LDVARY, no uniform after the THRSW and no
+//!   rf2/rf3 read (qpu_inst_valid_in_thrend_slot, :1978-2059);
+//! * rf0's flops at a thread switch (:1704-1745, :2110-2119).
+//!
+//! [`tlb_after_scoreboard_wait71`] is the scheduler's pixel-scoreboard rule
+//! (:731-752): it needs the shader state's lock bit, so it is a function of
+//! its own and [`verify71`] does not call it.
+//!
+//! Left out of qpu_schedule.c, each for its reason:
+//!
+//! * the read of rf0 right after an LDVARY (reads_too_soon, :623-636; Mesa's
+//!   own output does it, see below) and the read of an SFU result in the next
+//!   instruction (read_stalls, :779-787): priorities, not refusals;
+//! * the accumulator timing (mux_reads_too_soon, :602-620, and the r4 part
+//!   of writes_too_soon_after_write, :699-711): no accumulators at 7.1;
+//! * no branch with MSFIGN and a condition other than ALWAYS/A0/NA0 right
+//!   after a SETMSF: choose_instruction_to_schedule keeps it at every
+//!   version (:1491-1500), but emit_branch names it a V3D 4.x restriction
+//!   and drops it at `ver >= 71` (`is_safe_msf_branch`, :2430-2438);
+//! * the TMU output FIFO bound when a lookup pairs with an LDTMU
+//!   (:1563-1584): it needs each lookup's result count (`ldtmu_count`),
+//!   which the TMU configuration decides and the words do not show;
+//! * what qpu_inst_after_thrsw_valid_in_delay_slot keeps out of a THRSW's
+//!   slots (:2131-2218: TLB, TMU writes, WRTMUC, TMU waits, accumulator
+//!   writes, MULTOP, flag writes, BARRIERID): it judges only instructions
+//!   scheduled after the THRSW, and one scheduled before it may sit in the
+//!   same slot; the words do not say which (its branch and THRSW parts are
+//!   the validator's rules above);
+//! * emit_branch's LDVARY guard (:2471-2477): it limits only moving a branch
+//!   up; an unmoved branch right after an LDVARY is legal, so the words
+//!   cannot tell;
+//! * the thread end's TLB Z write in slot 2 (:1984-1985): Mesa's
+//!   `is_tlb_z_write` mark again;
+//! * "at least one outstanding lookup or TSY wait" at a thread switch (the
+//!   comment at :2168-2169): Mesa does not enforce it (a FS's last THRSW has
+//!   none when the shader samples nothing);
+//! * the dependencies (calculate_deps, :310-545, such as flags, rtop, TLB and
+//!   TMU operations ordered against a THRSW): the program's own data flow,
+//!   which a check of the words cannot know (rtop is the validator's rule
+//!   above);
+//! * qpu_merge_inst's limits (:1235-1386: two address-writing signals, a
+//!   signal address in the condition field, the packer): codec71's encoding
+//!   (the small immediates are the validator's rule above); and
+//!   fixup_pipelined_ldvary (:2612-2731), whose asserts are the LDVARY-slot
+//!   and rf0 rules above.
+//!
+//! [`peripherals_compatible71`] counts restricted accesses per word, where
+//! Mesa compares the two instructions it merges: a lone VPMSETUP (a VPM read
+//! and write from one operation) passes Mesa and is refused here. select71
+//! never emits VPMSETUP, and sched71 packs with this function, so loosening
+//! it would move sched71's words; it is left as it is.
 //!
 //! A 7.1 SFU result is not a hazard to check: the register-file read of an
 //! SFU result too soon stalls (qpu_schedule.c:778-786 is a priority, not a
@@ -146,7 +211,26 @@ fn writes_unifa(alu: &Alu71) -> bool {
 /// `qinst->uniform != ~0`): an LDUNIF/LDUNIFRF signal or a magic write that
 /// loads one (TMUAU, TLBU, VPMU, SYNCU).
 fn reads_uniform(alu: &Alu71) -> bool {
-    alu.sig.ldunif || alu.sig.ldunifrf || magic_writes(alu).into_iter().flatten().any(loads_unif)
+    uniform_reads(alu) > 0
+}
+
+/// How many words the instruction takes from the uniform stream: one per
+/// LDUNIF/LDUNIFRF signal and per magic write that loads one.
+fn uniform_reads(alu: &Alu71) -> u32 {
+    (alu.sig.ldunif || alu.sig.ldunifrf) as u32
+        + magic_writes(alu).into_iter().flatten().filter(|&w| loads_unif(w)).count() as u32
+}
+
+/// `v3d_qpu_writes_flags` (qpu_instr.c:1140-1150).
+fn writes_flags(alu: &Alu71) -> bool {
+    let f = &alu.flags;
+    f.apf != Pf::None || f.mpf != Pf::None || f.auf != Uf::None || f.muf != Uf::None
+}
+
+/// `qpu_inst_is_tlb` (qpu_schedule.c:132-154): a TLB read signal or a magic
+/// TLB/TLBU write.
+fn is_tlb_access(alu: &Alu71) -> bool {
+    alu.sig.ldtlb || alu.sig.ldtlbu || magic_writes(alu).into_iter().flatten().any(is_tlb)
 }
 
 /// One instruction's peripheral accesses, as Mesa's scheduler counts them
@@ -252,16 +336,24 @@ pub fn verify71(prog: &[Instr71], single_seg: bool) -> Result<(), VerifyError> {
     let mut last_unifa_ip: isize = -10;
     let mut last_implicit_rf0_ip: isize = -10;
     let mut rf0_flops_conflict = false;
+    let mut last_branch_cond = BranchCond::Always;
 
     for (i, instr) in prog.iter().enumerate() {
         let ip = i as isize;
         let fail = |rule| Err(VerifyError { ip: i, rule });
+        macro_rules! ours {
+            ($bad:expr, $rule:expr) => {
+                if $bad {
+                    return fail($rule);
+                }
+            };
+        }
         /* in_branch_delay_slots / in_thrsw_delay_slots (qpu_validate.c:79-89) */
         let in_branch_delay = ip - last_branch_ip < 4;
         let in_thrsw_delay = ip - last_thrsw_ip < 3;
 
         let alu = match instr {
-            Instr71::Branch(_) => {
+            Instr71::Branch(br) => {
                 /* qpu_validate.c:157-164 */
                 if in_branch_delay {
                     return fail("branch in a branch delay slot.");
@@ -275,6 +367,7 @@ pub fn verify71(prog: &[Instr71], single_seg: bool) -> Result<(), VerifyError> {
                     return fail("branch within three instructions of a UNIFA write (qpu_schedule.c, ours)");
                 }
                 last_branch_ip = ip;
+                last_branch_cond = br.cond;
                 last = Some(instr);
                 continue;
             }
@@ -335,6 +428,36 @@ pub fn verify71(prog: &[Instr71], single_seg: bool) -> Result<(), VerifyError> {
          * instructions later (qpu_schedule.c:1440-1442). */
         if (alu.sig.ldunifa || alu.sig.ldunifarf) && ip - last_unifa_ip <= 3 {
             return fail("LDUNIFA within three instructions of a UNIFA write (qpu_schedule.c, ours)");
+        }
+
+        /* Ours: one uniform-stream word per instruction, and none with an
+         * LDUNIFA ("Simulator complains if we have two uniforms loaded in
+         * the same instruction", choose_instruction_to_schedule,
+         * qpu_schedule.c:1513-1531). */
+        ours!(uniform_reads(alu) > 1, "two uniforms in one instruction (qpu_schedule.c, ours)");
+        ours!(
+            (alu.sig.ldunifa || alu.sig.ldunifarf) && reads_uniform(alu),
+            "LDUNIFA with a uniform in one instruction (qpu_schedule.c, ours)"
+        );
+
+        /* Ours: what a branch delay slot may hold
+         * (qpu_inst_valid_in_branch_delay_slot, qpu_schedule.c:2396-2412,
+         * used by emit_branch at :2487 and by qpu_set_branch_targets at
+         * :3002): no uniform (the branch moves the uniform stream, :2973-2983)
+         * and no UNIFA write (a UNIFA write and its three followers do not
+         * straddle a branch, the twin of the check at :1488); a branch or
+         * THRSW there is Mesa's validator's rule. And no flag write in a
+         * conditional branch's slots: emit_branch never moves the branch
+         * above one (:2482-2485) and fills the rest with NOPs (:2513-2514);
+         * qpu_set_branch_targets copies successor instructions only behind
+         * an unconditional branch (:2992). */
+        if in_branch_delay {
+            ours!(reads_uniform(alu), "uniform read in a branch delay slot (qpu_schedule.c, ours)");
+            ours!(writes_unifa(alu), "UNIFA write in a branch delay slot (qpu_schedule.c, ours)");
+            ours!(
+                last_branch_cond != BranchCond::Always && writes_flags(alu),
+                "flags written in a conditional branch's delay slot (qpu_schedule.c, ours)"
+            );
         }
 
         /* qpu_validate.c:250-288 */
@@ -490,6 +613,40 @@ pub fn verify71(prog: &[Instr71], single_seg: bool) -> Result<(), VerifyError> {
     }
     if !thrend_found {
         return Err(VerifyError { ip: end, rule: "No program-end THRSW found" });
+    }
+    Ok(())
+}
+
+/// Ours: every TLB access of the fragment shader `prog` comes after the
+/// scoreboard wait, which the thread switch does when it happens, two delay
+/// slots after its THRSW: the first THRSW's when `lock_on_first` (the shader
+/// state's `lock_scoreboard_on_first_thrsw`), else the last-thread-switch
+/// pair's first. Mesa's scheduler keeps it (scoreboard_is_locked and
+/// pixel_scoreboard_too_soon, qpu_schedule.c:731-752, checked at :1459 and
+/// :1536; the TLB operations depend on every THRSW, :494-497; a FS always
+/// has a last THRSW, nir_to_vir.c:5016-5017) and its validator does not.
+/// A TLB access may sit in a later THRSW's slots, as the thread end's
+/// (qpu_inst_valid_in_thrend_slot, :1978-2059, refuses only a TLB Z write
+/// in slot 2, a mark the words do not carry). Not part of [`verify71`]:
+/// its callers do not pass the shader state's bit, and Mesa's validator
+/// accepts the single-segment TLB rows of tools/v3d/hazards71.tsv
+/// (`tlbz.*`) that this refuses.
+pub fn tlb_after_scoreboard_wait71(prog: &[Instr71], lock_on_first: bool) -> Result<(), VerifyError> {
+    let thrsw = |i: &Instr71| matches!(i, Instr71::Alu(a) if a.sig.thrsw);
+    let mut lock: Option<usize> = None;
+    for (ip, instr) in prog.iter().enumerate() {
+        if lock.is_none() && thrsw(instr) {
+            if lock_on_first {
+                lock = Some(ip);
+            } else if ip > 0 && thrsw(&prog[ip - 1]) {
+                lock = Some(ip - 1);
+            }
+        }
+        if let Instr71::Alu(alu) = instr {
+            if is_tlb_access(alu) && !lock.is_some_and(|l| ip >= l + 3) {
+                return Err(VerifyError { ip, rule: "TLB access before the scoreboard wait (qpu_schedule.c, ours)" });
+            }
+        }
     }
     Ok(())
 }
@@ -792,6 +949,155 @@ mod tests {
         let mut r = add(A::Mov, 10, false);
         r.add.a.raddr = 2;
         assert_eq!(end_rule([thrsw(), r, nop()]), Err("RF2-3 read after THREND (qpu_schedule.c, ours)"));
+    }
+
+    fn ldunif() -> Alu71 {
+        let mut a = nop();
+        a.sig.ldunif = true;
+        a
+    }
+    fn ldunifa() -> Alu71 {
+        let mut a = nop();
+        a.sig.ldunifa = true;
+        a
+    }
+    /// An add `mov` to rf10 that pushes the Z flag.
+    fn flag_write() -> Alu71 {
+        let mut a = add(AddOp71::Mov, 10, false);
+        a.flags.apf = Pf::PushZ;
+        a
+    }
+    fn branch_if(cond: BranchCond) -> Instr71 {
+        let Instr71::Branch(mut b) = branch() else { unreachable!() };
+        b.cond = cond;
+        Instr71::Branch(b)
+    }
+    /// `slot` (1..=3) or later after a branch, then a NOP up to past the
+    /// slots, then a single-segment thread end.
+    fn after_branch(br: Instr71, at: usize, a: Alu71) -> Result<(), &'static str> {
+        let mut body = std::vec![br, Instr71::Alu(nop()), Instr71::Alu(nop()), Instr71::Alu(nop())];
+        body.insert(at, Instr71::Alu(a));
+        body.push(Instr71::Alu(nop()));
+        rule(&with_end(&body, true), true)
+    }
+
+    /// One uniform-stream word per instruction, none with an LDUNIFA
+    /// (qpu_schedule.c:1513-1531).
+    #[test]
+    fn one_uniform_per_instruction() {
+        let tmu = |waddr| {
+            let mut a = ldunif();
+            a.add = add(AddOp71::Mov, waddr, true).add;
+            a
+        };
+        /* TMUAU (13) loads a uniform, TMUA (12) does not */
+        assert_eq!(body_rule(&[tmu(13)]), Err("two uniforms in one instruction (qpu_schedule.c, ours)"));
+        assert_eq!(body_rule(&[tmu(12)]), Ok(()), "LDUNIF with a TMUA write");
+        let mut a = ldunifa();
+        a.add = add(AddOp71::Mov, 13, true).add;
+        assert_eq!(body_rule(&[a]), Err("LDUNIFA with a uniform in one instruction (qpu_schedule.c, ours)"));
+        let mut a = ldunifa();
+        a.sig.ldunif = true;
+        assert_eq!(body_rule(&[a]), Err("LDUNIFA with a uniform in one instruction (qpu_schedule.c, ours)"));
+        assert_eq!(body_rule(&[ldunifa()]), Ok(()), "LDUNIFA alone");
+        assert_eq!(body_rule(&[ldunif(), ldunifa()]), Ok(()), "LDUNIF, then LDUNIFA");
+    }
+
+    /// No uniform and no UNIFA write in a branch delay slot
+    /// (qpu_schedule.c:2396-2412), no flag write behind a conditional branch
+    /// (:2482-2485).
+    #[test]
+    fn branch_delay_slot_contents() {
+        let cond = branch_if(BranchCond::A0);
+        for slot in 1..=3 {
+            assert_eq!(
+                after_branch(branch(), slot, ldunif()),
+                Err("uniform read in a branch delay slot (qpu_schedule.c, ours)"),
+                "slot {slot}"
+            );
+            assert_eq!(
+                after_branch(branch(), slot, add(AddOp71::Mov, 9, true)),
+                Err("UNIFA write in a branch delay slot (qpu_schedule.c, ours)"),
+                "slot {slot}"
+            );
+            assert_eq!(
+                after_branch(cond, slot, flag_write()),
+                Err("flags written in a conditional branch's delay slot (qpu_schedule.c, ours)"),
+                "slot {slot}"
+            );
+            /* an unconditional branch's slots may write flags (Mesa copies
+             * its target's first instructions there, :2992-3008) */
+            assert_eq!(after_branch(branch(), slot, flag_write()), Ok(()), "slot {slot}");
+        }
+        /* the instruction after the third slot */
+        assert_eq!(after_branch(branch(), 4, ldunif()), Ok(()));
+        assert_eq!(after_branch(branch(), 4, add(AddOp71::Mov, 9, true)), Ok(()));
+        assert_eq!(after_branch(cond, 4, flag_write()), Ok(()));
+        /* and the flag write before the branch */
+        let p = with_end(
+            &[Instr71::Alu(flag_write()), cond, Instr71::Alu(nop()), Instr71::Alu(nop()), Instr71::Alu(nop())],
+            true,
+        );
+        assert_eq!(rule(&p, true), Ok(()));
+    }
+
+    /// A TLB write (TLB, magic 7) `at` the index into a two-section FS:
+    /// nop, THRSW (ip 1), nop, nop, the last-THRSW pair (ip 4 and 5), nop,
+    /// nop, nop, nop, the thread end (ip 10).
+    fn tlb_at(at: usize) -> Vec<Instr71> {
+        let mut p: Vec<Instr71> =
+            [nop(), thrsw(), nop(), nop(), thrsw(), thrsw(), nop(), nop(), nop(), nop(), thrsw(), nop(), nop()]
+                .map(Instr71::Alu)
+                .to_vec();
+        let Instr71::Alu(a) = &mut p[at] else { unreachable!() };
+        a.mul = mul(MulOp71::Mov, WADDR_TLB, true).mul;
+        p
+    }
+
+    /// The scoreboard wait comes with the lock THRSW's switch, two slots
+    /// after it (qpu_schedule.c:731-752).
+    #[test]
+    fn tlb_waits_for_the_scoreboard() {
+        const RULE: &str = "TLB access before the scoreboard wait (qpu_schedule.c, ours)";
+        let tlb = |at, first| tlb_after_scoreboard_wait71(&tlb_at(at), first).map_err(|e| (e.ip, e.rule));
+        for at in [0, 3, 4, 5, 6] {
+            assert_eq!(rule(&tlb_at(at), false), Ok(()), "verify71 does not check it ({at})");
+            assert_eq!(tlb(at, false), Err((at, RULE)), "locked on the last THRSW pair, {at}");
+        }
+        for at in [7, 8, 9, 10, 11, 12] {
+            assert_eq!(tlb(at, false), Ok(()), "after the pair's switch, {at}");
+        }
+        /* locked on the first THRSW (ip 1): from ip 4 on, its pair's slots too */
+        assert_eq!(tlb(0, true), Err((0, RULE)));
+        assert_eq!(tlb(3, true), Err((3, RULE)));
+        for at in [4, 5, 6, 7] {
+            assert_eq!(tlb(at, true), Ok(()), "after the first switch, {at}");
+        }
+        /* a TLB read signal is an access too */
+        let mut p = tlb_at(7);
+        let Instr71::Alu(a) = &mut p[3] else { unreachable!() };
+        a.sig.ldtlb = true;
+        a.sig_addr = 10;
+        assert_eq!(tlb_after_scoreboard_wait71(&p, true).map_err(|e| e.ip), Err(3));
+        /* a program with no TLB access has nothing to wait for */
+        assert_eq!(tlb_after_scoreboard_wait71(&with_end(&[Instr71::Alu(nop())], true), false), Ok(()));
+    }
+
+    /// Every fragment shader Mesa 26.2.1 compiles for 7.1 makes its TLB
+    /// accesses after the scoreboard wait, even counted from the last
+    /// THRSW pair (the fixture does not record the lock bit; the first
+    /// THRSW is never later than the pair).
+    #[test]
+    fn every_mesa_7_1_fragment_shader_waits_for_the_scoreboard() {
+        let mut n = 0;
+        for (pair, st, _, words) in fixture_programs().iter().filter(|p| p.1 == "fs") {
+            let prog: Vec<Instr71> = words.iter().map(|&w| decode71(w).unwrap()).collect();
+            if let Err(e) = tlb_after_scoreboard_wait71(&prog, false) {
+                panic!("{pair} {st}: {e:?}");
+            }
+            n += prog.iter().any(|i| matches!(i, Instr71::Alu(a) if is_tlb_access(a))) as usize;
+        }
+        assert_eq!(n, 242, "fragment shaders with a TLB access");
     }
 
     /// rf32 is another thread's at 4 threads and this one's at 2.
