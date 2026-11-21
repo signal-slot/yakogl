@@ -1,0 +1,72 @@
+# The AM62P single-case list of the merged PowerVR pixel causes of plan #325 (dEQP-GLES3, DEQP_MODULE=gles3):
+# one image per cause, a few cases each, from tools/cts/gles3-mustpass.txt (every name is in it). Run
+# by board-rt-pcf; a pass or fail here is a case result, not a row of the tree (RESULTS.md is #313's).
+#
+#   DEQP_MODULE=gles3 DEQP_WORK=<stage 1, tools/cts/cts-build-zephyr.sh MODULE=gles3> ZEPHYR_WS=... \
+#       tools/cts/am62p-deqp-images.sh tools/cts/am62p-pixel-cases.txt <img-dir> > <img-dir>/build.out
+#   TREE_IMAGE_DIR=<img-dir> tools/board.sh am62p tree tools/cts/am62p-pixel-cases.txt <outdir>
+#
+# The rows are labelled ("# image <LABEL>:"), so each image is <img-dir>/<LABEL> and tools/board.sh waits
+# for <LABEL>.built. TREE_ROWS=0 runs only the first row (rows count from 0). The four-draw-buffer row
+# needs a different build (below). The gl_test numbers of the same causes are a separate image
+# (GL_TEST_CASES, comma-separated, see the end of this file); they are comments here, not rows.
+#
+# Causes with no gl_test case of their own: texture swizzle, wrap R, ETC2/EAC arrays, mipmap PCF and cube
+# PCF are measured by the dEQP cases below. gl_test 218 (shadowcmp) is the 2D depth compare baseline.
+#
+# flat shading: 7b39917c (flat varyings take the last vertex), host test tests/es3_pvr_flatshade.rs,
+# tests/es3_pvr_flatshade_lines.rs (f42a836f); gl_test 89 flatlast, 230..237 flat_* (below)
+# image PF1:
+dEQP-GLES3.functional.rasterization.flatshading.triangle_strip,dEQP-GLES3.functional.rasterization.flatshading.triangle_fan,dEQP-GLES3.functional.rasterization.flatshading.lines,dEQP-GLES3.functional.rasterization.flatshading.line_loop_wide
+# ETC2/EAC 2D arrays by layer: 81bfac76, host test tests/es3_pvr_etc_array.rs (the dEQP texture.format.compressed
+# cases are 2D and cube; the 2d_array sampling path is the same native array path, so these run it with the
+# compressed formats; gl_test 20 etc and 126 etcmip are the ETC1 cases)
+# image PE1:
+dEQP-GLES3.functional.texture.format.compressed.etc2_eac_rgba8_2d_pot,dEQP-GLES3.functional.texture.format.compressed.eac_r11_2d_pot,dEQP-GLES3.functional.texture.format.compressed.etc2_rgb8_2d_pot,dEQP-GLES3.functional.texture.filtering.2d_array.combinations.linear_linear_mirror_repeat
+# 2D-array mipmap PCF and mirrored-repeat PCF weights: 919db72b, host test tests/es3_pvr_pcf.rs
+# image PM1:
+dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.always_depth_component16,dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.always_depth_component16,dEQP-GLES3.functional.texture.shadow.2d_array.linear.less_depth_component32f,dEQP-GLES3.functional.texture.shadow.2d.linear_mipmap_linear.always_depth_component16
+# cube PCF: 43af85d7, host test tests/es3_pvr_pcf_cube.rs
+# image PC1:
+dEQP-GLES3.functional.texture.shadow.cube.linear.always_depth_component16,dEQP-GLES3.functional.texture.shadow.cube.linear_mipmap_linear.always_depth_component16,dEQP-GLES3.functional.texture.shadow.cube.nearest_mipmap_nearest.always_depth_component16
+# texture swizzle and wrap R: 2df189df (swizzle composed into the texture state), host test
+# tests/es3_pvr_swizzle.rs; wrap R rides on the 3D and array wrap combinations (tests/es3_pvr_3d_lod.rs,
+# e90122b8 and the wrap work of tests/es3_pvr_3d.rs); the luminance/alpha formats are sampled through a swizzle
+# image PS1:
+dEQP-GLES3.functional.texture.format.unsized.luminance_alpha_2d_pot,dEQP-GLES3.functional.texture.format.unsized.alpha_2d_array_pot,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_repeat_repeat_mirror,dEQP-GLES3.functional.texture.filtering.3d.combinations.linear_linear_clamp_clamp_mirror
+# a partial colour mask on an integer target: fea19063, host test tests/es3_pvr_int_mask.rs;
+# gl_test 102 maskclear / 59 clearmask are the mask cases of the suite
+# image PI1:
+dEQP-GLES3.functional.fragment_out.array.int.rgba8i_highp_ivec4,dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec2,dEQP-GLES3.functional.fragment_out.array.int.r16i_highp_ivec3
+# an integer target beside another: 90452224 (back end), e660d5d9 (compiler, up to four targets), host tests
+# tests/es3_pvr_int_mixed_gl.rs, tests/es3_pvr_mrt_load.rs, tests/es3_pvr_mixed_shapes.rs; gl_test 200 intrt
+# image PB1:
+dEQP-GLES3.functional.fragment_out.random.1,dEQP-GLES3.functional.fragment_out.random.2,dEQP-GLES3.functional.fragment_out.basic.uint.rgba8ui_highp_uvec4,dEQP-GLES3.functional.fragment_out.basic.int.rgba8i_highp_ivec4
+# gl_InstanceID per draw: db633936 (the vertex program adds a per-draw base, PDS instance_id_modifier),
+# a489b1b8 (generator); host tests tests/es3_pvr_instanceid.rs, tests/es3_pvr_instanceid_pds.rs;
+# gl_test 221 instmix
+# image PD1:
+dEQP-GLES3.functional.instanced.draw_arrays_instanced.mixed.4_instances,dEQP-GLES3.functional.instanced.draw_elements_instanced.mixed.4_instances,dEQP-GLES3.functional.instanced.draw_arrays_instanced.instance_id.4_instances
+# four draw buffers (the MRT4 knob): e660d5d9 (compiler) and the end-of-tile programs, host test
+# tests/es3_pvr_mrt4.rs. The knobs are in the Kconfigs (deqp: CONFIG_PVR_DEQP_MRT4 with CONFIG_DEQP_TEST_KNOBS=y;
+# gl_test: CONFIG_PVR_GL_TEST_MRT4=y) but the library's setter pvr_debug_set_draw_targets (src/pvr/knob.rs) is
+# not in the tree at this tip, so an image with either knob does not link (undefined reference, measured
+# 2026-11-21 at 63b98ef6). Until the setter and DRAW_TARGETS 4 merge, the row below is built WITHOUT the knob:
+# a baseline, the limits' dEQP cases answer 3 draw buffers and fail. After they merge, build this row's
+# image by hand with the same west command as tools/cts/am62p-deqp-images.sh plus
+# -DCONFIG_DEQP_TEST_KNOBS=y -DCONFIG_PVR_DEQP_MRT4=y (the script has no pass-through), and expect Pass.
+# image PN1:
+dEQP-GLES3.functional.implementation_limits.max_draw_buffers,dEQP-GLES3.functional.implementation_limits.max_color_attachments
+#
+# gl_test (driver/samples/zephyr/gl_test; CONFIG_GL_TEST_CASES, comma-separated, run in order on one context):
+#   89 flatlast, 230,231,232,233,234,235,236,237 flat_*          (flat shading)
+#   20 etc, 126 etcmip, 206 es3levels                            (ETC1 chain; 3D / 2D-array levels)
+#   218 shadowcmp                                                (sampler2DShadow compare)
+#   102 maskclear, 200 intrt, 106 mrt3                           (masks, integer target, three targets)
+#   221 instmix, 243 divmix                                      (gl_InstanceID per draw, instance divisors)
+#   245 mrt4                                                     (four draw buffers; prints SKIP without the MRT4 knob)
+#
+# gl_test image (built from this tip, links, 48 MB RAM; GL_TEST_KNOBS is on by default for the PowerVR):
+#   west build -p always -b verdin_am62p/am62p54/a53 -d <dir> yakogl/driver/samples/zephyr/gl_test -- \
+#       '-DCONFIG_GL_TEST_CASES="89,230,231,232,233,234,235,236,237,20,126,206,218,102,200,106,221,243,245"'
+# (add -DCONFIG_PVR_GL_TEST_MRT4=y once pvr_debug_set_draw_targets is in the library)
