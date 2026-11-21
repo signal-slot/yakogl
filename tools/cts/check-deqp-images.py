@@ -24,8 +24,9 @@ Zephyr merges them), the Kconfig files and the tables, and fails when
     `#if defined(CONFIG_X)` block of a deqp Kconfig probe symbol (default n,
     depending on DEQP_TEST_KNOBS), or a board's configuration sets X=y;
   - the memory carve-outs differ from the ones of the last passing sweeps
-    (Pi 4: 48 MiB / 16 MiB of tiled copies, and texture-2048.conf's 64 / 24
-    MiB for image T5; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out),
+    (Pi 4: 48 MiB / 16 MiB of tiled copies, and texture-2048.conf's 72 / 24
+    MiB for image T5, 64 in sweep 28 and 72 since 6d2e7d0d's tile memory,
+    tests/v3d_es2ctx_t5_mem.rs; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out),
     or the T6's is under 64 MiB (no passing sweep yet: the size the 2048x2048
     textures need, as image T5);
   - a table no longer selects every case of gles2-mustpass.txt, or the AM62P
@@ -323,9 +324,11 @@ def check_repo():
     for k, v in (('YAKOGL_V3D_CARVEOUT_BYTES', '50331648'), ('YAKOGL_V3D_TILED_COPIES_BYTES', '16777216')):
         if p.get(k) != v:
             bad.append('Pi 4 rpi_4b.conf: %s=%s, the sweeps ran %s' % (k, p.get(k), v))
-    for k, v in (('YAKOGL_V3D_CARVEOUT_BYTES', '67108864'), ('YAKOGL_V3D_TILED_COPIES_BYTES', '25165824')):
+    # T5's carve-out: sweep 28's 64 MiB plus 6d2e7d0d's tile memory, 72 MiB
+    # (texture-2048.conf's header, tests/v3d_es2ctx_t5_mem.rs)
+    for k, v in (('YAKOGL_V3D_CARVEOUT_BYTES', '75497472'), ('YAKOGL_V3D_TILED_COPIES_BYTES', '25165824')):
         if t.get(k) != v:
-            bad.append('Pi 4 texture-2048.conf: %s=%s, sweep 28 ran %s' % (k, t.get(k), v))
+            bad.append('Pi 4 texture-2048.conf: %s=%s, T5 is measured at %s' % (k, t.get(k), v))
     if boards['i.MX8MP'].get('COMMON_LIBC_MALLOC_ARENA_SIZE') != '167772160':
         bad.append('i.MX8MP conf: the C heap is not 160 MiB (167772160)')
     if boards['AM62P'].get('KERNEL_VM_SIZE') != '0x20000000':
