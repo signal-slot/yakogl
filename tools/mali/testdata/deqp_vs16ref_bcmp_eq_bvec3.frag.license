@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The fragment shader of the dEQP-GLES2 shape named for deqp_vs16ref_bcmp_eq_bvec3 in tests/mali_deqp_vs16ref.rs, written in the form dEQP-GLES2 generates it (ShaderOperatorCase / ShaderUniformCase, VK-GL-CTS 93bca01); reconstructed from the held deqp_intval_* and deqp_arith_* pairs of the same generators, not taken from a .qpa.
