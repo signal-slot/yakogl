@@ -2352,6 +2352,8 @@ step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_r
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_rt_switch
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_sampler_slots.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_sampler_slots
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_uniforms.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_uniforms
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_tiled_ts.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_tiled_ts
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gl_es2ctx_buffer_rename.rs)" \
