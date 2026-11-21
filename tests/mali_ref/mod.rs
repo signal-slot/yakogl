@@ -22,6 +22,17 @@
 //!   is compared this way. [`assert_matches_unset`] is for a reference of
 //!   another family drawn without that option (`gm2_*`, `varymerge_*`),
 //!   every uniform word 0; it refuses a `deqp_*` name.
+//! * Struct uniforms: gl_ref.py's `--uniform-values` sets every struct
+//!   member by its dEQP name (`u.m2[1]`, `u[2].m1`, `u.m1.ms2[0].mss1`),
+//!   each the next value index ([`uniform_leaves`], `uniform_settings()`
+//!   in gl_ref.py), and Mesa uploads a mediump member as an fp32 word
+//!   ([`uniform_value`]). Only the references drawn since gl_ref.py could
+//!   do so carry those values; which ones is not in the expect.json, so it
+//!   is the explicit list [`STRUCT_VALUES`]. Any other reference whose
+//!   program has a struct-member uniform row (`deqp_unitype_vsstruct_*`,
+//!   drawn before) is compared against every uniform word 0.
+//!   `tests/mali_ref_selftest.rs` checks the member values against
+//!   gl_ref.py's for the `deqp_fclane2_*` shapes.
 //! * [`assert_refused`] / [`assert_refused_ref`]: the pair still refuses,
 //!   with the code generator's `MaliError` text containing a given text.
 //!
@@ -84,8 +95,9 @@ impl Reference {
 
     /// [`Reference::load`] of a reference drawn without `--uniform-values`
     /// (`drm_shim_ref.sh run`, as the `gm2_*` families are). Not for a
-    /// `deqp_*` reference: those are all drawn with the option, unless
-    /// they have a struct uniform, which [`differences`] sees by itself.
+    /// `deqp_*` reference: those are all drawn with the option (a struct
+    /// uniform's members set only for those in [`STRUCT_VALUES`], which
+    /// [`differences`] sees by itself).
     pub fn load_unset(name: &str) -> Reference {
         assert!(!name.starts_with("deqp_"), "{name}: a deqp_* reference is drawn with --uniform-values; use load");
         Reference { uniform_values: false, ..Reference::load(name) }
@@ -284,19 +296,115 @@ pub fn word_diff(name: &str, ours: &[u64], theirs: &[u64]) -> Option<String> {
     Some(m)
 }
 
-/// The uniforms a program declares, in gl_ref.py's `uniforms()` order: the
-/// vertex shader's, then the fragment shader's not already declared.
-fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for text in [vs, fs] {
-        let mut t = String::new();
-        let mut rest = text;
-        while let Some(a) = rest.find("/*") {
-            t.push_str(&rest[..a]);
-            rest = rest[a..].find("*/").map_or("", |b| &rest[a + b + 2..]);
+/// A program's text without comments (`/* */` and `//`, as gl_ref.py's
+/// `strip_comments`).
+fn strip_comments(text: &str) -> String {
+    let mut t = String::new();
+    let mut rest = text;
+    while let Some(a) = rest.find("/*") {
+        t.push_str(&rest[..a]);
+        rest = rest[a..].find("*/").map_or("", |b| &rest[a + b + 2..]);
+    }
+    t.push_str(rest);
+    t.lines().map(|l| l.find("//").map_or(l, |i| &l[..i])).collect::<Vec<_>>().join("\n")
+}
+
+/// The `#define NAME <int>` macros of a text (gl_ref.py's `_scan_defines`).
+fn defines(text: &str) -> Vec<(String, u32)> {
+    let mut out = Vec::new();
+    for l in text.lines() {
+        let l = l.trim_start();
+        let Some(rest) = l.strip_prefix('#') else { continue };
+        let w: Vec<&str> = rest.split_whitespace().collect();
+        if let ["define", name, value] = w[..] {
+            if let Ok(v) = value.trim_matches(['(', ')']).parse() {
+                out.push((name.to_string(), v));
+            }
         }
-        t.push_str(rest);
+    }
+    out
+}
+
+/// An array size (gl_ref.py's `_resolve_size`): a literal, a `#define`d
+/// integer, or a sum of those; None when not an array.
+fn array_size(tok: Option<&str>, defs: &[(String, u32)]) -> Option<u32> {
+    let tok = tok?.trim();
+    if tok.contains('+') {
+        return Some(tok.split('+').map(|t| array_size(Some(t), defs).expect("an array size gl_ref.py reads")).sum());
+    }
+    tok.parse().ok().or_else(|| defs.iter().find(|d| d.0 == tok).map(|d| d.1))
+}
+
+/// `name` or `name[size]`, split.
+fn declarator(decl: &str) -> (&str, Option<&str>) {
+    match decl.find('[') {
+        Some(i) => (decl[..i].trim(), Some(decl[i + 1..].trim_end().trim_end_matches(']'))),
+        None => (decl.trim(), None),
+    }
+}
+
+/// A named struct: its name and its members (name, type, array size or
+/// None) in declaration order.
+type Struct = (String, Vec<(String, String, Option<u32>)>);
+
+/// The named structs of the texts (gl_ref.py's `struct_types()`), the first
+/// definition of a name winning.
+fn struct_types(texts: &[&str]) -> Vec<Struct> {
+    let mut out: Vec<Struct> = Vec::new();
+    for text in texts {
+        let t = strip_comments(text);
+        let defs = defines(&t);
+        let mut rest = t.as_str();
+        while let Some(i) = rest.find("struct") {
+            let before_ok = i == 0 || !rest.as_bytes()[i - 1].is_ascii_alphanumeric() && rest.as_bytes()[i - 1] != b'_';
+            rest = &rest[i + "struct".len()..];
+            let (Some(open), true) = (rest.find('{'), before_ok) else { continue };
+            let name = rest[..open].trim();
+            let Some(close) = rest[open..].find('}') else { break };
+            let body = &rest[open + 1..open + close];
+            if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || body.contains('{') {
+                continue;
+            }
+            let mut members = Vec::new();
+            for stmt in body.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                let mut w = stmt.split_whitespace().peekable();
+                if w.peek().is_some_and(|p| matches!(*p, "lowp" | "mediump" | "highp")) {
+                    w.next();
+                }
+                let ty = w.next().unwrap_or("").to_string();
+                for decl in w.collect::<Vec<_>>().join(" ").split(',') {
+                    let (m, size) = declarator(decl);
+                    members.push((m.to_string(), ty.clone(), array_size(size, &defs)));
+                }
+            }
+            if !out.iter().any(|s| s.0 == name) {
+                out.push((name.to_string(), members));
+            }
+            rest = &rest[open + close..];
+        }
+    }
+    out
+}
+
+const SAMPLERS: &[&str] = &["sampler2D", "samplerCube", "sampler3D", "sampler2DShadow", "samplerExternalOES"];
+
+/// The uniforms gl_ref.py's `--uniform-values` numbers, in its
+/// `uniform_settings()` order, as (GL name, type): value index k of the
+/// k-th entry. The uniforms are those of `uniforms()`, the vertex shader's,
+/// then the fragment shader's not already declared; a sampler keeps its
+/// place; a struct uniform is its members (`uniform_leaves()`), depth first
+/// in declaration order, each by the name dEQP sets it with: `u.m0`, an
+/// array member element by element `u.m2[0]`, an array of structs element
+/// by element `u[0].m0`, a nested struct `u.m1.ms0`. Any other array
+/// declarator stays one entry, `u[3]` (its location lookup is -1, so it is
+/// never set).
+pub fn uniform_leaves(vs: &str, fs: &str) -> Vec<(String, String)> {
+    let structs = struct_types(&[vs, fs]);
+    let defs = defines(&(strip_comments(vs) + "\n" + &strip_comments(fs)));
+    let mut decls: Vec<(String, String)> = Vec::new();
+    for text in [vs, fs] {
         /* a directive (`#version 100`) is no part of the next statement */
+        let t = strip_comments(text);
         let t: String = t.lines().filter(|l| !l.trim_start().starts_with('#')).collect::<Vec<_>>().join("\n");
         for stmt in t.split([';', '{', '}']) {
             let w: Vec<&str> = stmt.split_whitespace().collect();
@@ -304,40 +412,107 @@ fn uniform_names(vs: &str, fs: &str) -> Vec<String> {
                 continue;
             }
             let skip = if matches!(w.get(1), Some(&("lowp" | "mediump" | "highp"))) { 3 } else { 2 };
+            let ty = w.get(skip - 1).copied().unwrap_or("");
             let names = w.get(skip..).unwrap_or(&[]).join(" ");
             for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
-                let name = name.to_string();
-                if !out.contains(&name) {
-                    out.push(name);
+                if !decls.iter().any(|d| d.0 == name) {
+                    decls.push((name.to_string(), ty.to_string()));
                 }
             }
         }
     }
+    fn expand(out: &mut Vec<(String, String)>, structs: &[Struct], name: &str, ty: &str, size: Option<u32>) {
+        let elements: Vec<String> = match size {
+            None => vec![name.to_string()],
+            Some(n) => (0..n).map(|i| format!("{name}[{i}]")).collect(),
+        };
+        for e in elements {
+            match structs.iter().find(|s| s.0 == ty) {
+                Some((_, members)) => {
+                    for (m, mty, msize) in members {
+                        expand(out, structs, &format!("{e}.{m}"), mty, *msize);
+                    }
+                }
+                None => out.push((e, ty.to_string())),
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (decl, ty) in decls {
+        if SAMPLERS.contains(&ty.as_str()) || !structs.iter().any(|s| s.0 == ty) {
+            out.push((decl, ty));
+            continue;
+        }
+        let (name, size) = declarator(&decl);
+        expand(&mut out, &structs, name, &ty, array_size(size, &defs));
+    }
     out
 }
 
+/// The references drawn with their struct members set: gl_ref.py's
+/// `--uniform-values` since item fclane2-struct of plan #387. Every other
+/// reference with a struct-member uniform row was drawn before gl_ref.py
+/// could set one (`deqp_unitype_vsstruct_*`, `deqp_uniarray_struct*`,
+/// `deqp_unif2_*struct*`, ...): its words are compared against every
+/// uniform 0. A reference redrawn with the members set joins this list in
+/// the commit that redraws it.
+pub const STRUCT_VALUES: &[&str] = &[
+    "deqp_fclane2_struct_arrmember_float",
+    "deqp_fclane2_struct_array_float",
+    "deqp_fclane2_struct_basic_bool",
+    "deqp_fclane2_struct_basic_float",
+    "deqp_fclane2_struct_basic_int",
+    "deqp_fclane2_struct_nested_float",
+];
+
+/// Dwords of one element of an array row of GL type `ty` (the front end's
+/// std430 stride, `reflect::type_layout`: a vec3 pads to 4, a mat3's
+/// columns to 4).
+fn element_dwords(ty: u32) -> u16 {
+    use yakogl::gl::consts as gl;
+    match ty {
+        gl::GL_FLOAT | gl::GL_INT | gl::GL_BOOL => 1,
+        gl::GL_FLOAT_VEC2 | gl::GL_INT_VEC2 | gl::GL_BOOL_VEC2 => 2,
+        gl::GL_FLOAT_MAT3 => 12,
+        gl::GL_FLOAT_MAT4 => 16,
+        _ => 4,
+    }
+}
+
 /// The value gl_ref.py's `--uniform-values` gave uniform dword `d`
-/// (`uniform_components()`: component c of uniform k is 16 (k + 1) + c),
-/// as the word Mesa uploads: fp32 bits, the integer of an `int` / `ivecN`,
-/// and of a `bool` / `bvecN` (true where c is even) Mesa's true, all ones,
-/// or 0. An array declarator gets none (its location lookup is -1), so 0.
+/// (`uniform_components()`: component c of value index k is 16 (k + 1) +
+/// c, k the place of the uniform's entry in `names`, [`uniform_leaves`]),
+/// as the word Mesa uploads: fp32 bits (a mediump struct member too), the
+/// integer of an `int` / `ivecN`, and of a `bool` / `bvecN` (true where c
+/// is even) Mesa's true, all ones, or 0. A row named as an entry is that
+/// entry; a struct member's array row (`u.m2`) is its elements' entries
+/// (`u.m2[0]`, `u.m2[1]`, ...). Any other array declarator gets none (its
+/// location lookup is -1), so 0.
 pub fn uniform_value(names: &[String], rows: &[(String, u16, u16, u16)], d: u16) -> u32 {
     use yakogl::gl::consts as gl;
-    let (name, first, _, ty) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
+    let (name, first, count, ty) =
+        rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
     /* the built-in's state, glDepthRangef(0, 1) by default: near, far, diff */
     match name.as_str() {
         "gl_DepthRange.near" => return 0f32.to_bits(),
         "gl_DepthRange.far" | "gl_DepthRange.diff" => return 1f32.to_bits(),
         _ => {}
     }
-    if names.iter().any(|n| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
+    let member = name.contains('.');
+    let stride = element_dwords(u32::from(*ty));
+    let (k, at) = if let Some(k) = names.iter().position(|n| n == name) {
+        (k, d - first)
+    } else if let Some(k) = names.iter().position(|n| member && *n == format!("{name}[{}]", (d - first) / stride)) {
+        (k, (d - first) % stride)
+    } else if !member && names.iter().any(|n| n.strip_prefix(name.as_str()).is_some_and(|t| t.starts_with('['))) {
         return 0;
-    }
-    let k = names.iter().position(|n| n == name).expect("the uniform is declared");
+    } else {
+        panic!("{name}: the uniform is declared ({names:?})");
+    };
     /* gl_ref.py counts a matrix's components packed; the front end strides
-     * a mat3's columns to 4 dwords (its 12 dwords, no array here) */
-    let (_, _, count, _) = rows.iter().find(|r| &r.0 == name).expect("a uniform row holds the dword");
-    let c = if *count == 12 { (d - first) / 4 * 3 + (d - first) % 4 } else { d - first };
+     * a mat3's columns to 4 dwords (its 12 dwords) */
+    let mat3 = u32::from(*ty) == gl::GL_FLOAT_MAT3 || *count == 12 && !member;
+    let c = if mat3 { at / 4 * 3 + at % 4 } else { at };
     let value = 16 * (k as u32 + 1) + u32::from(c);
     match u32::from(*ty) {
         gl::GL_INT | gl::GL_INT_VEC2 | gl::GL_INT_VEC3 | gl::GL_INT_VEC4 => value,
@@ -407,12 +582,16 @@ fn padded(words: usize) -> usize {
 /// expect.json, one entry each; empty when the words and facts are equal.
 pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
     let mut d = Vec::new();
-    let names = uniform_names(&r.vs, &r.fs);
-    /* gl_ref.py sets no struct uniform: such a reference is drawn without
-     * `--uniform-values`, every uniform 0 (deqp_unitype_vsstruct_*); so is
-     * one loaded with [`Reference::load_unset`] (`uniform_values` false) */
+    let names: Vec<String> = uniform_leaves(&r.vs, &r.fs).into_iter().map(|l| l.0).collect();
+    /* a reference with a struct-member uniform row is compared with
+     * gl_ref.py's member values when it is in [`STRUCT_VALUES`], else
+     * against every uniform 0 (drawn before gl_ref.py set members:
+     * deqp_unitype_vsstruct_*); so is one loaded with
+     * [`Reference::load_unset`] (`uniform_values` false) */
     let member = |r: &(String, u16, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
-    let values = r.uniform_values && !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member);
+    let values = r.uniform_values
+        && (STRUCT_VALUES.contains(&r.name.as_str())
+            || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
     let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
     let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 

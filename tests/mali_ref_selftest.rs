@@ -4,7 +4,9 @@
 //! program against an expect.json reference. Two references the compiler
 //! already matches (`tools/mali/testdata/cases.txt`: `tri` and
 //! `tri_varying`, every region `equal`), a changed shader that must differ,
-//! one refused shape, and the uniform words of each GL type.
+//! one refused shape, the uniform words of each GL type, and the struct
+//! member values of the `deqp_fclane2_*` references against gl_ref.py's
+//! (python3, a `GAP` without it) and against the words of their FAU.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_ref_selftest
@@ -77,4 +79,160 @@ fn a_uniform_word_follows_its_gl_type() {
     ];
     let words: Vec<u32> = (0..8).map(|d| mali_ref::uniform_value(&names, &rows, d)).collect();
     assert_eq!(words, [16f32.to_bits(), 17f32.to_bits(), 32, 33, 34, u32::MAX, 0, u32::MAX]);
+}
+
+/// The `deqp_fclane2_*` references, drawn with their struct members set
+/// (`mali_ref::STRUCT_VALUES`).
+const STRUCT_SHAPES: &[&str] = &[
+    "deqp_fclane2_struct_basic_float",
+    "deqp_fclane2_struct_basic_int",
+    "deqp_fclane2_struct_basic_bool",
+    "deqp_fclane2_struct_arrmember_float",
+    "deqp_fclane2_struct_array_float",
+    "deqp_fclane2_struct_nested_float",
+];
+
+/// The fragment shader's uniform rows as the front end reflects them
+/// (name, first dword, dwords, GL type), the rows the code generator's
+/// record carries: the code generator refuses these shapes, so this asks
+/// the front end (`reflect::interface`).
+fn fragment_rows(fs: &str) -> Vec<(String, u16, u16, u16)> {
+    use yakogl::shaderc::online::{arena::Arena, reflect, sema::Stage};
+    let mut buf = vec![0u8; 4 << 20];
+    let a = Arena::new(&mut buf);
+    let i = reflect::interface(&a, Stage::Fragment, fs).unwrap_or_else(|e| panic!("the front end reads it: {e:?}"));
+    i.reflection
+        .uniforms
+        .iter()
+        .filter(|u| u.dword_off != reflect::NO_BLOCK)
+        .map(|u| (u.name.to_string(), u.dword_off, u.dwords, u.gl_type))
+        .collect()
+}
+
+/// Every block dword of the fragment rows, in row order, as
+/// `mali_ref::uniform_value` gives it for the reference's draw.
+fn member_words(r: &mali_ref::Reference) -> Vec<u32> {
+    let names: Vec<String> = mali_ref::uniform_leaves(&r.vs, &r.fs).into_iter().map(|l| l.0).collect();
+    let rows = fragment_rows(&r.fs);
+    assert!(rows.iter().all(|r| r.0.contains('.')), "{}: struct-member rows only: {rows:?}", r.name);
+    rows.iter().flat_map(|row| row.1..row.1 + row.2).map(|d| mali_ref::uniform_value(&names, &rows, d)).collect()
+}
+
+/// The fragment program's FAU words of a reference's expect.json.
+fn fragment_fau(r: &mali_ref::Reference) -> Vec<u32> {
+    let fs = &r.json[r.json.find("\"fs.fragment\"").expect("an fs.fragment region")..];
+    let fau = &fs[fs.find("\"fau\": [").expect("a fau list") + 8..];
+    fau[..fau.find(']').expect("the end of the fau list")]
+        .split(',')
+        .map(|w| w.trim().trim_matches('"'))
+        .filter(|w| !w.is_empty())
+        .map(|w| u32::from_str_radix(w, 16).expect("a hex FAU word"))
+        .collect()
+}
+
+/// The struct-member values of every `deqp_fclane2_*` shape are the words
+/// Mesa uploaded in its draw: the member words, in declaration order, are
+/// one run of the reference's fragment FAU (16.0, 32.0, ... as fp32 for a
+/// mediump float member, 16, 32, ... for an int). Of `_basic_bool` Mesa
+/// pushes the same five words in another order (its program reads `m0`
+/// negated, `.not`), so there the run holds the same words. The references
+/// are in `STRUCT_VALUES`, so `differences` compares with these values.
+#[test]
+fn struct_member_values_are_mesas_fau_words() {
+    let sorted = |w: &[u32]| {
+        let mut w = w.to_vec();
+        w.sort_unstable();
+        w
+    };
+    for name in STRUCT_SHAPES {
+        assert!(mali_ref::STRUCT_VALUES.contains(name), "{name}: not in STRUCT_VALUES");
+        let r = mali_ref::Reference::load(name);
+        let ours = member_words(&r);
+        let fau = fragment_fau(&r);
+        let found = fau.windows(ours.len()).any(|w| {
+            if name.ends_with("_bool") {
+                sorted(w) == sorted(&ours)
+            } else {
+                w == ours.as_slice()
+            }
+        });
+        assert!(found, "{name}: the member words {ours:08x?} are not a run of the reference's FAU {fau:08x?}");
+    }
+}
+
+/// What `gl_ref.uniform_settings()` (gl_ref.py's `--uniform-values`) sets:
+/// one line per uniform, its GL name, type and values.
+const GL_REF_SETTINGS: &str = r#"
+import sys
+sys.path.insert(0, sys.argv[1])
+import gl_ref
+vs, fs = open(sys.argv[2]).read(), open(sys.argv[3]).read()
+for leaf, ty, floats, values in gl_ref.uniform_settings(vs, fs):
+    print(leaf, ty, " ".join(str(v) for v in values))
+"#;
+
+/// The member values the module computes are gl_ref.py's: for each
+/// `deqp_fclane2_*` shape, `gl_ref.uniform_settings()` gives the same GL
+/// names and types in the same order as `mali_ref::uniform_leaves`, and its
+/// values, as Mesa uploads them (fp32 bits, the integer, a true bool all
+/// ones), are the words `mali_ref::uniform_value` gives the front end's
+/// rows. Without python3 this prints `GAP` and checks nothing (a gap, not
+/// a pass); `struct_member_values_are_mesas_fau_words` checks the values
+/// against the references' words without it.
+#[test]
+fn struct_member_values_match_gl_ref() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    for name in STRUCT_SHAPES {
+        let p = format!("{root}/tools/mali/testdata/{name}");
+        let tools = format!("{root}/tools/mali");
+        let (vert, frag) = (format!("{p}.vert"), format!("{p}.frag"));
+        let out = match std::process::Command::new("python3")
+            .args(["-I", "-c", GL_REF_SETTINGS, &tools, &vert, &frag])
+            .output()
+        {
+            Ok(o) => o,
+            Err(e) => {
+                println!("GAP struct_member_values_match_gl_ref: python3 does not run ({e})");
+                return;
+            }
+        };
+        assert!(out.status.success(), "{name}: gl_ref.py: {}", String::from_utf8_lossy(&out.stderr));
+        let theirs: Vec<(String, String, Vec<f64>)> = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(|l| {
+                let w: Vec<&str> = l.split_whitespace().collect();
+                (w[0].to_string(), w[1].to_string(), w[2..].iter().map(|v| v.parse().expect("a value")).collect())
+            })
+            .collect();
+        let r = mali_ref::Reference::load(name);
+        let names: Vec<(String, String)> = theirs.iter().map(|t| (t.0.clone(), t.1.clone())).collect();
+        assert_eq!(mali_ref::uniform_leaves(&r.vs, &r.fs), names, "{name}: the members and their order");
+        let want: Vec<u32> = theirs
+            .iter()
+            .flat_map(|(_, ty, values)| {
+                let float = matches!(ty.as_str(), "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "mat4");
+                let boolean = ty.starts_with("bool") || ty.starts_with("bvec");
+                values.iter().map(move |&v| match (float, boolean) {
+                    (true, _) => (v as f32).to_bits(),
+                    (_, true) if v != 0.0 => u32::MAX,
+                    (_, true) => 0,
+                    _ => v as i64 as u32,
+                })
+            })
+            .collect();
+        assert_eq!(member_words(&r), want, "{name}: the member words");
+    }
+}
+
+/// A reference with a struct-member row that is not in `STRUCT_VALUES` was
+/// drawn before gl_ref.py set members and keeps every uniform word 0:
+/// `deqp_unitype_vsstruct_partial` compiles and matches that way.
+#[test]
+fn an_older_struct_reference_keeps_zero_uniforms() {
+    let r = mali_ref::Reference::load("deqp_unitype_vsstruct_partial");
+    assert!(!mali_ref::STRUCT_VALUES.contains(&r.name.as_str()));
+    let pair = mali_ref::compile_pair(&r.vs, &r.fs).expect("the pair compiles");
+    assert!(pair.vs.uniforms.iter().any(|u| u.0.contains('.')), "a struct-member row");
+    let d = mali_ref::differences(&r, &pair);
+    assert!(d.is_empty(), "{}", d.join("\n"));
 }
