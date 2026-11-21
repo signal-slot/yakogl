@@ -50,6 +50,12 @@ U-Boot (a few minutes); later runs take about a minute.
   source and the compiler; a run's files go to `$CACHE/run.XXXXXX`, removed
   after a passing run, kept (with the console logs) after a failure or with
   `MP2_QEMU_KEEP=1`.
+- The QEMU binary: `MP2_QEMU`, else `qemu-system-aarch64` on `PATH`. Without
+  root, `tools/cts/deps-env.sh --build MP2_QEMU` builds a pinned QEMU 10.0.3
+  (aarch64-softmmu, static glib/pixman/libslirp) into the dependency layout,
+  and `export $(tools/cts/deps-env.sh --present)` sets `MP2_QEMU` to it. The
+  cache needs no extra setting: it already defaults to
+  `$CONNECTED_DEPS_DIR/uboot-mp2-qemu`.
 
 The fragment `build-uboot.sh` adds: MMC on PCI (`MMC`, `DM_MMC`,
 `MMC_SDHCI`, `MMC_PCI`, `CMD_MMC`; `qemu_arm64_defconfig` has no MMC), the

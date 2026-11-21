@@ -296,6 +296,58 @@ url = "https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz"
 sha256 = "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
 
 [[dep]]
+name = "MP2_QEMU"
+path = "qemu/bin/qemu-system-aarch64"
+marker = "qemu/bin/qemu-system-aarch64"
+note = "the qemu-system-aarch64 of driver/tools/uboot-mp2/qemu/run.sh (the uboot-mp2 qemu row of tools/check.sh reads $MP2_QEMU, else qemu-system-aarch64 on PATH; a skip is a gap): upstream QEMU 10.0.3, aarch64-softmmu only, built without root. glib, pcre2, pixman and libslirp (user-mode network and TFTP) are built static from their pinned releases into the same prefix first, so the host needs no -dev packages for them. The run cache (U-Boot source, build, run files) is MP2_QEMU_CACHE, default $CONNECTED_DEPS_DIR/uboot-mp2-qemu (driver/tools/uboot-mp2/qemu/README.md)"
+build = '''
+rm -rf "$DEPS/qemu.part" "$DEPS/qemu.part.work"
+P="$DEPS/qemu.part"
+W="$DEPS/qemu.part.work"
+mkdir -p "$P" "$W"
+export PKG_CONFIG_PATH="$P/lib/pkgconfig:$P/share/pkgconfig"
+export PATH="$P/bin:$PATH"
+tar -xjf "$DEPS/downloads/pcre2-10.45.tar.bz2" -C "$W"
+( cd "$W/pcre2-10.45" && ./configure --prefix="$P" --libdir="$P/lib" --disable-shared --enable-static --with-pic > /dev/null && make -j"$(nproc)" > /dev/null && make install > /dev/null )
+tar -xJf "$DEPS/downloads/glib-2.84.3.tar.xz" -C "$W"
+meson setup "$W/glib-build" "$W/glib-2.84.3" --prefix="$P" --libdir=lib --default-library=static --buildtype=release -Dtests=false -Dintrospection=disabled -Dlibmount=disabled -Dselinux=disabled -Dsysprof=disabled -Dglib_debug=disabled -Dnls=disabled -Dman-pages=disabled -Ddocumentation=false
+ninja -C "$W/glib-build" install
+tar -xzf "$DEPS/downloads/pixman-0.44.2.tar.gz" -C "$W"
+meson setup "$W/pixman-build" "$W/pixman-0.44.2" --prefix="$P" --libdir=lib --default-library=static --buildtype=release -Dtests=disabled -Ddemos=disabled
+ninja -C "$W/pixman-build" install
+tar -xzf "$DEPS/downloads/libslirp-v4.9.1.tar.gz" -C "$W"
+meson setup "$W/slirp-build" "$W/libslirp-v4.9.1" --prefix="$P" --libdir=lib --default-library=static --buildtype=release
+ninja -C "$W/slirp-build" install
+tar -xJf "$DEPS/downloads/qemu-10.0.3.tar.xz" -C "$W"
+mkdir "$W/qemu-build"
+( cd "$W/qemu-build" && "$W/qemu-10.0.3/configure" --prefix="$P" --target-list=aarch64-softmmu --enable-slirp --disable-docs --disable-tools --disable-guest-agent --disable-user --disable-gtk --disable-sdl --disable-vnc --disable-opengl --disable-curses --disable-kvm --disable-werror --disable-download --enable-fdt=internal && make -j"$(nproc)" && make install )
+rm -rf "$W" "$DEPS/qemu"
+mv "$P" "$DEPS/qemu"
+'''
+packages.apt = ["gcc", "g++", "make", "meson", "ninja-build", "pkg-config", "python3", "flex", "bison", "libffi-dev", "zlib1g-dev", "xz-utils", "bzip2"]
+packages.portage = ["sys-devel/gcc", "dev-build/make", "dev-build/meson", "dev-build/ninja", "dev-util/pkgconf", "dev-lang/python", "sys-devel/flex", "sys-devel/bison", "dev-libs/libffi", "sys-libs/zlib", "app-arch/xz-utils", "app-arch/bzip2"]
+
+[[dep.inputs]]
+url = "https://download.qemu.org/qemu-10.0.3.tar.xz"
+sha256 = "5c891267b1534a774465db8b1a0dfcb0c5e6d7ecb6f71345625adf4e0889945b"
+
+[[dep.inputs]]
+url = "https://download.gnome.org/sources/glib/2.84/glib-2.84.3.tar.xz"
+sha256 = "aa4f87c3225bf57ca85f320888f7484901a17934ca37023c3bd8435a72db863e"
+
+[[dep.inputs]]
+url = "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.45/pcre2-10.45.tar.bz2"
+sha256 = "21547f3516120c75597e5b30a992e27a592a31950b5140e7b8bfde3f192033c4"
+
+[[dep.inputs]]
+url = "https://www.cairographics.org/releases/pixman-0.44.2.tar.gz"
+sha256 = "6349061ce1a338ab6952b92194d1b0377472244208d47ff25bef86fc71973466"
+
+[[dep.inputs]]
+url = "https://gitlab.freedesktop.org/slirp/libslirp/-/archive/v4.9.1/libslirp-v4.9.1.tar.gz"
+sha256 = "3970542143b7c11e6a09a4d2b50f30a133473c41f15ed0bdcc3b7a1c450d9a5c"
+
+[[dep]]
 name = "PVR_FW_BLOB"
 path = "pvr_fw_blob.h"
 marker = "pvr_fw_blob.h"
