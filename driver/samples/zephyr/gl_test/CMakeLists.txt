@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # gl_test: the one GL suite image for the Verdin AM62P (PowerVR), the Verdin
 # iMX8M Plus and Armadillo-X2 (Vivante GC7000UL), the STM32MP257F-DK's A35
-# (Vivante GCNanoUltra31), the Raspberry Pi 4 (V3D) and the NanoPC-T6
-# (Mali-G610).
+# (Vivante GCNanoUltra31), the Raspberry Pi 4 (V3D), the NanoPC-T6
+# (Mali-G610) and the Verdin iMX95 (Mali-G310, built only).
 # tools/pvrlab/gl_test.c is the on-silicon GL test suite of the Linux harness;
 # the same source runs here (printk instead of pr_info). The board is chosen by
 # the Zephyr board (-b) only; there is no per-board option here. What differs
@@ -43,6 +43,11 @@ endif()
 if(BOARD MATCHES "^stm32mp257f_dk")
   set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
 endif()
+
+# The Verdin iMX95's A55: the board layer's app.conf and app.overlay, then
+# verdin_imx95.conf here (read-back only, no panel unless asked), as the deqp
+# sample takes them (../common/verdin_imx95.cmake).
+include("${CMAKE_CURRENT_SOURCE_DIR}/../common/verdin_imx95.cmake")
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(gl_test)
@@ -131,28 +136,37 @@ elseif(CONFIG_YAKOGL_GPU_VIVANTE AND CONFIG_YAKOGL_STM32MP2)
     "${YAKOGL_DIR}/src/vivante"
     "${PVR_REPO}/src/vivante")
 elseif(CONFIG_YAKOGL_GPU_MALI)
-  # ---- NanoPC-T6, Mali-G610 ------------------------------------------------
+  # ---- NanoPC-T6, Mali-G610; Verdin iMX95, Mali-G310 -----------------------
   # Through YakoGL's GL core, its in-process compiler and its Mali backend on
   # the OSAL src/osal/zephyr_mali.c (our own kernel side, board::nanopc_t6_osal).
-  # The board glue (WDT0, the early banner, the PSCI reset back into Armbian)
-  # is driver/zephyr/lib/board/nanopc_t6, in every nanopc_t6 image.
-  if(NOT CONFIG_YAKOGL_NANOPC_T6)
-    message(FATAL_ERROR "gl_test: CONFIG_YAKOGL_GPU_MALI needs the nanopc_t6 board (CONFIG_YAKOGL_NANOPC_T6)")
+  # The board glue (the T6: WDT0, the early banner, the PSCI reset back into
+  # Armbian, driver/zephyr/lib/board/nanopc_t6; the Verdin iMX95: WDOG3, the
+  # GPU's SCMI power-on and the board layer's end, driver/zephyr/lib/board/
+  # verdin_imx95) is in every image of its board. src/main_mali.c is the one
+  # main of both; the build string's define is the board's (T6_GL_TEST_BUILD,
+  # VI95_GL_TEST_BUILD: tools/board.sh reads it by that name).
+  if(CONFIG_YAKOGL_NANOPC_T6)
+    set(_mali_build T6_GL_TEST_BUILD)
+  elseif(CONFIG_YAKOGL_BOARD_VERDIN_IMX95)
+    set(_mali_build VI95_GL_TEST_BUILD)
+  else()
+    message(FATAL_ERROR "gl_test: CONFIG_YAKOGL_GPU_MALI needs the nanopc_t6 board (CONFIG_YAKOGL_NANOPC_T6) "
+                        "or the verdin_imx95 board with the board layer (CONFIG_YAKOGL_BOARD_VERDIN_IMX95)")
   endif()
   execute_process(COMMAND git -C "${PVR_REPO}" describe --always --dirty
-                  OUTPUT_VARIABLE T6_GL_TEST_BUILD OUTPUT_STRIP_TRAILING_WHITESPACE
+                  OUTPUT_VARIABLE ${_mali_build} OUTPUT_STRIP_TRAILING_WHITESPACE
                   ERROR_QUIET RESULT_VARIABLE describe_rc)
-  if(NOT describe_rc EQUAL 0 OR T6_GL_TEST_BUILD STREQUAL "")
-    set(T6_GL_TEST_BUILD "unknown")
+  if(NOT describe_rc EQUAL 0 OR "${${_mali_build}}" STREQUAL "")
+    set(${_mali_build} "unknown")
   endif()
-  target_compile_definitions(app PRIVATE T6_GL_TEST_BUILD="${T6_GL_TEST_BUILD}")
-  message(STATUS "gl_test (nanopc_t6) build: ${T6_GL_TEST_BUILD}")
+  target_compile_definitions(app PRIVATE ${_mali_build}="${${_mali_build}}")
+  message(STATUS "gl_test (${BOARD}) build: ${${_mali_build}}")
 
   # The CSF firmware, driver/src/fw/mali_csffw_blob.h (driver/tools/mkmalifw.sh;
   # gitignored, never committed), is embedded by the board glue
-  # (driver/zephyr/lib/board/nanopc_t6/nanopc_t6_mali.c): the build stops at
-  # its include without it.
-  target_sources(app PRIVATE src/main_nanopc_t6.c)
+  # (nanopc_t6_mali.c, verdin_imx95_mali.c): the build stops at its include
+  # without it.
+  target_sources(app PRIVATE src/main_mali.c)
 
   # The GL ES 1.00 shader set, always: the in-process compiler is the Mali's
   # only shader back end (as panthor-gltest builds gl_test.c, and the V3D).

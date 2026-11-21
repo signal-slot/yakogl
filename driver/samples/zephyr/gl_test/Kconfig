@@ -550,7 +550,7 @@ config V3D_GL_TEST_HOLD_S
 	  board image is): the run plus the time the record stays readable.
 endmenu
 
-menu "gl_test on the NanoPC-T6 (Mali-G610)"
+menu "gl_test on a Mali (the NanoPC-T6's G610, the Verdin iMX95's G310)"
 	depends on YAKOGL_GPU_MALI
 
 config T6_GL_TEST_CASE
