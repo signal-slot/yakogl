@@ -19,7 +19,7 @@ if ! git -C "$HERE" merge-base --is-ancestor HEAD origin/main 2> /dev/null; then
     has "$out" 'not on origin/main' "refusal"
 fi
 
-run() { env -i PATH="$PATH" BOARD_HOST=secret-user@10.9.8.7 "$S" "$@" --allow-local --dry-run 2>&1; }
+run() { env -i PATH="$PATH" ${PR_CONFIGS_DIR:+PR_CONFIGS_DIR="$PR_CONFIGS_DIR"} BOARD_HOST=secret-user@10.9.8.7 "$S" "$@" --allow-local --dry-run 2>&1; }
 
 off=$(run t --knob off) || fail "knob off failed"
 has "$off" 'on origin/main' "off: the main line"
@@ -42,6 +42,38 @@ has "$cap" '--cap-pages 512' "cap in the command"
 glm=$(run t --knob on --glmark2 --one-in-flight) || fail "glmark2 failed"
 has "$glm" 'CONFIG_GLMARK2_PVR_ONE_KICK_IN_FLIGHT=y' "one in flight"
 has "$glm" 'tools/board.sh am62p run .*glmark2' "glmark2 run"
+
+# case 217 legs (acceptance c2); the fragments are a parallel item's, so the
+# selftest points PR_CONFIGS_DIR at stand-ins
+FD=$(mktemp -d) || exit 1
+trap 'rm -rf "$FD"' EXIT
+: > "$FD/gl_test-217-off.conf"
+: > "$FD/gl_test-217-on.conf"
+leg() { PR_CONFIGS_DIR=$FD run "$@"; }
+for k in off on; do
+    l=$(leg t --leg 217-$k) || fail "leg 217-$k failed"
+    if [ $k = on ]; then K=y; ex=pr; else K=n; ex=stop; fi
+    has "$l" "CONFIG_YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER=$K" "217-$k: knob"
+    has "$l" 'CONFIG_YAKOGL_DRV_GPU_PVR_FL_PROBE_MAX_PAGES=512' "217-$k: cap"
+    has "$l" 'CONFIG_GL_TEST_CASES="217"' "217-$k: case"
+    has "$l" "-DEXTRA_CONF_FILE=$FD/gl_test-217-$k.conf" "217-$k: fragment"
+    has "$l" 'CONFIG_YAKOGL_AM62P_RTI_SELF_ARM=y' "217-$k: watchdog self-arm"
+    has "$l" 'CONFIG_SOC_AM62PX_A53_FEED_INHERITED_WDT=n' "217-$k: watchdog feed"
+    has "$l" 'tools/board.sh am62p run .*gltest' "217-$k: run"
+    has "$l" "pr-verdict.py --expect $ex .*<label>[.]log 217" "217-$k: verdict command"
+    has "$l" "pr-session.sh t --leg 217-$k" "217-$k: command line"
+    lacks "$l" 'GLMARK2|secret|10[.]9[.]8[.]7' "217-$k: no glmark2/board address"
+done
+# a missing fragment: a clear refusal in a real run, a warning in a dry run
+miss=$(env -i PATH="$PATH" PR_CONFIGS_DIR="$FD/none" "$S" t --leg 217-on --allow-local 2>&1) && fail "a missing fragment was accepted"
+has "$miss" 'gl_test-217-on.conf is missing' "missing fragment"
+miss=$(PR_CONFIGS_DIR=$FD/none run t --leg 217-on) || fail "dry run with a missing fragment failed"
+has "$miss" 'warning: .*gl_test-217-on.conf is missing' "missing fragment warning"
+leg t --leg 217-on --knob off > /dev/null && fail "--leg with a disagreeing knob was accepted"
+leg t --leg 217-off --cap-pages 4 > /dev/null && fail "--leg with another cap was accepted"
+leg t --leg 217-on --cases 175 > /dev/null && fail "--leg with --cases was accepted"
+leg t --leg 218-on > /dev/null && fail "a bad leg was accepted"
+leg t --leg 217-on --knob on --cap-pages 512 > /dev/null || fail "--leg with agreeing options failed"
 
 run t --knob maybe > /dev/null && fail "a bad knob was accepted"
 run t > /dev/null && fail "a missing knob was accepted"
