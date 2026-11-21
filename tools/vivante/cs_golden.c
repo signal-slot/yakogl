@@ -72,7 +72,19 @@
  *      TS-cleared target to a linear one. TS_MEM_CONFIG, the TS clear
  *      values and the RS fill and resolve are what to read here
  *      (docs/notes/gc-tiled-targets.md step 0; testdata/ts-clear.golden)
- *  16  case 20's ETC2 RGBA8 EAC texture. The branch is here, but ES 2.0 has
+ *  30  early depth into a tiled colour target (golden only): a 64x64 RGBA8
+ *      texture and a 64x64 D24S8 renderbuffer in one FBO, a depth clear,
+ *      then one depth-tested (GL_LEQUAL), depth-writing quad at z 0.5 and
+ *      glFinish -- the draw docs/notes/gc-tiled-wire.md W4/W5 move into a
+ *      tiled shadow. PE_COLOR_FORMAT's tiling bits, PE_DEPTH_CONFIG's
+ *      SUPER_TILED and EARLY_Z, RA_EARLY_DEPTH and PE_MEM_CONFIG are what to
+ *      read here (testdata/tiled-ez.golden, tests/gc_tiled_ez_golden.rs).
+ *      Mesa 26.2.1 makes this texture super-tiled on the GC7000UL
+ *      (SUPERTILED_TEXTURE, etnaviv_resource.c:577-581); a TILED colour
+ *      target comes only from a scanout modifier, which an ES 2.0 harness on
+ *      the shim cannot ask for, so the colour tiling bits are a listed
+ *      difference in the test, not a match
+ *  16case 20's ETC2 RGBA8 EAC texture. The branch is here, but ES 2.0 has
  *      no ETC2 and this context rejects the upload with GL_INVALID_ENUM, so
  *      there is no golden to be had: it stops with exit 3 and says why,
  *      rather than describing the default texture the binding kept.
@@ -265,6 +277,64 @@ static void blend_geometry_g(void)
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STATIC_DRAW);
 	cuv_attribs_g();
+}
+
+/* Mode 30: one depth-tested, depth-writing quad into an RGBA8 texture with a
+ * D24S8 renderbuffer, after a depth clear. The shape of tests/gc_tiled_rt.rs'
+ * scene (glmark2's shadow and refract draw into a texture), with the depth
+ * buffer this backend keeps. No stencil test, no discard, no gl_FragDepth:
+ * Mesa's early-depth rule allows both halves early. */
+static int tiled_ez_mode_g(void)
+{
+	static const char vs[] =
+		"attribute vec4 a_pos;\n"
+		"void main() { gl_Position = a_pos; }\n";
+	static const char fs[] =
+		"precision mediump float;\n"
+		"void main() { gl_FragColor = vec4(0.5, 0.25, 0.125, 1.0); }\n";
+	static const float quad[16] = {
+		-1, -1, 0.5f, 1,   1, -1, 0.5f, 1,   -1, 1, 0.5f, 1,   1, 1, 0.5f, 1,
+	};
+	GLuint fbo, tex, drb, vbo, prog;
+
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+	glGenRenderbuffers(1, &drb);
+	glBindRenderbuffer(GL_RENDERBUFFER, drb);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, 64, 64);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, drb);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, drb);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		fprintf(stderr, "cs_golden: mode 30: texture + D24S8 FBO incomplete\n");
+		return 3;
+	}
+	glViewport(0, 0, 64, 64);
+
+	prog = glCreateProgram();
+	glAttachShader(prog, compile(GL_VERTEX_SHADER, vs));
+	glAttachShader(prog, compile(GL_FRAGMENT_SHADER, fs));
+	glBindAttribLocation(prog, 0, "a_pos");
+	glLinkProgram(prog);
+	glUseProgram(prog);
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 16, (const void *)0);
+	glEnableVertexAttribArray(0);
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glFinish();
+	fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
+	return 0;
 }
 
 static int frag_mode_g(int mode)
@@ -787,7 +857,7 @@ int main(int argc, char **argv)
 		 * drift from the code the way the old duplicate mode list did. If
 		 * you add a branch, add the number here. */
 		static const int have[] = { 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18,
-					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29 };
+					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
 		size_t k;
 		int known = 0;
 
@@ -823,6 +893,11 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	fprintf(stderr, "renderer: %s\n", (const char *)glGetString(GL_RENDERER));
+
+	if (mode == 30) {
+		/* its own FBO: a texture, not the renderbuffer below */
+		return tiled_ez_mode_g();
+	}
 
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);

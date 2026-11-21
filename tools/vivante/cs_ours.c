@@ -84,6 +84,10 @@
  *   29    golden only: a tile-status fast clear of an RGBA8 + D24S8 target,
  *         one triangle, then a resolve to linear (glReadPixels). This
  *         backend has no tile status yet (testdata/ts-clear.golden)
+ *   30    golden only: early depth into a tiled colour target, an RGBA8
+ *         texture + D24S8 FBO, a depth clear and one LEQUAL quad. The twin
+ *         is tests/gc_tiled_ez_golden.rs, which needs the gc_tiled_rt test
+ *         knob (testdata/tiled-ez.golden)
  */
 struct pc_vertex {
 	float pos[4];
