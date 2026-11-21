@@ -207,6 +207,46 @@ class InstanceLayout(unittest.TestCase):
             self.assertEqual(r.returncode, 2, (opts, r.stderr))
 
 
+class AttribBindings(unittest.TestCase):
+    """`--attrib-bindings`: explicit glBindAttribLocation, aliasing included."""
+
+    def test_parse(self):
+        self.assertEqual(gl_ref.parse_attrib_bindings("a_0=15,a_16=15,b=0"), [("a_0", 15), ("a_16", 15), ("b", 0)])
+        for bad in ("a_0", "a_0=", "a_0=x", "1a=2", "a=1,,b=2", "a=-1", ""):
+            with self.assertRaises(ValueError, msg=bad):
+                gl_ref.parse_attrib_bindings(bad)
+
+    def test_without_bindings_the_numbering_is_declaration_order(self):
+        names = ["p", "m", "c"]
+        self.assertEqual(gl_ref.attribute_locations(names, {"p": 1, "m": 1, "c": 1}), [0, 1, 2])
+        self.assertEqual(gl_ref.attribute_locations(names, {"p": 1, "m": 3, "c": 1}), [0, 1, 4])
+
+    def test_aliased_locations_are_kept(self):
+        names = ["a_0", "a_2", "a_1", "a_3"]
+        w = {n: 1 for n in names}
+        self.assertEqual(gl_ref.attribute_locations(names, w, [("a_0", 1), ("a_1", 1), ("a_2", 0), ("a_3", 0)]),
+                         [1, 0, 1, 0])
+
+    def test_unlisted_attributes_skip_bound_locations(self):
+        names = ["pos", "a", "b"]
+        w = {"pos": 1, "a": 2, "b": 1}
+        # `a` covers 1-2 (bound), so `pos` takes 0 and `b` the next free one, 3
+        self.assertEqual(gl_ref.attribute_locations(names, w, [("a", 1)]), [0, 1, 3])
+        # a matrix that does not fit before a bound location moves past it
+        self.assertEqual(gl_ref.attribute_locations(["m", "x"], {"m": 2, "x": 1}, [("x", 1)]), [2, 1])
+
+    def test_a_name_the_shader_lacks_is_refused(self):
+        with self.assertRaises(ValueError):
+            gl_ref.attribute_locations(["a"], {"a": 1}, [("b", 0)])
+
+    def test_bad_option_is_refused_before_any_library(self):
+        for opts in (["--attrib-bindings", "a_0"], ["--attrib-bindings", "a=1,b=x"],
+                     ["--attrib-bindings", "a=1", "--divisors", "0,2,2"]):
+            r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "gl_ref.py"), "/nonexistent",
+                                INST_VERT, INST_FRAG, *opts], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2, (opts, r.stderr))
+
+
 class InstancedExtract(unittest.TestCase):
     def test_divisor_fields_and_draw(self):
         with tempfile.NamedTemporaryFile("w", suffix=".trace") as f:
