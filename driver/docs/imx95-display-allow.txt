@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Bits of the Verdin iMX95's X4 display registers (the DPU, the display CSR,
+# the pixel interleaver, the DSI side) that may differ between the Zephyr
+# cold path (board::verdin_imx95_display) and the Linux dump M4 of
+# driver/docs/imx95-display.md section 6, each with its reason.
+# Format: ADDRESS MASK REASON (hex, hex, text), as
+# nanopc-t6-display-allow.txt and stm32mp257f-dk-display-allow.txt. MASK is
+# the set of bits allowed to differ.
+#
+# Seeded before the dump exists: the entries below follow from what the
+# registers are (status, time stamps, CRCs of the picture, the frame
+# buffer's address), not from a comparison. Entries the first comparison
+# finds are added below them with their reason, or the driver changes.
+#
+# --- The read list (M4; read by tools/probes/verdin_imx95/linux_day_one/
+# day_one.sh, read only) ---
+# One line per block:
+#   #@read ADDRESS WORDS NAME GATE   WORDS consecutive 32-bit words from ADDRESS
+# GATE display: read only when M2 shows the DSI connector connected and
+# enabled and M3 the DISPLAY domain on; camera: also the CAMERA domain on.
+# The addresses are section 6's M4 list (the note's section 1 for the
+# blocks: hal_nxp PERI_DISPLAY_SEERIS.h, Linux imx95.dtsi).
+# Left out on purpose, because a read changes hardware state (the DW MIPI
+# DSI host's documented behaviour; dw-mipi-dsi.c reads GEN_PLD_DATA only in
+# its read and INT_ST0/1 only to clear the flags): DW host GEN_PLD_DATA
+# 0x4acf0070 (a read pops the receive FIFO), INT_ST0 0x4acf00bc and INT_ST1
+# 0x4acf00c0 (read-to-clear). No I2C register is read here; the bridge is
+# M2's regmap or i2cdump.
+#@read 0x4b400000 1 dpu_COMCTRL_IPIDENTIFIER display
+#@read 0x4b5d0008 18 dpu_FetchLayer0 display
+#@read 0x4b600008 18 dpu_FetchYUV0 display
+#@read 0x4b510008 4 dpu_ExtDst0 display
+#@read 0x4b6b0008 39 dpu_FrameGen0 display
+#@read 0x4b6d0008 9 dpu_Signature0 display
+#@read 0x4b6d0400 3 dpu_Signature0_CRC display
+#@read 0x4b010000 9 display_csr display
+#@read 0x4b0d0000 1 interleaver display
+#@read 0x4b0d0020 1 interleaver_20 display
+#@read 0x4b0d0050 1 interleaver_50 display
+#@read 0x4ad00000 4 dsi_stream_csr camera
+#@read 0x4ad10000 3 dsi_master_csr camera
+#@read 0x4ad20100 5 combo_phy_csr camera
+#@read 0x4acf0000 28 dw_dsi camera
+#@read 0x4acf0074 18 dw_dsi_74 camera
+#@read 0x4acf00c4 20 dw_dsi_c4 camera
+
+# DPU: the picture's buffer and its measurements
+0x4b5d0018 0xffffffff FetchLayer0 BASEADDRESS0: Linux's buffer, not ours
+0x4b5d001c 0xffffffff FetchLayer0 BASEADDRESSMSB0: likewise
+0x4b6b0098 0xffffffff FrameGen0 FGTIMESTAMP: the line and frame counters, sampled at an arbitrary time
+0x4b6b009c 0xffffffff FrameGen0 FGCHSTAT: status, sampled at an arbitrary time
+0x4b6d0400 0xffffffff Signature0 CRC_R_WINDOW0: the CRC of the picture, which differs
+0x4b6d0404 0xffffffff Signature0 CRC_G_WINDOW0: likewise
+0x4b6d0408 0xffffffff Signature0 CRC_B_WINDOW0: likewise
+
+# DW MIPI DSI host
+0x4acf00b0 0xffffffff PHY_STATUS: lane states, sampled at an arbitrary time
