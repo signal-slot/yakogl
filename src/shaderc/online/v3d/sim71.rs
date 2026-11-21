@@ -456,10 +456,20 @@ pub(super) fn check(a: &Alu71, last_slot: bool, what: &str) -> R<()> {
     Ok(())
 }
 
-/// The ALU halves that write the register file.
+/// The ALU halves that write the register file: an operation with a
+/// destination (`v3d_qpu_add_op_has_dst`, qpu_instr.c:557, as
+/// qpu_instr.c:1074 asks it) and a non-magic waddr. An STVPMV/STVPMD/STVPMP
+/// has none: on 7.1 its waddr field is part of the opcode (0, 1, 2) and its
+/// magic bit is clear
+/// (qpu_pack.c:1870-1883, :2138), so a decoded STVPM reads as "rf0..rf2"
+/// without writing them. Mesa's validator asks "not NOP and not magic" of
+/// its VIR instruction, whose destination-less ops write the magic NOP
+/// (vir_to_qpu.c:305-307), the same question.
 fn alu_rf_writes(a: &Alu71) -> [Option<u8>; 2] {
     let (add_on, mul_on) = ops_on(a);
-    [(add_on && !a.add.magic).then_some(a.add.waddr), (mul_on && !a.mul.magic).then_some(a.mul.waddr)]
+    let add_dst = add_on && add_op_args(a.add.op) & ARG_D != 0;
+    let mul_dst = mul_on && mul_op_args(a.mul.op) & ARG_D != 0;
+    [(add_dst && !a.add.magic).then_some(a.add.waddr), (mul_dst && !a.mul.magic).then_some(a.mul.waddr)]
 }
 
 fn sig_rf_write(a: &Alu71) -> Option<u8> {
@@ -467,7 +477,10 @@ fn sig_rf_write(a: &Alu71) -> Option<u8> {
 }
 
 /// The thread end's own THRSW instruction: no ALU writes the register file,
-/// and no signal rf2 or rf3 (qpu_validate.c:373-421).
+/// and no signal rf2 or rf3 (qpu_validate.c:373-421). A VPM store is legal
+/// here and in the delay slots (7.1 has no VPM rule there,
+/// qpu_schedule.c:1990 is ver 42 only), and takes effect: Mesa's own
+/// 7.1 vertex shaders end so (tools/v3d/gltest-mesa71/clear.disasm:24-26).
 pub(super) fn at_thrend(a: &Alu71, what: &str) -> R<()> {
     if alu_rf_writes(a).iter().any(Option::is_some) {
         return unmodelled(format!("{what}: an ALU register-file write at the thread end"));
@@ -755,6 +768,71 @@ mod tests {
         let inputs = Inputs::Vertex(VsInputs { vpm: vec![[1.5f32.to_bits(); LANES]] });
         let o = run71(&program(&body), &[], &inputs, &Env::default()).expect("runs");
         assert_eq!(o.vpm_out, vec![Some([3.0f32.to_bits(); LANES])]);
+    }
+
+    /// `stvpmv` of rf`r` to the row in rf`row` (Mesa's signal table has no
+    /// THRSW with a small immediate, so its thread-end stores address the
+    /// row through a register too).
+    fn stvpmv(row: u8, r: u8) -> Alu71 {
+        add(AddOp71::Stvpmv, 0, false, rf(row), rf(r))
+    }
+
+    /// `mov rf<waddr>, <small immediate v>`.
+    fn imm(waddr: u8, v: u32) -> Alu71 {
+        let idx = small_imm_index(v).expect("a small immediate");
+        let mut i = add(AddOp71::Mov, waddr, false, Operand { raddr: idx, unpack: Unpack71::None }, Operand::default());
+        i.sig.small_imm_a = true;
+        i
+    }
+
+    /// A VPM store in the thread end's THRSW and in both its delay slots, as
+    /// Mesa's own 7.1 vertex shaders end (tools/v3d/gltest-mesa71/
+    /// clear.disasm:24-26): legal on 7.1, and every store lands. STVPMV's
+    /// waddr field (0, its opcode) is no rf0 write.
+    #[test]
+    fn a_vpm_store_at_the_thread_end() {
+        let zero = small_imm_index(0).expect("0 is a small immediate");
+        let mut ld = add(AddOp71::LdvpmvIn, 10, false, Operand { raddr: zero, unpack: Unpack71::None }, rf(0));
+        ld.sig.small_imm_a = true;
+        let code = words(&[
+            thrsw(Alu71::nop()),
+            thrsw(Alu71::nop()),
+            ld,
+            imm(20, 0),
+            imm(21, 1),
+            imm(22, 2),
+            add(AddOp71::Fadd, 11, false, rf(10), rf(10)),
+            add(AddOp71::Fsub, 12, false, rf(11), rf(10)),
+            add(AddOp71::Fsub, 13, false, rf(10), rf(10)),
+            thrsw(stvpmv(20, 11)),
+            stvpmv(21, 12),
+            stvpmv(22, 13),
+        ]);
+        let inputs = Inputs::Vertex(VsInputs { vpm: vec![[1.5f32.to_bits(); LANES]] });
+        let o = run71(&code, &[], &inputs, &Env::default()).expect("runs");
+        let lanes = |x: f32| Some([x.to_bits(); LANES]);
+        assert_eq!(o.vpm_out, vec![lanes(3.0), lanes(1.5), lanes(0.0)]);
+    }
+
+    /// What stays refused at the thread end beside a VPM store: an ALU
+    /// register-file write in the THRSW's own instruction, and an rf2/rf3
+    /// write in a delay slot (qpu_validate.c:373-421).
+    #[test]
+    fn a_thread_end_beside_a_vpm_store_still_checks_its_writes() {
+        let vs = |tail: [Alu71; 3]| {
+            let mut code = vec![thrsw(Alu71::nop()), thrsw(Alu71::nop()), imm(20, 0), imm(21, 1.0f32.to_bits())];
+            code.extend(tail);
+            run71(&words(&code), &[], &Inputs::Vertex(VsInputs { vpm: Vec::new() }), &Env::default())
+        };
+        let mut st = stvpmv(20, 21);
+        st.mul = mul(MulOp71::Fmul, 10, false, rf(21), rf(21)).mul;
+        let e = vs([thrsw(st), Alu71::nop(), Alu71::nop()]).unwrap_err();
+        assert!(e.contains("an ALU register-file write at the thread end"), "{e}");
+        let mov2 = add(AddOp71::Mov, 2, false, rf(21), Operand::default());
+        let e = vs([thrsw(stvpmv(20, 21)), mov2, Alu71::nop()]).unwrap_err();
+        assert!(e.contains("an rf2 or rf3 write after the thread end"), "{e}");
+        // The same tail without the offending writes runs.
+        vs([thrsw(stvpmv(20, 21)), Alu71::nop(), Alu71::nop()]).expect("runs");
     }
 
     #[test]
