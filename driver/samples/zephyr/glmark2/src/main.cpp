@@ -1390,12 +1390,15 @@ private:
     /* One line per scene, after its glmark2-frame line, for the frame whose
      * swap is number JOBS_LINE_FRAME (osal_v3d_recent_jobs_us):
      *   glmark2-jobs: <scene>: frame N: J job(s): <job>; <job>; ...
-     * <job> = "total T render R[~] idle I[ tfu K/Tus]" in us: the job's
+     * <job> = "total T render R[~] idle I[ tfu K/Tus] bin B prep P" in us: the job's
      * submit-to-completion time, its render, and the GPU idle gap before its
      * bin (the end of the previous job's GPU work, TFU jobs included, to this
      * job's bin submit); "~" marks a render whose end the OSAL saw late (the
      * job's FRDONE was already up), "tfu" the K TFU jobs (glGenerateMipmap)
-     * run since the previous job completed, T us in all. Jobs listed are
+     * run since the previous job completed, T us in all; "bin B" and
+     * "prep P" (appended last, so a parser that stops after tfu still reads
+     * the fields it knew) are the job's bin phase and the CPU prep before its
+     * bin (osal_v3d_recent_job_us). Jobs listed are
      * those completed by that swap (the frame's last render finishes at the
      * next submit, so the list can carry the previous frame's last job). Not
      * parsed by glmark2-ms.py. */
@@ -1416,6 +1419,7 @@ private:
             if (j.tfu_jobs != 0) {
                 printk(" tfu %u/%uus", j.tfu_jobs, j.tfu);
             }
+            printk(" bin %u prep %u", j.bin, j.prep);
         }
         printk("\n");
     }

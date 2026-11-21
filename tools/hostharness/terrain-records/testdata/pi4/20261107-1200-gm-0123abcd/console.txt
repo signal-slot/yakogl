@@ -6,5 +6,6 @@
 12:00:09  FPS: 6 FrameTime: 161.800 ms
 12:00:09 glmark2-frame: [terrain] <default>: 61 frames; us per frame: gl 156000, swap 154200, show 320, other 3027, frame 166667 (end waited for in 61 of 61)
 12:00:09 glmark2-counters: [terrain] <default>: frames 61 jobs 549 waits 549 copy.first-sample 77 copy.plain 11 mip.queued 0 rt.live 4 rt.bytes 2097152 tfu.jobs 58 tfu.failed 0 tile.untimed 0
+12:00:09 glmark2-jobs: [terrain] <default>: frame 10: 2 job(s): total 18900 render 16200~ idle 40 tfu 2/610us; total 14100 render 12000 idle 0
 12:00:09 yakogl/v3d: TFU mipmap at frame 461: 58 chains (0 queued behind a job, 0 waited), refused: unknown 52
 12:00:09 yakogl/v3d: tiled copies for draws at frame 461, by reason: plain 11, r32f 0, first-sample 77

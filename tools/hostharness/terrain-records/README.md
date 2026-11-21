@@ -40,6 +40,14 @@ Fields, with the line each comes from (`absent` if the line is not there):
   missing or reads `glmark2-counters: <scene>: absent` (the GC7000 image). The
   two-run table carries a `counter <key> (a frame)` row per key.
 
+- `glmark2-jobs: <scene info>: frame N: J job(s): <job>; <job>; ...`
+  (Pi 4 image, `driver/samples/zephyr/glmark2/src/main.cpp` print_jobs),
+  terrain's line only. `<job>` = `total T render R[~] idle I[ tfu K/Tus]` and,
+  on images built after the bin/prep commit, ` bin B prep P` last (us). Both
+  formats are read; an old line gives `bin`/`prep` as none and the block says
+  `old format`. The block sums render, idle, bin and prep over the listed jobs.
+  `absent (...)` lines are skipped.
+
 The `glmark2-counters` lines in `testdata/` are made up, written to the design,
 until a GM image prints them. The other counters are cumulative over the whole console, not terrain's alone.
 `testdata/` is synthetic (no board address, host name or UART path).
