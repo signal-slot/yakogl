@@ -5317,6 +5317,28 @@ fn ds_seed_depth(b: &mut Backend, d: &GlesDraw, (ds, _): (DsStore, DsStore)) -> 
     0
 }
 
+/// The packed D24S8 words of buffer `s` the resolves read, and where pixel
+/// (x, y)'s first sample is among them: `(words, at)` with `at(x, y)` the
+/// word index. One sample a pixel: row-linear at the ZLS-tile-aligned width.
+/// Two or four samples: the buffer [`ds_bytes`] sizes, the ISP's scaled
+/// image (Mesa `rogue_get_isp_scale_xy_from_samples`: 4x is 2 by 2, 2x is 1
+/// by 2), row-linear at its own aligned width, and pixel (x, y) reads the
+/// word at (2x, 2y) (4x) or (x, 2y) (2x), the top-left of its spread.
+/// ES 3.0 4.3.3 leaves which sample a depth or stencil resolve takes to the
+/// implementation (note docs/notes/es3-msaa-renderbuffers.md (b)8); which
+/// sample the BXS-4-64 stores there is BOARD-UNVERIFIED ((e) open point 6).
+/// `None` when the buffer is smaller than that layout.
+fn ds_sample0(s: &DsBuf) -> Option<(usize, impl Fn(u32, u32) -> usize)> {
+    let (sx, sy) = match s.samples {
+        4 => (2usize, 2usize),
+        2 => (1, 2),
+        _ => (1, 1),
+    };
+    let row = s.w.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize * sx;
+    let bytes = ds_bytes(s.w, s.h, s.samples)?;
+    (bytes <= s.mem.size).then_some((bytes / 4, move |x: u32, y: u32| y as usize * sy * row + x as usize * sx))
+}
+
 /// Bytes of the packed D24S8 buffer of a w x h target (whole ZLS tiles, per
 /// sample), or `None` when that does not fit a usize.
 fn ds_bytes(w: u32, h: u32, samples: u32) -> Option<usize> {
@@ -5702,7 +5724,8 @@ fn depth_buffer_binding(b: &mut Backend, t: &GlesTextureBind) -> Option<GlesText
 /// alignment transfer reads such a store as rows of `bufferRowLength` =
 /// the aligned width (pvr_arch_cmd_buffer.c, the ds alignment transfer).
 /// Confirmed on the AM62P (2026-10-01, gl_test 169: the rendered ramp read
-/// back exactly). A plane that holds a
+/// back exactly). A multisampled buffer (a 4x renderbuffer's, the 4x
+/// window's) gives one sample a pixel ([`ds_sample0`]). A plane that holds a
 /// whole clear only (here or parked) is that value everywhere. 1 when it
 /// holds nothing; -EBUSY when the frame being recorded still draws into it
 /// (the GL core submits and waits for that kick first).
@@ -5736,25 +5759,24 @@ pub unsafe extern "C" fn pvr_backend_depth_resolve(id: u32, dst: *mut f32, w: u3
         let parked = b.ds_parked.iter().find(|e| e.owners[DEPTH] == id).and_then(|e| e.planes[DEPTH].cleared_value());
         return parked.map_or(1, |v| fill(f32::from_bits(v)));
     };
-    if !s.valid || s.samples > 1 || s.mem.cpu.is_null() {
+    if !s.valid || s.mem.cpu.is_null() {
         return 1;
     }
-    let aw = s.w.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize;
-    let rows = s.h.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize;
-    if aw.saturating_mul(rows).saturating_mul(4) > s.mem.size {
+    /* a multisampled buffer reads one sample a pixel ([`ds_sample0`]) */
+    let Some((n, at)) = ds_sample0(s) else {
         return -crate::util::EINVAL;
-    }
-    // SAFETY: a live, CPU-mapped allocation of at least aw * rows words
-    // (checked above), which no pending kick writes (the GL core waited).
+    };
+    // SAFETY: a live, CPU-mapped allocation of at least n words (checked
+    // by ds_sample0), which no pending kick writes (the GL core waited).
     let words = unsafe {
-        osal::cache_invd(s.mem.cpu, aw * rows * 4);
-        core::slice::from_raw_parts(s.mem.cpu as *const u32, aw * rows)
+        osal::cache_invd(s.mem.cpu, n * 4);
+        core::slice::from_raw_parts(s.mem.cpu as *const u32, n)
     };
     let (sw, sh) = (s.w, s.h);
     // SAFETY: the caller's contract.
     unsafe {
         ds_retention::write_depth_texels(dst, w, h, pitch, |x, y| {
-            (x < sw && y < sh).then(|| ds_retention::unorm24_depth(words[y as usize * aw + x as usize]))
+            (x < sw && y < sh).then(|| ds_retention::unorm24_depth(words[at(x, y)]))
         })
     };
     0
@@ -5813,24 +5835,23 @@ pub unsafe extern "C" fn pvr_backend_stencil_resolve(id: u32, dst: *mut u8, w: u
     if s.id.kind == DS_STENCIL {
         return -crate::util::ENOTSUP;
     }
-    if !s.valid || s.samples > 1 || s.mem.cpu.is_null() {
+    if !s.valid || s.mem.cpu.is_null() {
         return 1;
     }
-    let aw = s.w.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize;
-    let rows = s.h.div_ceil(ZLS_TILE) as usize * ZLS_TILE as usize;
-    if aw.saturating_mul(rows).saturating_mul(4) > s.mem.size {
+    /* a multisampled buffer reads one sample a pixel ([`ds_sample0`]) */
+    let Some((n, at)) = ds_sample0(s) else {
         return -crate::util::EINVAL;
-    }
-    // SAFETY: a live, CPU-mapped allocation of at least aw * rows words
-    // (checked above), which no pending kick writes (the GL core waited).
-    let words = unsafe {
-        osal::cache_invd(s.mem.cpu, aw * rows * 4);
-        core::slice::from_raw_parts(s.mem.cpu as *const u32, aw * rows)
     };
-    for y in 0..h.min(s.h) as usize {
-        for x in 0..w.min(s.w) as usize {
+    // SAFETY: a live, CPU-mapped allocation of at least n words (checked
+    // by ds_sample0), which no pending kick writes (the GL core waited).
+    let words = unsafe {
+        osal::cache_invd(s.mem.cpu, n * 4);
+        core::slice::from_raw_parts(s.mem.cpu as *const u32, n)
+    };
+    for y in 0..h.min(s.h) {
+        for x in 0..w.min(s.w) {
             // SAFETY: the caller's contract: (x, y) is inside the rows.
-            unsafe { dst.add(y * pitch as usize + x).write((words[y * aw + x] >> 24) as u8) };
+            unsafe { dst.add(y as usize * pitch as usize + x as usize).write((words[at(x, y)] >> 24) as u8) };
         }
     }
     0
@@ -6769,6 +6790,17 @@ pub unsafe extern "C" fn pvr_backend_draw(draw: *const GlesDraw) -> i32 {
      * background object cannot carry, loads each attachment with its own
      * program and is a quad per attachment ([`clear_by_target_quads`]). */
     let ntargets = (d.num_targets as usize).min(d.targets.len());
+    /* Several colour attachments at 4x (a 4x framebuffer object with more
+     * than one draw buffer): not built. Each attachment would resolve on its
+     * own store, but the sample store across kicks ([`MsStore`]) holds one
+     * attachment, and a wide pixel at four samples is a USC partition the
+     * ISP's tiles in flight were never measured with
+     * (docs/notes/es3-msaa-renderbuffers.md (c1)). Refused by name, never
+     * drawn with lost samples. */
+    if d.samples > 1 && d.targets[1..ntargets.max(1)].iter().any(|t| t.gpu != 0) {
+        glog_once!("yakogl/pvr: draw refused: several colour attachments of a multisampled framebuffer (not built)");
+        return -util::ENOTSUP;
+    }
     /* A colour clear of a mix under a mask that keeps some channels of an
      * attachment no clear program can keep them in: refused by name, the
      * clear alone or fused into a draw, before any part of it is recorded. */
@@ -10182,6 +10214,26 @@ pub extern "C" fn pvr_backend_surface_swapped(surface_gpu: u64) {
     }
 }
 
+/// `YakoglBackend::texture_released`: the GL core is about to free the
+/// storage `[base_gpu, + bytes)` of a texture or renderbuffer. The one thing
+/// this backend keeps for such storage is the sample store of a 4x target
+/// ([`MsStore`], keyed by the target's address): a 4x renderbuffer deleted or
+/// specified again can come back at the same address and size, and its next
+/// frame must not load the samples of the old one. The store's memory stays
+/// (the next 4x target reuses it); only its contents stop counting.
+#[no_mangle]
+pub extern "C" fn pvr_backend_texture_released(base_gpu: u64, bytes: u64) {
+    // SAFETY: single-threaded by contract; taken once per entry point.
+    let b = unsafe { &mut PVR.get().b };
+    if !b.inited {
+        return;
+    }
+    let end = base_gpu.saturating_add(bytes);
+    if b.ms.valid && (base_gpu..end).contains(&b.ms.target_gpu) {
+        b.ms.valid = false;
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn pvr_backend_flush() -> i32 {
     // SAFETY: single-threaded by contract; taken once per entry point.
@@ -10489,8 +10541,9 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     kick_pending: Some(pvr_backend_kick_pending),
     heap_base: Some(pvr_backend_heap_base),
     counters: Some(pvr_backend_counters),
-    /* keeps nothing per texel storage: it samples the GL core's own */
-    texture_released: None,
+    /* keeps nothing per texel storage (it samples the GL core's own) but
+     * the sample store of a 4x target, which a release makes stale */
+    texture_released: Some(pvr_backend_texture_released),
     /* depth/stencil stay in the GL core's hands across a swap */
     surface_swapped: Some(pvr_backend_surface_swapped),
     texture_uploaded: None,
@@ -10503,7 +10556,12 @@ pub static yakogl_backend_pvr: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: Some(pvr_backend_ds_write),
     stencil_resolve: Some(pvr_backend_stencil_resolve),
-    max_samples: 0,
+    /* a 4x framebuffer object is drawn as the 4x window is (CR_ISP_AA 4X,
+     * the PBE's `downscale` resolving into the renderbuffer at every tile
+     * store, the sample store across kicks: [`MsStore`]); one colour
+     * attachment at 4x (several are refused by name in the draw), depth and
+     * stencil read back at one sample a pixel (`ds_sample0`) */
+    max_samples: 4,
     /* the PDS fetches a per-instance array by the instance number: divisor 1 */
     #[cfg(not(feature = "pvr-instance-divisor"))]
     max_instance_divisor: 1,
