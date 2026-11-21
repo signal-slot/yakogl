@@ -224,3 +224,80 @@ fn a_bad_index_is_an_error() {
         assert_eq!(glGetError(), GL_INVALID_VALUE);
     }
 }
+
+/* ---- the getters' edge conversions against Mesa ----
+ *
+ * Mesa 26.x src/mesa/main/varray.c: _mesa_GetVertexAttribiv returns a
+ * float current value as lroundf(v[i]) (halves away from zero, the ES 3.0
+ * 6.1.2 "nearest integer"); _mesa_GetVertexAttribIiv/Iuiv copy the dwords
+ * of an integer current value (get_current_attrib). lroundf of NaN, of an
+ * infinity and of a value outside the long range is undefined in C (x86
+ * returns LONG_MIN, truncated to GLint it is 0 or INT_MIN, by build). So
+ * yakogl's documented choice is pinned there (vertex.rs `round_to_int`):
+ * NaN reads 0 and every out-of-range value saturates at the GLint range;
+ * Iuiv of a negative also clamps at 0. A uint above i32::MAX read as an
+ * int is a mixed read ES 3.0 leaves undefined; yakogl saturates it. */
+
+#[test]
+fn float_value_nan_and_infinities_read_as_integers() {
+    let _g = context();
+    unsafe { glVertexAttrib4f(1, f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.0) };
+    assert_eq!(geti(1), [0, i32::MAX, i32::MIN, 0]);
+    assert_eq!(getii(1), [0, i32::MAX, i32::MIN, 0]);
+    assert_eq!(getui(1), [0, i32::MAX as u32, 0, 0]);
+    let f = getf(1);
+    assert!(f[0].is_nan());
+    assert_eq!(f[1], f32::INFINITY);
+    assert_eq!(f[2], f32::NEG_INFINITY);
+}
+
+#[test]
+fn float_value_beyond_the_int_range_saturates() {
+    let _g = context();
+    // 2^31, 2^32, 2^31 + 256 (the next float), 3e9
+    unsafe { glVertexAttrib4f(1, 2147483648.0, 4294967296.0, 2147483904.0, 3.0e9) };
+    assert_eq!(geti(1), [i32::MAX; 4]);
+    assert_eq!(getii(1), [i32::MAX; 4]);
+    // -2^31 is exact, -2^31 - 256 the next float below it, -2^32, -3e9
+    unsafe { glVertexAttrib4f(2, -2147483648.0, -2147483904.0, -4294967296.0, -3.0e9) };
+    assert_eq!(geti(2), [i32::MIN; 4]);
+    assert_eq!(getii(2), [i32::MIN; 4]);
+    // the largest float below 2^31 is exact
+    unsafe { glVertexAttrib4f(3, 2147483520.0, -2147483520.0, f32::MAX, f32::MIN) };
+    assert_eq!(geti(3), [2147483520, -2147483520, i32::MAX, i32::MIN]);
+}
+
+#[test]
+fn float_value_halfway_rounds_away_from_zero() {
+    let _g = context();
+    unsafe { glVertexAttrib4f(1, 0.5, -0.5, 1.5, -1.5) };
+    assert_eq!(geti(1), [1, -1, 2, -2]);
+    assert_eq!(getii(1), [1, -1, 2, -2]);
+    assert_eq!(getui(1), [1, 0, 2, 0]);
+    unsafe { glVertexAttrib4f(1, 2.5, 0.49999997, -0.49999997, 8388607.5) };
+    assert_eq!(geti(1), [3, 0, 0, 8388608]);
+}
+
+#[test]
+fn uint_value_above_i32_max_read_as_int_saturates() {
+    let _g = context();
+    unsafe { glVertexAttribI4ui(3, 0x8000_0000, 0x8000_0001, u32::MAX, i32::MAX as u32) };
+    assert_eq!(geti(3), [i32::MAX; 4]);
+    assert_eq!(getii(3), [i32::MAX; 4]);
+    // the exact reads are untouched
+    assert_eq!(getui(3), [0x8000_0000, 0x8000_0001, u32::MAX, i32::MAX as u32]);
+    assert_eq!(getf(3), [2147483648.0, 2147483648.0, 4294967296.0, 2147483648.0]);
+    unsafe { assert_eq!(glGetError(), GL_NO_ERROR) };
+}
+
+#[test]
+fn negative_int_value_read_as_uint_and_float() {
+    let _g = context();
+    unsafe { glVertexAttribI4i(2, -1, -5, i32::MIN, -16777217) };
+    assert_eq!(getui(2), [0, 0, 0, 0]);
+    assert_eq!(getf(2), [-1.0, -5.0, -2147483648.0, -16777216.0]);
+    // the exact reads are untouched
+    assert_eq!(getii(2), [-1, -5, i32::MIN, -16777217]);
+    assert_eq!(geti(2), [-1, -5, i32::MIN, -16777217]);
+    unsafe { assert_eq!(glGetError(), GL_NO_ERROR) };
+}
