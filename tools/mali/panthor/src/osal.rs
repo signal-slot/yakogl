@@ -41,8 +41,9 @@ use std::time::Duration;
 use yakogl::osal::mali::{OsalMaliGpu, OsalMaliHeap, OsalMaliKick, OSAL_QUERY_MALI_GPU, OSAL_QUERY_MALI_TILER_HEAP};
 use yakogl::osal::{OsalGpuMem, OsalOps, OSAL_MEM_GPU_EXEC};
 
-/// The render node `init` opens: `YAKOGL_MALI_DEV`, else this.
-pub const DEFAULT_DEV: &str = "/dev/dri/renderD128";
+/// The render node `init` opens: `YAKOGL_MALI_DEV`, else this
+/// ([`crate::dev::default_path`]).
+pub const DEFAULT_DEV: &str = crate::dev::DEFAULT_PATH;
 /// Mesa's tiler heap: 2 MiB chunks, 5 initial, 64 at most, 65535 in flight
 /// (driinfo_panfrost.h:16-21, Mesa 25.0.7 pan_csf.c:1420-1426).
 const HEAP_CHUNK: u32 = 2 << 20;
@@ -101,7 +102,7 @@ unsafe extern "C" fn o_init(_arg: *mut c_void) -> i32 {
     if g.0.is_some() {
         return 0;
     }
-    let path = std::env::var("YAKOGL_MALI_DEV").unwrap_or_else(|_| DEFAULT_DEV.into());
+    let path = crate::dev::default_path();
     let made = (|| -> Result<State, Error> {
         let dev: &'static Device = Box::leak(Box::new(Device::open(&path)?));
         let vm: &'static Vm<'static> = Box::leak(Box::new(Vm::create(dev)?));

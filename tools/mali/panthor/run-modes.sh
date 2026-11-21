@@ -9,6 +9,9 @@
 #
 #   BOARD_HOST=root@<t6> tools/mali/panthor/run-modes.sh <outdir> <binary> <reps> <mode>...
 #
+# MALI_BOARD and the rest of the board profile go to run-on-board.sh
+# through the environment.
+#
 # A mode is the binary's argument list as one word ("-" for none, "--depth",
 # "--sweep"). Each run writes <outdir>/<NN>-<binary><mode>-<rep>.log and its
 # dmesg capture .dmesg, and appends "<name> rc=<rc> <time>" to
@@ -50,7 +53,7 @@ for mode in "$@"; do
       rc=0
       DMESG_LOG=$out/$name.dmesg tools/mali/panthor/run-on-board.sh "$bin" "${args[@]}" > "$out/$name.log" 2>&1 || rc=$?
       [ -n "${RETRY_BUSY:-}" ] || break
-      grep -qE '^board_lock: busy|^run-on-board.sh: /dev/dri/renderD128 is in use, not starting' "$out/$name.log" || break
+      grep -qE '^board_lock: busy|^run-on-board.sh: /dev/dri/renderD[0-9]+ is in use, not starting' "$out/$name.log" || break
       tries=$((tries + 1))
       if [ "$tries" -ge "${RETRY_MAX:-60}" ]; then
         echo "run-modes.sh: $name: the board stayed busy for $tries tries" >&2

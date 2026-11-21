@@ -166,20 +166,26 @@ sed -n "s/^+ ssh \\\$BOARD_HOST '\\(.*\\)'\$/\\1/p" "$tmp/dry.out" > "$tmp/dry-c
 check "dry-run: printed commands are reading ones" reading_only "$tmp/dry-cmds.log"
 
 # --- the negative cases: a mutant of the script that writes must be caught
+# A mutant lives in a tree of its own ($tmp/tree/cts/), beside the files the
+# script reads by its own path (mali-kmsg.py, ../mali/panthor/board-profile.sh).
 mutant() { # <name> <sed expression>
-  cp "$SCRIPT" "$tmp/mut-$1.sh"
-  sed -i "$2" "$tmp/mut-$1.sh"
-  ln -sf "$HERE/mali-kmsg.py" "$tmp/mali-kmsg.py"
-  UNDER=$tmp/mut-$1.sh run_case "mut-$1" good
+  mkdir -p "$tmp/tree/cts" "$tmp/tree/mali/panthor"
+  cp "$SCRIPT" "$tmp/tree/cts/mut-$1.sh"
+  sed -i "$2" "$tmp/tree/cts/mut-$1.sh"
+  ln -sf "$HERE/mali-kmsg.py" "$tmp/tree/cts/mali-kmsg.py"
+  ln -sf "$HERE/../mali/panthor/board-profile.sh" "$tmp/tree/mali/panthor/board-profile.sh"
+  UNDER=$tmp/tree/cts/mut-$1.sh run_case "mut-$1" good
 }
 rejected() { ! reading_only "$1"; }
 mutant rm "s|^C_UNAME='uname -r'|C_UNAME='uname -r; rm -f /root/yakogl-mali/x'|"
 check "mutant rm: the write check catches it" rejected "$tmp/mut-rm.log"
-mutant redirect "s|^C_NODE='test -c /dev/dri/renderD128 \&\& echo present'|C_NODE='test -c /dev/dri/renderD128 \&\& echo present > /boot/x'|"
+mutant redirect 's|^C_NODE="test -c $node \&\& echo present"|C_NODE="test -c $node \&\& echo present > /boot/x"|'
 check "mutant redirect: the write check catches it" rejected "$tmp/mut-redirect.log"
 mutant modprobe "s|^C_MODULE='|C_MODULE='modprobe panthor; |"
 check "mutant modprobe: the write check catches it" rejected "$tmp/mut-modprobe.log"
 check "the real script is not rejected (control)" reading_only "$tmp/good.log"
+check "each mutant ran its probe (a mutant that sends nothing proves nothing)" \
+  bash -c 'for m in rm redirect modprobe; do grep -q "^uname -r" "$1/mut-$m.log" || exit 1; done' _ "$tmp"
 
 # --- no address or credential in the script or the testdata
 check "no address or credential in the files" bash -c '! grep -rEn "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|password|ts\.net" "$1" "$2"' _ "$SCRIPT" "$FIX"

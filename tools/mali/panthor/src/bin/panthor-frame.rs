@@ -17,7 +17,7 @@
 //! back and counts it. A wait that times out or a group the kernel marks
 //! faulted is an error, never a pass.
 //!
-//! Usage: panthor-frame [--no-draw] [--skip-submit] [--fb /dev/fb0] [--scale N] [/dev/dri/renderD128]
+//! Usage: panthor-frame [--no-draw] [--skip-submit] [--fb /dev/fb0] [--scale N] [<render node>: $YAKOGL_MALI_DEV, else /dev/dri/renderD128]
 //!
 //! - default: clear blue, the two red triangles: expect red 2048, blue
 //!   2048, other 0, nothing misplaced (red is the left half).
@@ -319,7 +319,7 @@ fn show(t: &Tally) -> String {
 
 fn main() -> ExitCode {
     println!("panthor-frame: build {}", yakogl_mali_panthor::BUILD);
-    let mut o = Opts { draw: true, submit: true, fb: None, scale: 8, dev: "/dev/dri/renderD128".into() };
+    let mut o = Opts { draw: true, submit: true, fb: None, scale: 8, dev: yakogl_mali_panthor::dev::default_path() };
     let mut args = std::env::args().skip(1);
     let mut dev = None;
     while let Some(a) = args.next() {

@@ -144,7 +144,7 @@ FB_DUMP=1 run fbdump clean --scenes 1-2
 check "exit 0, both scenes ok (the verdict is as without the dump)" \
   bash -c "[ \"\$(cat '$tmp/fbdump/rc')\" = 0 ] && grep -qx 'mali-glmark2: 2/2 scenes ok, failed 0, commit ${c1:0:8}' '$tmp/fbdump/out.txt'"
 check "GLMARK2_FB=1 is on each scene's board command" \
-  bash -c "[ \$(grep -c 'env LD_LIBRARY_PATH=[^ ]*/lib GLMARK2_FB=1 ' '$tmp/fbdump/ssh.log') = 2 ]"
+  bash -c "[ \$(grep -c 'env LD_LIBRARY_PATH=[^ ]*/lib YAKOGL_MALI_DEV=/dev/dri/renderD128 GLMARK2_FB=1 ' '$tmp/fbdump/ssh.log') = 2 ]"
 check "a PNG of the dump's size per scene in RAW_DIR/png/, nowhere in the run directory" \
   bash -c "for n in 01 02; do python3 -I -c \"import struct,sys; d=open(sys.argv[1],'rb').read(); sys.exit(0 if d[:8]==b'\\x89PNG\\r\\n\\x1a\\n' and struct.unpack('>II', d[16:24])==(16,12) else 1)\" '$tmp/fbdump/raw/png/'\$n.png || exit 1; done;
     grep -q 'crc32 .* agrees' '$tmp/fbdump/raw/png/01.txt' && grep -q 'picture value agrees' '$tmp/fbdump/raw/png/02.txt' &&
@@ -330,7 +330,7 @@ check "--dry-run lists the 33 default scenes in order and exits 0" \
     grep -q '  1 build:use-vbo=false$' '$tmp/dry/a.txt' && grep -q '  33 loop:vertex-steps=5:fragment-steps=5:fragment-uniform=true$' '$tmp/dry/a.txt'"
 check "--dry-run prints the commit check and the per-scene command" \
   bash -c "grep -q 'commit $c1, on main: yes' '$tmp/dry/a.txt' &&
-    grep -q \"exec timeout -k 10 180 env LD_LIBRARY_PATH=<stage>/lib <stage>/bin/glmark2-es2-mali --size 800x600 -b\" '$tmp/dry/a.txt'"
+    grep -q \"exec timeout -k 10 180 env LD_LIBRARY_PATH=<stage>/lib YAKOGL_MALI_DEV=/dev/dri/renderD128 <stage>/bin/glmark2-es2-mali --size 800x600 -b\" '$tmp/dry/a.txt'"
 COMMIT_DRY=1 dry b --dry-run --scenes '22-25' --timeout 60
 check "a bare --dry-run (no build, no outdir) exits 0 and prints the plan" \
   bash -c "[ \"\$(cat '$tmp/dry/b.rc')\" = 0 ] && grep -q 'build: not given' '$tmp/dry/b.txt' &&
@@ -344,7 +344,7 @@ check "--dry-run never calls ssh or scp, takes no lock and creates nothing" \
 FB_DUMP=1 dry e --dry-run --scenes 1-2 "$tmp/drybuild" "$tmp/dry/out"
 check "--dry-run with FB_DUMP=1 says so and shows GLMARK2_FB=1 in the command; without it neither appears" \
   bash -c "[ \"\$(cat '$tmp/dry/e.rc')\" = 0 ] && grep -q 'FB_DUMP=1: GLMARK2_FB=1 on each scene' '$tmp/dry/e.txt' &&
-    grep -q 'LD_LIBRARY_PATH=<stage>/lib GLMARK2_FB=1 <stage>/bin/glmark2-es2-mali' '$tmp/dry/e.txt' &&
+    grep -q 'LD_LIBRARY_PATH=<stage>/lib YAKOGL_MALI_DEV=/dev/dri/renderD128 GLMARK2_FB=1 <stage>/bin/glmark2-es2-mali' '$tmp/dry/e.txt' &&
     ! grep -q 'GLMARK2_FB\|FB_DUMP' '$tmp/dry/a.txt'"
 dry d "$tmp/drybuild"
 check "a real run without <outdir> exits 1 (usage)" bash -c "[ \"\$(cat '$tmp/dry/d.rc')\" = 1 ]"

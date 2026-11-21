@@ -36,8 +36,11 @@
 # before any ssh. --dev runs such a build anyway, for local tests only.
 #
 # The run:
-#   - refuses while a process holds /dev/dri/renderD128 (exit 4), as
-#     mali-deqp-run.sh does, and records the board's boot_id and uname -r;
+#   - refuses while a process holds the render node (exit 4), as
+#     mali-deqp-run.sh does, and records the board's boot_id and uname -r; the
+#     node is the board profile's (tools/mali/panthor/board-profile.sh:
+#     MALI_BOARD, default nanopc-t6; MALI_RENDER_NODE, default
+#     /dev/dri/renderD128), handed to the library as YAKOGL_MALI_DEV;
 #   - stages the build under the login's home, <home>/yakogl-mali-glmark2/
 #     <sha8>-<stamp>/ (MALI_GLMARK2_STAGE_ROOT names another directory of the
 #     board; never /boot or a system directory) after checking the free space,
@@ -45,7 +48,7 @@
 #     is left empty);
 #   - for each scene n runs one process, under setsid and
 #     `timeout -k KILL_GRACE_S <timeout>` (default 180 s):
-#       LD_LIBRARY_PATH=<stage>/lib <stage>/bin/glmark2-es2-mali --size 800x600 -b '<scene>'
+#       LD_LIBRARY_PATH=<stage>/lib YAKOGL_MALI_DEV=<node> <stage>/bin/glmark2-es2-mali --size 800x600 -b '<scene>'
 #     and takes the kernel lines the scene added (the ring after its last
 #     line before the scene: dmesg only reads, nothing is written to the
 #     kernel log), classified by tools/cts/mali-kmsg.py as it is;
@@ -298,13 +301,17 @@ case $on_main in
   *) refusal="BUILD-INFO's commit $commit is not on $main_ref (on_main: $on_main): build from an origin/main commit, or --dev for a local test" ;;
 esac
 
+# shellcheck source=../mali/panthor/board-profile.sh
+. "$REPO/tools/mali/panthor/board-profile.sh"
+board_profile_load || exit 1
+node=$MALI_RENDER_NODE
 stamp=$(date -u +%Y%m%d-%H%M%S)
 stage_root_given=${MALI_GLMARK2_STAGE_ROOT-}
 # fb_env <id>: the frame dump's variable, for a numbered scene when FB_DUMP=1
 fb_env() { if [ "${FB_DUMP-}" = 1 ] && [[ $1 =~ ^([0-9]+|[<]n[>])$ ]]; then echo " GLMARK2_FB=1"; fi; }
 gm_cmd() { # <stage> <id> <scene> [seconds]: the board's command for one process
   echo "cd $1 && setsid -w sh -c 'echo \$\$ > $1/run/$2.pgid; exec timeout -k ${KILL_GRACE_S:-10} ${4:-$limit}" \
-    "env LD_LIBRARY_PATH=$1/lib$(fb_env "$2") $1/bin/$PROGRAM --size $SIZE -b \"\$1\"' glmark2 '$3'" \
+    "env LD_LIBRARY_PATH=$1/lib YAKOGL_MALI_DEV=$node$(fb_env "$2") $1/bin/$PROGRAM --size $SIZE -b \"\$1\"' glmark2 '$3'" \
     "> $1/run/$2.out 2> $1/run/$2.err < /dev/null"
 }
 
@@ -594,9 +601,9 @@ rssh "for t in cat dmesg fuser df uname setsid timeout pkill pgrep; do command -
   exit 4
 }
 rc=0
-users=$(rssh 'fuser -v /dev/dri/renderD128 2>&1') || rc=$?
+users=$(rssh "fuser -v $node 2>&1") || rc=$?
 case $rc in
-  0) echo "$me: /dev/dri/renderD128 is in use, not starting:" >&2; echo "$users" >&2; exit 4 ;;
+  0) echo "$me: $node is in use, not starting:" >&2; echo "$users" >&2; exit 4 ;;
   1) ;;
   *) echo "$me: fuser failed with $rc, not starting" >&2; exit 4 ;;
 esac
