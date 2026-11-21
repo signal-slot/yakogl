@@ -14,6 +14,10 @@ this note forecasts, except terrain's signal: SIGABRT (rc 134, a libstdc++
 assertion) on the board, not SIGSEGV (section 1, row 22). `D-DEPTHONLY` and
 `D-NPOTMIP` were not reached (section 2).
 
+**Refreshed** (2026-11-21, plan #367 item `forecast-refresh`): sections 1 and 2
+are re-measured at main `104748bb`: **14 of 33 scenes compile-clean**.
+Sections 3 and 4 are as of `d09629d3`.
+
 **Re-measured** (2026-11-14, plan #367 item `remeasure`) at main `d09629d3`
 (main `a92775f3` differs from it in no file a Mali compile reaches):
 sections 1-3 are that measurement, not the forecast of `95f20610`. View 2
@@ -76,89 +80,85 @@ What it can and cannot see:
 
 ## 1. By scene
 
-Measured at main `d09629d3` (2026-11-14). Scene numbers are the harness's
-(`FINDINGS-mali-allscenes.md`, entry order of glmark2's default list).
-Programs are `<vs>+<fs>`, the first four hex digits of each corpus file's
-hash (`<scene>-<hash>.{vert,frag}.glsl`), in the order glmark2 links them
-(`PROGRAMS` in `tests/mali_glmark2_corpus.rs`). Per program: `ok` when both
-stages compile and the program links, else the first refusal of each stage
-that is refused (section 2's codes). This column is
-`tests/fixtures/mali_glmark2_verdicts.txt`, the fixture the test pins: no
-program whose two stages compile fails to link. **Harness**: what glmark2
-did on the host (`setup fails`: exit 3 after a shader is refused, nothing
-drawn; `runs, GL errors`: the scene goes on without the refused program;
-`crash`: glmark2 itself, signal 11 on the host). **Issue**: where the
-families of the row belong (section 4).
+Measured at main `104748bb` (2026-11-21; the verdicts are
+`tests/fixtures/mali_glmark2_verdicts.txt` at that commit, and the corpus is
+the one generated from glmark2 `22c527cb`). Scene numbers are the harness's
+(`FINDINGS-mali-allscenes.md`, entry order of glmark2's default list). Per
+scene: `clean`, or the first refusal of each shader that is refused, by
+family (section 2's table has the messages). A scene is compile-clean when
+every one of its shaders compiles and every program it links builds; it
+says nothing about the picture. **Items** are the queued lowering items
+that cover the refusal (section 2).
 
-| # | scene | programs: first refusal per stage | harness | issue |
+| # | scene | verdict | first refusal per shader | items |
 |---|---|---|---|---|
-| 0 | `build:use-vbo=false` | `ace2+4748` VS `CONST_FOLD` | setup fails | #33 |
-| 1 | `build:use-vbo=true` | `ace2+4748` VS `CONST_FOLD` | setup fails | #33 |
-| 2 | `texture:texture-filter=nearest` | `ace2+425b` VS `CONST_FOLD` | setup fails | #33 |
-| 3 | `texture:texture-filter=linear` | `ace2+425b` VS `CONST_FOLD` | setup fails | #33 |
-| 4 | `texture:texture-filter=mipmap` | `ace2+425b` VS `CONST_FOLD` | setup fails | #33 |
-| 5 | `shading:shading=gouraud` | `83cd+4748` VS `CONST_FOLD` | setup fails | #33 |
-| 6 | `shading:shading=blinn-phong-inf` | `78e3+994f` FS `FRAGCOLOR_LANE` | setup fails | #33 |
-| 7 | `shading:shading=phong` | `e5f2+8a64` FS `ARITH_CONST` | setup fails | #33 |
-| 8 | `shading:shading=cel` | `e5f2+fea0` FS `FRAGCOLOR_LANE` | setup fails | #33 |
-| 9 | `bump:bump-render=high-poly` | `78e3+d442` FS `FRAGCOLOR_LANE` | setup fails | #33 |
-| 10 | `bump:bump-render=normals` | `51d0+487d` FS `CONST_FOLD` | setup fails | #33 |
-| 11 | `bump:bump-render=height` | `270a+77c5` FS `FRAGCOLOR_LANE` | setup fails | #33 |
-| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` | `4623+3c3d` FS `CONST_FOLD` | setup fails | #33 |
-| 13 | `effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;` | `4623+ba8e` FS `ARITH_CONST` | setup fails | #33 |
-| 14 | `pulsar:quads=5:texture=false:light=false` | `9d75+4748` ok | **runs, clean** | — |
-| 15 | `desktop:…:effect=blur:…` | `792b+9ce9` ok; `792b+7f17` FS `ARITH_CONST`; `792b+68af` FS `ARITH_CONST` | runs, 352 GL errors | #33 |
-| 16 | `desktop:windows=4:effect=shadow` | `792b+9ce9` ok | **runs, clean** | — |
-| 17 | `buffer:…:update-method=map:interleave=false` | `7234+9fe6` VS `ARITH`, FS `ARITH_CONST` | runs, 15 GL errors | #33 |
-| 18 | `buffer:…:update-method=subdata:interleave=false` | `7234+9fe6` VS `ARITH`, FS `ARITH_CONST` | runs, 15 GL errors | #33 |
-| 19 | `buffer:…:update-method=map:interleave=true` | `7234+9fe6` VS `ARITH`, FS `ARITH_CONST` | runs, 15 GL errors | #33 |
-| 20 | `ideas:speed=duration` | `bf4b+23c8` VS `INT_VALUE`; `c265+23c8` VS `INT_VALUE`; `a09e+23c8` VS `ARITH_CONST`; `038e+23c8` ok; `51b2+c565` VS `UNIFORM_TYPE`, FS `INT_VALUE`; `4f27+e6a9` ok; `4f27+df64` FS `TEX_COORD`; `51b2+1aca` VS `UNIFORM_TYPE`, FS `FRAGCOLOR_LANE`; `c236+23c8` ok | setup fails | #32, #33 |
-| 21 | `jellyfish` | `14ac+8ee5` FS `FRAGCOLOR_LANE`; `08a2+22fc` VS `FMA`, FS `ARITH` | setup fails | #33 |
-| 22 | `terrain` | `8b69+1637` FS `NEG_ZERO`; `8b69+c549` FS `ARITH`; `8b69+d697` FS `TEX_LANES`; `18bc+4d26` VS `FAU_PAGE`, FS `FRAGCOLOR_LANE`; `8b69+e043` FS `ARITH_CONST`; `8b69+bdfd` FS `ARITH_CONST`; `8b69+895a` ok; `8b69+bbba` FS `ARITH_CONST`; `8b69+8c86` FS `ARITH_CONST` | **crash** (glmark2; host rc 139, board rc 134) | #32, #33 |
-| 23 | `shadow` | `6964+4748` VS `CONST_FOLD`; `37f4+928e` ok; `b9d1+cf4b` VS `ARITH_CONST`, FS `ARITH` | setup fails | #33 |
-| 24 | `refract` | `7215+3fae` VS `FAU_PAGE`, FS `ARITH_CONST`; `37f4+928e` ok | setup fails | #33 |
-| 25 | `conditionals:vertex-steps=0:fragment-steps=0` | `3107+6c61` FS `FRAGCOORD_FP16` | setup fails | #33 |
-| 26 | `conditionals:vertex-steps=0:fragment-steps=5` | `3107+a5b5` FS `FS_OPERAND` | setup fails | #33 |
-| 27 | `conditionals:vertex-steps=5:fragment-steps=0` | `a21c+6c61` FS `FRAGCOORD_FP16` | setup fails | #33 |
-| 28 | `function:fragment-steps=5:fragment-complexity=low` | `0162+c8ce` FS `FRAGCOORD_FP16` | setup fails | #33 |
-| 29 | `function:fragment-steps=5:fragment-complexity=medium` | `0162+849c` FS `FRAGCOLOR_LANE` | setup fails | #33 |
-| 30 | `loop:…:fragment-loop=false` | `3cb0+e016` VS `LOOP_VERTEX`, FS `FRAGCOORD_FP16` | setup fails | #33 |
-| 31 | `loop:…:fragment-uniform=false` | `3cb0+c7ea` VS `LOOP_VERTEX`, FS `FRAGCOORD_FP16` | setup fails | #33 |
-| 32 | `loop:…:fragment-uniform=true` | `3cb0+3678` VS `LOOP_VERTEX`, FS `LOOP_FP16` | setup fails | #33 |
+| 0 | `build:use-vbo=false` | **clean** | — | — |
+| 1 | `build:use-vbo=true` | **clean** | — | — |
+| 2 | `texture:texture-filter=nearest` | refused | FS `425b` `TEX_COORD` (link `ace2+425b`) | `lower-texcoord-425b` |
+| 3 | `texture:texture-filter=linear` | refused | FS `425b` `TEX_COORD` | `lower-texcoord-425b` |
+| 4 | `texture:texture-filter=mipmap` | refused | FS `425b` `TEX_COORD` | `lower-texcoord-425b` |
+| 5 | `shading:shading=gouraud` | **clean** | — | — |
+| 6 | `shading:shading=blinn-phong-inf` | refused | FS `994f` `NONFINITE_CONST` | `lower-nonfinite-const` |
+| 7 | `shading:shading=phong` | refused | FS `8a64` `ARITH_CONST` | `lower-constprod-rest` |
+| 8 | `shading:shading=cel` | refused | FS `fea0` `NONFINITE_CONST` | `lower-nonfinite-const` |
+| 9 | `bump:bump-render=high-poly` | refused | FS `d442` `NONFINITE_CONST` | `lower-nonfinite-const` |
+| 10 | `bump:bump-render=normals` | refused | FS `487d` `NONFINITE_CONST` | `lower-nonfinite-const` |
+| 11 | `bump:bump-render=height` | refused | FS `77c5` `NONFINITE_CONST` | `lower-nonfinite-const` |
+| 12 | `effect2d:kernel=0,1,0;1,-4,1;0,1,0;` | refused | FS `3c3d` `TEX_MULTI` | `lower-fma` |
+| 13 | `effect2d:kernel=1,1,1,1,1;…` | refused | FS `ba8e` `TEX_MULTI` | `lower-fma` |
+| 14 | `pulsar:quads=5:texture=false:light=false` | **clean** | — | — |
+| 15 | `desktop:…:effect=blur:…` | refused | FS `68af`, `7f17` `TEX_MULTI` | `lower-fma` |
+| 16 | `desktop:windows=4:effect=shadow` | **clean** | — | — |
+| 17 | `buffer:…:update-method=map:interleave=false` | **clean** | — | — |
+| 18 | `buffer:…:update-method=subdata:interleave=false` | **clean** | — | — |
+| 19 | `buffer:…:update-method=map:interleave=true` | **clean** | — | — |
+| 20 | `ideas:speed=duration` | refused | VS `51b2` `CONTROL_FLOW`; FS `1aca`, `c565` `INT_VALUE`; FS `df64` `TEX_COORD` | `lower-ideas` |
+| 21 | `jellyfish` | refused | VS `08a2` `ARITH_CONST`; FS `8ee5` `FS_OPERAND` | `lower-constprod-rest` (`08a2`); none for `8ee5` |
+| 22 | `terrain` | refused | FS `1637`, `4d26`, `c549` `ARITH`; FS `8c86`, `bbba`, `bdfd`, `e043` `TEX_MULTI` | `lower-fs-arith2`; `lower-fma` |
+| 23 | `shadow` | refused | FS `cf4b` `ARITH` | `lower-fs-arith2` |
+| 24 | `refract` | refused | FS `3fae` `ARITH_CONST` | `lower-constprod-rest` |
+| 25 | `conditionals:vertex-steps=0:fragment-steps=0` | **clean** | — | — |
+| 26 | `conditionals:vertex-steps=0:fragment-steps=5` | **clean** | — | — |
+| 27 | `conditionals:vertex-steps=5:fragment-steps=0` | **clean** | — | — |
+| 28 | `function:fragment-steps=5:fragment-complexity=low` | **clean** | — | — |
+| 29 | `function:fragment-steps=5:fragment-complexity=medium` | refused | FS `849c` `FRAGCOORD_FP16` | `lower-mploop` |
+| 30 | `loop:…:fragment-loop=false` | **clean** | — | — |
+| 31 | `loop:…:fragment-uniform=false` | **clean** | — | — |
+| 32 | `loop:…:fragment-uniform=true` | refused | FS `3678` `LOOP_FP16` | `lower-mploop` |
 
 The `buffer` rows stand for
 `buffer:update-fraction=0.5:update-dispersion=0.9:columns=200:update-method=…:interleave=…`,
 the `loop` rows for `loop:vertex-steps=5:fragment-steps=5:…`, scene 15 for
 `desktop:windows=4:effect=blur:blur-radius=5:passes=1:separable=true`.
+Shaders not named in a row compile.
 
-**Tally: 2 of 33 scenes are compile-clean** (14 `pulsar`, new since the
-forecast; 16 `desktop:windows=4:effect=shadow`). 26 fail at setup, 4 run
-with GL errors and a wrong picture (15, 17, 18, 19), 1 crashes in glmark2
-(22, terrain). All 31 come from compile refusals. Of the 48 programs, 7
-build (`9d75+4748`, `792b+9ce9`, ideas' `038e+23c8`, `c236+23c8` and
-`4f27+e6a9`, terrain's `8b69+895a`, and `37f4+928e`, the depth program of
-shadow and refract). `shadow` still carries `D-DEPTHONLY` behind its
-refusals, `refract` `D-NPOTMIP` (section 2).
+**Tally at main `104748bb`: 14 of 33 scenes are compile-clean** (0, 1, 5,
+14, 16, 17, 18, 19, 25, 26, 27, 28, 30, 31). That is what
+`cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_glmark2_corpus -- --nocapture`
+prints at that commit: `mali: 69 shaders, 42 compiled; 22 pairs tried, 21
+linked; 14 of 33 scenes compile-clean: [0, 1, 5, 14, 16, 17, 18, 19, 25, 26,
+27, 28, 30, 31]`. 42 of the 69 corpus shaders compile (it was 23 at
+`d09629d3`), and 21 of the 22 programs whose two stages were tried linked;
+the one that did not is `ace2+425b`, the texture scenes' program, refused
+at its fragment stage. The other 19 scenes are refused at compile
+time; scene 22 (`terrain`) still carries glmark2's abort behind its
+refusals (below).
 
-Against the forecast (`95f20610`), per corpus shader: 23 of 69 compile
-(16 of 29 vertex, 7 of 40 fragment; 11 at the forecast). 12 shaders that
-were refused now compile, all vertex: the lit ones `78e3`, `e5f2`, `51d0`,
-`270a`, `9d75`, `37f4`; `conditionals`' and `function`'s `3107`, `a21c`,
-`0162`; `ideas`' `038e`, `c236`, `4f27`. Most of the rest moved to a later
-refusal (section 2); no shader moved back.
+Against the `d09629d3` re-measure (2 of 33 clean, 23 shaders compile):
+12 scenes became clean (0, 1, 5, 17-19, 25-28, 30, 31). No shader moved
+back (the test fails on one that does).
 
-What the 31 do on the board, from the harness's logs:
+What the harness showed at `d09629d3`, for the scenes still refused (not
+re-run at `104748bb`; `host-draw-probe-2` measures the setup and draw side
+at the tip):
 
-- **Setup fails** (26: 0-13, 20, 21, 23-32): glmark2 prints `Error: Failed
-  to add vertex|fragment shader from file None:` and the compile log, the
-  scene draws nothing and puts no work of its own on the GPU. A refused
-  shader cannot fault the GPU.
-- **Runs with GL errors** (15, 17-19): the GL errors are what ES 2.0 asks
-  for when a client uses a program that did not link
-  (`0x501 in glGetAttribLocation`/`glGetUniformLocation`, `0x502` at the
-  draw, `current_drawable_program`), not a GL-core defect. The refused draws
-  are not submitted. 17-19 draw nothing but the clear (3 draws over 3
-  frames, all refused); 15 draws its windows without the blur.
+- **Setup fails**: glmark2 prints `Error: Failed to add vertex|fragment
+  shader from file None:` and the compile log, the scene draws nothing and
+  puts no work of its own on the GPU. A refused shader cannot fault the
+  GPU.
+- **Runs with GL errors** (desktop blur, 15): the GL errors are what ES 2.0
+  asks for when a client uses a program that did not link, not a GL-core
+  defect. The refused draws are not submitted.
 - **terrain aborts** in glmark2 itself, not in YakoGL: signal 11 (rc 139)
   on the host, SIGABRT (rc 134) on the board (main `da65355e`,
   RESULTS.md). In `TerrainRenderer::init_program()`
@@ -170,133 +170,82 @@ What the 31 do on the board, from the harness's logs:
   enables libstdc++'s `std::vector::operator[]` assertion, which fires on
   the -1 index (SIGABRT); on the host the out-of-range read gives signal
   11. The -1 locations are the symptom; the refused program is the cause.
-  `init_program()` loads `terrain.vert` and `terrain.frag`; that this is
-  program `18bc+4d26` is inferred from the table (row 22: the only
-  terrain program whose vertex shader is not `8b69`, refused at both
-  stages), not checked by hash (the corpus text was not at hand). Its two blockers now are VS
-  `18bc` at `FAU_PAGE` (a push word past FAU page 0, no lowering yet:
-  section 2) and FS `4d26` at `FRAGCOLOR_LANE`. `terrain.vert` does two
-  `texture2D` look-ups (checked in the source), so `TEX_VERTEX` is
-  forecast to follow `FAU_PAGE` for `18bc` (section 3); it has not been
-  measured.
+  `18bc` (terrain's second vertex shader, two `texture2D` look-ups) now
+  compiles; terrain's fragment shaders `1637`, `4d26` and `c549` (`ARITH`)
+  and `8c86`, `bbba`, `bdfd`, `e043` (`TEX_MULTI`) are what is left.
 
 ## 2. The causes
 
-### Compile refusals
+### Compile refusals still open
 
-The message is `MaliError::message`'s text (`src/shaderc/online/mali/mod.rs`;
-the code's variant in brackets). **Shaders** counts the distinct corpus
-shaders whose first refusal in their stage it is. **Scenes** are the scenes
-with a program that meets it; **alone** the scenes in which it is the only
-family left, so that lowering it alone makes the scene compile-clean.
-Codes of the forecast are kept; the ones marked new are new messages.
+Read from the fixture at main `104748bb`. The message is
+`MaliError::message`'s text (`src/shaderc/online/mali/mod.rs`). **Shaders**
+counts the distinct corpus shaders whose first refusal in their stage it is;
+**scenes** are the scenes that meet it; **alone** the scenes in which it is
+the only family left, so that lowering it alone makes the scene
+compile-clean. The code names are this note's (the older ones are kept where
+a family kept its message). **Item** is the queued lowering item.
 
-| cause | message | shaders | VS / FS hashes | scenes | alone | note, issue |
+| cause | message | shaders | hashes | scenes | alone | item |
 |---|---|---:|---|---|---:|---|
-| `CONST_FOLD` (`ConstantFold`) | `Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet` | 3 VS, 2 FS | VS `ace2` `83cd` `6964`; FS `487d` `3c3d` | 0-5, 10, 12, 23 | 8 | `docs/notes/mali-algebraic-folds.md`, `docs/notes/mali-mixed-precision.md`; #33 |
-| `FRAGCOLOR_LANE` | `Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet` | 8 FS | FS `994f` `fea0` `d442` `77c5` `1aca` `8ee5` `4d26` `849c` | 6, 8, 9, 11, 20, 21, 22, 29 | 5 | `docs/notes/mali-varying-constants.md`, `docs/notes/mali-fragment-outputs.md`; #33 |
-| `ARITH_CONST` (`ArithConstant`) | `Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet` | 2 VS, 10 FS | VS `a09e` `b9d1`; FS `8a64` `ba8e` `7f17` `68af` `9fe6` `e043` `bdfd` `bbba` `8c86` `3fae` | 7, 13, 15, 17-20, 22-24 | 3 | `docs/notes/mali-constant-products.md`, `docs/notes/mali-algebraic-folds.md`; #33 |
-| `FRAGCOORD_FP16` (`FragCoordMediump`), new | `Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet` | 4 FS | FS `6c61` `c8ce` `e016` `c7ea` | 25, 27, 28, 30, 31 | 3 | `docs/notes/mali-fragcoord-mediump.md`, `docs/notes/mali-fragcoord-fp16-ops.md`; #33 |
-| `FS_OPERAND` (`FsOperandForm`), new here | `Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet` | 1 FS | FS `a5b5` | 26 | 1 | `docs/notes/mali-gles2-forecast.md` (`FS_OPERAND`); #33 |
-| `ARITH` (`Arithmetic`) | `Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet` | 1 VS, 3 FS | VS `7234`; FS `22fc` `c549` `cf4b` | 17-19, 21-23 | 0 | `docs/notes/mali-alu-ops.md`, `docs/notes/mali-vs-alu-ops.md`; #33 |
-| `LOOP_VERTEX` (`LoopVertex`), new here | `Valhall: a loop in a vertex shader is not lowered yet` | 1 VS | VS `3cb0` | 30-32 | 0 | `docs/notes/mali-vs-loops.md`; #33 |
-| `FAU_PAGE` (`FauPage`), new | `Valhall: a push word past FAU page 0 is not lowered yet` | 2 VS | VS `18bc` `7215` | 22, 24 | 0 | lowered since this table (`docs/notes/mali-fau-pages.md`, fau.rs `select_fau_page`): `18bc` and `7215` compile, both scenes keep other refusals; #33 |
-| `INT_VALUE` (`IntValue`) | `Valhall: an integer or boolean value is not lowered yet` | 2 VS, 1 FS | VS `bf4b` `c265`; FS `c565` | 20 | 0 | `docs/notes/mali-int-and-size.md`; #33 |
-| `UNIFORM_TYPE` (`UniformType`), new here | `Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet` | 1 VS | VS `51b2` | 20 | 0 | `docs/notes/mali-uniform-types.md`; #33 |
-| `TEX_COORD` | `Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet` | 1 FS | FS `df64` | 20 | 0 | `docs/notes/mali-texture-refusals.md`, `docs/notes/mali-tex-coords.md`; #32 |
-| `FMA` | `Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet` | 1 VS | VS `08a2` | 21 | 0 | `docs/notes/mali-vs-alu-ops.md`, `docs/notes/mali-vs-fma.md`; #33 |
-| `NEG_ZERO` (`NegZeroShared`), new | `Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet` | 1 FS | FS `1637` | 22 | 0 | `docs/notes/mali-algebraic-folds.md` (the -0.0 rules); #33 |
-| `TEX_LANES` (`TexLanes`), new | `Valhall: a texture result's lanes other than its own pairs in order (a swizzle, a lane alone) is not lowered yet` | 1 FS | FS `d697` | 22 | 0 | `docs/notes/mali-texture-refusals.md`; #32 |
-| `LOOP_FP16` (`LoopMediump`), new | `Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet` | 1 FS | FS `3678` | 32 | 0 | `docs/notes/mali-loop-break.md`, `docs/notes/mali-precision.md`; #33 |
-| `LOCALS` | `Valhall: a shader with more than 32 local variables is not lowered yet` | 0 | — (was FS `ba8e`, `1637`) | — | — | lowered since the forecast; #33 |
+| `NONFINITE_CONST` (was `CONST_FOLD`) | `Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet` | 5 FS | `994f` `fea0` `d442` `487d` `77c5` | 6, 8, 9, 10, 11 | 5 | `lower-nonfinite-const` |
+| `TEX_MULTI` | `Valhall: a fragment shader texture look-up beside another in a form only a lone look-up takes (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet` | 8 FS | `3c3d` `ba8e` `68af` `7f17` `8c86` `bbba` `bdfd` `e043` | 12, 13, 15, 22 | 3 | `lower-fma` (in review) |
+| `TEX_COORD` | `Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet` | 2 FS | `425b` `df64` | 2, 3, 4, 20 | 3 | `lower-texcoord-425b` (`425b`), `lower-ideas` (`df64`) |
+| `ARITH_CONST` | `Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet` | 2 FS, 1 VS | FS `8a64` `3fae`; VS `08a2` | 7, 21, 24 | 2 | `lower-constprod-rest` |
+| `ARITH` | `Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet` | 4 FS | `cf4b` `1637` `4d26` `c549` | 22, 23 | 1 | `lower-fs-arith2` |
+| `INT_VALUE` | `Valhall: an integer or boolean value is not lowered yet` | 2 FS | `1aca` `c565` | 20 | 0 | `lower-ideas` |
+| `CONTROL_FLOW` | `Valhall: control flow (if, a loop, a return before the end) is not lowered yet` | 1 VS | `51b2` | 20 | 0 | `lower-ideas` |
+| `FS_OPERAND` | `Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet` | 1 FS | `8ee5` | 21 | 0 | none queued |
+| `FRAGCOORD_FP16` | `Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet` | 1 FS | `849c` | 29 | 1 | `lower-mploop` |
+| `LOOP_FP16` | `Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet` | 1 FS | `3678` | 32 | 1 | `lower-mploop` |
 
-13 vertex and 33 fragment shaders are refused (46 of 69). "new here" marks
-a code that `docs/notes/mali-gles2-forecast.md` already uses for the same
-message.
+28 corpus shaders are refused (2 vertex, 26 fragment), and `ace2` (a vertex
+shader that compiles) sits in the texture scenes' refused program
+`ace2+425b`. Families no longer in the fixture: the vertex `CONST_FOLD`
+(`ace2`, `83cd`, `6964`), `FAU_PAGE`, `LOCALS`, `NEG_ZERO`, `TEX_LANES`,
+`LOOP_VERTEX`, `UNIFORM_TYPE`, `FMA` and `FRAGCOLOR_LANE`: each shader that met
+one now compiles or meets a family above. `FS_OPERAND` is the only family
+open without an item; `8ee5` is jellyfish's fragment shader, so scene 21
+needs it as well as `lower-constprod-rest`.
 
 **Order of scenes unblocked** (greedy: each step lowers the family that
 makes the most scenes compile-clean given the steps before it; a scene can
 still meet a later refusal, section 3):
 
-| step | family | scenes made compile-clean | clean after |
+| step | family (item) | scenes made compile-clean | clean after |
 |---:|---|---|---:|
-| — | (now) | 14, 16 | 2 |
-| 1 | `CONST_FOLD` | 0-5, 10, 12 | 10 |
-| 2 | `FRAGCOLOR_LANE` | 6, 8, 9, 11, 29 | 15 |
-| 3 | `ARITH_CONST` | 7, 13, 15 | 18 |
-| 4 | `ARITH` | 17, 18, 19, 23 (`shadow`: then `D-DEPTHONLY`) | 22 |
-| 5 | `FRAGCOORD_FP16` | 25, 27, 28 | 25 |
-| 6 | `LOOP_VERTEX` | 30, 31 | 27 |
-| 7 | `FS_OPERAND` | 26 | 28 |
-| 8 | `FAU_PAGE` | 24 (`refract`: then `D-NPOTMIP`, `D-DEPTHTEX`) | 29 |
-| 9 | `FMA` | 21 (`jellyfish`) | 30 |
-| 10 | `LOOP_FP16` | 32 | 31 |
-| 11 | `INT_VALUE` + `UNIFORM_TYPE` + `TEX_COORD` | 20 (`ideas`) | 32 |
-| 12 | `NEG_ZERO` + `TEX_LANES` | 22 (`terrain`) | 33 |
+| — | (now, `104748bb`) | 14 scenes | 14 |
+| 1 | `NONFINITE_CONST` (`lower-nonfinite-const`) | 6, 8, 9, 10, 11 | 19 |
+| 2 | `TEX_COORD` `425b` (`lower-texcoord-425b`) | 2, 3, 4 | 22 |
+| 3 | `TEX_MULTI` (`lower-fma`) | 12, 13, 15 | 25 |
+| 4 | `ARITH_CONST` (`lower-constprod-rest`) | 7, 24 | 27 |
+| 5 | `ARITH` (`lower-fs-arith2`) | 23 | 28 |
+| 6 | `FRAGCOORD_FP16`, `LOOP_FP16` (`lower-mploop`) | 29, 32 | 30 |
+| 7 | `INT_VALUE`, `CONTROL_FLOW`, `TEX_COORD` `df64` (`lower-ideas`) | 20 | 31 |
+| 8 | `FS_OPERAND` (no item) and `ARITH_CONST` `08a2` | 21 | 32 |
+| 9 | `ARITH`, `TEX_MULTI` | 22 (`terrain`) | 33 |
 
-What moved since the forecast, per shader (forecast code → now):
+This is the arithmetic of the table, not a measurement: each lowering can
+uncover a later refusal behind the first (section 3).
 
-- **Vertex `ARITH_CONST` is nearly gone** (13 → 2 shaders). Of the lit and
-  transformed vertex shaders, `78e3`, `e5f2`, `51d0`, `270a`, `9d75` and
-  `37f4` compile; `ace2`, `83cd` and `6964` (glmark2's `light-basic` with
-  constants added) moved to `CONST_FOLD`; `7234` (buffer) to `ARITH`;
-  `18bc` (terrain) and `7215` (refract) to `FAU_PAGE`; `b9d1` (shadow's
-  ground) stays `ARITH_CONST`.
-- **`ARITH` in fragment shaders** (25 → 3): the lit fragment shaders moved
-  to `FRAGCOLOR_LANE` (`994f`, `fea0`, `d442`, `77c5`, `1aca`, `4d26`,
-  `849c`), `ARITH_CONST` (`8a64`, `9fe6`, `3fae`, terrain's `e043`, `bdfd`,
-  `bbba`, `8c86`), `CONST_FOLD` (`487d`), `TEX_LANES` (`d697`); the step
-  shaders of `conditionals`, `function` and `loop` to `FRAGCOORD_FP16`
-  (`6c61`, `c8ce`, `e016`, `c7ea`), `FS_OPERAND` (`a5b5`) and `LOOP_FP16`
-  (`3678`). `22fc`, `c549` and `cf4b` stay `ARITH`.
-- **`ARITH` in vertex shaders** (4 → 1): `3107`, `a21c` and `0162`
-  compile; `3cb0` (loop) moved to `LOOP_VERTEX`.
-- **`FMA`** (8 → 1): of `ideas`' vertex shaders `038e`, `c236` and `4f27`
-  compile, `bf4b` and `c265` moved to `INT_VALUE`, `a09e` to
-  `ARITH_CONST`, `51b2` to `UNIFORM_TYPE`; jellyfish's `08a2` stays `FMA`.
-- **`CONST_FOLD`** in fragment shaders: the desktop blur passes `7f17` and
-  `68af` moved to `ARITH_CONST`; effect2d's Laplace kernel `3c3d` stays.
-- **`LOCALS`** is gone: `ba8e` moved to `ARITH_CONST`, `1637` to
-  `NEG_ZERO`.
-- Unchanged: `c565` (`INT_VALUE`), `df64` (`TEX_COORD`), `8ee5`
-  (`FRAGCOLOR_LANE`).
+### Setup- and draw-time causes
 
-What is behind each family, read from the corpus (built-in calls, as a
-guide: the compiler names only the family):
+Predicted from the code at `95f20610`, updated at `104748bb`. A scene's
+setup and draw causes are reached only once its shaders compile, so none is
+confirmed on the board. `shadow` (scene 23) still stops at `cf4b` and
+`refract` (24) at `3fae`. The line numbers of the older rows are gone.
 
-- **`CONST_FOLD`**: `light-basic`'s vertex shaders with glmark2's added
-  constants (`ace2` build and texture, `83cd` gouraud, `6964` shadow's
-  model: `normalize` of a constant light direction, `max(dot(N, L), 0.0)`,
-  constant material lanes) and the fragment shaders `487d` (bump normals)
-  and `3c3d` (effect2d's Laplace kernel, weights of 0.0): a fold on or to a
-  value that is not a finite normal float (a zero).
-- **`FRAGCOLOR_LANE`**: lit fragment shaders that write
-  `gl_FragColor = vec4(<computed>.xyz, 1.0)` (blinn-phong `994f`), a
-  computed colour rather than a varying's own lane or a constant.
-- **`ARITH_CONST`**: in fragment shaders now: the per-fragment lighting of
-  `phong` (`8a64`), the blur and 5x3 box kernels' constant weights
-  (`7f17`, `68af`, `ba8e`), buffer's and terrain's colour arithmetic.
-- **`FRAGCOORD_FP16`**: the step shaders read `gl_FragCoord` in mediump
-  arithmetic past the forms lowered.
-- **`FAU_PAGE`**: terrain's `18bc` and refract's `7215` push more uniform
-  words than FAU page 0 holds.
-
-### Setup- and draw-time causes (predicted from the code at `95f20610`)
-
-None of these is reached on the host at `d09629d3` either: each scene is
-still stopped by a compile refusal first (`shadow` at its model program
-`6964+4748`, before `DepthRenderTarget::setup`; `refract` at `7215+3fae`).
-The first board run (main `da65355e`) did not reach `D-DEPTHONLY` or
-`D-NPOTMIP` either, for the same reason; both stay open risks, to check
-once the compile refusals are gone. The line numbers below are those of
-`95f20610`.
-
-| code | what | where | scenes | owner |
+| code | what | where | scenes | state |
 |---|---|---|---|---|
-| `D-DEPTHONLY` | A framebuffer with no colour attachment is `GL_FRAMEBUFFER_UNSUPPORTED` on the Mali (`DRAWS_WITHOUT_COLOUR = false`, `src/mali/backend.rs:91`, read as `DEPTH_ONLY_TARGETS` at `src/backend.rs:761`; `check_status` returns `GL_FRAMEBUFFER_UNSUPPORTED` for a framebuffer with no colour attachment at `src/gl/framebuffer.rs:871-874`). glmark2's shadow pass (`DepthRenderTarget::setup`, `src/scene-shadow.cpp:73-118`) attaches only a `GL_DEPTH_COMPONENT` texture and gives up on any other status: `DepthRenderTarget::setup: glCheckFramebufferStatus failed (0x8cdd)`. | setup | `shadow` (not reached by the first board run) | none yet: new issue (section 4) |
-| `D-NPOTMIP` | refract's colour target (`DistanceRenderTarget`, 1600x1200 RGBA, `GL_LINEAR_MIPMAP_LINEAR`, `glGenerateMipmap` every frame). The Mali lays out no NPOT chain (`npot_mip_chains` in `src/gl/texture.rs`: `MIP_LEVEL_ALIGN` 64, `native_layered_textures` false, so `grow_npot_chain` keeps one level), so the texture samples level 0 under the mipmap filter. Not a refusal, but a picture that can differ from Mesa's where it is minified. | draw (picture) | `refract` (not reached by the first board run) | a risk: new issue only if the board's picture shows it (section 4) |
-| `D-DEPTHTEX` | The depth texture `refract` (and `shadow`, once `D-DEPTHONLY` is gone) samples goes through `mali_depth_resolve` to R32F. gl_test case 169 is the only board evidence for it. | draw | `refract`, `shadow` | a risk; #32 (`docs/notes/mali-texture-refusals.md`) if it fails |
-| `D-OK` | No texture-format or blend refusal is expected: glmark2 uploads unsized `GL_RGB`/`GL_RGBA` `GL_UNSIGNED_BYTE` (stored RGBA8), its targets are `GL_RGBA`, and its blends (`SRC_ALPHA, ONE_MINUS_SRC_ALPHA`; desktop's separate `ZERO, ONE` alpha; terrain's `SRC_ALPHA, ONE`) are fixed function (`src/mali/blend.rs`). Every attribute is float32. `glGenerateMipmap` runs on the CPU (`generate_mipmap: None`). The harness confirms it for the scenes it reaches: no refused draw, no incomplete texture, no incomplete framebuffer, no OSAL refusal in any scene. | — | all | — |
+| `D-DEPTHONLY` | A framebuffer with no colour attachment was `GL_FRAMEBUFFER_UNSUPPORTED` on the Mali, and glmark2's shadow pass (`DepthRenderTarget::setup`) gives up on that status. | setup | `shadow` | **lowered in `src/mali`**: `DRAWS_WITHOUT_COLOUR` is `true` (`src/mali/backend.rs:111`), so a depth-only framebuffer is complete and drawn as panfrost draws one with no colour buffer (`docs/notes/mali-depth-only.md`). Unit tests only; the board has not drawn one (item `board-depthonly-check`). |
+| `D-NPOTMIP` | refract's colour target (1600x1200 RGBA, `GL_LINEAR_MIPMAP_LINEAR`, `glGenerateMipmap` every frame). The Mali lays out no NPOT chain (`npot_mip_chains` in `src/gl/texture.rs`: `MIP_LEVEL_ALIGN` 64, `native_layered_textures` false, so `grow_npot_chain` keeps one level), so the texture samples level 0 under the mipmap filter. Not a refusal, but a picture that can differ from Mesa's where it is minified. | draw (picture) | `refract` | **risk**, open: open an issue only if the board's picture shows it (section 4) |
+| `D-DEPTHTEX` | The depth texture `refract` and `shadow` sample goes through `mali_depth_resolve` to R32F. gl_test case 169 is the only board evidence for it. | draw | `refract`, `shadow` | **risk**, open; #32 (`docs/notes/mali-texture-refusals.md`) if it fails |
+| `D-OK` | No texture-format or blend refusal is expected: glmark2 uploads unsized `GL_RGB`/`GL_RGBA` `GL_UNSIGNED_BYTE` (stored RGBA8), its targets are `GL_RGBA`, and its blends are fixed function (`src/mali/blend.rs`). Every attribute is float32. `glGenerateMipmap` runs on the CPU. The harness at `d09629d3` confirmed it for the scenes it reached. | — | all | — |
+
+`host-draw-probe-2` re-runs glmark2's scenes through the Mali back end at the
+tip; its result, not this table, is the record of the causes past the
+compiler.
+
 
 ### GPU-fault and hang risks
 
@@ -356,7 +305,7 @@ Existing issues: `ARITH_CONST`, `ARITH`, `FMA`, `CONST_FOLD`, `LOCALS`,
 `TEX_VERTEX` are #32 (plan #309). `D-DEPTHTEX` is #32 if it fails. Two
 causes have no issue:
 
-**Draft: `D-DEPTHONLY`** (not reached by the first board run, main
+**Draft: `D-DEPTHONLY`** (lowered since: section 2; the draft is kept as written. Not reached by the first board run, main
 `da65355e`: shadow stops at its compile refusal first)
 
 > Title: Mali: a framebuffer with only a depth attachment is
