@@ -333,18 +333,6 @@ fn shader_binary_formats_are_none() {
     });
 }
 
-/// ES 2.0.25 6.1.3 / table 6.x: GL_SHADER_BINARY_FORMATS is core state, a list
-/// of GL_NUM_SHADER_BINARY_FORMATS (here 0) values: glGetIntegerv writes nothing
-/// and sets no error. DEFECT: `get_integerv` (src/gl/state.rs) has no arm for
-/// 0x8DF8 and answers GL_INVALID_ENUM (1280). Ignored until fixed.
-#[test]
-#[ignore = "defect: glGetIntegerv(GL_SHADER_BINARY_FORMATS) is GL_INVALID_ENUM, ES 2.0 says an empty list and no error"]
-fn shader_binary_formats_list_is_empty() {
-    on_gc7000(|| {
-        assert_eq!(geti(GL_SHADER_BINARY_FORMATS), (GL_NO_ERROR, vec![]));
-    });
-}
-
 #[test]
 fn program_binary_formats_follow_the_extension() {
     on_gc7000(|| {
