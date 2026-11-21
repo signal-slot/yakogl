@@ -197,6 +197,135 @@ pub fn edid_preferred(edid: &[u8]) -> Result<VideoMode, i32> {
     Ok(mode)
 }
 
+/// One mode an EDID offers, as [`edid_modes`] reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EdidMode {
+    pub mode: VideoMode,
+    /// CTA-861 VIC when the mode came from a video data block (SVD).
+    pub vic: Option<u8>,
+    /// SVD native flag (bit 7, only meaningful for VIC 1-64).
+    pub native: bool,
+    /// The base block's first DTD (VESA E-EDID 1.4 section 3.10.2).
+    pub preferred: bool,
+}
+
+/// The mode of a CTA-861 VIC, for the two this crate carries: VIC 4 is
+/// [`HD720_60`], VIC 16 is [`FHD1080_60`]. Any other VIC is `None`.
+pub fn cea_vic_mode(vic: u8) -> Option<VideoMode> {
+    match vic {
+        4 => Some(HD720_60),
+        16 => Some(FHD1080_60),
+        _ => None,
+    }
+}
+
+/// Walk one CTA-861 extension block (tag 0x02; CTA-861-G section 7.5): the
+/// video data blocks' SVDs (data block tag 2 in bits 7:5 of the header byte,
+/// length in bits 4:0, collection from byte 4 up to the DTD offset in byte 2)
+/// and the DTDs from that offset on. An SVD is a VIC in bits 6:0 with the
+/// native flag in bit 7 for VIC 1-64 (Linux drm_edid.c `svd_to_vic` and
+/// `cea_db_iter`/`do_cea_modes`, v6.12); VICs without a constant here are
+/// skipped. DTDs end at a zero pixel clock or the block's checksum byte.
+/// `-EINVAL` for a bad checksum, a DTD offset past the block or a data block
+/// that overruns the collection. A block with another tag is ignored (Ok).
+pub fn cea_modes<F: FnMut(EdidMode)>(block: &[u8; 128], mut f: F) -> Result<(), i32> {
+    if block[0] != 0x02 {
+        return Ok(());
+    }
+    if block.iter().fold(0u8, |a, &b| a.wrapping_add(b)) != 0 {
+        return Err(-EINVAL);
+    }
+    let d = usize::from(block[2]);
+    if d == 0 {
+        return Ok(()); // no data blocks, no DTDs
+    }
+    if !(4..=127).contains(&d) {
+        return Err(-EINVAL);
+    }
+    let mut i = 4;
+    while i < d {
+        let (tag, len) = (block[i] >> 5, usize::from(block[i] & 0x1f));
+        if i + 1 + len > d {
+            return Err(-EINVAL);
+        }
+        if tag == 2 {
+            for &svd in &block[i + 1..i + 1 + len] {
+                let (vic, native) =
+                    if (1..=64).contains(&(svd & 0x7f)) { (svd & 0x7f, svd & 0x80 != 0) } else { (svd, false) };
+                if let Some(mode) = cea_vic_mode(vic) {
+                    f(EdidMode { mode, vic: Some(vic), native, preferred: false });
+                }
+            }
+        }
+        i += 1 + len;
+    }
+    // DTDs start at the offset byte and must end before the checksum byte.
+    let mut at = d;
+    while at + 18 <= 127 {
+        let dtd: &[u8; 18] = block[at..at + 18].try_into().map_err(|_| -EINVAL)?;
+        if dtd[0] == 0 && dtd[1] == 0 {
+            break;
+        }
+        if let Some(mode) = edid_dtd(dtd) {
+            f(EdidMode { mode, vic: None, native: false, preferred: false });
+        }
+        at += 18;
+    }
+    Ok(())
+}
+
+/// Every mode of an EDID: the base block's DTDs (the first is `preferred`;
+/// VESA E-EDID 1.4 section 3.10.2, the descriptors at bytes 54-125) and then
+/// those of each CTA-861 extension block (`edid[126]` blocks follow). The base
+/// block must pass [`edid_block_ok`]; a short buffer, a bad CEA checksum or a
+/// malformed CEA block is `-EINVAL`. Extension blocks with another tag are
+/// ignored. [`edid_preferred`] is unchanged and reads only the base block.
+pub fn edid_modes<F: FnMut(EdidMode)>(edid: &[u8], mut f: F) -> Result<(), i32> {
+    let base: &[u8; 128] = edid.get(..128).and_then(|b| b.try_into().ok()).ok_or(-EINVAL)?;
+    if !edid_block_ok(base) {
+        return Err(-EINVAL);
+    }
+    for (n, at) in (54..=108).step_by(18).enumerate() {
+        let dtd: &[u8; 18] = base[at..at + 18].try_into().map_err(|_| -EINVAL)?;
+        if let Some(mode) = edid_dtd(dtd) {
+            if mode.check().is_ok() {
+                f(EdidMode { mode, vic: None, native: false, preferred: n == 0 });
+            }
+        }
+    }
+    for k in 1..=usize::from(base[126]) {
+        let blk: &[u8; 128] = edid.get(k * 128..(k + 1) * 128).and_then(|b| b.try_into().ok()).ok_or(-EINVAL)?;
+        cea_modes(blk, &mut f)?;
+    }
+    Ok(())
+}
+
+/// Pick the mode to drive from `supported` (the caller's modes, best first).
+/// Order: the base block's preferred mode if supported, else a CTA native SVD
+/// that is supported, else the first entry of `supported` the sink lists
+/// (VIC or DTD, timing equal). `Ok(None)` when the sink lists none of them;
+/// errors as [`edid_modes`].
+pub fn best_supported(edid: &[u8], supported: &[VideoMode]) -> Result<Option<VideoMode>, i32> {
+    let (mut pref, mut native) = (None, None);
+    let mut listed = [false; 16];
+    edid_modes(edid, |m| {
+        let Some(idx) = supported.iter().position(|s| *s == m.mode) else { return };
+        if m.preferred {
+            pref = Some(m.mode);
+        }
+        if m.native && native.is_none() {
+            native = Some(m.mode);
+        }
+        if let Some(l) = listed.get_mut(idx) {
+            *l = true;
+        }
+    })?;
+    if pref.is_some() || native.is_some() {
+        return Ok(pref.or(native));
+    }
+    Ok(supported.iter().zip(listed).find(|(_, l)| *l).map(|(m, _)| *m))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,5 +446,116 @@ mod tests {
         assert_eq!(m.refresh_mhz(154_000_000), 59_950);
         assert!(m.check().is_ok());
         assert_eq!(VideoMode { vsync: 0, ..m }.check(), Err(-EINVAL));
+    }
+
+    fn fix_sum(b: &mut [u8; 128]) {
+        b[127] = 0;
+        b[127] = b.iter().fold(0u8, |a, &x| a.wrapping_add(x)).wrapping_neg();
+    }
+
+    /// Two-block EDID: the 1080p base block (preferred DTD cleared when
+    /// `dvi` is false is not needed) plus a CEA block built by `cea`.
+    fn edid2(cea: impl FnOnce(&mut [u8; 128])) -> [u8; 256] {
+        let mut e = [0u8; 256];
+        e[..128].copy_from_slice(&EDID_DVI_1080P);
+        e[126] = 1;
+        let mut b = [0u8; 128];
+        b[0] = 0x02;
+        b[1] = 3;
+        cea(&mut b);
+        fix_sum(&mut b);
+        let mut base = [0u8; 128];
+        base.copy_from_slice(&e[..128]);
+        fix_sum(&mut base);
+        e[..128].copy_from_slice(&base);
+        e[128..].copy_from_slice(&b);
+        e
+    }
+
+    fn collect(e: &[u8]) -> Result<Vec<EdidMode>, i32> {
+        let mut v = Vec::new();
+        edid_modes(e, |m| v.push(m)).map(|_| v)
+    }
+
+    #[test]
+    fn cea_vic16_native() {
+        // Video data block: VIC 4, VIC 16 native, VIC 5 (no constant, skipped).
+        let e = edid2(|b| {
+            b[2] = 8;
+            b[4] = 0x40 | 3;
+            b[5..8].copy_from_slice(&[4, 0x80 | 16, 5]);
+        });
+        let v = collect(&e).unwrap();
+        let vics: Vec<_> = v.iter().filter_map(|m| m.vic.map(|c| (c, m.native, m.mode))).collect();
+        assert_eq!(vics, vec![(4, false, HD720_60), (16, true, FHD1080_60)]);
+        assert!(v[0].preferred && v[0].mode == FHD1080_60);
+        assert_eq!(best_supported(&e, &[HD720_60]), Ok(Some(HD720_60)));
+        assert_eq!(best_supported(&e, &[WUXGA_60_RB]), Ok(None));
+        assert_eq!(edid_preferred(&e), Ok(FHD1080_60));
+    }
+
+    #[test]
+    fn cea_native_beats_list_order() {
+        // Base block without a usable preferred timing.
+        let mut e = edid2(|b| {
+            b[2] = 7;
+            b[4] = 0x40 | 2;
+            b[5..7].copy_from_slice(&[4, 0x80 | 16]);
+        });
+        e[54] = 0;
+        e[55] = 0;
+        let mut base = [0u8; 128];
+        base.copy_from_slice(&e[..128]);
+        fix_sum(&mut base);
+        e[..128].copy_from_slice(&base);
+        assert_eq!(best_supported(&e, &[HD720_60, FHD1080_60]), Ok(Some(FHD1080_60)));
+        // VIC 4 listed but not native; with FHD unsupported it is still chosen.
+        assert_eq!(best_supported(&e, &[HD720_60]), Ok(Some(HD720_60)));
+    }
+
+    #[test]
+    fn cea_dtds_only() {
+        let e = edid2(|b| {
+            b[2] = 4; // no data blocks, DTDs from byte 4
+            b[4..22].copy_from_slice(&DTD_720P);
+        });
+        let v = collect(&e).unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!((v[1].mode, v[1].vic, v[1].preferred), (HD720_60, None, false));
+    }
+
+    #[test]
+    fn cea_refusals() {
+        let mut e = edid2(|b| b[2] = 4);
+        e[255] ^= 1;
+        assert_eq!(collect(&e), Err(-EINVAL));
+        // Data block longer than the collection.
+        let e = edid2(|b| {
+            b[2] = 6;
+            b[4] = 0x40 | 5;
+        });
+        assert_eq!(collect(&e), Err(-EINVAL));
+        // Missing extension block.
+        let mut e = edid2(|b| b[2] = 4);
+        assert_eq!(collect(&e[..200]), Err(-EINVAL));
+        e[126] = 1;
+        // Bad base block.
+        e[0] = 1;
+        assert_eq!(collect(&e), Err(-EINVAL));
+    }
+
+    #[test]
+    fn non_cea_extension_ignored() {
+        // Tag 0x70 (DisplayID) with a bad checksum and CEA-looking bytes.
+        let mut e = edid2(|b| {
+            b[0] = 0x70;
+            b[2] = 5;
+            b[4] = 0x41;
+            b[5] = 0x80 | 4;
+        });
+        e[255] ^= 1;
+        let v = collect(&e).unwrap();
+        assert_eq!(v.len(), 1);
+        assert_eq!(best_supported(&e, &[HD720_60, FHD1080_60]), Ok(Some(FHD1080_60)));
     }
 }
