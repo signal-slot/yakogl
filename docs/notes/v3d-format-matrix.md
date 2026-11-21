@@ -359,6 +359,10 @@ same samples through `XYZW`.
   and clears and reads back with 0, 0, 1; beside an RGBA8 / RGBA8UI
   renderbuffer a disagreeing-mask draw is taken with a mask per target
   and an agreeing one with the one mask.
+  `tests/es3_v3d_fbo_int_rg_layers.rs` (same feature set) does the same for
+  cube faces and 3D slices. `tests/es3_blit_int_tex.rs` pins
+  glBlitFramebuffer between such textures as copied (`ca583834`, `d5ff3ea4`;
+  the absent channels as 0, 0, 1).
   `tests/es3_v3d_int_rg_mrt_mask.rs` (same feature set) decodes the
   COLOR_WRITE_MASKS word the real `v3d_job.c` builds for each format at
   attachment 1 beside RGBA8 and RGBA32UI, at attachment 0 beside RGBA8,
