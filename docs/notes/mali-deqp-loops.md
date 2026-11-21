@@ -1431,3 +1431,83 @@ equal this reference's (the reference included), and the refusal at the tip.
   different `yzwx` count) is found by the case's own words only when a
   step needs it: `deqp-host-measure.sh --filter <case>` followed by the
   commands of 9.7 on the case's `.qpa` shaders makes it.
+
+## 10. The mediump kept loop and the step-2 fragment forms (spike-loops-3, at 7b2246c0)
+
+Plan #377 item spike-loops-3, a read-only spike: a working patch reported to
+the planner, not committed. HOST-ONLY: compile and word comparisons, no
+board run.
+
+**What compiles, and how it compares.** A kept loop carries the hidden pass
+counter (`LOOP_CAP`, `mali-loop-board-failures.md`), so its words are
+compared in `src/shaderc/online/mali/tests.rs` with `CapEdit`
+(`deqp_loops_<name>_is_mesa_26_2_1_with_the_loop_cap`, every region, fact
+and FAU word; an `int` uniform's word gl_ref.py's integer). Eight
+references are Mesa 26.2.1's words with the cap's three words (four with a
+`LSHIFT_OR`) added and its registers moved, nothing else: step 1b's
+`fs_for_uni`, `fs_while_uni`, `fs_dowhile_uni` (the base) and step 2b's
+`fs_cond_break`, `fs_cond_continue`, `fs_double_continue`, `fs_mixed`,
+`fs_inf_break`. Of the 127 `deqp_loops2_*`, 25 compile, 17 of them Mesa's
+words with the cap's in the same sense (`tests/mali_deqp_loops2.rs`
+`COMPILED`); the other 8 differ in form only (the `while (i++ < n)`
+counter, which Mesa carries as `i + 1`; a loop Mesa deletes, `empty_body`,
+`scope_while`; a look-up's kept branch, `disc_texture`).
+
+**Design** (`nir_fs.rs`):
+
+1. Route (`mod.rs`, `loop16`): a mediump shader with a kept loop goes to
+   `select_highp` with the fp16 uniform block, its varying lanes an fp16
+   operation reads converted first (`convert_inputs16`, the dynamic bound's
+   `int(v_one + 0.5)`), without that route's `inputs16` pairing and code
+   motion.
+2. Phis (`walk_kept_loop`): an aligned pair of a mediump vector's lanes the
+   body stores is one 16-bit phi of two lanes (Mesa's two `vec2` phis of
+   `res`); its pre-header source the varying's `V2F32_TO_V2F16`
+   (`Fs::pair16`), its latch source the pair as it stands (a `vec2`,
+   `MKVEC.v2i16`, placed at the local's last store or after the selects it
+   reads, the later pair's first; another pair's phi when the body swaps
+   them, `compound_statement`). A lone fp16 lane carried (the fp16 float
+   counter, glmark2's `gm2_intloop_uniform_fs`) keeps `LoopMediump`.
+3. Jumps: a kept loop's `if` whose side ends in `break`/`continue` is a
+   region (`walk_if_sides`, `jump16`), as in a highp shader.
+4. `if (c) break;` right after the head test (only instructions between) is
+   one terminator with it (`merged_break`; `opt_loop_merge_terminators`):
+   `ior(c, !head)`, `LSHIFT_OR` into the head's mask. With `if (c0)
+   continue; else if (c3) break;` the break's terminator is `iand(c3, !c0)`,
+   the head's compare and the cap's words sinking after it (`sink_after`,
+   `nir_opt_move` of comparisons), and the continue's selects read `!c0`.
+5. `if (c) { step; continue; }` in a mediump body: the rest of the body is
+   flattened into `bcsel(c, before, after)` (`MUX.v2i16` on the 32-bit
+   mask's low half, `walk_if16`); a bare `continue` ending the body (its
+   step's copy before it, the dead step after) is the body's end.
+6. `kept_loop`: a lone run-time `if (c) break;` (the body's one control
+   node) is the loop's terminator, taken as it is (`fs_inf_break`).
+7. The array rule (`guessed_trips`, both walks): a loop with a run-time
+   bound whose body writes a local array by its counter (the front end's
+   one local per element, stored through a `bcsel` ladder of the counter's
+   compares with constants) is unrolled by the array's length with the
+   bound dropped (`guess_loop_limit`/`partial_unroll`, the leftover loop
+   dead). A loop that reads the elements keeps Mesa's guards on the bound,
+   which this rule does not make: it is not unrolled, and a mediump kept
+   one is refused. `fs_idx_dyn` and `vs_idx_dyn` are then word for word
+   their constant-bound twins (`fs_idx_dyn_is_its_constant_bound_twin`):
+   the fragment one differs from Mesa only in the sum's FMA fusion (#367
+   lower-fma), the vertex one refuses at the constop text.
+
+Refused on purpose (no reference, or found wrong while measuring): nested or
+sequenced mediump kept loops (S6; `loop_nested*.frag`, `fs_vec_dyn`'s
+second loop); a discard under a flattened `if` in a kept loop
+(`disc_dynamic`'s `if (i > 0) if (..) discard;` lost its outer condition);
+an indexed store in a kept loop (`fs_vec_dyn`, F10 vectors).
+
+**Left** (per reference, at this patch): `fs_101` (`LoopForm`: needs the
+`kept_loop` past-32 decision and the first-pass rotation), `fs_uncond_break`
+(`LoopForm`: `wrapper_unroll` decision), `fs_dowhile_if` (`ControlFlow`:
+the do-while's tail test), `fs_select` (the bool uniform's `bcsel`),
+`fs_float_uni` (`LoopMediump`: the lone fp16 counter's `U16_TO_U32` copy
+and `FCMP_OR.v2f16` head), `fs_vec_dyn` (F10 vector ladders, two loops),
+`fs_idx_dyn` (FMA), every vertex kept loop (`vs_float_uni`, `vs_for_uni`,
+`vs_dowhile_uni`, `vs_select`, `vs_vector`: 16-bit carried pairs, the float
+head test and the stores' `F16_TO_F32` in `nir.rs`/`select.rs`; the last
+four behind the unitype texts first), `vs_idx_dyn`/`vs_idx_static`
+(constop), `vs_nested_const` (the vertex unroll of nested loops).

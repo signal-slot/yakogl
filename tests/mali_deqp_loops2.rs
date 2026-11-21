@@ -8,9 +8,11 @@
 //! (`tools/mali/deqp-host-measure.sh`) logged them, drawn once on Mesa's
 //! drm-shim with `--uniform-values`.
 //!
-//! No reference is byte-compared yet: every one is refused, and
-//! `refusals_pinned` asserts the exact `MaliError` text of each (the vertex
-//! shader's when it refuses, else the fragment shader's). The lowering that
+//! No reference is byte-compared yet: `refusals_pinned` asserts the exact
+//! `MaliError` text of each refused one (the vertex shader's when it
+//! refuses, else the fragment shader's), and `compiled_pinned` that each of
+//! [`COMPILED`] (the mediump kept loops of plan #377, docs/notes/
+//! mali-deqp-loops.md section 10) compiles. The lowering that
 //! lifts one moves its entry in [`REFUSALS`] in the same commit and, when the
 //! pair compiles, adds `mali_ref::assert_matches` for it (a kept loop carries
 //! the pass counter the walk adds, which the shared compare does not edit:
@@ -42,72 +44,47 @@ const LOOP_FORM: &str = "a loop past Mesa's unroll limits or with two run-time b
 /// dEQP body; the `idx`, `ret`, `fn`, `inv` and `disc` names are the other
 /// groups' own.
 const REFUSALS: &[(&str, &str)] = &[
-    ("fs_disc_always", LOOP_MEDIUMP),
-    ("fs_disc_dyn", LOOP_MEDIUMP),
-    ("fs_disc_dynamic", LOOP_MEDIUMP),
-    ("fs_disc_texture", LOOP_MEDIUMP),
-    ("fs_do_con_select_iteration_count", LOOP_MEDIUMP),
-    ("fs_do_dyn_101_iterations", LOOP_MEDIUMP),
+    ("fs_disc_always", "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's)"),
+    ("fs_disc_dyn", "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's)"),
+    ("fs_disc_dynamic", "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's)"),
     ("fs_do_dyn_basic_highp_float", LOOP_MEDIUMP),
     ("fs_do_dyn_conditional_break", GUARD_MEDIUMP),
-    ("fs_do_dyn_nested", LOOP_MEDIUMP),
-    ("fs_do_dyn_select_iteration_count", LOOP_MEDIUMP),
-    ("fs_do_uni_101_iterations", LOOP_MEDIUMP),
+    ("fs_do_dyn_nested", "control flow (if, a loop, a return before the end)"),
+    ("fs_do_dyn_select_iteration_count", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_do_uni_basic_highp_float", LOOP_MEDIUMP),
     ("fs_do_uni_basic_mediump_float", LOOP_MEDIUMP),
     ("fs_do_uni_conditional_break", GUARD_MEDIUMP),
     ("fs_do_uni_conditional_continue", GUARD_MEDIUMP),
-    ("fs_do_uni_nested", LOOP_MEDIUMP),
-    ("fs_do_uni_select_iteration_count", LOOP_MEDIUMP),
-    ("fs_for_con_select_iteration_count", LOOP_MEDIUMP),
-    ("fs_for_dyn_101_iterations", LOOP_MEDIUMP),
+    ("fs_do_uni_nested", "control flow (if, a loop, a return before the end)"),
+    ("fs_do_uni_select_iteration_count", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_for_dyn_basic_mediump_float", LOOP_MEDIUMP),
-    ("fs_for_dyn_basic_mediump_int", LOOP_MEDIUMP),
-    ("fs_for_dyn_conditional_body", LOOP_MEDIUMP),
-    ("fs_for_dyn_conditional_break", LOOP_MEDIUMP),
     ("fs_for_dyn_nested", LOOP_MEDIUMP),
-    ("fs_for_dyn_select_iteration_count", LOOP_MEDIUMP),
-    ("fs_for_uni_101_iterations", LOOP_MEDIUMP),
+    ("fs_for_dyn_select_iteration_count", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_for_uni_basic_highp_float", LOOP_MEDIUMP),
-    ("fs_for_uni_compound_statement", LOOP_MEDIUMP),
-    ("fs_for_uni_conditional_body", LOOP_MEDIUMP),
-    ("fs_for_uni_empty_body", LOOP_MEDIUMP),
-    ("fs_for_uni_function_call_inout", LOOP_MEDIUMP),
     ("fs_for_uni_nested", LOOP_MEDIUMP),
     ("fs_for_uni_nested_sequence", LOOP_MEDIUMP),
     ("fs_for_uni_nested_tricky_dataflow_1", LOOP_MEDIUMP),
     ("fs_for_uni_nested_tricky_dataflow_2", LOOP_MEDIUMP),
     ("fs_for_uni_sequence", LOOP_MEDIUMP),
-    ("fs_for_uni_single_iteration", LOOP_MEDIUMP),
-    ("fs_idx_mat4_dd", LOOP_MEDIUMP),
+    ("fs_idx_mat4_dd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_idx_mat4_sd", LOOP_MEDIUMP),
-    ("fs_idx_tmp_float_dd", LOOP_MEDIUMP),
+    ("fs_idx_tmp_float_dd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_idx_tmp_float_dldl", LOOP_MEDIUMP),
     ("fs_idx_tmp_vec4_cd", LOOP_MEDIUMP),
     ("fs_idx_tmp_vec4_sd", LOOP_MEDIUMP),
     ("fs_idx_uni_float", LOOP_MEDIUMP),
-    ("fs_idx_uni_vec4", LOOP_MEDIUMP),
-    ("fs_idx_var_vec4_sd", LOOP_MEDIUMP),
+    ("fs_idx_uni_vec4", "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform,"),
+    ("fs_idx_var_vec4_sd", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
     ("fs_idx_vec_direct_w", LOOP_MEDIUMP),
     ("fs_idx_vec_static_w", LOOP_MEDIUMP),
-    ("fs_idx_vec_w_direct", LOOP_MEDIUMP),
-    ("fs_idx_vec_w_dynsub", LOOP_MEDIUMP),
-    ("fs_ret_dyn", LOOP_MEDIUMP),
-    ("fs_ret_dynamic_loop_never", LOOP_MEDIUMP),
-    ("fs_scope_while", LOOP_MEDIUMP),
+    ("fs_idx_vec_w_direct", LOOP_FORM),
+    ("fs_idx_vec_w_dynsub", LOOP_FORM),
+    ("fs_ret_dyn", LOOP_FORM),
+    ("fs_ret_dynamic_loop_never", LOOP_FORM),
     ("fs_struct_local", LOOP_MEDIUMP),
     ("fs_wh_con_101_iterations", LOOP_FORM),
-    ("fs_wh_dyn_101_iterations", LOOP_MEDIUMP),
     ("fs_wh_dyn_basic_highp_float", LOOP_MEDIUMP),
-    ("fs_wh_dyn_conditional_body", LOOP_MEDIUMP),
-    ("fs_wh_dyn_conditional_break", LOOP_MEDIUMP),
     ("fs_wh_dyn_nested", LOOP_MEDIUMP),
-    ("fs_wh_uni_101_iterations", LOOP_MEDIUMP),
-    ("fs_wh_uni_compound_statement", LOOP_MEDIUMP),
-    ("fs_wh_uni_conditional_body", LOOP_MEDIUMP),
-    ("fs_wh_uni_conditional_break", LOOP_MEDIUMP),
-    ("fs_wh_uni_conditional_continue", LOOP_MEDIUMP),
-    ("fs_wh_uni_double_continue", LOOP_MEDIUMP),
     ("fs_wh_uni_nested", LOOP_MEDIUMP),
     ("vs_do_con_101_iterations", LOOP_VERTEX),
     ("vs_do_con_nested", LOOP_VERTEX),
@@ -139,11 +116,11 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_for_uni_nested_tricky_dataflow_1", LOOP_VERTEX),
     ("vs_for_uni_nested_tricky_dataflow_2", LOOP_VERTEX),
     ("vs_for_uni_unconditional_break", LOOP_VERTEX),
-    ("vs_idx_mat4_dldl", LOOP_VERTEX),
-    ("vs_idx_tmp_vec4_dd", LOOP_VERTEX),
-    ("vs_idx_tmp_vec4_dldl", LOOP_VERTEX),
-    ("vs_idx_var_vec4_dd", LOOP_VERTEX),
-    ("vs_idx_var_vec4_dldl", LOOP_VERTEX),
+    ("vs_idx_mat4_dldl", "a constant operation on or to a value that is not a finite normal float"),
+    ("vs_idx_tmp_vec4_dd", "a constant operation on or to a value that is not a finite normal float"),
+    ("vs_idx_tmp_vec4_dldl", "a constant operation on or to a value that is not a finite normal float"),
+    ("vs_idx_var_vec4_dd", "a constant operation on or to a value that is not a finite normal float"),
+    ("vs_idx_var_vec4_dldl", "a constant operation on or to a value that is not a finite normal float"),
     ("vs_idx_vec_dldl", LOOP_VERTEX),
     ("vs_idx_vec_w_direct", LOOP_VERTEX),
     ("vs_idx_vec_w_dynsub", LOOP_VERTEX),
@@ -171,6 +148,40 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_wh_uni_unconditional_continue", LOOP_VERTEX),
 ];
 
+/// The references whose pair compiles since plan #377's mediump kept loop
+/// (docs/notes/mali-deqp-loops.md section 10), each with whether its
+/// fragment words are Mesa's with the loop cap's added and its registers
+/// moved (checked by the spike's word alignment; no `CapEdit` list pins them
+/// yet) or differ in form (a `while (i++ < n)` counter, a loop Mesa deletes,
+/// a look-up's kept branch).
+const COMPILED: &[(&str, bool)] = &[
+    ("fs_disc_texture", false),
+    ("fs_do_con_select_iteration_count", true),
+    ("fs_do_dyn_101_iterations", true),
+    ("fs_do_uni_101_iterations", true),
+    ("fs_for_con_select_iteration_count", true),
+    ("fs_for_dyn_101_iterations", true),
+    ("fs_for_dyn_basic_mediump_int", true),
+    ("fs_for_dyn_conditional_body", true),
+    ("fs_for_dyn_conditional_break", true),
+    ("fs_for_uni_101_iterations", true),
+    ("fs_for_uni_compound_statement", true),
+    ("fs_for_uni_conditional_body", true),
+    ("fs_for_uni_empty_body", false),
+    ("fs_for_uni_function_call_inout", true),
+    ("fs_for_uni_single_iteration", true),
+    ("fs_scope_while", false),
+    ("fs_wh_dyn_101_iterations", true),
+    ("fs_wh_dyn_conditional_body", false),
+    ("fs_wh_dyn_conditional_break", true),
+    ("fs_wh_uni_101_iterations", false),
+    ("fs_wh_uni_compound_statement", true),
+    ("fs_wh_uni_conditional_body", false),
+    ("fs_wh_uni_conditional_break", true),
+    ("fs_wh_uni_conditional_continue", false),
+    ("fs_wh_uni_double_continue", false),
+];
+
 #[test]
 fn refusals_pinned() {
     for (name, text) in REFUSALS {
@@ -187,6 +198,16 @@ fn refusals_pinned() {
 }
 
 #[test]
+fn compiled_pinned() {
+    for (name, _) in COMPILED {
+        let r = mali_ref::Reference::load(&format!("deqp_loops2_{name}"));
+        if let Err(e) = mali_ref::compile_pair(&r.vs, &r.fs) {
+            panic!("{name}: refused again: {e}");
+        }
+    }
+}
+
+#[test]
 fn references_listed() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tools/mali/testdata");
     let mut on_disk: Vec<String> = std::fs::read_dir(dir)
@@ -198,7 +219,8 @@ fn references_listed() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> = REFUSALS.iter().map(|(n, _)| n.to_string()).collect();
+    let mut listed: Vec<String> =
+        REFUSALS.iter().map(|(n, _)| n.to_string()).chain(COMPILED.iter().map(|(n, _)| n.to_string())).collect();
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_loops2_* reference is not in REFUSALS, or the other way round");
 }

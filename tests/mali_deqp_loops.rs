@@ -11,6 +11,9 @@
 //! byte-equal since plan #367 lower-int-loops' vertex unroll.
 //! `refusals_pinned` runs now: it asserts each reference's exact current
 //! refusal (the vertex shader's when it refuses, else the fragment shader's).
+//! The mediump kept loops of `fs_for_uni`, `fs_while_uni`, `fs_dowhile_uni`,
+//! `fs_cond_break`, `fs_cond_continue`, `fs_double_continue`, `fs_mixed` and
+//! `fs_inf_break` compile (note section 10): each is a compile check here.
 //! A kept-loop reference carries the pass counter in its words, which the
 //! shared compare does not edit: its lowering compares it with `CapEdit` in
 //! `src/shaderc/online/mali/tests.rs` and turns its test here into a compile
@@ -28,22 +31,28 @@ fn fs_101() {
     mali_ref::assert_matches("deqp_loops_fs_101");
 }
 
+/// Compiles (step 2b: the `break` merged into the head's exit test). A kept loop: its words are Mesa's with
+/// the loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_cond_break_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-2"]
 fn fs_cond_break() {
-    mali_ref::assert_matches("deqp_loops_fs_cond_break");
+    compiles("deqp_loops_fs_cond_break");
 }
 
+/// Compiles (step 2b: the `continue` flattened into `MUX.v2i16` selects). A kept loop: its words are Mesa's with
+/// the loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_cond_continue_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-2"]
 fn fs_cond_continue() {
-    mali_ref::assert_matches("deqp_loops_fs_cond_continue");
+    compiles("deqp_loops_fs_cond_continue");
 }
 
+/// Compiles (step 2b: a bare `continue` ending the body). A kept loop: its words are Mesa's with
+/// the loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_double_continue_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-2"]
 fn fs_double_continue() {
-    mali_ref::assert_matches("deqp_loops_fs_double_continue");
+    compiles("deqp_loops_fs_double_continue");
 }
 
 #[test]
@@ -52,64 +61,96 @@ fn fs_dowhile_if() {
     mali_ref::assert_matches("deqp_loops_fs_dowhile_if");
 }
 
+/// Compiles (step 1b: the do-while). A kept loop: its words are Mesa's with
+/// the loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_dowhile_uni_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-1"]
 fn fs_dowhile_uni() {
-    mali_ref::assert_matches("deqp_loops_fs_dowhile_uni");
+    compiles("deqp_loops_fs_dowhile_uni");
 }
 
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-1"]
+#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) (its fp16 float counter, a lone 16-bit lane carried: no `U16_TO_U32` copy row yet), lowered by lower-loops-1"]
 fn fs_float_uni() {
     mali_ref::assert_matches("deqp_loops_fs_float_uni");
 }
 
+/// Compiles (step 1b: the mediump kept loop). A kept loop: its words are Mesa's with
+/// the loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_for_uni_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-1"]
 fn fs_for_uni() {
-    mali_ref::assert_matches("deqp_loops_fs_for_uni");
+    compiles("deqp_loops_fs_for_uni");
 }
 
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-2"]
+#[ignore = "differs: no loop since the array rule (`guessed_trips`), the words of its constant-bound twin (`fs_idx_dyn_is_its_constant_bound_twin`), whose sum Mesa fuses into three FMA.v2f16 and ours does not (#367 lower-fma)"]
 fn fs_idx_dyn() {
     mali_ref::assert_matches("deqp_loops_fs_idx_dyn");
 }
 
+/// The array rule (nir_fs.rs `guessed_trips`, docs/notes/mali-deqp-loops.md
+/// section 10): `for (int i = 0; i < ui_four; i++) arr[i] = ..;` over
+/// `float arr[4]` is unrolled by the array's length with its run-time
+/// bound dropped, as Mesa's `partial_unroll` leaves it. Both stages are the
+/// program of the same pair with the bound `4`, word for word, or refuse
+/// alike (the vertex twin's constop refusal).
 #[test]
-#[ignore = "refused: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects), lowered by lower-loops-2"]
+fn fs_idx_dyn_is_its_constant_bound_twin() {
+    for name in ["deqp_loops_fs_idx_dyn", "deqp_loops_vs_idx_dyn"] {
+        let r = mali_ref::Reference::load(name);
+        let twin = |s: &str| s.replace("i < ui_four", "i < 4");
+        match (mali_ref::compile_pair(&r.vs, &r.fs), mali_ref::compile_pair(&twin(&r.vs), &twin(&r.fs))) {
+            (Ok(a), Ok(b)) => {
+                assert_eq!(a.fs.code, b.fs.code, "{name}: fragment words");
+                assert_eq!(a.vs.code, b.vs.code, "{name}: vertex words");
+            }
+            (Err(a), Err(b)) => assert_eq!(a, b, "{name}: refusals"),
+            (a, b) => panic!("{name}: {:?} against its twin's {:?}", a.err(), b.err()),
+        }
+    }
+}
+
+/// Compiles (step 2b: the lone `if (c) break;` terminator); a kept loop, its words are Mesa's with the
+/// loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_inf_break_is_mesa_26_2_1_with_the_loop_cap`.
+#[test]
 fn fs_inf_break() {
-    mali_ref::assert_matches("deqp_loops_fs_inf_break");
+    compiles("deqp_loops_fs_inf_break");
 }
 
+/// Compiles (step 2b: `continue` and `else if (..) break;`); a kept loop, its words are Mesa's with the
+/// loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_mixed_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-2"]
 fn fs_mixed() {
-    mali_ref::assert_matches("deqp_loops_fs_mixed");
+    compiles("deqp_loops_fs_mixed");
 }
 
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-1"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) (the `ub_true ? N : 0` bound's select of the bool uniform), then lower-loops-1"]
 fn fs_select() {
     mali_ref::assert_matches("deqp_loops_fs_select");
 }
 
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-1"]
+#[ignore = "refused: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, (`kept_loop` keeps a loop Mesa unrolls, `wrapper_unroll`), lowered by lower-loops-1"]
 fn fs_uncond_break() {
     mali_ref::assert_matches("deqp_loops_fs_uncond_break");
 }
 
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-2"]
+#[ignore = "refused: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, (an indexed store in a kept loop; then a second, sequenced kept loop), lowered by lower-loops-2"]
 fn fs_vec_dyn() {
     mali_ref::assert_matches("deqp_loops_fs_vec_dyn");
 }
 
+/// Compiles (step 1b: the `while` form). A kept loop: its words are Mesa's with
+/// the loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_while_uni_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge), lowered by lower-loops-1"]
 fn fs_while_uni() {
-    mali_ref::assert_matches("deqp_loops_fs_while_uni");
+    compiles("deqp_loops_fs_while_uni");
 }
 
 /// Unrolled as Mesa unrolls it (plan #367 lower-int-loops: the vertex
@@ -145,7 +186,7 @@ fn vs_for_uni() {
 }
 
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-2"]
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float, the vertex twin's of the array rule (`fs_idx_dyn_is_its_constant_bound_twin`; the constop family), then byte-equal"]
 fn vs_idx_dyn() {
     mali_ref::assert_matches("deqp_loops_vs_idx_dyn");
 }
@@ -181,28 +222,28 @@ fn vs_while_const() {
     mali_ref::assert_matches("deqp_loops_vs_while_const");
 }
 
+/// The pair of reference `name` compiles and links (a kept loop's words are
+/// compared with the cap in `src/shaderc/online/mali/tests.rs`).
+fn compiles(name: &str) {
+    let r = mali_ref::Reference::load(name);
+    if let Err(e) = mali_ref::compile_pair(&r.vs, &r.fs) {
+        panic!("{name}: refused: {e}");
+    }
+}
+
 /// The first refusal of each reference at the tip, without the "Valhall: "
 /// prefix and the " is not lowered yet" suffix.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_loops_fs_101", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
-    ("deqp_loops_fs_cond_break", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_cond_continue", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_double_continue", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
     ("deqp_loops_fs_dowhile_if", "control flow (if, a loop, a return before the end)"),
-    ("deqp_loops_fs_dowhile_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
     ("deqp_loops_fs_float_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_for_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_idx_dyn", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_inf_break", "a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects)"),
-    ("deqp_loops_fs_mixed", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_select", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_uncond_break", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_vec_dyn", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
-    ("deqp_loops_fs_while_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
+    ("deqp_loops_fs_select", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
+    ("deqp_loops_fs_uncond_break", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
+    ("deqp_loops_fs_vec_dyn", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
     ("deqp_loops_vs_dowhile_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
     ("deqp_loops_vs_float_uni", "a loop in a vertex shader"),
     ("deqp_loops_vs_for_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
-    ("deqp_loops_vs_idx_dyn", "a loop in a vertex shader"),
+    ("deqp_loops_vs_idx_dyn", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_loops_vs_idx_static", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_loops_vs_nested_const", "a loop in a vertex shader"),
     ("deqp_loops_vs_select", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
