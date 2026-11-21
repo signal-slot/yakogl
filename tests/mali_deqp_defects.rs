@@ -116,8 +116,8 @@ fn defects_pinned() {
 /// (`mali_ref::compile_pair` holds its own lock; this one covers
 /// [`compile_bound`] and the pin's calls).
 fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
-    static ONE: Mutex<()> = Mutex::new(());
-    ONE.lock().unwrap_or_else(|p| p.into_inner())
+    static COMPILING: Mutex<()> = Mutex::new(());
+    COMPILING.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 fn log_text(log: &[c_char]) -> String {
