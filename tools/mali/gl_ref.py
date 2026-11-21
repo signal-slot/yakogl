@@ -10,13 +10,14 @@ tools/mali/drm_shim_ref.sh).
         [--second-frame] [--depth-stencil] [--second-clear depth|stencil]
         [--blend-func SRC,DST] [--blend-color R,G,B,A] [--mrt N] [--levels N]
         [--samples 4] [--mat-columns] [--instances N] [--divisors D0,D1,...]
+        [--attrib-bindings NAME=LOC,NAME=LOC,...]
 
 <libdir> holds the libEGL.so.1 and libGLESv2.so.2 to use. The program runs on
 an EGL surfaceless display (EGL_PLATFORM_SURFACELESS_MESA) into a WxH RGBA8
 framebuffer object (64x64 by default; the viewport is the whole framebuffer
 and the depth range 0,1 unless given: a run that sets them makes the
 viewport scale and offset words of the trace's FAU table distinct), binds the attributes to locations in declaration order
-(as glsl2pan.py numbers them), gives each a buffer of zeros, clears and draws
+(as glsl2pan.py numbers them, unless `--attrib-bindings`), gives each a buffer of zeros, clears and draws
 six vertices, then glFlush()es: the driver submits the job, and a pandecode
 trace (PAN_MESA_DEBUG=trace) holds the programs. It reads nothing back, as it
 runs on drm-shim, where no job ever completes. Prints the renderer and
@@ -118,6 +119,18 @@ for the smallest D, and glVertexAttribDivisor(location, D) set on each. For
 case 141 (`--instances 4 --divisors 0,2,2`) that is `pos` stride 16 in a
 96-byte buffer and `offs`, `icol` stride 24 at offsets 0 and 8 in a 48-byte
 buffer, the case's first draw. Without either option the draw is unchanged.
+
+`--attrib-bindings NAME=LOC,...` binds the named attributes to the given
+locations with glBindAttribLocation before the link, as an application that
+sets its own bindings does (dEQP's attribute_location tests). Two names may
+take one location (GLSL ES 1.00 lets attributes alias; Mesa links such a
+program when at most one of the two is statically used, or both are, as dEQP's
+bind_aliasing shaders read them under opposite conditions). Attributes the
+list does not name take, in declaration order, the lowest locations no listed
+attribute covers (a matN attribute covers N under `--mat-columns`, else 1);
+a name the vertex shader does not declare stops the run. Every location up to
+the highest bound one gets a vec4 array of zeros and is enabled. Without the
+option the numbering is unchanged, byte for byte.
 """
 import ctypes as C
 import os
@@ -364,6 +377,41 @@ def uniform_settings(vs_text, fs_text):
     return out
 
 
+def parse_attrib_bindings(text):
+    """`a=1,b=1,c=0` as [(name, location)] in order (ValueError on a bad item)."""
+    out = []
+    for item in text.split(","):
+        name, eq, loc = item.partition("=")
+        if not eq or not re.fullmatch(r"[A-Za-z_]\w*", name) or not loc.isdigit():
+            raise ValueError(item)
+        out.append((name, int(loc)))
+    return out
+
+
+def attribute_locations(names, widths, bindings=None):
+    """The location of each name: `bindings` ([(name, loc)]) as given, the
+    others in declaration order at the lowest locations no bound attribute
+    covers; `widths[name]` is the number of locations a name covers. With no
+    bindings it is 0, w0, w0 + w1, ... (the numbering without the option)."""
+    bound = dict(bindings or [])
+    unknown = [n for n in bound if n not in names]
+    if unknown:
+        raise ValueError("not an attribute of the vertex shader: " + ", ".join(unknown))
+    used = {l + k for n, l in bound.items() for k in range(widths[n])}
+    locs, nxt = [], 0
+    for n in names:
+        if n in bound:
+            locs.append(bound[n])
+            continue
+        if bindings:
+            while any(nxt + k in used for k in range(widths[n])):
+                nxt += 1
+        locs.append(nxt)
+        used |= {nxt + k for k in range(widths[n])}
+        nxt += widths[n]
+    return locs
+
+
 def option(args, name, default, parse):
     """The value of `--name V` in args (removed from it), parsed, or default."""
     if name not in args:
@@ -388,6 +436,7 @@ def main():
         samples = option(args, "--samples", 1, int)
         instances = option(args, "--instances", None, int)
         divisors = option(args, "--divisors", None, lambda v: [int(x) for x in v.split(",")])
+        bindings = option(args, "--attrib-bindings", None, parse_attrib_bindings)
         blend_color = option(args, "--blend-color", (0.0, 0.0, 0.0, 0.0),
                              lambda v: tuple(float(x) for x in v.split(",")))
     except (ValueError, IndexError, KeyError):
@@ -416,6 +465,9 @@ def main():
     libdir, vs_path, fs_path = args
     es3 = bool(mrt) or is_es3(open(vs_path).read(), open(fs_path).read())
     if levels < 1 or (levels > 1 and not es3):
+        print(__doc__, file=sys.stderr)
+        return 2
+    if bindings is not None and divisors is not None:
         print(__doc__, file=sys.stderr)
         return 2
     if divisors is not None:
@@ -518,10 +570,13 @@ def main():
     gl.glAttachShader(prog, shader(GL_FRAGMENT_SHADER, fs_path))
     names = (attributes_es3 if es3 else attributes)(open(vs_path).read())
     cols = attribute_columns(open(vs_path).read()) if (mat_columns and not es3) else {}
-    locs, nloc = [], 0
-    for n in names:
-        locs.append(nloc)
-        nloc += cols.get(n, (1, 4))[0]
+    widths = {n: cols.get(n, (1, 4))[0] for n in names}
+    try:
+        locs = attribute_locations(names, widths, bindings)
+    except ValueError as e:
+        print("gl_ref: --attrib-bindings: %s" % e, file=sys.stderr)
+        return 2
+    nloc = max((l + widths[n] for l, n in zip(locs, names)), default=0)
     for i, n in zip(locs, names):
         gl.glBindAttribLocation(prog, i, n.encode())
     gl.glLinkProgram(prog)

@@ -217,3 +217,50 @@ FragmentTooLarge / TooManyValues / TexLanes shaders (struct uniforms; waiting fo
 Lowering order: note section 4 (AttributeNumbering fold first, then Invariant A/B, Rebalance with arith step 8,
 AlgebraicForm random pair, bind_aliasing, Spill after the mediump vertex walk, struct-uniform texts last).
 ```
+
+## 6. `gl_ref.py --attrib-bindings` and the bind_aliasing references (`deqp_misc3_*`)
+
+Plan #387, item `board-baseline-rows`. This is the tool change step 6 of
+section 4 asked for.
+
+- **Option.** `tools/mali/gl_ref.py --attrib-bindings a_0=1,a_1=1,...` calls
+  `glBindAttribLocation` with the listed locations before the link; two names
+  may share one. A name not listed takes the lowest free run of locations after
+  the listed ones are removed, in declaration order. A listed name the vertex
+  shader lacks, a bad item, or the option with `--divisors` stops the run with
+  exit 2. Without the option the numbering and every existing reference are
+  unchanged (spot check: `deqp_misc2_invariant_cse` regenerates byte-identical).
+  `tools/mali/deqp_ref.sh` forwards the option (shim instrument only; it
+  makes shim the default). Help is in `gl_ref.py`'s header; tests in
+  `tools/mali/test_gl_ref.py` (`python3 -I tools/mali/test_gl_ref.py`).
+- **References.** `tools/mali/testdata/deqp_misc3_bind_{cond_float,cond_vec2,
+  cond_vec3,cond_vec4,cond_mat2,cond_mat3,cond_mat4,max_cond_mat4}`: `.vert`,
+  `.frag`, `.bind` (the bindings as `name location` lines, as
+  `deqp_defects_encode_*.bind`) and `.expect.json`, made with
+  `deqp_ref.sh ... --instrument shim --attrib-bindings <the .bind pairs>` on
+  Mesa 26.2.1 (drm-shim built the documented way into
+  `$CONNECTED_DEPS_DIR/mesa-shim`); every draw `glGetError 0x0`. `cond_T`
+  is dEQP's `BindAliasingAttributeTest` with offset 0: `a_0` of type T read
+  when `u_A != 0.0`, a vec4 `a_1` read when `u_A == 0.0`, both bound to
+  location 1. `max_cond_mat4` is `BindMaxAliasingAttributeTest`: four pairs
+  of mat4 at locations 12, 8, 4, 0. **Caveat:** the CTS clone and the `.qpa`
+  were not available when these were made, so the shader texts are written
+  from the generator's code (`generateVertexShaderTemplate`, the same form as
+  the verbatim `max_cond_float` pair of `deqp_defects_encode_*`), not copied
+  from a run; check them against the next host measure's `.qpa` and redraw if a
+  byte differs.
+- **What Mesa does.** Aliased names share one load: each location has one
+  `LD_ATTR_IMM`, whichever name reads it (`cond_float`: one load,
+  `index:0x0`). The record `index` counts the *read locations in ascending
+  order*, not the location number: location 1 alone is `index:0`;
+  `max_cond_mat4`'s locations 12, 8, 4, 0 are loaded as index 3, 2, 1, 0.
+  `cond_mat2` loads two records (`a_0`'s two columns, `index:0x0` v4 and
+  `index:0x1` v2, since `vec4(mat2)` is the four floats of both columns);
+  `cond_mat3` loads a v4 and an f32 (`index` 0 and 1: three floats of column 0
+  and the first of column 1); `vec4(mat4)` reads column 0 only, one load. This is what
+  `compile_vs_mapped_blocks` must produce from the link's location map.
+- **Test.** `tests/mali_deqp_misc3.rs`: eight `#[ignore]`d byte-compares and
+  `refusals_pinned`, which pins the link's refusal (`the Valhall back end of
+  a vertex shader at the link's attribute locations is not lowered yet`).
+  They compile the way `glBindAttribLocation` + `glLinkProgram` do
+  (`compile_bound`, as `tests/mali_deqp_defects.rs`).
