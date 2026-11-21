@@ -794,3 +794,350 @@ pub fn ts_resolve(c: &TsResolve) -> Words {
     r.end();
     w
 }
+
+// --- W13: the swap resolve of a TILED window (groundwork, no wiring) ----------
+//
+// `docs/notes/gc-tiled-window.md` W13: the window's colour buffer is a 4x4
+// TILED shadow and the RS resolves it into the linear buffer the display
+// reads, in the frame's last stream before eglSwapBuffers presents it.
+// Nothing calls these builders: egl.rs and backend.rs are unchanged, and no
+// stream moves. tests/gc_swap_resolve.rs runs the words through `rs_interp`
+// over a tiled shadow and compares the result with an untile through
+// `layout::offset`; this file keeps its `regs.rs`-only dependency (the host
+// tests that include it by `#[path]`).
+//
+// The words are Mesa 26.2.1's for the flush of a window resource with a
+// tiled render shadow: `etna_flush_resource` (`etnaviv_clear_blit.c:286-295`)
+// -> `etna_copy_resource` (`:337-395`, the whole level) -> `etna_try_rs_blit`
+// (`etnaviv_rs.c:678-943`, no tile status) -> `etna_compile_rs_state`
+// (`:68-187`) -> `etna_submit_rs_state` (`:221-257`, the RS_NEW_BASEADDR and
+// SINGLE_BUFFER arm of this core). In order: GL_FLUSH_CACHE COLOR|DEPTH and a
+// stall RA->PE (`:845-850`), `TS_MEM_CONFIG` 0 because the source has no
+// valid tile status (`:888-890`), then the coalesced RS block.
+//
+// - A TILED side's stride is its row stride times 4 with RS_CONFIG's
+//   `SOURCE_TILED`, and no stride `TILING` bit (that bit is the super-tiled
+//   sides', `:104-110`); `TS_MODE(0)` of the CACHE128B256BPERLINE core is 0.
+// - The window is the GL size, widened to the RS alignment (16 x 4) when the
+//   destination's padding holds the widened rectangle (`:806-837`); otherwise
+//   Mesa leaves the RS (`goto manual`, which for a linear destination returns
+//   false), and here the builder refuses ([`NotSwapResolve`]). The shadow's
+//   own padding always holds it: its stride is the 16-padded width
+//   ([`window_shadow_stride`]) and its rows the 4-padded height
+//   (`layout::padding`, TILED with `rs_align`).
+// - `swap_rb` is Mesa's `blit_rb_swap` of a shared RB_SWAP format
+//   (`etnaviv_clear_blit.c:283-284`): an RGBA8 window resolved from the PE's
+//   BGRA order.
+//
+// Where gc-tiled-window.md differs from Mesa: the note refuses a window whose
+// width is not a multiple of 16 or height not of 4 (its 1366x768 example,
+// after `tiled_rt::spec_of`); Mesa resolves such a window when the
+// destination is padded for the widened rectangle, and so does
+// [`swap_resolve`] given [`WindowResolve::dst_pitch`] and
+// [`WindowResolve::dst_rows`]. The note names no size floor of the LCDIF:
+// its "frame floor" is the latch wait in `board_show`, a time, so no size is
+// refused for it. The in-place (scanned-out) window the note excludes is a
+// window class, the caller's decision, not a size.
+
+/// `VIVS_RS_SOURCE_STRIDE_STRIDE__MASK` and `VIVS_RS_DEST_STRIDE_STRIDE__MASK`
+/// (state_3d.xml.h): the stride field of both stride registers.
+pub const RS_STRIDE_MAX: u32 = 0x0003_ffff;
+/// `VIVS_RS_WINDOW_SIZE_WIDTH__MASK` / `_HEIGHT__MASK`: the window fields.
+pub const RS_WINDOW_MAX: u32 = 0xffff;
+/// Bytes a pixel of a window this resolve takes: 32-bit only (the note's
+/// window shadow is `tiled_rt::BPP`'s 4 bytes; RGB565 is not in the design).
+pub const WINDOW_BPP: u32 = 4;
+
+/// The swap resolve of one window buffer: the tiled shadow into the linear
+/// buffer of the frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowResolve {
+    /// GPU address of the 4x4 TILED shadow, [`window_shadow_stride`] bytes a
+    /// row of pixels (the RS's 16-padded width), rows padded to 4.
+    pub src_addr: u32,
+    /// GPU address of the linear window buffer.
+    pub dst_addr: u32,
+    /// The GL size of the window.
+    pub width: u32,
+    pub height: u32,
+    /// RS format of both sides: `GC_RS_FORMAT_A8R8G8B8` or
+    /// `GC_RS_FORMAT_X8R8G8B8`. Any other is refused.
+    pub format: u32,
+    /// `RS_CONFIG` `SWAP_RB`: R and B exchanged on the way (an RGBA8 window).
+    pub swap_rb: bool,
+    /// Bytes from one row of the destination to the next; 0: `width * 4`.
+    pub dst_pitch: u32,
+    /// Rows the destination buffer holds; 0: `height`. More rows than
+    /// `height` let a height that is not a multiple of 4 be widened.
+    pub dst_rows: u32,
+}
+
+/// Why the RS does not resolve a window (the caller keeps the linear path).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotSwapResolve {
+    /// A width or height of 0.
+    Empty,
+    /// An RS format other than A8R8G8B8 and X8R8G8B8 (RGB565 included).
+    Format,
+    /// `dst_pitch` shorter than a row of `width` pixels, or `dst_rows` fewer
+    /// than `height`.
+    Destination,
+    /// The window widened to 16 x 4 does not fit the destination's padding
+    /// (Mesa's `goto manual`, `etnaviv_rs.c:832-837`).
+    Unaligned,
+    /// A window or a stride past its register field.
+    TooLarge,
+}
+
+/// The row stride in bytes of a window shadow `width` pixels wide:
+/// `layout::stride(Layout::Tiled, width, 4, true)` (the 16-padded width
+/// times 4, `etnaviv_resource.c:327-329`), computed here because this file
+/// depends on `regs.rs` only.
+pub const fn window_shadow_stride(width: u32) -> u32 {
+    width.div_ceil(RS_WIDTH_ALIGN) * RS_WIDTH_ALIGN * WINDOW_BPP
+}
+
+/// The destination's row pitch in bytes.
+const fn window_pitch(r: &WindowResolve) -> u32 {
+    if r.dst_pitch != 0 {
+        r.dst_pitch
+    } else {
+        r.width * WINDOW_BPP
+    }
+}
+
+/// The RS window `(w, h)` of a swap resolve: the GL size, each side widened
+/// to the RS alignment when the destination's padding holds it
+/// (`etnaviv_rs.c:806-837`, one sample, a whole level).
+pub const fn swap_resolve_window(r: &WindowResolve) -> Result<(u32, u32), NotSwapResolve> {
+    if r.width == 0 || r.height == 0 {
+        return Err(NotSwapResolve::Empty);
+    }
+    if r.format != GC_RS_FORMAT_A8R8G8B8 && r.format != GC_RS_FORMAT_X8R8G8B8 {
+        return Err(NotSwapResolve::Format);
+    }
+    /* the aligned window must fit the 16-bit fields (and the products below
+     * a u32) */
+    if r.width > RS_WINDOW_MAX - (RS_WIDTH_ALIGN - 1) || r.height > RS_WINDOW_MAX - (RS_HEIGHT_ALIGN - 1) {
+        return Err(NotSwapResolve::TooLarge);
+    }
+    let pitch = window_pitch(r);
+    let rows = if r.dst_rows != 0 { r.dst_rows } else { r.height };
+    if pitch < r.width * WINDOW_BPP || rows < r.height {
+        return Err(NotSwapResolve::Destination);
+    }
+    let w = r.width.div_ceil(RS_WIDTH_ALIGN) * RS_WIDTH_ALIGN;
+    let h = r.height.div_ceil(RS_HEIGHT_ALIGN) * RS_HEIGHT_ALIGN;
+    if w * WINDOW_BPP > pitch || h > rows {
+        return Err(NotSwapResolve::Unaligned);
+    }
+    if window_shadow_stride(r.width) << 2 > RS_STRIDE_MAX || pitch > RS_STRIDE_MAX {
+        return Err(NotSwapResolve::TooLarge);
+    }
+    Ok((w, h))
+}
+
+/// The words of the swap resolve of `r`, or why the RS does not take it:
+/// GL_FLUSH_CACHE COLOR|DEPTH, a stall RA->PE, `TS_MEM_CONFIG` 0, then
+/// RS_CONFIG (TILED source, linear destination, `SWAP_RB` as asked), the
+/// strides, the pipe addresses and offsets, the window, dither off, no clear,
+/// `RS_EXTRA_CONFIG` 0 and the kick inside RS_SINGLE_BUFFER, coalesced as
+/// Mesa's `etna_submit_rs_state`: [`SWAP_RESOLVE_WORDS`] words.
+///
+/// `TS_MEM_CONFIG` 0 turns off any tile status the stream had set up (Mesa
+/// marks the TS state dirty after a blit, `etnaviv_rs.c:891`): a caller with
+/// a live TS writes it again after these words.
+pub fn swap_resolve(r: &WindowResolve) -> Result<Words, NotSwapResolve> {
+    let (w, h) = swap_resolve_window(r)?;
+    let mut words = Words::new();
+
+    words.state(GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH);
+    words.stall(GC_SYNC_RA, GC_SYNC_PE);
+    words.state(GC_TS_MEM_CONFIG, 0);
+    let mut c = Coalesce::new(&mut words);
+    c.emit(GC_RS_CONFIG, rs_config(r.format) | GC_RS_SOURCE_TILED | if r.swap_rb { GC_RS_SWAP_RB } else { 0 });
+    c.emit(GC_RS_SOURCE_STRIDE, window_shadow_stride(r.width) << 2);
+    c.emit(GC_RS_DEST_STRIDE, window_pitch(r));
+    c.emit(rs_pipe_source_addr(0), r.src_addr);
+    c.emit(rs_pipe_dest_addr(0), r.dst_addr);
+    c.emit(rs_pipe_offset(0), 0);
+    c.emit(rs_pipe_offset(1), 0);
+    c.emit(GC_RS_WINDOW_SIZE, rs_window_width(w) | rs_window_height(h));
+    c.emit(rs_dither(0), 0xffff_ffff);
+    c.emit(rs_dither(1), 0xffff_ffff);
+    c.emit(GC_RS_CLEAR_CONTROL, 0);
+    for i in 0..4 {
+        c.emit(rs_fill_value(i), 0);
+    }
+    c.emit(GC_RS_EXTRA_CONFIG, 0);
+    c.emit(GC_RS_SINGLE_BUFFER, GC_RS_SINGLE_BUFFER_ENABLE);
+    c.emit(GC_RS_KICKER, GC_RS_KICKER_VALUE);
+    c.emit(GC_RS_SINGLE_BUFFER, 0);
+    c.end();
+    Ok(words)
+}
+
+/// The length of [`swap_resolve`]'s words.
+pub const SWAP_RESOLVE_WORDS: usize = 42;
+
+/// The `(register, value)` writes of `words`, a run of LOAD_STATE records
+/// and their pad words (what every builder here writes), in stream order:
+/// the input of `rs_interp::RsInterp::run`. Panics on a word that is neither
+/// a LOAD_STATE header nor a pad where a header is due.
+pub fn state_writes(words: &[u32]) -> impl Iterator<Item = (u32, u32)> + '_ {
+    let mut at = 0;
+    let mut run = (0u32, 0u32); /* (next register, values left) */
+    core::iter::from_fn(move || loop {
+        if run.1 > 0 {
+            let v = words[at];
+            let w = (run.0, v);
+            at += 1;
+            run = (run.0 + 4, run.1 - 1);
+            return Some(w);
+        }
+        let hdr = *words.get(at)?;
+        at += 1;
+        if hdr == PAD {
+            continue;
+        }
+        assert_eq!(hdr & 0xf800_0000, GC_OP_LOAD_STATE, "rs_clear: word {hdr:#010x} is not a LOAD_STATE");
+        run = ((hdr & 0xffff) << 2, (hdr >> 16) & 0x3ff);
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SRC: u32 = 0x1000_0000;
+    const DST: u32 = 0x2000_0000;
+
+    fn window(width: u32, height: u32, format: u32, swap_rb: bool) -> WindowResolve {
+        WindowResolve { src_addr: SRC, dst_addr: DST, width, height, format, swap_rb, dst_pitch: 0, dst_rows: 0 }
+    }
+
+    /// The swap resolve's words for a window, derived by hand from Mesa
+    /// 26.2.1: `etna_try_rs_blit` (`etnaviv_rs.c:845-850` flush and stall,
+    /// `:888-890` `TS_MEM_CONFIG` 0), `etna_compile_rs_state` (`:95-162`) and
+    /// `etna_submit_rs_state` (`:221-257`), coalesced as `etnaviv_emit.h`'s
+    /// `etna_coalesce_*` (a header per run of consecutive registers, a pad
+    /// after an odd end). Only the four values that depend on the window
+    /// vary: RS_CONFIG, the two strides and the window size.
+    #[rustfmt::skip]
+    fn mesa_words(config: u32, src_stride: u32, dst_stride: u32, window: u32) -> [u32; SWAP_RESOLVE_WORDS] {
+        [
+            0x0801_0e03, 0x0000_0003,           /* GL_FLUSH_CACHE (0x380c) COLOR | DEPTH */
+            0x0801_0e02, 0x0000_0705,           /* GL_SEMAPHORE_TOKEN (0x3808) RA -> PE */
+            0x0801_0f00, 0x0000_0705,           /* GL_STALL_TOKEN (0x3c00) RA -> PE */
+            0x0801_0595, 0x0000_0000,           /* TS_MEM_CONFIG (0x1654): no TS */
+            0x0801_0581, config,                /* RS_CONFIG (0x1604) */
+            0x0801_0583, src_stride,            /* RS_SOURCE_STRIDE (0x160c) */
+            0x0801_0585, dst_stride,            /* RS_DEST_STRIDE (0x1614) */
+            0x0801_05b0, SRC,                   /* RS_PIPE_SOURCE_ADDR(0) (0x16c0) */
+            0x0801_05b8, DST,                   /* RS_PIPE_DEST_ADDR(0) (0x16e0) */
+            0x0802_05c0, 0, 0, PAD,             /* RS_PIPE_OFFSET(0..1) (0x1700) */
+            0x0801_0588, window,                /* RS_WINDOW_SIZE (0x1620) */
+            0x0802_058c, 0xffff_ffff, 0xffff_ffff, PAD, /* RS_DITHER(0..1) (0x1630) */
+            0x0805_058f, 0, 0, 0, 0, 0,         /* RS_CLEAR_CONTROL (0x163c), RS_FILL_VALUE(0..3) */
+            0x0801_05a8, 0,                     /* RS_EXTRA_CONFIG (0x16a0) */
+            0x0801_05ae, 1,                     /* RS_SINGLE_BUFFER (0x16b8) ENABLE */
+            0x0801_0580, 0xbeeb_beeb,           /* RS_KICKER (0x1600) */
+            0x0801_05ae, 0,                     /* RS_SINGLE_BUFFER */
+        ]
+    }
+
+    #[test]
+    fn the_800x600_swap_resolve_is_mesas_words() {
+        // RS_CONFIG: SOURCE_FORMAT(A8R8G8B8 6) | SOURCE_TILED 0x80 |
+        // DEST_FORMAT(6) << 8; source stride 800 * 4 = 0xc80, times 4, no
+        // TILING bit (TILED, not super-tiled); destination 0xc80; window
+        // 600 << 16 | 800.
+        let w = swap_resolve(&window(800, 600, GC_RS_FORMAT_A8R8G8B8, false)).unwrap();
+        assert_eq!(w.as_slice(), &mesa_words(0x0000_0686, 0x3200, 0x0c80, 0x0258_0320));
+    }
+
+    #[test]
+    fn the_1920x1080_swap_resolve_is_mesas_words() {
+        // X8R8G8B8 (5) with SWAP_RB 0x20000000; stride 1920 * 4 = 0x1e00,
+        // times 4 = 0x7800; window 1080 << 16 | 1920.
+        let w = swap_resolve(&window(1920, 1080, GC_RS_FORMAT_X8R8G8B8, true)).unwrap();
+        assert_eq!(w.as_slice(), &mesa_words(0x2000_0585, 0x7800, 0x1e00, 0x0438_0780));
+        let w = swap_resolve(&window(1920, 1080, GC_RS_FORMAT_A8R8G8B8, false)).unwrap();
+        assert_eq!(w.as_slice(), &mesa_words(0x0000_0686, 0x7800, 0x1e00, 0x0438_0780));
+    }
+
+    #[test]
+    fn a_padded_destination_widens_the_window_as_mesa_does() {
+        // 1366 is not a multiple of 16: Mesa widens to 1376 when both
+        // levels' padding hold it (etnaviv_rs.c:814-815); the shadow's
+        // stride is the 16-padded row.
+        let r = WindowResolve { dst_pitch: 1376 * 4, ..window(1366, 768, GC_RS_FORMAT_A8R8G8B8, false) };
+        assert_eq!(swap_resolve_window(&r), Ok((1376, 768)));
+        let w = swap_resolve(&r).unwrap();
+        assert_eq!(w.as_slice(), &mesa_words(0x0000_0686, (1376 * 4) << 2, 1376 * 4, 768 << 16 | 1376));
+        // and a height not a multiple of 4 with room for the padded rows
+        let r = WindowResolve { dst_rows: 604, ..window(800, 601, GC_RS_FORMAT_A8R8G8B8, false) };
+        assert_eq!(swap_resolve_window(&r), Ok((800, 604)));
+    }
+
+    #[test]
+    fn the_sizes_and_formats_the_rs_does_not_resolve_are_refused() {
+        let a8 = GC_RS_FORMAT_A8R8G8B8;
+        let refused = |r: WindowResolve| swap_resolve(&r).err();
+        assert_eq!(refused(window(0, 600, a8, false)), Some(NotSwapResolve::Empty));
+        assert_eq!(refused(window(800, 0, a8, false)), Some(NotSwapResolve::Empty));
+        // 16-bit windows are not in the design (gc-tiled-window.md: one
+        // 4-byte target), RGB565 included
+        assert_eq!(refused(window(800, 600, GC_RS_FORMAT_R5G6B5, false)), Some(NotSwapResolve::Format));
+        assert_eq!(refused(window(800, 600, GC_RS_FORMAT_A4R4G4B4, false)), Some(NotSwapResolve::Format));
+        // a destination smaller than the window
+        assert_eq!(
+            refused(WindowResolve { dst_pitch: 799 * 4, ..window(800, 600, a8, false) }),
+            Some(NotSwapResolve::Destination)
+        );
+        assert_eq!(
+            refused(WindowResolve { dst_rows: 599, ..window(800, 600, a8, false) }),
+            Some(NotSwapResolve::Destination)
+        );
+        // no padding for the widened window (the note's 1366x768 panel with
+        // a tight pitch; a height of 601 with no spare rows): Mesa's
+        // `goto manual`
+        assert_eq!(refused(window(1366, 768, a8, false)), Some(NotSwapResolve::Unaligned));
+        assert_eq!(
+            refused(WindowResolve { dst_pitch: 1372 * 4, ..window(1366, 768, a8, false) }),
+            Some(NotSwapResolve::Unaligned)
+        );
+        assert_eq!(refused(window(800, 601, a8, false)), Some(NotSwapResolve::Unaligned));
+        assert_eq!(refused(window(8, 4, a8, false)), Some(NotSwapResolve::Unaligned));
+        // past the register fields: the source stride field (18 bits) holds
+        // a row of 16383 pixels times 4 times 4, the window fields 16 bits
+        assert!(swap_resolve(&window(16368, 4, a8, false)).is_ok());
+        assert_eq!(refused(window(16384, 4, a8, false)), Some(NotSwapResolve::TooLarge));
+        assert_eq!(refused(window(0xffff, 4, a8, false)), Some(NotSwapResolve::TooLarge));
+        assert_eq!(refused(window(16, 0xffff, a8, false)), Some(NotSwapResolve::TooLarge));
+        assert_eq!(
+            refused(WindowResolve { dst_pitch: RS_STRIDE_MAX + 1, ..window(800, 600, a8, false) }),
+            Some(NotSwapResolve::TooLarge)
+        );
+    }
+
+    #[test]
+    fn state_writes_reads_the_swap_resolve_back() {
+        let w = swap_resolve(&window(800, 600, GC_RS_FORMAT_A8R8G8B8, false)).unwrap();
+        let writes: [(u32, u32); 23] = {
+            let mut it = state_writes(w.as_slice());
+            let a = core::array::from_fn(|_| it.next().unwrap());
+            assert_eq!(it.next(), None);
+            a
+        };
+        assert_eq!(writes[0], (GC_GL_FLUSH_CACHE, GC_FLUSH_COLOR | GC_FLUSH_DEPTH));
+        assert_eq!(writes[3], (GC_TS_MEM_CONFIG, 0));
+        assert_eq!(writes[4], (GC_RS_CONFIG, 0x0686));
+        assert_eq!(writes[9], (rs_pipe_offset(0), 0));
+        assert_eq!(writes[10], (rs_pipe_offset(1), 0));
+        assert_eq!(writes[11], (GC_RS_WINDOW_SIZE, 0x0258_0320));
+        assert_eq!(writes[18], (rs_fill_value(3), 0));
+        assert_eq!(writes[21], (GC_RS_KICKER, GC_RS_KICKER_VALUE));
+        assert_eq!(writes[22], (GC_RS_SINGLE_BUFFER, 0));
+    }
+}
