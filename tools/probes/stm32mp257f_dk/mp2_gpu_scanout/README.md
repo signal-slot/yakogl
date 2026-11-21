@@ -129,7 +129,7 @@ MP2_HOLD_S=45 tools/board-stm32mp2.sh run build/mp2_gpu_scanout/zephyr/zephyr.bi
 ```
 
 While the runner prints `hold: result seen at ..., holding 45s`, take a
-screenshot from `resource:kvm-stm32mp257f-dk` and judge it. The triangle
+screenshot of the board's HDMI output and judge it. The triangle
 fills the screen as in `gc_triangle`: its apexes are at (0.5, 0.1),
 (0.1, 0.9) and (0.9, 0.9) of the width and height, on the background
 `0x102030`, whatever the mode:
