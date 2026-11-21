@@ -582,14 +582,12 @@ mod es3 {
         assert_eq!(c.clear_target_mask, 2, "draw buffer 2 is target 1");
         assert_eq!(c.targets[1].0, a2, "the named target is attachment 2");
 
-        /* the dropped draw buffer 0: its bit moves out of the list, and the
-         * clear names nothing (`clear_target_mask`'s empty value, bit 7) */
+        /* the dropped draw buffer 0 names no image: ES 3.0 4.2.3 makes the
+         * clear no error and no effect, so the back end gets nothing */
         // SAFETY: four readable floats.
         unsafe { glClearBufferfv(GL_COLOR, 0, red.as_ptr()) };
         assert_eq!(err(), GL_NO_ERROR);
-        let c = seen().pop().expect("the clear reached the back end");
-        assert_eq!(c.clear_target_mask, 1 << 7, "draw buffer 0 is not in the list");
-        assert!(c.targets.iter().all(|t| t.0 != 0), "the list itself is unchanged");
+        assert!(seen().is_empty(), "a clear of a draw buffer with no image reaches no back end");
         release(fb, &rbs);
     }
 
