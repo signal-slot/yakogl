@@ -1,0 +1,9 @@
+config OTHER
+	default y
+
+config YAKOGL_DRV_GPU_PVR_PARTIAL_RENDER
+	bool "x"
+	default n
+
+config NEXT
+	default y
