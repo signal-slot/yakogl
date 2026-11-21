@@ -447,7 +447,8 @@ fn select_in(layout: Layout, key: ds_cache::DsKey) -> Result<ds_cache::Selected,
 /// W3. A depth surface has a layout. A surface with a live plane stays in it:
 /// another layout is refused, not remapped; one that holds nothing, or a
 /// whole clear's value (the same in every layout), changes. A plane in a
-/// surface of another layout is not copied to a new surface.
+/// surface of another layout is copied to a new surface on the CPU, each
+/// pixel to its place (W12a groundwork, `ds_cache::copy_plane`).
 #[test]
 fn a_depth_surface_keeps_its_layout_while_it_holds_contents() {
     let rig = Rig::new();
@@ -467,18 +468,24 @@ fn a_depth_surface_keeps_its_layout_while_it_holds_contents() {
     assert_eq!(ds_cache::layout_of(key), Layout::SuperTiled);
     assert_eq!(ds_cache::planes_of(key).unwrap()[0].cleared_value(), Some(1.0f32.to_bits()), "the value is kept");
 
-    /* the depth plane (object 5) written in the super-tiled surface does not
-     * move into a surface of another layout... */
+    /* the depth plane (object 5) written in the super-tiled surface moves
+     * into a surface of another layout, converted on the CPU... */
     ds_cache::drawn(key, 3, false, [true, true], [None, None]);
     let other = ds_key((5, 1), (7, 1));
-    assert_eq!(select_in(Layout::Linear, other).unwrap_err(), -crate::util::ENOTSUP);
-    /* ...but moves into one of the same layout */
-    select_in(Layout::SuperTiled, other).expect("the same layout");
+    select_in(Layout::Linear, other).expect("another layout, converted");
+    assert!(ds_cache::planes_of(other).unwrap()[0].is_live());
+    /* ...where it keeps that layout while live... */
+    assert_eq!(select_in(Layout::SuperTiled, other).unwrap_err(), -crate::util::ENOTSUP);
+    /* ...and moves into one of the same layout */
+    let third = ds_key((5, 1), (8, 1));
+    select_in(Layout::Linear, third).expect("the same layout");
     assert!(rig.faults().is_empty());
 }
 
+/// W12a groundwork: a super-tiled surface is read through
+/// `depth_format::read_super_tiled` (bit-exactness: tests/gc_depth_resolve.rs).
 #[test]
-fn a_non_linear_depth_surface_is_not_resolved_by_the_cpu() {
+fn a_super_tiled_depth_surface_is_resolved_by_the_cpu() {
     let rig = Rig::new();
     let key = ds_key((9, 1), (9, 1));
     select_in(Layout::SuperTiled, key).expect("a super-tiled surface");
@@ -486,8 +493,8 @@ fn a_non_linear_depth_surface_is_not_resolved_by_the_cpu() {
     let mut out = [7.0f32; 64 * 64];
     // SAFETY: 64 rows of 64 floats.
     let rc = unsafe { ds_cache::resolve_depth(9, out.as_mut_ptr(), 64, 64, 64, GC_DEPTH_GUARD_BYTES, |_| 0) };
-    assert_eq!(rc, 1, "nothing for a CPU reader");
-    assert!(out.iter().all(|&v| v == 7.0), "and nothing written");
+    assert_eq!(rc, 0, "read through depth_format");
+    assert!(out.iter().all(|&v| (0.0..=1.0).contains(&v)), "every texel written");
     assert!(rig.faults().is_empty());
 }
 

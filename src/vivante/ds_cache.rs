@@ -31,7 +31,8 @@
 //! every surface holding one, the draw is refused (src/ds_retention.rs).
 
 use super::backend::{g, heap_data};
-use super::layout::Layout;
+use super::depth_format::{self, PeDepthFormat};
+use super::layout::{self, Layout};
 use crate::backend::GlesDraw;
 use crate::ds_retention::{self, Parked, Plane, DEPTH, STENCIL};
 use crate::osal::{self, OsalGpuMem, OSAL_MEM_DATA};
@@ -97,9 +98,12 @@ struct Surface {
     /// How the pixel engine lays the surface out: [`Layout::Linear`] (row
     /// after row, what every surface here has been) or [`Layout::SuperTiled`],
     /// which only a draw into a tiled colour shadow gives it
-    /// ([`pe_private`], `tiled_rt.rs`). A plane that holds contents is
-    /// never read or copied across layouts ([`copy_plane`], [`seed_depth`],
-    /// [`resolve_depth`]); a whole-clear value is layout-free.
+    /// ([`pe_private`], `tiled_rt.rs`). A live plane keeps its surface's
+    /// layout ([`select_in`]); [`copy_plane`], [`seed_depth`] and
+    /// [`resolve_depth`] read and write a `SuperTiled` one through
+    /// `layout::offset` and `depth_format` (W12a groundwork,
+    /// docs/notes/gc-tiled-wire.md), the linear one as before; a
+    /// whole-clear value is layout-free.
     layout: Layout,
 }
 
@@ -523,10 +527,21 @@ pub fn gone(id: u32, pending: impl Fn(u32) -> bool) {
 
 /// Copy plane `p` of surface `from` into surface `to`, leaving `to`'s other
 /// plane as it is: a masked word copy on the CPU, after `finish` has made
-/// the GPU idle. Two surfaces of one row stride have one layout (rows and
-/// supertiles both 64-pixel aligned, `align64`), so the shorter one's rows
-/// are copied word for word. Another stride is a layout this code does not
-/// remap: the draw is refused with -ENOTSUP and a line naming it.
+/// the GPU idle. Two surfaces of one row stride and one layout lay their
+/// pixels out alike (rows and supertiles both 64-pixel aligned, `align64`),
+/// so the shorter one's rows are copied word for word. Another stride is a
+/// layout this code does not remap: the draw is refused with -ENOTSUP and a
+/// line naming it.
+///
+/// One stride and two layouts (`Linear` and `SuperTiled`, W12a groundwork):
+/// each pixel of the shorter one's rows is copied from its place in one to
+/// its place in the other (`layout::offset`), with the same mask. Reached
+/// only with `gc_tiled_rt` on: no surface leaves `Linear` without it (the
+/// one caller that asks for `SuperTiled` is src/vivante/backend.rs:3374,
+/// behind `tiled_rt_spec`'s `tiled_rt_on()` at src/vivante/backend.rs:744).
+/// With the knob on, a depth renderbuffer live in a super-tiled surface and
+/// then attached with another stencil object to a draw drawn linear comes
+/// here; until W12a that draw was refused.
 fn copy_plane(
     c: &mut Cache,
     from: usize,
@@ -536,7 +551,8 @@ fn copy_plane(
     finish: &mut impl FnMut() -> i32,
 ) -> Result<(), i32> {
     let (Some(s), Some(d)) = (c.entries[from].as_ref(), c.entries[to].as_ref()) else { return Err(-1) };
-    if s.layout != d.layout {
+    let cpu_layout = |l: Layout| matches!(l, Layout::Linear | Layout::SuperTiled);
+    if s.layout != d.layout && !(cpu_layout(s.layout) && cpu_layout(d.layout)) {
         crate::glog_once!(
             "vivante: the {} of object 0x{:x} is in a {:?} surface and the draw wants a {:?} one: not copied, the \
              draw is refused",
@@ -560,6 +576,7 @@ fn copy_plane(
     }
     let (src, dst) = (s.mem, d.mem);
     let bytes = s.stride as usize * s.rows.min(d.rows) as usize;
+    let remap = (s.layout != d.layout).then_some((s.layout, d.layout, s.stride, s.rows.min(d.rows)));
     let rc = finish();
     if rc != 0 {
         return Err(rc);
@@ -577,6 +594,20 @@ fn copy_plane(
     }
     let mask = PLANE_MASK[p];
     let (sb, db) = (&sb[guard..guard + bytes], &mut db[guard..guard + bytes]);
+    if let Some((sl, dl, stride, rows)) = remap {
+        for y in 0..rows {
+            for x in 0..stride / 4 {
+                let (sa, da) = (layout::offset(sl, x, y, 4, stride), layout::offset(dl, x, y, 4, stride));
+                let (Some(sw), Some(dw)) = (sb.get(sa..sa + 4), db.get_mut(da..da + 4)) else { continue };
+                let sv = u32::from_ne_bytes([sw[0], sw[1], sw[2], sw[3]]);
+                let dv = u32::from_ne_bytes([dw[0], dw[1], dw[2], dw[3]]);
+                dw.copy_from_slice(&((dv & !mask) | (sv & mask)).to_ne_bytes());
+            }
+        }
+        // SAFETY: as above.
+        unsafe { osal::cache_flush(dst.cpu, dst.size) };
+        return Ok(());
+    }
     for (sw, dw) in sb.as_chunks::<4>().0.iter().zip(db.as_chunks_mut::<4>().0.iter_mut()) {
         let (sv, dv) = (u32::from_ne_bytes(*sw), u32::from_ne_bytes(*dw));
         *dw = ((dv & !mask) | (sv & mask)).to_ne_bytes();
@@ -600,6 +631,14 @@ fn copy_plane(
 /// `Err(-ENOTSUP)`, named once in the log, for a 4x surface (scale 2, a
 /// depth texture is single-sampled) or one with no CPU view: the draw is
 /// refused rather than tested against depth the texels no longer hold.
+///
+/// A `SuperTiled` surface (W12a groundwork) takes each texel at its place
+/// there (`layout::offset`, the offsets `depth_format::write_super_tiled`
+/// writes, with the same rounding: `depth_unorm24`). No caller reaches that
+/// today: texels come only with `GlesDraw::depth_texels`, and a draw that
+/// carries them is not `pe_private` (above), the condition every
+/// `SuperTiled` surface was selected under (src/vivante/backend.rs:744 and
+/// :3374); a surface of a key keeps its layout while a plane is live.
 fn seed_depth(
     c: &mut Cache,
     slot: usize,
@@ -611,7 +650,7 @@ fn seed_depth(
     let Some(e) = c.entries[slot].as_ref() else { return Err(-1) };
     let busy = e.used_by != 0 && pending(e.used_by);
     let (scale, id) = (e.key.scale, e.key.depth_id);
-    if e.layout != Layout::Linear {
+    if !matches!(e.layout, Layout::Linear | Layout::SuperTiled) {
         crate::glog_once!(
             "vivante: draw refused: the depth the CPU wrote into object 0x{:x} cannot go into a {:?} surface",
             id,
@@ -643,6 +682,20 @@ fn seed_depth(
     unsafe { osal::cache_invd(e.mem.cpu, e.mem.size) };
     let stride = e.stride as usize;
     let (cols, rows) = ((t.w as usize).min(stride / 4), (t.h as usize).min(e.rows as usize));
+    if e.layout == Layout::SuperTiled {
+        for y in 0..rows as u32 {
+            for x in 0..cols as u32 {
+                let at = layout::offset(Layout::SuperTiled, x, y, 4, e.stride);
+                let Some(word) = px.get_mut(at..at + 4) else { continue };
+                let old = u32::from_ne_bytes([word[0], word[1], word[2], word[3]]);
+                word.copy_from_slice(&((old & PLANE_MASK[STENCIL]) | t.unorm24(x, y) << 8).to_ne_bytes());
+            }
+        }
+        // SAFETY: as above.
+        unsafe { osal::cache_flush(e.mem.cpu, e.mem.size) };
+        e.planes[DEPTH] = Plane::LIVE;
+        return Ok(());
+    }
     for y in 0..rows {
         for (x, word) in px[y * stride..y * stride + cols * 4].as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let old = u32::from_ne_bytes(*word);
@@ -677,6 +730,18 @@ fn seed_depth(
 /// kick used the surface, and the GL core finished every kick slot first
 /// (docs/notes/gc-depth-resolve.md). A failed wait is its return code.
 ///
+/// A `SuperTiled` surface (W12a groundwork) is read through
+/// `depth_format::read_super_tiled`: the same floats, bit for bit, as the
+/// linear read of the same words (tests/gc_depth_resolve.rs). Only a
+/// surface whose objects carry neither bit 30 (texture) nor bit 31 (window)
+/// leaves `Linear` (`pe_private`, required at src/vivante/backend.rs:744 for
+/// the `SuperTiled` of src/vivante/backend.rs:3374, both behind
+/// `tiled_rt_on()`): with `gc_tiled_rt` off no surface reaches this path.
+/// With it on, a depth texture's resolve (`ds_object_id(.., true)` at
+/// src/gl/texture.rs:738, bit 30) still never does; an ES 3.0 depth blit
+/// from a renderbuffer (src/gl/blit.rs:1035, bit 30 clear) does, and until
+/// W12a was answered 1 (nothing read). Any other layout answers 1.
+///
 /// # Safety
 /// `dst` holds `h` rows of `pitch` floats, `w <= pitch`.
 pub unsafe fn resolve_depth(
@@ -707,8 +772,8 @@ pub unsafe fn resolve_depth(
     if let Some(v) = e.planes[DEPTH].cleared_value() {
         return fill(f32::from_bits(v));
     }
-    if e.layout != Layout::Linear {
-        return 1; /* PE-private (pe_private): no reader is meant to get here */
+    if !matches!(e.layout, Layout::Linear | Layout::SuperTiled) {
+        return 1; /* no CPU reading of this layout */
     }
     /* the wait may submit the open frame: nothing in the cache moves */
     let rc = wait_kick(e.written_by);
@@ -722,6 +787,12 @@ pub unsafe fn resolve_depth(
     // SAFETY: the whole CPU mapping.
     unsafe { osal::cache_invd(e.mem.cpu, e.mem.size) };
     let Some(px) = all.get(guard..guard + bytes) else { return -crate::util::EINVAL };
+    if e.layout == Layout::SuperTiled {
+        // SAFETY: the caller's contract: `h` rows of `pitch` floats.
+        let out = unsafe { core::slice::from_raw_parts_mut(dst, h as usize * pitch as usize) };
+        depth_format::read_super_tiled(PeDepthFormat::D24S8, px, e.stride, w, h, out, pitch);
+        return 0;
+    }
     /* a row at a time on plain slices: no closure, no checked index per
      * texel (the per-texel form cost ~2 ms a 1024 x 1024 resolve on the
      * i.MX8MP, docs/notes/gc-depth-resolve.md). A texel past the surface is
