@@ -358,3 +358,18 @@ if(CONFIG_YAKOGL_DRV_I2C_STM32MP2 OR CONFIG_YAKOGL_DRV_DSI_STM32 OR CONFIG_YAKOG
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_DRV_DISPLAY_STM32_LTDC
     "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/display/display_yakogl_stm32_ltdc.c")
 endif()
+
+# Raspberry Pi Zero 2 W (soc/brcm/bcm2710, boards/raspberrypi/rpi_zero_2w):
+# the SoC's two interrupt controllers, carried with the SoC and the board from
+# upstream Zephyr at the commit driver/UPSTREAM.zephyr-rpi_zero_2w names,
+# compiled as upstream's drivers/interrupt_controller/CMakeLists.txt does.
+# Their header (<zephyr/drivers/interrupt_controller/intc_bcm283x.h>, which
+# the SoC's soc_irq.c includes too) is under ../include.
+if(CONFIG_BCM2836_L1_INTC OR CONFIG_BCM2835_ARMCTRL_IC)
+  zephyr_include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../include")
+  zephyr_library_named(yakogl_drv_bcm283x_intc)
+  zephyr_library_sources_ifdef(CONFIG_BCM2835_ARMCTRL_IC
+    "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/interrupt_controller/intc_bcm2835_armctrl.c")
+  zephyr_library_sources_ifdef(CONFIG_BCM2836_L1_INTC
+    "${CMAKE_CURRENT_SOURCE_DIR}/../drivers/interrupt_controller/intc_bcm2836_l1.c")
+endif()

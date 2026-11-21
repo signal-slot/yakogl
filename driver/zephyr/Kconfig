@@ -687,3 +687,8 @@ source "subsys/logging/Kconfig.template.log_config"
 rsource "lib/board/Kconfig"
 
 rsource "Kconfig.am62p"
+
+# The BCM283x interrupt-controller pair of the Raspberry Pi Zero 2 W
+# (soc/brcm/bcm2710), carried unchanged from upstream Zephyr until the
+# west.yml pin has it (driver/UPSTREAM.zephyr-rpi_zero_2w).
+rsource "../drivers/interrupt_controller/Kconfig.brcm"
