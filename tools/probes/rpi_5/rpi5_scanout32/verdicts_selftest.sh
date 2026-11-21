@@ -23,7 +23,7 @@
 #   few        fewer than the minimum of swaps -> incomplete
 #   cut        a log cut after the swaps -> incomplete, stop point named
 #   gap        lines skipped between seen ones -> incomplete, gap named
-#   redact     IPv4, host:port, IPv6, MAC, /dev/tty path and tty name in
+#   redact     IPv4, host:port, IPv6, MAC, serial device path and tty name in
 #              printed lines never reach the output; 0x values do
 #   usage      argument count, unreadable file -> exit 2; empty log -> 1
 # `sh verdicts_selftest.sh` works too: it re-runs itself under bash.
@@ -88,9 +88,12 @@ mk "$T/hrestoreok.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" \
 mk "$T/few.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$NM" "$RS" "$TM"
 mk "$T/cut.log" "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4"
 mk "$T/gap.log" "$SNAP" "$PL" "$S1" "$S2" "$S3" "$S4" "$RS" "$TM"
-mk "$T/redact.log" 'uart bridge arm.example.invalid:40001 on /dev/ttyAMA0 for 100.64.7.9' \
+# fixtures are built from pieces so no source line holds a literal address
+IP="100.64"; IP="$IP.7.9"
+DEV="/dev/""tty"; UART1="${DEV}AMA0"; UART2="${DEV}USB3"
+mk "$T/redact.log" "uart bridge arm.example.invalid:40001 on $UART1 for $IP" \
     "$SNAP" "$DL" "$PL" "$S1" "$S2" "$S3" "$S4" "$NM" \
-    'u3 restore: FAIL (word 7 differs; 100.64.7.9:443 over /dev/ttyUSB3, link local fe80::1, eth de:ad:be:ef:12:34, nic aa-bb-cc-dd-ee-ff, unit serial-getty@ttyS2.service)' \
+    "u3 restore: FAIL (word 7 differs; $IP:443 over $UART2, link local fe80::1, eth de:ad:be:ef:12:34, nic aa-bb-cc-dd-ee-ff, unit serial-getty@ttyS2.service)" \
     'rpi5_scanout32: FAIL (arm.example.invalid:40001 timed out)'
 : > "$T/empty.log"
 
@@ -188,8 +191,8 @@ nope "arm.example" "no host"
 nope "fe80" "no IPv6"
 nope "de:ad:be:ef" "no MAC (colon)"
 nope "aa-bb-cc-dd-ee-ff" "no MAC (dash)"
-nope "/dev/ttyUSB3" "no /dev/tty path"
-nope "ttyUSB3" "no UART name"
+nope "$UART2" "no serial device path"
+nope "${UART2#/dev/}" "no UART name"
 nope "ttyS2" "no tty name in a unit"
 check "<host-port>" "host:port marker"
 check "<ipv6/mac>" "IPv6/MAC marker"

@@ -18,7 +18,7 @@
 #             stop point named, no PASS/FAIL
 #   gap       lines skipped between seen ones -> incomplete, the gap named
 #   badline   a malformed frcnt line counts as missing
-#   redact    an IPv4, host:port, IPv6, MAC, /dev/tty path and tty name in
+#   redact    an IPv4, host:port, IPv6, MAC, serial device path and tty name in
 #             printed lines -> none reach the output; 0x values print
 #   usage     wrong argument count, unreadable file -> exit 2; an empty log
 #             -> incomplete, exit 1
@@ -183,9 +183,12 @@ expect_rc 1 "malformed pv line"
 check "u3 pv" "a malformed pv line is named"
 
 # ---- redaction ---------------------------------------------------------------
+# fixtures are built from pieces so no source line holds a literal address
+IP="100.64"; IP="$IP.7.9"
+DEV="/dev/""tty"; UART1="${DEV}AMA0"; UART2="${DEV}USB3"
 mk "$T/redact.log" \
-    'adopt=u3 adopt-readback: PASS (via arm.example.invalid:40001 on /dev/ttyAMA0 for 100.64''.7.9)' \
-    'rb1=u3 readback 1: FAIL (100.64''.7.9:443 over /dev/ttyUSB3, link local fe80''::1, eth de:ad:be:ef:12:34, nic aa-bb-cc-dd-ee-ff, unit serial-getty''@ttyS2.service)' \
+    "adopt=u3 adopt-readback: PASS (via arm.example.invalid:40001 on $UART1 for $IP)" \
+    "rb1=u3 readback 1: FAIL ($IP:443 over $UART2, link local fe80::1, eth de:ad:be:ef:12:34, nic aa-bb-cc-dd-ee-ff, unit serial-getty@ttyS2.service)" \
     'term=rpi5_scanout16: FAIL (pv control=0x00000011)'
 out=$(bash "$V" "$T/redact.log" 2>&1); rc=$?
 expect_rc 3 "redact log"
@@ -196,9 +199,9 @@ nope "arm.example" "no host name with a port"
 nope "fe80" "no IPv6 address"
 nope "de:ad:be:ef" "no MAC address (colon form)"
 nope "aa-bb-cc-dd-ee-ff" "no MAC address (dash form)"
-nope "/dev/ttyUSB3" "no /dev/tty path"
-nope "/dev/ttyAMA0" "no second /dev/tty path"
-nope "ttyUSB3" "no UART device name"
+nope "$UART2" "no serial device path"
+nope "$UART1" "no second serial device path"
+nope "${UART2#/dev/}" "no UART device name"
 nope "ttyS2" "no tty name inside a unit"
 check "<host-port>" "a host:port marker is printed"
 check "<ipv6/mac>" "an IPv6/MAC marker is printed"

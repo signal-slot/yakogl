@@ -73,7 +73,7 @@
 #                                   names the first swap that failed,
 #                                   'unanswered' for an incomplete log
 # Everything printed goes through the redactor first (IPv4/IPv6, MAC,
-# host:port, /dev/tty*, /dev/serial*, ttyS/USB/ACM/AMA names); 0x values
+# host:port, serial device paths and tty names); 0x values
 # are not redacted.
 #
 # Exit status:

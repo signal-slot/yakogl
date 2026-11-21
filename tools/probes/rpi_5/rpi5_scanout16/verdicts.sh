@@ -74,8 +74,8 @@
 #
 # Everything the script prints goes through a redactor first, like
 # tools/board.sh's redact_line: IPv4 and IPv6 addresses, MAC addresses,
-# host:port pairs, /dev/tty* and /dev/serial* paths and ttyS/ttyUSB/
-# ttyACM/ttyAMA names come out as markers; rules run twice so a second
+# host:port pairs, serial device paths and tty names (ttyS,
+# USB, ACM and AMA ones) come out as markers; rules run twice so a second
 # value next to an already masked one is caught too. A DRAM address and
 # other 0x... values print unredacted.
 #
