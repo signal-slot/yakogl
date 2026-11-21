@@ -477,6 +477,45 @@ int stm32_ltdc_set_fb(const struct device *dev, uint64_t fb_phys)
 	return rc;
 }
 
+int stm32_ltdc_crc_enable(const struct device *dev, bool on)
+{
+	struct ltdc_data *d;
+	int rc;
+
+	if (!is_ltdc(dev)) {
+		return -ENODEV;
+	}
+	d = dev->data;
+	k_mutex_lock(&d->lock, K_FOREVER);
+	if (!d->st.on) {
+		k_mutex_unlock(&d->lock);
+		return -ENODEV;
+	}
+	/* layer 3 is non-secure on the DK */
+	rc = yd_mp25_ltdc_crc_enable(&d->yd_cfg, &d->st.ltdc, on ? 1u : 0u, 0u);
+	k_mutex_unlock(&d->lock);
+	return rc;
+}
+
+int stm32_ltdc_frame_crc(const struct device *dev, uint32_t *crc)
+{
+	struct ltdc_data *d;
+	int rc;
+
+	if (!is_ltdc(dev)) {
+		return -ENODEV;
+	}
+	d = dev->data;
+	k_mutex_lock(&d->lock, K_FOREVER);
+	if (!d->st.on) {
+		k_mutex_unlock(&d->lock);
+		return -ENODEV;
+	}
+	rc = yd_mp25_ltdc_frame_crc(&d->yd_cfg, &d->env, crc);
+	k_mutex_unlock(&d->lock);
+	return rc;
+}
+
 /* ---- Zephyr display API ---------------------------------------------------- */
 
 static int ltdc_blanking_on(const struct device *dev)

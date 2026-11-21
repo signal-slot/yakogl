@@ -23,6 +23,7 @@
 #ifndef YAKOGL_DRV_STM32_LTDC_H
 #define YAKOGL_DRV_STM32_LTDC_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <zephyr/device.h>
 #include <yakogl_mp25_display.h>
@@ -103,6 +104,16 @@ int stm32_ltdc_wait_frame(const struct device *dev, uint32_t *isr);
  * 4 GiB, bus-aligned, allowed for the LTDC (stm32_ltdc_board_fb_check()).
  * fb_phys 0 goes back to the driver's buffer. -ENODEV while down. */
 int stm32_ltdc_set_fb(const struct device *dev, uint64_t fb_phys);
+
+/* Frame CRC (GCR.CRCEN; layer 3 is non-secure on the DK). on switches the
+ * CRC unit on or off. -ENODEV while the chain is down or the LTDC has no CRC,
+ * else the FFI's negative errno. */
+int stm32_ltdc_crc_enable(const struct device *dev, bool on);
+
+/* One frame's CCRCR after the FFI's skipped frames, into *crc (untouched on
+ * an error). -ENODEV while down or no CRC unit, -EINVAL CRC off or crc NULL,
+ * -ETIMEDOUT no frame. Compare two reads; ST's algorithm is undocumented. */
+int stm32_ltdc_frame_crc(const struct device *dev, uint32_t *crc);
 
 /* ---- board hooks ---------------------------------------------------------
  * Weak defaults in the driver; the board layer overrides them
