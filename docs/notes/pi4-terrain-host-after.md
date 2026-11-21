@@ -129,3 +129,93 @@ values of a table of 8. They now are the clean frame's (5 chains, no refusal,
 7 image stores, 1 swap wait). The multi-scene harness cannot reproduce the
 stale-mark thrash on the tip by itself; its "before" is only visible with a
 table of 8.
+
+## After the dead window clear (d2767897)
+
+Plan #329, item `pi4-terrain-host-after2` (#1209). Host only, no board. Tip
+`d2767897` of the integration snapshot (`git fetch origin` is not possible
+here); the clear fix is `4255adf1` (`gl: a full pending clear stays on its
+framebuffer across a bind to another`, `draw::park_pending_clear`).
+
+**Answer: 8 jobs a frame on the V3D path, not 9.** The fix applies there,
+and `tests/v3d_terrain_jobs.rs` pins 8 on purpose.
+
+### Why the test passed after the merge
+
+It did not pass by accident. `4255adf1` itself changed
+`tests/v3d_terrain_jobs.rs`: both tests now assert
+`(f.jobs, f.draws) == (8, 8)` and `(waits, backend_waits, swap_waits) ==
+(8, 8, 1)`, with a comment that the board's 9 was the window's clear as a job
+of its own, emitted when the terrain FBO was bound. The test's double does not
+hide the clear: it uses the real V3D backend and counts `v3d_counters` kicks.
+The value 9 is what `docs/notes/pi4-terrain-host-after.md` above and
+`pi4-slow-terrain.md` recorded before the fix (their tables are the
+pre-fix state and now stale on that count). `v3d-terrain-gpu.md` candidate 3
+("9 jobs to 8") is therefore already in the tip; nothing is stale in the test.
+The header of the first test still quotes the old 9 only as history.
+
+### Host run at the tip
+
+`cargo test --no-default-features --features
+host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d_terrain_jobs --
+--nocapture --test-threads=1`:
+
+```
+test a_clean_terrain_frame ... clean: settled after 3 frame(s): Frame {
+    jobs: 8, imaged: 7, draws: 8, swap_waits: 1, waits: 8, backend_waits: 8,
+    tfu_queued: 5, tfu_run: 0, chains: 5, refused: [],
+    copies: [("image-store", 7)] }
+ok
+test terrain_after_an_fbo_scene_that_deletes_its_textures ... stale: settled after 3 frame(s): Frame { (the same values) }
+ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+`pi4-terrain/run.sh` (GM2_PROFILE=1, YAKOGL_V3D_TFU=1, frames 2 to 20):
+"v3d: jobs 8.00 a frame, CPU waits for a job 8.00 a frame"; 8.0 draws a
+frame; TFU model jobs 5.00 a frame. Waits by call: `glGenerateMipmap` 5.00
+(one each, the host TFU model finishing the job in flight), `eglSwapBuffers`
+2.84, `glFinish` 0.16 (the harness's occasional finish). `multiscene.sh` (blur
+and shadow desktop scenes, then terrain, 20 frames, one process; and terrain
+alone): 5 chains a frame from frame 2, `unknown` 0, `plain` 0, `first-sample`
+0, `image-store` 7; frame 1 is 1 chain, `unknown` 13, `plain` 3,
+`first-sample` 7, `image-store` 1, as before.
+
+The job list of a frame, from `terrain_frame` (one job a draw, 8 draws):
+
+| # | target | stores a render image |
+|---|---|---|
+| 1 | height map | yes |
+| 2 | normal map | yes |
+| 3 | terrain target (reads height, normal, specular, 3 JPEGs) | yes; then glGenerateMipmap (TFU chain 1) |
+| 4 | bloom H | yes; chain 2 |
+| 5 | bloom V | yes; chain 3 |
+| 6 | overlay blended into the terrain target | yes; chain 4 |
+| 7 | tilt-shift H | yes; chain 5 |
+| 8 | window (tilt-shift V, carries the window's COLOR|DEPTH clear) | no |
+
+`imaged` 7 is jobs 1 to 7. The window clear that was job 0 before is gone.
+
+### Predicted board values for `pi4-board-after2`
+
+An image from a main with `4255adf1` (and `c6b16f71`, `31a4cf8d`):
+
+* V3D jobs a frame: **8** (was 9). The window's clear no longer submits a job
+  at the terrain FBO bind. CPU waits a job: 8 on the host double; on the board
+  the waits poll `completed`, so the count of waits that really block is lower
+  and not predicted here; `swap_waits` 1.
+* `glmark2-jobs` (the per-scene counter line of
+  `glmark2-scene-counters.md`, if the image prints it): terrain `jobs` 8 a
+  frame, `tfu` 5 a frame, `tfu_run` 0, `refused` 0 after frame 1,
+  `image-store` 7 a frame. Over N frames the job total is 8 N (9 N before).
+  The log lines: `TFU mipmap at frame 10` shows 5 chains more each frame;
+  `tiled copies ... first-sample` +0 after frame 1.
+* Terrain ms: a job saved is about 0.5 to 0.8 ms of GPU time
+  (`v3d-terrain-gpu.md` candidate 3, confidence high), so about 35 ms against
+  the 35.7 ms record (a gain within run-to-run spread: it should read 0.5 to
+  1 ms lower). It is not a verdict on speed. If the jobs entry reads 9, the
+  image lacks `4255adf1`; if it reads 8 and ms did not move, the clear's
+  cost was small, as the 0.5 to 0.8 ms estimate says.
+
+No stale or wrong count was found, so there is no new issue to open from
+this check.
