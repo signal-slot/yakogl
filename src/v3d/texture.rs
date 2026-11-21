@@ -754,6 +754,30 @@ pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dT
     s
 }
 
+/// [`state`] with the TMU's base level set to `first_level`, the GL base
+/// level of the view, clamped to the last stored level (`max_level`): a
+/// first level past the chain reads the last level. Every other field is
+/// [`state`]'s: the base pointer stays level 0's slice, and Image Depth and
+/// Array Stride stay level 0's, since the TMU applies `base_level` itself.
+///
+/// Mesa's `v3d_setup_texture_shader_state` (v3dx_state.c:903-988, the range
+/// [`state`] cites) writes the view's first level to the record's Base Level
+/// and its last level to Max Level, and keeps the base pointer (:957-960),
+/// image depth (:935-939) and array stride (:961) level 0's. The vendored
+/// third_party/mesa-26.2.1 has no v3dx_state.c, so the Base/Max Level lines
+/// are from memory of that function, not re-read here; the other lines are
+/// the ones [`state`] already cites. Max Level is not adjusted: `state`
+/// already sets it to the last stored level.
+///
+/// Used by basefix (not wired yet), with [`size_words`] at the same first
+/// level, so that textureGrad does not apply the base level twice.
+#[allow(dead_code)] // basefix is its user
+pub fn state_at(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32, first_level: u32) -> V3dTexState {
+    let mut s = state(b, layout, image_gpu);
+    s.base_level = first_level.min(s.max_level);
+    s
+}
+
 /// The texture shader state of a depth texture binding read from the D24S8
 /// depth buffer its jobs stored (`backend::ZsBuf`, `GlesTextureBind::depth_id`),
 /// laid out as [`rt_layout`] lays out one level (the depth buffer's own
@@ -1923,6 +1947,34 @@ mod tests {
         b.mip_filter = 0;
         assert!(sampler(&b).mip_none, "no mip filter clamps the LOD to level 0");
         assert_eq!(sampler(&bind(4, 4)).wrap_s, V3D_WRAP_MODE_REPEAT, "GL's default");
+    }
+
+    /// [`state_at`]: level 0 is [`state`]; a first level moves only
+    /// `base_level`, clamped to the last stored level, for a 2D texture, a
+    /// 3D one and a 2D array.
+    #[test]
+    fn state_at_sets_only_the_base_level_clamped() {
+        let mipped = |b: GlesTextureBind| GlesTextureBind { mip_levels: 5, mip_filter: 1, ..b };
+        let shapes = [mipped(bind(16, 16)), mipped(vol(8, 8, 4, 1)), mipped(array(16, 8, 5, 1))];
+        for b in shapes {
+            let l = layout(&b).unwrap();
+            let base = state(&b, &l, 0x4000);
+            let last = base.max_level;
+            assert_eq!(last, l.levels - 1);
+            assert!(last >= 3, "{:?}", b.type_);
+            assert_eq!(state_at(&b, &l, 0x4000, 0), base, "level 0 is `state`, {:?}", b.type_);
+            let s1 = state_at(&b, &l, 0x4000, 1);
+            assert_eq!(s1, V3dTexState { base_level: 1, ..base }, "only base_level moves, {:?}", b.type_);
+            assert_eq!(state_at(&b, &l, 0x4000, last), V3dTexState { base_level: last, ..base });
+            assert_eq!(state_at(&b, &l, 0x4000, last + 1).base_level, last, "past the chain clamps");
+            assert_eq!(state_at(&b, &l, 0x4000, 99), V3dTexState { base_level: last, ..base });
+        }
+        let v = mipped(vol(8, 8, 4, 1));
+        let lv = layout(&v).unwrap();
+        let s = state_at(&v, &lv, 0, 1);
+        assert_eq!((s.depth, s.array_stride_64), (4, lv.slices[0].size / 64), "3D: level 0's");
+        let a = mipped(array(16, 8, 5, 1));
+        assert_eq!(state_at(&a, &layout(&a).unwrap(), 0, 1).depth, 5, "array: all layers");
     }
 
     /// [`size_words`] with a first level of 0 is exactly what
