@@ -625,6 +625,10 @@ std::thread_local! {
     /// test asserts it stays 0: every such site the corpus reaches has its
     /// class from Mesa.
     pub(crate) static NO_CONTEXT: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    /// Each value [`NO_CONTEXT`] counted, as `%<id> <op>`, so the corpus
+    /// test names the value and its shader rather than only a count.
+    pub(crate) static NO_CONTEXT_AT: core::cell::RefCell<std::vec::Vec<std::string::String>> =
+        const { core::cell::RefCell::new(std::vec::Vec::new()) };
     /// Set by the test of the no-context rule: the copy in of a parameter
     /// keeps the call's context, as a site that sets no class would.
     pub(crate) static UNMEASURED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
@@ -5130,6 +5134,32 @@ impl<'a> Lower<'_, 'a> {
         } else {
             out.extend_from_slice(self.a, run.as_slice())?;
         }
+        /* The read of the result slot is a copy the lowering makes. A
+         * float function's call carries its return precision, which the
+         * read records. A call with no class (an int function's: the slot
+         * is F32 whatever the return type) reads the 32-bit slot at full
+         * width: High, like the copy in and back of a parameter, not the
+         * no-context Unknown (dEQP functions.misc.argument_eval_order_1). */
+        let outer = self.cur;
+        if self.cur == Prec::None {
+            self.cur = Prec::High;
+        }
+        let r = self.load_result_slot(name, want, id, slot, comps, out);
+        self.cur = outer;
+        r
+    }
+
+    /// The value of [`Lower::inline_with_slot`]'s result slot, read once
+    /// the body has filled it.
+    fn load_result_slot(
+        &mut self,
+        name: &'a str,
+        want: Want<'a>,
+        id: ir::LocalId,
+        slot: Local<'a>,
+        comps: u8,
+        out: &mut AVec<'a, Node>,
+    ) -> R<'a, Ret> {
         match want {
             Want::Struct { .. } | Want::Array { .. } => Err(self.err(name, RUN_RESULT_IN_ONE_SLOT)),
             Want::Matrix(n, _) => {
@@ -9127,7 +9157,11 @@ impl<'a> Lower<'_, 'a> {
             }
             ir::ValueKind::Float | ir::ValueKind::Bool if self.cur == Prec::None => {
                 #[cfg(test)]
-                NO_CONTEXT.with(|n| n.set(n.get() + 1));
+                {
+                    NO_CONTEXT.with(|n| n.set(n.get() + 1));
+                    let at = std::format!("%{} {op:?}", self.instrs.len());
+                    NO_CONTEXT_AT.with(|v| v.borrow_mut().push(at));
+                }
                 Prec::Unknown
             }
             ir::ValueKind::Float | ir::ValueKind::Bool => self.cur,
