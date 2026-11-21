@@ -167,7 +167,7 @@ compile_error!(
 );
 #[cfg(all(feature = "gpu-v3d", mesa_reference))]
 compile_error!(
-    "feature \"gpu-v3d\" takes no table (\"no-shader-table\" in the host tests, no \"mesa-reference-table\"): there is no Mesa reference for the V3D"
+    "feature \"gpu-v3d\" takes no table (a host-test build leaves it out by itself, \"no-shader-table\" is accepted; \"mesa-reference-table\" is refused): there is no Mesa reference for the V3D"
 );
 
 /* The Mali-G610's only shader back end is the in-process compiler as well
@@ -180,5 +180,5 @@ compile_error!(
 );
 #[cfg(all(feature = "gpu-mali", mesa_reference))]
 compile_error!(
-    "feature \"gpu-mali\" takes no table (\"no-shader-table\" in the host tests, no \"mesa-reference-table\"): there is no Mesa reference table for the Mali"
+    "feature \"gpu-mali\" takes no table (a host-test build leaves it out by itself, \"no-shader-table\" is accepted; \"mesa-reference-table\" is refused): there is no Mesa reference table for the Mali"
 );
