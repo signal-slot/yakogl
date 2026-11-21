@@ -282,10 +282,12 @@ out=$(dry nanopc-t6 status 2>&1)
 check "nanopc-t6 status: kexec_loaded, watchdog0 and the runner's staging directory" \
     eval 'grep -q "kexec_loaded /sys/class/watchdog/watchdog0/state" <<<"$out" && grep -q "/tmp/yakogl-kexec" <<<"$out"'
 check "nanopc-t6 runs: nothing written on the host, no stub ran" eval '[ ! -e "$S/logs" ] && untouched'
-# The STM32MP257F-DK: board.sh knows only its standalone verbs, which it
-# exec's to tools/board-stm32mp2-standalone.sh (MP2S_STANDALONE_RUNNER names a
-# stub here); every other verb is refused with rc 2. The runner's own verbs
-# are checked by its selftest; the stub records its argv and exits with
+# The STM32MP257F-DK: its standalone verbs (status, install, uninstall,
+# default, nodefault) are exec'd to tools/board-stm32mp2-standalone.sh
+# (MP2S_STANDALONE_RUNNER names a stub here); its U-Boot one-shot verbs (run,
+# probe, disarm, uboot-status) reach tools/board-stm32mp2-uboot.sh (MP2_RUNNER,
+# a stub below); every other verb is refused with rc 2. The runners' own verbs
+# are checked by their selftests; the stub records its argv and exits with
 # MP2S_STUB_RC.
 cat > "$S/mp2s-stub.sh" <<'STUB'
 #!/bin/bash
@@ -320,10 +322,38 @@ check "--dry-run is passed through to the runner for each of the five verbs (bef
 check "the runner's exit code passes through (2 and 3 kept)" \
     eval 'MP2S_STUB_RC=3 mp2s_case " [nodefault]" stm32mp257f-dk nodefault && [ "$MP2S_RC" = 3 ] &&
           MP2S_STUB_RC=2 mp2s_case " [status]" stm32mp257f-dk status && [ "$MP2S_RC" = 2 ]'
-check "stm32mp257f-dk run, probe, tree, disarm, stage, gm, tally, an unknown verb: rc 2, the runner not run, the one-shot runners named" \
-    eval 'ok=1; for v in run probe tree disarm stage gm gm-lines tally diff bogus; do
+check "stm32mp257f-dk stage, gm, gm-lines, tally, diff, an unknown verb: rc 2, no runner run, the runners named" \
+    eval 'ok=1; for v in stage gm gm-lines tally diff bogus; do
               : > "$MP2S_STUB_LOG"; "$B" stm32mp257f-dk $v x y > "$S/mp2s.out" 2>&1; rc=$?
               [ "$rc" = 2 ] && [ ! -s "$MP2S_STUB_LOG" ] && grep -q "board-stm32mp2.sh" "$S/mp2s.out" && grep -q "board-stm32mp2-uboot.sh" "$S/mp2s.out" || ok=0; done; [ "$ok" = 1 ]'
+# the U-Boot one-shot verbs reach MP2_RUNNER (a stub), never the standalone runner
+cat > "$S/mp2u-stub.sh" <<'STUB'
+#!/bin/bash
+printf 'ARGV BOOT=%s:' "$BOARD_BOOT" >> "$MP2U_STUB_LOG"
+printf ' [%s]' "$@" >> "$MP2U_STUB_LOG"
+echo >> "$MP2U_STUB_LOG"
+exit 0
+STUB
+export MP2_RUNNER=$S/mp2u-stub.sh MP2U_STUB_LOG=$S/mp2u-stub.log
+mp2u_case() { # mp2u_case BOOT "expected argv line" board.sh-args...
+    local boot=$1 want=$2; shift 2
+    : > "$MP2U_STUB_LOG"; : > "$MP2S_STUB_LOG"
+    BOARD_BOOT=$boot "$B" "$@" > "$S/mp2u.out" 2>&1 || return 1
+    [ "$(cat "$MP2U_STUB_LOG")" = "ARGV BOOT=$boot:$want" ] && [ ! -s "$MP2S_STUB_LOG" ]
+}
+check "stm32mp257f-dk --dry-run run <image> reaches the U-Boot runner with BOARD_BOOT=uboot-mmc" \
+    eval 'mp2u_case uboot-mmc " [--dry-run] [run] [$dkimg] [$S/logs] [stm32mp257f-dk]" --dry-run stm32mp257f-dk run "$dkimg" "$S/logs"'
+check "stm32mp257f-dk uboot-tftp: run reaches the U-Boot runner with BOARD_BOOT=uboot-tftp" \
+    eval 'mp2u_case uboot-tftp " [--dry-run] [run] [$dkimg] [$S/logs] [stm32mp257f-dk]" --dry-run stm32mp257f-dk run "$dkimg" "$S/logs"'
+check "stm32mp257f-dk disarm and uboot-status reach the U-Boot runner" \
+    eval 'mp2u_case uboot-mmc " [--dry-run] [disarm]" --dry-run stm32mp257f-dk disarm && mp2u_case uboot-mmc " [--dry-run] [status]" --dry-run stm32mp257f-dk uboot-status'
+check "stm32mp257f-dk probe reaches the U-Boot runner as its status read" \
+    eval 'mp2u_case uboot-mmc " [--dry-run] [status]" --dry-run stm32mp257f-dk probe "$S/logs"'
+check "stm32mp257f-dk install still reaches the standalone runner, not the U-Boot one" \
+    eval ': > "$MP2U_STUB_LOG"; mp2s_case " [--dry-run] [install]" --dry-run stm32mp257f-dk install && [ ! -s "$MP2U_STUB_LOG" ]'
+check "stm32mp257f-dk BOARD_BOOT=tryboot: rc 2, no runner run" \
+    eval ': > "$MP2U_STUB_LOG"; BOARD_BOOT=tryboot "$B" --dry-run stm32mp257f-dk run "$dkimg" "$S/logs" > "$S/mp2u.out" 2>&1; rc=$?; [ "$rc" = 2 ] && [ ! -s "$MP2U_STUB_LOG" ]'
+unset MP2_RUNNER MP2U_STUB_LOG
 unset MP2S_STANDALONE_RUNNER
 out=$(env -u BOARD_PERSON_PRESENT "$B" --dry-run stm32mp257f-dk default "$dkimg" forever 2>&1); rc=$?
 check "the real runner, --dry-run default <img> forever without BOARD_PERSON_PRESENT: non-zero naming BOARD_PERSON_PRESENT" \

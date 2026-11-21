@@ -15,7 +15,11 @@
 #   tools/board.sh <board> tally <rundir> | diff <rundir-a> <rundir-b>
 #   tools/board.sh [--dry-run] stm32mp257f-dk status | install | uninstall | nodefault
 #   tools/board.sh [--dry-run] stm32mp257f-dk default <image> <1-9|forever>
-#      (the DK's verbs: exec'd to tools/board-stm32mp2-standalone.sh; nothing else for the DK)
+#      (the DK's standalone verbs: exec'd to tools/board-stm32mp2-standalone.sh;
+#       status is the standalone runner's)
+#   tools/board.sh [--dry-run] stm32mp257f-dk run <image> <logdir> [name] | probe <logdir> | disarm | uboot-status
+#      (the DK's U-Boot one-shot verbs, BOARD_BOOT uboot-mmc|uboot-tftp: tools/board-stm32mp2-uboot.sh;
+#       uboot-status is that runner's status, probe is the same read)
 #      board = pi4 | pi5 | am62p | imx8mp | x2 | nanopc-t6 | stm32mp257f-dk
 #      BOARD_BOOT = tryboot | uboot-tftp | uboot-mmc | kexec-dev
 #
@@ -273,16 +277,19 @@ shift 2
 # exec'd to tools/board-stm32mp2-standalone.sh (--dry-run passed through, its
 # exit code kept: 0 done, 2 usage, 3 refused). None of the Verdin/Pi machinery
 # below (yako_default, the U-Boot env code, take_lock) runs for them: the
-# runner owns the person gate for "forever" and its own board locking. Every
-# other verb is refused: the DK's one-shot runners are
-# tools/board-stm32mp2.sh and tools/board-stm32mp2-uboot.sh.
+# runner owns the person gate for "forever" and its own board locking. The
+# U-Boot one-shot verbs (run, probe, disarm, uboot-status; tree is refused
+# with a pointer) go on to the main flow, whose DK branches hand them to
+# tools/board-stm32mp2-uboot.sh (mp2_uboot) with BOARD_BOOT. Every other verb
+# is refused with exit 2.
 if [ "$BOARD" = stm32mp257f-dk ]; then
     case "$VERB" in
     status | install | uninstall | default | nodefault)
         exec bash "${MP2S_STANDALONE_RUNNER:-$HERE/board-stm32mp2-standalone.sh}" "${DRYFLAG[@]+"${DRYFLAG[@]}"}" "$VERB" "$@"
         ;;
+    run | probe | disarm | uboot-status | tree) ;;
     *)
-        echo "board.sh stm32mp257f-dk: '$VERB' is not a board.sh verb for the DK (only status, install, uninstall, default, nodefault: the standalone boot, tools/board-stm32mp2-standalone.sh). Its one-shot runs are tools/board-stm32mp2.sh and tools/board-stm32mp2-uboot.sh" >&2
+        echo "board.sh stm32mp257f-dk: '$VERB' is not a board.sh verb for the DK (the standalone boot: status, install, uninstall, default, nodefault, tools/board-stm32mp2-standalone.sh; the U-Boot one-shot: run, probe, disarm, uboot-status, tools/board-stm32mp2-uboot.sh). Its other one-shot runner is tools/board-stm32mp2.sh" >&2
         exit 2
         ;;
     esac
@@ -2464,7 +2471,6 @@ mp2_lease() {
 
 # ---- status / install / uninstall / disarm -----------------------------------------
 cmd_status() {
-    if [ "$BOARD" = stm32mp257f-dk ]; then mp2_uboot status; return; fi
     need_board
     b "echo 'board lease ($LEASE):'; cat $LEASE 2>/dev/null || echo none; echo \"board clock: \$(date +%s)\""
     case "$BOOT" in
@@ -2493,18 +2499,10 @@ cmd_status() {
 
 cmd_setup() {
     if [ "$BOARD" = stm32mp257f-dk ]; then
-        # 'install' and 'uninstall' are uboot-netboot-lib's hook in bootcmd
-        # (am62p, imx8mp): the DK's typed one-shot arms nothing in the
-        # stored environment, so there is nothing to install or uninstall
-        # (the hook for the standalone boot is tools/board-stm32mp2.sh's
-        # env-edit). 'disarm' is the runner's: it removes the files staged
-        # by a run cut off before its undo, and the state file naming them.
-        case "$VERB" in
-        disarm) mp2_uboot disarm ;;
-        install | uninstall)
-            note "nothing to $VERB: the DK's typed one-shot arms nothing in the stored environment (docs/notes/stm32mp257f-dk-uboot-boot.md)" ;;
-        *) die "stm32mp257f-dk $VERB: no such setup verb (disarm, install, uninstall)" 2 ;;
-        esac
+        # install and uninstall are the standalone runner's (the early block);
+        # disarm is the U-Boot runner's: it removes the files staged by a run
+        # cut off before its undo, and the state file naming them.
+        mp2_uboot disarm
         return
     fi
     need_board
@@ -2626,9 +2624,6 @@ default_undo() {
 }
 
 cmd_default() {
-    if [ "$BOARD" = stm32mp257f-dk ]; then
-        die "the STM32MP257F-DK sets no boot default here: its Linux has no fw_setenv, and the typed one-shot arms nothing in the stored environment. The DK's own default boot is the standalone item: tools/board-stm32mp2.sh install (#1281)" 2
-    fi
     case "$BOOTS" in
     tryboot | *uboot-*) ;;
     *) die "$BOARD has no boot loader backend (only: $BOOTS): '$VERB' is the boot loader's" 2 ;;
@@ -3060,6 +3055,7 @@ cmd_diff() {
 
 case "$VERB" in
 status) cmd_status ;;
+uboot-status) mp2_uboot status ;;
 install | uninstall | disarm) cmd_setup ;;
 probe | run | stage) cmd_run "$@" ;;
 default | nodefault) cmd_default "$@" ;;
