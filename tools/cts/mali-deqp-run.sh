@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# dEQP-GLES2 on the NanoPC-T6 (Mali-G610 over panthor, the board's own
-# Armbian), one chunk per row of a tree table, into one slice directory.
+# dEQP-GLES2 on a Mali board over panthor (the board's own Linux: the
+# NanoPC-T6's Armbian, Mali-G610; or the Verdin iMX95, Mali-G310), one chunk
+# per row of a tree table, into one slice directory.
 #
 #   BOARD_HOST=root@<t6> tools/cts/mali-deqp-run.sh --build DIR --out SLICEDIR \
 #       --rows A-B [--tree tools/cts/mali-gles2-tree.txt] [--session S1..S4|smoke] [--reruns NAME[,NAME...]] [--dry-run]
@@ -19,14 +20,21 @@
 # tree that does not exist is said so and exits 1, dry run or not.
 #
 # --reruns NAME[,NAME...] marks the run as a rerun of earlier slices: each NAME
-# is a slice directory basename of the t6-gles2 naming of tools/cts/log/README.md
-# (<YYYY-MM-DD>-t6-gles2-<session>[-suffix], no slash), and the list is written
+# is a slice directory basename of the <tag>-gles2 naming of tools/cts/log/README.md
+# (<YYYY-MM-DD>-<tag>-gles2-<session>[-suffix], no slash; <tag> is the board
+# profile's MALI_BOARD_TAG, t6 on the NanoPC-T6), and the list is written
 # as reruns=NAME,NAME in meta.txt, which mali-deqp-tally.py reads to let this
 # slice replace those slices' Lost rows. Anything else is a usage error (exit
 # 1). The dry run prints it. Without the option meta.txt has no reruns key.
 #
 # BOARD_HOST comes from the lease (target:nanopc-t6), never from a file;
 # BOARD_SSH_OPTS (optional) is passed to ssh and scp, as run-on-board.sh does.
+# The board profile (tools/mali/panthor/board-profile.sh: MALI_BOARD, default
+# nanopc-t6) names the board in the slice's licence and, for a board other
+# than the NanoPC-T6, in a board= line of meta.txt; it gives the render node
+# (MALI_RENDER_NODE, default /dev/dri/renderD128, handed to the library as
+# YAKOGL_MALI_DEV) and the stage root (MALI_STAGE_ROOT, default
+# /root/yakogl-mali). The paths below are the defaults.
 # Spell BOARD_HOST as run-on-board.sh and the kexec recipe do: the board lock
 # (driver/tools/kexec-zephyr/board_lock.sh) is one file per BOARD_HOST string.
 #
@@ -125,9 +133,13 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 me=mali-deqp-run
+# shellcheck source=../mali/panthor/board-profile.sh
+. "$REPO/tools/mali/panthor/board-profile.sh"
+board_profile_load || exit 1
+node=$MALI_RENDER_NODE
 
 usage() {
-  sed -n '7,9p' "$0" | sed 's/^# \{0,1\}//' >&2
+  sed -n '9,11p' "$0" | sed 's/^# \{0,1\}//' >&2
   exit 1
 }
 
@@ -155,9 +167,9 @@ case $session in
 esac
 if [ -n "$reruns" ]; then
   # One anchored match of the whole value: a newline or a stray character fails.
-  rerun_re='[0-9]{4}-[0-9]{2}-[0-9]{2}-t6-gles2-[A-Za-z0-9]+(-[A-Za-z0-9._]+)*'
+  rerun_re="[0-9]{4}-[0-9]{2}-[0-9]{2}-$MALI_BOARD_TAG-gles2-[A-Za-z0-9]+(-[A-Za-z0-9._]+)*"
   if [[ $reruns == *$'\n'* ]] || ! [[ $reruns =~ ^$rerun_re(,$rerun_re)*$ ]]; then
-    echo "$me: --reruns wants slice directory names <YYYY-MM-DD>-t6-gles2-<session>[-suffix], comma-separated, not '${reruns//$'\n'/ }'" >&2
+    echo "$me: --reruns wants slice directory names <YYYY-MM-DD>-$MALI_BOARD_TAG-gles2-<session>[-suffix], comma-separated, not '${reruns//$'\n'/ }'" >&2
     exit 1
   fi
 fi
@@ -169,7 +181,7 @@ mustpass=${MALI_DEQP_MUSTPASS:-$HERE/gles2-mustpass.txt}
 main_ref=${MALI_DEQP_MAIN_REF:-origin/main}
 if [ -z "$build" ]; then
   commit='not given' on_main='skipped (no build)' lib_id='skipped (no build)' sha8='<sha8>'
-  stage=/root/yakogl-mali/$sha8
+  stage=$MALI_STAGE_ROOT/$sha8
 else
   build=$(cd "$build" 2>/dev/null && pwd) || { echo "$me: no build directory" >&2; exit 1; }
   for f in deqp-gles2 build.txt lib/libGLESv2.so.2 lib/libEGL.so.1; do
@@ -186,7 +198,7 @@ else
     commit=$full
   fi
   sha8=${commit:0:8}
-  stage=/root/yakogl-mali/$sha8
+  stage=$MALI_STAGE_ROOT/$sha8
   lib_id=$(for l in libGLESv2.so.2 libEGL.so.1; do
     printf '%s:%s\n' "$l" "$(sha256sum < "$build/lib/$l" | cut -c1-12)"; done | paste -sd,)
   lib_id=$(sed -n 's/^lib=//p' "$build/build.txt" | head -1 | grep . || echo "$lib_id")
@@ -347,7 +359,8 @@ def field(s, n=240):
 
 LICENSE = ('SPDX-License-Identifier: Apache-2.0\n'
            'SPDX-FileCopyrightText: 2026 Signal Slot, Inc.\n'
-           'Results of our NanoPC-T6 dEQP-GLES2 run, written by tools/cts/mali-deqp-run.sh.\n')
+           'Results of our %s dEQP-GLES2 run, written by tools/cts/mali-deqp-run.sh.\n'
+           % os.environ.get('MALI_BOARD_NAME', 'NanoPC-T6'))
 
 
 def finalize(raw, out):
@@ -474,7 +487,7 @@ HOLD_MAX=${HOLD_MAX:-21600}
 margin=${DEADLINE_MARGIN_S:-600}
 surface=${DEQP_SURFACE:-256}
 deqp_cmd() { # <list> <qpa> <limit>
-  echo "cd $stage && setsid -w timeout -k 10 $3 env LD_LIBRARY_PATH=$stage/lib" \
+  echo "cd $stage && setsid -w timeout -k 10 $3 env LD_LIBRARY_PATH=$stage/lib YAKOGL_MALI_DEV=$node" \
     "\$(command -v stdbuf > /dev/null 2>&1 && echo 'stdbuf -oL') $stage/deqp-gles2" \
     "--deqp-caselist-file=$stage/$1 --deqp-log-filename=$stage/$2 --deqp-archive-dir=$stage/data" \
     "--deqp-surface-type=pbuffer --deqp-surface-width=$surface --deqp-surface-height=$surface" \
@@ -578,8 +591,8 @@ fix_meta() {
   local k
   [ -f "$raw/meta.txt" ] || return 0
   cp "$raw/meta.txt" "$raw/meta.kv"
-  for k in commit session rows reruns tree boot_id_before boot_id_after kernel lib started ended; do
-    [ "$k" != reruns ] || grep -q '^reruns=' "$raw/meta.kv" || continue
+  for k in commit session rows reruns board tree boot_id_before boot_id_after kernel lib started ended; do
+    case $k in reruns | board) grep -q "^$k=" "$raw/meta.kv" || continue ;; esac
     printf '%s=%s\n' "$k" "$(sed -n "s/^$k=//p" "$raw/meta.kv" | tail -1)"
   done > "$raw/meta.txt"
 }
@@ -594,6 +607,7 @@ mkdir -p "$raw/qpa" "$raw/kmsg" "$raw/log" "$out"
   echo "session=$session"
   echo "rows=$row_a-$row_b"
   [ -z "$reruns" ] || echo "reruns=$reruns"
+  [ "$MALI_BOARD" = nanopc-t6 ] || echo "board=$MALI_BOARD"
   echo "tree=$tree_rel"
   echo "lib=$lib_id"
   echo "started=$(date -u +%FT%TZ)"
@@ -605,9 +619,9 @@ rssh 'command -v fuser >/dev/null && command -v dmesg >/dev/null && command -v s
   exit 4
 }
 rc=0
-users=$(rssh 'fuser -v /dev/dri/renderD128 2>&1') || rc=$?
+users=$(rssh "fuser -v $node 2>&1") || rc=$?
 case $rc in
-  0) echo "$me: /dev/dri/renderD128 is in use, not starting:" >&2; echo "$users" >&2; exit 3 ;;
+  0) echo "$me: $node is in use, not starting:" >&2; echo "$users" >&2; exit 3 ;;
   1) ;;
   *) echo "$me: fuser failed with $rc, not starting" >&2; exit 4 ;;
 esac
@@ -618,11 +632,11 @@ echo "kernel=$kernel" >> "$raw/meta.txt"
 echo "$me: boot_id before $boot0, kernel $kernel"
 
 need_kb=$(( $(du -skL "$build/deqp-gles2" "$build/data" "$build/lib" | awk '{ s += $1 } END { print s }') + ${STAGE_MARGIN_KB:-1048576} ))
-rssh "mkdir -p /root/yakogl-mali && rm -rf -- $stage && mkdir -p $stage" || { echo "$me: cannot make $stage" >&2; exit 4; }
+rssh "mkdir -p $MALI_STAGE_ROOT && rm -rf -- $stage && mkdir -p $stage" || { echo "$me: cannot make $stage" >&2; exit 4; }
 staged=1
 free_kb=$(rssh "df -Pk $stage" | awk 'NR == 2 { print $4 }')
 [ -n "$free_kb" ] && [ "$free_kb" -ge "$need_kb" ] || {
-  echo "$me: ${free_kb:-?} KiB free under /root/yakogl-mali, the stage needs $need_kb: not starting" >&2
+  echo "$me: ${free_kb:-?} KiB free under $MALI_STAGE_ROOT, the stage needs $need_kb: not starting" >&2
   exit 4
 }
 bscp -t 1800 -q -r "${opts[@]}" "$build/deqp-gles2" "$build/data" "$build/lib" "$host:$stage/" ||
@@ -720,7 +734,7 @@ while IFS=$'\t' read -r -u 3 row lab n; do
       break
     fi
     if [ "$reason" = chunk-hang ]; then
-      wedged=$(rssh "pkill -KILL -f '[/]root/yakogl-mali/$sha8/deqp-gles2'; sleep 1; pgrep -f '[/]root/yakogl-mali/$sha8/deqp-gles2'" || true)
+      wedged=$(rssh "pkill -KILL -f '[${stage:0:1}]${stage:1}/deqp-gles2'; sleep 1; pgrep -f '[${stage:0:1}]${stage:1}/deqp-gles2'" || true)
       if [ -n "$wedged" ]; then
         echo "$me: row $row $lab: deqp-gles2 survives SIGKILL on the board (a wedged ioctl?): the board needs a person" >&2
         why=wedged

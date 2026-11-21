@@ -40,7 +40,7 @@
 //! the target's bytes with the dump's; the frame's AFBC target is compared
 //! byte for byte with the first dump and the difference reported.
 //!
-//! Usage: panthor-replay [--skip-frame] [--shift-heap] <trace with dumps> [/dev/dri/renderD128]
+//! Usage: panthor-replay [--skip-frame] [--shift-heap] <trace with dumps> [<render node>: $YAKOGL_MALI_DEV, else /dev/dri/renderD128]
 //!
 //! `--skip-frame` is the control: the frame job is not submitted, so the
 //! blit samples the zeroed AFBC target, and the count must hold no red and
@@ -499,7 +499,7 @@ fn main() -> ExitCode {
         );
         return ExitCode::from(2);
     };
-    let dev = args.get(1).cloned().unwrap_or_else(|| "/dev/dri/renderD128".into());
+    let dev = args.get(1).cloned().unwrap_or_else(yakogl_mali_panthor::dev::default_path);
     let what = match (skip_frame, shift_heap) {
         (true, _) => "control (no red, no blue without the frame)",
         (false, true) => "replay with shifted heap VAs",

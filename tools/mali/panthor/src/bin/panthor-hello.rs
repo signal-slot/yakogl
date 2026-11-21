@@ -22,7 +22,7 @@
 //! fence; panthor_sched.c:3040-3094), so the fence alone would signal even
 //! if our instructions did nothing: the value read back is the evidence.
 //!
-//! Usage: panthor-hello [--control] [/dev/dri/renderD128]. Exit 0 only when
+//! Usage: panthor-hello [--control] [<render node>: $YAKOGL_MALI_DEV, else /dev/dri/renderD128]. Exit 0 only when
 //! the value read back is exactly the start value plus the increment, the
 //! status word reads 0, the pad survives, and the group reports no timeout
 //! and no fault. `--control` submits the same stream with the SYNC_ADD64
@@ -128,7 +128,7 @@ fn main() -> ExitCode {
         args.remove(0);
         println!("panthor-hello: control run, SYNC_ADD64 replaced by NOP");
     }
-    let path = args.first().cloned().unwrap_or_else(|| "/dev/dri/renderD128".into());
+    let path = args.first().cloned().unwrap_or_else(yakogl_mali_panthor::dev::default_path);
     let what = if control { "control (no change without SYNC_ADD64)" } else { "SYNC_ADD64" };
     match run(&path, control) {
         Ok(true) => {

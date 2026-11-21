@@ -13,6 +13,9 @@
 # the stage's .out and .err are unchanged (stdout / stderr only), the dry run
 # names the merged stream, and --per-case gives info.version the refusal cause
 # and info.vendor errno:-12, while --tally without --per-case is unchanged.
+# The same row on the board profile verdin-imx95 with MALI_RENDER_NODE
+# renderD129: meta.txt's board= line, the licence's board name, and the render
+# node in fuser and YAKOGL_MALI_DEV (the T6 slice has no board= line).
 #
 #   tools/cts/mali-deqp-run-selftest.sh    prints "mali-deqp-run-selftest: N checks passed"
 #
@@ -26,7 +29,7 @@ E2E=$HERE/testdata/mali-deqp-e2e
 FIX=$HERE/testdata/mali-deqp/runner-percase
 RUN=$HERE/mali-deqp-run.sh
 TALLY=$HERE/mali-deqp-tally.py
-EXPECT=14
+EXPECT=19
 base=${TMPDIR:-$REPO/build}
 mkdir -p "$base"
 tmp=$(mktemp -d "$base/mali-deqp-run-selftest-XXXXXX")
@@ -107,6 +110,22 @@ check "the slice's other files are still written (meta, chunks, results, refusal
   bash -c "cd '$S' && test -f meta.txt -a -f chunks.tsv -a -f results.tsv -a -f refusals.tsv -a -f kmsg/E1.txt"
 check "chunks.tsv: E1 done" bash -c "awk -F'\t' '\$2 == \"E1\" && \$4 == \"done\"' '$S/chunks.tsv' | grep -q ."
 check "the slice keeps no board name" bash -c "! grep -rq 'board\.invalid' '$S/refusals'"
+
+check "the NanoPC-T6 slice's meta.txt has no board line (the T6's format is unchanged)" \
+  bash -c "! grep -q '^board=' '$S/meta.txt'"
+
+echo "mali-deqp-run-selftest: the same row on the board profile verdin-imx95 with renderD129"
+: > "$tmp/ssh-v.log"
+runner_env env FAKE_LOG="$tmp/ssh-v.log" MALI_BOARD=verdin-imx95 MALI_RENDER_NODE=/dev/dri/renderD129 \
+  RAW_DIR="$tmp/raw-v" bash "$RUN" "${args[@]}" --out "$tmp/slices/imx95-gles2-percase" > "$tmp/out-v.txt" 2>&1
+echo $? > "$tmp/rc-v"
+V=$tmp/slices/imx95-gles2-percase
+check "verdin-imx95: the runner exits 0" bash -c "[ \"\$(cat '$tmp/rc-v')\" = 0 ]"
+check "verdin-imx95: meta.txt says board=verdin-imx95, after rows and before tree" \
+  bash -c "grep -A1 '^rows=' '$V/meta.txt' | grep -qx 'board=verdin-imx95' && grep -A1 '^board=' '$V/meta.txt' | grep -q '^tree='"
+check "verdin-imx95: the licence names the Verdin iMX95" grep -q 'Results of our Verdin iMX95 dEQP-GLES2 run' "$V/meta.txt.license"
+check "verdin-imx95: fuser and the library are given renderD129, never renderD128" \
+  bash -c "grep -q 'fuser -v /dev/dri/renderD129' '$tmp/ssh-v.log' && grep -q 'YAKOGL_MALI_DEV=/dev/dri/renderD129' '$tmp/ssh-v.log' && ! grep -q renderD128 '$tmp/ssh-v.log'"
 
 echo "mali-deqp-run-selftest: the dry run names the merged stream"
 runner_env bash "$RUN" "${args[@]}" --dry-run > "$tmp/dry.txt" 2>&1
