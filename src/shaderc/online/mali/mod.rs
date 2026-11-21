@@ -1617,6 +1617,19 @@ fn compile_stage<'s>(
             let highp = |name: &str| matches!(prec(name), Some(Precision::High));
             select::UboLayout::fs16(m, &f.nir, &highp)
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
+        } else if nir_fs::loop16(&f) {
+            /* a mediump shader's kept loop (docs/notes/mali-deqp-loops.md
+             * section 10): a highp shader's blocks, its carried pairs two
+             * 16-bit `vec2` phis, the varying lanes an fp16 operation reads
+             * converted as `nir_lower_mediump_io` does (the dynamic bound's
+             * `int(v_one + 0.5)`), without the pairing and the code motion
+             * of a colour of booleans' route (`inputs16`: the body's `vec2`s
+             * stay where their local is stored) */
+            let highp = |name: &str| fp32(name);
+            nir_fs::convert_inputs16(&mut f)
+                .map(|()| f.inputs16 = false)
+                .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
+                .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else if nir_fs::guarded16(&f) || nir_fs::kept16(&f) || nir_fs::frag32(&f) {
             /* a mediump shader's unrolled loop with run-time guards: the
              * graph's regions flattened as a highp shader's, its fp16 nodes
