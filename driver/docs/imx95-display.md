@@ -696,6 +696,10 @@ Under the board's Linux, over ssh, nothing written:
 | M3 | `dmesg` SCMI and System Manager lines (protocol versions, firmware build); `/sys/kernel/debug/clk/clk_summary` rows for `dispapb`, `dispaxi`, `dispocram`, `disp1pix`, `videopll1`, `videopll1_vco`, `mipiphycfg`, `mipiphypllref`, `mipiphypllbypass`, `camapb`; `/sys/kernel/debug/pm_genpd/pm_genpd_summary` for display and camera; `/proc/config.gz` for `KEXEC`, `CRASH_DUMP`; `/proc/iomem` for a crash reservation | what the System Manager lets the AP set; whether (a) can run |
 | M4 | only if M2 shows a running panel and M3 the display domain on: one 32-bit read each of DPU `COMCTRL_IPIDENTIFIER` (0x4B400000); FetchLayer0 0x4B5D0008-0x4B5D004C and FetchYUV0's first block; ExtDst0 0x4B510008-0x4B510014; FrameGen0 0x4B6B0008-0x4B6B00A0; Signature0 0x4B6D0008-0x4B6D0028 and 0x4B6D0400-0x4B6D0408; display CSR 0x4B010000-0x4B010020; interleaver 0x4B0D0000, +0x20, +0x50; with CAMERA on: DSI stream CSR 0x4AD00000-0x4AD0000C, DSI master CSR 0x4AD10000-0x4AD10008, combo PHY CSR 0x4AD20100-0x4AD20110 (U13, U16), DW host 0x4ACF0000-0x4ACF0110 (`VERSION` for U18, the timing and PHY words) | the golden dump, with an allow list as the T6's and X2's (`driver/docs/nanopc-t6-display-allow.txt`) |
 
+M1 to M4 are one script, `tools/probes/verdin_imx95/linux_day_one/day_one.sh`
+(its README; M4's read list and gates are the `#@read` lines of
+`driver/docs/imx95-display-allow.txt`).
+
 Under U-Boot, at its prompt: `dm tree` (no `video` device expected),
 `bdinfo` (DRAM banks, where a buffer may live). No register reads: U-Boot
 has not powered the display domain.
@@ -707,6 +711,11 @@ Under Zephyr (the first probe image, later):
 | Z0 | SCMI base discovery (agent id, expected 2 "AP-NS"; protocols); power state of domains 13 and 3; the perf DISP and CAM levels (expected 3, ODV); rate and state of clocks 75, 76, 78, 80, 18, 19, 62, 66, 67, 68; `CLOCK_GET_PERMISSIONS` on 18, 19, 66-68, 80 (expected all) and 75 (expected none) | does our image reach the System Manager, and is the display domain on? |
 | Z1 | only if Z0 says DISPLAY is on: FrameGen0/1 enable and status, the fetch unit's address, stride and size | after a crash kexec: **a scanout to adopt?** |
 | Z2 | the cold X4 path of section 4(b), step by step (a stop-after per step, as the i.MX8MP's `STOP_AFTER`), with the read-backs of "Proof without a camera"; the bridge's test pattern first, then our stream | **our own picture** |
+
+Z0 is the probe `tools/probes/verdin_imx95/imx95_scmi` (read only, all
+three domains and the clocks the port uses; `check.sh` compares it with
+Toradex's configuration); the DSI side's identity before Z2 (U13, U16, U18,
+U19, U21) is `imx95_dsi_ids`.
 
 Which result picks which route:
 
