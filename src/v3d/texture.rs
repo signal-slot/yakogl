@@ -754,6 +754,17 @@ pub fn state(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32) -> V3dT
     s
 }
 
+/// [`state`] with the TMU's base level at `first_level`
+/// (`v3d_setup_texture_shader_state` sets base_level from the view's first
+/// level, v3dx_state.c), clamped to the state's last level: a first level
+/// past the last stored one reads the last. Everything else, `max_level`
+/// included, is [`state`]'s. Not wired yet: the caller must pair it with the
+/// base-relative size words of [`size_words`] in the same change.
+pub fn state_at(b: &GlesTextureBind, layout: &V3dTexLayout, image_gpu: u32, first_level: u32) -> V3dTexState {
+    let s = state(b, layout, image_gpu);
+    V3dTexState { base_level: first_level.min(s.max_level), ..s }
+}
+
 /// The texture shader state of a depth texture binding read from the D24S8
 /// depth buffer its jobs stored (`backend::ZsBuf`, `GlesTextureBind::depth_id`),
 /// laid out as [`rt_layout`] lays out one level (the depth buffer's own
@@ -1296,6 +1307,11 @@ mod tests {
         let s = state(&b, &l, 0x1000);
         assert_eq!((s.base, s.width, s.height, s.depth), (0x1000 + l.slices[0].offset, 64, 32, 4));
         assert_eq!((s.base_level, s.max_level, s.array_stride_64), (0, 6, stride / 64));
+        for (first, want) in [(0, 0), (3, 3), (6, 6), (7, 6), (u32::MAX, 6)] {
+            let at = state_at(&b, &l, 0x1000, first);
+            assert_eq!(at.base_level, want, "first level {first}");
+            assert_eq!(V3dTexState { base_level: 0, ..at }, V3dTexState { base_level: 0, ..s });
+        }
         /* a one-layer array is a 2D texture's image and record, depth 1 */
         let one = array(13, 7, 1, 1);
         let lo = layout(&one).unwrap();
