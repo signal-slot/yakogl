@@ -5143,7 +5143,20 @@ impl<'a> Lower<'_, 'a> {
                 Ok(Ret::Matrix(cols))
             }
             Want::Value(_) | Want::Nothing => {
-                let v = self.push_instr(Op::LoadLocal { local: id, index: None, comps })?;
+                /* The slot is an F32 local whatever the function returns, so
+                 * an int function's result loads as a float value in a
+                 * context with no class (the int call): it records the
+                 * slot's storage class (High, 32 bits) and not Unknown.
+                 * dEQP's functions.misc.argument_eval_order_1_fragment
+                 * (`tools/mali/testdata/deqp_texmisc_fcm_eval_order.frag`)
+                 * is the corpus shader of this shape. */
+                let outer = self.cur;
+                if outer == Prec::None {
+                    self.cur = self.local_prec.as_slice()[id.0 as usize];
+                }
+                let v = self.push_instr(Op::LoadLocal { local: id, index: None, comps });
+                self.cur = outer;
+                let v = v?;
                 out.push(self.a, Node::Instr(ir::InstrId(v.0)))?;
                 Ok(Ret::Value(Src::id(v)))
             }

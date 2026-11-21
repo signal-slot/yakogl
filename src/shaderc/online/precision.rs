@@ -1675,6 +1675,34 @@ mod tests {
     /// shader that calls pow on a computed value is refused by design
     /// (glmark2's `pow(max(dot(N, H), 0.0), 100.0)`). One positive pin
     /// keeps the Unknown path live over the corpus.
+    /// An int function that returns early returns through an F32 slot
+    /// (`Lower::inline_with_slot`), so its result loads as a float value
+    /// in the int call's context, which has no class: the load records the
+    /// slot's class, not Unknown (`NO_CONTEXT` stays 0). The float function
+    /// is the control.
+    #[test]
+    fn an_int_function_that_returns_early_loads_its_result_with_a_class() {
+        let head = "precision mediump float;\nvarying float v_in0;\n";
+        let cases = [
+            "int g(bool c) { if (c) return 1; return -1; }\n\
+             void main() { int o = g(v_in0 > 0.5); gl_FragColor = vec4(float(o)); }",
+            "int g(int c) { if (c > 0) return 1; else return -1; }\n\
+             void main() { int o = g(int(v_in0)); gl_FragColor = vec4(float(o)); }",
+            "float g(bool c) { if (c) return 1.0; return -1.0; }\n\
+             void main() { gl_FragColor = vec4(g(v_in0 > 0.5)); }",
+        ];
+        let mut buf = std::vec![0u8; 1 << 20];
+        for body in cases {
+            let src = std::format!("{head}{body}\n");
+            super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+            let a = Arena::new(&mut buf);
+            let text = a.alloc_str(&src).expect("the arena holds the source");
+            let l = compile_to_ir(&a, Stage::Fragment, text).expect("the shader lowers");
+            assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{body}");
+            assert!(unclassed(&l.module).is_empty(), "{body}");
+        }
+    }
+
     #[test]
     fn every_value_of_the_corpus_has_its_kind_s_class() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

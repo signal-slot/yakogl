@@ -5954,9 +5954,13 @@ fn texture_units(
             black_state(g, b.type_ == GLES_TEXTYPE_CUBE)
         };
         let sampler = sampler_for(g, b)?;
-        let (width, height) = if b.incomplete != 0 { (1, 1) } else { (b.width, b.height) };
+        /* the base level's size, as Mesa's v3d_uniforms.c minifies by the
+         * view's first level: width, height and a 3D depth; the array size
+         * as is (the job builder refuses 0) */
+        let minify = |v: u32| v.checked_shr(u32::from(b.base_level)).unwrap_or(0).max(1);
+        let (width, height) = if b.incomplete != 0 { (1, 1) } else { (minify(b.width), minify(b.height)) };
         let layers = if b.incomplete != 0 { 1 } else { u32::from(b.layers).max(1) };
-        let depth = if b.type_ == GLES_TEXTYPE_3D { layers } else { 1 };
+        let depth = if b.type_ == GLES_TEXTYPE_3D { minify(layers) } else { 1 };
         let array_size = if b.type_ == GLES_TEXTYPE_2D_ARRAY { layers } else { 1 };
         out[n] = V3dJobTmu { unit: b.unit as u32, tex_state, sampler, width, height, depth, array_size };
         n += 1;

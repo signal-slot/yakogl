@@ -21,8 +21,9 @@
 //! * a sampler2DArrayShadow that both samples and is queried over a
 //!   DEPTH_COMPONENT32F array.
 //!
-//! The base level is out of scope: the draw applies no GL_TEXTURE_BASE_LEVEL
-//! for words 44/45 (src/gl/draw.rs), so 46/47 follow the same level-0 rule.
+//! The base level is out of scope here: every texture of this file is at
+//! GL_TEXTURE_BASE_LEVEL 0. tests/es3_texsize_base_level_v3d.rs covers the
+//! words at BASE_LEVEL 1 (the depth minified, the layer count as is).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_tex_words46_47_edge_v3d
