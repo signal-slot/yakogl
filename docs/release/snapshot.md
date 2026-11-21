@@ -144,11 +144,11 @@ leaves the public tree. Each is a question for the owner. Counts are at
     `SECURITY.md` says nothing of the private history. What does the
     `[0.1.0]` section say and date, what is the tag's name, and when is it
     made, and do `ROADMAP.md` and `SECURITY.md` mention the private history?
-13. **Lab tooling names.** `git grep -il -e orion -e ccfarm -e ask_farm`
-    outside `third_party/` finds 56 files (4 name `orion`, 53 `ccfarm` or
+13. **Lab tooling names.** `git grep -il -e <VM-lab tool> -e ccfarm -e ask_farm`
+    outside `third_party/` finds 56 files (4 name the VM-lab tool, 53 `ccfarm` or
     `ask_farm`): 22 in `docs/notes/`, 7 in `tools/cts/`, 5 each in
     `docs/release/` and `docs/es3/`, the rest elsewhere. `CLAUDE.md`
-    (item 5) is one of them. Is the VM-lab tool `orion` public? If it is,
+    (item 5) is one of them. Is the VM-lab tool (name withheld; the owner knows it) public? If it is,
     the names stay, with an allow rule for the scan; if not, the text is
     reworded.
 
