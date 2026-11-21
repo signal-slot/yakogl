@@ -2301,6 +2301,10 @@ step "test    $V3D_ES2_CONFIG (tests/es3_mrt_gl.rs)" \
 # accepted (GL_NO_ERROR, no refused draw), through the report-es2 GL core.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_refusals
+# The ES 2.0 uniform API answers (locations, glGetActiveUniform, glGetUniform*,
+# GL_ACTIVE_UNIFORMS) keep their values under 3cbecbb9 (more than 255 uniforms).
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_uniforms.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_uniforms
 # The ES 2.0 varying and uniform limits keep their answers (the ES 3.0 raises
 # of plan #359 do not show under report-es2); the PowerVR and GC7000
 # report-es2 rows run it with the rest of tests/.
