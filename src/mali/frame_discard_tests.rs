@@ -108,6 +108,8 @@ fn build(s: State) -> (Vec<u8>, BTreeMap<u32, u32>) {
             geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
             sample_positions: SAMPLES,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: TileBudget::G610,
         };
         let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();

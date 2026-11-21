@@ -66,8 +66,15 @@ fn build() -> Built {
     let mut code = Arena::new("code", CODE_VA, m_code).expect("arena");
     let mut spds = Arena::new("spds", SPDS_VA, m_spds).expect("arena");
     let mut data = Arena::new("data", DATA_VA, m_data).expect("arena");
-    let c = build_context(&mut ctx, HEAP_FIRST_CHUNK_VA, HEAP_CHUNK_SIZE, GEOMETRY_BUFFER_VA, TILER_MAX_LEVELS)
-        .expect("context");
+    let c = build_context(
+        &mut ctx,
+        HEAP_FIRST_CHUNK_VA,
+        HEAP_CHUNK_SIZE,
+        GEOMETRY_BUFFER_VA,
+        TILER_MAX_LEVELS,
+        yakogl::mali::model::TileBudget::G610,
+    )
+    .expect("context");
     let mut cs = Stream::new(&mut words, USER_REGS);
     let a = FrameArenas { desc: &mut desc, code: &mut code, spds: &mut spds, data: &mut data };
     let f = l1::build_triangle_frame(a, &mut cs, &c, TARGET_VA, DRAW).expect("the frame builds");
