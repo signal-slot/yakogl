@@ -9,36 +9,38 @@
  * given back byte-equal.
  *
  * The firmware's list is wherever channel 0's LPTRS.HEADE names, read at run
- * time (on the board it was word 672, with no END within 256 words), never
- * assumed to be words 0..31.
+ * time (on the board it was word 672), never assumed to be words 0..31.
+ * hvs6_dlist_swap.h (dlplace) finds it, walks it entry by entry to its END
+ * and refuses a list with no END within HVS6S_FW_MAX words; it places our
+ * list only in words that read zero, clear of words 0..31 and of the
+ * firmware's span, within the list memory (mem_words, from CXM_SIZE).
  *
- *   S1  the HVS VERSION word and the stepping it names
+ *   S1  the HVS VERSION word and the stepping it names, CXM_SIZE
  *   S2  channel 0's CTRL0, LPTRS, STATUS (FRCNT) and DL words, decoded, and
  *       STATUS read several times to show FRCNT advancing
  *   S3  the firmware's display list from LPTRS.HEADE: every word to its END,
- *       or the first HVS6S_FW_MAX words when no END is in view
+ *       or the first DUMP_MAX words when no END is in view
  *   S4  pixel valve 0 (HDMI0's) PV_CONTROL and PV_V_CONTROL, read only
- *   S5  the snapshot (hvs6_dlist_swap.h): LPTRS, words 0..31 and the
- *       firmware's list, plus SNAP_MAX words from HEADE kept by the probe and
- *       hashed                                     -> u3 snapshot
- *   S6  our list pair placed (hvs6s_place): slot A and slot B, 10 words each
- *       (hvs6_dlist_write.h's entry), refused when it does not fit; then,
- *       before any write, the span read and refused unless every word reads
- *       zero twice, it lies outside the words read from HEADE (and before
- *       HEADE when the firmware's list has no END in view) and no channel's
- *       list pointer is inside it                   -> u3 dlist
+ *   S5  the plan's snapshot (hvs6s_snapshot, read only): LPTRS and the
+ *       firmware's list [HEADE, HEADE + fw_len), hashed   -> u3 snapshot
+ *   S6  the plan's placement (hvs6s_place_io, read only): one span for slot
+ *       A and slot B, 10 words each (hvs6_dlist_write.h's entry), every word
+ *       read zero, clear of words 0..31 and the firmware's span; then no
+ *       channel's LPTRS.HEADE or DL.LACT inside it            -> u3 dlist
  *   S7  buffers A and B filled (pattern.h, A as XRGB8888, B with red and
  *       blue exchanged) and cleaned to memory          -> u3 plane
- *   S8  SWAPS swaps, A, B, A, B ...: each one writes the slot's list and then
- *       LPTRS (hvs6s_swap), waits for FRCNT past it, judged by swap_check.h
- *                                          -> u3 swap <k>, u3 named
+ *   S8  swap 1 is hvs6s_run with cfg.start = slot A: its own snapshot, the
+ *       placement checked again, the swap to buffer A and its restore, with
+ *       the dlswap record of that run. Then slot B checked (hvs6s_place_io)
+ *       and swaps 2..SWAPS, B, A, B ... (hvs6s_swap). Every swap judged by
+ *       swap_check.h                          -> u3 swap <k>, u3 named
  *   S9  a sample of each buffer read back after a clean+invalidate
- *   S10 the restore (hvs6s_restore): the firmware's LPTRS written back, two
- *       frames, then LPTRS, words 0..31 and the SNAP_MAX words from HEADE
+ *   S10 the restore (hvs6s_restore) after swaps 2..SWAPS: the firmware's
+ *       LPTRS written back, two frames; then LPTRS and the firmware's words
  *       compared with the snapshot through swap_check.h's swap_restore_judge,
  *       and our span written back to zero once channel 0 is off it
  *                                                        -> u3 restore
- *   then the dlswap record of swap 1 and the restore, and the end line.
+ *   then the end line.
  *
  * The restore runs whenever something was written, whatever failed after
  * it; when nothing was (placement refused), S10 only compares. The pixel
@@ -74,7 +76,8 @@
 #define ALL_ONES  0xffffffffu
 #define CHAN      0u             /* the channel the firmware drives HDMI0 from */
 #define DL_WORDS  ((HVS_SIZE - HVS6_DLIST_OFFSET) / 4u)
-#define SNAP_MAX  256u           /* words kept: the bootloader's 32 and what follows */
+#define SNAP_MAX  HVS6S_FW_MAX   /* S3: words read from HEADE */
+#define DUMP_MAX  64u            /* S3: words printed when no END is in view */
 
 /* Our buffers: the firmware's mode is 1920x1080; a smaller one is used whole. */
 #define FB_MAX_W  1920u
@@ -224,74 +227,95 @@ static uint64_t slot_plane_addr(uint32_t start, int *rc)
 	return *rc == HVS6_OK ? pl.addr : 0;
 }
 
-static struct hvs6s_snap fwsnap;
+/* plansnap: the read-only plan's snapshot (S5/S6), before anything is
+ * written. fwsnap: hvs6s_run's own (S8), the one every restore compares
+ * against. */
+static struct hvs6s_snap plansnap, fwsnap;
 static struct swap_step steps[SWAPS];
+static uint32_t fw_rb[HVS6S_FW_MAX];
 
-/* The firmware's words from LPTRS.HEADE on, SNAP_MAX of them, taken with the
- * snapshot and compared after the restore: the list the channel runs, not
- * words 0..31 (the board's list starts at word 672 and has no END in 256). */
-static uint32_t ext[SNAP_MAX], ext_rb[SNAP_MAX];
-static uint32_t ext_n;
-/* Our span's words as they read before the first write (all zero, checked). */
-static uint32_t pair_prev[PAIR_WORDS];
-
-/*
- * Before any list word is written: the span [at, at + len) is read and
- * checked against everything the probe can see. NULL when it is safe;
- * otherwise the reason, *err the dlswap code and *bad the word that refused
- * it (when one did), and nothing may be written.
- */
-static const char *place_check(const struct hvs6s_snap *s, uint32_t at, uint32_t len,
-			       enum hvs6s_err *err, uint32_t *bad, uint32_t *bad_val)
+/* The firmware's span in words for swap_check.h: the walked length to the
+ * END, or, when the walk found none, the extent it read from HEADE. */
+static uint32_t fw_words_of(const struct hvs6s_snap *s)
 {
-	*err = HVS6S_ERR_PLACE_FW;
-	*bad = 0;
-	*bad_val = 0;
-	if (at < HVS6S_KEPT) {
-		*err = HVS6S_ERR_PLACE_KEPT;
-		return "overlaps words 0..31";
+	if (s->fw_end_found) {
+		return s->fw_len;
 	}
-	if (len > PAIR_WORDS) {
-		*err = HVS6S_ERR_PLACE_FIT;
-		return "span longer than the probe's pair";
-	}
-	if (hvs6s_overlap(at, len, s->fw_head, s->fw_len)) {
-		return "overlaps the firmware's walked list";
-	}
-	if (hvs6s_overlap(at, len, s->fw_head, ext_n)) {
-		return "overlaps the words read from HEADE";
-	}
-	if (!s->fw_end_found && (uint64_t)at + len > s->fw_head) {
-		return "reaches HEADE or past it while the firmware's list has no END in view";
-	}
-	for (unsigned int c = 0; c < YD5_HVS6_NUM_CHANNELS; c++) {
-		uint32_t lp = hvs_rd(hvs6s_lptrs_reg(c)) & YD5_HVS6_LPTRS_HEADE_MASK;
-		uint32_t la = hvs_rd(hvs6s_dl_reg(c)) & HVS6S_DL_LACT_MASK;
+	return s->walk_stop >= s->fw_head ? s->walk_stop - s->fw_head + 1u : 0u;
+}
 
-		if (hvs6s_overlap(at, len, lp, 1) || hvs6s_overlap(at, len, la, 1)) {
-			*bad = hvs6s_overlap(at, len, lp, 1) ? lp : la;
-			*bad_val = c;
-			return "a channel's list pointer is inside it";
+static bool snaps_equal(const struct hvs6s_snap *a, const struct hvs6s_snap *b)
+{
+	if (!a->taken || !b->taken || a->lptrs != b->lptrs || a->fw_head != b->fw_head ||
+	    a->fw_len != b->fw_len) {
+		return false;
+	}
+	for (uint32_t i = 0; i < a->fw_len; i++) {
+		if (a->fw[i] != b->fw[i]) {
+			return false;
 		}
 	}
-	/* Two reads a frame apart: every word zero both times. */
-	for (unsigned int pass = 0; pass < 2u; pass++) {
-		if (pass != 0) {
-			k_msleep(FRCNT_GAP_MS);
-		}
-		for (uint32_t i = 0; i < len; i++) {
-			uint32_t w = hvs_rd(hvs6s_word_off(at + i));
+	return true;
+}
 
-			if (w != 0) {
-				*bad = at + i;
-				*bad_val = w;
-				return "a word in it is not zero";
-			}
-			pair_prev[i] = w;
-		}
+/* One swap's sample for swap_check.h, all ten fields. The registers are the
+ * header's samples when LPTRS was written (at the write, and once read-back
+ * and FRCNT were in), else the probe's own reads around the call. */
+static void fill_step(struct swap_step *st, const struct hvs6s_report *r, uint32_t pre_lptrs,
+		      uint32_t pre_status, uint32_t post_lptrs, uint32_t post_status,
+		      uint32_t slot_word, uint64_t buf_bus, const struct hvs6s_snap *s)
+{
+	int prc;
+
+	st->sample = (struct swap_sample){
+		.ptr_before = r->swapped ? r->at_write.lptrs : pre_lptrs,
+		.ptr_after = r->swapped ? r->after.lptrs : post_lptrs,
+		.expected_word = slot_word,
+		.status_before = r->swapped ? r->at_write.status : pre_status,
+		.status_after = r->swapped ? r->after.status : post_status,
+		.pv_control = pv_rd(SA_PV_CONTROL),
+		.pv_vcontrol = pv_rd(SA_PV_V_CONTROL),
+		.fw_start = s->fw_head & SWAP_LPTRS_MASK,
+		.fw_words = fw_words_of(s),
+		.our_words = SLOT_WORDS,
+	};
+	st->plane_addr = slot_plane_addr(slot_word, &prc);
+	st->expected_addr = buf_bus;
+	if (prc != HVS6_OK) {
+		printk("rpi5_scanout32: S8 slot word %u: plane entry did not decode (hvs6 error "
+		       "%d)\n", slot_word, prc);
 	}
-	*err = HVS6S_OK;
-	return NULL;
+}
+
+/* The dlswap summary and u3 swap lines of swap k (and u3 named after swap
+ * 1); returns the judge's reason. */
+static enum swap_reason swap_lines(unsigned int k, const struct swap_step *st,
+				   const struct hvs6s_report *r, enum hvs6s_err e, bool *named)
+{
+	enum swap_reason why = swap_judge(&st->sample);
+	uint32_t slot_word = st->sample.expected_word;
+
+	printk("dlswap swap%u %s %s lptrs-readback %s frcnt-advance %s settle %s "
+	       "lact-follows %s (record only)\n",
+	       k + 1u, e == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(e),
+	       r->lptrs_ok ? "ok" : "FAIL", r->frcnt_ok ? "ok" : "FAIL",
+	       r->settle_ok ? "ok" : (r->frcnt_ok ? "FAIL" : "skip"),
+	       r->lact_follows ? "yes" : "no");
+	printk("u3 swap %u: buf %c list-ptr=0x%08x frcnt %u -> %u judge=%s slot=%u "
+	       "plane=0x%010llx fw=%u+%u ours=%u\n",
+	       k + 1u, (k & 1u) ? 'B' : 'A', st->sample.ptr_after,
+	       swap_frcnt(st->sample.status_before), swap_frcnt(st->sample.status_after),
+	       swap_reason_name(why), slot_word, (unsigned long long)st->plane_addr,
+	       st->sample.fw_start, st->sample.fw_words, st->sample.our_words);
+	if (k == 0) {
+		*named = st->sample.ptr_after != ALL_ONES &&
+			 (st->sample.ptr_after & SWAP_LPTRS_MASK) == slot_word;
+		printk("u3 named: %s LPTRS 0x%08x after swap 1, our list at word %u, "
+		       "first read 0x%08x poll %u\n",
+		       *named ? "yes" : "no", st->sample.ptr_after, slot_word, r->lptrs_first,
+		       r->lptrs_poll);
+	}
+	return why;
 }
 
 int main(void)
@@ -306,21 +330,24 @@ int main(void)
 	int rc;
 
 	struct hvs6s_cfg cfg = {0};
-	struct hvs6s_report rec, rrest;
+	struct hvs6s_report plan, runrep, rrest;
 	enum hvs6s_err snap_err = HVS6S_ERR_ARG, place_err = HVS6S_ERR_ARG, first_err = HVS6S_OK;
+	enum hvs6s_err run_err = HVS6S_ERR_ARG;
 	uint32_t pair = 0, slot[2] = {0, 0};
 	uint32_t fw_w = FB_MAX_W, fw_h = FB_MAX_H, pitch;
 	uint64_t phys[2] = {0, 0}, bus[2] = {0, 0};
 	bool bufs_ok = false, placed = false, named = false, readback_ok = false;
-	bool restore_pass = false, refused = false, wrote = false;
+	bool restore_pass = false, ran = false, wrote_list = false, wrote_more = false;
+	bool same_snap = false;
 	unsigned int nsteps = 0, swaps_ok = 0;
 	const char *fail = NULL;
-	char failbuf[96];
+	char failbuf[192];
+	char why[96];
 
 	printk("rpi5_scanout32: build %s\n", RPI5_SCANOUT32_BUILD);
 	rpi_wdog_announce();
-	printk("rpi5_scanout32: stage 2: our XRGB8888 list in free words at or after word 32 "
-	       "(read and checked first), %u swaps A/B on "
+	printk("rpi5_scanout32: stage 2: our XRGB8888 list in zero words at or after word 32, "
+	       "clear of the firmware's list at LPTRS.HEADE (read and checked first), %u swaps A/B on "
 	       "channel %u, then the firmware's list restored; no pixel valve, HDMI or PHY write\n",
 	       SWAPS, CHAN);
 
@@ -425,10 +452,10 @@ int main(void)
 		}
 	}
 
-	/* One line per word: from HEADE to the END, or the first HVS6S_FW_MAX
-	 * words when no END is in view (the board's list had none in 256). */
+	/* One line per word: from HEADE to the END, or the first DUMP_MAX
+	 * words when no END is in view. */
 	for (i = 0; i < got; i++) {
-		if (saw_end ? i > end_idx : i >= HVS6S_FW_MAX) {
+		if (saw_end ? i > end_idx : i >= DUMP_MAX) {
 			break;
 		}
 		printk("rpi5_scanout32: S3 dl[%3u] = 0x%08x\n", start + i, snap[i]);
@@ -460,100 +487,111 @@ int main(void)
 	       pv0 != 0 ? "mapped" : "NOT mapped", (unsigned long long)PV0_BASE,
 	       pv_rd(SA_PV_CONTROL), pv_rd(SA_PV_V_CONTROL));
 
-	/* S5: the snapshot. hvs6_dlist_swap.h's offsets are D0's. */
+	/* S5: the plan's snapshot, read only. hvs6_dlist_swap.h's offsets are
+	 * D0's; the list memory's size is CXM_SIZE (in words), capped by the
+	 * block mapped here. */
 	cfg.chan = CHAN;
 	cfg.mem_words = cxm == ALL_ONES ? 0u : MIN(cxm, DL_WORDS);
 	cfg.start = HVS6S_AUTO;
 	cfg.list_arm = HVS_BASE + HVS6_DLIST_OFFSET;
 	cfg.cache_line = (uint32_t)sys_cache_data_line_size_get();
 	cfg.max_polls = MAX_POLLS;
+	hvs6s_report_init(&plan);
 	if (hvs == 0) {
 		printk("rpi5_scanout32: S5 dlswap snapshot FAIL: HVS not mapped\n");
 	} else if (gen != HVS6_GEN_D) {
 		printk("rpi5_scanout32: S5 dlswap snapshot FAIL: stepping is not D0 (the swap's "
 		       "offsets are D0's)\n");
 	} else {
-		snap_err = hvs6s_snapshot(&io, &cfg, &fwsnap);
-		if (snap_err == HVS6S_OK) {
-			ext_n = snap_dlist(ext, fwsnap.fw_head, SNAP_MAX);
-			if (ext_n > cfg.mem_words - fwsnap.fw_head) {
-				ext_n = cfg.mem_words - fwsnap.fw_head;
-			}
-			if (ext_n == 0) {
-				snap_err = HVS6S_ERR_SNAPSHOT;
-			}
-		}
-		printk("rpi5_scanout32: S5 dlswap snapshot %s (%s) mem_words %u lptrs 0x%08x "
-		       "fw_head %u fw_len %u end %s\n",
+		snap_err = hvs6s_snapshot(&io, &cfg, &plansnap);
+		printk("rpi5_scanout32: S5 dlswap snapshot %s (%s) mem_words %u (CXM_SIZE 0x%08x) "
+		       "lptrs 0x%08x fw_head %u fw_len %u entries %u, walk stopped at word %u "
+		       "(0x%08x), END %s\n",
 		       snap_err == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(snap_err),
-		       cfg.mem_words, fwsnap.lptrs, fwsnap.fw_head, fwsnap.fw_len,
-		       fwsnap.fw_end_found ? "found" : "capped");
+		       cfg.mem_words, cxm, plansnap.lptrs, plansnap.fw_head, plansnap.fw_len,
+		       plansnap.fw_entries, plansnap.walk_stop, plansnap.walk_word,
+		       plansnap.fw_end_found ? "found" : "NOT found");
 	}
 	if (snap_err == HVS6S_OK) {
-		printk("rpi5_scanout32: S5 kept for the restore: LPTRS 0x%08x, words 0..%u, the "
-		       "firmware's list words %u..%u (%u from HEADE)\n", fwsnap.lptrs,
-		       HVS6S_KEPT - 1u, fwsnap.fw_head, fwsnap.fw_head + ext_n - 1u, ext_n);
-		/* The hash is over the words from HEADE: the list the channel runs. */
-		printk("u3 snapshot: list-ptr=0x%08x words=%u hash=0x%08x\n", fwsnap.lptrs, ext_n,
-		       words_hash(ext, ext_n));
+		/* The hash is over the firmware's words [HEADE, HEADE + fw_len),
+		 * END included: the list the channel runs, as the restore compares. */
+		printk("u3 snapshot: list-ptr=0x%08x heade=%u words=%u hash=0x%08x\n",
+		       plansnap.lptrs, plansnap.fw_head, plansnap.fw_len,
+		       words_hash(plansnap.fw, plansnap.fw_len));
 	} else {
-		printk("u3 snapshot: list-ptr=0x%08x words=0 hash=0x00000000 FAIL no snapshot\n",
-		       lptrs);
+		uint32_t sl = plansnap.lptrs != 0 ? plansnap.lptrs : lptrs;
+
+		hvs6s_fail(&plan, snap_err);
+		printk("u3 snapshot: list-ptr=0x%08x heade=%u words=0 hash=0x00000000 FAIL %s "
+		       "(walk stopped at word %u, 0x%08x, after %u entries)\n",
+		       sl, sl & YD5_HVS6_LPTRS_HEADE_MASK, hvs6s_err_name(snap_err),
+		       plansnap.walk_stop, plansnap.walk_word, plansnap.fw_entries);
 		first_err = snap_err;
 		fail = "no snapshot of the firmware's list";
 	}
 
-	/* S6: one span for slot A and slot B, at or after word 32, outside the
-	 * firmware's list; then read and checked before anything is written. */
-	if (snap_err == HVS6S_OK) {
-		place_err = hvs6s_place(&cfg, &fwsnap, PAIR_WORDS, &pair);
-		placed = place_err == HVS6S_OK;
+	/* S6: the plan's placement, read only: one span for slot A and slot B,
+	 * every word zero, clear of words 0..31 and the firmware's span
+	 * (hvs6s_place_io); then no channel's list pointer inside it. */
+	for (unsigned int c = 0; c < YD5_HVS6_NUM_CHANNELS; c++) {
+		printk("rpi5_scanout32: S6 ch%u LPTRS 0x%08x DL 0x%08x\n", c,
+		       hvs_rd(hvs6s_lptrs_reg(c)), hvs_rd(hvs6s_dl_reg(c)));
 	}
-	if (placed) {
-		uint32_t bad, bad_val;
-		const char *why;
+	if (snap_err == HVS6S_OK) {
+		place_err = hvs6s_place_io(&io, &cfg, &plansnap, PAIR_WORDS, &pair, &plan);
+		if (place_err == HVS6S_OK) {
+			for (unsigned int c = 0; c < YD5_HVS6_NUM_CHANNELS; c++) {
+				uint32_t lp = hvs_rd(hvs6s_lptrs_reg(c)) & YD5_HVS6_LPTRS_HEADE_MASK;
+				uint32_t la = hvs_rd(hvs6s_dl_reg(c)) & HVS6S_DL_LACT_MASK;
+				bool in_lp = hvs6s_overlap(pair, PAIR_WORDS, lp, 1);
 
-		for (unsigned int c = 0; c < YD5_HVS6_NUM_CHANNELS; c++) {
-			printk("rpi5_scanout32: S6 ch%u LPTRS 0x%08x DL 0x%08x\n", c,
-			       hvs_rd(hvs6s_lptrs_reg(c)), hvs_rd(hvs6s_dl_reg(c)));
-		}
-		why = place_check(&fwsnap, pair, PAIR_WORDS, &place_err, &bad, &bad_val);
-		if (why == NULL) {
-			printk("rpi5_scanout32: S6 placement check ok: words %u..%u read zero twice, "
-			       "outside words 0..31, the firmware's list from HEADE %u (%u words "
-			       "read, END %s) and every channel's list pointer\n",
-			       pair, pair + PAIR_WORDS - 1u, fwsnap.fw_head, ext_n,
-			       fwsnap.fw_end_found ? "found" : "not in view");
-		} else {
-			placed = false;
-			refused = true;
-			printk("rpi5_scanout32: S6 placement check FAIL: words %u..%u %s (word/channel "
-			       "%u value 0x%08x); nothing is written\n",
-			       pair, pair + PAIR_WORDS - 1u, why, bad, bad_val);
-			printk("u3 dlist: placed word 0 len 0 FAIL refused at word %u: %s\n", pair,
-			       why);
-			if (first_err == HVS6S_OK) {
-				first_err = place_err;
-				fail = "our list was refused: its words are not known free";
+				if (in_lp || hvs6s_overlap(pair, PAIR_WORDS, la, 1)) {
+					place_err = HVS6S_ERR_PLACE_FW;
+					snprintk(why, sizeof(why),
+						 "channel %u's %s %u is inside words %u..%u", c,
+						 in_lp ? "LPTRS.HEADE" : "DL.LACT", in_lp ? lp : la,
+						 pair, pair + PAIR_WORDS - 1u);
+					break;
+				}
 			}
+		} else if (plan.place_bad_word >= 0) {
+			snprintk(why, sizeof(why), "%s: word %lld reads 0x%08x",
+				 hvs6s_err_name(place_err), (long long)plan.place_bad_word,
+				 plan.place_bad_val);
+		} else {
+			snprintk(why, sizeof(why), "%s (%u non-zero words stepped past)",
+				 hvs6s_err_name(place_err), plan.place_skipped);
 		}
+		plan.place_err = place_err;
+		placed = place_err == HVS6S_OK;
+	} else {
+		snprintk(why, sizeof(why), "no snapshot: %s", hvs6s_err_name(snap_err));
 	}
 	if (placed) {
 		slot[0] = pair;
 		slot[1] = pair + SLOT_WORDS;
+		plan.start = pair;
+		plan.len = PAIR_WORDS;
+		printk("rpi5_scanout32: S6 placement check ok: words %u..%u read zero, clear of "
+		       "words 0..%u, the firmware's list %u..%u (%u entries, END at word %u) and "
+		       "every channel's list pointer; %u non-zero word(s) stepped past\n",
+		       pair, pair + PAIR_WORDS - 1u, HVS6S_KEPT - 1u, plansnap.fw_head,
+		       plansnap.fw_head + plansnap.fw_len - 1u, plansnap.fw_entries,
+		       plansnap.walk_stop, plan.place_skipped);
 		printk("rpi5_scanout32: S6 dlswap place ok: slot A word %u, slot B word %u, %u "
 		       "words each\n", slot[0], slot[1], SLOT_WORDS);
-		printk("u3 dlist: placed word %u len %u (slot A %u, slot B %u)\n", pair,
-		       2u * SLOT_WORDS, slot[0], slot[1]);
-	} else if (!refused) {
-		printk("rpi5_scanout32: S6 dlswap place %s: %s\n",
-		       snap_err == HVS6S_OK ? "FAIL" : "skip",
-		       snap_err == HVS6S_OK ? hvs6s_err_name(place_err) : "no snapshot");
-		printk("u3 dlist: placed word 0 len 0 FAIL %s\n",
-		       snap_err == HVS6S_OK ? hvs6s_err_name(place_err) : "no snapshot");
+		printk("u3 dlist: placed word %u len %u (slot A %u, slot B %u)\n", pair, PAIR_WORDS,
+		       slot[0], slot[1]);
+	} else {
+		printk("rpi5_scanout32: S6 placement check %s: %s; nothing is written\n",
+		       snap_err == HVS6S_OK ? "FAIL" : "skip", why);
+		printk("u3 dlist: refused %s\n", why);
+		if (snap_err == HVS6S_OK) {
+			hvs6s_fail(&plan, place_err);
+		}
 		if (first_err == HVS6S_OK) {
 			first_err = place_err;
-			fail = "our list was not placed";
+			fail = "our list was refused: its words are not known free";
 		}
 	}
 
@@ -585,81 +623,128 @@ int main(void)
 		fail = "buffers A/B not ready";
 	}
 
-	/* S8: the swaps, A, B, A, B ... */
-	hvs6s_report_init(&rec);
+	/* S8: swap 1 is hvs6s_run at slot A (its own snapshot, the placement
+	 * checked again, the swap to buffer A and the restore); then slot B is
+	 * checked the same way and swaps 2.. alternate B, A, B ... */
+	hvs6s_report_init(&runrep);
+	hvs6s_report_init(&rrest);
 	cfg.plane.format = HVS6W_XRGB8888;
 	cfg.plane.x = 0;
 	cfg.plane.y = 0;
 	cfg.plane.width = fw_w;
 	cfg.plane.height = fw_h;
 	cfg.plane.pitch = pitch;
-	for (unsigned int k = 0; k < SWAPS; k++) {
-		unsigned int b = k & 1u;
-		struct hvs6s_report r;
-		struct swap_step *st = &steps[k];
-		enum hvs6s_err e;
-		enum swap_reason why;
-		uint32_t pre_status, pre_lptrs, post_status, post_lptrs;
-		int prc;
+	cfg.plane.addr = bus[0];
+	if (placed && bufs_ok) {
+		uint32_t pre_status = hvs_rd(hvs6s_status_reg(CHAN));
+		uint32_t pre_lptrs = hvs_rd(hvs6s_lptrs_reg(CHAN));
+		enum swap_reason w;
 
-		if (!placed || !bufs_ok) {
-			printk("u3 swap %u: skipped (%s)\n", k + 1u,
-			       !placed ? "not placed" : "buffers not ready");
-			continue;
+		cfg.start = slot[0];
+		ran = true;
+		run_err = hvs6s_run(&io, &cfg, &fwsnap, &runrep);
+		/* our list's words are written once the run's placement passed */
+		wrote_list = fwsnap.taken && runrep.place_err == HVS6S_OK;
+		same_snap = snaps_equal(&plansnap, &fwsnap);
+		printk("rpi5_scanout32: S8 hvs6s_run %s (%s) at slot A word %u: swapped %d "
+		       "restored %d; its snapshot %s the plan's\n",
+		       run_err == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(run_err), slot[0],
+		       runrep.swapped, runrep.restored, same_snap ? "equals" : "DIFFERS from");
+		(void)hvs6s_lines(&fwsnap, &runrep, &emit);
+		fill_step(&steps[0], &runrep, pre_lptrs, pre_status,
+			  hvs_rd(hvs6s_lptrs_reg(CHAN)), hvs_rd(hvs6s_status_reg(CHAN)), slot[0],
+			  bus[0], &fwsnap);
+		nsteps = 1;
+		w = swap_lines(0, &steps[0], &runrep, run_err, &named);
+		if (run_err != HVS6S_OK && first_err == HVS6S_OK) {
+			first_err = run_err;
 		}
-		pre_status = hvs_rd(hvs6s_status_reg(CHAN));
-		pre_lptrs = hvs_rd(hvs6s_lptrs_reg(CHAN));
-		cfg.plane.addr = bus[b];
-		hvs6s_report_init(&r);
-		wrote = true; /* from here on the restore writes LPTRS back */
-		e = hvs6s_swap(&io, &cfg, slot[b], &r);
-		post_status = hvs_rd(hvs6s_status_reg(CHAN));
-		post_lptrs = hvs_rd(hvs6s_lptrs_reg(CHAN));
-
-		st->sample.ptr_before = r.swapped ? r.at_write.lptrs : pre_lptrs;
-		st->sample.ptr_after = post_lptrs;
-		st->sample.expected_word = slot[b];
-		st->sample.status_before = r.swapped ? r.at_write.status : pre_status;
-		st->sample.status_after = post_status;
-		st->sample.pv_control = pv_rd(SA_PV_CONTROL);
-		st->sample.pv_vcontrol = pv_rd(SA_PV_V_CONTROL);
-		st->plane_addr = slot_plane_addr(slot[b], &prc);
-		st->expected_addr = bus[b];
-		nsteps = k + 1u;
-		why = swap_judge(&st->sample);
-
-		hvs6s_regs_line(&emit, "at-write", &r.at_write);
-		hvs6s_regs_line(&emit, "after", &r.after);
-		printk("dlswap swap%u %s %s lptrs-readback %s frcnt-advance %s settle %s "
-		       "lact-follows %s (record only)\n",
-		       k + 1u, e == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(e),
-		       r.lptrs_ok ? "ok" : "FAIL", r.frcnt_ok ? "ok" : "FAIL",
-		       r.settle_ok ? "ok" : (r.frcnt_ok ? "FAIL" : "skip"),
-		       r.lact_follows ? "yes" : "no");
-		printk("u3 swap %u: buf %c list-ptr=0x%08x frcnt %u -> %u judge=%s slot=%u "
-		       "plane=0x%010llx%s\n",
-		       k + 1u, b ? 'B' : 'A', post_lptrs, swap_frcnt(st->sample.status_before),
-		       swap_frcnt(post_status), swap_reason_name(why), slot[b],
-		       (unsigned long long)st->plane_addr,
-		       prc != HVS6_OK ? " (entry did not decode)" : "");
-		if (k == 0) {
-			named = post_lptrs != ALL_ONES &&
-				(post_lptrs & SWAP_LPTRS_MASK) == slot[0];
-			printk("u3 named: %s LPTRS 0x%08x after swap 1, our list at word %u, "
-			       "first read 0x%08x poll %u\n",
-			       named ? "yes" : "no", post_lptrs, slot[0], r.lptrs_first,
-			       r.lptrs_poll);
-			rec = r;
-		}
-		if (e != HVS6S_OK && first_err == HVS6S_OK) {
-			first_err = e;
-		}
-		if (e == HVS6S_OK && why == SWAP_OURS) {
+		if (run_err == HVS6S_OK && w == SWAP_OURS) {
 			swaps_ok++;
+		}
+		if (!same_snap && fail == NULL) {
+			fail = "the firmware's list changed between the plan and the run";
 		}
 		k_msleep(HOLD_MS);
 	}
-	if (!placed || !bufs_ok) {
+
+	/* Slot B, read and checked before its first write, as slot A was. */
+	{
+		bool go = ran && runrep.swapped && runrep.restore_equal && same_snap;
+
+		if (go) {
+			struct hvs6s_report bplace;
+			uint32_t sb = 0;
+			enum hvs6s_err be;
+
+			hvs6s_report_init(&bplace);
+			cfg.start = slot[1];
+			be = hvs6s_place_io(&io, &cfg, &fwsnap, SLOT_WORDS, &sb, &bplace);
+			if (be == HVS6S_OK && sb != slot[1]) {
+				be = HVS6S_ERR_PLACE_FIT;
+			}
+			if (be == HVS6S_OK) {
+				printk("rpi5_scanout32: S8 slot B place ok: word %u..%u read zero\n",
+				       slot[1], slot[1] + SLOT_WORDS - 1u);
+			} else {
+				go = false;
+				if (bplace.place_bad_word >= 0) {
+					snprintk(why, sizeof(why), "slot B refused: %s: word %lld reads "
+						 "0x%08x", hvs6s_err_name(be),
+						 (long long)bplace.place_bad_word, bplace.place_bad_val);
+				} else {
+					snprintk(why, sizeof(why), "slot B refused: %s",
+						 hvs6s_err_name(be));
+				}
+				printk("rpi5_scanout32: S8 slot B place FAIL: %s; nothing more is "
+				       "written\n", why);
+				if (first_err == HVS6S_OK) {
+					first_err = be;
+					fail = "slot B was refused: its words are not known free";
+				}
+			}
+		} else if (ran) {
+			snprintk(why, sizeof(why), "swap 1: %s",
+				 !runrep.swapped ? "LPTRS was not written"
+				 : !runrep.restore_equal ? "the run's restore was not byte-equal"
+				 : "the run's snapshot differed from the plan's");
+		} else {
+			snprintk(why, sizeof(why), "%s", !placed ? "not placed" : "buffers not ready");
+		}
+
+		for (unsigned int k = ran ? 1u : 0u; k < SWAPS; k++) {
+			unsigned int b = k & 1u;
+			struct hvs6s_report r;
+			enum hvs6s_err e;
+			enum swap_reason w;
+			uint32_t pre_status, pre_lptrs;
+
+			if (!go) {
+				printk("u3 swap %u: skipped (%s)\n", k + 1u, why);
+				continue;
+			}
+			pre_status = hvs_rd(hvs6s_status_reg(CHAN));
+			pre_lptrs = hvs_rd(hvs6s_lptrs_reg(CHAN));
+			cfg.plane.addr = bus[b];
+			hvs6s_report_init(&r);
+			wrote_more = true; /* from here on S10 writes LPTRS back */
+			e = hvs6s_swap(&io, &cfg, slot[b], &r);
+			hvs6s_regs_line(&emit, "at-write", &r.at_write);
+			hvs6s_regs_line(&emit, "after", &r.after);
+			fill_step(&steps[k], &r, pre_lptrs, pre_status, hvs_rd(hvs6s_lptrs_reg(CHAN)),
+				  hvs_rd(hvs6s_status_reg(CHAN)), slot[b], bus[b], &fwsnap);
+			nsteps = k + 1u;
+			w = swap_lines(k, &steps[k], &r, e, &named);
+			if (e != HVS6S_OK && first_err == HVS6S_OK) {
+				first_err = e;
+			}
+			if (e == HVS6S_OK && w == SWAP_OURS) {
+				swaps_ok++;
+			}
+			k_msleep(HOLD_MS);
+		}
+	}
+	if (!ran) {
 		printk("u3 named: no (no swap was made)\n");
 	} else {
 		struct swap_seq_verdict v = swap_seq_judge(steps, nsteps);
@@ -670,6 +755,11 @@ int main(void)
 		if (!v.pass && fail == NULL) {
 			snprintk(failbuf, sizeof(failbuf), "swap %d: %s (%s)", v.index + 1,
 				 swap_seq_reason_name(v.reason), swap_reason_name(v.swap));
+			fail = failbuf;
+		}
+		if (nsteps < SWAPS && fail == NULL) {
+			snprintk(failbuf, sizeof(failbuf), "%u of %u swaps made (%s)", nsteps, SWAPS,
+				 why);
 			fail = failbuf;
 		}
 		if (!named && fail == NULL) {
@@ -699,113 +789,111 @@ int main(void)
 		printk("rpi5_scanout32: S9 readback skip (buffers not ready)\n");
 	}
 
-	/* S10: the restore, whenever the snapshot was taken. When nothing was
-	 * written (refused or skipped), no register or word is written here
-	 * either: the compare alone runs. */
-	hvs6s_report_init(&rrest);
-	if (snap_err == HVS6S_OK) {
-		uint32_t rb_kept[HVS6S_KEPT], rb_ptr, rb_n;
-		struct swap_restore_verdict vk, vf;
-		enum hvs6s_err e = HVS6S_OK;
-		bool cleared = true;
+	/* S10: the restore after swaps 2.., and the compare whenever a snapshot
+	 * was taken. Swap 1's restore is hvs6s_run's own. When nothing more
+	 * was written, no register or word is written here: the compare alone
+	 * runs (and our words go back to zero). */
+	{
+		const struct hvs6s_snap *ref = fwsnap.taken ? &fwsnap : &plansnap;
 
-		if (wrote) {
-			e = hvs6s_restore(&io, &cfg, &fwsnap, &rrest);
-		} else {
-			printk("rpi5_scanout32: S10 restore write skip: nothing was written; "
-			       "read-only compare\n");
-		}
-		rb_ptr = hvs_rd(hvs6s_lptrs_reg(CHAN));
-		for (i = 0; i < HVS6S_KEPT; i++) {
-			rb_kept[i] = hvs_rd(hvs6s_word_off(i));
-		}
-		rb_n = snap_dlist(ext_rb, fwsnap.fw_head, ext_n);
-		vk = swap_restore_judge(fwsnap.kept, rb_kept, HVS6S_KEPT, fwsnap.lptrs, rb_ptr);
-		vf = swap_restore_judge(ext, ext_rb, rb_n == ext_n ? ext_n : 0u, fwsnap.lptrs,
-					rb_ptr);
-		if (rb_n != ext_n) {
-			vf.pass = false;
-		}
+		if (ref->taken) {
+			enum hvs6s_err e = HVS6S_OK;
+			struct swap_restore_verdict vf;
+			uint32_t rb_ptr, rb_lact;
+			bool cleared = true, settled;
 
-		/* Our span back to what it read before the first write (zero), once
-		 * channel 0 is back on the firmware's list and frames have passed. */
-		if (wrote && placed) {
-			bool back = rrest.restore_lptrs_ok && rrest.restore_frcnt_ok &&
-				    !hvs6s_overlap(pair, PAIR_WORDS,
-						   rb_ptr & YD5_HVS6_LPTRS_HEADE_MASK, 1);
-			int bad = -1;
+			if (wrote_more) {
+				e = hvs6s_restore(&io, &cfg, &fwsnap, &rrest);
+				hvs6s_regs_line(&emit, "restore-after", &rrest.after_restore);
+				printk("dlswap restore-frcnt %s polls=%u\n",
+				       rrest.restore_frcnt_ok ? "ok" : "FAIL", rrest.restore_polls);
+				settled = rrest.restore_frcnt_ok;
+			} else if (ran) {
+				printk("rpi5_scanout32: S10 restore write skip: no swap after swap 1; "
+				       "hvs6s_run's own restore %s; compare only\n",
+				       runrep.restored ? "wrote the firmware's LPTRS back"
+				       : "did not run");
+				settled = runrep.restore_frcnt_ok;
+			} else {
+				printk("rpi5_scanout32: S10 restore write skip: nothing was written; "
+				       "read-only compare\n");
+				settled = true;
+			}
+			rb_ptr = hvs_rd(hvs6s_lptrs_reg(CHAN));
+			rb_lact = hvs_rd(hvs6s_dl_reg(CHAN)) & HVS6S_DL_LACT_MASK;
+			for (i = 0; i < ref->fw_len; i++) {
+				fw_rb[i] = hvs_rd(hvs6s_word_off(ref->fw_head + i));
+			}
+			vf = swap_restore_judge(ref->fw, fw_rb, ref->fw_len, ref->lptrs, rb_ptr);
 
-			if (back) {
-				for (i = 0; i < PAIR_WORDS; i++) {
-					io_write32(NULL, hvs6s_word_off(pair + i), pair_prev[i]);
-				}
-				barrier_dsync_fence_full();
-				for (i = 0; i < PAIR_WORDS && bad < 0; i++) {
-					if (hvs_rd(hvs6s_word_off(pair + i)) != pair_prev[i]) {
-						bad = (int)i;
+			/* Our span back to zero (it read zero before the first write),
+			 * once channel 0 is back on the firmware's list, frames have
+			 * passed and neither its LPTRS nor DL.LACT is inside it. */
+			if (wrote_list) {
+				bool back = settled &&
+					    (rb_ptr & YD5_HVS6_LPTRS_HEADE_MASK) == ref->fw_head &&
+					    !hvs6s_overlap(pair, PAIR_WORDS,
+							   rb_ptr & YD5_HVS6_LPTRS_HEADE_MASK, 1) &&
+					    !hvs6s_overlap(pair, PAIR_WORDS, rb_lact, 1);
+				int bad = -1;
+
+				if (back) {
+					for (i = 0; i < PAIR_WORDS; i++) {
+						io_write32(NULL, hvs6s_word_off(pair + i), 0u);
+					}
+					barrier_dsync_fence_full();
+					for (i = 0; i < PAIR_WORDS && bad < 0; i++) {
+						if (hvs_rd(hvs6s_word_off(pair + i)) != 0u) {
+							bad = (int)i;
+						}
 					}
 				}
+				cleared = back && bad < 0;
+				printk("rpi5_scanout32: S10 our words %u..%u %s\n", pair,
+				       pair + PAIR_WORDS - 1u,
+				       !back ? "left in place: channel 0 is not back on the firmware's "
+					       "list"
+				       : bad < 0 ? "back to zero" : "NOT back to zero");
 			}
-			cleared = back && bad < 0;
-			printk("rpi5_scanout32: S10 our words %u..%u %s\n", pair,
-			       pair + PAIR_WORDS - 1u,
-			       !back ? "left in place: channel 0 is not back on the firmware's list"
-			       : bad < 0 ? "back to zero" : "NOT back to zero");
-		}
 
-		restore_pass = e == HVS6S_OK && vk.pass && vf.pass && cleared;
-		printk("rpi5_scanout32: S10 dlswap restore %s (%s); words 0..31 %s index %d want "
-		       "0x%08x got 0x%08x; fw %u..+%u %s index %d want 0x%08x got 0x%08x\n",
-		       !wrote ? "skip" : e == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(e),
-		       swap_restore_reason_name(vk.reason), vk.index, vk.want, vk.got,
-		       fwsnap.fw_head, ext_n, swap_restore_reason_name(vf.reason),
-		       vf.index, vf.want, vf.got);
-		if (restore_pass) {
-			printk("u3 restore: PASS byte-equal list-ptr=0x%08x words=%u+%u "
-			       "hash=0x%08x%s\n",
-			       rb_ptr, HVS6S_KEPT, ext_n, words_hash(ext_rb, ext_n),
-			       wrote ? "" : " (nothing was written)");
+			restore_pass = e == HVS6S_OK && vf.pass && cleared;
+			printk("rpi5_scanout32: S10 dlswap restore %s (%s); fw %u..+%u %s index %d "
+			       "want 0x%08x got 0x%08x\n",
+			       !wrote_more ? "skip" : e == HVS6S_OK ? "ok" : "FAIL",
+			       hvs6s_err_name(e), ref->fw_head, ref->fw_len,
+			       swap_restore_reason_name(vf.reason), vf.index, vf.want, vf.got);
+			if (restore_pass) {
+				printk("u3 restore: PASS byte-equal list-ptr=0x%08x heade=%u words=%u "
+				       "hash=0x%08x%s\n",
+				       rb_ptr, ref->fw_head, ref->fw_len,
+				       words_hash(fw_rb, ref->fw_len),
+				       wrote_list ? "" : " (nothing was written)");
+			} else {
+				printk("u3 restore: FAIL %s list-ptr=0x%08x want 0x%08x (%s%s) "
+				       "hash=0x%08x\n",
+				       hvs6s_err_name(e), rb_ptr, ref->lptrs,
+				       swap_restore_reason_name(vf.reason),
+				       cleared ? "" : " / our words not cleared",
+				       words_hash(fw_rb, ref->fw_len));
+			}
+			if (e != HVS6S_OK && first_err == HVS6S_OK) {
+				first_err = e;
+			}
+			if (!restore_pass && fail == NULL) {
+				fail = "the firmware's list was not restored byte-equal";
+			}
 		} else {
-			printk("u3 restore: FAIL %s list-ptr=0x%08x want 0x%08x (%s / %s%s) "
-			       "hash=0x%08x\n",
-			       hvs6s_err_name(e), rb_ptr, fwsnap.lptrs,
-			       swap_restore_reason_name(vk.reason),
-			       swap_restore_reason_name(vf.reason),
-			       cleared ? "" : " / our words not cleared", words_hash(ext_rb, rb_n));
+			printk("rpi5_scanout32: S10 dlswap restore skip (no snapshot; nothing was "
+			       "written)\n");
+			printk("u3 restore: FAIL not run (no snapshot; nothing was written)\n");
 		}
-		if (e != HVS6S_OK && first_err == HVS6S_OK) {
-			first_err = e;
-		}
-		if (!restore_pass && fail == NULL) {
-			fail = "the firmware's list was not restored byte-equal";
-		}
-	} else {
-		printk("rpi5_scanout32: S10 dlswap restore skip (no snapshot; nothing was written)\n");
-		printk("u3 restore: FAIL not run (no snapshot; nothing was written)\n");
 	}
 
-	/* The dlswap record: placement, swap 1 and the restore, one line per step. */
-	if (snap_err == HVS6S_OK) {
-		rec.place_err = place_err;
-		if (placed) {
-			rec.start = pair;
-			rec.len = 2u * SLOT_WORDS;
-		}
-		rec.restored = rrest.restored;
-		rec.restore_frcnt_ok = rrest.restore_frcnt_ok;
-		rec.restore_polls = rrest.restore_polls;
-		rec.at_restore = rrest.at_restore;
-		rec.after_restore = rrest.after_restore;
-		rec.restore_lptrs_ok = rrest.restore_lptrs_ok;
-		rec.restore_equal = rrest.restore_equal;
-		rec.diff_word = rrest.diff_word;
-		rec.diff_want = rrest.diff_want;
-		rec.diff_got = rrest.diff_got;
-		rec.err = first_err;
-		(void)hvs6s_lines(&fwsnap, &rec, &emit);
-	} else {
-		printk("dlswap snapshot FAIL lptrs=0x%08x (%s)\n", lptrs, hvs6s_err_name(snap_err));
-		printk("dlswap result FAIL %s\n", hvs6s_err_name(snap_err));
+	/* The dlswap record of the plan when hvs6s_run did not run (it printed
+	 * its own record after swap 1): snapshot, placement, nothing written. */
+	if (!ran) {
+		hvs6s_fail(&plan, first_err);
+		(void)hvs6s_lines(&plansnap, &plan, &emit);
 	}
 
 	if (fail == NULL && first_err != HVS6S_OK) {
