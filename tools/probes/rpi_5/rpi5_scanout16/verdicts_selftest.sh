@@ -14,6 +14,9 @@
 #             over failing evidence does not rescue it
 #   wrap      FRCNT 60 -> 3 advanced (PASS); 17 -> 17 stuck; 70 is no counter
 #   q2        the hold line's answers: redrawn, list changed, both, unclear
+#   q2 list   the list word line: one entry word per frame, a word at the
+#             context offset, a word outside the entry, nothing changed, a
+#             truncated log, no context offset printed
 #   cut       a log cut after the pattern line -> incomplete, exit 1, the
 #             stop point named, no PASS/FAIL
 #   gap       lines skipped between seen ones -> incomplete, the gap named
@@ -150,6 +153,45 @@ q2 listch "q2: yes, list changed (2 list words changed in 10000 ms)" 'u3 hold: 1
 q2 both "q2: yes, redrawn and list changed (16 plane bytes, 1 list words in 3000 ms)" 'u3 hold: 3000 ms plane=redrawn bytes=16 list=changed words=1'
 q2 contra "q2: unclear (plane=kept with bytes=4)" 'u3 hold: 3000 ms plane=kept bytes=4 list=kept words=0'
 q2 zero "q2: unclear (a hold of 0 ms holds nothing)" 'u3 hold: 0 ms plane=kept bytes=0 list=kept words=0'
+
+# the list word: a log with the probe's q2 lines inserted before the hold line.
+# q2w <name> <expect> <summary line or ''> <ctx line or ''> [hold line]
+q2w() {
+    local hold=${5:-u3 hold: 240000 ms plane=kept bytes=0 list=changed words=1}
+    mk "$T/$1.tmp" "hold=$hold"
+    {
+        grep -v '^u3 hold:' "$T/$1.tmp" | sed -n '1,/^u3 pv:/p'
+        [ -n "$4" ] && echo "$4"
+        echo 'rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x800000a8 now 0x800000a9'
+        [ -n "$3" ] && echo "$3"
+        echo "$hold"
+        sed -n '/^rpi5_scanout16: PASS/,$p' "$T/$1.tmp"
+    } > "$T/$1.log"
+    out=$(bash "$V" "$T/$1.log" 2>&1); rc=$?
+    expect_rc 0 "q2 list $1 (the word never changes the verdict)"
+    check "$2" "q2 list $1"
+}
+CTX='rpi5_scanout16: q2 entry words 8 ctx-off 4'
+# one entry word changing every frame: the HVS writes it back
+q2w perframe "word 676 entry-off 4 was 0x800000a8 now 0x800000a9 per-frame yes: hvs-writeback" \
+    'u3 q2: word 676 entry-off 4 was 0x800000a8 now 0x800000a9 per-frame yes' "$CTX"
+# a word at the context offset, rarely changing: still the write-back position
+q2w ctxpos "per-frame no: hvs-writeback" \
+    'u3 q2: word 676 entry-off 4 was 0x800000a8 now 0x800000a9 per-frame no' "$CTX"
+# an entry word that is not the context word, rarely changing: a firmware edit
+q2w fwedit "word 674 entry-off 2 was 0x0000fff0 now 0x0000ffe0 per-frame no: firmware-edit" \
+    'u3 q2: word 674 entry-off 2 was 0x0000fff0 now 0x0000ffe0 per-frame no' "$CTX"
+# a word outside the entry
+q2w outside "word 704 entry-off none was 0x20000000 now 0x00000001 per-frame no: firmware-edit" \
+    'u3 q2: word 704 entry-off none was 0x20000000 now 0x00000001 per-frame no' "$CTX"
+# nothing changed
+q2w nochange "; no list word changed" 'u3 q2: no list word changed' "$CTX" \
+    'u3 hold: 240000 ms plane=kept bytes=0 list=kept words=0'
+# a truncated log: no summary line
+q2w notrunc "; list word unknown (no 'u3 q2:' line)" '' ''
+# in the entry, rare, and the entry's context offset not printed: the data does not decide
+q2w noctx "per-frame no: unknown" \
+    'u3 q2: word 674 entry-off 2 was 0x0000fff0 now 0x0000ffe0 per-frame no' ''
 
 # ---- cut after the pattern line --------------------------------------------
 head -n 7 "$T/pass.log" > "$T/cut.log"

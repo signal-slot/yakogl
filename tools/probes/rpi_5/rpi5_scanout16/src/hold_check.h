@@ -162,6 +162,62 @@ static inline uint32_t hold_clamp_end(uint32_t start_ms, uint32_t want_ms, uint3
 	return (uint32_t)end;
 }
 
+/* ---- Q2's list half: which list word changed, where it sits, and whether it
+ * follows the frame. Grounds (driver/zephyr/lib/board/rpi5_scanout/
+ * hvs6_dlist.h, the entry layout "CTL0, POS0, CTL2, POS1 only when not unity,
+ * POS2, POS3 context, then the pointer words", and driver/docs/
+ * rpi5-v3d71-facts.md section 10): a plane entry's POS3 word is the context
+ * word, the one the HVS keeps its per-plane state in. ---- */
+#define HOLD_Q2_CAP 8u    /* changed words named per sample */
+#define HOLD_BURST_FRAMES 16u
+#define HOLD_BURST_MS 2000u /* the budget of one burst: 16 frames of 60 Hz plus slack */
+
+/* Word index of the POS3 context word in an entry: 4 when unity, else 5. */
+static inline uint32_t hold_ctx_off(bool unity)
+{
+	return unity ? 4u : 5u;
+}
+
+/* Offset of list word rel (counted from the list head) inside the first
+ * entry (entry_n words), or -1 when it lies outside it. */
+static inline int hold_entry_off(uint32_t rel, uint32_t entry_n)
+{
+	return rel < entry_n ? (int)rel : -1;
+}
+
+/* The words of cur that differ from ref (n words): up to cap indexes into idx;
+ * returns the total number that differ (may exceed cap). */
+static inline uint32_t hold_diff_words(const uint32_t *ref, const uint32_t *cur, uint32_t n,
+				       uint32_t *idx, uint32_t cap)
+{
+	uint32_t total = 0;
+
+	for (uint32_t i = 0; i < n; i++) {
+		if (cur[i] == ref[i])
+			continue;
+		if (total < cap)
+			idx[total] = i;
+		total++;
+	}
+	return total;
+}
+
+/* Changes between consecutive values of one word read once per frame. */
+static inline uint32_t hold_transitions(const uint32_t *v, uint32_t n)
+{
+	uint32_t t = 0;
+
+	for (uint32_t i = 1; i < n; i++)
+		t += v[i] != v[i - 1];
+	return t;
+}
+
+/* A word follows the frame when it changed in at least half the frame steps. */
+static inline bool hold_per_frame(const uint32_t *v, uint32_t n)
+{
+	return n >= 2 && hold_transitions(v, n) * 2u >= n - 1u;
+}
+
 /* (h) The combined verdict. */
 enum hold_reason {
 	HOLD_PASS = 0,

@@ -39,6 +39,24 @@ HVS register, nor a word of any display list.
    FRCNT to move, because two samples seconds apart can hold the same 6-bit
    count. `hold_clamp_end` ends the hold 10 s before the watchdog stops
    being fed. `hold_judge` decides.
+   Q2's list half is named while the hold runs: the adopted snapshot keeps
+   up to 64 list words, and at every sample each word that differs from it is
+   printed (at most 8, the rest counted):
+   `rpi5_scanout16: q2 word <list word index> off <index - HEADE> entry-off
+   <offset in the first plane entry, or none> was 0x.. now 0x..`. Right after
+   the reference sample and again at the end of the hold a burst reads the
+   list once per FRCNT change for 16 frames and prints, with FRCNT, every word
+   that differs from the snapshot or between two frames
+   (`q2 burst <reference|end> frame <k> FRCNT <n>: w<index>=0x..`), which
+   shows whether a word follows the frame (the HVS writing status back) or
+   changes rarely (a firmware edit). The closing burst runs inside the
+   hold, before `hold_clamp_end`'s end, so the end line stays 10 s ahead of
+   the watchdog. `rpi5_scanout16: q2 entry words <n> ctx-off <k>` gives the
+   entry's length and the POS3 context word's offset (4 unity, else 5), and
+   `u3 q2: word <n> entry-off <k> was 0x.. now 0x.. per-frame yes|no` (or
+   `u3 q2: no list word changed`) closes the question. These lines are not
+   part of the eleven and are optional to `verdicts.sh`. The probe writes no
+   register and no list word.
 6. Readback 2 (line [7]), STATUS.FRCNT twice 50 ms apart (line [8]), the
    valve's PV_CONTROL and PV_V_CONTROL (line [9]), the hold line (line [10],
    bytes = readback 2's differing bytes, words = list words that differ from
@@ -86,7 +104,9 @@ each line at its start, so the prefix is stripped first. The run ends at
 
 `verdicts.sh` exits with 0 for PASS, 1 for incomplete, 2 for a usage error, and
 3 for a complete log that fails (the board ran, a condition failed). Its `q2:`
-line answers Q2 and does not change the exit status. The host tests are
+line answers Q2 and does not change the exit status; when the log has the
+`u3 q2:` line it also names the list word, its entry offset and values and
+classifies it as `hvs-writeback`, `firmware-edit` or `unknown`. The host tests are
 `verdicts_selftest.sh`, `frame16_selftest.sh` and `hold_check_selftest.sh`.
 
 ## On the board

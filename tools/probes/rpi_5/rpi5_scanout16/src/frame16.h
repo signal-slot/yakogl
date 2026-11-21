@@ -274,6 +274,46 @@ static inline int frame16_fmt_hold(char *b, size_t n, uint32_t ms, const struct 
 			changed ? "changed" : "kept", (unsigned int)(changed ? words : 0));
 }
 
+/* Q2 list-word lines. entry_off < 0 prints 'none'. */
+static inline int frame16_fmt_q2_word(char *b, size_t n, uint32_t index, uint32_t head, int entry_off,
+				      uint32_t was, uint32_t now)
+{
+	if (entry_off < 0)
+		return snprintf(b, n, "rpi5_scanout16: q2 word %u off %u entry-off none was 0x%08x "
+				"now 0x%08x", (unsigned int)index, (unsigned int)(index - head),
+				(unsigned int)was, (unsigned int)now);
+	return snprintf(b, n, "rpi5_scanout16: q2 word %u off %u entry-off %d was 0x%08x now 0x%08x",
+			(unsigned int)index, (unsigned int)(index - head), entry_off,
+			(unsigned int)was, (unsigned int)now);
+}
+
+static inline int frame16_fmt_q2_more(char *b, size_t n, uint32_t left)
+{
+	return snprintf(b, n, "rpi5_scanout16: q2 %u more changed words left out", (unsigned int)left);
+}
+
+/* The entry the offsets refer to: its length and the POS3 context offset. */
+static inline int frame16_fmt_q2_entry(char *b, size_t n, uint32_t nwords, uint32_t ctx_off)
+{
+	return snprintf(b, n, "rpi5_scanout16: q2 entry words %u ctx-off %u", (unsigned int)nwords,
+			(unsigned int)ctx_off);
+}
+
+/* u3 q2 summary: changed (word given) or none. */
+static inline int frame16_fmt_q2(char *b, size_t n, bool changed, uint32_t index, int entry_off,
+				 uint32_t was, uint32_t now, bool per_frame)
+{
+	if (!changed)
+		return snprintf(b, n, "u3 q2: no list word changed");
+	if (entry_off < 0)
+		return snprintf(b, n, "u3 q2: word %u entry-off none was 0x%08x now 0x%08x per-frame %s",
+				(unsigned int)index, (unsigned int)was, (unsigned int)now,
+				per_frame ? "yes" : "no");
+	return snprintf(b, n, "u3 q2: word %u entry-off %d was 0x%08x now 0x%08x per-frame %s",
+			(unsigned int)index, entry_off, (unsigned int)was, (unsigned int)now,
+			per_frame ? "yes" : "no");
+}
+
 /* [11]: a result line; reason is free text (PASS: what held; FAIL: why). */
 static inline int frame16_fmt_terminal(char *b, size_t n, bool pass, const char *reason)
 {
