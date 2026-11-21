@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+gc_fence: build test
+gc diag: reset-attempt n=1 004=0x7ffffffe 000=0x00000109
+gc diag: reset-attempt n=2 004=0x7fffffff 000=0x00000109
+gc diag: after-reset 3a8=0x00000000 10c=0x00000001
+gc diag: after-init 3a8=0x00000000 10c=0x00000001
