@@ -28,8 +28,8 @@
 #             has (an empty directory or a venv without west is "missing").
 #             "." is the layout directory itself.
 #   board     the entry belongs to a board's set only: a board name
-#             (am62p | imx8mp | rpi_4b | nanopc_t6), or "*" for every
-#             named board.
+#             (am62p | imx8mp | rpi_4b | nanopc_t6 | verdin_imx95), or "*"
+#             for every named board.
 #             Without it the entry is in every set.
 #   create    deps-env.sh (printing) makes the directory when it is absent.
 #   requires  entries that must be present before this one is built.
@@ -554,3 +554,408 @@ sha256 = "60707a62fe6c1228c3389b12a13ca4efd76defc5532473e547a29e99cf7d2a6e"
 [[dep.inputs]]
 url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/b/binutils/libsframe1_2.44-3_amd64.deb"
 sha256 = "38f625dfdc582717029ac3a3e97c51d994ec2e7a0e9b230c6b44e40d1276311f"
+
+[[dep]]
+name = "IMX95_LINUX_SRC"
+path = "linux-7.3"
+marker = "linux-7.3/Makefile"
+board = "verdin_imx95"
+note = "mainline Linux v7.3 (the newest release on 2026-11-21; its arch/arm64/boot/dts/freescale has imx95-verdin-{wifi,nonwifi}-mallow.dts since v7.1), the kernel of the Verdin iMX95's microSD card (tools/mali/panthor/imx95-sdcard.sh, docs/notes/imx95-linux-panthor.md section 5). The tarball's sha256 is the one kernel.org's signed sha256sums.asc gives for it (checked 2026-11-21)"
+build = '''
+rm -rf "$DEPS/linux-7.3.part"
+mkdir -p "$DEPS/linux-7.3.part"
+tar -xJf "$DEPS/downloads/linux-7.3.tar.xz" -C "$DEPS/linux-7.3.part" --strip-components=1
+mv "$DEPS/linux-7.3.part" "$DEPS/linux-7.3"
+'''
+packages.apt = ["xz-utils", "make", "gcc", "flex", "bison", "bc", "libssl-dev", "libelf-dev", "kmod", "cpio"]
+packages.portage = ["app-arch/xz-utils", "dev-build/make", "sys-devel/gcc", "sys-devel/flex", "sys-devel/bison", "sys-devel/bc", "dev-libs/openssl", "virtual/libelf", "sys-apps/kmod", "app-alternatives/cpio"]
+
+[[dep.inputs]]
+url = "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.3.tar.xz"
+sha256 = "87363c24f10e06321eb362765521094e94471f6bff8bce2d6b3e40f39f004953"
+
+[[dep]]
+name = "IMX95_DEBIAN_TOOLS"
+path = "debian-trixie-sdtools"
+marker = "debian-trixie-sdtools/usr/sbin/debootstrap"
+board = "verdin_imx95"
+note = "the host tools of the Verdin iMX95's microSD card that a host may lack, unpacked without root: Debian trixie's debootstrap 1.0.141 (its first stage under fakeroot), debian-archive-keyring 2025.1 (the keys debootstrap checks the trixie Release with) and mtools 4.0.48 (the card's FAT partition, no loop mount), .debs of snapshot.debian.org at 20261101T000000Z. Run debootstrap with DEBOOTSTRAP_DIR=<this>/usr/share/debootstrap"
+build = '''
+part="$DEPS/debian-trixie-sdtools.part"
+rm -rf "$part"
+mkdir -p "$part"
+for deb in debootstrap_1.0.141_all.deb debian-archive-keyring_2025.1_all.deb mtools_4.0.48-1_amd64.deb; do
+  member=$(ar t "$DEPS/downloads/$deb" | grep '^data\.tar')
+  case "$member" in *.xz) z=-J ;; *.zst) z=--zstd ;; *.gz) z=-z ;; *) z= ;; esac
+  ar p "$DEPS/downloads/$deb" "$member" | tar -x $z -f - -C "$part"
+done
+"$part/usr/bin/mcopy" --version > /dev/null
+mv "$part" "$DEPS/debian-trixie-sdtools"
+'''
+packages.apt = ["binutils", "xz-utils", "zstd", "fakeroot", "wget", "dosfstools", "e2fsprogs", "fdisk"]
+packages.portage = ["sys-devel/binutils", "app-arch/xz-utils", "app-arch/zstd", "sys-apps/fakeroot", "net-misc/wget", "sys-fs/dosfstools", "sys-fs/e2fsprogs", "sys-apps/util-linux"]
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/d/debian-archive-keyring/debian-archive-keyring_2025.1_all.deb"
+sha256 = "9ea7778e443144ca490668737a8ab22dd3e748bb99e805e22ec055abeb3c7fac"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/d/debootstrap/debootstrap_1.0.141_all.deb"
+sha256 = "8c02cb8ad712eb67afb0d23fab175c562804cc97eda70b70cb0f3bc2a21732d7"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/m/mtools/mtools_4.0.48-1_amd64.deb"
+sha256 = "e7069109ce49f5a450caeca681e454f24dc412f9fdb289cde54e115162203760"
+
+[[dep]]
+name = "IMX95_QEMU_SYSTEM"
+path = "qemu-system-arm-trixie/bin/qemu-system-aarch64"
+marker = "qemu-system-arm-trixie/bin/qemu-system-aarch64"
+board = "verdin_imx95"
+note = "Debian trixie's qemu-system-arm 10.0.13 with the trixie amd64 libraries it loads (all but libc6, which is the host's: glibc >= 2.41), unpacked without root: the microSD card's second debootstrap stage runs in it on the generic virt machine (tools/mali/panthor/imx95-sdcard.sh). The .debs of snapshot.debian.org at 20261101T000000Z, the closure of `apt install qemu-system-arm` less the essential set. bin/qemu-system-aarch64 sets LD_LIBRARY_PATH to those libraries and QEMU_MODULE_DIR to its own modules (a host's qemu modules of another build abort it)"
+build = '''
+part="$DEPS/qemu-system-arm-trixie.part"
+rm -rf "$part"
+mkdir -p "$part/bin"
+for deb in \
+  gcc-14-base_14.2.0-19_amd64.deb \
+  libaio1t64_0.3.113-8+b1_amd64.deb \
+  libasound2-data_1.2.14-1+deb13u1_all.deb \
+  libasound2t64_1.2.14-1+deb13u1_amd64.deb \
+  libatomic1_14.2.0-19_amd64.deb \
+  libblkid1_2.41.5-0+deb13u1_amd64.deb \
+  libbpf1_1.5.0-3_amd64.deb \
+  libbrlapi0.8_6.7-3.1+deb13u3_amd64.deb \
+  libcacard0_2.8.0-3+b2_amd64.deb \
+  libcap-ng0_0.8.5-4+b1_amd64.deb \
+  libcap2_2.75-10+deb13u1+b3_amd64.deb \
+  libcapstone5_5.0.7-1~deb13u1_amd64.deb \
+  libdaxctl1_81-1_amd64.deb \
+  libdb5.3t64_5.3.28+dfsg2-9_amd64.deb \
+  libelf1t64_0.192-4_amd64.deb \
+  libexecs1_1.4-2+b2_amd64.deb \
+  libfdt1_1.7.2-2+b1_amd64.deb \
+  libffi8_3.4.8-2_amd64.deb \
+  libfuse3-4_3.17.2-3_amd64.deb \
+  libglib2.0-0t64_2.84.4-3~deb13u5_amd64.deb \
+  libgmp10_6.3.0+dfsg-3_amd64.deb \
+  libgnutls30t64_3.8.9-3+deb13u4_amd64.deb \
+  libhogweed6t64_3.10.1-1_amd64.deb \
+  libibverbs1_56.1-1_amd64.deb \
+  libidn2-0_2.3.8-2_amd64.deb \
+  libjpeg62-turbo_2.1.5-4_amd64.deb \
+  libkmod2_34.2-2_amd64.deb \
+  libmount1_2.41.5-0+deb13u1_amd64.deb \
+  libncursesw6_6.5+20250216-2_amd64.deb \
+  libndctl6_81-1_amd64.deb \
+  libnettle8t64_3.10.1-1_amd64.deb \
+  libnl-3-200_3.7.0-2_amd64.deb \
+  libnl-route-3-200_3.7.0-2_amd64.deb \
+  libnspr4_4.36-1_amd64.deb \
+  libnss3_3.110-1+deb13u4_amd64.deb \
+  libnuma1_2.0.19-1_amd64.deb \
+  libp11-kit0_0.25.5-3_amd64.deb \
+  libpcre2-8-0_10.46-1~deb13u2_amd64.deb \
+  libpcsclite1_2.3.3-1_amd64.deb \
+  libpixman-1-0_0.44.0-3_amd64.deb \
+  libpmem1_1.13.1-1.1+b1_amd64.deb \
+  libpng16-16t64_1.6.48-1+deb13u5_amd64.deb \
+  librdmacm1t64_56.1-1_amd64.deb \
+  libsasl2-2_2.1.28+dfsg1-9_amd64.deb \
+  libsasl2-modules-db_2.1.28+dfsg1-9_amd64.deb \
+  libseccomp2_2.6.0-2_amd64.deb \
+  libselinux1_3.8.1-1_amd64.deb \
+  libslirp0_4.8.0-1+deb13u1_amd64.deb \
+  libsqlite3-0_3.46.1-7+deb13u2_amd64.deb \
+  libssl3t64_3.5.7-1~deb13u2_amd64.deb \
+  libsystemd0_257.13-1~deb13u1_amd64.deb \
+  libtasn1-6_4.20.0-2+deb13u1_amd64.deb \
+  libtinfo6_6.5+20250216-2_amd64.deb \
+  libudev1_257.13-1~deb13u1_amd64.deb \
+  libunistring5_1.3-2_amd64.deb \
+  liburing2_2.9-1_amd64.deb \
+  libusb-1.0-0_1.0.28-1_amd64.deb \
+  libusbredirparser1t64_0.15.0-1_amd64.deb \
+  libuuid1_2.41.5-0+deb13u1_amd64.deb \
+  libvdeplug2t64_4.0.1-5.1+b1_amd64.deb \
+  libzstd1_1.5.7+dfsg-1_amd64.deb \
+  openssl-provider-legacy_3.5.7-1~deb13u2_amd64.deb \
+  qemu-system-arm_10.0.13+ds-0+deb13u1_amd64.deb \
+  qemu-system-common_10.0.13+ds-0+deb13u1_amd64.deb \
+  qemu-system-data_10.0.13+ds-0+deb13u1_all.deb \
+  zlib1g_1.3.dfsg+really1.3.1-1+b1_amd64.deb; do
+  member=$(ar t "$DEPS/downloads/$deb" | grep '^data\.tar')
+  case "$member" in *.xz) z=-J ;; *.zst) z=--zstd ;; *.gz) z=-z ;; *) z= ;; esac
+  ar p "$DEPS/downloads/$deb" "$member" | tar -x $z -f - -C "$part"
+done
+printf '#!/bin/sh\n# IMX95_QEMU_SYSTEM (tools/cts/deps.toml): Debian trixie'"'"'s qemu-system-aarch64 with its own host libraries.\nroot=$(cd "$(dirname "$0")/.." && pwd)\nexport QEMU_MODULE_DIR="$root/usr/lib/x86_64-linux-gnu/qemu"\nLD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu:$root/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec "$root/usr/bin/qemu-system-aarch64" -L "$root/usr/share/qemu" "$@"\n' > "$part/bin/qemu-system-aarch64"
+chmod +x "$part/bin/qemu-system-aarch64"
+"$part/bin/qemu-system-aarch64" --version > /dev/null
+mv "$part" "$DEPS/qemu-system-arm-trixie"
+'''
+packages.apt = ["binutils", "xz-utils", "zstd"]
+packages.portage = ["sys-devel/binutils", "app-arch/xz-utils", "app-arch/zstd"]
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14/gcc-14-base_14.2.0-19_amd64.deb"
+sha256 = "5b6825de4263824b78c4c51f6476414f3b4e89c2ab63e81dc8b9b5501e867cf6"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/liba/libaio/libaio1t64_0.3.113-8+b1_amd64.deb"
+sha256 = "490c8a2d116001a5f3b0a6d7a7aabf6a7b629366590dc5c3f75b078e931dd129"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/a/alsa-lib/libasound2-data_1.2.14-1+deb13u1_all.deb"
+sha256 = "04688afdff3769c0f685541daed7b2f6f0cb946799ddf1d5847ddf11fe245559"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/a/alsa-lib/libasound2t64_1.2.14-1+deb13u1_amd64.deb"
+sha256 = "5495496142d57e5ad6d581ac5456ec3c87f872c109a2bfb815d154b673eebc67"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gcc-14/libatomic1_14.2.0-19_amd64.deb"
+sha256 = "212b399aae2f7299203d261a57e49372e09565a9a5ea971905f94a3960366c05"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/u/util-linux/libblkid1_2.41.5-0+deb13u1_amd64.deb"
+sha256 = "81535f3c2c0efc732965907c8749103a0a26377c761622c9ce39b4c92dcde52f"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libb/libbpf/libbpf1_1.5.0-3_amd64.deb"
+sha256 = "04c96ead3024888d80d08c8d08cc8cf4589f4614627acc69519f87ffb5adc1c2"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/b/brltty/libbrlapi0.8_6.7-3.1+deb13u3_amd64.deb"
+sha256 = "d8767805735bfae0edbe793fc8b6f6266ac9e55bec88c3d36b567c41b6438ca2"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libc/libcacard/libcacard0_2.8.0-3+b2_amd64.deb"
+sha256 = "1d6a8d17b893e54dfea8fe78df16c9a8ab4a6e626f9312881784592d480d9317"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libc/libcap-ng/libcap-ng0_0.8.5-4+b1_amd64.deb"
+sha256 = "20a9e4b0619a3eb2566338223bed135dde5a601eaa2f8fdd5f20b94506addcac"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libc/libcap2/libcap2_2.75-10+deb13u1+b3_amd64.deb"
+sha256 = "89fc4d34fc7a28ad6f0fcd0c561ab253b9dedf6f77f5a000b47c276c8295bf67"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/c/capstone/libcapstone5_5.0.7-1~deb13u1_amd64.deb"
+sha256 = "775187a7be26bb0b076d1979a02163b943dbc13eb4adb0efc503223a03c75422"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/ndctl/libdaxctl1_81-1_amd64.deb"
+sha256 = "6296eb5c976743ba0defb7a061ef081238ca072cf569c6bb96fd3f9095c58a30"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/d/db5.3/libdb5.3t64_5.3.28+dfsg2-9_amd64.deb"
+sha256 = "18d02510ee78b67e4504ba050176797a200ff24214a7cd318082ab60ad7bf3fc"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/e/elfutils/libelf1t64_0.192-4_amd64.deb"
+sha256 = "94497b7e17b6f574a0605b380d454e20d3f01a9c63b70c2a2263f679d30053e1"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libe/libexecs/libexecs1_1.4-2+b2_amd64.deb"
+sha256 = "05b578fead365a81141fe834c3b3b6df89d17a050784a237f736489fbd426105"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/d/device-tree-compiler/libfdt1_1.7.2-2+b1_amd64.deb"
+sha256 = "8e37034d7864807ae2063efcc82fc79aad59069546212e6e0908ed67f9f7e107"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libf/libffi/libffi8_3.4.8-2_amd64.deb"
+sha256 = "0ebdc340de33333639c3c63874cd4b15ac2e83dfa1ef3053b7eefaf4919f4f68"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/f/fuse3/libfuse3-4_3.17.2-3_amd64.deb"
+sha256 = "92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/glib2.0/libglib2.0-0t64_2.84.4-3~deb13u5_amd64.deb"
+sha256 = "e2baf92c57d1db1753e5781a61450d9a01e7833c7bd2dfe87776a6811c11ecc2"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gmp/libgmp10_6.3.0+dfsg-3_amd64.deb"
+sha256 = "d0d0265eb01770f17afd0f7c8c0622f80479dcfbbe13653a0debeec61464e622"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/g/gnutls28/libgnutls30t64_3.8.9-3+deb13u4_amd64.deb"
+sha256 = "18a8bdfd91c7e3bcb01719d55a2b56849c7160b34f1f52b1c4fdfdd41bf1352b"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/nettle/libhogweed6t64_3.10.1-1_amd64.deb"
+sha256 = "b059ed155115ac09da295322de48ee1ed58ef5fa45edcc9e12ff0e94636ef25f"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/r/rdma-core/libibverbs1_56.1-1_amd64.deb"
+sha256 = "4c3b889607586e6328964a5f98e01ef01daa415be24334d743d6654aab4c47a4"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libi/libidn2/libidn2-0_2.3.8-2_amd64.deb"
+sha256 = "90b039bcdc4578f8e1c4935adf8dbb525e36a164deefdbbb8c45bac347d48278"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libj/libjpeg-turbo/libjpeg62-turbo_2.1.5-4_amd64.deb"
+sha256 = "5504299ad0e3c0a9ca9f962a68a650a040db52f9f416a109e74df48d55601d3f"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/k/kmod/libkmod2_34.2-2_amd64.deb"
+sha256 = "ee6c50ebac79aa9795e8bf9aa01d94c99984d09d22598c66be0f8ba917b62179"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/u/util-linux/libmount1_2.41.5-0+deb13u1_amd64.deb"
+sha256 = "6d00f45f2e80e078e906e3eedecd3ba6913e39fef49bff361ee583f17f00ec05"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/ncurses/libncursesw6_6.5+20250216-2_amd64.deb"
+sha256 = "47baa2e11579583654583a066b69bd5a5d2f22423081f707ed6c0c3ba6d538b7"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/ndctl/libndctl6_81-1_amd64.deb"
+sha256 = "fe60a05d42e61cb9f49a90b872aa5ca569363b13459ee0d405243c37a7de7c93"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/nettle/libnettle8t64_3.10.1-1_amd64.deb"
+sha256 = "1b03d4a9cd9c8143ba50fe6396f36937e901a317d492d179f4596862c1731cfe"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libn/libnl3/libnl-3-200_3.7.0-2_amd64.deb"
+sha256 = "ce5c153953016be42def7b105f37d55eae07a9608d1dfe6bcb03cc017fc384cb"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libn/libnl3/libnl-route-3-200_3.7.0-2_amd64.deb"
+sha256 = "1c8c95542688996cff8e954583642b10a3bd78b69954f565fda62144c2bc3897"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/nspr/libnspr4_4.36-1_amd64.deb"
+sha256 = "87fc2039ee89cff2b8010fa9535706b1def40031acfc52bf12197dcb3cb7b064"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/nss/libnss3_3.110-1+deb13u4_amd64.deb"
+sha256 = "8d20d0754039e15e9bd2c8484e98dc9c2982907d4f20834da29a9501913d00b5"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/numactl/libnuma1_2.0.19-1_amd64.deb"
+sha256 = "e578583f73f8208564e5035b18aa729c441fc7ecb389c666923552e123f4d655"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/p11-kit/libp11-kit0_0.25.5-3_amd64.deb"
+sha256 = "784bf2063e166c8bc851a32623b74ebd85c499043a9d57c5bbd64fa63447f45a"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/pcre2/libpcre2-8-0_10.46-1~deb13u2_amd64.deb"
+sha256 = "1252b96a5bc44bb5db982bef8eb18e54f5047cede2aff641bce4f8e1edb91c3e"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/pcsc-lite/libpcsclite1_2.3.3-1_amd64.deb"
+sha256 = "a8bc4725549060d1e696d358e32a3699d947d5381871553a290389830bebccbd"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/pixman/libpixman-1-0_0.44.0-3_amd64.deb"
+sha256 = "3862c87596f6b4b60fc916395fd69aa10af28a875a8e5c081a8cf30ddd120bd6"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/pmdk/libpmem1_1.13.1-1.1+b1_amd64.deb"
+sha256 = "7d972d6958e915ce602e4b90debc6b4b91a01dfea1fe003d0b013756e7d9d863"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libp/libpng1.6/libpng16-16t64_1.6.48-1+deb13u5_amd64.deb"
+sha256 = "2465b4e9fa85cff54dc10a6da3e64074d8d9292c86e4a8f989b809d6b158e97e"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/r/rdma-core/librdmacm1t64_56.1-1_amd64.deb"
+sha256 = "5b56911725905b8e2a8389c99416ca078395c4ca8ce0d516bc758d5be0134687"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/c/cyrus-sasl2/libsasl2-2_2.1.28+dfsg1-9_amd64.deb"
+sha256 = "66e49d7ae026811b49a0050f18b0325960a2625ffd1ff60d91b7844a815fa9d2"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/c/cyrus-sasl2/libsasl2-modules-db_2.1.28+dfsg1-9_amd64.deb"
+sha256 = "a5c38659fbd62c33c6d9bfa2be43e75a572d1818531aad32dd74d0a58cc4bd19"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libs/libseccomp/libseccomp2_2.6.0-2_amd64.deb"
+sha256 = "89d5138e05fb6a86b9afd8b54dc0fb4b14f4c27c05e6c5f767c2132bdf808531"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libs/libselinux/libselinux1_3.8.1-1_amd64.deb"
+sha256 = "68bb8d32bd8d6d7d2f5952a169db03d1484b46ae1e52abccdec42a19dccea5d5"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libs/libslirp/libslirp0_4.8.0-1+deb13u1_amd64.deb"
+sha256 = "6125698173f8be0d0de01ff897a0df3c5e50fb09f70238b26dd6574aaa0934e1"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/s/sqlite3/libsqlite3-0_3.46.1-7+deb13u2_amd64.deb"
+sha256 = "0a459adaffd901109f7811ab65f58e7a957b4907d05539cf3d1184efdcde0468"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/o/openssl/libssl3t64_3.5.7-1~deb13u2_amd64.deb"
+sha256 = "916f7f40b34a06e6ebfaefcdab331bff458328411da672598f126a760472467d"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/s/systemd/libsystemd0_257.13-1~deb13u1_amd64.deb"
+sha256 = "ab0d4127b5e46e6f8c015a1db15a62ba9ae274cdefa150083adf90ada0600ea1"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libt/libtasn1-6/libtasn1-6_4.20.0-2+deb13u1_amd64.deb"
+sha256 = "23fec6e06583ce2bad9b2c04c9b485e90440e259b1abf8677cd80d3ce60831ad"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/n/ncurses/libtinfo6_6.5+20250216-2_amd64.deb"
+sha256 = "8b9f6a7983e9418564e48a627518de4c03917b56efe68d7f3e93bd8fffa1cc10"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/s/systemd/libudev1_257.13-1~deb13u1_amd64.deb"
+sha256 = "5d41c284f5a93b05bc7d648b61a02dd2bb9ff05b2261ad1a8b7d96044a0cfa88"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libu/libunistring/libunistring5_1.3-2_amd64.deb"
+sha256 = "6dd3490bef06ea1096f32d10766b7e016cf579bfae8451d1b7df15ce05b8aa46"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libu/liburing/liburing2_2.9-1_amd64.deb"
+sha256 = "4b589c00c7a51172aace2cb2fb3d3ff32daf86c644023126dcfcaa840cc941ea"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libu/libusb-1.0/libusb-1.0-0_1.0.28-1_amd64.deb"
+sha256 = "bb6467a002915c4ac464aa1b22204907951a30e43bcb86596ebd3539e84458e9"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/u/usbredir/libusbredirparser1t64_0.15.0-1_amd64.deb"
+sha256 = "4b039802dac140bae5a6f3fb6341eeeb9ea8c3e4d7b95ad36a07a8c28572f177"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/u/util-linux/libuuid1_2.41.5-0+deb13u1_amd64.deb"
+sha256 = "c1bf4c4c3ff48c57fabf93307dfb56996b60cfa33927afc4158b5db36fb2721e"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/v/vdeplug4/libvdeplug2t64_4.0.1-5.1+b1_amd64.deb"
+sha256 = "01291e2c8e28e91eac6b59c983a3a44e29ad0ddb8622699fbb84cbd5f26334a4"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-1_amd64.deb"
+sha256 = "2f6a2aeacfc925eba8b00ac9139bc4bfccf8cacb09eb93de067074b26948eef9"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/o/openssl/openssl-provider-legacy_3.5.7-1~deb13u2_amd64.deb"
+sha256 = "f155c8191ae6d41da73d792f4182680aeafeb85c3dd223934ee9fdd115c4f1fa"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/q/qemu/qemu-system-arm_10.0.13+ds-0+deb13u1_amd64.deb"
+sha256 = "babb8ab3c9f5f045184bd8c20604237d28c1b5e6a578d7f400566b9f257b59e7"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/q/qemu/qemu-system-common_10.0.13+ds-0+deb13u1_amd64.deb"
+sha256 = "3a99dc23c42c66bb7e96dc1f2ba12b1797d154a472fbdb1cfcd822d9fb69e85b"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/q/qemu/qemu-system-data_10.0.13+ds-0+deb13u1_all.deb"
+sha256 = "a0e03c526cc09d4c2ab20aa19a8c12e916cdc49a170acb16a6563c28f70eafd3"
+
+[[dep.inputs]]
+url = "https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.1-1+b1_amd64.deb"
+sha256 = "015be740d6236ad114582dea500c1d907f29e16d6db00566ca32fb68d71ac90d"
