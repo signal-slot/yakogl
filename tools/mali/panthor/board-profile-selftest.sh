@@ -56,9 +56,9 @@ check "verdin-imx95: no kernel record yet (empty glob)" is "$v" MALI_KERNEL_GLOB
 check "verdin-imx95: render node and stage root default as on the T6" \
   bash -c 'grep -qx MALI_RENDER_NODE=/dev/dri/renderD128 <<< "$1" && grep -qx MALI_STAGE_ROOT=/root/yakogl-mali <<< "$1"' _ "$v"
 
-o=$(load MALI_BOARD=verdin-imx95 MALI_RENDER_NODE=/dev/dri/renderD129 MALI_STAGE_ROOT=/home/torizon/yakogl-mali)
-check "the environment wins: renderD129, /home/torizon/yakogl-mali" \
-  bash -c 'grep -qx MALI_RENDER_NAME=renderD129 <<< "$1" && grep -qx MALI_STAGE_ROOT=/home/torizon/yakogl-mali <<< "$1"' _ "$o"
+o=$(load MALI_BOARD=verdin-imx95 MALI_RENDER_NODE=/dev/dri/renderD129 MALI_STAGE_ROOT=/srv/yakogl-mali)
+check "the environment wins: renderD129, /srv/yakogl-mali" \
+  bash -c 'grep -qx MALI_RENDER_NAME=renderD129 <<< "$1" && grep -qx MALI_STAGE_ROOT=/srv/yakogl-mali <<< "$1"' _ "$o"
 
 check "an unknown board is refused" bash -c '! load_out=$(env -i PATH="$PATH" MALI_BOARD=rk3399 bash -c ". \"\$1\" && board_profile_load" _ "$1" 2>&1)' _ "$PROFILE"
 check "a render node that is not /dev/dri/renderD<n> is refused" bash -c '! env -i PATH="$PATH" MALI_RENDER_NODE="/dev/dri/card0; reboot" bash -c ". \"\$1\" && board_profile_load" _ "$1"' _ "$PROFILE"
