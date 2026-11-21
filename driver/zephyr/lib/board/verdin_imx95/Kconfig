@@ -45,8 +45,24 @@ config YAKOGL_BOARD_VERDIN_IMX95
 	  (board_verdin_imx95.c): the windows in the Mali carve-out's window
 	  memory (YAKOGL_MALI_WINDOW_BYTES), the screen with
 	  YAKOGL_VERDIN_IMX95_DISPLAY; record: the yk-record line on the
-	  console UART; reset: verdin_imx95_reset(); watchdog: WDOG3
+	  console UART and, with YAKOGL_VERDIN_IMX95_RECORD_BBM, the BBNSM
+	  GPR4..7; reset: verdin_imx95_reset(); watchdog: WDOG3
 	  (YAKOGL_VERDIN_IMX95).
+
+config YAKOGL_VERDIN_IMX95_RECORD_BBM
+	bool "The board layer's last record in the BBNSM GPR4..7 over SCMI"
+	default y
+	depends on YAKOGL_BOARD_VERDIN_IMX95
+	help
+	  verdin_imx95_record.c is the board layer's sink (board_sink_store):
+	  every record the layer stores (the yk-record line's four words)
+	  also goes into the battery-backed GPR4..7 through the System
+	  Manager's BBM protocol (BBM_GPR_SET, yd_imx95_bbm_record_store of
+	  the drivers crate, soc::imx95::bbm), where Linux reads it after the
+	  reset (tools/imx95_bbm_record.sh): the result of a run without a
+	  console (docs/standalone-boot.md, "The record without a console").
+	  Toradex's System Manager gives the A55's non-secure agent those
+	  four GPRs. Off: the console line is the only sink.
 
 config YAKOGL_VERDIN_IMX95_DISPLAY
 	bool "The Toradex 10.1\" DSI display on X4 is the board layer's screen"
