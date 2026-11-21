@@ -17,6 +17,10 @@ pub mod gpu_power;
 #[rustfmt::skip]
 pub mod regs;
 pub mod sm;
+// The read-only SCMI survey of tools/probes/verdin_imx95/imx95_scmi.
+pub mod survey;
+#[cfg(test)]
+mod survey_tests;
 
 #[cfg(test)]
 mod display_tests;

@@ -74,8 +74,9 @@ if(CONFIG_YAKOGL_VERDIN_IMX95)
   add_dependencies(yakogl_board_verdin_imx95 yakogl_drivers_rust)
   zephyr_library_sources_ifdef(CONFIG_YAKOGL_BOARD_VERDIN_IMX95 verdin_imx95/board_verdin_imx95.c)
   zephyr_include_directories(verdin_imx95)
-  if(CONFIG_YAKOGL_GPU_MALI OR CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY)
-    # the one raw SCMI channel of the GPU's power-on and the display's
+  if(CONFIG_YAKOGL_GPU_MALI OR CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY OR CONFIG_YAKOGL_VERDIN_IMX95_SCMI)
+    # the one raw SCMI channel of the GPU's power-on and the display's (and
+    # of the probes, tools/probes/verdin_imx95)
     zephyr_library_sources(verdin_imx95/verdin_imx95_scmi.c)
   endif()
   if(CONFIG_YAKOGL_GPU_MALI)

@@ -8,7 +8,6 @@
 //! After it the OSAL ops are the `yd_t6_osal_*` entries, which touch the GPU
 //! and the OSAL's memory only.
 
-#[cfg(feature = "mali")]
 use super::imx95_display::CScmi;
 use super::rk3588::{ident_words, lo_hi, YdT6GpuUp};
 use crate::board::imx95_gpu::{self, GpuUp};
@@ -176,6 +175,195 @@ pub unsafe extern "C" fn yd_imx95_osal_up(
     }
 }
 
+/// [`gpu_power::power_on`] alone, as a record: what the SM answered, or
+/// where it stopped. 0 when it ran, `-EIO` when it stopped.
+fn power_on_record<T: crate::firmware::scmi::Transport>(t: &mut T, rate_hz: u64, out: &mut YdImx95GpuPower) -> i32 {
+    use crate::soc::imx95::gpu_power::{self, Config};
+    let cfg = if rate_hz == 0 { Config::VERDIN } else { Config { rate_hz } };
+    let g = match gpu_power::power_on(t, &cfg) {
+        Ok(up) => GpuUp { power: Some(up), ..GpuUp::default() },
+        Err(e) => {
+            let (refusal, detail) = imx95_gpu::scmi_error_code(&e);
+            GpuUp { power_error: Some(e), stop: imx95_gpu::Stop::Scmi, refusal, detail, ..GpuUp::default() }
+        }
+    };
+    *out = YdImx95GpuPower::from(&g);
+    if g.power.is_some() {
+        0
+    } else {
+        -crate::errno::EIO
+    }
+}
+
+/// [`gpu_power::power_off`] as a record: all zero when it ran, else where
+/// it stopped (`refusal`, `message`, `status`, `detail` as a power-on's).
+fn power_off_record<T: crate::firmware::scmi::Transport>(t: &mut T, out: &mut YdImx95GpuPower) -> i32 {
+    use crate::soc::imx95::gpu_power;
+    match gpu_power::power_off(t) {
+        Ok(()) => {
+            *out = YdImx95GpuPower::default();
+            0
+        }
+        Err(e) => {
+            let (refusal, detail) = imx95_gpu::scmi_error_code(&e);
+            *out = YdImx95GpuPower::from(&GpuUp { power_error: Some(e), refusal, detail, ..GpuUp::default() });
+            -crate::errno::EIO
+        }
+    }
+}
+
+/// The GPU powered over SCMI and nothing else (soc::imx95::gpu_power's
+/// power-on: the versions, the levels, PD 14 on, the level for `rate_hz`,
+/// 0 for 800 MHz, clock gate 174 on and its rate read), for a probe that
+/// then reads the GPU's identity itself (tools/probes/verdin_imx95/imx95_ident).
+/// No GPU register is touched. 0 (`out->on` 1), `-EIO` (`out` says where it
+/// stopped; what was switched on stays on), `-EINVAL` (a null argument).
+///
+/// # Safety
+/// `out` is valid for a write.
+#[no_mangle]
+pub unsafe extern "C" fn yd_imx95_gpu_power_on(
+    scmi: Option<extern "C" fn(*const u8, usize, *mut u8, usize) -> i32>,
+    rate_hz: u64,
+    out: *mut YdImx95GpuPower,
+) -> i32 {
+    let Some(scmi) = scmi else { return -crate::errno::EINVAL };
+    // SAFETY: the caller's contract.
+    let Some(out) = (unsafe { out.as_mut() }) else { return -crate::errno::EINVAL };
+    power_on_record(&mut CScmi(scmi), rate_hz, out)
+}
+
+/// The GPU off over SCMI (clock gate 174 off, PD 14 off and read back
+/// off; the level left as it is). 0 (`out` all zero), `-EIO` (`out` says
+/// where it stopped), `-EINVAL`. Read no GPU register after it.
+///
+/// # Safety
+/// `out` is valid for a write.
+#[no_mangle]
+pub unsafe extern "C" fn yd_imx95_gpu_power_off(
+    scmi: Option<extern "C" fn(*const u8, usize, *mut u8, usize) -> i32>,
+    out: *mut YdImx95GpuPower,
+) -> i32 {
+    let Some(scmi) = scmi else { return -crate::errno::EINVAL };
+    // SAFETY: the caller's contract.
+    let Some(out) = (unsafe { out.as_mut() }) else { return -crate::errno::EINVAL };
+    power_off_record(&mut CScmi(scmi), out)
+}
+
+/// `struct yd_imx95_fw_csg0` is [`imx95_gpu::Csg0`] as it is.
+pub type YdImx95FwCsg0 = imx95_gpu::Csg0;
+
+const _: () = assert!(size_of::<YdImx95FwCsg0>() == 4 * 7);
+const _: () = assert!(offset_of!(YdImx95FwCsg0, suspend_size) == 4 * 2);
+
+/// The pre-study's B3 on the Verdin iMX95 ([`imx95_gpu::fw_up`]): the GPU
+/// powered over SCMI ([`yd_imx95_gpu_power_on`]'s messages), its identity,
+/// soft reset and L2, AS0 over the firmware's sections, the load, the MCU's
+/// boot, the global configuration and one `PING`, as `yd_t6_fw_up` runs
+/// them after its own power-on; then CSG 0's control block read back
+/// (`csg0`). Nothing after: no group, no queue. The arguments are
+/// `yd_t6_fw_up`'s with `scmi` and `rate_hz` (as [`yd_imx95_osal_up`]'s) for
+/// the RK3588's four bases; `gpu` maps the GPU's block for `gpu_len`, at
+/// least `YD_IMX95_GPU_MAP_MIN`. `z1` and `power` as [`yd_imx95_osal_up`]
+/// writes them. 0 when every step ran (`out->step` `YD_T6_FW_STEP_NONE`),
+/// `-EIO` when one stopped, `-EINVAL` for a null or misaligned argument.
+///
+/// # Safety
+/// As `yd_t6_fw_up`'s; `power` and `csg0` are valid for writes.
+#[cfg(feature = "mali")]
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn yd_imx95_fw_up(
+    scmi: Option<extern "C" fn(*const u8, usize, *mut u8, usize) -> i32>,
+    rate_hz: u64,
+    gpu: usize,
+    gpu_len: usize,
+    blob: *const u8,
+    blob_len: usize,
+    backings: *const super::rk3588::YdT6FwBacking,
+    n_backings: u32,
+    pool: *mut u8,
+    pool_pages: u32,
+    tables_pa: u64,
+    timer_hz: u32,
+    clean: Option<extern "C" fn(usize, usize) -> i32>,
+    delay_us: Option<extern "C" fn(u32)>,
+    on_handover: Option<extern "C" fn(*const YdT6GpuUp)>,
+    z1: *mut YdT6GpuUp,
+    power: *mut YdImx95GpuPower,
+    out: *mut super::rk3588::YdT6FwUp,
+    csg0: *mut YdImx95FwCsg0,
+) -> i32 {
+    use crate::board::imx95_gpu::Imx95Power;
+    use crate::board::nanopc_t6_sections::Backing;
+    use crate::errno::{EINVAL, EIO};
+    use crate::gpu::mali::pgtable::{Table, PAGE};
+    use crate::soc::imx95::gpu_power::Config;
+    let (Some(scmi), Some(clean), Some(delay_us), Some(on_handover)) = (scmi, clean, delay_us, on_handover) else {
+        return -EINVAL;
+    };
+    if gpu == 0 || gpu_len < imx95_gpu::GPU_MAP_MIN || timer_hz == 0 {
+        return -EINVAL;
+    }
+    if out.is_null()
+        || z1.is_null()
+        || power.is_null()
+        || csg0.is_null()
+        || blob.is_null()
+        || backings.is_null()
+        || pool.is_null()
+        || pool_pages == 0
+        || n_backings as usize > crate::gpu::mali::fw::MAX_SECTIONS
+        || !(pool as usize).is_multiple_of(PAGE as usize)
+    {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (blob, given) = unsafe {
+        (core::slice::from_raw_parts(blob, blob_len), core::slice::from_raw_parts(backings, n_backings as usize))
+    };
+    let mut placed = [Backing::default(); crate::gpu::mali::fw::MAX_SECTIONS];
+    for (p, k) in placed.iter_mut().zip(given) {
+        *p = Backing { pa: k.pa, cpu: k.cpu, size: k.size };
+    }
+    // SAFETY: the caller's contract; 4 KiB aligned covers u64's alignment.
+    let pages = unsafe { core::slice::from_raw_parts_mut(pool.cast::<Table>(), pool_pages as usize) };
+    // SAFETY: the caller's contract.
+    let hw = unsafe { crate::mmio::Hw::new() };
+    let cfg = if rate_hz == 0 { Config::VERDIN } else { Config { rate_hz } };
+    let mut p = Imx95Power::new(CScmi(scmi), cfg);
+    let mut g = GpuUp::default();
+    let (o, c) = imx95_gpu::fw_up(
+        &hw,
+        gpu,
+        &mut p,
+        blob,
+        &placed[..given.len()],
+        pages,
+        tables_pa,
+        timer_hz,
+        &|a, n| clean(a, n),
+        &mut |us| delay_us(us),
+        &mut |h| {
+            let h = YdT6GpuUp::from(h);
+            on_handover(&h);
+        },
+        &mut g,
+    );
+    // SAFETY: the caller's contract.
+    unsafe {
+        *z1 = YdT6GpuUp::from(&g);
+        *power = YdImx95GpuPower::from(&g);
+        *out = o;
+        *csg0 = c;
+    }
+    if o.step == crate::board::nanopc_t6_fw::STEP_NONE {
+        0
+    } else {
+        -EIO
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,5 +451,44 @@ mod tests {
         let (refusal, detail) = imx95_gpu::scmi_error_code(&e);
         let p = YdImx95GpuPower::from(&GpuUp { power_error: Some(e), refusal, detail, ..GpuUp::default() });
         assert_eq!((p.refusal, p.message, p.status, p.detail), (8, 0, 0, [100_000_000, 0]));
+    }
+
+    /// The probes' power-on alone and its off (imx95_ident): what the SM
+    /// answered in the record; the off reads back off; a refusal names the
+    /// message and the status. The header has the entries and pins the
+    /// B3 read-back's layout.
+    #[test]
+    fn the_power_on_and_off_alone_keep_the_records_of_the_osal() {
+        use crate::soc::imx95::gpu_power::{CLK_GPU_CGC, PD_GPU};
+        use crate::soc::imx95::sm_mock::{Sm, PERM_NONE};
+        let mut sm = Sm::verdin();
+        let mut p = YdImx95GpuPower::default();
+        assert_eq!(power_on_record(&mut sm, 0, &mut p), 0);
+        assert_eq!((p.on, p.level_index, p.level_khz, p.rate_hz, p.refusal), (1, 2, 800_000, [800_000_000, 0], 0));
+        assert!(sm.on(PD_GPU) && sm.enabled(CLK_GPU_CGC));
+        let mut off = YdImx95GpuPower { on: 7, ..YdImx95GpuPower::default() };
+        assert_eq!(power_off_record(&mut sm, &mut off), 0);
+        assert_eq!(off, YdImx95GpuPower::default());
+        assert!(!sm.on(PD_GPU) && !sm.enabled(CLK_GPU_CGC));
+
+        // AP-NS without the clock gate: the enable is refused, DENIED
+        let mut sm = Sm::verdin();
+        sm.clk_perm.insert(CLK_GPU_CGC, PERM_NONE);
+        assert_eq!(power_on_record(&mut sm, 0, &mut p), -crate::errno::EIO);
+        assert_eq!((p.on, p.refusal, p.message, p.status), (0, 2, 0x1407, -3));
+        assert_eq!(power_off_record(&mut sm, &mut off), -crate::errno::EIO);
+        assert_eq!((off.on, off.refusal, off.message, off.status), (0, 2, 0x1407, -3));
+
+        assert!(H.contains("int yd_imx95_gpu_power_on("));
+        assert!(H.contains("int yd_imx95_gpu_power_off("));
+        assert!(H.contains("int yd_imx95_fw_up("));
+        for (what, v) in [
+            ("sizeof(struct yd_imx95_fw_csg0)", size_of::<YdImx95FwCsg0>()),
+            ("offsetof(struct yd_imx95_fw_csg0, suspend_size)", offset_of!(YdImx95FwCsg0, suspend_size)),
+            ("offsetof(struct yd_imx95_fw_csg0, refusal)", offset_of!(YdImx95FwCsg0, refusal)),
+        ] {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
     }
 }
