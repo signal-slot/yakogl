@@ -1,0 +1,10 @@
+attribute vec3 pos;
+attribute vec3 col;
+uniform mat4 mvp;
+uniform float t;
+void main()
+{
+    float s = t / 15.0;
+    vec3 p = pos + col / 12.0 * sin(s * 15.0 + pos.y / 2.0);
+    gl_Position = mvp * vec4(p, 1.0);
+}
