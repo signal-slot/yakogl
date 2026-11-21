@@ -1,0 +1,11 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/*
+ * The same sram0 as every Pi 5 image: 32 MiB from 0x200000, below 4 GiB.
+ *
+ * The register blocks the dump reads are mapped in src/dump.h with
+ * device_map() (as rpi5_display does); they have no node here.
+ */
+&sram0 {
+	reg = <0x0 0x200000 0x2000000>;
+};
