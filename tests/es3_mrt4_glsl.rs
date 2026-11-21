@@ -258,14 +258,12 @@ fn array_past_location_3_fails() {
 }
 
 #[test]
-#[ignore = "defect: no duplicate fragment-output location check at link, src/gl/program.rs:1907 glLinkProgram"]
 fn two_outputs_on_one_location_fail() {
     must_fail("layout(location = 1) out vec4 a;\nlayout(location = 1) out vec4 b;", "a = vec4(1.0); b = vec4(2.0);");
 }
 
 /// The stand-in at 0 is the build's own count, 3: location 3 fails there.
 #[test]
-#[ignore = "defect: output location not checked against draw_targets() (3), src/gl/program.rs:1907 glLinkProgram"]
 fn build_count_rejects_location_3() {
     let _g = context_with(0);
     let _r = Restore;
