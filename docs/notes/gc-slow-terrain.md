@@ -350,3 +350,66 @@ shorter noise shader.
   About 17 MB a frame is the terrain mesh alone (393 216 x 44 bytes), so
   expect page 3 v2 of about 25 000 to 50 000 KiB and v3 of about 15 000 to
   25 000 KiB. They do not separate the candidates.
+
+## Plan #355: host state and what the X2 must measure
+
+Written at `a54d9357`. Every figure below is a host count or a figure cited
+from a note; **no X2 millisecond exists** (`x2-glmark2-slow-scenes.md` holds
+none yet). Issue #1204 and #1106's scene rows are filled by X2 sessions only.
+
+### What landed
+
+- `9cdeff6d` "tiled 32-bit render targets and early depth behind gc_tiled_rt
+  (W1-W5)": `src/vivante/tiled_rt.rs` (the shadow of a 4-byte colour target,
+  tile-in before the first draw, RS copy back in the same stream) and the
+  early-depth arm in `src/vivante/early_z.rs`. The knob is
+  `gc_tiled_rt`, default off (`src/vivante/backend.rs:455`, test hook
+  `gc_debug_set_tiled_rt` at `:461`).
+- `342c286a` keeps the shadow for a draw without the depth test into a live
+  super-tiled depth (`tests/gc_tiled_rt.rs`); `ad0e070e` adds the sampler
+  words of a tiled shadow (`tiled_rt.rs`, W10 groundwork, not wired).
+- `tests/gc_scene_kicks_tiled.rs` counts knob off and on per scene.
+
+### The measured cause, as the host gives it
+
+- **Which draws qualify** is `tiled_rt_spec` (`src/vivante/backend.rs:736-750`):
+  one 4-byte colour target, width a multiple of 16 and height of 4
+  (`tiled_rt.rs:140-147`), depth test on, a depth surface only the pixel
+  engine reads. In the harness that is terrain's 800x600 pass with a depth
+  renderbuffer.
+- **Counts, a frame, knob off to on** (`tests/gc_scene_kicks_tiled.rs:26-42`,
+  `Lag`): kicks 11 to 11; RS tile-in 2 to 3; RS copy back 0 to 2; RS other
+  11 to 11; draws 51 to 51; draws with early depth 0 to 2; CPU tiled copies 0
+  and CPU depth resolves 0 in both. The knob-off ceilings are 14 kicks and 14
+  waits (`:76-79`, copied from `tests/gc_scene_kicks.rs:98`); the measured 11
+  is below them. `gc-slow-host-counts.md:477-540` reads 71 draws for the same
+  frame because it counts the clear quads; the test's 51 is the figure to
+  compare with a test run.
+- The extra jobs are 800x600x4 = 1.92 MB each. No kick is added.
+- **Early depth saves little.** `gc-terrain-overdraw.md:15-34` (host model,
+  no board): about 2.5 % of the 148-instruction pass's fragments, 1.0 to
+  1.3 ms a frame, overdraw 1.02 to 1.03; make_grid's order is already at the
+  floor. This replaces `gc-tiled-targets.md`'s 0 to 14 ms.
+- **The cause of terrain's frame is not touched:** the GPU shading of 140 to
+  205 ms (this note, "Answer in short"), which the knob does not move.
+
+### Predicted gain
+
+`gc-slow-host-counts.md:477-540` ("Terrain" of the gc_tiled_rt section):
+cost +0.7 to +3 ms (3 RS jobs of 1.92 MB at an unmeasured 2 to 8 GB/s),
+gain 0 to -14 ms on the earlier range, -0.75 to -1.6 ms by the order model;
+net about -14 to +3 ms of about 250 (about -0.9 to +2.3 ms with the model).
+Reading rule: D <= -3 ms helps; D >= +0.7 ms hurts; between, no net effect.
+The kicks, waits and CPU tiled copies must not move.
+
+### Rows the X2 sessions fill
+
+Frame time is the mean of the scene's 10 s; D is knob on minus knob off, same
+image otherwise. Empty until a session runs.
+
+| row | commit | gc_tiled_rt | ms a frame | board.sh verdict line | record words |
+|---|---|---|---:|---|---|
+| before | 72972ba4 | n/a (not built) | | | |
+| tip | | off | | | |
+| tip | | on | | | |
+| D (on minus off) | | | | | |
