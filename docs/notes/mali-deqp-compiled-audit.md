@@ -3,10 +3,12 @@
 # Mali (Valhall): are the once-refused dEQP shaders that now compile Mesa's words? An audit at `7b540fee`
 
 **Status: audit** (plan #387, item `compiled-audit`; issues #20, #7).
-HOST-ONLY. Nothing under `src/`, `tests/` or `tools/` changed; no reference
-or test was committed. The scratch harness, the sample and every reference
-of this audit lived under `$TMPDIR` and are gone with the task; section 2
-says how to make them again.
+HOST-ONLY. The audit itself changed nothing under `src/`, `tests/` or
+`tools/`; its scratch harness, the sample and every reference lived under
+`$TMPDIR` and are gone with the task; section 2 says how to make them again.
+Item `audit-ref-2` (section 4.10) then drew a Mesa reference for 38 of the
+shapes below (`tools/mali/testdata/deqp_audit_*`, pinned by
+`tests/mali_deqp_audit.rs`); the rank table and the M1 table name them.
 
 The project's rule is that a shape compiles to the words Mesa 26.2.1
 generates, never "compiled, not Mesa's". The host cannot see rendering.
@@ -193,17 +195,17 @@ section 2 step 7 estimate over the 4,428 compiled cases. Sites are
 *(inferred)* was read, not run. The rank weighs a wrong value first, then
 the estimated cases.
 
-| Rank | Cause | Sampled pairs (cases) | Est. cases | Value can differ from Mesa's | Site |
-|--:|---|--:|--:|---|---|
-| 1 | D1 `b2i32` of a 16-bit mask reads the low lane for every lane | 1 (1); 13 (13) over its whole shape | 13 | **yes, wrong value** | `nir_fs.rs:12205-12210` |
-| 2 | V1 vertex mediump/lowp arithmetic at fp32, Mesa fp16 | 50 (76) | ≈710 | rounding only (ours is more precise) | `nir.rs:4619-4642` |
-| 3 | F1 fragment compare of two fp32 varying lanes built at fp16, Mesa fp32 | 17 (19) | ≈228 | a compare of values within one fp16 step | `nir_fs.rs:5950-6005`, `:11538-11641` |
-| 4 | S1 same opcodes, Mesa's instruction order not reproduced | 12 (12) | ≈162 | no | `nir_fs.rs:321-614`, `:11597` |
-| 5 | A1 vertex attribute loads in another order | 11 (11) | ≈135 | no | `nir.rs:6190-6233` |
-| 6 | M1 one-off folds and forms Mesa's algebraic rules give | 8 (10) | ≈89 | rounding, `-0.0`/NaN for some | section 4.6 |
-| 7 | L1 varying load width, order or a varying Mesa does not keep | 5 (5), and the tag on 15 more | ≈64 | no | `nir_fs.rs:7544`, `:8089-8098`, `:4331-4336`; `nir.rs:3091-3104` |
-| 8 | R1 Mesa's fragment shader keeps fp16 operations ours fuses or orders otherwise | 4 (4) | ≈53 | rounding of a fused FMA | `vec16.rs:1003-1025` |
-| 9 | K1 a constant folded with one rounding more (FAU word, 1 ulp) | 1 (1) | ≈14 | 1 ulp | `nir_fs.rs:3375-3378`, `nir.rs:2205`, `:2212` |
+| Rank | Cause | Sampled pairs (cases) | Est. cases | Value can differ from Mesa's | Site | References (`tools/mali/testdata/`, tests in `tests/mali_deqp_audit.rs`) |
+|--:|---|--:|--:|---|---|---|
+| 1 | D1 `b2i32` of a 16-bit mask reads the low lane for every lane | 1 (1); 13 (13) over its whole shape | 13 | **yes, wrong value** | `nir_fs.rs:12205-12210` | `deqp_audit_d1_conv_bvec2_int_to_ivec3_fs`, `_d1_conv_bool_bool_to_ivec2_fs`, `_d1_conv_bvec3_to_ivec3_fs`, `_d1_conv_bvec4_to_ivec2_fs`, `_d1_conv_vec2_bvec2_to_ivec4_fs` |
+| 2 | V1 vertex mediump/lowp arithmetic at fp32, Mesa fp16 | 50 (76) | ≈710 | rounding only (ours is more precise) | `nir.rs:4619-4642` | `deqp_audit_v1_conv_bool_to_bool_vs`, `_v1_swz_mediump_bvec2_grg_vs`, `_v1_op_postinc_lowp_int_vs`, `_v1_op_sqrt_mediump_vec4_vs`, `_v1_matrix_div_dynamic_mediump_mat3_vs`, `_v1_uniform_initial_float_vs`, `_v1_uniform_info_float_both` |
+| 3 | F1 fragment compare of two fp32 varying lanes built at fp16, Mesa fp32 | 17 (19) | ≈228 | a compare of values within one fp16 step | `nir_fs.rs:5950-6005`, `:11538-11641` | `deqp_audit_f1_op_greaterthan_lowp_vec4_fs`, `_f1_op_equal_mediump_vec4_fs`, `_f1_swz_mediump_vec3_rb_fs`, `_f1_swz_mediump_vec3_sp_fs`, `_f1_swz_mediump_vec3_x_fs`, `_f1_swz_mediump_vec4_wwwy_fs`, `_f1_op_distance_mediump_float_fs`, `_f1_conv_vec3_float_to_mat2_fs`, `_f1_conv_float_to_mat3_fs`, `_f1_uniform_info_mat4_fs` |
+| 4 | S1 same opcodes, Mesa's instruction order not reproduced | 12 (12) | ≈162 | no | `nir_fs.rs:321-614`, `:11597` | `deqp_audit_s1_swz_mediump_vec4_yyyy_fs`, `_s1_matrix_add_dynamic_lowp_mat2_vs` |
+| 5 | A1 vertex attribute loads in another order | 11 (11) | ≈135 | no | `nir.rs:6190-6233` | `deqp_audit_a1_op_greaterthan_highp_ivec2_vs`, `_a1_op_greater_or_equal_highp_float_vs` |
+| 6 | M1 one-off folds and forms Mesa's algebraic rules give | 8 (10) | ≈89 | rounding, `-0.0`/NaN for some | section 4.6 | `deqp_audit_m1_cexpr_greaterthan_ivec2_vs`, `_m1_matrix_mul_uniform_highp_mat2_vs`, `_m1_uniform_initial_mat4_vs`; the `shaders.random.*` ones: none (section 4.10) |
+| 7 | L1 varying load width, order or a varying Mesa does not keep | 5 (5), and the tag on 15 more | ≈64 | no | `nir_fs.rs:7544`, `:8089-8098`, `:4331-4336`; `nir.rs:3091-3104` | `deqp_audit_l1_op_mul_highp_int_ivec2_fs`, `_l1_op_greaterthan_mediump_ivec2_fs`, `_l1_matrix_sub_uniform_mediump_mat3_vs` |
+| 8 | R1 Mesa's fragment shader keeps fp16 operations ours fuses or orders otherwise | 4 (4) | ≈53 | rounding of a fused FMA | `vec16.rs:1003-1025` | `deqp_audit_r1_idx_vec2_static_loop_write_component_read_fs`, `_r1_swz_mediump_vec4_xyzw_vs`, `_r1_swz_mediump_vec4_qpts_vs`; `random.conditionals.fragment.59`: none (section 4.10) |
+| 9 | K1 a constant folded with one rounding more (FAU word, 1 ulp) | 1 (1) | ≈14 | 1 ulp | `nir_fs.rs:3375-3378`, `nir.rs:2205`, `:2212` | `deqp_audit_k1_cexpr_length_vec3_fs` |
 
 ### 4.1 D1: `b2i32` of a 16-bit mask widens the wrong lane (a miscompile)
 
@@ -406,15 +408,15 @@ the estimated cases.
 
 ### 4.6 M1: one-off forms (8 pairs)
 
-| Example (`dEQP-GLES2.functional.`) | What differs | Value | Ours (site) | Mesa's rule |
-|---|---|---|---|---|
-| `shaders.random.conditionals.vertex.42` | `FADD_IMM -7.0` then `FADD_IMM +2.0`; Mesa one `FADD_IMM -5.0` | fp32 rounding of `(h-7)+2` vs `h-5` | `vs_fadd`, `nir.rs:2663-2682` (no constant reassociation through the `v_color` variable; `reassociate_constant`, `glsl.rs:1428`, cannot see it) | `op(op(a,#b),#c) → op(a, op(b,c))` |
-| `shaders.matrix.mul.uniform_highp_mat2_mat2_vertex` | two FMA chains and an `FADD`; Mesa one chain of four FMAs | rounding order | `dot_addend`, `nir.rs:5896-5899` ("not taken") | `fadd(ffma(a,b,fmul(c,d)), e) → ffma(a,b,ffma(c,d,e))` |
-| `shaders.random.conditionals.fragment.10` | `FMA` by the FAU pair `(0, -1)`; Mesa folds lane x to `+0.0` | `0*x`: `-0.0`/NaN vs `+0.0` | per-pair zero rule, `nir_fs.rs:5891-5904` (needs both lanes zero) | `fmul(a, 0.0) → 0.0` per lane |
-| `shaders.random.comparison_ops.fragment.21` | `vec2(-(f*0.25), 1.0)` as `FMA` by `(-1, 1)`; Mesa `FADD .neg` + `MKVEC` | no | `nir_fs.rs:8526-8536` (the late `vec2(fneg a, b) → fmul` rule applied unconditionally) | rule gated by `is_only_used_as_float` *(inferred)* |
-| `shaders.constant_expressions.builtin_functions.vector_relational.greaterThan_ivec2_vertex` | `LSHIFT_OR .not` + `MUX(0, 1.0, ~b)`; Mesa `MOV` + `MUX(1.0, 0, b)` | no | fragment `B2f` arm, `nir_fs.rs:2331`, `int_lane` `:2371-2377` (the vertex walk has the rule, `nir.rs:4915-4919`) | `b2f(inot a) → bcsel(a, 0.0, 1.0)` |
-| `shaders.conversions.vector_combine.bvec2_int_to_ivec3_fragment` | D1, section 4.1 | **wrong** | `nir_fs.rs:12205-12210` | |
-| `uniform_api.value.initial.get_uniform.basic.float_vertex`, `.mat4_vertex` | fp32 compare of a widened fp16 uniform; Mesa `FCMP_OR.v2f16` against `2a66` | fp16 vs fp32 compare | `nir.rs:4923` (V1) | `lower_precision` |
+| Example (`dEQP-GLES2.functional.`) | What differs | Value | Ours (site) | Mesa's rule | Reference |
+|---|---|---|---|---|---|
+| `shaders.random.conditionals.vertex.42` | `FADD_IMM -7.0` then `FADD_IMM +2.0`; Mesa one `FADD_IMM -5.0` | fp32 rounding of `(h-7)+2` vs `h-5` | `vs_fadd`, `nir.rs:2663-2682` (no constant reassociation through the `v_color` variable; `reassociate_constant`, `glsl.rs:1428`, cannot see it) | `op(op(a,#b),#c) → op(a, op(b,c))` | none (a `rsg` random shader, section 4.10) |
+| `shaders.matrix.mul.uniform_highp_mat2_mat2_vertex` | two FMA chains and an `FADD`; Mesa one chain of four FMAs | rounding order | `dot_addend`, `nir.rs:5896-5899` ("not taken") | `fadd(ffma(a,b,fmul(c,d)), e) → ffma(a,b,ffma(c,d,e))` | `deqp_audit_m1_matrix_mul_uniform_highp_mat2_vs` |
+| `shaders.random.conditionals.fragment.10` | `FMA` by the FAU pair `(0, -1)`; Mesa folds lane x to `+0.0` | `0*x`: `-0.0`/NaN vs `+0.0` | per-pair zero rule, `nir_fs.rs:5891-5904` (needs both lanes zero) | `fmul(a, 0.0) → 0.0` per lane | none (`rsg`) |
+| `shaders.random.comparison_ops.fragment.21` | `vec2(-(f*0.25), 1.0)` as `FMA` by `(-1, 1)`; Mesa `FADD .neg` + `MKVEC` | no | `nir_fs.rs:8526-8536` (the late `vec2(fneg a, b) → fmul` rule applied unconditionally) | rule gated by `is_only_used_as_float` *(inferred)* | none (`rsg`) |
+| `shaders.constant_expressions.builtin_functions.vector_relational.greaterThan_ivec2_vertex` | `LSHIFT_OR .not` + `MUX(0, 1.0, ~b)`; Mesa `MOV` + `MUX(1.0, 0, b)` | no | fragment `B2f` arm, `nir_fs.rs:2331`, `int_lane` `:2371-2377` (the vertex walk has the rule, `nir.rs:4915-4919`) | `b2f(inot a) → bcsel(a, 0.0, 1.0)` | `deqp_audit_m1_cexpr_greaterthan_ivec2_vs` |
+| `shaders.conversions.vector_combine.bvec2_int_to_ivec3_fragment` | D1, section 4.1 | **wrong** | `nir_fs.rs:12205-12210` | | `deqp_audit_d1_conv_bvec2_int_to_ivec3_fs` |
+| `uniform_api.value.initial.get_uniform.basic.float_vertex`, `.mat4_vertex` | fp32 compare of a widened fp16 uniform; Mesa `FCMP_OR.v2f16` against `2a66` | fp16 vs fp32 compare | `nir.rs:4923` (V1) | `lower_precision` | `deqp_audit_v1_uniform_initial_float_vs`, `deqp_audit_m1_uniform_initial_mat4_vs` |
 
 Three more pairs carry an `other` tag (counted under V1 and F1):
 - `shaders.fragdata.valid_dynamic_index`: Mesa blends `gl_FragData[i]`
@@ -485,6 +487,30 @@ Three more pairs carry an `other` tag (counted under V1 and F1):
   `1/(1/sqrt)`, two roundings (`nir.rs:2205`, `:2212`). `ConstantFold`
   covers only non-finite and non-normal values.
 - **Cases.** 1 sampled pair; about 14 cases by the group estimate.
+
+### 4.10 The references (item `audit-ref-2`)
+
+`tools/mali/testdata/deqp_audit_<name>.{vert,frag,expect.json}`, drawn with
+`tools/mali/deqp_ref.sh <vert> <frag> <prefix> --instrument shim` (Mesa
+26.2.1 G610 drm-shim). `tests/mali_deqp_audit.rs` has one `#[ignore]`d compare
+test per reference, `differs_pinned` (each still compiles and still differs;
+at the tip all 38 do) and `references_parse`. The pairs are **rebuilt** from
+dEQP's generator code (VK-GL-CTS `93bca018`, sparse fetch of
+`modules/gles2`, `data/gles2`; no run log): the test header says which
+template each one follows and what is not dEQP's (the literal a `uniform_api`
+case compares against). At the tip every one compiles and none is byte-equal (the first
+difference `mali_ref::differences` prints is in the fragment program for the
+D1, F1, S1 and R1 shapes, in the varying or position program for the V1, A1,
+M1 and L1 ones, and a FAU word for K1).
+
+Not drawn, with the reason:
+
+| Shape | Why none |
+|---|---|
+| `shaders.random.conditionals.vertex.42`, `.fragment.10`, `.fragment.59`, `comparison_ops.fragment.21`, and the two `shaders.random.*` pairs of L1 | the text is made by dEQP's random shader generator (`rsg`) from a seed, which needs a built dEQP; the sparse sources hold the generator, not its output |
+| `attribute_location.bind_aliasing`, `bind_max_attributes.vec3` (V1/other) | the pair needs `glBindAttribLocation`; item `board-baseline-rows` adds explicit bindings to `gl_ref.py` |
+| `uniform_api.info_query.*basic_struct.sampler2D_samplerCube_vertex` | no reference could be drawn either at the audit (section 6) |
+| the other 8 `D1` shapes and the other V1/F1/S1/A1 pairs of the sample | same cause as a drawn shape; five D1 shapes are drawn, the ones that differ in their widening (`bool`, `bvec2`/`int`, `bvec3`, `bvec4`, `vec2`/`bvec2`) |
 
 ## 5. Board forecast for the compiled cases
 
