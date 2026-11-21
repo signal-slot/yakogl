@@ -63,4 +63,10 @@ interrupt count is `gc_render_perf()`'s `kicks_done`, which only the
 interrupt handler moves; the irq latency is its `gpu_busy_ns` (submit to
 interrupt). The elapsed time has the wait's 1 ms polling step in it.
 
-Built for the Verdin iMX8M Plus A53 and the STM32MP257F-DK A35 with `-Werror`; not run on a board yet.
+Built for the Verdin iMX8M Plus A53 and the STM32MP257F-DK A35 with `-Werror`.
+Ran on the STM32MP257F-DK on 2026-11-21 (build `6612c6cb`, first run, no
+fix): `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us
+(completed 1, wait 0)`, `gc_fence: PASS`, record `594b0206 00000001
+00000001 01001049`, SPI 183 `route=ours`
+(`docs/notes/stm32mp257f-dk-bringup.md`, "gc_fence"). Not run on the
+i.MX8MP yet.
