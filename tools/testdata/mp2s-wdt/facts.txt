@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Secure-watchdog facts of ST's OP-TEE 4.0.0-stm32mp-r3.1 and TF-A v2.10-stm32mp-r3.1
+# (plan #362, survey secure-wdt-facts). Checked by tools/mp2s_wdt_facts_check.sh.
+# Line: KEY VALUE TREE:path:line   (TREE optee = ST_OPTEE_R31_TREE, tfa = ST_TFA_R31_TREE)
+# Keys: SMC_FUNC_ID, CMD_*, TIMEOUT_S (secure IWDG's timeout-sec, 2 trees), EARLY_S,
+# MIN_TIMEOUT_S (EARLY_S+1, derived: no upstream line, written derived:EARLY_S+1:0).
+SMC_FUNC_ID 0xbc000000 optee:core/arch/arm/plat-stm32mp2/conf.mk:308
+CMD_INIT 0 optee:core/arch/arm/include/sm/watchdog_smc.h:29
+CMD_SET_TIMEOUT 1 optee:core/arch/arm/include/sm/watchdog_smc.h:30
+CMD_ENABLE 2 optee:core/arch/arm/include/sm/watchdog_smc.h:31
+CMD_PET 3 optee:core/arch/arm/include/sm/watchdog_smc.h:32
+CMD_GET_TIMELEFT 4 optee:core/arch/arm/include/sm/watchdog_smc.h:33
+TIMEOUT_S 32 optee:core/arch/arm/dts/stm32mp257f-dk.dts:333
+TIMEOUT_S 32 tfa:fdts/stm32mp257f-dk.dts:165
+EARLY_S 5 optee:core/drivers/stm32_iwdg.c:74
+MIN_TIMEOUT_S 6 derived:EARLY_S+1:0
