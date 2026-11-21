@@ -51,5 +51,23 @@
 #
 # GLSLANG is glslangValidator on PATH (a distro package, tools/setup-gate-host.sh).
 # Needs python3 >= 3.11 (tomllib), a gate requirement anyway.
+#
+# MESA_ETNA_TREE (issues #7, #1281) is the one entry outside deps.toml: the
+# Mesa 26.2.1 etnaviv tree of tools/vivante/gate_st.sh and
+# gen_shader_table.py --st, made on purpose by
+# tools/vivante/mesa-etna-build.sh under <layout>/mesa-etna-26.2.1. The
+# printing forms add it only when that script's --check says the tree is
+# complete, so a host without it sees it unset (a gap), and --check, --build
+# and the gate workflow's refusal of a missing entry do not count it.
 set -euo pipefail
-exec python3 -I "$(dirname "${BASH_SOURCE[0]}")/deps_env.py" "$@"
+HERE=$(dirname "${BASH_SOURCE[0]}")
+for a in "$@"; do
+  case $a in --check | --layout | --build | --build-missing | --packages)
+    exec python3 -I "$HERE/deps_env.py" "$@" ;;
+  esac
+done
+python3 -I "$HERE/deps_env.py" "$@"
+etna=$(python3 -I "$HERE/deps_env.py" --layout)/mesa-etna-26.2.1
+if etna_line=$("$HERE/../vivante/mesa-etna-build.sh" --check "$etna" 2>/dev/null); then
+  echo "$etna_line"
+fi
