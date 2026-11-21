@@ -16,10 +16,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/sys/printk.h>
-#ifdef CONFIG_YAKOGL_NANOPC_T6
-/* The NanoPC-T6's WDT0 is fed only while the run says it makes progress
- * (nanopc_t6.h): a case that begins or ends does (src/mali_board.c). */
-#include <nanopc_t6.h>
+#ifdef CONFIG_YAKOGL_GPU_MALI
+/* A Mali board's watchdog (the NanoPC-T6's WDT0, the Verdin iMX95's WDOG3)
+ * is fed only while the run says it makes progress: a case that begins or
+ * ends does (src/mali_board.c). osal_zephyr_mali_board_feed() is the board
+ * glue's feed, the one the OSAL calls in its waits. */
+#include "zephyr_mali_board.h"
 #endif
 
 #define DEQP_LOG_NAME "deqp.qpa"
@@ -57,8 +59,8 @@ static void take_line(void)
 #ifdef CONFIG_GC_COMMON_RESULT_SNVS
 		deqp_snvs_progress(NULL, cur_case);
 #endif
-#ifdef CONFIG_YAKOGL_NANOPC_T6
-		t6_watchdog_feed();
+#ifdef CONFIG_YAKOGL_GPU_MALI
+		osal_zephyr_mali_board_feed();
 #endif
 		return;
 	}
@@ -90,8 +92,8 @@ static void take_line(void)
 #ifdef CONFIG_GC_COMMON_RESULT_SNVS
 		deqp_snvs_progress(status, cur_case);
 #endif
-#ifdef CONFIG_YAKOGL_NANOPC_T6
-		t6_watchdog_feed();
+#ifdef CONFIG_YAKOGL_GPU_MALI
+		osal_zephyr_mali_board_feed();
 #endif
 		cur_case[0] = 0;
 	}

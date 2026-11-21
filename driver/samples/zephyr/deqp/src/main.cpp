@@ -27,6 +27,11 @@ extern "C" {
 #ifdef CONFIG_YAKOGL_BOARD_STM32MP2
 #include "yakogl_board.h"
 #endif
+#ifdef CONFIG_YAKOGL_BOARD_VERDIN_IMX95
+/* src/mali_board.c: the Verdin iMX95's end (the board layer's sample_glue.c
+ * has pvr_sample_finish, which does not end through board_finish) */
+FUNC_NORETURN void mali_deqp_finish(int rc);
+#endif
 #ifdef CONFIG_YAKOGL_GPU_POWERVR
 void pvr_set_native_cube(int on);
 extern int pvr_native_cube;   /* src/shaderc/mod.rs: the switch itself */
@@ -216,6 +221,10 @@ extern "C" int main(void)
     /* the STM32MP257F-DK: "deqp: PASS"/"FAIL", the yk-record line and PSCI
      * SYSTEM_RESET back into ST's Linux (board_stm32mp2.c) */
     board_finish("deqp", rc);
+#elif defined(CONFIG_YAKOGL_BOARD_VERDIN_IMX95)
+    /* the Verdin iMX95: the OSAL's close line, "deqp: OK|FAILED (rc=N)",
+     * then board_finish(): the yk-record line and PSCI SYSTEM_RESET */
+    mali_deqp_finish(rc);
 #else
     return pvr_sample_finish(rc);
 #endif
