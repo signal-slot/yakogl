@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+The minimal partner vertex shader of the highp 40-iteration fragment loop reference: written by the project, not a dEQP case.
