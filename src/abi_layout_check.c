@@ -408,6 +408,7 @@ _Static_assert(offsetof(struct gles_draw, occlusion_query) == 3576, "struct gles
 _Static_assert(offsetof(struct gles_draw, target_cpu) == 3584, "struct gles_draw.target_cpu");
 _Static_assert(offsetof(struct gles_draw, depth_texels) == 3592, "struct gles_draw.depth_texels");
 _Static_assert(offsetof(struct gles_draw, depth_texels_pitch) == 3600, "struct gles_draw.depth_texels_pitch");
+_Static_assert(offsetof(struct gles_draw, target_missing_channels) == 3604, "struct gles_draw.target_missing_channels");
 _Static_assert(sizeof(struct yakogl_backend) == 240, "struct yakogl_backend");
 _Static_assert(offsetof(struct yakogl_backend, name) == 0, "struct yakogl_backend.name");
 _Static_assert(offsetof(struct yakogl_backend, native_attrib_formats) == 8, "struct yakogl_backend.native_attrib_formats");
