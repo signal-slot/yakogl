@@ -153,6 +153,11 @@ impl Built {
 }
 
 fn build(pool: u64, kick: Kick) -> Built {
+    build_on(pool, kick, TileBudget::G610)
+}
+
+/// [`build`] on the GPU model of tile-buffer budget `budget`.
+fn build_on(pool: u64, kick: Kick, budget: TileBudget) -> Built {
     let (mut desc_m, mut code_m, mut spd_m, mut ctx_m) =
         (vec![0u8; 0x4000], vec![0u8; 0x800], vec![0u8; 0x100], vec![0u8; 0x200]);
     let mut words = vec![0u64; 512];
@@ -164,6 +169,8 @@ fn build(pool: u64, kick: Kick) -> Built {
         geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
         sample_positions: SAMPLES,
         tiler_max_levels: 8,
+        tiler_bin_budget: (2 << 20) - 64,
+        tile_budget: budget,
     };
     let (fbd, tls, tiler);
     {
@@ -239,23 +246,6 @@ fn build(pool: u64, kick: Kick) -> Built {
 /// word, ours, cause).
 type Named = (usize, u32, u32, &'static str);
 
-/// FBD w11, a 4x frame's tile: Mesa 26.2.1 also bounds the tile by the
-/// depth tile budget whether or not the frame has a depth buffer
-/// (`pan_zsbuf_bytes_per_pixel`, pan_desc.h:242-259: 4 bytes a sample;
-/// pan_desc.c:617-625), half the G610's 16 KiB Z tile buffer
-/// (`MODEL_TB_SIZES(32768, 16384)`, pan_model.c:88; pan_props.h:61-72):
-/// 8192 >> log2(16) = 512 pixels, and the colour allocation 16 * 512 =
-/// 8192. The builder follows Mesa 25.0.7, which has no such bound: 1024
-/// pixels and 16384 bytes for a 4x RGBA8 frame (frame.rs `tile_size`, the
-/// board's 25.0.7 dump that frame_msaa_tests.rs mesa-msrtt pins).
-const TILE_26_2: Named = (
-    11,
-    0x08001292,
-    0x10001492,
-    "FBD w11 Effective Tile Size log2 10 (1024) and Color Buffer Allocation 16 (16384): Mesa 25.0.7's 4x tile, \
-     not 26.2.1's (9, 512 and 8, 8192), which also bounds it by the depth tile budget",
-);
-
 /// Ours against Mesa's words, but the 64-bit pointers at the word indices
 /// `pointers` (low word first), returned as (ours, Mesa's) for the caller
 /// to follow, and the `named` words, which must be Mesa's and ours as named.
@@ -284,7 +274,7 @@ fn compare(name: &str, ours: &[u32], mesa: &[u32], pointers: &[usize], named: &[
 /// is the frame's own tiler context, or 0 for a frame without a draw.
 fn check_fbd(name: &str, b: &Built, mesa: &[u32; 16]) -> FramebufferParameters {
     let ours = b.words(b.fbd, 16);
-    let p = compare(name, &ours, mesa, &[14], &[TILE_26_2]);
+    let p = compare(name, &ours, mesa, &[14], &[]);
     assert_eq!(p[0].0, b.tiler.unwrap_or(0), "{name}: our tiler pointer is the frame's tiler context");
     /* the 16 words of padding after it, zero on both sides */
     assert_eq!(b.words(b.fbd + 64, 16), [0; 16], "{name}: FBD padding");
@@ -307,6 +297,63 @@ fn a_split_4x_frame_s_first_kick_keeps_the_four_samples() {
     assert_eq!(b.tls, KICK_1_POOL + 0x100);
 }
 
+/// The 4x frame of Mesa 26.2.1 on the drm-shim, drawn as each GPU
+/// (tools/mali/testdata/tile-budget/ms4.*.trace, `gl_ref.py --samples 4`:
+/// one triangle into a 4x pbuffer, 16 bytes of colour and 16 of depth a
+/// pixel).
+const MS4: [(&str, &str, u32, u32); 3] = [
+    ("G610", include_str!("../../tools/mali/testdata/tile-budget/ms4.g610.trace"), 0xa867_0005, 0),
+    ("G310v1", include_str!("../../tools/mali/testdata/tile-budget/ms4.g310v1.trace"), 0xac74_0001, 0),
+    ("G310v4", include_str!("../../tools/mali/testdata/tile-budget/ms4.g310v4.trace"), 0xac74_0001, 3),
+];
+
+/// Kick 1 on each GPU against Mesa's 4x frame as that GPU: the tile is the
+/// Z budget's, 4 bytes of depth a sample (pan_desc.c:617-625), 512 pixels
+/// on the G610 and the G310v4 (8192 >> 4) and 256 on the G310v1 (4096 >>
+/// 4), the colour buffer allocation 16 bytes a pixel of it, and the tiler
+/// context keeps level 0 for the 256-pixel tile (Hierarchy Mask 255, not
+/// 254). The FBD is the board's kick 1 (section 4.1) but for its tile and
+/// allocation, which are the shim's for that GPU; the shim's G610 values
+/// are the board's. The render target (offset 0) is the board's on every
+/// GPU, and the tiler context is Mesa's but for the pointers each builder
+/// chose.
+#[test]
+fn a_4x_frame_s_tile_follows_the_gpu_s_tile_buffer() {
+    use super::frame_mrt_tests::{block, mesa_tiler, num};
+    let fbd_of = |w: &[u32; 16]| {
+        let b: Vec<u8> = w.iter().flat_map(|w| w.to_le_bytes()).collect();
+        FramebufferParameters::unpack(&b.try_into().unwrap()).unwrap()
+    };
+    let board = fbd_of(&KICK_1_FBD);
+    let mut seen = vec![];
+    for (gpu, trace, gpu_id, variant) in MS4 {
+        let budget = super::model::model(gpu_id, variant).expect("a model of the table").tile_budget();
+        let b = build_on(KICK_1_POOL, Kick::First, budget);
+        let mut f = block(trace, "Framebuffer @", "Parameters:");
+        let (tile, alloc) = (num(&mut f, "Effective Tile Size") as u32, num(&mut f, "Color Buffer Allocation") as u32);
+        assert_eq!(num(&mut f, "Sample Count"), 4, "{gpu}");
+        if gpu == "G610" {
+            assert_eq!(
+                (tile, alloc),
+                (board.effective_tile_size, board.color_buffer_allocation),
+                "the shim's G610 is the board's"
+            );
+        }
+        let want = FramebufferParameters { effective_tile_size: tile, color_buffer_allocation: alloc, ..board };
+        let want: Vec<u32> = want.pack().unwrap().as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect();
+        let ours = b.words(b.fbd, 16);
+        compare(&format!("{gpu} kick 1 FBD"), &ours, &want, &[14], &[]);
+        compare(&format!("{gpu} kick 1 RT"), &b.words(b.fbd + 128, 16), &KICK_1_RT, &[], &[]);
+        let tiler = b.tiler.expect("a tiler context");
+        let at = (tiler - b.pool) as usize;
+        let ours_t: [u8; TilerContext::LENGTH] = b.bytes[at..at + TilerContext::LENGTH].try_into().unwrap();
+        let theirs_t = mesa_tiler(trace, "Tiler Context @", TilerContext::unpack(&ours_t).unwrap());
+        assert_eq!(ours_t, theirs_t, "{gpu}: the tiler context");
+        seen.push((gpu, tile, alloc, TilerContext::unpack(&ours_t).unwrap().hierarchy_mask));
+    }
+    assert_eq!(seen, [("G610", 512, 8192, 254), ("G310v1", 256, 4096, 255), ("G310v4", 512, 8192, 254)]);
+}
+
 /// Kick 2 (sections 4.1, 4.2, 5): the same FBD but for pre frame 0
 /// (Intersect) and the frame shader DCDs, and the same render target but
 /// for no clean-tile write and no clear colour: the four planes are drawn
@@ -316,7 +363,7 @@ fn the_second_kick_reloads_and_keeps_the_four_samples() {
     let b = build(KICK_2_POOL, Kick::Second);
     /* w6:w7, the DCD array, is followed in the pre-frame test */
     let ours = b.words(b.fbd, 16);
-    let p = compare("kick 2 FBD", &ours, &KICK_2_FBD, &[6, 14], &[TILE_26_2]);
+    let p = compare("kick 2 FBD", &ours, &KICK_2_FBD, &[6, 14], &[]);
     assert_eq!(p[1].0, b.tiler.unwrap(), "kick 2: our tiler pointer is the frame's tiler context");
     let rt = b.words(b.fbd + 128, 16);
     compare("kick 2 RT", &rt, &KICK_2_RT, &[], &[]);
@@ -462,7 +509,7 @@ fn the_resolve_averages_the_four_samples_into_the_target() {
     want[0] = PrePostFrameShaderMode::ALWAYS.0;
     want[14] = 0;
     want[15] = 0;
-    compare("resolve FBD", &fbd, &want, &[6], &[TILE_26_2]);
+    compare("resolve FBD", &fbd, &want, &[6], &[]);
     /* kick 1's RT but for: w1 Writeback MSAA Average (1 at bits 12-13, not
      * Layered's 3); w8:w9 the target, not the store; w11 no surface stride;
      * w12-w15 no clear colour. Clean tiles are written (w1 bit 31) */
@@ -513,6 +560,8 @@ fn a_sample_store_that_cannot_hold_the_samples_is_refused() {
         geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
         sample_positions: SAMPLES,
         tiler_max_levels: 8,
+        tiler_bin_budget: (2 << 20) - 64,
+        tile_budget: TileBudget::G610,
     };
     let mut desc = Arena::new("desc", KICK_2_POOL, &mut desc_m).unwrap();
     let mut cs = Stream::new(&mut words, 92);

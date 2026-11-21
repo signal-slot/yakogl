@@ -1225,7 +1225,7 @@ extern int shc_online_lend_keep(unsigned char *buf, size_t len);
 #define OSAL_QUERY_MALI_GPU 15u
 #define OSAL_QUERY_MALI_TILER_HEAP 16u
 struct osal_mali_gpu {
-	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count;
+	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count, core_features;
 };
 struct osal_mali_heap {
 	uint64_t ctx_gpu, first_chunk_gpu;
@@ -1281,7 +1281,7 @@ static int mali_query(uint32_t what, void *out, size_t out_sz)
 		/* the T6's, as src/mali/backend_tests.rs's GPU */
 		static const struct osal_mali_gpu gpu = {
 			.gpu_id = 0xa8670005u, .tiler_features = 0x809,
-			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4,
+			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4, .core_features = 0,
 		};
 
 		if (!out || out_sz != sizeof(gpu))

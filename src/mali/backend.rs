@@ -150,6 +150,12 @@ pub const NO_MALI_OSAL: &str = "mali: the OSAL has no Mali queue (gpu_alloc, sub
 /// The OSAL answered the device query with a register count that leaves no
 /// user register, or a tiler heap descriptor the frame cannot name.
 pub const INVALID_OSAL_ANSWER: &str = "mali: the OSAL's device or tiler heap answer is outside what the frame can use";
+/// The OSAL's `GPU_ID` and `CORE_FEATURES` name a GPU that Mesa 26.2.1's
+/// model table has no row for ([`super::model::MODELS`]): its tile buffer,
+/// which sizes every frame's tile, is not known (Mesa refuses it too,
+/// `pan_get_model` returning NULL).
+pub const NOT_BUILT_GPU_MODEL: &str =
+    "mali: the GPU (GPU_ID, CORE_FEATURES variant) is not a model of Mesa's table (G610, G310v1-v5)";
 /// A buffer the OSAL gave without a CPU mapping, or one whose mapping is not
 /// 8-byte aligned (the command stream is written as 64-bit words).
 pub const INVALID_OSAL_BUFFER: &str = "mali: an OSAL buffer has no 8-byte-aligned CPU mapping";
@@ -1165,10 +1171,18 @@ fn bring_up(g: &mut MaliState) -> Result<(), i32> {
         );
         return Err(-EINVAL);
     }
+    /* the model, as Mesa's `pan_get_model` (pan_device.c): its tile
+     * buffer sizes every frame's tile */
+    let Some(model) = super::model::model(gpu.gpu_id, gpu.core_features) else {
+        glog!("{} (gpu_id {:#010x}, core_features {:#x})", NOT_BUILT_GPU_MODEL, gpu.gpu_id, gpu.core_features);
+        return Err(-ENODEV);
+    };
     g.user_regs = user_regs;
     glog!(
-        "mali: gpu_id {:#010x}, tiler_features {:#x}, {} user registers; tiler heap ctx {:#x}, first chunk {:#x}, chunk {:#x}",
+        "mali: gpu_id {:#010x} ({}, core_features {:#x}), tiler_features {:#x}, {} user registers; tiler heap ctx {:#x}, first chunk {:#x}, chunk {:#x}",
         gpu.gpu_id,
+        model.name,
+        gpu.core_features,
         gpu.tiler_features,
         user_regs,
         heap.ctx_gpu,
@@ -1196,6 +1210,7 @@ fn bring_up(g: &mut MaliState) -> Result<(), i32> {
         heap.chunk_size,
         g.geometry.gpu,
         frame::tiler_max_levels(gpu.tiler_features),
+        model.tile_budget(),
     )
     .map_err(frame_error)?;
     note_high_water(&mut g.high_water[5], "context", ctx_arena.high_water(), ctx_arena.capacity());

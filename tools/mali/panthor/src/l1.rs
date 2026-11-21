@@ -273,7 +273,8 @@ mod tests {
             let mut code = Arena::new("code", bases[2], &mut m.code).expect("arena");
             let mut spds = Arena::new("spds", bases[3], &mut m.spds).expect("arena");
             let mut data = Arena::new("data", bases[4], &mut m.data).expect("arena");
-            let c = build_context(&mut ctx, 0x8000_00a0_0000, 2 << 20, 0x0200_0000, 8).expect("context");
+            let c = build_context(&mut ctx, 0x8000_00a0_0000, 2 << 20, 0x0200_0000, 8, frame::TileBudget::G610)
+                .expect("context");
             let mut cs = Stream::new(&mut words, 92);
             let a = FrameArenas { desc: &mut desc, code: &mut code, spds: &mut spds, data: &mut data };
             build_triangle_frame(a, &mut cs, &c, 0x0300_0000, draw).expect("the frame builds");
