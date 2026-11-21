@@ -21,7 +21,13 @@
 #   - a binner out of memory fed the first overflow block (BPOA, BPOS), an
 #     MMU fault in the render reset through the SMS (the job's -EFAULT, one
 #     recovery, the next job runs), a kick with a bad magic refused with no
-#     register written, and a 4.2 identity refused at init by name.
+#     register written, and a 4.2 identity refused at init by name;
+#   - the 7.1 TFU (osal_v3d71_tfu): a render in flight finished first, then
+#     the TFUC clear, IIA IIS ICA IUA IOA IOC(0x00086061 at 0x71c) IOS COEF0-3
+#     and ICFG|IOC_SET last, write for write; done by TFUC or by TFU_CS's
+#     count; an MMU fault (-EFAULT) and a job that never ends (bounded poll,
+#     -ETIMEDOUT) each reset the GPU, which runs the next TFU and render; the
+#     4.2-shaped TFU queries stay unanswered.
 #
 # Run from the repository root. Builds into build/v3d71/osal71_mock/ (the
 # shim headers and the model are written there by this script). The last
@@ -146,6 +152,7 @@ cat >"$out/osal71_mock_test.c" <<'EOF'
 #include "v3d.h"
 #include "v3d_regs.h"
 #include "zephyr_v3d.h"
+#include "zephyr_v3d71.h"
 #include "rpi_mbox.h"
 
 /* ---- the register model: the four BCM2712 blocks at their ARM addresses */
@@ -159,6 +166,9 @@ static struct {
 	uint32_t frdone_reads;  /* FRDONE after this many core INT_STS reads */
 	uint32_t sts_reads;     /* core INT_STS reads since the render started */
 	bool rendering;
+	bool tfu_hang;          /* a TFU job never ends */
+	bool tfu_fault;         /* a TFU job ends in an MMU fault */
+	bool tfu_cvt_only;      /* a TFU job moves TFU_CS's count but raises no TFUC */
 } model;
 
 /* the log: register writes, PM_WDOG reads, clock and mailbox calls */
@@ -255,6 +265,17 @@ void mock_write32(uint32_t v, mm_reg_t a)
 			v &= ~(V3D_MMU0_CACHE_CTL_FLUSH_SET | V3D_MMU0_CACHE_CTL_FLUSHING_SET);
 		if (off == V3D_MMU0_CTL)
 			v &= ~(V3D_MMU0_CTL_TLB_CLEAR_SET | V3D_MMU0_CTL_TLB_CLEARING_SET);
+		if (off == V3D71_TFU_ICFG && !model.tfu_hang) {
+			/* the job runs at once: the conversion counter moves, then
+			 * TFUC (or a fault, or nothing but the counter) */
+			uint32_t *cs = &hub[V3D71_TFU_CS / 4];
+
+			*cs = (*cs & ~(0xffu << 16)) | (((V3D_TFU_CS_CVTCT_GET(*cs) + 1u) & 0xffu) << 16);
+			if (model.tfu_fault)
+				hub[V3D_HUB_CTL_INT_STS / 4] |= V3D_HUB_CTL_INT_STS_INT_MMU_PTI_SET;
+			else if (!model.tfu_cvt_only)
+				hub[V3D_HUB_CTL_INT_STS / 4] |= V3D_HUB_CTL_INT_STS_INT_TFUC_SET;
+		}
 		*p = v;
 		return;
 	case 'C':
@@ -381,7 +402,7 @@ void yakogl_log_repeats_report(char *buf, size_t cap)
 
 /* ---- the checks ---------------------------------------------------------- */
 static int checks, failed;
-#define PLANNED 57
+#define PLANNED 78
 #define CHECK(c, ...)                                                                              \
 	do {                                                                                       \
 		checks++;                                                                          \
@@ -661,6 +682,98 @@ int main(void)
 	CHECK(o->gpu_free(&j2.ta) == 0, "a free");
 	osal_v3d_mem_used(&used1, NULL, NULL);
 	CHECK(used1 == used0 - 64u * 1024u, "the free's 64 KiB back (used %u -> %u)", used0, used1);
+
+	/* 8b. the 7.1 TFU: the registers, IOC included, in order, and the wait */
+	const struct v3d_tfu71_job tj = {
+		.icfg = 0x00430000u, .iia = 0x00200000u, .iis = 0x00100040u, .ica = 0x11111111u, .iua = 0x00300000u,
+		.ioa = 0x00240000u, .ioc = 0x00086061u, .ios = 0x00000040u,
+		.coef = { 0xa0a0a0a0u, 0xb1b1b1b1u, 0xc2c2c2c2u, 0xd3d3d3d3u },
+	};
+	struct osal_v3d71_tfu_status ts;
+	uint32_t ran, nfail;
+	CHECK(osal_v3d71_tfu_present(), "the 7.1 TFU is present after init");
+	CHECK(o->query(OSAL_QUERY_V3D_TFU_MIN_BYTES, &v, sizeof(v)) == -ENOTSUP &&
+		      o->query(OSAL_QUERY_V3D_TFU_QUEUE, &v, sizeof(v)) == -ENOTSUP,
+	      "the 4.2-shaped TFU queries stay unanswered (no IOC in their jobs)");
+	CHECK(osal_v3d71_tfu(NULL, 0, &ts) == -ENODEV, "no job: -ENODEV");
+	/* a render still in flight is finished before the TFU's first write */
+	struct job j5;
+	CHECK(job_alloc(o, &j5) == 0, "the TFU test's job buffers");
+	int64_t f5 = o->submit(&j5.k, sizeof(j5.k));
+	mark = nev;
+	quiet = true;
+	rc = osal_v3d71_tfu(&tj, 1000000, &ts);
+	quiet = false;
+	CHECK(rc == 0, "the TFU job returned %d", rc);
+	CHECK(o->completed() == (uint32_t)f5, "the render in flight completed before the TFU ran");
+	int frd = find('W', 'C', V3D_CTL_0_INT_CLR, mark), tclr = find('W', 'H', V3D_HUB_CTL_INT_CLR, mark);
+	CHECK(frd >= 0 && tclr > frd, "FRDONE consumed (%d) before the TFU's first write (%d)", frd, tclr);
+	const struct w tfu_writes[] = {
+		{ 'H', V3D_HUB_CTL_INT_CLR, V3D_HUB_CTL_INT_STS_INT_TFUC_SET | V3D_HUB_CTL_INT_STS_INT_TFUF_SET },
+		{ 'H', V3D71_TFU_IIA, tj.iia },
+		{ 'H', V3D71_TFU_IIS, tj.iis },
+		{ 'H', V3D71_TFU_ICA, tj.ica },
+		{ 'H', V3D71_TFU_IUA, tj.iua },
+		{ 'H', V3D71_TFU_IOA, tj.ioa },
+		{ 'H', V3D71_TFU_IOC, 0x00086061u },
+		{ 'H', V3D71_TFU_IOS, tj.ios },
+		{ 'H', V3D71_TFU_COEF0, tj.coef[0] },
+		{ 'H', V3D71_TFU_COEF1, tj.coef[1] },
+		{ 'H', V3D71_TFU_COEF2, tj.coef[2] },
+		{ 'H', V3D71_TFU_COEF3, tj.coef[3] },
+		{ 'H', V3D71_TFU_ICFG, tj.icfg | V3D_TFU_ICFG_IOC_SET },
+		{ 'H', V3D_HUB_CTL_INT_CLR, V3D_HUB_CTL_INT_STS_INT_TFUC_SET | V3D_HUB_CTL_INT_STS_INT_TFUF_SET },
+	};
+	CHECK(V3D71_TFU_IOC == 0x71c && V3D71_TFU_ICFG == 0x708, "IOC is at 0x71c and ICFG at 0x708");
+	CHECK(tclr > 0 && writes_are(tclr, tfu_writes, 14, "tfu"),
+	      "the TFU's writes: clear, IIA IIS ICA IUA IOA IOC(0x00086061) IOS COEF0-3, ICFG|IOC_SET last, clear");
+	CHECK(ts.us == 0 && V3D_TFU_CS_CVTCT_GET(ts.cs_after) == V3D_TFU_CS_CVTCT_GET(ts.cs_before) + 1 &&
+		      (ts.hub_int_sts & V3D_HUB_CTL_INT_STS_INT_TFUC_SET),
+	      "done by TFUC at once: us %u, CS 0x%08x -> 0x%08x, hub 0x%08x", ts.us, ts.cs_before, ts.cs_after,
+	      ts.hub_int_sts);
+	CHECK((hub[V3D_HUB_CTL_INT_STS / 4] & V3D_HUB_CTL_INT_STS_INT_TFUC_SET) == 0, "TFUC cleared after the job");
+	CHECK(hub[V3D71_TFU_IOC / 4] == 0x00086061u, "IOC reached the register (0x%08x)", hub[V3D71_TFU_IOC / 4]);
+	/* completion by the conversion counter alone (no TFUC) */
+	model.tfu_cvt_only = true;
+	rc = osal_v3d71_tfu(&tj, 1000, &ts);
+	model.tfu_cvt_only = false;
+	CHECK(rc == 0 && !(ts.hub_int_sts & V3D_HUB_CTL_INT_STS_INT_TFUC_SET), "done by TFU_CS's count: %d", rc);
+	/* an MMU fault: -EFAULT, one recovery */
+	uint32_t rec0 = osal_v3d_recoveries();
+	model.tfu_fault = true;
+	quiet = true;
+	mark = nev;
+	rc = osal_v3d71_tfu(&tj, 1000, &ts);
+	quiet = false;
+	model.tfu_fault = false;
+	hub[V3D_HUB_CTL_INT_STS / 4] = 0;
+	CHECK(rc == -EFAULT && osal_v3d_recoveries() == rec0 + 1 && find('W', 'S', V3D_SMS_TEE_CS, mark) > 0,
+	      "an MMU fault in the TFU: %d, recoveries %u -> %u", rc, rec0, osal_v3d_recoveries());
+	/* a job that never ends: the bounded poll returns -ETIMEDOUT, the GPU is reset and works after */
+	rec0 = osal_v3d_recoveries();
+	model.tfu_hang = true;
+	quiet = true;
+	mark = nev;
+	const uint32_t t0 = now_us;
+	rc = osal_v3d71_tfu(&tj, 200, &ts);
+	const uint32_t spent = now_us - t0;
+	quiet = false;
+	model.tfu_hang = false;
+	CHECK(rc == -ETIMEDOUT && ts.us == 200 && !(ts.hub_int_sts & V3D_HUB_CTL_INT_STS_INT_TFUC_SET),
+	      "a hung TFU: %d after %u us", rc, ts.us);
+	CHECK(spent >= 200 && spent < 100000, "the wait is bounded by the timeout (%u us spent)", spent);
+	CHECK(osal_v3d_recoveries() == rec0 + 1 && !osal_v3d_hung() && find('W', 'S', V3D_SMS_TEE_CS, mark) > 0,
+	      "the timeout reset the GPU through the SMS (recoveries %u)", osal_v3d_recoveries());
+	CHECK(find('W', 'H', V3D71_TFU_ICFG, mark) > 0 && find('W', 'H', V3D71_TFU_ICFG, mark) < find('W', 'S', V3D_SMS_TEE_CS, mark),
+	      "ICFG started the job before the reset");
+	rc = osal_v3d71_tfu(&tj, 1000, &ts);
+	CHECK(rc == 0, "a TFU job after the reset ran: %d", rc);
+	osal_v3d71_tfu_counts(&ran, &nfail, &v);
+	CHECK(ran == 3 && nfail == 2, "counts: %u ran, %u failed", ran, nfail);
+	hub[V3D_HUB_CTL_INT_STS / 4] = 0;
+	model.rendering = false;
+	int64_t f6 = o->submit(&j5.k, sizeof(j5.k));
+	CHECK(o->wait(f6, 1000000) == 0, "a render after the TFU jobs");
 
 	/* 9. a 4.2 identity on the BCM2712: refused at init by name */
 	o->shutdown();
