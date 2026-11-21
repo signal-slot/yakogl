@@ -379,6 +379,7 @@ const _: () = assert!(offset_of!(crate::backend::GlesDraw, occlusion_query) == 3
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_cpu) == 3584);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, depth_texels) == 3592);
 const _: () = assert!(offset_of!(crate::backend::GlesDraw, depth_texels_pitch) == 3600);
+const _: () = assert!(offset_of!(crate::backend::GlesDraw, target_missing_channels) == 3604);
 const _: () = assert!(size_of::<crate::backend::YakoglBackend>() == 240);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, name) == 0);
 const _: () = assert!(offset_of!(crate::backend::YakoglBackend, native_attrib_formats) == 8);

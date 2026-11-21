@@ -1142,6 +1142,44 @@ pub fn fb_target_channel_mask_n(c: &GlContext, n: u8) -> u8 {
         .map_or(0xf, |l| (1u8 << l.channels.min(4)) - 1)
 }
 
+/// The channels (bit 0 R .. bit 3 A) colour attachment `n` of the bound
+/// framebuffer stores but its GL format does not have
+/// (`GlesDraw::target_missing_channels`): GL_R8, GL_RG8 and a GL_RED / GL_RG
+/// byte texture are kept in an RGBA8888 store, GL_RG16F (and GL_RGB16F) in
+/// the four halves of RGBA16F, GL_RGB8 / GL_RGB565 / a GL_RGB texture in
+/// RGBA8888. Those channels read 0 (red, green, blue) or 1 (alpha) (ES 3.0
+/// 4.3.2: ReadPixels; table 3.23: a texture sampled), so the store must hold
+/// that whatever the fragment shader wrote into them. 0 for every other
+/// target: the default surface (its alpha is [`fb_target_alpha_bits_n`]'s),
+/// an integer surface and the single-channel float ones (R16F, R32F),
+/// which store exactly their channels.
+pub fn fb_target_missing_channels_n(c: &GlContext, n: u8) -> u8 {
+    if c.bound_framebuffer == 0 {
+        return 0;
+    }
+    /* only a four-channel store has lanes the format lacks */
+    if !matches!(fb_target_format_n(c, n), GLES_SURF_RGBA8888 | GLES_SURF_RGBA16F) {
+        return 0;
+    }
+    let Some(a) = c.framebuffer_ref(c.bound_framebuffer).and_then(|fb| color_attachment(fb, n)) else { return 0 };
+    let base = match a.type_ {
+        GL_TEXTURE => c.texture_ref(a.name).map(|t| t.format),
+        GL_RENDERBUFFER => c.renderbuffer_ref(a.name).map(|rb| match rb.internalformat {
+            GL_R8 => GL_RED,
+            GL_RG8 | GL_RG16F => GL_RG,
+            GL_RGB8 | GL_RGB565 | GL_RGB16F => GL_RGB,
+            _ => GL_RGBA,
+        }),
+        _ => None,
+    };
+    match base {
+        Some(GL_RED) => 0b1110,
+        Some(GL_RG) => 0b1100,
+        Some(GL_RGB) => 0b1000,
+        _ => 0,
+    }
+}
+
 /// How many alpha bits the bound colour target really has.
 ///
 /// The storage behind every colour attachment is RGBA8 whatever the format

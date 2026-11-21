@@ -2816,6 +2816,9 @@ fn per_target_masks(c: &GlContext, d: &mut GlesDraw, app: u8) -> Result<(), Draw
 /// image or colour-renderable storage [`framebuffer::fb_target_n`] needs,
 /// so `frame_attachment` stayed 0 and the frame's own target is not written
 /// either — the same `gpu` 0 slot this case had before.
+///
+/// Each slot also carries the channels its format lacks in its store
+/// (`target_missing_channels`, [`framebuffer::fb_target_missing_channels_n`]).
 fn resolve_targets(c: &GlContext, d: &mut GlesDraw) {
     let shift = framebuffer::frame_attachment(c);
     let lead = shift as usize;
@@ -2825,10 +2828,13 @@ fn resolve_targets(c: &GlContext, d: &mut GlesDraw) {
     if shift == 0 && framebuffer::draw_buffer0_none(c) && !framebuffer::colour_writes_off(c) {
         d.targets[0].gpu = 0;
     }
+    d.target_missing_channels = [0; GLES_MAX_TARGETS];
+    d.target_missing_channels[0] = framebuffer::fb_target_missing_channels_n(c, shift);
     for i in 1..GLES_MAX_TARGETS - lead {
         d.targets[i] = GlesDrawTarget::ZERO;
         if let Some((gpu, w, h, format)) = framebuffer::fb_target_n(c, (i + lead) as u8) {
             d.targets[i] = GlesDrawTarget { gpu, w, h, format, out_shift: 0 };
+            d.target_missing_channels[i] = framebuffer::fb_target_missing_channels_n(c, (i + lead) as u8);
             d.num_targets = i as u8 + 1;
         }
     }

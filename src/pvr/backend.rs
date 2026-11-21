@@ -891,19 +891,27 @@ fn ppp_ctrl(pretransform: bool) -> u32 {
 /// PBESTATE_REG_WORD0's channel swizzle (chan0..3) for a target of this
 /// surface format: memory R,G,B,A, or B,G,R,A for XRGB8888 scan-out and for
 /// RGB565 (the R5G6B5 pack mode puts channel 0 in the low bits, and an
-/// RGB565 target keeps red high, DRM order); with the alpha lane SWIZ.ONE
-/// when the GL format behind it has no alpha.
+/// RGB565 target keeps red high, DRM order); with SWIZ.ZERO in the lane of a
+/// colour channel the GL format behind it does not have and SWIZ.ONE in the
+/// alpha lane when it has no alpha. `missing` is that set (bit 0 R .. bit 3
+/// A, `GlesDraw::target_missing_channels`, with the frame target's
+/// `target_alpha_bits == 0` as bit 3).
 ///
-/// SWIZ.ONE: the PBE writes 1 there, whatever the shader produced.
+/// SWIZ.ZERO / SWIZ.ONE: the PBE writes 0 / 1 there, whatever the shader
+/// produced.
 ///
-/// A colour target whose GL format has no alpha (GL_RGB, GL_RGB565) still has
-/// an alpha byte in memory, because the storage is RGBA8 whatever the format
-/// asked for; GL says such a buffer reads 1 (ES 2.0 4.3.1). Doing it in the
-/// PBE costs nothing and covers every writer at once -- the background object,
-/// the clear quad and any draw -- where a write mask would have needed a
+/// A colour target whose GL format has fewer channels than its store (GL_RGB
+/// and GL_RGB565 with no alpha; GL_R8, GL_RG8, GL_RG16F and the GL_RED /
+/// GL_RG textures with neither blue nor alpha, and GL_R8 with no green)
+/// still has those lanes in memory, because the storage is RGBA8 or RGBA16F
+/// whatever the format asked for; GL says such a buffer reads 0 for a
+/// missing red, green or blue and 1 for a missing alpha (ES 3.0 4.3.2), and
+/// a sampled texture the same (table 3.23). Doing it in the PBE costs
+/// nothing and covers every writer at once -- the background object, the
+/// clear quad and any draw -- where a write mask would have needed a
 /// fragment shader variant per shader (glColorMask is lowered into the shader
-/// on this GPU) and would have left the alpha already in memory alone.
-fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
+/// on this GPU) and would have left the values already in memory alone.
+fn pbe_swizzle(fmt: u8, missing: u8) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
     let mut swiz = if fmt == GLES_SURF_XRGB8888 || fmt == GLES_SURF_RGB565 {
         [
             csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN2,
@@ -920,10 +928,37 @@ fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
         ]
     };
     /* an integer surface stores the channels it has, alpha included */
-    if alpha_one && !gles_surf_is_integer(fmt) {
-        swiz[3] = csb::ROGUE_PBESTATE_SWIZ_ONE;
+    if gles_surf_is_integer(fmt) {
+        return swiz;
+    }
+    for lane in swiz.iter_mut() {
+        /* the lane's GL channel: SOURCE_CHAN0..3 are 0..3 */
+        let chan = *lane;
+        if chan <= csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3 && missing & (1 << chan) != 0 {
+            *lane = if chan == csb::ROGUE_PBESTATE_SWIZ_SOURCE_CHAN3 {
+                csb::ROGUE_PBESTATE_SWIZ_ONE
+            } else {
+                csb::ROGUE_PBESTATE_SWIZ_ZERO
+            };
+        }
     }
     swiz
+}
+
+/// `missing` (bit 3, alpha) of a frame target whose GL format has no alpha
+/// (`target_alpha_bits == 0`), for [`pbe_swizzle`].
+const PBE_MISSING_ALPHA: u8 = 0b1000;
+
+/// The channels attachment slot `slot` of the open frame lacks, for
+/// [`pbe_reg_words`]: its `target_missing` set, with the frame target's
+/// missing alpha (`target_alpha_bits == 0`) added on slot 0.
+fn frame_missing(b: &Backend, slot: usize) -> u8 {
+    let m = b.target_missing.get(slot).copied().unwrap_or(0);
+    if slot == 0 && b.target_alpha_bits == 0 {
+        m | PBE_MISSING_ALPHA
+    } else {
+        m
+    }
 }
 
 /// The PBE register words (CR_PBE_WORD0/1 of an attachment) for a `tw` x
@@ -938,9 +973,19 @@ fn pbe_swizzle(fmt: u8, alpha_one: bool) -> [csb::ROGUE_PBESTATE_SWIZ; 4] {
 /// target sets `gamma` (REG_WORD0 bit 4, pbestate.xml:268): the PBE encodes
 /// red, green and blue on store, as Mesa's pvr_arch_pbe_pack_state does for
 /// PVR_PBE_GAMMA_ENABLED (pvr_arch_job_common.c:163-171; `twocomp_gamma`
-/// only for a two-component format, which this is not).
-fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downscale: bool, twiddle: bool) -> [u64; 2] {
-    let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, alpha_one);
+/// only for a two-component format, which this is not). `missing`: the
+/// channels the target's GL format lacks (bit 0 R .. bit 3 A,
+/// [`pbe_swizzle`]), written as 0 or 1.
+fn pbe_reg_words_missing(
+    fmt: u8,
+    missing: u8,
+    tw: u32,
+    th: u32,
+    pitch: u32,
+    downscale: bool,
+    twiddle: bool,
+) -> [u64; 2] {
+    let [swiz_chan0, swiz_chan1, swiz_chan2, swiz_chan3] = pbe_swizzle(fmt, missing);
     let w0 = csb_pack!(
         ROGUE_PBESTATE_REG_WORD0_pack,
         2,
@@ -973,6 +1018,13 @@ fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downsca
         }
     );
     [dw64(w0), dw64(w1)]
+}
+
+/// [`pbe_reg_words_missing`] with only the alpha lane in question
+/// (`alpha_one`: the GL format has no alpha), the form the older tests pin.
+#[cfg(test)]
+fn pbe_reg_words(fmt: u8, alpha_one: bool, tw: u32, th: u32, pitch: u32, downscale: bool, twiddle: bool) -> [u64; 2] {
+    pbe_reg_words_missing(fmt, if alpha_one { PBE_MISSING_ALPHA } else { 0 }, tw, th, pitch, downscale, twiddle)
 }
 
 /// The PBESTATE_STATE_WORD0/1 pair attachment `mrt_index` hands the
@@ -1771,6 +1823,10 @@ struct Backend {
     /// `GlesDraw::target_alpha_bits` of the frame's attachment 0: 0 means the
     /// GL format has no alpha, so the PBE writes 1 there.
     target_alpha_bits: u8,
+    /// `GlesDraw::target_missing_channels` of the frame's attachment slots:
+    /// the channels each one's GL format lacks, which the PBE writes as 0
+    /// (colour) or 1 (alpha) ([`pbe_swizzle`]).
+    target_missing: [u8; GLES_MAX_TARGETS],
     /// The frame's target orientation (for a synthesised object).
     target_flip_y: bool,
     /// Colour attachments beyond the first (a G-buffer pass writes three):
@@ -6056,6 +6112,7 @@ fn frame_begin_with(p: &mut Pvr, d: &GlesDraw, (frame_ds, frame_s): (DsStore, Ds
     b.target_pitch = crate::backend::draw_pitch(d);
     b.target_format = d.target_format;
     b.target_alpha_bits = d.target_alpha_bits;
+    b.target_missing = d.target_missing_channels;
     b.target_flip_y = d.flip_y;
     b.num_targets = (if d.num_targets > 1 { d.num_targets } else { 1 }).min(b.eot_pairs as u8);
     b.targets[0] =
@@ -9939,9 +9996,9 @@ fn flush(p: &mut Pvr) -> i32 {
          * `downscale` off, so every sample of the tile goes out, linear over
          * the target's own row pitch ([`MsStore`]) */
         if store_samples && rt == 1 {
-            let [w0, w1] = pbe_reg_words(
+            let [w0, w1] = pbe_reg_words_missing(
                 b.target_format,
-                b.target_alpha_bits == 0,
+                frame_missing(b, 0),
                 b.target_w,
                 b.target_h,
                 b.target_pitch,
@@ -9985,7 +10042,7 @@ fn flush(p: &mut Pvr) -> i32 {
         let [w0, w1] = if slot == 0 && b.target_gpu == 0 {
             [0, 0]
         } else {
-            pbe_reg_words(fmt, rt == 0 && b.target_alpha_bits == 0, tw, th, pitch, b.samples > 1, twiddle)
+            pbe_reg_words_missing(fmt, frame_missing(b, slot), tw, th, pitch, b.samples > 1, twiddle)
         };
         b.kick.frag.pbe_word[rt][0] = w0;
         b.kick.frag.pbe_word[rt][1] = w1;
@@ -10774,6 +10831,30 @@ mod tests {
             assert_eq!(with_alpha >> 29 & 0x7, 3, "fmt {fmt}: the shader's alpha");
             assert_eq!(no_alpha >> 29 & 0x7, 4, "fmt {fmt}: SWIZ.ONE");
             assert_eq!(with_alpha & !(0x7 << 29), no_alpha & !(0x7 << 29), "fmt {fmt}: colour lanes unchanged");
+        }
+    }
+
+    #[test]
+    fn a_target_missing_colour_channels_takes_swiz_zero_in_their_lanes() {
+        /* REG_WORD0.swiz_chan0..3 at [20:22], [23:25], [26:28], [29:31]
+         * (pbestate.xml): SWIZ.ZERO = 5, SWIZ.ONE = 4. An R store (GL_R8 in
+         * RGBA8888) zeroes green and blue and writes alpha 1; an RG one
+         * zeroes blue; the BGRA lanes of XRGB8888 zero the lane holding the
+         * missing channel. An integer surface keeps its own lanes. */
+        let lanes = |w: u64| [w >> 20 & 7, w >> 23 & 7, w >> 26 & 7, w >> 29 & 7];
+        let w = |fmt, missing| lanes(pbe_reg_words_missing(fmt, missing, 64, 64, 64, false, false)[0]);
+        assert_eq!(w(GLES_SURF_RGBA8888, 0), [0, 1, 2, 3]);
+        assert_eq!(w(GLES_SURF_RGBA8888, 0b1110), [0, 5, 5, 4], "R");
+        assert_eq!(w(GLES_SURF_RGBA16F, 0b1100), [0, 1, 5, 4], "RG16F");
+        assert_eq!(w(GLES_SURF_RGBA8888, 0b1000), [0, 1, 2, 4], "RGB");
+        assert_eq!(w(GLES_SURF_XRGB8888, 0b1110), [5, 5, 0, 4], "BGRA lanes");
+        assert_eq!(w(GLES_SURF_RG8UI, 0b1100), [0, 1, 2, 3], "integer");
+        for alpha_one in [false, true] {
+            let m = if alpha_one { PBE_MISSING_ALPHA } else { 0 };
+            assert_eq!(
+                pbe_reg_words(GLES_SURF_RGBA8888, alpha_one, 64, 64, 64, false, false),
+                pbe_reg_words_missing(GLES_SURF_RGBA8888, m, 64, 64, 64, false, false)
+            );
         }
     }
 
