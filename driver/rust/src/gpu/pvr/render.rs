@@ -2278,6 +2278,9 @@ pub unsafe extern "C" fn yd_pvr_render_scene_begin(r: *mut YdPvrRender) {
 
 fn fwccb_service_r_inner(k: &mut YdPvrKm, r: &mut YdPvrRender, snap: &mut Option<InFlight>) -> i32 {
     let (seq, fufo_off, gufo_off, gs) = (r.seq, r.fufo_off, r.gufo_off, r.grow_scene);
+    // the partial-render knob: the at-maximum case awaits the firmware's
+    // partial render instead of stopping (ccb::at_maximum_awaits_pr)
+    let pr = r.cfg.partial_render != 0;
     let mut first = |k: &YdPvrKm| *snap = Some(InFlight::take(k, seq, fufo_off, gufo_off, gs));
     // the HWRT datas a freelist reconstruction resets: every built member
     let mut hwrts = [0u32; HWRT_SETS];
@@ -2287,14 +2290,14 @@ fn fwccb_service_r_inner(k: &mut YdPvrKm, r: &mut YdPvrRender, snap: &mut Option
         n += 1;
     }
     if r.cfg.fl_grow_on_demand == 0 {
-        return fwccb_service_with(k, None, &hwrts[..n], Some(&mut first));
+        return fwccb_service_with(k, None, &hwrts[..n], Some(&mut first), pr);
     }
     let gen_b = &mut r.gen_b;
     let mut src = |k: &mut YdPvrKm, bytes: u32| {
         let bo = bo_alloc(k, GENERAL_HEAP_BASE, gen_b, bytes, L0_FLAGS_DATA);
         (!bo.cpu.is_null()).then_some(bo)
     };
-    fwccb_service_with(k, Some(&mut src), &hwrts[..n], Some(&mut first))
+    fwccb_service_with(k, Some(&mut src), &hwrts[..n], Some(&mut first), pr)
 }
 
 /// The time a fence may stand still before the render service stops
@@ -3368,6 +3371,105 @@ mod wait_tests {
         t.r.cfg.fl_grow_on_demand = 1;
         assert_eq!(t.wait(100), 0, "log:\n{}", t.log());
         assert_eq!(t.k.stop_cause, 0);
+    }
+
+    /// The knob-on at-maximum line (ccb::at_maximum_awaits_pr), as
+    /// tools/cts/pr-verdict.py reads it.
+    const AWAIT_LINE: &str =
+        "render: at maximum (list 1, 512 pages), awaiting the firmware's partial render for up to 10 s";
+
+    /// Put UPDATE_STATS notices `es` in FWCCB slots `from..`, publishing them
+    /// (write offset `from + es.len()`).
+    fn post_stats_from(t: &mut Rig, from: u32, es: &[u32]) {
+        for (j, &e) in es.iter().enumerate() {
+            let cmd = FWCCB_CTL + 0x40 + (from + j as u32) * FWCCB_CMD_SIZE as u32;
+            t.mem[(cmd + FWCCB_CMD_TYPE as u32) as usize / 4] = FWCCB_CMD_UPDATE_STATS;
+            t.mem[(cmd + FWCCB_STATS_ELEMENT as u32) as usize / 4] = e;
+            t.mem[(cmd + FWCCB_STATS_ADJUST as u32) as usize / 4] = 1;
+        }
+        t.mem[(FWCCB_CTL + CCB_CTL_WRITE_OFFSET as u32) as usize / 4] = from + es.len() as u32;
+        t.mem[(FWCCB_CTL + CCB_CTL_WRAP_MASK as u32) as usize / 4] = 7;
+    }
+
+    /// (ii) The probe's case with the partial-render knob on (case 217's
+    /// knob-on run, tools/cts/log/2026-11-02-pr-217probe): no stop, one
+    /// warning line, and the wait goes on to the fence the firmware completes
+    /// after its partial render.
+    #[test]
+    fn with_the_partial_render_knob_the_probes_case_waits_on() {
+        let mut t = rig(7, 6, Some(50_000));
+        list_at_maximum(&mut t);
+        post_stats(&mut t, FWCCB_STATS_OUT_OF_MEMORY);
+        (t.r.cfg.fl_grow_on_demand, t.r.cfg.partial_render) = (1, 1);
+        assert_eq!(t.wait(20000), 0, "log:\n{}", t.log());
+        assert_eq!(t.k.stop_cause, 0);
+        assert!(t.waited_us() >= 50_000, "waited for the fence: {} us", t.waited_us());
+        let log = t.log();
+        assert_eq!(log.lines().filter(|l| *l == AWAIT_LINE).count(), 1, "log:\n{log}");
+        assert!(!log.lines().any(|l| l.starts_with("render: stopped")), "log:\n{log}");
+        // a second notice at the same list is not said again
+        post_stats_from(&mut t, 1, &[FWCCB_STATS_OUT_OF_MEMORY]);
+        fwccb_service_r(&mut t.k, &mut t.r);
+        assert_eq!(t.k.stop_cause, 0);
+        assert_eq!(t.log().lines().filter(|l| *l == AWAIT_LINE).count(), 1, "log:\n{}", t.log());
+    }
+
+    /// (iii) Knob on, no partial render: the existing stop still bounds the
+    /// wait, at STOP_WAIT_MS with cause 4 (no timer of its own).
+    #[test]
+    fn with_the_partial_render_knob_and_no_partial_render_the_10_s_stop_fires() {
+        let mut t = rig(7, 6, None);
+        list_at_maximum(&mut t);
+        post_stats(&mut t, FWCCB_STATS_OUT_OF_MEMORY);
+        (t.r.cfg.fl_grow_on_demand, t.r.cfg.partial_render) = (1, 1);
+        assert_eq!(t.wait(20000), -errno::ESHUTDOWN, "log:\n{}", t.log());
+        assert_eq!(t.waited_us(), u64::from(STOP_WAIT_MS) * 1000);
+        assert_eq!(t.k.stop_cause, super::super::freelist::STOP_KICK_TIMEOUT);
+        assert_eq!(t.k.stop_cause, 4);
+        let log = t.log();
+        let lines: Vec<&str> = log.lines().collect();
+        assert_eq!(lines.iter().filter(|l| **l == AWAIT_LINE).count(), 1, "log:\n{log}");
+        let at = lines.iter().position(|l| *l == AWAIT_LINE).unwrap();
+        let stop = lines.iter().position(|l| l.starts_with("render: stopped: a kick that did not complete")).unwrap();
+        assert!(at < stop, "the wait line before the stop:\n{log}");
+    }
+
+    /// (iv) Knob on: a partial-render notice after the at-maximum notice
+    /// clears the wait, and the fence then completes with no stop.
+    #[test]
+    fn with_the_partial_render_knob_a_partial_render_clears_the_wait() {
+        let mut t = rig(7, 6, Some(5_000));
+        list_at_maximum(&mut t);
+        post_stats(&mut t, FWCCB_STATS_OUT_OF_MEMORY);
+        (t.r.cfg.fl_grow_on_demand, t.r.cfg.partial_render) = (1, 1);
+        fwccb_service_r(&mut t.k, &mut t.r);
+        let awaiting = 1u32 << super::super::ccb::ATMAX_AWAITING_SHIFT;
+        assert_eq!(t.k.atmax_pr & awaiting, awaiting, "armed: log:\n{}", t.log());
+        post_stats_from(&mut t, 1, &[FWCCB_STATS_PARTIAL_RENDERS]);
+        assert_eq!(t.wait(20000), 0, "log:\n{}", t.log());
+        assert_eq!((t.k.stop_cause, t.k.atmax_pr & awaiting), (0, 0), "log:\n{}", t.log());
+        assert_eq!(t.k.fw_stats[FWCCB_STATS_PARTIAL_RENDERS as usize], 1);
+        let log = t.log();
+        assert!(
+            log.lines().any(|l| l == "render: partial render after the at-maximum notice (list 1); its wait is over"),
+            "log:\n{log}"
+        );
+        assert_eq!(log.lines().filter(|l| *l == AWAIT_LINE).count(), 1, "log:\n{log}");
+    }
+
+    /// (i) The knob off (`partial_render` 0) is the stop as before, with
+    /// nothing armed.
+    #[test]
+    fn without_the_partial_render_knob_the_probes_case_still_stops() {
+        let mut t = rig(7, 6, None);
+        list_at_maximum(&mut t);
+        post_stats(&mut t, FWCCB_STATS_OUT_OF_MEMORY);
+        t.r.cfg.fl_grow_on_demand = 1;
+        assert_eq!(t.r.cfg.partial_render, 0);
+        assert_eq!(t.wait(20000), -errno::ESHUTDOWN, "log:\n{}", t.log());
+        assert_eq!(t.waited_us(), 0);
+        assert_eq!((t.k.stop_cause, t.k.atmax_pr), (super::super::freelist::STOP_AT_MAXIMUM, 0));
+        assert!(!t.log().contains("awaiting"), "log:\n{}", t.log());
     }
 
     /// The line at a grow request: kicks 7..=10 in flight (fragment done at
