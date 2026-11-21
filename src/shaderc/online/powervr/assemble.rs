@@ -1667,7 +1667,7 @@ fn encode_closed(
 }
 
 /// A whole vertex shader: the arithmetic, the output writes and the end of
-/// task, closed by [`encode_closed`]'s alignment rule.
+/// task, closed by `encode_closed`'s alignment rule.
 ///
 /// Returns the bytes written into `buf`.
 ///
@@ -2326,7 +2326,7 @@ pub enum TargetPlace {
 /// classes, none blended: output (`place`, out) is packed for its own target
 /// and written where the end-of-tile program emits that attachment from
 /// (`src/pvr/mrt_layout.rs`): pixel output registers `first..`, or a tile
-/// buffer the end-of-tile program loads back ([`TileStores`]). Each output
+/// buffer the end-of-tile program loads back (`TileStores`). Each output
 /// works in its own six temporaries from `free + 6j`: the colour moved into
 /// the first four (only red for R16F and R32F) and packed into the fifth and
 /// sixth; an integer target's dwords not already in a temporary moved into
