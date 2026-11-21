@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-21, the tryboot cycles of S32c1..S32c4: image sha256, Linux boot id before the reboot, reboot time, seconds to Linux, clean-up, run and end lines (README.md)
+== cycles
+S32c1 sha256=cdd4d64fb7d667c6f4ba54a086436931c1baf3efd06bbda4c7450acfbdb7696f boot_before=58a7b88d-afa9-4a6a-9cf1-2b7b4127a1c6 t_reboot=1795263614 back_after=298s cleanup=staged image removed, tryboot.txt put back (read back)
+   1 cases in 187 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S32c2 sha256=9a107769b4a452b620aed589eb7545e7ad50412a6ae2f11b83efcb6a004169b6 boot_before=f04623bf-9e2a-40c2-9ad5-6d1f58f86040 t_reboot=1795263945 back_after=300s cleanup=staged image removed, tryboot.txt put back (read back)
+   1 cases in 187 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S32c3 sha256=e3b66a6a7b0c3b25e1400fadabfe3865381d7e755bd4485f1f336bc322317a2c boot_before=03ac177c-ab54-4c9e-8886-12919212fba3 t_reboot=1795264267 back_after=311s cleanup=staged image removed, tryboot.txt put back (read back)
+   1 cases in 199 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
+S32c4 sha256=ad2ddcd7ab3105a35b2bc007cedce65532d54ad17f895bbb45d7229dde6af062 boot_before=1361a85e-d4d1-4d7d-a926-9da8c230efee t_reboot=1795264607 back_after=306s cleanup=staged image removed, tryboot.txt put back (read back)
+   1 cases in 198 ms, record at 0 s after boot, reset at ~250 s
+   slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+   v3d_deqp: build b1b5b845 STOPPED EARLY by dEQP (complete=0; later cases never began): 1 cases, P 0 F 0 R 1 N 0 other 0
