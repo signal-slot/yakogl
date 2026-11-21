@@ -30,6 +30,10 @@
 # both stages (the translation numbers varyings by declaration order, per
 # stage), and run at `v3d_shc --device 71` (rev 7, compat_rev 0).
 #
+# glmark2's precision macros HIGHP_OR_DEFAULT and MEDIUMP_OR_DEFAULT are
+# substituted in the compiled copy as glmark2 defines them on a GLES2 context
+# (highp and mediump); the corpus files are not changed.
+#
 # Columns: key, vs instructions, fs instructions, vs threads, fs threads, reason
 # ("ok" when Mesa compiled the program, else the failing step and its message;
 # the numbers are "-" then). Names and numbers only, never shader text.
@@ -109,11 +113,18 @@ if not pairs:
 work = tempfile.mkdtemp(prefix="glmark2_ref71-", dir=os.environ.get("TMPDIR"))
 atexit.register(shutil.rmtree, work, True)
 
+PRECISION_MACROS = (("HIGHP_OR_DEFAULT", "highp"), ("MEDIUMP_OR_DEFAULT", "mediump"))
 LOC = re.compile(r"layout\(location = (\d+)\) (in|out) (\w+) (\w+)((?:\[[^\]]*\])?);")
 
 
 def translate(name, stage):
-    return g.gv.translate_es100_gl(open(os.path.join(corpus, name)).read(), stage)
+    text = open(os.path.join(corpus, name)).read()
+    # glmark2 defines these two at load time (libmatrix/shader-source.cc:490-505);
+    # on a GLES2 context GL_ES is set, and so is GL_FRAGMENT_PRECISION_HIGH on
+    # the v3d, so both expand to the qualifier in either stage.
+    for macro, qual in PRECISION_MACROS:
+        text = re.sub(r"\b%s\b" % macro, qual, text)
+    return g.gv.translate_es100_gl(text, stage)
 
 
 def varying_locs(tr, direction):
