@@ -117,6 +117,10 @@ pub(crate) mod fold;
 /// The contract between the front end and the code generator.
 pub mod ir;
 pub mod lexer;
+/// The GL link entry for the V3D 7.1: `codegen::link_sources` with the 7.1
+/// chain and record (`v3d_abi71`).
+#[cfg(feature = "gpu-v3d")]
+pub mod link71;
 /// Sampler-state variants in the IR: the look-ups whose code depends on the
 /// bound sampler's filters, and the c = 0.5 remap of an explicit level.
 pub mod lodkey;
@@ -141,6 +145,9 @@ pub mod texref;
 /// linked program's three QPU programs (`docs/online-shaderc/v3d-backend.md`).
 #[cfg(feature = "gpu-v3d")]
 pub mod v3d_abi;
+/// The linked program's `ShcShader` for the V3D 7.1, in `v3d_abi`'s layout.
+#[cfg(feature = "gpu-v3d")]
+pub mod v3d_abi71;
 
 pub use backend::{select_once, SHC_ONLINE};
 
