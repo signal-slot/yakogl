@@ -44,9 +44,17 @@
  *     the bin to the interrupt is a board step of its own.
  *   - no job waits in a slot behind the one in flight: a second submit
  *     finishes the first.
- *   - the TFU is refused (-ENOTSUP, its queries unanswered): the 7.1 TFU is
- *     a block of its own (0x700, with IOC; v3d_tfu71.*) that this file does
- *     not drive yet.
+ *   - the 4.2-shaped TFU entries stay refused (osal_v3d_tfu returns
+ *     -ENOTSUP; OSAL_QUERY_V3D_TFU_MIN_BYTES, _RUN and _QUEUE are not
+ *     answered): their structs (osal_v3d_tfu, v3d_tfu_job) carry no IOC and a
+ *     4.2 packer's job would be written into a block that is not the 7.1
+ *     TFU's. The 7.1 TFU is its own block (0x700, with IOC at 0x71c;
+ *     v3d_tfu71.*) and its own entry, osal_v3d71_tfu (zephyr_v3d71.h): one
+ *     job alone on the idle GPU (the job in flight is finished first), the
+ *     registers written in Mesa's and the rpi5_tfu probe's order with ICFG
+ *     last, completion polled on the hub's TFUC status and TFU_CS.CVTCT
+ *     within a bound. HUB_IDENT1 bit 17 ("TFU: no") is not consulted: the
+ *     7.1.10 reads 0 there and runs the job (tools/cts/RESULTS.md, rpi5_tfu).
  *   - the job builder's packet-skip counters are the 4.2 builder's
  *     (v3d_job.c), which a 7.1 image does not carry: osal_v3d_pack_counts
  *     says off and zero.
@@ -86,6 +94,7 @@
 #include "v3d_frees.h"
 #include "v3d_granules.h"
 #include "zephyr_v3d.h"
+#include "zephyr_v3d71.h"
 
 /* The watchdog must be in the image: CONFIG_YAKOGL_GPU_V3D71 selects it. */
 #ifndef CONFIG_YAKOGL_RPI5_WDOG
@@ -807,8 +816,8 @@ static int z_query(uint32_t what, void *out, size_t out_sz)
 		*(struct osal_v3d_bin_pool *)out = s.bin;
 		return 0;
 	}
-	/* OSAL_QUERY_V3D_TFU_*: not answered, the 7.1 TFU is not driven here
-	 * (the file comment) */
+	/* OSAL_QUERY_V3D_TFU_MIN_BYTES/_RUN/_QUEUE: not answered, they carry the
+	 * 4.2 job (no IOC); the 7.1 entry is osal_v3d71_tfu (the file comment) */
 	if (what == OSAL_QUERY_CLOCK_NS || what == OSAL_QUERY_DRAW_STATS)
 		return osal_zephyr_timing_query(what, out, out_sz);
 	return -ENOTSUP;
@@ -822,6 +831,114 @@ int osal_v3d_tfu(const struct v3d_tfu_job *j, struct v3d_tfu_status *st)
 	if (st)
 		*st = (struct v3d_tfu_status){ 0 };
 	return s.inited ? -ENOTSUP : -ENODEV;
+}
+
+/* ---- the 7.1 TFU (zephyr_v3d71.h) ---------------------------------------- */
+
+static uint32_t tfu71_ran, tfu71_failed, tfu71_us;
+
+bool osal_v3d71_tfu_present(void)
+{
+	return s.inited && !hung;
+}
+
+void osal_v3d71_tfu_counts(uint32_t *ran, uint32_t *failed, uint32_t *us)
+{
+	if (ran)
+		*ran = tfu71_ran;
+	if (failed)
+		*failed = tfu71_failed;
+	if (us)
+		*us = tfu71_us;
+}
+
+int osal_v3d71_tfu(const struct v3d_tfu71_job *j, uint32_t timeout_us, struct osal_v3d71_tfu_status *st)
+{
+	struct osal_v3d71_tfu_status none;
+	const uint32_t hub_mmu = V3D_HUB_CTL_INT_STS_INT_MMU_WRV_SET | V3D_HUB_CTL_INT_STS_INT_MMU_PTI_SET |
+				 V3D_HUB_CTL_INT_STS_INT_MMU_CAP_SET | V3D71_HUB_CTL_INT_STS_INT_GMPV_SET;
+	const uintptr_t hub = s.regs.hub;
+
+	if (!st)
+		st = &none;
+	*st = (struct osal_v3d71_tfu_status){ 0 };
+	if (!s.inited || !j)
+		return -ENODEV;
+	if (hung)
+		return -EIO;
+	if (timeout_us == 0)
+		timeout_us = JOB_HANG_US;
+	/* alone on the GPU: the render in flight may read what the TFU writes,
+	 * and both use the TMU/L2T caches */
+	while (s.inflight)
+		(void)finish_inflight(false);
+	if (hung)
+		return -EIO; /* that job's recovery failed */
+
+	const uint32_t cs0 = sys_read32(hub + V3D71_TFU_CS);
+
+	st->cs_before = cs0;
+	/* a stale completion must not end this wait */
+	sys_write32(V3D_HUB_CTL_INT_STS_INT_TFUC_SET | V3D_HUB_CTL_INT_STS_INT_TFUF_SET,
+		    hub + V3D_HUB_CTL_INT_CLR);
+	barrier_dmem_fence_full();
+	/* Mesa's simulator order (v3dx_simulator.c:185-199) and the probe's:
+	 * ICFG, which starts the job, last; IOC_SET raises TFUC at the end */
+	sys_write32(j->iia, hub + V3D71_TFU_IIA);
+	sys_write32(j->iis, hub + V3D71_TFU_IIS);
+	sys_write32(j->ica, hub + V3D71_TFU_ICA);
+	sys_write32(j->iua, hub + V3D71_TFU_IUA);
+	sys_write32(j->ioa, hub + V3D71_TFU_IOA);
+	sys_write32(j->ioc, hub + V3D71_TFU_IOC);
+	sys_write32(j->ios, hub + V3D71_TFU_IOS);
+	sys_write32(j->coef[0], hub + V3D71_TFU_COEF0);
+	sys_write32(j->coef[1], hub + V3D71_TFU_COEF1);
+	sys_write32(j->coef[2], hub + V3D71_TFU_COEF2);
+	sys_write32(j->coef[3], hub + V3D71_TFU_COEF3);
+	barrier_dmem_fence_full();
+	sys_write32(j->icfg | V3D_TFU_ICFG_IOC_SET, hub + V3D71_TFU_ICFG);
+
+	int rc = -ETIMEDOUT;
+	uint32_t t = 0;
+
+	for (;; t++) {
+		const uint32_t sts = sys_read32(hub + V3D_HUB_CTL_INT_STS);
+		const uint32_t cs = sys_read32(hub + V3D71_TFU_CS);
+
+		st->hub_int_sts = sts;
+		st->cs_after = cs;
+		if (sts & hub_mmu) {
+			rc = -EFAULT;
+			break;
+		}
+		if ((sts & V3D_HUB_CTL_INT_STS_INT_TFUC_SET) ||
+		    (V3D_TFU_CS_CVTCT_GET(cs) != V3D_TFU_CS_CVTCT_GET(cs0) && !(cs & V3D_TFU_CS_BUSY_SET))) {
+			rc = 0;
+			break;
+		}
+		if (t >= timeout_us)
+			break;
+		k_busy_wait(1);
+	}
+	st->us = t;
+	st->su = sys_read32(hub + V3D71_TFU_SU);
+	sys_write32(V3D_HUB_CTL_INT_STS_INT_TFUC_SET | V3D_HUB_CTL_INT_STS_INT_TFUF_SET,
+		    hub + V3D_HUB_CTL_INT_CLR);
+	barrier_dmem_fence_full();
+	tfu71_us += t;
+	if (rc) {
+		tfu71_failed++;
+		diag_failed++;
+		if (rc == -EFAULT)
+			diag_mmu_faults++;
+		printk("osal(v3d71): TFU job did not end (%d after %u us): hub int 0x%08x, TFU_CS 0x%08x -> 0x%08x, "
+		       "SU 0x%08x; iia 0x%08x ioa 0x%08x ioc 0x%08x icfg 0x%08x\n",
+		       rc, t, st->hub_int_sts, cs0, st->cs_after, st->su, j->iia, j->ioa, j->ioc, j->icfg);
+		recover(0);
+	} else {
+		tfu71_ran++;
+	}
+	return rc;
 }
 
 uint32_t osal_v3d_bin_oom_jobs(void)
@@ -899,7 +1016,7 @@ unsigned osal_v3d_recent_jobs_us(struct osal_v3d_recent_job_us *out, unsigned ma
 			.total = k_cyc_to_us_floor32(recent_cyc[r].total),
 			.render_late = recent_cyc[r].render_late,
 			.idle = k_cyc_to_us_floor32(recent_cyc[r].idle),
-			.tfu_jobs = 0, /* no TFU on this OSAL yet */
+			.tfu_jobs = 0, /* 7.1 TFU jobs: osal_v3d71_tfu_counts, not per fence */
 			.tfu = 0,
 		};
 	}
