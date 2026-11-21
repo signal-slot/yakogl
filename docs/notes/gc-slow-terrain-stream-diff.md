@@ -308,6 +308,82 @@ spent in the PE, the RA or the texture unit. No difference shows up in the
 semaphores, stalls or TS flushes between draws: the two drivers write the
 same sequence.
 
+## With gc_tiled_rt on (plan #355)
+
+Host counts only: no X2 number exists for this section, and none is given.
+Measured at commit `4d6bfcec` (the plan's integration tip) with
+
+```text
+cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2,test-knobs --test gc_scene_kicks_tiled_rt -- --nocapture
+cargo test --no-default-features --features host-test,gpu-vivante,shaderc-online,test-knobs --test gc_scene_kicks_tiled -- --nocapture
+```
+
+The first passes and prints the knob-off and knob-on tallies below (the
+harness is `tests/common/gc_scenes.rs`, 800x600 terrain, a warm frame, every
+counted frame equal). The second, at this commit, passes for shadow and
+refract, but its terrain test fails on a stale knob-off pin before it runs the
+knob-on side: it expects 11 RS "other" jobs and gets 9 (`rs_tile_in` 2 and
+`draws` 51 agree). That pin belongs to another item (accept-precheck); the
+figures here are the first file's.
+
+| a terrain frame | knob off | knob on | change |
+|---|---:|---:|---:|
+| kicks (`Lag` and `Done`) | 11 | 11 | 0 |
+| waits outside the swap (`Lag`; `Done` 0) | 11 | 11 | 0 |
+| CPU tiled copies, CPU depth resolves | 0, 0 | 0, 0 | 0 |
+| RS jobs in the streams, all | 11 | 14 | **+3** |
+| RS linear to tiled (tile-in) | 2 | 3 | **+1** |
+| RS tiled to linear (copy back) | 0 | 2 | **+2** |
+| RS fills and linear copies (all minus the two above; the second test's off column prints 9) | 9 | 9 | 0 |
+| draws in the streams | 51 | 51 | 0 |
+| draws taking early depth | 0 | 2 | **+2** |
+
+The off column's two linear-to-tiled jobs are the RS copies of the two
+vertex-stage maps (`tiled_copy.rs`). The knob adds one tile-in (the overlay
+blends into the terrain target in a later pass; the terrain pass opens with a
+whole colour clear, so it needs none) and one copy back at the end of each of
+the two passes, before the chain reads the target. All are jobs in the stream
+being recorded: no kick, wait or CPU copy is added. Shadow and refract are
+identical off and on (3 and 4 RS jobs, 3 and 12 draws, 0 early-depth draws,
+2 and 3 kicks), as `gc-slow-host-counts.md` says.
+
+The words that change on the two draws (`tests/gc_tiled_rt.rs`,
+`knob_on_the_shadow_draw_takes_early_depth`, Mesa's golden mode 8; read from
+that test's assertions, not re-run here):
+
+| register | off | on |
+|---|---|---|
+| RA_EARLY_DEPTH | 0x15000030 | 0x05000031 (TEST_ENABLE, no WRITE_DISABLE) |
+| PE_DEPTH_CONFIG | 0x00041311 | 0x05051311 (adds EARLY_Z, DISABLE_ZS, SUPER_TILED) |
+
+The other PE colour words of a tiled target were not diffed here; the
+comparison with Mesa's words is the golden test's (item tiled-ez-golden).
+
+Bytes: each of the three added jobs moves the 800x600x4 = 1.92 MB terrain
+target, so 5.76 MB a frame more through the RS. That is arithmetic from the
+size, not a counter: the harness tallies jobs, not bytes. The mean-over-frames
+table of `gc-slow-host-counts.md` (11.2 fills, 13.2 to 16.2 jobs) predates the
+frame merging that lowered the counts; its +3 is the same.
+
+Against Mesa's stream, by the rank numbers above:
+
+- Rank 3 (late depth on the terrain and overlay draws): closed for those two
+  draws, whose RA and PE words are Mesa's early-depth ones. Its size is
+  `gc-terrain-overdraw.md`'s 0.75 to 1.57 ms a frame (a model of the
+  fragments rejected, not a measurement).
+- Added by the knob, which Mesa does not pay: the three RS jobs, +0.7 to
+  +3 ms a frame at an unmeasured 2 to 8 GB/s (`gc-slow-host-counts.md`; the
+  CPU copy of the same 1.92 MB took 12.3 to 12.9 ms). Mesa renders the
+  target tiled with TS and has no copy; W7-W9 would remove them and need
+  session A's verdict on TS with the MMU off.
+- Unchanged and still open: rank 1 (shader length), rank 2 (11 kicks; the
+  knob adds none), rank 4 (clears as RS fills against TS fills), rank 5 (the
+  vertex-stage maps still take RS copies), ranks 6 to 9 (depth16 stored as
+  D24S8, linear textures, window OVERWRITE, clear quads under the PE depth
+  stage).
+- Net on the host: the knob closes one difference and adds a cost of the same
+  order as its gain. Whether terrain gets faster is for the X2 (session A).
+
 ## What this note does not show
 
 - No board numbers. Ranks 6, 8 and 9 are bandwidth estimates at the 1.9 to
