@@ -12,10 +12,10 @@ directory of its own so it does not touch the README of sessions 1 to 3.
 
 | row | image | mustpass | Pass | Fail | NotSupported | other | begun | run | GPU recoveries | hangs | verdict | before (b1b5b845) P / F / N.S. / other / never began | moved |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 80 | T17 | 504 | 432 | 0 | 72 | 0 | 504 | 39.2 s | 0 | none | DONE, none failed | 36 / 0 / 216 / 1 / 251 | aborted image runs to its end: 396 Pass, 72 NotSupported (ASTC 8x8 and 8x8 sRGB) |
-| 83 | UB1 | 968 | 968 | 0 | 0 | 0 | 968 | 31.6 s | 0 | none | DONE, all passed | 968 / 0 / 0 / 0 / 0 | equal |
-| 84 | UB2 | 755 | 755 | 0 | 0 | 0 | 757 | 39.9 s | 0 | none | DONE, all passed | 754 / 1 / 0 / 0 / 0 | 1 Fail to Pass (`ubo.random.all_per_block_buffers.28`) |
-| 85 | UB3 | 632 | 632 | 0 | 0 | 0 | 632 | 52.3 s | 0 | none | DONE, all passed | 628 / 4 / 0 / 0 / 0 | 4 Fail to Pass (`single_struct_array` `shared_instance_array_both`, `std140_instance_array_both`, each `per_block_buffer` and `single_buffer`) |
+| 80 | T17 | 504 | 432 | 0 | 72 | 0 | 504 | 39.2 s (repeat 39.2 s) | 0 | none | DONE, none failed | 36 / 0 / 216 / 1 / 251 | aborted image runs to its end: 396 Pass, 72 NotSupported (ASTC 8x8 and 8x8 sRGB) |
+| 83 | UB1 | 968 | 968 | 0 | 0 | 0 | 968 | 31.6 s (repeat 31.6 s) | 0 | none | DONE, all passed | 968 / 0 / 0 / 0 / 0 | equal |
+| 84 | UB2 | 755 | 755 | 0 | 0 | 0 | 757 | 39.9 s (repeat 39.8 s) | 0 | none | DONE, all passed | 754 / 1 / 0 / 0 / 0 | 1 Fail to Pass (`ubo.random.all_per_block_buffers.28`) |
+| 85 | UB3 | 632 | 632 | 0 | 0 | 0 | 632 | 52.3 s (repeat 52.2 s) | 0 | none | DONE, all passed | 628 / 4 / 0 / 0 / 0 | 4 Fail to Pass (`single_struct_array` `shared_instance_array_both`, `std140_instance_array_both`, each `per_block_buffer` and `single_buffer`) |
 | 86 | UA1 | 759 | 759 | 0 | 0 | 0 | 760 | 31.5 s | 0 | none | DONE, all passed | 758 / 1 / 0 / 0 / 0 | 1 Fail to Pass (`uniform_api.random.83`) |
 | 87 | UA2 | 1014 | 1014 | 0 | 0 | 0 | 1014 | 42.9 s | 0 | none | DONE, all passed | 1014 / 0 / 0 / 0 / 0 | equal |
 | 88 | UA3 | 408 | 408 | 0 | 0 | 0 | 408 | 14.9 s | 0 | none | DONE, all passed | 408 / 0 / 0 / 0 / 0 | equal |
@@ -48,17 +48,55 @@ UA3  v3d_deqp: build fad0558a DONE, all passed: 408 cases, P 408 F 0 R 0 N 0 oth
 
 ## What is recorded, and what is not
 
-Only **UA1, UA2 and UA3 have a console and a tally** (`<LABEL>.console.txt`,
-`<LABEL>.tally.txt`, below). The leased serial console keeps 1 MiB; T17, UB1,
-UB2 and UB3 had scrolled out of it before their console could be saved to
-disk, so for those four the record is the image's own end-of-run summary, read
-from the console as it arrived (the `deqp: done:` / `deqp: summary:` lines, the
-end line above, `jobs:`, `slow jobs: 0 ...; MMU faults: 0; recoveries: 0; hung:
-none`, the case-order line), copied into the table above and the end lines; no
-file of theirs is committed. Their tallies and the T17 list of NotSupported
-cases are therefore not in this directory; a repeat of those four images
-would produce them (`tools/cts/pi4-session-tally.sh`). `cycles.txt` has the
-per-image sha256 and boot ids.
+**All seven images have a console and a tally** (`<LABEL>.console.txt`,
+`<LABEL>.tally.txt`, below). In the first run the leased serial console
+(1 MiB) dropped T17's, UB1's, UB2's and UB3's console before it could be saved
+to disk; only their end-of-run summary was read as it arrived (the table's
+first figures and the first four end lines above). Those four images were
+then run once more from the same commit (the repeat below), and each console
+was saved to disk as soon as its end line arrived, before the next cycle: the
+T17, UB1, UB2 and UB3 consoles and tallies in this directory are the repeat's.
+The repeat gives the same result as the first run, case for case in the
+counters: T17 432 Pass, 72 NotSupported (all 72 `ASTC not supported`, the
+`astc_8x8` and `astc_8x8_srgb` groups, 36 each), UB1 968, UB2 757 (755 of them
+in the mustpass), UB3 632, all with `complete=1`, `N cases begun, N with a
+result, 0 without`, 0 Fail, 0 GPU recoveries, 0 MMU faults, 0 slow jobs, no
+hung job. `cycles.txt` has the per-image sha256 and boot ids of both runs.
+
+The repeat's end lines:
+
+```
+T17  v3d_deqp: build fad0558a DONE, none failed: 504 cases, P 432 F 0 R 0 N 72 other 0   (504 cases in 39172 ms)
+UB1  v3d_deqp: build fad0558a DONE, all passed: 968 cases, P 968 F 0 R 0 N 0 other 0     (968 cases in 31574 ms)
+UB2  v3d_deqp: build fad0558a DONE, all passed: 757 cases, P 757 F 0 R 0 N 0 other 0     (757 cases in 39843 ms)
+UB3  v3d_deqp: build fad0558a DONE, all passed: 632 cases, P 632 F 0 R 0 N 0 other 0     (632 cases in 52223 ms)
+```
+
+## The repeat (T17, UB1, UB2, UB3)
+
+Built on another worker in a worktree of `fad0558a` (`git describe --always
+--dirty`: `fad0558a`), the same way as below (VK-GL-CTS 93bca01 with its
+externals, the gles3 stage 1 of `docs/es3/board-recipe-pi4.md` section 2 in
+285 s, then `DEQP_MODULE=gles3 tools/cts/pi4-deqp-images.sh
+tools/cts/pi4-gles3-tree.txt <dir> T17 UB1 UB2 UB3`: four `rc=0
+build=fad0558a` lines; every console prints `v3d_deqp: build fad0558a`). The
+images' sha256 are not the first run's: each image carries the absolute paths
+of the build (151 strings in T17 name the stage-1 directory or the Rust
+toolchain's sources, from assertion and panic messages), so the same commit
+built under other paths gives other bytes. Each repeat image was read back on
+the board equal to the sha256 built (`cycles.txt`). Four tryboot cycles, the
+steps of "The board" below in the same order. Before the first one the board
+again held a leftover `tryboot.txt` of an earlier session (it named a
+`yakogl-E.bin` that was not there, with an `hdmi_timings` line; the board had
+rebooted since); it was set to the one-newline stock before anything was
+staged. After the last cycle: Linux up (boot_id `85816105`), no
+`yakogl-*.bin`, `pi4run-*.bin` or `config-linux.txt` under `/boot/firmware`,
+`tryboot.txt` one newline (1 byte, read back), `config.txt` unchanged
+(sha256 `6ea8eaef...de46`, never written). Consoles were cut by the same rule
+(first line after `reboot: Restarting system` to the end line, CRs and NULs
+dropped); tallies by `tools/cts/pi4-session-tally.sh` (`T17: 432 pass, 0
+fail, 72 notsupported, 0 other`; UB1 968; UB2 755; UB3 632; UA1-UA3's
+tallies came out byte for byte as committed).
 
 ## The board
 
@@ -104,8 +142,10 @@ fail, 0 notsupported, 0 other`; UA2 1014; UA3 408).
 Every `.txt` starts with three `#` header lines (SPDX, then a title); the
 tally reads past them.
 
-- `UA1`, `UA2`, `UA3` `.console.txt`: the image's console, from the first line
-  after Linux's reboot to the `v3d_deqp: build fad0558a DONE ...` end line.
-- `UA1`, `UA2`, `UA3` `.tally.txt`: `pi4-session-tally.sh`.
+- `T17`, `UB1`, `UB2`, `UB3` (the repeat), `UA1`, `UA2`, `UA3` (the first
+  run) `.console.txt`: the image's console, from the first line after Linux's
+  reboot to the `v3d_deqp: build fad0558a DONE ...` end line.
+- the same seven `.tally.txt`: `pi4-session-tally.sh`.
 - `cycles.txt`: per image the sha256 of the image (also read back on the
-  board), the boot id of the Linux that came back and the end line.
+  board), the boot id of the Linux that came back and the end line; the first
+  run's seven lines, then the repeat's four.

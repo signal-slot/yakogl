@@ -1,0 +1,2653 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at fad0558a, 2026-11-21, image T17: UART console of the run, from the firmware's first line after Linux's reboot to the image's end line (README.md)
+  4.02 [sdcard] pieeprom.upd not found
+  4.03 [sdcard] recover4.elf not found
+  4.03 [sdcard] recovery.elf not found
+  4.61 Read start4.elf bytes  2299008 hnd 0x211ac
+  4.67 Read fixup4.dat bytes     5496 hnd 0x20bca
+  4.69 0x00d03114 0x00000000 0x00001fff
+  4.72 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  4.09 Starting start4.elf @ 0xfec00200 partition 1
+  4.21 XHCI-STOP
+  4.21 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  4.21 USBSTS 18
+  4.22 PCI0 reset
+  4.23 +
+
+MESS:00:00:04.243443:0: arasan: arasan_emmc_open
+MESS:00:00:04.245101:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.365330:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:04.378200:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:04.412470:0: boot-part: 1 fs-type: 0
+MESS:00:00:04.413883:0: boot-part: 1 fs-type: 3
+MESS:00:00:04.418267:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:04.582512:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:04.585340:0: brfs: File read: 164 bytes
+MESS:00:00:04.677808:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:04.682317:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:04.698371:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.164407:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.169953:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:05.178990:0: *** Restart logging
+MESS:00:00:05.180762:0: brfs: File read: 164 bytes
+MESS:00:00:05.258942:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.263975:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.278173:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.286355:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.290175:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:05.298934:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.304424:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:05.326254:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:05.341568:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:05.344859:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:05.386014:0: brfs: File read: 56249 bytes
+MESS:00:00:05.405431:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:05.470283:0: brfs: File read: 5971 bytes
+MESS:00:00:05.476732:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.517853:0: brfs: File read: 164 bytes
+MESS:00:00:05.521881:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:05.525017:0: Read command line from file 'cmdline.txt':
+MESS:00:00:05.530867:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:05.687457:0: brfs: File read: 145 bytes
+MESS:00:00:07.113573:0: brfs: File read: /mfs/sd/yakogl-T17.bin
+MESS:00:00:07.116392:0: Loaded 'yakogl-T17.bin' to 0x200000 size 0xffdf50
+MESS:00:00:07.122918:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:07.131693:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:07.138221:0: uart: Baud rate change done...
+MESS:00:00:07.140244:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 8388608 bytes, keep: 1048576 bytes
+v3d_deqp: build fad0558a
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.wrap.astc_8x8.*,dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.*,dEQP-GLES3.functional.texture.wrap.eac_r11.*,dEQP-GLES3.functional.texture.wrap.eac_rg11.*,dEQP-GLES3.functional.texture.wrap.eac_signed_r11.*,dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.*,dEQP-GLES3.functional.texture.wrap.etc1.*,dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.*,dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.*,dEQP-GLES3.functional.texture.wrap.etc2_rgb8.*,dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.*,dEQP-GLES3.functional.texture.wrap.etc2_srgb8.*,dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.*,dEQP-GLES3.functional.texture.wrap.rgba8.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 2629632 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_linear_divisible
+v3d_deqp: case #0 N 184ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_linear_not_divisible
+v3d_deqp: case #1 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_nearest_divisible
+v3d_deqp: case #2 N 30ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_nearest_not_divisible
+v3d_deqp: case #3 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_clamp_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_linear_divisible
+v3d_deqp: case #4 N 30ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_linear_not_divisible
+v3d_deqp: case #5 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_nearest_divisible
+v3d_deqp: case #6 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_nearest_not_divisible
+v3d_deqp: case #7 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_mirror_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_linear_divisible
+v3d_deqp: case #8 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_linear_not_divisible
+v3d_deqp: case #9 N 30ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_nearest_divisible
+v3d_deqp: case #10 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_nearest_not_divisible
+v3d_deqp: case #11 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.clamp_repeat_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_linear_divisible
+v3d_deqp: case #12 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_linear_not_divisible
+v3d_deqp: case #13 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_nearest_divisible
+v3d_deqp: case #14 N 30ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_nearest_not_divisible
+v3d_deqp: case #15 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_clamp_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_linear_divisible
+v3d_deqp: case #16 N 30ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_linear_not_divisible
+v3d_deqp: case #17 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_nearest_divisible
+v3d_deqp: case #18 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_nearest_not_divisible
+v3d_deqp: case #19 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_mirror_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_linear_divisible
+v3d_deqp: case #20 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_linear_not_divisible
+v3d_deqp: case #21 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_divisible
+v3d_deqp: case #22 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_not_divisible
+v3d_deqp: case #23 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_linear_divisible
+v3d_deqp: case #24 N 30ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_linear_not_divisible
+v3d_deqp: case #25 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_nearest_divisible
+v3d_deqp: case #26 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_nearest_not_divisible
+v3d_deqp: case #27 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_clamp_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_linear_divisible
+v3d_deqp: case #28 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_linear_not_divisible
+v3d_deqp: case #29 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_nearest_divisible
+v3d_deqp: case #30 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_nearest_not_divisible
+v3d_deqp: case #31 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_mirror_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_divisible
+v3d_deqp: case #32 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_not_divisible
+v3d_deqp: case #33 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_nearest_divisible
+v3d_deqp: case #34 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_nearest_not_divisible
+v3d_deqp: case #35 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8.repeat_repeat_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_linear_divisible
+v3d_deqp: case #36 N 31ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_linear_not_divisible
+v3d_deqp: case #37 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_nearest_divisible
+v3d_deqp: case #38 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_nearest_not_divisible
+v3d_deqp: case #39 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_clamp_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_linear_divisible
+v3d_deqp: case #40 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_linear_not_divisible
+v3d_deqp: case #41 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_nearest_divisible
+v3d_deqp: case #42 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_nearest_not_divisible
+v3d_deqp: case #43 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_mirror_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_linear_divisible
+v3d_deqp: case #44 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_linear_not_divisible
+v3d_deqp: case #45 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_nearest_divisible
+v3d_deqp: case #46 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_nearest_not_divisible
+v3d_deqp: case #47 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.clamp_repeat_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_linear_divisible
+v3d_deqp: case #48 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_linear_not_divisible
+v3d_deqp: case #49 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_nearest_divisible
+v3d_deqp: case #50 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_nearest_not_divisible
+v3d_deqp: case #51 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_clamp_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_linear_divisible
+v3d_deqp: case #52 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_linear_not_divisible
+v3d_deqp: case #53 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_nearest_divisible
+v3d_deqp: case #54 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_nearest_not_divisible
+v3d_deqp: case #55 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_mirror_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_linear_divisible
+v3d_deqp: case #56 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_linear_not_divisible
+v3d_deqp: case #57 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_nearest_divisible
+v3d_deqp: case #58 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_nearest_not_divisible
+v3d_deqp: case #59 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.mirror_repeat_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_linear_divisible
+v3d_deqp: case #60 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_linear_not_divisible
+v3d_deqp: case #61 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_nearest_divisible
+v3d_deqp: case #62 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_nearest_not_divisible
+v3d_deqp: case #63 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_clamp_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_linear_divisible
+v3d_deqp: case #64 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_linear_not_divisible
+v3d_deqp: case #65 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_nearest_divisible
+v3d_deqp: case #66 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_nearest_not_divisible
+v3d_deqp: case #67 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_mirror_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_divisible
+v3d_deqp: case #68 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_not_divisible
+v3d_deqp: case #69 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_linear_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_divisible
+v3d_deqp: case #70 N 32ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_not_divisible'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_not_divisible
+v3d_deqp: case #71 N 33ms k2/6 c19880/19880 r0 dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.repeat_repeat_nearest_not_divisible
+  NotSupported (ASTC not supported)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_linear_npot'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 2629632, BPCA 0x00b99000 BPCS 2617344 CT0QMA 0x00b96000 CT0QMS 2629632, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_linear_npot
+v3d_deqp: case #72 P 127ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_linear_pot
+v3d_deqp: case #73 P 91ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_nearest_npot
+v3d_deqp: case #74 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_nearest_pot
+v3d_deqp: case #75 P 66ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_linear_npot
+v3d_deqp: case #76 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_linear_pot
+v3d_deqp: case #77 P 91ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_nearest_npot
+v3d_deqp: case #78 P 68ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_nearest_pot
+v3d_deqp: case #79 P 66ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_linear_npot
+v3d_deqp: case #80 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_linear_pot
+v3d_deqp: case #81 P 91ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_nearest_npot
+v3d_deqp: case #82 P 68ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_nearest_pot
+v3d_deqp: case #83 P 66ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_linear_npot
+v3d_deqp: case #84 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_linear_pot
+v3d_deqp: case #85 P 92ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_nearest_npot
+v3d_deqp: case #86 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_nearest_pot
+v3d_deqp: case #87 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_linear_npot
+v3d_deqp: case #88 P 94ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_linear_pot
+v3d_deqp: case #89 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_nearest_npot
+v3d_deqp: case #90 P 69ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_nearest_pot
+v3d_deqp: case #91 P 68ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_linear_npot
+v3d_deqp: case #92 P 94ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_linear_pot
+v3d_deqp: case #93 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_nearest_npot
+v3d_deqp: case #94 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_nearest_pot
+v3d_deqp: case #95 P 68ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_linear_npot
+v3d_deqp: case #96 P 92ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_linear_pot
+v3d_deqp: case #97 P 92ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_nearest_npot
+v3d_deqp: case #98 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_nearest_pot
+v3d_deqp: case #99 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_linear_npot
+v3d_deqp: case #100 P 94ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_linear_pot
+v3d_deqp: case #101 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_nearest_npot
+v3d_deqp: case #102 P 68ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_nearest_pot
+v3d_deqp: case #103 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_linear_npot
+v3d_deqp: case #104 P 94ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_linear_pot
+v3d_deqp: case #105 P 93ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_nearest_npot
+v3d_deqp: case #106 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_nearest_pot
+v3d_deqp: case #107 P 67ms k2/10 c20141/20212 r0 dEQP-GLES3.functional.texture.wrap.eac_r11.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_linear_npot'..
+yakogl/v3d: tiled copies high-water 135168 of 16777216 bytes
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_linear_npot
+v3d_deqp: case #108 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_linear_pot
+v3d_deqp: case #109 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_nearest_npot
+v3d_deqp: case #110 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_nearest_pot
+v3d_deqp: case #111 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_linear_npot
+v3d_deqp: case #112 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_linear_pot
+v3d_deqp: case #113 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_nearest_npot
+v3d_deqp: case #114 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_nearest_pot
+v3d_deqp: case #115 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_linear_npot
+v3d_deqp: case #116 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_linear_pot
+v3d_deqp: case #117 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_nearest_npot
+v3d_deqp: case #118 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_nearest_pot
+v3d_deqp: case #119 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_linear_npot
+v3d_deqp: case #120 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_linear_pot
+v3d_deqp: case #121 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_nearest_npot
+v3d_deqp: case #122 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_nearest_pot
+v3d_deqp: case #123 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_linear_npot
+v3d_deqp: case #124 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_linear_pot
+v3d_deqp: case #125 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_nearest_npot
+v3d_deqp: case #126 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_nearest_pot
+v3d_deqp: case #127 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_linear_npot
+v3d_deqp: case #128 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_linear_pot
+v3d_deqp: case #129 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_nearest_npot
+v3d_deqp: case #130 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_nearest_pot
+v3d_deqp: case #131 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_linear_npot
+v3d_deqp: case #132 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_linear_pot
+v3d_deqp: case #133 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_nearest_npot
+v3d_deqp: case #134 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_nearest_pot
+v3d_deqp: case #135 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_linear_npot
+v3d_deqp: case #136 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_linear_pot
+v3d_deqp: case #137 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_nearest_npot
+v3d_deqp: case #138 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_nearest_pot
+v3d_deqp: case #139 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_linear_npot
+v3d_deqp: case #140 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_linear_pot
+v3d_deqp: case #141 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_nearest_npot
+v3d_deqp: case #142 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_nearest_pot
+v3d_deqp: case #143 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_rg11.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_linear_npot
+v3d_deqp: case #144 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_linear_pot
+v3d_deqp: case #145 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_nearest_npot
+v3d_deqp: case #146 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_nearest_pot
+v3d_deqp: case #147 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_linear_npot
+v3d_deqp: case #148 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_linear_pot
+v3d_deqp: case #149 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_nearest_npot
+v3d_deqp: case #150 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_nearest_pot
+v3d_deqp: case #151 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_linear_npot
+v3d_deqp: case #152 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_linear_pot
+v3d_deqp: case #153 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_nearest_npot
+v3d_deqp: case #154 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_nearest_pot
+v3d_deqp: case #155 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_linear_npot
+v3d_deqp: case #156 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_linear_pot
+v3d_deqp: case #157 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_nearest_npot
+v3d_deqp: case #158 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_nearest_pot
+v3d_deqp: case #159 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_linear_npot
+v3d_deqp: case #160 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_linear_pot
+v3d_deqp: case #161 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_nearest_npot
+v3d_deqp: case #162 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_nearest_pot
+v3d_deqp: case #163 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_linear_npot
+v3d_deqp: case #164 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_linear_pot
+v3d_deqp: case #165 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_nearest_npot
+v3d_deqp: case #166 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_nearest_pot
+v3d_deqp: case #167 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_linear_npot
+v3d_deqp: case #168 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_linear_pot
+v3d_deqp: case #169 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_nearest_npot
+v3d_deqp: case #170 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_nearest_pot
+v3d_deqp: case #171 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_linear_npot
+v3d_deqp: case #172 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_linear_pot
+v3d_deqp: case #173 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_nearest_npot
+v3d_deqp: case #174 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_nearest_pot
+v3d_deqp: case #175 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_linear_npot
+v3d_deqp: case #176 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_linear_pot
+v3d_deqp: case #177 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_nearest_npot
+v3d_deqp: case #178 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_nearest_pot
+v3d_deqp: case #179 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_r11.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_linear_npot
+v3d_deqp: case #180 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_linear_pot
+v3d_deqp: case #181 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_nearest_npot
+v3d_deqp: case #182 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_nearest_pot
+v3d_deqp: case #183 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_linear_npot
+v3d_deqp: case #184 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_linear_pot
+v3d_deqp: case #185 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_nearest_npot
+v3d_deqp: case #186 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_nearest_pot
+v3d_deqp: case #187 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_linear_npot
+v3d_deqp: case #188 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_linear_pot
+v3d_deqp: case #189 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_nearest_npot
+v3d_deqp: case #190 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_nearest_pot
+v3d_deqp: case #191 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_linear_npot
+v3d_deqp: case #192 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_linear_pot
+v3d_deqp: case #193 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_nearest_npot
+v3d_deqp: case #194 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_nearest_pot
+v3d_deqp: case #195 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_linear_npot
+v3d_deqp: case #196 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_linear_pot
+v3d_deqp: case #197 P 101ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_nearest_npot
+v3d_deqp: case #198 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_nearest_pot
+v3d_deqp: case #199 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_linear_npot
+v3d_deqp: case #200 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_linear_pot
+v3d_deqp: case #201 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_nearest_npot
+v3d_deqp: case #202 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_nearest_pot
+v3d_deqp: case #203 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_linear_npot
+v3d_deqp: case #204 P 101ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_linear_pot
+v3d_deqp: case #205 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_nearest_npot
+v3d_deqp: case #206 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_nearest_pot
+v3d_deqp: case #207 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_linear_npot
+v3d_deqp: case #208 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_linear_pot
+v3d_deqp: case #209 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_nearest_npot
+v3d_deqp: case #210 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_nearest_pot
+v3d_deqp: case #211 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_linear_npot
+v3d_deqp: case #212 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_linear_pot
+v3d_deqp: case #213 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_nearest_npot
+v3d_deqp: case #214 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_nearest_pot
+v3d_deqp: case #215 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.eac_signed_rg11.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_linear_npot
+v3d_deqp: case #216 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_linear_pot
+v3d_deqp: case #217 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_nearest_npot
+v3d_deqp: case #218 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_nearest_pot
+v3d_deqp: case #219 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_linear_npot
+v3d_deqp: case #220 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_linear_pot
+v3d_deqp: case #221 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_nearest_npot
+v3d_deqp: case #222 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_nearest_pot
+v3d_deqp: case #223 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_linear_npot
+v3d_deqp: case #224 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_linear_pot
+v3d_deqp: case #225 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_nearest_npot
+v3d_deqp: case #226 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_nearest_pot
+v3d_deqp: case #227 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_linear_npot
+v3d_deqp: case #228 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_linear_pot
+v3d_deqp: case #229 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_nearest_npot
+v3d_deqp: case #230 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_nearest_pot
+v3d_deqp: case #231 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_linear_npot
+v3d_deqp: case #232 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_linear_pot
+v3d_deqp: case #233 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_nearest_npot
+v3d_deqp: case #234 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_nearest_pot
+v3d_deqp: case #235 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_linear_npot
+v3d_deqp: case #236 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_linear_pot
+v3d_deqp: case #237 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_nearest_npot
+v3d_deqp: case #238 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_nearest_pot
+v3d_deqp: case #239 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_linear_npot
+v3d_deqp: case #240 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_linear_pot
+v3d_deqp: case #241 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_nearest_npot
+v3d_deqp: case #242 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_nearest_pot
+v3d_deqp: case #243 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_linear_npot
+v3d_deqp: case #244 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_linear_pot
+v3d_deqp: case #245 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_nearest_npot
+v3d_deqp: case #246 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_nearest_pot
+v3d_deqp: case #247 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_linear_npot
+v3d_deqp: case #248 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_linear_pot
+v3d_deqp: case #249 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_nearest_npot
+v3d_deqp: case #250 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_nearest_pot
+v3d_deqp: case #251 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc1.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_npot
+v3d_deqp: case #252 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot
+v3d_deqp: case #253 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_npot
+v3d_deqp: case #254 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_pot
+v3d_deqp: case #255 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_npot
+v3d_deqp: case #256 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_pot
+v3d_deqp: case #257 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_nearest_npot
+v3d_deqp: case #258 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_nearest_pot
+v3d_deqp: case #259 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_linear_npot
+v3d_deqp: case #260 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_linear_pot
+v3d_deqp: case #261 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_nearest_npot
+v3d_deqp: case #262 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_nearest_pot
+v3d_deqp: case #263 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_linear_npot
+v3d_deqp: case #264 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_linear_pot
+v3d_deqp: case #265 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_nearest_npot
+v3d_deqp: case #266 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_nearest_pot
+v3d_deqp: case #267 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_linear_npot
+v3d_deqp: case #268 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_linear_pot
+v3d_deqp: case #269 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_nearest_npot
+v3d_deqp: case #270 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_nearest_pot
+v3d_deqp: case #271 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_linear_npot
+v3d_deqp: case #272 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_linear_pot
+v3d_deqp: case #273 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_nearest_npot
+v3d_deqp: case #274 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_nearest_pot
+v3d_deqp: case #275 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_linear_npot
+v3d_deqp: case #276 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_linear_pot
+v3d_deqp: case #277 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_nearest_npot
+v3d_deqp: case #278 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_nearest_pot
+v3d_deqp: case #279 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_linear_npot
+v3d_deqp: case #280 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_linear_pot
+v3d_deqp: case #281 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_nearest_npot
+v3d_deqp: case #282 P 72ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_nearest_pot
+v3d_deqp: case #283 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_linear_npot
+v3d_deqp: case #284 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_linear_pot
+v3d_deqp: case #285 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_nearest_npot
+v3d_deqp: case #286 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_nearest_pot
+v3d_deqp: case #287 P 71ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_rgba8.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot
+v3d_deqp: case #288 P 109ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot
+v3d_deqp: case #289 P 109ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot
+v3d_deqp: case #290 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot
+v3d_deqp: case #291 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot
+v3d_deqp: case #292 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot
+v3d_deqp: case #293 P 110ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot
+v3d_deqp: case #294 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot
+v3d_deqp: case #295 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_npot
+v3d_deqp: case #296 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_pot
+v3d_deqp: case #297 P 110ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_npot
+v3d_deqp: case #298 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_pot
+v3d_deqp: case #299 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_npot
+v3d_deqp: case #300 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_pot
+v3d_deqp: case #301 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_npot
+v3d_deqp: case #302 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_pot
+v3d_deqp: case #303 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_npot
+v3d_deqp: case #304 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_pot
+v3d_deqp: case #305 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_npot
+v3d_deqp: case #306 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_pot
+v3d_deqp: case #307 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_npot
+v3d_deqp: case #308 P 113ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_pot
+v3d_deqp: case #309 P 112ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_npot
+v3d_deqp: case #310 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_pot
+v3d_deqp: case #311 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_npot
+v3d_deqp: case #312 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_pot
+v3d_deqp: case #313 P 110ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_npot
+v3d_deqp: case #314 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_pot
+v3d_deqp: case #315 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_npot
+v3d_deqp: case #316 P 113ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_pot
+v3d_deqp: case #317 P 112ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_npot
+v3d_deqp: case #318 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_pot
+v3d_deqp: case #319 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_npot
+v3d_deqp: case #320 P 113ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_pot
+v3d_deqp: case #321 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_npot
+v3d_deqp: case #322 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_pot
+v3d_deqp: case #323 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_linear_npot
+v3d_deqp: case #324 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_linear_pot
+v3d_deqp: case #325 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_nearest_npot
+v3d_deqp: case #326 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_nearest_pot
+v3d_deqp: case #327 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_linear_npot
+v3d_deqp: case #328 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_linear_pot
+v3d_deqp: case #329 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_nearest_npot
+v3d_deqp: case #330 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_nearest_pot
+v3d_deqp: case #331 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_linear_npot
+v3d_deqp: case #332 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_linear_pot
+v3d_deqp: case #333 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_nearest_npot
+v3d_deqp: case #334 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_nearest_pot
+v3d_deqp: case #335 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_linear_npot
+v3d_deqp: case #336 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_linear_pot
+v3d_deqp: case #337 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_nearest_npot
+v3d_deqp: case #338 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_nearest_pot
+v3d_deqp: case #339 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_linear_npot
+v3d_deqp: case #340 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_linear_pot
+v3d_deqp: case #341 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_nearest_npot
+v3d_deqp: case #342 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_nearest_pot
+v3d_deqp: case #343 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_linear_npot
+v3d_deqp: case #344 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_linear_pot
+v3d_deqp: case #345 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_nearest_npot
+v3d_deqp: case #346 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_nearest_pot
+v3d_deqp: case #347 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_linear_npot
+v3d_deqp: case #348 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_linear_pot
+v3d_deqp: case #349 P 92ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_nearest_npot
+v3d_deqp: case #350 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_nearest_pot
+v3d_deqp: case #351 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_linear_npot
+v3d_deqp: case #352 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_linear_pot
+v3d_deqp: case #353 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_nearest_npot
+v3d_deqp: case #354 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_nearest_pot
+v3d_deqp: case #355 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_npot
+v3d_deqp: case #356 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_pot
+v3d_deqp: case #357 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_nearest_npot
+v3d_deqp: case #358 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_nearest_pot
+v3d_deqp: case #359 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+v3d_deqp: case #360 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+v3d_deqp: case #361 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+v3d_deqp: case #362 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+v3d_deqp: case #363 P 73ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+v3d_deqp: case #364 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+v3d_deqp: case #365 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+v3d_deqp: case #366 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+v3d_deqp: case #367 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+v3d_deqp: case #368 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+v3d_deqp: case #369 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+v3d_deqp: case #370 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+v3d_deqp: case #371 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+v3d_deqp: case #372 P 103ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+v3d_deqp: case #373 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+v3d_deqp: case #374 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+v3d_deqp: case #375 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+v3d_deqp: case #376 P 104ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+v3d_deqp: case #377 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+v3d_deqp: case #378 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+v3d_deqp: case #379 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+v3d_deqp: case #380 P 104ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+v3d_deqp: case #381 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+v3d_deqp: case #382 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+v3d_deqp: case #383 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+v3d_deqp: case #384 P 102ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+v3d_deqp: case #385 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+v3d_deqp: case #386 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+v3d_deqp: case #387 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+v3d_deqp: case #388 P 104ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+v3d_deqp: case #389 P 101ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+v3d_deqp: case #390 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+v3d_deqp: case #391 P 75ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+v3d_deqp: case #392 P 104ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+v3d_deqp: case #393 P 101ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+v3d_deqp: case #394 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+v3d_deqp: case #395 P 74ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_npot
+v3d_deqp: case #396 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_pot
+v3d_deqp: case #397 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_npot
+v3d_deqp: case #398 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_pot
+v3d_deqp: case #399 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_npot
+v3d_deqp: case #400 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_pot
+v3d_deqp: case #401 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_npot
+v3d_deqp: case #402 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_pot
+v3d_deqp: case #403 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_npot
+v3d_deqp: case #404 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_pot
+v3d_deqp: case #405 P 97ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_npot
+v3d_deqp: case #406 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_pot
+v3d_deqp: case #407 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_npot
+v3d_deqp: case #408 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_pot
+v3d_deqp: case #409 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_npot
+v3d_deqp: case #410 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_pot
+v3d_deqp: case #411 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_npot
+v3d_deqp: case #412 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_pot
+v3d_deqp: case #413 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_npot
+v3d_deqp: case #414 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_pot
+v3d_deqp: case #415 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_npot
+v3d_deqp: case #416 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_pot
+v3d_deqp: case #417 P 99ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_npot
+v3d_deqp: case #418 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_pot
+v3d_deqp: case #419 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_npot
+v3d_deqp: case #420 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_pot
+v3d_deqp: case #421 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_npot
+v3d_deqp: case #422 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_pot
+v3d_deqp: case #423 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_npot
+v3d_deqp: case #424 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_pot
+v3d_deqp: case #425 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_npot
+v3d_deqp: case #426 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_pot
+v3d_deqp: case #427 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_npot
+v3d_deqp: case #428 P 100ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_pot
+v3d_deqp: case #429 P 98ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_npot
+v3d_deqp: case #430 P 70ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_pot
+v3d_deqp: case #431 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+v3d_deqp: case #432 P 111ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+v3d_deqp: case #433 P 112ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+v3d_deqp: case #434 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+v3d_deqp: case #435 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+v3d_deqp: case #436 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+v3d_deqp: case #437 P 112ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+v3d_deqp: case #438 P 78ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+v3d_deqp: case #439 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+v3d_deqp: case #440 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+v3d_deqp: case #441 P 112ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+v3d_deqp: case #442 P 78ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+v3d_deqp: case #443 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+v3d_deqp: case #444 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+v3d_deqp: case #445 P 113ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+v3d_deqp: case #446 P 78ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+v3d_deqp: case #447 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+v3d_deqp: case #448 P 116ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+v3d_deqp: case #449 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+v3d_deqp: case #450 P 79ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+v3d_deqp: case #451 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+v3d_deqp: case #452 P 116ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+v3d_deqp: case #453 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+v3d_deqp: case #454 P 79ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+v3d_deqp: case #455 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+v3d_deqp: case #456 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+v3d_deqp: case #457 P 113ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+v3d_deqp: case #458 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+v3d_deqp: case #459 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+v3d_deqp: case #460 P 116ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+v3d_deqp: case #461 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+v3d_deqp: case #462 P 78ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+v3d_deqp: case #463 P 77ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+v3d_deqp: case #464 P 116ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+v3d_deqp: case #465 P 114ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+v3d_deqp: case #466 P 78ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+v3d_deqp: case #467 P 76ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_npot
+v3d_deqp: case #468 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_pot
+v3d_deqp: case #469 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_npot
+v3d_deqp: case #470 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_pot
+v3d_deqp: case #471 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_npot
+v3d_deqp: case #472 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_pot
+v3d_deqp: case #473 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_npot
+v3d_deqp: case #474 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_pot
+v3d_deqp: case #475 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_npot
+v3d_deqp: case #476 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_pot
+v3d_deqp: case #477 P 93ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot
+v3d_deqp: case #478 P 67ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_pot
+v3d_deqp: case #479 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_npot
+v3d_deqp: case #480 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_pot
+v3d_deqp: case #481 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_npot
+v3d_deqp: case #482 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_pot
+v3d_deqp: case #483 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_npot
+v3d_deqp: case #484 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_pot
+v3d_deqp: case #485 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_npot
+v3d_deqp: case #486 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_pot
+v3d_deqp: case #487 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_npot
+v3d_deqp: case #488 P 96ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_pot
+v3d_deqp: case #489 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot
+v3d_deqp: case #490 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_pot
+v3d_deqp: case #491 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_npot
+v3d_deqp: case #492 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_pot
+v3d_deqp: case #493 P 94ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_npot
+v3d_deqp: case #494 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_pot
+v3d_deqp: case #495 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_npot
+v3d_deqp: case #496 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_pot
+v3d_deqp: case #497 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot
+v3d_deqp: case #498 P 69ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_pot
+v3d_deqp: case #499 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_npot
+v3d_deqp: case #500 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_pot
+v3d_deqp: case #501 P 95ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot
+v3d_deqp: case #502 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_pot
+v3d_deqp: case #503 P 68ms k2/10 c20141/20389 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        432/504 (85.7%)
+  Failed:        0/504 (0.0%)
+  Not supported: 72/504 (14.3%)
+  Warnings:      0/504 (0.0%)
+  Waived:        0/504 (0.0%)
+deqp: done: 432 passed, 0 failed, 72 not supported, 0 warnings, complete=1
+deqp: summary: 504 cases begun, 504 with a result, 0 without
+v3d_deqp DONE, none failed: build fad0558a, filter 'dEQP-GLES3.functional.texture.wrap.astc_8x8.*,dEQP-GLES3.functional.texture.wrap.astc_8x8_srgb.*,dEQP-GL...
+  504 cases in 39172 ms, record at 39 s after boot, reset at ~250 s
+  totals: P 432 N 72  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 432 passed, 0 failed, 72 not supported, 0 warnings, complete=1
+  summary: 504 cases begun, 504 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 10, before #0 (first not passed) 0; slowest #0 184 ms
+  carve-out (KiB, of 48636): after #0 19880, last 20141, high-water 20389
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 864 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 20096256 bytes used now, 20879104 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 1749 calls, 80068 map reads (45 a call, at most 1153 in one); free runs 2, longest 29706496 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 864 jobs ended; emitted 18144, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  128 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  256 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+  384 PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x3371000, GPU VA 0x181000..0x3100000
+driver: ... 7 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  astc_8x8                                                   36 N36                    36x ASTC not supported
+  astc_8x8_srgb                                              36 N36                    36x ASTC not supported
+    0 N astc_8x8.clamp_clamp_linear_divisible            184ms k2/6 c19880/19880         ASTC not supported
+    1 N astc_8x8.clamp_clamp_linear_not_divisible        31ms k2/6 c19880/19880          ASTC not supported
+    2 N astc_8x8.clamp_clamp_nearest_divisible           30ms k2/6 c19880/19880          ASTC not supported
+    3 N astc_8x8.clamp_clamp_nearest_not_divisible       31ms k2/6 c19880/19880          ASTC not supported
+    4 N astc_8x8.clamp_mirror_linear_divisible           30ms k2/6 c19880/19880          ASTC not supported
+    5 N astc_8x8.clamp_mirror_linear_not_divisible       31ms k2/6 c19880/19880          ASTC not supported
+    6 N astc_8x8.clamp_mirror_nearest_divisible          31ms k2/6 c19880/19880          ASTC not supported
+    7 N astc_8x8.clamp_mirror_nearest_not_divisible      31ms k2/6 c19880/19880          ASTC not supported
+  ... 64 more not passed (the UART has every line)
+v3d_deqp: build fad0558a DONE, none failed: 504 cases, P 432 F 0 R 0 N 72 other 0
