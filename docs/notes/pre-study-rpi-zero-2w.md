@@ -166,6 +166,18 @@ Pi 4, 400, CM4, CM4S, `:32`); the default `kernel` there is `kernel7.img`
     (`vc4_irq.c`: `vc4_irq` `:203`, `vc4_overflow_mem_work` `:61-111`). The
     overflow memory is a 16 MB buffer in 512 KB slices (`vc4_v3d.c:237`
     `bin_bo_alloc`, `:240` size, `:291` slice size).
+    Read again for item 5: the handler first writes the whole `V3D_INTCTL`
+    value it read back to `V3D_INTCTL` (`vc4_irq.c:211,218`), then masks
+    `OUTOMEM`; the work item writes `V3D_BPOA` = the buffer's bus address +
+    slot × 512 KB but `V3D_BPOS` = the size of the **whole** 16 MB buffer
+    (`bo->base.base.size`, `:107`), not the slice's, so for any slot above 0
+    the binner is told it may run past the end of the buffer. Our driver core
+    writes the slice size (`driver/src/vc4/vc4_hw.c`, `vc4_overflow_give`);
+    whether the binner then raises `OUTOMEM` again at the slice's end is a
+    board reading (section 6, item 2). The old slice is not freed at once:
+    it goes to the running job's slots and is freed when that job ends
+    (`:85-103`). `OUTOMEM` is enabled only once the bin buffer exists
+    (`vc4_v3d.c:299-303`), `FLDONE | FRDONE` at install (`vc4_irq.c:272-275`).
   - Hang: a timer reads `V3D_CTnCA`; if neither thread moved, a work item
     resets (`vc4_gem.c` `vc4_hangcheck_elapsed` `:327-370`, `vc4_reset`
     `:290-313`). The reset is not a register write: it drops the runtime-PM
@@ -174,11 +186,26 @@ Pi 4, 400, CM4, CM4S, `:32`); the default `kernel` there is `kernel7.img`
     `V3D_VPMBASE` and re-enables the interrupts (`:384-399`); the power domain
     goes with it through the device's `power-domains` (Q3). The guide's `CTRSTA`
     bit (`bcm-guide` p. 85) is an unused alternative for one thread.
+    Read again for item 5: the timer runs every 100 ms (`vc4_gem.c:41-46`);
+    a job's last `CTnCA` reading starts at 0, so the first check after a
+    start is always progress and a hang is declared at the second check at
+    the earliest; only the threads of jobs present are compared (`:352-353`).
+    The suspend half of the cycle masks and clears the three interrupts
+    (`vc4_irq_disable`, `vc4_irq.c:289-293`, from `vc4_v3d.c:377`) before the
+    clock goes off; after the resume `vc4_irq_reset` clears them again and
+    enables all three, `OUTOMEM` included (`vc4_irq.c:343-352`).
   - Init: the only register `vc4_v3d_init_hw` writes is `V3D_VPMBASE = 0`
     ("take all the memory that would have been reserved for user QPU
     programs") (`vc4_v3d.c:162-171`, the write at `:170`). The guide explains
     why the field is small: user shaders can address only the first 64 rows of
-    the VPM (errata HW-2253, `bcm-guide` p. 108).
+    the VPM (errata HW-2253, `bcm-guide` p. 108). The rest of the first
+    set-up is in `vc4_v3d_bind` and the interrupt install, read for item 5:
+    after the `IDENT0` check `V3D_BPOA = 0`, `V3D_BPOS = 0` (`vc4_v3d.c:468-472`),
+    then `V3D_INTCTL = OUTOMEM | FLDONE | FRDONE` (`vc4_irq_prepare`,
+    `vc4_irq.c:255-258`) and `V3D_INTENA = FLDONE | FRDONE`
+    (`vc4_irq_enable`, `:272-275`). Linux's runtime resume writes `VPMBASE`
+    and `INTENA` before the identity check (`vc4_v3d.c:457`, `:461`); our core
+    checks first, so a block that is not a VC4 V3D is never written.
 - **Firmware needed by the GPU**: none. Mesa says it "makes no use of the
   closed source VPU firmware on the VideoCore IV block, instead talking
   directly to the GPU block from Linux" (`mesa:docs/drivers/vc4.rst:14-16`). The
@@ -243,7 +270,15 @@ Carries over unchanged:
   island (`repo:docs/notes/pi4-v3d-bringup.md:79-93`). On the Zero 2 W the
   device tree does not use that path for the V3D: its `v3d` node points at the
   firmware power domain (Q3), so this sequence is the fallback, not the
-  default.
+  default. Read again for item 5: the GRAFX island's own power-on comes
+  first (`bcm2835_power_power_on`, `:217-285`, the parent domain of the V3D
+  one, `:617,669`): power switches with the inrush limit stepped from 3.5 to
+  20 mA, `PM_POWOK` awaited, electrical isolation off, memory repair
+  (`PM_MEMREP`, `PM_MRDONE`), functional isolation off. Its inrush loop does
+  not stop at the first `POWOK` (`:239-251`): all four steps are written and
+  the last wait decides; our fallback keeps that. The bridge's ID word
+  `0x62726467` ("BRDG", `ASB_AXI_BRDG_ID` `0x20`) is checked at probe
+  (`:638-639`), and every ASB write carries the PM password too (`:176`).
 
 Why `src/v3d` does not extend. The VC4 column is read from Mesa; the V3D
 column is what the repository's own V3D notes say.
@@ -307,7 +342,8 @@ Read in `zephyr:` (4.4.99):
   (`zephyr:dts/arm64/nxp/nxp_mimx8mp_a53.dtsi`).
 - **What the GPU and display need**, from the Linux sources above and the Pi 4
   work: the mailbox (`0x7e00b880`, `0x3f00b880` in ARM space) for the V3D
-  clock (set-rate tag `0x00038002`, `raspberrypi-firmware.h:79`) and the
+  clock (`SET_CLOCK_STATE` `0x00038001` to switch it, `SET_CLOCK_RATE`
+  `0x00038002` for its rate, `raspberrypi-firmware.h:78-79`; Q3) and the
   framebuffer tags; the power domain (the firmware's domain 11, binding index
   10, `SET_DOMAIN_STATE` `0x00038030`, or the PM/ASB sequence); the V3D
   register block (`0x3f..` alias of bus `0x7ec00000`, i.e. ARM `0x3fc00000`);
@@ -391,7 +427,18 @@ The three things to try on day one, in order:
    the firmware for the V3D clock and power domain (Q3), read `V3D_IDENT0` (expected `0x02443356`: `(2 << 24) | 'V' | '3' << 8 | 'D' << 16`
    from `vc4_regs.h:37-41`), `IDENT1`, `IDENT2`, and try the PM/ASB reset.
    Measures: the block is where the dts says; the interrupt line; the cache
-   alias.
+   alias. With item 5's core (`driver/src/vc4`) the session also reads:
+   `GET_DOMAIN_STATE {11, ~0}` and `PM_GRAFX` (`PM_POWUP`, `PM_V3DRSTN`) at
+   the first instruction, before anything is switched (Q3: is the island on,
+   and does the firmware answer the new domain interface); which of the two
+   power implementations brings `IDENT0` up (`vc4_power_fw_on` or
+   `vc4_power_pm_on`), and the V3D rate the firmware reports;
+   `CTnCS` after a list ends (`CTRUN` clear: the core refuses to start a
+   thread whose `CTRUN` reads set, from the guide's rule, not from Linux);
+   whether the binner raises `OUTOMEM` again when a 512 KB overflow slice
+   given with `V3D_BPOS` = 512 KB runs out (Linux writes 16 MB there,
+   section 2); and, once a list can hang on purpose, whether `CTRSTA` alone
+   recovers the thread (the thread reset) or only the power cycle does.
 3. **First clear, then first triangle.** A binner list with one clear (a tile
    buffer clear and store to a firmware framebuffer, no shader), then one
    triangle with a fixed shader set from `vc4_shc`. Measures: the clear colour
@@ -501,10 +548,27 @@ An unknown stays an unknown. Each is a question with what would answer it.
     finding (the firmware leaves the island on, `repo:docs/notes/pi4-v3d-bringup.md:79-93`)
     may or may not carry over.
   - Day-one order (section 6): read `V3D_SCRATCH` and `V3D_IDENT0` first; if the
-    block does not answer, `SET_DOMAIN_STATE` for domain 11 and `SET_CLOCK_RATE`
-    (`0x00038002`) for clock 5 through the property mailbox; the PM/ASB
-    sequence of section 3 last. What the board answers is the state of the
-    island and the V3D clock rate at the first instruction of our image.
+    block does not answer, `SET_DOMAIN_STATE` for domain 11 and then the V3D
+    clock through the property mailbox; the PM/ASB sequence of section 3
+    last. What the board answers is the state of the island and the V3D
+    clock rate at the first instruction of our image.
+  - Correction (item 5, read at the tag): Linux switches the V3D clock **on**
+    with `SET_CLOCK_STATE` (`0x00038001`) `{5, 1, 0}`, not with
+    `SET_CLOCK_RATE`: `clk_prepare_enable` in `vc4_v3d_runtime_resume`
+    (`vc4_v3d.c:390`) is `raspberrypi_fw_prepare`
+    (`linux:drivers/clk/bcm/clk-raspberrypi.c:289-304`), off is
+    `raspberrypi_fw_unprepare` (`:306-319`). `SET_CLOCK_RATE` (`0x00038002`)
+    only sets the rate: the V3D clock is `maximize` (`:137-140`), so at
+    registration Linux reads `GET_MAX_CLOCK_RATE` and sets the clock to it
+    when it runs slower (`:357-400`). Every clock tag carries three words
+    `{id, value, 0}` (`struct raspberrypi_firmware_prop`, `:184-188`); the
+    domain tag two, `{domain, state}`. The `GET_DOMAIN_STATE` probe asks for
+    `RPI_POWER_DOMAIN_ARM` (22, `raspberrypi-power.h:34`) with state `~0` and
+    treats an unchanged word as "no such tag" (`raspberrypi-power.c:145-159`).
+    `driver/src/vc4/vc4_power.c` sends, for on: `SET_DOMAIN_STATE {11, 1}`,
+    optionally `GET_MAX_CLOCK_RATE` and `SET_CLOCK_RATE`, then
+    `SET_CLOCK_STATE {5, 1, 0}`; for off the two switches in reverse; and
+    `GET_DOMAIN_STATE {11, ~0}` reads the island's state for day one.
 - **Q4. What is the interrupt route for the V3D line and the timer?** Answered
   from the two irqchip drivers and the ARM-local document. It is the first
   non-GIC arm64 interrupt controller in this project, but a small one.
@@ -592,7 +656,13 @@ An unknown stays an unknown. Each is a question with what would answer it.
     (`repo:driver/zephyr/lib/board/rpi4/rpi_mbox.c:18-25`), so for the Zero 2 W
     only the base changes: ARM `0x3f00b880` instead of `0xfe00b880`. The name
     `brcm,bcm2711-mbox` is Zephyr's own binding name. Zephyr's `rpi_fw` was not
-    re-read in this pass.
+    re-read in this pass. Item 5 made that change: `rpi_mbox.c` takes
+    `CONFIG_SOC_BCM2710` for base `0x3f00b880` with the `0xc0000000` bus
+    alias of `bcm2837.dtsi:10`. The symbol is upstream Zephyr's
+    (`zephyr-main:soc/brcm/bcm2710/Kconfig.soc`, `SOC_BCM2710`, section 9);
+    the workspace pin does not have that SoC yet, and either way of item 4
+    brings it. `tools/vc4/hw_mock_test.c` runs `rpi_mbox.c` so built against
+    a model of the property channel.
   - Interrupt: bank 0 irq 1 of `intc` (`bcm283x.dtsi:103`); the Pi 4 override is a
     GIC SPI. With polling, as `rpi_mbox.c` does, neither matters.
 - **Q7. What does the Pi 3 family firmware need on the card besides
@@ -690,7 +760,7 @@ week or more in units of that port, not calendar promises.
 | 2 | QPU ISA model, encoder, decoder, round trip (`src/shaderc/online/vc4/`) | M | round trip over the corpus and `vc4_qpu_disasm.c` vectors |
 | 3 | Packet and record encoders for binner and render lists; golden test | M | byte equality with item 1 |
 | 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only. **2026-11-20: upstream Zephyr has both (section 9); the item is now how our workspace gets them** | M | image builds in a gate row |
-| 5 | Driver: mailbox clock and power (the Pi 4's `rpi_mbox.c` with base `0x3f00b880`, Q6), reset, list start, interrupts (Q4), overflow memory, hang reset, mock test | M | host mock test; day-one checks 1 and 2 |
+| 5 | Driver: mailbox clock and power (the Pi 4's `rpi_mbox.c` with base `0x3f00b880`, Q6), reset, list start, interrupts (Q4), overflow memory, hang reset, mock test. **Host part done**: `driver/src/vc4/` (`vc4_regs.h`, `vc4.h`, `vc4_hw.c`: identity, init, the two cache clears, list start under the guide's stopped-thread rule, the interrupt decisions, overflow slices with `OUTOMEM` handled as level-like, the hang check, the reset choice with Linux's power cycle and the guide's `CTRSTA` thread reset; `vc4_power.c`: the firmware implementation over `rpi_mbox_tag` and the PM/ASB fallback; `vc4_bin_range_pick`, the 256 MB rule as a pure function), every register access through `struct vc4_io` (no Zephyr in the core); `rpi_mbox.c` built for `CONFIG_SOC_BCM2710`; `tools/vc4/hw_mock_test.c` (run by `tools/vc4/hw_mock.sh`, gate row `vc4 hw_mock_test`, scope `vc4`): one frame, an out-of-memory during binning, a dry pool, hangs while rendering and binning with both resets, a wrong `IDENT0`, both power paths. No Zephyr glue and no interrupt-controller code (item 4); what stays for the board is section 6 item 2 | M | host mock test; day-one checks 1 and 2 |
 | 6 | Board day one: UART, identity, clear, triangle with Mesa's own shaders | S (board) | section 6 |
 | 7 | Compiler: select, schedule, allocate for FS/VS/CS, uniform stream, VPM I/O, SFU; no 32-bit multiply, no divide | L | corpus words vs `vc4_shc`; QPU sim; gl_test shader cases |
 | 8 | Back end `src/vc4`: draw, state, clears, depth and stencil, blend in the FS, cull, point and line variants, scissor | L | gl_test sweep |
