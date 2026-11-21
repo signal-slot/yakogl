@@ -463,6 +463,77 @@ pub unsafe extern "C" fn yd_mp25_ltdc_wait_frame(cfg: *const YdMp25LtdcConfig, e
     rc(ltdc_of(&hw, c).and_then(|l| l.wait_frame(&hw, env)))
 }
 
+/// `GCR.CRCEN` on or off, as ltdc.c's `ltdc_crtc_set_crc_source` does.
+/// `layer3_secure` is the RIFSC's answer for layer 3 (ltdc.c drops the CRC
+/// then): switching on is `-EINVAL`. `-ENODEV` where the version has no CRC.
+pub(crate) fn ltdc_crc_enable_with(m: &impl Mmio, c: &YdMp25LtdcConfig, on: bool, layer3_secure: bool) -> i32 {
+    rc(ltdc_of(m, c).and_then(|l| l.crc_enable(m, on, layer3_secure)))
+}
+
+/// Skip `CRC_SKIP_FRAMES` frames (`ltdc_irq_thread` drops them), wait for one
+/// more and read `CCRCR`. `-ENODEV` without a CRC unit, `-EINVAL` while the
+/// CRC is switched off, `-ETIMEDOUT` when no frame comes.
+pub(crate) fn ltdc_frame_crc_with(m: &impl Mmio, env: &impl Env, c: &YdMp25LtdcConfig) -> Result<u32, i32> {
+    let l = ltdc_of(m, c)?;
+    if !l.has_crc() {
+        return Err(-ENODEV);
+    }
+    if m.read32(c.base + ltdc::GCR as usize) & ltdc::GCR_CRCEN == 0 {
+        return Err(-EINVAL);
+    }
+    for _ in 0..ltdc::CRC_SKIP_FRAMES {
+        l.wait_frame(m, env)?;
+    }
+    l.frame_crc(m, env)
+}
+
+/// Frame CRC on or off (`GCR.CRCEN`; nothing else changes). `on` and
+/// `layer3_secure` are booleans (0 / non-zero). `-ENODEV`: no CRC unit in this
+/// version; `-EINVAL`: switching on with a secure layer 3, or a null pointer.
+///
+/// # Safety
+/// `cfg`, `data` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_crc_enable(
+    cfg: *const YdMp25LtdcConfig,
+    data: *mut YdMp25LtdcData,
+    on: u8,
+    layer3_secure: u8,
+) -> i32 {
+    if cfg.is_null() || data.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    unsafe { ltdc_crc_enable_with(&port(), &*cfg, on != 0, layer3_secure != 0) }
+}
+
+/// The CRC of a frame: waits `CRC_SKIP_FRAMES` frames and one more, then
+/// stores `CCRCR` in `*out_crc` (untouched on an error). `-ENODEV` (no CRC
+/// unit), `-EINVAL` (CRC off, which a secure layer 3 always leaves it, or a
+/// null pointer), `-ETIMEDOUT` (no frame).
+///
+/// # Safety
+/// `cfg`, `env`, `out_crc` valid; `cfg->base` mapped.
+#[no_mangle]
+pub unsafe extern "C" fn yd_mp25_ltdc_frame_crc(
+    cfg: *const YdMp25LtdcConfig,
+    env: *const YdEnv,
+    out_crc: *mut u32,
+) -> i32 {
+    if cfg.is_null() || env.is_null() || out_crc.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    match unsafe { ltdc_frame_crc_with(&port(), &*env, &*cfg) } {
+        Ok(v) => {
+            // SAFETY: as above.
+            unsafe { *out_crc = v };
+            0
+        }
+        Err(e) => e,
+    }
+}
+
 /// `ISR`, read and written back to `ICR` (`ltdc_irq`); kept in `data->isr`.
 /// Bits: 0 line, 1 FIFO underrun warning, 2 transfer error, 6 FIFO
 /// underrun error. 0 when the block does not probe.
@@ -1843,6 +1914,96 @@ mod tests {
         // up again on the same models: the same end state
         let again = bring_up(&m, &e, 4);
         assert_running(&m, &again, 4);
+    }
+
+    /// The frame CRC through the extern entry points on the display model:
+    /// refused until enabled, stable over reads, follows the scanned buffer.
+    #[test]
+    fn crc_entry_points_on_the_model() {
+        let soc = Soc::new();
+        let (c, _adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let m = Mp25Display::new();
+        let a: Vec<u32> = (0..64).collect();
+        let b: Vec<u32> = (0..64).rev().collect();
+        m.load_fb(FB, &a);
+        m.load_fb(FB + 0x1000, &b);
+        let mut ch = bring_up(&m, &e, 4);
+        let mut crc = 0xdead_beefu32;
+        // SAFETY: locals.
+        with_display(&m, || unsafe {
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), -EINVAL);
+            assert_eq!(crc, 0xdead_beef);
+            assert_eq!(yd_mp25_ltdc_crc_enable(&LTDC_CFG, &mut ch.ld, 1, 0), 0);
+            assert_eq!(m.ltdc_reg(ltdc::GCR) & ltdc::GCR_CRCEN, ltdc::GCR_CRCEN);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), 0);
+            let first = crc;
+            assert_ne!(first, 0);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), 0);
+            assert_eq!(crc, first, "stable for the same buffer");
+            assert_eq!(yd_mp25_ltdc_set_fb(&LTDC_CFG, &mut ch.ld, &e, FB + 0x1000), 0);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), 0);
+            assert_ne!(crc, first, "a different pattern");
+            assert_eq!(yd_mp25_ltdc_set_fb(&LTDC_CFG, &mut ch.ld, &e, FB), 0);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), 0);
+            assert_eq!(crc, first);
+            // off again: refused
+            assert_eq!(yd_mp25_ltdc_crc_enable(&LTDC_CFG, &mut ch.ld, 0, 0), 0);
+            assert_eq!(m.ltdc_reg(ltdc::GCR) & ltdc::GCR_CRCEN, 0);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), -EINVAL);
+            // a secure layer 3: no CRC source, the read stays refused
+            assert_eq!(yd_mp25_ltdc_crc_enable(&LTDC_CFG, &mut ch.ld, 1, 1), -EINVAL);
+            assert_eq!(m.ltdc_reg(ltdc::GCR) & ltdc::GCR_CRCEN, 0);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, &mut crc), -EINVAL);
+        });
+        assert_eq!(m.violations(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn crc_model_reads_zero_unless_running_and_old_hardware_is_refused() {
+        let m = Mp25Display::new();
+        m.load_fb(FB, &[1, 2, 3]);
+        let soc = Soc::new();
+        let (c, _adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let mut d = YdMp25LtdcData::default();
+        // SAFETY: locals.
+        with_display(&m, || unsafe {
+            // CRCEN set, LTDC not running: CCRCR reads 0
+            assert_eq!(yd_mp25_ltdc_crc_enable(&LTDC_CFG, &mut d, 1, 0), 0);
+            assert_eq!(m.read32(LTDC + ltdc::CCRCR as usize), 0);
+        });
+        // an LTDC version without the CRC unit (the MP13's 0x040000)
+        let mut img = vec![0u32; 0x400 / 4];
+        img[(ltdc::IDR / 4) as usize] = 0x0004_0000;
+        img[(ltdc::GC2R / 4) as usize] = 3 << 4;
+        img[(ltdc::LCR / 4) as usize] = 2;
+        let cfg = YdMp25LtdcConfig { base: img.as_mut_ptr() as usize, ..LTDC_CFG };
+        let mut crc = 7u32;
+        // SAFETY: `img` is live, 0x400 bytes.
+        unsafe {
+            let r = yd_mp25_ltdc_crc_enable(&cfg, &mut d, 1, 0);
+            assert!(r < 0, "{r}");
+            assert!(yd_mp25_ltdc_frame_crc(&cfg, &e, &mut crc) < 0);
+        }
+        assert_eq!(crc, 7);
+    }
+
+    #[test]
+    fn crc_null_pointers_are_einval() {
+        let soc = Soc::new();
+        let (c, _adv) = rig(&soc, Adv7535Config::default());
+        let e = env(&c);
+        let mut d = YdMp25LtdcData::default();
+        let mut crc = 0u32;
+        // SAFETY: nulls are the point; the rest are locals.
+        unsafe {
+            assert_eq!(yd_mp25_ltdc_crc_enable(core::ptr::null(), &mut d, 1, 0), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_crc_enable(&LTDC_CFG, core::ptr::null_mut(), 1, 0), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_crc(core::ptr::null(), &e, &mut crc), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, core::ptr::null(), &mut crc), -EINVAL);
+            assert_eq!(yd_mp25_ltdc_frame_crc(&LTDC_CFG, &e, core::ptr::null_mut()), -EINVAL);
+        }
     }
 
     #[test]

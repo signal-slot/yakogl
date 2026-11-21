@@ -40,6 +40,13 @@
 //! shadow when the register is written or in the copy a reload takes over;
 //! the timing registers (`SSCR`..`TWCR`) written with `LTDCEN` high.
 //!
+//! **The frame CRC** (`CCRCR`, 0x7c) is a model, not ST's algorithm (which is
+//! undocumented): FNV-1a over the 32-bit pixels of the buffer loaded with
+//! [`Mp25Display::load_fb`] at the active layer-1 `CFBAR` (0 when none is
+//! loaded there). It reads as that value only while `GCR.CRCEN` and
+//! `GCR.LTDCEN` are both set, else 0. It follows the active copy, so a new
+//! address counts from its reload. No ordering rule is attached to it.
+//!
 //! Status as the block shows it: `LTDC_IDR` 0x040101, `LCR` 2 layers, `GC2R`
 //! a 64-bit bus; `ISR.LIF` set while `LTDCEN`; the DSI `VERSION` 1.41;
 //! `PHY_STATUS` `PHY_LOCK` and the clock lane's stop state follow the rules
@@ -99,6 +106,8 @@ struct State {
     /// The layer registers the pixel pipeline uses (taken at a reload).
     layer_active: BTreeMap<u32, u32>,
     reload_pending: bool,
+    /// Buffers the CRC model reads, by physical address.
+    fb_mem: BTreeMap<u32, Vec<u32>>,
     violations: Vec<String>,
 }
 
@@ -226,6 +235,13 @@ impl State {
         self.ltdc.remove(&l::SRCR);
     }
 
+    /// The model CRC of the layer-1 buffer in the active copy.
+    fn model_crc(&self) -> u32 {
+        let base = self.layer_active.get(&L1CFBAR).copied().unwrap_or(0);
+        let Some(px) = self.fb_mem.get(&base) else { return 0 };
+        px.iter().flat_map(|p| p.to_le_bytes()).fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193))
+    }
+
     fn ltdc_read(&mut self, off: u32) -> u32 {
         match off {
             l::IDR => l::HWVER_40101,
@@ -234,6 +250,14 @@ impl State {
             l::ISR => {
                 if self.ltdc_get(l::GCR) & l::GCR_LTDCEN != 0 {
                     l::INT_LINE
+                } else {
+                    0
+                }
+            }
+            l::CCRCR => {
+                let gcr = self.ltdc_get(l::GCR);
+                if gcr & l::GCR_CRCEN != 0 && gcr & l::GCR_LTDCEN != 0 {
+                    self.model_crc()
                 } else {
                     0
                 }
@@ -251,7 +275,7 @@ impl State {
 
     fn ltdc_write(&mut self, off: u32, v: u32) {
         match off {
-            l::IDR | l::LCR | l::GC2R | l::ISR => {
+            l::IDR | l::LCR | l::GC2R | l::ISR | l::CCRCR => {
                 self.violate(format!("LTDC: write to read-only {off:#x}"));
             }
             l::ICR => {}
@@ -303,6 +327,12 @@ impl Mp25Display {
     /// A layer register as the pixel pipeline sees it (0 before a reload).
     pub fn ltdc_active(&self, off: u32) -> u32 {
         self.s.borrow().layer_active.get(&off).copied().unwrap_or(0)
+    }
+
+    /// Give the CRC model the pixels of the buffer at `phys` (below 4 GiB).
+    /// Replacing the pixels at the same address changes the CRC at once.
+    pub fn load_fb(&self, phys: u64, pixels: &[u32]) {
+        self.s.borrow_mut().fb_mem.insert(u32::try_from(phys).expect("fb below 4 GiB"), pixels.to_vec());
     }
 
     /// The PLL registers (`WPCR1`, `WRPCR0`, `WRPCR1`) after a commit.
