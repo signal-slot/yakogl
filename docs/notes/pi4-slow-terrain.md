@@ -526,6 +526,80 @@ wants them on one. `commit` reads the image's sha256 prefix (`dbcff325`,
   entries of the frame-10 `glmark2-jobs` line (`render` 7930 and 9352 us)
   are 74 % of the render sum.
 
+### Third run: the mark fix and the dead window clear (`e07d066a`)
+
+`e07d066a` is the integration tip of 2026-11-21 and is an ancestor of
+origin/main. It has `c6b16f71` (render-into mark cleared on free,
+pi4-target-mark-clear), `4255adf1` (a full pending clear stays pending
+across a framebuffer bind, pvr-dead-clear-kick), `24f30d7e` (the
+`glmark2-counters` line) and parse-fix. Neither fix had been measured on the
+board. Image: the GM image of `tools/cts/common-images.sh pi4`, built from
+`e07d066a` (`sample: build tree=e07d066a table=6c5b8a70`, not dirty), run
+with `tools/board.sh pi4 run <image> records/pi4 glmark2-e07d066a`. No
+runner patch was needed this time. Records:
+`records/pi4/20261121-0830-glmark2-e07d066a-4786beae/` (kept on the runner
+host, gitignored):
+
+```
+board.sh pi4 glmark2-e07d066a rc=0 verdict=done boot=tryboot row boot_verdict=complete result=record:GLMARK2 resets=0 record=594b1201,fc3f00c3,6184003f,00258320 back_after=435s unsupported=0
+```
+
+**terrain 34.776 ms a frame, 29 FPS** (`glmark2-frame` frame 34717 us over
+289 frames).
+
+| | `17e91019` | `e07d066a` |
+|---|---|---|
+| terrain FrameTime | 35.720 ms (28 FPS) | **34.776 ms (29 FPS)** |
+| gl / swap / frame us | 27374 / 8283 / 35659 | 26436 / 8278 / 34717 |
+| jobs a frame, end waited for | 9.0, 281 of 281 | **8.003** (2315 over 289), 289 of 289 |
+| `glmark2-jobs` frame 10 | 8 entries | 8 entries; 5 TFU jobs (806, 114, 113, 804, 804 us) 2.64 ms |
+| `glmark2-steps` sum | 111 us | 124 us |
+| TFU chains a frame | 5.0 | 4.986 |
+| `unknown` / `first-sample` / `image-store` a frame | 0 / 0 / 7.0 | 0.014 / 0.024 / 6.979 |
+| `level0-back`, `chain-back` (`rt.back`) | 0, 0 | 0 |
+| score, scenes, GL errors, resets | 196, 33 ran 0 failed, 0, 0 | 195, 33 ran 0 failed, 0, 0 |
+| shadow / refract | 7.342 / 17.247 ms | 7.359 / 17.276 ms |
+
+`glmark2-counters` printed (36 lines). Terrain's, a frame: `waits` 8.003,
+`wait.ns` 28.38 ms (`v3d_wait_time` a frame: 28.4 of the 34.7 ms is inside
+`wait_job`), `mip.queued` 4.986, `copy.image-store` 6.979, `rt.direct` 7.976,
+`rt.chains` 4.986, `tfu.jobs` 0.007, `tile.ns` 0/47.4 ms/0 over the run
+(0.16 ms a frame in the middle slot), `tiled.n` 0. The counters are a
+frame's average over the whole scene, so the "frame 1 to shadow frame 1"
+differences of the earlier table were not needed; `parse.py` (after
+parse-fix) read the FPS, the commit, the verdict and the counters line
+correctly on this console.
+
+**Measured gain against `17e91019`: 0.944 ms a frame (35.720 to 34.776 ms,
+2.6 %), all of it in `gl` (-938 us; swap -5 us).** Jobs a frame went 9.0 to
+8.003, as `v3d-terrain-gpu.md` candidate 3 predicted. The cause is the dead
+window clear: the job it made is gone, and the other eight are the same
+(`rt.direct`, TFU chains and `image-store` are unchanged to the first
+decimal). The mark fix (`c6b16f71`) is not the cause: the counters it could
+move (`unknown`, `first-sample`) were already flat, and they are flat now,
+as this note's "Candidate 1" entry expected (a frame within run-to-run
+spread of 35.7 ms from it alone). One run per image: the earlier pairs of
+runs of one commit differed by about 0.1 ms, so 0.94 ms is outside that
+spread, but a repeat was not run. The frame-10 render sum is 27.26 ms
+(the first entry `4394~` is marked `~`, its meaning was not checked here)
+against 23.49 ms printed for the earlier images; this was not reconciled.
+What is left is as in "What is left" above: 28.4 ms of the 34.7 ms is the
+CPU waiting in `wait_job` for eight jobs, so the frame is bound by the GPU
+work of the jobs (about 29 ms), not by CPU work. The CPU work outside the
+waits is about 6 ms.
+
+**gl_test case 220 (lodtime)**, image built from the same `e07d066a`
+(`tools/cts/common-images.sh --cases 220 pi4 ... GT`, `CONFIG_V3D_GL_TEST_CASE`),
+`records/pi4/20261121-0838-gltest220-e07d066a-df7fa4db/`, verdict
+`board.sh pi4 gltest220-e07d066a rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:gl_test_case resets=0 record=absent back_after=263s`.
+The three lines: `lodtime: LINEAR: 100 draws, 24 ms (0.24 ms a draw)`,
+`lodtime: LINEAR_MIPMAP_LINEAR: 100 draws, 24 ms (0.24 ms a draw)`,
+`lodtime: mipmap/linear time ratio 1.00`; case 220 PASS (the centre pixels
+agree, no GL error). The ratio is 1.00, not near 2: trilinear filtering
+costs nothing more on a 1:1 quad, so `v3d-terrain-gpu.md` candidate 1
+(up to 8.6 ms) is ruled out on this probe. (The image's console printed the
+case twice, the same figures both times.)
+
 ### How the console was captured (session-specific)
 
 connected's serial MCP server held the console bridge's one client for this
