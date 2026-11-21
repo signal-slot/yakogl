@@ -31,6 +31,15 @@ F10 (bad cmd_size), 11 hang ended by the watchdog; 0 no row matches.
                complete) is recorded and is the expected outcome; the case
                verdict is printed, not judged.
 
+The knob-on at-maximum wait line ('render: at maximum (list L, P pages),
+awaiting the firmware's partial render for up to 10 s'): under --expect pr a
+wait a partial render resolved (renders >= 1, no stop, recoveries 0) adds the
+note 'at-maximum wait resolved by partial render', and a stop cause 4 after
+the wait fails as 'at-maximum wait: firmware did not render partially
+(fallback: run C config, see docs/notes/pvr-pr-atmax.md)'. The same line in a
+--expect stop (knob-off) log fails as 'knob-off image printed the knob-on
+wait line'.
+
 The figures are the run's: the last 'render freelists' lines of the log (the
 run-end report). A log with several runs should be cut first.
 """
@@ -52,6 +61,12 @@ STATS_RE = re.compile(r"firmware UPDATE_STATS: partial renders (\d+), out of mem
 # 'render: stopped: <cause words> (list L, K KiB); no kick is waited ...' -
 # driver/rust/src/gpu/pvr/freelist.rs, stop(); words from stop_name().
 STOP_RE = re.compile(r"render: stopped: (.*?) \(list (\d+), (\d+) KiB\)")
+# 'render: at maximum (list L, P pages), awaiting the firmware's partial render
+# for up to 10 s' - driver/rust/src/gpu/pvr/render.rs, the knob-on at-maximum
+# wait: with the partial-render knob on this line takes the stop's place while
+# the firmware renders partially.
+ATMAX_RE = re.compile(r"render: at maximum \(list \d+, \d+ pages\), "
+                      r"awaiting the firmware's partial render for up to 10 s")
 # The cause numbers are board::record GPU_STOP_* (driver/rust/src/board/record.rs).
 STOP_CAUSES = (
     ("the parameter manager out of memory with its freelist at the maximum", 2),
@@ -66,11 +81,14 @@ RECORD_RE = re.compile(r"GPU_STOP \(\d+\) tag \d+: cause (\d+) ")
 
 def parse(text):
     """The log's facts: case verdicts, run-end figures, stop cause."""
-    f = {"cases": {}, "pr": None, "oom": None, "hwr": None, "grow": None, "stop": None}
+    f = {"cases": {}, "pr": None, "oom": None, "hwr": None, "grow": None, "stop": None,
+         "atmax": False}
     for line in text.splitlines():
         m = CASE_RE.search(line)
         if m:
             f["cases"][m.group(1)] = f["cases"][m.group(2)] = m.group(3)
+        if ATMAX_RE.search(line):
+            f["atmax"] = True
         m = GROW_RE.search(line)
         if m:
             f["grow"] = tuple(int(x) for x in m.groups()[:3])
@@ -181,10 +199,18 @@ def verdict(text, cases, expect):
             bad.append("GPU recoveries %d (want 0)" % f["hwr"])
         if f["stop"] is not None:
             bad.append("render stopped, cause %d" % f["stop"])
+        if f["atmax"]:
+            if f["stop"] is None and f["pr"] is not None and f["pr"] >= 1 and f["hwr"] == 0:
+                lines.append("pr-verdict: at-maximum wait resolved by partial render")
+            elif f["stop"] == 4:
+                bad.append("at-maximum wait: firmware did not render partially "
+                           "(fallback: run C config, see docs/notes/pvr-pr-atmax.md)")
     elif f["stop"] is None:
         bad.append("no 'render: stopped' line (want cause 2 or 4)")
     elif f["stop"] not in (2, 4):
         bad.append("stop cause %d (want 2 or 4)" % f["stop"])
+    if expect == "stop" and f["atmax"]:
+        bad.append("knob-off image printed the knob-on wait line")
     if bad or expect == "pr":
         lines.append("pr-verdict: class %d %s" % classify(text, f, cases))
     return lines, bad
@@ -222,6 +248,18 @@ STALL_UNMET = (SERIAL + "render: stall: frag[0] off=0 FENCE_PR ufo 0x00001000 ne
 TIMEOUT_LINES = (SERIAL + "render: fence 9 timeout (ufo=8) waiting on the test\n"
                  + SERIAL + "render: stall: frag ccb has nothing unread\n")
 FAIL_CASE = "gl_test: case 175 refusehang: FAIL\n"
+# The knob-on at-maximum wait line (pr-atmax-gate), and three logs carrying it:
+# one the partial render resolves, one followed by a stop cause 4, and a
+# knob-off log, which must never print it.
+ATMAX_LINE = (SERIAL + "render: at maximum (list 1, 512 pages), awaiting the firmware's "
+              "partial render for up to 10 s\n")
+LOG_ATMAX_PASS = ATMAX_LINE + LOG_PASS
+LOG_ATMAX_NOPR = (ATMAX_LINE + STOP_LINE % STOP_WORDS + "gl_test: case 175 refusehang: TIMEOUT\n"
+                  + GROW_LINE + STATS_LINE.replace("partial renders 1", "partial renders 0"))
+LOG_ATMAX_KNOBOFF = (ATMAX_LINE + STOP_LINE
+                     % "the parameter manager out of memory with its freelist at the maximum"
+                     + "gl_test: case 175 refusehang: TIMEOUT\n" + GROW_LINE
+                     + STATS_LINE.replace("partial renders 1", "partial renders 0"))
 
 
 def class_tests():
@@ -274,6 +312,13 @@ def selftest():
          "GPU recoveries 0 list 1 KiB 0\n" + GROW_LINE + STATS_LINE,
          ["refusehang"], "stop", 0, "stopped=cause2"),
         ("grow line", LOG_PASS, ["refusehang"], "pr", 0, "pr-verdict: grow requests 4 served 3 unserved 1"),
+        ("at-max wait resolved, expect pr", LOG_ATMAX_PASS, ["refusehang", "forcedpr"], "pr", 0,
+         "at-maximum wait resolved by partial render"),
+        ("at-max wait, firmware did not render partially", LOG_ATMAX_NOPR, ["refusehang"], "pr", 1,
+         "at-maximum wait: firmware did not render partially (fallback: run C config, "
+         "see docs/notes/pvr-pr-atmax.md)"),
+        ("at-max wait line in a knob-off log", LOG_ATMAX_KNOBOFF, ["refusehang"], "stop", 1,
+         "knob-off image printed the knob-on wait line"),
     ]
     cases += [("log for " + n, t, ["refusehang"], "pr", 0 if w.startswith("class 1 ") else 1, w)
               for n, t, w in class_tests()]

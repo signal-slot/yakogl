@@ -1,0 +1,5 @@
+[00:01:02.003,000] <inf> yakogl: render: at maximum (list 1, 512 pages), awaiting the firmware's partial render for up to 10 s
+[00:01:12.000,000] <inf> yakogl: render: stopped: a kick that did not complete in the stop's time (list 1, 0 KiB); no kick is waited for or taken from now on
+[00:01:12.050,000] <inf> yakogl: gl_test: case 175 refusehang: TIMEOUT
+[00:01:12.100,000] <inf> yakogl: render freelists: 4 grow requests, 3 served, 1 unserved, 100 KiB taken on demand; GPU recoveries 0 (HWR counter 0)
+[00:01:12.101,000] <inf> yakogl: render freelists: reserve refills refused 0 (0 KiB); firmware UPDATE_STATS: partial renders 0, out of memory 3, TA stores 0, 3D stores 1, CDM stores 0, TDM stores 0, other 0
