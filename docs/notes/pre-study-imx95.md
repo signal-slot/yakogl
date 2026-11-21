@@ -583,6 +583,11 @@ Day one, in order:
 | B2 | Our image through the hook (`BOARD_BOOT=uboot-mmc board.sh … run`): SCMI base protocol (agent name "AP-NS", protocol list), `PD_GPU` on, the GPU clocks, then **the GPU identity read by our code** (`mali::ident`) | `GPU_ID`, `CORE_FEATURES`, `SHADER_PRESENT`, `L2_FEATURES`, `TILER_FEATURES`, `MMU_FEATURES`, `COHERENCY_FEATURES` printed and stored in the record |
 | B3 | The firmware (the T6's Z3 path with the same file) | **the firmware's first answer**: the GLB version (1.5.0 expected, since the bytes are the T6's) and the CS features word |
 
+The images for B1 to B3, each with one verdict line, and B1's Linux reading
+are in `tools/probes/verdin_imx95/` (its README: `imx95_wdog` first, then
+`imx95_scmi`, `imx95_ident`, `imx95_fw`; `linux_day_one/` for B1's Linux
+half).
+
 Then the measurements that say the port is alive:
 
 - M1 the first submitted frame read back (the T6's Z4).
