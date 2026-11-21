@@ -1,0 +1,12 @@
+commit=a2482523f609e5afcd7a554973bbde8d6558d103
+session=adhoc
+rows=1-25
+reruns=2026-11-15-t6-gles2-S1-37305608,2026-11-15-t6-gles2-S2-37305608,2026-11-15-t6-gles2-S3-37305608,2026-11-15-t6-gles2-S4-37305608
+replaces=2026-11-15-t6-gles2-S1-37305608,2026-11-15-t6-gles2-S2-37305608,2026-11-15-t6-gles2-S3-37305608,2026-11-15-t6-gles2-S4-37305608
+tree=build/r373/tree.txt
+boot_id_before=b452f289-16e2-427e-9e32-64722b2fdedf
+boot_id_after=b452f289-16e2-427e-9e32-64722b2fdedf
+kernel=6.18.55-current-rockchip64
+lib=libGLESv2.so.2:81f4a52368dc,libEGL.so.1:b7cb2d36423e
+started=2026-11-21T13:14:17Z
+ended=2026-11-21T13:19:22Z
