@@ -3084,8 +3084,9 @@ fn vs_identity16(op: Alu, x: &[[Val; 4]], width: usize) -> Option<usize> {
     })
 }
 
-/// Node `n` is an fp16 sum of fp16 uniform loads alone (a mediump array's
-/// `res += u_arr[k]`, deqp_uniarray_*_const_vs): its `f2f32` at the store
+/// Node `n` is fp16 arithmetic of fp16 uniform loads alone (a mediump
+/// array's `res += u_arr[k]`, deqp_uniarray_*_const_vs; a mediump matrix's
+/// sums and products): its `f2f32` at the store
 /// hides the constant lanes beside it from Mesa's link (`kept`, the
 /// `StoreOutput` arm of [`walk`]).
 fn uniform_sum16(vs: &Nir<'_>, n: u16) -> bool {
@@ -3093,12 +3094,19 @@ fn uniform_sum16(vs: &Nir<'_>, n: u16) -> bool {
     if nd.bits != 16 {
         return false;
     }
+    /* fp16 arithmetic of the uniforms alone: their sums, negations
+     * (deqp_unitype_vsmat3_lowp's `u_in0 - u_in1`), products and fmas
+     * (deqp_misc_spill_*'s `u_in0 * u_in1`), constants among the operands */
+    let of = |v: &Val| match *v {
+        Val::Lane(x, _) | Val::Pair(x, _) => uniform_sum16(vs, x),
+        Val::Const(_) => true,
+        _ => false,
+    };
     match nd.kind {
         Kind::Uniform { .. } => true,
-        Kind::Alu(Alu::Fadd) => nd.src[..2].iter().all(|v| match *v {
-            Val::Lane(x, _) | Val::Pair(x, _) => uniform_sum16(vs, x),
-            _ => false,
-        }),
+        Kind::Alu(op @ (Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fneg | Alu::Vec2)) => {
+            nd.src[..op.arity()].iter().all(of) && nd.src[..op.arity()].iter().any(|v| !matches!(v, Val::Const(_)))
+        }
         _ => false,
     }
 }
@@ -3265,7 +3273,8 @@ fn vs_uniform16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: &[ir::S
                 continue;
             }
             let drawn = matches!((vs_lane16(vs, p, false), vs_lane16(vs, q, false)),
-                (Some(Val::Lane(a, i)), Some(Val::Lane(b, j))) if a == b && ((i, j) == (0, 1) || (i == j && i < 2)));
+                (Some(Val::Lane(a, i)), Some(Val::Lane(b, j))) if a == b && i % 2 == 0 && (j == i + 1 || i == j)
+                    || a == b && i == j);
             if !drawn {
                 return false;
             }
@@ -3395,6 +3404,24 @@ fn vs_alu16u(
 fn vs_pair16(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Val, MaliError> {
     match (p, q) {
         (Val::Const(a), Val::Const(b)) if a == b => Ok(Val::Const(half(a)?)),
+        /* a later word of an fp16 uniform (a vec4's or a mat4 column's z
+         * and w): that word's own node, read as a first word is
+         * (deqp_unitype_fsivec4's `vMatrix * vTest`: `FMA.v2f16 r2, u7.w0,
+         * r0.h11, 0x0.neg` of column 1's zw, `MOV.i32 r2, u5.w0` of
+         * `vTest.zw` read by its halves) */
+        (Val::Lane(n, c), Val::Lane(m, d))
+            if n == m
+                && c >= 2
+                && (d == c + 1 && c % 2 == 0 || c == d)
+                && matches!(vs.nodes[n as usize], NirNode { kind: Kind::Uniform { .. }, bits: 16, .. }) =>
+        {
+            let Kind::Uniform { dword, comps } = vs.nodes[n as usize].kind else {
+                return Err(MaliError::Defect(Defect::IrIndex));
+            };
+            let w = c & !1;
+            let k = vs.load16(Kind::Uniform { dword: dword + u16::from(w), comps: (comps - w).min(2) })?;
+            vs_pair16(vs, Val::Lane(k, c - w), Val::Lane(k, d - w))
+        }
         (Val::Lane(n, c), Val::Lane(m, d)) if n == m => {
             let nd = vs.nodes[n as usize];
             let uniform = matches!(nd.kind, Kind::Uniform { .. });
@@ -3601,6 +3628,69 @@ fn vs_clamp(vs: &mut Nir<'_>, a: AluOp, p: Val, q: Val) -> Result<Val, MaliError
     }
 }
 
+/// One side of a product of dEQP's mediump `compare_float` results
+/// (`abs(a - b) < c ? 1.0 : 0.0`, uniform_api's `compare_vec2`,
+/// `compare_mat2`): the walk's `b2f(flt(fabs(f2f32(x)), c))` of a 16-bit
+/// lane `x`, `x - 0.0` read as `x` (`fadd(a, -0.0)` is `a`,
+/// nir_opt_algebraic.py), or a product already folded
+/// ([`vs_cmp_and`]): (the fp16 value compared, true for a leaf whose
+/// `fabs` is still to make, `c` as an fp16 half).
+fn vs_cmp_side(vs: &Nir<'_>, v: Val) -> Option<(Val, bool, u16)> {
+    let (Alu::B2f, [m, ..]) = vs_alu_of(vs, v)? else { return None };
+    match vs_alu_of(vs, m)? {
+        (Alu::Fcmp(Cmpf::Lt), [a, Val::Const(c), _]) if vs.nodes[lane_node(m)? as usize].bits == 32 => {
+            let (Alu::Fabs, [w, ..]) = vs_alu_of(vs, a)? else { return None };
+            let (Alu::F2f32, [x, ..]) = vs_alu_of(vs, w)? else { return None };
+            if !vs_is_f16(vs, x) {
+                return None;
+            }
+            /* `x - 0.0`: the identity at the link */
+            let x = match vs_alu_of(vs, x) {
+                Some((Alu::Fadd, [y, Val::Const(0 | 0x8000 | F32_NEG_ZERO), _])) if vs_is_f16(vs, y) => y,
+                _ => x,
+            };
+            Some((x, true, select::f16_rtne(c)?))
+        }
+        (Alu::I2i32, [k, ..]) => {
+            let (Alu::Fcmp(Cmpf::Lt), [mx, Val::Const(c16), _]) = vs_alu_of(vs, k)? else { return None };
+            Some((mx, false, (c16 & 0xffff) as u16))
+        }
+        _ => None,
+    }
+}
+
+/// The node a lane `v` is of.
+fn lane_node(v: Val) -> Option<u16> {
+    match v {
+        Val::Lane(n, _) => Some(n),
+        _ => None,
+    }
+}
+
+/// `fmul(b2f(a), b2f(b))` of two [`vs_cmp_side`]s of one constant `c`:
+/// `b2f(iand(a, b))` (nir_opt_algebraic.py:1679), `iand(flt(x, c), flt(y,
+/// c))` is `flt(fmax(x, y), c)` (:1159), all at 16 bits as lower_precision
+/// leaves the mediump compares; the `b2f32` of the 16-bit mask is
+/// `S16_TO_S32` then `CSEL.u32.eq` (deqp_unitype_vsapi_mat2: `FMAX.v2f16 r0,
+/// u5.w1.abs.h00, u5.w1.abs.h11` per column, their `FMAX.v2f16`, then
+/// `FCMP_OR.v2f16.lt.m1 r0, r0^.h00, u6.w1, 0x0` of the fp16 0.05 pair).
+fn vs_cmp_and(vs: &mut Nir<'_>, p: Val, q: Val) -> Result<Option<Val>, MaliError> {
+    let (Some((x, xl, c)), Some((y, yl, d))) = (vs_cmp_side(vs, p), vs_cmp_side(vs, q)) else {
+        return Ok(None);
+    };
+    if c != d {
+        return Ok(None);
+    }
+    let h = c;
+    let u = Val::Undef;
+    let x = if xl { vs.alu_sized(Alu::Fabs, 16, x, u, u)? } else { x };
+    let y = if yl { vs.alu_sized(Alu::Fabs, 16, y, u, u)? } else { y };
+    let mx = vs.alu_sized(Alu::Fmax, 16, x, y, u)?;
+    let k = vs.alu_sized(Alu::Fcmp(Cmpf::Lt), 16, mx, Val::Const(u32::from(h) * 0x1_0001), u)?;
+    let m = vs.alu(Alu::I2i32, k, u, u)?;
+    Ok(Some(vs.alu(Alu::B2f, m, u, u)?))
+}
+
 /// A vertex `any` / `all` of a compare vector, as Mesa's passes leave the
 /// reduction (docs/notes/mali-vs-compare-clamp.md section 2,
 /// vsarith_86_anyall): `all(equal(v.xy, 0.0))` is `feq(fadd(fabs(y),
@@ -3686,8 +3776,8 @@ fn vs_reduce(vs: &mut Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: ir::Sr
                 _ => return Err(MaliError::Arithmetic),
             };
         }
-        let yx = vs.alu(Alu::Ior, b[1], b[0], u)?;
-        let any = vs.alu(Alu::Ior, yx, b[2], u)?;
+        let zy = vs.alu(Alu::Ior, b[2], b[1], u)?;
+        let any = vs.alu(Alu::Ior, zy, b[0], u)?;
         return vs.alu(Alu::Inot, any, u, u);
     }
     match (a, op, n) {
@@ -4716,6 +4806,16 @@ fn walk<'s>(
                          * `vec4(u * color, 1.0) * 0.5`: `u * 0.5` first,
                          * `FMA.f32 r0, u3.w1, 0x38000000.h1, r0^.neg`, then
                          * each lane's `FMA.f32 r, r0, a, 0.5`) */
+                        AluOp::Fmul
+                            if m.prec_of(ValueId(id.0)) == Prec::Medium
+                                && vs_cmp_side(&vs, x(0)).is_some()
+                                && vs_cmp_side(&vs, x(1)).is_some() =>
+                        {
+                            match vs_cmp_and(&mut vs, x(0), x(1))? {
+                                Some(v) => v,
+                                None => vs_fmul(&mut vs, split, x(0), x(1))?,
+                            }
+                        }
                         AluOp::Fmul if split == [false; 2] || !(is_zero(x(0)) || is_zero(x(1))) => {
                             match vs_fmul_const_up(&mut vs, m, &s, x(0), x(1))? {
                                 Some(v) => v,

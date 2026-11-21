@@ -9,8 +9,9 @@
 //! byte-equal and run: `cmp_fne_hp`, `cmp_ine0_hp`, `cmp_notequal_vec2`,
 //! `fragcoord_xyz` and `invariant_position` (a copy, which has no
 //! arithmetic to keep exact). The others are refused, each test ignored with
-//! its refusal quoted; the lowering removes the `ignore` and the
-//! reference's entry in `REFUSALS` together. `refusals_pinned` runs now: it
+//! its refusal quoted (the two spill references compile with other words
+//! than Mesa's, `DIFFERS`, pinned by `differences_pinned`); the lowering
+//! removes the `ignore` and the reference's entry in `REFUSALS` together. `refusals_pinned` runs now: it
 //! asserts each ignored reference's exact current refusal (the vertex
 //! shader's when it refuses, else the fragment shader's).
 //!
@@ -72,13 +73,13 @@ fn misc_invariant_position() {
 }
 
 #[test]
-#[ignore = "refused: a program needing more than the split file's 32 work registers (the full file, spilling), lowered by lower-misc"]
+#[ignore = "differs: the fp16 product's pairs, of which the column sums read one lane, are not shrunk to it (`nir_opt_shrink_vectors`) and the swizzled sums pair otherwise; pinned by differences_pinned"]
 fn misc_spill_lowp_mat4_mat4() {
     mali_ref::assert_matches("deqp_misc_spill_lowp_mat4_mat4");
 }
 
 #[test]
-#[ignore = "refused: a program needing more than the split file's 32 work registers (the full file, spilling), lowered by lower-misc"]
+#[ignore = "differs: the fp16 product's pairs, of which the column sums read one lane, are not shrunk to it (`nir_opt_shrink_vectors`) and the swizzled sums pair otherwise; pinned by differences_pinned"]
 fn misc_spill_mediump_mat4_mat4() {
     mali_ref::assert_matches("deqp_misc_spill_mediump_mat4_mat4");
 }
@@ -89,13 +90,26 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc_constmat_mat2_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_highp", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
     ("deqp_misc_constmat_mat4_mediump", "a shape Mesa's algebraic rules rewrite without a reference (max(x, 0.0), clamp(x, -1.0, 1.0), a negated float(bool) in a product)"),
-    ("deqp_misc_spill_lowp_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
-    ("deqp_misc_spill_mediump_mat4_mat4", "a program needing more than the split file's 32 work registers (the full file, spilling)"),
 ];
+
+/// The ignored references that compile with other words than Mesa's: the
+/// mediump and lowp `mat4 * mat4` (the vertex walk's fp16 pairs of every
+/// column word since plan #377's spike-unitype-rest, no longer over 32 work
+/// registers; the flat `.v4` with its 1.0 is Mesa's).
+const DIFFERS: &[&str] = &["deqp_misc_spill_lowp_mat4_mat4", "deqp_misc_spill_mediump_mat4_mat4"];
 
 #[test]
 fn refusals_pinned() {
     for (name, text) in REFUSALS {
         mali_ref::assert_refused_ref(name, text);
+    }
+}
+
+#[test]
+fn differences_pinned() {
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(name);
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; un-ignore it");
     }
 }
