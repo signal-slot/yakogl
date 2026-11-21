@@ -11,16 +11,15 @@ is `pvr-mip-three-levels.md`, its error `tools/hostharness/mip-multilevel/README
 (`mip-multilevel-error`). Nothing here was run: the verdicts are read from
 the code and from the measured errors of those notes.
 
-**dEQP source: unverified.** `VK-GL-CTS` is not in the dependency cache (only
-`VK-GL-CTS-gles3/data`, the shader corpus; `tools/cts/deps.toml:253-272`),
-and a sparse fetch of `modules/gles2` was refused here. So the reference
-generator and threshold of dEQP's mipmap cases are **not read from the CTS
-source** in this note. Where a claim about them is needed it is marked
-*unverified* and the section says what to read. The repo's own citations of
-that file are `es2fTextureMipmapTests.cpp:330-340` (lod precision,
-`docs/notes/v3d-qpu-grad.md:204`) and `:658`, `:669`
-(`docs/online-shaderc/v3d-backend.md:2414-2418`), commit `93bca01` of
-`deps.toml`; they are second-hand here.
+**dEQP source: read.** `VK-GL-CTS` at `93bca01` (the commit of
+`tools/cts/deps.toml:259`) was fetched as a blobless partial clone into
+`$CONNECTED_DEPS_DIR/VK-GL-CTS-es2part` (its own directory, so the sparse
+`VK-GL-CTS-gles3` of `deps.toml:253-272` is untouched; only the files below
+were read). `E` = `modules/gles2/functional/es2fTextureMipmapTests.cpp`,
+`G` = `framework/opengl/gluTextureTestUtil.cpp`. One definition is not read:
+`computeFixedPointError` (called by `computeFixedPointThreshold`,
+`framework/common/tcuTexLookupVerifier.cpp:2199-2201`, defined elsewhere), so
+the size of the threshold in LSBs below is marked unverified.
 
 ## Answer
 
@@ -33,11 +32,14 @@ that file are `es2fTextureMipmapTests.cpp:330-340` (lod precision,
    Levels 1, 2, 5, 8 cannot move. Measured size of the move (host model):
    max 1 LSB on every level of 256x256, 1 to 2 LSB on 800x600
    (`mip-multilevel/README.md`, result table).
-3. **Verdict: never default-on for every texture; safe for render targets
-   (terrain).** Details in the table. A render target is what glmark2's
-   per-frame chains are; the dEQP cases are uploads. The deciding fact the
-   notes do not have is dEQP's threshold (unverified), and with it a board
-   run of the 20 cases below.
+3. **Verdict: default-on is safe for every ES 2.0 case and glmark2 scene
+   this study could measure, on the evidence of the CTS source and the host
+   error, with three things only a measurement closes** (the AM62P board run
+   of the 20 cases, the error at 512x512 and 1600x1200, and refract's
+   levels). dEQP's `generate` cases compare each stored level with the level
+   above it in the *same* texture, not with a reference filter (part (a)),
+   so a level that is 1-2 LSB from the iterated chain is judged against its
+   own neighbour, with a threshold of several LSB. See the table in (c).
 
 ## (a) dEQP-GLES2 cases that reach the GPU chain on the AM62P
 
@@ -81,7 +83,7 @@ narrow format, and the CPU filter averages those bytes
 (`src/gl/texture.rs:4909-4912`), so the GPU's 2x2 average of the same bytes is
 the same operation; the three-levels path changes which texels differ by an
 LSB, not what is averaged. Whether dEQP then compares with the narrow
-format's own precision is dEQP's side (unverified, below).
+format's own precision is the threshold of the next section.
 
 Other `glGenerateMipmap` users among the dEQP-GLES2 cases are **unverified**:
 the mustpass list names no case by its calls. The list has
@@ -97,31 +99,53 @@ run with a call counter at `pvr_generate_mipmap`. Until then the table lists
 only the 20 above, and the verdict below covers any other 2D RGBA8 chain by
 the same rule.
 
-### What each compares against, with its tolerance
+### What each compares against, with its tolerance (CTS source)
 
-**Unverified.** From the repo: the 20 cases sit in the pass tally of the
-AM62P (`docs/es2-cts-failures.md:20`, 17,140 pass, 0 fail over the tree), so
-today's chain (one kick a level, TPU bilinear, 8-bit) passes them. That
-chain is not the CPU box on NPOT levels 4 and up of 800x600
-(`mip-multilevel/README.md`, finding), and the case sizes are POT (a dEQP
-chain of the kind `pvr-mip-three-levels.md` lists as 64x64, 6 levels; also
-unverified, read it in the `generate` group's init: the sizes of
-square and non-square) where `iter` is byte-identical to the CPU.
+The 20 cases are `Texture2DGenMipmapCase` (`E:770-880`), named
+`<format>[_non_square]_<hint>` (`E:1170-1195`):
 
-To fill in from `es2fTextureMipmapTests.cpp` at `93bca01` (what to read, so
-nobody has to guess): (1) does the generate case build its reference from
-the driver's own levels (read back), or by dEQP's box filter of level 0,
-and with which rounding; (2) the pass threshold of the sampled-image
-comparison (`lodThreshold`/`colorThreshold`, from the format's bit depths)
-and the `lodBits` (the repo cites 6 for ES 3 and 4 for projected,
-`v3d-backend.md:2414-2418`); (3) the case sizes. The repo's own recollection,
-**not verified here**: dEQP compares the rendered image of the textured quad
-with a reference sampled through its own `TextureRenderer`, with a
-per-format threshold that grows as the bit depth falls. If that holds, the
-four rgba8888 cases have the tightest threshold (about 1-2 LSB at 8 bits)
-and the rgb565, rgba4444, rgba5551 cases are loose (a 4 to 6 bit step).
-Under that reading a 1 LSB level error passes the loose cases and is on the
-edge for the rgba8888 and rgb888 ones.
+- **Content and sizes.** Level 0 is an 8-texel colour grid of two colours,
+  (1, 0.5, 0, 0.5) and (0, 0, 1, 1) (`E:816-817`); the sizes are 64x64 and
+  `non_square` 32x64 (`E:1121-1122`), so both are POT, 6 levels above 0
+  (`numLevels = log2floor(max) + 1`, `E:808`). Formats and types
+  `E:1101-1108`; hints `E:1110-1114` (FASTEST, NICEST; the backend ignores
+  them, ES 2.0 asks for no filter).
+- **How the levels are read.** `glGenerateMipmap` (`E:829-832`), then each
+  level is drawn 1:1 with `GL_NEAREST_MIPMAP_NEAREST` (`E:801`, loop from
+  `E:841`) and read back with `glReadPixels`. The comparison sees the
+  texels the GPU wrote, after the sampler.
+- **What it compares against.** `compareGenMipmapResult` (`G:3478-3555`):
+  level 0 against dEQP's own level 0 (threshold as below); then **each
+  level l against the result's own level l-1**, not a reference chain:
+  (1) a bilinear check (`G:3348-3383`): the pixel must be a valid linear
+  sample of the level above at the scaled centre, within `colorThreshold`
+  and `uvwBits` = 4 fraction bits (`E:863`); (2) if that fails, a box check
+  (`G:3385-`); a level that passes neither is a **QualityWarning**
+  (`G:3527-3529`), not a failure; (3) only if a pixel then falls outside the
+  min/max of its source neighbourhood (`G:3422-3476`, "very lenient", one
+  texel margin) is the case failed (`G:3531-3542`).
+- **Threshold.** `colorThreshold = computeFixedPointThreshold(cmpBits)`
+  (`E:862`), with `cmpBits` = min(framebufferBits - 2, formatBits) per
+  channel where the format has the channel (`E:855-861`). On an 8-bit
+  framebuffer that is 6 bits for rgba8888/rgb888, 5 for rgb565's R and B,
+  4 for rgba4444, 5 for rgba5551's colours. In LSBs of 8 bits that is about
+  4 (rgba8888, rgb888) and 8 or more (the 16-bit formats):
+  *unverified* (the definition of `computeFixedPointError` is not read);
+  the repo's framebuffer is RGBA8 on the AM62P (assumed, not checked).
+
+What this means for the three-levels path: a level that the shader makes
+from level l-2 in one pass is checked against the stored level l-1, with
+a bilinear-sample-of-the-level-above rule and a 4-LSB-order threshold. The
+measured difference from the iterated chain is at most 1 LSB on POT levels
+(`mip-multilevel/README.md`, 256x256), and the difference between a one-pass
+box and the 2x2 box of the stored level above is of the same size, so the
+bilinear check passes (the step is even, the weights exact, the grid's
+colours uniform in 8-texel cells: levels 1-3 of the 64x64 grid are the cell
+colours exactly, and only levels 4-6, where a texel straddles cells, can
+differ by a rounding). Today's chain passes the 20 cases (the AM62P tally,
+`docs/es2-cts-failures.md:20`: 17,140 pass, 0 fail, 5 QualityWarning
+over the tree). Which of the five QualityWarnings, if any, are these cases
+is not known here; a three-levels change must not add one.
 
 ## (b) glmark2 scenes that call `glGenerateMipmap`
 
@@ -162,36 +186,44 @@ shader's `Q` on the board (README, "Not modelled"). Measured sizes:
 
 | Case | Levels that can move | Error (measured) | Tolerance | Keeps the answer? | Verdict |
 |---|---|---|---|---|---|
-| dEQP `mipmap.2d.generate.rgba8888_*` and `rgb888_*` (8 cases) | 3, 4, 6 of a 64x64 chain (or the dEQP sizes) | not measured at the dEQP sizes; 1 LSB at 256x256 levels 3-8 | dEQP's threshold, unverified, plausibly 1-2 LSB at 8 bits | **unknown**; at the edge if the threshold is 1 LSB | **not default-on** until the 8 cases are run |
-| dEQP `generate.rgb565_*`, `rgba4444_*`, `rgba5551_*` (12 cases) | same | 1 LSB at 8-bit store | a 4 to 6 bit threshold, unverified | likely (one 8-bit LSB is a fraction of a 4-bit step), unverified | **not default-on** with the first group (same code path); no extra risk |
+| dEQP `mipmap.2d.generate.rgba8888_*` and `rgb888_*` (8 cases) | levels 3, 4, 6 of the 64x64 and 32x64 chains; on this grid content only 4-6 can differ | 1 LSB on POT levels 3-8 (256x256; 64x64 not measured, same weights) | each level against its own level above, bilinear then box then min/max, threshold about 4 LSB (unverified size) | **yes, by the source**: 1 LSB against about 4; a level passes the bilinear check, or at worst a QualityWarning | **default-on safe**, pending the board run |
+| dEQP `generate.rgb565_*`, `rgba4444_*`, `rgba5551_*` (12 cases) | same | 1 LSB in the 8-bit store | the same with a 4 to 5 bit threshold (about 8 LSB or more, unverified) | yes, with more margin than the first group | **default-on safe** |
 | dEQP `generate.{a8,l8,la88}_*` (12), `cube.generate.*` (16) | none | not on the GPU chain | - | yes, by routing (`texture.rs:4854`, `mip_chain_gpu` `:7249`) | unaffected |
 | glmark2 terrain per-frame chains (5 a frame) | 3+ of 800x600, 3+ of 256x256 | 0 on levels 1-2; 1 to 2 on the ALU levels | 8 on probes and mean | **yes**: the picture reads level 1-2 at weight 1, levels 1 at weight <= 1.9%; those levels are exactly the TPU levels | **safe** (render target) |
 | glmark2 terrain uploads (3 JPEG, specular) | 3+ of 512x512 | 1 LSB expected (POT, unmeasured at 512) | 8 | yes: <= 1 LSB through weight <= 1 | safe for the picture |
 | glmark2 `texture-filter=mipmap` (crate, 512x512) | 3+ | 1 LSB expected | 8 | yes, the picture reads some level at weight <= 1; a probe moves <= 1 | safe for the picture |
 | glmark2 refract (1600x1200) | 3+, NPOT odd steps | not measured (NPOT, like 800x600: 2) | 8 | probably (<= 2 against 8), **unmeasured**; the levels it reads are not studied | needs a measure and a read of its LOD before it is called safe |
 
-**Default-on verdict: not safe, with one exception.**
+**Default-on verdict: safe on the evidence read, three items open.**
 
-- The 20 dEQP uploads cannot be covered by the measurements, and nothing in
-  the repo says dEQP's threshold. A path that moves 1-2 LSB of a level the
-  case samples is a risk to a CTS row that today passes (c3's "every ES 2.0
-  answer the same", plan goal). Default-on is **not** safe until those 20
-  cases run on the AM62P with the knob on and come back Pass
-  (`tools/cts/RESULTS.md` row, a board session), and the CTS reference and
-  threshold above are read from the source.
-- **Safe only for render targets (terrain's per-frame chains):** the picture
-  tolerance (8) is four times the largest measured error (2), and the
-  levels the frames sample are the byte-identical TPU levels. That is an
-  argument for turning it on for a texture that a draw rendered into (the GL
-  core keeps a render-into mark per texture slot, item `pi4-target-mark-clear`;
-  whether the offer can pass it to the backend is unverified here and is
-  the implementer's question), and leaving uploads on one kick a level.
-  Without such a gate the knob is **all or nothing**.
-- **Never:** nothing is "never" on the evidence: no measured level is out of
-  tolerance (every box-tap level is within 2 of 8). The case that would be
-  "never" is a dEQP threshold of 0 LSB on rgba8888, which the CTS source
-  would show; if so the 8 rgba8888/rgb888 cases make default-on "never" and
-  render-targets-only the only form.
+- **dEQP's 20 cases.** The case never compares with a reference filter. It
+  compares each stored level with the stored level above, with a bilinear
+  rule and a threshold of several LSB (part (a)), and the path's error is
+  1 LSB on POT levels. So it keeps "every ES 2.0 answer the same" at the
+  case level. The risk that remains is a QualityWarning (a level that
+  fails both the bilinear and the box check): `docs/es2-cts-failures.md:20`
+  counts 5 on the AM62P today and the count must not grow. A board run of
+  the 20 cases by name with the knob on is the proof (it is the board
+  item's, not this note's).
+- **glmark2.** Terrain's per-frame chains read levels 1 and 2, which are
+  TPU levels and byte-identical; the other four per-frame chains are read at
+  level 1 with weight at most 1.9%. The uploads and the crate image read
+  every level but at an error of 1 LSB against a tolerance of 8. Safe.
+- **Refract** (1600x1200, NPOT, odd steps at levels 5, 6, 8) is the one
+  case not covered: the error there is not measured and its sampled levels
+  are not studied. If the error there is within 2 (as 800x600) the
+  tolerance of 8 holds. Until measured, the verdict for refract is
+  "likely safe, unmeasured".
+- **"Safe only for render targets" is not needed** by the source, and it
+  would cost a gate the backend offer does not have today (the GL core has
+  a render-into mark per slot, `pi4-target-mark-clear`; passing it to the
+  backend is unverified here). It stays the fallback if the board shows a
+  QualityWarning on the uploads.
+- **"Never"** would need a level out of its threshold. None is: every
+  measured box-tap level is within 2 of a tolerance of 8, and dEQP's
+  threshold is about 4 or more. NPOT chains differ from the CPU box on
+  levels 4+ already today (`mip-multilevel/README.md`, finding), and the
+  box taps are closer to it, so the path improves that.
 
 ## The host test that would pin it
 
@@ -212,6 +244,10 @@ nothing (`tools/hostharness/glmark2/README.md`), so the host `host` column
    asserting levels 1, 2, 5, 8 byte-equal in every TPU model, and every
    level's max <= 1 under the `gl` and `w8` models (<= 2 at the NPOT sizes).
    The added sizes close the two unmeasured sizes in the table above.
+   Add the dEQP check itself: for the dEQP grid at 64x64 and 32x64, each
+   level l of the new chain must be a valid bilinear sample of the stored
+   level l-1 within the 4-LSB-order threshold (`G:3348-3383`, the pass a
+   QualityWarning needs to avoid).
 3. **The render-target gate**, if the render-targets-only form is built: a
    rig test with a texture rendered into (kicks 4 a chain) and one uploaded
    (kicks 9 a chain, today's one kick a level) at the same size.
@@ -223,14 +259,19 @@ nothing (`tools/hostharness/glmark2/README.md`), so the host `host` column
 
 ## What is left, for the planner
 
-- Read `es2fTextureMipmapTests.cpp` at `93bca01` for the reference
-  generator, threshold and sizes of the `generate` cases, and
-  `grep generateMipmap` over `modules/gles2` and `modules/glshared` for the
-  other users. This note marks both unverified; every verdict above that
-  hangs on them is marked.
+- **Still unverified:** the size in LSBs of `computeFixedPointThreshold`
+  (`computeFixedPointError`'s definition is not read) and which other
+  dEQP-GLES2 cases call `glGenerateMipmap` besides the `generate` group
+  (the CTS tree is not complete here; a `git grep` over a blobless clone
+  fetches every blob and was stopped). A complete `VK-GL-CTS` checkout
+  (`DEQP_WORK`) answers both in one grep.
 - `pvr-mip-three-levels.md`, part (e), says 4 of the 32 `generate` cases
-  reach the GPU chain; by the store the answer is 20 (the table above). That
-  note belongs to `pvr-mip-three-levels`; the planner should pass this
-  correction to it.
+  reach the GPU chain; by the store the answer is 20 (the table in part
+  (a)). That note belongs to `pvr-mip-three-levels`; the planner should pass
+  this correction to it. The same note's "dEQP compares with a threshold
+  that allows a filter's rounding" is right, but the case compares level
+  against level, not against a reference: its host test should compare
+  each level of the new chain with the box of the stored level above,
+  as `compareGenMipmapBilinear` does, in addition to the iterated chain.
 - Measure the box-tap error at 512x512 and 1600x1200
   (`mip-multilevel/compare.py --sizes`), and read refract's LOD.
