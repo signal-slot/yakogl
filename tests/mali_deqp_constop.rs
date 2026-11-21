@@ -93,8 +93,9 @@ fn constop_loops_for_basic_mediump_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_for_basic_mediump_float_fs");
 }
 
+/// The highp counter folded away with the unrolled loop (`nir_fs.rs`
+/// `folded_counter`): byte-equal to the mediump counter's reference.
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (past its conversions since lower-mixprec's rotated colour), lowered by lower-constop"]
 fn constop_loops_while_basic_highp_float_fs() {
     mali_ref::assert_matches("deqp_constop_loops_while_basic_highp_float_fs");
 }
@@ -107,8 +108,11 @@ fn constop_mat3sub_vs() {
     mali_ref::assert_matches("deqp_constop_mat3sub_vs");
 }
 
+/// The packed mat3's column 1 pair across two slots one `vec2`
+/// (`MKVEC.v2i16 r1, r1^.h1, r2.h0`), the matrix's columns one variable
+/// of one conversion per slot, and `vec4(s, 1.0) + vec4(s, 0.0)` kept as
+/// Mesa's `fadd` of two `vec2` (`nir_fs.rs`).
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (past its constant operation), lowered by lower-constop"]
 fn constop_matrix_preinc_mediump_mat3_fs() {
     mali_ref::assert_matches("deqp_constop_matrix_preinc_mediump_mat3_fs");
 }
@@ -128,8 +132,10 @@ fn constop_nz_prod_vs() {
     mali_ref::assert_matches("deqp_constop_nz_prod_vs");
 }
 
+/// `a_position * -0.0` is -0.0 in every lane (the zero's own sign), and
+/// the w that selects -0.0 or 1.0 is read by the reciprocal as +0.0 with
+/// no `FMAX` clamp (`nir.rs`, the viewport transform).
 #[test]
-#[ignore = "compiles but differs: vs.position word 2 is CSEL.u32.eq r1, r0, 0x0, u3.w0, 0x0, the reference has MOV.i32 r1, u3.w1 (Mesa's `a_position * z` of z = -0.0 is -0.0, ours 0.0); lowered by lower-constop"]
 fn constop_nz_shared_vs() {
     mali_ref::assert_matches("deqp_constop_nz_shared_vs");
 }
@@ -145,8 +151,10 @@ fn constop_op_abs_mediump_float_fs() {
     mali_ref::assert_matches("deqp_constop_op_abs_mediump_float_fs");
 }
 
+/// Each sum of `in0.zxy + in1.yzx` one lane (no two pair under
+/// `alu_srcs_equal`), their `vec2` read by the `FMA.v2f16` (`nir_fs.rs`
+/// `split_sum`).
 #[test]
-#[ignore = "refused: a fragment shader operand of a form or in a place no reference draws (past its constant operation: the vec3 sum's lanes alone), lowered by lower-constop"]
 fn constop_op_add_assign_effect_mediump_vec3_fs() {
     mali_ref::assert_matches("deqp_constop_op_add_assign_effect_mediump_vec3_fs");
 }
@@ -166,26 +174,10 @@ fn constop_struct_param_out_vs() {
     mali_ref::assert_matches("deqp_constop_struct_param_out_vs");
 }
 
-/// Where the highp loops reference is refused since plan #367's
-/// lower-fs-arith lowered the fragment arithmetic in front of it and
-/// lower-mixprec its rotated colour's conversions: its constant operation is
-/// no longer the first refusal.
-const MIXED: &str = "a fragment shader that mixes highp and mediump or lowp float values";
-
-/// Every ignored reference above that is refused, and the refusal the compiler
-/// gives it now (`constop_nz_shared_vs` compiles but differs).
+/// Every ignored reference above, and the refusal the compiler gives it now.
 const REFUSED: &[(&str, &str)] = &[
     ("deqp_constop_ce_atan_separate_fs", "a constant product in a shape Mesa's algebraic rules move or fold"),
-    ("deqp_constop_loops_while_basic_highp_float_fs", MIXED),
-    (
-        "deqp_constop_matrix_preinc_mediump_mat3_fs",
-        "a gl_FragColor lane other than the varying's own lane or a constant",
-    ),
     ("deqp_constop_op_abs_highp_float_fs", "a fragment shader that mixes highp and mediump or lowp float values"),
-    (
-        "deqp_constop_op_add_assign_effect_mediump_vec3_fs",
-        "a fragment shader operand of a form or in a place no reference draws",
-    ),
 ];
 
 #[test]
