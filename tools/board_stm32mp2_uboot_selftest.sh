@@ -9,8 +9,9 @@
 #
 # 1. Every verb under --dry-run, both backends, with ssh, scp, curl, stty,
 #    flock and sudo replaced by stubs that record any call: rc 0, the plan as
-#    "DRY ..." lines (the fw_printenv and /boot sha256 records before and
-#    after, the staging, the typed line, the reboot, the diffs, the verdict
+#    "DRY ..." lines (the environment records before and after, read with
+#    dd of the u-boot-env partition and tools/uboot_env.py check and print,
+#    the /boot sha256 records, the staging, the typed line, the reboot, the diffs, the verdict
 #    shape), the UNDO before the staging, no stub run, nothing written on the
 #    host, no host name, address or console path in the output.
 # 2. The refusals that need no board: an image of 255 MiB or more (refused
@@ -26,8 +27,9 @@
 #    the script to ${scriptaddr}, keep the 255 MiB bound (mmc), bound a dead
 #    TFTP server under the IWDG, stay under CONFIG_SYS_CBSIZE and end in "run
 #    bootcmd".
-# 4. A fake board (ssh runs the command in a scratch tree; fw_printenv prints
-#    a file; the reboot starts a new "uptime") and a fake console helper (it
+# 4. A fake board (ssh runs the command in a scratch tree; the dd of
+#    u-boot-env reads a 512 KiB image that tools/uboot_env.py set builds from
+#    a text file, copy 2 blank as on the DK's card; there is no fw_printenv; the reboot starts a new "uptime") and a fake console helper (it
 #    records the typed line and plays a boot): a run that comes back (the
 #    verdict line, also in verdict.txt, the empty diffs, the staged files
 #    gone, the record redacted, tools/mp2_uboot_record_check.py passing), the
@@ -38,7 +40,9 @@
 #    TERM (its exit removes the staged files) and by SIGKILL (disarm removes
 #    them and the record), --expect-watchdog (watchdog_reset rc 0 with it, rc
 #    4 without, psci_reset_before_wdog), a TFTP fetch that ends in a reset
-#    (fetch_reset), and the live refusals: a bad CRC, scriptaddr unset or in
+#    (fetch_reset), status reading bootcmd from the dd'd image, and the live
+#    refusals: a bad CRC in copy 1, a copy 2 neither valid nor blank, a
+#    partition of another size, scriptaddr unset or in
 #    the window, a standalone default set (tools/mp2s_guard.py --for
 #    oneshot), a pending one-shot (yako_once, a hook or an environment write
 #    in bootcmd, env_default=1, stored mp2z_*), /boot on the eMMC, files of an
@@ -61,7 +65,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2-uboot.sh"
-WANT_CHECKS=102
+WANT_CHECKS=110
 
 S=$(mktemp -d)
 trap 'pkill -f "$S/" 2>/dev/null; rm -rf "$S"' EXIT
@@ -134,16 +138,20 @@ for verb in status disarm; do
     done
 done
 out=$(BOARD_HOST=$FAKE_HOST dry status 2>&1)
-check "status: reads fw_printenv (all), the mount of /boot, lists the staged files, prints the undo (disarm)" \
-    eval 'grep -q "^DRY board\$ fw_printenv 2>&1" <<<"$out" && grep -q "findmnt -n -v -o SOURCE,FSTYPE -T /boot" <<<"$out" &&
+check "status: reads the environment (dd of u-boot-env), the mount of /boot, lists the staged files, prints the undo (disarm)" \
+    eval 'grep -q "^DRY board\$ dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none   # > <tmp>/env.now.bin (read-only" <<<"$out" && grep -q "findmnt -n -v -o SOURCE,FSTYPE -T /boot" <<<"$out" &&
           grep -q "ls -d /boot/yakogl/mp2z-\*" <<<"$out" && grep -q "UNDO: of anything staged: tools/board-stm32mp2-uboot.sh disarm" <<<"$out"'
+check "status (dd): uboot_env.py check and print with the DK layout (0x2000 at 0x7e000 and 0x7c000), no fw_printenv run" \
+    eval 'grep -qF "DRY host\$ python3 -I tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 --allow-blank-copy check <tmp>/env.now.bin" <<<"$out" &&
+          grep -qF "allow-blank-copy print <tmp>/env.now.bin | sort" <<<"$out" && ! grep -E "^DRY board" <<<"$out" | sed "s/#.*//" | grep -q fw_printenv'
 mkdir -p "$S/logs"
 out=$(BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART dry run "$S/img/mp2_hello.bin" "$S/logs" 2>&1)
 rc=$?
 check "run uboot-mmc: rc 0, no stub ran, no run directory made, no leak" \
     eval '[ "$rc" = 0 ] && untouched && [ -z "$(ls -A "$S/logs")" ] && ! leaks "$out"'
-check "run uboot-mmc: lock, console probe, fw_printenv and the /boot sha256 before, the staging, the reboot" \
-    eval 'grep -q "board_lock.sh" <<<"$out" && grep -q "probe <BOARD_UART>" <<<"$out" && grep -q "fw_printenv 2>&1   # > .*/env-before.txt" <<<"$out" &&
+check "run uboot-mmc: lock, console probe, the environment (dd, uboot_env.py print) and the /boot sha256 before, the staging, the reboot" \
+    eval 'grep -q "board_lock.sh" <<<"$out" && grep -q "probe <BOARD_UART>" <<<"$out" && grep -q "^DRY board\$ dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none   # > <tmp>/env-before.bin" <<<"$out" &&
+          grep -q "uboot_env.py .* print <tmp>/env-before.bin | sort   # > .*/env-before.txt" <<<"$out" &&
           grep -q "sha256sum   # > .*/boot-sha256.txt" <<<"$out" && grep -q "cat > /boot/yakogl/mp2z-mp2_hello-.*\.bin\.part" <<<"$out" && grep -q "systemctl reboot" <<<"$out"'
 check "run uboot-mmc: tools/mp2s_guard.py --for oneshot on the environment read, before the staging" \
     eval 'grep -q "^DRY host\$ python3 -I tools/mp2s_guard.py --for oneshot --printenv .*/env-before.txt" <<<"$out" &&
@@ -161,7 +169,7 @@ check "run uboot-mmc: the run directory is made with mkdir alone, -2, -3, ... wh
 check "run uboot-mmc: the typed line: mp2z_* only, script to \${scriptaddr}, the 255 MiB bound, run bootcmd at the end" \
     eval '[[ $TL == "echo mp2z-typed: undo: "*"; setenv mp2z_part 8; setenv mp2z_file /yakogl/mp2z-mp2_hello-"* ]] && grep -qF "itest \${filesize} -lt 0xff00000" <<<"$TL" &&
           grep -qF "load mmc \${boot_instance}:8 \${scriptaddr} /yakogl/mp2z-" <<<"$TL" && grep -qF "source \${scriptaddr}" <<<"$TL" && [[ $TL == *"; run bootcmd" ]]'
-check "run uboot-mmc: the cleanup, fw_printenv and /boot after, both diffs, the verdict shape" \
+check "run uboot-mmc: the cleanup, the environment and /boot after, both diffs, the verdict shape" \
     eval 'grep -q "rm -f /boot/yakogl/mp2z-" <<<"$out" && grep -q "env-after.txt" <<<"$out" && grep -q "boot-sha256.after.txt" <<<"$out" &&
           grep -q "diff <rundir>/env-before.txt <rundir>/env-after.txt   # must be empty" <<<"$out" &&
           grep -q "verdict=<v> boot=uboot-mmc row boot_verdict=<scan>" <<<"$out" && grep -q "not_back, rc 7, NEEDS A PERSON, no retry" <<<"$out"'
@@ -282,11 +290,37 @@ reset_board() {
     : > "$F/typed.lines"
     rm -f "$S/board.mp2u-left"
 }
-cat > "$F/bin/fw_printenv" <<EOF
-#!/bin/sh
-[ -e "$F/state/badcrc" ] && echo "Warning: Bad CRC, using default environment"
-cat "$F/env.txt"
+# The board's u-boot-env partition, as the runner's dd reads it: 512 KiB,
+# built from env.txt at every read by tools/uboot_env.py set on a seed whose
+# copy 1 (0x7e000, flags 0x02) holds no variable and whose copy 2 (0x7c000)
+# is all zeros, as on the DK's card (docs/notes/stm32mp257f-dk-uboot-boot.md,
+# section 1). There is no fw_printenv on this board: the runner must not need
+# it. state/badcrc spoils a byte of copy 1, state/badcopy2 gives copy 2 a
+# non-zero flag byte (neither valid nor blank), state/bigpart makes the
+# partition 1 MiB.
+mkdir -p "$F/dev"
+cat > "$F/seed.py" <<'EOF'
+import sys, zlib
+SIZE, OFF1, PART = 0x2000, 0x7e000, 0x80000
+area = bytes(SIZE - 5)
+img = bytearray(PART)
+img[OFF1:OFF1 + SIZE] = zlib.crc32(area).to_bytes(4, "little") + b"\x02" + area
+with open(sys.argv[1], "wb") as f:
+    f.write(img)
 EOF
+printf '#!/bin/bash\nF="%s" REPO="%s"\n' "$F" "$REPO" > "$F/mkenv"
+cat >> "$F/mkenv" <<'EOF'
+python3 -I "$F/seed.py" "$F/dev/seed.bin" || exit 1
+vars=()
+while IFS= read -r l; do [ -n "$l" ] && vars+=("$l"); done < "$F/env.txt"
+python3 -I "$REPO/tools/uboot_env.py" --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 --allow-blank-copy \
+    set "$F/dev/seed.bin" "$F/dev/u-boot-env" "${vars[@]}" || exit 1
+if [ -e "$F/state/badcrc" ]; then printf 'X' | dd of="$F/dev/u-boot-env" bs=1 seek=$((0x7e000 + 9)) conv=notrunc status=none; fi
+if [ -e "$F/state/badcopy2" ]; then printf '\001' | dd of="$F/dev/u-boot-env" bs=1 seek=$((0x7c000 + 4)) conv=notrunc status=none; fi
+if [ -e "$F/state/bigpart" ]; then truncate -s 1M "$F/dev/u-boot-env"; fi
+exit 0
+EOF
+chmod +x "$F/mkenv"
 printf '#!/bin/sh\ncat "%s/state/findmnt"\n' "$F" > "$F/bin/findmnt"
 printf '#!/bin/sh\necho bootfs\n' > "$F/bin/lsblk"
 printf '#!/bin/sh\necho fakeboard\n' > "$F/bin/uname"
@@ -315,8 +349,10 @@ cmd="\$*"
 printf '%s\n' "\$cmd" >> "\$F/ssh.log"
 [ -e "\$F/state/dead" ] && exit 255
 case "\$cmd" in *".part"*) echo "fake-ssh: staging" >&2 ;; esac
+case "\$cmd" in *"/dev/disk/by-partlabel/u-boot-env"*) "\$F/mkenv" >&2 || exit 1 ;; esac
 cmd=\$(printf '%s' "\$cmd" | sed -E -e "s#/boot(/|[ );']|\\\$)#\$F/boot\\1#g" -e "s#/proc/uptime#\$F/proc/uptime#g" \\
-    -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/sys/vm/drop_caches#g")
+    -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/sys/vm/drop_caches#g" \\
+    -e "s#/dev/disk/by-partlabel/u-boot-env#\$F/dev/u-boot-env#g")
 PATH="\$F/bin:\$PATH" exec sh -c "\$cmd"
 EOF
 printf '#!/bin/sh\n[ -e "%s/state/tftpdead" ] && exit 28\necho canary\n' "$F" > "$S/fakebin/curl"
@@ -368,7 +404,9 @@ live() { PATH="$S/fakebin:$PATH" BOARD_HOST=$FAKE_HOST BOARD_UART=$FAKE_UART MP2
 LEFTF=$S/board.mp2u-left
 staged_on_card() { ls "$F/boot/yakogl/" 2>/dev/null | grep -q '^mp2z-'; }
 log_clean() { # the board commands never write the environment or a device, nor touch modules or services
-    ! grep -qE "save""env|fw_set""env|dd |mmcblk0|modprobe|insmod|rmmod|tailscale|sshd|setenv" "$F/ssh.log"
+    # (the one dd allowed is the read of u-boot-env, exactly as the runner spells it)
+    ! grep -vxE "(sudo -n )?dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none" "$F/ssh.log" |
+        grep -qE "save""env|fw_set""env|fw_printenv|dd |of=|mmcblk0|modprobe|insmod|rmmod|tailscale|sshd|setenv"
 }
 vline() { grep '^board-stm32mp2-uboot.sh stm32mp257f-dk ' <<<"$out" | tail -1; }
 
@@ -388,6 +426,12 @@ check "mmc run: the record: env before/after, /boot sha256 before/after, empty d
           cmp -s "$RD/boot-sha256.txt" "$RD/boot-sha256.after.txt" && [ ! -s "$RD/env.diff" ] && [ ! -s "$RD/boot.diff" ] && [ -s "$RD/console.ts" ] && [ -e "$RD/typed.log" ]'
 check "mmc run: the record is redacted (MAC, host, address)" \
     eval 'grep -q "^ethaddr=<redacted>" "$RD/env-before.txt" && ! grep -rqE "00:80:e1|mp2board|bridgehost|198\.51\.100\.99" "$RD" && grep -q "192.0.2.1" "$RD/console.ts"'
+check "mmc run (dd): env-before.txt is uboot_env.py print of the dd'd image, sorted: the same variables as the board's text (MAC redacted)" \
+    eval 'printf "%s\n" "$ENV0" | sort | sed "s/^ethaddr=.*/ethaddr=<redacted>/" | cmp -s - "$RD/env-before.txt"'
+check "mmc run (dd): u-boot-env read with dd twice, no fw_printenv; the raw images stay out of the record, their sha256 in meta.txt" \
+    eval '[ "$(grep -cx "dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none" "$F/ssh.log")" = 2 ] && ! grep -q fw_printenv "$F/ssh.log" &&
+          ! ls "$RD"/*.bin > /dev/null 2>&1 && grep -qE "^env_before_bin_sha256=[0-9a-f]{64}$" "$RD/meta.txt" &&
+          [ "$(sed -n "s/^env_before_bin_sha256=//p" "$RD/meta.txt")" = "$(sed -n "s/^env_after_bin_sha256=//p" "$RD/meta.txt")" ]'
 check "mmc run: the stock files are byte for byte unchanged" eval 'grep -qx kernel "$F/boot/Image.gz" && grep -qx dtb "$F/boot/stm32mp257f-dk.dtb"'
 check "mmc run: the board commands never write the environment or a device" log_clean
 check "mmc run: no state file left, no leak in the output" eval '[ ! -e "$LEFTF" ] && ! leaks "$out"'
@@ -395,6 +439,11 @@ check "mmc run: the staged script is the built mp2-mmc.scr (read back by sha256 
     eval 'grep -q "sha256sum mp2z-mp2_hello-.*\.scr mp2z-mp2_hello-.*\.bin" "$F/ssh.log"'
 check "mmc run: verdict.txt holds the verdict line; tools/mp2_uboot_record_check.py passes the record" \
     eval '[ "$(cat "$RD/verdict.txt")" = "$(vline)" ] && python3 -I "$REPO/tools/mp2_uboot_record_check.py" "$RD" > "$S/rc.out" 2>&1'
+
+reset_board
+out=$(live status 2>&1); rc=$?
+check "status, live (dd): rc 0, bootcmd and scriptaddr printed from the dd'd u-boot-env, no fw_printenv, nothing written" \
+    eval '[ "$rc" = 0 ] && grep -qx "bootcmd=run bootcmd_stm32mp" <<<"$out" && grep -qx "scriptaddr=0x90100000" <<<"$out" && ! grep -q fw_printenv "$F/ssh.log" && log_clean && ! leaks "$out"'
 
 reset_board
 out=$(BOARD_BOOT=uboot-tftp NETBOOT_SERVER=192.0.2.77 NETBOOT_TFTP_ROOT=$S/tftp live run "$S/img/mp2_hello.bin" "$S/runs" tftp_hello 2>&1); rc=$?
@@ -523,10 +572,18 @@ now=$(date +%s)
 for t in $(seq "$now" $((now + 60))); do mkdir -p "$S/runs/$(date -d "@$t" +%Y%m%d-%H%M%S)-mp2_hello-$SHA8"; done
 ndirs0=$(ls -d "$S/runs"/*-mp2_hello-"$SHA8"* | wc -l)
 nrefusal0=$nrefusal
-live_refused "a bad CRC in fw_printenv" "bad CRC"
+live_refused "a bad CRC in copy 1 (0x7e000) of the dd'd u-boot-env" "REFUSED: a bad CRC in the stored environment (tools/uboot_env.py check"
 check "a run whose directory name exists takes the next (-2), the existing one stays empty" \
     eval 'ls -d "$S/runs"/*-mp2_hello-"$SHA8"-2 > /dev/null 2>&1 && [ -s "$(ls -d "$S/runs"/*-mp2_hello-"$SHA8"-2 | head -1)/meta.txt" ] &&
           [ -z "$(ls -A "$S/runs/$(date -d "@$now" +%Y%m%d-%H%M%S)-mp2_hello-$SHA8")" ]'
+reset_board; touch "$F/state/badcopy2"
+live_refused "copy 2 (0x7c000) neither valid nor blank: a bad CRC" "REFUSED: a bad CRC in the stored environment"
+reset_board; touch "$F/state/bigpart"
+live_refused "a u-boot-env of another size than 512 KiB" "read 1048576 bytes, not the 512 KiB u-boot-env"
+check "the refusals on the environment read ran dd of u-boot-env, never fw_printenv, and wrote nothing" \
+    eval 'grep -qx "dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none" "$F/ssh.log" && ! grep -q fw_printenv "$F/ssh.log" && log_clean'
+reset_board; printf '%s\n' "$ENV0" | grep -v '^bootcmd=' > "$F/env.txt"
+live_refused "no bootcmd in the stored environment" "the stored environment has no bootcmd"
 reset_board; printf '%s\n' "$ENV0" | grep -v scriptaddr > "$F/env.txt"
 live_refused "scriptaddr unset" "scriptaddr is 'unset'"
 reset_board; printf '%s\n' "$ENV0" | sed 's/^scriptaddr=.*/scriptaddr=0xa8000000/' > "$F/env.txt"

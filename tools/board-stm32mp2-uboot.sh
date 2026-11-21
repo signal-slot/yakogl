@@ -82,7 +82,9 @@
 #   2. takes the board lock; checks ssh, no session from another machine,
 #      /boot on the SD card's bootfs, the console free (BOARD_UART, a probe),
 #      no staged file left by an earlier run, the free space, and reads the
-#      stored environment with fw_printenv (all variables): a "Bad CRC" is a
+#      stored environment (all variables) with dd of the u-boot-env partition
+#      and tools/uboot_env.py check and print (Linux's fw_printenv does not
+#      run on the DK): a bad CRC on either copy is a
 #      refusal (ST's env_check would store the RAM environment at the next
 #      "run bootcmd"), scriptaddr must be set and clear of the window, and
 #      tools/mp2s_guard.py --for oneshot must allow (no standalone default,
@@ -93,7 +95,7 @@
 #      bootcmd, a bootcmd that writes the environment (any of U-Boot's
 #      save commands or fw_set*), a stored env_default=1, stored mp2z_*
 #      variables); records
-#      fw_printenv and the sha256 of every stock file of /boot (the "before");
+#      that text and the sha256 of every stock file of /boot (the "before");
 #   3. prints the UNDO, then stages the script and the image;
 #   4. starts mp2_uboot_console.py typed (capture and the one line), then
 #      reboots the board's Linux; BL2's IWDG ends a hang in about 32 s, the
@@ -102,7 +104,8 @@
 #      RETURN_BOUND s (120 + 180); the old boot still answering
 #      MP2_REBOOT_GRACE s (90) after the reboot is verdict=not_rebooted;
 #   6. removes the staged files (read back gone);
-#   7. records fw_printenv and the /boot sha256 again and prints both diffs
+#   7. reads the environment (dd + uboot_env.py) and the /boot sha256 again
+#      and prints both diffs
 #      (expected empty);
 #   8. prints the verdict line.
 # A board that does not come back within the bound: verdict=not_back, rc 7,
@@ -527,25 +530,50 @@ prechecks() {
     [[ $BOOT_DEV =~ p([0-9]+)$ ]] || die "/boot's source is not a partition"
     BOOT_PART=${BASH_REMATCH[1]}
 }
-# env_read FILE: fw_printenv, all variables, into FILE; refuses a bad CRC and
-# a scriptaddr that is unset or not clear of the window
+# env_read FILE: the stored environment, every variable, sorted, into FILE.
+# Linux's fw_printenv does not run on the DK as shipped (no /etc/fw_env.config;
+# docs/notes/stm32mp257f-dk-uboot-boot.md, section 1), so the text now comes
+# from tools/uboot_env.py print of the u-boot-env partition, read read-only
+# with dd into $TMP/<FILE's name>.bin. The raw image carries the MAC and the
+# serial, so it stays out of the run directory (redact_run cannot redact a
+# binary); its sha256 goes into meta.txt (env_before_bin_sha256, ...).
+# Refuses: a partition that is not the 512 KiB one of the note's layout, a
+# bad CRC on either copy (tools/uboot_env.py check; the stock card's copy at
+# 0x7c000 is all zeros, never written, and is accepted with
+# --allow-blank-copy, as tools/board-stm32mp2.sh does; any other bad copy is
+# refused), no bootcmd, a scriptaddr unset or not clear of the window.
+# ENV_TXT: the text file read (the dry run's sample under --dry-run).
+ENV_DEV=/dev/disk/by-partlabel/u-boot-env
+ENV_PART_SIZE=$((512 * 1024))   # u-boot-env on the DK's microSD (the note, section 1)
+ENV_LAYOUT=(--size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 --allow-blank-copy)
+ENV_DD="dd if=$ENV_DEV bs=64k status=none"
 ENV_DRY='bootcmd=run bootcmd_stm32mp
 bootdelay=1
 scriptaddr=0x90100000'
+ENV_TXT=
 env_read() {
-    local out=$1 sa
+    local out=$1 sa name bin msg sz
+    name=$(basename "$out" .txt)
+    bin=$TMP/$name.bin
     if [ "$DRY" = 1 ]; then
-        echo "DRY board\$ ${SU}fw_printenv 2>&1   # > $out (every variable)"
+        echo "DRY board\$ ${SU}$ENV_DD   # > <tmp>/$name.bin (read-only; not fw_printenv, which does not run on the DK)"
+        echo "DRY host\$ python3 -I tools/uboot_env.py ${ENV_LAYOUT[*]} check <tmp>/$name.bin   # both copies' CRC, else refused"
+        echo "DRY host\$ python3 -I tools/uboot_env.py ${ENV_LAYOUT[*]} print <tmp>/$name.bin | sort   # > ${out/#"$TMP"/<tmp>} (every variable)"
         printf '%s\n' "$ENV_DRY" > "$TMP/env.dry"
         out=$TMP/env.dry
     else
-        B_TIMEOUT=60 fgw b_ssh "${SU}fw_printenv 2>&1; echo \"fw_printenv:rc=\$?\"" > "$out" 2>/dev/null ||
-            die "cannot read the environment (fw_printenv over ssh failed)" 5
-        grep -qx 'fw_printenv:rc=0' "$out" || die "fw_printenv failed on the board: $(tr '\n' ';' < "$out" | cut -c1-200)" 5
-        sed -i '/^fw_printenv:rc=/d' "$out"
+        B_TIMEOUT=60 fgw b_ssh "${SU}$ENV_DD" > "$bin" 2>/dev/null ||
+            die "cannot read the environment (dd of $ENV_DEV over ssh failed)" 5
+        sz=$(stat -c %s "$bin")
+        [ "$sz" = "$ENV_PART_SIZE" ] ||
+            die "REFUSED: $ENV_DEV read $sz bytes, not the 512 KiB u-boot-env with its copies at 0x7e000 and 0x7c000"
+        msg=$(python3 -I "$TOOLS/uboot_env.py" "${ENV_LAYOUT[@]}" check "$bin" 2>&1) ||
+            die "REFUSED: a bad CRC in the stored environment (tools/uboot_env.py check: $(tr '\n' ';' <<<"$msg" | cut -c1-160)): U-Boot runs on its defaults and ST's env_check would store the RAM environment at the next 'run bootcmd'"
+        { python3 -I "$TOOLS/uboot_env.py" "${ENV_LAYOUT[@]}" print "$bin" 2>/dev/null || echo "uboot_env:print-failed"; } | sort > "$out"
+        grep -qx 'uboot_env:print-failed' "$out" && die "tools/uboot_env.py could not print the stored environment" 5
+        meta "${name//[!A-Za-z0-9]/_}_bin_sha256" "$(sha256sum "$bin" | cut -d' ' -f1)"
     fi
-    grep -qi 'bad crc' "$out" &&
-        die "REFUSED: fw_printenv reports a bad CRC: U-Boot runs on its defaults and ST's env_check would store the RAM environment at the next 'run bootcmd'"
+    ENV_TXT=$out
     grep -q '^bootcmd=' "$out" || die "the stored environment has no bootcmd: not ST's environment as expected"
     sa=$(sed -n 's/^scriptaddr=//p' "$out" | head -1)
     [[ $sa =~ ^(0x)?[0-9a-fA-F]+$ ]] || die "REFUSED: scriptaddr is '${sa:-unset}' in the stored environment: the typed line loads the script to \${scriptaddr}"
@@ -555,9 +583,10 @@ env_read() {
     SCRIPTADDR=$sa
 }
 SCRIPTADDR=
-# standalone_guard FILE: tools/mp2s_guard.py --for oneshot on the fw_printenv
-# text in FILE: refuses while a standalone default (mp2s_*) is set, since the
-# boot after the image would then not be Linux
+# standalone_guard FILE: tools/mp2s_guard.py --for oneshot on the environment
+# text in FILE (env_read's uboot_env.py print, in fw_printenv's format):
+# refuses while a standalone default (mp2s_*) is set, since the boot after
+# the image would then not be Linux
 # (docs/notes/stm32mp257f-dk-standalone.md, section 7)
 standalone_guard() {
     local f=$1 msg
@@ -668,7 +697,10 @@ cmd_status() {
     prechecks
     env_read "$TMP/env.now"
     echo "boot: $BOOT; bootfs $BOOT_DEV (U-Boot part $BOOT_PART); scriptaddr $SCRIPTADDR; go window $LOAD..$LOAD_END"
-    b "${SU}fw_printenv bootcmd bootdelay boot_targets scriptaddr 2>&1; ls -l $STAGE_DIR 2>/dev/null; df -B1 --output=avail /boot | tail -1; cut -d' ' -f1 /proc/uptime"
+    # bootcmd and its neighbours from env_read's text (uboot_env.py print of the dd'd partition)
+    if [ "$DRY" = 1 ]; then echo "DRY host\$ grep -E '^(bootcmd|bootdelay|boot_targets|scriptaddr)=' <the text above>"
+    else grep -E '^(bootcmd|bootdelay|boot_targets|scriptaddr)=' "$ENV_TXT"; fi
+    b "ls -l $STAGE_DIR 2>/dev/null; df -B1 --output=avail /boot | tail -1; cut -d' ' -f1 /proc/uptime"
     our_leftovers
     if [ -n "$LEFTOVER" ]; then echo "staged files of this runner: $(tr '\n' ' ' <<<"$LEFTOVER")"; else echo "staged files of this runner: none on the card"; fi
     if [ "$BOOT" = uboot-tftp ]; then
@@ -911,7 +943,9 @@ cmd_run() {
     if diff "$RD/boot-sha256.txt" "$RD/boot-sha256.after.txt" > "$RD/boot.diff"; then meta boot_diff empty; else meta boot_diff changed; fi
     meta ended "$(date '+%F %T')"
     redact_run "$RD"
-    echo "$TAG: fw_printenv before/after diff ($(mget env_diff)):"; sed 's/^/  /' "$RD/env.diff"
+    # the label stays "fw_printenv" (tools/mp2_uboot_note_check.py and c5 look
+    # for it); the text is uboot_env.py print of the dd'd u-boot-env partition
+    echo "$TAG: fw_printenv before/after diff ($(mget env_diff)) (u-boot-env via dd + uboot_env.py print):"; sed 's/^/  /' "$RD/env.diff"
     echo "$TAG: /boot sha256 before/after diff ($(mget boot_diff)):"; sed 's/^/  /' "$RD/boot.diff"
     verdict_line "$RD"
     echo "$V_LINE" | tee "$RD/verdict.txt"
