@@ -57,6 +57,9 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
 - `stm32mp257f_dk/mp2_identify`: the STM32MP257F-DK's return-trial image, the
   hand-over record and OP-TEE's watchdog armed at boot, then PSCI reset.
 - `rpi_5/*`: the Raspberry Pi 5 probes (`tools/probes/rpi_5/README.md`).
+- `verdin_imx95/*`: the Verdin iMX95's first-session probes (`imx95_wdog`,
+  `imx95_scmi`, `imx95_ident`, `imx95_fw`, `imx95_dsi_ids`) and the Linux
+  day-one reading (`linux_day_one/`), `tools/probes/verdin_imx95/README.md`.
 - `rpi5_display`: U3 on the Raspberry Pi 5, the display (`driver/docs/rpi5-display.md`): the mailbox framebuffer, display register words, a split screen; with a read-only Linux dump and host tests. Moves under `rpi_5/` when that tree is free.
 
 Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
@@ -78,6 +81,11 @@ Gate rows (`tools/check.sh`, reached by a change under `tools/probes/` or
   `mp2_hello` is built with `CONFIG_YAKOGL_STM32MP2_WDOG=y` and must carry the
   watchdog marker `gc_wdog_arm: armed` once. Without `ZEPHYR_WS` they are the
   one gap naming it.
+- `zephyr  verdin_imx95 probe images`: every directory of `verdin_imx95/`
+  with a `CMakeLists.txt` and a `prj.conf`, `west build -b
+  verdin_imx95/mimx9596/a55` with `-DYAKOGL_WERROR=ON`; each image links
+  WDOG3's arming and only `imx95_wdog` is built unfed. A gap without
+  `ZEPHYR_WS` or the CSF firmware header (`imx95_fw` embeds it).
 - `test    rpi_5 fdt_walk host test`: `rpi_5/common/fdt/test/run.sh` (host cc,
   ASan/UBSan, no Zephyr). Ok only with `dtc` on PATH and `fdt_walk: N checks,
   0 failed` without a SKIPPED line; without `dtc` it is a gap naming it. If it
