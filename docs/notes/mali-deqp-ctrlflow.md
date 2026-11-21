@@ -192,6 +192,66 @@ Step 6 belongs to the loops items.
 - The references are drawn with `--uniform-values`; a lowering compares
   them with `mali_ref::assert_matches` as they are.
 
+## 6a. Measured sites at a7260420
+
+MEASURED, HOST-ONLY. Every `deqp_ctrlflow_*` reference (27) was compiled
+with `mali_ref::compile_pair` (as `tests/mali_deqp_ctrlflow.rs`, features
+`host-test,gpu-mali,shaderc-online,no-shader-table`) at the integration tip
+`a7260420`, in a scratch test that was not committed, with a temporary
+`eprintln!(file!(), line!())` at every `MaliError::ControlFlow` /
+`DiscardForm` construction in `vec16.rs`, `nir.rs` and `nir_fs.rs` (all
+reverted; no code or test is changed). Sites are `nir_fs.rs` unless
+`nir.rs` is named; line numbers are those of `a7260420` and drift with the
+files. The text is the refusal `refusals_pinned` pins; it is unchanged for
+all 27: **no reference's first refusal is another text** (no intval,
+loop or guard text hides a ctrlflow one), so no item owns a moved
+reference. `nir.rs:3821` is not a site of its own: `vs_steps` emits
+`Step::Refuse(flat(..).err())` for an `if` whose side `flat` refused, and
+the error comes from `side` (`nir.rs:3774` or `:3779`, printed first).
+"Step" is the row of section 5.
+
+| Reference | Text | Site | What the site is | Step |
+|---|---|---|---|--:|
+| `disc_basic_always` | DiscardForm | `:6828` | `ir::Op::Discard` outside an `if` | 2 |
+| `disc_function_static_loop_always` | DiscardForm | `:1833` | `discard()`: the condition is a constant, not a lane (the note guessed `:6828`) | 2 |
+| `disc_basic_never` | DiscardForm | `:1833` | `discard()`: constant `false` condition (the note guessed `:4496`) | 1 |
+| `disc_basic_uniform` | DiscardForm | `:1835` | `discard()`: the condition is an integer compare, not an `Fcmp` | 2 |
+| `disc_static_loop_uniform` | DiscardForm | `:1835` | as `disc_basic_uniform` | 2 |
+| `disc_basic_dynamic` | DiscardForm | `:9075` | `cmp_leaf`: a computed operand (`x + y`) | 2 |
+| `disc_function_dynamic` | DiscardForm | `:9075` | as `disc_basic_dynamic` | 2 |
+| `fs_int_cond` | ControlFlow | `:4657` | `walk_if16`'s `sel`: a join of two lanes that is no float-compare `bcsel` (an integer compare; its `bvec4` is dead). The note guessed `:4613`: the integer compare passes `mask_lane` | 1 |
+| `fs_int_cond_colour` | ControlFlow | `:4625` | the colour differs between the sides and the condition is not a 16-bit `Fcmp` (note: `:4613`) | 3 |
+| `fs_float_cond_colour_read` | ControlFlow | `:4641` | `alu_only` fails: a side holds more than `PEEPHOLE_LIMIT` ops or a non-ALU node | 1 |
+| `fs_float_cond_varying` | ControlFlow | `:4641` | as above: a side reads a varying | 3 |
+| `fs_vec_cond` | ControlFlow | `:4613` | the condition (an `all()` of lane compares) is neither a mask lane nor a 16-bit `Fcmp` | 3 |
+| `fs_struct_select` | ControlFlow | `:4657` | `sel`: a select of a boolean or mask lane at the join (note: `:4641`) | 3 |
+| `fs_shaderlib_and` | ControlFlow | `:4641` | `alu_only` fails (the `&&` `if`'s side; note: `:4657`) | 5 |
+| `fs_side_effect_or` | ControlFlow | `:4657` | `sel`: a global's value joined under the `||` `if` | 5 |
+| `fs_side_effect_ternary` | ControlFlow | `:4657` | `sel`: as `fs_side_effect_or` | 5 |
+| `fs_frontfacing` | ControlFlow | `:4625` | the face bit passes `mask_lane`; the colour differs per side and the condition is no 16-bit `Fcmp` (note: `:4613`) | 5 |
+| `fs_return_static_loop` | ControlFlow | `:4625` | a side's flow is not `Flow::Next` (the return flag) (note: `:4234`) | 5 |
+| `fs_loop_break_continue` | ControlFlow | `:4625` | the `if` of a kept loop's body: the colour differs per side | 6 (`loops-lower-1`) |
+| `vs_nested` | ControlFlow | `nir.rs:3779` (via `:3821`) | `side`: an `IrNode::If` inside a side | 1 (dead conditions) |
+| `vs_nested_combined` | ControlFlow | `nir.rs:3779` | as `vs_nested` | 1 |
+| `vs_elseif` | ControlFlow | `nir.rs:3779` | as `vs_nested` | 4 |
+| `vs_nested_hsl` | ControlFlow | `nir.rs:3774` | `side`: more than `PEEPHOLE_LIMIT_GL` ALU ops in a side (note: a nested `if`) | 4 |
+| `vs_statement_side` | ControlFlow | `nir.rs:3774` | `side`: more than `PEEPHOLE_LIMIT_GL` ops (the unused statement's compare chain) | 1 |
+| `vs_varying_select` | ControlFlow | `nir.rs:3774` | `side` limit, before `vs_join` (note: `:3885`) | 4 |
+| `vs_varying_one_side` | ControlFlow | `nir.rs:3885` | `vs_join`: a varying set on one side only | 1 |
+| `vs_varying_else_side` | ControlFlow | `nir.rs:3885` | as `vs_varying_one_side` | 1 |
+
+What the measure changes for the steps: (a) `disc_basic_never` and
+`disc_function_static_loop_always` both stop in `discard()` on a constant
+condition, so step 1's `if (false) discard;` and step 2's `discard;` share
+the one constant-condition form (`DISCARD.f32.eq 0x0, 0x0` for `true`, none
+for `false`); (b) four fragment references (`fs_int_cond_colour`,
+`fs_frontfacing`, `fs_return_static_loop`, `fs_loop_break_continue`) pass
+the condition test and stop at `:4625`, on the per-side colour, so their
+lowering is the colour join of the select, not a condition form; (c)
+`vs_nested_hsl`, `vs_statement_side` and `vs_varying_select` stop on the
+side's op limit (`:3774`), so a step 4 that only adds nested `if`s to `side`
+does not reach them before the limit is lifted.
+
 ## 7. Issue comment (to post on the plan #387 tracking issue, or #20)
 
 > **ctrlflow-ref (plan #387): ControlFlow and DiscardForm at `5cb80624`.**
