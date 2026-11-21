@@ -8,7 +8,8 @@
 # families file's order and mustpass order, splits a family at --max, lists a
 # case once, leaves out a case no line matches and a ARITH_CONST text the real
 # families file does not carry, and passes check-gles3-tree.py. --refusal
-# filters; the error exits are checked, and the real families file must not
+# filters; every text of the real families file must occur in
+# src/shaderc/online/mali/*.rs or carry a "#historical<TAB>text" line; the error exits are checked, and the real families file must not
 # name the plan #367 ARITH_CONST text.
 #
 #   tools/cts/mali-family-tree-selftest.sh   prints "mali-family-tree-selftest: N checks passed"
@@ -66,5 +67,26 @@ check "the real families file names no ARITH_CONST text (plan #367's)" \
   test "$(grep -v '^#' "$HERE/mali-family-refusals.txt" | grep -c 'a constant product in a shape')" -eq 0
 check "every real families line is family<TAB>text" \
   test "$(grep -v '^#' "$HERE/mali-family-refusals.txt" | grep -vcP '^[a-z]+\t[^\t]+$')" -eq 0
+
+# The families file against the compiler: no network, no build, grep only.
+REPO=$(cd "$HERE/../.." && pwd)
+FAMS=$HERE/mali-family-refusals.txt
+miss=0 stale=0
+while IFS=$'\t' read -r fam text; do
+  case $fam in
+    '#historical')
+      if grep -qF -- "$text" "$REPO"/src/shaderc/online/mali/*.rs; then
+        echo "  stale #historical (the compiler has it): $text"; stale=$((stale + 1))
+      fi
+      continue ;;
+    ''|'#'*) continue ;;
+  esac
+  grep -qF -- "$text" "$REPO"/src/shaderc/online/mali/*.rs && continue
+  grep -qxF -- "#historical"$'\t'"$text" "$FAMS" && continue
+  echo "  missing: $fam: $text (in neither the compiler nor a #historical line)"
+  miss=$((miss + 1))
+done < "$FAMS"
+check "every families text is in src/shaderc/online/mali/*.rs or marked #historical" test "$miss" -eq 0
+check "no #historical line names a text the compiler still has" test "$stale" -eq 0
 
 if [ "$fails" -eq 0 ]; then echo "mali-family-tree-selftest: $n checks passed"; else echo "mali-family-tree-selftest: $fails of $n checks FAILED"; exit 1; fi

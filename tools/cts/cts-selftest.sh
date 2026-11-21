@@ -942,7 +942,7 @@ malicheck 50 mali-fail-triage-selftest.sh 11
 # 51: mali-deqp-build.sh's dry run and its symbol-floor checks on fake tools.
 malicheck 51 mali-deqp-build-selftest.sh 29
 # 52: mali-family-tree.py builds the tree table of the compile-refused cases by family.
-malicheck 52 mali-family-tree-selftest.sh 16
+malicheck 52 mali-family-tree-selftest.sh 18
 
 # 58: es2-tree-gate.py on synthetic whole-tree records (plan #351): a Pi 4 and
 # an i.MX8MP record that pass, and the Fail, crash, no-result, unaccepted
