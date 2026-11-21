@@ -125,6 +125,17 @@ runner's 0xa0000000..0xb0000000.
 waits `RUN_BOUND` (120 s by default) for the end line: give a dEQP run
 `RUN_BOUND=600` or more.
 
+The DK has no SNVS record, so it takes no run-time selector; its image
+carries a patch slot instead (`CONFIG_DEQP_CASE_SLOT=y` in its board conf).
+`tools/cts/mp2-deqp-slot.py` writes it in `zephyr.bin` after the build and
+before the runner stages it: `write zephyr.bin --selector <i>` runs entry
+`i` of `CONFIG_DEQP_CASE_TABLE` (the tree table `tools/cts/board-stage.sh`
+builds in), `--filter '<p>,<p>'` or `--case-list <file>` runs a list of its
+own, `--clear` and an unwritten slot run `CONFIG_DEQP_CASE`; `show` reads it
+back. The image prints `deqp: case filter '...'` first, so the console says
+which list ran. `tools/cts/mp2_deqp_slot_selftest.sh [zephyr.bin]` checks
+the tool.
+
 ## NanoPC-T6 (Mali-G610)
 
 The image runs through YakoGL's GL core, its in-process compiler and its Mali
