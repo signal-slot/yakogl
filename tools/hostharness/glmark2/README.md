@@ -365,3 +365,18 @@ entry, from an empty carve-out.
   (their carve-outs); the PowerVR cannot.
 * Frames: 3 per entry by default. Per-frame lines are counted, so their
   count scales with `GM2_FRAMES`.
+
+## Mesa's 7.1 counts
+
+`tools/hostharness/glmark2/ref71.sh <corpus dir> <out.tsv>` compiles every
+vertex/fragment pair of the generated corpus (the pairs
+`tests/glmark2_corpus.rs` tries, one row per pair keyed `<vs file>+<fs file>`)
+with Mesa 26.2.1's V3D 7.1 compiler (`v3d_shc --device 71`, `V3D_SHC`;
+`tools/v3d/README.md` H2) and writes the vertex and fragment instruction counts,
+the threads and Mesa's refusal message, if any. It needs `V3D_SHC` and
+`GLMARK2_SRC` (the commit goes into the header) and exits 3 naming the missing
+one. The committed result is `tools/shaders/glmark2_counts_71.tsv`: names and
+numbers only, never shader text. Regenerate it with the command in its header
+whenever the corpus or the Mesa tree changes.
+
+The knobs' refusals are checked by `ref71-selftest.sh` (no Mesa tree needed).
