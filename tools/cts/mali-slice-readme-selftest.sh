@@ -64,6 +64,20 @@ for what in "ip:results.tsv:dEQP-GLES2.x.y\tFail\tconnect to $ip" \
     [ -e "$work/r/README.md" ] && bad "$tag: --write wrote a README" || ok "$tag: --write wrote nothing"
 done
 
+# A slice of another board (a board= line in meta.txt, mali-deqp-run.sh on
+# MALI_BOARD=verdin-imx95) names that board and the command that made it;
+# everything else is the clean slice's README.
+rm -rf "$work/v"; mkdir -p "$work/v"; cp -r "$DATA/clean" "$work/v/clean"
+sed -i 's/^rows=.*/&\nboard=verdin-imx95/' "$work/v/clean/meta.txt"
+got=$(python3 -I "$TOOL" "$work/v/clean" 2>&1)
+if grep -q '^# Verdin iMX95 dEQP-GLES2 ' <<<"$got" && grep -q 'of the Verdin iMX95 (Mali-G310 over panthor' <<<"$got" &&
+   grep -q '^MALI_BOARD=verdin-imx95 BOARD_HOST=<board> tools/cts/mali-deqp-run.sh' <<<"$got" &&
+   ! grep -q 'NanoPC-T6\|Mali-G610\|nanopc-t6' <<<"$got"; then ok "board=verdin-imx95: the README names the Verdin iMX95 only"
+else bad "board=verdin-imx95: the README does not name the board"; fi
+want=$(sed -e 's/NanoPC-T6/Verdin iMX95/g' -e 's/Mali-G610 over panthor, the board.s own Armbian/Mali-G310 over panthor, the board'"'"'s own Linux/' \
+  -e 's/^BOARD_HOST=<board>/MALI_BOARD=verdin-imx95 BOARD_HOST=<board>/' -e 's/target:nanopc-t6/target:verdin-imx95/' "$DATA/clean.expected")
+if [ "$got" = "$want" ]; then ok "board=verdin-imx95: no other line differs from clean.expected"; else bad "board=verdin-imx95: other lines differ"; fi
+
 # A missing file is refused too.
 rm -rf "$work/r"; cp -r "$DATA/clean" "$work/r"; rm "$work/r/chunks.tsv"
 python3 -I "$TOOL" "$work/r" >/dev/null 2>&1; rc=$?

@@ -134,6 +134,16 @@ pub struct Device {
     pub priorities: Option<DrmPanthorGroupPrioritiesInfo>,
 }
 
+/// The render node when none is named: panthor's on the NanoPC-T6 and on
+/// a board whose display driver has no render node.
+pub const DEFAULT_PATH: &str = "/dev/dri/renderD128";
+
+/// The render node a tool opens when none is named: `YAKOGL_MALI_DEV`
+/// (run-on-board.sh sets it from the board profile), else [`DEFAULT_PATH`].
+pub fn default_path() -> String {
+    std::env::var("YAKOGL_MALI_DEV").unwrap_or_else(|_| DEFAULT_PATH.into())
+}
+
 impl Device {
     /// Open `path` (e.g. /dev/dri/renderD128), check that the driver is
     /// panthor and read its GPU, CSIF, timestamp and priority queries.

@@ -55,6 +55,10 @@ meta.txt carries one more, optional key
   reruns=<dir name>[,<dir name>...]   (one or more earlier slices, each
                among the slices given)
 
+and a slice of a board other than the NanoPC-T6 one more, optional key,
+board=<MALI_BOARD> (tools/mali/panthor/board-profile.sh), which the tally
+does not read.
+
 A case may then appear in the rerunning slice and in an earlier slice, and
 only so: that earlier slice is one of the names in reruns and has the case as
 Lost. The later status wins: the earlier Lost row is dropped from the tally

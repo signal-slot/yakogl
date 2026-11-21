@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
-# Read-only probe of the NanoPC-T6 (Armbian 26.8.10 trixie, kernel
+# Read-only probe of the board (the NanoPC-T6: Armbian 26.8.10 trixie, kernel
 # 6.18.55-current-rockchip64) before a glmark2-es2 run built by
-# tools/cts/mali-glmark2-build.sh.
+# tools/cts/mali-glmark2-build.sh. The board profile
+# (tools/mali/panthor/board-profile.sh: MALI_BOARD, default nanopc-t6) gives
+# the render node (MALI_RENDER_NODE), the uname -r the panthor record is for
+# (MALI_KERNEL_GLOB; none yet on the Verdin iMX95, then the kernel is only
+# named) and the os-release codename the builds target (MALI_OS_CODENAME,
+# trixie).
 #
 #   BOARD_HOST=root@<t6> tools/cts/mali-glmark2-preflight.sh [--build DIR] [--stage DIR]
 #   tools/cts/mali-glmark2-preflight.sh --host root@<t6> ...
@@ -32,6 +37,10 @@
 set -uo pipefail
 me=${0##*/}
 HERE=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=../mali/panthor/board-profile.sh
+. "$HERE/../mali/panthor/board-profile.sh"
+board_profile_load || exit 2
+node=$MALI_RENDER_NODE
 GLIBC_FLOOR=2.41 GLIBCXX_FLOOR=3.4.33 CXXABI_FLOOR=1.3.15
 PROGRAM=glmark2-es2-mali
 host=${BOARD_HOST-} build= stage=/root/yakogl-mali need_kb=1048576 dry=0
@@ -74,8 +83,8 @@ C_OSREL='cat /etc/os-release'
 C_UNAME='uname -r'
 C_GLIBC="grep -aoE 'GLIBC_[0-9]+(\\.[0-9]+)+' /lib/aarch64-linux-gnu/libc.so.6 | sort -u"
 C_CXX="grep -aoE '(GLIBCXX|CXXABI)_[0-9]+(\\.[0-9]+)+' /usr/lib/aarch64-linux-gnu/libstdc++.so.6 | sort -u"
-C_NODE='test -c /dev/dri/renderD128 && echo present'
-C_DRIVER='basename "$(readlink -f /sys/class/drm/renderD128/device/driver)"'
+C_NODE="test -c $node && echo present"
+C_DRIVER="basename \"\$(readlink -f /sys/class/drm/$MALI_RENDER_NAME/device/driver)\""
 C_MODULE='test -d /sys/module/panthor && echo loaded; grep -c "^panthor " /proc/modules'
 C_DFSTAGE="d=$stage; [ -d \"\$d\" ] || d=/root; df -Pk \"\$d\""
 C_DFBOOT='df -Pk /boot'
@@ -105,13 +114,18 @@ pretty=$(sed -n 's/^PRETTY_NAME="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' <<< "$osr" | he
 codename=$(sed -n 's/^VERSION_CODENAME=//p' <<< "$osr" | head -1)
 ver=$(sed -n 's/^VERSION_ID="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' <<< "$osr" | head -1)
 if [ -z "$pretty" ]; then say os-release FAIL "cannot read /etc/os-release"
-elif [ "$codename" = trixie ] || [ "${ver%%.*}" = 13 ]; then say os-release ok "$pretty"
-else say os-release FAIL "$pretty (trixie wanted)"; fi
+elif [ "$codename" = "$MALI_OS_CODENAME" ] || { [ "$MALI_OS_CODENAME" = trixie ] && [ "${ver%%.*}" = 13 ]; }; then say os-release ok "$pretty"
+else say os-release FAIL "$pretty ($MALI_OS_CODENAME wanted)"; fi
 kern=$(rssh "$C_UNAME" 2>&1 | head -1)
+# shellcheck disable=SC2254  # MALI_KERNEL_GLOB is a pattern
 case $kern in
-  6.18.*rockchip64*) say uname ok "$kern" ;;
   '') say uname FAIL "uname -r gave nothing" ;;
-  *) say uname warn "$kern (6.18.55-current-rockchip64 is the one the panthor record is for)" ;;
+  *)
+    if [ -z "$MALI_KERNEL_GLOB" ]; then say uname ok "$kern (no panthor record on the $MALI_BOARD_NAME yet: this is the kernel the first one is for)"
+    elif [[ $kern == $MALI_KERNEL_GLOB ]]; then say uname ok "$kern"
+    elif [ "$MALI_BOARD" = nanopc-t6 ]; then say uname warn "$kern (6.18.55-current-rockchip64 is the one the panthor record is for)"
+    else say uname warn "$kern (the panthor record is for $MALI_KERNEL_GLOB)"; fi
+    ;;
 esac
 
 # --- library floors
@@ -177,12 +191,12 @@ if [ -n "$build" ]; then
 fi
 
 # --- render node, panthor
-node=$(rssh "$C_NODE" 2>&1) || node=
-if [ "$node" != present ]; then say render-node FAIL "/dev/dri/renderD128 does not exist"
+have_node=$(rssh "$C_NODE" 2>&1) || have_node=
+if [ "$have_node" != present ]; then say render-node FAIL "$node does not exist"
 else
   drv=$(rssh "$C_DRIVER" 2>&1 | head -1)
-  if [ "$drv" = panthor ]; then say render-node ok "/dev/dri/renderD128 belongs to panthor"
-  else say render-node FAIL "/dev/dri/renderD128 belongs to '${drv:-unknown}', not panthor"; fi
+  if [ "$drv" = panthor ]; then say render-node ok "$node belongs to panthor"
+  else say render-node FAIL "$node belongs to '${drv:-unknown}', not panthor"; fi
 fi
 mod=$(rssh "$C_MODULE" 2>&1) || mod=
 if grep -q '^loaded$' <<< "$mod" || grep -qx '[1-9][0-9]*' <<< "$mod"; then say panthor-module ok loaded
