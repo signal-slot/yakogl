@@ -46,12 +46,20 @@
 #   cases.txt        the case list, in mustpass order
 #   board.tsv        case, the board's status and its refusal text (the slices)
 #   c_NNN, c_NNN.qpa, c_NNN.out, c_NNN.r<k>.qpa  the chunks and their logs
+#   c_NNN.crashed    only after a crash: "case<TAB>exit=N" per case a process
+#                    died in; the chunk goes on with the cases after it
 #   measure.tsv      per case: board status, board family, host status, the
 #                    refusing stage, host family, shape, the host refusal text
 #   summary.md       HOST-ONLY: per family a table of shapes with case counts
 #                    (Fail/NotSupported by the BOARD's status), an example case
 #                    and the count by stage; the families' totals; the cases
 #                    not reproduced on the host, by reason
+#                    A case a process died in (the library SIGSEGV of
+#                    docs/notes/mali-deqp-defects.md, a timeout) has its own
+#                    row: host_status 'crash', host_refusal 'exit=N', no
+#                    family; summary.md lists them under "### Crash" and
+#                    not-reproduced.tsv as 'crash (exit=N)'. The rest of the
+#                    chunk is measured (tools/mali/test_deqp_host_measure.py).
 #   not-reproduced.tsv  cases whose host first refusal is not the board's
 #   shapes/<family>_<shape>.vert|.frag  one representative pair per shape,
 #                    verbatim from the .qpa (plus .case naming the case)
@@ -339,21 +347,35 @@ build_lib() {
 # (a crash, the timeout) goes on in a fresh process over the cases no process
 # of it has begun (c_NNN.r<k>.qpa); a process that begins none of them is
 # stopped by the first one before it begins, which goes to c_NNN.skipped.
+# The case a process died in (begun, no #endTestCaseResult; or the one that
+# went to .skipped) is also written to c_NNN.crashed as "case<TAB>exit=N":
+# the extract stage turns it into a 'crash' row. DEQP_RUNNER (a test hook) is
+# a command run as `$DEQP_RUNNER <caselist> <qpa>` in place of deqp-gles2.
 run_chunk() {
-	local c=$1 list=$1 log=$1.qpa k=0 left rest
+	local c=$1 list=$1 log=$1.qpa k=0 left rest rc open
 	left=$(wc -l < "$c")
 	: > "$c.out"
+	: > "$c.crashed"
 	while :; do
-		(cd "$DEQP_DIR/modules/gles2" &&
-		 LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-gles2 --deqp-caselist-file="$list" \
-			--deqp-log-filename="$log" --deqp-log-shader-sources=enable --deqp-log-images=disable \
-			--deqp-surface-type=pbuffer --deqp-surface-width="$SURFACE" --deqp-surface-height="$SURFACE" >> "$c.out" 2>&1)
-		echo "exit=$?" >> "$c.out"
+		rc=0
+		if [ -n "${DEQP_RUNNER:-}" ]; then
+			"$DEQP_RUNNER" "$list" "$log" >> "$c.out" 2>&1 || rc=$?
+		else
+			(cd "$DEQP_DIR/modules/gles2" &&
+			 LD_LIBRARY_PATH="$LIB" timeout 600 ./deqp-gles2 --deqp-caselist-file="$list" 				--deqp-log-filename="$log" --deqp-log-shader-sources=enable --deqp-log-images=disable 				--deqp-surface-type=pbuffer --deqp-surface-width="$SURFACE" --deqp-surface-height="$SURFACE" >> "$c.out" 2>&1) || rc=$?
+		fi
+		echo "exit=$rc" >> "$c.out"
+		# the last case this process began, if it has no end
+		open=$(awk '/^#beginTestCaseResult /{b=$2; open=1} /^#endTestCaseResult/{open=0} END{if (open) print b}' "$log" 2>/dev/null || true)
+		if [ "$rc" -ne 0 ] && [ -n "$open" ]; then
+			printf '%s\texit=%s\n' "$open" "$rc" >> "$c.crashed"
+		fi
 		grep -vxF -f <(cat "$c".qpa "$c".r*.qpa 2>/dev/null | sed -n 's/^#beginTestCaseResult //p'
 		               cat "$c.skipped" 2>/dev/null) "$c" > "$c.rest" || true
 		rest=$(wc -l < "$c.rest")
 		if [ "$rest" -gt 0 ] && [ "$rest" -eq "$left" ]; then
 			head -1 "$c.rest" >> "$c.skipped"
+			printf '%s\texit=%s\n' "$(head -1 "$c.rest")" "$rc" >> "$c.crashed"
 			sed -i 1d "$c.rest"
 			rest=$((rest - 1))
 		fi
@@ -361,9 +383,10 @@ run_chunk() {
 		left=$rest k=$((k + 1)) list=$c.rest log=$c.r$k.qpa
 	done
 	rm -f "$c.rest"
+	[ -s "$c.crashed" ] || rm -f "$c.crashed"
 }
 export -f run_chunk
-export DEQP_DIR LIB SURFACE
+export DEQP_DIR LIB SURFACE DEQP_RUNNER
 
 run_cases() {
 	local s n
@@ -743,6 +766,15 @@ for q in sorted(f for f in os.listdir(out) if f.startswith('c_') and f.endswith(
     for i in range(1, len(parts), 2):
         cases[parts[i]] = parse_case(parts[i + 1])
 
+# the cases a process died in (run_chunk's c_NNN.crashed): their own 'crash' row
+crashed = OrderedDict()
+for q in sorted(f for f in os.listdir(out) if re.fullmatch(r'c_\d+\.crashed', f)):
+    with open(os.path.join(out, q)) as f:
+        for line in f:
+            if line.strip():
+                c, _, ex = line.rstrip('\n').partition('\t')
+                crashed.setdefault(c, ex)
+
 board = {}
 with open(os.path.join(out, 'board.tsv')) as f:
     for line in f:
@@ -772,6 +804,10 @@ os.makedirs(srcdir, exist_ok=True)
 for c in order:
     bst, btext = board.get(c, ('?', ''))
     bfam = family_of(btext)
+    if c in crashed:
+        rows.append((c, bst, bfam, 'crash', '', '', '', crashed[c], ''))
+        notrep.append((c, bst, bfam, 'crash (%s)' % crashed[c], short(btext)))
+        continue
     if c not in cases:
         rows.append((c, bst, bfam, 'NotRun', '', '', '', '', ''))
         notrep.append((c, bst, bfam, 'not run on the host', short(btext)))
@@ -863,8 +899,13 @@ with open(os.path.join(out, 'summary.md'), 'w') as f:
             f.write('| %s | %d | %d | %d | %d / %d | %s | `%s` | %s | %s |\n' % (
                 shape, d['cases'], d['Fail'], d['NotSupported'], d['stages']['vs'], d['stages']['fs'],
                 owner_of(fam, shape), d['example'], fmt_counter(d['groups']), fmt_counter(d['next'])))
+    if crashed:
+        f.write('\n### Crash (HOST-ONLY)\n\nThe process died in these cases (the rest of the chunk was run in a fresh process):\n\n| Case | Board | Exit |\n|---|---|---|\n')
+        for c, ex in crashed.items():
+            if c in board:
+                f.write('| `%s` | %s | crash (%s) |\n' % (c, board[c][0], ex))
     f.write('\n### Not reproduced (HOST-ONLY)\n\n')
-    for reason, n in Counter(r[3].split(':')[0] for r in notrep).most_common():
+    for reason, n in Counter(re.sub(r' \(exit=\d+\)', '', r[3].split(':')[0]) for r in notrep).most_common():
         f.write('- %s: %d\n' % (reason, n))
     if notrep:
         f.write('\nBy board family, host outcome and board refusal:\n\n')
