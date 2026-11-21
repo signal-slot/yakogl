@@ -39,11 +39,15 @@ for log in "$data"/*.log; do
     base=${base%.log}
     c=${base%%.*}
     kind=${base#*.}
-    got=$(python3 -I "$tool" --only "$c" "$log")
+    # A "# args: ..." line in a log replaces the default "--only <check>" (ring text cases).
+    args=$(sed -n 's/^# args: //p' "$log")
+    [ -n "$args" ] || args="--only $c"
+    # shellcheck disable=SC2086
+    got=$(python3 -I "$tool" $args "$log")
     rc=$?
     if [ "$regen" = 1 ]; then { sed -n '1,2p' "$data/$base.log"; printf '%s\n' "$got"; } >"$data/$base.want"; fi
     want=$(grep -v '^# ' "$data/$base.want" 2>/dev/null || echo "(no .want file)")
-    case $kind in fail) wantrc=1 ;; *) wantrc=0 ;; esac
+    case $kind in fail | *-fail) wantrc=1 ;; *) wantrc=0 ;; esac
     if [ "$got" = "$want" ] && [ "$rc" = "$wantrc" ]; then
         ok "$base: ${got##*$'\n'}"
     else

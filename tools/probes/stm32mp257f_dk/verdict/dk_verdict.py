@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """dk_verdict.py - the P6/P7 verdicts of one STM32MP257F-DK console log.
 
-    dk_verdict.py [--expect CHECK,...] [--only CHECK,...] [LOGFILE]   (stdin without LOGFILE)
+    dk_verdict.py [--ring] [--expect CHECK,...] [--only CHECK,...] [LOGFILE]   (stdin without LOGFILE)
 
 Prints one line per check, "verdict <check> <field>=<PASS|FAIL|value> ...",
 then "N checks, M failed". Exit 0: every check printed PASS; 1: a check
@@ -12,6 +12,15 @@ failed (or none applied); 2: usage. Formats and sources: README.md.
 A check applies when the log shows its program (see APPLIES); --expect forces
 checks, so a missing program is a FAIL instead of a silent skip; --only runs
 exactly the named checks.
+
+Ring text (the output of ramlog/ramlog_decode.py, 2>&1 or not): --ring says
+so, and so does a "[ramlog: N bytes lost]" or "ramlog: no ring" line in the
+text. The decoder prints the text only, no header; its wrap marker and its
+"no ring" message are stderr lines. In ring mode: the early raw banner lines
+(MP2:A, MP2:A1: asm, never printk) are not required; a wrapped ring adds
+"ring=FAIL:ring-wrapped:<N>-bytes-lost" to every check and a "verdict ring"
+line; "no ring" is one "verdict ring FAIL:no-ring" line; supply says
+"not-in-ring" (BL2 prints before our image) unless the text has the lines.
 """
 import re
 import sys
@@ -59,9 +68,15 @@ def num(s):
         return None
 
 
+LOST = re.compile(r"^\[ramlog: (\d+) bytes lost\]$")
+NO_RING = re.compile(r"^ramlog: no ring$")
+SHORT_RING = re.compile(r"^ramlog: size \d+ does not fit ")
+
+
 class Log:
-    def __init__(self, lines):
+    def __init__(self, lines, ring=False):
         self.lines = lines
+        self.ring = ring
 
     def find(self, pat, start=0):
         rx = re.compile(pat)
@@ -92,7 +107,9 @@ END = r"^mp2: .+: PSCI SYSTEM_RESET at \d+ ms"
 
 
 def check_return_trial(log):
-    banner = (log.has(r"^MP2:A EL\d") and log.has(r"^MP2:A1$") and
+    # MP2:A/A1 are raw asm UART lines: they are never in the RAM ring.
+    early = log.ring or (log.has(r"^MP2:A EL\d") and log.has(r"^MP2:A1$"))
+    banner = (early and
               log.has(r"^MP2:B console up") and
               log.has(r"^mp2_(hello|identify|gpu): build "))
     end = log.has(END) and not log.has(r"^mp2: PSCI SYSTEM_RESET returned") \
@@ -277,6 +294,8 @@ RCC_FLAGS = [(0, "PORRSTF"), (1, "BORRSTF"), (2, "PADRSTF"), (3, "HCSSRSTF"),
 def check_supply(log):
     hits = [RESET_REASON.search(x) for x in log.lines]
     hits = [m for m in hits if m]
+    if not hits and log.ring:
+        return [("boot", "not-in-ring")]
     if not hits:
         return [("boot", "FAIL:none")]
     out = []
@@ -319,23 +338,45 @@ APPLIES = {
 }
 
 
-def run(text, expect, only):
-    log = Log(clean(text))
-    whole = Log(clean(text, last_run=False))  # supply: also the BL2 lines
+def run(text, expect, only, ring=False):
+    raw = text.replace("\0", "").replace("\r", "").split("\n")
+    lost, no_ring, kept = 0, None, []
+    for x in raw:
+        x = ZLOG.sub("", STAMP.sub("", x))
+        m = LOST.match(x)
+        if m:
+            lost += int(m.group(1))
+        elif NO_RING.match(x):
+            no_ring = "no-ring"
+        elif SHORT_RING.match(x):
+            no_ring = "ring-dump-short"
+        else:
+            kept.append(x)
+    if no_ring:
+        return [("verdict ring FAIL:%s" % no_ring, True, True)]
+    ring = ring or lost > 0
+    text = "\n".join(kept)
+    log = Log(clean(text), ring)
+    whole = Log(clean(text, last_run=False), ring)  # supply: also the BL2 lines
     results = []
+    if lost:
+        results.append(("verdict ring FAIL:ring-wrapped:%d-bytes-lost" % lost, True, True))
     for c in CHECKS:
         subject = whole if c == "supply" else log
         if (c in only) if only else (c in expect or APPLIES[c](subject)):
             fields = FUNCS[c](subject)
+            if lost:
+                fields.append(("ring", "FAIL:ring-wrapped:%d-bytes-lost" % lost))
             bad = any(v.startswith("FAIL") or (k, v) == ("igroupr", "mismatch") or
                       (k in ("intr", "idle") and v != "ok") for k, v in fields)
+            judged = fields != [("boot", "not-in-ring")]
             line = "verdict %s %s" % (c, " ".join("%s=%s" % kvp for kvp in fields))
-            results.append((line, bad))
+            results.append((line, bad, judged))
     return results
 
 
 def main(argv):
-    expect, only, path = set(), set(), None
+    expect, only, path, ring = set(), set(), None, False
     args = argv[1:]
     while args:
         a = args.pop(0)
@@ -345,6 +386,8 @@ def main(argv):
                     sys.stderr.write("dk_verdict: unknown check %s (%s)\n" % (c, ", ".join(CHECKS)))
                     return 2
                 (expect if a == "--expect" else only).add(c)
+        elif a == "--ring":
+            ring = True
         elif a.startswith("-") and a != "-":
             sys.stderr.write(__doc__)
             return 2
@@ -355,12 +398,13 @@ def main(argv):
             text = fh.read().decode("utf-8", "replace")
     else:
         text = sys.stdin.buffer.read().decode("utf-8", "replace")
-    results = run(text, expect, only)
-    for line, _ in results:
+    results = run(text, expect, only, ring)
+    for line, _, _ in results:
         print(line)
-    failed = sum(1 for _, bad in results if bad)
+    failed = sum(1 for _, bad, _ in results if bad)
     print("%d checks, %d failed" % (len(results), failed))
-    return 1 if failed or not results else 0
+    # Not-in-ring is no judgement: a run with nothing else judged is no pass.
+    return 1 if failed or not any(j for _, _, j in results) else 0
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+verdict ring FAIL:ring-wrapped:3210-bytes-lost
+verdict return-trial banner=FAIL psci-reset=PASS ring=FAIL:ring-wrapped:3210-bytes-lost
+2 checks, 2 failed

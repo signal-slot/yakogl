@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# args: --ring --only return-trial
+[ramlog: 3210 bytes lost]
+ps 1234 ticks
+mp2_hello: PSCI version 0x10001, reset at 20000 ms of uptime at the latest
+mp2_hello: 1 s (uptime 1000 ms)
+mp2_hello: PASS: counted 5 s in 5001 ms
+mp2: mp2_hello done: PSCI SYSTEM_RESET at 5002 ms

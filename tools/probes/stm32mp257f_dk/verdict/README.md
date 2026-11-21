@@ -9,7 +9,7 @@ line per check. Python 3, standard library only. The board items
 quote its lines.
 
 ```
-tools/probes/stm32mp257f_dk/verdict/dk_verdict.py [--expect CHECK,...] [--only CHECK,...] [LOGFILE]
+tools/probes/stm32mp257f_dk/verdict/dk_verdict.py [--ring] [--expect CHECK,...] [--only CHECK,...] [LOGFILE]
 tools/probes/stm32mp257f_dk/verdict/selftest.sh [--regen]
 ```
 
@@ -23,6 +23,25 @@ Output, e.g. `verdict return-trial banner=PASS psci-reset=PASS`, then
 (an unknown log is never a pass); 2: usage. A field is `PASS`/`FAIL`, or
 `PASS:<value>`/`FAIL:<value>` when the reading matters (`FAIL:absent` = the
 line is not in the log), or a plain reading (`customer=0x...`, `el=2`).
+
+## Ring text (blind runs)
+
+Text decoded from the RAM ring (`../ramlog/ramlog_decode.py`, stdout, with
+stderr merged by `2>&1`) gives the same verdict as the UART capture of the
+same image. The decoder prints the text only, no header: ring mode is
+`--ring` (the runner passes it) or any `[ramlog: N bytes lost]` /
+`ramlog: no ring` line in the text. In ring mode:
+
+- `MP2:A EL<n>` and `MP2:A1` (raw asm lines, never printk) are not required
+  by `return-trial`; `MP2:B` and the `build` line still are.
+- A wrapped ring (`[ramlog: N bytes lost]`): a `verdict ring FAIL:ring-wrapped:<N>-bytes-lost`
+  line, and `ring=FAIL:ring-wrapped:<N>-bytes-lost` on every check line.
+  Exit 1: never a PASS on a ring that lost its start.
+- `ramlog: no ring` (bad magic) or `ramlog: size ... does not fit` (short
+  dump): one line `verdict ring FAIL:no-ring` / `FAIL:ring-dump-short`.
+- `supply` says `boot=not-in-ring` (BL2 prints before the image, so its
+  `Reset reason:` lines cannot be in the ring); not a FAIL, and a run in which
+  only that line is not-judged exits 1. Read the supply from the console.
 
 ## What is read
 
@@ -172,6 +191,6 @@ before the reboot by the runner):
 ## Self-test
 
 `selftest.sh` runs each `testdata/<check>.<case>.log` (a pass and a fail case
-per check, plus a runner-stamped log) against its `.want`, checks the exit
+per check, a runner-stamped log, and the ring-text cases `<check>.ring-pass`, `return-trial.ring-wrapped-fail`, `ring.none-fail`, `supply.ring-pass`; a `# args: ...` line in a log replaces `--only <check>`; a case named `*-fail` must exit 1) against its `.want`, checks the exit
 codes, stdin, auto mode and the unknown-log case, and ends with
 `N checks, 0 failed`.
