@@ -1,0 +1,3 @@
+[00:10:01.000,000] <inf> pvr: FWT| === FW trace: log_type=0x00000000 size=12000 dw ===
+[00:10:01.000,000] <inf> pvr: FWT| T0-MAIN> [123451] PR: no ZS buffer (store)
+[00:10:01.000,000] <inf> pvr: FWT| T0-MAIN> [123452] PR: no ZS buffer (load)
