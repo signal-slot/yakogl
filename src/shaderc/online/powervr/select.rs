@@ -37,7 +37,7 @@
 //!   and may need an iterator (`fitr`) the builder emits. Until that is said,
 //!   a fragment shader that reads a varying is refused by name.
 //! * **Vertex outputs.** `abi.md`: the program writes them with the
-//!   `uvsw_write` family, which is a backend operation and not an [`AluOp`],
+//!   `uvsw_write` family, which is a backend operation and not an `AluOp`,
 //!   so it cannot be a `SelGroup` at all. [`Selected::outputs`] hands the
 //!   builder the per-component sources instead and the builder emits the
 //!   writes -- the same split the GC7000 side uses for its io lists.
@@ -152,7 +152,7 @@ fn smp_type(ret: ir::ScalarType) -> OpType {
 }
 
 /// Does `op` sample with the implicit level at a smooth varying read as
-/// it is, so that [`Self::plane_gradients`] can give it exact gradients
+/// it is, so that `plane_gradients` can give it exact gradients
 /// (`shaderc::pvr_proj_lod`)? The number of coordinates when it does.
 /// Asked by selection, and by the online back end at link
 /// ([`samples_with_plane_gradients`]).
@@ -5302,7 +5302,7 @@ const MASKED_US_PER_GROUP: [(usize, u32); 10] = [
     (usize::MAX, 384),
 ];
 
-/// The masked cost of an arm of `n` groups ([`MASKED_US_PER_GROUP`]).
+/// The masked cost of an arm of `n` groups (`MASKED_US_PER_GROUP`).
 pub fn masked_cost_us(n: usize) -> u32 {
     let (mut cost, mut from) = (0u32, 0usize);
     for &(to, rate) in &MASKED_US_PER_GROUP {

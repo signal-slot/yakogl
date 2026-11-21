@@ -358,7 +358,7 @@ fn record_ubo(sh: &mut crate::shaderc::ShcShader, ubo: Option<UboPlace>) -> Resu
 /// texture (`smp` 3d over a volume, the draw binds the twiddled copy of
 /// `gl::native_vol`). All are decided after dead-code removal: a dead
 /// look-up takes its sample with it and sets nothing. A `textureSize`
-/// compiled for the TPU's own kind ([`SelOp::NativeSize`]) sets its kind's
+/// compiled for the TPU's own kind (`SelOp::NativeSize`) sets its kind's
 /// bit too: it reads the copy's image word (one face's or one layer's size,
 /// the depth field), which the stacked image's word does not hold.
 pub fn native_flags(groups: &[SelGroup]) -> u8 {
@@ -558,7 +558,7 @@ pub fn mixed_key_targets(blend_key: u32) -> Option<([TargetPack; MAX_PACK_TARGET
 /// [`build_fragment`] for colour attachments of different classes, the
 /// per-target list `targets` (up to [`MAX_PACK_TARGETS`], draw buffer `i`
 /// written from output location `i`): each output packed for its own
-/// target ([`pack_target_outputs`]) and written to the pixel output
+/// target (`pack_target_outputs`) and written to the pixel output
 /// registers the end-of-tile emit reads that attachment from
 /// ([`target_out_regs`]); `output_regs` is the registers they span (the
 /// record's `num_outputs`). A target [`target_layout`] spills is stored to
@@ -569,7 +569,7 @@ pub fn mixed_key_targets(blend_key: u32) -> Option<([TargetPack; MAX_PACK_TARGET
 /// control word's alpha-to-one select, which ES 3.0 never turns on). No
 /// blend applies and none is decoded here.
 ///
-/// Refused by name: [`pack_target_outputs`]'s refusals.
+/// Refused by name: `pack_target_outputs`'s refusals.
 pub fn build_fragment_targets<'a>(
     m: &'a ir::Module<'a>,
     limits: Limits,
@@ -1386,7 +1386,7 @@ pub const MAX_PACK_TARGETS: usize = crate::backend::GLES_MAX_TARGETS;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TargetPack {
     /// A pure integer target: the output bit-inserted into its layout's
-    /// dwords with no conversion, as [`pack_int_output`] packs it.
+    /// dwords with no conversion, as `pack_int_output` packs it.
     Int(crate::shaderc::ShcIntRt),
     /// A float or normalised target of class `SHC_RT_RGBA8`, `_F16X4`,
     /// `_F16` or `_F32` (`gles_surf_rt_class`; sRGB is not one): packed as
