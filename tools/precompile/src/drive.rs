@@ -20,7 +20,7 @@
 //! and the holders are the GL core's too: the shader object keeps its copy,
 //! the program its own, so a link that replaces the program's fragment
 //! shader leaves the shader object's record alive, as on the board. After
-//! each call every record the cache indexes is read back ([`capture`]), so a
+//! each call every record the cache indexes is read back (`capture`), so a
 //! record that a later call frees is captured all the same.
 
 use core::ffi::c_char;

@@ -120,7 +120,7 @@ fn partition(s: &str, sep: char) -> (&str, &str) {
     s.split_once(sep).unwrap_or((s, ""))
 }
 
-/// 'BLENDSPEC[@rt]' -> (blendspec, rt).
+/// `BLENDSPEC[@rt]` -> (blendspec, rt).
 pub fn split_rt(spec: &str) -> Result<(&str, &str), SpecError> {
     let (blend, rt) = partition(spec, '@');
     if lookup(RT_CLASSES, rt).is_none() && int_rt_of(rt).is_none() {
@@ -129,7 +129,7 @@ pub fn split_rt(spec: &str) -> Result<(&str, &str), SpecError> {
     Ok((blend, rt))
 }
 
-/// 'FACTORS[:MASK][@rt]' -> (factors, mask bits).
+/// `FACTORS[:MASK][@rt]` -> (factors, mask bits).
 pub fn split_variant_spec(spec: &str) -> Result<(String, u32), SpecError> {
     let (spec, _) = split_rt(spec)?;
     let (factors, mask) = partition(spec, ':');

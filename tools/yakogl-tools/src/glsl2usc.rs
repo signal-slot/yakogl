@@ -125,12 +125,12 @@ pub fn stage_of(path: &str) -> R<&'static str> {
     }
 }
 
-/// 'BLENDSPEC[@rt]' -> (blendspec, rt).
+/// `BLENDSPEC[@rt]` -> (blendspec, rt).
 pub fn split_rt(spec: &str) -> R<(&str, &str)> {
     list::split_rt(spec).map_err(|e| spec_error(spec, e))
 }
 
-/// 'FACTORS[:MASK][@rt]' -> (factors, mask bits).
+/// `FACTORS[:MASK][@rt]` -> (factors, mask bits).
 pub fn split_variant_spec(spec: &str) -> R<(String, u32)> {
     list::split_variant_spec(spec).map_err(|e| spec_error(spec, e))
 }
