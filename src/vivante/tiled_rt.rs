@@ -277,9 +277,54 @@ pub fn sampler_words(spec: &Spec, shadow: u64) -> Option<SamplerWords> {
     })
 }
 
+/// Default threshold of [`long_program`], in instructions: a fragment
+/// program of at least this many qualifies.
+///
+/// W6's fallback (`gc-tiled-wire.md`): if the RS resolve costs more than early
+/// depth saves, the W4 rule narrows to draws with a long fragment program.
+/// The figures (our GC7000 compiler, `tests/gc_terrain_shader_count.rs`
+/// `GLMARK2`; `gc-terrain-shaders.md`): `terrain.frag` 80 (148 in
+/// `gc-slow-host-counts.md`, before ranks T and 4a-4c), the blur passes
+/// `tilt_*.frag` 57 and `bloom_*.frag` 32, `normalmap.frag` 20,
+/// `luminance.frag` 7, `overlay.frag` 2. 64 lies between the terrain pass and
+/// the longest blur, so terrain's pass qualifies and the blits and overlays
+/// do not. The notes carry no instruction counts for the shadow and refract
+/// programs; this threshold is not derived from them.
+pub const LONG_PROGRAM_INSTRS: u32 = 64;
+
+/// Whether a fragment program of `usc_dw` dwords of shader code (the shader
+/// output's `usc_dw`, four dwords an instruction) has at least
+/// `threshold_instrs` instructions. Pure; nothing calls it until W6 asks.
+#[allow(dead_code)]
+pub const fn long_program(usc_dw: u32, threshold_instrs: u32) -> bool {
+    usc_dw / 4 >= threshold_instrs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_program_splits_terrain_from_blits_and_overlays() {
+        for (name, instrs, want) in [
+            ("terrain.frag", 80, true),
+            ("tilt_h.frag", 57, false),
+            ("bloom_v.frag", 32, false),
+            ("normalmap.frag", 20, false),
+            ("luminance.frag", 7, false),
+            ("overlay.frag", 2, false),
+        ] {
+            assert_eq!(long_program(instrs * 4, LONG_PROGRAM_INSTRS), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn long_program_boundary_and_partial_dwords() {
+        assert!(long_program(64 * 4, 64));
+        assert!(!long_program(64 * 4 - 1, 64));
+        assert!(long_program(0, 0));
+        assert!(!long_program(0, 1));
+    }
 
     #[test]
     fn terrains_256_square_shadow_samples_with_the_notes_words() {
