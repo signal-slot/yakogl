@@ -4662,6 +4662,56 @@ zephyr_verdin_imx95_probe_images() {
   done
   [ "$n" -gt 0 ] || { echo "no verdin_imx95 probe image under tools/probes/verdin_imx95/"; return 1; }
 }
+# gl_test on the Verdin iMX95's Mali-G310 (driver/samples/zephyr/gl_test with
+# verdin_imx95.conf after the board layer's app.conf, ../common/
+# verdin_imx95.cmake; src/main_mali.c, the T6's main): built only, no board
+# yet (docs/notes/pre-study-imx95.md, B5). It builds with the firmware
+# embedded ($1, as the triangle row), and the image is a read-back image the
+# U-Boot route would load: the board layer on, the X4 display off
+# (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY not y, no display line in the file), the
+# RAM footprint (the AArch64 header's image_size) inside zephyr,sram, the file
+# smaller than the carve-out (the OSAL's memory is .noinit, not in zephyr.bin),
+# the build line, the GPU's bring-up lines and WDOG3's armed line once each,
+# and the record's BBM sink (board-sh's verdin_imx95_record.c) linked.
+zephyr_verdin_imx95_gltest_image() {
+  local dir=build/zephyr-werror/verdin_imx95-gl_test bin footprint size window carve line n
+  mali_csffw_header "$1" verdin_imx95-gl_test || return 1
+  zephyr_werror_image verdin_imx95/mimx9596/a55 gl_test verdin_imx95-gl_test || return 1
+  bin="$dir/zephyr/zephyr.bin"
+  grep -q '^CONFIG_YAKOGL_GPU_MALI=y$' "$dir/zephyr/.config" || { echo "the image is not built for the Mali"; return 1; }
+  grep -q '^CONFIG_YAKOGL_BOARD_VERDIN_IMX95=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no board layer (CONFIG_YAKOGL_BOARD_VERDIN_IMX95)"; return 1; }
+  # the record's sink: board_finish() stores the last record through
+  # board_sink_store(), which verdin_imx95_record.c makes the BBNSM GPR4..7
+  grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM=y$' "$dir/zephyr/.config" ||
+    { echo "the image has no BBM record sink (CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM)"; return 1; }
+  nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_imx95_bbm_record_store$' ||
+    { echo "zephyr.elf does not link yd_imx95_bbm_record_store (the record's BBM sink)"; return 1; }
+  if grep -q '^CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y$' "$dir/zephyr/.config"; then
+    echo "the read-back image brings the X4 display up (CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y)"
+    return 1
+  fi
+  footprint=$(od -A n -t u8 -j 16 -N 8 "$bin" | tr -d ' ')
+  size=$(stat -c %s "$bin")
+  window=$(sed -n 's/^CONFIG_SRAM_SIZE=//p' "$dir/zephyr/.config")
+  [ -n "$window" ] && [ "$footprint" -le $((window * 1024)) ] || {
+    echo "the image needs $footprint bytes of RAM, zephyr,sram has ${window:-?} KiB"
+    return 1
+  }
+  carve=$(sed -n 's/^CONFIG_YAKOGL_MALI_CARVEOUT_BYTES=//p' "$dir/zephyr/.config")
+  [ -n "$carve" ] && [ "$size" -lt "$carve" ] || {
+    echo "zephyr.bin is $size bytes, not under the carve-out's ${carve:-?}: the file holds the GPU's memory"
+    return 1
+  }
+  for line in 'vi95_gl_test: build %s' 'verdin_imx95: WDOG3 armed: CS 0x%08x' 'board: watchdog armed' \
+    'verdin_imx95: CSF firmware %u bytes embedded' \
+    'verdin_imx95: GPU on over SCMI: ' 'verdin_imx95: the SCMI power-on stopped: '; do
+    n=$(strings -n 20 "$bin" | grep -cF "$line") || true
+    [ "$n" = 1 ] || { echo "zephyr.bin carries '$line' ${n:-0} times, not once"; return 1; }
+  done
+  n=$(strings -n 20 "$bin" | grep -cF 'verdin_imx95: display up: ') || true
+  [ "${n:-0}" = 0 ] || { echo "zephyr.bin carries the display's bring-up line: the panel is in the image"; return 1; }
+}
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
 # the runner's MP2_NO_WATCHDOG=1 step): it builds, and it carries the layer's
@@ -4801,6 +4851,12 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  verdin_imx95 probe images (tools/probes/verdin_imx95/*, built only), -Werror on our C files" \
       zephyr_verdin_imx95_probe_images "$mali_csffw"
+    # gl_test on the Verdin iMX95's Mali-G310 (read-back, no display): the
+    # same firmware, the same gap.
+    scope mali gltest drivers samples
+    needs_mali_csffw
+    step "zephyr  verdin_imx95 gl_test image (Mali-G310, read-back, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_gltest_image "$mali_csffw"
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images
