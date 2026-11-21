@@ -88,6 +88,8 @@ pub mod verify71;
 pub mod vop71;
 
 #[cfg(test)]
+mod diff71;
+#[cfg(test)]
 pub(crate) mod fields;
 #[cfg(test)]
 mod golden;
