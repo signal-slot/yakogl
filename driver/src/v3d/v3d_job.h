@@ -203,9 +203,25 @@ struct v3d_job_state {
 	 * before this field), every RT takes `colormask`, as before. The GL
 	 * core gives its own masks only where an R or RG integer texture,
 	 * drawn as its four-channel store, writes fewer channels than another
-	 * target of the draw. */
+	 * target of the draw; the Rust back end also sets them in a draw of
+	 * several targets where an RT has no colour buffer (a GL_NONE draw
+	 * buffer, or past the last one): that RT's nibble is 0, every channel
+	 * disabled. */
 	bool rt_colormask_own;
 	uint32_t rt_colormask;
+	/* BLEND_ENABLES' "Mask" per render target (bit n: RT n blends), as
+	 * Mesa's v3d_create_blend_state (v3dx_state.c:148-156) sets
+	 * blend_enables from rt[n].blend_enable with an independent blend
+	 * state, and v3dx_emit.c:525-568 writes it: st/mesa's blend state
+	 * leaves an integer or a 32-bit float target (not blendable,
+	 * v3d_format_supports_tlb_resolve_and_blend) and a render target with
+	 * no colour buffer out. With `rt_blend_own` and `blend_enabled`,
+	 * BLEND_ENABLES is `rt_blend_mask & 0xf`; without it (zeroed: every
+	 * caller before this field), 0xf whenever `blend_enabled`, as before.
+	 * BLEND_CFG stays one state over all four RTs (render_target_mask 0xf):
+	 * the RTs share the blend equation and factors. */
+	bool rt_blend_own;
+	uint32_t rt_blend_mask;
 };
 
 /* Primitive codes: Mesa's "Primitive" enum (V3D_PRIM_POINTS ..

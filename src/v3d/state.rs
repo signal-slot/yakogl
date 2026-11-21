@@ -717,8 +717,61 @@ pub fn job_state(d: &GlesDraw) -> Result<V3dJobState, Refusal> {
             .map(|k| u32::from(d.target_color_mask[k] & 0xf) << (4 * (k - 1)))
             .fold(0, |a, m| a | m);
     }
+    rt_masks(d, &mut st);
     st.blend_color_f16 = d.blend_color.map(f32_to_f16);
     Ok(st)
+}
+
+/// Can render target `k` of `d` blend: it has a colour buffer (target 0
+/// always: `targets[0]` mirrors `target_*`, and a draw with blending has
+/// target 0), and its format is blendable on the V3D — neither integer
+/// (ES 3.0 4.1.8) nor 32-bit float (`v3d_format_supports_tlb_resolve_and_blend`,
+/// v3d_formats.c:148-163: st/mesa drops the blend of a target without
+/// PIPE_BIND_BLENDABLE).
+fn rt_blendable(d: &GlesDraw, k: usize) -> bool {
+    let n = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
+    let format = match k {
+        0 => d.target_format,
+        _ if k < n && d.targets[k].gpu != 0 => d.targets[k].format,
+        _ => return false,
+    };
+    !gles_surf_is_integer(format) && !matches!(format, GLES_SURF_R32F | GLES_SURF_RG32F | GLES_SURF_RGBA32F)
+}
+
+/// The per-RT halves of the blend and colour-mask state of a draw of
+/// several targets (Mesa 26.2.1 v3dx_emit.c:525-585 over an independent
+/// blend state):
+///
+/// - BLEND_ENABLES (`rt_blend_own`, `rt_blend_mask`): a bit for each RT that
+///   blends, so an integer or 32F target beside blended ones, and an RT with
+///   no colour buffer, are left out. BLEND_CFG stays one state over all RTs.
+/// - COLOR_WRITE_MASKS (`rt_colormask_own`, `rt_colormask`): an RT 1..3 with
+///   no colour buffer (a GL_NONE draw buffer, an attachment without storage,
+///   or past `num_targets`) has every channel disabled; the others keep the
+///   masks set above.
+///
+/// A draw of one target keeps the single state (BLEND_ENABLES 0xf, every
+/// RT's nibble RT 0's), as Mesa's non-independent blend state, so ES 2.0
+/// draws emit what they did.
+fn rt_masks(d: &GlesDraw, st: &mut V3dJobState) {
+    let n = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
+    if n < 2 {
+        return;
+    }
+    if st.blend_enabled {
+        st.rt_blend_own = true;
+        st.rt_blend_mask = (0..GLES_MAX_TARGETS).filter(|&k| rt_blendable(d, k)).fold(0, |m, k| m | 1 << k);
+    }
+    let absent = |k: usize| k >= n || d.targets[k].gpu == 0;
+    if (1..GLES_MAX_TARGETS).any(absent) {
+        if !st.rt_colormask_own {
+            st.rt_colormask_own = true;
+            st.rt_colormask = (1..GLES_MAX_TARGETS).fold(0, |a, k| a | (st.colormask & 0xf) << (4 * (k - 1)));
+        }
+        for k in (1..GLES_MAX_TARGETS).filter(|&k| absent(k)) {
+            st.rt_colormask &= !(0xf << (4 * (k - 1)));
+        }
+    }
 }
 
 /// What a draw does with the depth and the stencil the tile buffer holds:
@@ -963,6 +1016,43 @@ mod tests {
         assert_eq!(job_state(&d).unwrap().colormask, 0x7);
         d.color_write = false;
         assert_eq!(job_state(&d).unwrap().colormask, 0);
+    }
+
+    /// The per-RT blend enables and write masks (`rt_masks`): one target
+    /// keeps the single state; several leave integer, 32F and absent RTs out
+    /// of BLEND_ENABLES and mask every channel of an absent RT.
+    #[test]
+    fn per_rt_blend_enables_and_write_masks() {
+        let mut d = draw();
+        d.blend = true;
+        (d.blend_src_rgb, d.blend_dst_rgb, d.blend_src_alpha, d.blend_dst_alpha) = (1, 1, 1, 1);
+        let st = job_state(&d).unwrap();
+        assert!(st.blend_enabled && !st.rt_blend_own && !st.rt_colormask_own, "one target: as before");
+        let t = |gpu, format| GlesDrawTarget { gpu, w: 64, h: 64, format, out_shift: 0 };
+        d.targets[0] = t(d.target_gpu, d.target_format);
+        d.targets[1] = t(0x0200_0000, GLES_SURF_RGBA32F);
+        d.targets[2] = t(0x0300_0000, GLES_SURF_RGBA8UI);
+        d.targets[3] = t(0x0400_0000, GLES_SURF_RGBA16F);
+        d.num_targets = 4;
+        let st = job_state(&d).unwrap();
+        assert_eq!((st.rt_blend_own, st.rt_blend_mask), (true, 0b1001), "32F RT 1 and integer RT 2 do not blend");
+        assert!(!st.rt_colormask_own, "every RT has a colour buffer");
+        /* glDrawBuffers(ATT0, NONE, ATT2): RT 1 a gap, RT 3 past the list */
+        d.targets[1] = GlesDrawTarget::ZERO;
+        d.targets[2] = t(0x0300_0000, GLES_SURF_RGBA8888);
+        d.targets[3] = GlesDrawTarget::ZERO;
+        d.num_targets = 3;
+        d.color_mask = 0b0101;
+        let st = job_state(&d).unwrap();
+        assert_eq!(st.rt_blend_mask, 0b0101);
+        assert_eq!(
+            (st.rt_colormask_own, st.rt_colormask),
+            (true, 0b0101 << 4),
+            "RT 2 writes R and B; RTs 1 and 3 nothing"
+        );
+        d.blend = false;
+        let st = job_state(&d).unwrap();
+        assert!(!st.blend_enabled && !st.rt_blend_own);
     }
 
     #[test]

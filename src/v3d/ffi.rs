@@ -392,6 +392,11 @@ pub struct V3dJobState {
     /// With `rt_colormask_own`: RT n (1..3) at bits 4(n-1)..4(n-1)+3,
     /// PIPE_MASK_RGBA (set = written).
     pub rt_colormask: u32,
+    /// BLEND_ENABLES names the RTs of `rt_blend_mask` (bit n: RT n blends)
+    /// when `blend_enabled`; false: every RT blends when `blend_enabled`.
+    pub rt_blend_own: bool,
+    /// With `rt_blend_own`: the RTs that blend, bit n RT n.
+    pub rt_blend_mask: u32,
 }
 
 /// `struct v3d_job_draw_layout`: where one draw's uniform streams went (GPU
@@ -891,7 +896,7 @@ const _: () = assert!(offset_of!(V3dJobTarget, uif_only) == 117);
 const _: () = assert!(offset_of!(V3dJobTarget, uif_load) == 118);
 const _: () = assert!(offset_of!(V3dJobTarget, rt_format) == 120);
 const _: () = assert!(size_of::<V3dJobStencilFace>() == 28);
-const _: () = assert!(size_of::<V3dJobState>() == 196);
+const _: () = assert!(size_of::<V3dJobState>() == 204);
 const _: () = assert!(offset_of!(V3dJobState, scissor) == 24);
 const _: () = assert!(offset_of!(V3dJobState, scissor_maxy) == 40);
 const _: () = assert!(offset_of!(V3dJobState, front_ccw) == 44);
@@ -912,6 +917,8 @@ const _: () = assert!(offset_of!(V3dJobState, sample_mask) == 180);
 const _: () = assert!(offset_of!(V3dJobState, oq_addr) == 184);
 const _: () = assert!(offset_of!(V3dJobState, rt_colormask_own) == 188);
 const _: () = assert!(offset_of!(V3dJobState, rt_colormask) == 192);
+const _: () = assert!(offset_of!(V3dJobState, rt_blend_own) == 196);
+const _: () = assert!(offset_of!(V3dJobState, rt_blend_mask) == 200);
 const _: () = assert!(size_of::<V3dWpos>() == 8);
 const _: () = assert!(size_of::<V3dJobDraw>() == 152);
 const _: () = assert!(offset_of!(V3dJobDraw, instances) == 144);
