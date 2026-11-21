@@ -223,6 +223,104 @@ constexpr uint32_t KICK_BOUND_US = 100;
 #endif
 FrameCost s_cost;
 
+#if defined(CONFIG_YAKOGL_GPU_V3D)
+/* The V3D backend's counters (src/v3d/backend.rs, cumulative since init; no C
+ * header declares them). docs/notes/glmark2-scene-counters.md. */
+extern "C" {
+void v3d_counters(uint32_t *kicks, uint32_t *waits);
+void v3d_wait_time(uint64_t *ns, uint32_t *untimed);
+void v3d_copy_counters(uint32_t *copies);
+void v3d_mip_counters(uint32_t *refused, uint32_t *queued, uint32_t *queue_full);
+void v3d_rt_images(uint32_t *live, uint64_t *bytes, uint32_t *direct, uint32_t *cpu_writes,
+                   uint32_t *no_memory, uint32_t *chains, uint32_t *chains_returned);
+void v3d_tiled_evictions(uint32_t *count, uint64_t *bytes, uint32_t *hot);
+void v3d_tiling_time(uint64_t *ns, uint32_t *untimed);
+void v3d_tfu_counters(uint32_t *jobs, uint32_t *failed);
+void v3d_texture_counters(uint32_t *tilings, uint64_t *bytes);
+void v3d_sampler_counters(uint32_t *packed, uint32_t *reused);
+}
+constexpr unsigned CTR_COPY_REASONS = 16; /* V3D_COPY_REASONS */
+constexpr unsigned CTR_MIP_REFUSALS = 14; /* V3D_MIP_REFUSALS */
+static const char *const CTR_COPY_NAMES[CTR_COPY_REASONS] = {
+    "plain", "r32f", "first-sample", "cpu-write", "relayout", "not-stored", "no-chain", "layout",
+    "depth-refused", "upload", "arena", "stamp-replaced", "stale-given-back", "image-store",
+    "level0-back", "chain-back",
+};
+static const char *const CTR_MIP_NAMES[CTR_MIP_REFUSALS] = {
+    "uninit", "levels", "not-rt", "unknown", "stamp", "relayout", "no-tfu", "flush", "unstored",
+    "wait", "layout", "pack", "no-query", "tfu",
+};
+struct SceneCounters {
+    uint32_t jobs = 0, waits = 0, wait_untimed = 0, mip_queued = 0, mip_full = 0;
+    uint32_t rt_live = 0, rt_direct = 0, rt_cpuwrites = 0, rt_nomem = 0, rt_chains = 0, rt_back = 0;
+    uint32_t tiled_n = 0, tiled_hot = 0, tile_untimed = 0, tfu_jobs = 0, tfu_failed = 0;
+    uint32_t tex_n = 0, smp_packed = 0, smp_reused = 0;
+    uint64_t wait_ns = 0, rt_bytes = 0, tiled_bytes = 0, tex_bytes = 0, tile_ns[3] = {};
+    uint32_t copy[CTR_COPY_REASONS] = {}, mip_refused[CTR_MIP_REFUSALS] = {};
+    void read()
+    {
+        v3d_counters(&jobs, &waits);
+        v3d_wait_time(&wait_ns, &wait_untimed);
+        v3d_copy_counters(copy);
+        v3d_mip_counters(mip_refused, &mip_queued, &mip_full);
+        v3d_rt_images(&rt_live, &rt_bytes, &rt_direct, &rt_cpuwrites, &rt_nomem, &rt_chains, &rt_back);
+        v3d_tiled_evictions(&tiled_n, &tiled_bytes, &tiled_hot);
+        v3d_tiling_time(tile_ns, &tile_untimed);
+        v3d_tfu_counters(&tfu_jobs, &tfu_failed);
+        v3d_texture_counters(&tex_n, &tex_bytes);
+        v3d_sampler_counters(&smp_packed, &smp_reused);
+    }
+    /* the line's words after "frames N": differences, rt.live and rt.bytes the end value */
+    void print_diff(const SceneCounters &a) const
+    {
+        const auto ll = [](uint64_t v) { return static_cast<unsigned long long>(v); };
+        printk(" jobs %u waits %u wait.ns %llu wait.untimed %u", jobs - a.jobs, waits - a.waits,
+               ll(wait_ns - a.wait_ns), wait_untimed - a.wait_untimed);
+        for (unsigned i = 0; i < CTR_COPY_REASONS; i++) {
+            if (copy[i] != a.copy[i]) {
+                printk(" copy.%s %u", CTR_COPY_NAMES[i], copy[i] - a.copy[i]);
+            }
+        }
+        for (unsigned i = 0; i < CTR_MIP_REFUSALS; i++) {
+            if (mip_refused[i] != a.mip_refused[i]) {
+                printk(" mip.refused.%s %u", CTR_MIP_NAMES[i], mip_refused[i] - a.mip_refused[i]);
+            }
+        }
+        printk(" mip.queued %u mip.full %u", mip_queued - a.mip_queued, mip_full - a.mip_full);
+        printk(" rt.live %u rt.bytes %llu rt.direct %u rt.cpuwrites %u rt.nomem %u rt.chains %u rt.back %u",
+               rt_live, ll(rt_bytes), rt_direct - a.rt_direct, rt_cpuwrites - a.rt_cpuwrites,
+               rt_nomem - a.rt_nomem, rt_chains - a.rt_chains, rt_back - a.rt_back);
+        printk(" tiled.n %u tiled.bytes %llu tiled.hot %u", tiled_n - a.tiled_n,
+               ll(tiled_bytes - a.tiled_bytes), tiled_hot - a.tiled_hot);
+        printk(" tile.ns %llu/%llu/%llu tile.untimed %u", ll(tile_ns[0] - a.tile_ns[0]),
+               ll(tile_ns[1] - a.tile_ns[1]), ll(tile_ns[2] - a.tile_ns[2]), tile_untimed - a.tile_untimed);
+        printk(" tfu.jobs %u tfu.failed %u tex.n %u tex.bytes %llu smp.packed %u smp.reused %u",
+               tfu_jobs - a.tfu_jobs, tfu_failed - a.tfu_failed, tex_n - a.tex_n,
+               ll(tex_bytes - a.tex_bytes), smp_packed - a.smp_packed, smp_reused - a.smp_reused);
+    }
+};
+#elif defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+struct SceneCounters {
+    uint32_t kicks = 0, waits = 0, draws = 0, tiles = 0, reposts = 0, timeouts = 0;
+    void read()
+    {
+        pvr_backend_counters(&kicks, &waits);
+        pvr_backend_workload(&draws, &tiles);
+        reposts = pvr_render_reposts;
+        timeouts = pvr_backend_wait_timeouts();
+    }
+    void print_diff(const SceneCounters &a) const
+    {
+        printk(" kicks %u waits %u draws %u tiles %u reposts %u wait_timeouts %u", kicks - a.kicks,
+               waits - a.waits, draws - a.draws, tiles - a.tiles, reposts - a.reposts,
+               timeouts - a.timeouts);
+    }
+};
+#endif
+#if defined(CONFIG_YAKOGL_GPU_V3D) || defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+SceneCounters s_ctr0; /* read at the scene's first frame (log_scene_info) */
+#endif
+
 uint64_t cyc_to_us(uint64_t cyc)
 {
     return cyc * 1000000u / sys_clock_hw_cycles_per_sec();
@@ -1074,6 +1172,9 @@ public:
         s_cost = fresh;
 #endif
         s_cost.steps_known = osal_draw_stats(s_cost.steps0, &s_cost.untimed0);
+#if defined(CONFIG_YAKOGL_GPU_V3D) || defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+        s_ctr0.read();
+#endif
 #if defined(GM_PERF)
         if (s_perf.asked) {
             perf_scene_begin();
@@ -1092,6 +1193,7 @@ public:
         MainLoop::log_scene_result(); /* upstream's own line, unchanged */
         print_cost();
         print_steps();
+        print_counters();
         print_picture();
         print_mem("end");
         keep_scene();
@@ -1219,6 +1321,25 @@ private:
         }
         printk("; sum %llu; untimed laps %u\n", (unsigned long long)(sum / 1000u / c.frames),
                untimed - (c.steps_known ? c.untimed0 : 0u));
+    }
+
+    /* One line per scene: the backend's counters as differences between the
+     * scene's first frame and its end (docs/notes/glmark2-scene-counters.md). */
+    void print_counters()
+    {
+        if (s_cost.frames == 0) {
+            return;
+        }
+#if defined(CONFIG_YAKOGL_GPU_V3D) || defined(CONFIG_YAKOGL_DRV_GPU_PVR)
+        SceneCounters now;
+        now.read();
+        printk("glmark2-counters: %s: frames %llu", scene_->info_string().c_str(),
+               (unsigned long long)s_cost.frames);
+        now.print_diff(s_ctr0);
+        printk("\n");
+#else
+        printk("glmark2-counters: %s: absent\n", scene_->info_string().c_str());
+#endif
     }
 
     void print_cost()
