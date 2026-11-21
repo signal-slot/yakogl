@@ -144,6 +144,21 @@ int yd_mp25_ltdc_set_fb(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_lt
  * after two frames. */
 int yd_mp25_ltdc_wait_frame(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env);
 
+/* Frame CRC (GCR.CRCEN, ltdc.c ltdc_crtc_set_crc_source). on and
+ * layer3_secure are booleans; layer3_secure is the RIFSC's answer for layer 3
+ * (ltdc.c drops the CRC then): switching on gives -EINVAL. -ENODEV: this LTDC
+ * version has no CRC. Only GCR.CRCEN changes. */
+int yd_mp25_ltdc_crc_enable(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data,
+			    uint8_t on, uint8_t layer3_secure);
+
+/* Skip CRC_SKIP_FRAMES (2) frames, wait for one more and store CCRCR in
+ * *out_crc (untouched on an error). -ENODEV (no CRC unit), -EINVAL (CRC off,
+ * which a secure layer 3 always leaves it; null pointers), -ETIMEDOUT (no
+ * frame). ST's algorithm is undocumented: compare two reads, never a
+ * computed value. */
+int yd_mp25_ltdc_frame_crc(const struct yd_mp25_ltdc_config *cfg, const struct yd_env *env,
+			   uint32_t *out_crc);
+
 /* ISR read and cleared through ICR, kept in data->isr: bit 0 line, 1 FIFO
  * underrun warning, 2 transfer error, 6 FIFO underrun error. */
 uint32_t yd_mp25_ltdc_isr(const struct yd_mp25_ltdc_config *cfg, struct yd_mp25_ltdc_data *data);
