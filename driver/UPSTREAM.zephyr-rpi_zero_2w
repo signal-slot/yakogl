@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+name:      Zephyr RTOS, the Raspberry Pi Zero 2 W board and its BCM2710 SoC
+url:       https://github.com/zephyrproject-rtos/zephyr
+version:   main (no tag; VERSION 4.5.99)
+commit:    1b3f4f14ad2002beb743dba17b455a1f0c688639 (2026-11-20, "arch: x86: ia32: export
+           arch_shadow_stack_reset() with reuse enabled"), the tip of main when the files
+           were copied (2026-11-21) and so the newest commit; every file below is the
+           same at 4f2d5263e21e, the commit docs/notes/pre-study-rpi-zero-2w.md 9.1 read
+date:      2026-11-20
+licence:   Apache-2.0 (each file's SPDX line; board.yml, soc.yml and rpi_zero_2w.yaml
+           have none upstream, Zephyr's licence covers them, tools/license_audit.allow)
+copyright: Copyright (c) 2026 Jonathan Elliot Peace (the SoC, the board, bcm2710.dtsi,
+           the interrupt controllers); Copyright (c) 2026 Muhammad Waleed Badar
+           (rpi_common.dtsi, rpi_zero_2w-pinctrl.dtsi, the board's Kconfig.defconfig,
+           rpi_bcm283x_power.h); as each file's header says
+licence-files: LICENSES/Apache-2.0.txt of this repository (the Apache License 2.0;
+           Zephyr's LICENSE at the commit above, sha256
+           c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08, is the same
+           licence with the appendix's placeholders in {} instead of [])
+generated: none
+patches:   patches/zephyr-rpi_zero_2w/0001-bcm2710-cpus-no-cpu-release-addr.patch
+             dts/arm64/broadcom/bcm2710.dtsi: no cpu-release-addr in the cpu nodes; the
+             pin's arm,cortex-a53 binding does not declare it (upstream ee3207193d2 did,
+             with the spin-table SMP start the pin lacks), so the image is single-core
+           patches/zephyr-rpi_zero_2w/0002-bcm2710-aux-uart-pin-driver.patch
+             dts/arm64/broadcom/bcm2710.dtsi: the console UART on the pin's own
+             mini-UART driver (brcm,bcm2711-aux-uart, uart_bcm2711.c); the pin's
+             uart_ns16550.c lacks upstream's BCM283x auxiliary variant (d7c5d598635)
+           patches/zephyr-rpi_zero_2w/0003-rpi_common-framebuffer-under-firmware.patch
+             boards/raspberrypi/common/rpi_common.dtsi: fb0 back under the firmware node
+             without firmware, pixel-format and red-blue-swap, which the pin's
+             framebuffer binding does not declare (upstream 967b76a1a16, e242dcfea46)
+           (each patch's header has the whole reason; applied in that order, they
+           turn the files listed below into the files in the tree)
+local-changes: none besides the patches
+
+Where and why. The pin of west.yml (Zephyr af17c0c8, 2026-07-29) has no BCM2710 SoC
+and no Zero 2 W board; upstream added them on 2026-08-17 (40222de576b) and moving the
+pin for one board is not wanted (docs/notes/pre-study-rpi-zero-2w.md, section 9.2).
+These are Zephyr material, not a library: they are read by Zephyr's build as an
+out-of-tree board, SoC, devicetree and driver root, so they live in the yakogl-drivers
+Zephyr module (driver/zephyr/module.yml), whose board_root, soc_root and dts_root are
+driver/ and which already carries the Verdin, NanoPC-T6 and STM32MP257F-DK boards and
+SoCs that way. Every file keeps its upstream path relative to driver/ (dts_root's
+include/ is where the devicetree finds the dt-bindings headers), so this list is
+also the list of upstream paths. driver/zephyr/Kconfig sources
+drivers/interrupt_controller/Kconfig.brcm and driver/zephyr/CMakeLists.txt compiles
+the two controllers, as upstream's drivers/interrupt_controller/ does, and puts
+include/ on the include path for <zephyr/drivers/interrupt_controller/intc_bcm283x.h>.
+Not third_party/: Zephyr finds these files only in a module root.
+
+Left out (upstream has them; not needed to build and boot to a console with the pin):
+the board's doc/ (index.rst, img/rpi_zero_2w.webp); the bindings and drivers of the
+nodes the board enables but hello_world does not use: brcm,bcm2835-rng
+(drivers/entropy/entropy_bcm2835_rng.c), raspberrypi,bcm283x-vc-thermal
+(drivers/sensor/broadcom/), raspberrypi,bcm283x-power
+(drivers/power_domain/power_domain_rpi_bcm283x.c; the board's Kconfig.defconfig
+turns POWER_DOMAIN on only with PM), and brcm,bcm2835-dma (drivers/dma/, the node is
+disabled); a node without a binding is parsed and ignored. Upstream's
+brcm,bcm283x-aux-uart binding and its uart_ns16550.c variant (patch 0002), the
+framebuffer binding and driver changes (patch 0003), and the SMP support of
+ee3207193d2 (arch/arm64 IPI hook, drivers/pm_cpu_ops spin-table; patch 0001) are
+core changes the pin lacks and are not carried.
+
+tools/check.sh checks these hashes: it reverses the patches on a copy of the files in
+the tree and compares every file with the hash below.
+
+files:
+5f0144744eef2411fb75c8eded505b52027a4840803562404faf0924ae81c334  boards/raspberrypi/common/rpi_common.dtsi
+3b5a5ca1cea9796494fb23710971059c1bc6c9dd1eacb4091eb56d675f021f35  boards/raspberrypi/rpi_zero_2w/Kconfig.defconfig
+33757c7efeda0381608330f3345d65019f34458001045cafcbfa2315137540d6  boards/raspberrypi/rpi_zero_2w/Kconfig.rpi_zero_2w
+7cdc0df33ee1047fe6d9c2b864e7c0e9ce2b85b3013280e5746060093cb402bc  boards/raspberrypi/rpi_zero_2w/board.yml
+51d0debe90f02ade16350626c0368dae50342b838f5eef06ad9eec40cea7ce9c  boards/raspberrypi/rpi_zero_2w/rpi_zero_2w-pinctrl.dtsi
+725841274168261396958060c1d2e003261c363eb760ef3f849c30d41fd59593  boards/raspberrypi/rpi_zero_2w/rpi_zero_2w.dts
+5d7e570ad90648b6a9c160af1ba4b04f158bc7c84f315e572d4758f94e94fc92  boards/raspberrypi/rpi_zero_2w/rpi_zero_2w.yaml
+64bb901842282d493e9f1876017eb4d108ea62293af734f899e1bc94f3380341  boards/raspberrypi/rpi_zero_2w/rpi_zero_2w_defconfig
+afe9b9a69c0f80a8cdec7dd7a6fae52fbf7e67f5135e177de041dc0084fcdb72  drivers/interrupt_controller/Kconfig.brcm
+44afaad377d3d7f871b131e8e3f4daef12eb4ff6d4a555e4d904149ac999482e  drivers/interrupt_controller/intc_bcm2835_armctrl.c
+6017a001241d6db09e60f558f540601e4e0e06d54254fbd6d596dccb80501f06  drivers/interrupt_controller/intc_bcm2836_l1.c
+ad6cb64b434da56ae0facda934f08e71306439eeb7bc38d0d3dfea99ad544ec7  dts/arm64/broadcom/bcm2710.dtsi
+dded341cd6327038af85706231d337f1e80b992e23f19da3191726d2f2bd4117  dts/bindings/interrupt-controller/brcm,bcm2835-armctrl-ic.yaml
+6a3437d322852d7275ec4cb5d3df4c732c715c52e21f9b51582434274af9e5b8  dts/bindings/interrupt-controller/brcm,bcm2836-l1-intc.yaml
+4f49c461a2b8c94c67539b22b8043882921e10eefbf193006f89a02e10c415a7  include/zephyr/drivers/interrupt_controller/intc_bcm283x.h
+2415a5c39301cf26b102755915b474f820961f9350a823460198ba6d3bc48059  include/zephyr/dt-bindings/interrupt-controller/bcm2835-armctrl.h
+3d45549a24805e488e2e939eb65dd62a2f8ba0161a28417035f5d3b346e7ee0c  include/zephyr/dt-bindings/interrupt-controller/bcm2836-l1.h
+36549ee5cd155705f67948d00c34fd8407ea3589a770b21a8bd62757839086e9  include/zephyr/dt-bindings/power/rpi_bcm283x_power.h
+981c919759c111d1eed6a580b06ae8e1c355d7ec6234fe3d09d96b0375c77300  soc/brcm/bcm2710/CMakeLists.txt
+6dcadcb9c6eee0d5852d2f9dbde125048527020be268f71f1d6a2432b0ce9c06  soc/brcm/bcm2710/Kconfig
+a715d718297cecab3a5d2ef044d90519cac01727fbc0259e1acc2711ff6007ac  soc/brcm/bcm2710/Kconfig.defconfig
+5bf12a0958af641b509662f0cffa8dcd81a4af8b13f489f5a580fbdaa5467d99  soc/brcm/bcm2710/Kconfig.soc
+4b8f77802d1b511cd725eadc0fb5b5537806d5d01dde74109b5e45f7c9cfabe5  soc/brcm/bcm2710/soc.h
+b17e97733371dcba73b4a19fda0b397e3f3c44f2203542d249eec7e3b357a161  soc/brcm/bcm2710/soc.yml
+cf6e47c1a222e93b756e8938c5d648c5503afd074752c7594cd00b61cefe0b5f  soc/brcm/bcm2710/soc_irq.c
+39f74cf607e602d5f15fa2dc318b3be3e937493f181ff54e1e75c7269276c18c  soc/brcm/common/pinctrl_soc.h
