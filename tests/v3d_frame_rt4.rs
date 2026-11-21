@@ -907,3 +907,36 @@ fn blend_off_names_no_rt() {
     assert_eq!(en[0].get("Mask"), 0, "no RT blends");
     assert!(bcl.iter().all(|d| d.name != "Blend Cfg"), "no BLEND_CFG");
 }
+
+/// Per-RT blend enables (`rt_blend_own`, item v3d-blend-rt): BLEND_ENABLES is
+/// the job's mask, Mesa's blend_enables of an independent blend state
+/// (v3dx_state.c:148-156, v3dx_emit.c:525-531): an integer RT 3 left out
+/// (0b0111). BLEND_CFG stays the one state over every RT.
+#[test]
+fn blend_enables_follow_the_per_rt_mask() {
+    let st = V3dJobState { rt_blend_own: true, rt_blend_mask: 0b0111, ..blend_state(true) };
+    let bcl = draw_bcl(&st);
+    let en: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Blend Enables").collect();
+    assert_eq!(en.len(), 1, "one BLEND_ENABLES (v3d_packet.xml:773)");
+    assert_eq!(en[0].get("Mask"), 0b0111, "RT 3 does not blend");
+    let cfg: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Blend Cfg").collect();
+    assert_eq!(cfg.len(), 1);
+    assert_eq!(cfg[0].get("Render Target Mask"), 0xf);
+    /* the mask means nothing without blending */
+    let st = V3dJobState { rt_blend_own: true, rt_blend_mask: 0b0111, ..blend_state(false) };
+    let bcl = draw_bcl(&st);
+    let en: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Blend Enables").collect();
+    assert_eq!(en[0].get("Mask"), 0);
+}
+
+/// A GL_NONE draw buffer 3 (`rt_colormask` nibble 0 for RT 3): COLOR_WRITE_MASKS
+/// disables every channel of RT 3 (bits 12-15) and keeps RT 0-2 written
+/// (v3dx_emit.c:571-585).
+#[test]
+fn none_rt3_write_mask_is_full() {
+    let st = V3dJobState { rt_colormask_own: true, rt_colormask: 0x0ff, ..blend_state(false) };
+    let bcl = draw_bcl(&st);
+    let wm: Vec<&Dec> = bcl.iter().filter(|d| d.name == "Color Write Masks").collect();
+    assert_eq!(wm.len(), 1);
+    assert_eq!(wm[0].get("Mask"), 0xf000, "RT 3 masked, RT 0-2 written");
+}
