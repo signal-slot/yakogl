@@ -133,20 +133,14 @@ route (b) (section 4) runs unchanged but for `MALI_BOARD=verdin-imx95`.
 SCMI or reset difference): NXP's panthor carries the i.MX 95 power code that
 mainline lacks. (ii) is not worth its cost.
 
-What the owner must do for (iii): one microSD card in the Mallow, and at
-Toradex's U-Boot prompt (a person or the X11 bridge, as B1 already needs)
-`printenv boot_targets` and, if the card is not first, a one-time
-`run bootcmd_mmc1` (the name is read at B1, not assumed). No reflash, no
-change to the eMMC or to U-Boot's environment.
+What the owner must do for (iii): one microSD card in the Mallow, power
+on. Toradex's U-Boot scans the card first (`boot_targets=mmc1 mmc0 dhcp`,
+section 5); if an environment was changed so that it does not, one command
+at its prompt boots the card once. No reflash, no change to the eMMC or to
+U-Boot's environment.
 
-The card (host work, an item of its own): v7.3 `make defconfig Image dtbs
-modules` for arm64; `imx95-verdin-{wifi,nonwifi}-mallow.dtb` by the module's
-variant (pre-study 1.1); a trixie debootstrap with `openssh-server`,
-`psmisc` (fuser), `util-linux` (setsid), `coreutils` (timeout, stdbuf);
-`/lib/firmware/arm/mali/arch10.12/mali_csffw.bin` from the pinned
-`MALI_CSFFW` (`tools/cts/deps-env.sh --build MALI_CSFFW`, same bytes);
-`extlinux/extlinux.conf` for U-Boot's distro boot. Its login, address and
-keys come from the lease, never a file.
+The card is built on the host by `tools/mali/panthor/imx95-sdcard.sh`
+(section 5). Its login, address and keys come from the lease, never a file.
 
 ## 3. Day one on the Verdin iMX95 (route (b))
 
@@ -173,6 +167,13 @@ tools/cts/mali-deqp-run.sh --build build/deqp-imx95 --out tools/cts/log/<date>-i
 #    then S2 rows 25-38, S3 39-68, S4 69-76, the tally and the reruns of the recipe
 ```
 
+- On the card of section 5 the login is root by key (`BOARD_HOST=root@<the
+  lease's address>`), the stage root stays `/root/yakogl-mali`, debugfs is
+  mounted and the SCMI raw interface is in the kernel, so the day-one probe
+  (`tools/probes/verdin_imx95/linux_day_one/`) and
+  `tools/imx95_bbm_record.sh probe` run as they are; `uname -r` is `7.3.0`.
+  Before step 0, `systemctl --failed` on the console tells whether the
+  board's own drivers (ENETC, usdhc, SCMI) came up; no host test can.
 - Step 0 must show `panthor` as the driver of a render node and no
   `mali_kbase` loaded. A `mali_kbase` line means the image is not (iii) or
   (iv): stop; nothing of ours runs beside kbase, and its output is not read.
@@ -209,3 +210,90 @@ What route (b) does not settle: who releases `GPURESET` and the SCMI power
 sequence our own kernel side must do (U5); under Linux the SM and the kernel
 do it. If mainline brings the GPU up, its sequence (one `PD_GPU`, no perf
 domain, the `GPU_CGC` clock) is a working public reference for B2.
+
+## 5. The microSD card of (iii)
+
+`tools/mali/panthor/imx95-sdcard.sh` builds the card on the host, without
+root: no sudo, no loop mount, no user namespace (Ubuntu's AppArmor refuses
+unprivileged ones) and no binfmt_misc. Its inputs are pinned in
+`tools/cts/deps.toml` (board `verdin_imx95`): `IMX95_LINUX_SRC` (the v7.3
+tarball, the sha256 kernel.org's signed `sha256sums.asc` gives),
+`IMX95_DEBIAN_TOOLS` (trixie's debootstrap, the Debian archive keyring,
+mtools), `IMX95_QEMU_SYSTEM` (trixie's qemu-system-arm with its libraries)
+and `MALI_CSFFW`; the rootfs's packages come from snapshot.debian.org at
+`20261101T000000Z`, checked by debootstrap against the pinned keyring.
+
+| Piece | What |
+|---|---|
+| kernel | v7.3, arm64 `defconfig` + `tools/mali/panthor/imx95-sdcard.config` (panthor `=m`; SCMI with the raw interface beside the drivers, `ARM_SCMI_RAW_MODE_SUPPORT_COEX` and debugfs, for `tools/imx95_bbm_record.sh`; LPUART console; usdhc; ENETC v4 + EMDIO + NETC block control + DP83867; kexec, kexec_file, crash dump; virtio for the host test). Each line of the fragment is checked in the final `.config`. Built with Debian trixie's `aarch64-linux-gnu-` gcc 14 (`MALI_DEQP_TOOLCHAIN`, or `CROSS_COMPILE`; the Zephyr SDK's gcc has no `stdint.h` for the kernel's NEON code). Release `7.3.0`. |
+| dtbs | `imx95-verdin-wifi-mallow.dtb` (model "Toradex Verdin iMX95 WB on Mallow Board") and `imx95-verdin-nonwifi-mallow.dtb` ("Toradex Verdin iMX95 on Mallow Board"), both on the card |
+| boot | MBR, p1 FAT32 "BOOT" 256 MiB, bootable: `Image`, `dtbs/`, `boot.scr` (and its source `boot.cmd`), the kernel's config. `boot.scr` picks `imx95-verdin-${variant}-mallow.dtb` (U-Boot sets `variant` from the module's config block), `root=PARTUUID=1a95c0de-02 rootwait rw console=ttyLP2,115200`, then `booti`. |
+| rootfs | p2 ext4: Debian trixie arm64 minbase with systemd, openssh-server, sudo, psmisc (fuser), procps (pkill), util-linux (setsid, findmnt), coreutils (timeout, stdbuf), python3, busybox (devmem), i2c-tools, kexec-tools, libubootenv-tool (fw_printenv), xz/zstd, libstdc++6; the modules; `arm/mali/arch10.12/mali_csffw.bin` from `MALI_CSFFW`. systemd-networkd DHCP on every wired port, systemd-resolved, timesyncd; `serial-getty@ttyLP2` with root logged in (the way in when the network does not come up; `IMX95_SD_CONSOLE_AUTOLOGIN=0` gives a plain getty); sshd with `PasswordAuthentication no`, root by key only, the key from `BOARD_SSH_PUBKEY` at build time; root has no password; ssh host keys are made on the first boot; `/etc/machine-id` empty (made on the first boot); debugfs is mounted by systemd. |
+
+Why U-Boot boots it: Toradex's U-Boot for the Verdin iMX95 (BSP 7.x,
+`u-boot-toradex` `toradex_imx_lf_v2024.04`, the same in mainline U-Boot)
+runs bootstd, `bootcmd=bootflow scan -b`, with
+`boot_targets=mmc1 mmc0 dhcp` (`board/toradex/verdin-imx95/verdin-imx95.env:3`).
+`mmc1` is usdhc2, the Mallow's microSD slot (`mmc0` the eMMC, DT aliases);
+bootstd scans the partitions with the bootable flag, as FAT or ext4, for
+`extlinux/extlinux.conf` and `boot.scr`. The card has only `boot.scr`: an
+extlinux file would take the dtb from `${fdtfile}`, which Toradex derives
+as `imx95-verdin-${variant}-${fdt_board}.dtb` with `fdt_board=dev`, the
+wrong carrier. The load addresses are U-Boot's (`kernel_addr_r=0x90400000`,
+`fdt_addr_r=0x9c400000`: 192 MiB for the `Image`).
+
+Build (outputs in `$IMX95_SD_OUT`, default `build/imx95-sdcard/`, which
+is gitignored):
+
+```sh
+tools/cts/deps-env.sh --build --board verdin_imx95 IMX95_LINUX_SRC IMX95_DEBIAN_TOOLS IMX95_QEMU_SYSTEM MALI_CSFFW
+tools/cts/deps-env.sh --build --board nanopc_t6 MALI_DEQP_TOOLCHAIN
+BOARD_SSH_PUBKEY=<your public key file> tools/mali/panthor/imx95-sdcard.sh
+#   steps kernel rootfs card verify, or any of them by name
+```
+
+The rootfs is made in two stages: debootstrap's first stage under fakeroot,
+an ext4 image of it (`mke2fs -d`), then debootstrap's second stage and the
+configuration commands run as PID 1 in qemu's `virt` machine, booting the
+card's own kernel. `verify` reads the card image on the host (the partition
+table, the FAT files against the build, the script image's CRCs, the kernel
+config, the dtbs' compatibles and GPU node, `panthor.ko` and its
+`modules.alias` line, the firmware's sha256 against the pin, root's key, no
+host keys, no password, e2fsck). A boot of a copy of the finished rootfs
+on `virt` (2026-11-21, by hand) reached `multi-user.target` with
+`ssh.service` started (ssh's host keys made on that first boot) but showed
+no serial login prompt on `ttyAMA0` within 40 minutes of TCG on a busy
+host, so a host test that logs in is not in the script yet. `virt` is not
+the board's DT in any case; it proves the rootfs and its init, not the
+i.MX 95 drivers.
+
+Write the card (the device is yours, never in a file; check it with
+`lsblk` first, everything on it is replaced):
+
+```sh
+cd "${IMX95_SD_OUT:-build/imx95-sdcard}"
+sha256sum -c card.img.sha256
+sudo dd if=card.img of=/dev/<card> bs=4M conv=fsync status=progress
+#   or, faster on a sparse image:  bmaptool create card.img > card.bmap
+#                                  sudo bmaptool copy --bmap card.bmap card.img /dev/<card>
+```
+
+First boot: the card in the Mallow's microSD slot, power on. On the console
+(ttyLP2, 115200): U-Boot's `bootflow scan` finds `mmc1`, the script prints
+`imx95-sdcard: mmc 1:1 Image dtbs/imx95-verdin-<variant>-mallow.dtb`, then
+the kernel, then a root shell (autologin). The ethernet port gets an address
+by DHCP; ssh in as root with the key. If U-Boot boots the eMMC instead (an
+environment whose `boot_targets` was changed), stop it at the prompt and boot
+the card once, changing nothing that is saved:
+
+```
+bootflow scan -b mmc1
+#   or, by hand:  load mmc 1:1 ${scriptaddr} boot.scr; source ${scriptaddr}
+```
+
+`setenv sd_extra_args crashkernel=256M` (or `sd_fdtfile <dtb>`) before
+either adds kernel arguments (or names another dtb) for that boot only, as
+long as it is not `saveenv`d.
+
+Back to Toradex's image: power off, take the card out. Nothing on the eMMC
+or in U-Boot's environment was changed.
