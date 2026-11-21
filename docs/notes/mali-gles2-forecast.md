@@ -387,7 +387,12 @@ or fixed function), `uniform_api` 1267 (link-only cases may pass), the
 `ARITH` by group, some may be `FsOperandForm`, `MixedPrecision` or even
 compile), and the pass forecast of the GL-core groups (section 1).
 
-## 6. Measured against the forecast
+## 6. Measured against the forecast (the 2026-11-12/13 measurement)
+
+This section, and the counts of sections 1 and 2 that it quotes (for example
+`ZS_ELSEWHERE` 35 and `BLEND_SHADER` 828), are the 2026-11-12/13 measurement
+of the first tree, kept as it was. Section 7 is the forecast after plan #373's
+host fixes; it does not replace these lines.
 
 The first whole tree (the baseline at the top) has 5,260 Pass against the
 5,970 forecast. By section 4's rules every refusal message the board
@@ -437,6 +442,138 @@ Section 4's new causes, from the measurement (they are still in
 wrong pixels of `texture.vertex.cube` with no refusal (16), and 4 wrong
 pixels no refusal explains. The 164 GL errors and missing pixels in chunks
 with refusals (cause 4 there) wait for a per-case refusal record.
+
+## 7. After plan #373's host fixes (forecast, 2026-11-21)
+
+**These are forecasts, not board results.** No board ran for this section;
+nothing here is a Pass or a Fail that dEQP reported. Sections 1 to 6 keep the
+2026-11-12/13 numbers.
+
+**Baseline.** The per-row counts "before" are the tree at `37305608`
+(`tools/cts/log/2026-11-15-t6-gles2-S{1..4}-37305608/results.tsv`, rows
+mapped to labels by `tools/cts/mali-gles2-tree.txt`), the same compiler and
+frame code as the 2026-11-12/13 measurement for these causes. "Before" of
+a refused case is read from `refusals.tsv` of those slices: `compiler` below
+is a refusal of the online Mali compiler (section 2's M.2 families), which
+plan #373 does not touch.
+
+**Which build.** The board's `report-es2` build (`libGLESv2` with the feature
+`report-es2`, the ES 2.0 context dEQP-GLES2 runs on) is the relevant one. Two
+fixes only take effect there: the depth/stencil sharing of cause 5 (the host
+tests of `tests/mali_zs_sharing.rs` run in the default ES 3 build, so they pin
+the sequences, and `src/mali/backend_tests.rs` the descriptor) and the cube
+samplers and the magnification switch of causes 7 and 8
+(`ea40c2b7` is `report-es2` only; `tests/mali_vcube_magswitch.rs`
+runs its fix cases there). A rerun with a plain build would not show them.
+
+**Fixes that these rows depend on** (commit; pin; design note):
+
+| cause | commit | pin | note |
+|---|---|---|---|
+| 3 blend shaders | `961cbf77`, `e33ef7b1`, `b5f882ea` | `tests/mali_blend_states.rs`, `tests/mali_blend_words.rs` (`a2482523`), `src/mali/frame_blend_tests.rs` | `mali-blend-shaders.md` |
+| 4 refusal line | `fc195a8d`, `b48f3b49` (runner) | `tests/mali_fragment_random.rs` (`07952272`) | `mali-frame-refusals.md` |
+| 5 depth/stencil sharing | `e918e015` | `tests/mali_zs_sharing.rs` (`4cc135c1`), `src/mali/backend_tests.rs` | `mali-zs-sharing.md` |
+| 6 draw-limit counting | `b2585cf2` | `tests/mali_draw_oom.rs` (`69cee8fe`), `src/mali/program_tests.rs` | `mali-draw-limits.md` |
+| 7 vertex cube samplers, magnification | `0afaf24d`, `ea40c2b7` | `tests/mali_cube_samplers.rs` (`ce63b181`), `tests/mali_vcube_magswitch.rs` (`90a000ac`) | `mali-cube-textures.md` |
+| 8 rgb565 alpha write, fragment cube sampler | `0c3a7729` | `tests/mali_rgb565_stencil.rs` (`239b538d`), lib test `fragment_cube_samplers_follow_the_context` | `mali-frame-formats.md` |
+| cube completeness | `c50f2c41` | `tests/mali_cube_complete.rs` | `docs/es2-cts-failures.md` M.3 row 6 |
+| attribute records (row 8) | `24c04082` | `tests/mali_attr_gap.rs` (`2ead3e12`), `tests/mali_draw_inval.rs` (`57030909`) | `mali-attribute-records.md` |
+| texturecubelod | (the cause 7 sampler) | `tests/mali_vcube_lod.rs` (`3c52c60a`) | `mali-cube-textures.md` |
+
+**How the numbers were made.** "Pass" below counts the cases whose refusal or
+GL error is gone as passing; that is the upper bound the host can state. A
+case drawn unrefused can still differ in pixels, which only the board shows
+(the pins check descriptors, GL errors and `draws_refused`, not frames). The
+"Fail" of the same row is then the compiler refusals plus whatever pixel
+differences remain. No cargo command was run for this section: the pins are
+cited as they stand in the tree, not replayed. The dEQP generator seeds of
+`fragment_ops.random`, `shaders.random` and `interaction` are not reproduced
+by the pins (their headers say so), so those rows are ranges.
+
+| row | cases | 11-15 Pass / Fail / other | forecast Pass | forecast Fail | refusal left | supported by |
+|---|---:|---|---:|---:|---|---|
+| `T6S2R01` blend `equation_src_func_dst_func` (part) | 400 | 125 / 275 / 0 | 400 | 0 | none | `961cbf77`; `mali_blend_states`, `mali_blend_words` |
+| `T6S2R02` blend (rest) | 239 | 88 / 151 / 0 | 239 | 0 | none | same |
+| `T6S2R03` blend `rgb_func_alpha_func.dst` | 196 | 10 / 186 / 0 | 196 | 0 | none | same |
+| `T6S2R04` blend `.src`, depth, depth_stencil | 400 | 184 / 216 / 0 | 400 | 0 | none | same; the 175 non-blend cases already Pass |
+| `T6S2R06` stencil ops, interaction, random, scissor, stencil | 288 | 71 / 216 / 1 | up to 174 | at least 114 | 97 `interaction` and 17 `scissor` compiler refusals | `24c04082`, `b2585cf2`, `mali_draw_inval`, `mali_draw_oom`, `mali_fragment_random`, `mali_blend_states` |
+| `T6S1R06` `fbo.render` | 319 | 282 / 37 / 0 | 319 | 0 | none | `e918e015` (35), `0c3a7729` (2); `mali_zs_sharing`, `mali_rgb565_stencil` |
+| `T6S1R11` `texture.completeness` | 40 | 24 / 16 / 0 | 40 | 0 | none | `c50f2c41`; `mali_cube_complete` |
+| `T6S1R14` `texture.mipmap` | 112 | 102 / 10 / 0 | 108 | 4 | 4 compiler refusals | `0afaf24d`, `0c3a7729`; `mali_cube_samplers`, `fragment_cube_samplers_follow_the_context` |
+| `T6S1R17` `texture.vertex` | 90 | 74 / 16 / 0 | 90 | 0 | none | `0afaf24d` (10), `ea40c2b7` (6); `mali_cube_samplers`, `mali_vcube_magswitch` |
+| `T6S3R11` matrix add, div, ... | 270 | 63 / 189 / 18 | up to 81 | at least 189 | 189 compiler refusals | `b2585cf2`; `mali_draw_oom` |
+| `T6S3R12` matrix mul, ... | 324 | 85 / 239 / 0 | 85 | 239 | compiler refusals | unchanged (no fix reaches it) |
+| `T6S3R13` matrix sub, ... | 144 | 39 / 99 / 6 | up to 45 | at least 99 | 99 compiler refusals | `b2585cf2`; `mali_draw_oom` |
+| `T6S3R14` random `all_features` | 198 | 4 / 194 / 0 | 4 | 194 | compiler refusals | unchanged |
+| `T6S3R15` random `basic_expression` | 300 | 30 / 266 / 4 | up to 39 | at least 261 | 261 compiler refusals; `vertex.96` and others may stay | `b2585cf2`, `24c04082`; `mali_draw_oom`, `mali_draw_inval` |
+| `T6S3R16` random `comparison_ops` | 100 | 8 / 92 / 0 | 8 | 92 | compiler refusals | unchanged |
+| `T6S3R17` random `conditionals` | 300 | 24 / 276 / 0 | 24 | 276 | compiler refusals | unchanged |
+| `T6S3R18` random `exponential` | 200 | 3 / 197 / 0 | 3 | 197 | compiler refusals | unchanged |
+| `T6S3R19` random `scalar_conversion` | 300 | 27 / 272 / 1 | up to 29 | at least 271 | 271 compiler refusals | `b2585cf2`, `24c04082` |
+| `T6S3R20` random `swizzle` | 100 | 9 / 90 / 1 | up to 10 | at least 90 | 90 compiler refusals | `b2585cf2` |
+| `T6S3R21` random `texture` | 200 | 10 / 190 / 0 | up to 11 | at least 189 | 189 compiler refusals | `24c04082`; `mali_draw_inval` (`texture.vertex.19`) |
+| `T6S3R22` random `trigonometric` | 200 | 3 / 197 / 0 | 3 | 197 | compiler refusals | unchanged |
+| `T6S4R01` algorithm ... constant_expressions (part) | 395 | 65 / 328 / 2 | up to 67 | at least 326 | compiler refusals | `b2585cf2`; `mali_draw_oom` (the 2 `conditionals.*_assignment_to_matrix`) |
+| `T6S4R02` constant_expressions, conversions | 365 | 32 / 333 / 0 | 32 | 333 | compiler refusals | unchanged |
+| `T6S4R03` conversions | 378 | 60 / 318 / 0 | 60 | 318 | compiler refusals | unchanged |
+| `T6S4R04` discard, fragdata, function ... | 292 | 89 / 195 / 0 (8 NotSupported) | 89 | 195 | compiler refusals | unchanged |
+| `T6S4R05` invalid_implicit_conversions ... | 387 | 351 / 36 / 0 | 351 | 36 | compiler refusals | unchanged |
+| `T6S4R06` linkage, misc, preprocessor | 383 | 208 / 175 / 0 | 208 | 175 | compiler refusals | unchanged |
+| `T6S4R07` preprocessor, ... | 356 | 162 / 183 / 0 (11 NotSupported) | 162 | 183 | compiler refusals | unchanged |
+| `T6S4R08` struct, texture_functions | 119 | 20 / 75 / 0 (24 NotSupported) | up to 21 | at least 74 | compiler refusals | `0afaf24d`, `ea40c2b7`; `mali_vcube_lod` (`texturecubelod`) |
+
+Notes on the rows.
+
+- Rows `T6S2R01` to `R04`: the 828 `fragment_ops.blend` cases failed with
+  `NOT_BUILT_BLEND_SHADER` (275 + 151 + 186 + 216). Blend states of a
+  fixed-function equation and a blend shader both draw; the pin
+  `mali_blend_states` shows no refusal for any state and `mali_blend_words`
+  equals Mesa's descriptor and shader (`pan_blend_ref`). A case that stays
+  Fail would be a pixel difference, not a refusal. The three
+  `rgb_equation_alpha_equation` cases of `R02` already pass.
+- `T6S2R06`: the 3 `interaction` cases not refused at link (`3` a
+  `ResourceError`, `11` and `66` `GL_INVALID_OPERATION`) draw after
+  `b2585cf2` and `24c04082`, as `tests/mali_draw_oom.rs` and
+  `tests/mali_draw_inval.rs` show on reduced shapes. The 100
+  `fragment_ops.random` cases were Fail in a chunk with refusals; the host
+  replay (M.3 row 2) put them with the blend refusal, so they follow `R01` to
+  `R04`. The ceiling "up to 174" is 71 + 3 + 100. The plan's
+  `fragrandom-words` item compared the 100 descriptors with Mesa's rules and
+  named four small differences (two depth, a dither bit, the 0.5 blend
+  constant); none is a refusal, and whether they change pixels is not settled
+  (`fragrandom-diffs`), so some of the 100 may stay Fail on pixels.
+  `scissor` and the 97 `interaction` compiler refusals stay.
+- `T6S1R06`: 35 cause-5 cases and 2 `stencil_clear.rbo_rgb565_*` cases are
+  the 37 non-Pass; both fixes are in `report-es2` only for cause 5. The D16 +
+  S8 pair is accepted by the ES 2.0 core, where Mesa's ES 3 context reports
+  it unsupported (M.3 row 3); the board decides if dEQP agrees.
+- `T6S1R14`: the 6 cube mipmap cases (`basic`, `bias`, `projected`, each
+  `linear_linear` and `linear_nearest`) are forecast Pass. There is no ES 2.0
+  drm-shim reference for them (`MESA_PAN_TREE` has no drm-shim build; M.3
+  row 9), so the board is the first pixel check. The 4 compiler refusals of
+  the row stay.
+- `T6S1R17`: the 10 `wrap.*` and `linear_mipmap_linear_*` cases follow
+  `0afaf24d`, the 6 `nearest_mipmap_*_linear_*` cases need `ea40c2b7`.
+- Matrix and `shaders.random` rows: the 33 former `ResourceError`
+  cases (18 + 6 in `R11`/`R13`, 4 + 1 + 1 in `R15`/`R19`/`R20`, 2 in
+  `T6S4R01`, 1 in `T6S2R06`) drew `-EINVAL` from the frame's varying count; after
+  `b2585cf2` they draw. Whether the fragment shader writes Mesa's folded
+  constants is for the board. "Up to" counts them as Pass.
+- The `GL_INVALID_OPERATION` draws of `shaders.random` (`basic_expression`
+  `vertex.{53,85,90,95,96}`, `scalar_conversion.vertex.53`,
+  `texture.vertex.19`) are in the "up to" figures: `mali_draw_inval` pins
+  reduced shapes, not the generator's seeds, and M.3 row 8 says `vertex.96`
+  and others may stay. The rerun's per-case refusal line (`fc195a8d`, tally
+  `--per-case`) names any that stay.
+- Rows marked "unchanged" have no refusal that a plan #373 fix touches; the
+  forecast is the baseline. Their `compiler` refusals are M.2's, owned by
+  the compiler plans.
+
+**Totals.** The compiler refusals and the Fail of the "unchanged" rows do not
+move; only the rows a fix reaches gain Pass. This is not the whole tree: rows outside this list (for example
+`default_vertex_attrib`, `shaders.operator.sequence`, the `negative_api`,
+`state_query` and `shader_api` rows held for `apierr-fix`) are not forecast
+here.
 
 ## What the note does not claim
 
