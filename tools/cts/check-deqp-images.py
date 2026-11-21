@@ -29,7 +29,8 @@ Zephyr merges them), the Kconfig files and the tables, and fails when
     MiB for image T5, 64 in sweep 28 and 72 since 6d2e7d0d's tile memory,
     tests/v3d_es2ctx_t5_mem.rs; i.MX8MP: 160 MiB heap; AM62P: 256 MiB GPU carve-out),
     or the T6's is under 64 MiB (no passing sweep yet: the size the 2048x2048
-    textures need, as image T5);
+    textures need, as image T5), or the Verdin iMX95's leaves the GL side
+    under 64 MiB beside its window memory, or brings its panel up;
   - a table no longer selects every case of gles2-mustpass.txt, or the AM62P
     multisample table is not the rgba8888d24s8ms4 image;
   - a dEQP-GLES3 table (am62p-gles3-tree.txt, pi4-gles3-tree.txt) does not
@@ -60,6 +61,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 DEQP = os.path.join(REPO, 'driver/samples/zephyr/deqp')
+VI95_APP = os.path.join(REPO, 'driver/zephyr/lib/board/verdin_imx95/app.conf')
 OURS = re.compile(r'^(YAKOGL|DEQP|V3D|GC_|PVR|GL_TEST)')
 # back ends / modes a conformance image must not select
 FORBIDDEN_ON = ('YAKOGL_SHADERC_PRECOMPILED_ONLY', 'YAKOGL_PRECOMPILED_SHADERS', 'YAKOGL_SHADERC_OFFLINE')
@@ -255,7 +257,8 @@ def check_repo():
     syms = kconfig_symbols()
 
     # 1. every symbol of ours any recipe file names exists
-    files = [os.path.join(DEQP, 'prj.conf'), os.path.join(DEQP, 'texture-2048.conf')]
+    files = [os.path.join(DEQP, 'prj.conf'), os.path.join(DEQP, 'texture-2048.conf'),
+             os.path.join(DEQP, 'verdin_imx95.conf')]
     bd = os.path.join(DEQP, 'boards')
     files += [os.path.join(bd, f) for f in sorted(os.listdir(bd)) if f.endswith('.conf')]
     scripts = [os.path.join(HERE, f) for f in sorted(os.listdir(HERE)) if f.endswith(('.sh', '.txt')) or f == 'README.md']
@@ -283,6 +286,9 @@ def check_repo():
         'Pi 4 T5': {**base, **parse_conf(os.path.join(DEQP, 'boards/rpi_4b.conf')),
                     **parse_conf(os.path.join(DEQP, 'texture-2048.conf'))},
         'T6': dict(base, **parse_conf(os.path.join(DEQP, 'boards/nanopc_t6.conf'))),
+        # the board layer's app.conf, then the sample's verdin_imx95.conf, as
+        # driver/samples/zephyr/common/verdin_imx95.cmake merges them
+        'Verdin iMX95': {**base, **parse_conf(VI95_APP), **parse_conf(os.path.join(DEQP, 'verdin_imx95.conf'))},
     }
     dq = read(os.path.join(DEQP, 'Kconfig'))
     for name, c in boards.items():
@@ -293,6 +299,8 @@ def check_repo():
         bad.append('Pi 4: deqp/boards/rpi_4b.conf does not set CONFIG_YAKOGL_GPU_V3D=y')
     if boards['T6'].get('YAKOGL_GPU_MALI') != 'y':
         bad.append('T6: deqp/boards/nanopc_t6.conf does not set CONFIG_YAKOGL_GPU_MALI=y')
+    if boards['Verdin iMX95'].get('YAKOGL_GPU_MALI') != 'y':
+        bad.append('Verdin iMX95: app.conf and deqp/verdin_imx95.conf do not set CONFIG_YAKOGL_GPU_MALI=y')
 
     # 3. the library's and the sample's own defaults
     def has(sym, text):
@@ -358,6 +366,16 @@ def check_repo():
     if not (t6 or '').isdigit() or int(t6) < 67108864:
         bad.append('T6 nanopc_t6.conf: YAKOGL_MALI_CARVEOUT_BYTES=%s, under the 64 MiB '
                    'texture.size.2d.2048x2048_* need' % t6)
+    # the Verdin iMX95: the same 64 MiB for the GL side, beside the board
+    # layer's window memory at the carve-out's end; no panel in a sweep image
+    vi = boards['Verdin iMX95']
+    vc, vw = vi.get('YAKOGL_MALI_CARVEOUT_BYTES') or '', vi.get('YAKOGL_MALI_WINDOW_BYTES') or '0'
+    if not (vc.isdigit() and vw.isdigit()) or int(vc) - int(vw) < 67108864:
+        bad.append('Verdin iMX95 verdin_imx95.conf: YAKOGL_MALI_CARVEOUT_BYTES=%s less the window '
+                   'memory %s leaves under the 64 MiB texture.size.2d.2048x2048_* need' % (vc, vw))
+    if vi.get('YAKOGL_VERDIN_IMX95_DISPLAY') != 'n':
+        bad.append('Verdin iMX95 verdin_imx95.conf: CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY is not n '
+                   '(a sweep image reads back; the panel only on request)')
 
     # 5. the tables
     must = [l.strip() for l in read(os.path.join(HERE, 'gles2-mustpass.txt')).splitlines()
