@@ -4,10 +4,12 @@
 #
 # mp2s_selftest_all.sh - one entry point for every DK standalone host selftest.
 # The selftests are found by glob at run time (a newly merged one needs no
-# edit): tools/mp2s_*_selftest.sh, tools/board_stm32mp2_standalone_selftest.sh,
-# tools/efi_varfile_selftest.sh, tools/fwu_metadata_selftest.sh and
-# driver/tools/mp2-standalone/selftest.sh. Missing ones are skipped silently;
-# this runner's own selftest is excluded (no recursion).
+# edit): tools/mp2s_*_selftest.sh, tools/mp2s_*_selftest.py,
+# tools/board_stm32mp2_standalone_selftest.sh, tools/fwu_metadata_selftest.py,
+# tools/testdata/efi_varfile_selftest.sh, tools/testdata/mp2s-env/test_mp2s_env.py
+# (runs standalone) and driver/tools/mp2-standalone/selftest.sh. .sh files run
+# with bash, .py files with `python3 -I -B`. Missing ones are skipped
+# silently; this runner's own selftest is excluded (no recursion).
 #
 #   tools/mp2s_selftest_all.sh [--list] [--only REGEX]
 #
@@ -32,7 +34,7 @@ while [ $# -gt 0 ]; do
         [ $# -ge 2 ] || { echo "mp2s_selftest_all: --only needs a REGEX" >&2; exit 2; }
         only=$2
         shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "mp2s_selftest_all: unknown argument: $1" >&2; exit 2 ;;
     esac
     shift
@@ -43,9 +45,11 @@ esac
 
 found=()
 for f in "$root"/tools/mp2s_*_selftest.sh \
+         "$root"/tools/mp2s_*_selftest.py \
          "$root"/tools/board_stm32mp2_standalone_selftest.sh \
-         "$root"/tools/efi_varfile_selftest.sh \
-         "$root"/tools/fwu_metadata_selftest.sh \
+         "$root"/tools/fwu_metadata_selftest.py \
+         "$root"/tools/testdata/efi_varfile_selftest.sh \
+         "$root"/tools/testdata/mp2s-env/test_mp2s_env.py \
          "$root"/driver/tools/mp2-standalone/selftest.sh; do
     [ -f "$f" ] || continue
     n=${f#"$root"/}
@@ -70,7 +74,11 @@ bad=0
 for n in "${tests[@]+"${tests[@]}"}"; do
     [ -n "$n" ] || continue
     t0=$SECONDS
-    (cd "$root" && timeout -k 5 "$tmo" bash "$n") >"$out" 2>&1 </dev/null
+    case $n in
+    *.py) interp=(python3 -I -B) ;;
+    *) interp=(bash) ;;
+    esac
+    (cd "$root" && timeout -k 5 "$tmo" "${interp[@]}" "$n") >"$out" 2>&1 </dev/null
     rc=$?
     dt=$((SECONDS - t0))
     if [ "$rc" -eq 0 ]; then
