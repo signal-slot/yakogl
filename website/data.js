@@ -28,7 +28,7 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "63ed7e30e1c86e2d62b845fcda28c1016d6afa51",
+    "commit": "226cd9a27e88d886f48e072b626fb334cb9fb4d4",
     "date": "2026-11-21",
     "source": "tools/cts/RESULTS.md"
   },
@@ -221,18 +221,18 @@ window.YAKOGL_DATA = {
     "gltest.pi4": {
       "label": "gl_test regression set",
       "board": "pi4",
-      "value": "12 / 12",
+      "value": "13 / 13",
       "unit": "cases passed, 0 GPU resets",
-      "commit": "445c5653",
-      "onMain": false,
-      "date": "2026-10-20",
+      "commit": "975a6792",
+      "onMain": true,
+      "date": "2026-11-21",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "pass",
-      "note": "Run from the same 445c5653 build as the Pi 4 benchmark below. A later glmark2-only run from main c4af4917 (2026-10-22) did not rerun gl_test.",
+      "note": "Run from main 975a6792 (the common set Pi 4 row, tryboot). The glmark2 figure below is an earlier run.",
       "provenance": {
-        "kind": "pre-publication",
-        "recordCommit": "381b0f09e9c8e7b3d437946c888224f12a27b367"
+        "kind": "repository",
+        "recordCommit": "cb6d6db3df1130c14ad5a74d52626df0a780fa57"
       }
     },
     "glmark2.am62p": {
