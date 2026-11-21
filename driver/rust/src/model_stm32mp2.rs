@@ -1451,11 +1451,13 @@ mod tests {
         let first_gpu = ev.iter().position(|e| matches!(e, Event::GpuR(..) | Event::GpuW(..))).unwrap();
         assert!(last_scmi < first_rcc && first_rcc < first_gpu);
         assert_eq!(
-            ev[first_rcc..first_rcc + 7],
+            ev[first_rcc..first_rcc + 8],
             [
                 Event::RccW(0x83c, 0b10),
                 Event::RccR(0x83c, 0b10),
                 Event::RccW(0x83c, 0b11),
+                // the read with the reset held (power_up logs it)
+                Event::RccR(0x83c, 0b11),
                 Event::RccR(0x83c, 0b11),
                 Event::RccW(0x83c, 0b10),
                 Event::RccR(0x83c, 0b10),

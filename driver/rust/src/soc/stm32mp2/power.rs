@@ -12,7 +12,9 @@
 //!    (`stm32_gpu_opp.c:50-58`), so the level comes before the domain.
 //! 2. POWER (0x11), domain 0 (`PD_SCMI_GPU`): PROTOCOL_VERSION,
 //!    POWER_STATE_SET on, POWER_STATE_GET to read it back.
-//! 3. `RCC_GPUCFGR`: gate on, reset asserted, reset released, one read back.
+//! 3. `RCC_GPUCFGR`: read at entry, gate on, reset asserted and read, reset
+//!    released, then read until the reset bit clears (at most
+//!    [`rcc::RELEASE_READS`]; one read showed it still set on the board).
 //! 4. `HI_IDLE_STATE` (0x004) through the caller's register read, at most
 //!    [`Config::idle_reads`] times.
 //!
@@ -35,7 +37,7 @@
 //! The token is [`TOKEN`] on every message: one channel, one message in
 //! flight, and the reference vectors (tools/testdata/optee-scmi) use it.
 
-use super::rcc::GpuRcc;
+use super::rcc::{self, GpuRcc};
 use crate::firmware::scmi::{self, Transport, MAX_MSG};
 use crate::mmio::Mmio;
 
@@ -319,11 +321,15 @@ pub fn power_up<T: Transport, M: Mmio, L: Log, R: FnMut(usize) -> u32>(
     }
     power_state(scmi, log, cfg.power_domain, scmi::POWER_ON, Step::PowerOn, Step::PowerOnCheck)?;
 
+    log_fmt(log, format_args!("rcc gpucfgr 0x{:08x} at entry", rcc.status().raw));
     rcc.enable_clock();
     rcc.assert_reset();
+    log_fmt(log, format_args!("rcc gpucfgr 0x{:08x} (reset held)", rcc.status().raw));
     rcc.deassert_reset();
-    let s = rcc.status();
+    let (s, reads) = rcc.wait_reset_released(rcc::RELEASE_READS);
     log_fmt(log, format_args!("rcc gpucfgr 0x{:08x}", s.raw));
+    let how = if s.reset_asserted() { "still held" } else { "released" };
+    log_fmt(log, format_args!("rcc reset {} after {} reads", how, reads));
     if !s.clock_enabled() || s.reset_asserted() {
         return Err(Error::Rcc { raw: s.raw });
     }
@@ -561,14 +567,17 @@ mod tests {
         assert_eq!(up, Up { level_before: 800_000, level: 800_000, rcc: 0x102, idle: 0xffff_ffff, idle_reads: 3 });
         let mut want = scmi_evs(&UP);
         want.extend([
-            // gate on, reset asserted, reset released (read-modify-writes)
+            // read at entry; gate on, reset asserted (read-modify-writes)
+            Ev::RccR(0x100),
             Ev::RccR(0x100),
             Ev::RccW(0x102),
             Ev::RccR(0x102),
             Ev::RccW(0x103),
+            // read with the reset held, then released
+            Ev::RccR(0x103),
             Ev::RccR(0x103),
             Ev::RccW(0x102),
-            // read back
+            // read back until released (once here)
             Ev::RccR(0x102),
             Ev::Gpu(IDLE_STATE),
             Ev::Gpu(IDLE_STATE),
@@ -599,7 +608,10 @@ mod tests {
                 "scmi < 0444040000000000",
                 "scmi > 0544040000000000",
                 "scmi < 054404000000000000000000",
+                "rcc gpucfgr 0x00000000 at entry",
+                "rcc gpucfgr 0x00000003 (reset held)",
                 "rcc gpucfgr 0x00000002",
+                "rcc reset released after 1 reads",
                 "gpu idle 0x7fffffff after 1 reads",
             ]
         );
@@ -873,6 +885,79 @@ mod tests {
         let mut log = Lines::default();
         let e = power_up(&mut t, &GpuRcc::new(&m, 0), |_| panic!("no GPU read"), &mut log, &Config::DK);
         assert_eq!(e, Err(Error::Rcc { raw: 3 }));
+        assert_eq!(log.0[log.0.len() - 1], format!("rcc reset still held after {} reads", rcc::RELEASE_READS));
+    }
+
+    #[test]
+    fn a_reset_release_that_lags_is_waited_for() {
+        // The DK (2026-11-21): one read right after the release showed
+        // 0x00000007 (bit 2 set at entry, the reset bit still set); the
+        // reset bit here clears on the fourth read.
+        struct Lagging {
+            reg: RefCell<u32>,
+            lag: RefCell<u32>,
+        }
+        impl Mmio for Lagging {
+            fn read32(&self, _: usize) -> u32 {
+                let mut lag = self.lag.borrow_mut();
+                let r = *self.reg.borrow();
+                if r & rcc::RESET == 0 && *lag > 0 {
+                    *lag -= 1;
+                    return r | rcc::RESET;
+                }
+                r
+            }
+            fn write32(&self, _: usize, v: u32) {
+                *self.reg.borrow_mut() = v;
+            }
+            fn read8(&self, _: usize) -> u8 {
+                unreachable!()
+            }
+            fn write8(&self, _: usize, _: u8) {
+                unreachable!()
+            }
+        }
+        let ev: Events = Rc::default();
+        let mut t = Script { steps: up_script(), ev };
+        // lag 0 until the reset is first set, so the entry and gate reads are plain
+        let m = Lagging { reg: RefCell::new(0x4), lag: RefCell::new(0) };
+        let r = GpuRcc::new(&m, 0);
+        let mut log = Lines::default();
+        let mut armed = false;
+        let up = power_up(
+            &mut t,
+            &r,
+            |_| 0x7fff_ffff,
+            &mut Hook(&mut log, |line: &str| {
+                if line.ends_with("(reset held)") && !armed {
+                    armed = true;
+                    *m.lag.borrow_mut() = 3;
+                }
+            }),
+            &Config::DK,
+        )
+        .unwrap();
+        assert_eq!((up.rcc, up.idle), (0x6, 0x7fff_ffff));
+        let rcc_lines: Vec<&str> = log.0.iter().map(String::as_str).filter(|l| l.starts_with("rcc ")).collect();
+        assert_eq!(
+            rcc_lines,
+            [
+                "rcc gpucfgr 0x00000004 at entry",
+                "rcc gpucfgr 0x00000007 (reset held)",
+                "rcc gpucfgr 0x00000006",
+                "rcc reset released after 4 reads",
+            ]
+        );
+    }
+
+    /// A log sink that also calls `f` with each line (to change the fake
+    /// register at a point of the sequence).
+    struct Hook<'a, F: FnMut(&str)>(&'a mut Lines, F);
+    impl<F: FnMut(&str)> Log for Hook<'_, F> {
+        fn line(&mut self, s: &str) {
+            (self.1)(s);
+            self.0.line(s);
+        }
     }
 
     #[test]

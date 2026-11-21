@@ -539,8 +539,10 @@ pub fn reset_idle_with<R: Mmio, G: Mmio>(
     let held = r.status();
     log.fmt(format_args!("rcc gpucfgr 0x{:08x} (reset held)", held.raw));
     r.deassert_reset();
-    let s = r.status();
+    let (s, reads) = r.wait_reset_released(super::rcc::RELEASE_READS);
     log.fmt(format_args!("rcc gpucfgr 0x{:08x}", s.raw));
+    let how = if s.reset_asserted() { "still held" } else { "released" };
+    log.fmt(format_args!("rcc reset {} after {} reads", how, reads));
     out.rcc_held = held.raw;
     out.rcc = s.raw;
     if !held.clock_enabled() || !held.reset_asserted() {
@@ -982,14 +984,17 @@ mod tests {
         let mut want = smc_evs(&OPEN);
         want.extend(smc_evs(&UP));
         want.extend([
-            // gate on, reset asserted, reset released (read-modify-writes)
+            // read at entry; gate on, reset asserted (read-modify-writes)
+            Ev::RccR(0x100),
             Ev::RccR(0x100),
             Ev::RccW(0x102),
             Ev::RccR(0x102),
             Ev::RccW(0x103),
+            // read with the reset held, then released
+            Ev::RccR(0x103),
             Ev::RccR(0x103),
             Ev::RccW(0x102),
-            // read back
+            // read back until released (once here)
             Ev::RccR(0x102),
             Ev::GpuR(power::IDLE_STATE),
             Ev::GpuR(power::IDLE_STATE),
@@ -1021,7 +1026,10 @@ mod tests {
             want.extend(frame(v(&format!("invoke_{n}_req")), v(&format!("invoke_{n}_reply"))));
             want.push(format!("scmi < {}", hexs(&v(&format!("rep_{n}")))));
         }
+        want.push("rcc gpucfgr 0x00000000 at entry".to_string());
+        want.push("rcc gpucfgr 0x00000003 (reset held)".to_string());
         want.push("rcc gpucfgr 0x00000002".to_string());
+        want.push("rcc reset released after 1 reads".to_string());
         want.push("gpu idle 0x7fffffff after 1 reads".to_string());
         want.extend(frame(v("close_session_req"), v("close_session_reply")));
         want.extend(frame(v("unregister_shm_req"), v("unregister_shm_reply")));
@@ -1211,7 +1219,12 @@ mod tests {
         );
         assert_eq!(
             lines,
-            ["rcc gpucfgr 0x00000003 (reset held)", "rcc gpucfgr 0x00000002", "gpu idle 0x7fffffff after 2 reads"]
+            [
+                "rcc gpucfgr 0x00000003 (reset held)",
+                "rcc gpucfgr 0x00000002",
+                "rcc reset released after 1 reads",
+                "gpu idle 0x7fffffff after 2 reads",
+            ]
         );
     }
 

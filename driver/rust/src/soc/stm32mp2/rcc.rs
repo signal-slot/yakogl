@@ -92,7 +92,28 @@ impl<'a, M: Mmio> GpuRcc<'a, M> {
     pub fn status(&self) -> Status {
         Status { raw: self.mmio.read32(self.reg()) }
     }
+
+    /// After [`Self::deassert_reset`]: read `RCC_GPUCFGR` until the reset bit
+    /// reads clear, at most `max` reads (at least one). Returns the last read
+    /// and the number of reads. The release is not immediate on the board:
+    /// read once right after the clearing write, the register showed
+    /// 0x00000007 (reset still set) on the DK (2026-11-21), and ST's reset
+    /// driver also waits for the bit to read back zero after clearing it.
+    pub fn wait_reset_released(&self, max: u32) -> (Status, u32) {
+        let mut s = self.status();
+        let mut n = 1;
+        while s.reset_asserted() && n < max {
+            s = self.status();
+            n += 1;
+        }
+        (s, n)
+    }
 }
+
+/// Most reads of `RCC_GPUCFGR` [`GpuRcc::wait_reset_released`] makes before
+/// the reset counts as held (a bound in reads, not time: the release time
+/// has not been measured; the count the board needed is logged).
+pub const RELEASE_READS: u32 = 100_000;
 
 #[cfg(test)]
 mod tests {
@@ -201,6 +222,50 @@ mod tests {
                 Op::W(A, 0),
             ]
         );
+    }
+
+    /// A register whose reset bit reads set for `lag` reads after it was
+    /// cleared, as the DK's read right after the release showed (0x7).
+    struct Lagging {
+        reg: Cell<u32>,
+        lag: Cell<u32>,
+        reads: Cell<u32>,
+    }
+    impl Mmio for Lagging {
+        fn read32(&self, _: usize) -> u32 {
+            self.reads.set(self.reads.get() + 1);
+            if self.lag.get() > 0 {
+                self.lag.set(self.lag.get() - 1);
+                return self.reg.get() | RESET;
+            }
+            self.reg.get()
+        }
+        fn write32(&self, _: usize, val: u32) {
+            self.reg.set(val);
+        }
+        fn read8(&self, _: usize) -> u8 {
+            unreachable!()
+        }
+        fn write8(&self, _: usize, _: u8) {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn wait_reset_released_reads_until_the_bit_clears() {
+        let m = Lagging { reg: Cell::new(0x6), lag: Cell::new(3), reads: Cell::new(0) };
+        let (s, n) = GpuRcc::new(&m, BASE).wait_reset_released(RELEASE_READS);
+        assert_eq!((s.raw, n, m.reads.get()), (0x6, 4, 4));
+        assert!(s.clock_enabled() && !s.reset_asserted());
+    }
+
+    #[test]
+    fn wait_reset_released_stops_at_the_bound_and_reads_at_least_once() {
+        let m = Lagging { reg: Cell::new(0x6), lag: Cell::new(u32::MAX), reads: Cell::new(0) };
+        let (s, n) = GpuRcc::new(&m, BASE).wait_reset_released(5);
+        assert_eq!((s.raw, n, m.reads.get()), (0x7, 5, 5));
+        let m = Lagging { reg: Cell::new(0x2), lag: Cell::new(0), reads: Cell::new(0) };
+        assert_eq!(GpuRcc::new(&m, BASE).wait_reset_released(0).1, 1);
     }
 
     #[test]
