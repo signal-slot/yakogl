@@ -67,6 +67,8 @@ want tests/gc_mipmap_gpu.rs vivante
 want src/v3d/job.rs v3d
 want src/shaderc/online/v3d/prepare.rs "v3d v3d71"
 want src/shaderc/online/v3d_abi.rs v3d
+want src/shaderc/online/v3d_abi71.rs v3d
+want src/shaderc/online/link71.rs v3d
 # V3D 7.1 (Raspberry Pi 5): its files and the shared V3D files reach the
 # v3d71 row too; the 4.2-only paths do not
 want src/shaderc/online/v3d/isa71.rs "v3d v3d71"

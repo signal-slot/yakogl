@@ -204,7 +204,7 @@ scope_of_path() {
   # plan #360's float colour render-target tests: a GPU's own file reaches
   # that GPU's rows (es3_half_float_rt_v3d*, es3_half_float_rt_pvr*,
   # es3_half_float_rt_gc*), as tests/es3_fragdepth_gc* does
-  src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/es3_v3d_f32_rt_key* | tests/es3_v3d_clear_float_words* | tests/es3_color_buffer_float_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
+  src/shaderc/online/v3d_abi.rs | src/shaderc/online/v3d_abi71.rs | src/shaderc/online/link71.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/es3_v3d_f32_rt_key* | tests/es3_v3d_clear_float_words* | tests/es3_color_buffer_float_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/* | tests/mali_*) echo mali ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
