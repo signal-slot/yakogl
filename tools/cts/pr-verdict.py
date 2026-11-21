@@ -67,6 +67,18 @@ STOP_RE = re.compile(r"render: stopped: (.*?) \(list (\d+), (\d+) KiB\)")
 # the firmware renders partially.
 ATMAX_RE = re.compile(r"render: at maximum \(list \d+, \d+ pages\), "
                       r"awaiting the firmware's partial render for up to 10 s")
+# 'gl_test: forcedpr: OUTCOME: N layers (S step[s]): requests R (served V, refused U), notices
+# O, stop T, partial renders P, GPU recoveries G' - gl_test.c, case_forcedpr() (case 217), the
+# summary line; OUTCOME is PASS, NOT EXERCISED, FAIL stopped, FAIL fence timeout, FAIL pixels
+# or FAIL depth.
+FPR_RE = re.compile(
+    r"gl_test: forcedpr: (PASS|NOT EXERCISED|FAIL stopped|FAIL fence timeout|FAIL pixels|FAIL depth): "
+    r"(\d+) layers \((\d+) steps?\): requests (\d+) \(served (\d+), refused (\d+)\), "
+    r"notices (\d+), stop (\d+), partial renders (\d+), GPU recoveries (\d+)")
+# 'gl_test: forcedpr: B of N depth samples differ; first at window pixel (X,Y) from the top
+# left: got G want W (of 255)' - gl_test.c, case_forcedpr(): the depth read-back differs.
+DEPTH_RE = re.compile(r"gl_test: forcedpr: \d+ of \d+ depth samples differ; first at window pixel "
+                      r"\(\d+,\d+\) from the top left: got \d+ want \d+ \(of 255\)")
 # The cause numbers are board::record GPU_STOP_* (driver/rust/src/board/record.rs).
 STOP_CAUSES = (
     ("the parameter manager out of memory with its freelist at the maximum", 2),
@@ -82,11 +94,15 @@ RECORD_RE = re.compile(r"GPU_STOP \(\d+\) tag \d+: cause (\d+) ")
 def parse(text):
     """The log's facts: case verdicts, run-end figures, stop cause."""
     f = {"cases": {}, "pr": None, "oom": None, "hwr": None, "grow": None, "stop": None,
-         "atmax": False}
+         "atmax": False, "fpr": None}
     for line in text.splitlines():
         m = CASE_RE.search(line)
         if m:
             f["cases"][m.group(1)] = f["cases"][m.group(2)] = m.group(3)
+        m = FPR_RE.search(line)
+        if m:  # the last summary is the run's
+            f["fpr"] = {"outcome": m.group(1), "layers": int(m.group(2)), "steps": int(m.group(3)),
+                        "pr": int(m.group(9)), "hwr": int(m.group(10))}
         if ATMAX_RE.search(line):
             f["atmax"] = True
         m = GROW_RE.search(line)
@@ -138,7 +154,8 @@ def classify(text, f, cases):
     """(class number, mode words) of the first matching row of the table."""
     lines = text.splitlines()
     done = all(f["cases"].get(c) == "PASS" for c in cases)
-    differs = any(PIXELS_RE.search(ln) for ln in lines)
+    differs = any(PIXELS_RE.search(ln) or DEPTH_RE.search(ln) for ln in lines)
+    differs = differs or (f["fpr"] is not None and f["fpr"]["outcome"] in ("FAIL pixels", "FAIL depth"))
     if done and f["pr"] and f["pr"] >= 1 and f["hwr"] == 0 and not differs and f["stop"] is None:
         return 1, "success"
     if f["pr"] is not None and differs and f["hwr"] == 0:
@@ -184,6 +201,19 @@ def verdict(text, cases, expect):
                      % (c, v, fmt(f["pr"]), fmt(f["oom"]), fmt(f["hwr"]), stop))
         if expect == "pr" and v != "PASS":
             bad.append("case %s is %s" % (c, v))
+    q = f["fpr"]
+    if q is not None:
+        lines.append("pr-verdict: forcedpr %s layers=%d steps=%d partial_renders=%d recoveries=%d"
+                     % (q["outcome"], q["layers"], q["steps"], q["pr"], q["hwr"]))
+        if expect == "pr":
+            if q["outcome"] == "NOT EXERCISED":
+                bad.append("forcedpr not exercised (no partial render ran)")
+            elif q["outcome"] != "PASS":
+                bad.append("forcedpr %s" % q["outcome"])
+            elif q["pr"] < 1:
+                bad.append("forcedpr partial renders %d (want >= 1)" % q["pr"])
+            elif q["hwr"] != 0:
+                bad.append("forcedpr GPU recoveries %d (want 0)" % q["hwr"])
     if f["grow"] is not None:
         lines.append("pr-verdict: grow requests %d served %d unserved %d" % f["grow"])
     else:
@@ -231,7 +261,7 @@ STATS_LINE = (SERIAL + "render freelists: reserve refills refused 0 (0 KiB); fir
 GROW_LINE = (SERIAL + "render freelists: 4 grow requests, 3 served, 1 unserved, 100 KiB taken on demand; "
              "GPU recoveries 0 (HWR counter 0)\n")
 LOG_PASS = ("gl_test: case 175 refusehang: PASS\n"
-            "gl_test: case 190 forcedpr: PASS\n" + GROW_LINE + STATS_LINE)
+            "gl_test: case 217 forcedpr: PASS\n" + GROW_LINE + STATS_LINE)
 STOP_WORDS = "a kick that did not complete in the stop's time"
 STOP_LINE = (SERIAL + "render: stopped: %s (list 1, 0 KiB); no kick is waited for or taken from now on\n")
 LOG_STOP = (STOP_LINE % STOP_WORDS + "gl_test: case 175 refusehang: TIMEOUT\n" + GROW_LINE
@@ -290,6 +320,17 @@ def class_tests():
     ]
 
 
+def fpr_line(outcome, pr=1, hwr=0):
+    return ("gl_test: forcedpr: %s: 40 layers (3 steps): requests 2 (served 1, refused 1), notices 1, "
+            "stop 0, partial renders %d, GPU recoveries %d\n" % (outcome, pr, hwr))
+
+
+FPR_DEPTH = ("gl_test: forcedpr: 7 of 4096 depth samples differ; first at window pixel (3,4) from the "
+             "top left: got 10 want 200 (of 255)\n")
+FPR_PIXELS = ("gl_test: forcedpr: 5 of 65536 pixels differ; first at (0,0) from the bottom left: "
+              "got 0x00000000 want 0xff0000ff\n")
+
+
 def selftest():
     cases = [
         ("recoveries 0 is required for class 1", LOG_HWR, ["refusehang"], "pr", 1, "class 0"),
@@ -319,6 +360,28 @@ def selftest():
          "see docs/notes/pvr-pr-atmax.md)"),
         ("at-max wait line in a knob-off log", LOG_ATMAX_KNOBOFF, ["refusehang"], "stop", 1,
          "knob-off image printed the knob-on wait line"),
+        ("217 PASS", LOG_PASS + fpr_line("PASS"), ["forcedpr"], "pr", 0,
+         "pr-verdict: forcedpr PASS layers=40 steps=3 partial_renders=1 recoveries=0"),
+        ("217 PASS with partial renders 0", LOG_PASS + fpr_line("PASS", pr=0), ["forcedpr"], "pr", 1,
+         "forcedpr partial renders 0 (want >= 1)"),
+        ("217 PASS with recoveries", LOG_PASS + fpr_line("PASS", hwr=1), ["forcedpr"], "pr", 1,
+         "forcedpr GPU recoveries 1 (want 0)"),
+        ("217 NOT EXERCISED is no pass", LOG_PASS + fpr_line("NOT EXERCISED", pr=0), ["forcedpr"], "pr", 1,
+         "forcedpr not exercised"),
+        ("217 FAIL stopped", LOG_PASS + fpr_line("FAIL stopped"), ["forcedpr"], "pr", 1,
+         "forcedpr FAIL stopped"),
+        ("217 FAIL fence timeout", LOG_PASS + fpr_line("FAIL fence timeout"), ["forcedpr"], "pr", 1,
+         "forcedpr FAIL fence timeout"),
+        ("217 FAIL pixels", LOG_PASS + fpr_line("FAIL pixels") + FPR_PIXELS, ["forcedpr"], "pr", 1,
+         "class 2 F8 corrupt frame"),
+        ("217 FAIL depth", LOG_PASS + fpr_line("FAIL depth") + FPR_DEPTH, ["forcedpr"], "pr", 1,
+         "class 2 F8 corrupt frame"),
+        ("217 FAIL depth, no detail line", LOG_PASS + fpr_line("FAIL depth"), ["forcedpr"], "pr", 1,
+         "class 2 F8 corrupt frame"),
+        ("217 depth line alone is class 2", FAIL_CASE + FPR_DEPTH + GROW_LINE + STATS_LINE, ["refusehang"],
+         "pr", 1, "class 2 F8 corrupt frame"),
+        ("217 summary printed, knob off", LOG_STOP + fpr_line("FAIL stopped", pr=0), ["refusehang"],
+         "stop", 0, "pr-verdict: forcedpr FAIL stopped layers=40"),
     ]
     cases += [("log for " + n, t, ["refusehang"], "pr", 0 if w.startswith("class 1 ") else 1, w)
               for n, t, w in class_tests()]
