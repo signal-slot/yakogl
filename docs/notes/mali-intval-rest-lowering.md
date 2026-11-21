@@ -589,3 +589,24 @@ of `measure.tsv`.
   `i_lt_const`, `i_eq_const`, `step_vec3/4`, `hs_int_ivec4_gggg`).
 - The ES 2 shader sources are not in the tree (`$CONNECTED_DEPS_DIR/VK-GL-CTS-gles3`
   holds `gles3` data only); the host measure builds them from the CTS pin.
+
+## 11. The "(no reference)" marks, mapped (intval5-ref, partial)
+
+Plan #387 item `intval5-ref`. **The Mesa drm-shim was not built on the
+machine of this item** (`tools/mali/drm_shim_ref.sh build ...` was refused as a
+command needing approval, and `$CONNECTED_DEPS_DIR/mesa-shim` does not exist),
+so **no `deqp_intval5_*` reference and no `tests/mali_deqp_intval5.rs` was
+drawn**. This section only maps each mark to what exists, using the words of
+the section 7 references (`deqp_intval4_*`, Mesa 26.2.1's disassembly), and
+names what is still to draw.
+
+| mark (line) | pattern | reference that settles it | Mesa's words, and the correction to the prediction |
+|---|---|---|---|
+| 215 (4.1) | `!=` of two run-time ints, `bool(int)` | `deqp_intval4_ne_int_fs`, `_ne_ivec2_fs`; `deqp_intval3_reslib_int_to_bool_fs` | Confirmed: `F32_TO_S32.rtz` of each varying lane, then `ICMP_OR.u32.ne.m1 r0, r0^, r1^, 0x0`; ivec2: `ICMP_OR.u32.ne.m1 r1, a, b, 0x0` then `ICMP_OR.u32.ne.m1 r0, c, d, r1^` (the accumulator is the first lane's mask). Colour `MUX.v2i16.wait0126 r0, 0x0, 0x3C000000.h11, r0^.h00`. |
+| 224 (4.1) | `!(i == 2)` | `deqp_intval4_not_eq_int_fs` | The prediction holds: Mesa emits one word, `ICMP_OR.u32.ne.m1 r0, r0^, 0x3020100.b2, 0x0` (`ine`); ours is two. |
+| 307 (4.4) | `\|\|` of fp16 compares | `deqp_intval4_logical_or_fs` | `a > 0.0 \|\| b > 0.0`: `FADD.f32 r0.h0, x, 0x0.neg` per lane, `FMAX.v2f16 r0, r0^.h00, r1^.h00`, `FCMP_OR.v2f16.lt.f1 r0, 0x0, r0^.h00, 0x0`: the constant-first rule gives `fmax` for `ior`, as predicted; **the colour mask's compare mode is `.f1`, not `.m1`**. The `&&` (`fmin`) is held by `deqp_intval3_opfs_logical_and_bool`. |
+| 307 (4.4) | `&&` of two int compares | `deqp_intval4_and_icmp_fs` | `(i > 1) && (i < 3)`: `ICMP_OR.s32.lt.m1 r1, r0, 0x3020100.b3, 0x0` (`i < 3`) first, then `ICMP_AND.s32.lt.m1 r0, 0x1000000.b3, r0^, r1^` (`1 < i`, constant 1 as byte 3 of `0x1000000`): the accumulator chain of 4.2, **second compare first**. |
+| 307 (4.4) | 16-bit mask `&&` 32-bit mask | **none drawn** | still to draw (`bool(v.x > 0.0) && (int(v.y) < 1)`) |
+| 335 (4.7), 136, 404 | three-mask `iand` of separate uniforms (`c_int3`, `c_bool3`); `c_ivec4`, `c_bvec4`, `c_int1` (k = 4), `c_int_lt`, `c_bool_one`, `c_bool_not`, `c_int_two`, `c_bvec2` | **none drawn** (`deqp_unif2_fs_int_uniform`, `_fs_bool_uniform` hold the array form, with wrong FAU values) | still to draw. `deqp_intval4_uni_bool_and_or_fs` gives the scalar bool words: `LSHIFT_AND.i32 r1, u2.w0, r0.b00, u2.w1` (`&&`), `LSHIFT_OR.i32` (`\|\|`), and **`ICMP_OR.u32.ne.m1 r0, u2.w0, u2.w1, r0^` for `u_a != u_b` (`ine` of the words, not a `.not` chain)**, after `MOV.i32.discard r0, 0x0`. |
+| 52, 404 | bvec3/bvec4 compares | `deqp_intval4_bvec3_cmp_fs` (LOWERED), `_bvec4_cmp_fs` (`Defect(IrIndex)`) | width-3/4 uniform chains still to draw |
+| 393 (M4) | int `bcsel` | `deqp_intval4_sel_int_fs` | `FCMP_OR.v2f16.lt.m1` of the condition, `S16_TO_S32` of its mask, **`CSEL.u32.eq r0, r0^, 0x0, r2^, r1^`** (the two arms from `F32_TO_S32.rtz`), `S32_TO_F32`, `FADD.f32 r0.h0, r0^, 0x0.neg`, colour as `FMA.v2f16 .. 0x38000000.h11, 0x38000000.h11`: the int select is `CSEL`, not `MUX`. |
