@@ -26,6 +26,11 @@ LABEL = re.compile(r'^board\.sh \S+ glmark2-([0-9a-f]{8})\b')
 COUNTERS = re.compile(r'glmark2-counters: (.*?): (absent|frames (\d+)\b(.*))$')
 # Cumulative differences are printed per frame; these are levels or causes.
 LEVEL_KEYS = {'rt.live', 'rt.bytes', 'tile.untimed', 'fl.stop'}
+# "total T render R[~] idle I[ tfu K/Tus][ bin B prep P]": the bin and prep
+# pair is last, printed by newer GM images; older images do not print it.
+JOBS = re.compile(r'glmark2-jobs: (.*?): frame (\d+): (\d+) job\(s\):(.*)$')
+JOB = re.compile(r'\s*total (\d+) render (\d+)(~?) idle (\d+)(?: tfu (\d+)/(\d+)us)?'
+                 r'(?: bin (\d+) prep (\d+))?\s*$')
 FRAME = re.compile(r'glmark2-frame: \[terrain\].*')
 TFU = re.compile(r'yakogl/v3d: TFU mipmap at frame (\d+): (\d+) chains')
 TILED = re.compile(r'yakogl/v3d: tiled copies for draws at frame (\d+), by reason: (.*)')
@@ -84,6 +89,21 @@ def parse_one(rundir, console):
                         c[k] = v
                 r['counters'] = c
                 r['counters_frames'] = n
+        m = JOBS.search(l)
+        if m and TERRAIN.search(m.group(1)):
+            jobs = []
+            for part in m.group(4).split(';'):
+                j = JOB.match(part)
+                if not j:
+                    jobs = None
+                    break
+                g = j.groups()
+                jobs.append({'total': int(g[0]), 'render': int(g[1]), 'late': g[2] == '~',
+                             'idle': int(g[3]), 'tfu_jobs': int(g[4] or 0), 'tfu': int(g[5] or 0),
+                             'bin': int(g[6]) if g[6] else None,
+                             'prep': int(g[7]) if g[7] else None})
+            if jobs:
+                r['jobs_frame'], r['jobs'] = int(m.group(2)), jobs
         m = FRAME.search(l)
         if m:
             r['frame_line'] = m.group(0)
@@ -192,6 +212,13 @@ def block(r, title):
         o.append('  - `%s`' % g('tfu_line'))
         o.append('  - `%s`' % g('tiled_line'))
     o.append(counters_text(r))
+    if 'jobs' in r:
+        js = r['jobs']
+        bp = [j for j in js if j['bin'] is not None]
+        o.append('- glmark2-jobs (terrain, frame %d): %d jobs, render %d us, idle %d us'
+                 % (r['jobs_frame'], len(js), sum(j['render'] for j in js), sum(j['idle'] for j in js))
+                 + ('; bin %d us, prep %d us' % (sum(j['bin'] for j in bp), sum(j['prep'] for j in bp))
+                    if bp else '; bin and prep absent (old format)'))
     if 'reposts' in r or 'kick_line' in r:
         o.append('- AM62P re-post lines: %s (kicks re-posted %s, last "so far" %s)'
                  % (g('reposts', 0), g('reposted_kicks', 0), g('reposts_so_far', 0)))
@@ -255,6 +282,20 @@ def selftest():
         (a['ms'], 33.3), (a['tfu_frame'], 461),
         (m['reposts'], 2), (m['reposts_so_far'], 2), (m['fps'], 12),
         ('last completed' in m['kick_line'], True), ('reposts' in p, False),
+    ]
+    old = parse_text(['glmark2-jobs: [terrain] <d>: frame 10: 2 job(s): total 900 render 800~ idle 5 tfu 2/60us;'
+                      ' total 700 render 600 idle 0'])
+    new = parse_text(['glmark2-jobs: [terrain] <d>: frame 10: 2 job(s): total 900 render 800~ idle 5 tfu 2/60us'
+                      ' bin 120 prep 30; total 700 render 600 idle 0 bin 90 prep 25'])
+    chk += [
+        (len(old['jobs']), 2), (old['jobs'][0]['tfu'], 60), (old['jobs'][0]['late'], True),
+        (old['jobs'][0]['bin'], None), (old['jobs'][1]['render'], 600),
+        (new['jobs'][0]['bin'], 120), (new['jobs'][0]['prep'], 30), (new['jobs'][0]['tfu_jobs'], 2),
+        (new['jobs'][1]['bin'], 90), (new['jobs'][1]['prep'], 25), (new['jobs_frame'], 10),
+        ('bin 210 us, prep 55 us' in block(new, 'n'), True), ('old format' in block(old, 'o'), True),
+        (parse_text(['glmark2-jobs: [shadow] <d>: frame 10: 1 job(s): total 1 render 1 idle 0']).get('jobs'), None),
+        (parse_text(['glmark2-jobs: [terrain] <d>: frame 10: absent (the scene ran fewer frames)']).get('jobs'), None),
+        (p['jobs'][0]['bin'], None), (a['jobs'][0]['bin'], 1200),
     ]
     bad = [c for c in chk if c[0] != c[1]]
     d = diff(p, a)
