@@ -113,7 +113,11 @@ static BACKEND: YakoglBackend = YakoglBackend {
     uniforms_host_only: false,
     ds_write: None,
     stencil_resolve: None,
-    max_samples: 0,
+    /* what each GPU's own table says (the stand-in cannot link the PowerVR
+     * table itself: it pulls in the driver's C generators): the PowerVR
+     * draws and resolves a 4x framebuffer (src/pvr/backend.rs
+     * `yakogl_backend_pvr`, tests/pvr_msaa_rb.rs), the others keep 0 */
+    max_samples: if cfg!(feature = "gpu-powervr") { 4 } else { 0 },
 };
 
 static LIBRARY: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -260,8 +264,11 @@ fn limits() -> Vec<Limit> {
 /// list true: it is the limit half of the gap list in docs/es3/backend-caps.md.
 /// An entry is by name and holds for every GPU build unless it says otherwise.
 fn known_gaps() -> Vec<(&'static str, &'static str)> {
-    let mut v: Vec<(&'static str, &'static str)> =
-        vec![("MAX_SAMPLES", "1: no multisample render targets reported (gl/state.rs)")];
+    let mut v: Vec<(&'static str, &'static str)> = vec![];
+    if !cfg!(feature = "gpu-powervr") {
+        // the PowerVR reports 4 (src/pvr/backend.rs max_samples)
+        v.push(("MAX_SAMPLES", "1: the back end table's max_samples is 0 (gl/msaa.rs backend_max_samples)"));
+    }
     if !cfg!(feature = "gpu-mali") {
         // the Mali reports 4 (gl/context.rs CAP_COLOR_ATTACHMENTS)
         v.extend_from_slice(&[

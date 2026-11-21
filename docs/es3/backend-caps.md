@@ -150,7 +150,7 @@ in `src/gl/context.rs`. "Per GPU" means a `cfg(feature = "gpu-…")` constant.
 |---|---|---|
 | MAX_COLOR_ATTACHMENTS | 3, every GPU | `state.rs:1306` ← `context.rs:237` |
 | MAX_DRAW_BUFFERS | 3 | `state.rs:1305` ← `context.rs:227` |
-| MAX_SAMPLES | 1 | `state.rs:1307` |
+| MAX_SAMPLES | 4 on the PowerVR (its table's `max_samples`, `src/pvr/backend.rs` `yakogl_backend_pvr`), 1 on the others | `state.rs:1307` ← `msaa.rs` `backend_max_samples` |
 | MAX_3D_TEXTURE_SIZE, MAX_ARRAY_TEXTURE_LAYERS | 256, 256 | `state.rs:1309-1310` |
 | MAX_TEXTURE_SIZE, MAX_CUBE_MAP_TEXTURE_SIZE, MAX_RENDERBUFFER_SIZE | 4096 each | `state.rs:1190-1192` |
 | MAX_VIEWPORT_DIMS | 4096 x 4096 | `state.rs:279,1180-1183` |
@@ -210,7 +210,7 @@ means the minimum is met.
 |---|---|---|---|
 | MAX_DRAW_BUFFERS, MAX_COLOR_ATTACHMENTS ≥ 4 | Hw 8 PBE emit registers, four 32-bit output registers a pixel: four RGBA8-class outputs fit, wider formats take pairs (`rogue_hw_utils.h:189-195`); Mesa Vulkan exposes 4 (`pvr_physical_device.c:739`). **Reports 3.** `VIVANTE_NOTES.md:1136-1137` plans to keep the PowerVR at 3, below the minimum, which the hardware does not require for ≤32-bit formats | Hw 4 (`etnaviv_screen.c:299-304,774-782`). **Reports 3**; plan 3 → 4 (`VIVANTE_NOTES.md:1136-1137`) | Hw 4 (`v3d_limits.h:44`; `v3d_screen.c:332`). **Reports 3** (mrt4) |
 | MAX_3D_TEXTURE_SIZE ≥ 256; MAX_ARRAY_TEXTURE_LAYERS ≥ 256 | Hw 11-bit depth (`texstate.xml:310`), render z 2048 (`rogue_hw_utils.h:265-273`); Mesa Vulkan's device limits are 256 / 256 (`pvr_physical_device.c:622,624`). Reports 256/256 = | Hw layers = max texture size (8192), "TODO: verify" (`etnaviv_screen.c:283-288`). Reports 256/256 = | Hw 2048 layers (`v3d_limits.h:77`). Reports 256/256 = |
-| MAX_SAMPLES ≥ 4 | Hw 4 (`bxs-4-64.h:92`); Vulkan sample counts 1, 4 (`pvr_physical_device.c:735,740`). **Reports 1** | Hw 4x only (`etnaviv_screen.c:451-468`, `H:19129`); multisample textures debug-only in Mesa (`:296`). **Reports 1** | Hw 4 (`v3d_limits.h:41`; `v3d_screen.c:423-424`). **Reports 1** |
+| MAX_SAMPLES ≥ 4 | Hw 4 (`bxs-4-64.h:92`); Vulkan sample counts 1, 4 (`pvr_physical_device.c:735,740`). **Reports 4 =** (one colour attachment at 4x, resolved by the PBE's `downscale` store; `tests/pvr_msaa_rb.rs`) | Hw 4x only (`etnaviv_screen.c:451-468`, `H:19129`); multisample textures debug-only in Mesa (`:296`). **Reports 1** | Hw 4 (`v3d_limits.h:41`; `v3d_screen.c:423-424`). **Reports 1** |
 | MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS ≥ 64, SEPARATE_ATTRIBS ≥ 4, SEPARATE_COMPONENTS ≥ 4 | Hw none (§1.3). **Reports 64 / 4 / 64 =** (the capture runs on the CPU, `gl/tf_capture.rs`) | Hw none (`HWTFB` = 0, `H:19202`); Mesa 26.2.1 offers 0 buffers here (`etnaviv_screen.c:267`). **Reports 64 / 4 / 64 =** (CPU capture) | Hw yes, 4 buffers (packets; `v3d_screen.c:321`). **Reports 64 / 4 / 64 =** (CPU capture) |
 | MAX_VERTEX_UNIFORM_BLOCKS ≥ 12, FRAGMENT ≥ 12, COMBINED ≥ 24, BINDINGS ≥ 24 | no UBO hardware relied on: blocks are flattened into the default block ([C] the comment at `state.rs:1221-1226`). Reports 12/12/24/24 = | same lowering (etnaviv lowers UBOs to uniforms too, `etnaviv_screen.c:195-199`); = | same lowering; = |
 | MAX_UNIFORM_BLOCK_SIZE ≥ 16384 | **Reports 6144** (yakogl's budget, not a hardware cap: the back end uploads one 1536-dword block a stage) | **Reports 6144**: the user blocks share the 1536-dword constant file; reading them from memory with `load` is the design of `docs/notes/gc-ubo-const-limit.md` | Reports 16384 = (each QUNIFORM_UNIFORM word of the stream names any dword of the stage's array, so blocks sit behind the default block, `context.rs` `MAX_UNIFORM_BLOCK_SIZE`; `v3d/backend_tests.rs` `a_uniform_block_of_16384_bytes_reaches_the_stream_whole`, `tests/v3d_ubo_large_sim.rs`). A dynamically indexed array is still at most 64 vec4 (`shaderc/online/v3d/prepare.rs` `MAX_SELECTED`, no `ldunifa` yet) |
@@ -279,7 +279,7 @@ for an entry that now meets its minimum.
 | Limit | spec | PowerVR | GC7000UL | V3D | owner item |
 |---|---|---|---|---|---|
 | MAX_COLOR_ATTACHMENTS, MAX_DRAW_BUFFERS | 4 | 3 | 3 | 3 | mrt4 |
-| MAX_SAMPLES | 4 | 1 | 1 | 1 | none in the plan |
+| MAX_SAMPLES | 4 | ok (4) | 1 | 1 | PowerVR done (plan #388, fix-msaa-rb); GC7000UL and V3D: their `*-msaa-fbo` items (docs/notes/es3-msaa-renderbuffers.md) |
 | MAX_UNIFORM_BLOCK_SIZE | 16384 | 6144 | 6144 | ok (16384) | V3D done (plan #359); PowerVR and GC7000UL: ubo-uniform |
 | MAX_COMBINED_*_UNIFORM_COMPONENTS | 50048 / 50176 | 1536 | 1536 | ok (50688) | V3D done (plan #359); PowerVR and GC7000UL: ubo-uniform |
 | MAX_VARYING_VECTORS / _COMPONENTS / FRAGMENT_INPUT | 15 / 60 / 60 | ok (15 / 60 / 60) | ok (15 / 60 / 60) | 15 / 60 / 60 (Mali 8 / 32 / 32) | V3D done (v3d-varyings-raise: 15 / 60 / 60 / 64 with MAX_VERTEX_OUTPUT_COMPONENTS); V3D board run |
@@ -326,7 +326,8 @@ targets; native (block) sampling of the six ETC2/EAC formats the GL core decodes
   ES 3.0's minimum of 4.
 - The V3D back end already accepts a 4-sample draw (`src/v3d/state.rs:40-42`,
   V3D's one multisample mode), while the GL core reports MAX_SAMPLES 1 on
-  every GPU ([C] `state.rs:1251`).
+  it: the V3D table's `max_samples` is 0 ([C] `msaa.rs` `backend_max_samples`).
+  The PowerVR's is 4 (fix-msaa-rb).
 - `GL_MAX_ELEMENT_INDEX` is exactly the minimum, 2²⁴-1 (`state.rs:1255`).
 - `MAX_VIEWPORT_DIMS` has no minimum in Table 6.32 (only "as large as the
   visible surface"); the b6004e1 test required it to be ≥ MAX_TEXTURE_SIZE,
