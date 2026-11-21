@@ -61,3 +61,37 @@ done
 ```
 
 `cmp` prints nothing when the files are equal.
+
+## Struct uniforms
+
+`gl_ref.py --uniform-values` (the shim instrument passes it) sets a uniform
+of a named struct type member by member, through the locations dEQP's
+`uniform_api` cases look up with `glGetUniformLocation`:
+
+| Declaration | Members set, in this order |
+|---|---|
+| `struct S { mediump float m0; mediump vec4 m1; }; uniform S u_var;` | `u_var.m0`, `u_var.m1` |
+| an array member, `mediump float m2[3];` | `u_var.m2[0]`, `u_var.m2[1]`, `u_var.m2[2]` |
+| an array of structs, `uniform S u_var[3];` | `u_var[0].m0`, `u_var[0].m1`, `u_var[1].m0`, ... |
+| a nested struct, `T m1;` with `T { ...; U ms2[2]; }` | `u_var.m1.ms0`, ..., `u_var.m1.ms2[0].mss0`, ... |
+
+Depth first, in declaration order (`uniform_leaves()`). Each member takes the
+next value index k (component c gets 16 (k + 1) + c, an int member the
+integer, a bool member true where c is even), so a uniform declared after a
+struct moves up by the struct's member count less one; a program without a
+struct is numbered as before (`uniform_settings()`). The run prints each
+member's location (`gl_ref: uniform vec4 u_var[1].m1 at 3 = 64 65 66 67`); a
+location of -1 means Mesa dropped the member. Not set: a sampler member (the
+run stops with "does not set a sampler2D uniform (u_var.m0)"), a struct
+defined inline in the uniform declaration (`uniform struct { ... } u;`, not
+seen as a uniform at all), and, as before, a plain array uniform (`uniform
+vec4 u[3];`, its location lookup is -1, so it stays 0).
+
+Mesa uploads a struct's mediump float members as fp32 FAU words (16.0 is
+`41800000`), ints as their integer and bools as `ffffffff` / `00000000`
+(`tools/mali/testdata/deqp_fclane2_*.expect.json`). The struct references
+drawn before this (`deqp_unif2_*struct*`, `deqp_uniarray_struct*`,
+`deqp_unitype_vsapi_struct`) have every uniform 0; `tests/mali_ref`'s
+`differences` still assumes that for any program with a struct-member row,
+so a byte-compare of a `deqp_fclane2_*` reference needs it to compute the
+values above first. The tests: `python3 -I tools/mali/test_gl_ref.py`.

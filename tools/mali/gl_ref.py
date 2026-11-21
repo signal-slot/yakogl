@@ -31,6 +31,18 @@ is 0 and a uniform word cannot be told from a zero pad. An `int` / `ivecN`
 uniform gets the same values as integers, a `bool` / `bvecN` one true where
 c is even and false where it is odd (`uniform_components()`).
 
+A uniform of a named struct type (`struct S { ... }; uniform S u;`, or an
+array of them, `uniform S u[3];`) is set member by member through the
+locations dEQP looks up: `u.m0`, an array member element by element
+(`u.m2[0]`, `u.m2[1]`, ...), an array of structs element by element
+(`u[0].m0`, ..., `u[1].m0`, ...), a nested struct `u.m1.ms0`, depth first in
+declaration order (`uniform_leaves()`). Each such member takes the next
+uniform index k, so the uniforms declared after a struct move up by its
+member count less one; a program without a struct numbers as before
+(`uniform_settings()`). A sampler member is not set (the run stops), nor is
+a struct defined inline in the uniform declaration. A plain array uniform
+(`uniform vec4 u[3];`) stays unset, as before: its location lookup is -1.
+
 `--second-frame` draws again after the glFlush, without a clear, and flushes:
 the second frame starts from the first one's image, which Mesa reloads
 with its preload shader (pan_fb_preload.c), so the trace holds that
@@ -269,6 +281,87 @@ def uniform_components(k, ty):
     if ty in BOOL_UNIFORM_COMPONENTS:
         return False, [1 - c % 2 for c in range(BOOL_UNIFORM_COMPONENTS[ty])]
     return None
+
+
+STRUCT_DEF = re.compile(r"\bstruct\s+(\w+)\s*\{([^{}]*)\}")
+MEMBER_DECL = re.compile(r"^\s*(?:(?:highp|mediump|lowp)\s+)?(\w+)\s+(.*?)\s*$", re.S)
+DECLARATOR = re.compile(r"^(\w+)\s*(?:\[\s*([^\]]+?)\s*\])?$")
+
+
+def struct_types(*texts):
+    """Name -> [(member, type, array size or None)] of every named
+    `struct Name { ... }` the texts define, members in declaration order (the
+    first definition of a name wins; a definition nested in another is not
+    read)."""
+    out = {}
+    for text in texts:
+        t = u.strip_comments(text)
+        defines = u._scan_defines(t)
+        for m in STRUCT_DEF.finditer(t):
+            members = []
+            for stmt in m.group(2).split(";"):
+                if not stmt.strip():
+                    continue
+                d = MEMBER_DECL.match(stmt)
+                if not d:
+                    raise SystemExit("gl_ref: struct %s: cannot read member %r" % (m.group(1), stmt.strip()))
+                for decl in d.group(2).split(","):
+                    n = DECLARATOR.match(decl.strip())
+                    if not n:
+                        raise SystemExit("gl_ref: struct %s: cannot read member %r" % (m.group(1), decl.strip()))
+                    members.append((n.group(1), d.group(1), u._resolve_size(n.group(2), defines)))
+            out.setdefault(m.group(1), members)
+    return out
+
+
+def uniform_leaves(decl, ty, structs, defines=None):
+    """The (GL name, type) pairs --uniform-values sets for the uniform
+    declarator `decl` (`u` or `u[3]`) of type ty: [(decl, ty)] itself when ty
+    is not a struct (an array declarator included, as before: its location is
+    -1 and it stays 0); for a struct, every member of a basic type in
+    declaration order, depth first, by the name dEQP looks it up with:
+    `u.m0`, an array member element by element `u.m2[0]`, `u.m2[1]`, ..., an
+    array of structs element by element `u[0].m0`, ..., `u[1].m0`, and a
+    nested struct `u.m1.ms0`."""
+    if ty not in structs:
+        return [(decl, ty)]
+    m = DECLARATOR.match(decl)
+    if not m:
+        raise SystemExit("gl_ref: cannot read the uniform declarator %r" % decl)
+
+    def expand(name, ty, size):
+        out = []
+        for e in [name] if size is None else ["%s[%d]" % (name, i) for i in range(size)]:
+            if ty in structs:
+                for mname, mty, msize in structs[ty]:
+                    out += expand(e + "." + mname, mty, msize)
+            else:
+                out.append((e, ty))
+        return out
+    return expand(m.group(1), ty, u._resolve_size(m.group(2), defines or {}))
+
+
+def uniform_settings(vs_text, fs_text):
+    """What --uniform-values sets, in order: (GL name, type, floats, values),
+    floats False for glUniform*iv. Value index k counts the uniforms of
+    `uniforms()` in declaration order, each sampler keeping its place, and
+    each member a struct uniform expands to (`uniform_leaves()`) taking the
+    next k: a program without a struct numbers as `enumerate(uniforms())`.
+    Stops on a type it does not set (a sampler struct member among them)."""
+    structs = struct_types(vs_text, fs_text)
+    defines = u._scan_defines(u.strip_comments(vs_text) + "\n" + u.strip_comments(fs_text))
+    out, k = [], 0
+    for name, ty in uniforms(vs_text, fs_text):
+        if ty in SAMPLERS:
+            k += 1
+            continue
+        for leaf, lty in uniform_leaves(name, ty, structs, defines):
+            given = None if lty in SAMPLERS else uniform_components(k, lty)
+            if given is None:
+                raise SystemExit("gl_ref: --uniform-values does not set a %s uniform (%s)" % (lty, leaf))
+            out.append((leaf, lty) + given)
+            k += 1
+    return out
 
 
 def option(args, name, default, parse):
@@ -526,13 +619,7 @@ def main():
         print("gl_ref: %s %s at unit %d: %s" % (ty, name, unit, what))
     gl.glActiveTexture(GL_TEXTURE0)
     if set_uniforms:
-        for k, (name, ty) in enumerate(uniforms(open(vs_path).read(), open(fs_path).read())):
-            if ty in SAMPLERS:
-                continue
-            given = uniform_components(k, ty)
-            if given is None:
-                raise SystemExit("gl_ref: --uniform-values does not set a %s uniform (%s)" % (ty, name))
-            floats, values = given
+        for name, ty, floats, values in uniform_settings(open(vs_path).read(), open(fs_path).read()):
             n = len(values)
             loc = gl.glGetUniformLocation(prog, name.encode())
             if not floats:
