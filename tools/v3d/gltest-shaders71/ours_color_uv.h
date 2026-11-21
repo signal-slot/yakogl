@@ -49,20 +49,15 @@
 #define OURS71_COLOR_UV_ATTR_A_COLOR_RECORD 1 /* location 1 */
 #define OURS71_COLOR_UV_ATTR_A_UV_RECORD 2 /* location 2 */
 
-#define OURS71_COLOR_UV_FS_NUM_WORDS 17
-static const uint64_t ours71_color_uv_fs_code[17] __attribute__((aligned(8))) = {
+#define OURS71_COLOR_UV_FS_NUM_WORDS 12
+static const uint64_t ours71_color_uv_fs_code[12] __attribute__((aligned(8))) = {
 	0x39013186bb03f000ull,
-	0x54001106bb103000ull,
-	0x390161840503f004ull,
-	0x54001146bb143000ull,
-	0x3901a1850503f005ull,
-	0x54001186bb183000ull,
-	0x3901e1860503f006ull,
-	0x540011c6bb1c3000ull,
-	0x390221870503f007ull,
-	0x54001206bb203000ull,
-	0x390261880503f008ull,
-	0x54201246bb243000ull,
+	0x55015106bb103000ull,
+	0x5501814405143004ull,
+	0x5501c18505183005ull,
+	0x550201c6051c3006ull,
+	0x5502420705203007ull,
+	0x5420024805243008ull,
 	0x5420010905108009ull,
 	0x54001146bb149000ull,
 	0x382031873503f105ull,

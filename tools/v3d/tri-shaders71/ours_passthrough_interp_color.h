@@ -44,16 +44,13 @@
 #define OURS71_TRI_ATTR_A_POS_RECORD 0 /* location 0 */
 #define OURS71_TRI_ATTR_A_COLOR_RECORD 1 /* location 1 */
 
-#define OURS71_TRI_FS_NUM_WORDS 12
-static const uint64_t ours71_tri_fs_code[12] __attribute__((aligned(8))) = {
+#define OURS71_TRI_FS_NUM_WORDS 9
+static const uint64_t ours71_tri_fs_code[9] __attribute__((aligned(8))) = {
 	0x39013186bb03f000ull,
-	0x54001106bb103000ull,
-	0x390161840503f004ull,
-	0x54001146bb143000ull,
-	0x3901a1850503f005ull,
-	0x54001186bb183000ull,
-	0x3921e1860503f006ull,
-	0x542011c6bb1c3000ull,
+	0x55015106bb103000ull,
+	0x5501814405143004ull,
+	0x5521c18505183005ull,
+	0x542001c6051c3006ull,
 	0x380021870503f007ull,
 	0x382031873503f105ull,
 	0x380031873503f187ull,

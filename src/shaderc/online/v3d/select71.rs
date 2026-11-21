@@ -708,7 +708,22 @@ fn region_edges(
 /// themselves. chain71 keeps the result only when it compiles to fewer words
 /// at no fewer threads.
 pub fn interleave71<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
-    let order = order71(sel.ops, sel.vregs, a)?;
+    interleave71_with(sel, false, a)
+}
+
+/// [`interleave71`] with 7.1's signal field in its slot model: a word's
+/// small immediate is its signal (v3d71_sig_map, qpu_pack.c:164-199: SMIMM_A
+/// .. SMIMM_D each stand alone, no LDUNIF, LDUNIFRF, LDVARY, LDTMU or WRTMUC
+/// beside them), so an operation with a small immediate and one with a load
+/// signal take different words, as sched71 packs them. Whether the plan
+/// gives fewer words depends on where the THRSW then merges, which the slot
+/// model does not see: chain71 builds both orders and keeps the shorter.
+pub fn interleave71_sig<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
+    interleave71_with(sel, true, a)
+}
+
+fn interleave71_with<'a>(sel: &Selected71<'_>, sig_imm: bool, a: &Arena<'a>) -> Result<Selected71<'a>, Select71Error> {
+    let order = order71_with(sel.ops, sel.vregs, sig_imm, a)?;
     let out = a.alloc_filled(sel.ops.len(), Op71::Thrsw)?;
     for (o, &i) in out.iter_mut().zip(order.iter()) {
         *o = sel.ops[i as usize];
@@ -718,7 +733,14 @@ pub fn interleave71<'a>(sel: &Selected71<'_>, a: &Arena<'a>) -> Result<Selected7
 
 /// [`interleave71`]'s order: position k of the new order holds operation
 /// `order[k]` of `ops`.
+#[cfg(test)]
 fn order71<'a>(ops: &[Op71], v: u32, a: &Arena<'a>) -> Result<&'a [u32], ArenaError> {
+    order71_with(ops, v, false, a)
+}
+
+/// The order of [`interleave71`] (`sig_imm` false) or
+/// [`interleave71_sig`] (true).
+fn order71_with<'a>(ops: &[Op71], v: u32, sig_imm: bool, a: &Arena<'a>) -> Result<&'a [u32], ArenaError> {
     let n = ops.len();
     let res = Res { flags: v, unif: v + 1, rf0: v + 2, side: v + 3 };
     let nres = v as usize + 4;
@@ -774,6 +796,11 @@ fn order71<'a>(ops: &[Op71], v: u32, a: &Arena<'a>) -> Result<&'a [u32], ArenaEr
                 let mut need = shapes[j].slots;
                 if need & SLOT_EITHER != 0 {
                     need = (need & !SLOT_EITHER) | if used & SLOT_MUL == 0 { SLOT_MUL } else { SLOT_ADD };
+                }
+                /* a small immediate is a signal of its own at 7.1: no load
+                 * signal beside it (v3d71_sig_map, qpu_pack.c:164-199) */
+                if sig_imm && need & (SLOT_SIG | SLOT_IMM) != 0 {
+                    need |= SLOT_SIG | SLOT_IMM;
                 }
                 if need & used != 0 {
                     continue;
@@ -1369,9 +1396,11 @@ void main() { gl_FragColor = vec4(inversesqrt(v_color.x), exp2(v_color.y), 0.0, 
             let order = order71(l.ops, l.vregs, &a).expect("scratch");
             same_meaning(l.ops, order);
             moved += order.iter().enumerate().filter(|&(k, &i)| k != i as usize).count();
-            let il = interleave71(l, &a).expect("scratch");
-            assert_eq!(il.ops.len(), l.ops.len());
-            assert_eq!((il.fragment, il.vregs), (l.fragment, l.vregs));
+            same_meaning(l.ops, order71_with(l.ops, l.vregs, true, &a).expect("scratch"));
+            for il in [interleave71(l, &a).expect("scratch"), interleave71_sig(l, &a).expect("scratch")] {
+                assert_eq!(il.ops.len(), l.ops.len());
+                assert_eq!((il.fragment, il.vregs), (l.fragment, l.vregs));
+            }
         };
         match vs {
             None => with_fs(fs, |_, l| check(&l.expect("lowers"))),
@@ -1455,5 +1484,29 @@ void main() { gl_FragColor = v_a + v_b; }
         let pos = |i: u32| order.iter().position(|&x| x == i).unwrap();
         assert!(pos(2) < pos(3), "the C read after the ldunif that overwrites rf0: {order:?}");
         assert!(pos(4) < pos(5), "a load before the TLBU write's uniform: {order:?}");
+    }
+
+    /// `ldunif ; fmul ; ldunif ; mov 0`: the plain order plans the
+    /// small-immediate move into the first load's word, which no 7.1 word
+    /// holds; the signal-aware order plans it after the second load.
+    #[test]
+    fn a_small_immediate_and_a_load_signal_take_different_words() {
+        let u = Uniform::constant(0x3f80_0000);
+        let ops = [
+            Op71::Ldunif { dst: V(0), u },
+            Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(1)), a: Src71::V(V(0)), b: Src71::V(V(0)) },
+            Op71::Ldunif { dst: V(2), u },
+            Op71::Add { op: AddOp71::Mov, dst: Dst71::V(V(3)), a: Src71::SmallImm(0), b: Src71::None },
+            Op71::Add { op: AddOp71::Vfpack, dst: Dst71::Tlb, a: Src71::V(V(1)), b: Src71::V(V(2)) },
+            Op71::Add { op: AddOp71::Vfpack, dst: Dst71::Tlb, a: Src71::V(V(3)), b: Src71::V(V(3)) },
+        ];
+        let mut buf = std::vec![0u8; 1 << 16];
+        let a = Arena::new(&mut buf);
+        let plain = order71(&ops, 4, &a).unwrap();
+        same_meaning(&ops, plain);
+        assert_eq!(plain, [0, 3, 1, 2, 4, 5]);
+        let sig = order71_with(&ops, 4, true, &a).unwrap();
+        same_meaning(&ops, sig);
+        assert_eq!(sig, [0, 1, 2, 3, 4, 5]);
     }
 }

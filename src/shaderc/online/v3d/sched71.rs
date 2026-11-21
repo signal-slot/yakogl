@@ -23,9 +23,13 @@
 //! and starts a new word otherwise. The uniform stream, the `ldvary`
 //! sequence and the TLB writes keep the program order, and alloc71's "last
 //! read" is exact. Whether a word can hold an operation is decided by
-//! [`encode71`] (two signals with no joint encoding are not made). This
-//! first cut has none of sched.rs's `hoist` or `ldvary_back`, and reads an
-//! SFU result two instructions later, not one (design note (c), (e)).
+//! [`encode71`] (two signals with no joint encoding are not made). The one
+//! exception to "never earlier" is an `ldvary`'s signal, which moves one word
+//! back when it can run there (`Packer71::ldvary_back`, sched.rs's
+//! `ldvary_back` at 7.1). sched.rs's `hoist` is not here (select71's
+//! `interleave71` orders the operations instead), and an SFU result is read
+//! two instructions later, as Mesa's `instruction_latency` says
+//! (qpu_schedule.c:1869-1870; design note (c), (e)).
 //!
 //! # The 7.1 rules, from Mesa 26.2.1 (MIT), each cited
 //!
@@ -941,6 +945,14 @@ impl<'a, 'r> Packer71<'a, 'r> {
             }
             break;
         }
+        /* the word the next operation may go in: the one this went into,
+         * even when its ldvary signal moves one word back below */
+        let placed = at;
+        if let (Op71::Ldvary { .. }, Some(r)) = (op, def_reg) {
+            if let Some(k) = self.ldvary_back(at, r, op) {
+                at = k;
+            }
+        }
         if let Some(v) = op.def() {
             self.ready[v.0 as usize] = at + latency(op);
             if def_reg == Some(0) {
@@ -970,8 +982,59 @@ impl<'a, 'r> Packer71<'a, 'r> {
             }
             _ => {}
         }
-        self.floor = at;
+        self.floor = placed;
         Ok(())
+    }
+
+    /// The `ldvary` just placed in word `at`, writing rf`r`, moved one word
+    /// back when it can run there: sched.rs's `ldvary_back` at 7.1, so a
+    /// varying's FMUL shares a word with the next `ldvary` and its FADD with
+    /// the next FMUL, one word per smooth varying as Mesa's 7.1 output has
+    /// (its list scheduler issues the next `ldvary` as soon as the C read of
+    /// the last one is in the following instruction: `reads_too_soon`,
+    /// qpu_schedule.c:623-635, `writes_too_soon_after_write`, :713-727).
+    ///
+    /// In word `k = at - 1` the destination is written at the end of `k`
+    /// and C one word later, at the end of `at` (qpu_schedule.c:1739-1742),
+    /// so: `k` is at or after the fence and after the last THRSW's word,
+    /// takes the signal (merge: the address, no condition, no plain
+    /// `ldunif`, no second write of rf`r`, it encodes), and the THRSW
+    /// window around it stays valid; no word from `at` on reads or writes
+    /// rf`r` (it would see or overwrite the new value early); word `at`
+    /// writes no rf0 (Mesa's rule above); and no word after `at` reads or
+    /// writes rf0 (the new C lands there; word `at` still reads the C
+    /// before). Returns `k` when moved.
+    fn ldvary_back(&mut self, at: usize, r: u8, op: &Op71) -> Option<usize> {
+        let k = at.checked_sub(1)?;
+        if k < self.fence || self.last_thrsw.is_some_and(|t| k <= t) {
+            return None;
+        }
+        let words = self.words.as_slice();
+        let mut here = words[at];
+        (here.alu.sig.ldvary, here.alu.sig_addr, here.alu.sig_magic, here.sig_addr_used) = (false, 0, false, false);
+        let moved = merge(&words[k], self.reg, op).ok()?;
+        if writes_rf(&here.alu, 0) || implicit_rf0(&here.alu) {
+            return None;
+        }
+        let rest = |w: &Word71| w.branch.is_some() || reads_rf(&w.alu, r) || writes_rf(&w.alu, r);
+        if rest(&here) || words[at + 1..].iter().any(rest) {
+            return None;
+        }
+        let rf0 = |w: &Word71| reads_rf(&w.alu, 0) || writes_rf(&w.alu, 0) || implicit_rf0(&w.alu);
+        if words[at + 1..].iter().any(rf0) {
+            return None;
+        }
+        let (old_k, old_at) = (words[k], words[at]);
+        let w = self.words.as_mut_slice();
+        (w[k], w[at]) = (moved, here);
+        if let Some(t) = self.last_thrsw {
+            if k <= t + 2 && !window_ok(self.words.as_slice(), None, t, self.section, false) {
+                let w = self.words.as_mut_slice();
+                (w[k], w[at]) = (old_k, old_at);
+                return None;
+            }
+        }
+        Some(k)
     }
 
     /// The program end: a THRSW on the earliest of the last three words from
@@ -1390,6 +1453,54 @@ mod tests {
         let ld = find(&instrs, |a| a.sig.ldvary);
         assert!(alu(&instrs[ld + 1]).sig.ldunifrf, "the conflict is set up\n{text}");
         assert!(!alu(&instrs[t + 2]).sig.writes_address(), "{text}");
+    }
+
+    /// Three smooth varyings, each `ldvary ; fmul W ; fadd C`.
+    fn three_varyings() -> [Op71; 14] {
+        let mut ops = [Op71::Thrsw; 14];
+        for k in 0..3u32 {
+            let b = 3 * k;
+            ops[b as usize] = Op71::Ldvary { dst: V(b) };
+            ops[b as usize + 1] =
+                Op71::Mul { op: MulOp71::Fmul, dst: Dst71::V(V(b + 1)), a: v(b), b: Src71::Payload(3) };
+            ops[b as usize + 2] =
+                Op71::Add { op: AddOp71::Fadd, dst: Dst71::V(V(b + 2)), a: v(b + 1), b: Src71::LdvaryC };
+            ops[11 + k as usize] = Op71::Mul { op: MulOp71::Mov, dst: Dst71::Tlb, a: v(b + 2), b: Src71::None };
+        }
+        ops
+    }
+
+    fn three_inputs() -> Vec<Varying> {
+        let vary = |x: f32, c: f32| Varying { vary: [x.to_bits(); LANES], c: [c.to_bits(); LANES] };
+        vec![vary(3.0, 0.25), vary(-1.5, 4.0), vary(0.5, -2.0)]
+    }
+
+    /// The next `ldvary` moves one word back, into the word of the last
+    /// varying's FMUL (sched.rs `ldvary_back` at 7.1): one word per varying,
+    /// each C read in the second word after its own `ldvary` and before the
+    /// next one's C lands.
+    #[test]
+    fn an_ldvary_moves_back_beside_the_last_varyings_product() {
+        let (instrs, o) = fs(&three_varyings(), &[4, 5, 6, 7, 8, 9, 10, 11, 12], three_inputs());
+        let text = listing(&instrs);
+        assert_eq!([tlb_f(&o, 0), tlb_f(&o, 1), tlb_f(&o, 2)], [3.0 * W + 0.25, -1.5 * W + 4.0, 0.5 * W - 2.0]);
+        let ld: Vec<usize> = (0..instrs.len()).filter(|&k| alu(&instrs[k]).sig.ldvary).collect();
+        assert_eq!(ld, [0, 1, 2], "{text}");
+        for &l in &ld {
+            assert_eq!(alu(&instrs[l + 2]).add.op, AddOp71::Fadd, "{text}");
+        }
+    }
+
+    /// The move is not made when the word before writes the `ldvary`'s
+    /// register (the second varying's register is the first product's, read
+    /// by the sum one word later).
+    #[test]
+    fn an_ldvary_stays_when_the_word_before_writes_its_register() {
+        let (instrs, o) = fs(&three_varyings(), &[4, 5, 6, 5, 8, 9, 10, 11, 12], three_inputs());
+        let text = listing(&instrs);
+        assert_eq!([tlb_f(&o, 0), tlb_f(&o, 1), tlb_f(&o, 2)], [3.0 * W + 0.25, -1.5 * W + 4.0, 0.5 * W - 2.0]);
+        let ld: Vec<usize> = (0..instrs.len()).filter(|&k| alu(&instrs[k]).sig.ldvary).collect();
+        assert_eq!(ld[..2], [0, 2], "{text}");
     }
 
     /// A plain `ldunif` never goes into the word right after an `ldvary`
