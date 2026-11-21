@@ -74,8 +74,10 @@ fn loop_float_fs() {
     mali_ref::assert_matches("deqp_uniarray_loop_float_fs");
 }
 
+/// The vertex loop unrolled (plan #367 lower-int-loops), each `u_arr[i]`
+/// at its folded counter the constant-index read: byte-equal to
+/// `float_const_vs`, as Mesa's.
 #[test]
-#[ignore = "refused: a uniform read at a run-time index other than a float array's element ..., after the vertex unroll of plan #367 lower-int-loops"]
 fn loop_float_vs() {
     mali_ref::assert_matches("deqp_uniarray_loop_float_vs");
 }
@@ -160,10 +162,6 @@ const REFUSALS: &[(&str, &str)] = &[
     (
         "dyn_vec4_vs",
         "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member",
-    ),
-    (
-        "loop_float_vs",
-        "a uniform read at a run-time index other than a float array's element",
     ),
     (
         "struct",
