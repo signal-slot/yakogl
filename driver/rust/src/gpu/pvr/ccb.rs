@@ -168,7 +168,7 @@ pub fn kccb_probe_slot(k: &YdPvrKm, slot: u32, why: &str) {
 /// number of commands taken. A grow is served from the list's reserve or
 /// the shared grow pool ([`fwccb_service_with`] adds the render pool).
 pub fn fwccb_service(k: &mut YdPvrKm) -> i32 {
-    fwccb_service_with(k, None, &[], None)
+    fwccb_service_with(k, None, &[], None, false)
 }
 
 /// [`fwccb_service`], with `ondemand` serving a grow the reserve and the
@@ -179,18 +179,25 @@ pub fn fwccb_service(k: &mut YdPvrKm) -> i32 {
 /// resets ([`freelist::reconstruct`]); none outside the render service.
 /// `first_read` runs once, when the batch's first command is found and
 /// before any command is handled or said (the render service samples the
-/// kicks in flight there).
+/// kicks in flight there). `pr`: the partial-render knob
+/// (`YdPvrRenderCfg::partial_render`). Off, the at-maximum case stops the
+/// render service ([`at_maximum`], as before); on, it leaves the firmware
+/// its partial render, bounded by the render service's existing stop
+/// ([`at_maximum_awaits_pr`]).
 pub fn fwccb_service_with(
     k: &mut YdPvrKm,
     mut ondemand: Option<&mut freelist::GrowSource<'_>>,
     hwrts: &[u32],
     mut first_read: Option<&mut dyn FnMut(&YdPvrKm)>,
+    pr: bool,
 ) -> i32 {
     let ctl = k.heap_cpu(k.fwccb_ctl_off);
     let ring = k.heap_cpu(k.fwccb_cmds_off);
     let mut serviced = 0i32;
     // grow requests, and the out-of-memory notices after the last of them
     let (mut grows, mut ooms_after) = (0u32, 0u32);
+    // partial-render notices after the batch's last out-of-memory notice
+    let mut prs_after = 0u32;
 
     k.invd(ctl, CCB_CTL_SIZE);
     loop {
@@ -273,6 +280,13 @@ pub fn fwccb_service_with(
             let (e, adj) = unsafe { (rd32(c, FWCCB_STATS_ELEMENT), rd32(c, FWCCB_STATS_ADJUST) as i32) };
             update_stats(k, e, adj);
             ooms_after += u32::from(e == FWCCB_STATS_OUT_OF_MEMORY);
+            if e == FWCCB_STATS_OUT_OF_MEMORY {
+                prs_after = 0;
+            } else if e == FWCCB_STATS_PARTIAL_RENDERS {
+                prs_after += 1;
+                // a wait armed by an earlier batch (never with the knob off)
+                partial_render_arrived(k);
+            }
             serviced += 1;
         } else {
             crate::km_log!(k, Inf, "FWCCB: cmd type=0x{:08x} (unhandled, skipping)", ty);
@@ -285,7 +299,15 @@ pub fn fwccb_service_with(
         k.fence();
         k.invd(ctl, CCB_CTL_SIZE);
     }
-    at_maximum(k, grows, ooms_after);
+    if pr {
+        at_maximum_awaits_pr(k, grows, ooms_after);
+        if prs_after != 0 {
+            // the partial render came in this batch, after the notice
+            partial_render_arrived(k);
+        }
+    } else {
+        at_maximum(k, grows, ooms_after);
+    }
     serviced
 }
 
@@ -400,16 +422,91 @@ fn write_offset_check(k: &mut YdPvrKm, wo: u32, wrap: u32) {
 /// (docs/notes/pvr-render-pool.md, "The runaway grow and the
 /// stop that did not fire").
 pub fn at_maximum(k: &mut YdPvrKm, grows: u32, ooms_after: u32) {
+    if let Some(i) = at_maximum_list(k, grows, ooms_after) {
+        freelist::stop(k, freelist::STOP_AT_MAXIMUM, k.fls[i].id, 0);
+    }
+}
+
+/// The rule [`at_maximum`] calls "a list at its maximum": a list that grows
+/// (`grow` != 0) with less than one grow left between its listed and ready
+/// pages and its maximum. Wrapping, as the rule always was: a list past its
+/// maximum reads as room.
+pub const fn full_list(npages: u32, ready: u32, maxpages: u32, grow: u32) -> bool {
+    grow != 0 && maxpages.wrapping_sub(npages.wrapping_add(ready)) < grow
+}
+
+/// The slot of the first list [`at_maximum`]'s case names: enough
+/// out-of-memory notices for the batch's grows, and a [`full_list`].
+fn at_maximum_list(k: &YdPvrKm, grows: u32, ooms_after: u32) -> Option<usize> {
     let needed = if grows == 0 { 1 } else { 2 };
     if ooms_after < needed {
+        return None;
+    }
+    k.fls[..(k.nfls as usize).min(super::km::FL_MAX)]
+        .iter()
+        .position(|f| full_list(f.npages, f.ready, f.maxpages, f.grow))
+}
+
+/// [`YdPvrKm::atmax_pr`]: the "awaiting" bit of list slot `i` is
+/// `1 << (ATMAX_AWAITING_SHIFT + i)`; the "said" bit is `1 << i`.
+pub const ATMAX_AWAITING_SHIFT: u32 = 16;
+const _: () = assert!(super::km::FL_MAX as u32 <= ATMAX_AWAITING_SHIFT);
+const ATMAX_SAID_MASK: u32 = (1 << ATMAX_AWAITING_SHIFT) - 1;
+
+/// [`at_maximum`]'s case with the partial-render knob on: the render
+/// service is not stopped. At a full list the firmware's only way on is a
+/// partial render (DDK rgx_fwif_shared.h:951-965, rgx_fwif_sf.h:1569-1630),
+/// which the host cannot start (rgx_fwif_km.h:904-1010 has no such
+/// command), and with the knob on it did render partially after a refused
+/// grow (tools/cts/log/2026-10-31-pr-neg175, the B runs). The stop at
+/// cause 2 fired before it could (tools/cts/log/2026-11-02-pr-217probe).
+///
+/// The wait is bounded by the render service's existing stop: a fence that
+/// does not move for `render::STOP_WAIT_MS` (10 s) stops it with cause 4
+/// ([`freelist::STOP_KICK_TIMEOUT`]). No timer of its own.
+///
+/// Said once per list per run, at warning level, never with the
+/// `render: stopped` prefix tools/cts/pr-verdict.py keys on. The list's
+/// wait is armed until a partial-render notice clears it
+/// ([`partial_render_arrived`]).
+pub fn at_maximum_awaits_pr(k: &mut YdPvrKm, grows: u32, ooms_after: u32) {
+    let Some(i) = at_maximum_list(k, grows, ooms_after) else {
+        return;
+    };
+    k.atmax_pr |= 1 << (ATMAX_AWAITING_SHIFT + i as u32);
+    if k.atmax_pr & (1 << i) == 0 {
+        k.atmax_pr |= 1 << i;
+        let (id, pages) = (k.fls[i].id, k.fls[i].npages);
+        crate::km_log!(
+            k,
+            Wrn,
+            "render: at maximum (list {}, {} pages), awaiting the firmware's partial render for up to {} s",
+            id,
+            pages,
+            super::render::STOP_WAIT_MS / 1000
+        );
+    }
+}
+
+/// A partial-render notice (UPDATE_STATS "partial renders") clears every
+/// armed at-maximum wait ([`at_maximum_awaits_pr`]) and says so. Nothing is
+/// armed with the knob off, so it does nothing there.
+fn partial_render_arrived(k: &mut YdPvrKm) {
+    let armed = k.atmax_pr >> ATMAX_AWAITING_SHIFT;
+    if armed == 0 {
         return;
     }
-    let full = k.fls[..(k.nfls as usize).min(super::km::FL_MAX)]
-        .iter()
-        .find(|f| f.grow != 0 && f.maxpages.wrapping_sub(f.npages.wrapping_add(f.ready)) < f.grow)
-        .map(|f| f.id);
-    if let Some(id) = full {
-        freelist::stop(k, freelist::STOP_AT_MAXIMUM, id, 0);
+    k.atmax_pr &= ATMAX_SAID_MASK;
+    for i in 0..(k.nfls as usize).min(super::km::FL_MAX) {
+        if armed & (1 << i) != 0 {
+            let id = k.fls[i].id;
+            crate::km_log!(
+                k,
+                Inf,
+                "render: partial render after the at-maximum notice (list {}); its wait is over",
+                id
+            );
+        }
     }
 }
 
@@ -580,10 +677,151 @@ mod at_maximum_tests {
         f.arr = arr.as_mut_ptr();
         k.nfls = 1;
         let mut src = |_: &mut YdPvrKm, _: u32| -> Option<PvrGpuBo> { None };
-        fwccb_service_with(&mut k, Some(&mut src), &[], None);
+        fwccb_service_with(&mut k, Some(&mut src), &[], None, false);
         let cause = k.stop_cause;
         drop(regs);
         (cause, LOG.with(|l| l.borrow().clone()))
+    }
+
+    /// FWCCB batches of UPDATE_STATS elements, served one after the other
+    /// with the partial-render knob `pr`, list 1 at `listed` of `max` pages
+    /// growing by 256, its reserve empty. Returns the stop cause, the log,
+    /// `atmax_pr` and the commands each batch serviced.
+    fn run_batches(batches: &[&[u32]], listed: u32, max: u32, pr: bool) -> (u32, Vec<String>, u32, Vec<i32>) {
+        LOG.with(|l| l.borrow_mut().clear());
+        let mut mem = std::vec![0u32; 0x3000 / 4];
+        let mut regs = std::vec![0u32; 0x1000];
+        let mut arr = std::vec![0u32; 4096];
+        let ops = Box::new(YdPvrKmOps {
+            ctx: core::ptr::null_mut(),
+            flush: nop_range,
+            invd: nop_range,
+            fence: nop,
+            busy_wait_us: nop_wait,
+            log,
+        });
+        // SAFETY: all-zero is the documented state before the first call.
+        let mut k: Box<YdPvrKm> = Box::new(unsafe { core::mem::zeroed() });
+        k.cpu = mem.as_mut_ptr() as *mut u8;
+        k.size = (mem.len() * 4) as u64;
+        k.ops = &*ops;
+        k.fw_main_size = (mem.len() * 4) as u32;
+        k.fw_config_off = u32::MAX;
+        k.regs = regs.as_mut_ptr() as usize;
+        (k.fwccb_ctl_off, k.fwccb_cmds_off) = (FCTL, RING);
+        (k.kccb_ctl_off, k.kccb_cmds_off, k.kccb_rtn_off) = (KCTL, KCMDS, KRTN);
+        let f = &mut k.fls[0];
+        (f.id, f.npages, f.maxpages, f.grow) = (1, listed, max, 256);
+        (f.backed, f.reserve, f.heap_off) = (listed, 0, FL);
+        f.arr = arr.as_mut_ptr();
+        k.nfls = 1;
+        let mut slot = 0u32;
+        let mut served = Vec::new();
+        for batch in batches {
+            for &e in batch.iter() {
+                let c = RING + (slot & (FWCCB_NUM_CMDS - 1)) * FWCCB_CMD_SIZE as u32;
+                mem[(c + FWCCB_CMD_TYPE as u32) as usize / 4] = FWCCB_CMD_UPDATE_STATS;
+                mem[(c + FWCCB_STATS_ELEMENT as u32) as usize / 4] = e;
+                mem[(c + FWCCB_STATS_ADJUST as u32) as usize / 4] = 1;
+                slot += 1;
+            }
+            mem[(FCTL + CCB_CTL_WRITE_OFFSET as u32) as usize / 4] = slot & (FWCCB_NUM_CMDS - 1);
+            mem[(FCTL + CCB_CTL_WRAP_MASK as u32) as usize / 4] = FWCCB_NUM_CMDS - 1;
+            served.push(fwccb_service_with(&mut k, None, &[], None, pr));
+        }
+        let (cause, atmax) = (k.stop_cause, k.atmax_pr);
+        drop(regs);
+        (cause, LOG.with(|l| l.borrow().clone()), atmax, served)
+    }
+
+    const OOM: u32 = FWCCB_STATS_OUT_OF_MEMORY;
+    const PR: u32 = FWCCB_STATS_PARTIAL_RENDERS;
+    const WAIT_LINE: &str =
+        "render: at maximum (list 1, 512 pages), awaiting the firmware's partial render for up to 10 s";
+
+    /// (i) Knob off: the case 217 shape (512 of 512, one notice, no grow)
+    /// stops with cause 2, as before, and nothing is armed.
+    #[test]
+    fn knob_off_the_at_maximum_case_still_stops_with_cause_2() {
+        let (cause, log, atmax, _) = run_batches(&[&[OOM]], 512, 512, false);
+        assert_eq!(cause, freelist::STOP_AT_MAXIMUM);
+        assert_eq!(cause, 2);
+        assert_eq!(atmax, 0);
+        assert!(log.iter().any(|l| l.starts_with("render: stopped: ")), "log:\n{}", log.join("\n"));
+        assert!(!log.iter().any(|l| l.contains("awaiting")), "log:\n{}", log.join("\n"));
+    }
+
+    /// (ii) Knob on: no stop, exactly one warning line (the text
+    /// pr-verdict.py reads), and the service keeps taking the next batches.
+    #[test]
+    fn knob_on_the_at_maximum_case_warns_once_and_does_not_stop() {
+        let (cause, log, atmax, served) = run_batches(&[&[OOM], &[OOM], &[OOM, OOM]], 512, 512, true);
+        assert_eq!(cause, 0, "log:\n{}", log.join("\n"));
+        assert_eq!(served, [1, 1, 2], "every batch was taken");
+        assert_eq!(log.iter().filter(|l| l.as_str() == WAIT_LINE).count(), 1, "log:\n{}", log.join("\n"));
+        assert!(!log.iter().any(|l| l.starts_with("render: stopped")), "log:\n{}", log.join("\n"));
+        assert_eq!(atmax, 1 | 1 << ATMAX_AWAITING_SHIFT, "said and awaiting, list slot 0");
+    }
+
+    /// (iv) Knob on: a partial-render notice after the at-maximum notice
+    /// clears the wait, in a later batch or later in the same one; the
+    /// notice is still said only once.
+    #[test]
+    fn knob_on_a_partial_render_after_the_notice_clears_the_wait() {
+        let over = "render: partial render after the at-maximum notice (list 1); its wait is over";
+        let (cause, log, atmax, _) = run_batches(&[&[OOM], &[PR]], 512, 512, true);
+        assert_eq!((cause, atmax), (0, 1), "log:\n{}", log.join("\n"));
+        assert_eq!(log.iter().filter(|l| l.as_str() == over).count(), 1, "log:\n{}", log.join("\n"));
+        let (cause, log, atmax, _) = run_batches(&[&[OOM, PR]], 512, 512, true);
+        assert_eq!((cause, atmax), (0, 1), "log:\n{}", log.join("\n"));
+        assert!(log.iter().any(|l| l == over), "log:\n{}", log.join("\n"));
+        // a notice after the partial render arms the wait again, unsaid
+        let (cause, log, atmax, _) = run_batches(&[&[OOM], &[PR], &[OOM]], 512, 512, true);
+        assert_eq!((cause, atmax), (0, 1 | 1 << ATMAX_AWAITING_SHIFT));
+        assert_eq!(log.iter().filter(|l| l.as_str() == WAIT_LINE).count(), 1, "log:\n{}", log.join("\n"));
+        // a partial render before the notice does not clear it
+        let (_, _, atmax, _) = run_batches(&[&[PR, OOM]], 512, 512, true);
+        assert_eq!(atmax, 1 | 1 << ATMAX_AWAITING_SHIFT);
+    }
+
+    /// Knob on, room left: neither a stop nor a wait (the rule is the same).
+    #[test]
+    fn knob_on_with_room_left_nothing_is_armed() {
+        let (cause, log, atmax, _) = run_batches(&[&[OOM], &[PR]], 512, 4096, true);
+        assert_eq!((cause, atmax), (0, 0));
+        assert!(!log.iter().any(|l| l.starts_with("render: at maximum") || l.contains("its wait is over")));
+    }
+
+    /// (v) `full_list` is the rule `at_maximum` had inline, over a table of
+    /// (listed, ready, max, grow) including a list past its maximum and a
+    /// list that does not grow.
+    #[test]
+    fn full_list_is_the_old_inline_rule() {
+        let old = |npages: u32, ready: u32, maxpages: u32, grow: u32| {
+            grow != 0 && maxpages.wrapping_sub(npages.wrapping_add(ready)) < grow
+        };
+        let mut n = 0;
+        for pages in [0u32, 1, 255, 256, 257, 511, 512, 513, 768, 1024, 3840, 3841, 4096, 4097, u32::MAX] {
+            for max in [0u32, 256, 512, 1024, 4096, u32::MAX] {
+                for ready in [0u32, 1, 64] {
+                    for grow in [0u32, 1, 256] {
+                        assert_eq!(
+                            full_list(pages, ready, max, grow),
+                            old(pages, ready, max, grow),
+                            "pages {pages} ready {ready} max {max} grow {grow}"
+                        );
+                        n += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(n, 15 * 6 * 3 * 3);
+        // the records' cases by name
+        assert!(full_list(512, 0, 512, 256), "the probe and case 217: 512 of 512");
+        assert!(full_list(4096, 0, 4096, 256), "fwccb-2: 4096 of 4096");
+        assert!(!full_list(1280, 0, 4096, 256), "the knob-off control's refract");
+        assert!(full_list(3841, 0, 4096, 256), "less than a grow left");
+        assert!(!full_list(3840, 0, 4096, 256), "exactly a grow left");
     }
 
     /// fwccb-2's batch: twelve grows to 4096 (two notices after the first,

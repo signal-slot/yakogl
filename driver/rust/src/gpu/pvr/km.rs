@@ -184,7 +184,12 @@ pub struct YdPvrKm {
     pub pool_top: u32,
     /// Its most: every page in `[size - pool_top_hw, size)` has been mapped.
     pub pool_top_hw: u32,
-    pub pad: u32,
+    /// The at-maximum wait with the partial-render knob on
+    /// ([`super::ccb::at_maximum_awaits_pr`]), by list slot: bit `i` the
+    /// notice was said for list `fls[i]` (once per run), bit
+    /// [`super::ccb::ATMAX_AWAITING_SHIFT`] + `i` it awaits the firmware's
+    /// partial render. Always 0 with the knob off. Was the struct's pad.
+    pub atmax_pr: u32,
 }
 
 /// Grows a freelist can be served (the table [`YdPvrKm::fl_grow_pfn`]): the

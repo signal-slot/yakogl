@@ -1240,7 +1240,10 @@ struct yd_pvr_km {
 	 * now and at most */
 	uint32_t pool_top_above;
 	uint32_t pool_top, pool_top_hw;
-	uint32_t pad;
+	/* gpu::pvr::ccb at_maximum_awaits_pr (partial-render knob on): per list
+	 * slot, the at-maximum notice said (bits 0-5) and awaiting the
+	 * firmware's partial render (bits 16-21); 0 with the knob off */
+	uint32_t atmax_pr;
 };
 /* The driver's pool_top_above: 256 KiB
  * (docs/notes/pvr-render-pool.md, the top region). */
