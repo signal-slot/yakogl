@@ -9,10 +9,10 @@ design the code follows; there are no run logs or session diaries.
 | --- | --- |
 | `es2-cts-failures.md`, `es3-cts-failures.md` | dEQP-GLES2 and dEQP-GLES3: what is accepted, what fails now and why. |
 | `es2/` | The NanoPC-T6 (Mali-G610) dEQP-GLES2 board recipe, `es2/board-recipe-mali.md`: library, deqp-gles2 build, tree table, runner, kernel messages, tally and board rules. |
-| `es3/` | ES 3.0 designs per feature, the board recipes, and the current per-case failure lists (`*.tsv`). |
+| `es3/` | ES 3.0 designs per feature, the board recipes, the shader and texture failure maps (`es3/shader-failure-map.md`, `es3/texture-failure-map.md`) with their host repros, `es3/zephyr-env.md` (the Zephyr build environment for the gate rows), the HOST-ONLY GC7000UL dEQP-GLES3 run in `es3/host-gc-gles3-5454be1b/` (its `README.md`), and the current per-case failure lists (`*.tsv`). |
 | `online-shaderc/` | The on-board shader compiler: front end, IR, back ends, ISAs and ABIs. |
-| `notes/` | Designs and findings that the code relies on (comments cite them), one file per subject. Each file's title line says what it covers: `grep -m1 '^# ' docs/notes/*.md` lists them. This row names no file. |
-| `release/` | Release stage: building guide, checklist, licence and redaction audits. |
+| `notes/` | Designs and findings that the code relies on (comments cite them), one file per subject. Each file's title line says what it covers: `grep -m1 '^# ' docs/notes/*.md` lists them. The files that need a longer description have their own rows below. |
+| `release/` | Release stage: `release/building.md` (building guide), `release/checklist.md`, `release/license-audit.md` and `release/redaction-audit.md` (the audits), `release/snapshot.md` (the public snapshot commit) and `release/readme-walkthrough.md` (the README's instructions walked on a fresh clone). |
 | `ci.md`, `source-form.md`, `standalone-boot.md`, `v3d-noseamless-cube.md`, `notes/v3d-texture-size-words.md` | The CI gate, the source-form rule, standalone boot, two V3D designs: the non-seamless cube, and the texture size uniform words 44-47. |
 | `notes/v3d71-cube-seamless.md` | Mesa's 7.1 cube-map and seamless reading (packets, driver, CI): what the 7.1 table sets for a cube, the U8 prediction, and the case board71-tex runs. |
 | `notes/pre-study-rpi5.md` | The Pi 5 pre-study (BCM2712, VideoCore VII, V3D 7.1): the host reading of Mesa, Linux and the firmware, and the P and U steps stage 5 cites from it. |
