@@ -19,7 +19,10 @@
  *            screen buffer at the panel's (0,0) and that buffer is shown
  *            (the fallback, counted: board_show_copied). Without the option
  *            board_show() refuses (-ENOTSUP)
- *   record   the yk-record line on the console UART (common/record.c)
+ *   record   the yk-record line on the console UART (common/record.c) and,
+ *            with CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM, the last record in
+ *            the battery-backed BBNSM GPR4..7, read from Linux after the
+ *            reset (verdin_imx95_record.c, board_sink_store)
  *   watchdog WDOG3 (verdin_imx95_wdog.c), fed while board_wdog_alive()
  *   reset    verdin_imx95_reset(): PSCI SYSTEM_RESET, the picture taken
  *            down first
@@ -147,10 +150,12 @@ int board_selector(void)
 	return -1;
 }
 
+#ifndef CONFIG_YAKOGL_VERDIN_IMX95_RECORD_BBM
 void board_sink_store(const uint32_t w[4])
 {
 	ARG_UNUSED(w); /* the UART line is the sink */
 }
+#endif
 
 FUNC_NORETURN void board_reset(void)
 {
