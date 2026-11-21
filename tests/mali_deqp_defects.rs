@@ -62,12 +62,14 @@ fn defects_encode_reduced() {
 #[test]
 #[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)"]
 fn defects_lanecycle_fs() {
+    let _one = one_at_a_time();
     mali_ref::assert_matches("deqp_defects_lanecycle_fs");
 }
 
 #[test]
 #[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)"]
 fn defects_lanecycle_reduced() {
+    let _one = one_at_a_time();
     mali_ref::assert_matches("deqp_defects_lanecycle_reduced");
 }
 
@@ -114,7 +116,10 @@ fn defects_pinned() {
 
 /// The compiler's process-wide state takes one pair at a time
 /// (`mali_ref::compile_pair` holds its own lock; this one covers
-/// [`compile_bound`] and the pin's calls).
+/// [`compile_bound`], the pin's calls and the `lanecycle` tests, so every
+/// test of this binary compiles and reads under the one lock that
+/// src/test_rules.rs `a_test_binary_that_resets_the_compiler_holds_one_test`
+/// asks for: `forget_compiled` resets the arena all of them read).
 fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
     static COMPILING: Mutex<()> = Mutex::new(());
     COMPILING.lock().unwrap_or_else(|p| p.into_inner())
