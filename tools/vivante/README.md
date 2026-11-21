@@ -859,3 +859,23 @@ the shim re-resolves two dozen libc symbols with `dlsym(RTLD_NEXT, ...)` on
 *every* intercepted call. That is cheap for shader-db; against a whole
 EGL/gallium stack the symbol tables are large enough that it never finishes.
 Resolving them once fixes it.
+
+## resolve-asm-check.sh
+
+`resolve-asm-check.sh [TARGET_DIR]` guards `ds_cache::resolve_row`, the CPU
+depth resolve behind shadow's and refract's cost
+(`docs/notes/gc-slow-shadow-refract.md`, cause 1): the surface is in the
+uncached carve-out, so a per-byte `ldrb` loop is one bus read a byte. It
+builds the image's aarch64 code (`cargo rustc -p yakogl --release --lib
+--no-default-features --features
+osal-zephyr,gpu-vivante,shaderc-online,no-shader-table --target
+aarch64-unknown-none -- --emit=asm`, into `TARGET_DIR` or a directory under
+`$TMPDIR`, never `/tmp`; the target needs `rustup target add
+aarch64-unknown-none`), cuts `resolve_row`'s body out of the `.s` file and
+fails if its aligned path has an `ldrb` or the function has no `ldp`/`ldr`
+wide load. The byte-wise fallback for an unaligned row keeps its `ldrb`. One
+verdict line: `resolve-asm-check: ok|FAIL|not done: ...` (exit 0, 1, 2; a
+build that cannot run, or a `resolve_row` inlined away, is "not done", not a
+pass). `resolve-asm-check-selftest.sh` feeds the extractor canned `.s`
+snippets (pass, fail, not done) and needs no build. Not a `tools/check.sh`
+row yet.
