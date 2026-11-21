@@ -387,7 +387,7 @@ What can start our image, and which route signs off:
 | --- | --- | --- |
 | **U-Boot from the eMMC** (sign-off) | Toradex's U-Boot: `ext4load mmc 0:1 <addr> <file>; dcache off; icache off; go <addr>` | all commands present: `CMD_GO` and `CMD_ELF` default y (TU: `cmd/Kconfig:475-477, 501-503`), `CONFIG_CMD_CACHE=y`, `CONFIG_CMD_EXT4_WRITE=y`, `CONFIG_CMD_MMC=y` (TU: `configs/verdin-imx95_defconfig:77, 83, 90`); eMMC is `mmc 0` (`update_uboot`'s `mmc dev 0 1`, TU: `verdin-imx95.env:18`) |
 | U-Boot over TFTP (development) | the same hook's `yako_net` | as on the other Verdins |
-| Direct (TF-A → Zephyr as BL33) | our image in place of U-Boot in container 2 | the i.MX8MP's design (`docs/notes/imx8mp-direct-boot.md`) carries over in form; on the i.MX 95 the container is mkimage's `u-boot-atf-container.img` (MK: `soc.mak:292`). Later, after sign-off |
+| Direct (TF-A → Zephyr as BL33) | our image in place of U-Boot in container 2 | the i.MX8MP's design (`docs/notes/imx8mp-direct-boot.md`) carries over in form; on the i.MX 95 the container is mkimage's `u-boot-atf-container.img` (MK: `soc.mak:292`). Designed in `docs/notes/imx95-direct-boot.md`. Later, after sign-off |
 | USB serial download | `uuu`/SDP into SPL (`CONFIG_SPL_USB_SDP_SUPPORT=y`, TU: `configs/verdin-imx95_defconfig:179`) | recovery only |
 
 Zephyr's own route for the EVK, a `flash.bin` whose TF-A starts Zephyr
@@ -484,7 +484,7 @@ Items the five parallel documents do not cover:
 | H2 | `tools/board.sh` entry `imx95` (or `verdin-imx95`): `BOOTS="uboot-tftp uboot-mmc"`, `NB_MMC=0:1`, `MMC_PART=/dev/mmcblk0p1`, `YAKO_ADDR`/`LOAD_END` from the board's DTS, `MARKER` of the WDOG3 self-arm, the record sink from H4 | `tools/board_selftest.sh` passes with the entry (it checks `board.sh` without a board) |
 | H3 | WDOG3 self-arm for the image (the i.MX8MP's `gc_wdog_arm` pattern, `docs/standalone-boot.md:270-277`), with PSCI reset as the refusal path | a build of the board image that links it; the arming line is the `MARKER` |
 | H4 | The record without a console: the SCMI BBM GPR calls for GPR4..7 from Zephyr, and their read from Linux (Linux has `scmi_bbm`, L: `imx95-verdin.dtsi:29, 623`) | a design paragraph in `docs/standalone-boot.md` and a host test of the record format over a mocked SCMI; the board check is B3 |
-| H5 | The direct-boot container: how to replace `u-boot-hash.bin` in mkimage's second container with our loader (MK: `soc.mak:281-300`), against Toradex's OEI and SM | a design note; nothing runs until B6 |
+| H5 | The direct-boot container: how to replace `u-boot-hash.bin` in mkimage's second container with our loader (MK: `soc.mak:281-300`), against Toradex's OEI and SM | designed: `docs/notes/imx95-direct-boot.md` (the chain, the options, the fallback, the board steps D1-D6); `tools/imx95-mkboot.py` builds and checks the image, `tools/imx95_mkboot_selftest.py` tests it; nothing runs until B7 |
 
 ## 6. What needs the board
 
@@ -553,7 +553,7 @@ Board items:
 | B4 | First frame (Z4 analogue) | M | B3, P2, P4 | read-back pixels as predicted |
 | B5 | `gl_test` on read-back to 50/50 | M | B4 | row in `tools/cts/RESULTS.md` |
 | B6 | Display bring-up on the Mallow's DSI panel | L | P9, B2 | first clear, then the first triangle |
-| B7 | Sign-off: `default <image> N` from the eMMC, then the direct route | S | B5 | both routes recorded |
+| B7 | Sign-off: `default <image> N` from the eMMC, then the direct route (steps D1-D6 of `docs/notes/imx95-direct-boot.md`) | S | B5 | both routes recorded |
 | B8 | dEQP-GLES2 tree as on the T6 | L (shared compiler work) | B5 | the tally in `RESULTS.md` |
 
 Order logic: B1 comes first on the board because the fuses and the SM
