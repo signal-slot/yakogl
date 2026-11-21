@@ -66,7 +66,9 @@ and warnings; the <a href="#records">records</a> list them.</p>
 <td>On the board's Linux, 165 of 256 <code>gl_test</code> cases pass (2026-11-12) and
 dEQP-GLES2 reads 5,456 passes of 17,165 cases (2026-11-15).
 On Zephyr, the regression set of <code>gl_test</code> passes 50 of 50 cases, drawn off-screen
-(2026-11-16, started from the board's Linux by kexec); there is no display yet.
+(2026-11-16, started from the board's Linux by kexec), and dEQP-GLES2 reads 6,644 passes,
+9,545 failures and 973 not-supported cases of 17,165, all 76 images finished (2026-11-17);
+there is no display yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Details</a></td></tr>
 <tr id="x2"><th scope="row"><a href="https://armadillo.atmark-techno.com/armadillo-x2">Atmark Techno Armadillo-X2</a></th><td>Vivante GC7000UL</td>
 <td>The same SoC and GPU as the Verdin iMX8M Plus. Zephyr starts from the board's
@@ -77,8 +79,10 @@ Linux for development. Booting from the board's own loader has not run yet.
 No image has run on the board yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-stm32mp257f-dk.md">Details</a></td></tr>
 <tr id="pi5"><th scope="row"><a href="https://www.raspberrypi.com/products/raspberry-pi-5/">Raspberry Pi 5</a></th><td>Broadcom V3D 7.1</td>
-<td>The frame path runs against a simulator on the host.
-No image has run on the board yet.
+<td>The frame path runs against a simulator on the host. Probe images have run on the board
+(2026-11-19 to 2026-11-21): the GPU identity words, a first clear, a triangle (Mesa's shaders
+and ours) and a texture-unit mip-chain job pass, and the firmware's property mailbox answers.
+There is no dEQP result and no display yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-rpi5.md">Details</a></td></tr>
 </tbody>
 </table></div>
