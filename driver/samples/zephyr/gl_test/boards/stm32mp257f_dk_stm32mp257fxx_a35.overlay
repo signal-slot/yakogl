@@ -3,3 +3,77 @@
 /* The STM32MP257F-DK's A35: the board layer's GPU node and carve-out, as
  * gc_fence and gc_clear take them (examples/zephyr.cmake). */
 #include "../../../../zephyr/lib/board/stm32mp2/app.overlay"
+
+/*
+ * The HDMI display chain, LTDC -> DSI -> ADV7535, as tools/probes/
+ * stm32mp257f_dk/mp2_display's overlay has it (its header cites ST's tree
+ * line by line); the bindings are driver/dts/bindings. gl_test's DK board
+ * window (board_window over the LTDC driver) scans out of ltdc_fb.
+ *
+ * The frame buffer: 0xb0000000, 32 MiB, no-map. The regions on the DK:
+ *   0xa0000000 - 0xafffffff  our image (zephyr,sram, 256 MiB)
+ *   0xb0000000 - 0xb1ffffff  ltdc_fb (this node)
+ *   0xfa800000 - 0xfe7fffff  gpu-reserved, the GPU carve-out (64 MiB)
+ * ltdc_fb ends at 0xb2000000, 0x48800000 below the carve-out: no overlap,
+ * and the image and the GPU's heap stay where they are. 32 MiB holds
+ * several 1080p XRGB8888 frames (pitch 7680, 8 MiB each).
+ */
+/ {
+	chosen {
+		yakogl,ltdc-fb = &ltdc_fb;
+	};
+
+	reserved-memory {
+		ltdc_fb: framebuffer@b0000000 {
+			reg = <0xb0000000 DT_SIZE_M(32)>;
+			no-map;
+		};
+	};
+
+	soc {
+		i2c2: i2c@40130000 {
+			compatible = "yakogl,stm32mp2-i2c";
+			reg = <0x40130000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			clock-frequency = <400000>;
+			kernel-clock-frequency = <100000000>;
+			status = "okay";
+
+			adv7535: hdmi@3d {
+				compatible = "yakogl,adv7535";
+				reg = <0x3d>;
+				edid-reg = <0x3f>;
+				cec-reg = <0x3c>;
+				packet-reg = <0x38>;
+				adi,dsi-lanes = <4>;
+				status = "okay";
+			};
+		};
+
+		dsi: dsi@48000000 {
+			compatible = "yakogl,stm32-dsi";
+			reg = <0x48000000 0x800>;
+			data-lanes = <4>;
+			bridge = <&adv7535>;
+			pll-ref-frequency = <27000000>;
+			/* the LTDC driver sets the chosen mode's (stm32_dsi_set_mode) */
+			pixel-clock-frequency = <148500000>;
+			status = "okay";
+		};
+
+		/* hactive x vactive: the largest mode the driver may choose,
+		 * 1920x1080@60 when the EDID prefers it, else 1280x720@60; one
+		 * 1080p XRGB8888 frame (pitch 7680) fits fb-size. */
+		ltdc: display-controller@48010000 {
+			compatible = "yakogl,stm32-ltdc";
+			reg = <0x48010000 0x400>;
+			hactive = <1920>;
+			vactive = <1080>;
+			pixel-format = "argb8888";
+			fb-size = <0x800000>;
+			dsi-host = <&dsi>;
+			status = "okay";
+		};
+	};
+};
