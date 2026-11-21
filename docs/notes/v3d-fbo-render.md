@@ -77,6 +77,14 @@ Of the 448 `Fail` rows (511 less A) only B and C (35) are another note's;
 the rest are E1 (61, expected to move on their own), the causes of D1, D2,
 D4 and D5 (145 rows) and one unexplained set of 207.
 
+**Since this accounting** (a status line, the table above is as written for
+`925dbca9`): E2a is fixed on the host by the wide store (section 3, commits
+`379438ee`, `ab0222cf`, `48f6017c`; no board run of those commits yet), and
+the Pi 4 board run of `fad0558a` (`tools/cts/log/2026-11-pi4-gles3-fad0558a-rerun/FB4.*`,
+image FB4: `fbo.invalidate`, `fbo.msaa`, `fbo.render`) has put numbers on E4b
+(section 7): 275 `fbo.render` Fails, of which 251 are `Image comparison
+failed` and 24 are the incomplete attachment of the E2a texture formats.
+
 What the groups are, from the sources (`es3fFboColorbufferTests.cpp`,
 `es3fFboRenderTest.cpp`; both compare with `tcu::bilinearCompare`, threshold
 at least 12 of 255 a channel, which fails on one wrong pixel; the ES 2.0
@@ -145,56 +153,72 @@ order of CPU and GPU work the synchronous rig does not have.
 
 ## 3. D1. Narrow integer textures as render targets (E2a, 96 rows)
 
-**What fails.** A texture of `GL_R8I .. GL_RG32UI` is an incomplete
+**What failed.** A texture of `GL_R8I .. GL_RG32UI` was an incomplete
 attachment (`GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`; the replay says so for all
-12 formats in all 8 groups, and `fbo.completeness` is unaffected). The gate is
-the GL core's `integer_texture_internalformat` (`src/gl/framebuffer.rs:404`):
-"Only the four-channel classes (RGBA8I .. RGB10_A2UI) qualify. `es3_formats`
-widens an R or RG integer texture to a four-channel store, so the surface of
-its internal format (`GLES_SURF_R8I` ..) has a different texel size than the
-store: drawing it would write the wrong layout, and the channels the format
-lacks would not read 0, 0, 1." The renderbuffer of the same formats is a
-complete `GLES_SURF_R8I` etc. (`renderbuffer_surf_format`), which is why
+12 formats in all 8 groups, and `fbo.completeness` was unaffected). The gate
+was the GL core's `integer_texture_internalformat`
+(`src/gl/framebuffer.rs`): it took only the four-channel classes, because
+`es3_formats` holds an R or RG integer texture in the four-channel store of
+its channel type and width (R8I in RGBA8I, RG32UI in RGBA32UI), so the
+surface of the internal format (`GLES_SURF_R8I` ..) has a different texel size
+than the store. The renderbuffer of the same formats is a complete
+`GLES_SURF_R8I` etc. (`renderbuffer_surf_format`), which is why
 `repeated_clear.blit.rbo`, `shared_*` and the rbo halves of `resize` and
-`recreate_color` are not in this set.
+`recreate_color` are not in this set. The Pi 4 board run of `fad0558a` shows
+the same 24 `fbo.render` cases (Framebuffer is not complete:
+`GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`, `es3fFboRenderTest.cpp:358`), section 7.
 
-**The owner is the GL core first.** `docs/notes/gl-texture-classes-es3.md`
-already plans the way out: step 3 `narrow-classes` (classes 30-39: one- and
-two-channel 8/16-bit integer classes, 2 and 4 bytes a texel; the R32/RG32
-classes 26-29 are in the GL core since `d7d7357a`, "in no mask yet") and step 4
-(map them in `integer_texture_surface`, `framebuffer.rs:~421`, so the texture
-is a complete attachment where `rt_format_drawable` says the surface is
-drawn). Nothing in `src/v3d` can be tried before those two GL-core steps:
-the V3D draws and samples the wide class today.
+**How it was fixed: the wide store, not the narrow classes.** This section
+once planned the fix as `gl-texture-classes-es3.md`'s narrow classes 30-39
+plus V3D TMU rows, mask bits and a narrow surface. Main did not do that. It
+draws the texture as the surface of its four-channel store, which the V3D's
+`rt_format` already has, and narrows what the application sees in the GL
+core (the design of 48ed224f, the PowerVR's `WIDE_INT_RT`). Three commits
+(read them with `git show`), all after `fad0558a` (none is an ancestor
+of it) and none run on a board yet:
 
-**The `src/v3d` part, once the classes exist** (the V3D needs no wide-store
-trick: Mesa has the narrow rows natively):
+1. `379438ee` "r and rg integer textures are complete colour attachments
+   drawn as their wide store": `WIDE_INT_RT` now holds for `gpu-v3d`, so
+   `integer_texture_internalformat` takes the twelve formats.
+   `fb_target_format_n` names the wide surface; `fb_target_channel_mask_n`
+   limits `GlesDraw::color_mask` to the format's channels, which the job
+   builder writes into `COLOR_WRITE_MASKS`; `glReadPixels` fills 0, 0, 1 for
+   the channels the format lacks. `build_common` refuses by name
+   (`refuse_uneven_target_masks`, `GL_INVALID_OPERATION`) a draw whose
+   targets' masks differ, where `ONE_COLOR_MASK` (`gpu-v3d`) says the back
+   end has one mask. No V3D code changes. Tests `tests/es3_v3d_fbo_int_rg.rs`,
+   `es3_narrow_int_rt_v3d.rs`, `es3_readback_v3d.rs`, `es3_int_rt.rs`.
+2. `ab0222cf` "clears of r and rg integer textures keep the wide store's
+   absent channels at 0, 0, 1": `int_clear_channels` (`src/gl/draw.rs`) gives
+   the channels a colour clear keeps; `apply_clear_plan` takes it as the new
+   `channels` argument and writes 0 (G, B) and 1 (A) as raw integer bits
+   where the mask leaves a channel out. `emit_pending_clear` (clear-only
+   kick, TLB or quad) and the clear fused into a draw in `build_common` both
+   call it. `NARROW_INT_CLEAR` (`gpu-v3d`) gates it. A `glClear` whose targets
+   disagree on the channels is refused by name (`GL_INVALID_OPERATION`).
+   Test `tests/es3_v3d_int_rg_clear.rs`.
+3. `48f6017c` "a colour write mask per render target": `GlesDraw` gets
+   `per_target_mask` and `target_color_mask[4]` (in `num_targets`' padding,
+   `abi_layout` regenerated); `per_target_masks` (`draw.rs`, `gpu-v3d` only)
+   sets them where the targets' masks differ; `state.rs` `job_state` puts
+   them in `V3dJobState::rt_colormask_own` / `rt_colormask` (RT 1..3). Still
+   refused by name: uneven masks under `glEnable(GL_BLEND)` with both
+   integer and non-integer targets (one `BLEND_ENABLES` and one `BLEND_CFG`
+   for every RT in `v3d_job.c`).
 
-1. `V3D_SAMPLED_TEXFMTS` (`src/backend.rs`, the V3D mask) gets bits 26-29 and
-   30-39 for the classes the V3D samples (all of them: Mesa's table has
-   `R8I R8UI R16I R16UI R32I R32UI RG8I RG8UI RG16I RG16UI RG32I RG32UI` as
-   `SWIZ_X001` / `SWIZ_XY01` with return size 16 for the 8- and 16-bit and 32
-   (1 or 2 channels) for the 32-bit ones, `v3dx_format_table.c:118-134`).
-2. `tmu_format` (`src/v3d/texture.rs:~200-246`) gets the rows: the data
-   format of the class, swizzle `[R, 0, 0, 1]` for one channel and `[R, G, 0,
-   1]` for two (the arms of `R16F` and `RGB565` are the model); a texture of
-   these classes read through the sampler of its type needs no new look-up.
-3. `gles_texfmt_return_32` (`src/backend.rs`) lists the four 32-bit classes
-   (`R32UI`, `R32I`, `RG32UI`, `RG32I`) so the program is compiled for the
-   32-bit TMU output (`LodKey::ret32`) and `texture::refusal_for`'s
-   `return_32` check agrees.
-4. The tiled copy (`copy_image_for`, `v3d_tex_layout(.., cpp, ..)`) takes
-   `cpp` 1, 2, 4 and 8 from `gles_texfmt_bytes`; the TFU path is not used for
-   integer classes today (`v3d-tfu-order.md`), so nothing there.
-5. The render side needs no new row: `state::rt_format` has all twelve
-   (`state.rs:472-483`, Mesa `v3dx_format_table.c:236-345`). `rt_texture`
-   (`backend.rs:1794`) keeps these textures out of the render-image table
-   (RGBA8 only), so a render into one stores the raster storage and the next
-   sample takes the tiled copy of it, as every non-RGBA8 target does.
-6. Tests (`src/v3d/backend_tests.rs`, `gl_rig`): an `R8I` texture attached,
-   drawn into, sampled with an `isampler2D`: the job's `rt_format[0]` and
-   `stride = pitch * 1`, the sampled record's data format and swizzle; and
-   the replay's incomplete count for the 12 formats going to 0.
+The steps this section once listed (`V3D_SAMPLED_TEXFMTS` bits 26-39,
+`tmu_format` rows, `gles_texfmt_return_32`, a narrow `copy_image_for`) are
+not needed for the framebuffer: nothing of the narrow classes was added, and
+`src/backend.rs` and `src/v3d/texture.rs` are not in the three commits. They
+remain the way to a narrow store, if one is ever wanted. A clear of the wide
+store only reads right through the 0, 0, 1 fill; a hidden channel of the
+store is not compared by any test.
+
+**What is checked.** Host only: the tests named above (complete as a 2D
+texture, as a layer and as level 1; the job's mask; the TLB clear words;
+read-back 0, 0, 1). The Pi 4 has not run these commits: the E2a rows, and the
+24 `fbo.render` and 12 `fbo.invalidate.format` Fails of FB4 that belong to
+them, are expected to pass on the next FB4 run.
 
 After D1 these rows meet the next sets: the 24 `tex2darray` / `tex3d` rows
 fall into E3 (D2) and the 14 `resize` / `recreate_color` rows into E4b.
@@ -296,7 +320,26 @@ alternative is zeroing the missing channels of the TLB clear colour and
 keeping the whole-tile clear, which is right while nothing masks. GL-core
 change first, V3D second.
 
-## 7. E4b. The 207 `fbo.render` rows nothing explains
+## 7. E4b. The `fbo.render` rows nothing explains (207 at `925dbca9`, 251 at `fad0558a`)
+
+**The board run of `fad0558a`** (FB4, `tools/cts/log/2026-11-pi4-gles3-fad0558a-rerun/FB4.console.txt`
+and `FB4.tally.txt`; the image runs `fbo.invalidate.*`, `fbo.msaa.*`,
+`fbo.render.*` in that order, 509 cases, 114 pass, 329 fail, 66 not supported,
+0 without a result):
+
+- `fbo.render` has 275 Fails: `recreate_color` 61, `resize` 86,
+  `shared_colorbuffer` 78, `shared_colorbuffer_clear` 26,
+  `recreate_depth_stencil` 11, `shared_depth_stencil` 10, `stencil_clear` 3.
+- 251 of the 275 say `Fail (Image comparison failed)`; the other 24 say
+  `Framebuffer is not complete: 'GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT'`
+  (`es3fFboRenderTest.cpp:358`), the E2a texture formats of section 3, which
+  main has fixed since. **The 251 are the unexplained set** (207 when counted
+  from the tsv at `925dbca9`; the two counts are of different runs and rows
+  and were not reconciled row by row). They include `rgba8`:
+  `shared_colorbuffer_clear.rbo_rgba8`, the smallest case, fails.
+- No case of the 251 has a message other than the image comparison, so a GL
+  error the replay does not issue is ruled out as the common cause.
+
 
 **The facts.**
 
@@ -356,15 +399,21 @@ change first, V3D second.
    `fbo.stencil` (FboTestCase, flat shaders, no texture) pass on the Pi 4, so
    a defect would be in what `fbo.render` adds: sampling the depth texture,
    and the quad clear with scissor.
-4. **Order within the 8 FB4 image**: the image runs `fbo.invalidate` (38 not
-   pass) and `fbo.msaa` (66) first. A state one of them leaves (a refused
-   4x draw, a `GL_OUT_OF_MEMORY`, a job left open) would break the rest
-   of the image and none of the nine other images. Against it: three
-   `render` cases pass in the middle of the group, and a refused draw in
-   `fbo.color.clear` (image FB3, 19 of them) did not break its neighbours.
-   Rule out by running `fbo.render.*` as an image of its own.
+4. **State held by the V3D back end between cases**, which the order in the
+   FB4 image makes visible: the image runs `fbo.invalidate` (38 not pass,
+   `fad0558a`) and `fbo.msaa` (66 not supported, many Fail) first. dEQP resets
+   GL state between cases (the GL core's own state), so what survives is not
+   GL state but what the back end keeps: a refused 4x draw, a
+   `GL_OUT_OF_MEMORY`, a job left open, the queued / in-flight jobs and the
+   stamp aliasing of `open_alias`, a `Target` or `ZsBuf` entry that outlives
+   its framebuffer. Such a leak would break the rest of the image and none
+   of the other images. Against it: some `render` cases pass in the middle of
+   the group (the `recreate_color.rbo_r16f` ones), and a refused draw in
+   `fbo.color.clear` (image FB3) did not break its neighbours. Rule out by
+   running `fbo.render.*` as an image of its own (item `fbo-g3`; not done
+   here).
 
-**What settles it, and who has it.** The 207 rows are one question to the
+**What settles it, and who has it.** The rows are one question to the
 board, not to the code: the console record of an image holds each failing
 case's message ("Image comparison failed", "Got unexpected error", a
 framebuffer status) and, with `--deqp-log-images`, the two pictures. Plan
@@ -383,13 +432,14 @@ a GL error the replay does not issue.
 | fix | rows | needs |
 |---|---|---|
 | a rerun on main (E1) | 61 expected to pass or join E4b (14 of them, the `render` ones, probably join it) | board |
-| D1 narrow integer classes | up to 96 (then 24 meet D2 and 14 meet E4b) | `src/gl` classes 30-39 and `integer_texture_surface`, then `src/v3d` bits, TMU rows |
+| D1 wide store (`379438ee`, `ab0222cf`, `48f6017c`, landed on the host, not on a board) | up to 96 (then 24 meet D2 and 14 meet E4b); at `fad0558a` 24 `fbo.render` and 12 `fbo.invalidate.format` Fails of FB4 | a Pi 4 rerun of FB4 |
 | D2 array / 3D sampling | 34 now, 58 with D1 | `src/shaderc` look-ups, then `src/v3d` refusal |
 | D5 `rgb16f` texture | 12 | `src/gl`, one condition |
 | D4 missing channels | 3 certain, 21 exposed | `src/gl` field, then `src/v3d` mask |
 | B, C | 35 | `srgb.md`, `v3d-rgb10a2.md` |
-| E4b | 207 | board data (section 7) |
+| E4b | 207 at `925dbca9`; 251 `fbo.render` Image comparison Fails at `fad0558a` | a cause (section 7: back-end state between cases first) |
 | A | 63 `NotSupported` | a decision on `GL_EXT_color_buffer_float`; the V3D has rows for `R32F` only (`state.rs:471`): `RG32F` (32F, 64 bpp), `RGBA32F` (32F, 128 bpp) and `R11F_G11F_B10F` (16F, 64 bpp) are Mesa's (`v3dx_format_table.c:310-330`, `:250-262`) and would be three `rt_format` arms and three `GLES_SURF_*` values; the GL core stores `GL_RGBA32F` as halves (`sized_format`), so claiming the extension needs a real 32-bit store first |
 
 Of the 511 rows the cause is known for 304 (A, B, C, E1, E2a, E2b, E3, E4a),
-and of those 61 need no change.
+and of those 61 need no change. (Counts as of `925dbca9`; the `fad0558a`
+figures are in sections 1 and 7.)
