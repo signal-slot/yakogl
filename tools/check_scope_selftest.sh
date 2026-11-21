@@ -144,6 +144,9 @@ want tools/host-replay/common.sh samples
 want driver/rust/src/lib.rs drivers
 want driver/CMakeLists.txt drivers
 want tools/cts/deqp-uart-tally.py tools
+want tools/vc4/drm_shim_ref.sh tools
+want tools/vc4/ref_selftest.py tools
+want tools/vc4/testdata/flat.submit1.bcl.bin tools
 want tools/check_selftests.py tools
 want tools/check_selftests_selftest.sh tools
 want tools/board.sh tools

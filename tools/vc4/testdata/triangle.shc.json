@@ -1,0 +1,14 @@
+{
+  "gpu": { "name": "VC4 2.1", "prim": "triangles", "color_format": "rgba8", "threaded_fs_supported": true, "attr_components": [4, 4] },
+  "uniform_names": [],
+  "attributes": [{ "name": "a_pos", "location": 0, "element": 0 }, { "name": "a_color", "location": 1, "element": 1 }],
+  "fs": { "failed": false, "instructions": 13, "threaded": false, "disable_early_z": false, "color_inputs": "0x00000000", "num_inputs": 4, "input_slots": [{ "slot": 32, "swizzle": 0 }, { "slot": 32, "swizzle": 1 }, { "slot": 32, "swizzle": 2 }, { "slot": 32, "swizzle": 3 }],
+    "num_texture_samples": 0, "uniforms": [],
+    "code": ["0x100049e0203e303e", "0x10024862213e317e", "0x114258c0819e7549", "0x115059c0809e701b", "0x100049e0203e303e", "0x10024862213e317e", "0x116258c0819e7549", "0x117059c0809e701b", "0x100009e7009e7000", "0x10020ba715027d80", "0x300009e7009e7000", "0x100009e7009e7000", "0x500009e7009e7000"] },
+  "vs": { "failed": false, "instructions": 25, "num_inputs": 8, "vattrs_live": "0x03", "vattr_offsets": [0, 16, 32, 32, 32, 32, 32, 32, 32],
+    "num_texture_samples": 0, "uniforms": [{ "contents": 2, "name": "VIEWPORT_X_SCALE", "data": "0x00000000" }, { "contents": 3, "name": "VIEWPORT_Y_SCALE", "data": "0x00000000" }, { "contents": 5, "name": "VIEWPORT_Z_SCALE", "data": "0x00000000" }, { "contents": 4, "name": "VIEWPORT_Z_OFFSET", "data": "0x00000000" }],
+    "code": ["0xe0024c6700801a00", "0x100049e220c20037", "0x100049c020c20037", "0x100059c120c20037", "0x100208e715c27d80", "0x10021d27159e76c0", "0xe0025c6700001a00", "0x100009e7009e7000", "0x100049e0209e701c", "0xd0020867029e1e00", "0x100049e3209e7021", "0x100049e0209e7013", "0x10124021279c003b", "0x1022402227067273", "0x1002082715c27d80", "0x10020c2715027d80", "0x10024c2181c205f6", "0x100248b095c27d9b", "0x100248f095c27d80", "0x10020c27159e7240", "0x10020c27159e7480", "0x10020c27159e76c0", "0x300009e7009e7000", "0x100009e7009e7000", "0x100009e7009e7000"] },
+  "cs": { "failed": false, "instructions": 23, "num_inputs": 4, "vattrs_live": "0x01", "vattr_offsets": [0, 16, 16, 16, 16, 16, 16, 16, 16],
+    "num_texture_samples": 0, "uniforms": [{ "contents": 3, "name": "VIEWPORT_Y_SCALE", "data": "0x00000000" }, { "contents": 2, "name": "VIEWPORT_X_SCALE", "data": "0x00000000" }, { "contents": 5, "name": "VIEWPORT_Z_SCALE", "data": "0x00000000" }, { "contents": 4, "name": "VIEWPORT_Z_OFFSET", "data": "0x00000000" }],
+    "code": ["0xe0024c6700401a00", "0x100208e715c27d80", "0x100208a715c27d80", "0x1002006715c27d80", "0xe0025c6700001a00", "0x10024c2095c276f6", "0x10024c34959e7480", "0x10024c2235060d97", "0x10020c27159e7000", "0x100049e0209e7004", "0xd0020867029e1e00", "0x100049c0209e7021", "0x100049e02082701e", "0x100049e1209c0007", "0x10124023279c0257", "0x10224022270606f7", "0x100049e3209c0017", "0x10020c2715027d80", "0x10020c2701827780", "0x10020c27159c0fc0", "0x300009e7009e7000", "0x100009e7009e7000", "0x100009e7009e7000"] }
+}
