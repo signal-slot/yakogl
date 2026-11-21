@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-Implemented in COMMIT (V3D and PowerVR; see "As built" at the end).
+Implemented in 47e786a9 (V3D and PowerVR; see "As built" at the end).
 
 # glmark2 GM image: the per-scene counter line (design)
 
