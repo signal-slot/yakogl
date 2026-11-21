@@ -8294,6 +8294,12 @@ struct Pairs {
     /// of the pair): (low lane, high lane, node).
     cache: [(Val, Val, u8); 16],
     ncache: usize,
+    /// The pairs whose [`vectorise`] call from [`lane_tree`] has not
+    /// returned yet ([`vectorise_pair`]): a lane that leads back to its own
+    /// pair is refused, never an endless recursion (lanecycle,
+    /// docs/notes/mali-deqp-defects.md section 3, fix C).
+    pending: [(Val, Val); 32],
+    npending: usize,
     /// The colour lane the next [`lane_tree`] call stands for (taken by
     /// it): the lane of a vector operation it is ([`Fs::pair_lane`]).
     hint: Option<usize>,
@@ -9330,6 +9336,23 @@ fn mixed_word(f: &Fs<'_>, a: Val, b: Val) -> Option<(Val, (u8, u8))> {
     }
 }
 
+/// [`vectorise`] of the pair (`a`, `b`) for [`lane_tree`], which caches it
+/// only once it returns: a pair already on its way (a computed lane beside a
+/// constant, whose lane alone is built through [`lane_tree`] and so through
+/// its own pair again: `vec4(2.0) * b * vec4(0.0, 0.0, b, 0.0)`,
+/// deqp_defects_lanecycle_*) is refused by name (`ColourForm`), as is a
+/// nesting deeper than [`Pairs::pending`] holds.
+fn vectorise_pair(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayout) -> Result<u8, MaliError> {
+    if pr.npending >= pr.pending.len() || pr.pending[..pr.npending].contains(&(a, b)) {
+        return Err(MaliError::ColourForm);
+    }
+    pr.pending[pr.npending] = (a, b);
+    pr.npending += 1;
+    let x = vectorise(f, pr, a, b, pair, ubo);
+    pr.npending -= 1;
+    x
+}
+
 /// Lane `v` of the colour alone ([`lane_word`]) as nodes of one lane: the
 /// fmuls and fadds of texels and constants, an fadd of a product fused as
 /// [`vectorise`] fuses it (texmore_2.stderr: `%9 = fmul %6.z, 0.25`,
@@ -9350,7 +9373,7 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let x = match (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
                 Some(k) => pr.cache[k].2,
                 None => {
-                    let x = vectorise(f, pr, a, b, h as u8, ubo)?;
+                    let x = vectorise_pair(f, pr, a, b, h as u8, ubo)?;
                     if pr.ncache < pr.cache.len() {
                         pr.cache[pr.ncache] = (a, b, x);
                         pr.ncache += 1;
@@ -9369,7 +9392,7 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let x = match (0..pr.ncache).find(|&k| pr.cache[k].0 == a && pr.cache[k].1 == b) {
                 Some(k) => pr.cache[k].2,
                 None => {
-                    let x = vectorise(f, pr, a, b, pair, ubo)?;
+                    let x = vectorise_pair(f, pr, a, b, pair, ubo)?;
                     if pr.ncache < pr.cache.len() {
                         pr.cache[pr.ncache] = (a, b, x);
                         pr.ncache += 1;
@@ -9835,6 +9858,8 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         n: 0,
         cache: [(Val::Undef, Val::Undef, 0); 16],
         ncache: 0,
+        pending: [(Val::Undef, Val::Undef); 32],
+        npending: 0,
         hint: None,
         mate: [None; MAX_NODES],
     };
@@ -10571,7 +10596,13 @@ fn move_loads(f: &Fs<'_>, events: &mut [(u8, u32, u8, u16)], scratch: &Arena<'_>
                 Ok(t.load.map(u16::from) == Some(k))
             }
             NODE | COND => {
-                let nd = f.nir.nodes[f.nir.order[e.3 as usize] as usize];
+                let id = f.nir.order[e.3 as usize];
+                let nd = f.nir.nodes[id as usize];
+                /* a look-up among the nodes ([`multi16`]) at its varying */
+                if nd.kind == Kind::Tex && multi16(f) {
+                    let t = f.look_up_of(id).map(|j| f.look_ups[j]);
+                    return Ok(t.is_some_and(|t| t.load.map(u16::from) == Some(k)));
+                }
                 let Kind::Alu(op) = nd.kind else { return Ok(false) };
                 for v in &nd.src[..op.arity()] {
                     if load_lane(f, *v)?.is_some_and(|(u, j, _)| !u && j == k) {
@@ -10878,6 +10909,197 @@ pub fn kept16(f: &Fs<'_>) -> bool {
     !f.prec.highp && f.nir.live_ifs().any(|r| !r.single && !r.inot)
 }
 
+/// TEX_MULTI (plan #367 lower-fma, docs/notes/mali-tex-multi.md): the
+/// mediump shader `f` makes several 2D look-ups, at least one at a computed
+/// coordinate, in straight-line code. Its program is [`select_highp`]'s:
+/// the varying lanes converted ([`convert_inputs16`]), each computed
+/// coordinate the look-up's own operation of two lanes ([`pair_coords`]),
+/// the look-ups among the nodes in program order, the colour's fp16 lanes
+/// paired ([`vectorize16`]) and each look-up's texels read as its words.
+/// Only the forms measured against Mesa compile ([`multi_forms`]).
+pub fn multi16(f: &Fs<'_>) -> bool {
+    let plain = |t: &TexLookup| {
+        t.cube.is_none() && !t.array && !t.d3 && !t.fetch && !t.shadow && !t.zero && t.bias == Val::Undef
+    };
+    !f.prec.highp
+        && f.live_look_ups().count() > 1
+        && f.live_look_ups().any(|(_, t)| t.coord == TexCoord::Computed)
+        && f.live_look_ups().all(|(_, t)| plain(t))
+        && f.nir.nifs == 0
+        && f.nir.nloops == 0
+        && f.discards == 0
+}
+
+/// The pair of fp16 lanes `(a, b)` as one source of a two-lane node: two
+/// constants one word of halves, the two lanes of an aligned pair of one
+/// value that value's word, two one-lane operations alike a new operation
+/// of two lanes over their sources' pairs, inserted into the order before
+/// position `at` (returned moved past the insertions). Any other pair:
+/// None.
+fn coord_pair(
+    f: &mut Fs<'_>,
+    a: Val,
+    b: Val,
+    at: &mut usize,
+    origin: u16,
+    depth: u8,
+) -> Result<Option<Val>, MaliError> {
+    let half = |v: u32| f16_rtne(v).map(u32::from).ok_or(MaliError::Fp16Inexact);
+    match (a, b) {
+        (Val::Const(p), Val::Const(q)) => return Ok(Some(Val::Const(half(p)? | half(q)? << 16))),
+        (Val::Lane(n, c), Val::Lane(m, d)) if n == m && c % 2 == 0 && d == c + 1 => {
+            let nd = f.nir.nodes[n as usize];
+            return Ok(match (nd.kind, nd.bits, nd.width) {
+                (Kind::Alu(_), 16, 2) if c == 0 => Some(Val::Pair(n, Swz::H01)),
+                _ => None,
+            });
+        }
+        _ => {}
+    }
+    let (Val::Lane(n, 0), Val::Lane(m, 0)) = (a, b) else { return Ok(None) };
+    let (x, y) = (f.nir.nodes[n as usize], f.nir.nodes[m as usize]);
+    let (Kind::Alu(op), 16, 1) = (x.kind, x.bits, x.width) else { return Ok(None) };
+    if y.kind != x.kind || y.bits != 16 || y.width != 1 || depth > 8 {
+        return Ok(None);
+    }
+    if !matches!(op, Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fneg | Alu::Fabs) {
+        return Ok(None);
+    }
+    let mut src = [Val::Undef; 3];
+    for k in 0..op.arity() {
+        match coord_pair(f, x.src[k], y.src[k], at, origin, depth + 1)? {
+            Some(v) => src[k] = v,
+            None => return Ok(None),
+        }
+    }
+    let id = f.nir.insert_before(*at, NirNode { kind: x.kind, src, bits: 16, width: 2 })?;
+    f.origin[id as usize] = origin;
+    *at += 1;
+    Ok(Some(Val::Pair(id, Swz::H01)))
+}
+
+/// TEX_MULTI's coordinates ([`multi16`]): each computed coordinate of two
+/// fp16 lanes is the look-up's own operation of two lanes, as NIR keeps the
+/// GLSL vector operation (`nir_lower_alu_width` leaves a 16-bit vec2,
+/// `bi_vectorize_filter`), not lanes the walk's CSE shares between look-ups
+/// (gm2_texmulti_2's `v_uv + vec2(-0.25, 0.0)` and `v_uv + vec2(0.25,
+/// 0.0)`: two `FADD_IMM.v2f16` of the converted pair, each `y + 0.0` its
+/// own). A coordinate whose lanes do not pair has no reference and is
+/// refused as before ([`MaliError::TexCount`]).
+fn pair_coords(f: &mut Fs<'_>) -> Result<(), MaliError> {
+    let defect = MaliError::Defect(Defect::IrIndex);
+    /* a varying's conversion ([`convert_inputs16`]) stands at its first
+     * reader: GLSL's lower_precision puts the `f2fmp` in the expression
+     * that reads the lane, so a look-up at the varying itself before it
+     * reads the load as it is first (gm2_texmulti_1: `TEX_SINGLE ...
+     * @r0:r1`, then `V2F32_TO_V2F16 r0, r0, r1`) */
+    let mut k = 0;
+    while k < f.nir.len {
+        let id = f.nir.order[k];
+        let nd = f.nir.nodes[id as usize];
+        let input = matches!(nd.src[0], Val::Lane(n, _) if matches!(f.nir.nodes[n as usize].kind, Kind::Input { .. }));
+        if nd.kind != Kind::Alu(Alu::F2f16) || nd.bits != 16 || !input {
+            k += 1;
+            continue;
+        }
+        let first = f.nir.uses(id).filter_map(|(u, _)| f.nir.order[..f.nir.len].iter().position(|&o| o == u)).min();
+        match first {
+            Some(to) if to > k + 1 => {
+                f.nir.order.copy_within(k + 1..to, k);
+                f.nir.order[to - 1] = id;
+                f.origin[id as usize] = f.origin[f.nir.order[to] as usize];
+            }
+            _ => k += 1,
+        }
+    }
+    for j in 0..f.nlook {
+        let t = f.look_ups[j];
+        if !t.live() || t.coord != TexCoord::Computed {
+            continue;
+        }
+        let nd = f.nir.nodes[t.node as usize];
+        let mut at = f.nir.order[..f.nir.len].iter().position(|&x| x == t.node).ok_or(defect)?;
+        let origin = [nd.src[0], nd.src[1]]
+            .iter()
+            .filter_map(|v| match *v {
+                Val::Lane(n, _) => Some(f.origin[n as usize]),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(f.origin[t.node as usize]);
+        let Some(Val::Pair(id, _)) = coord_pair(f, nd.src[0], nd.src[1], &mut at, origin, 0)? else {
+            return Err(MaliError::TexCount);
+        };
+        f.nir.nodes[t.node as usize].src[..2].copy_from_slice(&[Val::Lane(id, 0), Val::Lane(id, 1)]);
+    }
+    Ok(())
+}
+
+/// The forms of TEX_MULTI ([`multi16`]) measured byte-equal to Mesa 26.2.1's
+/// drm-shim (tools/mali/testdata/gm2_texmulti_1..3), checked once
+/// [`pair_coords`] made the coordinates pairs: each computed coordinate
+/// the converted vec2 varying plus a constant pair (`FADD_IMM.v2f16`), the
+/// colour sums and products of texels and constants. A coordinate of
+/// another form (a uniform step, gm2_texmulti_4; one computed from the
+/// varying, terrain's tilt-shift, gm2_texmulti_5 and _6), and any other
+/// operation, uniform or value, is refused as before
+/// ([`MaliError::TexCount`]); a product of a constant product with another
+/// constant is the constant-product gap ([`MaliError::ArithConstant`]).
+fn multi_forms(f: &Fs<'_>) -> Result<(), MaliError> {
+    let node = |v: Val| match v {
+        Val::Lane(n, _) | Val::Pair(n, _) => Some(f.nir.nodes[n as usize]),
+        _ => None,
+    };
+    let conv = |v: Val| {
+        matches!(node(v), Some(NirNode { kind: Kind::Alu(Alu::F2f16), bits: 16, width: 2, src, .. })
+            if matches!(node(src[0]), Some(NirNode { kind: Kind::Input { .. }, .. })))
+    };
+    /* a colour operand: a constant, a texel, or a colour operation */
+    let colour = |v: Val| match node(v) {
+        None => matches!(v, Val::Const(_)),
+        Some(NirNode { kind: Kind::Tex, .. }) => true,
+        Some(NirNode { kind: Kind::Alu(Alu::Fadd | Alu::Fmul), bits: 16, src, .. }) => !conv(src[0]),
+        _ => false,
+    };
+    for &id in &f.nir.order[..f.nir.len] {
+        let nd = f.nir.nodes[id as usize];
+        let read_by_tex = f.nir.uses(id).any(|(u, _)| f.nir.nodes[u as usize].kind == Kind::Tex);
+        let ok = match nd.kind {
+            Kind::Input { .. } | Kind::Store { .. } | Kind::Tex => true,
+            Kind::Alu(Alu::F2f16) => conv(Val::Lane(id, 0)),
+            /* a coordinate: `FADD_IMM.v2f16` of the converted pair */
+            Kind::Alu(Alu::Fadd) if read_by_tex => {
+                nd.bits == 16
+                    && nd.width == 2
+                    && conv(nd.src[0])
+                    && matches!(nd.src[0], Val::Pair(_, Swz::H01))
+                    && matches!(nd.src[1], Val::Const(_))
+            }
+            /* a product of a product with a constant and another constant
+             * (gm2_constfold_4's `t * Kernel1 * Kernel1`): Mesa folds the
+             * two constants where the walk keeps both products when their
+             * product is inexact in fp16 ([`Fs::op`]), a constant-product
+             * gap, not this family's */
+            Kind::Alu(Alu::Fmul) if nd.src[..2].iter().any(|&v| matches!(v, Val::Const(_))) => {
+                let inner = |v: Val| {
+                    matches!(node(v), Some(NirNode { kind: Kind::Alu(Alu::Fmul), src, .. })
+                        if src[..2].iter().any(|s| matches!(s, Val::Const(_))))
+                };
+                if nd.src[..2].iter().any(|&v| inner(v)) {
+                    return Err(MaliError::ArithConstant);
+                }
+                nd.bits == 16 && nd.src[..2].iter().all(|&v| colour(v))
+            }
+            Kind::Alu(Alu::Fadd | Alu::Fmul) => nd.bits == 16 && nd.src[..2].iter().all(|&v| colour(v)),
+            _ => false,
+        };
+        if !ok {
+            return Err(MaliError::TexCount);
+        }
+    }
+    Ok(())
+}
+
 /// The forms [`kept16`]'s route transcribes (cflow_148_texbranch): fp16
 /// sums, products and compares over uniform lanes, constants, texels and
 /// each other, the negation of one, the look-ups' copies and the joins'
@@ -11113,6 +11335,38 @@ fn vectorize16(f: &mut Fs<'_>) -> Result<(), MaliError> {
         for s in 0..op.arity() {
             src[s] = match (x.src[s], y.src[s]) {
                 (Val::Const(p), Val::Const(q)) => Val::Const(half(p)? | half(q)? << 16),
+                /* two texels of an fp16 look-up's word ([`multi16`]): the
+                 * word is the `vec2` of its texels ([`Fs::vec16`]), made
+                 * once, right after the look-up, which no instruction
+                 * stands for */
+                (p @ Val::Lane(n, c), Val::Lane(m, d))
+                    if n == m && f.nir.nodes[n as usize].kind == Kind::Tex && c / 2 == d / 2 && multi16(f) =>
+                {
+                    let (lo, hi) = (lane_half(f, p).unwrap_or(0), d % 2);
+                    let w = c / 2 * 2;
+                    let v = NirNode {
+                        kind: Kind::Alu(Alu::Vec2),
+                        src: [Val::Lane(n, w), Val::Lane(n, w + 1), Val::Undef],
+                        bits: 16,
+                        width: 2,
+                    };
+                    let id = match (0..f.nir.n).find(|&i| f.nir.nodes[i] == v) {
+                        Some(i) => i as u16,
+                        None => {
+                            let pos = f.nir.order[..f.nir.len]
+                                .iter()
+                                .position(|&o| o == n)
+                                .ok_or(MaliError::Defect(Defect::IrIndex))?;
+                            let id = f.nir.insert_before(pos + 1, v)?;
+                            f.origin[id as usize] = f.origin[n as usize];
+                            if pos + 1 < k {
+                                k += 1;
+                            }
+                            id
+                        }
+                    };
+                    Val::Pair(id, swz(lo, hi))
+                }
                 (p @ Val::Lane(n, _), q) => {
                     let (lo, hi) = (lane_half(f, p), lane_half(f, q));
                     Val::Pair(n, swz(lo.ok_or(MaliError::Defect(Defect::IrIndex))?, hi.unwrap_or(0)))
@@ -11679,7 +11933,8 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     let oom = |_| MaliError::OutOfScratch;
     let defect = MaliError::Defect(Defect::IrIndex);
     f.ubo = *ubo;
-    let c = f.colour.ok_or(MaliError::NoColour)?;
+    let mut c = f.colour.ok_or(MaliError::NoColour)?;
+    let store0 = f.nir.n;
     /* the colour's stores, then the further targets': the fusion counts
      * them as uses */
     for (out, lanes) in core::iter::once((0, c)).chain(targets(f)) {
@@ -11712,6 +11967,11 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     if kept16(f) {
         branch_forms(f)?;
         revector_coords(f)?;
+    }
+    if multi16(f) {
+        pair_coords(f)?;
+        nir::dce(&mut f.nir, None);
+        multi_forms(f)?;
     }
     let mut inots = f.nir.inverted_guards();
     f.nir.invert_ladder(&mut inots)?;
@@ -11761,6 +12021,13 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     nir::fuse(&mut f.nir);
     nir::dot_addend(&mut f.nir)?;
     nir::late_rules(&mut f.nir);
+    /* TEX_MULTI's colour lanes as the pairing left them (its stores'
+     * sources: a lane paired is the pair's half) */
+    if multi16(f) {
+        for (k, x) in c.iter_mut().enumerate() {
+            *x = f.nir.nodes[store0 + k].src[0];
+        }
+    }
     if pairs16 {
         late_rules16(f);
     }
@@ -11957,7 +12224,7 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     }
     /* so does a 2D array's, after the conversions of its coordinate made
      * where it stands (case 42's `F16_TO_F32` of the layer) */
-    let inline = cube || f.live_look_ups().any(|(_, t)| t.array);
+    let inline = cube || f.live_look_ups().any(|(_, t)| t.array) || multi16(f);
     /* and a look-up of an unrolled pass, among the pass's nodes, which all
      * stand where the loop's last instruction does ([`walk_loop`]) */
     let unrolled = |n: u16| f.origin[n as usize] != f.look_up_of(n).map_or(u16::MAX, |j| f.look_ups[j].at);

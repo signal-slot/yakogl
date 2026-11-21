@@ -17,6 +17,18 @@ The item changes no compiler code. It commits four references,
 All four fail at the tip: each byte-compare test is ignored, and
 `defects_pinned` pins what happens today (section 5).
 
+**Since plan #367 (lower-fma), the guard half of fix C has landed** (section
+4): `nir_fs::vectorise_pair` keeps the pairs whose `vectorise` call from
+`lane_tree` has not returned yet. A lane that leads back to its own pair is
+refused by name, as is a nesting deeper than 32 pairs. The refusal is
+`MaliError::ColourForm` ("a gl_FragColor lane other than the varying's own
+lane or a constant"). Both `lanecycle` references now end in that refusal
+instead of a stack overflow. `defects_pinned` pins it the way it pins the
+`encode` text, and no longer needs a child process. `tools/mali/route.sh
+measure` over `tools/mali/testdata` runs to the end again: the overflow had
+aborted two of its shares. Byte-equality still needs lane w kept as
+`2b * 0.0` (section 3.3).
+
 **HOST-ONLY.** The outcomes at the tip come from `deqp-gles2` run on the host
 against the Mali back end's C pair (`tools/mali/deqp-host-measure.sh`). Only
 the compile and link outcomes and the crash are real. A board status (Fail)
