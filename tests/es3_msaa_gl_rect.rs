@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! ES 3.0 multisample resolve blit: region, mirror and multisample-destination
-//! rules on the 4x stand-in (docs/notes/es3-msaa-renderbuffers.md (a), (b);
-//! docs/notes/v3d-msaa-es3.md (4)). Helpers copied from es3_msaa_gl.rs.
+//! ES 3.0 4.3.3 glBlitFramebuffer from a 4x read framebuffer, the rectangle
+//! rules, on the 4x stand-in back end of tests/es3_msaa_gl.rs (its helpers are
+//! copied here): the resolve region, mirrors, offsets, rectangles partly
+//! outside the source, zero-width rectangles, and a draw framebuffer with
+//! sample buffers (every blit into it is GL_INVALID_OPERATION).
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_msaa_gl_rect
 //! ```
 
 #![cfg(all(feature = "host-test", feature = "shaderc-online", not(feature = "report-es2")))]
-#![allow(dead_code, unused_imports)] // helpers copied whole from es3_msaa_gl.rs
+#![allow(dead_code)]
 
 use core::ffi::{c_char, c_void};
 use std::ffi::CString;
@@ -22,7 +25,7 @@ use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
 use yakogl::gl::state::*;
-use yakogl::gl::texture::{glBindTexture, glDeleteTextures, glGenTextures, glTexImage2D};
+use yakogl::gl::texture::{glBindTexture, glGenTextures, glTexImage2D};
 use yakogl::gl::types::*;
 use yakogl::gl::vertex::{glEnableVertexAttribArray, glVertexAttribPointer};
 use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps};
@@ -474,122 +477,214 @@ fn inside(i: usize, r: [GLint; 4]) -> bool {
 
 const FULL: [GLint; 4] = [0, 0, 8, 8];
 
-const RED_ZERO: [u8; 4] = [0; 4];
+/* ---- the rules ------------------------------------------------------------ */
 
-/// The 8x8 pixels of `dst` against the expectation: RESOLVED inside `r`, zero outside.
-fn check_region(dst: &Fbo, r: [GLint; 4], what: &str) {
-    for (i, p) in pixels(dst.fb).iter().enumerate() {
-        let want = if inside(i, r) { RESOLVED } else { RED_ZERO };
+/// Every pixel of the 8x8 `fb` is the resolved colour inside `region` and
+/// zero outside.
+fn assert_region(fb: GLuint, region: [GLint; 4], what: &str) {
+    for (i, p) in pixels(fb).iter().enumerate() {
+        let want = if inside(i, region) { RESOLVED } else { [0; 4] };
         assert_eq!(*p, want, "{what}: pixel ({}, {})", i % 8, i / 8);
     }
 }
 
-/// An offset rectangle of equal size is a different region: refused, nothing copied.
+/// An offset region of equal size, the same on both sides, copies only it.
 #[test]
-fn offset_rectangle_is_refused_and_copies_nothing() {
+fn offset_region_of_equal_size_copies_only_it() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x();
-    for (s, d) in [([0, 0, 4, 4], [1, 0, 5, 4]), ([0, 0, 4, 4], [0, 1, 4, 5]), ([2, 2, 6, 6], [0, 0, 4, 4])] {
-        assert_eq!(blit(src.fb, dst.fb, s, d), GL_INVALID_OPERATION, "{s:?} to {d:?}");
+    let r = [3, 2, 7, 6];
+    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
+    assert_region(dst.fb, r, "offset");
+    /* a second, disjoint one adds to it */
+    let r2 = [0, 6, 2, 8];
+    assert_eq!(blit(src.fb, dst.fb, r2, r2), GL_NO_ERROR);
+    for (i, p) in pixels(dst.fb).iter().enumerate() {
+        let want = if inside(i, r) || inside(i, r2) { RESOLVED } else { [0; 4] };
+        assert_eq!(*p, want, "two regions: pixel ({}, {})", i % 8, i / 8);
+    }
+}
+
+/// A rectangle of equal size but moved (source and destination differ) is
+/// not the same region: GL_INVALID_OPERATION, nothing copied. ES 3.0 4.3.3
+/// (Mesa blit.c compares the coordinates, not only the sizes).
+#[test]
+fn moved_rectangle_of_equal_size_is_refused() {
+    let _g = context_ms4();
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
+    assert_eq!(blit(src.fb, dst.fb, [0, 0, 4, 4], [4, 4, 8, 8]), GL_INVALID_OPERATION);
+    assert_eq!(blit(src.fb, dst.fb, [2, 2, 6, 6], [2, 3, 6, 7]), GL_INVALID_OPERATION, "one row");
+    assert_eq!(blit(src.fb, dst.fb, [2, 2, 6, 6], [3, 2, 7, 6]), GL_INVALID_OPERATION, "one column");
+    assert_eq!(PENDING.lock().unwrap().len(), 1, "a refused blit waits for nothing");
+    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
+}
+
+/// One pixel, and a whole row, are regions too.
+#[test]
+fn one_pixel_and_one_row_regions() {
+    let _g = context_ms4();
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
+    assert_eq!(blit(src.fb, dst.fb, [5, 5, 6, 6], [5, 5, 6, 6]), GL_NO_ERROR);
+    assert_region(dst.fb, [5, 5, 6, 6], "one pixel");
+    assert_eq!(blit(src.fb, dst.fb, [0, 0, 8, 1], [0, 0, 8, 1]), GL_NO_ERROR);
+    for (i, p) in pixels(dst.fb).iter().enumerate() {
+        let want = if inside(i, [5, 5, 6, 6]) || inside(i, [0, 0, 8, 1]) { RESOLVED } else { [0; 4] };
+        assert_eq!(*p, want, "pixel ({}, {})", i % 8, i / 8);
+    }
+}
+
+/// A mirror on one side only is not the same region: GL_INVALID_OPERATION,
+/// for x, y and both, in either framebuffer's rectangle. Nothing is copied.
+#[test]
+fn mirror_on_one_side_is_invalid_operation() {
+    let _g = context_ms4();
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
+    let cases: [([GLint; 4], [GLint; 4], &str); 6] = [
+        (FULL, [8, 0, 0, 8], "dst mirrored in x"),
+        (FULL, [0, 8, 8, 0], "dst mirrored in y"),
+        (FULL, [8, 8, 0, 0], "dst mirrored in x and y"),
+        ([8, 0, 0, 8], FULL, "src mirrored in x"),
+        ([0, 8, 8, 0], FULL, "src mirrored in y"),
+        ([2, 2, 6, 6], [6, 2, 2, 6], "a sub-rectangle mirrored in x"),
+    ];
+    for (s, d, what) in cases {
+        assert_eq!(blit(src.fb, dst.fb, s, d), GL_INVALID_OPERATION, "{what}");
     }
     assert_eq!(PENDING.lock().unwrap().len(), 1, "a refused blit waits for nothing");
-    check_region(&dst, [0, 0, 0, 0], "no copy");
+    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
 }
 
-/// A mirror on one side only is refused, in x, in y and in both axes.
+/// A mirror on both sides is the same rectangle on both (Mesa compares the
+/// four coordinates, blit.c): the resolve is allowed and, the sample values
+/// being the same everywhere, copies the same pixels as the unmirrored one.
 #[test]
-fn one_sided_mirror_is_refused() {
+fn mirror_on_both_sides_is_the_same_region() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x();
-    assert_eq!(blit(src.fb, dst.fb, FULL, [8, 0, 0, 8]), GL_INVALID_OPERATION, "dst x mirrored");
-    assert_eq!(blit(src.fb, dst.fb, FULL, [0, 8, 8, 0]), GL_INVALID_OPERATION, "dst y mirrored");
-    assert_eq!(blit(src.fb, dst.fb, FULL, [8, 8, 0, 0]), GL_INVALID_OPERATION, "dst both mirrored");
-    assert_eq!(blit(src.fb, dst.fb, [8, 0, 0, 8], FULL), GL_INVALID_OPERATION, "src x mirrored");
-    assert_eq!(blit(src.fb, dst.fb, [0, 8, 8, 0], FULL), GL_INVALID_OPERATION, "src y mirrored");
-    check_region(&dst, [0, 0, 0, 0], "no copy");
-}
-
-/// The same mirrored rectangle on both sides is the same region and its
-/// coordinates are identical: the core allows it and copies that region
-/// unflipped (the resolve is the identity on the region).
-#[test]
-fn identical_mirrored_rectangles_are_the_same_region() {
-    let _g = context_ms4();
+    assert_eq!(blit(src.fb, dst.fb, [8, 0, 0, 8], [8, 0, 0, 8]), GL_NO_ERROR, "x");
+    assert_region(dst.fb, FULL, "x mirrored on both");
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
-    let src = drawn_4x();
-    let r = [6, 5, 2, 1];
-    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
-    check_region(&dst, [2, 1, 6, 5], "mirrored on both sides");
+    assert_eq!(blit(src.fb, dst.fb, [6, 6, 2, 2], [6, 6, 2, 2]), GL_NO_ERROR, "x and y, a sub-rectangle");
+    assert_region(dst.fb, [2, 2, 6, 6], "x and y mirrored on both");
 }
 
-/// A region of equal rectangles copies only that region.
-#[test]
-fn same_region_leaves_the_rest_untouched() {
-    let _g = context_ms4();
-    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
-    let src = drawn_4x();
-    let r = [3, 2, 7, 4];
-    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
-    check_region(&dst, r, "inner region");
-}
-
-/// Equal rectangles partly outside the bounds are clipped to them.
+/// Rectangles partly outside the source bounds are clipped, not an error:
+/// the same rectangle on both sides copies the part inside.
 #[test]
 fn rectangle_partly_outside_is_clipped() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x();
-    let r = [-3, -2, 5, 4];
-    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
-    check_region(&dst, [0, 0, 5, 4], "low corner");
-    let r = [5, 6, 20, 30];
-    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
-    for (i, p) in pixels(dst.fb).iter().enumerate() {
-        let want = if inside(i, [0, 0, 5, 4]) || inside(i, [5, 6, 8, 8]) { RESOLVED } else { RED_ZERO };
-        assert_eq!(*p, want, "high corner: pixel ({}, {})", i % 8, i / 8);
-    }
+    let r = [4, 4, 12, 12];
+    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR, "past the top right");
+    assert_region(dst.fb, [4, 4, 8, 8], "past the top right");
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let r = [-4, -3, 3, 5];
+    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR, "before the origin");
+    assert_region(dst.fb, [0, 0, 3, 5], "before the origin");
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let r = [-100, -100, 100, 100];
+    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR, "far larger than the source");
+    assert_region(dst.fb, FULL, "far larger");
 }
 
-/// A rectangle wholly outside the bounds copies nothing, without an error.
+/// A rectangle wholly outside the image copies nothing and is no error.
 #[test]
 fn rectangle_wholly_outside_copies_nothing() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x();
-    let r = [10, 10, 14, 14];
-    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
-    check_region(&dst, [0, 0, 0, 0], "outside");
+    for r in [[8, 0, 12, 8], [-5, -5, -1, -1], [0, 20, 8, 28]] {
+        assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR, "{r:?}");
+    }
+    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
 }
 
-/// Zero-width and zero-height equal rectangles are no error and copy nothing;
-/// unequal ones (zero on one side) are the scaled-resolve error.
+/// A zero-width or zero-height rectangle, the same on both sides, is no
+/// error and copies nothing; where the two differ the regions differ: an error.
 #[test]
-fn zero_sized_rectangles() {
+fn zero_size_rectangles() {
     let _g = context_ms4();
     let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
     let src = drawn_4x();
-    assert_eq!(blit(src.fb, dst.fb, [3, 0, 3, 8], [3, 0, 3, 8]), GL_NO_ERROR, "zero width");
-    assert_eq!(blit(src.fb, dst.fb, [0, 4, 8, 4], [0, 4, 8, 4]), GL_NO_ERROR, "zero height");
-    assert_eq!(blit(src.fb, dst.fb, [3, 3, 3, 3], [3, 3, 3, 3]), GL_NO_ERROR, "empty");
-    check_region(&dst, [0, 0, 0, 0], "nothing copied");
-    assert_eq!(blit(src.fb, dst.fb, [3, 0, 3, 8], [3, 0, 4, 8]), GL_INVALID_OPERATION, "zero to one wide");
-    assert_eq!(blit(src.fb, dst.fb, FULL, [3, 0, 3, 8]), GL_INVALID_OPERATION, "full to zero wide");
+    for r in [[3, 0, 3, 8], [0, 4, 8, 4], [5, 5, 5, 5]] {
+        assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR, "{r:?}");
+    }
+    assert!(pixels(dst.fb).iter().all(|p| *p == [0; 4]), "no copy");
+    assert_eq!(blit(src.fb, dst.fb, [3, 0, 3, 8], [2, 0, 5, 8]), GL_INVALID_OPERATION, "zero into three wide");
+    assert_eq!(blit(src.fb, dst.fb, [2, 0, 5, 8], [3, 0, 3, 8]), GL_INVALID_OPERATION, "three wide into zero");
+    assert_eq!(blit(src.fb, dst.fb, [3, 0, 3, 8], [4, 0, 4, 8]), GL_INVALID_OPERATION, "zero wide, moved");
 }
 
-/// Every blit into a 4x draw framebuffer is GL_INVALID_OPERATION whatever
-/// the rectangles, including a zero-sized one and an empty mask-less region.
+/// The region rule holds whatever the mask: a moved rectangle is refused
+/// before a depth or stencil bit with no buffer is dropped.
 #[test]
-fn multisample_destination_refuses_every_rectangle() {
+fn region_rule_holds_for_every_mask() {
     let _g = context_ms4();
-    let ms = framebuffer(4, &[GL_RGBA8]).unwrap();
-    let single = framebuffer(0, &[GL_RGBA8]).unwrap();
-    let ms2 = framebuffer(4, &[GL_RGBA8]).unwrap();
-    for r in [FULL, [2, 2, 6, 6], [3, 3, 3, 3], [-4, -4, 20, 20]] {
-        assert_eq!(blit(single.fb, ms.fb, r, r), GL_INVALID_OPERATION, "1x to 4x {r:?}");
-        assert_eq!(blit(ms2.fb, ms.fb, r, r), GL_INVALID_OPERATION, "4x to 4x {r:?}");
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
+    for mask in [GL_DEPTH_BUFFER_BIT, GL_STENCIL_BUFFER_BIT, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT] {
+        let e = blit_with(src.fb, dst.fb, [0, 0, 4, 4], [4, 4, 8, 8], mask, GL_NEAREST);
+        assert_eq!(e, GL_INVALID_OPERATION, "moved, mask {mask:#x}");
     }
-    assert_eq!(blit(single.fb, ms.fb, FULL, [0, 0, 4, 4]), GL_INVALID_OPERATION, "1x to 4x scaled");
-    assert_eq!(blit(ms2.fb, ms.fb, FULL, [8, 0, 0, 8]), GL_INVALID_OPERATION, "4x to 4x mirrored");
+}
+
+/// Any blit into a draw framebuffer with sample buffers is
+/// GL_INVALID_OPERATION: 4x to 4x of the same size and format, a sub-region,
+/// a mirror on both sides, and 1x to 4x.
+#[test]
+fn blit_into_a_4x_draw_framebuffer_any_region() {
+    let _g = context_ms4();
+    let ms_dst = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let ms_src = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let single = framebuffer(0, &[GL_RGBA8]).unwrap();
+    for (read, who) in [(ms_src.fb, "4x"), (single.fb, "1x")] {
+        for (s, d, what) in [
+            (FULL, FULL, "same size, full"),
+            ([2, 2, 6, 6], [2, 2, 6, 6], "same region"),
+            ([2, 2, 6, 6], [1, 1, 5, 5], "moved"),
+            ([8, 0, 0, 8], [8, 0, 0, 8], "mirrored on both"),
+            ([3, 0, 3, 8], [3, 0, 3, 8], "zero wide"),
+            ([4, 4, 12, 12], [4, 4, 12, 12], "partly outside"),
+            (FULL, [0, 0, 4, 4], "scaled"),
+        ] {
+            assert_eq!(blit(read, ms_dst.fb, s, d), GL_INVALID_OPERATION, "{who} to 4x, {what}");
+        }
+    }
+}
+
+/// The draw framebuffer's samples are looked at for every mask and filter.
+#[test]
+fn blit_into_a_4x_draw_framebuffer_any_mask() {
+    let _g = context_ms4();
+    let ms_dst = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let single = framebuffer(0, &[GL_RGBA8]).unwrap();
+    for mask in
+        [GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_STENCIL_BUFFER_BIT, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT]
+    {
+        let e = blit_with(single.fb, ms_dst.fb, FULL, FULL, mask, GL_NEAREST);
+        assert_eq!(e, GL_INVALID_OPERATION, "NEAREST, mask {mask:#x}");
+    }
+    let e = blit_with(single.fb, ms_dst.fb, FULL, FULL, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    assert_eq!(e, GL_INVALID_OPERATION, "LINEAR");
+}
+
+/// A refused blit into a 4x framebuffer leaves the pending job of the 4x
+/// source alone; a good resolve afterwards still works.
+#[test]
+fn refused_blits_leave_the_state_alone() {
+    let _g = context_ms4();
+    let ms_dst = framebuffer(4, &[GL_RGBA8]).unwrap();
+    let dst = framebuffer(0, &[GL_RGBA8]).unwrap();
+    let src = drawn_4x();
+    assert_eq!(blit(src.fb, ms_dst.fb, FULL, FULL), GL_INVALID_OPERATION);
+    assert_eq!(PENDING.lock().unwrap().len(), 1, "the 4x job is still pending");
+    let r = [1, 1, 7, 7];
+    assert_eq!(blit(src.fb, dst.fb, r, r), GL_NO_ERROR);
+    assert_region(dst.fb, r, "after the refused blit");
 }
