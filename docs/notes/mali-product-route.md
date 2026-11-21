@@ -32,9 +32,12 @@ Now there is one route. `link_records` (src/shaderc/online/mali/tests.rs)
 calls the entry points through `SHC_ONLINE` in the GL core's order. The
 tests' `compile_linked` (and so `check_linked`, `check_program`,
 `check_program_for` and every directory-driven reference test), the back
-end's own link tests (`mali::tests_ref::link_records`) and the measuring
-tool `tools/mali/route.sh` all go through it; nothing rebuilds the link from
-the compiler's inner functions. A test of one stage calls `compile_alone`,
+end's own link tests (`mali::tests_ref::link_records`) all go through it;
+nothing rebuilds the link from the compiler's inner functions. The measuring
+tools `tools/mali/route.sh` and `tools/mali/corpus_check.py` call the same
+entry points in the same order from the integration tests' module
+(`tests/mali_ref/mod.rs` `route`), so that they compare by the integration
+tests' rule (issue #8783). A test of one stage calls `compile_alone`,
 so every such call says so; where a program's reference is compared with
 one stage alone, the test also pins the product's refusal of that program
 by name (route_if_condition).

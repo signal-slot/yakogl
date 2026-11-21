@@ -186,7 +186,9 @@ fn stage_of(sh: &ShcShader) -> mali_ref::Stage {
             .collect()
     };
     let m = MaliShader::of(sh).expect("a Mali record");
+    let facts = format!("{:?}", (&code, m.work_reg_count, m.preload, m.fau, m.secondary));
     mali_ref::Stage {
+        facts,
         code,
         work_reg_count: m.work_reg_count,
         preload: m.preload,

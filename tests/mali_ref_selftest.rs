@@ -236,3 +236,67 @@ fn an_older_struct_reference_keeps_zero_uniforms() {
     let d = mali_ref::differences(&r, &pair);
     assert!(d.is_empty(), "{}", d.join("\n"));
 }
+
+/// The measure of tools/mali/route.sh and tools/mali/corpus_check.py
+/// ([`mali_ref::measure_list`]): with YAKOGL_MALI_MEASURE_LIST naming a
+/// list file, one row per line on stdout (YAKOGL_MALI_MEASURE_SHARD=k/n
+/// takes the k-th of n shares). Without it, the self-test of the rows.
+#[test]
+fn the_measure_reads_a_list() {
+    if let Some(list) = std::env::var_os("YAKOGL_MALI_MEASURE_LIST") {
+        let shard = std::env::var("YAKOGL_MALI_MEASURE_SHARD")
+            .ok()
+            .and_then(|s| s.split_once('/').and_then(|(k, n)| Some((k.parse().ok()?, n.parse().ok()?))))
+            .unwrap_or((0, 1));
+        mali_ref::measure_list(std::path::Path::new(&list), shard);
+        return;
+    }
+    use mali_ref::{measure, measure_row, Rule, StageVerdict};
+    let tri = mali_ref::Reference::load("tri");
+    let m = measure(&tri.vs, &tri.fs, Some(&tri.json), Rule::Either);
+    assert_eq!((m.verdict, &m.vs, &m.fs), ("EQUAL", &StageVerdict::Equal, &StageVerdict::Equal));
+    let digest = m.digest.clone().expect("a digest");
+    assert_eq!(measure_row("tri", &m), format!("tri\tEQUAL\t{digest}\t-\tEQUAL\t-\tEQUAL\t-"));
+    /* the same program against another program's reference: one digest */
+    let other = mali_ref::Reference::load("tri_varying");
+    let m = measure(&tri.vs, &tri.fs, Some(&other.json), Rule::Values);
+    assert_eq!(m.verdict, "DIFFER", "{}", m.detail);
+    assert_eq!(m.digest.as_deref(), Some(digest.as_str()));
+    assert!(m.detail.starts_with("vs: vs.varying: 0 words ours, 11 reference, first at word 0"), "{}", m.detail);
+    let m = measure(&tri.vs, &tri.fs, None, Rule::Values);
+    assert_eq!((m.verdict, &m.vs, &m.fs), ("NOREF", &StageVerdict::NoRef, &StageVerdict::NoRef));
+    /* a refused vertex shader: its stage REFUSED with the log, the other
+     * stage compiled and BLOCKED */
+    let vs = "attribute vec2 pos; uniform int n; void main(){ gl_Position = vec4(pos, float(n), 1.0); }";
+    let m = measure(vs, &tri.fs, Some(&tri.json), Rule::Values);
+    assert_eq!(m.verdict, "REFUSED");
+    assert!(m.detail.starts_with("vs (") && m.detail.contains("a uniform other than a float"), "{}", m.detail);
+    assert!(matches!(&m.vs, StageVerdict::Refused(d) if d == &m.detail), "{:?}", m.vs);
+    assert_eq!(m.fs, StageVerdict::Blocked);
+    let row = measure_row("x", &m);
+    assert!(row.starts_with("x\tREFUSED\t-\tvs ("), "{row}");
+    assert_eq!(row.matches('\t').count(), 7, "eight fields: {row}");
+}
+
+/// Issue #8783: the measure reads each uniform word by the rule
+/// [`mali_ref::differences`] uses (an `int` is its integer, a `bool` all
+/// ones or 0, `gl_DepthRange` near, far, diff are 0, 1, 1, a mat3 is
+/// counted packed over its 4-dword columns), so these references, which
+/// their own tests assert byte-equal, measure EQUAL under both rules.
+#[test]
+fn the_measure_reads_uniform_words_as_the_tests_do() {
+    for name in [
+        "deqp_misc_cmp_ine0_hp",
+        "deqp_unitype_depthrange_vs",
+        "deqp_unitype_vsmat3_highp",
+        "deqp_unitype_vsmat3_mediump",
+        "deqp_intval_reslib_bvec_fs",
+        "deqp_intval_uniapi_bool_vs",
+    ] {
+        let r = mali_ref::Reference::load(name);
+        for rule in [mali_ref::Rule::Values, mali_ref::Rule::Either] {
+            let m = mali_ref::measure(&r.vs, &r.fs, Some(&r.json), rule);
+            assert_eq!(m.verdict, "EQUAL", "{name} ({rule:?}): {}", m.detail);
+        }
+    }
+}

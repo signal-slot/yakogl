@@ -106,6 +106,9 @@ impl Reference {
 
 /// One stage as the tests read it: its words and facts, copied out.
 pub struct Stage {
+    /// The words, work registers, preload, FAU words and varying program,
+    /// printed: the input of [`Pair::digest`].
+    pub facts: String,
     pub code: Vec<u64>,
     pub work_reg_count: u8,
     pub preload: u64,
@@ -122,6 +125,14 @@ pub struct Stage {
 pub struct Pair {
     pub vs: Stage,
     pub fs: Stage,
+}
+
+impl Pair {
+    /// The digest of what a reference compares of the program (both
+    /// stages' [`Stage::facts`]): equal digests, equal programs.
+    pub fn digest(&self) -> String {
+        format!("{:016x}", fnv1a(format!("{}|{}", self.vs.facts, self.fs.facts).as_bytes()))
+    }
 }
 
 fn log_text(log: &[c_char]) -> String {
@@ -142,6 +153,12 @@ fn message(log: &str) -> String {
 }
 
 fn compile(stage: u32, src: &str) -> Result<ShcShader, String> {
+    compile_rc(stage, src).map_err(|(_, log)| message(&log))
+}
+
+/// glCompileShader of `src`: Err is the entry point's return code and its
+/// whole log.
+fn compile_rc(stage: u32, src: &str) -> Result<ShcShader, (i32, String)> {
     let mut out = ShcShader::ZERO;
     let mut log = [0 as c_char; LOG];
     let z = format!("{src}\0");
@@ -151,8 +168,14 @@ fn compile(stage: u32, src: &str) -> Result<ShcShader, String> {
     if rc == 0 {
         Ok(out)
     } else {
-        Err(message(&log_text(&log)))
+        Err((rc, log_text(&log)))
     }
+}
+
+/// The FNV-1a hash of `bytes`: a digest that is the same in every build
+/// (std's hasher is not), so that two measures of two trees compare.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
 fn stage_of(sh: &ShcShader) -> Stage {
@@ -170,7 +193,12 @@ fn stage_of(sh: &ShcShader) -> Stage {
             .collect()
     };
     let m = MaliShader::of(sh).expect("a Mali record");
+    /* what the reference compares of a stage, in the form the unit tests'
+     * route measure printed it (tests.rs `route_digest`), so a digest
+     * stays the same across the move of the measure to this module */
+    let facts = format!("{:?}", (&code, m.work_reg_count, m.preload, m.fau, m.secondary));
     Stage {
+        facts,
         code,
         work_reg_count: m.work_reg_count,
         preload: m.preload,
@@ -187,13 +215,83 @@ fn stage_of(sh: &ShcShader) -> Stage {
 /// the link. Err is the first refusal: the code generator's message, or the
 /// log when it is not the code generator's.
 pub fn compile_pair(vs_src: &str, fs_src: &str) -> Result<Pair, String> {
+    route(vs_src, fs_src).program.map_err(|r| match r.step {
+        Step::Link => r.log,
+        _ => message(&r.log),
+    })
+}
+
+/// A step of glCompileShader and glLinkProgram on the Mali.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Step {
+    /// glCompileShader of the vertex shader (`compile`).
+    Vertex,
+    /// glCompileShader of the fragment shader (`compile`).
+    Fragment,
+    /// glLinkProgram's vertex shader for the fragment shader
+    /// (`compile_vs_linked` with no map).
+    VsLinked,
+    /// glLinkProgram's `link`.
+    Link,
+}
+
+impl Step {
+    /// The step's name in a measure row (tools/mali/route.sh).
+    pub fn name(self) -> &'static str {
+        match self {
+            Step::Vertex => "vs",
+            Step::Fragment => "fs",
+            Step::VsLinked => "vs_linked",
+            Step::Link => "link",
+        }
+    }
+}
+
+/// A program refused on the route: the step, its return code and the log
+/// the entry point wrote.
+#[derive(Clone, Debug)]
+pub struct Refusal {
+    pub step: Step,
+    pub rc: i32,
+    pub log: String,
+}
+
+/// A program as the GL core builds it, with each stage's own compile.
+pub struct Route {
+    /// glCompileShader of each stage, both made whatever the other's
+    /// outcome (the GL core compiles each shader object by itself): Err is
+    /// the return code and the log.
+    pub vs: Result<(), (i32, String)>,
+    pub fs: Result<(), (i32, String)>,
+    /// The program: Err is the first refusal in the GL core's order (the
+    /// vertex compile, the fragment compile, `compile_vs_linked`, `link`).
+    pub program: Result<Pair, Refusal>,
+}
+
+/// The program of `vs_src` and `fs_src` through the back end's entry
+/// points in the GL core's order ([`compile_pair`]), keeping each step.
+pub fn route(vs_src: &str, fs_src: &str) -> Route {
     /* the compiler's scratch arena and record cache are process-wide, and
      * the test harness runs tests on threads: one pair at a time */
     static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
     yakogl::shaderc::online::backend::forget_compiled();
-    let vs = compile(SHC_STAGE_VERTEX, vs_src)?;
-    let mut fs = compile(SHC_STAGE_FRAGMENT, fs_src)?;
+    let v = compile_rc(SHC_STAGE_VERTEX, vs_src);
+    let f = compile_rc(SHC_STAGE_FRAGMENT, fs_src);
+    let own = |r: &Result<ShcShader, (i32, String)>| r.as_ref().map(|_| ()).map_err(Clone::clone);
+    let (vs_own, fs_own) = (own(&v), own(&f));
+    let refused = |step, (rc, log)| Refusal { step, rc, log };
+    let program = match (v, f) {
+        (Err(e), _) => Err(refused(Step::Vertex, e)),
+        (_, Err(e)) => Err(refused(Step::Fragment, e)),
+        (Ok(vs), Ok(mut fs)) => link_pair(vs_src, vs, &mut fs).map(|vs| Pair { vs: stage_of(&vs), fs: stage_of(&fs) }),
+    };
+    Route { vs: vs_own, fs: fs_own, program }
+}
+
+/// glLinkProgram's two steps: the vertex shader for the fragment shader,
+/// then the link, which may replace `fs`. Ok is the program's vertex shader.
+fn link_pair(vs_src: &str, vs: ShcShader, fs: &mut ShcShader) -> Result<ShcShader, Refusal> {
     let mut log = [0 as c_char; LOG];
     let relink = yakogl::shaderc::online::SHC_ONLINE.compile_vs_linked.expect("the online back end relinks");
     let vs_z = format!("{vs_src}\0");
@@ -201,20 +299,20 @@ pub fn compile_pair(vs_src: &str, fs_src: &str) -> Result<Pair, String> {
     // SAFETY: a NUL-terminated source, no map, a valid fragment shader, a
     // real output and a log of the size announced.
     let rc = unsafe {
-        relink(vs_z.as_ptr() as *const c_char, core::ptr::null(), &fs, &mut out, log.as_mut_ptr(), log.len())
+        relink(vs_z.as_ptr() as *const c_char, core::ptr::null(), &*fs, &mut out, log.as_mut_ptr(), log.len())
     };
     let vs = match rc {
         0 => out,
         1 => vs,
-        _ => return Err(message(&log_text(&log))),
+        _ => return Err(Refusal { step: Step::VsLinked, rc, log: log_text(&log) }),
     };
     let link = yakogl::shaderc::online::SHC_ONLINE.link.expect("the online back end links");
     // SAFETY: two distinct valid shaders and a log of the size announced.
-    let rc = unsafe { link(&vs, &mut fs, log.as_mut_ptr(), log.len()) };
+    let rc = unsafe { link(&vs, fs, log.as_mut_ptr(), log.len()) };
     if rc != 0 {
-        return Err(log_text(&log));
+        return Err(Refusal { step: Step::Link, rc, log: log_text(&log) });
     }
-    Ok(Pair { vs: stage_of(&vs), fs: stage_of(&fs) })
+    Ok(vs)
 }
 
 /* ---- the reference's side --------------------------------------------- */
@@ -581,6 +679,16 @@ fn padded(words: usize) -> usize {
 /// Every difference of `pair` (built from `r`'s sources) against `r`'s
 /// expect.json, one entry each; empty when the words and facts are equal.
 pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
+    differences_with(r, pair, STRUCT_VALUES.contains(&r.name.as_str()))
+}
+
+/// [`differences`], with `members` saying whether the draw set the struct
+/// members' values (gl_ref.py's `--uniform-values` today does; a committed
+/// reference did only if it is in [`STRUCT_VALUES`]). The measure
+/// ([`measure`]) passes true: tools/mali/corpus_check.py draws with today's
+/// gl_ref.py, and its rule `either` falls back to every uniform 0 for an
+/// older reference.
+pub fn differences_with(r: &Reference, pair: &Pair, members: bool) -> Vec<String> {
     let mut d = Vec::new();
     let names: Vec<String> = uniform_leaves(&r.vs, &r.fs).into_iter().map(|l| l.0).collect();
     /* a reference with a struct-member uniform row is compared with
@@ -589,9 +697,7 @@ pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
      * deqp_unitype_vsstruct_*); so is one loaded with
      * [`Reference::load_unset`] (`uniform_values` false) */
     let member = |r: &(String, u16, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
-    let values = r.uniform_values
-        && (STRUCT_VALUES.contains(&r.name.as_str())
-            || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
+    let values = r.uniform_values && (members || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
     let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
     let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 
@@ -691,5 +797,252 @@ pub fn refusal_change(name: &str, text: &str) -> Option<String> {
         Ok(_) => Some(format!("{name}: now compiles; remove its #[ignore] and its pin")),
         Err(e) if e.contains(text) => None,
         Err(e) => Some(format!("{name}: expected a refusal containing {text:?}, got: {e}")),
+    }
+}
+
+/* ---- the measure: a list of programs, one row each ---------------------- */
+
+/// How a measure reads a reference's uniform words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rule {
+    /// The draw set the uniforms (`--uniform-values`, every `deqp_*`
+    /// reference and every one tools/mali/corpus_check.py makes):
+    /// [`differences`] as [`assert_matches`] reads it.
+    Values,
+    /// A directory of references of both kinds (tools/mali/testdata): a
+    /// stage is equal when it is equal under `--uniform-values` or with
+    /// every uniform 0 ([`assert_matches_unset`]). The words, the facts and
+    /// the FAU layout are the same under both; only the uniform values
+    /// differ.
+    Either,
+}
+
+impl Rule {
+    pub fn parse(s: &str) -> Option<Rule> {
+        match s {
+            "values" => Some(Rule::Values),
+            "either" => Some(Rule::Either),
+            _ => None,
+        }
+    }
+}
+
+/// The stage a difference of [`differences`] is in: the vertex program's
+/// regions and the secondary offset, or the fragment program.
+fn stage_of_difference(d: &str) -> &'static str {
+    if d.starts_with("fs") {
+        "fs"
+    } else {
+        "vs"
+    }
+}
+
+/// The first line of a panic's message.
+fn panic_line(e: &(dyn std::any::Any + Send)) -> String {
+    let m = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()));
+    m.unwrap_or_default().lines().next().unwrap_or("").to_string()
+}
+
+/// One stage's verdict in a measure row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StageVerdict {
+    /// The program compiled and this stage is the reference's.
+    Equal,
+    /// The program compiled and this stage is not the reference's: its
+    /// first difference.
+    Differ(String),
+    /// This stage was refused (its own compile, or the link step whose log
+    /// names it): the step, the return code and the log.
+    Refused(String),
+    /// This stage compiled; the program was refused at the other's step.
+    Blocked,
+    /// The program compiled; there is no reference to compare it with.
+    NoRef,
+    /// The comparison itself failed (a reference this module cannot read):
+    /// the panic's first line.
+    Error(String),
+}
+
+impl StageVerdict {
+    fn fields(&self) -> (&'static str, String) {
+        match self {
+            StageVerdict::Equal => ("EQUAL", "-".into()),
+            StageVerdict::Differ(d) => ("DIFFER", d.clone()),
+            StageVerdict::Refused(d) => ("REFUSED", d.clone()),
+            StageVerdict::Blocked => ("BLOCKED", "-".into()),
+            StageVerdict::NoRef => ("NOREF", "-".into()),
+            StageVerdict::Error(d) => ("ERROR", d.clone()),
+        }
+    }
+}
+
+/// The measure of one program: the route's verdict (EQUAL, DIFFER,
+/// REFUSED or NOREF, as tools/mali/route.sh prints it), the digest of
+/// what it compiled, the route's detail, and each stage's verdict.
+pub struct Measure {
+    pub verdict: &'static str,
+    pub digest: Option<String>,
+    pub detail: String,
+    pub vs: StageVerdict,
+    pub fs: StageVerdict,
+}
+
+/// Program `vs`, `fs` on the route ([`route`]) against the reference
+/// `json` (None: no reference) under `rule`.
+pub fn measure(vs: &str, fs: &str, json: Option<&str>, rule: Rule) -> Measure {
+    let r = route(vs, fs);
+    let refused = |step: Step, rc: i32, log: &str| format!("{} ({rc}): {log}", step.name());
+    let pair = match r.program {
+        Err(e) => {
+            let text = refused(e.step, e.rc, &e.log);
+            /* a link step's log names the stage the code generator refused */
+            let stage = match e.step {
+                Step::Vertex => "vs",
+                Step::Fragment => "fs",
+                _ if e.log.contains("refused this fragment shader") => "fs",
+                _ if e.log.contains("refused this vertex shader") => "vs",
+                Step::VsLinked => "vs",
+                Step::Link => "both",
+            };
+            let own = |o: &Result<(), (i32, String)>, step: Step, me: &str| match o {
+                Err((rc, log)) => StageVerdict::Refused(refused(step, *rc, log)),
+                Ok(()) if stage == me || stage == "both" => StageVerdict::Refused(text.clone()),
+                Ok(()) => StageVerdict::Blocked,
+            };
+            let (v, f) = (own(&r.vs, Step::Vertex, "vs"), own(&r.fs, Step::Fragment, "fs"));
+            return Measure { verdict: "REFUSED", digest: None, detail: text, vs: v, fs: f };
+        }
+        Ok(p) => p,
+    };
+    let digest = Some(pair.digest());
+    let Some(json) = json else {
+        return Measure {
+            verdict: "NOREF",
+            digest,
+            detail: "-".into(),
+            vs: StageVerdict::NoRef,
+            fs: StageVerdict::NoRef,
+        };
+    };
+    let reference = |uniform_values| Reference {
+        name: String::new(),
+        vs: vs.to_string(),
+        fs: fs.to_string(),
+        json: json.to_string(),
+        uniform_values,
+    };
+    let diff = |uniform_values| {
+        let r = reference(uniform_values);
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| differences_with(&r, &pair, true)))
+            .map_err(|e| panic_line(&*e))
+    };
+    let first = diff(true);
+    let second = if rule == Rule::Either { Some(diff(false)) } else { None };
+    let stage = |me: &str| -> StageVerdict {
+        let of = |d: &Result<Vec<String>, String>| -> Result<Vec<String>, String> {
+            d.clone().map(|v| v.into_iter().filter(|x| stage_of_difference(x) == me).collect())
+        };
+        let a = of(&first);
+        if matches!(&a, Ok(v) if v.is_empty()) {
+            return StageVerdict::Equal;
+        }
+        if let Some(b) = second.as_ref().map(of) {
+            if matches!(&b, Ok(v) if v.is_empty()) {
+                return StageVerdict::Equal;
+            }
+        }
+        match a {
+            Ok(v) => {
+                /* the first word diff of the stage when there is one (a
+                 * region's FAU table is the stage's, so a varying
+                 * program's other words show as the position region's
+                 * FAU first): its count line, and the index of the first
+                 * word that differs (`*[ i]`) */
+                let first = v.iter().find(|d| d.lines().next().is_some_and(|l| l.contains(" words ours, ")));
+                let mut lines = first.unwrap_or(&v[0]).lines();
+                let head = lines.next().unwrap_or("").to_string();
+                match lines.find(|l| l.starts_with('*')).and_then(|l| l.split(']').next()) {
+                    Some(at) => StageVerdict::Differ(format!("{head}, first at word {}", at[2..].trim())),
+                    None => StageVerdict::Differ(head),
+                }
+            }
+            Err(e) => StageVerdict::Error(e),
+        }
+    };
+    let (v, f) = (stage("vs"), stage("fs"));
+    let (verdict, detail) = match (&v, &f) {
+        (StageVerdict::Equal, StageVerdict::Equal) => ("EQUAL", "-".to_string()),
+        (StageVerdict::Equal, d) => ("DIFFER", format!("fs: {}", d.fields().1)),
+        (d, _) => ("DIFFER", format!("vs: {}", d.fields().1)),
+    };
+    Measure { verdict, digest, detail, vs: v, fs: f }
+}
+
+/// One measure row, tab-separated: the key, the route's verdict, the
+/// digest (`-` when refused), the route's detail, then the vertex and the
+/// fragment stage's verdict and detail. The first four fields are
+/// tools/mali/route.sh's row.
+pub fn measure_row(key: &str, m: &Measure) -> String {
+    let flat = |s: &str| s.replace(['\t', '\n', '\r'], " ");
+    let (vv, vd) = m.vs.fields();
+    let (fv, fd) = m.fs.fields();
+    format!(
+        "{key}\t{}\t{}\t{}\t{vv}\t{}\t{fv}\t{}",
+        m.verdict,
+        m.digest.as_deref().unwrap_or("-"),
+        flat(&m.detail),
+        flat(&vd),
+        flat(&fd)
+    )
+}
+
+/// The measure of a list file, as tools/mali/route.sh and
+/// tools/mali/corpus_check.py run it: each line `key<TAB>vs path<TAB>fs
+/// path<TAB>expect.json path or -<TAB>values|either`; per line `begin<TAB>key`
+/// before the compile (so that a driver can name a program that crashed
+/// the process) and `measure<TAB>`[`measure_row`] after it, on stdout.
+/// `shard` = (k, n) takes every n-th line from the k-th.
+pub fn measure_list(list: &std::path::Path, shard: (usize, usize)) {
+    /* a deep shader (dEQP's generated ones) recurses past a test thread's
+     * 2 MiB in a debug build: the measure runs on a thread of its own */
+    let list = list.to_path_buf();
+    std::thread::Builder::new()
+        .stack_size(256 << 20)
+        .spawn(move || measure_list_on(&list, shard))
+        .expect("the measure's thread")
+        .join()
+        .unwrap_or_else(|e| std::panic::resume_unwind(e));
+}
+
+fn measure_list_on(list: &std::path::Path, shard: (usize, usize)) {
+    use std::io::Write as _;
+    let text = std::fs::read_to_string(list).unwrap_or_else(|e| panic!("{}: {e}", list.display()));
+    let out = std::io::stdout();
+    for line in text.lines().filter(|l| !l.is_empty()).skip(shard.0).step_by(shard.1.max(1)) {
+        let f: Vec<&str> = line.split('\t').collect();
+        assert!(f.len() == 5, "{}: not a measure line: {line}", list.display());
+        let rule = Rule::parse(f[4]).unwrap_or_else(|| panic!("{}: not a rule: {}", list.display(), f[4]));
+        let read = |p: &str| std::fs::read_to_string(p).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let (vs, fs) = (read(f[1]), read(f[2]));
+        let json = (f[3] != "-").then(|| read(f[3]));
+        {
+            let mut o = out.lock();
+            let _ = writeln!(o, "begin\t{}", f[0]);
+            let _ = o.flush();
+        }
+        let m = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| measure(&vs, &fs, json.as_deref(), rule)))
+            .unwrap_or_else(|e| {
+                let text = format!("panic: {}", panic_line(&*e));
+                Measure {
+                    verdict: "REFUSED",
+                    digest: None,
+                    detail: text.clone(),
+                    vs: StageVerdict::Refused(text.clone()),
+                    fs: StageVerdict::Refused(text),
+                }
+            });
+        let mut o = out.lock();
+        let _ = writeln!(o, "measure\t{}", measure_row(f[0], &m));
+        let _ = o.flush();
     }
 }
