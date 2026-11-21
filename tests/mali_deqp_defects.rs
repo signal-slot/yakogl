@@ -62,12 +62,14 @@ fn defects_encode_reduced() {
 #[test]
 #[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)"]
 fn defects_lanecycle_fs() {
+    let _one = one_at_a_time();
     mali_ref::assert_matches("deqp_defects_lanecycle_fs");
 }
 
 #[test]
 #[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)"]
 fn defects_lanecycle_reduced() {
+    let _one = one_at_a_time();
     mali_ref::assert_matches("deqp_defects_lanecycle_reduced");
 }
 
@@ -112,12 +114,15 @@ fn defects_pinned() {
 
 /* ---- the program as glBindAttribLocation and glLinkProgram build it ---- */
 
-/// The compiler's process-wide state takes one pair at a time
-/// (`mali_ref::compile_pair` holds its own lock; this one covers
-/// [`compile_bound`] and the pin's calls).
+/// The compiler's process-wide state takes one pair at a time, and
+/// `forget_compiled()` resets the keep arena every handed-out shader points
+/// into: every compile of this file, and the reads of its result, hold this
+/// lock ([`compile_bound`], the `lanecycle` tests' `mali_ref::assert_matches`
+/// and the pin's calls). `mali_ref::compile_pair` holds a lock of its own
+/// inside, which alone does not keep it apart from [`compile_bound`].
 fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
-    static ONE: Mutex<()> = Mutex::new(());
-    ONE.lock().unwrap_or_else(|p| p.into_inner())
+    static COMPILING: Mutex<()> = Mutex::new(());
+    COMPILING.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 fn log_text(log: &[c_char]) -> String {

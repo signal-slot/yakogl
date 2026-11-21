@@ -5111,6 +5111,36 @@ impl<'a> Lower<'_, 'a> {
             out.extend_from_slice(self.a, run.as_slice())?;
             return Ok(Ret::Value(Src::id(ValueId(0))));
         }
+        /* The slot is an F32 slot whatever the function returns, so its
+         * zero and its reload are float values. Under a call whose own
+         * value has no float class (an int or uint function, `int f(bool
+         * c, int b) { if (c) return b; else return -1; }`, dEQP's
+         * texmisc fcm_eval_order) they record the slot's storage, High
+         * (`push_local`: an F32 slot under no class): the value is the
+         * function's 32-bit int (Mesa lowers no int), not a float of
+         * unknown width. Only the Mali back end reads it. */
+        let outer = self.cur;
+        if self.cur == Prec::None {
+            self.cur = Prec::High;
+        }
+        let r = self.slot_result(name, slot, always, run, want, out);
+        self.cur = outer;
+        r
+    }
+
+    /// The tail of [`Lower::inline_with_slot`]: the slot zeroed ahead of a
+    /// body with a path that does not return (`always` false), the body
+    /// `run`, the slot read back.
+    fn slot_result(
+        &mut self,
+        name: &'a str,
+        slot: Local<'a>,
+        always: bool,
+        run: AVec<'a, Node>,
+        want: Want<'a>,
+        out: &mut AVec<'a, Node>,
+    ) -> R<'a, Ret> {
+        let (id, comps, columns) = (slot.id, slot.comps, slot.run.slots());
         if !always {
             /* A path that reaches the end without returning. Section 6.1
              * makes the result undefined, not the shader illegal, so the

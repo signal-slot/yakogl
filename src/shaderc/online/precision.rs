@@ -1592,6 +1592,33 @@ mod tests {
         assert_eq!(l.module.local_prec.len(), l.module.locals.len());
     }
 
+    /// An int function that returns early (`inline_with_slot`: the result
+    /// goes to an F32 slot) called where the value has no float class:
+    /// the slot's zero and reload record High, the slot's storage, and no
+    /// value falls to the no-context rule. dEQP's texmisc
+    /// `fcm_eval_order.frag` (tools/mali/testdata) reached it first:
+    /// `int func(float a, int b, bool c, int d) { if (c) return ..;
+    /// else return -1; }` in `out0 = func(..)`.
+    #[test]
+    fn an_int_function_s_early_return_slot_is_read_back_high() {
+        let head = "precision mediump float;\nvarying float v_in0;\n";
+        for f in [
+            "int f(bool c, int b) { if (c) return b; else return -1; }",
+            "int f(bool c, int b) { if (c) return b; return -1; }",
+            /* a path with no return: the slot is zeroed first */
+            "int f(bool c, int b) { if (c) return b; }",
+        ] {
+            let src =
+                std::format!("{head}{f}\nvoid main() {{ int r = f(v_in0 > 1.5, 1); gl_FragColor = vec4(float(r)); }}");
+            super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+            let g = compile(&src, Stage::Fragment);
+            assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{f}");
+            assert!(!g.prec.contains(&Prec::Unknown), "{f}: {:?}", g.prec);
+            let reloads = of(&g, |o| matches!(o, Op::LoadLocal { .. }));
+            assert!(reloads.contains(&Prec::High), "{f}: {reloads:?}");
+        }
+    }
+
     /// Every `.vert` and `.frag` under `dir`, recursively.
     fn sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
         let Ok(rd) = std::fs::read_dir(dir) else { return };
