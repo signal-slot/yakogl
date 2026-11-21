@@ -2418,6 +2418,7 @@ mod tests {
         Ident {
             gpu_id: 0,
             l2_features: 0,
+            core_features: 0,
             tiler_features: 0,
             mem_features: 0,
             mmu_features: 0,

@@ -458,6 +458,7 @@ unsafe extern "C" fn o_query(what: u32, out: *mut c_void, sz: usize) -> i32 {
                 tiler_features: s.dev.gpu.tiler_features,
                 cs_reg_count: s.dev.csif.cs_reg_count,
                 unpreserved_cs_reg_count: s.dev.csif.unpreserved_cs_reg_count,
+                core_features: s.dev.gpu.core_features,
             };
             // SAFETY: an out-parameter of this size.
             unsafe { *out.cast::<OsalMaliGpu>() = g };

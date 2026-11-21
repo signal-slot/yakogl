@@ -290,36 +290,77 @@ the recheck is a second, overlapping count, not a sum.
 
 ### `src/mali/`
 
-These lines carry a G610 assumption:
+The frame builder now follows the GPU's tile buffer as Mesa 26.2.1 does
+(after this note was first written):
 
-- `src/mali/frame.rs:280-283`: `TIB_BUDGET = 32768 / 2`. This is the
-  G610's colour tile buffer as a constant. A G310v1-v3 needs `16384 / 2`,
-  from the GPU's model (product and variant).
-- `src/mali/frame.rs:1955-1970` (`tile_size_of`): it uses the colour
-  budget only. Mesa 26.2.1 also bounds the tile by the Z budget
-  (`pan_desc.c:617-625`; 8192 on the G610, 4096 on a G310v1-v3).
-  - Our builder follows the board's Mesa 25.0.7, which writes 1024/16384
-    for a 4x frame with depth (`src/mali/frame_msaa_tests.rs:651-662`).
-    Mesa 26.2.1 on the shim writes 512/8192 for the G610 already.
-  - Which rule the i.MX 95 needs depends on the Mesa its board runs. The
-    G310's halved budgets move both rules.
-- `src/mali/frame.rs:3707-3729` (`tiler_context`): the 25.0.7
-  hierarchy-mask rule. It gives 255 for a 256-pixel tile, the same as
-  Mesa 26.2.1 (`pan_desc.c:1784-1790`), so it needs no G310 path. It is
-  correct once `tile` is.
-- `src/mali/frame.rs:2356-2398` (`internal_buffer_offset`) follows `tile`
-  and needs no G310 path of its own.
-- `src/mali/frame.rs:268, 2620`: `MEASURED_TILER_LEVELS = 8`, the G610's
-  `TILER_FEATURES` 0x809. A G310 that reports other levels is refused
-  (`NOT_BUILT_TILER_LEVELS`). The shim cannot tell: it answers 0x809 for
-  every id.
-- `src/mali/backend.rs:3714`: the backend table's name
-  `"Arm Mali-G610 (NanoPC-T6)"`.
-- `src/mali/backend.rs:381-387`: the query block's comment derives the
-  G610's 19 from `shader_present 0x50005`. The block itself is sized for
-  64 core ids (`QUERY_BLOCK_BYTES`), so any core mask fits.
-- The frame tests (`src/mali/frame_*_tests.rs`, `tiler_max_levels: 8`)
-  and their G610 traces stay the G610's.
+- **The budgets come from the GPU.** The OSAL's `OSAL_QUERY_MALI_GPU`
+  answer (`OsalMaliGpu`, `struct osal_mali_gpu`) carries `CORE_FEATURES`
+  beside `GPU_ID`: the panthor development OSAL from
+  `drm_panthor_gpu_info.core_features`, the Zephyr OSAL from the kernel
+  side's own read of the register (`gpu::mali::ident`, offset 0x8;
+  docs/notes/mali-gpu-model.md). The backend's `init` looks the model up as
+  `pan_get_model` does (`src/mali/model.rs`: the product id from `GPU_ID`,
+  the variant `CORE_FEATURES & 0xff`, against the G610 and G310v1-v5 rows of
+  `pan_model.c:88-99`) and refuses a GPU with no row
+  (`NOT_BUILT_GPU_MODEL`). The model's halved tile buffers
+  (`pan_props.h:47-72`) go into the frame context
+  (`frame::Context::tile_budget`). `TIB_BUDGET` is gone.
+- **The Z bound is built.** `tile_size_of` takes the minimum of the colour
+  budget's tile and the Z budget's for 4 bytes of depth a sample, as
+  `pan_desc.c:615-625` does (the Z bytes are counted whether or not the
+  frame has a depth buffer, `pan_desc.h:242-259`). The render targets'
+  offsets and the hierarchy mask follow the tile and needed no change.
+- **What it changed on the G610.** The Z bound reaches every 4x frame: 4x
+  RGBA8 (16 bytes a pixel) now has a 512-pixel tile and an 8192-byte
+  allocation, Mesa 26.2.1's, where the builder had followed the board's Mesa
+  25.0.7 (1024 and 16384). The split-kick tests against Mesa 26.2.1 on the
+  board (`src/mali/frame_split_tests.rs`) lost their named deviation and are
+  word-equal, and so is the backend's split kick
+  (`backend_tests.rs`, FBD w11 no longer excepted). The 25.0.7 board dumps
+  of a 4x frame now name their tile word as 25.0.7's
+  (`frame_msaa_tests.rs` `TILE_25_0_CAUSE`: the colour-only and the
+  depth/stencil MSRTT frames, `a_4x_target_is_the_board_s_...`,
+  `a_4x_depth_frame_...`, `a_4x_stencil_frame_...`; and
+  `frame_preload_tests.rs`'s colour and depth preloads of a 4x target).
+  The tiler hierarchy mask of a 512-pixel tile stays 254. No 1x frame
+  moved: at one sample the Z bound is 2048 pixels on the G610 and 1024 on a
+  G310v1-v3, never below the 1024-pixel clamp. On the board (Mesa 25.0.7
+  is what the T6 runs) a 4x frame now has half the tile it had; both are
+  legal tile sizes, and this is the size Mesa 26.2.1 draws with.
+- **Tests on the G310.** `tools/mali/testdata/tile-budget/` holds Mesa
+  26.2.1's three- and four-target frames and its 4x frame drawn as the
+  G310v1, the G310v4 and the G610 (`drm_shim_ref.sh run --gpu`); the
+  framebuffer parameters, the render targets and the tiler context of ours
+  equal them (`frame_mrt_tests.rs`
+  `three_and_four_targets_on_a_g310v1_are_mesa_s` and its G310v4 twin,
+  `frame_split_tests.rs` `a_4x_frame_s_tile_follows_the_gpu_s_tile_buffer`).
+
+What remains G610-specific in `src/mali/`:
+
+- **The tiler levels come from the GPU too.** `MEASURED_TILER_LEVELS = 8`
+  and its refusal are gone: the hierarchy mask is Mesa 26.2.1's
+  `GENX(pan_select_tiler_hierarchy_mask)` (`pan_desc.c:1745-1812`,
+  `frame::hierarchy_mask`) for any `TILER_FEATURES` max_levels, with the
+  bin-pointer budget of the heap chunk (`pan_csf.c:979-983`,
+  `Context::tiler_bin_budget`). At 8 levels and the frames built here it is
+  the 25.0.7 rule the board's dumps hold (254, and 255 for a 256-pixel
+  tile); only max_levels 0 is refused. The boot log quoted in
+  docs/notes/mali-gpu-model.md reads 0x809 (8 levels) on an i.MX 95.
+- `GL_RENDERER` (`"Arm Mali-G610 (YakoGL)"`, chosen by the GL core,
+  `src/gl/state.rs`) and the backend table's name
+  `"Arm Mali-G610 (NanoPC-T6)"` (`src/mali/backend.rs`) are the G610's on
+  every Mali GPU: issue #9204.
+- `src/mali/backend.rs`: the query block's comment that derives
+  the G610's 19 from `shader_present 0x50005` (the block is sized for 64
+  core ids, `QUERY_BLOCK_BYTES`, so any core mask fits).
+- The frame tests other than the ones above stay the G610's
+  (`tiler_max_levels: 8`, `TileBudget::G610`).
+- Which G310 variant the i.MX 95 has is not known: Mesa's v1-v3 and v4-v5
+  differ in the tile buffer, and nothing public read here gives the
+  board's `CORE_FEATURES`. The code does not assume one; it takes the
+  variant from the register on the first boot (pre-study-imx95.md, B2), and
+  the kernel side's G310 mock's variant 0 (`mock::G310_ASSUMED`) decides
+  nothing but the mock.
 
 ### Not measurable on the host
 

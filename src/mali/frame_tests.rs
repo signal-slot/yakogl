@@ -146,6 +146,8 @@ fn build_with(vs_bin: &[u8], vs_meta: ShaderMeta, fs_bin: &[u8], fs_meta: Shader
             geometry_buffer_size: 65536,
             sample_positions: positions.gpu,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: TileBudget::G610,
         };
         let attributes = [VertexAttribute {
             buffer: VertexBuffer { gpu: VERTICES, size: 1 << 20 },
@@ -533,6 +535,8 @@ fn a_clear_only_frame_is_the_fragment_job_alone() {
         geometry_buffer_size: 65536,
         sample_positions: SAMPLES,
         tiler_max_levels: 8,
+        tiler_bin_budget: (2 << 20) - 64,
+        tile_budget: TileBudget::G610,
     };
     let input = FrameInput {
         zs: None,
@@ -658,6 +662,8 @@ fn each_draw_not_built_is_refused_by_name() {
         geometry_buffer_size: 65536,
         sample_positions: SAMPLES,
         tiler_max_levels: 8,
+        tiler_bin_budget: (2 << 20) - 64,
+        tile_budget: TileBudget::G610,
     };
     let cases = [
         (FrameInput { zs: None, target, clear_rgba: None, draw: None }, NOT_BUILT_NO_CLEAR),
@@ -731,8 +737,8 @@ fn each_draw_not_built_is_refused_by_name() {
         ),
     ];
     let mut seen = Vec::new();
-    /* a tiler with other than the measured 8 levels refuses a draw, not a clear */
-    let levels = Context { tiler_max_levels: 7, ..ctx };
+    /* a tiler with no hierarchy level refuses a draw, not a clear */
+    let levels = Context { tiler_max_levels: 0, ..ctx };
     let draw_input = f(draw);
     let cases: Vec<_> =
         cases.iter().map(|(i, w)| (i, w, ctx)).chain([(&draw_input, &NOT_BUILT_TILER_LEVELS, levels)]).collect();
@@ -842,6 +848,8 @@ fn the_clear_colour_packs_as_mesa_rounds() {
         geometry_buffer_size: 65536,
         sample_positions: SAMPLES,
         tiler_max_levels: 8,
+        tiler_bin_budget: (2 << 20) - 64,
+        tile_budget: TileBudget::G610,
     };
     let mut clear = |rgba: [f32; 4]| -> u32 {
         let mut desc = Arena::new("desc", DESC, &mut desc_m).expect("arena");
@@ -1073,4 +1081,32 @@ fn a_frame_uploads_each_program_once() {
     let back = upload_program_cached(&mut cache, &mut code, &mut spds, &bin(1), fs).unwrap();
     assert!(code.top() > top && back.binary != a.binary, "uploaded again once out of the table");
     assert_eq!(cache.hits, 1);
+}
+
+/// The tiler hierarchy mask is Mesa 26.2.1's (pan_desc.c:1745-1812) for any
+/// `TILER_FEATURES` max_levels: at 8 (the G610's and, by its boot log, the
+/// i.MX 95 G310's 0x809) every level, level 0 dropped above a 16x16 tile
+/// (the board's 254 at 64x64; 255 for the 256-pixel tile of a G310v1-v3's
+/// 4x frame), shifted up for a frame wider than the levels reach; fewer
+/// levels spread out by Mesa's table; and the finest levels dropped until
+/// the bin pointers fit the heap chunk.
+#[test]
+fn the_hierarchy_mask_is_mesa_s_for_any_tiler_levels() {
+    let budget = (2 << 20) - 64;
+    let m = |w, h, levels, tile| hierarchy_mask(w, h, levels, tile, budget);
+    assert_eq!((m(64, 64, 8, 1024), m(64, 64, 8, 512), m(64, 64, 8, 256)), (Some(0xfe), Some(0xfe), Some(0xff)));
+    /* 4096 pixels need 9 levels of 16x16 squares: the 8 move up one */
+    assert_eq!(m(4096, 2160, 8, 1024), Some(0x1fe));
+    /* fewer levels: Mesa's spread table, the high bit always set */
+    let spread: Vec<_> = (1..8).map(|l| m(64, 64, l, 256)).collect();
+    assert_eq!(spread, [0x80, 0x82, 0xa2, 0xaa, 0xea, 0xee, 0xfe].map(Some));
+    assert_eq!(m(64, 64, 4, 1024), Some(0xaa), "0xaa: level 0 is off already");
+    assert_eq!(m(64, 64, 0, 1024), None, "no level");
+    /* a budget the finest levels do not fit: dropped until it does */
+    let full = hierarchy_mask(1024, 1024, 8, 256, u32::MAX).unwrap();
+    assert_eq!(full, 0xff);
+    /* 64x64 + 32x32 + ... bins are 43712 bytes of pointers, without level
+     * 0 10944, without level 1 too 2752 */
+    assert_eq!(hierarchy_mask(1024, 1024, 8, 256, 4096), Some(0xfc));
+    assert_eq!(hierarchy_mask(1024, 1024, 8, 256, 8), None, "no mask fits 8 bytes");
 }

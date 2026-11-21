@@ -113,6 +113,8 @@ fn build(mode: &str, flip_y: bool) -> Built {
             geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
             sample_positions: 0x7fff_ffff_f000,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: TileBudget::G610,
         };
         let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();
