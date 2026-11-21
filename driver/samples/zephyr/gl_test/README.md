@@ -1,16 +1,19 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4, Raspberry Pi 5, NanoPC-T6)
+# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4, Raspberry Pi 5, NanoPC-T6, Verdin iMX95)
 
 Runs `driver/tools/pvrlab/gl_test.c`, YakoGL's on-silicon test suite, on the
 GPUs: the Verdin AM62P's PowerVR, the i.MX8M Plus's Vivante GC7000UL, the
-STM32MP257F-DK's Vivante GCNanoUltra31, the Pi 4's V3D and the NanoPC-T6's
-Mali-G610. It is one sample for every board: the Zephyr board (`-b`) picks the
-GPU, `main_am62p.c`, `main_imx8mp.c`, `main_stm32mp2.c`, `main_rpi4.c` or
-`main_nanopc_t6.c` (the lines that start the back end and the board's way to
-give a verdict) and the files in `boards/` (`imx8mp.conf` and
+STM32MP257F-DK's Vivante GCNanoUltra31, the Pi 4's V3D, the NanoPC-T6's
+Mali-G610 and the Verdin iMX95's Mali-G310 (built only). It is one sample for
+every board: the Zephyr board (`-b`) picks the GPU, `main_am62p.c`,
+`main_imx8mp.c`, `main_stm32mp2.c`, `main_rpi4.c` or `main_mali.c` (the
+NanoPC-T6 and the Verdin iMX95; the lines that start the back end and the
+board's way to give a verdict) and the files in `boards/` (`imx8mp.conf` and
 `armadillo_x2.conf` are added by `CMakeLists.txt` for the i.MX8M Plus boards,
-the board layer's `stm32mp2/app.conf` for the DK). The options of each GPU are in
+the board layer's `stm32mp2/app.conf` for the DK, the board layer's
+`verdin_imx95/app.conf` and `app.overlay` and then `verdin_imx95.conf` here
+for the Verdin iMX95, `../common/verdin_imx95.cmake`). The options of each GPU are in
 their own menu of `Kconfig`. Every case reads its pixels back and prints
 `gl_test: case N <name>: PASS/FAIL`; a run ends with
 `gl_test: all: N of M cases failed`. The header comment of `gl_test.c` lists
@@ -282,3 +285,41 @@ most 16 times in an image. An error that needs a GPU reset, or one past the
 later case fails. The OSAL's two close lines (`osal(mali): kicks ...` and
 `osal(mali): restarts ...`) give the counts. The run ends with
 `gl_test: OK|FAILED (rc=N)` and `t6: gl_test done: PSCI SYSTEM_RESET`.
+
+## Verdin iMX95 (Mali-G310, built only)
+
+The same suite, the same `src/main_mali.c` and the same Kconfig menu
+(`T6_GL_TEST_CASE`, `T6_GL_TEST_CASES`) as the NanoPC-T6: the GPU code is
+the T6's (`docs/notes/mali-g310-vs-g610.md`). What differs is the board's
+part, which `main_mali.c` takes from the board glue and the board layer
+(`driver/zephyr/lib/board/verdin_imx95`): WDOG3 armed at `PRE_KERNEL_1`, the
+GPU powered over SCMI and the CSF firmware booted (`verdin_imx95_mali.c`; the
+G310's firmware is the G610's file, so the same
+`driver/src/fw/mali_csffw_blob.h`), and the end through `board_finish()`:
+`gl_test: OK|FAILED (rc=N)`, then `gl_test: PASS|FAIL`, the `yk-record`
+line and `verdin_imx95: board: run over: PSCI SYSTEM_RESET`.
+
+The board files are the board layer's `app.conf` and `app.overlay` (as every
+example's), then `verdin_imx95.conf` here
+(`../common/verdin_imx95.cmake`). That file turns the X4 panel off
+(`CONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=n`): the suite reads its pixels back and
+the image never brings the panel up unless asked
+(`-DCONFIG_YAKOGL_VERDIN_IMX95_DISPLAY=y`, which also builds). It sets the
+board layer's lifetime to 300 s and its alive window to 30 s, as the T6's
+image, and no hold.
+
+```sh
+driver/tools/mkmalifw.sh <mali_csffw.bin>      # the header, never committed
+west build -p always -b verdin_imx95/mimx9596/a55 -d build/vi95_gl_test \
+    yakogl/driver/samples/zephyr/gl_test -- -DYAKOGL_WERROR=ON
+```
+
+Memory (2026-11-21): the image's RAM footprint (the AArch64 header's
+`image_size`) is 93,069,312 bytes (88.8 MiB) of the 256 MiB at 0xd0000000
+(`verdin_imx95_mimx9596_a55.dts`, `zephyr,sram`), of it the carve-out of
+`app.conf` (40.6 MiB: the T6's 32 MiB for the GL side plus 8800 KiB of window
+memory) and the tiler heap's 10 MiB. `zephyr.bin` is 4,612,216 bytes: the
+OSAL's memory is `.noinit`. `tools/check.sh` (`zephyr  verdin_imx95 gl_test
+image`) checks the footprint against `zephyr,sram`, the file against the
+carve-out, the display off, and the build, WDOG3 and GPU bring-up lines once
+each. Not run on a board yet (`docs/notes/pre-study-imx95.md`, B5).
