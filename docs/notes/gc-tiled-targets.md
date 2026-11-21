@@ -61,16 +61,16 @@ Sources:
   | 1. tiled vertex-stage textures | 4-6 ms | 0 | 0 |
   | 3. fast clear of depth | ≈0 | 7.5 ms | ≈0 |
   | 3. TS-aware CPU depth resolve | 0 | 30-150 ms | 30-150 ms |
-  | 4. fast clear of colour | 1-5 ms | 0 | 2.5-7.5 ms |
-  | 5. early depth | 0-19 ms | 0-1 ms | 0-2 ms |
+  | 4. fast clear of colour | -1.3 to +3.4 ms | 0 | -1.9 to +7.7 ms |
+  | 5. early depth | 0.75-1.6 ms | 0-1 ms | 0-2 ms |
   | 6. tiled window | ≈2 ms | 0-1 ms | 0-1 ms |
 
-  - The fill gains come from the pixel model of
-    `docs/notes/imx8mp-frame-floor.md` candidate 2: 3.9 ns a rasterised
-    pixel, plus 0.6 to 0.8 ns an instruction a pixel (`gc-slow-terrain.md`,
-    "The GPU calibration").
-  - Early depth matters only on terrain's 148-instruction terrain pass. The
-    grid's draw order decides how much it saves.
+  - Rows 4 and 5 carry the current tip's figures. A clear of this tree is
+    already an RS fill (`rs_clear.rs`, 11fb5f88), so a TS fast clear removes
+    bytes, not a job: row 4 is `gc-slow-host-counts.md`'s "Predicted effect
+    of W7 to W9" (2 to 8 GB/s, unmeasured), row 5 is `gc-terrain-overdraw.md`'s
+    model. Row 3's 7.5 ms is superseded the same way in that source: 0 ms as
+    wired, 0.96 to 3.84 ms only with W12 (its TS-aware CPU depth resolve stays).
   - The largest single item is the TS-aware CPU depth resolve, which reads
     only tiles the depth pass wrote. If the texture unit learns to sample the
     D24S8 surface (item gt-depth-tpu, `docs/notes/gc-depth-sample.md`), the
@@ -615,19 +615,19 @@ Every board check runs on the Armadillo-X2 (target:x2) only, under plan
     today (`wide_target.rs:36-42`). Keep the shared GL change small: plan
     #310 is changing the GL core's texture classes.
 - **Gain.**
-  - **terrain 1 to 5 ms.** The four FBO clear quads at 800x600 and the four
-    256x256 ones are 4.8 ms. Height and normal are single-level, so
-    sampler TS applies and they need no resolve. The terrain target,
-    tilt_h, bloom_h and bloom_v are mipmapped and need a resolve before
-    their chain is sampled: about 0 (in place, super-tiled, fully drawn)
-    to a full-surface RS copy (TILED), at the rate step 0 measures.
-    Texture-cache locality of tiled sampling for the 9-tap blurs is a
-    possible further gain that the model has no term for.
+  - **terrain -1.3 to +3.4 ms** (`gc-slow-host-counts.md`, "Predicted effect of
+    W7 to W9": it replaces this study's "1 to 5 ms", whose top, 4.8 ms, is
+    quad pricing. A clear of this tree is an RS fill today (`rs_clear.rs`,
+    11fb5f88), so a fast clear removes bytes, not a job). Height and normal
+    are single-level, so sampler TS applies and they need no resolve. The
+    mipmapped targets need a resolve before their chain is sampled: about 0
+    (in place, super-tiled, fully drawn) to a full-surface TILED copy,
+    0 to 0.55-2.2 ms. Cache locality of tiled sampling is unmodelled.
   - **shadow 0.** It has no colour FBO.
-  - **refract 2.5 to 7.5 ms.** The fused 1600x1200 colour and depth clear
-    goes (7.5 ms), minus the resolve of level 0 before the chain and the
-    refraction pass sample it. The resolve writes the cleared share of
-    7.68 MB in place, or all of it by self-copy.
+  - **refract -1.9 to +7.7 ms** (same source; it replaces "2.5 to 7.5 ms",
+    the same sum priced as a quad). The fused 1600x1200 colour and depth
+    clear's 15.36 MB of fills go, minus 0 to 0.96-3.8 ms for the level-0
+    resolve the chain and the refraction pass sample need before sampling it.
 - **Host tests.**
   - `tests/gc_tiled_copy_reuse.rs`: a rendered 2D texture is sampled from
     its tiled surface with no copy;
@@ -649,13 +649,13 @@ Every board check runs on the Armadillo-X2 (target:x2) only, under plan
   colour target is tiled or absent.
 - **Size.** About 60 lines in `backend.rs` and `dedup.rs`.
 - **Gain.**
-  - **terrain 0 to 14 ms** (up to 19 at 0.8 ns): the hidden fragments of
-    the terrain pass. Cover times overdraw is 0.8 to 1.2 at cover about
-    0.8, so 0 to a third of 480 000 fragments, at 148 instructions each.
-    How many are rejected depends on whether `make_grid`'s order
-    (`terrain-renderer.cpp:243`) draws near rows first; this is the widest
-    range in this note. tilt_v's depth-tested full-screen quad gains
-    nothing.
+  - **terrain 0.75 to 1.6 ms a frame** (`gc-terrain-overdraw.md`, 5637ecd2,
+    host model): 1.9 to 3.0 % of the terrain pass's fragments are rejected
+    in `make_grid`'s order (`terrain-renderer.cpp:243`), at 148 instructions
+    each, cover 0.88 to 0.90, overdraw 1.02 to 1.03. The study's "0 to 14 ms"
+    (19 at its top at 0.8 ns, a third hidden of 480 000 fragments, cover
+    times overdraw 0.8 to 1.2) is superseded: that order already reaches
+    the per-pixel floor. tilt_v's depth-tested full-screen quad gains nothing.
   - **shadow 0 to 1 ms.** The depth pass shader is trivial, and the horse
     is drawn after the ground it covers.
   - **refract 0 to 2 ms.** The horse's own overdraw with culling is small.
@@ -669,7 +669,7 @@ Every board check runs on the Armadillo-X2 (target:x2) only, under plan
   - gl_test case 3 (the case that hung when the two halves disagreed) and
     the default set;
   - terrain's ms a frame. One image with `no_early_z` behaviour and one
-    without settles the 0 to 14 ms range.
+    without measures it against the model's 0.75 to 1.6 ms (`gc-terrain-overdraw.md`).
 
 ### 6. The window tiled, resolved to linear at the swap (optional, last)
 

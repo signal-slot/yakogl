@@ -508,18 +508,18 @@ Predicted change, a frame, **host-derived**:
   (`gc-slow-stream-diff.md`, finding 3) does not move; the +132 words are noise
   against the 6 to 76 KB a frame the FE already fetches (the same note,
   finding 6).
-- **Gain: 0 to -14 ms** (to -19 at 0.8 ns an instruction): early depth rejects
-  hidden fragments of the 148-instruction terrain pass, 42.6 ms at full cover
-  (`gc-tiled-targets.md`, "5. Early depth", Gain, and "The part"). The note puts
-  the range's width on `make_grid`'s draw order. The model of that order,
-  `gc-terrain-overdraw.md` (host model, no board), narrows it to -0.75 to
-  -1.6 ms a frame (2.5 % of the fragments, mean -1.0 to -1.3 ms): make_grid's
-  order already reaches the per-pixel floor, and the overdraw is only 1.02 to
-  1.03.
-- **Net: from about -14 ms to about +3 ms** on the cited range; about -0.9 to
-  +2.3 ms with the order model's gain, the sign set by the RS rate. Of a board frame of about 250 ms (`gc-slow-terrain.md`, before plan
-  #328's fixes) this is at most a twentieth: the knob cannot take terrain off
-  its GPU-shading bound (140 to 205 ms, the same note, rank 1).
+- **Gain: -0.75 to -1.6 ms a frame** (2.5 % of the fragments of the
+  148-instruction terrain pass, mean -1.0 to -1.3 ms): `gc-terrain-overdraw.md`
+  (5637ecd2), a host model of `make_grid`'s draw order, no board. make_grid's
+  order already reaches the per-pixel floor, and the overdraw is only 1.02
+  to 1.03. That supersedes `gc-tiled-targets.md`'s "0 to 14 ms" (up to 19 at
+  0.8 ns an instruction, 42.6 ms at full cover, "5. Early depth", Gain): its
+  upper end assumed a third hidden fragments, and put the range's width on
+  the order; the model finds a fortieth, and the order is not the limit.
+- **Net: about -0.9 to +2.3 ms**, the sign set by the RS rate (about -14 to
+  +3 on the superseded range). Of a board frame of about 250 ms (`gc-slow-terrain.md`,
+  before plan #328's fixes) this is under 1 %: the knob cannot take terrain
+  off its GPU-shading bound (140 to 205 ms, the same note, rank 1).
 
 Reading rule for session A, terrain (D = ms a frame with the knob on minus off,
 same image otherwise; the knob switches W4 and W5 together, so D cannot
@@ -619,17 +619,18 @@ run are read against.
 
 ### What it replaces in `gc-tiled-wire.md`
 
-The order table of `gc-tiled-wire.md` gives W8 "terrain 1 to 5 ms, refract 2.5
-to 7.5 ms". Those are `gc-tiled-targets.md` change 4's figures, and they price
-each clear as a **quad** at 3.9 ns a pixel (terrain's "four FBO clear quads at
-800x600 and the four 256x256 ones", 4.8 ms; refract's one fused 1600x1200
-quad, 7.5 ms). That is no longer the stream: plan #328 landed the RS fill
-clears (`rs_clear.rs`), and the "RS jobs, fill" rows above (terrain 11.2,
-shadow 3, refract 4 a frame) are RS jobs, not draws. What W7 to W9 can still
-remove is the **bytes** a fill writes, not a job: a TS fill is also one RS job.
-So every RS job count below is unchanged; the fill shrinks to the tile status
-(`gc-tiled-targets.md`, "Fast clear": 30 KB for a 1600x1200 surface instead of
-7.68 MB). The quad-priced figures overstate the gain at this tip.
+The order table of `gc-tiled-wire.md` gave W8 "terrain 1 to 5 ms, refract 2.5
+to 7.5 ms", figures of `gc-tiled-targets.md` change 4 that priced each clear
+as a **quad** at 3.9 ns a pixel (terrain's "four FBO clear quads at 800x600
+and the four 256x256 ones", 4.8 ms; refract's one fused 1600x1200 quad,
+7.5 ms). That is not the stream: plan #328 landed the RS fill clears
+(`rs_clear.rs`), and the "RS jobs, fill" rows above (terrain 11.2, shadow 3,
+refract 4 a frame) are RS jobs, not draws. What W7 to W9 can still remove is
+the **bytes** a fill writes, not a job: a TS fill is also one RS job. So
+every RS job count below is unchanged; the fill shrinks to the tile status
+(`gc-tiled-targets.md`, "Fast clear": 30 KB for a 1600x1200 surface instead
+of 7.68 MB). The quad-priced figures overstated the gain; the notes now
+carry this section's byte-priced rows (item stale-figures).
 
 ### Inputs, and the commit read
 
@@ -703,8 +704,8 @@ W7 to W9 as wired reach the terrain pass only.
 - The resolve that reads through TS (W8's TS-sourced copy of the same 1.92 MB)
   does not fetch cleared tiles: **0 to 0.24-0.96 ms**, 0 if the pass draws
   every tile, the whole 1.92 MB read (8 to 2 GB/s) if it draws none. The
-  pass's coverage is an open input (terrain-overdraw models it, not in this
-  tree), so this is an upper bound, not a middle.
+  pass's coverage is modelled in `gc-terrain-overdraw.md` (5637ecd2), so this
+  is an upper bound, not a middle.
 - **Prediction, W7 to W9 after W4/W5: terrain 0.5 to 2.9 ms a frame faster**
   (0.48 + 0 to 1.92 + 0.96). Of a board frame of about 250 ms
   (`gc-slow-terrain.md`, before plan #328's fixes) that is 0.2 to 1.2 %. Rank 1
@@ -716,8 +717,8 @@ W7 to W9 as wired reach the terrain pass only.
   levels, cannot use the sampler's TS, and a TILED source has no in-place
   resolve, so each needs a copy of its surface: 1.92 + 1.92 + 2 x 0.262 = 4.37
   MB, **0 to 0.55-2.2 ms** (0 where W4's copy-back already resolved them).
-  Net **-1.3 to +3.4 ms**. That is the replacement for the table's "1 to 5":
-  its top, 4.8 ms, is quads.
+  Net **-1.3 to +3.4 ms**. That replaced the table's "1 to 5" (its top, 4.8
+  ms, was quad pricing; the tables now carry this section's figures).
 - Not counted, no figure in the notes: the PE's depth reads of cleared tiles,
   and tiled sampling's cache locality (`gc-tiled-targets.md` change 4).
 
@@ -742,8 +743,8 @@ W7 to W9 as wired reach the terrain pass only.
   15.36 MB of fills, **1.9 to 7.7 ms** removed. The colour's level 0 is sampled
   by the `glGenerateMipmap` chain and the refraction pass, so it needs a resolve
   (TILED: a copy of all 7.68 MB), **0 to 0.96-3.8 ms**. Net **-1.9 to +7.7 ms**.
-  The table's "2.5 to 7.5 ms" is the same sum priced as a quad (7.5 ms for
-  1.92 Mpx of colour and depth); at RS rates the loss side is wider.
+  The tables' former "2.5 to 7.5 ms" was the same sum priced as a quad (7.5
+  ms for 1.92 Mpx of colour and depth); at RS rates the loss side is wider.
 - Of a refract frame of about 500 ms (`gc-tiled-targets.md`) the gain is at
   most 1.5 %; its dominant cost is the CPU depth resolve of shadow's cause.
 

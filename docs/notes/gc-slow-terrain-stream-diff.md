@@ -44,7 +44,7 @@ Host only. No board was run and no code was changed. Code is cited as
     terrain-compiler-fix): the largest term, though not a stream state;
   - kick boundaries (mip-one-kick, gc-frames-ring, fence-irq): 9 to 14 ms;
   - early depth on the terrain and overlay draws (gc-early-z, gc-tiled-wire
-    W4/W5, tiled-depth): 0 to 14 ms;
+    W4/W5, tiled-depth): 1.6 ms at most (`gc-terrain-overdraw.md`);
   - clears drawn as quads instead of TS fills (gc-tiled-wire W7 to W9; the
     RS fill of the surface is stream-diff's finding 1, which has no item):
     1.7 to 8.9 ms;

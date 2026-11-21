@@ -4,11 +4,11 @@
 
 Plan #355, item terrain-overdraw. `gc-tiled-wire.md` ("What this note does
 not settle") leaves open how many of terrain's fragments early depth (W5)
-rejects. `gc-tiled-targets.md` (step 5, `:651-657`) puts it at 0 to 14 ms a
-frame (up to 19 ms at 0.8 ns an instruction), from a cover times overdraw of
-0.8 to 1.2 and "0 to a third of 480 000 fragments", and says that the
-range's width depends on the order in which `make_grid` draws the grid. This
-note narrows that range with a host model of the draw. The model is
+rejects. `gc-tiled-targets.md` step 5 put it at 0 to 14 ms a frame (up to 19
+ms at 0.8 ns an instruction), from a cover times overdraw of 0.8 to 1.2 and
+"0 to a third of 480 000 fragments", and said that the range's width depends
+on the order in which `make_grid` draws the grid; step 5 and the wired notes
+now carry this note's figures (item stale-figures). The model is
 `tools/vivante/terrain_overdraw.py`. Every number below is a host model. No
 board measured any of it.
 
@@ -24,10 +24,11 @@ board measured any of it.
   the saving: terrain's overdraw is. The rasteriser makes about 440 000
   fragments a frame for about 429 000 covered pixels (cover 0.88 to 0.90,
   overdraw 1.02 to 1.03).
-- **So W5's terrain row is 0 to 14 (19) ms in `gc-tiled-wire.md:130`, `:942`
-  and in `gc-tiled-targets.md:65`, `:652`, and the model puts it at about
-  1 ms (at most 1.6 ms).** The range's upper end assumed that a third of the
-  fragments are hidden. The model finds a fortieth.
+- **W5's terrain row was 0 to 14 (19) ms in `gc-tiled-wire.md`'s Answer in
+  short, its W5 board check and order table, and in `gc-tiled-targets.md`'s
+  summary table and step 5; item stale-figures replaced those rows with the
+  model's about 1 ms (at most 1.6 ms).** The range's upper end assumed that a
+  third of the fragments are hidden. The model finds a fortieth.
 - For session A, the model predicts that the knob's net change on terrain is
   set by the RS copies, not by early depth (see "How session A confirms or
   refutes this").

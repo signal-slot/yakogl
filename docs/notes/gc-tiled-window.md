@@ -274,7 +274,8 @@ That is a model, with W8 (tile-status fast clear of the window) behind it
 (`gc-tiled-wire.md` "Order, dependencies and risk": W13 depends on W8, "an
 X2 run, every scene"). Without W8 the window clear is a quad (a draw, not a
 fast clear) and the gain is only what early depth and the tiled writes give
-(W5's range, terrain 0 to 14 ms at most). Break-even: the copy must cost
+(W5's range, terrain 0 to 14 ms at most, superseded: `gc-terrain-overdraw.md`
+models 1.6 ms at most). Break-even: the copy must cost
 less than the draws save, which is only measured on the board; if the RS
 copy of 1.92 MB costs more than about 1 ms, the shadow and refract scenes
 lose, and the window class narrows (the build item's knob: a separate
