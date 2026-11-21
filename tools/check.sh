@@ -4584,6 +4584,42 @@ zephyr_verdin_imx95_triangle_image() {
   nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_wdog32_arm$' ||
     { echo "zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
 }
+# Every Zephyr image under tools/probes/verdin_imx95/ (a directory with a
+# CMakeLists.txt and a prj.conf: imx95_wdog, imx95_scmi, imx95_ident,
+# imx95_fw, imx95_dsi_ids as present; tools/probes/verdin_imx95/README.md),
+# built for the Verdin iMX95's A55 with -Werror on our C files: built only,
+# the board is not in the farm. One row for all of them, so a new probe needs
+# no new row. imx95_fw embeds the CSF firmware ($1, made into the header as
+# the triangle row does). Each image carries the WDOG3 arming of the board
+# glue (yd_wdog32_arm linked, "board: watchdog armed" once) and its probe's
+# verdict lines; imx95_wdog alone is built with the feeding off.
+zephyr_verdin_imx95_probe_images() {
+  local d name n=0 dir bin c
+  mali_csffw_header "$1" verdin_imx95-probes || return 1
+  for d in tools/probes/verdin_imx95/*/; do
+    d=${d%/}
+    [ -f "$d/CMakeLists.txt" ] && [ -f "$d/prj.conf" ] || continue
+    name=${d##*/}
+    dir=build/zephyr-werror/verdin_imx95-$name
+    bin=$dir/zephyr/zephyr.bin
+    zephyr_werror_image verdin_imx95/mimx9596/a55 "$d" "verdin_imx95-$name" ||
+      { echo "verdin_imx95 probe $name did not build"; return 1; }
+    nm --defined-only "$dir/zephyr/zephyr.elf" | grep -q ' yd_wdog32_arm$' ||
+      { echo "$name: zephyr.elf does not link yd_wdog32_arm (WDOG3's arming)"; return 1; }
+    c=$(strings -n 20 "$bin" | grep -cF 'board: watchdog armed') || true
+    [ "$c" = 1 ] || { echo "$name: zephyr.bin carries 'board: watchdog armed' ${c:-0} times, not once"; return 1; }
+    c=$(strings -n 8 "$bin" | grep -cE "^$name: (PASS|FAIL)") || true
+    [ "${c:-0}" -gt 0 ] || { echo "$name: zephyr.bin carries no '$name: PASS' or '$name: FAIL' line"; return 1; }
+    if [ "$name" = imx95_wdog ]; then
+      grep -q '^# CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED is not set$' "$dir/zephyr/.config" ||
+        { echo "imx95_wdog is built with WDOG3 fed: its pass is the unfed reset"; return 1; }
+    elif grep -q '^# CONFIG_YAKOGL_VERDIN_IMX95_WDOG_FEED is not set$' "$dir/zephyr/.config"; then
+      echo "$name is built with WDOG3 unfed: only imx95_wdog may be"; return 1
+    fi
+    n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] || { echo "no verdin_imx95 probe image under tools/probes/verdin_imx95/"; return 1; }
+}
 # The STM32MP257F-DK's return-trial image (mp2_hello, issues #7 and #1281)
 # with the board layer's OP-TEE watchdog on (its prj.conf leaves it off, for
 # the runner's MP2_NO_WATCHDOG=1 step): it builds, and it carries the layer's
@@ -4718,6 +4754,11 @@ if [ "$QUICK" -eq 0 ]; then
     needs_mali_csffw
     step "zephyr  verdin_imx95 examples/triangle image (Mali-G310, built only), -Werror on our C files" \
       zephyr_verdin_imx95_triangle_image "$mali_csffw"
+    # The Verdin iMX95's first-session probes (tools/probes/verdin_imx95):
+    # imx95_fw embeds the same firmware, the same gap without it.
+    needs_mali_csffw
+    step "zephyr  verdin_imx95 probe images (tools/probes/verdin_imx95/*, built only), -Werror on our C files" \
+      zephyr_verdin_imx95_probe_images "$mali_csffw"
     scope drivers samples
     step "zephyr  rpi_5 probe images (tools/probes/rpi_5/*), -Werror on our C files" \
       zephyr_rpi5_probe_images

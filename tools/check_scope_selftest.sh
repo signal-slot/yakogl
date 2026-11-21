@@ -300,6 +300,8 @@ expect "gate_st: the Vivante scope only" '^check.sh: .*\(--changed HEAD, scopes:
 out=$(plan tools/probes/rpi_5/rpi5_hello/src/main.c)
 expect "rpi_5 probe: the probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
 expect "rpi_5 probe: the fdt_walk host row (or its dtc gap)" '^(plan  test    rpi_5 fdt_walk host test|gap   rpi_5 fdt_walk host test: dtc is not on PATH)' "$out"
+out=$(plan tools/probes/verdin_imx95/imx95_scmi/src/main.c)
+expect "verdin_imx95 probe: the probe images row" '^plan  zephyr  verdin_imx95 probe images' "$out"
 out=$(plan driver/zephyr/lib/board/rpi5/rpi_wdog.c)
 expect "board layer: the rpi_5 probe images row" '^plan  zephyr  rpi_5 probe images' "$out"
 # The licence audit reads every tracked file: any added or changed path reaches

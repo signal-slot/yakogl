@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# What imx95_scmi's lines should read on the Verdin iMX95, taken from
+# Toradex's public System Manager configuration and NXP's SM sources as the
+# design notes cite them (imx-sm-toradex configs/verdin-imx95.cfg and
+# config_scmi.h; driver/docs/imx95-display.md sections 1 and 6, "Z0";
+# docs/notes/imx95-gpu-power.md; soc/imx95/gpu_power.rs, display_power.rs,
+# dsi_power.rs). check.sh reads it.
+#
+# Format: KEY<TAB>VALUE-ERE. KEY is the probe's key (the text between
+# "imx95_scmi: " and " = "); VALUE-ERE an extended regular expression the
+# whole value must match. A key not listed here is recorded, not checked
+# (the domains' states and the clocks' rates depend on what ran before).
+#
+# Permissions: SCMI 3.2 CLOCK_GET_PERMISSIONS sets bit 31 (state), 30
+# (parent) and 29 (rate) for what the agent may control; AP-NS's ALL is all
+# three. A clock AP-NS holds no permission for reads none, or the SM refuses
+# the question (DENIED): both pass.
+
+# the agent (U1, U2: "AP-NS", agent 2)
+base agent	2 AP-NS
+# the protocol versions the port's sequences check (rpc_scmi_power.c,
+# rpc_scmi_perf.c, rpc_scmi_clock.c PROTOCOL_VERSION)
+proto 0x11 version	0x00030001
+proto 0x13 version	0x00040000
+proto 0x14 version	0x00030000
+# the GPU's performance levels: PRK 24 MHz, LOW 500, NOM 800, ODV 1000 MHz
+# (dev_sm_perf.c; Linux imx95.dtsi gpu_opp_table)
+perf 9 levels	0:24000 1:500000 2:800000 3:1000000
+# DISP and CAM: PRK, LOW 400, NOM 666.667, ODV 800 MHz (MIMX95_elec_spec.h),
+# started at ODV (brd_sm_tdx_common.c BOARD_PERF_LEVEL), nothing lowers them
+perf 12 levels	0:24000 1:400000 2:666667 3:800000
+perf 11 levels	0:24000 1:400000 2:666667 3:800000
+perf 12 level	3
+perf 11 level	3
+# ALL for AP-NS (config_scmi.h): the GPU gate, VIDEOPLL1 and its VCO, the
+# MIPI PHY clocks, DISP1PIX, TPM6, LPI2C3
+clk 174 permissions	0xe0000000 \(state parent rate\)
+clk 18 permissions	0xe0000000 \(state parent rate\)
+clk 19 permissions	0xe0000000 \(state parent rate\)
+clk 66 permissions	0xe0000000 \(state parent rate\)
+clk 67 permissions	0xe0000000 \(state parent rate\)
+clk 68 permissions	0xe0000000 \(state parent rate\)
+clk 80 permissions	0xe0000000 \(state parent rate\)
+clk 155 permissions	0xe0000000 \(state parent rate\)
+clk 129 permissions	0xe0000000 \(state parent rate\)
+# none: the SM's own (DISPAPB, DISPAXI, DISPOCRAM, CAMAPB set from the
+# performance levels; the GPU root and APB)
+clk 75 permissions	0x00000000 \(none\)|DENIED \(-3\)
+clk 76 permissions	0x00000000 \(none\)|DENIED \(-3\)
+clk 78 permissions	0x00000000 \(none\)|DENIED \(-3\)
+clk 62 permissions	0x00000000 \(none\)|DENIED \(-3\)
+clk 84 permissions	0x00000000 \(none\)|DENIED \(-3\)
+clk 83 permissions	0x00000000 \(none\)|DENIED \(-3\)
