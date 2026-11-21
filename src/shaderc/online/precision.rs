@@ -1686,12 +1686,20 @@ mod tests {
         let (mut compiled, mut bad, mut unknown) = (0usize, Vec::new(), Vec::<String>::new());
         super::super::lower::UNSEEN.with(|n| n.set(0));
         super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+        super::super::lower::NO_CONTEXT_AT.with(|v| v.borrow_mut().clear());
+        let mut no_context_at = Vec::<String>::new();
         for f in &files {
             let Ok(src) = std::fs::read_to_string(f) else { continue };
             let stage = if f.extension().is_some_and(|x| x == "vert") { Stage::Vertex } else { Stage::Fragment };
             let a = Arena::new(&mut buf);
             let Ok(text) = a.alloc_str(&src) else { continue };
-            let Ok(l) = compile_to_ir(&a, stage, text) else { continue };
+            let r = compile_to_ir(&a, stage, text);
+            /* the values lowered under no class, named with their shader
+             * (a refused shader's too: its lowering reached them) */
+            for at in super::super::lower::NO_CONTEXT_AT.with(|v| v.take()) {
+                no_context_at.push(std::format!("{}: {at}", f.display()));
+            }
+            let Ok(l) = r else { continue };
             let m = &l.module;
             compiled += 1;
             if !m.has_prec() {
@@ -1721,7 +1729,12 @@ mod tests {
         let unseen = super::super::lower::UNSEEN.with(|n| n.get());
         assert_eq!(unseen, 0, "expressions lowered that the precision scan never reached");
         let no_context = super::super::lower::NO_CONTEXT.with(|n| n.get());
-        assert_eq!(no_context, 0, "float or bool values lowered under no class, left to the Unknown rule");
+        assert_eq!(
+            no_context,
+            0,
+            "float or bool values lowered under no class, left to the Unknown rule:\n{}",
+            no_context_at.join("\n")
+        );
         /* the Unknown path is live: the dead-cube shader's `asin(float(k))`
          * of a global `k` NIR may prove constant (fourth review) */
         assert!(
@@ -2518,6 +2531,38 @@ void main(){ glob = glob * uh; mediump float t = a.x; t++; --t; v = vec4(glob, c
             assert!(bad.is_empty(), "{src}\nvalues whose class is not their kind's: {bad:?}");
             assert_eq!(super::super::lower::UNSEEN.with(|n| n.get()), 0, "{src}");
             assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{src}");
+        }
+    }
+
+    /// The result slot of an inlined function with more than one `return`
+    /// is F32 whatever the return type, so an int or bool function's read
+    /// of it is a float value under a call with no class. It is a copy the
+    /// lowering makes, a full-width read of a 32-bit slot: High, like the
+    /// copy in and back of a parameter, never the no-context Unknown.
+    /// dEQP's `functions.misc.argument_eval_order_1` (corpus
+    /// `deqp_texmisc_fcm_eval_order.frag`) is the int case.
+    #[test]
+    fn a_result_slot_read_of_a_call_with_no_class_is_high() {
+        for src in [
+            "precision mediump float; varying float v; uniform int r;\n\
+             int f(int b) { if (b > 1) return b + 1; else return -1; }\n\
+             void main(){ int o = f(int(v)); gl_FragColor = vec4(o == r); }",
+            "precision mediump float; varying float v;\n\
+             bool f(float a) { if (a > 0.5) return true; else return false; }\n\
+             void main(){ bool b = f(v); gl_FragColor = vec4(b); }",
+        ] {
+            super::super::lower::NO_CONTEXT.with(|n| n.set(0));
+            let mut buf = std::vec![0u8; 1 << 20];
+            let a = Arena::new(&mut buf);
+            let l = compile_to_ir(&a, Stage::Fragment, a.alloc_str(src).expect("arena")).expect("compiles");
+            let m = &l.module;
+            assert!(unclassed(m).is_empty(), "{src}");
+            assert_eq!(super::super::lower::NO_CONTEXT.with(|n| n.get()), 0, "{src}");
+            let loads: Vec<Prec> = (0..m.instrs.len())
+                .filter(|&i| matches!(m.instrs[i], Op::LoadLocal { .. }))
+                .map(|i| m.prec_of(ValueId(i as u32)))
+                .collect();
+            assert!(!loads.is_empty() && !loads.contains(&Prec::Unknown), "{src}: {loads:?}");
         }
     }
 
