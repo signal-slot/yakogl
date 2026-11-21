@@ -61,6 +61,12 @@ mod imx8mp_dsi;
 /// `yd_t6_osal_*`): src/ffi/imx95.rs.
 #[cfg(any(all(feature = "imx95", feature = "rk3588", feature = "mali"), test))]
 mod imx95;
+/// The Verdin iMX95's record sink, the BBNSM GPR4..7 over SCMI
+/// (soc::imx95::bbm; the glue is
+/// driver/zephyr/lib/board/verdin_imx95/verdin_imx95_record.c):
+/// src/ffi/imx95_bbm.rs.
+#[cfg(any(feature = "imx95", test))]
+mod imx95_bbm;
 /// The Verdin iMX95's picture on X4, `yd_imx95_display_up` / `_flip` / `_down`
 /// (board::verdin_imx95_display), and the SCMI channel's Rust side both
 /// halves share: src/ffi/imx95_display.rs.

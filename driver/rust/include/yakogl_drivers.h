@@ -345,6 +345,34 @@ int yd_wdog32_arm(uintptr_t base, uint32_t timeout_ms, uint32_t ext_reset, uint3
 		  struct yd_wdog32_arm *out);
 void yd_wdog32_refresh(uintptr_t base);
 
+/* ---- The Verdin iMX95's record in the BBNSM GPR4..7 (soc::imx95::bbm,
+ * ffi::imx95_bbm; the glue is verdin_imx95_record.c) --------------------------
+ * yd_imx95_bbm_record_store: the record's four words w[0..3] into GPR4..7
+ * over the System Manager's BBM protocol (0x81, BBM_GPR_SET 0x3), through
+ * scmi (verdin_imx95_scmi.h's form: the command out, the whole reply in, its
+ * length or a negative errno): GPR4 cleared first, then w1..w3 into
+ * GPR5..7, then w0 into GPR4. yd_imx95_bbm_record_load: GPR4..7 into w
+ * (BBM_GPR_GET 0x4). 0; -EIO when a message was not answered with SUCCESS
+ * (out says which); -EINVAL for a NULL argument (nothing sent). */
+#define YD_IMX95_BBM_RECORD_GPR 4 /* soc::imx95::bbm::RECORD_GPR: w0's GPR */
+
+struct yd_imx95_bbm {
+	uint32_t gpr;       /* the GPR whose message failed */
+	uint32_t msg;       /* 3 BBM_GPR_SET, 4 BBM_GPR_GET */
+	int32_t rc;         /* the transport's errno, else 0 */
+	int32_t status;     /* the SM's SCMI status of a refusal, else 0 */
+	uint32_t malformed; /* 1: the reply did not answer the command */
+};
+_Static_assert(sizeof(struct yd_imx95_bbm) == 20, "ffi::imx95_bbm YdImx95Bbm");
+_Static_assert(offsetof(struct yd_imx95_bbm, rc) == 8, "ffi::imx95_bbm YdImx95Bbm");
+
+int yd_imx95_bbm_record_store(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx,
+					  size_t rx_cap),
+			      const uint32_t w[4], struct yd_imx95_bbm *out);
+int yd_imx95_bbm_record_load(int (*scmi)(const uint8_t *tx, size_t tx_len, uint8_t *rx,
+					 size_t rx_cap),
+			     uint32_t w[4], struct yd_imx95_bbm *out);
+
 /* ---- RK3588 board glue (ip::dw_wdt, soc::rk3588, aarch64; nanopc_t6.c) ----
  * yd_dw_wdt_arm: WDT0's two CRU gates opened (CLKGATE_CON(15) bits 0, 1),
  * then the DW_apb_wdt armed for the period of `top` (2^(16 + top) cycles of

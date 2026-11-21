@@ -8,8 +8,12 @@
 //! and the display block's routing are registers ([`dpu`], [`display`];
 //! driver/docs/imx95-display.md), named from NXP's BSD-3 hal_nxp headers:
 //! [`regs`] is generated (tools/hal-nxp/gen_regs.py --soc imx95; never edit
-//! it by hand).
+//! it by hand). The result record without a console goes to the battery-backed
+//! GPRs over the SM's BBM protocol ([`bbm`]).
 
+pub mod bbm;
+#[cfg(test)]
+mod bbm_tests;
 pub mod display;
 pub mod display_power;
 pub mod dpu;
