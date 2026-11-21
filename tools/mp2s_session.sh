@@ -38,9 +38,12 @@
 # Stop rules (the note's step 8): nothing is retried, no reset resource is
 # used, `forever` is never run. A failure while the board is in Linux with
 # something staged runs nodefault and uninstall once. A board that may be
-# mid-boot (the watch or the comeback failed) is NOT touched: the output says
-# NEEDS A PERSON, names tools/mp2s_card_undo.sh as the last resort, and the
-# USB-C supply is checked first.
+# mid-boot (the watch or the comeback failed) is NOT touched: no second power
+# cycle, no reset resource, no other outside reset, no runner call, no ssh
+# command of the driver after the failure. It prints one line
+# `mp2s-session: NEEDS PERSON: <reason>` (also in session.txt), the card-in-a-PC
+# undo to use (tools/mp2s_card_undo.sh --dry-run, then --yes, on the card's
+# bootfs) and that the USB-C supply is checked first, then exits 3.
 #
 # Record: records/stm32mp257f-dk/<YYYYMMDD-HHMM>-standalone-<commit sha8>/
 # (gitignored): env-before.txt, boot-before.txt, raw.log, console.log, the
@@ -66,7 +69,8 @@
 #   MP2_SUDO     root prefix on the board (default "sudo -n ")
 # MP2_NO_WATCHDOG defaults to 1 for the runner: mp2_hello has no marker.
 # BOARD_PERSON_PRESENT is removed from the environment: no `forever` here.
-# Exit: 0 PASS, 1 FAIL <step>, 2 usage. Selftest: tools/mp2s_session_selftest.sh.
+# Exit: 0 PASS, 1 FAIL <step>, 2 usage, 3 NEEDS PERSON (the board did not come
+# back: the console watch or the comeback check failed; stopped, never retried). Selftest: tools/mp2s_session_selftest.sh.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
@@ -115,6 +119,7 @@ REC=${MP2S_RECORDS:-$ROOT/records/stm32mp257f-dk}/$(date +%Y%m%d-%H%M)-standalon
 RAW=$REC/raw.log
 STAMPED=$REC/console.log
 WPID=
+NEEDS=      # the reason, once the board may be stranded (exit 3)
 UNDO_OK=0   # 1: the board is in Linux with something staged: a failure runs the undo
 declare -A ST
 for s in $STEPS; do ST[$s]="not run"; done
@@ -159,9 +164,15 @@ finish() {
     if [ -n "$WPID" ]; then kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null; WPID=; fi
     {
         for s in $STEPS; do say "step $s: ${ST[$s]}"; done
+        if [ -n "$NEEDS" ]; then
+            say "NEEDS PERSON: $NEEDS"
+            say "undo with the card in a PC: tools/mp2s_card_undo.sh --dry-run, then --yes, on the card's bootfs partition"
+            say "check the USB-C supply first (BL2 'Reset reason:' in raw.log: tools/mp2s_reset_reason.py); no reset, no retry"
+        fi
         say "$1"
     } | if [ "$DRY" = 1 ] || [ ! -d "$REC" ]; then cat; else tee "$REC/session.txt"; fi
     [ "$1" = PASS ] && exit 0
+    [ -n "$NEEDS" ] && exit 3
     exit 1
 }
 undo_after_failure() {
@@ -177,8 +188,7 @@ fail() {
         undo_after_failure
     elif [ "$1" = console ] || [ "$1" = comeback ]; then
         if [ "${2:-}" != idle ]; then
-            say "NEEDS A PERSON: the board may be mid-boot; nothing more is sent to it (no reset, no nodefault)"
-            say "check the USB-C supply first (BL2 'Reset reason:' in raw.log: tools/mp2s_reset_reason.py); last resort: tools/mp2s_card_undo.sh"
+            NEEDS="the board did not come back (step $1 failed); it may be mid-boot, nothing more is sent to it"
         fi
     fi
     finish "FAIL $1"
