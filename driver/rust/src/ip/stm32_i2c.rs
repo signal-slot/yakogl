@@ -21,7 +21,8 @@
 //!    (TIMINGR may be written only with PE low, RM0457).
 //! 3. `stm32f7_i2c_compute_timing` (:461-650): the spec table
 //!    (`stm32f7_get_specs`: 100 kHz, 400 kHz, 1 MHz rows as in [`SPECS`]),
-//!    analog filter 50..260 ns (:172-173) when on, DNF = round(DT filter
+//!    analog filter 50..260 ns (:171-172, never used in the computation: see
+//!    [`compute_timing`]), DNF = round(DT filter
 //!    width / kernel clock period) <= 15 (:496), sdadel/scldel limits
 //!    (:517-527), the first (SCLDEL, SDADEL) per prescaler (:534-562), then
 //!    SCLL/SCLH inside `clk_min = 1e9/speed` .. `clk_max = 1e9/(0.8 speed)`
@@ -58,6 +59,9 @@ pub const TXDR: usize = 0x28;
 pub const CR1_PE: u32 = 1 << 0;
 pub const CR1_DNF: u32 = 0xf << 8;
 pub const CR1_ANFOFF: u32 = 1 << 12;
+/// Fast Mode Plus drive (`STM32_I2C_CR1_FMP`, i2c-stm32f7.c:53), set by
+/// the st,stm32mp25-i2c variant (`fmp_cr1_bit`, :430) above 400 kHz (:2039-2048).
+pub const CR1_FMP: u32 = 1 << 24;
 
 pub const CR2_SADD7: u32 = 0x7f << 1;
 pub const CR2_RD_WRN: u32 = 1 << 10;
@@ -112,10 +116,11 @@ pub struct Config {
 }
 
 impl Config {
-    /// The Linux defaults for `speed_hz`: rise 25 ns, fall 10 ns, analog
-    /// filter on, no digital filter.
+    /// The Linux defaults: rise 25 ns, fall 10 ns (i2c-stm32f7.c:174-175),
+    /// analog filter off (the DT property `i2c-analog-filter` absent, :717),
+    /// no digital filter (:168, :693-694).
     pub const fn new(clock_hz: u32, speed_hz: u32) -> Config {
-        Config { clock_hz, speed_hz, rise_ns: 25, fall_ns: 10, analog_filter: true, dnf_ns: 0 }
+        Config { clock_hz, speed_hz, rise_ns: 25, fall_ns: 10, analog_filter: false, dnf_ns: 0 }
     }
 }
 
@@ -185,8 +190,6 @@ const SPECS: [Spec; 3] = [
     },
 ];
 
-const AF_MIN_NS: i64 = 50;
-const AF_MAX_NS: i64 = 260;
 const DNF_MAX: i64 = 15;
 const NS: i64 = 1_000_000_000;
 
@@ -213,7 +216,11 @@ pub fn compute_timing(cfg: &Config) -> Result<Timing, i32> {
         return Err(-errno::EINVAL);
     }
     let dnf_delay = dnf * i2cclk;
-    let (af_min, af_max) = if cfg.analog_filter { (AF_MIN_NS, AF_MAX_NS) } else { (0, 0) };
+    // ST r3.1 reads `analog_filter` from the DT only after the timing is
+    // computed (i2c-stm32f7.c:717 after the loop at :696-710), so at :507-512
+    // it is still false and the filter delays never enter the computation:
+    // the filter flag drives ANFOFF only. Same here.
+    let (af_min, af_max) = (0, 0);
 
     let sdadel_min = (spec.hddat_min + fall - af_min - (dnf + 3) * i2cclk).max(0);
     let sdadel_max = (spec.vddat_max - rise - af_max - (dnf + 4) * i2cclk).max(0);
@@ -284,6 +291,9 @@ pub fn init<M: Mmio>(m: &M, base: usize, cfg: &Config) -> Result<Timing, i32> {
     m.modify32(base + CR1, CR1_ANFOFF, if cfg.analog_filter { 0 } else { CR1_ANFOFF });
     m.modify32(base + CR1, CR1_DNF, 0);
     m.modify32(base + CR1, CR1_DNF, field(CR1_DNF, u32::from(t.dnf)));
+    if cfg.speed_hz > 400_000 {
+        m.modify32(base + CR1, CR1_FMP, CR1_FMP);
+    }
     m.modify32(base + CR1, CR1_PE, CR1_PE);
     Ok(t)
 }
@@ -323,7 +333,7 @@ fn wait<M: Mmio>(m: &M, base: usize, want: u32) -> Result<(), i32> {
 }
 
 /// Any error flushes TXDR so old data is not sent by the next transfer
-/// (i2c-stm32f7.c :1745-1750, writing `ISR.TXE`).
+/// (i2c-stm32f7.c :1757-1759 and :1837-1839, writing `ISR.TXE`).
 fn flush_txdr<M: Mmio>(m: &M, base: usize) {
     m.write32(base + ISR, ISR_TXE);
 }
@@ -528,13 +538,13 @@ mod tests {
     #[test]
     fn timing_400k_64mhz_meets_the_spec() {
         let t = compute_timing(&Config::new(CLK, 400_000)).unwrap();
-        // 64 MHz, 400 kHz, analog filter on, rise 25 / fall 10, no DNF.
-        // The tuple is what compute_timing gives; the checks below are the
+        // 64 MHz, 400 kHz, rise 25 / fall 10, no DNF. The checks below are the
         // spec limits it must satisfy, computed independently.
         assert_eq!(t.dnf, 0);
         let clk = 16.0; // DIV_ROUND_CLOSEST(1e9, 64e6), integer ns as the kernel
         let pre = f64::from(t.presc + 1) * clk;
-        let tsync = 50.0 + 2.0 * clk;
+        // The analog filter does not enter the computation (see below).
+        let tsync = 2.0 * clk;
         let low = (f64::from(t.scll) + 1.0) * pre + tsync;
         let high = (f64::from(t.sclh) + 1.0) * pre + tsync;
         assert!(low >= 1300.0 && high >= 600.0);
@@ -542,10 +552,53 @@ mod tests {
         assert!((2500.0..=3125.0).contains(&period), "{period}");
         assert!((f64::from(t.scldel) + 1.0) * pre >= 25.0 + 100.0);
         let sda = (f64::from(t.sdadel) * pre) + clk;
-        assert!((0.0..=900.0 - 25.0 - 260.0 - 4.0 * clk).contains(&sda));
+        assert!((0.0..=900.0 - 25.0 - 4.0 * clk).contains(&sda));
         assert_eq!(t.timingr() >> 28, u32::from(t.presc));
-        // Pinned: what the algorithm gives for 64 MHz / 400 kHz.
-        assert_eq!(t.timingr(), 0x0070424c);
+        // Pinned: what ST's compute_timing gives for 64 MHz / 400 kHz
+        // (i2c-stm32f7.c:460-651, ported literally in a scratch script and run
+        // with analog filter delays 0).
+        assert_eq!(t.timingr(), 0x0070464f);
+    }
+
+    #[test]
+    fn analog_filter_does_not_enter_the_timing_like_linux() {
+        // i2c-stm32f7.c:507-512 reads i2c_dev->analog_filter, which :717 sets
+        // only after the compute loop (:696-710): the delays are 0 there.
+        let mut c = Config::new(CLK, 400_000);
+        let off = compute_timing(&c).unwrap();
+        c.analog_filter = true;
+        assert_eq!(compute_timing(&c).unwrap(), off);
+    }
+
+    #[test]
+    fn timing_matches_linux_for_other_clocks_and_speeds() {
+        // Values of a literal port of :460-651 (analog filter delays 0).
+        let t = |clk, hz| compute_timing(&Config::new(clk, hz)).unwrap().timingr();
+        assert_eq!(t(100_000_000, 400_000), 0x00c0_727f);
+        assert_eq!(t(64_000_000, 100_000), 0x1080_a391);
+        assert_eq!(t(64_000_000, 1_000_000), 0x0040_1a1d);
+        assert_eq!(t(200_000_000, 400_000), 0x2080_4c55);
+    }
+
+    #[test]
+    fn linux_defaults_are_filter_off_25_10() {
+        // :174-175 rise 25 / fall 10; :717 analog_filter false without the DT
+        // property; :168, :693-694 no digital filter.
+        assert_eq!(
+            Config::new(CLK, 400_000),
+            Config { clock_hz: CLK, speed_hz: 400_000, rise_ns: 25, fall_ns: 10, analog_filter: false, dnf_ns: 0 }
+        );
+    }
+
+    #[test]
+    fn fast_mode_plus_sets_cr1_fmp_only_above_400k() {
+        // i2c-stm32f7.c:2039-2048 (mp25: fmp_cr1_bit, :430).
+        let m = I2c::new(0x3d, &[]);
+        init(&m, BASE, &Config::new(CLK, 400_000)).unwrap();
+        assert!(m.writes.borrow().iter().all(|&(o, v)| o != CR1 || v & CR1_FMP == 0));
+        let m = I2c::new(0x3d, &[]);
+        init(&m, BASE, &Config::new(CLK, 1_000_000)).unwrap();
+        assert_eq!(m.writes.borrow().last(), Some(&(CR1, CR1_FMP | CR1_ANFOFF | CR1_PE)));
     }
 
     #[test]
@@ -564,7 +617,7 @@ mod tests {
         let t = compute_timing(&Config::new(CLK, 100_000)).unwrap();
         let clk = 16.0; // DIV_ROUND_CLOSEST(1e9, 64e6), integer ns as the kernel
         let pre = f64::from(t.presc + 1) * clk;
-        let tsync = 50.0 + 2.0 * clk;
+        let tsync = 2.0 * clk;
         let period = (f64::from(t.scll) + 1.0) * pre + (f64::from(t.sclh) + 1.0) * pre + 2.0 * tsync + 35.0;
         assert!((10_000.0..=12_500.0).contains(&period), "{period}");
     }
@@ -574,21 +627,29 @@ mod tests {
         let m = I2c::new(0x3d, &[]);
         let t = init(&m, BASE, &Config::new(CLK, 400_000)).unwrap();
         // PE low (the modify reads 0 and writes 0), TIMINGR, ANFOFF clear
-        // (analog filter on), DNF cleared then set to 0, PE high last.
+        // (the Linux default is the filter off: ANFOFF is set), DNF cleared
+        // then set to 0, PE high last.
         assert_eq!(
             *m.writes.borrow(),
-            vec![(CR1, 0), (TIMINGR, t.timingr()), (CR1, 0), (CR1, 0), (CR1, 0), (CR1, CR1_PE),]
+            vec![
+                (CR1, 0),
+                (TIMINGR, t.timingr()),
+                (CR1, CR1_ANFOFF),
+                (CR1, CR1_ANFOFF),
+                (CR1, CR1_ANFOFF),
+                (CR1, CR1_ANFOFF | CR1_PE),
+            ]
         );
     }
 
     #[test]
-    fn init_analog_filter_off_sets_anfoff() {
+    fn init_analog_filter_on_clears_anfoff() {
         let m = I2c::new(0x3d, &[]);
         let mut c = Config::new(CLK, 400_000);
-        c.analog_filter = false;
+        c.analog_filter = true;
         init(&m, BASE, &c).unwrap();
-        assert_eq!(m.writes.borrow()[2], (CR1, CR1_ANFOFF));
-        assert_eq!(m.writes.borrow().last(), Some(&(CR1, CR1_ANFOFF | CR1_PE)));
+        assert_eq!(m.writes.borrow()[2], (CR1, 0));
+        assert_eq!(m.writes.borrow().last(), Some(&(CR1, CR1_PE)));
     }
 
     fn up() -> I2c {
