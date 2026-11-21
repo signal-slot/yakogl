@@ -13,6 +13,7 @@
 //! | [`arena`] | bump arenas over (CPU mapping, GPU VA) pairs |
 //! | [`cs`] | the command-stream encoder and decoder |
 //! | [`frame`] | one frame: its descriptors and its command stream |
+//! | [`model`] | the GPU's model (Mesa's table) and its tile-buffer budget |
 //! | [`program`] | a Valhall record as the frame builder's meta |
 //! | [`backend`] | the GL core's capability answers, the table, the submit through the OSAL |
 
@@ -24,6 +25,7 @@ pub mod blend;
 pub mod cs;
 pub mod frame;
 pub mod genxml;
+pub mod model;
 pub mod program;
 
 #[cfg(test)]

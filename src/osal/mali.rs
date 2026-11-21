@@ -50,6 +50,11 @@ pub struct OsalMaliGpu {
     /// (`cs_reg_count`, `unpreserved_cs_reg_count`).
     pub cs_reg_count: u32,
     pub unpreserved_cs_reg_count: u32,
+    /// `CORE_FEATURES`: its low byte is the variant that tells a model's
+    /// configurations apart (Mesa 26.2.1 panthor_kmod.c:162; panthor's
+    /// `drm_panthor_gpu_info.core_features`); with `gpu_id` it names the
+    /// model the frames are sized for (src/mali/model.rs).
+    pub core_features: u32,
 }
 
 impl OsalMaliGpu {
@@ -57,8 +62,13 @@ impl OsalMaliGpu {
     /// board): the device every host test's mock OSAL stands for. One
     /// constant, so a field this struct gains is given a value here and not
     /// in each test's own literal.
-    pub const T6: OsalMaliGpu =
-        OsalMaliGpu { gpu_id: 0xa867_0005, tiler_features: 0x809, cs_reg_count: 96, unpreserved_cs_reg_count: 4 };
+    pub const T6: OsalMaliGpu = OsalMaliGpu {
+        gpu_id: 0xa867_0005,
+        tiler_features: 0x809,
+        cs_reg_count: 96,
+        unpreserved_cs_reg_count: 4,
+        core_features: 0,
+    };
 }
 
 /// The tiler heap (`DRM_IOCTL_PANTHOR_TILER_HEAP_CREATE`'s results): the
@@ -96,15 +106,16 @@ mod tests {
     /// osal_internal.h (src/abi_layout_check.c asserts them on the C side).
     #[test]
     fn the_mali_osal_structs_have_the_c_layout() {
-        assert_eq!(size_of::<OsalMaliGpu>(), 16);
+        assert_eq!(size_of::<OsalMaliGpu>(), 20);
         assert_eq!(
             [
                 offset_of!(OsalMaliGpu, gpu_id),
                 offset_of!(OsalMaliGpu, tiler_features),
                 offset_of!(OsalMaliGpu, cs_reg_count),
                 offset_of!(OsalMaliGpu, unpreserved_cs_reg_count),
+                offset_of!(OsalMaliGpu, core_features),
             ],
-            [0, 4, 8, 12]
+            [0, 4, 8, 12, 16]
         );
         assert_eq!(size_of::<OsalMaliHeap>(), 24);
         assert_eq!(

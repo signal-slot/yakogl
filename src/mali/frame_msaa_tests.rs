@@ -120,6 +120,8 @@ fn build_with(
             geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
             sample_positions: positions.gpu,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: TileBudget::G610,
         };
         let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();
@@ -212,6 +214,10 @@ fn a_4x_target_is_the_board_s_multisampled_render_to_texture() {
         let mut theirs_p = FramebufferParameters::unpack(&arr(&trace::bytes(&m, fbd, 64))).unwrap();
         let (our_tiler, their_tiler) = (ours_p.tiler, theirs_p.tiler);
         (ours_p.tiler, theirs_p.tiler) = (0, 0);
+        if samples == 4 {
+            /* the named difference: 25.0.7's tile, not 26.2.1's */
+            tile_26_2(&mut theirs_p);
+        }
         assert_eq!(format!("{ours_p:?}"), format!("{theirs_p:?}"), "{source}: the framebuffer parameters");
         /* the sample-position block the FBD names, byte for byte */
         let at = (theirs_p.sample_locations - SAMPLES) as usize;
@@ -461,6 +467,8 @@ fn build_207(draws: &[ZsDraw]) -> (Vec<u8>, Vec<u8>, Vec<u64>, Frame) {
             geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
             sample_positions: positions.gpu,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: TileBudget::G610,
         };
         let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();
@@ -527,6 +535,26 @@ fn build_207(draws: &[ZsDraw]) -> (Vec<u8>, Vec<u8>, Vec<u64>, Frame) {
 }
 
 /// One place where our bytes may differ from the dump's.
+/// The board's Mesa 25.0.7 has no Z bound on the tile; Mesa 26.2.1 bounds
+/// it by the Z tile-buffer budget for 4 bytes of depth a sample
+/// (pan_desc.c:617-625; half the G610's 16 KiB Z tile buffer,
+/// pan_model.c:88): 8192 >> log2(16) = 512 pixels for a 4x frame, where
+/// 25.0.7 writes 1024. The builder follows 26.2.1 (frame.rs
+/// `tile_size_of`), as the split kicks against 26.2.1 on the board show
+/// (frame_split_tests.rs). FBD w11: Effective Tile Size log2 (bits 8-15 of
+/// byte 0x2d) and Color Buffer Allocation in KiB (byte 0x2f).
+pub(super) const TILE_25_0_CAUSE: &str = "FBD w11 Effective Tile Size and Color Buffer Allocation: Mesa 25.0.7's \
+     4x tile of 1024 pixels; Mesa 26.2.1's is 512, bounded by the Z tile-buffer budget (pan_desc.c:617-625)";
+
+/// A 25.0.7 dump's 4x framebuffer parameters as Mesa 26.2.1 writes them:
+/// the tile 512 pixels and the allocation the same bytes a pixel of it
+/// ([`TILE_25_0_CAUSE`]).
+pub(super) fn tile_26_2(p: &mut FramebufferParameters) {
+    assert_eq!((p.sample_count, p.effective_tile_size), (4, 1024), "the dump's 25.0.7 4x tile");
+    p.color_buffer_allocation = p.color_buffer_allocation / p.effective_tile_size * 512;
+    p.effective_tile_size = 512;
+}
+
 struct Difference {
     block: &'static str,
     at: usize,
@@ -581,6 +609,13 @@ fn check_207(source: &str, draws: &[ZsDraw], extra: Vec<Difference>) {
             ours: vec![0; 8],
             cause: "S target base: Mesa 25.0.7 also writes the ZS base there with the S block format No Write \
                     (unused); Mesa 26.2.1 merges no S part for a D24S8 view (pan_job.c:596-612, pan_desc.c:540-550)",
+        },
+        Difference {
+            block: "Framebuffer Parameters",
+            at: 0x2c,
+            dump: vec![0x92, 0x14, 0x00, 0x10],
+            ours: vec![0x92, 0x12, 0x00, 0x08],
+            cause: TILE_25_0_CAUSE,
         },
     ];
     diffs.extend(extra);
@@ -648,7 +683,8 @@ fn check_207(source: &str, draws: &[ZsDraw], extra: Vec<Difference>) {
 /// the 4x depth/stencil frame moves against the 1x one
 /// (tools/mali/board-dump/zs-depth-2026-10-19.txt), held by the dump: 4
 /// samples on the rotated grid, the colour buffer allocation 16384 with the
-/// tile kept at 1024, the ZS target's and the render target's MSAA Average
+/// tile kept at 1024 (Mesa 25.0.7's; ours is 26.2.1's 512 and 8192, the
+/// difference [`TILE_25_0_CAUSE`] names), the ZS target's and the render target's MSAA Average
 /// (the D24S8 is a view of 4 samples on an image of 1, `mali_sampling_mode`,
 /// pan_desc.c:26-48), and DCD0's multisample enable.
 #[test]

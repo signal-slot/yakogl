@@ -486,7 +486,15 @@ fn a_draw_submits_the_frame_the_builder_makes_at_the_osal_s_vas() {
         let n;
         {
             let mut ctx_a = Arena::new("context", bufs[0], &mut ctx_m).unwrap();
-            let ctx = frame::build_context(&mut ctx_a, HEAP.first_chunk_gpu, HEAP.chunk_size, bufs[1], 8).unwrap();
+            let ctx = frame::build_context(
+                &mut ctx_a,
+                HEAP.first_chunk_gpu,
+                HEAP.chunk_size,
+                bufs[1],
+                8,
+                frame::TileBudget::G610,
+            )
+            .unwrap();
             let mut a = Arenas {
                 desc: Arena::new("desc", slot0[0], &mut desc_m).unwrap(),
                 data: Pool::new("data", slot0[1], &mut data_m).unwrap(),
@@ -2290,12 +2298,12 @@ fn a_split_4x_frame_keeps_its_samples_and_the_next_kick_reloads_them() {
             assert_eq!(fbds.len(), 2, "kick {kick}: the frame and the resolve, one kick");
             let (fbd, rt) = (words32(fbds[0], 16), words32(fbds[0] + 128, 16));
             /* every FBD word Mesa's but for the pointers (w4:w5 the sample
-             * positions, w6:w7 the pre-frame DCDs, w14:w15 the tiler) and w11
-             * (frame_split_tests.rs `TILE_26_2`: 25.0.7's 4x tile) */
-            for i in [0, 1, 2, 3, 8, 9, 10, 12, 13] {
+             * positions, w6:w7 the pre-frame DCDs, w14:w15 the tiler); w11,
+             * the tile and its allocation, too: Mesa 26.2.1's Z-bounded 4x
+             * tile, 512 pixels and 8192 bytes */
+            for i in [0, 1, 2, 3, 8, 9, 10, 11, 12, 13] {
                 assert_eq!(fbd[i], fbd_words[i], "kick {kick}: FBD w{i}");
             }
-            assert_eq!(fbd[11], 0x10001492, "kick {kick}: FBD w11");
             assert_eq!(ptr(&fbd, 6) != 0, kick == 2, "kick {kick}: a pre-frame draw");
             /* RT 0: Mesa's but for the base, the store */
             let base = ptr(&rt, 8);

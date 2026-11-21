@@ -225,8 +225,14 @@ struct Built {
 }
 
 /// gl_ref.py's MRT frame: `n` RGBA8 targets cleared to (0, 0, 1, 1), one
-/// quad of a program writing outputs `outputs` (bit i: target i).
+/// quad of a program writing outputs `outputs` (bit i: target i), on the
+/// G610.
 fn build(n: u64, outputs: u32) -> Result<Built, FrameError> {
+    build_on(TileBudget::G610, n, outputs)
+}
+
+/// [`build`] on the GPU model of tile-buffer budget `budget`.
+fn build_on(budget: TileBudget, n: u64, outputs: u32) -> Result<Built, FrameError> {
     let (mut desc_m, mut code_m, mut spd_m, mut ctx_m) =
         (vec![0u8; 0x4000], vec![0u8; 0x800], vec![0u8; 0x100], vec![0u8; 0x200]);
     let mut words = vec![0u64; 512];
@@ -240,6 +246,8 @@ fn build(n: u64, outputs: u32) -> Result<Built, FrameError> {
             geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
             sample_positions: 0x7fff_ffff_f000,
             tiler_max_levels: 8,
+            tiler_bin_budget: (2 << 20) - 64,
+            tile_budget: budget,
         };
         let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();
@@ -317,10 +325,19 @@ impl Built {
     }
 }
 
-/// The frame of `n` targets against Mesa's `trace`.
+/// The frame of `n` targets against Mesa's `trace`, on the G610.
 fn compare(trace: &str, n: u64) {
+    compare_on(TileBudget::G610, trace, n);
+}
+
+/// The frame of `n` targets against Mesa's `trace` drawn as the GPU whose
+/// tile-buffer budget is `budget`: the descriptors [`compare`] names, and
+/// the tiler context byte for byte but for the pointers each builder chose
+/// (the polygon list, the heap descriptor and the geometry buffer, which
+/// [`mesa_tiler`] takes from ours).
+fn compare_on(budget: TileBudget, trace: &str, n: u64) {
     let outputs = (1u32 << n) - 1;
-    let ours = build(n, outputs).expect("the MRT frame builds");
+    let ours = build_on(budget, n, outputs).expect("the MRT frame builds");
 
     /* BLEND_DESC: n descriptors, the count in the tag */
     let theirs_d50 = cs_word(trace, "MOVE48 d50,");
@@ -412,15 +429,72 @@ fn compare(trace: &str, n: u64) {
     }
     assert!(!p.has_zs_crc_extension && !p.empty_tile_write_enable && !p.crc_read_enable && !p.crc_write_enable);
     /* where each builder put its tiler context */
-    take(&mut f, "Tiler");
+    let tiler = take(&mut f, "Tiler");
     done(&f, "FBD parameters");
+    let tiler = u64::from_str_radix(tiler.trim_start_matches("0x"), 16).expect("the tiler pointer");
+    let after = format!("Tiler Context @{tiler:x}:");
+    let theirs = mesa_tiler(
+        trace,
+        &after,
+        TilerContext::unpack(ours.at(p.tiler, TilerContext::LENGTH).try_into().unwrap()).unwrap(),
+    );
+    assert_eq!(ours.at(p.tiler, TilerContext::LENGTH), theirs, "the tiler context");
 
     /* the render targets, after the 64 bytes of the ZS/CRC extension room */
     for i in 0..n {
         let at = fbd.gpu + 128 + i * RgbRenderTarget::LENGTH as u64;
         let buffer = RtBuffer { base: target(i).gpu, row_stride: 256, surface_stride: 0 };
-        assert_eq!(ours.at(at, RgbRenderTarget::LENGTH), mesa_rt(trace, i, buffer), "render target {i}");
+        let theirs = mesa_rt(trace, i, buffer);
+        assert_eq!(ours.at(at, RgbRenderTarget::LENGTH), theirs, "render target {i}");
+        /* the targets before it: 4 bytes a pixel each, of the frame's tile */
+        let mut rt = block(trace, "Color Render Targets @", &format!("AFBC RGB Color Render Target {i}:"));
+        let offset = num(&mut rt, "Internal Buffer Offset");
+        assert_eq!(offset, u64::from(4 * p.effective_tile_size) * i, "target {i}: the tile-buffer offset");
     }
+}
+
+/// Mesa's tiler context of `trace` (the block whose header is `after`, a
+/// `Tiler Context @<address>:` line) from its decoded fields, packed with
+/// our packer; the pointers, which name where each stack put its blocks,
+/// are `ours`'.
+pub(super) fn mesa_tiler(trace: &str, after: &str, ours: TilerContext) -> [u8; TilerContext::LENGTH] {
+    let mut f = block(trace, after, after);
+    let sample_pattern = match take(&mut f, "Sample Pattern").as_str() {
+        "Single-sampled" => SamplePattern::SINGLE_SAMPLED,
+        "Rotated 4x Grid" => SamplePattern::ROTATED_4X_GRID,
+        v => panic!("sample pattern {v}"),
+    };
+    let t = TilerContext {
+        polygon_list: ours.polygon_list,
+        hierarchy_mask: num(&mut f, "Hierarchy Mask") as u32,
+        sample_pattern,
+        sample_test_disable: flag(&mut f, "Sample test disable"),
+        first_provoking_vertex: flag(&mut f, "First provoking vertex"),
+        fb_width: num(&mut f, "FB Width") as u32,
+        fb_height: num(&mut f, "FB Height") as u32,
+        layer_count: num(&mut f, "Layer count") as u32,
+        layer_offset: num(&mut f, "Layer offset") as i32,
+        heap: ours.heap,
+        geometry_buffer_size: num(&mut f, "Geometry buffer size") as u32,
+        geometry_buffer: ours.geometry_buffer,
+        completed_top: num(&mut f, "Completed top"),
+        completed_bottom: num(&mut f, "Completed bottom"),
+        private_state: TilerState {
+            word0: num(&mut f, "Private state/Word0") as u32,
+            word1: num(&mut f, "Private state/Word1") as u32,
+            word2: num(&mut f, "Private state/Word2") as u32,
+            word3: num(&mut f, "Private state/Word3") as u32,
+            word4: num(&mut f, "Private state/Word4") as u32,
+            word5: num(&mut f, "Private state/Word5") as u32,
+            word6: num(&mut f, "Private state/Word6") as u32,
+            word7: num(&mut f, "Private state/Word7") as u32,
+        },
+    };
+    for k in ["Polygon List", "Heap", "Geometry buffer"] {
+        take(&mut f, k);
+    }
+    done(&f, "tiler context");
+    t.pack().unwrap()
 }
 
 /// Mesa's render target `i` of an MRT `trace` of RGBA8 targets from its
@@ -441,8 +515,6 @@ pub(super) fn mesa_rt(trace: &str, i: u64, buffer: RtBuffer) -> [u8; RgbRenderTa
     assert_eq!(take(&mut f, "Writeback MSAA"), "Single");
     assert_eq!(take(&mut f, "Swizzle"), "1672 (RGBA)");
     let mesa_offset = num(&mut f, "Internal Buffer Offset") as u32;
-    /* one RGBA8 target before it: 4 bytes a pixel of a 1024-pixel tile */
-    assert_eq!(u64::from(mesa_offset), 4096 * i, "target {i}: the tile-buffer offset");
     let expected = RgbRenderTarget {
         writeback_mode: WritebackMode::COMPAT,
         internal_buffer_offset: mesa_offset,
@@ -495,6 +567,49 @@ fn three_targets_are_mesa_s() {
     compare(MRT3, 3);
 }
 
+/// The tile-buffer references (tools/mali/testdata/tile-budget/README.md),
+/// each drawn by Mesa 26.2.1 as the GPU its name ends in.
+const MRT3_G310V1: &str = include_str!("../../tools/mali/testdata/tile-budget/mrt3.g310v1.trace");
+const MRT3_G310V4: &str = include_str!("../../tools/mali/testdata/tile-budget/mrt3.g310v4.trace");
+const MRT4_G610: &str = include_str!("../../tools/mali/testdata/tile-budget/mrt4.g610.trace");
+const MRT4_G310V1: &str = include_str!("../../tools/mali/testdata/tile-budget/mrt4.g310v1.trace");
+const MRT4_G310V4: &str = include_str!("../../tools/mali/testdata/tile-budget/mrt4.g310v4.trace");
+
+/// The budgets of a GPU of the model table (src/mali/model.rs).
+fn budget_of(gpu_id: u32, variant: u32) -> TileBudget {
+    super::model::model(gpu_id, variant).expect("a model of the table").tile_budget()
+}
+
+/// Three and four RGBA8 targets (12 and 16 bytes a pixel) on a G310v1,
+/// whose tile buffer is half the G610's (budgets 8192 and 4096): Mesa's
+/// tile 512, allocation 6144 / 8192, the targets' tile-buffer offsets
+/// 2048 apart; the framebuffer parameters, render targets and tiler
+/// context are Mesa's, as on the G610.
+#[test]
+fn three_and_four_targets_on_a_g310v1_are_mesa_s() {
+    let v1 = budget_of(0xac74_0001, 0);
+    assert_eq!(v1, TileBudget { colour: 8192, z: 4096 });
+    compare_on(v1, MRT3_G310V1, 3);
+    compare_on(v1, MRT4_G310V1, 4);
+    let fbd = |n| {
+        let b = build_on(v1, n, (1 << n) - 1).unwrap();
+        let p = FramebufferParameters::unpack(b.at(b.frame.layout.fbd.unwrap().gpu, 64).try_into().unwrap()).unwrap();
+        (p.effective_tile_size, p.color_buffer_allocation)
+    };
+    assert_eq!((fbd(3), fbd(4)), ((512, 6144), (512, 8192)));
+}
+
+/// The same frames on a G310v4 (the G610's tile buffer) and on the G610:
+/// Mesa's tile stays 1024 and the bytes are the G610's.
+#[test]
+fn three_and_four_targets_on_a_g310v4_and_the_g610_are_mesa_s() {
+    let v4 = budget_of(0xac74_0001, 3);
+    assert_eq!(v4, TileBudget::G610);
+    compare_on(v4, MRT3_G310V4, 3);
+    compare_on(v4, MRT4_G310V4, 4);
+    compare(MRT4_G610, 4);
+}
+
 /// A program that writes past the frame's targets, or not output 0, is
 /// refused by name; so is what a frame of several targets does not build.
 #[test]
@@ -524,6 +639,8 @@ fn what_several_targets_do_not_build_is_refused_by_name() {
         geometry_buffer_size: GEOMETRY_BUFFER_BYTES,
         sample_positions: 0x7fff_ffff_f000,
         tiler_max_levels: 8,
+        tiler_bin_budget: (2 << 20) - 64,
+        tile_budget: TileBudget::G610,
     };
     let small = Target { width: 32, ..target(1) };
     let open = begin_frame_targets(&mut desc, &mut cs, &[small]).unwrap();

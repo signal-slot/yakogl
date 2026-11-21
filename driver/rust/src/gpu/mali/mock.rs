@@ -6,16 +6,20 @@
 //! these tables, it reads the registers ([`super::ident`]).
 
 use super::{
-    GPU_AS_PRESENT, GPU_ID, GPU_L2_FEATURES, GPU_L2_PRESENT, GPU_MEM_FEATURES, GPU_MMU_FEATURES, GPU_SHADER_PRESENT,
-    GPU_TILER_FEATURES, GPU_TILER_PRESENT,
+    GPU_AS_PRESENT, GPU_CORE_FEATURES, GPU_ID, GPU_L2_FEATURES, GPU_L2_PRESENT, GPU_MEM_FEATURES, GPU_MMU_FEATURES,
+    GPU_SHADER_PRESENT, GPU_TILER_FEATURES, GPU_TILER_PRESENT,
 };
 
 /// The RK3588's Mali-G610 as the NanoPC-T6 reads it: panthor's probe line
 /// under Armbian (2026-10-18/19, super's module doc) and `GPU_ID` read with
-/// the GPU active.
-pub const G610: [(usize, u32); 9] = [
+/// the GPU active. `CORE_FEATURES` was not in that line: its variant byte is
+/// 0 because Mesa 26.2.1 knows the RK3588's GPU as the G610, whose one row
+/// is variant 0 (src/panfrost/model/pan_model.c:88, matched exactly by
+/// `pan_get_model`, :139-149); the upper bits are assumed 0.
+pub const G610: [(usize, u32); 10] = [
     (GPU_ID, super::G610_GPU_ID),
     (GPU_L2_FEATURES, 0x0712_0306),
+    (GPU_CORE_FEATURES, 0),
     (GPU_TILER_FEATURES, 0x809),
     (GPU_MEM_FEATURES, 0x301),
     (GPU_MMU_FEATURES, 0x2830),
@@ -44,9 +48,10 @@ pub const G610: [(usize, u32); 9] = [
 /// read on 2026-11-20 (through a search engine's quotation; the archives
 /// themselves could not be fetched from the host that wrote this), gives no
 /// `MMU`, `AS` or `shader_present` value.
-pub const G310: [(usize, u32); 9] = [
+pub const G310: [(usize, u32); 10] = [
     (GPU_ID, G310_GPU_ID),
     (GPU_L2_FEATURES, 0x0711_0306),
+    (GPU_CORE_FEATURES, G310_ASSUMED.core_features),
     (GPU_TILER_FEATURES, 0x809),
     (GPU_MEM_FEATURES, 0x1),
     (GPU_MMU_FEATURES, G310_ASSUMED.mmu_features),
@@ -66,8 +71,13 @@ pub const G310_GPU_ID: u32 = 0xac74_0001;
 /// L2:.. Tiler:.. Mem:.. MMU:.. AS:..", "shader_present=.. l2_present=..
 /// tiler_present=..") or our own [`super::ident`] dump of the same registers
 /// (`MMU_FEATURES` 0x0014, `AS_PRESENT` 0x0018, `SHADER_PRESENT` 0x0100,
-/// `TILER_PRESENT` 0x0110, `L2_PRESENT` 0x0120).
+/// `TILER_PRESENT` 0x0110, `L2_PRESENT` 0x0120, `CORE_FEATURES` 0x0008).
 pub struct Assumed {
+    /// `CORE_FEATURES`: variant 0, the G310v1 (Mesa's smaller tile buffer).
+    /// Which of the five G310 variants the i.MX 95 has is not known until
+    /// the board's register is read; the backend takes it from the GPU
+    /// (src/mali/model.rs), so this value decides nothing but the mock's.
+    pub core_features: u32,
     /// `MMU_FEATURES`: the G610's 48 VA / 40 PA bits.
     pub mmu_features: u32,
     /// `AS_PRESENT`: eight address spaces, as the G610.
@@ -82,5 +92,11 @@ pub struct Assumed {
 }
 
 /// See [`Assumed`].
-pub const G310_ASSUMED: Assumed =
-    Assumed { mmu_features: 0x2830, as_present: 0xff, shader_present: 0x3, tiler_present: 1, l2_present: 1 };
+pub const G310_ASSUMED: Assumed = Assumed {
+    core_features: 0,
+    mmu_features: 0x2830,
+    as_present: 0xff,
+    shader_present: 0x3,
+    tiler_present: 1,
+    l2_present: 1,
+};
