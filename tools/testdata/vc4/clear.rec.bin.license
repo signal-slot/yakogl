@@ -1,0 +1,5 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+What Mesa 26.2.1's vc4 driver hands the kernel for our tools/v3d/gl_ref.py on
+the drm-shim, recorded by tools/vc4/drm_shim_ref.py (README.md): values of our
+draw, no code of Mesa.

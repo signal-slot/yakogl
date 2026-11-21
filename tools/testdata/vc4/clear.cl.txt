@@ -1,0 +1,17 @@
+MESA: info: BCL:
+MESA: info: 0x00000000 0x00000000: 0x70 Tile Binning Mode Configuration
+MESA: info:     Tile Allocation memory address: 0
+MESA: info:     Tile Allocation memory size: 0
+MESA: info:     Tile State Data Array Address: 0
+MESA: info:     Width (in tiles): 1
+MESA: info:     Height (in tiles): 1
+MESA: info:     Multisample Mode (4x): 0 /* false */
+MESA: info:     Tile Buffer 64-bit Color Depth: 0 /* false */
+MESA: info:     Auto-initialise Tile State Data Array: 0 /* false */
+MESA: info:     Tile Allocation Initial Block Size: 0 /* block size 32 */
+MESA: info:     Tile Allocation Block Size: 0 /* block size 32 */
+MESA: info:     Double-buffer in non-ms mode: 0 /* false */
+MESA: info: 0x00000010 0x00000010: 0x06 Start Tile Binning
+MESA: info: 0x00000011 0x00000011: 0x38 Primitive List Format
+MESA: info:     Primitive Type: 2 /* Triangles List */
+MESA: info:     Data Type: 1 /* 16-bit index */
