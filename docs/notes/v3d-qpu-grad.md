@@ -208,7 +208,7 @@ Mesa has too (its `fsqrt` is the same two operations). What the host knows:
   integer, or of a filter switch at 0, may land on either side.
 - dEQP's `texturegrad` cases (`functional.shaders.texture_functions.
   texturegrad*`, 35, with `texturegradoffset` 28, `textureprojgrad` 26 and
-  `textureprojgradoffset` 26 in `docs/es3/shader-failure-map.md:216`) verify
+  `textureprojgradoffset` 26 in `docs/es3/shader-failure-map.md:283`) verify
   by `TexLookupVerifier` and accept any result a legal level within its
   `lodBits` and its derivative precision (`derivateBits`) would give; the
   reference code is not in this tree, so the exact numbers are to be read from the dEQP source when the item starts and
