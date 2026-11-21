@@ -334,7 +334,7 @@ a verdict may only move forward (to `ok`), a change in place is a regression.
   shapes are the six faces: `fstex_cubeface0..3` are refused as `TexCoord` and are the host-side
   twin of `tc_cube_face`; they are the first test to flip).
 
-## 7. Measured sites at a7260420
+## 5a. Measured sites at a7260420
 
 Measured, not read: a scratch test (not committed) compiled every `tools/mali/testdata/deqp_fmaloc_*`
 reference through the Mali online compiler as `tests/mali_deqp_fmaloc.rs` does (features
