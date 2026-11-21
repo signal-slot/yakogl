@@ -439,13 +439,17 @@ LDVPM rules (`:1182-1210`), but at 7.1 they choose among one class only.
 ### The rules alloc71 keeps
 
 - **Linear scan in program order**, as `alloc.rs` does (`alloc.rs:8-12`):
-  sched71 also merges without reordering, so "last read" is exact.
+  sched71 also merges without reordering within one order of the operations
+  (`build71` may hand it a second order, see "Reordering", below), so "last read" is exact.
 - **The register file per thread** is 4.2's: rf0..rf31 at 4 threads,
   rf0..rf63 at 1 or 2. Mesa's register sets have no version branch here
   (`vir_register_allocate.c:1054-1072`, `:1428-1435`), and `verify71`'s
   `registers_fit_threads71` checks it. The thread count is 4, else 2, never 1,
   as in `chain.rs` `build`.
-- **rf1, rf2, rf3 are never handed out**, in any stage. At 7.1 they hold the
+- **rf1, rf2, rf3 are handed out only in a fragment shader, only after the
+  last payload read of each, and only once rf4 and up are taken** (see
+  "Payload registers reused", below; this bullet was "never handed out"
+  until `a093a59a`). At 7.1 they hold the
   fragment payload: centroid W, Z, W (`nir_to_vir.c:4852-4858`;
   `reg_is_payload`, `vir_register_allocate.c:1108-1112`). Mesa starts at rf4
   "to prevent TLB writes from using RF2-3" (`:1417-1421`). In the thread end's
@@ -789,6 +793,114 @@ Unchanged, and rerun on the integration tip after `chain-hook`:
 `tests/v3d_online_corpus.rs` (324 sources and its known-refusal list), the
 `roundtrip` counts (8,893 unique words), the 45 `golden` rows, the `mesa_ref`
 digest, `tests/v3d_sim_mesa.rs`, and `tests/es2_report_guard.rs`.
+
+## (h) What merged after the design
+
+Repository lines here are at `3bdec8eb`'s tree. Commits are named by subject.
+
+### Prim variants: Points and Lines
+
+`chain71::compile_program71_keyed` (`chain71.rs:398`) takes all three
+`Prim`s; `chain.rs:437-441` still refuses Points and Lines at 4.2. Commit
+`v3d 7.1: chain71 compiles the points and lines variants of the fragment
+shader`. The one switch is `lines` (`chain71.rs:427-430`):
+
+- **Points** is the Triangles program, word for word. `select_fragment`
+  already takes the two implicit point varyings whenever the fragment shader
+  reads `gl_PointCoord`, so Points needs nothing more; the GL table draws
+  such a program as points only.
+- **Lines** reads `gl_PointCoord` as 0.0: `point_coord_as_zero`
+  (`chain71.rs:369-382`) replaces each `SOp::PointCoord` lane with a zero
+  constant before `fragment_inputs` runs (`chain71.rs:439`), so no implicit
+  varying is taken. Mesa's single read of the primitive is
+  `nir_to_vir.c:4869-4878`; a lines fragment shader takes the implicit line
+  varying only for the line-smoothing lowering (`vir.c:1282-1283`,
+  `v3d_program.c:607-608`), which ES has not. A shader that does not read
+  `gl_PointCoord` gives the Triangles program unchanged.
+- The vertex and coordinate shaders are the Triangles program's at every
+  primitive (the comment at `chain71.rs:411-420` gives the reason: the
+  records carry the point-size row whenever the shader writes it).
+- Pinned by `tests/shaderc71_prims.rs` (all of `tools/shaders/es100` at the
+  three primitives) and by the unit test at `chain71.rs:755-787`.
+
+### Payload registers reused (alloc71)
+
+The first cut kept rf1-rf3 out of every stage (the "rf1, rf2, rf3" bullet of
+(b)). Commit `v3d online: alloc71 hands out rf1-rf3 after their fragment
+payload reads, varyings15 fits at 7.1` changed it:
+
+- `payload_busy` (`alloc71.rs:349-372`) gives each of rf1..rf3 the operation
+  index of its last `Src71::Payload` read, carried to the back edge of every
+  counted loop that reads it; no read means free from the start. The busy
+  table is seeded from it for a fragment shader only (`alloc71.rs:244-250`).
+- The pick order is rf4 and up lowest first, then `RF_PAYLOAD71` (rf1..rf3,
+  `alloc71.rs:106`, `:317-321`); vertex and coordinate shaders still never
+  get them. A program that fits rf4 and up allocates as before.
+- `rf_end` (`alloc71.rs:161-163`, set at `:334-336`) counts rf4 and up only:
+  `r >= RF_FIRST71` raises it, so a payload register in use never moves it.
+- The thread-end rule is untouched and enforced twice: sched71's
+  `ok_in_thrend71` (`sched71.rs:507-526`, its last test) refuses a word in
+  the thread end's slots that reads or writes rf2/rf3, and `verify71`
+  (`verify71.rs:541-571`) fails "RF2-3 write after THREND" and "RF2-3 read
+  after THREND". Mesa: `qpu_schedule.c:2043-2056`, `qpu_validate.c:373-419`.
+  So a value in rf2/rf3 must be dead before the program end's slots, which
+  the allocator gets from the payload registers being picked last.
+- Mesa's side: its round-robin starts at rf4 and reaches rf1..rf3 last
+  (`vir_register_allocate.c:989-1004`, `:1415-1421`). The 15-varying
+  program `es100/varyings15` fits this way as Mesa's 2-thread, 0-spill
+  output does.
+
+### Thread end with a VPM store in the THRSW
+
+A 7.1 thread end may carry `stvpmv` (and `stvpmd`, `stvpmp`) in the THRSW
+instruction itself, as Mesa's own 7.1 vertex shaders end
+(`tools/v3d/gltest-mesa71/clear.disasm:24-26`). Commit `shaderc: sim71 runs
+a vpm store in the thread-end thrsw, as 7.1 allows`:
+
+- The codegen was right and `sim71` was wrong. The store is not a
+  register-file write: at 7.1 an STVPM's waddr field is part of its opcode
+  and its magic bit is clear (`qpu_pack.c:1870-1883`, `:2138`).
+  `alu_rf_writes` (`sim71.rs:468-472`) asks the question Mesa asks
+  (`v3d_qpu_add_op_has_dst`, `qpu_instr.c:557`, `:1074-1084`): only an
+  operation with a destination and a non-magic waddr writes a register.
+- `at_thrend` (`sim71.rs:484-489`) is the THRSW instruction itself: no ALU
+  register-file write; then `after_thrend` (`sim71.rs:492-498`): no write of
+  rf2/rf3, by either ALU half or by a signal (`sig_rf_write`). A VPM store
+  is legal there and in the delay slots (the rule at `qpu_schedule.c:1990`
+  is ver 42 only) and takes effect in the interpreter. Callers: `sim.rs:2014-2017`
+  (the two slots after the thread end) and `sim.rs:2235` (the THRSW itself).
+- `verify71.rs` makes the same split: slot 0 fails "ADD RF write at THREND"
+  and "MUL RF write at THREND" on a real destination (`:541-558`), and
+  `add_rf_dest`/`mul_rf_dest` return none for an STVPM, so a store passes.
+  Its header lists the rule (`verify71.rs:21-24`).
+- Unit tests: `sim71.rs:773-835` (the store in the thrsw, in the slots, and
+  the refusal of a real register write beside it).
+
+### Reordering: `interleave71` and `build71`
+
+- `select71::interleave71` (`select71.rs:710`) reorders the `Op71` list the
+  way a list scheduler fills words, so sched71 pairs add and mul better;
+  sched71 itself does not reorder, and has no `hoist`, `ldvary_back` or
+  `order.rs` pre-pass (the "left out" list of (e)). Commit `shaderc v3d71:
+  interleave the operations before packing`.
+- The window is `INTERLEAVE_WINDOW71 = 32` operations past the first not yet
+  placed (`select71.rs:352`): it bounds how far an operation moves up and
+  so how much longer its value lives. `order71` (`select71.rs:719`) keeps
+  barriers in place (a thread switch, any control-flow operation) and keeps
+  each virtual register's reads and writes, the flags', the uniform stream's,
+  rf0's and every effect-bearing operation (TMU, TLB, VPM, `ldvary`,
+  `ldtmu`, lane and flag reads, rtop, loop copies) in their relative order
+  (doc comment `select71.rs:693-709`).
+- `build71` (`chain71.rs:204-225`) builds in `select71`'s order first
+  (`finish71`); that build decides every refusal, its error is the stage's.
+  Only when the arena left holds twice what the first build took
+  (`chain71.rs:210-213`) does it call `interleave71` and `finish71` again,
+  and keeps the second build only if `alt.1 >= plain.1` (no fewer threads)
+  and `alt.0.words.len() < plain.0.words.len()` (fewer words) (`:216-222`).
+  Any error of the second build, or of `interleave71`, returns the first.
+- The effect on this commit's measure (es100 8318 to 7398 instructions) is
+  recorded in the commit message; the corpus coverage figures are not part
+  of this section.
 
 ## Order of the items
 
