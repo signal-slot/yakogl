@@ -79,6 +79,11 @@ want tools/v3d/shim71/clear.clif "v3d v3d71"
 want tools/v3d/pi5/v3d_ident.txt "v3d v3d71"
 want tools/v3d/qpu_counts_71.tsv "v3d v3d71"
 want tools/v3d/job_check.c "v3d v3d71"
+# VideoCore IV (Raspberry Pi Zero 2 W): the driver core and its mock test
+want driver/src/vc4/vc4_hw.c vc4
+want driver/src/vc4/vc4_regs.h vc4
+want tools/vc4/hw_mock_test.c vc4
+want tools/vc4/hw_mock.sh vc4
 want tools/mali/pan_shc.c mali
 want tools/mali/gate.env mali
 want tools/mali/check.sh mali
@@ -241,6 +246,14 @@ expect "--no-clippy: counted apart" ', [1-9][0-9]* clippy rows left to the night
 mkdir -p build/check/plan-notmesa
 out=$(PLAN_V3D_TREE=$PWD/build/check/plan-notmesa plan src/v3d/job.rs)
 expect "v3d: a MESA_V3D_TREE without build-v3d is a gap" "^gap   v3d tex_check, cl_golden, job_check: MESA_V3D_TREE='.*plan-notmesa' has no build-v3d" "$out"
+# the VC4 driver core reaches its mock row and nothing GPU-wide; the Pi 4
+# mailbox it builds (scope drivers) reaches the row too
+out=$(plan driver/src/vc4/vc4_hw.c)
+expect "vc4: its mock row" '^plan  run     vc4 hw_mock_test ' "$out"
+expect "vc4: its scope only" '^check.sh: .*\(--changed HEAD, scopes: vc4 \)' "$out"
+expect "vc4: no V3D row" '^skip  run     v3d hw_mock_test ' "$out"
+out=$(plan driver/zephyr/lib/board/rpi4/rpi_mbox.c)
+expect "rpi_mbox.c: the vc4 mock row" '^plan  run     vc4 hw_mock_test ' "$out"
 out=$(plan src/mali/genxml/pack.rs)
 expect "mali: its clippy row" '^plan  clippy  host-test,gpu-mali,shaderc-online,no-shader-table$' "$out"
 expect "mali: its tests" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(--lib mali' "$out"

@@ -206,6 +206,8 @@ scope_of_path() {
   # es3_half_float_rt_gc*), as tests/es3_fragdepth_gc* does
   src/shaderc/online/v3d_abi.rs | src/v3d/* | tests/v3d_* | tests/es3_half_float_rt_v3d* | tests/es3_v3d_f32_rt_key* | tests/es3_v3d_clear_float_words* | tests/es3_color_buffer_float_v3d* | tests/depth_resolve_v3d* | tests/es3_fragdepth_v3d*) echo v3d ;;
   src/shaderc/online/mali/* | src/mali/* | tools/mali/* | tests/mali_*) echo mali ;;
+  # VideoCore IV (Raspberry Pi Zero 2 W): the driver core and its mock test
+  driver/src/vc4/* | tools/vc4/*) echo vc4 ;;
   # glsl2pan.py and gl_ref.py import it: the mali row is reached as well
   tools/vivante/es100.py) echo "vivante mali" ;;
   src/shaderc/online/vivante/* | src/vivante/* | driver/src/vivante/* | tools/vivante/* | tools/gc/* | tools/gc7000-isa/* | tools/hal-nxp/* | driver/rust/src/soc/imx8mp/* | tests/gc_* | tests/es3_fragdepth_gc* | tests/es3_half_float_rt_gc* | tests/es3_half_float_mrt_gc*) echo vivante ;;
@@ -2681,6 +2683,24 @@ if command -v cc >/dev/null 2>&1; then
   }
   scope v3d
   step "run     v3d hw_mock_test (v3d_hw.c against the register model)" v3d_hw_mock_test
+  # The Zero 2 W's VideoCore IV driver core (driver/src/vc4: identity, init,
+  # cache clears, list start, the interrupt decisions, overflow memory, hang
+  # and reset, the two power paths, the bin memory rule) against its register
+  # and firmware model (tools/vc4/hw_mock.sh builds tools/vc4/hw_mock_test.c
+  # with cc -Wall -Wextra -Werror, as the v3d row above; VC4_MOCK_SAN=1 adds
+  # ASan and UBSan by hand, never here). The firmware path runs the Pi 4's rpi_mbox.c built
+  # for the BCM2837, so a change there (scope drivers) reaches the row too.
+  vc4_hw_mock_test() {
+    local out
+    out=$(bash tools/vc4/hw_mock.sh 2>&1) || { printf '%s\n' "$out" | grep -v '^  ' | tail -20; return 1; }
+    printf '%s\n' "$out" |
+      grep -qE '^vc4 hw_mock_test: ([0-9]+) checks run \(planned \1\), 0 failed$' || {
+      echo "vc4 hw_mock_test exited 0 without its result line"
+      return 1
+    }
+  }
+  scope vc4 drivers
+  step "run     vc4 hw_mock_test (driver/src/vc4 against the register model)" vc4_hw_mock_test
   # The TI/Img DDK's RGXStart / RGXStop and firmware image loader
   # (rgxstartstop.c, rgxfwimageutils.c, compiled through driver/compat exactly
   # as the board's build does) on our rgxlayer (driver/rust, feature pvr, built
