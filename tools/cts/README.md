@@ -31,6 +31,7 @@ tools/cts/
   am62p-ms4-tree.txt           the AM62P's 18th image: multisample.* on rgba8888d24s8ms4
   am62p-gles3-tree.txt         the dEQP-GLES3 tree for the AM62P, 46 images (section 2e)
   gen-am62p-gles3-tree.py      writes am62p-gles3-tree.txt; --check is a gate row
+  am62p-pixel-cases.txt        the AM62P single-case images of the merged PowerVR pixel causes (9 images, gl_test list in its tail)
   imx8mp-env.sh                sourced by the i.MX8MP build scripts: checks their environment
   imx8mp-deqp-stage1.sh        stage 1 for the i.MX8MP (a wrapper of cts-build-zephyr.sh)
   imx8mp-deqp-build.sh         the i.MX8MP image with the 29-entry table
