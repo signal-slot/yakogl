@@ -2651,15 +2651,18 @@ fn the_interpreter_runs_mesas_7_1_code_as_the_ir_says() {
     // does. Before, every tried pair stopped there (191, 164 in report-es2).
     // The pairs that now reach their FS stop only on SIM71_UNMODELLED; the
     // 8 (4) that moved to "not tried" are the harness's (SIM71_NOT_TRIED).
+    // Re-derived 2026-11-21 once sim71 runs 7.1's clamp unpacks (Sat, Nsat,
+    // Max0) on the mul ALU's FMOV as on the add's: the 46 (44) pairs that
+    // stopped there now run and agree (136 -> 182, 116 -> 160 in report-es2).
     assert_eq!(
         (pairs.len(), tried, agree.len(), n_un, n_nt),
-        if es2 { (242, 160, 116, 44, 82) } else { (242, 183, 136, 47, 59) },
+        if es2 { (242, 160, 160, 0, 82) } else { (242, 183, 182, 1, 59) },
         "the 7.1 population moved; re-derive the pins"
     );
     assert_eq!(retried.len(), if es2 { 2 } else { 4 }, "the 7.1 positive-input retries moved: {retried:?}");
     assert_eq!(
         (total, sampled.len()),
-        if es2 { (26126, 28) } else { (30606, 36) },
+        if es2 { (35542, 47) } else { (40470, 55) },
         "the 7.1 compared values or texture pairs moved"
     );
     let unmodelled_by = by_reason(&unmodelled);
@@ -2702,24 +2705,16 @@ fn by_reason(m: &BTreeMap<String, Vec<String>>) -> Vec<(String, usize)> {
 /// here (sim71.rs is another item's); each is a skip with its cause. The
 /// thread end's `stvpmv ; thrsw` (every VS and CS) is no longer one: sim71
 /// asks whether an op has a destination (add_op_args & ARG_D), as
-/// qpu_validate.c:373-421 and verify71 do.
-const SIM71_UNMODELLED: &[(&str, usize, usize, &str)] = &[
-    (
-        "FS: add Vfpack: a denormal operand",
-        1,
-        0,
-        "gltest/intrt.frag (a GLSL ES 3.00 pair): a VFPACK operand is a denormal, which sim.rs f32_unpack \
-         refuses as unmodelled",
-    ),
-    (
-        "FS: mul Fmov: input unpack Max0",
-        34,
-        34,
-        "the mul ALU's FMOV takes only 4.2's unpacks in sim71 (unpacks42); 7.1's clamps Sat, Nsat and Max0 \
-         are modelled for the add ALU's FMOV only (float_unpack)",
-    ),
-    ("FS: mul Fmov: input unpack Sat", 12, 10, "as the Max0 row: the mul ALU's FMOV with the Sat clamp"),
-];
+/// qpu_validate.c:373-421 and verify71 do. The mul ALU's FMOV with 7.1's
+/// clamp unpacks (Sat, Nsat, Max0; 46 pairs, 44 in report-es2) is no longer
+/// one either: sim71 runs them on both ALUs.
+const SIM71_UNMODELLED: &[(&str, usize, usize, &str)] = &[(
+    "FS: add Vfpack: a denormal operand",
+    1,
+    0,
+    "gltest/intrt.frag (a GLSL ES 3.00 pair): a VFPACK operand is a denormal, which sim.rs f32_unpack \
+     refuses as unmodelled",
+)];
 
 /// The 7.1 pairs this harness does not try, by reason (as for 4.2: the
 /// front end, the fixture's uniform lists, the streams the harness builds

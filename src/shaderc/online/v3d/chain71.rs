@@ -37,7 +37,7 @@ use super::qpu_ffi::Gen;
 use super::sched71::{pack71, Sched71Error};
 use super::sched71_cf::{branches_are_structured71, schedule71, Scheduled71};
 use super::select::{select_fragment, select_vertex_keyed, tmu_input_writes, Pressure, SelectError, Selected, VOp};
-use super::select71::{interleave71, select71, Select71Error};
+use super::select71::{interleave71, interleave71_sig, select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
 use super::vop71::{Instr71, Op71, Selected71, Uniform};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
@@ -196,27 +196,52 @@ pub const TARGET71: Target = Target { vpm_size: 65536 };
 /// than 16 / 4 TMU inputs, else 2 (chain.rs `build`, chain.rs:277-322).
 /// Then encode71 of every word, verify71 and registers_fit_threads71.
 ///
-/// The operations go through twice: in select71's order, and in
-/// [`interleave71`]'s, which sched71 pairs better. The interleaved build is
-/// kept when it is no fewer threads and fewer words; the in-order one
-/// decides every refusal (its error is the stage's), and the interleaved
-/// one is tried only when the scratch left holds twice what the first took.
+/// The operations go through two or three times: in select71's order, in
+/// [`interleave71`]'s, which sched71 pairs better, and for a fragment shader
+/// in [`interleave71_sig`]'s when that is another order. An interleaved
+/// build replaces the one kept so far when it is no fewer threads and fewer
+/// words, and gives its scratch back otherwise; the in-order one decides
+/// every refusal (its error is the stage's), and each interleaved one is
+/// tried only when the scratch left holds twice what the first took. (Over
+/// es100 and qpu_corpus_71 the signal-aware order never shortened a vertex
+/// or coordinate shader, so those are not built a third time.)
 pub fn build71<'a>(sel: &Selected<'_>, single_seg: bool, a: &Arena<'a>) -> Result<(Code71<'a>, u32), V3d71Error> {
     let sel71 = select71(sel, a)?;
     let four = tmu_input_writes(sel.ops) <= 16 / 4;
     let before = a.used();
     let plain = finish71(&sel71, four, single_seg, a)?;
     let cost = a.used().saturating_sub(before);
-    if a.left() < 2 * cost {
-        return Ok(plain);
-    }
-    let Ok(moved) = interleave71(&sel71, a) else {
-        return Ok(plain);
+    let mut best = plain;
+    /* the build of `moved` when it is better than `best`; else its scratch
+     * goes back */
+    let attempt = |moved: &Selected71<'_>, best: &mut (Code71<'a>, u32)| {
+        let mark = a.used();
+        match finish71(moved, four, single_seg, a) {
+            Ok(alt) if alt.1 >= best.1 && alt.0.words.len() < best.0.words.len() => *best = alt,
+            _ => {
+                // SAFETY: what finish71 allocated above `mark` is referred
+                // to only by its result, dropped here; `best`, `sel71` and
+                // the orders were allocated below `mark`. `a` is the
+                // compile's bottom-up scratch, which 4.2's build resets the
+                // same way (order.rs `reorder`, through chain.rs `build`).
+                unsafe { a.reset_to(mark) };
+            }
+        }
     };
-    match finish71(&moved, four, single_seg, a) {
-        Ok(alt) if alt.1 >= plain.1 && alt.0.words.len() < plain.0.words.len() => Ok(alt),
-        _ => Ok(plain),
+    if a.left() < 2 * cost {
+        return Ok(best);
     }
+    let Ok(first) = interleave71(&sel71, a) else { return Ok(best) };
+    attempt(&first, &mut best);
+    if !sel71.fragment || a.left() < 2 * cost {
+        return Ok(best);
+    }
+    if let Ok(second) = interleave71_sig(&sel71, a) {
+        if second.ops != first.ops {
+            attempt(&second, &mut best);
+        }
+    }
+    Ok(best)
 }
 
 /// [`build71`] of one order of the operations: allocation at 4 threads
