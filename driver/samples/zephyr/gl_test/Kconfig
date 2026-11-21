@@ -564,7 +564,7 @@ config YAKOGL_RPI5_WDOG_HOLD_S
 	default V3D_GL_TEST_HOLD_S if YAKOGL_GPU_V3D71
 endmenu
 
-menu "gl_test on the NanoPC-T6 (Mali-G610)"
+menu "gl_test on a Mali (the NanoPC-T6's G610, the Verdin iMX95's G310)"
 	depends on YAKOGL_GPU_MALI
 
 config T6_GL_TEST_CASE
