@@ -7,7 +7,7 @@
 //! table's rows are, and for a fragment shader the variant its SPEC names
 //! asked of the plain record; each `attach:N` the clear-attach program our
 //! encoder builds (`powervr::assemble::build_clear_attach`). The rows are
-//! printed as the precompiled table prints them ([`table::row_text`]), into
+//! printed as the precompiled table prints them (`table::row_text`), into
 //! one file the back end compiles in -- src/pvr/internal.rs or
 //! src/vivante/internal.rs -- which is committed, because every image needs
 //! these programs whether it carries a compiler or a table or neither, and

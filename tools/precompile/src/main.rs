@@ -9,22 +9,22 @@
 //! ```
 //!
 //! It drives the product back end (`SHC_ONLINE`, src/shaderc/online) through
-//! its own entry points in the order the GL core calls them ([`drive`]): each
+//! its own entry points in the order the GL core calls them (`drive`): each
 //! listed program's two sources compiled, linked, and the variants a draw
 //! asks for asked of the linked fragment shader; each source no program
 //! links compiled alone, a fragment shader's variants asked of its plain
 //! record. Then it writes every record the compiler's cache held, as Rust
-//! ([`table`]), to OUT (default `build/precompiled/<gpu>[-es2].rs`).
+//! (`table`), to OUT (default `build/precompiled/<gpu>[-es2].rs`).
 //!
 //! * A source the compiler refuses must be a listed refusal: FILE, default
-//!   tests/fixtures/online_refused_<gpu>[_es2].txt, which
+//!   `tests/fixtures/online_refused_<gpu>[_es2].txt`, which
 //!   tests/online_corpus.rs pins message for message. A listed one is
 //!   reported and left out with the pairs that name it (`--skip-failures`
 //!   by name); a refusal not listed, or a listed source that compiles now,
 //!   fails the run.
 //! * A link or a variant the compiler refuses (a program the GL refuses to
 //!   link, a blend state whose draws it refuses) must be in STEPS, default
-//!   tests/fixtures/precompile_refused_<gpu>[_es2].txt, one `<job>: <step>:
+//!   `tests/fixtures/precompile_refused_<gpu>[_es2].txt`, one `<job>: <step>:
 //!   <message>` line each in job order; the whole list's run must refuse
 //!   exactly those (`PRECOMPILE_REFUSED_WRITE=1` writes what it saw), an
 //!   app's run a subset of them.
@@ -43,7 +43,7 @@
 //! * `--internal`: instead of a table, the programs a back end binds itself:
 //!   the list's `internal` lines for this GPU, compiled into the back end's
 //!   committed file (src/pvr/internal.rs, src/vivante/internal.rs; `-o`
-//!   elsewhere, `--verify FILE` to compare; [`internal`]).
+//!   elsewhere, `--verify FILE` to compare; `internal`).
 //!
 //! A table holds no internal source (`internal/`, Mesa's GLSL 450;
 //! `internal/es/`, the twins `--internal` compiles): they are skipped, by

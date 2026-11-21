@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The shader ABI as Rust source: the leaf printers of every generated table.
 //!
-//! Two emitters write tables of [`ShcShader`] rows -- `emit.rs` (the PowerVR
+//! Two emitters write tables of [`ShcShader`](yakogl::shaderc::ShcShader) rows -- `emit.rs` (the PowerVR
 //! table from Mesa's pco_shc, tests/reference/blobs.rs) and `yakogl-precompile`
 //! (the table our own compiler builds, tools/precompile, which compiles this
 //! file in with `#[path]`). Both follow the idiom `emit.rs` describes: a row
@@ -81,7 +81,7 @@ pub fn attrib_is_zero(a: &ShcAttrib) -> bool {
 /// An array field of the shader ABI: its name in the generated source, the
 /// Rust type of its entries, and how one entry is printed and recognised as
 /// empty. Every generated table prints these fields, and it prints them in
-/// one of two forms -- the fixed array a [`ShcShader`] holds ([`print_array`]),
+/// one of two forms -- the fixed array a [`ShcShader`](yakogl::shaderc::ShcShader) holds ([`print_array`]),
 /// or a static a table's row or reflection points at (`print_list` in
 /// tools/precompile) -- so both forms are described by one value per field.
 /// The type belongs in the description because the fixed form pads with
