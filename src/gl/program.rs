@@ -1623,6 +1623,111 @@ fn parse_decimal(t: &[u8]) -> Option<u32> {
     t.iter().try_fold(0u32, |a, &d| a.checked_mul(10)?.checked_add((d - b'0') as u32))
 }
 
+/// The locations an output of type `ty` takes: a matrix one per column.
+fn output_type_slots(ty: &[u8]) -> u32 {
+    let Some(rest) = ty.strip_prefix(b"mat") else {
+        return 1;
+    };
+    match rest.first() {
+        Some(&d @ b'2'..=b'4') => (d - b'0') as u32,
+        _ => 1,
+    }
+}
+
+/// ES 3.0 3.9.2 / GLSL ES 3.00 4.3.8.2: the fragment shader's explicit
+/// `layout(location = N) out` declarations must not share a location and
+/// must lie below GL_MAX_DRAW_BUFFERS (`backend::draw_targets()`). Read from
+/// the source, as the vertex inputs' qualifiers are (the compile's record
+/// does not keep them). Err: the log line. Outputs without a location are
+/// placed by the compiler and not seen here; ES 2.0 has no such qualifier.
+fn check_fragment_output_locations(src: *const c_char, log: &mut [u8; INFO_LOG_SIZE]) -> Result<(), ()> {
+    if crate::REPORT_ES2 || src.is_null() {
+        return Ok(());
+    }
+    // SAFETY: the shader object's NUL-terminated copy of its source.
+    let text = unsafe { util::cstr_bytes(src) };
+    if !is_glsl_es300(text) {
+        return Ok(());
+    }
+    let limit = crate::backend::draw_targets() as u32;
+    let mut taken: [(u32, u32); 32] = [(0, 0); 32];
+    let mut n = 0;
+    let mut toks = AttribTokens { text, pos: 0 };
+    while let Some(t) = toks.next() {
+        if t != b"layout" || toks.next() != Some(&b"("[..]) {
+            continue;
+        }
+        let mut location = None;
+        let mut depth = 1;
+        while let Some(t) = toks.next() {
+            match t {
+                b"(" => depth += 1,
+                b")" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                b"location" if toks.next() == Some(&b"="[..]) => {
+                    location = toks.next().and_then(parse_decimal);
+                }
+                _ => {}
+            }
+        }
+        let (mut is_out, mut slots, mut seen_type) = (false, 1u32, false);
+        let mut count = 1u32;
+        while let Some(t) = toks.next() {
+            match t {
+                b";" | b"{" | b"=" | b"in" | b"uniform" => break,
+                b"out" => is_out = true,
+                b"flat" | b"smooth" | b"centroid" | b"highp" | b"mediump" | b"lowp" | b"invariant" => {}
+                id if is_ident(id) && !seen_type => {
+                    seen_type = true;
+                    slots = output_type_slots(id);
+                }
+                id if is_ident(id) => {
+                    /* the name; an array size follows it */
+                    let mark = toks.pos;
+                    if toks.next() == Some(&b"["[..]) {
+                        count = toks.next().and_then(parse_decimal).unwrap_or(1).max(1);
+                    } else {
+                        toks.pos = mark;
+                    }
+                    break;
+                }
+                _ => break,
+            }
+        }
+        let (true, Some(loc)) = (is_out && seen_type, location) else {
+            continue;
+        };
+        let (first, end) = (loc, loc.saturating_add(slots.saturating_mul(count)));
+        if end > limit {
+            write_log(
+                log,
+                format_args!(
+                    "link error: fragment output at location {first} ends at {end}, beyond the {limit} draw buffers"
+                ),
+            );
+            return Err(());
+        }
+        if let Some(&(f, _)) = taken[..n].iter().find(|&&(f, e)| first < e && f < end) {
+            write_log(
+                log,
+                format_args!(
+                    "link error: fragment outputs at location {first} and {f} overlap: one location, two outputs"
+                ),
+            );
+            return Err(());
+        }
+        if n < taken.len() {
+            taken[n] = (first, end);
+            n += 1;
+        }
+    }
+    Ok(())
+}
+
 /// Whether `map` puts an active attribute somewhere other than the compile's
 /// reflection rows do, and every active attribute has a row to compare with.
 ///
@@ -2109,6 +2214,9 @@ pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &Link
         return false;
     }
     if check_uniform_packing(&rvs, &rfs, log).is_err() {
+        return false;
+    }
+    if check_fragment_output_locations(inputs.fs_src, log).is_err() {
         return false;
     }
 
