@@ -1,0 +1,205 @@
+{
+ "tool": "tools/vc4/vc4_shc.py",
+ "draw": "tools/v3d/gl_ref.py triangle with this pair, 64x64 RGBA8, default GL state",
+ "shader_record": {
+  "flags": 5,
+  "attributes": 2
+ },
+ "shaders": {
+  "fs": {
+   "bo_handle": 3,
+   "program": "1/2",
+   "qpu": [
+    "0x100049e0203e303e",
+    "0x10024862213e317e",
+    "0x114258c0819e7549",
+    "0x115059c0809e701b",
+    "0x100049e0203e303e",
+    "0x10024862213e317e",
+    "0x116258c0819e7549",
+    "0x117059c0809e701b",
+    "0x100009e7009e7000",
+    "0x10020ba715027d80",
+    "0x300009e7009e7000",
+    "0x100009e7009e7000",
+    "0x500009e7009e7000"
+   ],
+   "disasm": [
+    "nop nop, r0, r0 ; fmul r0, vary, ra15",
+    "fadd r1, r0, r5 ; fmul r2, vary, ra15",
+    "fadd r3, r2, r5 ; mov ra0.8a, r1",
+    "nop nop, r0, r0 ; mov ra0.8b, r3",
+    "nop nop, r0, r0 ; fmul r0, vary, ra15",
+    "fadd r1, r0, r5 ; fmul r2, vary, ra15",
+    "fadd r3, r2, r5 ; mov ra0.8c, r1",
+    "nop nop, r0, r0 ; mov ra0.8d, r3",
+    "nop nop, r0, r0 ; nop nop, r0, r0",
+    "mov tlb_color_all, ra0 ; nop nop, r0, r0",
+    "sig_end nop nop, r0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; nop nop, r0, r0",
+    "sig_unlock_score nop nop, r0, r0 ; nop nop, r0, r0"
+   ],
+   "bo_handle_words": 0,
+   "uniform_bo_handles": [],
+   "uniforms": [],
+   "varyings": 4,
+   "single_threaded": true
+  },
+  "vs": {
+   "bo_handle": 4,
+   "program": "0/1",
+   "qpu": [
+    "0xe0024c6700801a00",
+    "0x100049e220c20037",
+    "0x100049c020c20037",
+    "0x100059c120c20037",
+    "0x100208e715c27d80",
+    "0x10021d27159e76c0",
+    "0xe0025c6700001a00",
+    "0x100009e7009e7000",
+    "0x100049e0209e701c",
+    "0xd0020867029e1e00",
+    "0x100049e3209e7021",
+    "0x100049e0209e7013",
+    "0x10124021279c003b",
+    "0x1022402227067273",
+    "0x1002082715c27d80",
+    "0x10020c2715027d80",
+    "0x10024c2181c205f6",
+    "0x100248b095c27d9b",
+    "0x100248f095c27d80",
+    "0x10020c27159e7240",
+    "0x10020c27159e7480",
+    "0x10020c27159e76c0",
+    "0x300009e7009e7000",
+    "0x100009e7009e7000",
+    "0x100009e7009e7000"
+   ],
+   "disasm": [
+    "load_imm vr_setup, nop, 0x00801a00 (0.000000)",
+    "nop nop, r0, r0 ; fmul r2, vpm_read, uni",
+    "nop nop, r0, r0 ; fmul rb0, vpm_read, uni",
+    "nop nop, r0, r0 ; fmul ra1, vpm_read, uni",
+    "mov r3, vpm_read ; nop nop, r0, r0",
+    "mov sfu_recip, r3 ; nop nop, r0, r0",
+    "load_imm vw_setup, nop, 0x00001a00 (0.000000)",
+    "nop nop, r0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; fmul r0, r3, r4",
+    "sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; fmul r3, r4, r1",
+    "nop nop, r0, r0 ; fmul r0, r2, r3",
+    "ftoi ra0.16a, r0, r0 ; fmul r1, rb0, r3",
+    "ftoi ra0.16b, r1, r1 ; fmul r2, ra1, r3",
+    "mov r0, vpm_read ; nop nop, r0, r0",
+    "mov vpm, ra0 ; nop nop, r0, r0",
+    "fadd vpm, r2, uni ; mov r1, vpm_read",
+    "mov r2, vpm_read ; mov vpm, r3",
+    "mov r3, vpm_read ; mov vpm, r0",
+    "mov vpm, r1 ; nop nop, r0, r0",
+    "mov vpm, r2 ; nop nop, r0, r0",
+    "mov vpm, r3 ; nop nop, r0, r0",
+    "sig_end nop nop, r0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; nop nop, r0, r0"
+   ],
+   "bo_handle_words": 0,
+   "uniform_bo_handles": [],
+   "uniforms": [
+    {
+     "contents": "vp_x_scale",
+     "value": "0x44000000"
+    },
+    {
+     "contents": "vp_y_scale",
+     "value": "0x44000000"
+    },
+    {
+     "contents": "vp_z_scale",
+     "value": "0x3f000000"
+    },
+    {
+     "contents": "vp_z_offset",
+     "value": "0x3f000000"
+    }
+   ],
+   "attribute_select": 3,
+   "attributes_size": 32
+  },
+  "cs": {
+   "bo_handle": 5,
+   "program": "0/2",
+   "qpu": [
+    "0xe0024c6700401a00",
+    "0x100208e715c27d80",
+    "0x100208a715c27d80",
+    "0x1002006715c27d80",
+    "0xe0025c6700001a00",
+    "0x10024c2095c276f6",
+    "0x10024c34959e7480",
+    "0x10024c2235060d97",
+    "0x10020c27159e7000",
+    "0x100049e0209e7004",
+    "0xd0020867029e1e00",
+    "0x100049c0209e7021",
+    "0x100049e02082701e",
+    "0x100049e1209c0007",
+    "0x10124023279c0257",
+    "0x10224022270606f7",
+    "0x100049e3209c0017",
+    "0x10020c2715027d80",
+    "0x10020c2701827780",
+    "0x10020c27159c0fc0",
+    "0x300009e7009e7000",
+    "0x100009e7009e7000",
+    "0x100009e7009e7000"
+   ],
+   "disasm": [
+    "load_imm vr_setup, nop, 0x00401a00 (0.000000)",
+    "mov r3, vpm_read ; nop nop, r0, r0",
+    "mov r2, vpm_read ; nop nop, r0, r0",
+    "mov ra1, vpm_read ; nop nop, r0, r0",
+    "load_imm vw_setup, nop, 0x00001a00 (0.000000)",
+    "mov vpm, r3 ; mov r0, vpm_read",
+    "mov vpm, r2 ; mov sfu_recip, r0",
+    "mov vpm, ra1 ; fmul r2, r2, uni",
+    "mov vpm, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; fmul r0, r0, r4",
+    "sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; fmul rb0, r4, r1",
+    "nop nop, r0, r0 ; fmul r0, r3, uni",
+    "nop nop, r0, r0 ; fmul r1, r0, rb0",
+    "ftoi ra0.16a, r1, r1 ; fmul r3, r2, rb0",
+    "ftoi ra0.16b, r3, r3 ; fmul r2, ra1, uni",
+    "nop nop, r0, r0 ; fmul r3, r2, rb0",
+    "mov vpm, ra0 ; nop nop, r0, r0",
+    "fadd vpm, r3, uni ; nop nop, r0, r0",
+    "mov vpm, rb0 ; nop nop, r0, r0",
+    "sig_end nop nop, r0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; nop nop, r0, r0",
+    "nop nop, r0, r0 ; nop nop, r0, r0"
+   ],
+   "bo_handle_words": 0,
+   "uniform_bo_handles": [],
+   "uniforms": [
+    {
+     "contents": "vp_y_scale",
+     "value": "0x44000000"
+    },
+    {
+     "contents": "vp_x_scale",
+     "value": "0x44000000"
+    },
+    {
+     "contents": "vp_z_scale",
+     "value": "0x3f000000"
+    },
+    {
+     "contents": "vp_z_offset",
+     "value": "0x3f000000"
+    }
+   ],
+   "attribute_select": 1,
+   "attributes_size": 16
+  }
+ }
+}

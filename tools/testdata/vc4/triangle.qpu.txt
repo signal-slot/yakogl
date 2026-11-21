@@ -1,0 +1,260 @@
+MESA: info: MESA_SHADER_FRAGMENT prog 1/2 pre-opt QIR:
+MESA: info: BLOCK 0:
+MESA: info: frag_w t0
+MESA: info: fmul t1, v0, t0
+MESA: info: vary_add_c t2, t1
+MESA: info: fmul t3, v1, t0
+MESA: info: vary_add_c t4, t3
+MESA: info: fmul t5, v2, t0
+MESA: info: vary_add_c t6, t5
+MESA: info: fmul t7, v3, t0
+MESA: info: vary_add_c t8, t7
+MESA: info: mov t9, t2
+MESA: info: mov t10, t4
+MESA: info: mov t11, t6
+MESA: info: mov t12, t8
+MESA: info: tlb_color_read t13
+MESA: info: mov t14, t13
+MESA: info: mov t15, t9
+MESA: info: mov t16, t10
+MESA: info: mov t17, t11
+MESA: info: mov t18, t12
+MESA: info: mmov t19.8a, t9
+MESA: info: mmov t19.8b, t10
+MESA: info: mmov t19.8c, t11
+MESA: info: mmov t19.8d, t12
+MESA: info: mov t20, t19
+MESA: info: mov t21, t20
+MESA: info: mov tlb_c, t21
+MESA: info: 
+MESA: info: MESA_SHADER_FRAGMENT prog 1/2 QIR:
+MESA: info: BLOCK 0:
+MESA: info: frag_w t0
+MESA: info: fmul t1, v0, t0
+MESA: info: vary_add_c t2, t1
+MESA: info: mmov t19.8a, t2
+MESA: info: fmul t3, v1, t0
+MESA: info: vary_add_c t4, t3
+MESA: info: mmov t19.8b, t4
+MESA: info: fmul t5, v2, t0
+MESA: info: vary_add_c t6, t5
+MESA: info: mmov t19.8c, t6
+MESA: info: fmul t7, v3, t0
+MESA: info: vary_add_c t8, t7
+MESA: info: mmov t19.8d, t8
+MESA: info: mov tlb_c, t19
+MESA: info: 
+MESA: info: MESA_SHADER_FRAGMENT prog 1/2 QPU:
+MESA: info: 0x100049e0203e303e nop nop, r0, r0 ; fmul r0, vary, ra15
+MESA: info: 0x10024862213e317e fadd r1, r0, r5 ; fmul r2, vary, ra15
+MESA: info: 0x114258c0819e7549 fadd r3, r2, r5 ; mov ra0.8a, r1
+MESA: info: 0x115059c0809e701b nop nop, r0, r0 ; mov ra0.8b, r3
+MESA: info: 0x100049e0203e303e nop nop, r0, r0 ; fmul r0, vary, ra15
+MESA: info: 0x10024862213e317e fadd r1, r0, r5 ; fmul r2, vary, ra15
+MESA: info: 0x116258c0819e7549 fadd r3, r2, r5 ; mov ra0.8c, r1
+MESA: info: 0x117059c0809e701b nop nop, r0, r0 ; mov ra0.8d, r3
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x10020ba715027d80 mov tlb_color_all, ra0 ; nop nop, r0, r0
+MESA: info: 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x500009e7009e7000 sig_unlock_score nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 
+MESA: info: MESA_SHADER_VERTEX prog 0/1 pre-opt QIR:
+MESA: info: BLOCK 0:
+MESA: info: mov t0, vpm0.0
+MESA: info: mov t1, vpm0.1
+MESA: info: mov t2, vpm0.2
+MESA: info: mov t3, vpm0.3
+MESA: info: mov t4, vpm1.0
+MESA: info: mov t5, vpm1.1
+MESA: info: mov t6, vpm1.2
+MESA: info: mov t7, vpm1.3
+MESA: info: mov t8, t0
+MESA: info: mov t9, t1
+MESA: info: mov t10, t2
+MESA: info: mov t11, t3
+MESA: info: mov t12, t4
+MESA: info: mov t13, t5
+MESA: info: mov t14, t6
+MESA: info: mov t15, t7
+MESA: info: mov t16, t8
+MESA: info: mov t17, t9
+MESA: info: mov t18, t10
+MESA: info: mov t19, t11
+MESA: info: mov t20, t12
+MESA: info: mov t21, t13
+MESA: info: mov t22, t14
+MESA: info: mov t23, t15
+MESA: info: rcp t24, t19
+MESA: info: fmul t25, t19, t24
+MESA: info: fsub t26, u1 (0x40000000 / 2.000000), t25
+MESA: info: fmul t27, t24, t26
+MESA: info: fmul t29, t16, u2 (vp_x_scale)
+MESA: info: fmul t30, t29, t27
+MESA: info: ftoi t28.16a, t30
+MESA: info: fmul t31, t17, u3 (vp_y_scale)
+MESA: info: fmul t32, t31, t27
+MESA: info: ftoi t28.16b, t32
+MESA: info: mov vpm, t28
+MESA: info: fmul t33, t18, u4 (vp_z_scale)
+MESA: info: fmul t34, t33, t27
+MESA: info: fadd t35, t34, u5 (vp_z_offset)
+MESA: info: mov vpm, t35
+MESA: info: mov vpm, t27
+MESA: info: mov vpm, t20
+MESA: info: mov vpm, t21
+MESA: info: mov vpm, t22
+MESA: info: mov vpm, t23
+MESA: info: 
+MESA: info: MESA_SHADER_VERTEX prog 0/1 QIR:
+MESA: info: BLOCK 0:
+MESA: info: fmul t29, vpm0.0, u2 (vp_x_scale)
+MESA: info: fmul t31, vpm0.1, u3 (vp_y_scale)
+MESA: info: fmul t33, vpm0.2, u4 (vp_z_scale)
+MESA: info: mov t3, vpm0.3
+MESA: info: rcp t24, t3
+MESA: info: fmul t25, t3, t24
+MESA: info: fsub t26, 2.000000, t25
+MESA: info: fmul t27, t24, t26
+MESA: info: fmul t30, t29, t27
+MESA: info: fmul t32, t31, t27
+MESA: info: ftoi t28.16a, t30
+MESA: info: ftoi t28.16b, t32
+MESA: info: mov vpm, t28
+MESA: info: fmul t34, t33, t27
+MESA: info: fadd vpm, t34, u5 (vp_z_offset)
+MESA: info: mov vpm, t27
+MESA: info: mov t4, vpm1.0
+MESA: info: mov vpm, t4
+MESA: info: mov t5, vpm1.1
+MESA: info: mov vpm, t5
+MESA: info: mov t6, vpm1.2
+MESA: info: mov vpm, t6
+MESA: info: mov t7, vpm1.3
+MESA: info: mov vpm, t7
+MESA: info: 
+MESA: info: MESA_SHADER_VERTEX prog 0/1 QPU:
+MESA: info: 0xe0024c6700801a00 load_imm vr_setup, nop, 0x00801a00 (0.000000)
+MESA: info: 0x100049e220c20037 nop nop, r0, r0 ; fmul r2, vpm_read, uni
+MESA: info: 0x100049c020c20037 nop nop, r0, r0 ; fmul rb0, vpm_read, uni
+MESA: info: 0x100059c120c20037 nop nop, r0, r0 ; fmul ra1, vpm_read, uni
+MESA: info: 0x100208e715c27d80 mov r3, vpm_read ; nop nop, r0, r0
+MESA: info: 0x10021d27159e76c0 mov sfu_recip, r3 ; nop nop, r0, r0
+MESA: info: 0xe0025c6700001a00 load_imm vw_setup, nop, 0x00001a00 (0.000000)
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100049e0209e701c nop nop, r0, r0 ; fmul r0, r3, r4
+MESA: info: 0xd0020867029e1e00 sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0
+MESA: info: 0x100049e3209e7021 nop nop, r0, r0 ; fmul r3, r4, r1
+MESA: info: 0x100049e0209e7013 nop nop, r0, r0 ; fmul r0, r2, r3
+MESA: info: 0x10124021279c003b ftoi ra0.16a, r0, r0 ; fmul r1, rb0, r3
+MESA: info: 0x1022402227067273 ftoi ra0.16b, r1, r1 ; fmul r2, ra1, r3
+MESA: info: 0x1002082715c27d80 mov r0, vpm_read ; nop nop, r0, r0
+MESA: info: 0x10020c2715027d80 mov vpm, ra0 ; nop nop, r0, r0
+MESA: info: 0x10024c2181c205f6 fadd vpm, r2, uni ; mov r1, vpm_read
+MESA: info: 0x100248b095c27d9b mov r2, vpm_read ; mov vpm, r3
+MESA: info: 0x100248f095c27d80 mov r3, vpm_read ; mov vpm, r0
+MESA: info: 0x10020c27159e7240 mov vpm, r1 ; nop nop, r0, r0
+MESA: info: 0x10020c27159e7480 mov vpm, r2 ; nop nop, r0, r0
+MESA: info: 0x10020c27159e76c0 mov vpm, r3 ; nop nop, r0, r0
+MESA: info: 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 
+MESA: info: MESA_SHADER_COORD prog 0/2 pre-opt QIR:
+MESA: info: BLOCK 0:
+MESA: info: mov t0, vpm0.0
+MESA: info: mov t1, vpm0.1
+MESA: info: mov t2, vpm0.2
+MESA: info: mov t3, vpm0.3
+MESA: info: mov t4, vpm1.0
+MESA: info: mov t5, vpm1.1
+MESA: info: mov t6, vpm1.2
+MESA: info: mov t7, vpm1.3
+MESA: info: mov t8, t0
+MESA: info: mov t9, t1
+MESA: info: mov t10, t2
+MESA: info: mov t11, t3
+MESA: info: mov t12, t8
+MESA: info: mov t13, t9
+MESA: info: mov t14, t10
+MESA: info: mov t15, t11
+MESA: info: rcp t16, t15
+MESA: info: fmul t17, t15, t16
+MESA: info: fsub t18, u1 (0x40000000 / 2.000000), t17
+MESA: info: fmul t19, t16, t18
+MESA: info: mov vpm, t12
+MESA: info: mov vpm, t13
+MESA: info: mov vpm, t14
+MESA: info: mov vpm, t15
+MESA: info: fmul t21, t12, u2 (vp_x_scale)
+MESA: info: fmul t22, t21, t19
+MESA: info: ftoi t20.16a, t22
+MESA: info: fmul t23, t13, u3 (vp_y_scale)
+MESA: info: fmul t24, t23, t19
+MESA: info: ftoi t20.16b, t24
+MESA: info: mov vpm, t20
+MESA: info: fmul t25, t14, u4 (vp_z_scale)
+MESA: info: fmul t26, t25, t19
+MESA: info: fadd t27, t26, u5 (vp_z_offset)
+MESA: info: mov vpm, t27
+MESA: info: mov vpm, t19
+MESA: info: 
+MESA: info: MESA_SHADER_COORD prog 0/2 QIR:
+MESA: info: BLOCK 0:
+MESA: info: mov t0, vpm0.0
+MESA: info: mov vpm, t0
+MESA: info: mov t1, vpm0.1
+MESA: info: mov t2, vpm0.2
+MESA: info: mov t3, vpm0.3
+MESA: info: rcp t16, t3
+MESA: info: mov vpm, t1
+MESA: info: mov vpm, t2
+MESA: info: mov vpm, t3
+MESA: info: fmul t17, t3, t16
+MESA: info: fsub t18, 2.000000, t17
+MESA: info: fmul t19, t16, t18
+MESA: info: fmul t21, t0, u2 (vp_x_scale)
+MESA: info: fmul t23, t1, u3 (vp_y_scale)
+MESA: info: fmul t22, t21, t19
+MESA: info: fmul t24, t23, t19
+MESA: info: ftoi t20.16a, t22
+MESA: info: ftoi t20.16b, t24
+MESA: info: mov vpm, t20
+MESA: info: fmul t25, t2, u4 (vp_z_scale)
+MESA: info: fmul t26, t25, t19
+MESA: info: fadd vpm, t26, u5 (vp_z_offset)
+MESA: info: mov vpm, t19
+MESA: info: 
+MESA: info: MESA_SHADER_COORD prog 0/2 QPU:
+MESA: info: 0xe0024c6700401a00 load_imm vr_setup, nop, 0x00401a00 (0.000000)
+MESA: info: 0x100208e715c27d80 mov r3, vpm_read ; nop nop, r0, r0
+MESA: info: 0x100208a715c27d80 mov r2, vpm_read ; nop nop, r0, r0
+MESA: info: 0x1002006715c27d80 mov ra1, vpm_read ; nop nop, r0, r0
+MESA: info: 0xe0025c6700001a00 load_imm vw_setup, nop, 0x00001a00 (0.000000)
+MESA: info: 0x10024c2095c276f6 mov vpm, r3 ; mov r0, vpm_read
+MESA: info: 0x10024c34959e7480 mov vpm, r2 ; mov sfu_recip, r0
+MESA: info: 0x10024c2235060d97 mov vpm, ra1 ; fmul r2, r2, uni
+MESA: info: 0x10020c27159e7000 mov vpm, r0 ; nop nop, r0, r0
+MESA: info: 0x100049e0209e7004 nop nop, r0, r0 ; fmul r0, r0, r4
+MESA: info: 0xd0020867029e1e00 sig_small_imm fsub r1, 2.0, r0 ; nop nop, r0, r0
+MESA: info: 0x100049c0209e7021 nop nop, r0, r0 ; fmul rb0, r4, r1
+MESA: info: 0x100049e02082701e nop nop, r0, r0 ; fmul r0, r3, uni
+MESA: info: 0x100049e1209c0007 nop nop, r0, r0 ; fmul r1, r0, rb0
+MESA: info: 0x10124023279c0257 ftoi ra0.16a, r1, r1 ; fmul r3, r2, rb0
+MESA: info: 0x10224022270606f7 ftoi ra0.16b, r3, r3 ; fmul r2, ra1, uni
+MESA: info: 0x100049e3209c0017 nop nop, r0, r0 ; fmul r3, r2, rb0
+MESA: info: 0x10020c2715027d80 mov vpm, ra0 ; nop nop, r0, r0
+MESA: info: 0x10020c2701827780 fadd vpm, r3, uni ; nop nop, r0, r0
+MESA: info: 0x10020c27159c0fc0 mov vpm, rb0 ; nop nop, r0, r0
+MESA: info: 0x300009e7009e7000 sig_end nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 0x100009e7009e7000 nop nop, r0, r0 ; nop nop, r0, r0
+MESA: info: 
+MESA: info: uniform 1/0: 0x44000000 vp_x_scale
+MESA: info: uniform 1/1: 0x44000000 vp_y_scale
+MESA: info: uniform 1/2: 0x3f000000 vp_z_scale
+MESA: info: uniform 1/3: 0x3f000000 vp_z_offset
+MESA: info: uniform 2/0: 0x44000000 vp_y_scale
+MESA: info: uniform 2/1: 0x44000000 vp_x_scale
+MESA: info: uniform 2/2: 0x3f000000 vp_z_scale
+MESA: info: uniform 2/3: 0x3f000000 vp_z_offset

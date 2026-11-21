@@ -1,0 +1,131 @@
+# tools/vc4/vc4_submit.py decode: 2 BO(s), 3 shader(s) (13+25+23 QPU words), 1 submit(s) (binner list 92 bytes)
+buffer objects (DRM_VC4_CREATE_BO): 1: 16384 bytes, 2: 1048576 bytes
+shader BO 3 (DRM_VC4_CREATE_SHADER_BO), 13 QPU words:
+  0x100049e0203e303e
+  0x10024862213e317e
+  0x114258c0819e7549
+  0x115059c0809e701b
+  0x100049e0203e303e
+  0x10024862213e317e
+  0x116258c0819e7549
+  0x117059c0809e701b
+  0x100009e7009e7000
+  0x10020ba715027d80
+  0x300009e7009e7000
+  0x100009e7009e7000
+  0x500009e7009e7000
+shader BO 4 (DRM_VC4_CREATE_SHADER_BO), 25 QPU words:
+  0xe0024c6700801a00
+  0x100049e220c20037
+  0x100049c020c20037
+  0x100059c120c20037
+  0x100208e715c27d80
+  0x10021d27159e76c0
+  0xe0025c6700001a00
+  0x100009e7009e7000
+  0x100049e0209e701c
+  0xd0020867029e1e00
+  0x100049e3209e7021
+  0x100049e0209e7013
+  0x10124021279c003b
+  0x1022402227067273
+  0x1002082715c27d80
+  0x10020c2715027d80
+  0x10024c2181c205f6
+  0x100248b095c27d9b
+  0x100248f095c27d80
+  0x10020c27159e7240
+  0x10020c27159e7480
+  0x10020c27159e76c0
+  0x300009e7009e7000
+  0x100009e7009e7000
+  0x100009e7009e7000
+shader BO 5 (DRM_VC4_CREATE_SHADER_BO), 23 QPU words:
+  0xe0024c6700401a00
+  0x100208e715c27d80
+  0x100208a715c27d80
+  0x1002006715c27d80
+  0xe0025c6700001a00
+  0x10024c2095c276f6
+  0x10024c34959e7480
+  0x10024c2235060d97
+  0x10020c27159e7000
+  0x100049e0209e7004
+  0xd0020867029e1e00
+  0x100049c0209e7021
+  0x100049e02082701e
+  0x100049e1209c0007
+  0x10124023279c0257
+  0x10224022270606f7
+  0x100049e3209c0017
+  0x10020c2715027d80
+  0x10020c2701827780
+  0x10020c27159c0fc0
+  0x300009e7009e7000
+  0x100009e7009e7000
+  0x100009e7009e7000
+submit 0 (DRM_VC4_SUBMIT_CL):
+  struct drm_vc4_submit_cl (176 bytes, the four pointers recorded as 0):
+    bin_cl_size                  92
+    shader_rec_size              72
+    shader_rec_count             1
+    uniforms_size                32
+    bo_handle_count              5
+    width                        64
+    height                       64
+    min_x_tile                   0
+    min_y_tile                   0
+    max_x_tile                   0
+    max_y_tile                   0
+    color_read                   none
+    color_write.hindex           4
+    color_write.offset           0x0
+    color_write.bits             0x44
+    color_write.flags            0
+    zs_read                      none
+    zs_write                     none
+    msaa_color_write             none
+    msaa_zs_write                none
+    clear_color[0]               0xffff0000
+    clear_color[1]               0xffff0000
+    clear_z                      0x0
+    clear_s                      0x0
+    flags                        0x1 (USE_CLEAR_COLOR)
+    seqno                        0
+    perfmonid                    0
+    in_sync                      0
+    out_sync                     1
+  bo_handles (5): 3 4 5 2 1
+  binner list (92 bytes, 16 packets):
+    0000: 112 TILE_BINNING_MODE_CONFIG     00 00 00 00 00 00 00 00 00 00 00 00 01 01 00
+    0010:   6 START_TILE_BINNING           
+    0011:  56 PRIMITIVE_LIST_FORMAT        12
+    0013: 102 CLIP_WINDOW                  00 00 00 00 40 00 40 00
+    001c:  96 CONFIGURATION_BITS           03 70 02
+    0020: 101 DEPTH_OFFSET                 00 00 00 00
+    0025:  98 POINT_SIZE                   00 00 80 3f
+    002a:  99 LINE_WIDTH                   00 00 80 3f
+    002f: 105 CLIPPER_XY_SCALING           00 00 00 44 00 00 00 44
+    0038: 106 CLIPPER_Z_SCALING            00 00 00 3f 00 00 00 3f
+    0041: 103 VIEWPORT_OFFSET              00 02 00 02
+    0046:  97 FLAT_SHADE_FLAGS             00 00 00 00
+    004b:  64 GL_SHADER_STATE              02 00 00 00
+    0050:  33 GL_ARRAY_PRIMITIVE           04 03 00 00 00 00 00 00 00
+    005a:   7 INCREMENT_SEMAPHORE          
+    005b:   4 FLUSH                        
+  shader records (72 bytes, 1):
+    record 0: 2 attribute(s), flags 0x5, 52 bytes: 05 00 00 04 00 00 00 00 00 00 00 00 00 00 03 20 00 00 00 00 00 00 00 00 00 00 01 10 00 00 00 00 00 00 00 00 00 00 00 00 0f 10 00 00 30 00 00 00 0f 10 10 10
+      fs: handle index 0 (BO 3), code offset 0x0, 4 varyings
+      vs: handle index 1 (BO 4), code offset 0x0, attribute select 0x3, attributes size 32
+      cs: handle index 2 (BO 5), code offset 0x0, attribute select 0x1, attributes size 16
+      attribute 0: handle index 3 (BO 2), offset 0x0, 16 bytes, stride 16, VPM offset vs 0 cs 0
+      attribute 1: handle index 3 (BO 2), offset 0x30, 16 bytes, stride 16, VPM offset vs 16 cs 16
+  uniforms (32 bytes, 8 words):
+      0: 0x44000000  512.0
+      1: 0x44000000  512.0
+      2: 0x3f000000  0.5
+      3: 0x3f000000  0.5
+      4: 0x44000000  512.0
+      5: 0x44000000  512.0
+      6: 0x3f000000  0.5
+      7: 0x3f000000  0.5

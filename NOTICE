@@ -101,6 +101,13 @@ third_party/zephyr-pr114866-2026-07-29-2473da6b (entry 11).
       qpu_ffi.rs, and qpu_pack.c's field positions in the test-only
       fields.rs). The encoder and decoder are no longer transcriptions of
       qpu_pack.c / qpu_instr.c: they call the vendored files.
+      tools/testdata/vc4/*.cl.txt and *.qpu.txt: text the VideoCore IV
+      driver (src/gallium/drivers/vc4/, Copyright 2014 Broadcom) and the
+      shared decoder (src/broadcom/cle/, vc4_packet.xml) print for our own
+      draw on the drm-shim (tools/vc4/drm_shim_ref.py). The values are
+      ours; the packet, field and instruction names are Mesa's (Apache-2.0
+      AND MIT, named in each file's .license sidecar). No source of that
+      driver is in this repository.
 
    c. Etnaviv (src/gallium/drivers/etnaviv/, src/etnaviv/)
       Copyright (c) 2012-2019 Etnaviv Project; Copyright (c) 2019 Zodiac

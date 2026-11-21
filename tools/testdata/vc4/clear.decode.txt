@@ -1,0 +1,42 @@
+# tools/vc4/vc4_submit.py decode: 1 BO(s), 0 shader(s) (0 QPU words), 1 submit(s) (binner list 21 bytes)
+buffer objects (DRM_VC4_CREATE_BO): 1: 16384 bytes
+submit 0 (DRM_VC4_SUBMIT_CL):
+  struct drm_vc4_submit_cl (176 bytes, the four pointers recorded as 0):
+    bin_cl_size                  21
+    shader_rec_size              0
+    shader_rec_count             0
+    uniforms_size                0
+    bo_handle_count              1
+    width                        64
+    height                       64
+    min_x_tile                   0
+    min_y_tile                   0
+    max_x_tile                   0
+    max_y_tile                   0
+    color_read                   none
+    color_write.hindex           0
+    color_write.offset           0x0
+    color_write.bits             0x44
+    color_write.flags            0
+    zs_read                      none
+    zs_write                     none
+    msaa_color_write             none
+    msaa_zs_write                none
+    clear_color[0]               0xffff0000
+    clear_color[1]               0xffff0000
+    clear_z                      0x0
+    clear_s                      0x0
+    flags                        0x1 (USE_CLEAR_COLOR)
+    seqno                        0
+    perfmonid                    0
+    in_sync                      0
+    out_sync                     1
+  bo_handles (1): 1
+  binner list (21 bytes, 5 packets):
+    0000: 112 TILE_BINNING_MODE_CONFIG     00 00 00 00 00 00 00 00 00 00 00 00 01 01 00
+    0010:   6 START_TILE_BINNING           
+    0011:  56 PRIMITIVE_LIST_FORMAT        12
+    0013:   7 INCREMENT_SEMAPHORE          
+    0014:   4 FLUSH                        
+  shader records (0 bytes, 0):
+  uniforms (0 bytes, 0 words):

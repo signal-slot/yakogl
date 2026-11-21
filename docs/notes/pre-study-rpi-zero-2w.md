@@ -10,6 +10,10 @@ Update 2026-11-20: section 9. Upstream Zephyr has had the SoC and the
 board since 2026-08-17, which changes section 4 and item 4; the rest
 stands.
 
+Update 2026-11-21: item 1 of section 8 is done (`tools/vc4/`), and Q9 in
+section 7 has its answer. Section 5 items 1 and 2 describe what was planned;
+`tools/vc4/README.md` says what exists.
+
 ## How to read the citations
 
 - `mesa:<path>` is a file of Mesa 26.2.1 (the tree the Mali and V3D reference
@@ -646,7 +650,33 @@ An unknown stays an unknown. Each is a question with what would answer it.
     The HDMI port is a mini-HDMI "supporting a single display ... at up to 1080p
     at 60 Hz" (`rpidoc:zero/zero-models.adoc:55-56`).
 - **Q9. Can the vc4 drm-shim give the bytes of the lists and records on the
-  host?** Answer: build it and run item 1 of section 5.
+  host?** Yes, with a handler added to the shim (answered 2026-11-21 by item 1,
+  `repo:tools/vc4/README.md`).
+  - As built, no: in Mesa 26.2.1 the shim's ioctl table has no entry for
+    `DRM_VC4_SUBMIT_CL` (`mesa:src/broadcom/drm-shim/vc4_noop.c:115-122`), so
+    the submit is not stubbed, it fails: the shim returns `-EINVAL` and prints
+    `DRM_SHIM: unhandled driver DRM ioctl 0` (`mesa:src/drm-shim/device.c:314-337`)
+    and the driver warns "Draw call returned Success.  Expect corruption."
+    (`mesa:.../vc4/vc4_job.c:522-525`; both lines seen on the host).
+  - `VC4_DEBUG=cl` gives the binner list as text only, printed before the
+    driver appends `INCREMENT_SEMAPHORE` and `FLUSH`
+    (`mesa:.../vc4/vc4_job.c:413-429`); it has no shader records, uniforms or
+    handle table. `VC4_DEBUG=qpu` gives the QPU words as text.
+  - `tools/vc4/drm_shim_ref.py build` adds a submit handler to the shim's
+    source in the work directory. It writes `struct drm_vc4_submit_cl` (the
+    four user pointers as 0) with the binner list, the shader records, the
+    uniforms and the BO handle table, and each shader's QPU words as passed to
+    `DRM_VC4_CREATE_SHADER_BO`, as raw bytes. A second run and a second clean
+    build give the same bytes. The text dumps are stored beside them
+    (`repo:tools/testdata/vc4/`).
+  - Found on the way: the order of a shader's uniform stream is not the order
+    of the QIR dump. The QPU scheduler orders the uniforms again
+    (`mesa:.../vc4/vc4_qpu_schedule.c:903-927`) and prints nothing; the stored
+    coordinate shader reads `vp_y_scale` before `vp_x_scale`. The build
+    therefore also switches on Mesa's disabled dump of the uniform words
+    (`mesa:.../vc4/vc4_uniforms.c:348-358`).
+  - Not recorded: the render list (the kernel builds it,
+    `kernel/vc4_render_cl.c`) and the contents of the BOs.
 - **Q10. Are vertex-stage texture look-ups supported?** `vc4_screen.c:159-160`
   sets one sampler count for both stages; the ES 2.0 minimum is zero. We did
   not find the decision. Answer: `ntq_emit_tex` (`vc4_program.c:400`), the
@@ -686,7 +716,7 @@ week or more in units of that port, not calendar promises.
 | # | Item | Size | Check |
 |---|---|---|---|
 | 0 | Read the Linux files at the tag, the Broadcom guide and the Raspberry Pi sources raw; update the unknowns (done, second pass; the guide pages not read fall inside items 2 and 3) | S | each Q has a cited answer or a named board test |
-| 1 | `tools/vc4/`: Mesa vc4 + drm-shim build script, `vc4_shc`, a list recorder | M | clean build; stored reference words and lists |
+| 1 | `tools/vc4/`: Mesa vc4 + drm-shim build script, `vc4_shc`, a list recorder. **Done 2026-11-21**: `drm_shim_ref.py` (build, run, the recorder in the shim, Q9), `vc4_submit.py` (reads and checks a record), `vc4_shc.py` (QPU words and uniform streams of a shader pair, compiled by the driver in a draw on the shim: Mesa has no entry to `vc4_shader_ntq` outside the gallium context, so there is no standalone `vc4_shc.c`), `vc4_selftest.py` (in the gate), and the data of a clear and a triangle in `tools/testdata/vc4/`. The scripts are Python and the data is under `tools/testdata/` because those paths are in the gate's `tools` scope without an edit of `tools/check.sh` | M | clean build; stored reference words and lists: two clean builds, byte-identical runs, the lists decode (`repo:tools/vc4/README.md`, "What was checked") |
 | 2 | QPU ISA model, encoder, decoder, round trip (`src/shaderc/online/vc4/`) | M | round trip over the corpus and `vc4_qpu_disasm.c` vectors |
 | 3 | Packet and record encoders for binner and render lists; golden test | M | byte equality with item 1 |
 | 4 | Zephyr SoC `bcm2837`, custom interrupt controller shell, board `rpi_zero_2w`, build-only. **2026-11-20: upstream Zephyr has both (section 9); the item is now how our workspace gets them** | M | image builds in a gate row |
