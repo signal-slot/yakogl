@@ -16,23 +16,18 @@
 //!   compiled the way glLinkProgram compiles them after glBindAttribLocation
 //!   ([`compile_bound`]: the attribute relink with the program's map), not by
 //!   `mali_ref::compile_pair`;
-//! - defect `lanecycle`, a stack overflow (the process dies; exit 139 in
-//!   `deqp-gles2`) in the fragment compile: `nir_fs::lane_tree` and
+//! - defect `lanecycle`, in the fragment compile `nir_fs::lane_tree` and
 //!   `nir_fs::vectorise` call each other without end on a pair whose second
-//!   lane is a constant: `lanecycle_fs`
+//!   lane is a constant (a stack overflow until `nir_fs::pair_node` refused
+//!   the pair asked for again as `Defect(LaneCycle)`): `lanecycle_fs`
 //!   (`shaders.random.scalar_conversion.fragment.96`, the fragment shader of
 //!   `.combined.96` too) and `lanecycle_reduced`
 //!   (`vec4(2.0) * b * vec4(0.0, 0.0, b, 0.0)`).
 //!
 //! None compiles at the tip: each test is ignored with its outcome quoted.
-//! The two `lanecycle` tests abort the whole test process while the defect
-//! stands (a stack overflow cannot be caught in-process: Rust's guard page
-//! ends the process with "has overflowed its stack"), so run them one at a
-//! time (`--ignored --exact`). The fix removes the `ignore` and the entry in
-//! `PINNED` together. `defects_pinned` runs now: it asserts each `encode`
-//! reference's exact `Defect(Encode)` and, in a child process of this test
-//! binary, that `lanecycle_reduced` still overflows its stack; it names every
-//! one that moved.
+//! The fix removes the `ignore` and the entry in `PINNED` together.
+//! `defects_pinned` runs now: it asserts each reference's exact refusal
+//! (`Defect(Encode)`, `Defect(LaneCycle)`) and names every one that moved.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_defects
@@ -65,28 +60,29 @@ fn defects_encode_reduced() {
 }
 
 #[test]
-#[ignore = "stack overflow: nir_fs::lane_tree and nir_fs::vectorise recurse without end (aborts the test process)"]
+#[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)"]
 fn defects_lanecycle_fs() {
     mali_ref::assert_matches("deqp_defects_lanecycle_fs");
 }
 
 #[test]
-#[ignore = "stack overflow: nir_fs::lane_tree and nir_fs::vectorise recurse without end (aborts the test process)"]
+#[ignore = "refused: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)"]
 fn defects_lanecycle_reduced() {
     mali_ref::assert_matches("deqp_defects_lanecycle_reduced");
 }
 
 const ENCODE: &str = "Valhall back end defect: an invariant of the pipeline did not hold (Encode)";
+const LANECYCLE: &str = "Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)";
 
-/// Every ignored `encode` reference and the refusal its vertex shader's
-/// compile (glCompileShader, no bindings yet) gives now.
-const PINNED: &[(&str, &str)] =
-    &[("deqp_defects_encode_max_cond_float", ENCODE), ("deqp_defects_encode_reduced", ENCODE)];
-
-/// The ignored `lanecycle` references: the test that today overflows its
-/// stack in a child process ([`overflow_change`]), and the other.
-const OVERFLOWS: &str = "defects_lanecycle_reduced";
-const LANECYCLE: &[&str] = &["deqp_defects_lanecycle_fs", "deqp_defects_lanecycle_reduced"];
+/// Every ignored reference and the refusal its program's compile gives now
+/// (the `encode` ones: the vertex shader's glCompileShader, no bindings
+/// yet; the `lanecycle` ones: the fragment shader's).
+const PINNED: &[(&str, &str)] = &[
+    ("deqp_defects_encode_max_cond_float", ENCODE),
+    ("deqp_defects_encode_reduced", ENCODE),
+    ("deqp_defects_lanecycle_fs", LANECYCLE),
+    ("deqp_defects_lanecycle_reduced", LANECYCLE),
+];
 
 /// The references that compile byte-equal (their tests run): none yet.
 const MATCHED: &[&str] = &[];
@@ -101,37 +97,17 @@ fn defects_pinned() {
         .filter_map(|f| f.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut named: Vec<&str> =
-        PINNED.iter().map(|(n, _)| *n).chain(LANECYCLE.iter().copied()).chain(MATCHED.iter().copied()).collect();
+    let mut named: Vec<&str> = PINNED.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
     named.sort();
     assert_eq!(on_disk, named, "a deqp_defects_* reference is neither pinned nor matched here");
-    let mut moved: Vec<String> = PINNED
+    let moved: Vec<String> = PINNED
         .iter()
         .filter_map(|(name, text)| {
             let _one = one_at_a_time();
             mali_ref::refusal_change(name, text)
         })
         .collect();
-    moved.extend(overflow_change(OVERFLOWS));
     assert!(moved.is_empty(), "{}", moved.join("\n"));
-}
-
-/// Test `test` of this binary run alone in a child process: None when it
-/// still dies of the stack overflow, else what changed.
-fn overflow_change(test: &str) -> Option<String> {
-    let exe = std::env::current_exe().expect("the test binary");
-    let out = std::process::Command::new(exe)
-        .args(["--ignored", "--exact", test, "--test-threads=1", "--nocapture"])
-        .output()
-        .expect("the test binary runs again");
-    let err = String::from_utf8_lossy(&out.stderr);
-    if !out.status.success() && err.contains("has overflowed its stack") {
-        return None;
-    }
-    Some(format!(
-        "{test}: no longer overflows its stack ({}); if it passes remove its #[ignore] and the lanecycle pin:\n{err}",
-        out.status
-    ))
 }
 
 /* ---- the program as glBindAttribLocation and glLinkProgram build it ---- */

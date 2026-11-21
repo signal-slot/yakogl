@@ -107,6 +107,10 @@ pub enum Defect {
     /// A moved expression holds an operation `motion::encode` has no number
     /// for (`motion::OPS`): `motion::flag` marks only those movable.
     MovedOp,
+    /// `nir_fs::lane_tree` was asked for a pair of lanes while that pair's
+    /// own `vectorise` was still open (`nir_fs::pair_node`): a cycle, or
+    /// pairs nested deeper than it tracks.
+    LaneCycle,
 }
 
 /// Why the Valhall back end did not produce code: one variant per gap, each

@@ -286,6 +286,23 @@ Order: C first. A crash costs more than its 2 cases, because every later case
 of the process is lost until a fresh process starts. Then A, then B
 (B after `intval-vs16` for byte-equality).
 
+### 4.1 Fix C's guard (landed)
+
+The cycle no longer kills the process. `nir_fs::pair_node` (called by
+`lane_tree` for both of its pair steps) keeps the pairs whose `vectorise` is
+under way; a pair asked for again while its own `vectorise` is open, or
+pairs nested deeper than the 16 it tracks, is refused as
+`MaliError::Defect(Defect::LaneCycle)`. The two `lanecycle` references are
+named refusals now. Breaking the cycle itself (building the lane without
+going back through `Fs::pair_lane`) and Mesa's words for the shape are
+still fix C's remaining work.
+
+The crash had also reached `tools/mali/route.sh measure` (the gate's
+"mali route.sh measure on tools/mali/testdata" row): the two references'
+pairs aborted the test process of their shares, so main was red there from
+the merge of the product route (74ad6cc50) next to these references
+(e993036bf).
+
 ## 5. The test (`tests/mali_deqp_defects.rs`)
 
 Features: `--no-default-features --features
@@ -298,15 +315,13 @@ host-test,gpu-mali,shaderc-online,no-shader-table`.
   The result is compared with `mali_ref::differences`. Today they fail at
   the vertex compile with `Defect(Encode)`.
 - `defects_lanecycle_fs` and `defects_lanecycle_reduced`: ignored,
-  `mali_ref::assert_matches`. While the defect stands, running either one
-  aborts the test process. Run them one at a time.
+  `mali_ref::assert_matches`. Today they are refused with
+  `Defect(LaneCycle)` (section 4.1).
 - `defects_pinned` runs now. It checks that every `deqp_defects_*`
-  reference on disk is named. Each `encode` reference must still give the
-  exact `Defect(Encode)` text (`mali_ref::refusal_change`). In a child
-  process of the test binary (`--ignored --exact
-  defects_lanecycle_reduced`), the lane-cycle shape must still end with
-  "has overflowed its stack". When a fix lands, the pin names the
-  reference that moved.
+  reference on disk is named, and that each one still gives its exact
+  refusal (`mali_ref::refusal_change`): `Defect(Encode)` for the `encode`
+  references, `Defect(LaneCycle)` for the `lanecycle` ones. When a fix
+  lands, the pin names the reference that moved.
 
 Run at the tip: 1 passed, 4 ignored. `cargo fmt --check` and `cargo clippy`
 (with the feature set above) are clean for the file.
