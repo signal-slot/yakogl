@@ -897,3 +897,64 @@ What moved beside them:
   session is the first to show whether `.src_flat32` reads a float
   descriptor correctly.
 - The vertex shader's fp16 arithmetic (`op_abs_vec2`): mixprec.
+
+## The references left (item spike-varylink-rest, 2026-11-21)
+
+From 7b2246c0, host only. Two rules close P and most of U. The discard
+needs its own lowering.
+
+**P, `op_abs_vec2`: byte-equal.** A mediump `abs` whose computed lanes are
+mediump attribute lanes (through a mediump local: `in0 = a_in0.wy`) or
+16-bit lanes is fp16, one lane at a time (`nir.rs` `vs_abs16` /
+`vs_fabs16`). Each lane is narrowed alone (`FADD.f32 r0.h0, r3^,
+0x0.neg`), then its `fabs` is one 16-bit lane, which emit.rs makes
+`FADD.v2f16 r0, r0^.abs.h00, 0x0.neg`. The colour's `* 0.5 + 0.5` then
+takes the existing two-lane path (`vs_pairs16` / `vs_alu16`, `MKVEC.v2i16
+0x0.h0, r0.h0`, the late fusion to `FMA.v2f16`), and each stored lane
+gets its own `F16_TO_F32`. The FAU's `3c003c00` (the 1.0 pair of `MKVEC
+r0.h0, u5.w1.h0`) comes out as Mesa's.
+
+**U, a varying declared and never written: the link rule.** Each lane of
+the varying is an undef (`link::VaryingConsts::push_undef`, tag
+`UNDEF_LANE`), carried with the constants to the program's fragment
+shader. Mesa does the same: `remove_dead_varyings` leaves its loads
+`nir_undef`. The vertex shader stores no slot for it, both alone (the
+`own` reads leave it out) and for the program. The fragment shader's load
+of such a lane is `Val::Undef` (`nir_fs.rs`, `LoadInput`). The colour join
+of an `if` takes the other side's lane (`walk_if16`'s `agree`,
+`nir_opt_undef`). Results:
+
+- `deqp_posvary_unwritten_{not_declared,declared_unused,negative_vs}` are
+  byte-equal (tested in `tests/mali_deqp_posvary.rs`).
+- In `deqp_varylink_unwritten` and `deqp_posvary_unwritten_declared_dead_read`,
+  the program's fragment shader is Mesa's 7 words (checked by calling
+  `compile_fs_for_vs` directly). The pair is still refused, with `control
+  flow` instead of `a varying lane left unwritten`: the fragment shader
+  alone (glCompileShader, before any vertex shader is known) selects its
+  colour between `vec4(var)` and `vec4(1.0)` under the boolean uniform
+  `u_false`. `walk_if16` takes a colour that differs between the sides
+  only under a 16-bit float compare. What is still needed is a lowering of
+  that select under a 32-bit boolean mask, or a fragment-shader record
+  whose refusal waits until the link. Neither has a reference here.
+
+**E1, `discard`: refused, unchanged.** Mesa rewrites `0.0 < x + y` to
+`-x < y` (nir_opt_algebraic.py:3663, `fadd(is_used_once)`). The compare's
+operands are then the two halves of the colour's own `V2F32_TO_V2F16 r0`
+of `v_coords.xy` (v_color.xyz is merged into v_coords by the link):
+`DISCARD.f32.lt r0.neg.h0, r0.h1`, before z is narrowed. With the rewrite
+done by hand in the source, it is still refused, so three pieces are
+missing:
+
+1. the rewrite, after liveness, on a discard's compare;
+2. a `cmp_leaf` operand that is a negated varying lane;
+3. compare operands that are halves of a pair the colour converts
+   (`Leaf::Half`), which `Fs::discard` refuses today as "two varying
+   lanes" (`discard16_two_lanes`, where Mesa compares at fp32 because
+   `flt(f2fmp a, f2fmp b)` goes back to fp32; the `fneg` stops that rule
+   here).
+
+Moved beside them: no glmark2 verdict (69 shaders, 42 compiled, 14 of 33
+scenes compile-clean, as before) and no `tools/mali/corpus-verdicts.txt`
+line. The unit test `each_mali_link_outcome_is_its_own_line` now asserts
+that an unwritten varying has no stored slot, where it used to assert a
+refusal.

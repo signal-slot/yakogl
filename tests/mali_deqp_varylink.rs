@@ -40,14 +40,19 @@ fn draw_multi() {
     mali_ref::assert_matches("deqp_varylink_draw_multi");
 }
 
+/// Shape P: the mediump `abs` of two attribute lanes and the colour's `*
+/// 0.5 + 0.5` at fp16, as Mesa computes them (nir.rs `vs_fabs16`, then the
+/// two-lane pairs of `vs_alu16`).
 #[test]
-#[ignore = "differs: Mesa computes the mediump `abs` and `* 0.5 + 0.5` at fp16, the vertex walk at fp32 (mixprec's vertex side); pinned by refusals_pinned"]
 fn op_abs_vec2() {
     mali_ref::assert_matches("deqp_varylink_op_abs_vec2");
 }
 
+/// Shape U: the program's fragment shader takes the unwritten `var` as an
+/// undef and is Mesa's; the fragment shader alone, which selects its colour
+/// under the boolean uniform `u_false`, is refused (control flow).
 #[test]
-#[ignore = "refused: a varying lane left unwritten (shape U, left to lower-misc); pinned by refusals_pinned"]
+#[ignore = "refused: control flow, the fragment shader alone's colour select under a boolean uniform (shape U's program is Mesa's); pinned by refusals_pinned"]
 fn unwritten() {
     mali_ref::assert_matches("deqp_varylink_unwritten");
 }
@@ -71,23 +76,13 @@ fn gm2_ideas_equal_uniform_lanes() {
     mali_ref::assert_matches("gm2_varylink_dup_uniform");
 }
 
-/// The refusal each ignored reference meets at the tip, and for one that
-/// compiles to other words, that only its vertex program differs.
+/// The refusal each ignored reference meets at the tip.
 #[test]
 fn refusals_pinned() {
     const DISCARD: &str = "Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet";
-    const VARYING: &str = "Valhall: a varying lane left unwritten is not lowered yet";
-    let pins = [("discard", DISCARD), ("unwritten", VARYING)];
+    const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
+    let pins = [("discard", DISCARD), ("unwritten", CONTROL_FLOW)];
     for (name, text) in pins {
         mali_ref::assert_refused_ref(&format!("deqp_varylink_{name}"), text);
     }
-    /* compiles since the walk computes no lane past an operand's (shape P);
-     * the fragment program is Mesa's, the vertex one is fp32 where Mesa's
-     * is fp16 */
-    let r = mali_ref::Reference::load("deqp_varylink_op_abs_vec2");
-    let pair = mali_ref::compile_pair(&r.vs, &r.fs).expect("op_abs_vec2 compiles");
-    let d = mali_ref::differences(&r, &pair);
-    assert!(!d.is_empty(), "op_abs_vec2 is byte-equal now: remove its #[ignore] and this pin");
-    let fs: Vec<_> = d.iter().filter(|m| m.starts_with("fs")).collect();
-    assert!(fs.is_empty(), "op_abs_vec2: its fragment program differs now:\n{fs:#?}");
 }

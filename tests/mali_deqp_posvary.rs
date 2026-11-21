@@ -14,7 +14,8 @@
 //! * `a varying lane left unwritten` (4 cases): a varying the vertex shader
 //!   declares and never writes.
 //!
-//! No reference is lowered yet, so each test is `#[ignore]`d with its
+//! Three `unwritten` references are byte-equal ([`MATCHED`]). Every other
+//! test is `#[ignore]`d with its
 //! refusal ([`REFUSED`]) and [`refusals_pinned`] asserts the whole
 //! `MaliError` message of every one, exactly, plus that every
 //! `deqp_posvary_*` reference on disk is listed: the lowering that lifts one
@@ -31,7 +32,13 @@ mod mali_ref;
 
 const NO_ATTR: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
 const POS_LANE: &str = "Valhall: a gl_Position lane left unwritten is not lowered yet";
-const VARY_UNWRITTEN: &str = "Valhall: a varying lane left unwritten is not lowered yet";
+const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
+
+/// The references the compiler matches byte for byte, without the
+/// `deqp_posvary_` prefix: a declared varying the vertex shader never
+/// writes is an undef the link takes into the fragment shader's loads
+/// (`link::VaryingConsts::push_undef`), no slot stored for it.
+const MATCHED: &[&str] = &["unwritten_not_declared", "unwritten_declared_unused", "unwritten_negative_vs"];
 
 /// Every reference with its whole `MaliError` message, without the
 /// `deqp_posvary_` prefix.
@@ -52,12 +59,11 @@ const REFUSED: &[(&str, &str)] = &[
     ("tex_uniform_w_array", NO_ATTR),
     /* a loop over uniform bounds and constant arrays (shape `loop_phi`) */
     ("loop_phi_array", NO_ATTR),
-    /* a declared varying the vertex shader does not write (shape
-     * `unwritten`) */
-    ("unwritten_not_declared", VARY_UNWRITTEN),
-    ("unwritten_declared_unused", VARY_UNWRITTEN),
-    ("unwritten_declared_dead_read", VARY_UNWRITTEN),
-    ("unwritten_negative_vs", VARY_UNWRITTEN),
+    /* a declared varying the vertex shader does not write, read under a
+     * uniform `if` (shape `unwritten`): the program's fragment shader is
+     * Mesa's (the undef folds the select), but the fragment shader alone,
+     * which selects its colour under a boolean uniform, is refused */
+    ("unwritten_declared_dead_read", CONTROL_FLOW),
     /* `fract` of a local copy of an attribute swizzle, written into the
      * lanes of a mediump colour (shape `fract_local`) */
     ("fract_highp_vec2", POS_LANE),
@@ -87,10 +93,7 @@ refused_ref! {
     tex_uniform_w, "refused: texture rgb and a uniform alpha in one vec4 (tex_uniform_w)";
     tex_uniform_w_array, "refused: texture rgb and a uniform alpha in one vec4 (tex_uniform_w)";
     loop_phi_array, "refused: a loop over uniform bounds stored in a varying (loop_phi)";
-    unwritten_not_declared, "refused: a declared varying never written (unwritten)";
-    unwritten_declared_unused, "refused: a declared varying never written (unwritten)";
-    unwritten_declared_dead_read, "refused: a declared varying never written (unwritten)";
-    unwritten_negative_vs, "refused: a declared varying never written (unwritten), the vertex half of a negative case";
+    unwritten_declared_dead_read, "refused: the fragment shader alone selects its colour under a boolean uniform (control flow)";
     fract_highp_vec2, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
     fract_highp_vec3, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
     fract_mediump_vec2, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
@@ -99,9 +102,29 @@ refused_ref! {
     fract_lowp_vec3, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
 }
 
+/// A declared varying never written (shape `unwritten`) that the fragment
+/// shader does not declare.
+#[test]
+fn unwritten_not_declared() {
+    mali_ref::assert_matches("deqp_posvary_unwritten_not_declared");
+}
+
+/// A declared varying never written, declared and not read by the fragment
+/// shader.
+#[test]
+fn unwritten_declared_unused() {
+    mali_ref::assert_matches("deqp_posvary_unwritten_declared_unused");
+}
+
+/// A declared varying never written, the vertex half of a negative case.
+#[test]
+fn unwritten_negative_vs() {
+    mali_ref::assert_matches("deqp_posvary_unwritten_negative_vs");
+}
+
 /// Each reference is refused with exactly its text in [`REFUSED`] (the
-/// whole `MaliError` message, not a substring), and the list covers every
-/// `deqp_posvary_*` reference on disk.
+/// whole `MaliError` message, not a substring), and the lists ([`REFUSED`],
+/// [`MATCHED`]) cover every `deqp_posvary_*` reference on disk.
 #[test]
 fn refusals_pinned() {
     let mut on_disk: Vec<String> = std::fs::read_dir("tools/mali/testdata")
@@ -110,7 +133,7 @@ fn refusals_pinned() {
         .filter_map(|n| n.strip_prefix("deqp_posvary_")?.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut listed: Vec<&str> = REFUSED.iter().map(|(n, _)| *n).collect();
+    let mut listed: Vec<&str> = REFUSED.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
     listed.sort_unstable();
     assert_eq!(on_disk, listed, "a deqp_posvary_* reference has no test here");
     let mut changed = Vec::new();

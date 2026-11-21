@@ -3274,6 +3274,61 @@ fn vs_uniform16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: &[ir::S
     wd > 0 && (uni || (half && any))
 }
 
+/// Source `s` is mediump: a mediump value, or a load of a mediump local
+/// (`in0 = a_in0.wy` of a `mediump vec2`, whose load the front end leaves
+/// unclassed).
+fn medium_src(m: &Module<'_>, s: ir::Src) -> bool {
+    m.prec_of(s.val) == Prec::Medium
+        || matches!(m.def(s.val), Some(IrOp::LoadLocal { local, .. }) if m.local_prec_of(*local) == Prec::Medium)
+}
+
+/// An `abs` the front end classed mediump whose computed lanes are 16-bit
+/// lanes or, through a mediump source, 32-bit attribute lanes: Mesa
+/// computes it at 16 bits ([`vs_fabs16`]).
+fn vs_abs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> bool {
+    let narrow = medium_src(m, s[0]);
+    let wd = vs_width16(w, s, 1, width);
+    wd > 0 && (0..wd).all(|i| vs_lane16(vs, lane(w, s[0], i), narrow).is_some())
+}
+
+/// [`vs_abs16`]'s `abs` as Mesa's NIR holds it: each lane narrowed alone
+/// (`f2f16`, `FADD.f32 r0.h0, r3^, 0x0.neg`) and its `fabs` an operation of
+/// one 16-bit lane, which the back end makes `FADD.v2f16 r0, r0^.abs.h00,
+/// 0x0.neg` (deqp_varylink_op_abs_vec2: `abs(a_in0.wy)`, lane x then lane y,
+/// each before the pair of the colour that reads it). CSE'd.
+fn vs_fabs16(
+    vs: &mut Nir<'_>,
+    m: &Module<'_>,
+    w: &Walk<'_>,
+    s: &[ir::Src; 3],
+    width: usize,
+    out: &mut [Val; 4],
+) -> Result<(), MaliError> {
+    let u = Val::Undef;
+    let narrow = medium_src(m, s[0]);
+    let wd = vs_width16(w, s, 1, width);
+    for (i, o) in out.iter_mut().enumerate().take(wd) {
+        let x = match vs_lane16(vs, lane(w, s[0], i), narrow).ok_or(MaliError::Defect(Defect::IrIndex))? {
+            l if vs_is_f16(vs, l) => l,
+            l @ Val::Lane(..) => {
+                let nd = NirNode { kind: Kind::Alu(Alu::F2f16), src: [l, u, u], bits: 16, width: 1 };
+                match vs.nodes[..vs.n].iter().position(|y| *y == nd) {
+                    Some(k) => Val::Lane(k as u16, 0),
+                    None => Val::Lane(vs.push_node(nd)?, 0),
+                }
+            }
+            _ => return Err(MaliError::Defect(Defect::IrIndex)),
+        };
+        let nd = NirNode { kind: Kind::Alu(Alu::Fabs), src: [x, u, u], bits: 16, width: 1 };
+        let id = match vs.nodes[..vs.n].iter().position(|y| *y == nd) {
+            Some(k) => k as u16,
+            None => vs.push_node(nd)?,
+        };
+        *o = Val::Lane(id, 0);
+    }
+    Ok(())
+}
+
 /// Lane `c` of attribute load `n` narrowed for a 16-bit reader: the
 /// `f2fmp` of the whole vector lower_precision makes at the first read,
 /// cut by `nir_lower_alu_width` into its aligned pairs and an odd lane
@@ -4635,6 +4690,11 @@ fn walk<'s>(
             {
                 vs_alu16u(&mut vs, a, m, w, &s, width, &mut out)?;
             }
+            /* `abs` of a mediump local's lanes (mediump attributes'): fp16,
+             * one lane at a time ([`vs_fabs16`]) */
+            IrOp::Alu(AluOp::Fabs, s) if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_abs16(&vs, m, w, &s, width) => {
+                vs_fabs16(&mut vs, m, w, &s, width, &mut out)?;
+            }
             IrOp::Alu(a, s) => {
                 /* a mediump operation of a lowp or mediump sampler's texels
                  * other than the fp16 arms' is fp16 in Mesa too, a form
@@ -5326,7 +5386,15 @@ fn walk<'s>(
      * (nir_opt_varyings.c:2880-2900, `propagate_uniform_expressions`: a
      * constant is a uniform expression): [`super::link::VaryingConsts`] */
     for o in m.outputs.iter().filter(|o| o.kind == IoKind::Varying) {
-        let Some(lanes) = varyings.get(o.location as usize).copied().flatten() else { continue };
+        /* a varying declared and never written: each lane an undef, which
+         * the link takes into the fragment shader's loads and stores no
+         * slot for ([`super::link::VaryingConsts::push_undef`]) */
+        let Some(lanes) = varyings.get(o.location as usize).copied().flatten() else {
+            for c in 0..o.components.min(4) {
+                vs.consts.push_undef(o.location, c);
+            }
+            continue;
+        };
         for (c, l) in lanes.iter().enumerate().take(o.components as usize) {
             let phi = phis & (1 << (o.location as usize * 4 + c)) != 0;
             match *l {
@@ -5421,9 +5489,13 @@ fn walk<'s>(
      * which this makes the shader's own compile) */
     let mut own = [(0u8, 0u8); MAX_VARYINGS];
     let mut nown = 0;
-    let konst = |o: &&ir::IoDecl<'_>, c: u8| {
-        varyings.get(o.location as usize).copied().flatten().is_some_and(|l| matches!(l[c as usize & 3], Val::Const(_)))
-            && (phis | kept) & (1 << (o.location as usize * 4 + (c as usize & 3))) == 0
+    let konst = |o: &&ir::IoDecl<'_>, c: u8| match varyings.get(o.location as usize).copied().flatten() {
+        /* never written: an undef the link takes (`push_undef`) */
+        None => true,
+        Some(l) => {
+            matches!(l[c as usize & 3], Val::Const(_))
+                && (phis | kept) & (1 << (o.location as usize * 4 + (c as usize & 3))) == 0
+        }
     };
     /* a lane equal to an earlier one, which the link's fragment shader reads
      * from that one: a shader alone is built without it too (the three
@@ -5457,7 +5529,13 @@ fn walk<'s>(
             /* a part (or none) of it is stored */
             vs.note(Prod::VaryingCompacted);
         }
-        let lanes = varyings.get(v.location as usize).copied().flatten().ok_or(MaliError::VaryingForm)?;
+        let lanes = match varyings.get(v.location as usize).copied().flatten() {
+            Some(l) => l,
+            /* never written and so not stored ([`compact_layout`] over
+             * the reads the undef lanes left out) */
+            None if vs.masks[k] == 0 => continue,
+            None => return Err(MaliError::VaryingForm),
+        };
         let attr = |l: Val| match l {
             Val::Lane(id, c) => match vs.nodes[id as usize].kind {
                 Kind::Input { loc, .. } => Some((id, loc, c)),

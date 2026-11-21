@@ -116,6 +116,10 @@ const FLAT_LANE: u8 = 0x80;
 /// ([`VaryingConsts::push_equal`]).
 const EQUAL_LANE: u8 = 0x40;
 
+/// The component tag of a lane the vertex shader never writes in
+/// [`VaryingConsts`] ([`VaryingConsts::push_undef`]).
+const UNDEF_LANE: u8 = 0x20;
+
 /// A vertex shader's varying lanes that are constants: Mesa's link
 /// propagates each into the fragment shader's read of it and removes the
 /// lane from the layout (nir_opt_varyings.c:2880-2900,
@@ -182,6 +186,26 @@ impl VaryingConsts {
         self.as_slice().iter().any(|e| e.0 == location && e.1 == comp | FLAT_LANE)
     }
 
+    /// Lane `comp` of varying `location` is never written: the vertex
+    /// shader declares the varying and stores nothing in it. Mesa's link
+    /// makes the fragment shader's load of it an undef
+    /// (nir_opt_varyings.c `remove_dead_varyings` on an output with no
+    /// store, its loads `nir_undef`), which `nir_opt_undef` and
+    /// `nir_opt_remove_phis` then fold away (deqp_varylink_unwritten: `if
+    /// (u_false) c = vec4(var); else c = vec4(1.0);` is the constant). Kept
+    /// beside the constants, its component tagged [`UNDEF_LANE`] and no
+    /// bits, so that [`VaryingConsts::get`] never finds it.
+    pub fn push_undef(&mut self, location: u8, comp: u8) {
+        self.push(location, comp | UNDEF_LANE, 0);
+    }
+
+    /// Lane `comp` of varying `location` is never written ([`push_undef`]).
+    ///
+    /// [`push_undef`]: VaryingConsts::push_undef
+    pub fn undef(&self, location: u8, comp: u8) -> bool {
+        self.as_slice().iter().any(|e| e.0 == location && e.1 == comp | UNDEF_LANE)
+    }
+
     /// Lane `comp` of varying `location` stores the value lane `of_comp`
     /// of varying `of_location` stores, the first such lane of the vertex
     /// shader: Mesa's link keeps one of equal lanes and reads the others
@@ -246,7 +270,8 @@ impl VaryingConsts {
         for &(location, comp, bits) in self.as_slice() {
             let Some(l) = at(location) else { continue };
             if comp & EQUAL_LANE == 0 {
-                /* a constant or a flat lane: `comp` holds the flat tag */
+                /* a constant, a flat or an undef lane: `comp` holds the
+                 * flat or undef tag */
                 out.push(l, comp, bits);
                 continue;
             }
@@ -293,6 +318,11 @@ impl FsConsts {
     /// [`VaryingConsts::flat`], at the fragment shader's `location`.
     pub fn flat(&self, location: u8, comp: u8) -> bool {
         self.0.flat(location, comp)
+    }
+
+    /// [`VaryingConsts::undef`], at the fragment shader's `location`.
+    pub fn undef(&self, location: u8, comp: u8) -> bool {
+        self.0.undef(location, comp)
     }
 
     /// [`VaryingConsts::class`], both lanes at the fragment shader's
@@ -612,14 +642,18 @@ mod tests {
         let unused_fs = stage(SHC_STAGE_FRAGMENT, UNUSED_FS);
         let part_fs = stage(SHC_STAGE_FRAGMENT, PART_FS);
         /* a vertex shader that declares a varying and does not write it
-         * is refused at compile time: no real record lists an output
-         * without a slot, so the slotless vertex layout is made by hand;
-         * a fragment record lists an input no code reads (statically used
-         * under `if (false)`) and has no slot for it: that layout too */
-        assert!(store::with_scratch(|s| {
-            codegen::compile_linked_blocks(SHC_STAGE_VERTEX, UNWRITTEN_VS.as_bytes(), 0, &[], s, store::keep()).is_err()
-        })
-        .expect("the scratch arena is free"));
+         * stores no lane of it (each an undef the program's fragment shader
+         * takes, `VaryingConsts::push_undef`): its record has no slot
+         * stored for the output, so the slotless vertex layout is made by
+         * hand; a fragment record lists an input no code reads (statically
+         * used under `if (false)`) and has no slot for it: that layout too */
+        let unwritten = stage(SHC_STAGE_VERTEX, UNWRITTEN_VS);
+        let r = MaliShader::of(&unwritten).expect("a Mali record");
+        assert!(
+            r.varyings.iter().all(|v| v.section != Section::Generic || v.mask == 0),
+            "an unwritten varying has a slot stored: {:?}",
+            r.varyings
+        );
         static AT_16: [VaryingSlot; 1] =
             [VaryingSlot { varying: Some(0), comps: 3, section: Section::Generic, offset: 16, mask: 0x7 }];
         static POSITION_ONLY: [VaryingSlot; 1] =
