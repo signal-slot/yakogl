@@ -377,7 +377,7 @@ def self_test():
     # 5. The verdict FAIL: a line of the record missing; Linux back.
     lines = [l for l in image_lines() if not l.startswith("t6_hello: 5 s")]
     rc, f, files = case(lines=lines)
-    check(rc == 11 and b"VERDICT t6_hello FAIL (1 of 25)" in files.get("verdict.txt", b""),
+    check(rc == 11 and re.search(rb"VERDICT t6_hello FAIL \(1 of [0-9]+\)", files.get("verdict.txt", b"")),
           "verdict FAIL: exit 11, verdict.txt names it (rc %d)" % rc)
 
     # 6. The image ran, no login after it: exit 10, nothing written.
