@@ -220,6 +220,84 @@ jobs:
           [ -d "$deps/hosttools/bin" ] && echo "$deps/hosttools/bin" >> "$GITHUB_PATH"
           for d in /usr/lib/llvm/23/bin /usr/lib/llvm-21/bin; do [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"; done
           true
+      # The machine starts from the image of the last green run on main
+      # (tools/env/yakogl-gate.yaml), build cache included, and cargo never
+      # removes what it stopped using. A unit (one crate built for one
+      # feature set, profile and target) whose features, flags or
+      # dependencies changed gets a new hash, and the old unit's outputs stay
+      # beside the new ones; so do the incremental directories no run has
+      # written since October. Each generation of the image inherits them.
+      # Measured on the image of 2026-11-19 (issue #10579): 174 GiB of the
+      # 193 GiB disk were used and 20 GiB free at the start of a job; 2,722
+      # of the cache's 16,878 units (23.8 GiB) and 47.5 GiB of incremental
+      # files had not been used since October. Runs that built the 134 test
+      # files added since that image ended with "No space left on device".
+      #
+      # A unit is in use when cargo read or wrote its record
+      # (<profile>/.fingerprint/<package>-<hash>/) in the two days before
+      # the cache's last write: cargo reads the record of every unit of
+      # every build, also of a unit it finds fresh. The outputs themselves
+      # do not tell: cargo never reads a fresh unit's invoked.timestamp, .d
+      # or .rmeta file, and removing files by their own read time made cargo
+      # build 23 third-party crates again for one tool (measured on the same
+      # image; with the rule below it built none). An unused unit loses its
+      # record, its outputs (<profile>/deps/*-<hash>*) and its build script
+      # directory (<profile>/build/<package>-<hash>). An incremental file
+      # goes when it was neither read nor written in those two days.
+      #
+      # The last write is the end of the run the image was captured from, so
+      # the rule does not depend on how old the image is. A write after
+      # "now" (a wrong clock) is not counted. Read times need a file system
+      # that keeps them (ext4 relatime here: a read moves a read time that
+      # is older than a day or than the file's last write), so nothing is
+      # removed on a noatime mount. Cargo builds a unit again when its record
+      # is gone, so a wrong removal costs time, not a wrong result. On that
+      # image the step took 5 s and left 88 GiB free.
+      - name: the build cache keeps only the units the last runs used (the disk's free space before and after)
+        if: steps.seen.outputs.run == 'true'
+        run: |
+          set -o pipefail
+          t=$CARGO_TARGET_DIR
+          if [ ! -d "$t" ]; then
+            echo "no build cache yet: nothing to remove"
+            exit 0
+          fi
+          df -h --output=size,used,avail,pcent,target "$t"
+          case ",$(findmnt -no OPTIONS -T "$t")," in
+            *,noatime,*)
+              echo "the build cache's filesystem is mounted noatime: read times say nothing, nothing is removed"
+              exit 0 ;;
+          esac
+          now=$(date +%s)
+          last=$(find "$t" -type f -printf '%T@\n' | awk -v now="$now" '$1 <= now && $1 > t { t = $1 } END { printf "%d", t }')
+          if [ "$last" -eq 0 ]; then
+            echo "the build cache is empty: nothing to remove"
+            exit 0
+          fi
+          cut=$((last - 2 * 86400))
+          echo "last write $(date -u -d "@$last" +%FT%TZ); a unit is in use when cargo read or wrote its record after $(date -u -d "@$cut" +%FT%TZ)"
+          used() { df --output=used -B1 "$t" | tail -n 1; }
+          before=$(used)
+          # The record directories (<profile>/.fingerprint/<package>-<hash>) with no
+          # file read or written after the cut, one per line.
+          dead="$RUNNER_TEMP/build-cache-unused-units"
+          find "$t" -type f -path '*/.fingerprint/*' -printf '%A@ %T@ %h\n' |
+            awk -v cut="$cut" '
+              { d = substr($0, length($1) + length($2) + 3); seen[d] = 1; if ($1 > cut || $2 > cut) live[d] = 1 }
+              END { for (d in seen) if (!(d in live)) print d }' > "$dead"
+          # Such a unit's outputs, <profile>/deps/*-<hash>[.*], listed before its
+          # record goes.
+          find "$t" -type f -path '*/deps/*' |
+            sed -nE 's|^((.*)/deps/[^/]*-([0-9a-f]{16})(\.[^/]*)?)$|\2/\3\t\1|p' |
+            awk -F'\t' 'NR == FNR { sub(/\/\.fingerprint\/.*-/, "/"); dead[$0] = 1; next } $1 in dead { print $2 }' "$dead" - |
+            tr '\n' '\0' | xargs -0 -r rm -f --
+          # Its record and its build script directory (<profile>/build/<package>-<hash>).
+          sed 'p; s|/\.fingerprint/|/build/|' "$dead" | tr '\n' '\0' | xargs -0 -r rm -rf --
+          find "$t" -type f -path '*/incremental/*' ! -newerat "@$cut" ! -newermt "@$cut" -delete
+          find "$t" -type d -path '*/incremental/*' -empty -delete
+          echo "removed $(wc -l < "$dead") unused units and the incremental files as old: $(( (before - $(used)) / 1073741824 ))G"
+          rm -f "$dead"
+          df -h --output=size,used,avail,pcent,target "$t"
       - name: the firmware blob (never committed)
         if: steps.seen.outputs.run == 'true'
         run: |
@@ -312,6 +390,16 @@ jobs:
           for _ in $(seq 20); do kill -0 -- "-$pg" 2>/dev/null || { echo "group $pg ended"; rm -f "$pgfile"; exit 0; }; sleep 1; done
           kill -KILL -- "-$pg" 2>/dev/null && echo "sent KILL to process group $pg"
           rm -f "$pgfile"
+      # A run that ended with "No space left on device" shows here how full
+      # the disk was and what filled it (issue #10579); a green run, how much
+      # room is left.
+      - name: the disk's free space after the gate
+        if: always() && steps.seen.outputs.run == 'true'
+        run: |
+          df -h --output=size,used,avail,pcent,target "$HOME"
+          for d in "${CARGO_TARGET_DIR:-}" "${TMPDIR:-}" "$GITHUB_WORKSPACE"; do
+            if [ -d "$d" ]; then du -sh "$d"; fi
+          done
       - name: the gate log
         if: always() && steps.seen.outputs.run == 'true'
         uses: actions/upload-artifact@v4
