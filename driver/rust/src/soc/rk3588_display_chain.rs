@@ -154,7 +154,11 @@ pub mod video_check {
     pub const CMU: u32 = 1 << 5;
 }
 
-/// The blocks' addresses.
+/// The blocks' addresses as the caller reaches them: on the board the
+/// mappings `device_map()` returned, never compared with a physical
+/// address. The chain is HDMI0's (its controller bound as `Port::Hdmi0`, VP0
+/// routed to HDMI0, PHY0), so the caller maps HDMI0's blocks: [`RK3588`]
+/// lists their physical addresses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bases {
     pub cru: usize,
@@ -488,10 +492,6 @@ pub fn bring_up(
     if !cfg.plan.is_valid() || cfg.plan.rate_hz != u64::from(cfg.mode.pixel_clock_hz) {
         let found = cfg.plan.rate_hz.min(u64::from(u32::MAX)) as u32;
         return Err(Failed { stage: START, error: Error::Phy(hdptx::Refused { why: hdptx::Refusal::Rate, found }) });
-    }
-    if Port::of_base(b.hdmi) != Some(Port::Hdmi0) {
-        let refused = dw::Refused { why: dw::Refusal::PortMismatch, found: b.hdmi as u32 };
-        return Err(Failed { stage: START, error: Error::Hdmi(refused) });
     }
     let win = window(&cfg.mode, fb, stride_bytes);
     let active = (cfg.mode.hactive, cfg.mode.vactive);
