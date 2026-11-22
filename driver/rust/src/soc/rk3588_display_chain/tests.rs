@@ -6,22 +6,15 @@ use super::*;
 use crate::ip::hdptx::Refusal as PhyRefusal;
 use crate::ip::vop2::Refusal as VopRefusal;
 use crate::model_rk3588_display::{
-    gate_addr, rst_addr, sel_addr, Faults, Rk3588Display, B_CRU, B_HDMI, B_MMU, B_PHY, B_PHY_GRF, B_PMU, B_VO1_GRF,
-    B_VOP, B_VOP_GRF, CRU, HDMI, MMU, PHY, PHY_GRF, PMU, SYS_GRF, TEST_CORE_ID, VO1_GRF, VOP as VOP_BASE, VOP_GRF,
+    chain_bases, gate_addr, rst_addr, sel_addr, Faults, Mapped, Rk3588Display, B_CRU, B_HDMI, B_MMU, B_PHY, B_PHY_GRF,
+    B_PMU, B_VO1_GRF, B_VOP, B_VOP_GRF, CRU, HDMI, MMU, PHY, PHY_GRF, PMU, SYS_GRF, TEST_CORE_ID, VO1_GRF,
+    VOP as VOP_BASE, VOP_GRF,
 };
 
-// The model's addresses, not the module's: the bases are restated.
-const B: Bases = Bases {
-    cru: CRU,
-    pmu: PMU,
-    sys_grf: SYS_GRF,
-    vop_grf: VOP_GRF,
-    vo1_grf: VO1_GRF,
-    phy: hdptx::Bases { phy: PHY, grf: PHY_GRF },
-    hdmi: HDMI,
-    vop: VOP_BASE,
-    vop_mmu: MMU,
-};
+// The bases as the probe passes them: mapped, never the physical ones
+// (`model_rk3588_display::Mapped`). The model's own addresses (CRU, PHY_GRF,
+// ...) are the physical ones its log records.
+const B: Bases = chain_bases();
 
 // An invented PHY image: test data only, no value is Linux's or the board's
 // (the board's is the D0 dump's, `rk3588_display_golden`).
@@ -48,7 +41,7 @@ fn cfg() -> Config<'static> {
 }
 
 fn up(m: &Rk3588Display, c: &Config) -> Result<Report, Failed> {
-    bring_up(m, &B, m, c, FB, STRIDE)
+    bring_up(&Mapped(m), &B, m, c, FB, STRIDE)
 }
 
 fn no_refusal(m: &Rk3588Display) {
@@ -205,7 +198,7 @@ fn the_chain_refuses_a_buffer_the_window_refuses() {
         (FB, 0x4_0000 * 4, VopRefusal::StrideTooWide),
     ] {
         let m = Rk3588Display::cold();
-        let r = bring_up(&m, &B, &m, &cfg(), fb, stride);
+        let r = bring_up(&Mapped(&m), &B, &m, &cfg(), fb, stride);
         assert_eq!(
             r.err(),
             Some(Failed { stage: stage::START, error: Error::Vop(vop2::Refused { why, read_back: 0 }) }),
@@ -318,7 +311,7 @@ fn a_port_with_standby_clear_but_no_pixel_clock_does_not_stop_the_chain() {
 fn shut_down_powers_the_chain_off() {
     let m = Rk3588Display::cold();
     up(&m, &cfg()).unwrap();
-    shut_down(&m, &B, &m).unwrap();
+    shut_down(&Mapped(&m), &B, &m).unwrap();
     no_refusal(&m);
     assert!(!m.usable("vop") && !m.usable("vo1"));
     assert_eq!(m.peek(PHY_GRF + 0x80), 0, "the PHY is off");
@@ -344,8 +337,25 @@ fn the_real_bases_are_the_design_notes() {
     assert_eq!(RK3588.phy, hdptx::Bases { phy: 0xfed6_0000, grf: 0xfd5e_0000 });
     assert_eq!((RK3588.hdmi, RK3588.vop), (0xfde8_0000, 0xfdd9_0000));
     assert_eq!(RK3588.vop_mmu, [0xfdd9_7e00, 0xfdd9_7f00]);
-    // the model sits at the same addresses (the golden test needs it)
-    assert_eq!(B, RK3588);
+    // the model sits at the same physical addresses (the golden test needs
+    // it), and the tests' bases are none of them: the probe's are mappings
+    let model = Bases {
+        cru: CRU,
+        pmu: PMU,
+        sys_grf: SYS_GRF,
+        vop_grf: VOP_GRF,
+        vo1_grf: VO1_GRF,
+        phy: hdptx::Bases { phy: PHY, grf: PHY_GRF },
+        hdmi: HDMI,
+        vop: VOP_BASE,
+        vop_mmu: MMU,
+    };
+    assert_eq!(model, RK3588);
+    let phys = [CRU, PMU, SYS_GRF, VOP_GRF, VO1_GRF, PHY, PHY_GRF, HDMI, VOP_BASE, MMU[0], MMU[1]];
+    let ours = [B.cru, B.pmu, B.sys_grf, B.vop_grf, B.vo1_grf, B.phy.phy, B.phy.grf, B.hdmi, B.vop];
+    for b in ours.iter().chain(&B.vop_mmu) {
+        assert!(!phys.contains(b), "{b:#x} is a physical base");
+    }
 }
 
 #[test]
@@ -419,17 +429,6 @@ fn a_locked_phy_whose_apb_clock_is_gated_is_not_touched_by_the_power_cycle() {
     no_refusal(&m);
     assert!(!r.found.phy_powered_off);
     assert_eq!(r.found.phy_status, 0, "STATUS is not read while the PHY is not reachable");
-}
-
-#[test]
-fn the_controller_base_is_checked_before_any_write() {
-    // review R4: TX1's base with port 0 was refused only at stage 6
-    let m = Rk3588Display::cold();
-    let b = Bases { hdmi: 0xfdea_0000, ..B };
-    let r = bring_up(&m, &b, &m, &cfg(), FB, STRIDE);
-    let refused = dw::Refused { why: dw::Refusal::PortMismatch, found: 0xfdea_0000 };
-    assert_eq!(r.err(), Some(Failed { stage: stage::START, error: Error::Hdmi(refused) }));
-    assert!(m.writes().is_empty());
 }
 
 #[test]
@@ -527,7 +526,7 @@ fn the_chain_writes_only_its_own_fields_of_shared_words() {
 fn a_shut_down_failure_names_the_shut_down() {
     let m = Rk3588Display::with_faults(Faults { standby_ignored: true, ..Faults::default() });
     up(&m, &cfg()).unwrap();
-    let r = shut_down(&m, &B, &m);
+    let r = shut_down(&Mapped(&m), &B, &m);
     assert!(matches!(r, Err(Failed { stage: stage::SHUT_DOWN, error: Error::Standby(_) })), "{r:?}");
     assert!(m.usable("vop"), "the domain stays on under the running port");
 }
@@ -611,7 +610,7 @@ fn shut_down_opens_an_unreadable_vop_and_stops_it_first() {
     up(&m, &cfg()).unwrap();
     m.leave_linux_running(false);
     m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) | 1 << 3);
-    shut_down(&m, &B, &m).unwrap();
+    shut_down(&Mapped(&m), &B, &m).unwrap();
     no_refusal(&m);
     assert!(!m.usable("vop") && !m.port_runs(0));
 }
@@ -689,7 +688,7 @@ fn the_pixel_clock_rule_reads_each_of_its_inputs() {
         let shift = 7 + 2 * r.port;
         m.poke(sel_addr(0, 112), r.mux << shift);
         let phy_status = if r.phy_ready { hdptx::grf::PHY_CLK_RDY } else { 0 };
-        let (here, now) = pixel_clocks(&m, &B, phy_status);
+        let (here, now) = pixel_clocks(&Mapped(&m), &B, phy_status);
         let bit = 1 << r.port;
         assert_eq!(
             now & bit != 0,

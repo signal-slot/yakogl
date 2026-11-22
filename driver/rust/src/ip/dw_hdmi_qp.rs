@@ -200,15 +200,6 @@ pub enum Port {
 }
 
 impl Port {
-    /// The port of the controller at `base`, as the glue tells it.
-    pub const fn of_base(base: usize) -> Option<Port> {
-        match base {
-            TX0_BASE => Some(Port::Hdmi0),
-            TX1_BASE => Some(Port::Hdmi1),
-            _ => None,
-        }
-    }
-
     /// vo1_grf: the I/O word's register (`CON3` / `CON6`).
     pub const fn io_con(self) -> usize {
         match self {
@@ -378,9 +369,6 @@ pub enum Refusal {
     /// `LINK_CONFIG0` or `HDCP2LOGIC_CONFIG0` read back without the bits
     /// just written.
     EnableReadBack = 4,
-    /// The port is not the one of the controller base (`Port::of_base`), or
-    /// the base is no controller. `found` is the base. Nothing was written.
-    PortMismatch = 5,
 }
 
 /// A refusal and the value it is about (the id found, the word read back,
@@ -395,13 +383,12 @@ pub struct Refused {
 /// words 1-4, the controller's interrupt masks and timer base (fact 2),
 /// then glue word 5 (module text). The controller's clocks and PD_VO1 must
 /// be on (D4) before this is called: the first read is the identity.
-/// `port` must be the one of `b.ctrl` ([`Port::of_base`], as the glue tells
-/// it, glue:467-477). A port that disagrees or a wrong identity refuses
-/// before any write, GRF included.
+/// `port` is the caller's: the controller mapped at `b.ctrl` must be that
+/// port's (TX0 at [`TX0_BASE`] for HDMI0, glue:467-477). `b.ctrl` is a
+/// mapping, not the physical address, so it says nothing about the port:
+/// the caller checks the physical base where it knows it. A wrong identity
+/// refuses before any write, GRF included.
 pub fn bind(m: &impl Mmio, b: &Bases, port: Port, p: &BindParams) -> Result<Ident, Refused> {
-    if Port::of_base(b.ctrl) != Some(port) {
-        return Err(Refused { why: Refusal::PortMismatch, found: b.ctrl as u32 });
-    }
     let id = ident(m, b.ctrl);
     if id.core_id != p.core_id {
         return Err(Refused { why: Refusal::WrongId, found: id.core_id });
@@ -658,10 +645,6 @@ mod tests {
         );
         assert_eq!((TX0_BASE, TX1_BASE), (0xfde8_0000, 0xfdea_0000));
         assert_eq!((SYS_GRF_BASE, VOP_GRF_BASE, VO1_GRF_BASE), (0xfd58_c000, 0xfd5a_4000, 0xfd5a_8000));
-        assert_eq!(
-            (Port::of_base(TX0_BASE), Port::of_base(TX1_BASE), Port::of_base(0)),
-            (Some(Port::Hdmi0), Some(Port::Hdmi1), None)
-        );
     }
 
     #[test]
@@ -778,25 +761,6 @@ mod tests {
         assert_eq!(w[2], (VO1 + 0x24, 0x1000_1000));
         assert_eq!(w[3], (SYS + 0x308, 0x8000_8000));
         assert_eq!(w[7], (SYS + 0x308, 0xc000_4000));
-    }
-
-    /// The port follows the controller base (glue:467-477): a port that
-    /// disagrees with it, or a base that is no controller, is refused before
-    /// any write, so one controller is never bound with the other's GRF bits.
-    #[test]
-    fn a_port_that_is_not_the_controllers_is_refused_with_nothing_written() {
-        for (b, port) in [(B, Port::Hdmi1), (B1, Port::Hdmi0), (Bases { ctrl: CTRL + 0x1000, ..B }, Port::Hdmi0)] {
-            let s = Soc::new();
-            s.set(b.ctrl, ID);
-            let r = bind(&s, &b, port, &P);
-            assert_eq!(
-                r,
-                Err(Refused { why: Refusal::PortMismatch, found: b.ctrl as u32 }),
-                "{port:?} at {:#x}",
-                b.ctrl
-            );
-            assert!(s.writes().is_empty(), "{:?}", s.writes());
-        }
     }
 
     #[test]

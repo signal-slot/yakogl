@@ -1085,3 +1085,102 @@ impl Env for Rk3588Display {
         Err(-crate::errno::ENOTSUP)
     }
 }
+
+/// The blocks as a Zephyr image maps them: each one at its own virtual
+/// address, none at its physical one (on the T6, `device_map()` returns
+/// addresses from 0x10000000 up). One window per mapping the display
+/// probes make, page offsets kept (the two `vop_mmu` sets share a page).
+/// A test that passes [`virt`] bases through [`Mapped`] fails when the code
+/// compares a base with a physical constant, or reaches a block from
+/// another block's base.
+const WINDOWS: [(usize, usize); 10] = [
+    (VOP, 0x5000),
+    (0xfdd9_7000, 0x1000),
+    (PMU, 0x1000),
+    (CRU, 0x3_1000),
+    (SYS_GRF, 0x1000),
+    (VOP_GRF, 0x1000),
+    (VO1_GRF, 0x1000),
+    (PHY_GRF, 0x1000),
+    (HDMI, 0x2_0000),
+    (PHY, 0x2000),
+];
+
+/// The first window's virtual address; window i is 1 MiB after window i - 1.
+const VIRT_BASE: usize = 0x4000_0000;
+
+/// The virtual address of `phys` in [`WINDOWS`]. Panics for an address no
+/// window holds.
+pub const fn virt(phys: usize) -> usize {
+    let mut i = 0;
+    while i < WINDOWS.len() {
+        let (base, size) = WINDOWS[i];
+        if phys >= base && phys < base + size {
+            return VIRT_BASE + i * 0x10_0000 + (phys - base);
+        }
+        i += 1;
+    }
+    panic!("no mapping holds this physical address");
+}
+
+/// The physical address of `va`, or `None` outside every window.
+fn phys(va: usize) -> Option<usize> {
+    let i = va.checked_sub(VIRT_BASE)? / 0x10_0000;
+    let (base, size) = *WINDOWS.get(i)?;
+    let off = va - VIRT_BASE - i * 0x10_0000;
+    (off < size).then_some(base + off)
+}
+
+/// `m` seen through [`WINDOWS`]: every access is translated to its physical
+/// address; one outside every window panics (on the board, a fault).
+pub struct Mapped<'a, M: Mmio>(pub &'a M);
+
+impl<M: Mmio> Mapped<'_, M> {
+    fn at(va: usize) -> usize {
+        phys(va).unwrap_or_else(|| panic!("access at {va:#x}: no mapping holds it (a physical address?)"))
+    }
+}
+
+impl<M: Mmio> Mmio for Mapped<'_, M> {
+    fn read32(&self, addr: usize) -> u32 {
+        self.0.read32(Self::at(addr))
+    }
+    fn write32(&self, addr: usize, val: u32) {
+        self.0.write32(Self::at(addr), val)
+    }
+    fn read8(&self, addr: usize) -> u8 {
+        self.0.read8(Self::at(addr))
+    }
+    fn write8(&self, addr: usize, val: u8) {
+        self.0.write8(Self::at(addr), val)
+    }
+}
+
+/// The chain's bases as the probe passes them: [`virt`] of the physical ones.
+pub const fn chain_bases() -> crate::soc::rk3588_display_chain::Bases {
+    use crate::soc::rk3588_display_chain::{Bases, RK3588 as P};
+    Bases {
+        cru: virt(P.cru),
+        pmu: virt(P.pmu),
+        sys_grf: virt(P.sys_grf),
+        vop_grf: virt(P.vop_grf),
+        vo1_grf: virt(P.vo1_grf),
+        phy: crate::ip::hdptx::Bases { phy: virt(P.phy.phy), grf: virt(P.phy.grf) },
+        hdmi: virt(P.hdmi),
+        vop: virt(P.vop),
+        vop_mmu: [virt(P.vop_mmu[0]), virt(P.vop_mmu[1])],
+    }
+}
+
+#[test]
+fn every_mapped_address_differs_from_its_physical_one_and_maps_back() {
+    for (base, size) in WINDOWS {
+        for off in [0, size - 4] {
+            let va = virt(base + off);
+            assert_ne!(va, base + off);
+            assert_eq!(phys(va), Some(base + off));
+        }
+    }
+    assert_eq!(phys(VIRT_BASE - 4), None);
+    assert_eq!(phys(virt(PMU) + 0x1000), None, "past the PMU's page");
+}

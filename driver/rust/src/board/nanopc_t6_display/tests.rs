@@ -11,6 +11,7 @@
 //! Esmart0's address in force is the buffer the display scans.
 
 use super::*;
+use crate::model_rk3588_display::{virt, Mapped};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
@@ -30,8 +31,18 @@ const HDMI: usize = 0xfde8_0000;
 /// model refuses every read outside this list.
 const HDMI_READS: [usize; 10] = [0xb0, 0xb8, 0xbc, 0x884, 0x888, 0x88c, 0x890, 0x894, 0x898, 0x89c];
 
-const B: Bases =
-    Bases { vop: VOP, vop_mmu: [MMU0, MMU1], pmu: PMU, cru: CRU, sys_grf: SYS_GRF, phy_grf: PHY_GRF, hdmi: HDMI };
+/// The bases as the probe passes them: mapped, none at its physical address
+/// (`model_rk3588_display::Mapped` translates them back, so the model and its
+/// log see the physical addresses above).
+const B: Bases = Bases {
+    vop: virt(VOP),
+    vop_mmu: [virt(MMU0), virt(MMU1)],
+    pmu: virt(PMU),
+    cru: virt(CRU),
+    sys_grf: virt(SYS_GRF),
+    phy_grf: virt(PHY_GRF),
+    hdmi: virt(HDMI),
+};
 
 // VOP offsets (driver/docs/nanopc-t6-display.md section 1)
 const CFG_DONE: usize = 0x000;
@@ -337,7 +348,7 @@ impl Mmio for Soc {
 }
 
 fn run(soc: &Soc, fb: u64) -> Adopt {
-    adopt(soc, &B, &mode_window(fb), &mut |us| soc.advance(us))
+    adopt(&Mapped(soc), &B, &mode_window(fb), &mut |us| soc.advance(us))
 }
 
 /// What the adopt must write from the dump's state, in order (section 2
@@ -538,7 +549,7 @@ fn a_buffer_above_4_gib_is_refused() {
 fn the_status_after_the_adopt_reads_section_5() {
     let soc = Soc::dump();
     assert_eq!(run(&soc, FB).stop, 0);
-    let s = status(&soc, &B, 100_000, 60, &mut || soc.now(), &mut |us| soc.advance(us));
+    let s = status(&Mapped(&soc), &B, 100_000, 60, &mut || soc.now(), &mut |us| soc.advance(us));
     assert_eq!((s.refusal, s.frame_start, s.underflow, s.bus_error), (0, 1, 0, [0, 0]));
     assert_eq!(s.frames, 60);
     // the polls are 100 us apart: the interval is right to one step
@@ -565,7 +576,7 @@ fn the_hdmi_controller_is_not_read_with_pd_vo1_off() {
     // REPAIR bit 18 (VO1) clear, bit 16 (VOP) kept
     let soc = Soc::with(Faults::default(), &[(PMU + 0x290, 0xfad1_0001)]);
     assert_eq!(run(&soc, FB).stop, 0);
-    let s = status(&soc, &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
+    let s = status(&Mapped(&soc), &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
     assert_eq!((s.vo1_usable, s.cmu, s.monitor), (0, [0; 3], [0; 7]));
     assert!(!soc.ops().iter().any(|o| matches!(o, Op::R(a, _) if (HDMI..HDMI + 0x1000).contains(a))));
 }
@@ -576,13 +587,13 @@ fn the_hdmi_controller_is_not_read_with_pd_vo1_off() {
 fn the_hdmi_controller_is_not_read_with_its_pclk_gated() {
     let soc = Soc::with(Faults::default(), &[(CRU + 0x8f0, 0x0eff)]);
     assert_eq!(run(&soc, FB).stop, 0);
-    let s = status(&soc, &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
+    let s = status(&Mapped(&soc), &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
     assert_eq!((s.vo1_usable, s.cru_gate60, s.cmu, s.monitor), (0, 0x0eff, [0; 3], [0; 7]));
     assert!(!soc.ops().iter().any(|o| matches!(o, Op::R(a, _) if (HDMI..HDMI + 0x1000).contains(a))));
     // the dump's word (open) reads the controller
     let soc = Soc::dump();
     assert_eq!(run(&soc, FB).stop, 0);
-    let s = status(&soc, &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
+    let s = status(&Mapped(&soc), &B, 100_000, 1, &mut || soc.now(), &mut |us| soc.advance(us));
     assert_eq!((s.vo1_usable, s.cru_gate60, s.cmu[0]), (1, 0x06ff, 0x255));
 }
 
@@ -626,12 +637,12 @@ fn the_pattern_has_four_quadrants_and_a_white_border() {
 /// [`show`] of a [`MODE`]-sized window at `addr`, on the model's clock.
 fn show_at(soc: &Soc, s: &mut Screen, addr: u64) -> i32 {
     let mut a = Adopt::default();
-    show(soc, &B, s, addr, MODE.hactive, MODE.vactive, FB_STRIDE, &mut |us| soc.advance(us), &mut a)
+    show(&Mapped(soc), &B, s, addr, MODE.hactive, MODE.vactive, FB_STRIDE, &mut |us| soc.advance(us), &mut a)
 }
 
 /// [`busy`] of the four buffers: bit k for `FBS[k]`.
 fn busy_fbs(soc: &Soc, s: &mut Screen) -> u32 {
-    busy(soc, &B, s, &FBS)
+    busy(&Mapped(soc), &B, s, &FBS)
 }
 
 /// A screen whose first show adopted `soc` on `FBS[0]`.
@@ -649,7 +660,7 @@ fn shown(soc: &Soc) -> Screen {
 fn the_first_show_adopts_with_the_windows_own_size() {
     let soc = Soc::dump();
     let (mut s, mut a) = (Screen::default(), Adopt::default());
-    assert_eq!(show(&soc, &B, &mut s, FB, 1024, 600, 4096, &mut |us| soc.advance(us), &mut a), 0);
+    assert_eq!(show(&Mapped(&soc), &B, &mut s, FB, 1024, 600, 4096, &mut |us| soc.advance(us), &mut a), 0);
     let mut want = expected_writes();
     for w in want.iter_mut().filter(|w| w.0 == VOP + E0 + 0x20 || w.0 == VOP + E0 + 0x24) {
         w.1 = 0x0257_03ff;
@@ -721,9 +732,9 @@ fn more_earlier_buffers_than_it_keeps_make_every_buffer_busy() {
         assert_eq!(show_at(&soc, &mut s, *fb), 0);
     }
     let never_shown = FB + 0x100_0000;
-    assert_eq!(busy(&soc, &B, &mut s, &[FBS[0], FBS[1], FBS[2], FBS[3], never_shown]), 0b1_1111);
+    assert_eq!(busy(&Mapped(&soc), &B, &mut s, &[FBS[0], FBS[1], FBS[2], FBS[3], never_shown]), 0b1_1111);
     soc.advance(FRAME_US as u32);
-    assert_eq!(busy(&soc, &B, &mut s, &[FBS[0], FBS[1], FBS[2], FBS[3], never_shown]), 0b0_1000);
+    assert_eq!(busy(&Mapped(&soc), &B, &mut s, &[FBS[0], FBS[1], FBS[2], FBS[3], never_shown]), 0b0_1000);
     assert_eq!((soc.scanned(), s.flips), (FBS[3], 3));
 }
 
@@ -790,7 +801,7 @@ fn a_later_window_of_another_geometry_is_refused_with_no_write() {
     let before = s;
     let mut a = Adopt::default();
     for (w, h, stride) in [(1024, 600, 4096), (1000, 768, 4096), (1024, 768, 4160)] {
-        let rc = show(&soc, &B, &mut s, FBS[1], w, h, stride, &mut |us| soc.advance(us), &mut a);
+        let rc = show(&Mapped(&soc), &B, &mut s, FBS[1], w, h, stride, &mut |us| soc.advance(us), &mut a);
         assert_eq!((rc, soc.writes().len(), s), (-ENOTSUP, writes, before), "{w}x{h} stride {stride}");
     }
 }
@@ -804,13 +815,13 @@ fn a_window_the_vop_cannot_scan_is_refused_before_any_access() {
     let soc = Soc::dump();
     let (mut s, mut a) = (Screen::default(), Adopt::default());
     for (addr, w, h, stride) in cases {
-        let rc = show(&soc, &B, &mut s, addr, w, h, stride, &mut |us| soc.advance(us), &mut a);
+        let rc = show(&Mapped(&soc), &B, &mut s, addr, w, h, stride, &mut |us| soc.advance(us), &mut a);
         assert_eq!((rc, soc.ops(), s), (-ENOTSUP, vec![], Screen::default()), "{addr:#x} {w}x{h}");
     }
     assert_eq!(show_at(&soc, &mut s, FBS[0]), 0);
     let (writes, before) = (soc.writes().len(), s);
     for (addr, w, h, stride) in cases {
-        let rc = show(&soc, &B, &mut s, addr, w, h, stride, &mut |us| soc.advance(us), &mut a);
+        let rc = show(&Mapped(&soc), &B, &mut s, addr, w, h, stride, &mut |us| soc.advance(us), &mut a);
         assert_eq!((rc, soc.writes().len(), s), (-ENOTSUP, writes, before), "{addr:#x} {w}x{h}");
     }
 }
@@ -823,11 +834,11 @@ fn a_window_the_vop_cannot_scan_is_refused_before_any_access() {
 fn a_stopped_adopt_is_final() {
     let soc = Soc::with(Faults { no_frames: true, ..Faults::default() }, &[]);
     let (mut s, mut a) = (Screen::default(), Adopt::default());
-    let rc = show(&soc, &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a);
+    let rc = show(&Mapped(&soc), &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a);
     assert_eq!((rc, a.stop, s.state), (-ENODEV, Stop::TakeOver as u32, SCREEN_STOPPED));
     let ops = soc.ops().len();
     let first = a;
-    assert_eq!(show(&soc, &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), -ENODEV);
+    assert_eq!(show(&Mapped(&soc), &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), -ENODEV);
     assert_eq!(busy_fbs(&soc, &mut s), 0b0001);
     assert_eq!((soc.ops().len(), a), (ops, first), "the record of the stop is kept");
 }
@@ -848,7 +859,7 @@ fn nothing_is_busy_before_the_first_show() {
 fn a_cfg_done_bit_that_never_clears_keeps_the_old_buffers_busy() {
     let soc = Soc::with(Faults { done_stuck: true, ..Faults::default() }, &[]);
     let (mut s, mut a) = (Screen::default(), Adopt::default());
-    assert_eq!(show(&soc, &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), 0);
+    assert_eq!(show(&Mapped(&soc), &B, &mut s, FB, 1024, 768, 4096, &mut |us| soc.advance(us), &mut a), 0);
     assert_eq!((a.cfg_done_written & 1, a.cfg_done_after & 1), (1, 1));
     assert_eq!(show_at(&soc, &mut s, FBS[1]), 0);
     soc.advance(10 * FRAME_US as u32);

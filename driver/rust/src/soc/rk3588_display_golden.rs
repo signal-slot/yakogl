@@ -21,7 +21,7 @@
 
 use super::rk3588_display_chain::{bring_up, t6, RK3588};
 use crate::ip::hdptx::{self, PllWords};
-use crate::model_rk3588_display::{Rk3588Display, PHY};
+use crate::model_rk3588_display::{chain_bases, Mapped, Rk3588Display, PHY};
 
 /// A file of driver/docs, read when the test runs. The two files are step
 /// D0's (they land with its dump); a missing one fails the test by name,
@@ -171,7 +171,8 @@ fn cold_image_matches_the_linux_dump_outside_the_allow_list() {
             m.poke(addr, v);
         }
     }
-    let r = bring_up(&m, &RK3588, &m, &t6::config(false, false, 0), FB, STRIDE);
+    // the bases mapped, as the probe passes them
+    let r = bring_up(&Mapped(&m), &chain_bases(), &m, &t6::config(false, false, 0), FB, STRIDE);
     assert!(r.is_ok(), "{r:?}");
     assert_eq!(m.refused(), Vec::<String>::new());
     let allow = allow();
