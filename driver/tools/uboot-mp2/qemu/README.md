@@ -39,8 +39,9 @@ U-Boot (a few minutes); later runs take about a minute.
   under `ZEPHYR_SDK_INSTALL_DIR` or `$CONNECTED_DEPS_DIR/zephyr-sdk-*`. The
   Zephyr SDK 1.0.1 compiler builds U-Boot v2023.10 as is.
 - U-Boot source: `MP2_QEMU_UBOOT_SRC`, else `$CACHE/u-boot-v2023.10` or
-  `$CONNECTED_DEPS_DIR/u-boot-v2023.10`, else `build-uboot.sh` clones the
-  `v2023.10` tag of `https://source.denx.de/u-boot/u-boot.git` into the cache.
+  `$CONNECTED_DEPS_DIR/u-boot-v2023.10`, else `build-uboot.sh` fetches the
+  `v2023.10` tag of `https://source.denx.de/u-boot/u-boot.git` into the cache
+  and checks that it is commit `4459ed60cb1e`.
   The build is out of tree (`O=`); the source is only read. Host build needs as
   for any U-Boot (OpenSSL headers, bison, flex, dtc).
 - The cache: `MP2_QEMU_CACHE`, else `$CONNECTED_DEPS_DIR/uboot-mp2-qemu`, else

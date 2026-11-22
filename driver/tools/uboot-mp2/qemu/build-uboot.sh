@@ -14,7 +14,7 @@
 #   MP2_QEMU_UBOOT_SRC a U-Boot v2023.10 tree to build from (read only: the
 #                      build is out of tree). Default: $CACHE/u-boot-v2023.10,
 #                      or $CONNECTED_DEPS_DIR/u-boot-v2023.10 when it exists,
-#                      cloned from source.denx.de when neither does.
+#                      fetched from source.denx.de when neither does.
 #   CROSS_COMPILE      an aarch64 cross prefix. Default: aarch64-linux-gnu-,
 #                      aarch64-none-elf-, or the Zephyr SDK's aarch64-zephyr-elf-
 #                      (ZEPHYR_SDK_INSTALL_DIR or $CONNECTED_DEPS_DIR/zephyr-sdk-*).
@@ -26,6 +26,8 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../../../.." && pwd)
 UBOOT_TAG=v2023.10
+# The commit the tag names: a tag can be moved, the commit cannot.
+UBOOT_COMMIT=4459ed60cb1e0562bc5b40405e2b4b9bbf766d57
 UBOOT_GIT=https://source.denx.de/u-boot/u-boot.git
 
 say() { echo "build-uboot.sh: $*" >&2; }
@@ -49,6 +51,21 @@ mp2_qemu_cache_ok() {
 	/tmp/* | /var/tmp/*) say "cache $1 is under /tmp or /var/tmp; set MP2_QEMU_CACHE"; return 1 ;;
 	"$root"/* | "$(cd "$root" && pwd -P)"/*) say "cache $1 is inside the repository; set MP2_QEMU_CACHE"; return 1 ;;
 	esac
+}
+
+# mp2_qemu_fetch URL TAG COMMIT DIR: DIR becomes a checkout of TAG, one commit
+# deep, when TAG names COMMIT at URL. Not "git clone -b TAG": for an annotated
+# tag git prints "warning: refs/tags/TAG <id> is not a commit!", and
+# tools/check.sh counts a warning line as a failed row, so the row failed on
+# the first run of a host (issue #10552; run.sh runs this on a tag of its own).
+# A fetch that was cut is run again in the same DIR.
+mp2_qemu_fetch() {
+	local url=$1 tag=$2 commit=$3 dir=$4 got
+	git -c init.defaultBranch=main init -q "$dir"
+	git -C "$dir" fetch -q --depth 1 "$url" "refs/tags/$tag"
+	got=$(git -C "$dir" rev-parse 'FETCH_HEAD^{commit}')
+	if [ "$got" != "$commit" ]; then say "$tag is $got at $url, not $commit"; return 1; fi
+	git -C "$dir" -c advice.detachedHead=false checkout -q "$commit"
 }
 
 # The aarch64 cross prefix, or nothing.
@@ -82,8 +99,8 @@ if [ -z "$src" ]; then
 		src=$CONNECTED_DEPS_DIR/u-boot-$UBOOT_TAG
 	else
 		src=$cache/u-boot-$UBOOT_TAG
-		say "cloning $UBOOT_GIT $UBOOT_TAG into $src"
-		git -c advice.detachedHead=false clone -q --depth 1 -b "$UBOOT_TAG" "$UBOOT_GIT" "$src"
+		say "fetching $UBOOT_GIT $UBOOT_TAG into $src"
+		mp2_qemu_fetch "$UBOOT_GIT" "$UBOOT_TAG" "$UBOOT_COMMIT" "$src"
 	fi
 fi
 v=$(sed -n 's/^VERSION = //p; s/^PATCHLEVEL = //p; s/^EXTRAVERSION = //p' "$src/Makefile" | paste -sd. | sed 's/\.$//')
