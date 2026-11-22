@@ -3,8 +3,8 @@
 //! The dEQP-GLES2 shaders kept in `tests/deqp_repro_shaders.rs` (random.*,
 //! loops, uniform_api.random.23; dEQP is Apache-2.0) through the V3D 7.1
 //! (Raspberry Pi 5) online back end. That file is cfg'd to gpu-vivante, so
-//! it never meets V3D; its string constants are read here at run time (not
-//! copied) and each vertex/fragment pair goes through
+//! it never meets V3D; its string constants are read here from the file's
+//! text (`include_str!`, not copied) and each vertex/fragment pair goes through
 //! `chain71::compile_program71` (and `chain::compile_program` at 4.2 for the
 //! comparison). Every 7.1 word of a program that compiles decodes with
 //! codec71 (`same_instr71`) and passes verify71, `registers_fit_threads71`
@@ -20,7 +20,6 @@
 //! ```
 #![cfg(all(feature = "shaderc-online", feature = "gpu-v3d"))]
 
-use std::path::Path;
 use yakogl::shaderc::online::sema::Stage;
 use yakogl::shaderc::online::v3d::chain::{self, Prim};
 use yakogl::shaderc::online::v3d::chain71::{compile_program71, Code71, TARGET71};
@@ -112,12 +111,11 @@ fn run(name: &str, vs: &str, fs: &str) -> (Option<String>, Option<String>) {
 
 #[test]
 fn the_deqp_repro_shaders_at_42_and_71() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/deqp_repro_shaders.rs");
-    let file = std::fs::read_to_string(path).expect("tests/deqp_repro_shaders.rs");
+    let file = include_str!("deqp_repro_shaders.rs");
     let progs = [
-        ("RANDOM_AF_FRAG64", constant(&file, "RANDOM_AF_FRAG64_VS"), constant(&file, "RANDOM_AF_FRAG64_FS")),
-        ("LOOPS_DO_WHILE_ONLY_CONTINUE", STUB_LOOPS_VS.to_string(), constant(&file, "LOOPS_DO_WHILE_ONLY_CONTINUE_FS")),
-        ("UNIFORM_API_RANDOM_23", STUB_UNIFORM_VS.to_string(), constant(&file, "UNIFORM_API_RANDOM_23_FS")),
+        ("RANDOM_AF_FRAG64", constant(file, "RANDOM_AF_FRAG64_VS"), constant(file, "RANDOM_AF_FRAG64_FS")),
+        ("LOOPS_DO_WHILE_ONLY_CONTINUE", STUB_LOOPS_VS.to_string(), constant(file, "LOOPS_DO_WHILE_ONLY_CONTINUE_FS")),
+        ("UNIFORM_API_RANDOM_23", STUB_UNIFORM_VS.to_string(), constant(file, "UNIFORM_API_RANDOM_23_FS")),
     ];
     let (mut r42, mut r71) = (Vec::new(), Vec::new());
     let (mut ok42, mut ok71) = (0, 0);
