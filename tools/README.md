@@ -709,6 +709,15 @@ the end): nothing is armed in the stored U-Boot environment, `bootcmd` is
 never written, everything the line sets is `mp2z_*` and RAM-only, and BL2's
 IWDG bounds a hang at ~32 s (`docs/notes/stm32mp257f-dk-uboot-boot.md`,
 #1281; the scripts and their mkimage step: `driver/tools/uboot-mp2/`).
+`BOARD_BOOT=standalone tools/board.sh [--dry-run] stm32mp257f-dk run
+[--expect-watchdog] <image> <logdir> [name] | status` is `exec`'d to
+`tools/board-stm32mp2.sh` (the one-shot runner above, not the standalone boot
+below) with the arguments as given and its exit code kept; `MP2_ONESHOT_RUNNER`
+names another runner (the self-test's stub). Every other verb exits 2 naming
+the direct call (`tools/board-stm32mp2.sh install|uninstall|env-edit ...`), and
+any other board with `BOARD_BOOT=standalone` is refused. Other `BOARD_BOOT`
+values and the unset default behave as before.
+
 `tools/board.sh [--dry-run] stm32mp257f-dk status|install|uninstall|default <image> <1-9|forever>|nodefault`
 is `exec`'d to `tools/board-stm32mp2-standalone.sh` (the standalone boot;
 `--dry-run` and the runner's exit code pass through, the runner owns the

@@ -233,7 +233,8 @@
 #                      the jump, t6-kms-mode.py); 0 or unset: the normal route
 #   T6_RUNNER          nanopc-t6: the runner (default driver/tools/kexec-zephyr/
 #                      nanopc-t6.sh; tools/board_selftest.sh puts a fake there)
-#   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)
+#   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp);
+#                      standalone: stm32mp257f-dk only, run and status to tools/board-stm32mp2.sh
 #   BOARD_PERSON_PRESENT  1: a person is at the board ("default ... forever" refuses without)
 #   NETBOOT_SERVER, NETBOOT_TFTP_ROOT, NETBOOT_TFTP_LOG (i.MX8MP), NETBOOT_ROUTE
 #                      (AM62P env|typed), NETBOOT_NO_WATCHDOG, NETBOOT_BACKUP_DIR:
@@ -272,6 +273,28 @@ usage() { sed -n '7,19p' "$SELF" >&2; exit 2; }
 [ $# -ge 2 ] || usage
 BOARD=$1 VERB=$2
 shift 2
+
+# ---- BOARD_BOOT=standalone: the DK's one-shot runner tools/board-stm32mp2.sh
+# (not board-stm32mp2-standalone.sh, the standalone *boot* below). Only run and
+# status go through board.sh, exec'd to the runner with the arguments as given
+# (--dry-run passed first); its install, uninstall and env-edit do not fit
+# board.sh's model and stay direct calls. Any other board is refused. The
+# runner is MP2_ONESHOT_RUNNER (the self-test puts a stub there).
+if [ "${BOARD_BOOT:-}" = standalone ]; then
+    if [ "$BOARD" != stm32mp257f-dk ]; then
+        echo "board.sh $BOARD: BOARD_BOOT=standalone is for stm32mp257f-dk only" >&2
+        exit 2
+    fi
+    case "$VERB" in
+    run | status)
+        exec bash "${MP2_ONESHOT_RUNNER:-$HERE/board-stm32mp2.sh}" "${DRYFLAG[@]+"${DRYFLAG[@]}"}" "$VERB" "$@"
+        ;;
+    *)
+        echo "board.sh stm32mp257f-dk: BOARD_BOOT=standalone sends only run and status to the runner; call tools/board-stm32mp2.sh $VERB directly (install, uninstall and env-edit are not board.sh verbs there)" >&2
+        exit 2
+        ;;
+    esac
+fi
 
 # ---- the STM32MP257F-DK's standalone verbs: the runner's, before anything else
 # status, install, uninstall, default <image> <1-9|forever> and nodefault are

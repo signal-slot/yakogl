@@ -353,6 +353,41 @@ check "stm32mp257f-dk install still reaches the standalone runner, not the U-Boo
     eval ': > "$MP2U_STUB_LOG"; mp2s_case " [--dry-run] [install]" --dry-run stm32mp257f-dk install && [ ! -s "$MP2U_STUB_LOG" ]'
 check "stm32mp257f-dk BOARD_BOOT=tryboot: rc 2, no runner run" \
     eval ': > "$MP2U_STUB_LOG"; BOARD_BOOT=tryboot "$B" --dry-run stm32mp257f-dk run "$dkimg" "$S/logs" > "$S/mp2u.out" 2>&1; rc=$?; [ "$rc" = 2 ] && [ ! -s "$MP2U_STUB_LOG" ]'
+# BOARD_BOOT=standalone: run and status exec the one-shot runner (a stub through
+# MP2_ONESHOT_RUNNER) with the arguments forwarded; other verbs and other boards
+# are refused with rc 2 and the runner is not run.
+cat > "$S/mp2o-stub.sh" <<'STUB'
+#!/bin/bash
+printf 'ARGV:' >> "$MP2O_STUB_LOG"
+printf ' [%s]' "$@" >> "$MP2O_STUB_LOG"
+echo >> "$MP2O_STUB_LOG"
+exit "${MP2O_STUB_RC:-0}"
+STUB
+export MP2_ONESHOT_RUNNER=$S/mp2o-stub.sh MP2O_STUB_LOG=$S/mp2o-stub.log
+mp2o_case() { # mp2o_case "expected argv line" board.sh-args...
+    local want=$1; shift
+    : > "$MP2O_STUB_LOG"; : > "$MP2U_STUB_LOG"; : > "$MP2S_STUB_LOG"
+    BOARD_BOOT=standalone "$B" "$@" > "$S/mp2o.out" 2>&1
+    MP2O_RC=$?
+    [ "$(cat "$MP2O_STUB_LOG")" = "ARGV:$want" ] && [ ! -s "$MP2U_STUB_LOG" ] && [ ! -s "$MP2S_STUB_LOG" ]
+}
+check "BOARD_BOOT=standalone: run forwards --dry-run, the image, the log directory, the name" \
+    eval 'mp2o_case " [--dry-run] [run] [$dkimg] [$S/logs] [nm]" --dry-run stm32mp257f-dk run "$dkimg" "$S/logs" nm && [ "$MP2O_RC" = 0 ]'
+check "BOARD_BOOT=standalone: run forwards --expect-watchdog; status forwards nothing more; the runner's rc is kept" \
+    eval 'mp2o_case " [run] [--expect-watchdog] [$dkimg] [$S/logs]" stm32mp257f-dk run --expect-watchdog "$dkimg" "$S/logs" &&
+          mp2o_case " [status]" stm32mp257f-dk status &&
+          { MP2O_STUB_RC=3 mp2o_case " [status]" stm32mp257f-dk status; [ "$MP2O_RC" = 3 ]; }'
+check "BOARD_BOOT=standalone: install, uninstall, env-edit, default, probe refused (rc 2), naming the direct board-stm32mp2.sh call, no runner run" \
+    eval 'ok=1; for v in install uninstall env-edit default probe; do
+              : > "$MP2O_STUB_LOG"; BOARD_BOOT=standalone "$B" stm32mp257f-dk $v x y > "$S/mp2o.out" 2>&1; rc=$?
+              [ "$rc" = 2 ] && [ ! -s "$MP2O_STUB_LOG" ] && grep -q "tools/board-stm32mp2.sh $v directly" "$S/mp2o.out" || ok=0; done; [ "$ok" = 1 ]'
+check "BOARD_BOOT=standalone with another board: rc 2, no runner run" \
+    eval 'ok=1; for b in pi4 pi5 am62p imx8mp x2 nanopc-t6 bogus; do
+              : > "$MP2O_STUB_LOG"; BOARD_BOOT=standalone "$B" --dry-run $b run "$S/img/pi4.bin" "$S/logs" > "$S/mp2o.out" 2>&1; rc=$?
+              [ "$rc" = 2 ] && [ ! -s "$MP2O_STUB_LOG" ] && grep -q "stm32mp257f-dk only" "$S/mp2o.out" || ok=0; done; [ "$ok" = 1 ]'
+check "BOARD_BOOT unset: the DK's status still reaches the standalone runner, not the one-shot runner" \
+    eval ': > "$MP2O_STUB_LOG"; mp2s_case " [status]" stm32mp257f-dk status && [ ! -s "$MP2O_STUB_LOG" ]'
+unset MP2_ONESHOT_RUNNER MP2O_STUB_LOG
 unset MP2_RUNNER MP2U_STUB_LOG
 unset MP2S_STANDALONE_RUNNER
 out=$(env -u BOARD_PERSON_PRESENT "$B" --dry-run stm32mp257f-dk default "$dkimg" forever 2>&1); rc=$?
