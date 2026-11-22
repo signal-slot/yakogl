@@ -898,4 +898,199 @@ mod tests {
         assert_eq!(tlb_f(&run(true, false), 0), 0.25);
         assert_eq!(tlb_f(&run(false, true), 0), 0.25);
     }
+
+    fn sig_only(f: impl FnOnce(&mut Alu71)) -> Alu71 {
+        let mut a = Alu71::nop();
+        f(&mut a);
+        a
+    }
+
+    fn ldunifrf(w: u8, magic: bool) -> Alu71 {
+        sig_only(|a| {
+            a.sig.ldunifrf = true;
+            a.sig_addr = w;
+            a.sig_magic = magic;
+        })
+    }
+
+    /// `at_thrend` and `after_thrend` (qpu_validate.c:373-421): the THRSW's
+    /// own instruction takes no ALU register-file write, a delay slot takes
+    /// any but rf2 and rf3, by either ALU half or by a signal.
+    #[test]
+    fn thread_end_register_file_writes() {
+        let ok = |r: R<()>| r.expect("legal");
+        let bad = |r: R<()>, why: &str| {
+            let e = r.unwrap_err();
+            assert!(e.contains(why), "{e}");
+        };
+        let add_rf = |w: u8| add(AddOp71::Mov, w, false, rf(5), Operand::default());
+        let mul_rf = |w: u8| mul(MulOp71::Mov, w, false, rf(5), Operand::default());
+        // The THRSW's own instruction: either ALU half is refused.
+        let at = "an ALU register-file write at the thread end";
+        bad(at_thrend(&add_rf(10), "t"), at);
+        bad(at_thrend(&mul_rf(10), "t"), at);
+        ok(at_thrend(&Alu71::nop(), "t"));
+        // A magic write (to the TLB) is no register-file write.
+        ok(at_thrend(&to_tlb(5), "t"));
+        // A signal's register-file write is not an ALU write: legal there
+        // unless it is rf2 or rf3.
+        ok(at_thrend(&ldunifrf(10, false), "t"));
+        let after = "an rf2 or rf3 write after the thread end";
+        bad(at_thrend(&ldunifrf(2, false), "t"), after);
+        // The delay slots: rf2 and rf3 refused from each of the three sources.
+        for w in [2, 3] {
+            bad(after_thrend(&add_rf(w), "t"), after);
+            bad(after_thrend(&mul_rf(w), "t"), after);
+            bad(after_thrend(&ldunifrf(w, false), "t"), after);
+        }
+        // Their neighbours and other registers are legal.
+        for w in [0, 1, 4, 10] {
+            ok(after_thrend(&add_rf(w), "t"));
+            ok(after_thrend(&mul_rf(w), "t"));
+            ok(after_thrend(&ldunifrf(w, false), "t"));
+        }
+        // A magic write or a magic signal write to the same number is none.
+        ok(after_thrend(&add(AddOp71::Mov, 2, true, rf(5), Operand::default()), "t"));
+        ok(after_thrend(&ldunifrf(3, true), "t"));
+        // A VPM store has no destination: its waddr field (its opcode, 0..2)
+        // is no write, in the THRSW and in a delay slot.
+        let st = stvpmv(20, 21);
+        ok(at_thrend(&st, "t"));
+        ok(after_thrend(&st, "t"));
+    }
+
+    /// The same rules end to end: an rf3 write by the mul half or by a signal
+    /// in a delay slot is refused, rf4 is not.
+    #[test]
+    fn thread_end_delay_slots_run() {
+        let vs = |slot: Alu71| {
+            let code = words(&[thrsw(Alu71::nop()), thrsw(Alu71::nop()), thrsw(Alu71::nop()), slot, Alu71::nop()]);
+            run71(&code, &[1], &Inputs::Vertex(VsInputs { vpm: Vec::new() }), &Env::default())
+        };
+        let mulw = |w: u8| mul(MulOp71::Mov, w, false, rf(5), Operand::default());
+        let after = "an rf2 or rf3 write after the thread end";
+        let e = vs(mulw(3)).unwrap_err();
+        assert!(e.contains(after), "{e}");
+        vs(mulw(4)).expect("rf4 is legal");
+        let e = vs(ldunifrf(2, false)).unwrap_err();
+        assert!(e.contains(after), "{e}");
+        vs(ldunifrf(4, false)).expect("rf4 is legal");
+    }
+
+    /// The single-restricted-peripheral rule of `check` (qpu_validate.c:
+    /// 333-344, qpu_schedule.c:855-892): one of TMU write, WRTMUC, TSY, TLB
+    /// read, SFU, VPM per instruction; WRTMUC with a TMU write other than
+    /// TMUC is the exception.
+    #[test]
+    fn one_restricted_peripheral_per_instruction() {
+        const TMUA: u8 = 11; // a TMU address (is_tmu)
+        const TMUC: u8 = 32; // WRTMUC's own address
+        const TSY: u8 = 16;
+        let bad = |a: &Alu71| {
+            let e = check(a, false, "t").unwrap_err();
+            assert!(e.contains("in one instruction"), "{e}");
+        };
+        let ok = |a: &Alu71| check(a, false, "t").expect("legal");
+        let magic_add = |w: u8| add(AddOp71::Mov, w, true, rf(5), Operand::default());
+        let magic_mul = |w: u8| mul(MulOp71::Mov, w, true, rf(5), Operand::default());
+        let recip = || add(AddOp71::Recip, 10, false, rf(5), Operand::default());
+        let vpm = || add(AddOp71::Stvpmv, 0, false, rf(5), rf(6));
+        let wrtmuc = |mut a: Alu71| {
+            a.sig.wrtmuc = true;
+            a
+        };
+        let both = |a: Alu71, m: Alu71| {
+            let mut a = a;
+            a.mul = m.mul;
+            a
+        };
+        // One peripheral alone, and the TLB write (not restricted) beside one.
+        ok(&magic_add(TMUA));
+        ok(&magic_mul(TMUA));
+        ok(&recip());
+        ok(&vpm());
+        ok(&wrtmuc(Alu71::nop()));
+        ok(&both(magic_add(TMUA), to_tlb(5)));
+        ok(&both(recip(), to_tlb(5)));
+        // Two restricted ones: TMU write + SFU, TMU write + VPM, SFU + TSY,
+        // TMU writes in both halves.
+        bad(&both(recip(), magic_mul(TMUA)));
+        bad(&both(vpm(), magic_mul(TMUA)));
+        bad(&both(magic_add(TSY), magic_mul(TMUA)));
+        bad(&both(magic_add(TMUA), magic_mul(TMUA)));
+        // A restricted signal beside a restricted ALU write.
+        bad(&wrtmuc(recip()));
+        bad(&wrtmuc(vpm()));
+        let mut a = magic_add(TMUA);
+        a.sig.ldtlb = true;
+        bad(&a);
+        // The exception: WRTMUC with a TMU write that is not TMUC ...
+        ok(&wrtmuc(magic_add(TMUA)));
+        ok(&wrtmuc(magic_mul(TMUA)));
+        // ... but not with a write to TMUC itself, and not with a third.
+        bad(&wrtmuc(magic_add(TMUC)));
+        bad(&wrtmuc(magic_mul(TMUC)));
+        bad(&wrtmuc(both(magic_add(TSY), magic_mul(TMUA))));
+        // A TLB read and a TLB write do not share an instruction.
+        let mut a = both(Alu71::nop(), to_tlb(5));
+        a.sig.ldtlb = true;
+        bad(&a);
+    }
+
+    /// A TSY write by the mul half is a restricted peripheral too, if Mesa's
+    /// `qpu_peripherals` (qpu_schedule.c:855-892) looks at both halves for
+    /// it. `peripherals` sets P_TSY from the add half only, so this
+    /// instruction (SFU on the add half, TSY on the mul half) passes `check`.
+    /// Unverified against Mesa (no tree here); reported, not fixed.
+    #[test]
+    #[ignore = "peripherals() sets P_TSY from the add half only: a mul-half TSY write beside an SFU op passes check"]
+    fn a_mul_half_tsy_write_is_restricted() {
+        let mut a = add(AddOp71::Recip, 10, false, rf(5), Operand::default());
+        a.mul = mul(MulOp71::Mov, 16, true, rf(5), Operand::default()).mul;
+        let e = check(&a, false, "t").unwrap_err();
+        assert!(e.contains("in one instruction"), "{e}");
+    }
+
+    /// `signals_done`'s implicit rf0: LDUNIF writes rf0 in its own
+    /// instruction, so a signal register-file write in the next one is no
+    /// flop and the thread switch keeps rf0; an explicit rf0 write after
+    /// LDVARY's conflict clears the flop.
+    #[test]
+    fn implicit_rf0_of_ldunif_and_ldvary() {
+        let ldunif = sig_only(|a| a.sig.ldunif = true);
+        let code = words(&[
+            ldunif,
+            ldunifrf(11, false),
+            thrsw(Alu71::nop()),
+            thrsw(Alu71::nop()),
+            ldunifrf(12, false), // the section's final instruction
+            to_tlb(0),
+            thrsw(Alu71::nop()),
+            Alu71::nop(),
+            Alu71::nop(),
+        ]);
+        let o = run71(&code, &[0x100, 7, 8], &fs_inputs(Vec::new()), &Env::default()).expect("runs");
+        assert_eq!(tlb(&o, 0), 0x100);
+        // LDVARY, a signal write beside C's arrival, then an explicit rf0
+        // write: the flop is cleared, rf0 stays defined after the switch.
+        let ldvary = sig_only(|a| {
+            a.sig.ldvary = true;
+            a.sig_addr = 10;
+        });
+        let code = words(&[
+            ldvary,
+            ldunifrf(11, false),
+            add(AddOp71::Mov, 0, false, rf(11), Operand::default()), // explicit rf0 write
+            thrsw(Alu71::nop()),
+            thrsw(Alu71::nop()),
+            ldunifrf(12, false),
+            to_tlb(0),
+            thrsw(Alu71::nop()),
+            Alu71::nop(),
+            Alu71::nop(),
+        ]);
+        let vary = Varying { vary: [0; LANES], c: [0.25f32.to_bits(); LANES] };
+        let o = run71(&code, &[1, 2], &fs_inputs(vec![vary]), &Env::default()).expect("runs");
+        assert!(o.tlb[0].value.iter().all(Option::is_some));
+    }
 }
