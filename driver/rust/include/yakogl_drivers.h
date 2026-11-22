@@ -1088,7 +1088,7 @@ uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_scr
 #define YD_T6_DISPLAY_COLD_ERROR_FOUND_RUNNING  5  /* detail: the ports running, bit n = VPn */
 #define YD_T6_DISPLAY_COLD_ERROR_STANDBY        6  /* as _VOP: a running port did not stop */
 #define YD_T6_DISPLAY_COLD_ERROR_DISPLAY        7  /* index: 1 clock, 2 domain (refusal: PdRefusal), 3 gate; detail */
-#define YD_T6_DISPLAY_COLD_ERROR_GRF            8  /* index: the GRF address, detail: the word read */
+#define YD_T6_DISPLAY_COLD_ERROR_GRF            8  /* index: GRF << 16 | offset (1 vop_grf, 2 vo1_grf); detail: the word */
 #define YD_T6_DISPLAY_COLD_ERROR_GATE           9  /* detail: the CLKGATE_CON read */
 #define YD_T6_DISPLAY_COLD_ERROR_DCLK_MUX       10 /* detail: CLKSEL_CON(112) read */
 #define YD_T6_DISPLAY_COLD_ERROR_HDMI           11 /* refusal: dw_hdmi_qp Refusal, detail: its word */

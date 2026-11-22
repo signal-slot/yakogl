@@ -196,6 +196,12 @@ fn a_failure_is_recorded_with_its_stage_and_numbers() {
     let m = chip(Faults { underflow: true, ..Faults::default() });
     let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.detail), (stage::VIDEO, ColdError::Video as u32, chain::video_check::UNDERFLOW));
+    // a GRF word that does not take is named by its GRF and offset, the
+    // same on the board as here (not by its mapped address)
+    let m = chip(Faults { grf_stuck: true, ..Faults::default() });
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    assert_eq!((c.stage, c.error, c.index), (stage::GRF, ColdError::Grf as u32, 1 << 16 | 0x08));
+    assert!(m.lines().iter().any(|(_, l)| l.starts_with("t6 display: stage 3 GRF failed: Grf(VopCon2, ")));
     let m = chip(Faults { dead: Some("vo1"), ..Faults::default() });
     let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.index), (stage::POWER, ColdError::Display as u32, 2));
