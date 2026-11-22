@@ -498,10 +498,21 @@ pattern generator (`VID_MODE_VPG_ENABLE`, L:`dw-mipi-dsi.c:575-582`, behind
    `FLEXGEN_28` = PLL8/22 (27 MHz) and `ALLOW_SET_RATE` on the running binary,
    as in the tag's DK file? Read `CK_KER_LTDC`'s source and `RCC_DSICFGR`
    at the board (the first probe line).
-2. **The LTDC's RIMU.** Which `RIMU_ID` is the LTDC's master and its CID
-   selection (`RIF_CIDSEL_P`), and does it pass RISAF4 for the buffer's region?
-   RM0457's RIMU table is needed; the DK file lists sixteen entries without
-   names (O:`...-rif.dtsi:625-640`).
+2. **The LTDC's RIMU.** *Still open (checked 2026-11-22).* Which `RIMU_ID` is
+   the LTDC's master and its CID selection (`RIF_CIDSEL_P`) is named in no
+   ST source read. What the sources settle (see the bring-up-side note
+   `stm32mp257f-dk-display-bringup.md`, rows 4 and 5, which cite them): the DK
+   file lists sixteen RIMU entries without names (O:`...-rif.dtsi:625-640`);
+   entries 11, 12 and 13 are the only masters without a peripheral pairing in
+   OP-TEE's table (O:`stm32_rifsc.c:146-211`) and are CID0, non-secure,
+   privileged, CID taken from the master (O:`...-rif.dtsi:636-638`). RISAF4
+   regions 9 (Linux memory) and 10 (GPU carveout, 0xfa800000) are non-secure,
+   read/write for CID0 and CID1 (O:`...-rif.dtsi:980-986`, `:1001`), so a
+   master presenting CID0 or CID1 reaches both. The LTDC master passing RISAF4
+   is therefore *likely [D]* (by elimination to 11-13) but not shown; the
+   board read of `RISC_RIMC_ATTR0..15` (probe `mp2_display_state`) or RM0457's
+   RIMU table decides. This session could not fetch ST's trees (no network
+   approval), so no new file:line was added.
 3. **The HDMI +5 V.** Is `LDO5` off at hand-over, and does the ADV7535 need it
    (HPD/DDC pull-ups on the connector) to read an EDID? The first
    board session reads the SCMI voltage state.
@@ -514,7 +525,7 @@ pattern generator (`VID_MODE_VPG_ENABLE`, L:`dw-mipi-dsi.c:575-582`, behind
    reset by whatever the board's pull and the pad's reset state leave. Does
    0x3d ACK before any PB6 pulse? If not, U-Boot's pulse (1 ms / 10 ms) is
    the reference.
-7. **Burst or not.** The ADV7535 asks for non-burst sync pulses; the
+7. **Burst or not.** *Answered and pinned (commit `1bb09fd4`, dsi-src-audit).* The ADV7535 asks for non-burst sync pulses; the
    non-burst checks and the low-power gap (`delay_to_lp`) must hold for the
    mode (L:`dw_mipi_dsi-stm.c:1186-1223`). Computed here **[D]**: 1080p60
    at 891 Mbit/s uses the table row `HSTT(900, 115, 58, 88, 35)` (L:`:936-1000`;
@@ -523,14 +534,43 @@ pattern generator (`VID_MODE_VPG_ENABLE`, L:`dw-mipi-dsi.c:575-582`, behind
    packet) both clear it; 720p60 on three lanes at 594 Mbit/s (row
    `HSTT(600, 82, 46, 64, 27)`) needs 46 against `hfp` 110. Both modes pass the
    check; the sync width (44 and 40 pixels) passes the 2-pixel minimum.
+   `1bb09fd4` added `ip::stm32_dsi_phy::{mode_valid, delay_to_lp}` (the checks
+   were missing), made `StmDsiPhy::lane_mbps` refuse what `mode_valid` refuses,
+   and its tests pin both computations (82 and 46 pixels) to the values above.
 8. **Alignment.** No source states a base or pitch alignment for `L1CFBAR` and
    `L1CFBLR` (only that the pitch is 16 bits and the line length 13). RM0457.
-9. **Which IRQ line carries what.** Two lines (SPI 158, 159); the split
-   between the line/reload flags and the error flags is not in the code read.
+9. **Which IRQ line carries what.** *Still open (checked 2026-11-22).* Two
+   lines (SPI 158, 159; level high, L:`stm32mp251.dtsi:2155-2156`; `nb_irq = 2`,
+   L:`ltdc.c:2562`). The flag set is one register (L:`ltdc.c:199-205`) and
+   the audit of `ip::stm32_ltdc` (`b2123016`) found no source for a split
+   between the line/reload flags and the error flags; the reference manual's
+   interrupt table is needed. Practical rule until then: enable the GIC
+   entry of both lines and let one handler read `ISR`. This session could not
+   fetch ST's trees, so the claim that Linux installs the same handler on both
+   lines is not re-verified.
 10. **RM0457** (LTDC chapter, DSI chapter, RCC, SYSCFG `DISPLAYCLKCR`, RIFSC/RIMU) is
-    unread: every offset and bit above is the drivers' and has not been
-    checked against the manual. The same holds for the IP-version
-    constants.
+    unread. Checked since against ST's own r3.1 drivers (not the manual),
+    each with a pinning test:
+    - `ip::stm32_ltdc` against `ltdc.c`/`ltdc.h`: offsets, bits, layer
+      tables, versions, timing and pixel-format codes agree, no code fix
+      (`b2123016`). Unchecked there: the pad limit of 0x010300 and a2 (from
+      `drv.c` platform data), and the enable order on a2 and plane-disable
+      reload, which differ harmlessly.
+    - `ip::dw_mipi_dsi` and `ip::stm32_dsi_phy` against `dw-mipi-dsi.c` and
+      `dw_mipi_dsi-stm.c`: registers, the 63-row `dppa_map` and HSTT tables,
+      set_rate/init order agree; `mode_valid`/`delay_to_lp` added and RGB666
+      is 24 bpp (`1bb09fd4`).
+    - `ip::adv7535` against `adv7511_drv.c`/`adv7533.c`: patch tables,
+      probe and power order agree; lane rule (3 lanes at or below 80 MHz,
+      so 720p60 is `0x1c = 3<<4`, not 4<<4 as written above), timing before
+      `0x1c`, regcache replay, HPD acknowledge fixed (`234ae271`).
+    - `ip::stm32_i2c` against `i2c-stm32f7.c` and `ip::stm32_gpio` against
+      `pinctrl-stm32.c`: timing search, CR1.FMP, ANFOFF default fixed;
+      GPIO encodings agree (`8488b4ce`).
+
+    Still needing RM0457: the register map of everything above as hardware
+    facts (these audits only show agreement with Linux), the RCC/SYSCFG
+    `DISPLAYCLKCR` bits, RIFSC/RIMU, and the IP-version constants.
 11. **EDID and mode choice.** First run: fixed 1080p60 against the monitor's
     EDID. A monitor that refuses 1080p60 at 148.5 MHz would need
     a second `FLEXGEN_27` setting over SCMI.
