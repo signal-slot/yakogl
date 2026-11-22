@@ -229,7 +229,8 @@
 #                      device_shutdown, so the display and the GPU stay as
 #                      Linux left them; the runner refuses it without a
 #                      crashkernel= reservation that holds the image's
-#                      window); 0 or unset: the normal route
+#                      window, and sets and holds the adopt's mode before
+#                      the jump, t6-kms-mode.py); 0 or unset: the normal route
 #   T6_RUNNER          nanopc-t6: the runner (default driver/tools/kexec-zephyr/
 #                      nanopc-t6.sh; tools/board_selftest.sh puts a fake there)
 #   BOARD_BOOT         the boot backend (default: pi4 tryboot, else uboot-tftp)

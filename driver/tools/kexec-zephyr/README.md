@@ -95,9 +95,13 @@ been run on the board.
 
 The display probe `t6_display` (step D2, `driver/docs/nanopc-t6-display.md`,
 section 2 route (a)) adopts the picture Linux leaves running, so it needs the
-crash route (`kexec --crash` into a `crashkernel=` reservation that holds the
-image window), not the normal kexec this script does today; that route is
-not in this script yet. Its record is judged with `t6-verdict.sh t6_display`
+crash route (`--crash`: `kexec --crash` into a `crashkernel=` reservation that
+holds the image window), not the normal kexec. The adopt accepts one mode,
+1024x768 at 60 Hz, so before the jump `--crash --go` runs `t6-kms-mode.py`
+(beside this) on the board: it sets that mode on HDMI-A-1 and holds it. The
+script reads VP0's mode back from Linux and jumps only when it is that mode;
+otherwise it stops the holder by its pid and Linux's own mode comes back
+(section 2(a), "The mode before the jump"). Its record is judged with `t6-verdict.sh t6_display`
 (fixture `testdata/t6_display-pass.uart`). The verdict judges the UART lines
 only: whether the display shows the four quadrants and the white border in
 the right places is the person's answer.

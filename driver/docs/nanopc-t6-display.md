@@ -329,6 +329,75 @@ set (the kernel limits only crash segments to the reservation,
 `kernel/kexec_core.c:200-210`), unless a crash image is loaded in it; with
 `--go` both routes read `kexec_crash_loaded` again under the board lock.
 
+**The mode before the jump.** The adopt accepts one mode only, 1024x768 at
+60 Hz (section 3; `board::nanopc_t6_display::MODE`). Linux runs the sink's
+preferred mode. A display without an EDID gave 1024x768 (2026-11-12). Since
+2026-11-22 HDMI-A-1 goes to an HDMI capture unit whose EDID prefers 1920x1080
+at 148.5 MHz, and Linux runs that (issue #10520). So `nanopc-t6.sh --crash
+--go` sets the mode itself, after the copies and right before the jump:
+
+1. `t6-kms-mode.py hold` (beside the runner; Python's standard library only,
+   since the board has python3 and no DRM tools) opens `/dev/dri/card0` as
+   the DRM master, finds HDMI-A-1 and the CRTC that drives it, and picks the
+   connector's mode whose clock, eight timing numbers and both sync flags are
+   the adopt's. When the list has none, it refuses and changes nothing. It
+   sets the mode with a dumb buffer of its own by the legacy `SETCRTC`,
+   which puts the buffer on the CRTC's primary plane, the plane fbcon used
+   (Cluster0, U2). It reads the CRTC back, prints one line that names the
+   holder's pid, and leaves a child process that keeps the card open as
+   master.
+2. The runner reads VP0's mode back from Linux: the `crtc[N]: video_port0`
+   block of `/sys/kernel/debug/dri/0/state`, its `enable`, `active` and
+   `mode:` lines (`drm_atomic.c:443-455`). It jumps only when VP0 is on and
+   its clock and eight numbers are the adopt's, with flags `0xa` (both syncs
+   negative, not interlaced). It also records HDMI-A-1's `output_bpc` and
+   `output_format` (U15).
+3. Every path that does not jump stops the holder by that pid: a refusal of
+   the mode step, a jump the board refuses (the linux-wdt check), a jump that
+   did not happen, an error. On the board the stop first checks the boot_id
+   and the pid's command line, so it never kills another process. The holder
+   sets the CRTC back as it found it (fbcon's frame buffer and mode), removes
+   its buffer and closes the card. The runner then reads VP0 again and
+   records whether Linux's own mode is back. The holder also ends by itself
+   after 600 s, for a runner that was killed before it could stop it.
+
+Why the mode stays until the image starts. While the holder is master,
+fbdev cannot take the CRTC back: its restore (through
+`drm_client_modeset_commit`), colour map, ioctl, pan and hotplug paths need
+`drm_master_internal_acquire`, which fails while a user-space master exists
+(linux v6.18 `drm_auth.c:433-442`, `drm_client_modeset.c:1229-1230`,
+`drm_fb_helper.c:1029`, `:1069`, `:1435`, `:1943-1944`). The one forced
+restore is `set_par` with `FB_ACTIVATE_KD_TEXT` (a VT set back to text mode
+from user space), and `set_par` does nothing while `oops_in_progress` is set
+(`drm_fb_helper.c:1332-1353`); nothing in the runner switches the VT. The
+panic of the crash route calls `__crash_kexec` before the kmsg dumpers (where
+`drm_panic` would draw) and before the console unblank (`kernel/panic.c:508-509`),
+and `__crash_kexec` stops the CPUs and enters the image with no
+`device_shutdown` (`kernel/crash_core.c:120-138`). So VP0 still scans out the
+holder's buffer in the adopt's mode when the image starts, through the IOMMU,
+as with a display without an EDID; the adopt's steps above are the same.
+
+What it leaves behind: nothing that outlives the holder. No file outside
+`/tmp/yakogl-kexec`, no package, no module, no property. When the holder
+ends, by a signal or killed, the kernel removes its frame buffer and its
+master, and the last close of the card lets fbdev set its own mode again
+(`drm_file.c:253`, `:263-264`, `:406-411`, `:440-441`;
+`drm_client_event.c:104-123`). The last close needs that no other process
+has the card open; the runner's read under the board lock refuses while any
+process holds a file of `/dev/dri`.
+
+The other way, and why not: debugfs `edid_override`. A made-up 1024x768 EDID
+written to `/sys/kernel/debug/dri/0/HDMI-A-1/edid_override` and `detect`
+written to the connector's `status` would make fbdev pick 1024x768 on the
+hotplug, with no process to keep. But it changes the kernel's view of the
+sink until someone writes `reset` and probes again, so a runner killed in
+between leaves the board on a made-up EDID until the next boot. The EDID is a
+blob we would have to make and keep right (the mode, DVI or HDMI, the size).
+The mode is then fbdev's own choice on a hotplug, so the read-back is still
+needed. And giving Linux's mode back is a second override, not a stop. The
+holder changes only the CRTC, for as long as it runs, and the kernel undoes
+it when it ends.
+
 The crash route has one more condition: no interrupt may be left on a
 chip whose bus lock sleeps. Before the jump, `machine_crash_shutdown`
 masks and shuts down every started interrupt, one after the other
@@ -466,6 +535,13 @@ it at **1024x768 at 60 Hz, 65 MHz** (h 1024 1048 1184 1344, v 768 771 777
 806, both syncs negative), DVI. That is the build's fixed mode
 (`soc::rk3588_display_chain::MODE_1024X768_60`); the PHY runs Linux's table
 row for 65 MHz (`hdptx.c:445-446`), read back from the dump.
+
+Since 2026-11-22 the T6's HDMI goes to an HDMI capture unit with an EDID
+that prefers 1920x1080 at 148.5 MHz, so Linux runs that mode. The crash
+route therefore sets the mode before the jump (section 2(a), "The mode
+before the jump"), and refuses when the connector's mode list has no mode
+with the adopt's timing (not read on the board yet); the cold route
+programs it itself.
 
 What the PHY PLL needs (`hdptx.c:900-970`): the PLL output is 5x the TMDS
 character rate divided out of a VCO of 2.0-4.0 GHz, `VCO = 24 MHz x M`
@@ -775,7 +851,7 @@ answers polls, takes injected failures and records the order.
 |---|---|---|---|---|---|
 | D0 | The dump: `driver/tools/kexec-zephyr/t6-display-dump.sh` (read only), its output committed as the dump file and the allow file seeded. Done on 2026-11-12 (section 6) | `t6-display-dump-selftest.sh`: the list check, the refusals and a whole run against a fake board | the run of section 6: 1120 words, the picture stayed on | script 490 lines, self-test 390 | yes |
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
-| D2 | Adopt (route a): `nanopc-t6.sh --crash` and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with the dump (mode match, mode mismatch refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
+| D2 | Adopt (route a): `nanopc-t6.sh --crash` (with its mode step, `t6-kms-mode.py`, section 2(a)) and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with the dump (mode match, mode mismatch refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
 | D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
 | D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row | the image builds with `-Werror` (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
@@ -820,6 +896,7 @@ variant of it.
 | U12 | A sink that is slow to answer DDC after power saving (seen with a 1920x720 panel on this board) | D10 retries; the fixed mode stays the fallback |
 | U13 | Are the TX resets SRST_HDMITX0_REF and SRST_HDMIHDP0 needed for a cold start (no Linux driver pulses them)? | D8: the cold run first without, then with a pulse if the controller does not respond |
 | U14 | `TIMER_BASE_CONFIG0` = 428571429: is it the reference clock rate on this board (CLK_HDMITX0_REF from aclk_hdcp1_root)? | answered by D0: yes, `clk_hdmitx0_ref` is 428571429 Hz |
+| U15 | With the capture unit's EDID (an HDMI sink), does Linux drive 1024x768 in RGB at 8 bits per colour, so VP0's `DSP_CTRL` is the value the adopt expects? Another depth or format changes `DSP_CTRL`, and the adopt then stops at its state check | the first `--crash` run after #10520: the record's "HDMI-A-1 output" line (`output_bpc`, `output_format`), then the adopt's own read |
 
 Risks: the PHY's fractional mode may need SDM values the dump gives but no
 formula checks (the integer fallback modes of section 3 remove that risk for a
