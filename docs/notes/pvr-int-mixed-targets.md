@@ -247,6 +247,147 @@ goes through the items above. `const fn` because the GL core's tests
 and the back end compare constants; the bodies need only loops and
 matches.
 
+### 2.6 Four draw buffers: the mixed key past three targets (RC14; design, not built)
+
+Today no mixed key reaches four targets: `SHC_MIXED_MAX_TARGETS` is 3
+(`src/target_key.rs:18`) and `shc_blend_key_mixed` returns `None` past it
+(`:118-121`). The 32-bit key has no room for a fourth slot: slot 3 at
+[25:29] would hit the tag, and [26:31] must stay zero for the tag
+argument of section 2.3 (its closing sentence, "a slot 3 fits at
+[26:30]", does not hold with the tag at bit 25). The back end refuses
+the draw by name (`REFUSE_MIX_TARGETS`, `src/pvr/target_keys.rs:18-19`,
+raised at `:56-58`) and the GL core gives no key (`src/gl/target_keys.rs:42-44`).
+This section is the design that lifts that, and the draws it still
+refuses. It is the blend-free half only: `docs/notes/pvr-blend-multi.md`
+section 3.2 owns the key layout and section 3.3 decides that "any draw of
+four targets of non-uniform class" is a multi key, with a zero blend word
+and zero masks here. Blend and colour masks stay refused as in section 5;
+sRGB slots stay refused (`srgb-mix-note` owns them).
+
+#### 2.6.1 The slot encoding
+
+The four-target mixed key is the 64-bit multi key (`blend-key-multi`
+builds it in `src/target_key.rs`):
+
+| bits | holds |
+|---|---|
+| [0:25] | the blend word: **zero** (no blend, the replace state) |
+| [26:34], [35:43], [44:52], [53:61] | slot 0..3, 9 bits each, slot `i` at `26 + 9 i` |
+| [62] | reserved, 0 |
+| [63] | multi tag, 1 |
+
+A slot is `code | mask << 5`. `code` is section 2.2's 5-bit slot code,
+unchanged (`0x10` RGBA8, `0x14` RGBA16F, `0x18` R16F, `0x1C` R32F, and
+`(t >> 5) & 0x1f` for an integer layout). `mask` (slot bits 5..8, a set
+bit disables a channel) is **zero**: every channel is written. Codes
+`0x04`, `0x08`, `0x0C` stay unused (sRGB). Slots are dense from slot 0 and
+conditions 2 and 4 of section 2.2 carry over: at least one integer
+layout, and not all the same one (one layout everywhere keeps the
+`shc_blend_key_int_rt` key). A `GL_NONE` gap would be a zero code in the
+multi key's grammar, but this design does not use it: the GL core builds
+no key for a gap (`src/gl/target_keys.rs:39-41`) and the back end refuses
+it (`REFUSE_GL_NONE`, `src/pvr/target_keys.rs:50-52`); `pvr-r09` owns
+gaps.
+
+Worked values, computed from the formula (the constructor's tests pin
+them): RGBA8, R32UI, R32I, R8UI is slots `0x10, 0x09, 0x19, 0x01`, key
+`0x8021_9048_4000_0000`; RGBA8, RGBA8, RGBA8, R32UI is slots `0x10, 0x10,
+0x10, 0x09`, key `0x8121_0080_4000_0000`.
+
+#### 2.6.2 How the 3-slot key maps onto it
+
+The 3-slot key (bit 25 tag, slot `i` at `10 + 5 i`, section 2.2) **keeps
+its value** for two and three targets: every key, record and test of
+sections 2 to 6 is unchanged and `shc_blend_key_mixed` stays their
+constructor. Only a four-target list builds a multi key.
+`pvr-blend-multi.md` 3.3 says the 3-slot key "keeps its value until
+`pvr-mixed4` moves it into the multi key"; this design decides **not to
+move it**: moving it re-spells the same list, changes
+`tests/gl_blend_key_pin.rs`, the worked keys of section 2.2 and every
+fixture that carries the key, and gains nothing. The multi decoder is
+canonical, so it rejects a multi key of two or three slots that a legacy
+key expresses: no list has two spellings. The two keys share the slot
+code, so one function reads either:
+
+```text
+list(key) = bit 63 clear: shc_blend_key_mixed_targets(key as u32)   // 2 or 3 slots
+            bit 63 set:   shc_blend_key_multi_slots(key)            // blend word 0,
+                                                                    // masks 0, 4 slots
+slot code = (key >> (10 + 5 i)) & 0x1f        (3-slot key)
+          = (key >> (26 + 9 i)) & 0x1ff, then >> 5 must be 0 (multi key)
+```
+
+`slot_key` (`src/target_key.rs:43-58`) turns either code into the
+per-target key. In code `shc_mixed_out_layout` (`:90`) takes a four-long
+list (its array and `SHC_MIXED_MAX_TARGETS` widen to 4) while
+`shc_blend_key_mixed` (`:118`) keeps a limit of 3 of its own, so a
+four-element list does not build a 3-slot key, and
+`shc_blend_key_mixed_targets` (`:148`) returns `None` for a key with
+bit 63 (its `key >> 26 != 0` test at `:149` already does).
+
+#### 2.6.3 The four-register budget
+
+`register_layout` (`src/pvr/mrt_layout.rs:212`) and section 3's rule
+(`shc_mixed_out_layout`, `src/target_key.rs:90-117`) put a target of two
+or more dwords on an even register and refuse one that ends past register
+3, and registers are never back-filled. Four targets need four registers
+at least, so a four-target list fits **only when every target takes one
+dword**: start `0, 1, 2, 3`, span 4, no hole. (Checked by enumerating
+dword counts 1, 2 and 4 over four targets: `(1, 1, 1, 1)` is the only
+list that fits.) The dword count is `ShcIntRt::dwords`
+(`src/shaderc/mod.rs:253-256`) or 2 for RGBA16F:
+
+| one dword (fits) | two or four dwords (refused, `REFUSE_FOUR_REGISTERS`) |
+|---|---|
+| RGBA8 (`0x10`), R16F (`0x18`), R32F (`0x1C`) | RGBA16F (`0x14`, 2) |
+| R8, R16, R32 UI/I | RG32UI/I (2), RGBA16UI/I (2) |
+| RG8, RG16 UI/I | RGBA32UI/I (4) |
+| RGBA8UI/I, RGB10_A2UI | |
+
+Any target of two dwords or more in a four-target mix is refused: it
+adds at least one register to the four. That is the same answer the
+one-layout path and `pvr-budget-note` give; tile buffers would lift it
+(section 7). The back end's refusal order is unchanged
+(`src/pvr/target_keys.rs:42-70`): GL_NONE gap, sRGB, the target count
+(this check goes away for four targets), the per-target key, the four
+registers.
+
+#### 2.6.4 Consumers that must change
+
+| change | where | owner |
+|---|---|---|
+| the multi constructor and decoder (`shc_blend_key_multi`, `shc_blend_key_multi_slots`); `shc_mixed_out_layout` and `shc_blend_key_mixed_targets` over four slots | `src/target_key.rs:18,90,118,148` | item `blend-key-multi` (plan #368) |
+| `ShcShader::blend_key_hi`, `blend_variant` taking a `u64` key, the program cache key and `ProgFsVariant::blend_key`, the ABI pins | `src/abi_layout.rs`, `src/abi_layout_check.c`, `include/gles_shaderc.h` (`pvr-blend-multi.md` 3.4) | item B of `pvr-blend-multi.md`; its `src/gl/draw.rs` parts are #361's |
+| key construction: `draw_target_keys` admits a fourth present slot (`n == SHC_MIXED_MAX_TARGETS` returns `None` at `:42-44`); `draw_mixed_key` returns a `u64`, the multi key for four targets and the 3-slot value zero-extended otherwise | `src/gl/target_keys.rs:19-61` | #361 (target keys) |
+| `current_blend_key` returns `u64`; its mixed early return takes the wider key (`several_targets`, `:1439`) | `src/gl/draw.rs:1450,1459-1466` | #361 |
+| `draw_target_keys` stops refusing a fourth target and keeps the register refusal (`REFUSE_MIX_TARGETS` then has no user: delete it); `draw_mixed_key` returns the 64-bit key; `int_targets_drawn` compares both halves of the key (`fs.blend_key == key` at `:6743`; `mix_clear_refused` at `:6719` already takes `PVR_BACKEND_MAX_RT`) | `src/pvr/target_keys.rs:42-76`, `src/pvr/backend.rs:6694-6747` | #350 / #325 (`src/pvr/**`) |
+| the log arm of `REFUSE_MIX_TARGETS` goes with the constant; four-target EOT, PBE state and `eot_pairs` already exist (`pvr-backend`) | `src/pvr/backend.rs:6833-6845` (arm at `:6838`) | #350 / #325 |
+| the online compiler: `mixed_key_targets` decodes through the multi decoder; `build_fragment_for` and `compile_fragment_for` take the wider key and test for a multi key **before** decoding a blend (a multi key's low half is zero, so `Blend::from_key` would see "no blend" and drop the slots); the record keeps both halves | `src/shaderc/online/powervr/chain.rs:527-538,546-557,2019-2035` | `pvr-blend-builder` (plan #368) for the key; `src/pvr/**` readers #350 / #325 |
+| `replace_class` recognises only the one-class replace key, so a multi key never reaches it; `MAX_PACK_TARGETS` is already `GLES_MAX_TARGETS` (4); `target_layout` already lays four one-dword targets at registers 0-3 | `chain.rs:587,628,1380,1470,2147` | unchanged |
+
+Packing is unchanged: `TargetPack::Int` or `TargetPack::Class` per slot
+(`chain.rs:546-557`), written at `start[i] = i`, `num_outputs` 4.
+
+#### 2.6.5 Tests that flip, and tests to add
+
+- `tests/es3_mrt4_formats_pvr.rs:971-972`,
+  `integer_attachment_3_beside_rgba8_draws`, is `#[ignore]`d for exactly
+  this (a mixed key past three draw buffers: the draw is refused by name).
+  It flips, its `#[ignore]` removed, in the commit that makes the draw
+  succeed (the `src/pvr/**` row of 2.6.4). The two sRGB ignores of that
+  file (`:989`, `:1001`) are `srgb-mix-note`'s and do not flip.
+- `tests/pvr_mixed_key_spec.rs` has one `#[ignore]` (`:400`, signed
+  RGB10_A2); it concerns the slot code, not the count, and does not
+  flip. Its header already sweeps one- to four-target lists against
+  `mrt_layout`; it gains the four-slot encoder and the "only
+  `(1, 1, 1, 1)` fits" assertion, written from this section.
+- `src/pvr/target_keys.rs` tests pin `REFUSE_MIX_TARGETS` for four targets
+  (`:151-152`): rewritten to the multi key or the four-register refusal.
+- `src/target_key.rs` tests: the two worked values of 2.6.1; the round
+  trip of every four-target list over the one-dword classes; `None` for a
+  list with a wider class, with no integer, or with one layout
+  everywhere; a 3-slot key and a multi key never decoding as each other.
+
 ## 3. The output registers
 
 One rule, used by the compiler, the back end's acceptance and the emit:
