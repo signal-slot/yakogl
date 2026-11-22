@@ -189,5 +189,40 @@ for s in "$GATE" "$HERE/gate_st_selftest.sh"; do
 	if bash -n "$s"; then pass; else fail "bash -n $s"; fi
 done
 
+# signature() on fixture decodes, no Mesa tree: Mesa 26.2.1 writes PE_MEM_CONFIG
+# as the 8th word of the burst named PE_STENCIL_CONFIG_EXT, so the word that
+# moved must count as PE_MEM_CONFIG and any other moved word as `other`.
+eval "$(sed -n '/^PE_MEM_CONFIG_ADDR=/,/^run_golden() {/p' "$GATE" | sed '$d')"
+echo "renderer: Vivante GC8000 rev 6205" >"$TMP/sig.err"
+cat >"$TMP/sig.a" <<'FIX'
+==== submit 0: 4 words ====
+LOAD_STATE 0x014a0 PE_STENCIL_CONFIG_EXT          count=8   0x00000000 0x000e430c 0xffffffff 0xffffffff 0x00000000 0x00000000 0x00000000 0x01000000
+LOAD_STATE 0x01654 TS_MEM_CONFIG                  count=4   0x00000082 0xffff8000 0xffff9000 0xf000f000
+LOAD_STATE 0x01604 RS_CONFIG                      count=1   0x00004606
+FIX
+sed 's/0x00000000 0x01000000$/0x00000000 0x00000000/; s/0x00000082 /0x00000002 /' "$TMP/sig.a" >"$TMP/sig.b"
+want="mode 1 renderer: Vivante GC8000 rev 6205 pe_mem_config=moved ts_mem_config=moved other=0"
+if [ "$(signature 1 "$TMP/sig.a" "$TMP/sig.b" "$TMP/sig.err")" = "$want" ]; then
+	pass
+else
+	fail "signature: 8th word of the stencil burst and TS word 0 moved: want '$want'"
+fi
+# the same streams: nothing moved
+want="mode 15 renderer: Vivante GC8000 rev 6205 pe_mem_config=same ts_mem_config=same other=0"
+if [ "$(signature 15 "$TMP/sig.a" "$TMP/sig.a" "$TMP/sig.err")" = "$want" ]; then
+	pass
+else
+	fail "signature: identical streams: want '$want'"
+fi
+# a real difference elsewhere (3rd word of the stencil burst, RS_CONFIG) still counts (other counts diff lines: 2 words, old and new)
+sed 's/0x000e430c 0xffffffff/0x000e430c 0xfffffffe/; s/0x00004606/0x00004607/' "$TMP/sig.b" >"$TMP/sig.c"
+want="mode 8 renderer: Vivante GC8000 rev 6205 pe_mem_config=moved ts_mem_config=moved other=4"
+got=$(signature 8 "$TMP/sig.a" "$TMP/sig.c" "$TMP/sig.err")
+if [ "$got" = "$want" ]; then
+	pass
+else
+	fail "signature: other states moved: want '$want', got '$got'"
+fi
+
 echo "$ok ok, $failed failed"
 [ "$failed" -eq 0 ]

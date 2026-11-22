@@ -75,6 +75,33 @@ run_hwdb() {
 	python3 -I "$HERE/hwdb_compare.py" "$TREE" --check "$HERE/testdata/hwdb-compare-st-6205.txt"
 }
 
+# cs_decode.py prints a LOAD_STATE as one line named after its first
+# register. Mesa 26.2.1 writes PE_MEM_CONFIG (0x014bc) as the 8th word of the
+# burst that starts at PE_STENCIL_CONFIG_EXT (0x014a0), so the decode line is
+# named PE_STENCIL_CONFIG_EXT and the name PE_MEM_CONFIG never appears (the
+# first version of this check grepped for the name and counted that line, and
+# the TS_MEM_CONFIG one, as 'other': pe_mem_config=same other=2 in modes 1 and
+# 8). The streams are therefore compared word by word: words_of rewrites each
+# LOAD_STATE as one "W <address> <value>" line per word, and a register is
+# named by its pinned address, not by the decoder's line name.
+PE_MEM_CONFIG_ADDR=0x014bc
+TS_MEM_CONFIG_ADDR=0x01654
+
+words_of() {
+	python3 -I -c '
+import re, sys
+for line in open(sys.argv[1]):
+    line = line.rstrip("\n")
+    m = re.match(r"LOAD_STATE 0x([0-9a-f]+) \S+\s+count=(\d+)\s+(.*)$", line)
+    if not m:
+        print("L " + line)
+        continue
+    addr = int(m.group(1), 16)
+    for i, v in enumerate(m.group(3).split()[: int(m.group(2))]):
+        print("W 0x%05x %s" % (addr + 4 * i, v))
+' "$1"
+}
+
 # One signature line per mode, from the two decoded streams and the ST run.
 signature() {
 	# $1 mode, $2 file with the GC7000UL decode, $3 file with the ST decode,
@@ -82,10 +109,10 @@ signature() {
 	local mode=$1 a=$2 b=$3 err=$4 renderer pe ts other d
 	renderer=$(grep -m1 '^renderer:' "$err" || true)
 	[ -n "$renderer" ] || renderer="renderer: (none)"
-	d=$(diff "$a" "$b" | grep '^[<>]' || true)
-	if printf '%s\n' "$d" | grep -q 'PE_MEM_CONFIG'; then pe=moved; else pe=same; fi
-	if printf '%s\n' "$d" | grep -q 'TS_MEM_CONFIG'; then ts=moved; else ts=same; fi
-	other=$(printf '%s\n' "$d" | grep -v 'PE_MEM_CONFIG\|TS_MEM_CONFIG' | grep -c '^[<>]' || true)
+	d=$(diff <(words_of "$a") <(words_of "$b") | grep '^[<>]' || true)
+	if printf '%s\n' "$d" | grep -q "^[<>] W $PE_MEM_CONFIG_ADDR "; then pe=moved; else pe=same; fi
+	if printf '%s\n' "$d" | grep -q "^[<>] W $TS_MEM_CONFIG_ADDR "; then ts=moved; else ts=same; fi
+	other=$(printf '%s\n' "$d" | grep -v "^[<>] W \($PE_MEM_CONFIG_ADDR\|$TS_MEM_CONFIG_ADDR\) " | grep -c '^[<>]' || true)
 	echo "mode $mode $renderer pe_mem_config=$pe ts_mem_config=$ts other=$other"
 }
 
@@ -125,7 +152,8 @@ run_golden() {
 	done < <(find "$build" -name 'lib*.so*' -printf '%h\n' 2>/dev/null | sort -u)
 	libdirs=${libdirs#:}
 
-	local tmp cc
+	local cc
+	# global: the EXIT trap runs after this function's locals are gone
 	tmp=$(mktemp -d "${TMPDIR:-/tmp}/gate_st.XXXXXX") || {
 		echo "gate_st: cannot create a temporary directory" >&2
 		exit 1
