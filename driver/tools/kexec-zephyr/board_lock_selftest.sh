@@ -1203,15 +1203,20 @@ check "prompt-go.py: LOAD (${got:-none}), where U-Boot loads the image and goes,
 # pty), before the process check below, so that it covers what they start.
 # The last line names the checks run and how many failed, and every check
 # line of the tool that did not run (none kept by hand: a skipped check line
-# fails it).
+# fails it). The check line here also carries the tool's own FAIL lines: the
+# gate's log is all a CI run leaves, and the count alone does not say which
+# check failed.
+fail_lines() { grep -E '^FAIL|FAIL$' <<<"$1" | sed 's/^/; /' | tr -d '\n' || true; }
 for t in prompt-reads prompt-go; do
-	got=$(python3 -I "$here/../uboot-t6/$t.py" --self-test 2>&1 | tail -n 1)
-	check "$t.py --self-test ('$got')" \
+	out=$(python3 -I "$here/../uboot-t6/$t.py" --self-test 2>&1)
+	got=$(tail -n 1 <<<"$out")
+	check "$t.py --self-test ('$got'$(fail_lines "$out"))" \
 		"$(grep -qE "^$t self-test: [1-9][0-9]* checks run, 0 failed\$" <<<"$got"; echo $?)"
 done
 # stage.sh and prompt-go.sh's dry run against a fake ssh.
-got=$(bash "$here/../uboot-t6/selftest.sh" 2>&1 | tail -n 1)
-check "uboot-t6/selftest.sh ('$got')" \
+out=$(bash "$here/../uboot-t6/selftest.sh" 2>&1)
+got=$(tail -n 1 <<<"$out")
+check "uboot-t6/selftest.sh ('$got'$(fail_lines "$out"))" \
 	"$(grep -qE '^uboot-t6 selftest: [1-9][0-9]* checks run, 0 failed$' <<<"$got"; echo $?)"
 
 # The stand-in UART's wire, by its pid.
