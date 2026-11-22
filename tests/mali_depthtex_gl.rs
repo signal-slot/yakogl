@@ -39,8 +39,7 @@ use yakogl::util::ENOTSUP;
 /* ---- the Mali over a mock OSAL ------------------------------------------ */
 
 /// The OSAL's answers: the board's (panthor-frame on the T6).
-const GPU: OsalMaliGpu =
-    OsalMaliGpu { gpu_id: 0xa867_0005, tiler_features: 0x809, cs_reg_count: 96, unpreserved_cs_reg_count: 4 };
+const GPU: OsalMaliGpu = OsalMaliGpu::T6;
 const HEAP: OsalMaliHeap =
     OsalMaliHeap { ctx_gpu: 0x8000_0001_5000, first_chunk_gpu: 0x8000_00a0_0000, chunk_size: 2 << 20, reserved: 0 };
 

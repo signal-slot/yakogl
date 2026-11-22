@@ -52,6 +52,15 @@ pub struct OsalMaliGpu {
     pub unpreserved_cs_reg_count: u32,
 }
 
+impl OsalMaliGpu {
+    /// The NanoPC-T6's answers (the Mali-G610 as panthor-frame read it on the
+    /// board): the device every host test's mock OSAL stands for. One
+    /// constant, so a field this struct gains is given a value here and not
+    /// in each test's own literal.
+    pub const T6: OsalMaliGpu =
+        OsalMaliGpu { gpu_id: 0xa867_0005, tiler_features: 0x809, cs_reg_count: 96, unpreserved_cs_reg_count: 4 };
+}
+
 /// The tiler heap (`DRM_IOCTL_PANTHOR_TILER_HEAP_CREATE`'s results): the
 /// heap context `HEAP_SET` names, the first chunk and the chunk size the
 /// heap descriptor names.
