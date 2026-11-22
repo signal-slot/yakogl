@@ -1196,6 +1196,25 @@ The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
   priority raised, and the timer would stop. Zephyr's GICv3 init writes
   none of these (`aarch64::gic_cpuif_reset` has the sources). The value of
   `ICC_AP1R0_EL1` as found is printed on every run (issue #6366).
+- Before that, at the same EARLY hook, it deactivates every interrupt left
+  Active at the GIC distributor (the SPIs, and the extended SPIs when
+  `GICD_TYPER.ESPI` says they exist) and at CPU 0's redistributor (the SGIs
+  and PPIs, and the extended PPIs when `GICR_TYPER.PPInum` says so). An
+  Active interrupt is not signalled again until it is deactivated, and the
+  crash route can start the image inside a handler, after the priority drop
+  and before the deactivation. Zephyr's GICv3 init writes `ICENABLER` and
+  `ICPENDR`, never `ICACTIVER`; Linux clears the Active state at its own
+  start, and this does the same: the `ISACTIVER` words are read, every
+  `ICACTIVER` word is written all ones, the `ISACTIVER` words are read
+  again. CPU 0's redistributor is found by walking the region from the
+  devicetree and comparing `GICR_TYPER`'s affinity with `MPIDR_EL1`. The
+  bases are the GIC node's `reg` entries. The MMU is on at EARLY, and
+  Zephyr's arm64 MMU code maps the GIC node's banks flat as device memory
+  before that, for its own GICv3 driver. Every run prints one line, "t6: GIC
+  active state: ... N INTID(s) active (INTIDs ...), ... 0 still active"
+  (`aarch64::gic_active_reset` has the sources; issue #10530). Whether a
+  kexec on the T6 ever leaves an interrupt Active is not measured yet: that
+  line answers it.
 - After the early console it prints the marker and the arming. If the arming
   refused, it resets through PSCI at once. If PSCI returns, it arms WDT0 once
   more with `TOP` 15 (89.5 s) and waits for it.
@@ -1439,6 +1458,9 @@ WDT0 reset brings the SoC back (step 3, measured 2026-10-19).
    marker; "t6: GICv3 CPU interface: ICC_CTLR_EL1 ... had EOImode 1";
    "t6: GICv3 CPU interface: ICC_AP1R0_EL1 0x... ICC_BPR1_EL1 0x... as
    found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0";
+   "t6: GIC active state: GICD_TYPER 0x... GICR_TYPER 0x... GICR_ISACTIVER0
+   0x... as found, N INTID(s) active (...), N word(s) written ICACTIVER, 0
+   still active";
    "t6: WDT0 armed: CR 0x00000008 -> 0x00000009 (was stopped), TORR
    0x0000000e -> 0x000000dd ... period 22369 ms" (with Linux's watchdog
    open, "was running" and Linux's values as found: expected `CR` 0x9 and
@@ -2741,7 +2763,7 @@ before it, and prints `ok`, `differs` or `missing` per line, then
 carry them:
 
 1. Z1's lines as for `t6_fw`: the early banner `T6:A` to `T6:A3`, `T6:B`,
-   the `yakogl-wdt: nanopc_t6` marker, the two GIC lines, the arming line,
+   the `yakogl-wdt: nanopc_t6` marker, the three GIC lines, the arming line,
    `T6:C` and `board: watchdog armed` (`table_boot`).
 2. Z2's and Z3's lines as for `t6_fw`, with the prefix `t6_submit:`:
    build, WDT0, image, the 7 sections and the pool (`table_fw_image`),

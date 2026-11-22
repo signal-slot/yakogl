@@ -464,7 +464,10 @@ at the revision in `west.yml`). An INTID Linux had acknowledged and not
 ended when the CPU crashed leaves its bit in `ICC_AP1R0_EL1`, which
 Zephyr's GICv3 init does not clear: the T6 board glue writes the active
 priorities and `ICC_BPR1_EL1` to 0 at EARLY and prints `ICC_AP1R0_EL1` as
-found (`aarch64::gic_cpuif_reset`, issue #6366). `kexec_zephyr --crash` takes every network
+found (`aarch64::gic_cpuif_reset`, issue #6366). The INTID itself stays
+Active at the distributor or the redistributor; the glue deactivates every
+Active INTID at the same hook and prints which ones it found
+(`aarch64::gic_active_reset`, issue #10530). `kexec_zephyr --crash` takes every network
 link down before the panic to cut the largest source.
 
 ### (b) Adopt from U-Boot

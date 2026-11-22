@@ -241,6 +241,12 @@ int yd_imx_wdog_arm(uintptr_t wdog_base, uintptr_t ccm_base, uint32_t timeout_ms
  * ICC_AP1Rn_EL1 0 (no active priority left by the kernel before us); nothing
  * when ICC_SRE_EL1.SRE is clear. What it found and did in *out
  * (aarch64::gic_cpuif_reset).
+ * yd_gic_active_reset: every interrupt left Active at the GICv3 distributor
+ * (gicd) and at this CPU's redistributor deactivated: the redistributor is
+ * found in the region gicr, gicr_size (stride gicr_stride, 0 for the
+ * architecture's step) by MPIDR_EL1's affinity; the ISACTIVER words are read,
+ * every ICACTIVER word written all ones, the ISACTIVER words read again.
+ * What it found and did in *out (aarch64::gic_active_reset).
  * yd_psci_system_reset: returns only when the firmware did not reset, with
  * the PSCI return code.
  * yd_t6_feed_verdict: whether the feeder's tick at uptime now_ms feeds WDT0
@@ -292,6 +298,32 @@ _Static_assert(sizeof(struct yd_gic_cpuif_reset) == 40, "rk3588.rs pins it");
 _Static_assert(offsetof(struct yd_gic_cpuif_reset, ap1r_cleared) == 32, "rk3588.rs pins it");
 
 void yd_gic_cpuif_reset(struct yd_gic_cpuif_reset *out);
+
+#define YD_GIC_RDIST_FOUND   (1u << 0) /* this CPU's redistributor was found */
+#define YD_GIC_ACTIVE_LISTED 8         /* the INTIDs listed in intids[] at most */
+
+struct yd_gic_active_reset {
+	uint64_t gicr_typer;    /* this CPU's GICR_TYPER; the last one read when none matched */
+	uint32_t gicd_typer;    /* GICD_TYPER */
+	uint32_t aff;           /* MPIDR_EL1's affinity as GICR_TYPER[63:32] holds it */
+	uint32_t frames;        /* the GICR_TYPER read in the walk */
+	uint32_t rd_offset;     /* RD_base - gicr of the one found; 0 when none */
+	uint32_t isactiver0;    /* GICR_ISACTIVER0 as found (SGIs and PPIs); 0 when none */
+	uint32_t spi_words;     /* GICD_ISACTIVERn words 1..ITLinesNumber */
+	uint32_t eppi_words;    /* extended PPI words (GICR_TYPER.PPInum 1 or 2) */
+	uint32_t espi_words;    /* GICD_ISACTIVERnE words (GICD_TYPER.ESPI) */
+	uint32_t words_cleared; /* ICACTIVER words written all ones */
+	uint32_t active;        /* INTIDs Active as found */
+	uint32_t intids[YD_GIC_ACTIVE_LISTED]; /* the first of them, the lowest first */
+	uint32_t still_active;  /* INTIDs Active when read again after the clear */
+	uint32_t flags;         /* YD_GIC_RDIST_FOUND */
+};
+_Static_assert(sizeof(struct yd_gic_active_reset) == 88, "rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_gic_active_reset, intids) == 48, "rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_gic_active_reset, flags) == 84, "rk3588.rs pins it");
+
+void yd_gic_active_reset(uintptr_t gicd, uintptr_t gicr, uintptr_t gicr_size, uintptr_t gicr_stride,
+			 struct yd_gic_active_reset *out);
 int yd_psci_system_reset(void);
 
 #define YD_T6_FEED_YES           0 /* feed */

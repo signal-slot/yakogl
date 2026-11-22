@@ -44,8 +44,8 @@ check() {
 	fi
 }
 
-# the line counts: boot 11 + reset 1 + each probe's own
-MMU=28 HELLO=26 GPU=33
+# the line counts: boot 12 + reset 1 + each probe's own
+MMU=29 HELLO=27 GPU=34
 
 check t6_mmu-pass 0 'VERDICT t6_mmu PASS' "$MMU 0 0" t6_mmu "$D/t6_mmu-pass.uart"
 check t6_mmu-missing 1 "VERDICT t6_mmu FAIL (1 of $MMU)" "$((MMU - 1)) 1 0" t6_mmu "$D/t6_mmu-missing.uart"
@@ -88,7 +88,7 @@ Z1=8
 check t6_mmu-z1stop 1 "VERDICT t6_mmu FAIL (14 of $((MMU + Z1)))" "$((MMU + Z1 - 14)) 12 2" t6_mmu "$D/t6_mmu-z1stop.uart"
 
 # another probe's record
-check t6_gpu-over-mmu 1 "VERDICT t6_gpu FAIL ($((GPU - 11)) of $GPU)" "11 $((GPU - 11)) 0" t6_gpu "$D/t6_mmu-pass.uart"
+check t6_gpu-over-mmu 1 "VERDICT t6_gpu FAIL ($((GPU - 12)) of $GPU)" "12 $((GPU - 12)) 0" t6_gpu "$D/t6_mmu-pass.uart"
 
 check t6_hello-pass 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$D/t6_hello-pass.uart"
 # an active priority left by Linux is recorded, not judged: the reset cleared
@@ -125,6 +125,28 @@ check t6_hello-kexec-with-t6g 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$HELLO 0 
 # T6:A's SCTLR_EL2 with the MMU on fails the kexec route too
 sed '/^T6:A EL2/s/SCTLR_EL2 0x0000000030400800/SCTLR_EL2 0x0000000030400801/' "$D/t6_hello-pass.uart" >"$WORK/k-on.log"
 check t6_hello-kexec-t6a-mmu-on 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/k-on.log"
+
+# the GIC active state line (issue #10530). The fixtures' GICD_TYPER 0xf
+# and 16 words are of the right form, not a prediction: the verdict reads
+# them as tokens. INTIDs Linux left Active are recorded, not judged: the
+# clear deactivated them
+GA='t6: GIC active state: '
+sed "s/^${GA}\(.*\) as found, 0 INTID(s) active (none)/${GA}\1 as found, 2 INTID(s) active (INTIDs 27 451)/; s/GICR_ISACTIVER0 0x00000000/GICR_ISACTIVER0 0x08000000/" \
+	"$D/t6_hello-pass.uart" >"$WORK/active.log"
+check t6_hello-gic-active-found 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$WORK/active.log"
+# an image without the clear: the line missing
+grep -v "^$GA" "$D/t6_hello-pass.uart" >"$WORK/noactive.log"
+check t6_hello-gic-active-missing 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 1 0" t6_hello "$WORK/noactive.log"
+# an INTID still Active after the clear
+sed "/^$GA/s/, 0 still active\$/, 1 still active/" "$D/t6_hello-pass.uart" >"$WORK/still.log"
+check t6_hello-gic-active-still 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/still.log"
+# no redistributor for CPU 0: the other form of the line
+sed "s/^${GA}GICD_TYPER 0x0000000f .* as found, /${GA}GICD_TYPER 0x0000000f, no redistributor with affinity 0x00000000 in 4 frame(s): SGIs and PPIs not scanned, /; /^$GA/s/, 16 word(s)/, 15 word(s)/" \
+	"$D/t6_hello-pass.uart" >"$WORK/nordist.log"
+check t6_hello-gic-no-redistributor 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/nordist.log"
+# the line twice: once per boot
+sed "/^$GA/p" "$D/t6_hello-pass.uart" >"$WORK/twice.log"
+check t6_hello-gic-active-twice 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/twice.log"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
 # the crash kexec: PD_GPU handed over on, Z1 takes the GPU over (four lines)
 TAKE=4
@@ -189,9 +211,9 @@ else
 	fails=$((fails + 1))
 fi
 
-# t6_fw: boot 11 + build, WDT0, image, 7 sections, pool, Z3's rc line and 7
-# record lines, PASS, reset = 32
-FW=32
+# t6_fw: boot 12 + build, WDT0, image, 7 sections, pool, Z3's rc line and 7
+# record lines, PASS, reset = 33
+FW=33
 check t6_fw-pass 0 'VERDICT t6_fw PASS' "$FW 0 0" t6_fw "$D/t6_fw-pass.uart"
 check t6_fw-missing 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 1 0" t6_fw "$D/t6_fw-missing.uart"
 # Z1 refused (step 3; NPLL did not lock, stop 4): the rc line differs, so does
@@ -221,11 +243,11 @@ check t6_fw-job-bit 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$
 sed 's/GLB version 1.5.0 (0x01050000)/GLB version 1.4.0 (0x01040000)/' "$D/t6_fw-pass.uart" >"$WORK/ver.log"
 check t6_fw-version 1 "VERDICT t6_fw FAIL (1 of $FW)" "$((FW - 1)) 0 1" t6_fw "$WORK/ver.log"
 
-# t6_submit: t6_fw's 32 lines (the Z3 record) + 11 Z4 lines = 43. The Z4 lines
+# t6_submit: t6_fw's 33 lines (the Z3 record) + 11 Z4 lines = 44. The Z4 lines
 # are the model's records (board::nanopc_t6_submit's
 # the_fixtures_z4_lines_are_the_model_s_records); a stopped run prints its
 # record too and is judged by its status fields.
-SUB=43
+SUB=44
 check t6_submit-pass 0 'VERDICT t6_submit PASS' "$SUB 0 0" t6_submit "$D/t6_submit-pass.uart"
 # wait timeout (step 14, refusal 19): Z4a, Z4e (extract and seqno 0), Z4j and
 # Z4k (the drain did not run: extract 0, ack 0) and the FAIL line differ
@@ -233,7 +255,7 @@ check t6_submit-wait-timeout 1 "VERDICT t6_submit FAIL (5 of $SUB)" "$((SUB - 5)
 # Z3 stopped (Z1 refused, stop 5): the rc line, Z4a..Z4e, Z4j and Z4k (zeros),
 # the FAIL line and the stop line differ, the 7 record lines are missing;
 # Z1's record follows the stop line (8 ok)
-check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (17 of $((SUB + Z1)))" "$((27 + Z1)) 7 10" t6_submit "$D/t6_submit-z3-stop.uart"
+check t6_submit-z3-stop 1 "VERDICT t6_submit FAIL (17 of $((SUB + Z1)))" "$((28 + Z1)) 7 10" t6_submit "$D/t6_submit-z3-stop.uart"
 # cut after Z4f: Z4g .. Z4k, PASS and the reset line missing
 check t6_submit-missing 1 "VERDICT t6_submit FAIL (7 of $SUB)" "$((SUB - 7)) 7 0" t6_submit "$D/t6_submit-missing.uart"
 # the watchdog reset the probe during the Z4 wait: the capture ends after the

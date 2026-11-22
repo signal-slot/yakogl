@@ -4,7 +4,8 @@
  * The NanoPC-T6 board glue, the Zephyr side (CONFIG_YAKOGL_NANOPC_T6;
  * driver/docs/nanopc-t6-mali.md, "Z1"). The register logic is driver/rust:
  * ip::dw_wdt and soc::rk3588 behind yd_dw_wdt_arm() / yd_dw_wdt_feed(), and
- * aarch64 behind yd_gic_cpuif_reset() / yd_psci_system_reset(), and the
+ * aarch64 behind yd_gic_active_reset() / yd_gic_cpuif_reset() /
+ * yd_psci_system_reset(), and the
  * feeder's decision behind yd_t6_feed_verdict() (board::nanopc_t6). This file
  * is registration only: the init hooks, the mappings, a timer, the prints.
  *
@@ -48,12 +49,20 @@
  *   jump's own ssh command, so WDT0 is running with Linux's period (44.7 s
  *   from the open)
  *   when the image starts, and the arming re-arms it ("was running").
- *   EARLY: the GICv3 CPU interface back to EOImode 0 (Linux left it in split
+ *   EARLY: every interrupt left Active at the GIC distributor and at this
+ *     CPU's redistributor deactivated (an Active interrupt is not signalled
+ *     again; Linux clears them at its start, Zephyr's init does not), then
+ *     the GICv3 CPU interface back to EOImode 0 (Linux left it in split
  *     mode; with it, the system timer would tick once), its active priorities
  *     (ICC_AP1Rn_EL1) and ICC_BPR1_EL1 to 0 (an interrupt the crashing CPU
  *     had not ended would keep the running priority raised, and the timer
  *     would not tick at all). Before Zephyr's GICv3 init at PRE_KERNEL_1,
- *     which writes none of them (driver/rust/src/aarch64.rs).
+ *     which writes none of them (driver/rust/src/aarch64.rs). The MMU is on
+ *     here (z_prep_c ran z_arm64_mm_init before z_cstart) and the GIC node's
+ *     reg banks are mapped flat as device memory by arch/arm64/core/mmu.c, as
+ *     Zephyr's own GICv3 driver needs: the devicetree's physical addresses
+ *     are used as they are. Interrupts stay masked until the first thread
+ *     runs (reset.S masks DAIF; only SError is unmasked before z_cstart).
  *   PRE_KERNEL_1 99 (after the early console at 60): map WDT0 and the CRU
  *     for the feeder; T6:B through the console, the marker and what the
  *     arming found, T6:C once WDT0 is armed; if it refused, say why and
@@ -91,6 +100,9 @@
 #define CRU_MAP   0x1000u     /* CLKGATE_CON(15) is CRU + 0x83c */
 #define UART2_NODE DT_NODELABEL(uart2)
 #define UART2_PHYS 0xfeb50000u /* board::nanopc_t6_early::UART2_PHYS */
+/* The GICv3 (Zephyr's rk3588.dtsi): reg 0 the distributor, reg 1 the one
+ * redistributor region. */
+#define GIC_NODE DT_NODELABEL(gic)
 
 BUILD_ASSERT(DT_NODE_HAS_STATUS(WDT0_NODE, okay), "nanopc_t6.dts names wdt0");
 BUILD_ASSERT(DT_REG_ADDR(WDT0_NODE) == WDT0_PHYS, "WDT0 is at 0xfeaf0000");
@@ -99,6 +111,9 @@ BUILD_ASSERT(DT_PROP(WDT0_NODE, clock_frequency) == 24000000,
 BUILD_ASSERT(!IS_ENABLED(CONFIG_WDT_DW), "WDT0 belongs to this file, not to Zephyr's wdt_dw");
 BUILD_ASSERT(DT_REG_ADDR(UART2_NODE) == UART2_PHYS && DT_PROP(UART2_NODE, reg_shift) == 2,
 	     "the early banner writes uart2's 32-bit registers at 0xfeb50000");
+BUILD_ASSERT(DT_NODE_HAS_COMPAT(GIC_NODE, arm_gic_v3) && DT_NUM_REGS(GIC_NODE) == 2 &&
+		     DT_PROP_OR(GIC_NODE, redistributor_regions, 1) == 1,
+	     "yd_gic_active_reset is given the distributor and one redistributor region");
 BUILD_ASSERT(DT_SAME_NODE(DT_CHOSEN(zephyr_console), UART2_NODE),
 	     "T6:B goes through the console, uart2 like the raw lines");
 BUILD_ASSERT(CONFIG_YAKOGL_NANOPC_T6_ALIVE_S < CONFIG_YAKOGL_NANOPC_T6_LIFETIME_S,
@@ -186,6 +201,7 @@ void z_arm64_el1_plat_init(void)
 	s_arm_rc = yd_t6_early_arm(WDT0_PHYS, CRU_PHYS, CONFIG_YAKOGL_NANOPC_T6_WDT_TOP, &s_arm);
 }
 static struct yd_gic_cpuif_reset s_gic;
+static struct yd_gic_active_reset s_gic_active;
 static volatile int64_t s_alive_ms = -1;
 static volatile bool s_released;
 static volatile uint32_t s_feeds;
@@ -245,14 +261,50 @@ static FUNC_NORETURN void refused_reset(void)
 	wait_for_wdt0();
 }
 
-/* The name is older than the AP1Rn and BPR1 clear; tools/check.sh looks for
- * it in the image. */
+/* The name is older than the AP1Rn, BPR1 and Active clears; tools/check.sh
+ * looks for it in the image. Linux's order: the distributor's and the
+ * redistributor's Active state (gic_dist_init, gic_cpu_config), then the CPU
+ * interface (gic_cpu_sys_reg_init; driver/rust/src/aarch64.rs). */
 static int t6_gic_eoi_reset(void)
 {
+	yd_gic_active_reset(DT_REG_ADDR_BY_IDX(GIC_NODE, 0), DT_REG_ADDR_BY_IDX(GIC_NODE, 1),
+			    DT_REG_SIZE_BY_IDX(GIC_NODE, 1),
+			    DT_PROP_OR(GIC_NODE, redistributor_stride, 0), &s_gic_active);
 	yd_gic_cpuif_reset(&s_gic);
 	return 0;
 }
 SYS_INIT(t6_gic_eoi_reset, EARLY, 0);
+
+/* Always printed, one line: a record says which interrupts the kernel before
+ * us left Active, and that none is left after the clear. */
+static void gic_active_report(void)
+{
+	const struct yd_gic_active_reset *a = &s_gic_active;
+
+	if (a->flags & YD_GIC_RDIST_FOUND) {
+		printk("t6: GIC active state: GICD_TYPER 0x%08x GICR_TYPER 0x%016llx "
+		       "GICR_ISACTIVER0 0x%08x as found, ",
+		       a->gicd_typer, (unsigned long long)a->gicr_typer, a->isactiver0);
+	} else {
+		printk("t6: GIC active state: GICD_TYPER 0x%08x, no redistributor with affinity "
+		       "0x%08x in %u frame(s): SGIs and PPIs not scanned, ",
+		       a->gicd_typer, a->aff, a->frames);
+	}
+	printk("%u INTID(s) active (", a->active);
+	if (a->active == 0) {
+		printk("none");
+	} else {
+		printk("INTIDs");
+		for (uint32_t i = 0; i < MIN(a->active, (uint32_t)YD_GIC_ACTIVE_LISTED); i++) {
+			printk(" %u", a->intids[i]);
+		}
+		if (a->active > YD_GIC_ACTIVE_LISTED) {
+			printk(" ...");
+		}
+	}
+	printk("), %u word(s) written ICACTIVER, %u still active\n", a->words_cleared,
+	       a->still_active);
+}
 
 static int t6_wdt_report(void)
 {
@@ -277,6 +329,7 @@ static int t6_wdt_report(void)
 		printk("t6: GICv3 CPU interface: ICC_SRE_EL1 0x%llx, SRE clear: not touched\n",
 		       (unsigned long long)s_gic.sre);
 	}
+	gic_active_report();
 	if (s_arm_rc != 0) {
 		printk("t6: WDT0 arming FAILED (rc %d, refusal %u): COMP_TYPE 0x%08x PARAM_1 0x%08x, "
 		       "CR 0x%08x TORR 0x%08x as found, read back 0x%08x, flags 0x%x: "

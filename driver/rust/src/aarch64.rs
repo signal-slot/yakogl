@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! What an AArch64 image entered from Linux needs from the CPU itself: the
 //! GICv3 CPU interface put back into its reset EOI mode with no active
-//! priority left ([`gic_cpuif_reset`]), and the way back, PSCI
-//! `SYSTEM_RESET`.
+//! priority left ([`gic_cpuif_reset`]), no interrupt left Active at the GICv3
+//! distributor or at this CPU's redistributor ([`gic_active_reset`]), and the
+//! way back, PSCI `SYSTEM_RESET`.
 //!
 //! **EOI mode.** Linux booted at EL2 runs the GICv3 CPU interface in split
 //! EOI/deactivate mode (`ICC_CTLR_EL1.EOImode` = 1; Linux v6.18
@@ -246,6 +247,320 @@ pub fn gic_cpuif_reset<R: IccRegs>(r: &mut R) -> GicCpuifReset {
     out.ap1r_cleared = n as u32;
     r.isb();
     out
+}
+
+// ---- Interrupts left Active at the distributor and the redistributor --------
+//
+// The offsets and fields are Linux v6.18's names and values (include/linux/
+// irqchip/arm-gic-v3.h, read for the facts only) and Zephyr af17c0c8's
+// (include/zephyr/drivers/interrupt_controller/gic.h,
+// drivers/interrupt_controller/intc_gicv3_priv.h); each line says where.
+
+/// `GICD_TYPER` (arm-gic-v3.h:14; gic.h:42).
+pub const GICD_TYPER: usize = 0x0004;
+/// `GICD_ISACTIVERn` and `GICD_ICACTIVERn`, one 32-bit word per 32 INTIDs,
+/// word n at +4n (arm-gic-v3.h:27-28; gic.h:121, 134).
+pub const GICD_ISACTIVER: usize = 0x0300;
+pub const GICD_ICACTIVER: usize = 0x0380;
+/// `GICD_ISACTIVERnE` and `GICD_ICACTIVERnE`, the extended SPI range
+/// (arm-gic-v3.h:38-39; gic.h:127, 140).
+pub const GICD_ISACTIVERNE: usize = 0x1a00;
+pub const GICD_ICACTIVERNE: usize = 0x1c00;
+/// `GICD_TYPER.ITLinesNumber`, bits 4:0: the SPIs end below
+/// 32 * (ITLinesNumber + 1) (arm-gic-v3.h:89 `GICD_TYPER_SPIS`; gic.h:273-274).
+pub const GICD_TYPER_ITLINES_MASK: u32 = 0x1f;
+/// `GICD_TYPER.ESPI`, bit 8: the extended SPI range exists (arm-gic-v3.h:85;
+/// gic.h:276-277).
+pub const GICD_TYPER_ESPI: u32 = 1 << 8;
+/// `GICD_TYPER.ESPI_range`, bits 31:27: 32 * (ESPI_range + 1) extended SPIs
+/// (arm-gic-v3.h:90-91 `GICD_TYPER_ESPIS`; Zephyr intc_gicv3.c:566).
+pub const GICD_TYPER_ESPI_RANGE_SHIFT: u32 = 27;
+/// The first extended SPI (arm-gic-v3.h:47).
+pub const ESPI_BASE_INTID: u32 = 4096;
+
+/// `GICR_TYPER`, 64 bits, in a redistributor's RD_base frame (arm-gic-v3.h:116;
+/// intc_gicv3_priv.h:35).
+pub const GICR_TYPER: usize = 0x0008;
+/// The SGI_base frame is 64 KiB after RD_base (Linux irq-gic-v3.c:240
+/// `gic_data_rdist_sgi_base`; intc_gicv3_priv.h:30 `GICR_SGI_BASE_OFF`).
+pub const GICR_SGI_BASE: usize = 0x1_0000;
+/// `GICR_ISACTIVER0` and `GICR_ICACTIVER0` in the SGI_base frame: INTIDs 0-31,
+/// the SGIs and PPIs. Words 1 and 2 after them are the extended PPI range
+/// (`GICR_ISACTIVERnE`; arm-gic-v3.h:235-236, and Linux irq-gic-v3.c:1345 with
+/// irq-gic-common.c:129-134 clears `(ppi_nr + 16) / 32` words from 0).
+pub const GICR_ISACTIVER0: usize = 0x0300;
+pub const GICR_ICACTIVER0: usize = 0x0380;
+/// `GICR_TYPER.VLPIS`, bit 1: two more 64 KiB frames (VLPI_base and a
+/// reserved one) follow SGI_base (arm-gic-v3.h:243; irq-gic-v3.c:1061-1064).
+pub const GICR_TYPER_VLPIS: u64 = 1 << 1;
+/// `GICR_TYPER.Last`, bit 4: the last redistributor of the region
+/// (arm-gic-v3.h:246; intc_gicv3_priv.h:69-71).
+pub const GICR_TYPER_LAST: u64 = 1 << 4;
+/// `GICR_TYPER.PPInum`, bits 31:27: 1 or 2 adds that many 32-INTID words of
+/// extended PPIs, others none (arm-gic-v3.h:138-146 `GICR_TYPER_NR_PPIS`).
+pub const GICR_TYPER_PPINUM_SHIFT: u32 = 27;
+/// `GICR_TYPER.Affinity_Value`, bits 63:32 (arm-gic-v3.h:249;
+/// intc_gicv3_priv.h:66-68).
+pub const GICR_TYPER_AFF_SHIFT: u32 = 32;
+/// The first extended PPI (arm-gic-v3.h:136).
+pub const EPPI_BASE_INTID: u32 = 1056;
+/// RD_base and SGI_base, the step to the next redistributor when the
+/// devicetree gives no stride and VLPIS is clear (irq-gic-v3.c:1062;
+/// intc_gicv3.c:724-731).
+pub const GICR_FRAME_SIZE: usize = 0x2_0000;
+
+/// How many INTIDs [`GicActiveReset::intids`] lists.
+pub const GIC_ACTIVE_LISTED: usize = 8;
+
+/// The SPI words of `GICD_ISACTIVERn`: words 1 to ITLinesNumber, INTIDs 32
+/// up. Word 0 is not one: the SGIs and PPIs are the redistributor's (Linux
+/// starts at INTID 32, irq-gic-common.c:113-118; so does Zephyr,
+/// intc_gicv3.c:586). At most 31 words: Linux stops below INTID 1020
+/// (irq-gic-v3.c:84 `GIC_LINE_NR`), which is inside word 31.
+pub const fn gicd_spi_words(gicd_typer: u32) -> u32 {
+    gicd_typer & GICD_TYPER_ITLINES_MASK
+}
+
+/// The words of `GICD_ISACTIVERnE`: ESPI_range + 1 when `GICD_TYPER.ESPI`
+/// is set, none when not (arm-gic-v3.h:90-91; Zephyr intc_gicv3.c:566).
+pub const fn gicd_espi_words(gicd_typer: u32) -> u32 {
+    if gicd_typer & GICD_TYPER_ESPI == 0 {
+        return 0;
+    }
+    ((gicd_typer >> GICD_TYPER_ESPI_RANGE_SHIFT) & 0x1f) + 1
+}
+
+/// The extended PPI words after `GICR_ISACTIVER0`: `GICR_TYPER.PPInum` when
+/// it is 1 or 2, none otherwise (arm-gic-v3.h:138-146).
+pub const fn gicr_eppi_words(gicr_typer: u64) -> u32 {
+    match (gicr_typer >> GICR_TYPER_PPINUM_SHIFT) & 0x1f {
+        1 => 1,
+        2 => 2,
+        _ => 0,
+    }
+}
+
+/// `MPIDR_EL1`'s affinity as `GICR_TYPER[63:32]` holds it: Aff3 (MPIDR bits
+/// 39:32) in 31:24, Aff2:Aff1:Aff0 (bits 23:0) below (Linux
+/// irq-gic-v3.c:1084-1088 `__gic_populate_rdist`; Zephyr intc_gicv3.c:655-670
+/// `arm_gic_mpidr_to_affinity`).
+pub const fn mpidr_gicr_affinity(mpidr: u64) -> u32 {
+    ((((mpidr >> 32) & 0xff) << 24) | (mpidr & 0x00ff_ffff)) as u32
+}
+
+/// One region of redistributors, from the devicetree (the GIC node's second
+/// `reg` entry, and its `redistributor-stride` or 0).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GicrRegion {
+    pub base: usize,
+    pub size: usize,
+    /// The step from one redistributor to the next; 0: by `GICR_TYPER.VLPIS`
+    /// ([`GICR_FRAME_SIZE`], twice that with VLPIS set).
+    pub stride: usize,
+}
+
+/// What [`gicr_find`] found.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GicrFound {
+    /// The RD_base of the redistributor whose affinity is the one asked for.
+    pub rd_base: Option<usize>,
+    /// Its `GICR_TYPER`; when none matched, the last one read.
+    pub typer: u64,
+    /// How many `GICR_TYPER` were read.
+    pub frames: u32,
+}
+
+/// A 64-bit GIC register as two 32-bit reads, the low word first, as
+/// Zephyr's AArch32 build reads `GICR_TYPER` (intc_gicv3.c:689-700). The
+/// `Mmio` trait has no 64-bit access; `GICR_TYPER` is read-only, so the two
+/// halves cannot change between the reads.
+fn read64_halves<M: crate::mmio::Mmio>(m: &M, addr: usize) -> u64 {
+    let lo = m.read32(addr);
+    let hi = m.read32(addr + 4);
+    u64::from(lo) | (u64::from(hi) << 32)
+}
+
+/// The redistributor of the CPU with affinity `aff` ([`mpidr_gicr_affinity`]):
+/// walk the region from its base, read each `GICR_TYPER`, stop at the one
+/// whose `Affinity_Value` is `aff`, at `GICR_TYPER.Last`, or where the next
+/// RD_base and SGI_base would not fit in the region. Linux v6.18
+/// `gic_iterate_rdists` (irq-gic-v3.c:1033-1070) and Zephyr
+/// `arm_gic_iterate_rdists` (intc_gicv3.c:703-737) walk the same way; the
+/// step without a stride follows Linux, which also skips VLPI_base when
+/// VLPIS is set (Zephyr assumes it clear). Only `GICR_TYPER` is read.
+pub fn gicr_find<M: crate::mmio::Mmio>(m: &M, region: GicrRegion, aff: u32) -> GicrFound {
+    let mut out = GicrFound::default();
+    let end = region.base.saturating_add(region.size);
+    let mut rd = region.base;
+    while rd.saturating_add(GICR_FRAME_SIZE) <= end {
+        let typer = read64_halves(m, rd + GICR_TYPER);
+        out.typer = typer;
+        out.frames += 1;
+        if (typer >> GICR_TYPER_AFF_SHIFT) as u32 == aff {
+            out.rd_base = Some(rd);
+            break;
+        }
+        if typer & GICR_TYPER_LAST != 0 {
+            break;
+        }
+        let step = if region.stride != 0 {
+            region.stride
+        } else if typer & GICR_TYPER_VLPIS != 0 {
+            2 * GICR_FRAME_SIZE
+        } else {
+            GICR_FRAME_SIZE
+        };
+        rd = rd.saturating_add(step);
+    }
+    out
+}
+
+/// What [`gic_active_reset`] found and did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GicActiveReset {
+    /// `GICD_TYPER` as read.
+    pub gicd_typer: u32,
+    /// The affinity looked for, and the redistributor walk.
+    pub aff: u32,
+    pub rdist: GicrFound,
+    /// `GICR_ISACTIVER0` as found (SGIs and PPIs); 0 when no redistributor
+    /// matched.
+    pub isactiver0: u32,
+    /// The words scanned in each range: SPI ([`gicd_spi_words`]), extended
+    /// PPI ([`gicr_eppi_words`], 0 without a redistributor) and extended SPI
+    /// ([`gicd_espi_words`]). `GICR_ISACTIVER0` is one more when a
+    /// redistributor matched.
+    pub spi_words: u32,
+    pub eppi_words: u32,
+    pub espi_words: u32,
+    /// The `ICACTIVER` words written all ones: every word scanned.
+    pub words_cleared: u32,
+    /// The INTIDs that were Active, counted, and the first
+    /// [`GIC_ACTIVE_LISTED`] of them, the lowest first (0 past the count).
+    pub active: u32,
+    pub intids: [u32; GIC_ACTIVE_LISTED],
+    /// The INTIDs still Active when the `ISACTIVER` words are read again
+    /// after the clear: 0 unless the clear did not take.
+    pub still_active: u32,
+}
+
+/// One range of Active words: the first `ISACTIVER` word's address, the
+/// first `ICACTIVER` word's, the INTID of bit 0 of the first word, and the
+/// number of words.
+#[derive(Clone, Copy)]
+struct ActiveRange {
+    set: usize,
+    clear: usize,
+    intid: u32,
+    words: u32,
+}
+
+/// Deactivate every interrupt the kernel before us left Active, at the
+/// distributor and at this CPU's redistributor, before Zephyr's GICv3 init
+/// and before interrupts are enabled. An Active interrupt is not signalled
+/// again until it is deactivated; Zephyr's init writes `ICENABLER` and
+/// `ICPENDR` but never `ICACTIVER` (zephyr af17c0c8
+/// drivers/interrupt_controller/intc_gicv3.c:583-606, no `ICACTIVER`
+/// anywhere in the file), so an interrupt Zephyr uses (the timer PPI, the
+/// UART's SPI, the GPU's) would never be taken. A crash kexec can start the
+/// image inside a handler, after the priority drop and before the
+/// deactivation (Linux runs EOImode 1, [`gic_cpuif_reset`]).
+///
+/// Linux clears this at its own start: `GICD_ICACTIVERn` for every SPI word
+/// (irq-gic-common.c:110-118 `gic_dist_config`), `GICD_ICACTIVERnE` for
+/// every extended SPI word (irq-gic-v3.c:993-996), and `GICR_ICACTIVER0` and
+/// the extended PPI words of the CPU's own redistributor
+/// (irq-gic-common.c:121-134 `gic_cpu_config`, from irq-gic-v3.c:1345). This
+/// does the same, in the same way: every word all ones, also a word that
+/// read 0 (writing 1 for an INTID that is not Active changes nothing, and a
+/// word that turned Active between the read and the write is cleared too).
+///
+/// The scan comes first: each range's `ISACTIVER` words are read and the
+/// Active INTIDs recorded; then every `ICACTIVER` word is written; then the
+/// `ISACTIVER` words are read once more, and what is still Active counted.
+/// In INTID order: `GICR_ISACTIVER0` (0-31), the SPI words (32 up), the
+/// extended PPI words (1056 up), the extended SPI words (4096 up).
+///
+/// `gicd` is the distributor's base; `region` and `aff` find this CPU's
+/// redistributor ([`gicr_find`]). When none matches, the SGIs and PPIs are
+/// not touched (`rdist.rd_base` is `None`) and the distributor is still
+/// cleared. Nothing else is read or written.
+pub fn gic_active_reset<M: crate::mmio::Mmio>(m: &M, gicd: usize, region: GicrRegion, aff: u32) -> GicActiveReset {
+    let mut out = GicActiveReset { aff, ..GicActiveReset::default() };
+    out.gicd_typer = m.read32(gicd + GICD_TYPER);
+    out.rdist = gicr_find(m, region, aff);
+    out.spi_words = gicd_spi_words(out.gicd_typer);
+    out.espi_words = gicd_espi_words(out.gicd_typer);
+    let (rdist_words, sgi) = match out.rdist.rd_base {
+        Some(rd) => {
+            out.eppi_words = gicr_eppi_words(out.rdist.typer);
+            (1 + out.eppi_words, rd + GICR_SGI_BASE)
+        }
+        None => (0, 0),
+    };
+    // GICR word 0 and the extended PPI words are one run in the SGI frame;
+    // split so that the INTIDs come in order around the SPIs.
+    let ranges = [
+        ActiveRange { set: sgi + GICR_ISACTIVER0, clear: sgi + GICR_ICACTIVER0, intid: 0, words: rdist_words.min(1) },
+        ActiveRange {
+            set: gicd + GICD_ISACTIVER + 4,
+            clear: gicd + GICD_ICACTIVER + 4,
+            intid: 32,
+            words: out.spi_words,
+        },
+        ActiveRange {
+            set: sgi + GICR_ISACTIVER0 + 4,
+            clear: sgi + GICR_ICACTIVER0 + 4,
+            intid: EPPI_BASE_INTID,
+            words: rdist_words.saturating_sub(1),
+        },
+        ActiveRange {
+            set: gicd + GICD_ISACTIVERNE,
+            clear: gicd + GICD_ICACTIVERNE,
+            intid: ESPI_BASE_INTID,
+            words: out.espi_words,
+        },
+    ];
+    for (i, r) in ranges.iter().enumerate() {
+        for w in 0..r.words {
+            let v = m.read32(r.set + 4 * w as usize);
+            if i == 0 {
+                out.isactiver0 = v;
+            }
+            let mut bits = v;
+            while bits != 0 {
+                let b = bits.trailing_zeros();
+                bits &= bits - 1;
+                if (out.active as usize) < GIC_ACTIVE_LISTED {
+                    out.intids[out.active as usize] = r.intid + 32 * w + b;
+                }
+                out.active += 1;
+            }
+        }
+    }
+    for r in &ranges {
+        for w in 0..r.words {
+            m.write32(r.clear + 4 * w as usize, !0);
+            out.words_cleared += 1;
+        }
+    }
+    for r in &ranges {
+        for w in 0..r.words {
+            out.still_active += m.read32(r.set + 4 * w as usize).count_ones();
+        }
+    }
+    out
+}
+
+/// `MPIDR_EL1`.
+#[cfg(target_arch = "aarch64")]
+pub fn read_mpidr_el1() -> u64 {
+    let v: u64;
+    // SAFETY: reading MPIDR_EL1 at EL1 has no side effect.
+    unsafe {
+        core::arch::asm!("mrs {}, mpidr_el1", out(reg) v, options(nomem, nostack, preserves_flags));
+    }
+    v
 }
 
 /// The CPU's own `ICC_*_EL1` registers.
@@ -622,5 +937,328 @@ mod tests {
         assert_eq!(zephyr_keeps(UBOOT_HCR_AT_GO), zephyr_keeps(HCR_EL2_AT_ENTRY));
         // The EL2 MMU is on at U-Boot's go, unlike Linux's kexec.
         assert_eq!(UBOOT_SCTLR_EL2_AT_GO & 0x1005, 0x1005);
+    }
+
+    // ---- gic_active_reset ----------------------------------------------
+
+    use crate::mmio::Mmio;
+    use std::cell::RefCell;
+
+    // The T6's GIC node (Zephyr af17c0c8 dts/arm64/rockchip/rk3588.dtsi:51-60):
+    // GICD at 0xfe600000, one GICR region of 1 MiB at 0xfe680000, no stride.
+    const GICD: usize = 0xfe60_0000;
+    const GICR: GicrRegion = GicrRegion { base: 0xfe68_0000, size: 0x10_0000, stride: 0 };
+
+    /// One redistributor: its RD_base, `GICR_TYPER`, and the Active words of
+    /// its SGI frame (`GICR_ISACTIVER0` and two extended PPI words).
+    struct Frame {
+        rd: usize,
+        typer: u64,
+        active: [u32; 3],
+    }
+
+    /// A GICv3 as far as [`gic_active_reset`] may touch it. Any other
+    /// access panics: an SPI word past ITLinesNumber, an extended word the
+    /// TYPER registers do not announce, a frame that is not there, any
+    /// write but to an `ICACTIVER` word, any 8-bit access. Every write is
+    /// recorded. A bit in `sticky` stays Active through a clear.
+    struct Gic {
+        gicd_typer: u32,
+        spi: RefCell<[u32; 32]>,
+        espi: RefCell<[u32; 32]>,
+        frames: RefCell<Vec<Frame>>,
+        sticky_spi: [u32; 32],
+        writes: RefCell<Vec<(usize, u32)>>,
+    }
+
+    /// What an address of the model is.
+    enum Reg {
+        Typer,
+        Spi(usize, bool),
+        Espi(usize, bool),
+        FrameTyper(usize, u32),
+        Sgi(usize, usize, bool),
+    }
+
+    impl Gic {
+        fn new(gicd_typer: u32, frames: Vec<Frame>) -> Self {
+            Gic {
+                gicd_typer,
+                spi: RefCell::new([0; 32]),
+                espi: RefCell::new([0; 32]),
+                frames: RefCell::new(frames),
+                sticky_spi: [0; 32],
+                writes: RefCell::new(Vec::new()),
+            }
+        }
+
+        /// Four redistributors in a row, 128 KiB apart, affinity 0, 0x100,
+        /// 0x200, 0x300 (the RK3588's four Cortex-A55 have Aff1 0..3 in
+        /// MPIDR_EL1); the last has `Last` set.
+        fn four_cpus() -> Vec<Frame> {
+            (0..4u64)
+                .map(|i| Frame {
+                    rd: GICR.base + i as usize * GICR_FRAME_SIZE,
+                    typer: ((i << 8) << 32) | (i << 8) | if i == 3 { GICR_TYPER_LAST } else { 0 },
+                    active: [0; 3],
+                })
+                .collect()
+        }
+
+        fn decode(&self, a: usize) -> Reg {
+            let spi_words = gicd_spi_words(self.gicd_typer) as usize;
+            let espi_words = gicd_espi_words(self.gicd_typer) as usize;
+            if a == GICD + GICD_TYPER {
+                return Reg::Typer;
+            }
+            for (set, base) in [(true, GICD_ISACTIVER), (false, GICD_ICACTIVER)] {
+                if a >= GICD + base + 4 && a < GICD + base + 4 + 4 * spi_words {
+                    return Reg::Spi((a - GICD - base) / 4, set);
+                }
+            }
+            for (set, base) in [(true, GICD_ISACTIVERNE), (false, GICD_ICACTIVERNE)] {
+                if a >= GICD + base && a < GICD + base + 4 * espi_words {
+                    return Reg::Espi((a - GICD - base) / 4, set);
+                }
+            }
+            for (i, f) in self.frames.borrow().iter().enumerate() {
+                if a == f.rd + GICR_TYPER || a == f.rd + GICR_TYPER + 4 {
+                    return Reg::FrameTyper(i, if a == f.rd + GICR_TYPER { 0 } else { 32 });
+                }
+                let words = 1 + gicr_eppi_words(f.typer) as usize;
+                for (set, base) in [(true, GICR_ISACTIVER0), (false, GICR_ICACTIVER0)] {
+                    let w0 = f.rd + GICR_SGI_BASE + base;
+                    if a >= w0 && a < w0 + 4 * words {
+                        return Reg::Sgi(i, (a - w0) / 4, set);
+                    }
+                }
+            }
+            panic!("an access outside the registers the clear may touch: {a:#x}");
+        }
+    }
+
+    impl Mmio for Gic {
+        fn read32(&self, a: usize) -> u32 {
+            match self.decode(a) {
+                Reg::Typer => self.gicd_typer,
+                Reg::Spi(w, true) => self.spi.borrow()[w],
+                Reg::Espi(w, true) => self.espi.borrow()[w],
+                Reg::FrameTyper(i, sh) => (self.frames.borrow()[i].typer >> sh) as u32,
+                Reg::Sgi(i, w, true) => self.frames.borrow()[i].active[w],
+                // the ICACTIVER words read as ISACTIVER on the hardware; the
+                // clear has no reason to read them
+                _ => panic!("read of an ICACTIVER word {a:#x}"),
+            }
+        }
+
+        fn write32(&self, a: usize, v: u32) {
+            self.writes.borrow_mut().push((a, v));
+            match self.decode(a) {
+                Reg::Spi(w, false) => self.spi.borrow_mut()[w] &= !v | self.sticky_spi[w],
+                Reg::Espi(w, false) => self.espi.borrow_mut()[w] &= !v,
+                Reg::Sgi(i, w, false) => self.frames.borrow_mut()[i].active[w] &= !v,
+                _ => panic!("a write to {a:#x}, which is not an ICACTIVER word"),
+            }
+        }
+
+        fn read8(&self, a: usize) -> u8 {
+            panic!("8-bit read at {a:#x}")
+        }
+
+        fn write8(&self, a: usize, _: u8) {
+            panic!("8-bit write at {a:#x}")
+        }
+    }
+
+    // MPIDR_EL1 of the RK3588's CPU 0: MT (bit 24) and the RES1 bit 31 set,
+    // every affinity 0 (Linux's rk3588-base.dtsi gives cpu@0 reg 0x0).
+    const T6_CPU0_MPIDR: u64 = 0x8100_0000;
+
+    /// The `ICACTIVER` words of a scan, in the order the clear writes them:
+    /// `GICR_ICACTIVER0` of the frame at `rd`, then the SPI words 1..=n.
+    fn clear_words(rd: usize, spi_words: u32) -> Vec<(usize, u32)> {
+        let mut v = vec![(rd + GICR_SGI_BASE + GICR_ICACTIVER0, !0)];
+        v.extend((1..=spi_words as usize).map(|w| (GICD + GICD_ICACTIVER + 4 * w, !0)));
+        v
+    }
+
+    #[test]
+    fn the_word_counts_come_from_the_typer_registers() {
+        // ITLinesNumber: words 1..=n; 15 is 512 lines, INTIDs up to 511
+        assert_eq!(gicd_spi_words(0x0000_000f), 15);
+        assert_eq!(gicd_spi_words(0x0000_001f), 31);
+        assert_eq!(gicd_spi_words(0x0000_0000), 0);
+        // other GICD_TYPER fields do not count (IDbits 23:19, LPIS 17)
+        assert_eq!(gicd_spi_words(0x0078_000f | (1 << 17)), 15);
+        // ESPI clear: no extended SPI, whatever ESPI_range holds
+        assert_eq!(gicd_espi_words(0xf800_000f), 0);
+        assert_eq!(gicd_espi_words(GICD_TYPER_ESPI), 1);
+        assert_eq!(gicd_espi_words(GICD_TYPER_ESPI | (3 << 27)), 4);
+        assert_eq!(gicd_espi_words(GICD_TYPER_ESPI | (31 << 27)), 32);
+        // PPInum 1 and 2 only, as Linux's GICR_TYPER_NR_PPIS
+        let ppinum = |n: u64| n << GICR_TYPER_PPINUM_SHIFT;
+        let eppi: Vec<u32> = (0..4).map(|n| gicr_eppi_words(ppinum(n))).collect();
+        assert_eq!(eppi, [0, 1, 2, 0]);
+        // affinity: MT, U and RES1 are not affinity; Aff3 moves down to 31:24
+        assert_eq!(mpidr_gicr_affinity(T6_CPU0_MPIDR), 0);
+        assert_eq!(mpidr_gicr_affinity(0x8100_0300), 0x300);
+        assert_eq!(mpidr_gicr_affinity(0x0000_0012_c004_0302), 0x1204_0302);
+    }
+
+    #[test]
+    fn nothing_active_writes_every_word_and_finds_none() {
+        let gic = Gic::new(0x0000_000f, Gic::four_cpus());
+        let got = gic_active_reset(&gic, GICD, GICR, mpidr_gicr_affinity(T6_CPU0_MPIDR));
+        assert_eq!(got.rdist, GicrFound { rd_base: Some(GICR.base), typer: 0, frames: 1 });
+        assert_eq!((got.active, got.intids, got.still_active), (0, [0; GIC_ACTIVE_LISTED], 0));
+        assert_eq!((got.spi_words, got.eppi_words, got.espi_words), (15, 0, 0));
+        assert_eq!(got.words_cleared, 16);
+        assert_eq!(*gic.writes.borrow(), clear_words(GICR.base, 15));
+    }
+
+    #[test]
+    fn a_ppi_left_active_is_named_and_cleared() {
+        let mut frames = Gic::four_cpus();
+        // INTID 27 (a timer PPI) and SGI 1 on CPU 0; CPU 1's PPI 26 is not ours
+        frames[0].active[0] = (1 << 27) | (1 << 1);
+        frames[1].active[0] = 1 << 26;
+        let gic = Gic::new(0x0000_000f, frames);
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!(got.isactiver0, (1 << 27) | (1 << 1));
+        assert_eq!(got.active, 2);
+        assert_eq!(got.intids[..3], [1, 27, 0]);
+        assert_eq!(got.still_active, 0);
+        assert_eq!(gic.frames.borrow()[0].active[0], 0);
+        assert_eq!(gic.frames.borrow()[1].active[0], 1 << 26, "another CPU's redistributor");
+    }
+
+    #[test]
+    fn an_spi_active_in_the_last_word_is_named_and_cleared() {
+        let gic = Gic::new(0x0000_000f, Gic::four_cpus());
+        // word 15 bit 31: INTID 511, the last SPI of 512 lines; word 1 bit 0:
+        // INTID 32, the first
+        gic.spi.borrow_mut()[15] = 1 << 31;
+        gic.spi.borrow_mut()[1] = 1;
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!((got.active, got.intids[..3].to_vec()), (2, vec![32, 511, 0]));
+        assert_eq!(got.isactiver0, 0);
+        assert_eq!(*gic.spi.borrow(), [0; 32]);
+        assert_eq!(got.still_active, 0);
+        assert_eq!(*gic.writes.borrow(), clear_words(GICR.base, 15));
+    }
+
+    #[test]
+    fn more_active_than_listed_are_counted_and_the_lowest_listed() {
+        let gic = Gic::new(0x0000_0003, Gic::four_cpus());
+        gic.spi.borrow_mut()[3] = 0xffff_0000;
+        gic.frames.borrow_mut()[0].active[0] = 1 << 30;
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!(got.active, 17);
+        assert_eq!(got.intids, [30, 112, 113, 114, 115, 116, 117, 118]);
+        assert_eq!(got.still_active, 0);
+    }
+
+    #[test]
+    fn an_active_bit_the_clear_does_not_take_is_counted() {
+        let mut gic = Gic::new(0x0000_000f, Gic::four_cpus());
+        gic.sticky_spi[2] = 1 << 4;
+        gic.spi.borrow_mut()[2] = (1 << 4) | (1 << 5);
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!((got.active, got.intids[..2].to_vec()), (2, vec![68, 69]));
+        assert_eq!(got.still_active, 1);
+    }
+
+    #[test]
+    fn the_walk_stops_at_the_frame_with_the_affinity() {
+        let gic = Gic::new(0x0000_0001, Gic::four_cpus());
+        gic.frames.borrow_mut()[2].active[0] = 1 << 25;
+        gic.frames.borrow_mut()[0].active[0] = 1 << 25;
+        // CPU 2 (Aff1 2): the third frame, three GICR_TYPER read
+        let got = gic_active_reset(&gic, GICD, GICR, mpidr_gicr_affinity(0x8100_0200));
+        let rd = GICR.base + 2 * GICR_FRAME_SIZE;
+        assert_eq!(got.rdist, GicrFound { rd_base: Some(rd), typer: 0x200_0000_0200, frames: 3 });
+        assert_eq!((got.isactiver0, got.intids[0]), (1 << 25, 25));
+        assert_eq!(gic.frames.borrow()[0].active[0], 1 << 25, "CPU 0's frame is not touched");
+        assert_eq!(*gic.writes.borrow(), clear_words(rd, 1));
+    }
+
+    #[test]
+    fn the_walk_stops_at_last_and_then_clears_the_distributor_only() {
+        let mut frames = Gic::four_cpus();
+        // Last on the second frame: the two after it are never read (the
+        // model would answer for them; the count says they were not asked)
+        frames[1].typer |= GICR_TYPER_LAST;
+        let gic = Gic::new(0x0000_0002, frames);
+        gic.spi.borrow_mut()[2] = 1 << 7;
+        let got = gic_active_reset(&gic, GICD, GICR, 0x300);
+        assert_eq!(got.rdist.rd_base, None);
+        assert_eq!(got.rdist.frames, 2);
+        assert_eq!(got.rdist.typer, 0x100_0000_0100 | GICR_TYPER_LAST);
+        assert_eq!((got.isactiver0, got.eppi_words), (0, 0));
+        assert_eq!((got.active, got.intids[0], got.still_active), (1, 71, 0));
+        let spi_only: Vec<(usize, u32)> = (1..=2).map(|w| (GICD + GICD_ICACTIVER + 4 * w, !0)).collect();
+        assert_eq!(*gic.writes.borrow(), spi_only);
+        assert_eq!(got.words_cleared, 2);
+    }
+
+    #[test]
+    fn the_walk_steps_by_vlpis_and_by_the_stride_and_stays_in_the_region() {
+        // VLPIS: 256 KiB per redistributor (Linux skips VLPI_base too)
+        let frames: Vec<Frame> = (0..2u64)
+            .map(|i| Frame {
+                rd: GICR.base + i as usize * 2 * GICR_FRAME_SIZE,
+                typer: ((i << 8) << 32) | GICR_TYPER_VLPIS | if i == 1 { GICR_TYPER_LAST } else { 0 },
+                active: [0; 3],
+            })
+            .collect();
+        let gic = Gic::new(0, frames);
+        let got = gicr_find(&gic, GICR, 0x100);
+        assert_eq!((got.rd_base, got.frames), (Some(GICR.base + 2 * GICR_FRAME_SIZE), 2));
+        // a stride from the devicetree wins
+        let frames: Vec<Frame> = (0..2u64)
+            .map(|i| Frame { rd: GICR.base + i as usize * 0x8_0000, typer: (i << 8) << 32, active: [0; 3] })
+            .collect();
+        let gic = Gic::new(0, frames);
+        let got = gicr_find(&gic, GicrRegion { stride: 0x8_0000, ..GICR }, 0x100);
+        assert_eq!((got.rd_base, got.frames), (Some(GICR.base + 0x8_0000), 2));
+        // no Last and no match: the walk ends at the region's end, never past
+        // it (the model panics on a frame that is not there)
+        let frames: Vec<Frame> = (0..2u64)
+            .map(|i| Frame { rd: GICR.base + i as usize * GICR_FRAME_SIZE, typer: (i << 8) << 32, active: [0; 3] })
+            .collect();
+        let gic = Gic::new(0, frames);
+        let got = gicr_find(&gic, GicrRegion { size: 2 * GICR_FRAME_SIZE, ..GICR }, 0x300);
+        assert_eq!((got.rd_base, got.frames), (None, 2));
+        // a region smaller than one redistributor: nothing read
+        let got = gicr_find(&gic, GicrRegion { size: GICR_FRAME_SIZE - 1, ..GICR }, 0);
+        assert_eq!(got, GicrFound::default());
+    }
+
+    #[test]
+    fn the_extended_ranges_are_scanned_when_the_typer_registers_announce_them() {
+        let mut frames = Gic::four_cpus();
+        // PPInum 2: two extended PPI words; ESPI with ESPI_range 1: two words
+        frames[0].typer |= 2 << GICR_TYPER_PPINUM_SHIFT;
+        frames[0].active = [0, 1 << 3, 1];
+        let gic = Gic::new(GICD_TYPER_ESPI | (1 << 27) | 1, frames);
+        gic.espi.borrow_mut()[1] = 1 << 31;
+        gic.spi.borrow_mut()[1] = 1 << 2;
+        let got = gic_active_reset(&gic, GICD, GICR, 0);
+        assert_eq!((got.spi_words, got.eppi_words, got.espi_words), (1, 2, 2));
+        // INTID order: SPI 34, EPPI 1056 + 3, EPPI 1088, ESPI 4096 + 63
+        assert_eq!(got.intids[..5], [34, 1059, 1088, 4159, 0]);
+        assert_eq!((got.active, got.still_active, got.words_cleared), (4, 0, 1 + 1 + 2 + 2));
+        let sgi = GICR.base + GICR_SGI_BASE;
+        let want = vec![
+            (sgi + GICR_ICACTIVER0, !0),
+            (GICD + GICD_ICACTIVER + 4, !0),
+            (sgi + GICR_ICACTIVER0 + 4, !0),
+            (sgi + GICR_ICACTIVER0 + 8, !0),
+            (GICD + GICD_ICACTIVERNE, !0),
+            (GICD + GICD_ICACTIVERNE + 4, !0),
+        ];
+        assert_eq!(*gic.writes.borrow(), want);
+        assert_eq!(gic.frames.borrow()[0].active, [0; 3]);
+        assert_eq!(*gic.espi.borrow(), [0; 32]);
     }
 }

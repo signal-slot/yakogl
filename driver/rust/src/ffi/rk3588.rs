@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The NanoPC-T6 (RK3588) board glue's Rust side, for
 //! driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c: the WDT0 self-arm
-//! (soc::rk3588 gates, ip::dw_wdt), its feed, the GIC CPU interface reset and
-//! PSCI SYSTEM_RESET (aarch64), the feeder's decision
+//! (soc::rk3588 gates, ip::dw_wdt), its feed, the GIC CPU interface reset,
+//! the GIC Active state clear and PSCI SYSTEM_RESET (aarch64), the feeder's
+//! decision
 //! (board::nanopc_t6), and the early banner with the EL2 entry fix
 //! (board::nanopc_t6_early, aarch64). No device, no env: the shim calls these with
 //! its mappings and logs from what comes back. Declarations:
@@ -245,6 +246,100 @@ pub unsafe extern "C" fn yd_gic_cpuif_reset(out: *mut YdGicCpuifReset) {
     let r = crate::aarch64::gic_cpuif_reset(&mut regs);
     // SAFETY: the caller's contract.
     unsafe { out.write(r.into()) };
+}
+
+/// `flags` of [`YdGicActiveReset`].
+pub const YD_GIC_RDIST_FOUND: u32 = 1 << 0;
+
+/// `struct yd_gic_active_reset`: what [`crate::aarch64::gic_active_reset`]
+/// found and did.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdGicActiveReset {
+    /// This CPU's `GICR_TYPER`; the last one read when none matched.
+    pub gicr_typer: u64,
+    pub gicd_typer: u32,
+    /// `MPIDR_EL1`'s affinity as `GICR_TYPER[63:32]` holds it.
+    pub aff: u32,
+    /// The `GICR_TYPER` read in the walk.
+    pub frames: u32,
+    /// RD_base less the region's base, of the one found; 0 when none.
+    pub rd_offset: u32,
+    /// `GICR_ISACTIVER0` as found; 0 when no redistributor matched.
+    pub isactiver0: u32,
+    pub spi_words: u32,
+    pub eppi_words: u32,
+    pub espi_words: u32,
+    pub words_cleared: u32,
+    /// The INTIDs Active as found, and the first of them.
+    pub active: u32,
+    pub intids: [u32; crate::aarch64::GIC_ACTIVE_LISTED],
+    /// The INTIDs still Active after the clear.
+    pub still_active: u32,
+    /// [`YD_GIC_RDIST_FOUND`].
+    pub flags: u32,
+}
+
+const _: () = assert!(size_of::<YdGicActiveReset>() == 88);
+const _: () = assert!(offset_of!(YdGicActiveReset, gicd_typer) == 8);
+const _: () = assert!(offset_of!(YdGicActiveReset, isactiver0) == 24);
+const _: () = assert!(offset_of!(YdGicActiveReset, active) == 44);
+const _: () = assert!(offset_of!(YdGicActiveReset, intids) == 48);
+const _: () = assert!(offset_of!(YdGicActiveReset, still_active) == 80);
+const _: () = assert!(offset_of!(YdGicActiveReset, flags) == 84);
+
+impl YdGicActiveReset {
+    /// The record of `r`; `gicr` is the region base `rd_offset` counts from.
+    pub fn from_reset(r: crate::aarch64::GicActiveReset, gicr: usize) -> Self {
+        let (flags, rd_offset) = match r.rdist.rd_base {
+            Some(rd) => (YD_GIC_RDIST_FOUND, (rd - gicr) as u32),
+            None => (0, 0),
+        };
+        YdGicActiveReset {
+            gicr_typer: r.rdist.typer,
+            gicd_typer: r.gicd_typer,
+            aff: r.aff,
+            frames: r.rdist.frames,
+            rd_offset,
+            isactiver0: r.isactiver0,
+            spi_words: r.spi_words,
+            eppi_words: r.eppi_words,
+            espi_words: r.espi_words,
+            words_cleared: r.words_cleared,
+            active: r.active,
+            intids: r.intids,
+            still_active: r.still_active,
+            flags,
+        }
+    }
+}
+
+/// Every interrupt left Active at the distributor `gicd` and at this CPU's
+/// redistributor deactivated ([`crate::aarch64::gic_active_reset`]; the
+/// redistributor by `MPIDR_EL1` in the region `gicr`, `gicr_size`,
+/// `gicr_stride`); what it found and did in `*out`.
+///
+/// # Safety
+/// At EL1, on the boot CPU, before Zephyr's GICv3 init and before interrupts
+/// are enabled; `gicd` (64 KiB) and the region are the GIC node's `reg`
+/// entries and mapped as device memory; `out` is valid for writes.
+#[cfg(target_arch = "aarch64")]
+#[no_mangle]
+pub unsafe extern "C" fn yd_gic_active_reset(
+    gicd: usize,
+    gicr: usize,
+    gicr_size: usize,
+    gicr_stride: usize,
+    out: *mut YdGicActiveReset,
+) {
+    // SAFETY: the caller's contract: every address gic_active_reset reaches
+    // is inside the two mapped ranges (gicr_find stays in the region).
+    let hw = unsafe { Hw::new() };
+    let aff = crate::aarch64::mpidr_gicr_affinity(crate::aarch64::read_mpidr_el1());
+    let region = crate::aarch64::GicrRegion { base: gicr, size: gicr_size, stride: gicr_stride };
+    let r = crate::aarch64::gic_active_reset(&hw, gicd, region, aff);
+    // SAFETY: the caller's contract.
+    unsafe { out.write(YdGicActiveReset::from_reset(r, gicr)) };
 }
 
 /// PSCI `SYSTEM_RESET` over SMC. Returns only when the firmware did not
@@ -3142,5 +3237,42 @@ mod gic_tests {
         // SRE clear: nothing reset, no flag
         let off = GicCpuifReset { sre: 0x6, ..GicCpuifReset::default() };
         assert_eq!(YdGicCpuifReset::from(off), YdGicCpuifReset { sre: 0x6, ..YdGicCpuifReset::default() });
+    }
+
+    #[test]
+    fn the_c_header_has_the_active_record() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        assert!(H.contains("#define YD_GIC_RDIST_FOUND   (1u << 0)"));
+        assert!(H.contains(&format!("#define YD_GIC_ACTIVE_LISTED {}", crate::aarch64::GIC_ACTIVE_LISTED)));
+        assert!(H.contains("_Static_assert(sizeof(struct yd_gic_active_reset) == 88,"));
+        assert!(H.contains("_Static_assert(offsetof(struct yd_gic_active_reset, intids) == 48,"));
+        assert!(H.contains("_Static_assert(offsetof(struct yd_gic_active_reset, flags) == 84,"));
+    }
+
+    #[test]
+    fn the_active_record_carries_what_was_found() {
+        use crate::aarch64::{GicActiveReset, GicrFound};
+        let gicr = 0xfe68_0000;
+        let r = GicActiveReset {
+            gicd_typer: 0xf,
+            aff: 0x200,
+            rdist: GicrFound { rd_base: Some(gicr + 0x4_0000), typer: 0x200_0000_0200, frames: 3 },
+            isactiver0: 1 << 27,
+            spi_words: 15,
+            eppi_words: 0,
+            espi_words: 0,
+            words_cleared: 16,
+            active: 2,
+            intids: [27, 511, 0, 0, 0, 0, 0, 0],
+            still_active: 0,
+        };
+        let c = YdGicActiveReset::from_reset(r, gicr);
+        assert_eq!((c.flags, c.rd_offset, c.frames, c.gicr_typer), (YD_GIC_RDIST_FOUND, 0x4_0000, 3, 0x200_0000_0200));
+        assert_eq!((c.gicd_typer, c.aff, c.isactiver0, c.spi_words, c.words_cleared), (0xf, 0x200, 1 << 27, 15, 16));
+        assert_eq!((c.active, c.intids, c.still_active), (2, [27, 511, 0, 0, 0, 0, 0, 0], 0));
+        // no redistributor: no flag, no offset
+        let none = GicActiveReset { rdist: GicrFound { rd_base: None, typer: 0x10, frames: 4 }, ..r };
+        let c = YdGicActiveReset::from_reset(none, gicr);
+        assert_eq!((c.flags, c.rd_offset, c.frames, c.gicr_typer), (0, 0, 4, 0x10));
     }
 }
