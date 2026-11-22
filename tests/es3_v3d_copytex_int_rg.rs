@@ -523,9 +523,9 @@ fn destinations(i: usize) -> Vec<Row> {
 
 fn run_copies(api: Api, kind: Kind) {
     let _g = context();
-    for i in 0..ROWS.len() {
+    for (i, src) in ROWS.iter().enumerate() {
         for dst in destinations(i) {
-            expect_copy(&ROWS[i], kind, api, &dst);
+            expect_copy(src, kind, api, &dst);
         }
     }
 }

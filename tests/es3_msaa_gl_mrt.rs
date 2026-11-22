@@ -50,8 +50,11 @@ unsafe extern "C" fn b_ok() -> i32 {
     0
 }
 
-/// The 4x targets a clear touched since the last `finish`: (`gpu`, w, h, colour).
-static PENDING: Mutex<Vec<(u64, u32, u32, [u8; 4])>> = Mutex::new(Vec::new());
+/// A 4x target a clear touched: (`gpu`, w, h, colour).
+type Cleared = (u64, u32, u32, [u8; 4]);
+
+/// The 4x targets a clear touched since the last `finish`.
+static PENDING: Mutex<Vec<Cleared>> = Mutex::new(Vec::new());
 
 fn bytes(c: [f32; 4]) -> [u8; 4] {
     c.map(|v| (v * 255.0 + 0.5) as u8)

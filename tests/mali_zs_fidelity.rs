@@ -292,7 +292,7 @@ fn draw_zsd() -> DepthStencil {
     }
     let d: Vec<DepthStencil> = frames(from).into_iter().flat_map(|f| f.draws).collect();
     assert_eq!(d.len(), 1, "one draw, one descriptor");
-    d[0].clone()
+    d[0]
 }
 
 #[test]

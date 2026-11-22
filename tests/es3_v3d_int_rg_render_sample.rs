@@ -679,7 +679,7 @@ fn check_state(r: &Row, kind: Kind, mip: bool, p: &Pair) {
         let m1 = texture::image_offset(b, &l, 1, 0).unwrap();
         assert_eq!(m1, l.slices[1].offset, "{what}: level 1 offset");
         assert_ne!(m1, l0, "{what}: level 1 is another image");
-        assert_eq!(l.slices[1].offset > 0, true, "{what}");
+        assert!(l.slices[1].offset > 0, "{what}");
     }
 
     /* the right image: the render's target is the bound storage, at the

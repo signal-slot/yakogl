@@ -145,7 +145,7 @@ fn rs_words_match_the_recorded_4x_frame() {
 
 #[test]
 fn store_slot_reuse_generation_and_eviction_with_gc_sizes() {
-    assert!(MSAA_SLOTS >= 2, "(e)2: at least two slots");
+    const { assert!(MSAA_SLOTS >= 2, "(e)2: at least two slots") };
     let a = sample_size(64, 64, 4);
     let b = sample_size(128, 128, 4);
     let c = sample_size(64, 64, 2);
