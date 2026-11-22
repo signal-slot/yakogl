@@ -261,7 +261,7 @@ fn tlb_clear_words_keep_the_missing_channels_today() {
 /// channel the format has is a plain TLB clear (RGB8 under glColorMask(1,1,1,0),
 /// R8 under (1,0,0,0)); one that misses a present channel is a quad.
 #[test]
-#[ignore = "colour_needs_quad (state.rs:94) tests the four GL channels; int_clear_channels (draw.rs:2977) widens the mask for R/RG integer textures only, so R8, RG8, RGB8 and float formats still take the quad for a mask of their present channels (v3d-fbo-render.md D4)"]
+#[ignore = "colour_needs_quad (state.rs:94) tests the four GL channels; int_clear_channels (draw.rs:2977) knows the format channels of R/RG integer textures only, so R8, RG8, RGB8 and float formats still take the quad for a mask of their present channels (v3d-fbo-render.md D4)"]
 fn clear_needs_a_quad_only_for_a_present_channel_masked() {
     for f in FORMATS {
         for mask in 1..16u8 {
