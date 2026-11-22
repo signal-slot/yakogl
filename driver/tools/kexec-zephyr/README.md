@@ -62,7 +62,16 @@ has a root shell on it) and `T6_RECORD_DIR` (where the run's record goes:
 the hand, the UART, `dmesg -w`
 up to the jump, the new Linux's `dmesg`, and `GLB_RST_ST`, `GLB_RST_CON`,
 WDT0 `CR` and `TORR` before and after). It reads the board's state again
-under the board lock. By default it opens `/dev/watchdog0` for the jump, so
+under the board lock. Then, before it copies anything, it proves the UART
+path: a temporary capture reads `T6_UART`, the board writes one marker line
+with a per-run nonce to its serial console (the `console=ttyS` entry of its
+kernel command line), and the capture must read that line back within 5 s.
+Otherwise it refuses (exit 3, no record directory) and names the bytes the
+capture read, whether the board's write succeeded, and the wire from the
+debug header to the host's adapter as the first thing to check (2026-11-22:
+a jump whose `uart.log` stayed at 0 bytes). The host never writes to
+`T6_UART`. The record says the marker was read back; the marker line
+itself is not in `uart.log`. By default it opens `/dev/watchdog0` for the jump, so
 Linux's dw_wdt covers the image's pre-arm window (the script's header says
 why that holds), and it jumps only after the board has read `WDT_CR.WDT_EN`
 back as 1 after the open: the record carries that line ("linux-wdt: WDT_EN
