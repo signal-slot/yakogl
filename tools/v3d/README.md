@@ -585,6 +585,7 @@ writes the same bytes.
 | `tools/shaders/glmark2_counts_71.tsv` | every vertex/fragment pair of the glmark2-es2 corpus (GPL text, generated, never committed) | key (`<vs file>+<fs file>`, as `tests/glmark2_corpus.rs` names a pair), vs instructions, fs instructions, vs threads, fs threads, reason (`-` for the numbers when refused) | the glmark2 7.1 corpus test (`tests/shaderc71_glmark2_corpus.rs`, being added) |
 | `tools/shaders/deqp_es2_lib_counts_71.tsv` | the `expect pass` / `build_successful` version-100 programs of the dEQP-GLES2 `data/gles2/shaders/*.test` library (VK-GL-CTS 93bca01) | case (`file.group.case[_vertex\|_fragment]`), stage, compiled, reason, instructions, threads, uniforms | the dEQP-GLES2 library 7.1 test (`tests/shaderc71_es2_corpus.rs`, being added) |
 | `tools/shaders/deqp_es2_gen_counts_71.tsv` | every program a host dEQP-GLES2 run harvested (the C++-generated shaders that are not in the `.test` files); the pair dEQP linked, no stub | id (sha256 of the program, never the text), stage, compiled, reason, instructions, threads, uniforms | the harvested-programs 7.1 test (`tests/shaderc71_deqp_programs.rs`, being added) |
+| `tools/shaders/deqp_repro_counts_71.tsv` | the dEQP-GLES2 shader constants of `tests/deqp_repro_shaders.rs` and `tests/mali_deqp_*.rs` (a lone stage run with a stub partner); counts only, no shader text | case (`<file>.<constant>`), stage, compiled, reason, instructions, threads, uniforms | none yet (a later count comparison) |
 
 Regenerate, from the repository root:
 
@@ -611,9 +612,13 @@ tools/cts/deqp-es2-programs.sh [--cts DIR] [--out DIR] [--jobs N] [--chunk N] \
   [--stage all|build|run|extract]
 V3D_SHC=<v3d_shc> tools/cts/deqp-es2-programs-ref71.sh HARVEST_DIR [--out FILE] [--jobs N]
 #   default --out tools/shaders/deqp_es2_gen_counts_71.tsv
+
+# dEQP-GLES2 in-tree repro shaders (tests/deqp_repro_shaders.rs, tests/mali_deqp_*.rs)
+V3D_SHC=<v3d_shc> tools/cts/deqp-repro-ref71.sh [--out FILE]
+#   default --out tools/shaders/deqp_repro_counts_71.tsv
 ```
 
-The four scripts read only `V3D_SHC` (not `MESA_V3D_TREE`): point it at the
+The scripts read only `V3D_SHC` (not `MESA_V3D_TREE`): point it at the
 `v3d_shc` of the Mesa 26.2.1 tree built as above. The harvest directory of
 the last table is what the gate will call `DEQP_ES2_PROGRAMS` once its test
 and `tools/cts/deps.toml` entry land; the script takes it as the
