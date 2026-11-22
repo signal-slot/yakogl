@@ -17,7 +17,7 @@ bad() { echo "FAIL: $1"; fail=1; }
 tree="$tmp/tree"
 mkdir -p "$tree/tools/cts" "$tree/driver/tools/kexec-zephyr" "$tree/a" "$tree/b" "$tree/third_party/x" || exit 1
 cat > "$tree/tools/check.sh" <<'GATE'
-scope_of_path() {
+path_scopes() {
   case "$1" in
   tools/map_selftest.sh) echo tools ;;
   esac
@@ -70,13 +70,13 @@ fi
 
 # The path-to-scope map is found by its name: a gate without exactly one is
 # refused, never read as if every path in it were run.
-printf 'scope_of_path() {\n  :\n}\n' >> "$tree/tools/check.sh"
+printf 'path_scopes() {\n  :\n}\n' >> "$tree/tools/check.sh"
 if (cd "$tree" && python3 -I "$tool" > "$tmp/out" 2> "$tmp/err"); then
-  bad "a gate with two scope_of_path() is accepted"
-elif grep -q 'has 2 scope_of_path() functions, not 1' "$tmp/err" && [ ! -s "$tmp/out" ]; then
-  ok "a gate with two scope_of_path() is refused"
+  bad "a gate with two path_scopes() is accepted"
+elif grep -q 'has 2 path_scopes() functions, not 1' "$tmp/err" && [ ! -s "$tmp/out" ]; then
+  ok "a gate with two path_scopes() is refused"
 else
-  bad "a gate with two scope_of_path() is refused without saying so"
+  bad "a gate with two path_scopes() is refused without saying so"
   cat "$tmp/err"
 fi
 

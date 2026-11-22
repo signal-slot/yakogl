@@ -180,8 +180,34 @@ BUILD_ONLY_CONFIGS=(
 # others name the rows below that carry them in a `scope` line. The map is
 # conservative on purpose: a shared layer, a generated file's generator, or
 # a path it has never seen selects everything, and a wrong `skip` here is
-# what the full run in CI exists to catch.
+# what the full run in CI exists to catch. A path the tree key scan reads
+# reaches its row as well (scope treekey, tree_key_scope below).
 scope_of_path() {
+  local s
+  s=$(path_scopes "$1")
+  [ "$s" != all ] && tree_key_scope "$1" && s="$s treekey"
+  echo "$s"
+}
+# The Rust sources the tree key scan reads (tools/check_tree_key_scan.py, the
+# row "tree key: every path a test names is under TEST_TREE_PATHS"). The row
+# passes this list to the scan, and tree_key_scope reads it, so the files
+# scanned and the paths that reach the row are one list. A `*` is a shell
+# pattern here and one path component for the scan.
+TREE_KEY_SCAN_DIRS=(src tests tools/yakogl-tools/src tools/precompile/src driver/rust/src
+  'driver/samples/zephyr/*/check/src')
+# 0 when a change of <path> can make the scan fail: a .rs file it reads, or
+# the scan itself. TEST_TREE_PATHS is in this script, which reaches every row.
+tree_key_scope() {
+  local d
+  [ "$1" = tools/check_tree_key_scan.py ] && return 0
+  for d in "${TREE_KEY_SCAN_DIRS[@]}"; do
+    # shellcheck disable=SC2254  # $d is a pattern on purpose
+    case "$1" in $d/*.rs) return 0 ;; esac
+  done
+  return 1
+}
+# The scopes of <path> in the map, before the tree key scan's.
+path_scopes() {
   case "$1" in
   # Its section M holds the block tools/cts/mali-deqp-tally.py generates from
   # the slices under tools/cts/log/; the row that compares the two (ctsdoc) is
@@ -1077,8 +1103,8 @@ test_env_key() {
 # workspace) and measured: every test binary of every test row of this
 # script (580 binaries, 2026-10-12) run under strace opened, inside the
 # checkout, these paths and its own scratch under build/test-tmp, and
-# nothing else. tools/check_testcache_selftest.sh fails when a path literal
-# in test code names a file outside them.
+# nothing else. The tree key row (tree_key_scan below) fails when a path
+# literal in test code names a file outside them.
 TEST_TREE_PATHS=(
   tools/shaders                                  # the corpus tests and the source lists
   tests/fixtures tests/reference                 # pinned results; the triangle check's tables
@@ -1107,6 +1133,12 @@ TEST_TREE_PATHS=(
   driver/docs/rpi5-v3d71-facts.md docs/notes/pre-study-rpi5.md
   src/v3d/zskeep71.rs src/v3d/backend.rs src/v3d/ffi.rs src/shaderc/online/v3d/select.rs
 )
+# tree_key_scan: the row that checks the list above against the test code
+# (tools/check_tree_key_scan.py over TREE_KEY_SCAN_DIRS).
+TREE_KEY_ROW="tools   tree key: every path a test names is under TEST_TREE_PATHS"
+tree_key_scan() {
+  python3 -I tools/check_tree_key_scan.py --keyed "${TEST_TREE_PATHS[@]}" --scan "${TREE_KEY_SCAN_DIRS[@]}"
+}
 # The hash of those files (their blob ids; a file changed or added in the
 # working tree by its content). The library's own unit tests (src/lib.rs)
 # also read src/ and tests/ (src/test_rules.rs). Outside git, the glmark2
@@ -1508,8 +1540,13 @@ if [ "${1-}" = "--test-keys" ]; then
   echo "tree $(test_tree_key other)"
   echo "lib-tree $(test_tree_key lib)"
   echo "names $(test_env_names | tr '\n' ' ')"
-  echo "paths ${TEST_TREE_PATHS[*]}"
   exit 0
+fi
+# --tree-key-scan: the tree key row alone, and the summary
+# (tools/check_testcache_selftest.sh).
+if [ "${1-}" = "--tree-key-scan" ]; then
+  step "$TREE_KEY_ROW" tree_key_scan
+  summary
 fi
 if [ "${1-}" = "--nextest-verdict" ]; then
   nextest_verdict "${2:?usage: tools/check.sh --nextest-verdict <nextest.log> <binary id> <tests selected>}" "${3:?binary id}" "${4:?tests selected}"
@@ -4262,6 +4299,15 @@ step "tools   check.sh test cache: record, skip, run again on a new key" tools/c
 # The row pool (--jobs): the same log with one job and four, and a lane
 # that orders a writer before its reader.
 step "tools   check.sh --jobs: the log in order, the counts, a lane" tools/check_pool_selftest.sh
+# The tree key scan (tree_key_scan): every path a literal in the test code
+# names is under TEST_TREE_PATHS. A file a test reads outside them leaves the
+# test cache blind to it. A file scan of a few seconds, with no build. Every
+# .rs file the scan reads reaches this row (scope treekey, TREE_KEY_SCAN_DIRS),
+# so a pull request that only adds a test runs it (inside the test cache
+# self-test, scope tools, it did not, and main turned red: #7819). The
+# self-test keeps the control: a probe read outside the key is named.
+scope treekey local
+step "$TREE_KEY_ROW" tree_key_scan
 # The PowerVR backend's view of Mesa's csbgen packers (src/pvr/csbgen.rs and
 # the C wrappers build.rs compiles, driver/src/pvr/generated/csbgen_wrap.c)
 # is bindgen's output over driver/compat/pvr_csbgen_rs.h, committed so that no

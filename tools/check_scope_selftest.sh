@@ -55,22 +55,22 @@ want tools/land.sh all
 want third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml all
 want some/new/place.rs all
 # one GPU
-want src/pvr/draw.rs pvr
-want src/shaderc/online/powervr/sched.rs pvr
+want src/pvr/draw.rs "pvr treekey"
+want src/shaderc/online/powervr/sched.rs "pvr treekey"
 want driver/src/pvr_vdm_ppp_gen.c pvr
 want driver/src/fw/pvr_fw_blob.h pvr
-want tests/reference/blobs.rs pvr
-want src/vivante/backend.rs vivante
-want src/shaderc/online/vivante/isa.rs vivante
+want tests/reference/blobs.rs "pvr treekey"
+want src/vivante/backend.rs "vivante treekey"
+want src/shaderc/online/vivante/isa.rs "vivante treekey"
 want tools/hal-nxp/gen_regs.py vivante
-want tests/gc_mipmap_gpu.rs vivante
-want src/v3d/job.rs v3d
-want src/shaderc/online/v3d/prepare.rs "v3d v3d71"
-want src/shaderc/online/v3d_abi.rs v3d
+want tests/gc_mipmap_gpu.rs "vivante treekey"
+want src/v3d/job.rs "v3d treekey"
+want src/shaderc/online/v3d/prepare.rs "v3d v3d71 treekey"
+want src/shaderc/online/v3d_abi.rs "v3d treekey"
 # V3D 7.1 (Raspberry Pi 5): its files and the shared V3D files reach the
 # v3d71 row too; the 4.2-only paths do not
-want src/shaderc/online/v3d/isa71.rs "v3d v3d71"
-want src/shaderc/online/v3d/golden71.rs "v3d v3d71"
+want src/shaderc/online/v3d/isa71.rs "v3d v3d71 treekey"
+want src/shaderc/online/v3d/golden71.rs "v3d v3d71 treekey"
 want driver/src/v3d/generated/v3d_packet_v71_pack.h "v3d v3d71"
 want driver/src/v3d/v3d_hw.c "v3d v3d71"
 want tools/v3d/check71.sh "v3d v3d71"
@@ -86,15 +86,15 @@ want tools/mali/route.sh mali
 want tools/mali/route_cells.py mali
 # glsl2pan.py and gl_ref.py import es100.py: both rows
 want tools/vivante/es100.py "vivante mali"
-want tests/v3d_cube_noseamless.rs v3d
-want tests/depth_resolve_v3d.rs v3d
+want tests/v3d_cube_noseamless.rs "v3d treekey"
+want tests/depth_resolve_v3d.rs "v3d treekey"
 # gl_FragDepth's host tests (#340): each GPU's fragdepth rows only, and the
 # cases file both GPUs'
-want tests/es3_fragdepth_v3d.rs v3d
-want tests/es3_fragdepth_v3d_state.rs v3d
-want tests/es3_fragdepth_v3d_sim.rs v3d
-want tests/es3_fragdepth_gc.rs vivante
-want tests/es3_fragdepth_cases.rs "vivante v3d"
+want tests/es3_fragdepth_v3d.rs "v3d treekey"
+want tests/es3_fragdepth_v3d_state.rs "v3d treekey"
+want tests/es3_fragdepth_v3d_sim.rs "v3d treekey"
+want tests/es3_fragdepth_gc.rs "vivante treekey"
+want tests/es3_fragdepth_cases.rs "vivante v3d treekey"
 # plan #360's float colour render-target tests: a GPU's own file reaches that
 # GPU's rows (as the fragdepth files do); the shared float tests (es3_color_
 # buffer_float, es3_half_float_getters, es3_readpixels_half_float,
@@ -102,34 +102,34 @@ want tests/es3_fragdepth_cases.rs "vivante v3d"
 # es3_half_float_clearbuffer, es3_float32_rt_off, es3_float_target,
 # es3_cbf_report_es2, es3_float_pack) map to `tests` and run in every GPU's
 # suite row, like every other tests/ file
-want tests/es3_half_float_rt_v3d.rs v3d
-want tests/es3_v3d_f32_rt_key.rs v3d
-want tests/es3_v3d_clear_float_words.rs v3d
-want tests/es3_color_buffer_float_v3d.rs v3d
-want tests/es3_half_float_rt_pvr.rs pvr
-want tests/es3_half_float_rt_gc.rs vivante
-want tests/es3_half_float_mrt_gc.rs vivante
-want src/mali/backend.rs mali
-want tests/mali_blend_states.rs mali
-want tests/mali_vcube_magswitch.rs mali
+want tests/es3_half_float_rt_v3d.rs "v3d treekey"
+want tests/es3_v3d_f32_rt_key.rs "v3d treekey"
+want tests/es3_v3d_clear_float_words.rs "v3d treekey"
+want tests/es3_color_buffer_float_v3d.rs "v3d treekey"
+want tests/es3_half_float_rt_pvr.rs "pvr treekey"
+want tests/es3_half_float_rt_gc.rs "vivante treekey"
+want tests/es3_half_float_mrt_gc.rs "vivante treekey"
+want src/mali/backend.rs "mali treekey"
+want tests/mali_blend_states.rs "mali treekey"
+want tests/mali_vcube_magswitch.rs "mali treekey"
 # plan #377's dEQP byte-compare tests, their shared module, and the
 # deqp_<family>_* references they read
-want tests/mali_deqp_intval.rs mali
-want tests/mali_deqp_colourpair.rs mali
-want tests/mali_ref_selftest.rs mali
-want tests/mali_ref/mod.rs mali
+want tests/mali_deqp_intval.rs "mali treekey"
+want tests/mali_deqp_colourpair.rs "mali treekey"
+want tests/mali_ref_selftest.rs "mali treekey"
+want tests/mali_ref/mod.rs "mali treekey"
 want tools/mali/testdata/deqp_colourpair_ck_lane.expect.json mali
-want src/mali/genxml/v10.rs mali
-want src/shaderc/online/mali/mod.rs mali
+want src/mali/genxml/v10.rs "mali treekey"
+want src/shaderc/online/mali/mod.rs "mali treekey"
 want tools/mali/gen_pack_rs.py mali
-want src/shaderc/online/mali/isa/v10.rs mali
+want src/shaderc/online/mali/isa/v10.rs "mali treekey"
 want tools/mali/isa-ref/board-2026-10-18.txt mali
 # the rest
 want driver/tools/pvrlab/gl_test.c gltest
 want tools/precompile/prove.sh precompile
 want tools/shaders/precompiled.list precompile
 want tests/fixtures/precompile_counts.txt "precompile tests"
-want tools/yakogl-tools/src/main.rs toolscrate
+want tools/yakogl-tools/src/main.rs "toolscrate treekey"
 want tools/mali/panthor/src/dev.rs mali
 want tools/osal/linux_heap_check.c osal
 want driver/samples/zephyr/gl_test/src/main_rpi4.c samples
@@ -149,7 +149,7 @@ want tools/probes/stm32mp257f_dk/mp2_hello/src/main.c samples
 want tools/vivante/gate_st.sh vivante
 want tools/vivante/gate_st_selftest.sh vivante
 want tools/host-replay/common.sh samples
-want driver/rust/src/lib.rs drivers
+want driver/rust/src/lib.rs "drivers treekey"
 want driver/CMakeLists.txt drivers
 want tools/cts/deqp-uart-tally.py tools
 want tools/check_selftests.py tools
@@ -258,7 +258,7 @@ expect "mali: no V3D row" '^skip  clippy  host-test,gpu-v3d,shaderc-online,no-sh
 # a dEQP byte-compare test: its row (and the rest of the mali scope), nothing else
 out=$(plan tests/mali_deqp_intval.rs)
 expect "mali: the deqp byte-compare row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
-expect "mali: a deqp test change, the mali rows only" '^check.sh: .*\(--changed HEAD, scopes: mali \)' "$out"
+expect "mali: a deqp test change, the mali rows and the tree key row only" '^check.sh: .*\(--changed HEAD, scopes: mali treekey \)' "$out"
 # A harness script runs in the row that calls it: tools/hostharness/glmark2/run.sh
 # is run by the glmark2 corpus row (a change there once passed a gate that
 # skipped the only row able to fail on it).
@@ -452,11 +452,11 @@ expect "cbf es2: the V3D report row" '^plan  test    host-test,gpu-v3d,shaderc-o
 # A change confined to tests/ (scope tests): the test rows of the targets it
 # reaches, and what every change reaches; no image, driver, sample, aarch64,
 # table or tool row (tools/check_tests_reach.py names the targets).
-want tests/es3_tf_api.rs tests
-want tests/common/mod.rs tests
-want tests/usc_exec/mod.rs tests
+want tests/es3_tf_api.rs "tests treekey"
+want tests/common/mod.rs "tests treekey"
+want tests/usc_exec/mod.rs "tests treekey"
 want tests/fixtures/v3d_texref.txt tests
-want tests/redaction_scan.rs tests
+want tests/redaction_scan.rs "tests treekey"
 want tools/release/redaction-scan.allow tests
 tests_plan=$(plan tests/es3_tf_api.rs)
 expect "tests: the summary" 'scopes: tests' "$tests_plan"
@@ -489,6 +489,22 @@ expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/
 # the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
 expect "tests: glmark2_corpus selects its corpus row" '^plan  test    glmark2 corpus' "$(plan tests/glmark2_corpus.rs)"
 expect "tests: gc_kick_diff selects its knob row" '^plan  test    .*tests/gc_kick_diff.rs' "$(plan tests/gc_kick_diff.rs)"
+# The tree key row (scope treekey): every .rs file the scan reads reaches it,
+# a test file with a GPU's scope too, and so does the scan itself; a document
+# and a tools/cts script do not (TREE_KEY_SCAN_DIRS in tools/check.sh).
+want tools/check_tree_key_scan.py "tools treekey"
+want driver/samples/zephyr/gl_test/check/src/main.rs "samples treekey"
+want tools/precompile/src/main.rs "precompile treekey"
+want driver/samples/zephyr/gl_test/src/main_am62p.c samples
+want src/pvr/ffi_layout_check.c pvr
+treekey='^plan  tools   tree key: every path a test names is under TEST_TREE_PATHS$'
+for p in tests/treekey_probe.rs tests/mali_treekey_probe.rs src/pvr/draw.rs driver/rust/src/treekey_probe.rs \
+  tools/check_tree_key_scan.py; do
+  expect "tree key: $p reaches its row" "$treekey" "$(plan "$p")"
+done
+for p in docs/notes/x.md tools/cts/deqp-uart-tally.py; do
+  expect "tree key: $p does not reach its row" '^skip  tools   tree key: ' "$(plan "$p")"
+done
 # --local: a shared-layer change runs the local set only
 local_plan() {
   ZEPHYR_WS=$PWD/build/check/plan-ws YAKOGL_CHECK_PLAN=1 YAKOGL_CHECK_PATHS="$1" tools/check.sh --local HEAD 2>&1 |
@@ -500,6 +516,7 @@ expect "local: the PowerVR compiler suite" '^plan  test    host-test,gpu-powervr
 expect "local: the GC7000 compiler suite" '^plan  test    host-test,gpu-vivante,shaderc-online$' "$out"
 expect "local: the V3D suite" '^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(--lib' "$out"
 expect "local: the gl_test arms" '^plan  cc      gl_test.c ' "$out"
+expect "local: the tree key row" "$treekey" "$out"
 expect "local: no report-es2 pair" '^skip  test    host-test,gpu-powervr,shaderc-online,report-es2$' "$out"
 expect "local: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$out"
 expect "local: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$out"

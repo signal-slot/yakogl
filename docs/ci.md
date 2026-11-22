@@ -219,8 +219,9 @@ next two mechanisms carry it.
 
 **A change confined to `tests/`** (the scope `tests`; any `tests/` path the
 GPU-named scopes above do not claim, and `tools/release/redaction-scan.allow`)
-runs the cargo test rows and the rows every change reaches (fmt, the licence
-audit), and no image, driver, sample, aarch64, table or tool row. In those
+runs the cargo test rows, the rows every change reaches (fmt, the licence
+audit) and the tree key row below, and no image, driver, sample, aarch64,
+table or other tool row. In those
 rows it builds, lints and runs only the integration test targets it reaches
 (`tools/check_tests_reach.py`): a changed `tests/<name>.rs` is the target
 `<name>`; a changed module or file under a `tests/` subdirectory reaches
@@ -238,6 +239,19 @@ rows (still not every row); a fixture that something outside `tests/` also
 reads, and a mix with `src/` or any other `all` path, select every row. The
 log says `check.sh: tests scope: targets ...`. The nightly run on main is
 the backstop.
+
+**The tree key row** (`tools   tree key: every path a test names is under
+TEST_TREE_PATHS`) scans the test code for string literals that name a file
+of the tree. It fails when one is not under `TEST_TREE_PATHS`: the test
+cache would not see a change of that file (section 3.2). It is a file scan
+of a few seconds, with no build (`tools/check_tree_key_scan.py`). It reads
+the `.rs` files under `TREE_KEY_SCAN_DIRS` in `tools/check.sh` (`src`,
+`tests`, `tools/yakogl-tools/src`, `tools/precompile/src`, `driver/rust/src`
+and the samples' `check/src`). A change of one of them, or of the scan,
+reaches the row (scope `treekey`); the map and the scan read the same list.
+So a pull request that only adds a test runs it, and a docs change does
+not. Before #7819 the scan was a part of the test cache self-test (scope
+`tools`), and new tests turned main red six times.
 
 ### 3.2 Never redo work whose inputs did not change (new)
 
