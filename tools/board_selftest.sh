@@ -1605,6 +1605,8 @@ pi5|v3d_tfu: PASS (levels 0-6 checked, 0 px wrong: level 0 exact, levels 1-6 (13
 pi5|v3d_tfu: FAIL (timeout: no TFUC and no CS count in 1000000 us, CS 0x00000000 SU 0x00000000 hub INT_STS 0x00000000; HUB_IDENT1 0x00081117)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_tfu_fail
 pi5|rpi5_mbox: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_mbox_done
 pi5|rpi5_mbox: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_mbox_fail
+pi5|rpi5_dispregs: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_dispregs_done
+pi5|rpi5_dispregs: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_dispregs_fail
 pi5|rpi5_mbox: feeding stopped, reset expected (selftest)|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 pi5|rpi5_scanout16: PASS (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout16_pass
 pi5|rpi5_scanout16: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout16_fail
