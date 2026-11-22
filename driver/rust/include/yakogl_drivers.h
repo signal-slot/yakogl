@@ -236,8 +236,11 @@ int yd_imx_wdog_arm(uintptr_t wdog_base, uintptr_t ccm_base, uint32_t timeout_ms
  * 24 MHz, top 0..15) to reset the system on its first timeout, restarted and
  * read back. 0, -EIO when it refused (refusal
  * says why), -EINVAL for a bad argument. yd_dw_wdt_feed restarts it.
- * yd_gic_eoi_mode_reset: ICC_CTLR_EL1.EOImode back to 0 on this CPU; the
- * value found when it changed it, 0 when nothing was written.
+ * yd_gic_cpuif_reset: this CPU's GICv3 CPU interface as Zephyr's GICv3 init
+ * assumes it: ICC_BPR1_EL1 0, ICC_CTLR_EL1.EOImode 0, every implemented
+ * ICC_AP1Rn_EL1 0 (no active priority left by the kernel before us); nothing
+ * when ICC_SRE_EL1.SRE is clear. What it found and did in *out
+ * (aarch64::gic_cpuif_reset).
  * yd_psci_system_reset: returns only when the firmware did not reset, with
  * the PSCI return code.
  * yd_t6_feed_verdict: whether the feeder's tick at uptime now_ms feeds WDT0
@@ -273,7 +276,22 @@ struct yd_dw_wdt_arm {
 
 int yd_dw_wdt_arm(uintptr_t wdt_base, uintptr_t cru_base, uint32_t top, struct yd_dw_wdt_arm *out);
 void yd_dw_wdt_feed(uintptr_t wdt_base);
-uint64_t yd_gic_eoi_mode_reset(void);
+
+#define YD_GIC_CPUIF_RESET     (1u << 0) /* SRE was set: the registers were read and reset */
+#define YD_GIC_EOIMODE_CLEARED (1u << 1) /* EOImode was 1 (split mode) and is now 0 */
+
+struct yd_gic_cpuif_reset {
+	uint64_t sre;          /* ICC_SRE_EL1 as found */
+	uint64_t ctlr_found;   /* ICC_CTLR_EL1 as found; 0 with SRE clear */
+	uint64_t ap1r0_found;  /* ICC_AP1R0_EL1 as found: a bit set is an active priority */
+	uint64_t bpr1_found;   /* ICC_BPR1_EL1 as found */
+	uint32_t ap1r_cleared; /* how many ICC_AP1Rn_EL1 were written 0 (PRIbits) */
+	uint32_t flags;        /* YD_GIC_* */
+};
+_Static_assert(sizeof(struct yd_gic_cpuif_reset) == 40, "rk3588.rs pins it");
+_Static_assert(offsetof(struct yd_gic_cpuif_reset, ap1r_cleared) == 32, "rk3588.rs pins it");
+
+void yd_gic_cpuif_reset(struct yd_gic_cpuif_reset *out);
 int yd_psci_system_reset(void);
 
 #define YD_T6_FEED_YES           0 /* feed */

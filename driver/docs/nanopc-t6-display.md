@@ -389,7 +389,11 @@ INTID that is acknowledged and not ended leaves the running priority
 raised, and the timer stops (the WDT then resets the board, and the run
 is lost). Zephyr's interrupt entry ends every INTID it acknowledges, also
 one above its table (`arch/arm64/core/isr_wrapper.S`, `spurious_continue`,
-at the revision in `west.yml`). `kexec_zephyr --crash` takes every network
+at the revision in `west.yml`). An INTID Linux had acknowledged and not
+ended when the CPU crashed leaves its bit in `ICC_AP1R0_EL1`, which
+Zephyr's GICv3 init does not clear: the T6 board glue writes the active
+priorities and `ICC_BPR1_EL1` to 0 at EARLY and prints `ICC_AP1R0_EL1` as
+found (`aarch64::gic_cpuif_reset`, issue #6366). `kexec_zephyr --crash` takes every network
 link down before the panic to cut the largest source.
 
 ### (b) Adopt from U-Boot

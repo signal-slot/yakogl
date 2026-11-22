@@ -9,7 +9,7 @@
 #
 # probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit or t6_display. The expected lines are in order: the
 # early banner (T6:A .. T6:A3, board::nanopc_t6_early), the board glue's
-# lines (T6:B, the marker, the GIC line, the arming, T6:C, "board: watchdog
+# lines (T6:B, the marker, the two GIC lines, the arming, T6:C, "board: watchdog
 # armed"; driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
 # lines (tools/probes/nanopc_t6/<probe>/src/main.c) and the glue's reset
 # line. Each template below is the printf format with its conversions
@@ -108,6 +108,11 @@ table_boot() {
 	e 'yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000'
 	# printed when Linux left EOImode 1 (every kexec so far); the value is recorded
 	e 't6: GICv3 CPU interface: ICC_CTLR_EL1 0x{x} had EOImode 1 (the kernel before us), now 0'
+	# always printed: the active priorities and BPR1 as Linux left them,
+	# recorded (a bit set in AP1R0 is an interrupt not ended at the
+	# hand-over, issue #6366). 1 AP1R: ICC_CTLR_EL1 0x8402 says 5 priority
+	# bits (driver/rust/src/aarch64.rs, icc_ap1r_count)
+	e 't6: GICv3 CPU interface: ICC_AP1R0_EL1 0x{x8} ICC_BPR1_EL1 0x{x} as found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0'
 	# two printks, one line; as found depends on --no-linux-wdt (was stopped)
 	# or not (was running): recorded. CR after is WDT_EN | RMOD.
 	e 't6: WDT0 armed: CR 0x{x8} -> 0x00000009 (was {s}), TORR 0x{x8} -> 0x{x8}, CCVR 0x{x8}, PARAM_1 0x{x8}, version 0x{x8}, flags 0x{x}: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s' \

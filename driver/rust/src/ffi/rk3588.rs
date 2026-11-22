@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The NanoPC-T6 (RK3588) board glue's Rust side, for
 //! driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c: the WDT0 self-arm
-//! (soc::rk3588 gates, ip::dw_wdt), its feed, the GIC EOI mode reset and
+//! (soc::rk3588 gates, ip::dw_wdt), its feed, the GIC CPU interface reset and
 //! PSCI SYSTEM_RESET (aarch64), the feeder's decision
 //! (board::nanopc_t6), and the early banner with the EL2 entry fix
 //! (board::nanopc_t6_early, aarch64). No device, no env: the shim calls these with
@@ -179,17 +179,72 @@ pub extern "C" fn yd_t6_feed_verdict(
     crate::board::nanopc_t6::feed_verdict(now_ms, alive_at_ms, released, deadline_ms, alive_ms) as u32
 }
 
-/// This CPU's GICv3 CPU interface into the reset EOI mode
-/// ([`crate::aarch64::gic_eoi_mode_reset`]): the `ICC_CTLR_EL1` value found
-/// when it was changed, 0 when nothing was written.
+/// `flags` of [`YdGicCpuifReset`].
+pub const YD_GIC_CPUIF_RESET: u32 = 1 << 0;
+pub const YD_GIC_EOIMODE_CLEARED: u32 = 1 << 1;
+
+/// `struct yd_gic_cpuif_reset`: what [`crate::aarch64::gic_cpuif_reset`]
+/// found and did.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct YdGicCpuifReset {
+    /// `ICC_SRE_EL1` as found.
+    pub sre: u64,
+    /// `ICC_CTLR_EL1`, `ICC_AP1R0_EL1` and `ICC_BPR1_EL1` as found; 0 when
+    /// SRE was clear.
+    pub ctlr_found: u64,
+    pub ap1r0_found: u64,
+    pub bpr1_found: u64,
+    /// The number of `ICC_AP1Rn_EL1` written 0 (`ICC_BPR1_EL1` is written 0
+    /// with them).
+    pub ap1r_cleared: u32,
+    /// [`YD_GIC_CPUIF_RESET`]: SRE was set and the registers were reset;
+    /// [`YD_GIC_EOIMODE_CLEARED`]: EOImode was 1 and is now 0.
+    pub flags: u32,
+}
+
+const _: () = assert!(size_of::<YdGicCpuifReset>() == 40);
+const _: () = assert!(offset_of!(YdGicCpuifReset, ctlr_found) == 8);
+const _: () = assert!(offset_of!(YdGicCpuifReset, ap1r0_found) == 16);
+const _: () = assert!(offset_of!(YdGicCpuifReset, bpr1_found) == 24);
+const _: () = assert!(offset_of!(YdGicCpuifReset, ap1r_cleared) == 32);
+const _: () = assert!(offset_of!(YdGicCpuifReset, flags) == 36);
+
+impl From<crate::aarch64::GicCpuifReset> for YdGicCpuifReset {
+    fn from(r: crate::aarch64::GicCpuifReset) -> Self {
+        let mut flags = 0;
+        if r.sre & crate::aarch64::ICC_SRE_EL1_SRE != 0 {
+            flags |= YD_GIC_CPUIF_RESET;
+        }
+        if r.eoimode_cleared {
+            flags |= YD_GIC_EOIMODE_CLEARED;
+        }
+        YdGicCpuifReset {
+            sre: r.sre,
+            ctlr_found: r.ctlr,
+            ap1r0_found: r.ap1r0,
+            bpr1_found: r.bpr1,
+            ap1r_cleared: r.ap1r_cleared,
+            flags,
+        }
+    }
+}
+
+/// This CPU's GICv3 CPU interface back to its reset EOI mode with no active
+/// priority ([`crate::aarch64::gic_cpuif_reset`]); what it found and did in
+/// `*out`.
 ///
 /// # Safety
-/// At EL1, on the boot CPU, before interrupts are enabled.
+/// At EL1, on the boot CPU, before Zephyr's GICv3 init and before interrupts
+/// are enabled; `out` is valid for writes.
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
-pub unsafe extern "C" fn yd_gic_eoi_mode_reset() -> u64 {
+pub unsafe extern "C" fn yd_gic_cpuif_reset(out: *mut YdGicCpuifReset) {
+    // SAFETY: the caller's contract is SysRegs::new's.
+    let mut regs = unsafe { crate::aarch64::SysRegs::new() };
+    let r = crate::aarch64::gic_cpuif_reset(&mut regs);
     // SAFETY: the caller's contract.
-    unsafe { crate::aarch64::gic_eoi_mode_reset() }
+    unsafe { out.write(r.into()) };
 }
 
 /// PSCI `SYSTEM_RESET` over SMC. Returns only when the firmware did not
@@ -2881,5 +2936,48 @@ mod tests {
             assert_eq!(r.qos_policy, p.id());
             assert_eq!(r.qos_words, p.values());
         }
+    }
+}
+
+#[cfg(test)]
+mod gic_tests {
+    use super::*;
+    use crate::aarch64::GicCpuifReset;
+
+    #[test]
+    fn the_c_header_has_the_gic_record() {
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        assert!(H.contains("#define YD_GIC_CPUIF_RESET     (1u << 0)"));
+        assert!(H.contains("#define YD_GIC_EOIMODE_CLEARED (1u << 1)"));
+        assert_eq!((YD_GIC_CPUIF_RESET, YD_GIC_EOIMODE_CLEARED), (1 << 0, 1 << 1));
+        assert!(H.contains("_Static_assert(sizeof(struct yd_gic_cpuif_reset) == 40,"));
+        assert!(H.contains("_Static_assert(offsetof(struct yd_gic_cpuif_reset, ap1r_cleared) == 32,"));
+    }
+
+    #[test]
+    fn the_record_carries_what_was_found() {
+        let r = GicCpuifReset {
+            sre: 0x7,
+            ctlr: 0x8402,
+            ap1r0: 1 << 20,
+            bpr1: 7,
+            eoimode_cleared: true,
+            ap1r_cleared: 1,
+            bpr1_written: true,
+        };
+        assert_eq!(
+            YdGicCpuifReset::from(r),
+            YdGicCpuifReset {
+                sre: 0x7,
+                ctlr_found: 0x8402,
+                ap1r0_found: 1 << 20,
+                bpr1_found: 7,
+                ap1r_cleared: 1,
+                flags: YD_GIC_CPUIF_RESET | YD_GIC_EOIMODE_CLEARED,
+            }
+        );
+        // SRE clear: nothing reset, no flag
+        let off = GicCpuifReset { sre: 0x6, ..GicCpuifReset::default() };
+        assert_eq!(YdGicCpuifReset::from(off), YdGicCpuifReset { sre: 0x6, ..YdGicCpuifReset::default() });
     }
 }

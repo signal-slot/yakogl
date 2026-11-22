@@ -4,7 +4,7 @@
  * The NanoPC-T6 board glue, the Zephyr side (CONFIG_YAKOGL_NANOPC_T6;
  * driver/docs/nanopc-t6-mali.md, "Z1"). The register logic is driver/rust:
  * ip::dw_wdt and soc::rk3588 behind yd_dw_wdt_arm() / yd_dw_wdt_feed(), and
- * aarch64 behind yd_gic_eoi_mode_reset() / yd_psci_system_reset(), and the
+ * aarch64 behind yd_gic_cpuif_reset() / yd_psci_system_reset(), and the
  * feeder's decision behind yd_t6_feed_verdict() (board::nanopc_t6). This file
  * is registration only: the init hooks, the mappings, a timer, the prints.
  *
@@ -46,7 +46,11 @@
  *   from the open)
  *   when the image starts, and the arming re-arms it ("was running").
  *   EARLY: the GICv3 CPU interface back to EOImode 0 (Linux left it in split
- *     mode; with it, the system timer would tick once).
+ *     mode; with it, the system timer would tick once), its active priorities
+ *     (ICC_AP1Rn_EL1) and ICC_BPR1_EL1 to 0 (an interrupt the crashing CPU
+ *     had not ended would keep the running priority raised, and the timer
+ *     would not tick at all). Before Zephyr's GICv3 init at PRE_KERNEL_1,
+ *     which writes none of them (driver/rust/src/aarch64.rs).
  *   PRE_KERNEL_1 99 (after the early console at 60): map WDT0 and the CRU
  *     for the feeder; T6:B through the console, the marker and what the
  *     arming found, T6:C once WDT0 is armed; if it refused, say why and
@@ -178,7 +182,7 @@ void z_arm64_el1_plat_init(void)
 {
 	s_arm_rc = yd_t6_early_arm(WDT0_PHYS, CRU_PHYS, CONFIG_YAKOGL_NANOPC_T6_WDT_TOP, &s_arm);
 }
-static uint64_t s_icc_ctlr_found;
+static struct yd_gic_cpuif_reset s_gic;
 static volatile int64_t s_alive_ms = -1;
 static volatile bool s_released;
 static volatile uint32_t s_feeds;
@@ -238,9 +242,11 @@ static FUNC_NORETURN void refused_reset(void)
 	wait_for_wdt0();
 }
 
+/* The name is older than the AP1Rn and BPR1 clear; tools/check.sh looks for
+ * it in the image. */
 static int t6_gic_eoi_reset(void)
 {
-	s_icc_ctlr_found = yd_gic_eoi_mode_reset();
+	yd_gic_cpuif_reset(&s_gic);
 	return 0;
 }
 SYS_INIT(t6_gic_eoi_reset, EARLY, 0);
@@ -252,10 +258,21 @@ static int t6_wdt_report(void)
 	device_map(&s_cru, CRU_PHYS, CRU_MAP, K_MEM_CACHE_NONE);
 	printk("T6:B console up (uart2 through the ns16550 driver)\n");
 	printk("%s\n", t6_marker);
-	if (s_icc_ctlr_found != 0) {
+	if (s_gic.flags & YD_GIC_EOIMODE_CLEARED) {
 		printk("t6: GICv3 CPU interface: ICC_CTLR_EL1 0x%llx had EOImode 1 "
 		       "(the kernel before us), now 0\n",
-		       (unsigned long long)s_icc_ctlr_found);
+		       (unsigned long long)s_gic.ctlr_found);
+	}
+	/* Always printed: a record says whether the kernel before us left an
+	 * active priority (a bit set in ICC_AP1R0_EL1). */
+	if (s_gic.flags & YD_GIC_CPUIF_RESET) {
+		printk("t6: GICv3 CPU interface: ICC_AP1R0_EL1 0x%08llx ICC_BPR1_EL1 0x%llx as found, "
+		       "%u ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0\n",
+		       (unsigned long long)s_gic.ap1r0_found, (unsigned long long)s_gic.bpr1_found,
+		       s_gic.ap1r_cleared);
+	} else {
+		printk("t6: GICv3 CPU interface: ICC_SRE_EL1 0x%llx, SRE clear: not touched\n",
+		       (unsigned long long)s_gic.sre);
 	}
 	if (s_arm_rc != 0) {
 		printk("t6: WDT0 arming FAILED (rc %d, refusal %u): COMP_TYPE 0x%08x PARAM_1 0x%08x, "

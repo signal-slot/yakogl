@@ -1189,6 +1189,12 @@ The glue (`driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c` over
   `a_watchdog_linux_left_running_is_re_topped_and_restarted_never_stopped`).
 - At EARLY it puts the GIC CPU interface back into EOImode 0. Armbian runs it
   in split mode (dmesg: "GICv3: GIC: Using split EOI/Deactivate mode").
+  It also writes 0 to the active priorities (`ICC_AP1R0_EL1`, the only one
+  with the T6's 5 priority bits) and to `ICC_BPR1_EL1`, as Linux's own init
+  does: an interrupt the crashing CPU had not ended would keep the running
+  priority raised, and the timer would stop. Zephyr's GICv3 init writes
+  none of these (`aarch64::gic_cpuif_reset` has the sources). The value of
+  `ICC_AP1R0_EL1` as found is printed on every run (issue #6366).
 - After the early console it prints the marker and the arming. If the arming
   refused, it resets through PSCI at once. If PSCI returns, it arms WDT0 once
   more with `TOP` 15 (89.5 s) and waits for it.
@@ -1430,6 +1436,8 @@ WDT0 reset brings the SoC back (step 3, measured 2026-10-19).
    (Linux's watchdog is opened by default; the record must hold "linux-wdt:
    WDT_EN proof"). Expected on the UART: `T6:A` .. `T6:A3`, `T6:B`, the
    marker; "t6: GICv3 CPU interface: ICC_CTLR_EL1 ... had EOImode 1";
+   "t6: GICv3 CPU interface: ICC_AP1R0_EL1 0x... ICC_BPR1_EL1 0x... as
+   found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0";
    "t6: WDT0 armed: CR 0x00000008 -> 0x00000009 (was stopped), TORR
    0x0000000e -> 0x000000dd ... period 22369 ms" (with Linux's watchdog
    open, "was running" and Linux's values as found: expected `CR` 0x9 and
@@ -2732,7 +2740,7 @@ before it, and prints `ok`, `differs` or `missing` per line, then
 carry them:
 
 1. Z1's lines as for `t6_fw`: the early banner `T6:A` to `T6:A3`, `T6:B`,
-   the `yakogl-wdt: nanopc_t6` marker, the GIC line, the arming line,
+   the `yakogl-wdt: nanopc_t6` marker, the two GIC lines, the arming line,
    `T6:C` and `board: watchdog armed` (`table_boot`).
 2. Z2's and Z3's lines as for `t6_fw`, with the prefix `t6_submit:`:
    build, WDT0, image, the 7 sections and the pool (`table_fw_image`),
