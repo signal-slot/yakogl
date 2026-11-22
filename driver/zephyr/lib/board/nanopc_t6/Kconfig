@@ -13,7 +13,8 @@ config YAKOGL_NANOPC_T6
 	  WDT0 (the DesignWare APB watchdog at 0xfeaf0000) armed at the end
 	  of Zephyr's EL1 init, before every init hook, and fed from a timer
 	  for a bounded time; the GICv3 CPU
-	  interface put back into its reset EOI mode at EARLY; and
+	  interface put back into its reset EOI mode, with no active
+	  priority and ICC_BPR1_EL1 0, at EARLY; and
 	  t6_reset_to_linux() (nanopc_t6.h), the end of a run: PSCI
 	  SYSTEM_RESET, with WDT0 behind it. YAKOGL_DRV_DISPLAY_RUST is the switch
 	  that builds the yakogl-drivers crate (driver/zephyr/CMakeLists.txt,
