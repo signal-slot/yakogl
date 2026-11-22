@@ -482,6 +482,50 @@ runners that does not allow public repositories. `gate.yml` uses no
 `ubuntu-latest` on pushes to main and by dispatch only, so no fork reaches
 it.
 
+### 3.6 The build cache keeps only the units the last runs used (2026-11-23)
+
+A job's machine starts from the image of the last green run on main, with
+that run's build cache (`~/.cache/yakogl/ci-target`). Cargo never removes
+what it stopped using: a unit (one crate built for one feature set, profile
+and target) whose features, flags or dependencies changed gets a new hash,
+and the old unit's outputs stay beside the new ones. Each generation of the
+image inherited the ones before it. Measured on the image of 2026-11-19
+(issue #10579), sizes as `df -h` counts them:
+
+| | |
+|---|---|
+| disk at the start of a job | 193 GiB: 174 GiB used, 20 GiB free |
+| build cache | 179,105 files, 163.9 GiB |
+| units not used since October | 2,722 of 16,878: 16,670 files, 23.8 GiB |
+| incremental files, none written since October | 76,744 files, 47.5 GiB |
+| in use | 85,691 files, 92.7 GiB; 80.2 GiB of it the 5,612 test binaries of the 557 files in `tests/` |
+| test files at the image's commit, and on 2026-11-22 | 557, 691 |
+
+A file in `tests/` is one binary per feature set that builds it (10 to 13),
+0.144 GiB together. The 134 test files added in three days needed about
+19 GiB beside the checkout and the temporary files, 20 GiB were free, and at
+least seven runs on 2026-11-22 ended with "No space left on device", some as
+a dead runner without a log.
+
+`gate.yml` now removes the unused units before the gate and prints the
+disk's free space before the gate and after it. A unit is in use when cargo
+read or wrote its record (`.fingerprint/<package>-<hash>/`) in the two days
+before the cache's last write; cargo reads that record in every build that
+has the unit, also when the unit is fresh. On that image the step takes 5 s
+and leaves 88 GiB free; every file of a unit in use stays (checked file by
+file), and a build of `yakogl-tools` after it finds its 44 dependencies
+fresh.
+
+The rule is by unit, not by file, for a measured reason. Cargo never reads a
+fresh unit's `invoked.timestamp`, `.d` or `.rmeta` file, so those look as
+old as the unused ones. Removing every file not read in those two days freed
+the same space, and the same build of `yakogl-tools` then compiled 23
+third-party crates again.
+
+What this does not fix: the cache a run needs grows with every test file.
+At 0.144 GiB each, the 88 GiB are about 600 more test files, two weeks at
+the rate of those three days. Issue #10653 holds that.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;
