@@ -35,6 +35,19 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   pattern in Esmart0, prints the section 5 read-backs, holds the picture
   30 s and resets. `driver/tools/kexec-zephyr/t6-verdict.sh t6_display`
   judges its record.
+- `nanopc_t6/t6_cold`: step D8 of the T6 display (section 2 route (c)):
+  started by a normal kexec, which turns the display off, it brings the
+  whole chain up from cold with power-cycle (board module
+  `driver/rust/src/board/nanopc_t6_display_cold.rs` over
+  `soc::rk3588_display_chain`, C entry `yd_t6_display_cold`), prints a line
+  before each stage, shows the same pattern in Esmart0, prints the same
+  read-backs, holds the picture 30 s and resets. The stage to stop after is a
+  build option (`-DT6_COLD_STOP_AFTER=N`, 1..8; `-DT6_COLD_FORCE_COLD=ON`
+  stops a port found running). `t6-verdict.sh t6_cold` judges its record,
+  a stopped one included.
+- `nanopc_t6/common/t6_picture.c`: the picture both display probes show and
+  check: the frame buffer with the pattern, the mappings, the hold, the
+  read-backs and the PASS or FAIL line.
 - `nanopc_t6/common/t6_z1.c`: Z1's record (the hand-over, the clock set,
   the supply, each step of the power-on), shared by the four probes that
   run Z1's power-on: `t6_gpu` prints it on every run, the others when the

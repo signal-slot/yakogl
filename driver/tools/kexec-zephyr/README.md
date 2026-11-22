@@ -111,9 +111,17 @@ holds the image window), not the normal kexec. The adopt accepts one mode,
 script reads VP0's mode back from Linux and jumps only when it is that mode;
 otherwise it stops the holder by its pid and Linux's own mode comes back
 (section 2(a), "The mode before the jump"). Its record is judged with `t6-verdict.sh t6_display`
-(fixture `testdata/t6_display-pass.uart`). The verdict judges the UART lines
-only: whether the display shows the four quadrants and the white border in
-the right places is the person's answer.
+(fixture `testdata/t6_display-pass.uart`). The
+display probe `t6_cold` (step D8, section 2 route (c)) brings the display up
+from cold, so it takes the normal route, which turns Linux's display off.
+Its record is judged with `t6-verdict.sh t6_cold` (fixtures
+`testdata/t6_cold-pass.uart` and `testdata/t6_cold-stop4.uart`, an image
+built to stop after stage 4): the stop the image was built with chooses the
+lines, and a run that hangs is missing from the stage after the last one it
+printed. `nanopc-t6.sh` has nothing per probe: a run's bound comes from the
+image's watchdog marker (`lifetime_s` and the period). The verdict
+judges the UART lines only: whether the display shows the four quadrants
+and the white border in the right places is the person's answer.
 
 `tools/board.sh nanopc-t6 run <zephyr.bin> <logdir>` runs an image through
 this script the way the other boards run (backend `kexec-dev`, so the verdict

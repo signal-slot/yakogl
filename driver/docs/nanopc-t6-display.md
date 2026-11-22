@@ -2,7 +2,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # NanoPC-T6 (RK3588): the picture on HDMI from Zephyr
 
-Status: design. No RK3588 display code exists yet. The T6 leaves "work in
+Status: the host side of D1, D2, D3a and D4 to D8 is in the tree (the
+modules, the chain, the adopt probe `t6_display` and the cold probe
+`t6_cold`); D0 is the only step run on the board. The T6 leaves "work in
 progress" only when Zephyr and YakoGL put the rendered picture on a display
 in the product form: U-Boot starts Zephyr from the eMMC, with no Linux before
 it. This page is the plan the implementation follows: the chain, the routes,
@@ -490,7 +492,10 @@ full sequence) with a `power-cycle` option that first puts every block into
 reset and its domain off, as the X2 HDMI design does
 (`x2-hdmi-cold.md`, `force-cold`, `power-cycle`); then signed off with U-Boot
 starting the image from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`),
-which is the same code with nothing left on.
+which is the same code with nothing left on. The chain's caller for D8 is
+the probe `tools/probes/nanopc_t6/t6_cold` (`board::nanopc_t6_display_cold`,
+C entry `yd_t6_display_cold`): it runs the chain with `power-cycle` on a
+CPU-drawn buffer, the stage to stop after a build option.
 
 The chain's START refusals (`soc::rk3588_display_chain`, its module text has
 the full rules) and two notes on them:
@@ -858,7 +863,7 @@ answers polls, takes injected failures and records the order.
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
 | D7 | `soc::rk3588_display_chain`: the staged cold bring-up (power, clocks and resets, GRF, PHY, DCLK_VOP0 to the PHY clock, controller, VOP2, video check) with `stop-after`, `power-cycle`, `force-cold`, and the golden test against the dump | a cold bring-up in block order over the combined model; every `stop-after`; each injected failure names its stage; golden: every dumped register equals the model's image outside the allow list | none alone | 500 lines + tests | no |
-| D8 | Cold run by normal kexec: the probe with `power-cycle`, bisected with `stop-after`, then the CPU pattern, then `gl_triangle` through D3 | as D7 | stage lines on the UART, the section 5 read-backs, the person confirms | runs | yes |
+| D8 | Cold run by normal kexec: the probe `t6_cold` with `power-cycle` (`-DT6_COLD_STOP_AFTER=N` builds it to stop after stage N, for a bisection), then the CPU pattern, then `gl_triangle` through D3. Host side done: `board::nanopc_t6_display_cold` and its C entry `yd_t6_display_cold`, the probe (its pattern, hold and read-backs shared with `t6_display` in `common/t6_picture.c`), its gate row, `t6-verdict.sh t6_cold` with a predicted record for a run to the end and for a stop after stage 4 | as D7; the state a normal kexec leaves after Linux ran 1920x1080 runs through with `power-cycle` and is refused at START without it; each stop is reported as asked with its stage line last | the reads before the chain (U4), a line per stage on the UART, the section 5 read-backs, the person confirms | runs | yes |
 | D9 | Sign-off: the same image started by U-Boot from the eMMC (`driver/tools/uboot-t6/prompt-go.sh`; it takes only the t6_hello..t6_submit probes today, so `gl_triangle` and `gl_slint` need adding to it and to `t6-verdict.sh`), `gl_triangle` and `gl_slint` on screen | none new | UART verdict, read-backs, the person confirms | runs | yes |
 | D10 | EDID over the controller's I2C master; the preferred mode within the PHY plans; HDMI mode with an AVI InfoFrame for HDMI sinks | I2C transfers on the model (done, NACK, segment) | the EDID equals Linux's copy from D0 | 300 lines | yes |
 
@@ -885,9 +890,9 @@ variant of it.
 | U1 | May the PHY's 212 analog init values be taken from the board dump (measurement) rather than from Linux's tables, as the design proposes? | owner decision (source form) |
 | U2 | Which window and format does Linux use for VP0's primary plane: Esmart or Cluster, AFBC or linear? | answered by D0: Cluster0, linear XRGB8888 (section 6) |
 | U3 | Does Linux run the PHY at the mode's rate with exactly the table values (`hdptx.c:427` for 148.5 MHz), or with its calculator (`:900-970`)? | D0: PHY register file CMN 0x51-0x86 |
-| U4 | After a normal kexec, is the PHY PLL still locked (a power-domain clock reference may hold it), and is PD_VOP on? | a GRF STATUS and PMU 0x290 read in the first D8 run before any write |
+| U4 | After a normal kexec, is the PHY PLL still locked (a power-domain clock reference may hold it), and is PD_VOP on? | a GRF STATUS and PMU 0x290 read in the first D8 run before any write (`t6_cold`'s "before:" lines; the GRF only when the PHY's clocks and reset allow it) |
 | U5 | Does a read of a block whose domain is off hang the bus or return zeros? | not to be tested by reading; the code reads status only after power-on and repair status, so the answer is not needed |
-| U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back |
+| U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back (`t6_cold`'s "VOP:" line and its read-backs) |
 | U7 | `CMU_*_FREQ` units and `VIDEO_MONITOR_STATUS` fields | answered by D0: 4 kHz per count; the monitor words hold sync, porch, total and active (section 6) |
 | U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | D2: read it right after the write and after one frame. D3's busy rule is safe with either answer (section 4, step D3) |
 | U9 | Does the crash reservation fit the image window (0x10000000-0x1fffffff) on Armbian without moving anything else, and does the crash route leave panthor's GPU in a state Z1's power-on handles? | D2: `/proc/iomem` after reboot with `crashkernel=`; the probe draws with the CPU, the Mali case is D3 |
