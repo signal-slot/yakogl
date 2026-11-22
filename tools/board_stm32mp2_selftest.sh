@@ -109,7 +109,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=207
+WANT_CHECKS=214
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -676,6 +676,46 @@ out=$("$B" tally "$d" 2>&1)
 rc=$?
 check "a blind run that came back: rc 0, returned, blind (never a row), no_console" \
     eval '[ "$rc" = 0 ] && grep -q " rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=60s$" <<<"$out"'
+# judge: a blind run's verdict from console text captured outside the runner
+d="$S/runs/20261108-1220-trial-0123abcd"
+mkrun "$d" name=trial blind=1 back=1 t_reboot=1000 t_back=1070
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$PASS_END" > "$S/ext-pass.txt"
+out=$("$B" judge "$d" "$S/ext-pass.txt" 2>&1)
+rc=$?
+check "judge: a blind run with a passing external console: rc 0, done, row shape, console=external" \
+    eval '[ "$rc" = 0 ] && grep -q " rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:mp2_identify back_after=70s console=external$" <<<"$out"'
+check "judge: the record has console.txt and meta console_source external" \
+    eval 'cmp -s "$S/ext-pass.txt" "$d/console.txt" && grep -qx "console_source=external" "$d/meta.txt"'
+out=$("$B" tally "$d" 2>&1)
+check "judge: tally of the judged record says the same, marker included" \
+    eval 'grep -q "verdict=done .* console=external$" <<<"$out"'
+d="$S/runs/20261108-1221-trial-0123abcd"
+mkrun "$d" name=trial blind=1 back=1 t_reboot=1000 t_back=1070
+printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" '12:00:06 mp2_identify: FAIL: no wdog' > "$S/ext-fail.txt"
+out=$("$B" judge "$d" "$S/ext-fail.txt" 2>&1)
+rc=$?
+check "judge: a blind run with a failing external console: rc 4, failed" \
+    eval '[ "$rc" = 4 ] && grep -q " rc=4 verdict=failed .* result=fail:mp2_identify .* console=external$" <<<"$out"'
+d="$S/runs/20261108-1222-trial-0123abcd"
+mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1070
+printf '%s\n' "$UBOOT" > "$d/console.txt"
+out=$("$B" judge "$d" "$S/ext-pass.txt" 2>&1)
+rc=$?
+check "judge: refuses to overwrite a runner-captured console.txt (non-zero, file kept)" \
+    eval '[ "$rc" != 0 ] && cmp -s <(printf "%s\n" "$UBOOT") "$d/console.txt"'
+d="$S/runs/20261108-1223-trial-0123abcd"
+mkrun "$d" name=trial blind=1 back=1 t_reboot=1000 t_back=1070
+: > "$S/ext-empty.txt"
+out=$("$B" judge "$d" "$S/ext-empty.txt" 2>&1)
+rc=$?
+check "judge: refuses an empty console file (non-zero, no console.txt)" \
+    eval '[ "$rc" != 0 ] && [ ! -e "$d/console.txt" ]'
+d="$S/runs/20261108-1224-trial-0123abcd"
+mkrun "$d" name=trial blind=1 back=0 t_reboot=1000 t_back=1300 rc_cycle=5
+out=$("$B" judge "$d" "$S/ext-pass.txt" 2>&1)
+rc=$?
+check "judge: never turns not_back into a pass (rc 5, not_back)" \
+    eval '[ "$rc" = 5 ] && grep -q " verdict=not_back " <<<"$out"'
 d="$S/runs/20261108-1210-trial-0123abcd"
 mkrun "$d" name=trial blind=0 back=1 t_reboot=1000 t_back=1070 rc_cycle=6
 printf '%s\n%s\n%s\n' "$UBOOT" "$LAYER" "$PASS_END" > "$d/console.txt"

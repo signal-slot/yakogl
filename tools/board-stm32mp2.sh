@@ -16,6 +16,7 @@
 #   tools/board-stm32mp2.sh [--dry-run] run [--expect-watchdog] <image> <logdir> [name]
 #   tools/board-stm32mp2.sh env-edit hook|unhook|arm|disarm <env.bin> <out.bin> [token file]
 #   tools/board-stm32mp2.sh tally <rundir>
+#   tools/board-stm32mp2.sh judge <rundir> <console-file>   (a blind run, console text from outside)
 #   tools/board-stm32mp2.sh selftest          (tools/board_stm32mp2_selftest.sh, no board)
 #
 # Why not tools/board.sh's uboot-mmc backend: that backend arms the one-shot
@@ -287,7 +288,7 @@ for a in "$@"; do
     esac
 done
 set -- "${args[@]+"${args[@]}"}"
-usage() { sed -n '14,19p' "$SELF" >&2; exit 2; }
+usage() { sed -n '14,20p' "$SELF" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 VERB=$1
 shift
@@ -806,7 +807,7 @@ redact_run() { # the copies never carry a host, an address or the console's path
     [ ${#files[@]} -gt 0 ] || return 0
     redact_words "$dir" "<BOARD_UART>" "${BOARD_UART:-}" "${UART_REAL:-}"
     if uart_is_bridge; then redact_words "$dir" "<uart-bridge>" "${BOARD_UART%:*}"; fi
-    redact_words "$dir" "<board-host>" "${BHOSTNAME:-}" "${BOARD_HOST#*@}"
+    redact_words "$dir" "<board-host>" "${BHOSTNAME:-}" "${BOARD_HOST:+${BOARD_HOST#*@}}"
     while read -r ip; do
         n=$((n + 1))
         LC_ALL=C sed -i -E "s/(^|[^0-9.])${ip//./\\.}([^0-9]|$)/\\1192.0.2.$n\\2/g;
@@ -832,9 +833,14 @@ for row in sys.stdin.buffer:
 
 # verdict_line DIR: V_LINE and V_RC from the run's files (meta.txt, console.txt)
 verdict_line() {
-    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect
+    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect ext=
     expect=$(mget expect_wdog "$dir")
     name=$(mget name "$dir"); back=$(mget back "$dir"); blind=$(mget blind "$dir")
+    # a blind run whose console text was handed in by 'judge' is judged like a
+    # run with a console; the return verdict below stays the runner's
+    if [ "$blind" = 1 ] && [ "$(mget console_source "$dir")" = external ]; then
+        blind=0; ext=" console=external"
+    fi
     t0=$(mget t_reboot "$dir"); t1=$(mget t_back "$dir"); cycle=$(mget rc_cycle "$dir")
     if [ -n "$t0" ] && [ -n "$t1" ] && [ "$back" = 1 ]; then after="$((t1 - t0))s"; else after=absent; fi
     con=$dir/console.txt
@@ -869,7 +875,7 @@ verdict_line() {
     [ "$cycle" = 6 ] && [ "$rc" = 0 ] && rc=6
     local kind=row
     [ "$blind" = 1 ] && kind=blind
-    V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after"
+    V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after$ext"
     V_RC=$rc
 }
 # the line after a not_back verdict (run and tally): what the plan asks of a
@@ -1496,6 +1502,30 @@ cmd_tally() {
     needs_person "$dir"
     exit "$V_RC"
 }
+# judge <rundir> <console-file>: the verdict of a blind run (MP2_NO_CONSOLE=1)
+# from console text captured outside the runner. Local files only: it never
+# contacts the board. The return verdict (not_back, not_rebooted) stays the
+# runner's: only a run that came back gets a console verdict.
+cmd_judge() {
+    [ $# -ge 2 ] || usage
+    local dir=$1 src=$2
+    [ -f "$dir/meta.txt" ] || die "$dir has no meta.txt" 2
+    [ -f "$src" ] || die "no console file $src" 2
+    [ -s "$src" ] || die "console file $src is empty: nothing to judge" 2
+    [ "$(mget blind "$dir")" = 1 ] || die "$dir is not a blind run: its console is the runner's own" 2
+    if [ -s "$dir/console.txt" ] && [ "$(mget console_source "$dir")" != external ]; then
+        die "$dir/console.txt was captured by the runner: never overwritten" 2
+    fi
+    cp "$src" "$dir/console.txt" || die "cannot write $dir/console.txt" 2
+    RD=$dir
+    [ "$(mget console_source "$dir")" = external ] || meta console_source external
+    redact_run "$dir"
+    verdict_line "$dir"
+    echo "$V_LINE"
+    needs_person "$dir"
+    [ -f "$dir/INDEX.txt" ] && write_index "$dir"
+    exit "$V_RC"
+}
 
 case "$VERB" in
 selftest) exec bash "$HERE/board_stm32mp2_selftest.sh" ;;
@@ -1506,5 +1536,6 @@ disarm) cmd_disarm "$@" ;;
 probe | run) cmd_run "$@" ;;
 env-edit) cmd_env_edit "$@" ;;
 tally) cmd_tally "$@" ;;
+judge) cmd_judge "$@" ;;
 *) usage ;;
 esac
