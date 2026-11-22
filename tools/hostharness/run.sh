@@ -243,7 +243,17 @@ s = open(sys.argv[1]).read()
 # themselves (glReadPixels is interposed), so expect_px only reports
 i = s.index("static bool expect_px(")
 j = s.index("return ok;", i)
-open(sys.argv[2], "w").write(s[:j] + "(void)ok; return true;" + s[j + len("return ok;"):])
+# this copy takes gl_test.c's Zephyr branch (the build defines neither
+# GL_TEST_HOST nor GL_TEST_USER), which has no <errno.h>; case 219 uses
+# ENOTSUP outside that branch, so add it to the generated file
+head = "#include <errno.h>\n"
+# the two render-service hooks cases 216 and 219 call: driver/src/pvr_render.c
+# is the board build's and the host library does not export them; case 219
+# takes -ENOTSUP as "kick times: not built", and no wait re-posts here
+tail = ("\nuint32_t pvr_render_reposts;\n"
+        "int pvr_render_last_kick_us(struct yd_pvr_kick_us *out)\n"
+        "{ (void)out; return -ENOTSUP; }\n")
+open(sys.argv[2], "w").write(head + s[:j] + "(void)ok; return true;" + s[j + len("return ok;"):] + tail)
 PY
     gcc "${hflags[@]}" -w -c "$out/gen/gl_test_host.c" -o "$out/obj/gl_test_host.o" 2>> "$out/hcc.log" \
       || { tail -30 "$out/hcc.log"; die "gl_test.c does not build against this library's headers"; }
