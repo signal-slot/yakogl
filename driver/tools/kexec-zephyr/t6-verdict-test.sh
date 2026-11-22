@@ -127,9 +127,10 @@ sed '/^T6:A EL2/s/SCTLR_EL2 0x0000000030400800/SCTLR_EL2 0x0000000030400801/' "$
 check t6_hello-kexec-t6a-mmu-on 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/k-on.log"
 
 # the GIC active state line (issue #10530). The fixtures' GICD_TYPER 0xf
-# and 16 words are of the right form, not a prediction: the verdict reads
-# them as tokens. INTIDs Linux left Active are recorded, not judged: the
-# clear deactivated them
+# and GICR_TYPER 0 are of the right form, not a prediction: the verdict
+# reads them as tokens, and checks the words written against them (1 +
+# ITLinesNumber 15 = 16). INTIDs Linux left Active are recorded, not
+# judged: the clear deactivated them
 GA='t6: GIC active state: '
 sed "s/^${GA}\(.*\) as found, 0 INTID(s) active (none)/${GA}\1 as found, 2 INTID(s) active (INTIDs 27 451)/; s/GICR_ISACTIVER0 0x00000000/GICR_ISACTIVER0 0x08000000/" \
 	"$D/t6_hello-pass.uart" >"$WORK/active.log"
@@ -147,6 +148,18 @@ check t6_hello-gic-no-redistributor 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((
 # the line twice: once per boot
 sed "/^$GA/p" "$D/t6_hello-pass.uart" >"$WORK/twice.log"
 check t6_hello-gic-active-twice 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/twice.log"
+# one word fewer or more than GICD_TYPER's ITLinesNumber 15 announces
+sed "/^$GA/s/, 16 word(s)/, 15 word(s)/" "$D/t6_hello-pass.uart" >"$WORK/words15.log"
+check t6_hello-gic-words-fewer 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/words15.log"
+sed "/^$GA/s/, 16 word(s)/, 17 word(s)/" "$D/t6_hello-pass.uart" >"$WORK/words17.log"
+check t6_hello-gic-words-more 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/words17.log"
+# the extended ranges count too: GICD_TYPER ESPI with ESPI_range 1 (2
+# words) and GICR_TYPER PPInum 2 (2 words): 1 + 2 + 15 + 2 = 20
+sed "/^$GA/s/GICD_TYPER 0x0000000f GICR_TYPER 0x0000000000000000 /GICD_TYPER 0x0800010f GICR_TYPER 0x0000000010000000 /" \
+	"$D/t6_hello-pass.uart" >"$WORK/ext16.log"
+sed "/^$GA/s/, 16 word(s)/, 20 word(s)/" "$WORK/ext16.log" >"$WORK/ext20.log"
+check t6_hello-gic-words-extended 0 'VERDICT t6_hello PASS' "$HELLO 0 0" t6_hello "$WORK/ext20.log"
+check t6_hello-gic-words-extended-missed 1 "VERDICT t6_hello FAIL (1 of $HELLO)" "$((HELLO - 1)) 0 1" t6_hello "$WORK/ext16.log"
 check t6_gpu-pass 0 'VERDICT t6_gpu PASS' "$GPU 0 0" t6_gpu "$D/t6_gpu-pass.uart"
 # the crash kexec: PD_GPU handed over on, Z1 takes the GPU over (four lines)
 TAKE=4

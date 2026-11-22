@@ -1460,7 +1460,9 @@ WDT0 reset brings the SoC back (step 3, measured 2026-10-19).
    found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0";
    "t6: GIC active state: GICD_TYPER 0x... GICR_TYPER 0x... GICR_ISACTIVER0
    0x... as found, N INTID(s) active (...), N word(s) written ICACTIVER, 0
-   still active";
+   still active" (the words written are the ones the two TYPER values
+   announce: 1 + ITLinesNumber without the extended ranges; `t6-verdict.sh`
+   checks it);
    "t6: WDT0 armed: CR 0x00000008 -> 0x00000009 (was stopped), TORR
    0x0000000e -> 0x000000dd ... period 22369 ms" (with Linux's watchdog
    open, "was running" and Linux's values as found: expected `CR` 0x9 and

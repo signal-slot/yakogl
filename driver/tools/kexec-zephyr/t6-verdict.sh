@@ -151,10 +151,11 @@ table_boot() {
 	# always printed, once: the interrupts Linux left Active at the
 	# distributor and at CPU 0's redistributor, recorded (issue #10530;
 	# driver/rust/src/aarch64.rs, gic_active_reset). The TYPER values, the
-	# count, the INTIDs and the words written are recorded; none may stay
-	# Active after the clear. No redistributor for CPU 0 is "differs".
-	e 't6: GIC active state: GICD_TYPER 0x{x8} GICR_TYPER 0x{x16} GICR_ISACTIVER0 0x{x8} as found, {d} INTID(s) active ({s}), {d} word(s) written ICACTIVER, 0 still active' \
-		'' gic_active_once
+	# count and the INTIDs are recorded; none may stay Active after the
+	# clear, and the words written must be the ones the TYPER values
+	# announce (gic_active_line). No redistributor for CPU 0 is "differs".
+	e 't6: GIC active state: GICD_TYPER 0x{@GD} GICR_TYPER 0x{@GR} GICR_ISACTIVER0 0x{x8} as found, {d} INTID(s) active ({s}), {@GW} word(s) written ICACTIVER, 0 still active' \
+		'' gic_active_line
 	# two printks, one line; as found depends on --no-linux-wdt (was stopped)
 	# or not (was running): recorded. CR after is WDT_EN | RMOD.
 	e 't6: WDT0 armed: CR 0x{x8} -> 0x00000009 (was {s}), TORR 0x{x8} -> 0x{x8}, CCVR 0x{x8}, PARAM_1 0x{x8}, version 0x{x8}, flags 0x{x}: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s' \
@@ -173,15 +174,29 @@ t6g_sctlr() {
 }
 
 # The GIC active state line is printed once per boot: a second one in the
-# record is a second boot, or a defect.
-gic_active_once() {
-	local n=0 l
+# record is a second boot, or a defect. The ICACTIVER words written are
+# every word the two TYPER values announce (driver/rust/src/aarch64.rs,
+# gic_active_reset): GICR_ICACTIVER0, the extended PPI words (GICR_TYPER
+# PPInum, bits 31:27, when 1 or 2; gicr_eppi_words), the SPI words
+# (GICD_TYPER ITLinesNumber, bits 4:0; gicd_spi_words) and the extended SPI
+# words (ESPI_range + 1, bits 31:27, when ESPI, bit 8, is set;
+# gicd_espi_words). Without ESPI and PPInum, as the fixtures have it, that
+# is 1 + (GICD_TYPER & 0x1f).
+gic_active_line() {
+	local n=0 l gd gr eppi espi
 	for l in "${LINES[@]}"; do
 		if [[ $l == 't6: GIC active state: '* ]]; then
 			n=$((n + 1))
 		fi
 	done
-	[ "$n" -eq 1 ]
+	[ "$n" -eq 1 ] || return 1
+	[ ${#V[GD]} -eq 8 ] && [ ${#V[GR]} -eq 16 ] && [[ ${V[GW]} =~ ^[0-9]+$ ]] || return 1
+	gd=$((16#${V[GD]})) gr=$((16#${V[GR]}))
+	eppi=$(((gr >> 27) & 0x1f))
+	[ "$eppi" -le 2 ] || eppi=0
+	espi=0
+	(((gd & 0x100) == 0)) || espi=$((((gd >> 27) & 0x1f) + 1))
+	((10#${V[GW]} == 1 + eppi + (gd & 0x1f) + espi))
 }
 
 # nanopc_t6.c, t6_reset_to_linux, the probe's last line.
