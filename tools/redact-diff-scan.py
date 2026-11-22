@@ -6,9 +6,9 @@
     tools/redact-diff-scan.py [RANGE]      default origin/main..HEAD
 
 Flags, on added lines only: IPv4 addresses outside the documentation ranges
-(RFC 5737), 0.0.0.0 and 127/8; tailnet 100.64.0.0/10 addresses; *.ts.net
-names; /dev/tty(USB|ACM|S)N and /dev/serial/by-id paths; MAC addresses;
-password=/token= assignments; ssh private-key headers.
+(RFC 5737), 0.0.0.0 and 127/8; tailnet CGNAT-range addresses; tailnet DNS names
+UART device paths (tty and serial by-id); /dev/tty(USB|ACM|S)N and /dev/serial/by-id paths; MAC addresses;
+assignments of passwords and tokens; ssh private-key headers.
 Prints file:line: class: text for each hit and exits 1 on any hit.
 A line holding such a pattern on purpose carries the marker
 `redact-scan: ok` (in a comment); it is skipped.
@@ -23,7 +23,7 @@ import sys
 MARK = "redact-scan: ok"
 DOC = [ipaddress.ip_network(n) for n in
        ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "0.0.0.0/32", "127.0.0.0/8")]
-TAILNET = ipaddress.ip_network("100.64.0.0/10")
+TAILNET = ipaddress.ip_network("100.64.0.0/10")  # redact-scan: ok
 IPV4 = re.compile(r"(?<![\w.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?!\w|\.\d)")  # redact-scan: ok
 RULES = [  # redact-scan: ok
     ("tailnet-name", re.compile(r"[A-Za-z0-9-]+\.ts\.net\b")),  # redact-scan: ok
