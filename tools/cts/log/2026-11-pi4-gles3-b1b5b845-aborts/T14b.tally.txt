@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 image T14b: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt T14b.console.txt
+T14b.console.txt: deqp: done: 90 passed, 108 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 198 cases begun, 198 with a result, 0 without
+mustpass cases with a result: 174 (of 198 seen)
+group                                       pass   fail    n/s  other
+texture                                       78     96      0      0
+TOTAL                                         78     96      0      0
+(the pass / fail counts above are the result lines seen; the image's own counters:)
+  T14b: deqp: summary 198 cases begun, 198 with a result; deqp: done 90 passed, 108 failed, 0 not supported, 0 warnings; b1b5b845 DONE: 198 cases, P 90 F 108 R 0 N 0 other 0; 198 result lines seen
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_linear_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_linear_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_linear_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_linear_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_linear_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_linear_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_nearest_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_nearest_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_nearest_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_nearest_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_nearest_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.linear_mipmap_nearest_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_linear_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_linear_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_linear_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_linear_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_linear_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_linear_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_nearest_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_nearest_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_nearest_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_nearest_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_nearest_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_mipmap_nearest_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.filtering.nearest_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.clamp_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.clamp_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.clamp_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.mirror_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.mirror_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.mirror_repeat
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.repeat_clamp
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.repeat_mirror
+Fail dEQP-GLES3.functional.texture.vertex.2d_array.wrap.repeat_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_linear_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_linear_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_linear_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_linear_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_linear_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_linear_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_nearest_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_nearest_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_nearest_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_nearest_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_nearest_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.linear_mipmap_nearest_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_linear_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_nearest_linear_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_nearest_linear_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_nearest_linear_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_nearest_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_nearest_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_mipmap_nearest_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_nearest_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_nearest_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.filtering.nearest_nearest_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_clamp_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_clamp_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_clamp_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_mirror_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_mirror_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_mirror_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_repeat_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_repeat_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.clamp_repeat_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_clamp_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_clamp_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_clamp_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_mirror_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_mirror_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_mirror_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_repeat_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_repeat_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.mirror_repeat_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_clamp_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_clamp_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_clamp_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_mirror_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_mirror_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_mirror_repeat
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_repeat_clamp
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_repeat_mirror
+Fail dEQP-GLES3.functional.texture.vertex.3d.wrap.repeat_repeat_repeat
