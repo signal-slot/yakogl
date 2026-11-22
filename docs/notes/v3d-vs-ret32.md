@@ -57,9 +57,11 @@ The chain, from the draw to the QPU word:
    `select_vertex` (`src/shaderc/online/v3d/select.rs:2370`) builds its `Sel`
    with `ret32: 0` (`:2412`); the field's doc says "fragment stage only: the
    two stages number their bindings apart, and the key is the fragment's"
-   (`:474-476`). `select_fragment` takes the ambient fragment key,
+   (`:474-476`). The fragment selection took the ambient fragment key,
    `compile_lod_key().ret32` (`:2166`), which `link_program` set to
-   `fr.lod_key` (`backend.rs:1759-1761`). So a vertex look-up always has
+   `fr.lod_key` (`backend.rs:1759-1761`); since issue #10540 it takes the
+   key as an argument (`select_fragment_keyed`), as the vertex selection
+   does. So a vertex look-up always has
    P1 = `unit | 4` (`select.rs:934`), a two-word P0 mask
    (`words |= 1 << (lane / 2)`, `:910`) and the f16 unpack (`:1012-1016`).
 5. **The back end refuses.** `texture_units` runs once per stage
@@ -163,7 +165,9 @@ Four edits, in the order of the chain; none needs a new key field.
    `compile_lod_key()`: that ambient key is the fragment's (the stages
    number their bindings apart), and reading it would key vertex binding 3
    by the fragment's binding 3. Fix the field doc (`:474-476`), keep the
-   fragment's read at `:2166`.
+   fragment's read at `:2166` (removed by issue #10540: two programs
+   compiled at the same time, as tests in one binary do, read each other's
+   key there).
 4. `src/gl/draw.rs`: none, `stage_lod_key` is stage-agnostic (`:1747`); the
    doc at `:1728-1732` already says so. `src/v3d/backend.rs` and
    `src/v3d/texture.rs`: none (Today, 5). The `refusal_for` text stays: it
