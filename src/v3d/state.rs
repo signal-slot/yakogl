@@ -68,10 +68,11 @@ pub fn unsupported(d: &GlesDraw) -> Option<Refusal> {
      * clear quad (`clear_mrt`, one output per RT of the job) both address
      * the RTs in that order, so a shifted clear reaches the right
      * attachments. A draw's shader writes output i to RT i (Mesa's mapping,
-     * draw buffer i is RT i), so its output 1 would reach RT 0. Remapping
-     * the job's RTs back to draw-buffer order is the back end's
-     * (`extra_targets`, `Target`); until then the draw is refused rather
-     * than drawn with the wrong output (review R-09). */
+     * draw buffer i is RT i), so its output 1 would reach RT 0.
+     * [`draw_buffer_order`] gives the draw with its RTs in draw-buffer order
+     * (out_shift 0, so this does not refuse it); until the back end's
+     * `draw_call` applies it, the draw is refused rather than drawn with the
+     * wrong output (review R-09). */
     if d.targets[0].out_shift != 0 && d.index_count != 0 {
         return Some("draw buffer 0 is GL_NONE while a later draw buffer is written");
     }
@@ -81,6 +82,55 @@ pub fn unsupported(d: &GlesDraw) -> Option<Refusal> {
         return Some("a second index list in one draw is not implemented");
     }
     None
+}
+
+/* ---- draw-buffer order ------------------------------------------------------ */
+
+/// `d` with its colour targets in draw-buffer order, for a list whose draw
+/// buffer 0 is GL_NONE (review R-09); `None` when there is nothing to move
+/// (`targets[0].out_shift` 0).
+///
+/// The GL core hands the list from the first draw buffer that writes:
+/// target `k` takes fragment output `k + s`, `s` = `targets[0].out_shift`
+/// (`GlesDrawTarget`). The V3D compiler writes output `L` to RT `L` (Mesa's
+/// mapping, docs/notes/v3d-fragment-out.md), so the job's RT `n` must be
+/// draw buffer `n`: RT 0..s have no colour buffer (address 0: configured,
+/// never loaded or stored, write mask 0 by `rt_masks`) and RT `s + k` is
+/// `targets[k]`. The answer says so in the terms the job already takes:
+///
+/// - `target_gpu` 0 with `num_targets` past 1: RT 0 is configured with no
+///   address (driver/src/v3d/v3d_job.c skips its load and store, `rt0`).
+///   `target_w/h`, `target_format` and `target_alpha_bits` stay the first
+///   written attachment's, so the frame's size is unchanged and RT 0's tile
+///   format is a valid one;
+/// - `targets[s + k]` = `targets[k]` (shift cleared), `targets[0..s]` zero,
+///   `num_targets` + `s`;
+/// - `clear_target_mask` (bit k = target k) moves up by `s`; 0 (every draw
+///   buffer) and bit 7 (none of them) stay;
+/// - `target_color_mask` (per target) moves up by `s`, the dropped slots 0.
+///
+/// The GL core never lists more than [`GLES_MAX_TARGETS`] draw buffers, so
+/// `num_targets + s` fits; a malformed draw past it is returned unchanged
+/// for [`refusal`] and the back end to answer.
+pub fn draw_buffer_order(d: &GlesDraw) -> Option<GlesDraw> {
+    let s = d.targets[0].out_shift as usize;
+    let n = (d.num_targets.max(1) as usize).min(GLES_MAX_TARGETS);
+    if s == 0 || n + s > GLES_MAX_TARGETS {
+        return None;
+    }
+    let mut r = *d;
+    r.target_gpu = 0;
+    r.targets = [GlesDrawTarget::ZERO; GLES_MAX_TARGETS];
+    for k in 0..n {
+        r.targets[s + k] = GlesDrawTarget { out_shift: 0, ..d.targets[k] };
+    }
+    r.num_targets = (n + s) as u8;
+    if d.clear_target_mask != 0 && d.clear_target_mask != 0x80 {
+        r.clear_target_mask = d.clear_target_mask << s;
+    }
+    r.target_color_mask = [0; GLES_MAX_TARGETS];
+    r.target_color_mask[s..s + n].copy_from_slice(&d.target_color_mask[..n]);
+    Some(r)
 }
 
 /* ---- the clear quad -------------------------------------------------------- */
@@ -1136,6 +1186,69 @@ mod tests {
         assert_eq!(unsupported(&d), None);
         (d.targets[0].out_shift, d.index_count, d.do_clear) = (1, 0, true);
         assert_eq!(unsupported(&d), None, "a shifted clear is drawn");
+        /* the same draw in draw-buffer order is not refused */
+        (d.targets[0].out_shift, d.index_count, d.do_clear) = (1, 3, false);
+        let r = draw_buffer_order(&d).expect("a shifted list moves");
+        assert_eq!(unsupported(&r), None);
+    }
+
+    /// [`draw_buffer_order`]: RT n is draw buffer n. {NONE, ATT1, NONE,
+    /// ATT3} comes as targets [ATT1, gap, ATT3] with out_shift 1, and leaves
+    /// as RT 0 none, RT 1 ATT1, RT 2 none, RT 3 ATT3; the frame's size and
+    /// RT 0's format stay; the clear and per-target masks move with the
+    /// targets. An unshifted list, and one past four targets, do not move.
+    #[test]
+    fn draw_buffer_order_puts_rt_n_at_draw_buffer_n() {
+        let t = |gpu, format, out_shift| GlesDrawTarget { gpu, w: 24, h: 16, format, out_shift };
+        let mut d = GlesDraw::ZERO;
+        (d.target_gpu, d.target_w, d.target_h, d.target_format) = (0x1000, 24, 16, GLES_SURF_RGBA16F);
+        d.target_alpha_bits = 8;
+        d.targets[0] = t(0x1000, GLES_SURF_RGBA16F, 1);
+        d.targets[2] = t(0x3000, GLES_SURF_RGBA8UI, 0);
+        d.num_targets = 3;
+        d.index_count = 6;
+        d.per_target_mask = true;
+        d.target_color_mask = [0xf, 0, 0x3, 0];
+        d.clear_target_mask = 0b100;
+        assert_eq!(unsupported(&d), Some("draw buffer 0 is GL_NONE while a later draw buffer is written"));
+
+        let r = draw_buffer_order(&d).expect("a shifted list moves");
+        let gpus: Vec<u64> = r.targets.iter().map(|t| t.gpu).collect();
+        assert_eq!((r.target_gpu, r.num_targets, gpus), (0, 4, vec![0, 0x1000, 0, 0x3000]));
+        assert!(r.targets.iter().all(|t| t.out_shift == 0), "nothing left to shift");
+        assert_eq!((r.targets[1].format, r.targets[3].format), (GLES_SURF_RGBA16F, GLES_SURF_RGBA8UI));
+        assert_eq!(
+            (r.target_w, r.target_h, r.target_format, r.target_alpha_bits),
+            (24, 16, GLES_SURF_RGBA16F, 8),
+            "the frame and RT 0's format are the first written attachment's"
+        );
+        assert_eq!(r.clear_target_mask, 0b1000, "target 2 is draw buffer 3");
+        assert_eq!(r.target_color_mask, [0, 0xf, 0, 0x3]);
+        assert_eq!(refusal(&r), None);
+        assert_eq!(unsupported(&r), None);
+        /* RT 0 and RT 2 have no colour buffer: every channel masked off */
+        let st = job_state(&GlesDraw { blend: false, color_write: true, color_mask: 0xf, ..r }).unwrap();
+        assert!(st.rt_colormask_own);
+        assert_eq!(st.rt_colormask & 0xf0, 0, "RT 2's nibble");
+
+        /* glClear (mask 0, every draw buffer) and a clear of a dropped draw
+         * buffer only (bit 7) keep their meaning */
+        for m in [0, 0x80] {
+            assert_eq!(draw_buffer_order(&GlesDraw { clear_target_mask: m, ..d }).unwrap().clear_target_mask, m);
+        }
+        /* {NONE, NONE, NONE, ATT3}: one target, shift 3 */
+        let mut e = GlesDraw::ZERO;
+        (e.target_gpu, e.target_w, e.target_h) = (0x4000, 24, 16);
+        e.targets[0] = t(0x4000, GLES_SURF_RGBA8888, 3);
+        e.num_targets = 1;
+        let r = draw_buffer_order(&e).unwrap();
+        assert_eq!((r.num_targets, r.targets[3].gpu, r.targets[0].gpu), (4, 0x4000, 0));
+
+        /* nothing to move; a malformed list past four targets is left to the refusals */
+        d.targets[0].out_shift = 0;
+        assert!(draw_buffer_order(&d).is_none());
+        d.targets[0].out_shift = 2;
+        assert!(draw_buffer_order(&d).is_none(), "3 targets + shift 2 is past four");
     }
 
     /// Alpha-to-coverage is legal GL state the backend cannot render yet:
