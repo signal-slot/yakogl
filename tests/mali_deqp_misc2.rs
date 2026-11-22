@@ -33,7 +33,8 @@
 //! of the item already have references of other items' tests, or no Mesa
 //! reference could be drawn here: the note says which and why.
 //!
-//! None compiles at the tip: each test is ignored with its refusal quoted;
+//! Only `invariant_posonly` compiles (byte-equal); each other test is
+//! ignored with its refusal quoted;
 //! the lowering removes the `ignore` and the reference's entry in
 //! `REFUSALS` together. `refusals_pinned` runs now: it asserts each ignored
 //! reference's exact current refusal and names every one that moved.
@@ -51,7 +52,6 @@ fn misc2_invariant_cse() {
 }
 
 #[test]
-#[ignore = "refused: an invariant output (Mesa keeps its arithmetic exact, unfused)"]
 fn misc2_invariant_posonly() {
     mali_ref::assert_matches("deqp_misc2_invariant_posonly");
 }
@@ -116,7 +116,6 @@ const ATTRNUM: &str =
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc2_invariant_cse", INVARIANT),
-    ("deqp_misc2_invariant_posonly", INVARIANT),
     ("deqp_misc2_rebalance_funcsum_fs", REBALANCE),
     ("deqp_misc2_rebalance_invariant", REBALANCE),
     ("deqp_misc2_rebalance_random_fs", REBALANCE),
@@ -127,8 +126,10 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc2_attrnum_dead_attrs", ATTRNUM),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run): the exact
+/// build of an invariant output whose program has no other arithmetic
+/// (nir.rs `build`, `Nir::exact`).
+const MATCHED: &[&str] = &["deqp_misc2_invariant_posonly"];
 
 #[test]
 fn refusals_pinned() {
