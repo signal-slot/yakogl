@@ -197,36 +197,57 @@ from the first is "private classes not run", not a pass. The snapshot
 directory is removed after a rehearsal; nothing is pushed and no remote is
 added.
 
-### Rehearsal on the origin/main tip (2026-11-22): blocked
+### Rehearsal on the origin/main tip (2026-11-22)
 
 - **R** (source): `756e1cd7a5a770f2389cf0426c55d5cf08ea7642`, a
   descendant of the redaction cleanup (Part 4 at `3b8f4949`, the
-  `docs/release/snapshot.md` lab-host rule). origin/main's copy
-  (`7d248a8f`) holds the same defect.
-- **Tool output**: `make-snapshot: the tree keeps submodule gitlink(s), not
-  supported: before`, exit **8**, for both runs (`--author 'yakogl
-  rehearsal <rehearsal@invalid>' --date 2026-01-01T00:00:00Z`). No snapshot
-  was made, so there is no snapshot hash, determinism check or shape check
-  for R.
-- **Cause**: `a9ca11e1` ("Host dEQP-GLES3 read_pixels ...") committed an
-  empty directory `before` as a gitlink (mode 160000, `fa85a83567a7`, no
-  `.gitmodules`). The tool refuses a kept gitlink by design; the entry must
-  leave the tree in an ordinary commit (`git rm before`) before the real
-  snapshot. It is an accident, not a `snapshot-exclude` decision, and the
-  tool was not changed.
-- **Redaction scan, public classes, on R's tree** (not on a snapshot):
-  exit **3**, "0 H/M finding(s), 3 class(es) not run, 98 informational, 142
-  look-alike(s) dropped: NOT COMPLETE (private classes not run)".
-- **Redaction scan, private classes**: not run (no snapshot to scan); no
-  private value was written anywhere.
-- **Licence audit** (check 25's flags, on R's checkout, not a snapshot):
-  `findings: 0`.
-- The 7 `lab-host` hits at `docs/notes/x2-glmark2-slow-scenes.md:41-43`
-  of the 2026-11-17 rehearsal are closed by the x2-names-out and
-  redact-tree cleanups (Part 4 at `3b8f4949`: private exit 0, 0 H/M).
+  `docs/release/snapshot.md` lab-host rule). **The tool refuses R itself**:
+  `make-snapshot: the tree keeps submodule gitlink(s), not supported:
+  before`, exit **8**. `a9ca11e1` ("Host dEQP-GLES3 read_pixels ...")
+  committed an empty directory `before` as a gitlink (mode 160000,
+  `fa85a83567a7`, no `.gitmodules`); origin/main (`7d248a8f`) still has
+  it. It is an accident, not a `snapshot-exclude` decision; `git rm before`
+  in an ordinary commit is open and the tool was not changed.
+- **R'** (what was rehearsed): `20c9e3194f4ac87e1bcd570434f94fe43fc47f5a`,
+  a commit made only for this rehearsal (never on a branch) with R as its
+  parent and R's tree minus the `before` entry (tree `077c1290`). Everything
+  below is R' = R minus that one gitlink.
+- **Identity and date**: `yakogl rehearsal <rehearsal@invalid>`,
+  `2026-01-01T00:00:00Z`, given as `--author` and `--date`.
+- **Tool output** (exit 0, both runs): `source
+  20c9e3194f4ac87e1bcd570434f94fe43fc47f5a`, `snapshot
+  1dead7cd3407c7c26c7c3d4f0459410202a97b71`, `files 14593`, `exclusions:
+  none (tools/release/snapshot-exclude lists no path)`. The same command
+  into a second output directory printed the same `snapshot` hash: the tool
+  is deterministic. `--self-test` passed.
+- **Shape** (read through `git fetch <outdir> HEAD`): `git rev-list --count
+  FETCH_HEAD` 1; the snapshot's tree is `077c1290`, R''s tree. The worker
+  could not run git inside the output directory, so the parent, remote and
+  author checks of the Procedure were not read there; the tool adds no
+  remote and no parent by construction (one root commit), and none was
+  added.
+- **Redaction scan, public classes** (on the fetched snapshot commit with
+  `--allow <outdir>/tools/release/redaction-scan.allow`): exit **3**, "0
+  H/M finding(s), 3 class(es) not run, 98 informational, 142 look-alike(s)
+  dropped: NOT COMPLETE (private classes not run)" (14370 files scanned;
+  `third_party/` and `docs/release/redaction-audit.md` excluded). Exit 3 is
+  not a pass for line 8.
+- **Redaction scan, private classes**: **not run**. The command with the
+  farm's values in an inline `YAKOGL_REDACTION_PRIVATE` was not approved on
+  this worker. This is a gap, not a pass. The last private run (in memory,
+  tip `3b8f4949`, Part 4) read exit 0, 0 H/M; the 7 `lab-host` hits at
+  `docs/notes/x2-glmark2-slow-scenes.md:41-43` of the 2026-11-17 rehearsal
+  were closed by `x2-names-out` and the redact-tree cleanup.
+- **Licence audit** (`--root` the snapshot checkout, check 25's five
+  `--fail-on` classes plus `undecided`): exit **0**: 14559 files, 5518 with
+  an SPDX line, 7586 allowlisted; missing-spdx 0, unknown-id 0,
+  unused-license 0, third-party-mismatch 0, undecided 0, generated 88
+  (mismatch 0), third-party-unlabelled 13 (information); findings 0.
+- The snapshot directories sit under `$TMPDIR` (removed with the task); no
+  remote was added and nothing was pushed.
 
-Open: remove the `before` gitlink, then repeat this rehearsal (two runs for
-the hash, shape, both scans, the audit) on a descendant.
+Open before the real snapshot: `git rm before` (the gitlink), the private
+scan on the snapshot commit, then a rehearsal on a descendant.
 
 The real snapshot of the commit to publish, line 8 on it with the owner's
 private file, D7 (promote and make public) and D8 (the date) are the
