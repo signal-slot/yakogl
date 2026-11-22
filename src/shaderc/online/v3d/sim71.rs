@@ -1093,4 +1093,79 @@ mod tests {
         let o = run71(&code, &[1, 2], &fs_inputs(vec![vary]), &Env::default()).expect("runs");
         assert!(o.tlb[0].value.iter().all(Option::is_some));
     }
+
+    /// The thread end's THRSW carries a VPM store whose waddr field is no
+    /// register-file write (7.1 encodes STVPMV's opcode there, qpu_pack.c:
+    /// 1870-1883), beside a magic-register mul write and an LDUNIF signal:
+    /// all legal at the thread end, and the program runs to its end.
+    #[test]
+    fn a_vpm_store_thrsw_with_magic_and_signal_writes_runs() {
+        let mut st = stvpmv(20, 21);
+        st.mul = mul(MulOp71::Fmul, 6, true, rf(21), rf(21)).mul; // magic waddr 6: no rf write
+        st.sig.ldunif = true;
+        let code = words(&[
+            thrsw(Alu71::nop()),
+            thrsw(Alu71::nop()),
+            imm(20, 0),
+            imm(21, 1.0f32.to_bits()),
+            thrsw(st),
+            Alu71::nop(),
+            Alu71::nop(),
+        ]);
+        let o = run71(&code, &[5], &Inputs::Vertex(VsInputs { vpm: Vec::new() }), &Env::default()).expect("runs");
+        assert_eq!(o.vpm_out, vec![Some([1.0f32.to_bits(); LANES])]);
+    }
+
+    /// A vertex shader compiled by chain71 (tools/shaders/es100/hello.vert,
+    /// `gl_Position = M * v`) runs to its thread end with M = 2 * identity:
+    /// its VPM output holds 2 * each attribute component, written.
+    #[test]
+    fn a_chain71_vertex_shader_runs_to_the_thread_end() {
+        use crate::shaderc::online::sema::Stage;
+        use crate::shaderc::online::v3d::chain::Prim;
+        use crate::shaderc::online::v3d::chain71::{compile_program71, TARGET71};
+        use crate::shaderc::online::v3d::select::{QUNIFORM_CONSTANT, QUNIFORM_UNIFORM};
+        use crate::shaderc::online::{lower, store};
+        let vs = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders/es100/hello.vert"));
+        let fs = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders/es100/hello.frag"));
+        let (words, us, sizes, threads) = store::with_scratch(|a| {
+            let mut m = Vec::new();
+            for (stage, src) in [(Stage::Vertex, vs), (Stage::Fragment, fs)] {
+                m.push(lower::compile_to_ir(a, stage, a.alloc_str(src).expect("scratch")).expect("front end").module);
+            }
+            let v = &a.alloc_filled(1, m[0]).expect("scratch")[0];
+            let f = &a.alloc_filled(1, m[1]).expect("scratch")[0];
+            let p = compile_program71(v, f, Prim::Triangles, TARGET71, a).expect("7.1 compiles");
+            let us: Vec<(u32, u32)> = p.vs.code.uniforms.iter().map(|u| (u.contents, u.data)).collect();
+            (p.vs.code.words.to_vec(), us, p.vs.vattr_sizes, p.vs.threads)
+        })
+        .expect("scratch");
+        let rows: usize = sizes.iter().map(|&s| usize::from(s)).sum();
+        assert_eq!(rows, 4, "one vec4 attribute");
+        let block: Vec<u32> =
+            (0..16).map(|k| if k / 4 == k % 4 { 2.0f32.to_bits() } else { 0.0f32.to_bits() }).collect();
+        let stream: Vec<u32> = us
+            .iter()
+            .map(|&(c, d)| match c {
+                QUNIFORM_UNIFORM => block[d as usize],
+                QUNIFORM_CONSTANT => d,
+                _ => 1.0f32.to_bits(), // the viewport scales (1.0)
+            })
+            .collect();
+        let attr = |r: usize, l: usize| (r + 1) as f32 + (l / 8) as f32;
+        let vpm = (0..rows).map(|r| core::array::from_fn(|l| attr(r, l).to_bits())).collect();
+        let env = Env { threads, quads: true, ..Env::default() };
+        let o = run71(&words, &stream, &Inputs::Vertex(VsInputs { vpm }), &env).expect("runs to the thread end");
+        // The stores of the thread end landed: position rows (x, y, z, 1/w)
+        // and no row left undefined between them. clip w = 2 * attr row 3, so
+        // some row holds its reciprocal (the SFU's is approximate).
+        assert!(o.vpm_out.iter().flatten().count() >= 4, "{:x?}", o.vpm_out);
+        let hit = o.vpm_out.iter().flatten().any(|row| {
+            (0..LANES).all(|l| {
+                let want = 1.0 / (2.0 * attr(3, l));
+                (f32::from_bits(row[l]) - want).abs() < want * 1e-3
+            })
+        });
+        assert!(hit, "no VPM row holds 1 / w: {:x?}", o.vpm_out);
+    }
 }
