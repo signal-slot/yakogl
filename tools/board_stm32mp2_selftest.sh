@@ -69,7 +69,13 @@
 #    The fake board's xargs refuses -0 as the DK's BusyBox one does, so
 #    install's boot-file record must not need it; a backup left with an empty
 #    record counts as a first install.
-#    An SD card numbered mmcblk1 is accepted (status reads it). A card whose
+#    An SD card numbered mmcblk1 is accepted (status reads it). The card
+#    renumbered by the reboot (mmcblk2 before, mmcblk0 after, as on
+#    2026-11-21): the runner resolves it again and its disarm writes the new
+#    number, never the stale one (card_before=, card_after= in meta.txt); a
+#    stale node that is not a block device, and a disk of type MMC resolved
+#    after the reboot, are REFUSED (rc 7, NEEDS A PERSON) with no write after
+#    the reboot. The fake board's "test -b" is isblk. A card whose
 #    environment has a preboot of its own: install stops with rc 7 before
 #    any write or backup.
 # 7. The expected-watchdog run (run --expect-watchdog, the hang option of
@@ -109,7 +115,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=214
+WANT_CHECKS=219
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -818,6 +824,11 @@ mkdir -p "$F/dev" "$F/boot/mmc0_extlinux" "$F/boot/mmc1_extlinux" "$F/proc" "$F/
 echo SD > "$F/sys/block/mmcblk0/device/type"
 echo MMC > "$F/sys/block/mmcblk1/device/type"
 cp "$S/env.bin" "$F/dev/mmcblk0p7"
+# the partitions as sysfs lists them under their disk, and the bootfs node
+# (the runner's card_check asks for both; the fake's isblk takes a file
+# under $F/dev for a block device unless state/notblock names it)
+mkdir -p "$F/sys/block/mmcblk0/mmcblk0p7" "$F/sys/block/mmcblk0/mmcblk0p8"
+touch "$F/sys/block/mmcblk0/mmcblk0p7/partition" "$F/sys/block/mmcblk0/mmcblk0p8/partition" "$F/dev/mmcblk0p8"
 # the stock boot files of the card (names as #1281 lists them; contents fake)
 printf 'stock Image.gz\n' > "$F/boot/Image.gz"
 printf 'stock boot.scr.uimg\n' > "$F/boot/boot.scr.uimg"
@@ -877,6 +888,13 @@ cat > "$F/bin/lsblk" <<EOF
 cat "$F/state/lsblk"
 EOF
 printf '#!/bin/sh\necho fakeboard\n' > "$F/bin/uname"
+# isblk NODE: test -b on the fake board (a stale node is a regular file: state/notblock)
+cat > "$F/bin/isblk" <<EOF
+#!/bin/sh
+[ -f "\$1" ] || exit 1
+grep -qxF "\${1##*/}" "$F/state/notblock" 2>/dev/null && exit 1
+exit 0
+EOF
 printf '#!/bin/sh\nexit 0\n' > "$F/bin/who"
 cat > "$F/bin/systemctl" <<EOF
 #!/bin/sh
@@ -889,6 +907,26 @@ reboot)
     die) touch "$F/state/dead" ;;
     noclear) printf '1.00 1.00\n' > "$F/proc/uptime" ;;
     noreboot) ;;
+    flip | stale | emmc)
+        # the next boot numbers the disks anew and leaves yako_once set (so
+        # the runner's own disarm would write after the cycle): flip, the
+        # card mmcblk2 comes back as mmcblk0; stale, the numbering stays but
+        # /dev/mmcblk2p7 is a regular file (what dd once made on devtmpfs);
+        # emmc, /boot is reported on mmcblk0, whose type is MMC; the card's
+        # environment as the reboot left it is kept in state/env.at-reboot
+        cp "$F/dev/mmcblk2p7" "$F/state/env.at-reboot"
+        case "\$mode" in
+        flip)
+            mv "$F/dev/mmcblk2p7" "$F/dev/mmcblk0p7"; mv "$F/dev/mmcblk2p8" "$F/dev/mmcblk0p8" ;;
+        stale) echo mmcblk2p7 > "$F/state/notblock" ;;
+        emmc) echo MMC > "$F/sys/block/mmcblk0/device/type" ;;
+        esac
+        case "\$mode" in
+        flip | emmc)
+            printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
+            sed s/mmcblk2/mmcblk0/g "$F/state/lsblk" > "$F/state/lsblk.n" && mv "$F/state/lsblk.n" "$F/state/lsblk" ;;
+        esac
+        printf '1.00 1.00\n' > "$F/proc/uptime" ;;
     hang) sleep 20 ;;
     *)
         python3 -I "$F/bin/uboot_saveenv" "$F/dev/mmcblk0p7" yako_once &&
@@ -917,7 +955,7 @@ printf '%s\n' "\${opts# }" >> "\$F/ssh.opts"
 # state/slowdd: a write of the partition takes 3 s (a signal arrives in it)
 [ -e "\$F/state/slowdd" ] && case "\$cmd" in *"dd of="*) sleep 3 ;; esac
 cmd=\$(printf '%s' "\$cmd" | sed -E -e "s#/boot(/|[ );']|\$)#\$F/boot\\1#g" -e "s#/dev/(mmcblk[0-9]+p[0-9]+)#\$F/dev/\\1#g" \\
-    -e "s#/proc/uptime#\$F/proc/uptime#g" -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/drop_caches#g" -e "s#conv=fsync#conv=fsync,notrunc#g")
+    -e "s#test -b #isblk #g" -e "s#/proc/uptime#\$F/proc/uptime#g" -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/drop_caches#g" -e "s#conv=fsync#conv=fsync,notrunc#g")
 PATH="\$F/bin:\$PATH" exec sh -c "\$cmd"
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$S/fakebin/stty"
@@ -1236,6 +1274,8 @@ echo SD > "$F/sys/block/mmcblk1/device/type"
 printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
 sed s/mmcblk0/mmcblk1/ <<<"$CARD_TABLE" > "$F/state/lsblk"
 cp "$PART" "$F/dev/mmcblk1p7"
+mkdir -p "$F/sys/block/mmcblk1/mmcblk1p7" "$F/sys/block/mmcblk1/mmcblk1p8"
+touch "$F/sys/block/mmcblk1/mmcblk1p7/partition" "$F/sys/block/mmcblk1/mmcblk1p8/partition" "$F/dev/mmcblk1p8"
 out=$(live status 2>&1)
 rc=$?
 check "live status with the SD card numbered mmcblk1 (type SD): rc 0, its u-boot-env and bootfs read, 'install: ok'" \
@@ -1243,8 +1283,73 @@ check "live status with the SD card numbered mmcblk1 (type SD): rc 0, its u-boot
 echo MMC > "$F/sys/block/mmcblk1/device/type"
 printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
 printf '%s\n' "$CARD_TABLE" > "$F/state/lsblk"
-rm -f "$F/dev/mmcblk1p7"
+rm -rf "$F/dev/mmcblk1p7" "$F/dev/mmcblk1p8" "$F/sys/block/mmcblk1/mmcblk1p7" "$F/sys/block/mmcblk1/mmcblk1p8"
 cp "$S/ssh.all.keep" "$F/ssh.all.log"
+
+# the card renumbered between boots (2026-11-21, gc_fence: mmcblk2 before
+# the reboot, mmcblk0 after it): the runner resolves the card again once the
+# board answers and asks the board about every target before it reads or
+# writes it. card_at2: the SD card as mmcblk2 before the reboot; card_home:
+# back to mmcblk0 with the one-shot gone, for the cases after these.
+card_at2() {
+    mkdir -p "$F/sys/block/mmcblk2/device" "$F/sys/block/mmcblk2/mmcblk2p7" "$F/sys/block/mmcblk2/mmcblk2p8"
+    echo SD > "$F/sys/block/mmcblk2/device/type"
+    touch "$F/sys/block/mmcblk2/mmcblk2p7/partition" "$F/sys/block/mmcblk2/mmcblk2p8/partition"
+    mv "$PART" "$F/dev/mmcblk2p7" && mv "$F/dev/mmcblk0p8" "$F/dev/mmcblk2p8"
+    printf '/dev/mmcblk2p8 ext4\n' > "$F/state/findmnt"
+    sed s/mmcblk0/mmcblk2/g <<<"$CARD_TABLE" > "$F/state/lsblk"
+    rm -f "$F/state/notblock" "$F/state/env.at-reboot"
+    : > "$F/ssh.log"
+}
+card_home() {
+    rm -f "$F/state/mode" "$F/state/notblock" "$F/dev/mmcblk0p7.emmc"
+    echo SD > "$F/sys/block/mmcblk0/device/type"
+    [ ! -e "$F/dev/mmcblk2p7" ] || mv "$F/dev/mmcblk2p7" "$PART"
+    [ ! -e "$F/dev/mmcblk2p8" ] || mv "$F/dev/mmcblk2p8" "$F/dev/mmcblk0p8"
+    ENVTB unset "$PART" "$PART.u" yako_once yako_file >/dev/null && mv "$PART.u" "$PART"
+    rm -rf "$F/sys/block/mmcblk2" "$F"/boot/yakogl/once-* "$LEFTF"
+    printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
+    printf '%s\n' "$CARD_TABLE" > "$F/state/lsblk"
+}
+after_reboot() { awk -v r="$(grep -n "systemctl reboot" "$F/ssh.log" | head -1 | cut -d: -f1)" 'NR > r' "$F/ssh.log"; }
+card_at2
+echo flip > "$F/state/mode"
+out=$(live run "$S/img/mp2.bin" "$S/live-logs" flip 2>&1)
+rc=$?
+rd=$(ls -d "$S"/live-logs/*-flip-* 2>/dev/null | head -1)
+check "card renumbered (mmcblk2 before the reboot, mmcblk0 after): rc 6, the arm written to /dev/mmcblk2p7 before the reboot, the disarm after it to /dev/mmcblk0p7 alone (the card resolved again), nothing named mmcblk2 after the reboot, no file made at the stale node" \
+    eval '[ "$rc" = 6 ] && grep -q " rc=6 verdict=done " <<<"$out" && grep -q "dd of=/dev/mmcblk2p7 bs=512 seek=992" "$F/ssh.log" && a=$(after_reboot) &&
+          grep -q "dd of=/dev/mmcblk0p7 bs=512 seek=992 conv=fsync status=none" <<<"$a" && ! grep -q "mmcblk2" <<<"$a" && [ ! -e "$F/dev/mmcblk2p7" ] &&
+          grep -q "test -b /dev/mmcblk0p7 " <<<"$a" && [ "$(vals "$PART" yako_once yako_file | paste -sd"|" -)" = "-|-" ] && grep -qx "disarmed=after the cycle" "$rd/meta.txt"'
+check "card renumbered: the record has card_before=/dev/mmcblk2 and card_after=/dev/mmcblk0 (device names only), the staged image removed" \
+    eval 'grep -qx "card_before=/dev/mmcblk2" "$rd/meta.txt" && grep -qx "card_after=/dev/mmcblk0" "$rd/meta.txt" && [ -z "$(ls "$F"/boot/yakogl/once-* 2>/dev/null)" ] && ! grep -q "^card_refused=" "$rd/meta.txt"'
+card_home
+card_at2
+echo stale > "$F/state/mode"
+out=$(live run "$S/img/mp2.bin" "$S/live-logs" stale 2>&1)
+rc=$?
+rd=$(ls -d "$S"/live-logs/*-stale-* 2>/dev/null | head -1)
+check "a stale node after the reboot (/dev/mmcblk2p7 a regular file, not a block device): rc 7, REFUSED naming it, NEEDS A PERSON, no dd of= and no rm after the reboot, the partition as the reboot left it (yako_once still set)" \
+    eval '[ "$rc" = 7 ] && grep -q "REFUSED: after the reboot: /dev/mmcblk2p7 is not a block device" <<<"$out" && grep -q "NEEDS A PERSON: the card did not pass the checks" <<<"$out" &&
+          grep -q " rc=7 verdict=done " <<<"$out" && a=$(after_reboot) && ! grep -q "dd of=" <<<"$a" && ! grep -qE "(^| )rm " <<<"$a" &&
+          cmp -s "$F/state/env.at-reboot" "$F/dev/mmcblk2p7" && [ "$(vals "$F/dev/mmcblk2p7" yako_once | head -1 | cut -c1-6)" = stale- ]'
+check "a stale node: the record has card_refused= and card_after=/dev/mmcblk2, the state file names the refusal and the staged image for a person" \
+    eval 'grep -q "^card_refused=after the reboot: /dev/mmcblk2p7 is not a block device" "$rd/meta.txt" && grep -qx "card_after=/dev/mmcblk2" "$rd/meta.txt" &&
+          grep -q "^left=the card was refused after the reboot" "$LEFTF" && grep -q "^left=/boot/yakogl/once-stale-.*on the card" "$LEFTF" && ! leaks_live "$out"'
+card_home
+card_at2
+cp "$S/env.bin" "$F/dev/mmcblk0p7"
+cp "$S/env.bin" "$S/emmc0-before.bin"
+echo emmc > "$F/state/mode"
+out=$(live run "$S/img/mp2.bin" "$S/live-logs" emmct 2>&1)
+rc=$?
+rd=$(ls -d "$S"/live-logs/*-emmct-* 2>/dev/null | head -1)
+check "the disk resolved after the reboot has type MMC (the eMMC as mmcblk0): rc 7, REFUSED 'not SD', NEEDS A PERSON, no dd of= and no rm after the reboot, the eMMC's /dev/mmcblk0p7 and the card's partition byte for byte" \
+    eval '[ "$rc" = 7 ] && grep -q "REFUSED: after the reboot: /boot is on /dev/mmcblk0, whose /sys/block/mmcblk0/device/type is .MMC., not SD" <<<"$out" && grep -q "NEEDS A PERSON: the card did not pass" <<<"$out" &&
+          a=$(after_reboot) && ! grep -q "dd of=" <<<"$a" && ! grep -qE "(^| )rm " <<<"$a" && cmp -s "$S/emmc0-before.bin" "$F/dev/mmcblk0p7" && cmp -s "$F/state/env.at-reboot" "$F/dev/mmcblk2p7" &&
+          grep -qx "card_before=/dev/mmcblk2" "$rd/meta.txt" && grep -qx "card_after=/dev/mmcblk0" "$rd/meta.txt"'
+mv "$F/dev/mmcblk0p7" "$F/dev/mmcblk0p7.emmc"
+card_home
 
 # a card whose environment has a preboot of its own: install refuses with
 # rc 7 before any change (no write, no pristine image, nothing to undo)

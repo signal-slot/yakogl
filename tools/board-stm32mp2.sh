@@ -148,7 +148,20 @@
 # /boot = mmcblk0p8, u-boot-env = mmcblk0p7, 512 KiB) and the eMMC is mmcblk1
 # (type MMC, not booted, the same labels: its u-boot-env is mmcblk1p5,
 # 1 MiB). Nothing is resolved through /dev/disk/by-partlabel (on the DK it
-# names the eMMC's partitions); a /dev/disk/ path is refused. It never repartitions, loads or unloads a module, or touches
+# names the eMMC's partitions); a /dev/disk/ path is refused. Linux numbers
+# the card and the eMMC differently from boot to boot (mmcblk2 before a
+# reboot and mmcblk0 after it, seen 2026-11-21), so a device resolved before
+# a reboot is never used after it: once the board answers again the card is
+# resolved again by the same rule (meta.txt: card_before=, card_after=), and
+# its partition numbers must be the ones of before. Right before every read
+# or write of the u-boot-env partition or of a file under /boot, the board
+# itself is asked (card_check): the node is a block device (test -b; a stale
+# node that dd once created as a regular file on devtmpfs is not), it is a
+# partition of the disk just resolved (/sys/block/<disk>/<part>/partition),
+# that disk's type is SD, and /boot is still mounted from the bootfs
+# partition resolved. A check that fails after the reboot is "REFUSED:":
+# nothing more is read or written, and the board is left for a person (rc 7,
+# NEEDS A PERSON), never retried. It never repartitions, loads or unloads a module, or touches
 # tailscale or sshd: every command it sends is in this file, and the
 # self-test's fake board logs them. ssh checks the board's host key and
 # never records one (StrictHostKeyChecking=yes, UpdateHostKeys=no): the key
@@ -225,7 +238,9 @@
 # environment write did not read back; 6 the one-shot was still set after
 # the cycle (cleared); 7 NEEDS A PERSON (install and run: the environment
 # has a preboot of its own, which the runner never overwrites; uninstall:
-# bootcmd carries the fallback prefix, and bootcmd is ST's, never written); 129, 130, 143 ended
+# bootcmd carries the fallback prefix, and bootcmd is ST's, never written;
+# run: the card refused once the board answered again, card_refused= in
+# meta.txt, nothing written after it); 129, 130, 143 ended
 # by HUP, INT, TERM (after the undo; the state file says what is left).
 #
 # Environment (no default for a machine or an address; none is ever written
@@ -567,6 +582,7 @@ where_env() {
         $'/dev/mmcblk0p8 ext4 /dev/mmcblk0 SD\n/dev/mmcblk0 \n/dev/mmcblk0p7 u-boot-env\n/dev/mmcblk0p8 bootfs' ||
         die "cannot read the mount of /boot and the card's partitions"
     read -r BOOT_DEV fstype disk dtype <<<"$(head -1 <<<"$m")"
+    [ -z "${CARD_SEEN_FILE:-}" ] || printf '%s\n' "$disk" > "$CARD_SEEN_FILE"   # reresolve's card_after
     PART_TABLE=$(tail -n +2 <<<"$m")
     [ "$fstype" = ext4 ] || die "/boot is '$fstype' on $BOOT_DEV, not ext4 (U-Boot's ext4load reads bootfs)"
     # the number does not name the eMMC (on the DK the card is mmcblk0 and
@@ -585,6 +601,56 @@ where_env() {
     [ "${ENV_DEV%p*}" = "${BOOT_DEV%p*}" ] || die "REFUSED: $ENV_DEV is not on $disk, the card /boot is on"
     dev_guard "$ENV_DEV" "$ENV_LABEL"
 }
+# card_check DEV LABEL: asked of the board right before DEV (the u-boot-env
+# partition, or the bootfs partition for a file under /boot) is read or
+# written: dev_guard (the label from the card's own table), then on the
+# board DEV is a block device, a partition of CARD_DISK in sysfs, that
+# disk's type is SD and /boot is mounted from BOOT_DEV. Any of it failing,
+# or CARD_REFUSED set (a refusal after the reboot), ends the script REFUSED.
+CARD_REFUSED=
+card_check() {
+    local dev=$1 want=$2 k n facts blk part typ boot
+    [ -z "$CARD_REFUSED" ] || die "REFUSED: $CARD_REFUSED: nothing more is read or written"
+    dev_guard "$dev" "$want"
+    k=${CARD_DISK##*/}
+    n=${dev##*/}
+    bget facts "test -b $dev && echo blk=1 || echo blk=0; test -e /sys/block/$k/$n/partition && echo part=1 || echo part=0; echo type=\$(cat /sys/block/$k/device/type 2>/dev/null); set -- \$(findmnt -n -v -o SOURCE -T /boot); echo boot=\$1" \
+        $'blk=1\npart=1\ntype=SD\nboot='"$BOOT_DEV" ||
+        die "REFUSED: cannot ask the board whether $dev is a partition of the SD card $CARD_DISK"
+    blk=$(sed -n 's/^blk=//p' <<<"$facts"); part=$(sed -n 's/^part=//p' <<<"$facts")
+    typ=$(sed -n 's/^type=//p' <<<"$facts"); boot=$(sed -n 's/^boot=//p' <<<"$facts")
+    [ "$blk" = 1 ] || die "REFUSED: $dev is not a block device on the board (a stale node: the card is not that number now)"
+    [ "$part" = 1 ] || die "REFUSED: $dev is not a partition of $CARD_DISK on the board (/sys/block/$k/$n)"
+    [ "$typ" = SD ] || die "REFUSED: $CARD_DISK has device type '${typ:-unread}' on the board, not SD: this runner writes the microSD the board booted from, never the eMMC"
+    [ -n "$BOOT_DEV" ] && [ "$boot" = "$BOOT_DEV" ] || die "REFUSED: /boot is mounted from '${boot:-nothing}' on the board, not $BOOT_DEV, the card's bootfs as resolved"
+}
+boot_check() { card_check "$BOOT_DEV" "$BOOT_LABEL"; }
+# reresolve: after the board answers from a new boot, the card resolved
+# again by where_env's rule and checked (card_check) in a subshell, so that a
+# refusal comes back here as CARD_REFUSED instead of ending the script;
+# on success CARD_DISK, CARD_TYPE, BOOT_DEV, BOOT_PART, ENV_DEV and
+# PART_TABLE are the new boot's. The partition numbers must be those of
+# before (the same card's layout). Returns 1 with CARD_REFUSED set.
+reresolve() {
+    local bp=$BOOT_PART ep=${ENV_DEV##*p} why
+    rm -f "$TMP/card.seen"
+    if ( CARD_SEEN_FILE=$TMP/card.seen; where_env &&
+        { [ "$BOOT_PART" = "$bp" ] || die "REFUSED: the card's bootfs is partition $BOOT_PART after the reboot, $bp before: not the same card"; } &&
+        { [ "${ENV_DEV##*p}" = "$ep" ] || die "REFUSED: the card's $ENV_LABEL is partition ${ENV_DEV##*p} after the reboot, $ep before: not the same card"; } &&
+        card_check "$ENV_DEV" "$ENV_LABEL" && boot_check &&
+        printf '%s\n' "$CARD_DISK" "$CARD_TYPE" "$BOOT_DEV" "$BOOT_PART" "$ENV_DEV" > "$TMP/card.new" &&
+        printf '%s\n' "$PART_TABLE" > "$TMP/card.table" ) 2> "$TMP/card.err"; then
+        { read -r CARD_DISK; read -r CARD_TYPE; read -r BOOT_DEV; read -r BOOT_PART; read -r ENV_DEV; } < "$TMP/card.new"
+        PART_TABLE=$(cat "$TMP/card.table")
+        return 0
+    fi
+    why=$(grep -h 'REFUSED: ' "$TMP/card.err" | tail -1)
+    [ -n "$why" ] || why=$(grep -v '^DRY ' "$TMP/card.err" | tail -1)
+    why=${why#"$TAG: "}
+    why=${why#REFUSED: }
+    CARD_REFUSED="after the reboot: ${why:-the card could not be resolved again}"
+    return 1
+}
 # env_pull FILE: the whole partition into FILE on the host (dd over ssh; the
 # board's envtools cannot start, see the header), at least ENV_HI bytes
 env_pull() {
@@ -595,6 +661,7 @@ env_pull() {
 # (or one valid and one blank, the stock card's shape)
 env_read() {
     local sz
+    card_check "$ENV_DEV" "$ENV_LABEL"
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > $1 (the whole $ENV_LABEL partition)"
         return 0
@@ -613,6 +680,7 @@ env_read() {
 # (never taken as "not set"). In --dry-run VAR gets DRY-VALUE.
 env_board_vars() {
     local __v=$1 __n=$2 __r=0
+    card_check "$ENV_DEV" "$ENV_LABEL"
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host, decoded there: uboot_env.py print $__n"
         printf -v "$__v" '%s' "${3:-}"
@@ -638,7 +706,7 @@ env_push() {
 env_write() {
     local file=$1 what=$2 got want names
     names=$(sed 's/=.*//' "$TMP/expect" | paste -sd' ' -)
-    dev_guard "$ENV_DEV" "$ENV_LABEL"
+    card_check "$ENV_DEV" "$ENV_LABEL"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ tail -c +$((ENV_LO + 1)) $file | head -c $((ENV_HI - ENV_LO)) | ssh BOARD '${SU}dd of=$ENV_DEV bs=512 seek=$((ENV_LO / 512)) conv=fsync status=none'"
         echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host <env.back>: must equal the host image byte for byte"
@@ -668,7 +736,7 @@ env_write() {
 PRISTINE=
 env_restore() {
     [ -n "$PRISTINE" ] && [ -f "$PRISTINE" ] || return 0
-    dev_guard "$ENV_DEV" "$ENV_LABEL"
+    card_check "$ENV_DEV" "$ENV_LABEL"
     local r=0
     ENV_PUSHING=1
     fgw env_push "$PRISTINE" || r=$?
@@ -873,6 +941,7 @@ verdict_line() {
     elif [ "$bv" = complete ]; then v=done; rc=0
     else v=no_end_line; rc=4; fi
     [ "$cycle" = 6 ] && [ "$rc" = 0 ] && rc=6
+    [ "$cycle" = 7 ] && rc=7   # the card refused after the reboot: a person
     local kind=row
     [ "$blind" = 1 ] && kind=blind
     V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after$ext"
@@ -881,7 +950,12 @@ verdict_line() {
 # the line after a not_back verdict (run and tally): what the plan asks of a
 # board that did not come back
 needs_person() {
-    local dir=$1 bound
+    local dir=$1 bound why
+    why=$(mget card_refused "$dir")
+    if [ -n "$why" ]; then
+        echo "$TAG: NEEDS A PERSON: the card did not pass the checks once the board answered again ($why). Nothing was read or written after that: the environment is as U-Boot left it (yako_once may still be set) and the staged image is on the card. This runner never retries: release the board, report it, and let a person look at which disk is the microSD before 'disarm'."
+        return 0
+    fi
     [ "$V_RC" = 5 ] || return 0
     bound=$(mget wait_bound "$dir")
     bound=${bound:+$bound s}
@@ -1072,6 +1146,7 @@ cmd_status() {
         env_tool print "$TMP/env.status" bootcmd bootdelay boot_targets preboot $OUR_VARS 2>&1
         echo
     fi
+    boot_check
     b "ls -l $STAGE_DIR $STAGE_DIR/$BACKUP_SUB 2>/dev/null; df -B1 --output=avail /boot | tail -1; cut -d' ' -f1 /proc/uptime"
     installed
     echo "install: $INSTALLED"
@@ -1079,6 +1154,7 @@ cmd_status() {
     echo "env partition: $ENV_DEV (copies at $ENV_OFF${ENV_OFF2:+, $ENV_OFF2}, size $ENV_SIZE); bootfs: $BOOT_DEV (U-Boot part $BOOT_PART, card $CARD_DISK)"
     lock_path
     if [ -n "$LEFT" ] && [ -s "$LEFT" ]; then left_show 2>&1; else echo "left behind: nothing recorded"; fi
+    boot_check
     if [ "$DRY" = 1 ]; then
         b "cd /boot && ${SU}sha256sum -c $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt --quiet   # the stock boot files against install's record"
     else
@@ -1115,6 +1191,7 @@ cmd_install() {
         echo "DRY host\$ mkdir -p $bdir && cp <env.bin> $PRISTINE"
         echo "DRY host\$ python3 tools/uboot_env.py ... set <env.bin> <env.new> 'preboot=$PREBOOT' 'yako_hook=$YAKO_HOOK' 'yako_mmc=$YAKO_MMC' yako_addr=$YAKO_ADDR yako_part=$BOOT_PART 'yako_bootcmd_prev=<bootcmd without the hook>'   # bootcmd is ST's: never written; preboot only where the environment has none (another preboot: rc 7, nothing written)"
         printf 'preboot=%s\nyako_addr=%s\nyako_part=%s\n' "$PREBOOT" "$YAKO_ADDR" "$BOOT_PART" > "$TMP/expect"
+        boot_check
         b "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && ${SU}cp <env.bin> $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && cd /boot && find . -path ./yakogl -prune -o -type f -exec ${SU}sha256sum {} + | LC_ALL=C sort -k2 > $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt"
         env_write "<env.new>" "install"
         note "install (dry run): hook state read as '$st'; nothing was changed"
@@ -1128,6 +1205,7 @@ cmd_install() {
     cp "$TMP/env.bin" "$PRISTINE" || die "cannot keep the pristine image at $PRISTINE"
     chmod 600 "$PRISTINE"
     local first
+    boot_check
     bget first "${SU}mkdir -p $STAGE_DIR/$BACKUP_SUB && if test -e $STAGE_DIR/$BACKUP_SUB/u-boot-env.bin && test -s $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt; then echo kept; else echo first; fi" ||
         die "cannot create $STAGE_DIR/$BACKUP_SUB on the card"
     if [ "$first" = first ]; then
@@ -1163,6 +1241,7 @@ cmd_uninstall() {
         echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> preboot $OUR_VARS   # preboot only when it is '$PREBOOT' (another is never touched); bootcmd is ST's: never written; while it begins with the hook, only yako_once yako_file"
         : > "$TMP/expect"
         env_write "<env.new>" "uninstall"
+        boot_check
         b "cd /boot && ${SU}sha256sum -c $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt --quiet   # the stock boot files as install found them, before the record goes"
         b "${SU}rm -rf $STAGE_DIR"
         return 0
@@ -1176,6 +1255,7 @@ cmd_uninstall() {
         env_write "$TMP/env.new" "uninstall"
     fi
     if [ "$HOOKED" = 1 ]; then
+        boot_check
         b "${SU}rm -f $STAGE_DIR/once-*.bin $STAGE_DIR/once-*.bin.part" || true
         needs_person_bootcmd unhook
     fi
@@ -1186,6 +1266,7 @@ cmd_uninstall() {
     [ "$left" != "$PREBOOT" ] || die "preboot is still '$PREBOOT' after the uninstall" 5
     # the stock boot files as install recorded them, before the record goes
     local chk
+    boot_check
     bget chk "if test -f $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt; then cd /boot && ${SU}sha256sum -c $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt --quiet 2>&1 && echo unchanged; else echo norecord; fi" || true
     case "$chk" in
     unchanged) note "stock boot files: unchanged since install" ;;
@@ -1221,6 +1302,7 @@ cmd_disarm() {
             [ -z "$once" ] || die "yako_once is still '$once'" 5
         fi
     fi
+    boot_check
     b "${SU}rm -f $STAGE_DIR/once-*.bin $STAGE_DIR/once-*.bin.part" || die "cannot remove the staged images"
     bget rest "ls $STAGE_DIR/once-* 2>/dev/null   # must print nothing" '' || true
     [ -z "$rest" ] || die "staged images are still on the card: $rest" 5
@@ -1249,6 +1331,8 @@ undo_arm() {
 # remove_staged: the staged image (and a cut-off copy) off the card, read back
 remove_staged() {
     [ -n "$STAGED" ] || return 0
+    [ -z "$CARD_REFUSED" ] || return 1
+    boot_check
     b "${SU}rm -f $STAGED $STAGED.part && ! test -e $STAGED && ! test -e $STAGED.part" || return 1
     STAGED=
 }
@@ -1267,6 +1351,7 @@ run_undo() {
             left+=("$STAGED (or its .part) on the card")
         fi
     fi
+    [ -n "$CARD_REFUSED" ] && left+=("the card was refused $CARD_REFUSED; nothing was read or written after it")
     [ "$WENT" = 1 ] && [ "$BACK" = 0 ] &&
         left+=("the board was rebooted and is not back: U-Boot clears yako_once before it loads; 'disarm' clears it if it is still set")
     [ "$RUN_OWNS_LEFT" = 1 ] || { [ ${#left[@]} = 0 ] || echo "$TAG: WARNING: left behind: ${left[*]}" | scrub >&2; return 0; }
@@ -1325,12 +1410,14 @@ cmd_run() {
     left_show
     common_prechecks
     where_env
+    meta card_before "$CARD_DISK"
     installed
     st=$INSTALLED
     [ "${st#needs a person}" = "$st" ] || needs_person_hook
     [ "$st" = ok ] || die "the U-Boot hook is not installed as this script writes it ($st): 'install' first"
     env_board_get once yako_once
     [ -z "$once" ] || die "a one-shot is already pending (yako_once=$once); find its owner, or 'disarm'"
+    boot_check
     bget left "ls $STAGE_DIR/once-* 2>/dev/null; true   # must print nothing" '' || die "cannot list $STAGE_DIR on the board"
     [ -z "$left" ] || die "$STAGE_DIR holds a one-shot image (or a cut-off copy) of a run that did not clean up ($left): look at it, or 'disarm'"
     # the board shows nothing left: from here this run owns the state file
@@ -1358,12 +1445,14 @@ cmd_run() {
     STAGED=$STAGE_DIR/$file
     STAGED_OURS=1
     left_write "staging $STAGED"
+    boot_check
     if [ "$DRY" = 1 ]; then
         echo "DRY board\$ ${SU}sh -c 'mkdir -p $STAGE_DIR && cat > $STAGE_DIR/$file.part && sync && mv $STAGE_DIR/$file.part $STAGE_DIR/$file && sync' < $IMG"
     else
         fgw timeout "$STAGE_TIMEOUT" ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}sh -c 'mkdir -p $STAGE_DIR && cat > $STAGE_DIR/$file.part && sync && mv $STAGE_DIR/$file.part $STAGE_DIR/$file && sync'" < "$IMG" ||
             die "copying the image to $STAGE_DIR/$file failed"
     fi
+    boot_check
     bget st "echo 3 | ${SU}tee /proc/sys/vm/drop_caches >/dev/null && sha256sum $STAGE_DIR/$file" "$IMG_SHA  $STAGE_DIR/$file" || st=
     st=${st%% *}
     [ "$st" = "$IMG_SHA" ] || die "the card's copy $STAGE_DIR/$file reads back as '$st', not $IMG_SHA (removed on exit)"
@@ -1397,6 +1486,8 @@ cmd_run() {
     meta t_reboot "$T_REBOOT"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ wait until ssh answers from a new boot (uptime < time since the reboot), <= $WAIT_BOUND s; the old boot still answering after min($REBOOT_GRACE, $WAIT_BOUND) s: not_rebooted, disarmed"
+        echo "DRY host\$ the card resolved again in the new boot (its number may differ), checked on the board; a check that fails: REFUSED, nothing written, NEEDS A PERSON"
+        reresolve || die "REFUSED: $CARD_REFUSED"
         echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host, decoded there: yako_once must be unset (U-Boot's hook cleared it)"
         b "${SU}rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory"
@@ -1431,6 +1522,23 @@ cmd_run() {
     done
     [ -n "$up" ] && meta up "$up"
     meta t_back "$(date +%s)"
+    # the board answers again: the card is resolved again before anything of
+    # it is read or written (Linux numbers it anew in each boot)
+    if [ "$rcc" != 5 ]; then
+        if reresolve; then
+            meta card_after "$CARD_DISK"
+        else
+            BACK=1
+            meta back 1
+            [ "$rcc" = not_rebooted ] && meta rebooted 0
+            meta card_after "$(head -1 "$TMP/card.seen" 2>/dev/null)"
+            meta card_refused "$CARD_REFUSED"
+            meta cleanup "not done: the card was refused after the reboot ($STAGED left on the card)"
+            meta rc_cycle 7
+            note "REFUSED: $CARD_REFUSED; nothing more is read or written"
+            rcc=refused
+        fi
+    fi
 
     # 7. the one-shot must be gone; the staged image removed; the verdict
     if [ "$rcc" = not_rebooted ]; then
@@ -1441,6 +1549,8 @@ cmd_run() {
         if ( undo_arm ); then ARMED=0; meta disarmed "not rebooted"; else note "WARNING: the disarm did not read back" >&2; fi
         STAGED_OURS=1
         if remove_staged; then meta cleanup "removed (not rebooted)"; else meta cleanup "NOT removed"; fi
+        rcc=
+    elif [ "$rcc" = refused ]; then
         rcc=
     elif [ "$rcc" != 5 ]; then
         BACK=1
