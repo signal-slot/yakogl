@@ -1,5 +1,5 @@
 {
- "trace": "deqp_constrnd_fp16_mul_inf.trace",
+ "trace": "deqp_constrnd_sqrt_zero_vs.trace",
  "secondary_offset": 256,
  "regions": {
   "vs.position": {
@@ -71,6 +71,8 @@
     "00000004",
     "00000008",
     "0000000c",
+    "3f38aa3b",
+    "00000018",
     "00000000"
    ]
   },
@@ -78,14 +80,54 @@
    "va": "7fffffffc100",
    "found": true,
    "words": [
-    "0066800202117d7c",
-    "185e820440000d7b",
-    "786140029a000042"
+    "0866800202117d7c",
+    "00b2c00400c0408b",
+    "0091c1000000008c",
+    "0160c00441c0d040",
+    "0090c100000c0000",
+    "00a4c00000084041",
+    "005e820440000d7b",
+    "1110c13f800000c0",
+    "006141029a000002",
+    "0091c40000000088",
+    "0091c500000000c0",
+    "21abc40000070244",
+    "006140021a000044",
+    "0091c00000000089",
+    "0091c100000000c0",
+    "01abc00000070200",
+    "0910c43f800000c0",
+    "006144025a000040",
+    "0091c0000000008a",
+    "0091c100000000c0",
+    "01abc00000074240",
+    "1110c23f800000c0",
+    "786142029a000040"
    ],
    "text": [
-    "LD_ATTR_IMM.f32.slot0 @r0, r60^, r61^, index:0x1, table:0x1",
-    "LEA_BUF_IMM.slot1.wait01 @r2:r3, r59^, table:0xD, index:0x0",
-    "STORE.i32.estream.slot2.end @r0, [r2^:r3^], offset:0"
+    "LD_ATTR_IMM.f32.slot0.wait0 @r0, r60^, r61^, index:0x1, table:0x1",
+    "FMA.f32 r0, u5.w1, r0^, 0x0.neg",
+    "MOV.i32 r1, u6.w0",
+    "FMA_RSCALE.f32 r0, r0^, 0x3F800000, 0x0.neg, r1^",
+    "F32_TO_S32 r1, r0",
+    "FEXP.f32 r0, r1^, r0^",
+    "LEA_BUF_IMM.slot1 @r2:r3, r59^, table:0xD, index:0x0",
+    "IADD_IMM.i32.wait1 r1, 0x0, #0x3F800000",
+    "STORE.i32.estream.slot2 @r1, [r2:r3], offset:0",
+    "MOV.i32 r4, u4.w0",
+    "MOV.i32 r5, 0x0",
+    "SHADDX.s64.wait2 [r4:r5], [r4^:r5^], [r2:r3], shift:0x0",
+    "STORE.i32.estream.slot0 @r0, [r4^:r5^], offset:0",
+    "MOV.i32 r0, u4.w1",
+    "MOV.i32 r1, 0x0",
+    "SHADDX.s64 [r0:r1], [r0:r1], [r2:r3], shift:0x0",
+    "IADD_IMM.i32.wait0 r4, 0x0, #0x3F800000",
+    "STORE.i32.estream.slot1 @r4, [r0^:r1^], offset:0",
+    "MOV.i32 r0, u5.w0",
+    "MOV.i32 r1, 0x0",
+    "SHADDX.s64 [r0:r1], [r0^:r1^], [r2^:r3^], shift:0x0",
+    "IADD_IMM.i32.wait1 r2, 0x0, #0x3F800000",
+    "STORE.i32.estream.slot2.end @r2, [r0^:r1^], offset:0"
    ],
    "work_reg_count": 32,
    "preload": "0x3800000000000000",
@@ -101,28 +143,28 @@
     "00000004",
     "00000008",
     "0000000c",
+    "3f38aa3b",
+    "00000018",
     "00000000"
    ]
   },
   "fs.fragment": {
-   "va": "7fffffffc180",
+   "va": "7fffffffc200",
    "found": true,
    "words": [
-    "085c80020200007d",
-    "40a440100000c040",
-    "087dbc0200ead07c",
-    "68a1c00000054084",
-    "4891c100000000db",
+    "085c80083200007d",
+    "68a5c00000044140",
+    "40a5c10000044342",
+    "487dbc0208ea017c",
     "787f4004733c00f0",
     "0110f000000000c0",
     "002fc1100000f1c0"
    ],
    "text": [
-    "LD_VAR_BUF_IMM.f32.slot0.src_f32.center.store.wait0 @r0, r61^, index:0x0",
-    "FADD.f32.wait0126 r0.h0, r0^, 0x0.neg",
-    "ATEST.wait0 @r60, r60^, 0x3F800000, atest_datum.w0",
-    "MKVEC.v2i16.discard r0, u2.w0.h0, r0^.h0",
-    "MOV.i32.wait r1, 0x3C000000",
+    "LD_VAR_BUF_IMM.f32.slot0.v4.src_f32.center.store.wait0 @r0:r1:r2:r3, r61^, index:0x0",
+    "V2F32_TO_V2F16.discard r0, r0^, r1^",
+    "V2F32_TO_V2F16.wait0126 r1, r2^, r3^",
+    "ATEST.wait @r60, r60^, r1.h1, atest_datum.w0",
     "BLEND.slot1.v4.f16.end @r0:r1, blend_descriptor_0.w0, r60, target:0x0",
     "IADD_IMM.i32 r48, 0x0, #0x0",
     "BRANCHZI.eq.absolute 0x0, blend_descriptor_0.w1"
@@ -133,8 +175,6 @@
     "00000000",
     "00000000",
     "00000000",
-    "00000000",
-    "7c007c00",
     "00000000"
    ]
   }

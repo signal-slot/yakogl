@@ -3,23 +3,34 @@
 //! Byte-compare of the Mali online compiler against the Mesa 26.2.1
 //! references `tools/mali/testdata/deqp_constrnd_*` (plan #377, the dEQP
 //! shape constop/random_mixed: `shaders.random.*` cases whose first refusal
-//! was 'a constant operation on or to a value that is not a finite normal
+//! is 'a constant operation on or to a value that is not a finite normal
 //! float'; see `docs/notes/mali-deqp-constop.md` and
 //! `tools/mali/testdata/deqp_shapes/index.tsv`). One test per reference. A
 //! reference the compiler still refuses is `#[ignore]`d with its refusal
 //! quoted, and `refusals_pinned` pins that refusal; the lowering removes the
 //! ignore and the pin together.
 //!
-//! `rnd_fragment43` is the shape's own pair
-//! (`shaders.random.all_features.fragment.43`, verbatim). The other four are
-//! hand-reduced mediump pairs of the random shaders' form (a non-const
-//! global read in `main`, so the GLSL front end leaves the fold to NIR), one
-//! per constant fold the tip still refuses. Mesa folds each at fp16 and keeps
-//! the result as IEEE gives it: an overflow is `0x7c00` (`b * b` of 300.0,
-//! `b + b` of 60000.0), a product below the fp16 normal range stays a
-//! subnormal (`0x0011` for 0.001 * 0.001, not flushed), and `1.0 / 0.0` is
-//! `0x7c00`. The constant colour lane x and the varying lane y are one fp16
-//! pair (`MKVEC.v2i16 r0, u2.w0.h0, r0.h0`, FAU word `7c007c00`).
+//! Every pair is a dEQP-GLES2 `shaders.random.*` program verbatim (VK-GL-CTS
+//! 93bca01's rsg generator at the case's parameters and seed). At 0f0b1ec9,
+//! 52 of the 1,900 random programs have this refusal first, all but two of
+//! them in the vertex shader (highp, `nir.rs`'s fold of constants). Reduced
+//! line by line, they fall into four sub-shapes, one reference each:
+//!
+//! * `sqrt_zero_vs` (`exponential.vertex.99`) and `atan_zero_lanes_vs`
+//!   (`trigonometric.vertex.87`): 22 cases. `sqrt`, `atan` or `exp` of a
+//!   constant 0 (a `0`, `false` or `0.0` lane, or a sum that is 0); the
+//!   lowering's reciprocal of 0.0 is an infinity.
+//! * `int_bits_vs` (`conditionals.vertex.8`): 24 cases. Integer and boolean
+//!   constants (`int(1) * 1 == int(int(1.0))`, `ivec ==`, `true`) whose
+//!   bits, read as a float, are a subnormal or a NaN.
+//! * `lod_const_vs` (`texture.vertex.8`): 4 cases. A constant level of
+//!   detail (`textureCubeLod(a, d, 6.5)`, `texture2DLod(a, c, float(b))`).
+//! * `atan_const_vs` (`all_features.vertex.95`): 2 cases. `atan` of non-zero
+//!   constants, and `sqrt` of a negative constant (a NaN).
+//!
+//! `rnd_fragment43` is the shape's example in `deqp_shapes`
+//! (`all_features.fragment.43`). Its constant fold now compiles, and its
+//! first refusal is #367's fragment ARITH.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_constrnd
@@ -34,27 +45,33 @@ fn constrnd_rnd_fragment43() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (a mediump product folding past 65504 to fp16 infinity)"]
-fn constrnd_fp16_mul_inf() {
-    mali_ref::assert_matches("deqp_constrnd_fp16_mul_inf");
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (sqrt(0.0) in a global initializer)"]
+fn constrnd_sqrt_zero_vs() {
+    mali_ref::assert_matches("deqp_constrnd_sqrt_zero_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (a mediump product folding to an fp16 subnormal)"]
-fn constrnd_fp16_mul_subnormal() {
-    mali_ref::assert_matches("deqp_constrnd_fp16_mul_subnormal");
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (atan of a vec4 with 0 lanes)"]
+fn constrnd_atan_zero_lanes_vs() {
+    mali_ref::assert_matches("deqp_constrnd_atan_zero_lanes_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (a mediump sum folding past 65504 to fp16 infinity)"]
-fn constrnd_fp16_add_inf() {
-    mali_ref::assert_matches("deqp_constrnd_fp16_add_inf");
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (integer and boolean constants read as float bits)"]
+fn constrnd_int_bits_vs() {
+    mali_ref::assert_matches("deqp_constrnd_int_bits_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (1.0 / 0.0 folding to infinity)"]
-fn constrnd_rcp_zero() {
-    mali_ref::assert_matches("deqp_constrnd_rcp_zero");
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (textureCubeLod at a constant level)"]
+fn constrnd_lod_const_vs() {
+    mali_ref::assert_matches("deqp_constrnd_lod_const_vs");
+}
+
+#[test]
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (atan of non-zero constants)"]
+fn constrnd_atan_const_vs() {
+    mali_ref::assert_matches("deqp_constrnd_atan_const_vs");
 }
 
 /// The refusal text of the constant folds this file's shape is named after.
@@ -66,10 +83,11 @@ const REFUSED: &[(&str, &str)] = &[
         "deqp_constrnd_rnd_fragment43",
         "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)",
     ),
-    ("deqp_constrnd_fp16_mul_inf", CONSTANT_FOLD),
-    ("deqp_constrnd_fp16_mul_subnormal", CONSTANT_FOLD),
-    ("deqp_constrnd_fp16_add_inf", CONSTANT_FOLD),
-    ("deqp_constrnd_rcp_zero", CONSTANT_FOLD),
+    ("deqp_constrnd_sqrt_zero_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_atan_zero_lanes_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_int_bits_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_lod_const_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_atan_const_vs", CONSTANT_FOLD),
 ];
 
 #[test]
