@@ -507,6 +507,79 @@ reference table `tools/cts/glmark2-pictures.txt` is not changed here.
 - Not done: a look at the panel (or the display dump) for a torn frame in a
   light scene (the first "Left" item above); the line-buffer read-ahead question.
 
+### Camera look procedure
+
+For the tear check the last board run did not make (the "Left" item above).
+The case is gl_test case 248 (`tearbars`, `driver/tools/pvrlab/gl_test.c`,
+`driver/tools/pvrlab/README.md`): a 1024x600 window, eight black bars on white
+that move 1/16 of the width (64 pixels, half the bar pitch) a frame, and in the
+top 32 rows the frame number in binary. It swaps with the plain
+`eglSwapBuffers` and the default swap interval, so the AM62P's four-buffer
+`display_busy` path is the one on the panel. It judges no tear: a camera does.
+
+**The image.** The common-set path of every other gl_test case, one case:
+
+```
+tools/cts/common-images.sh --cases 248 am62p tools/cts/common-tree.txt <img-dir> GT
+```
+
+(`CONFIG_GL_TEST_CASES="248"`; `ZEPHYR_WS`, `WEST_VENV` and the firmware blob as
+`tools/cts/common-images.sh` lists). 600 frames are about ten seconds at the
+panel's rate, short for several camera shots. For a longer run build with
+`-DEXTRA_CFLAGS=-DGL_TEST_TEAR_FRAMES=6000` added to the row's `west build`
+arguments (`--dry-run` prints them): the case's wall time then is about 100
+seconds, and the panel keeps the last frame after it. Leave
+`CONFIG_GL_TEST_PANEL` at 0: panel mode 1 or 2 draws into the single-buffered
+scan-out buffer and never reaches the flip path. Run it with
+`tools/board.sh am62p run <img-dir>/GT/zephyr/zephyr.bin <logdir>` on
+`target:am62p`, with `target:am62p-camera` on the same lease for the camera.
+
+**What to capture** (tailvision, `mcp__tailvision-am62p__take_screenshot`).
+`calibrate_camera` first, with the first bars on the panel, so exposure and
+white balance are locked: the white background is bright, which is what the
+detector wants. Then take 15 to 20 screenshots through the run, one after the
+other with `reuse_detection=true`, and a short exposure if the camera lets
+you set one (the shorter the exposure, the fewer frames one picture holds: at
+60 Hz one frame is 16.7 ms, and a picture of 1/60 s or more holds two or
+three frames and smears the bars on its own, which is no tear). Keep every
+picture: a tear is rare and the counter is what proves it. Take the same number
+of pictures of a run of the same image with the camera's exposure at its
+longest to see what an exposure that spans frames looks like (blurred,
+half-grey bars with no sharp line across them), so that blur is not
+mistaken for a tear.
+
+**What a tear looks like.** A frame is torn when the panel scans part of one
+buffer and then part of another. Both frames are sharp, and the bars sit at one
+phase above a horizontal line and at the other, 64 pixels away, below it: the
+bar edges jump by half a pitch at one row, and that row is the same for all
+eight bars. The line is where the scan was when the display took the new
+address. The read-ahead picture of `docs/notes/am62p-dss-readahead.md` ("board
+check") is a tear a few lines above or below the flip point, or a band at the
+bottom of the previous frame: look at the rows around the line for a
+repeated or missing band of bars.
+
+**The frame counter.** The top row has 16 cells of 64 pixels, the most
+significant bit at the left, black = 1. Read each cell as black or white and
+the 16 bits as a number: the frame the cell belongs to. The counter band is
+32 rows high at the top, so on a torn frame the counter is the upper frame's
+(the scan starts at the top) and the bars below the tear line are the next
+frame's. Read the bar phase, too: even frame numbers have bar 0 at x = 0, 128,
+...; odd ones at x = 64, 192, ... (frame n starts at n x 64 mod 1024, bars 128
+apart). A picture whose counter says N and whose lower bars are at the phase of
+N + 1 is a torn frame N / N + 1; one whose lower bars are at the phase of N + 2
+or later skipped a frame (the swap did not wait), and counts as a hint, not as
+a tear.
+
+**What to record.** The console line `gl_test: tear: frames F, ms T, swaps S,
+display_busy waits n/a` and the `dss vsyncs V` line (V over T tells whether
+the run held the panel's rate: 600 frames at 60 Hz take 10 s, T well under
+that means swaps did not wait for the display); the number of pictures, how
+many were torn, and their counters. A run with no torn picture in 15 to 20
+shots excludes nothing but frequent tears: say so in those words, and repeat
+with more shots before calling the panel clean. The result goes into this
+note's "Board result", not into the Decision, which this subsection leaves as
+it is.
+
 ## Decision: wait_vblank (2026-11)
 
 Plan #329 item `am62p-vblank-decide`, on main `4a04fec2`. The question of

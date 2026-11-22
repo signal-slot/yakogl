@@ -535,6 +535,19 @@
  *               ramp drawn, the surface read by the hook gc_debug_depth_dump
  *               and decoded (PERF pages 0xc0..0xcb). Modes 1 and 3 run, 0 and
  *               2 SKIP by name. As 246 for GPUs and options. Opt-in, by number
+ * 248 tearbars  moving bars and a frame counter at the window size (1024x600
+ *               unless -DGL_TEST_TEAR_W/_H), 600 frames (-DGL_TEST_TEAR_FRAMES),
+ *               eglSwapBuffers at the default interval: eight black bars on
+ *               white move 1/16 of the width a frame and the top rows hold
+ *               the frame number in binary, so one camera exposure shows a
+ *               torn frame (bars offset at one line) and which frames it
+ *               caught (docs/notes/am62p-flip-latch.md, "Camera look
+ *               procedure"). Judges one bar and one background pixel of the
+ *               last frame, every swap and no GL error; ends with
+ *               "gl_test: tear: frames F, ms T, swaps S, display_busy waits
+ *               W" (W is n/a: no API counts them) and, on the AM62P, the DSS
+ *               vsync count. SKIP by name without a window buffer. All GPUs
+ *               with a window; not in the set. Opt-in, by number
  * 180 teardown  a 1024x1024 texture sampled, the job flushed and left to
  *               finish unobserved, the texture deleted and one of the same
  *               size made: both read back (red, then green); on the V3D
@@ -8669,7 +8682,7 @@ static const char *const case_names[] = {
 	 * `gl_test: case 65 polyunit: FAIL`, a line the program could not emit.
 	 * A reader grepping for it would have found nothing and concluded the
 	 * case had not run. 63 was still missing when 65/66/67 were added. */
-	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4", [246] = "tsprobe", [247] = "dlayout",
+	[63] = "matattr", [65] = "polyunit", [66] = "clearvp", [67] = "fbods", [68] = "armselect", [69] = "ioswap", [70] = "loopcarry", [71] = "deadloop", [72] = "intlit", [73] = "branchlane", [74] = "ifoutput", [75] = "immneg", [76] = "boolany", [77] = "transc", [78] = "matvary", [79] = "idiv", [80] = "matdyn", [81] = "branchquad", [82] = "fragcentre", [83] = "pointcoord", [84] = "fragcoord", [85] = "cubetail", [86] = "anyall", [87] = "databreak", [88] = "rsflip", [89] = "flatlast", [90] = "churn", [91] = "hdrblend", [97] = "varyings15", [98] = "uniloop", [100] = "idxtex", [101] = "cubebias", [102] = "maskclear", [103] = "maskdepth", [104] = "divloop", [105] = "pointcoordvary", [106] = "mrt3", [107] = "clearload", [108] = "uniidx", [109] = "texlinear", [110] = "psizvpm", [111] = "points", [112] = "affectand", [113] = "cubemap", [114] = "cubelod", [115] = "texcube", [116] = "uniidxe", [117] = "uniidxf", [118] = "texmip", [119] = "pbufup", [120] = "uniidxg", [121] = "uniidxh", [122] = "uniidxi", [123] = "zsapart", [124] = "binovf", [125] = "texsubfbo", [126] = "etcmip", [127] = "lines", [128] = "uniidxj", [129] = "vstexlod", [130] = "allfeat3", [131] = "allfeat1", [132] = "narrowla", [133] = "texcubemip", [134] = "texcubethin", [135] = "texnarrow", [136] = "psizmax", [137] = "psizmin", [138] = "deriv", [140] = "tfuprobe", [141] = "es3instdiv", [142] = "unibranch", [145] = "samplecov", [148] = "texbranch", [149] = "vsunits", [150] = "shprobe", [162] = "dskeep", [163] = "drawbuf0", [164] = "bufdel", [165] = "ctxclear", [166] = "fshprobe", [167] = "stcycle", [168] = "stlayers", [169] = "dstex", [171] = "viewwin", [172] = "swapzs", [173] = "splitzs", [174] = "fwccbloss", [175] = "refusehang", [176] = "mapbuf", [177] = "zonly", [178] = "heldfree", [179] = "retile", [180] = "teardown", [181] = "fusemad", [182] = "fsat", [183] = "unipad", [184] = "depchain", [185] = "kindcost", [186] = "fcsplit", [187] = "predarm", [188] = "predif", [189] = "mulone", [190] = "blendonce", [191] = "varyfma", [192] = "predlive", [193] = "offarm", [194] = "offarmn", [195] = "ifbranch", [196] = "occl", [197] = "vtxgrid", [198] = "a2cconst", [199] = "es3trunc", [200] = "intrt", [201] = "usamp", [202] = "blitconv", [203] = "tfcap", [204] = "srgb", [205] = "mappbo", [206] = "es3levels", [207] = "msaazs", [208] = "msaapre", [209] = "varyorder", [210] = "occlacc", [211] = "msaablend", [212] = "ifsel", [213] = "discloop", [214] = "splitkick", [215] = "shadowmap", [216] = "mipchains", [217] = "forcedpr", [218] = "shadowcmp", [219] = "kickpair", [220] = "lodtime", [221] = "instmix", [222] = "dtpu", [223] = "msaarbo", [224] = "negapi_texsubimage2d", [225] = "negapi_texsubimage3d", [226] = "negapi_uniformui", [227] = "negapi_uniformuiv", [228] = "negapi_readpix_fmt", [229] = "tf_deleted_output", [230] = "flat_lines", [231] = "flat_lines_wide", [232] = "flat_line_strip", [233] = "flat_line_strip_wide", [234] = "flat_line_loop", [235] = "flat_line_loop_wide", [236] = "flat_tri_strip", [237] = "flat_tri_fan", [238] = "drawrandom_packed", [239] = "drawrandom_intfloat", [240] = "drawrandom_intw", [241] = "es3_precision_int", [242] = "es3_precision_uint", [243] = "divmix", [244] = "w128tex", [245] = "mrt4", [246] = "tsprobe", [247] = "dlayout", [248] = "tearbars",
 };
 
 /* ---- case 67: what a framebuffer object does NOT have -----------------------
@@ -20830,6 +20843,210 @@ out:
 	return ok ? 0 : -1;
 }
 
+/* ---- case 248: moving bars and a frame counter for a camera (tearbars) ------
+ *
+ * A presented window of TEAR_W x TEAR_H (the AM62P panel's 1024x600 unless the
+ * build says otherwise) drawn for TEAR_FRAMES frames and swapped with the
+ * plain eglSwapBuffers and the default swap interval: a white background,
+ * TEAR_BARS black vertical bars TEAR_BARW wide that sit TEAR_PITCH apart and
+ * move right by TEAR_STEP (1/16 of the width) a frame, wrapping, and in the
+ * top TEAR_BAND rows a frame counter: TEAR_BITS cells of TEAR_W / TEAR_BITS
+ * pixels, most significant bit at the left, black = 1. The step is half the
+ * pitch, so two consecutive frames put the bars at opposite phases: a camera
+ * exposure that caught two frames shows the bars at one phase above a
+ * horizontal line and at the other below it (a tear), and the counter row,
+ * which a tear takes from one of the two frames, says which frames those were
+ * (docs/notes/am62p-flip-latch.md, "Camera look procedure"). The case judges
+ * no tear itself.
+ *
+ * It PASSes on its own: no GL error, the last frame's bar pixel black and a
+ * background pixel white (read before the last swap, as a back buffer is
+ * undefined after it), every swap returned EGL_TRUE. Prints, at the end,
+ * "gl_test: tear: frames F, ms T, swaps S, display_busy waits W". F, T and S
+ * are the case's own; W is "n/a" (no API exposes how often a swap waited for
+ * the display); and, where the sample links pvr_sample_vsync_count (the AM62P
+ * images), "gl_test: tear: dss vsyncs V", the DSS vertical periods since
+ * boot. TEAR_FRAMES, TEAR_W and TEAR_H are compile-time
+ * (-DGL_TEST_TEAR_FRAMES=N, EXTRA_CFLAGS in tools/cts/common-images.sh).
+ * SKIPs by name when the window's buffer cannot be had. Opt-in, by number.
+ * Checks: 1 a window config, 2 the window and context, 3 the program, 4 the
+ * bar pixel, 5 the background pixel, 6 every swap, 7 no GL error.
+ * ------------------------------------------------------------------------- */
+#ifndef GL_TEST_TEAR_FRAMES
+#define GL_TEST_TEAR_FRAMES 600
+#endif
+#ifndef GL_TEST_TEAR_W
+#define GL_TEST_TEAR_W 1024u
+#endif
+#ifndef GL_TEST_TEAR_H
+#define GL_TEST_TEAR_H 600u
+#endif
+#define TEAR_W     GL_TEST_TEAR_W
+#define TEAR_H     GL_TEST_TEAR_H
+#define TEAR_BARS  8u
+#define TEAR_PITCH (TEAR_W / TEAR_BARS)   /* 128 */
+#define TEAR_BARW  (TEAR_PITCH * 3u / 8u) /* 48 */
+#define TEAR_STEP  (TEAR_W / 16u)         /* 64: half a pitch */
+#define TEAR_BAND  32u
+#define TEAR_BITS  16u
+#define TEAR_RECTS (TEAR_BARS + TEAR_BITS)
+
+#ifdef __ZEPHYR__
+/* The AM62P sample's DSS vertical-period count (sample_glue.c); weak, so
+ * an image without it prints no vsync line. */
+extern uint32_t pvr_sample_vsync_count(void) __attribute__((weak));
+#endif
+
+/* A pixel rectangle [x0,x1) x [y0,y1) (y up from the window's bottom) as six
+ * vertices of the passthrough program, appended at v[*n]. */
+static void tear_rect(struct pc_vertex *v, unsigned *n, unsigned x0, unsigned x1, unsigned y0, unsigned y1)
+{
+	static const int c[6][2] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 } };
+
+	for (int i = 0; i < 6; i++) {
+		struct pc_vertex *p = &v[(*n)++];
+
+		p->pos[0] = (float)(c[i][0] ? x1 : x0) * 2.0f / (float)TEAR_W - 1.0f;
+		p->pos[1] = (float)(c[i][1] ? y1 : y0) * 2.0f / (float)TEAR_H - 1.0f;
+		p->pos[2] = 0.0f;
+		p->pos[3] = 1.0f;
+		p->color[0] = p->color[1] = p->color[2] = p->color[3] = 1.0f;
+	}
+}
+
+/* x of bar 0's left edge in frame `f`, wrapping at the window width. At the
+ * default size every bar starts at a multiple of 64 and is 48 wide, so none
+ * straddles the right edge. */
+static unsigned tear_x0(unsigned f)
+{
+	return (f * TEAR_STEP) % TEAR_W;
+}
+
+static int case_tearbars(void)
+{
+	static const EGLint cfg_attribs[] = {
+		EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+		EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_NONE,
+	};
+	static const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+	static struct gles_native_window win;
+	static struct pc_vertex v[TEAR_RECTS * 6];
+	EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+	struct osal_gpu_mem wmem;
+	EGLSurface ws;
+	EGLContext ctx;
+	EGLConfig cfg;
+	EGLint n = 0;
+	GLuint prog, vbo = 0;
+	GLint loc;
+	uint32_t t0, ms, got = 0;
+	unsigned swaps = 0, frames;
+	bool ok = true;
+	bool swaps_ok = true;
+
+	release_harness_context();
+	/* check 1 */
+	if (!eglInitialize(dpy, NULL, NULL) || !eglChooseConfig(dpy, cfg_attribs, &cfg, 1, &n) || n < 1) {
+		pr_info("gl_test: case 248 tearbars: no window config\n");
+		return -1;
+	}
+	if (osal_gpu_alloc(yakogl_heap_base(GLES_HEAP_DATA), TEAR_W * TEAR_H * 4u, OSAL_MEM_DATA, &wmem) != 0) {
+		pr_info("gl_test: case 248 tearbars: SKIP (no %ux%u window buffer from the pool)\n", TEAR_W, TEAR_H);
+		return -3;
+	}
+	win.phys = wmem.phys;
+	win.width = TEAR_W;
+	win.height = TEAR_H;
+	win.stride_bytes = TEAR_W * 4u;
+	win.format = GLES_NATIVE_FORMAT_XRGB8888;
+	/* default attributes: a back-buffered window, presented by the OSAL
+	 * where it can show one, the default swap interval */
+	ws = eglCreateWindowSurface(dpy, cfg, &win, NULL);
+	ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctx_attribs);
+	/* check 2 */
+	if (ws == EGL_NO_SURFACE || ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, ws, ws, ctx)) {
+		pr_info("gl_test: case 248 tearbars: window surface or context failed (0x%x)\n", eglGetError());
+		zs_window_done(dpy, &wmem, ws, ctx);
+		return -1;
+	}
+	while (glGetError() != GL_NO_ERROR)
+		;
+	prog = link_program(gl_test_passthrough_vs_src, gl_test_uniform_fs_src);
+	/* check 3 */
+	if (!expect_u32("tearbars: program linked", prog ? 1u : 0u, 1u)) {
+		zs_window_done(dpy, &wmem, ws, ctx);
+		return -1;
+	}
+	glUseProgram(prog);
+	loc = glGetUniformLocation(prog, "u_color");
+	glUniform4f(loc, 0.0f, 0.0f, 0.0f, 1.0f);
+	glViewport(0, 0, TEAR_W, TEAR_H);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_BLEND);
+	glDisable(GL_CULL_FACE);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(struct pc_vertex), (const void *)0);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(struct pc_vertex), (const void *)16);
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+
+	t0 = now_ms();
+	for (frames = 0; frames < (unsigned)GL_TEST_TEAR_FRAMES; frames++) {
+		const unsigned x0 = tear_x0(frames);
+		const unsigned cell = TEAR_W / TEAR_BITS;
+		unsigned nv = 0;
+
+		/* the bars below the counter band */
+		for (unsigned k = 0; k < TEAR_BARS; k++) {
+			const unsigned bx = (x0 + k * TEAR_PITCH) % TEAR_W;
+
+			tear_rect(v, &nv, bx, bx + TEAR_BARW, 0, TEAR_H - TEAR_BAND);
+		}
+		/* the counter: bit TEAR_BITS-1-i of the frame number in cell i */
+		for (unsigned i = 0; i < TEAR_BITS; i++)
+			if ((frames >> (TEAR_BITS - 1u - i)) & 1u)
+				tear_rect(v, &nv, i * cell, (i + 1u) * cell, TEAR_H - TEAR_BAND, TEAR_H);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(nv * sizeof(v[0])), v, GL_STREAM_DRAW);
+		glDrawArrays(GL_TRIANGLES, 0, (GLsizei)nv);
+		if (frames + 1u == (unsigned)GL_TEST_TEAR_FRAMES) {
+			const unsigned y = (TEAR_H - TEAR_BAND) / 2u;
+
+			/* before the last swap: a back buffer is undefined after it */
+			glReadPixels(x0 + TEAR_BARW / 2u, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &got);
+			/* check 4 */
+			ok &= expect_u32("tearbars: bar pixel black", got, 0xff000000u);
+			glReadPixels((x0 + TEAR_PITCH / 2u + TEAR_BARW / 2u) % TEAR_W, y, 1, 1, GL_RGBA,
+				     GL_UNSIGNED_BYTE, &got);
+			/* check 5 */
+			ok &= expect_u32("tearbars: background pixel white", got, 0xffffffffu);
+		}
+		if (eglSwapBuffers(dpy, ws) == EGL_TRUE)
+			swaps++;
+		else
+			swaps_ok = false;
+	}
+	ms = now_ms() - t0;
+	/* check 6 */
+	ok &= expect_u32("tearbars: every swap returned EGL_TRUE", swaps_ok ? 1u : 0u, 1u);
+	/* check 7 */
+	ok &= expect_u32("tearbars: error after the frames", glGetError(), GL_NO_ERROR);
+	pr_info("gl_test: tear: frames %u, ms %u, swaps %u, display_busy waits n/a\n", frames, (unsigned)ms, swaps);
+#ifdef __ZEPHYR__
+	if (pvr_sample_vsync_count)
+		pr_info("gl_test: tear: dss vsyncs %u\n", (unsigned)pvr_sample_vsync_count());
+#endif
+	glDeleteBuffers(1, &vbo);
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	zs_window_done(dpy, &wmem, ws, ctx);
+	return ok ? 0 : -1;
+}
+
 #include "gl_test_instmix.inc"
 #include "gl_test_es3_negapi.inc"
 #include "gl_test_es3_flat.inc"
@@ -24145,6 +24362,11 @@ static int run_case(int c, int pretransform, int debug, int *ended)
 		rc = case_tsprobe();
 		if (rc == -3)
 			return -3; /* skipped by name: not the GC7000 with the knobs and CONFIG_GL_TEST_GC_TS_PROBE */
+		break;
+	case 248:
+		rc = case_tearbars();
+		if (rc == -3)
+			return -3; /* skipped by name: no window buffer */
 		break;
 	case 247:
 		rc = case_dlayout();
