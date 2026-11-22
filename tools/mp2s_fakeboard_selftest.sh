@@ -230,11 +230,29 @@ t "rm did not run" test -e "$work/keep.txt"
 refused "ssh: mv out of /boot" ssh "$H" "sudo -n mv -- /boot/Image.gz $work/Image.gz"
 t "mv did not run" test -e "$D/boot/Image.gz"
 refused "ssh: cp into the eMMC's bootfs path" ssh "$H" 'sudo -n cp -- /boot/Image.gz /dev/mmcblk0p8'
-refused "ssh: dd of= the env partition" ssh "$H" 'dd if=/dev/zero of=/dev/mmcblk1p7 bs=1 count=4 conv=notrunc'
+refused "ssh: dd of= the env partition without conv=notrunc" ssh "$H" 'dd if=/dev/zero of=/dev/mmcblk1p7 bs=1 count=4'
+envsum=$(sha "$ENV")
+refused "ssh: dd of= the env partition outside its copies" ssh "$H" 'printf ABCD | dd of=/dev/mmcblk1p7 bs=1 count=4 conv=notrunc'
+t "the dd outside the copies was put back" test "$(sha "$ENV")" = "$envsum"
+# the runner's env_write: one dd of a whole valid copy (conv=notrunc) is the
+# environment write, logged variable by variable
+envpy set "$ENV" "$work/dd-ok.bin" mp2s_ddtest=1 >/dev/null
+before=$(copies)
+t "ssh: a dd of one valid copy over the env runs" ssh "$H" "sudo -n dd if=$work/dd-ok.bin of=/dev/mmcblk1p7 bs=1M iflag=fullblock conv=notrunc,fsync status=none"
+t "the dd changed one copy" one_write "$before" "$(copies)"
+t "fw_printenv reads the dd's variable" test "$(fw_printenv -n mp2s_ddtest)" = 1
+t "fw_setenv deletes it again" fw_setenv mp2s_ddtest
+envpy set "$ENV" "$work/dd-bad.bin" bootcmd=evil >/dev/null
+envsum=$(sha "$ENV")
+refused "ssh: a dd copy that sets bootcmd" ssh "$H" "sudo -n dd if=$work/dd-bad.bin of=/dev/mmcblk1p7 bs=1M iflag=fullblock conv=notrunc,fsync status=none"
+t "the dd that set bootcmd was put back" test "$(sha "$ENV")" = "$envsum"
 refused "ssh: a write to /etc" ssh "$H" 'sudo -n sh -c "echo x > /etc/fw_env.config"'
 t "the fake's fw_env.config is unchanged" bash -c "grep -q '^/dev/mmcblk1p7 0x7e000 0x2000' '$D/etc/fw_env.config'"
 refused "ssh: mkdir outside /boot" ssh "$H" 'sudo -n mkdir -p -- /opt/x'
 refused "ssh: find -delete under /" ssh "$H" 'find /dev -name "*p7" -delete'
+refused "ssh: find -exec rm of a host path" ssh "$H" "find $work -name keep.txt -exec rm -f -- {} +"
+t "ssh: a read-only find -exec sha256sum of /boot runs" bash -c "ssh '$H' 'cd /boot && find . -type f -exec sudo -n sha256sum -- {} + | LC_ALL=C sort -k 2' | grep -q '  ./boot.scr.uimg\$'"
+t "ssh: cd /dev && head -- ./<partition> reads the fake's partition" test "$(ssh "$H" 'cd /dev && sudo -n head -c 1048576 -- ./mmcblk1p7' | wc -c)" = 524288
 refused "ssh: a write verb fed by xargs" ssh "$H" 'cat /boot/x | xargs rm -f'
 refused "ssh: mount" ssh "$H" 'sudo -n mount /dev/mmcblk1p9 /mnt'
 refused "ssh: a command that does not parse" ssh "$H" "echo 'unterminated"
@@ -257,10 +275,14 @@ chk "$w" "VIOLATION file $work/tee.txt outside /boot (not run)" "VIOLATION logge
 chk "$w" "VIOLATION file $work/keep.txt outside /boot (not run)" "VIOLATION logged: rm"
 chk "$w" "VIOLATION file $work/Image.gz outside /boot (not run)" "VIOLATION logged: mv"
 chk "$w" "VIOLATION file /dev/mmcblk0p8 outside /boot (not run)" "VIOLATION logged: cp to the eMMC"
-chk "$w" "VIOLATION file /dev/mmcblk1p7 outside /boot (not run)" "VIOLATION logged: dd of= the env"
+chk "$w" "VIOLATION file /dev/mmcblk1p7 outside /boot (not run)" "VIOLATION logged: dd of= the env without notrunc"
+chk "$w" "VIOLATION env u-boot-env written outside one of its copies" "VIOLATION logged: dd outside the copies"
+chk "$w" "setenv mp2s_ddtest 1" "the dd's variable logged as setenv"
+chk "$w" "VIOLATION setenv bootcmd evil" "VIOLATION logged: the dd that set bootcmd"
 chk "$w" "VIOLATION file /etc/fw_env.config outside /boot (not run)" "VIOLATION logged: /etc"
 chk "$w" "VIOLATION file /opt/x outside /boot (not run)" "VIOLATION logged: mkdir"
 chk "$w" "VIOLATION file /dev outside /boot (not run)" "VIOLATION logged: find -delete"
+chk "$w" "VIOLATION file $work outside /boot (not run)" "VIOLATION logged: find -exec rm"
 chk "$w" "VIOLATION ssh xargs rm: a write verb fed by xargs (not run)" "VIOLATION logged: xargs"
 chk "$w" "VIOLATION ssh mount: refused on the fake board (not run)" "VIOLATION logged: mount"
 chk "$w" "VIOLATION ssh command does not parse (not run)" "VIOLATION logged: no parse"

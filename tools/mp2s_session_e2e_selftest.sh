@@ -85,6 +85,9 @@ echo "runner $* person=${BOARD_PERSON_PRESENT-unset} nowd=${MP2_NO_WATCHDOG-unse
 fb() { "$FB/bin/ssh" stub "$@"; }
 case "$1" in
 install | uninstall) echo "runner: $1 done" ;;
+# the real runner reads the card's u-boot-env partition; the fake's env is
+# what its fw_printenv shim prints
+printenv) fb "sudo -n fw_printenv" ;;
 default)
     pfx=$(fb "sudo -n fw_printenv -n boot_prefixes") || exit 1
     printf '%s' "$pfx" > "$STATE/pfx"

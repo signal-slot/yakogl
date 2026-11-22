@@ -76,7 +76,12 @@
 # write verb fed by xargs are refused outright. After CMD ran, a sha256
 # manifest of DIR before and after names every file that changed: under
 # boot/ it is logged as a write; anywhere else it is a VIOLATION, and so is
-# dev/mmcblk1p7 changed by anything but fw_setenv. This is a check on the
+# dev/mmcblk1p7 changed by anything but fw_setenv or by `dd of=` it with
+# conv=notrunc (the runner's one write of a copy): such a dd's changes are
+# logged as setenv lines, the variables of the active copy before and after;
+# bytes changed outside one copy, or a protected variable among them, is a
+# VIOLATION (the partition is put back).
+# This is a check on the
 # commands a runner sends, not a sandbox: a program that writes outside DIR
 # by a path the parse cannot see is not stopped.
 #
@@ -91,6 +96,8 @@
 #                                 mp2z_*, yako_*: note, section 3)
 #   VIOLATION file PATH outside /boot [(not run)]
 #   VIOLATION env u-boot-env written outside fw_setenv
+#   VIOLATION env u-boot-env no longer reads (a dd left no valid copy)
+#   VIOLATION env u-boot-env written outside one of its copies
 #   VIOLATION ssh ...            (a command that does not parse, mount, umount,
 #                                 a write verb fed by xargs; not run)
 # A refused fw_setenv writes nothing, prints "VIOLATION" on stderr and exits
@@ -826,6 +833,52 @@ fb_setenv() {
     done
 }
 
+# fb_env_dd_judge BEFORE AFTER: a dd changed the partition AFTER (BEFORE is
+# its bytes before): every variable of the active copy that changed is a
+# setenv line; a protected one, or a partition that no longer reads, is a
+# VIOLATION and BEFORE goes back
+fb_env_dd_judge() {
+    local b a line name bad=0
+    if ! python3 -I - "$1" "$2" "$MP2S_FB_ENV_SIZE" "$MP2S_FB_ENV_OFF1" "$MP2S_FB_ENV_OFF2" <<'PYEOF'
+import sys
+b, a = open(sys.argv[1], "rb").read(), open(sys.argv[2], "rb").read()
+size, offs = int(sys.argv[3], 0), [int(x, 0) for x in sys.argv[4:6]]
+if len(a) != len(b):
+    sys.exit(1)
+d = [i for i in range(len(a)) if a[i] != b[i]]
+sys.exit(0 if any(all(o <= i < o + size for i in d) for o in offs) else 1)
+PYEOF
+    then
+        fb_log "VIOLATION env u-boot-env written outside one of its copies"
+        cp -- "$1" "$2"
+        return 1
+    fi
+    b=$(fb_envtool print "$1" 2>/dev/null) || { fb_log "VIOLATION env u-boot-env no longer reads (a dd left no valid copy)"; cp -- "$1" "$2"; return 1; }
+    a=$(fb_envtool print "$2" 2>/dev/null) || { fb_log "VIOLATION env u-boot-env no longer reads (a dd left no valid copy)"; cp -- "$1" "$2"; return 1; }
+    local -a lines=()
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        name=${line%%=*}
+        if grep -qxF -- "$line" <<< "$b"; then continue; fi
+        lines+=("setenv $name ${line#*=}")
+        fb_is_protected "$name" && bad=1
+    done <<< "$a"
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        name=${line%%=*}
+        grep -q -- "^$name=" <<< "$a" && continue
+        lines+=("setenv $name")
+        fb_is_protected "$name" && bad=1
+    done <<< "$b"
+    if [ $bad != 0 ]; then
+        for line in "${lines[@]}"; do fb_log "VIOLATION $line"; done
+        cp -- "$1" "$2"
+        return 1
+    fi
+    for line in "${lines[@]+"${lines[@]}"}"; do fb_log "$line"; done
+    return 0
+}
+
 # ---- the ssh shim -------------------------------------------------------------------
 
 # fb_cmd_check ROOT CMD: print the command with the board paths mapped into
@@ -833,16 +886,19 @@ fb_setenv() {
 # exit 3; exit 2 when it does not parse. Also refuses mount, umount and a
 # write verb fed by xargs (exit 3, "verb: ..." lines).
 fb_cmd_check() {
-    python3 -I - "$1" "$2" <<'PYEOF'
+    python3 -I - "$1" "$2" "$1/dev/${MP2S_FB_SD}p7" <<'PYEOF'
 import os, re, shlex, sys
 
-root, cmd = sys.argv[1], sys.argv[2]
+root, cmd, envdev = sys.argv[1], sys.argv[2], sys.argv[3]
 B = r"(?<![\w/.-])"
 E = r"(?![\w.-])"
 MAPS = [(B + "/boot" + E, root + "/boot"),
         (B + "/sys/class/block" + E, root + "/sys/class/block"),
         (B + "/sys/block" + E, root + "/sys/block"),
         (B + r"/dev/mmcblk(?=\d)", root + "/dev/mmcblk"),
+        # `cd /dev && head -- ./<name>` (tools/mp2s_comeback.sh reads the
+        # partition lsblk named, a name known only at run time)
+        (r"(?<![\w/.-])(?<=cd )/dev(?=\s*(?:&&|;|$))", root + "/dev"),
         (B + "/proc/sys/vm/drop_caches" + E, root + "/proc/sys/vm/drop_caches"),
         (B + "/proc/sys/kernel/random/boot_id" + E, root + "/proc/sys/kernel/random/boot_id"),
         (B + "/proc/self/mountinfo" + E, root + "/proc/self/mountinfo"),
@@ -989,7 +1045,11 @@ def scan(toks):
                     break
                 if a not in ("-H", "-L", "-P"):
                     paths.append(a)
-            targets.extend(paths or ["."])
+            # -delete writes the search paths; an -exec command is judged
+            # by its own verb below (sha256sum reads, rm writes), so a
+            # read-only `find . -type f -exec sha256sum -- {} +` passes
+            if "-delete" in args:
+                targets.extend(paths or ["."])
             if "-exec" in args or "-execdir" in args or "-ok" in args or "-okdir" in args:
                 k = max(args.index(a) for a in args if a in ("-exec", "-execdir", "-ok", "-okdir"))
                 sub = []
@@ -1035,7 +1095,15 @@ def scan(toks):
             pos.append(a)
         j += 1
     if verb == "dd":
-        targets.extend(a[3:] for a in args if a.startswith("of="))
+        # dd of= the card's u-boot-env with conv=notrunc: the runner's one
+        # environment write (tools/board-stm32mp2-standalone.sh env_write);
+        # what it changed is judged after it ran, variable by variable
+        notrunc = any(a.startswith("conv=") and "notrunc" in a[5:].split(",") for a in args)
+        for a in args:
+            if a.startswith("of="):
+                if notrunc and os.path.normpath(a[3:]) == envdev:
+                    continue
+                targets.append(a[3:])
     elif verb == "sed":
         if any(a in ("-i", "--in-place") or a.startswith("-i") or a.startswith("--in-place=") for a in args):
             has_e = any(a in ("-e", "-f", "--expression", "--file") or a.startswith("--expression=") for a in args)
@@ -1131,16 +1199,24 @@ fb_ssh() {
     local before_lines viol=0 h f after
     before_lines=$(wc -l < "$ROOT/writes.log")
     fb_manifest > "$ROOT/.manifest"
+    local envfile=dev/${MP2S_FB_SD}p7 envsave=
+    if fb_have_envtool && [ -f "$ROOT/$envfile" ]; then
+        envsave=$(mktemp "${TMPDIR:-/tmp}/mp2s_fb_envsave.XXXXXX") || exit 1
+        cp -- "$ROOT/$envfile" "$envsave" || exit 1
+    fi
     (cd "$ROOT" && PATH="$ROOT/bin:$PATH" MP2S_FAKE_ROOT=$ROOT bash -c "$mapped") || rc=$?
     after=$(fb_manifest)
-    local envfile=dev/${MP2S_FB_SD}p7
     while read -r h f; do # new or changed files
         [ -n "$f" ] || continue
         grep -qxF "$h  $f" "$ROOT/.manifest" && continue
         case $f in
         boot/*) fb_log "file /$f $h" ;;
         "$envfile")
-            if [ "$(tail -n +"$((before_lines + 1))" "$ROOT/writes.log" | grep -c '^setenv ')" = 0 ]; then
+            if [ "$(tail -n +"$((before_lines + 1))" "$ROOT/writes.log" | grep -c '^setenv ')" != 0 ]; then
+                :
+            elif [ -n "$envsave" ] && [[ $mapped == *" of=$ROOT/$envfile "*conv=*notrunc* ]]; then
+                fb_env_dd_judge "$envsave" "$ROOT/$envfile" || viol=1
+            else
                 fb_log "VIOLATION env u-boot-env written outside fw_setenv"; viol=1
             fi ;;
         *) fb_log "VIOLATION file /$f outside /boot"; viol=1 ;;
@@ -1155,6 +1231,7 @@ fb_ssh() {
         esac
     done < "$ROOT/.manifest"
     rm -f "$ROOT/.manifest"
+    [ -z "$envsave" ] || rm -f -- "$envsave"
     if [ $viol != 0 ]; then
         echo "mp2s_fakeboard: VIOLATION: the ssh command wrote outside /boot (see writes.log)" >&2
         exit 1

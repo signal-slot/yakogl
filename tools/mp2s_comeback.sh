@@ -15,10 +15,13 @@
 # and none is held here), else BOARD_SSH. The ssh options match the two
 # runners': the host key is checked and never recorded, and MP2_KNOWN_HOSTS
 # names a known_hosts file of its own (read only). MP2_SUDO prefixes the
-# board's fw_printenv as the standalone runner does (default "sudo -n ").
+# board's read of the u-boot-env partition as the standalone runner does
+# (default "sudo -n ").
 #
-# What it reads (one ssh session of cat, uname, findmnt and fw_printenv —
-# no service call, no module, no write, no fw_setenv, and never a question
+# What it reads (one ssh session of cat, uname, findmnt, lsblk, head and
+# base64 — no service call, no module, no write, no fw_printenv or
+# fw_setenv (the DK's Linux has no /etc/fw_env.config, so neither works
+# there, #1281), and never a question
 # about sshd or tailscale: the session's own existence is the evidence, and
 # the note's section 8 never touches them):
 #   boot id, uptime   --before-boot-id compares the id against the one read
@@ -28,9 +31,15 @@
 #                       word is the eMMC, which this design never uses
 #                       (section 1; the read of board-stm32mp2.sh's
 #                       dev_guard rule).
-#   fw_printenv       no mp2s_* left and no /yakogl/standalone/ in
-#                       boot_prefixes (the counted default's used-up branch
-#                       deletes both). A failing fw_printenv is a FAIL,
+#   u-boot-env        the u-boot-env partition of the disk /boot is on
+#                       (lsblk of that SD disk, never /dev/disk/by-partlabel,
+#                       which may name the eMMC's), sent as base64 and read
+#                       on the host with tools/uboot_env.py (copy 1 at the
+#                       partition's last 0x2000 bytes, copy 2 before it; the
+#                       active copy): no mp2s_* left and no
+#                       /yakogl/standalone/ in boot_prefixes (the counted
+#                       default's used-up branch deletes both). A partition
+#                       that cannot be read or whose CRCs fail is a FAIL,
 #                       never silence: the variables are not taken as unset
 #                       (tools/board-stm32mp2.sh's rule).
 #
@@ -43,6 +52,7 @@
 # 4 no ssh within --wait (whole seconds 0..900; 0 means one try).
 # Selftest without a board: tools/mp2s_comeback_selftest.sh.
 set -u
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 usage() {
     echo "usage: mp2s_comeback.sh [--wait SECONDS] [--before-boot-id ID]" >&2
@@ -102,13 +112,13 @@ echo "boot_mount=$m"
 d=${m%% *}; d=${d%p*}
 echo "boot_type=$(cat /sys/block/${d##*/}/device/type 2>/dev/null)"
 echo "root_mount=$(findmnt -n -v -o SOURCE,FSTYPE -T / 2>/dev/null)"
-e=$(@SU@fw_printenv 2>/dev/null); erc=$?
-echo "env_rc=$erc"
-echo "env_mp2s=$(printf %s "$e" | sed -n "s/^\(mp2s_[A-Za-z0-9_]*\)=.*/\1/p" | tr "\n" " ")"
-echo "env_pfx=$(printf %s "$e" | sed -n "s/^boot_prefixes=//p" | head -n1)"
+p=$(lsblk -rno PATH,PARTLABEL -- "/dev/${d##*/}" 2>/dev/null | awk "\$2 == \"u-boot-env\" { print \$1; exit }")
+echo "env_dev=$p"
+case $p in "/dev/${d##*/}p"[0-9]*) echo "env_b64=$(cd /dev && @SU@head -c 1048576 -- "./${p##*/}" | base64 -w 0)" ;; esac
 echo "end=1"
 '
 REMOTE=${REMOTE//@SU@/$SU}
+[ -f "$HERE/uboot_env.py" ] || { echo "comeback: tools/uboot_env.py is missing beside this tool" >&2; exit 2; }
 
 try_once() {
     timeout 25 ssh "${SSH_OPTS[@]}" "$TARGET" "$REMOTE" >"$TMP/out" 2>/dev/null </dev/null &&
@@ -132,9 +142,24 @@ boot_src=${boot_mount%% *}
 boot_fstype=${boot_mount#* }
 boot_type=$(g boot_type)
 root_mount=$(g root_mount)
-env_rc=$(g env_rc)
-env_mp2s=$(g env_mp2s)
-env_pfx=$(g env_pfx)
+env_dev=$(g env_dev)
+env_err=
+env_mp2s=
+env_pfx=
+# the partition, on the host: both CRCs valid, the active copy's variables
+if ! g env_b64 | base64 -d >"$TMP/env.bin" 2>/dev/null || [ ! -s "$TMP/env.bin" ]; then
+    env_err="the u-boot-env partition of /boot's disk could not be read (${env_dev:-none found by lsblk})"
+else
+    sz=$(stat -c %s "$TMP/env.bin")
+    LAY=(--redundant --size 0x2000 --offset $((sz - 0x2000)) --offset2 $((sz - 0x4000)))
+    if [ "$sz" -lt $((0x4000)) ] || ! python3 -I "$HERE/uboot_env.py" "${LAY[@]}" check "$TMP/env.bin" >/dev/null 2>&1 ||
+        ! python3 -I "$HERE/uboot_env.py" "${LAY[@]}" print "$TMP/env.bin" >"$TMP/env.txt" 2>/dev/null; then
+        env_err="the u-boot-env partition ${env_dev} ($sz bytes) has a copy whose CRC fails"
+    else
+        env_mp2s=$(sed -n 's/^\(mp2s_[A-Za-z0-9_]*\)=.*/\1/p' "$TMP/env.txt" | tr '\n' ' ')
+        env_pfx=$(sed -n 's/^boot_prefixes=//p' "$TMP/env.txt" | head -n1)
+    fi
+fi
 
 fails=()
 if [ -z "$boot_id" ]; then
@@ -152,12 +177,9 @@ else
     [ "$boot_fstype" = ext4 ] || fails+=("/boot is '$boot_fstype', not ext4")
 fi
 [ "$boot_type" = SD ] ||
-    fails+=("the disk /boot is on reads '${boot_type:-unreadable}', not SD (MMC is the eMMC, mmcblk0: the board must come back on the microSD)")
+    fails+=("the disk /boot is on reads '${boot_type:-unreadable}', not SD (MMC is the eMMC: the board must come back on the microSD)")
 [ -n "$root_mount" ] || fails+=("/ not mounted")
-case $env_rc in
-0) : ;;
-*) fails+=("fw_printenv did not answer (rc ${env_rc:-unreadable}): the variables are not taken as unset") ;;
-esac
+[ -z "$env_err" ] || fails+=("$env_err: the variables are not taken as unset")
 if [ -n "$env_mp2s" ]; then
     names=$(printf '%s\n' $env_mp2s | sed -n 's/^\(mp2s_[A-Za-z0-9_]*\)$/\1/p' | tr '\n' ' ')
     fails+=("mp2s_* left in the environment: ${names:-unknown}")

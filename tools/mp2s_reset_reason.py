@@ -7,9 +7,10 @@
 #
 #   tools/mp2s_reset_reason.py [--expect N] [FILE]     (FILE or stdin)
 #
-# The record is split into boots at each TF-A BL2 banner ("BL2: v2.10...");
-# a "Reset reason:" line with no banner before it in its boot also starts a
-# boot. One line per boot: index, the text after "Reset reason: ", a class.
+# The record is split into boots at each TF-A BL2 banner ("BL2: v2.10...")
+# and each "Reset reason:" line, in either order, one of each per boot: the
+# DK's BL2 prints "Reset reason:" before its banner (board, 2026-11-22), so a
+# banner after a boot's Reset reason line belongs to that boot. One line per boot: index, the text after "Reset reason: ", a class.
 #
 # Classes (strings from stm32mp257f-dk-bringup.md, "Reset reason" table;
 # matched case-insensitively on the key words, so the "(por_rstn)" suffix and
@@ -49,12 +50,14 @@ def split(lines):
     cur = None
     for ln in lines:
         if BANNER.search(ln):
-            cur = {"text": None}
-            boots.append(cur)
+            if cur is None or cur["banner"]:
+                cur = {"text": None, "banner": True}
+                boots.append(cur)
+            cur["banner"] = True
         m = HAS_REASON.search(ln)
         if m:
             if cur is None or cur["text"] is not None:
-                cur = {"text": None}
+                cur = {"text": None, "banner": False}
                 boots.append(cur)
             r = REASON.search(ln[m.start():])
             cur["text"] = (r.group(1) if r else ln.strip()) or None

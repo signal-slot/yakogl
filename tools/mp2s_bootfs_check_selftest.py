@@ -67,8 +67,8 @@ NOT_EXT4_NEW = 'NAME="mmcblk1p8" PKNAME="mmcblk1" TYPE="part" FSTYPE="vfat"'
 CASES = [
     ("not 'SD'", mut(findmnt="/dev/mmcblk2p8\n", type="MMC\n")),
     ("'MMC'", mut(type="MMC\n")),
-    ("mmcblk0", mut(findmnt="/dev/mmcblk0p8\n", lsblk=lsblk_disk("mmcblk0"),
-                    blkid=blkid_disk("mmcblk0"))),
+    ("'MMC'", mut(findmnt="/dev/mmcblk0p8\n", lsblk=lsblk_disk("mmcblk0"),
+                  blkid=blkid_disk("mmcblk0"), type="MMC\n")),
     ("not 'bootfs'", mut(findmnt="/dev/mmcblk1p10\n",
                          blkid='/dev/mmcblk1p10: LABEL="rootfs" TYPE="ext4"\n')),
     ("exactly one", mut(findmnt="/dev/mmcblk1p8\n/dev/mmcblk2p8\n")),
@@ -94,6 +94,16 @@ def main():
             ok += 1
         else:
             print("FAIL accepted case", rc, err)
+            fail += 1
+        # the card as mmcblk0 (the DK's Linux numbered it so on 2026-11-22):
+        # the index decides nothing, the type SD does
+        rc, out, err = run(mut(findmnt="/dev/mmcblk0p8\n",
+                               lsblk=lsblk_disk("mmcblk0") + lsblk_disk("mmcblk1"),
+                               blkid=blkid_disk("mmcblk0") + blkid_disk("mmcblk1")), tmp)
+        if rc == 0 and out.startswith("ok: /boot is /dev/mmcblk0p8") and not err:
+            ok += 1
+        else:
+            print("FAIL accepted case: the SD card as mmcblk0", rc, err)
             fail += 1
         for needle, files in CASES:
             rc, out, err = run(files, tmp)
@@ -121,7 +131,7 @@ def main():
             print("FAIL usage")
             fail += 1
     print("%d ok, %d failed" % (ok, fail))
-    return 0 if fail == 0 and ok == 16 else 1
+    return 0 if fail == 0 and ok == 17 else 1
 
 
 if __name__ == "__main__":
