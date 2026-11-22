@@ -181,7 +181,7 @@ side, under ssh before the Zephyr run, supplies the references
    builds with `CONFIG_CACHE_MANAGEMENT=y`; record in
    `tools/probes/rpi_5/rpi5_mbox/README.md`.
 2. **Does the firmware redraw into its plane after hand-over, and does it
-   keep the list?** The plane half is answered; the list half is still open.
+   keep the list?** The plane half and the list half are answered.
    `rpi5_scanout16` ran once on 2026-11-21 (tryboot, image from `2b88a9f6`,
    record in `tools/probes/rpi_5/rpi5_scanout16/README.md`). The verdict was
    `verdicts: PASS (plane adopted, both read-backs match, frcnt 48 -> 51
@@ -191,13 +191,23 @@ side, under ssh before the Zephyr run, supplies the references
    0x3f800000. It hashed the same in all 24 samples of a 240 s hold, and
    readback 2 was byte-equal over all 4147200 bytes. LPTRS (0x2a0) and both
    valves' words did not change.
-   *List: open.* The hash of the 64 words read from LPTRS.HEADE (word 672,
-   no END among them) took eight different values, recurring in a cycle, and
-   at the end one word differed from the adopted snapshot. The probe does not
-   print which word that was or its values. So it is still unknown whether the
-   firmware edits its list or the HVS writes a status or context word back into
-   the plane entry. Stage 2's byte-equal restore of the firmware's list
-   (`rpi5_scanout32`) has to know which of the two it is.
+   *List: answered (2026-11-22).* `rpi5_scanout16` ran again (tryboot, image
+   built from `ed71b85b`, 238370 ms hold; README section "Q2's list word
+   (2026-11-22)"). Exactly one list word changed: **word 676**, which is
+   entry offset 4 of the plane entry at word 672 (`HEADE`), the entry's context
+   word (`ctx-off 4`, 32 words in the entry). It was `0x8000005d` in the
+   adopted snapshot; the samples during the hold read other values (for
+   example `0x80000103`, `0x8000002a`, `0x800003b2`) and the last one `0x800000d2`
+   (`u3 q2: word 676 entry-off 4 was 0x8000005d now 0x800000d2 per-frame no`;
+   `q2: ... hvs-writeback`). The other 63 words, including the pointer word
+   (`0x3f800000`, entry word 6), did not change. Two bursts of 16
+   consecutive frames (FRCNT 44-59 at the start, 10-25 at the end) read
+   `w676=0x80008000` in every frame, so it is not rewritten each frame:
+   the value differs between the hold's samples, not within a burst. It is
+   a hardware-written status word, not the firmware editing its list.
+   *For U3's restore:* the byte-equal restore of the firmware's list
+   (`rpi5_scanout32`) must skip, or expect to differ at, entry offset 4
+   (absolute word 676 in the firmware's list); every other word must be equal.
 3. **Which pixel valve feeds HDMI0, and does the firmware run it at two
    pixels per clock?** Linux reads 1920 active pixels, the firmware's valve
    960 (`dd:559-562`). Matters only for option (ii) and for any plane resize.
