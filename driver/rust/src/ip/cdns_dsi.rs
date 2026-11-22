@@ -13,7 +13,7 @@
 //! - Order (12.9.2.7.1.3): "All DSI_VID_xxx registers must be programmed ...
 //!   before the write to the DSI_VID_MAIN_CTL register. All
 //!   DSI_MCTL_DPHY_xxx registers must be programmed ... before the write to
-//!   the DSI_MCTL_MAIN_DATA_CTL register to set the [0] LINK_EN bit."
+//!   the DSI_MCTL_MAIN_DATA_CTL register to set the \[0\] LINK_EN bit."
 //! - Start-up (12.9.2.7.3, Figure 12-551): program the PLL and start it
 //!   (PLL_START, "link has to be enabled": LINK_EN), wait for the PLL
 //!   (MCTL_MAIN_STS PLL_LCK), program the physical line, enable the lanes

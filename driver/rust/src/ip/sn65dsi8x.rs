@@ -34,7 +34,7 @@
 //!
 //! **Reserved and undefined bits are never changed** ("Reserved or undefined
 //! bit fields should not be modified", 7.6.1): every CSR this driver sets is
-//! written as a read-modify-write of the bits it owns ([`Csr::mask`]), unless
+//! written as a read-modify-write of the bits it owns (`Csr::mask`), unless
 //! it owns the whole byte. That also keeps the SN65DSI84's channel-B fields
 //! (undefined on the SN65DSI83) at their reset values, whichever part is
 //! fitted: the nine ID bytes are the same on both (Table 7-5 / 7-4), so the
@@ -81,7 +81,7 @@
 //!    HS / VS / DE polarity driven on the LVDS side (DE/HS/VS_NEG_POLARITY),
 //!    24 bpp (CHA_24BPP_MODE) and format 1 (CHA_24BPP_FORMAT1, "JEIDA").
 //!
-//! The sequence is Table 7-2's ([`Bridge::start`], [`Bridge::check_link`]).
+//! The sequence is Table 7-2's (`Bridge::start`, `Bridge::check_link`).
 //! What it adds, and why:
 //!
 //! - the ID read is retried for a second (`ID_TRIES` x `ID_RETRY_MS`): the

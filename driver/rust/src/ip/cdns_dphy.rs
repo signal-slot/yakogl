@@ -39,7 +39,7 @@
 //! the values are generated into [`crate::soc::am62p::ti_pr114866`]):
 //!
 //! - the band table of PCS_TX_DIG_TBIT0 (the TRM names band 0, "Data Rate
-//!   [80_100] MHz", only): [`band`];
+//!   \[80_100\] MHz", only): [`band`];
 //! - the PLL gm PWM divider values for CMN_DIG_TBIT10 (the TRM gives the
 //!   fields only);
 //! - where the WIZ registers are: the TRM's DPHY_TX summary lists them at

@@ -10,7 +10,7 @@
 //!
 //! Conventions: `cfg` points into the device's `config` (devicetree values,
 //! read only), `data` into its `data` (mutable state, one per instance, no
-//! statics anywhere), `env` at the shim's [`YdEnv`]. Errors are negative
+//! statics anywhere), `env` at the shim's `YdEnv`. Errors are negative
 //! errno. The shim serialises calls on one instance.
 
 #[cfg(any(feature = "am62p", test))]
