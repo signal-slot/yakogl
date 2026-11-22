@@ -983,6 +983,9 @@ pi4py() { # number, script, ok text
 }
 pi4py 53 pi4-console-scan.py "recoveries, hangs, resets and run times read from fixture consoles"
 pi4py 54 pi4-session-readme.py "a session README with its commit line, counts and verdicts"
+# 59: pi4-gles3-report.py on its hermetic fixtures (the RESULTS/STATUS/ROADMAP
+# and issue drafts drawn from session directories).
+pi4py 59 pi4-gles3-report.py "the report drafts built from synthetic session directories"
 
 # 55: pi4-gles3-preflight.sh on a fake layout (stage 1, images named after a
 # fake commit, the table's rows), the board environment replaced by stubs.
