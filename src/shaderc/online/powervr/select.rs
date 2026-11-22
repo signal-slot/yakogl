@@ -946,13 +946,14 @@ impl<'a> Sel<'a> {
     /// arms' condition once per arm ([`Sel::arm_active`]).
     fn guard_sample(&mut self, g: SelGroup) -> Result<SelGroup, SelectError> {
         let SelOp::Sample { proj, lod, cube, fetch, .. } = g.op else { return Ok(g) };
-        /* the sample's cube z and gradients, in the groups right before it:
-         * taken off, guarded, and put back, so they stay adjacent to it */
+        /* the sample's cube z, native-array layer address and gradients, in
+         * the groups right before it: taken off, guarded, and put back, so
+         * they stay adjacent to it (the guard's own groups go before them) */
         let mut before = [None; 8];
         let mut n = 0usize;
         while n < before.len() {
             match self.groups.as_slice().last() {
-                Some(x) if matches!(x.op, SelOp::SampleZ { .. } | SelOp::SampleGrad) => {
+                Some(x) if matches!(x.op, SelOp::SampleZ { .. } | SelOp::SampleAddr | SelOp::SampleGrad) => {
                     before[n] = self.groups.pop();
                     n += 1;
                 }
@@ -5888,6 +5889,81 @@ void main() {{ colour = vec4(0.0); {body} }}
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].1.srcs[0], all[1].1.srcs[0], "the shared coordinate is guarded twice");
         assert!(guarded(&gs, all[0].1.srcs[0], 0.0));
+    }
+
+    /// A native 2D-array look-up in a flattened `if` arm keeps its layer
+    /// address group ([`SelOp::SampleAddr`]) right before its sample:
+    /// `guard_sample` takes it off with the sample's other leading groups and
+    /// puts it back, so the groups it makes for the guard come before it.
+    /// With native arrays off there is no address group and the look-up is
+    /// the stacked one.
+    #[test]
+    #[cfg(all(feature = "gpu-powervr", not(feature = "report-es2")))]
+    fn a_native_array_sample_in_an_arm_keeps_its_address_group() {
+        let src = |body: &str| {
+            std::format!(
+                "#version 300 es
+precision highp float;
+uniform highp sampler2DArray sa;
+uniform float k;
+in vec2 uv;
+out vec4 colour;
+void main() {{ colour = vec4(0.0); {body} }}
+"
+            )
+        };
+        let select_with = |text: &str, native: bool| {
+            let _l = store::test_lock();
+            struct Put(i32, crate::shaderc::IfLowering);
+            impl Drop for Put {
+                fn drop(&mut self) {
+                    crate::shaderc::pvr_set_native_array(self.0);
+                    crate::shaderc::set_compile_if_lowering(self.1);
+                }
+            }
+            /* the arms predicated, which is where look-ups are guarded */
+            let lowering = crate::shaderc::set_compile_if_lowering(crate::shaderc::IfLowering::Predicate);
+            let _put = Put(i32::from(crate::shaderc::native_array_enabled()), lowering);
+            crate::shaderc::pvr_set_native_array(i32::from(native));
+            let mut out = std::vec::Vec::new();
+            store::with_scratch(|a| {
+                let text = a.alloc_str(text).unwrap();
+                let l = pvr_ir(a, text);
+                out = select(&l.module, a).expect("selects").groups.to_vec();
+            })
+            .unwrap();
+            out
+        };
+        let arms = [
+            ("if (k > 0.5) { colour = ", "; }"),
+            ("if (k > 0.5) { colour = vec4(1.0); } else { colour = ", "; }"),
+            ("if (k > 0.5) { if (k < 0.9) { colour = ", "; } }"),
+        ];
+        for (open, close) in arms {
+            for look in ["textureLod(sa, vec3(uv * k, 1.0), log2(k))", "texture(sa, vec3(uv * k, 1.0))"] {
+                let text = src(&std::format!("{open}{look}{close}"));
+                let on = select_with(&text, true);
+                let smp: std::vec::Vec<usize> =
+                    (0..on.len()).filter(|&i| matches!(on[i].op, SelOp::Sample { layer: true, .. })).collect();
+                assert!(!smp.is_empty(), "{open}{look}: no layer sample");
+                for i in smp {
+                    assert!(
+                        i > 0 && on[i - 1].op == SelOp::SampleAddr,
+                        "{open}{look}: the address is apart from {:?}",
+                        on[i]
+                    );
+                }
+                let off = select_with(&text, false);
+                assert!(
+                    !off.iter().any(|g| g.op == SelOp::SampleAddr),
+                    "{open}{look}: an address with native arrays off"
+                );
+                assert!(
+                    off.iter().any(|g| matches!(g.op, SelOp::Sample { layer: false, .. })),
+                    "{open}{look}: stacked look-up missing"
+                );
+            }
+        }
     }
 
     /// Selection's program for a fragment shader, its `if`s predicated
