@@ -2157,6 +2157,11 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_texsize.rs)" \
 # to nothing under report-es2.
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_fragdepth.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_fragdepth
+# The dEQP sglr shaders of texture.specification, texture.units and fbo
+# (493 AM62P cases of ad2b5ed failed to compile them): each distinct pair
+# through glCompileShader / glLinkProgram on the PowerVR online compiler.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_sglr_shaders.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_sglr_shaders
 # The six ES 3.0 ETC2/EAC names the GL core decodes at upload (docs/notes/
 # etc2-eac.md): each name accepted by glCompressedTexImage* and stored as the
 # decoder's values in the class the design gives it, the compressed format
