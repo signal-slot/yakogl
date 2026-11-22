@@ -282,9 +282,9 @@ pub enum Error {
     /// runs frames.
     Standby(vop2::Refused),
     Display(DisplayError),
-    /// A GRF word read back without the bits written (its address, the
-    /// word read).
-    Grf(usize, u32),
+    /// A GRF word read back without the bits written (which word, the word
+    /// read).
+    Grf(GrfWord, u32),
     /// A gate still reads gated after its write (the CLKGATE_CON read).
     Gate(u32),
     /// DCLK_VOP0's mux read back other than the PHY (the CLKSEL_CON read).
@@ -300,6 +300,27 @@ pub enum Error {
     /// A port the chain gives a pixel clock (VP0, and a port whose mux is
     /// on the PHY0) has none now, or runs no frame (bit n = VPn).
     Unclocked(u32),
+}
+
+/// The GRF words the GRF stage writes. A mapped address would name them
+/// differently on the board and in the tests; this names them the same.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum GrfWord {
+    /// vop_grf `GRF_VOP_CON2`.
+    VopCon2 = 1,
+    /// vo1_grf `GRF_VO1_CON0`.
+    Vo1Con0 = 2,
+}
+
+impl GrfWord {
+    /// The word's offset in its GRF.
+    pub const fn offset(self) -> usize {
+        match self {
+            GrfWord::VopCon2 => dw::grf::VOP_CON2,
+            GrfWord::Vo1Con0 => dw::grf::VO1_CON0,
+        }
+    }
 }
 
 /// A failure, with the stage it happened in.
@@ -590,14 +611,15 @@ pub fn bring_up(
     begin(env, GRF);
     gate_open(m, b.cru + clk::PCLK_VO1GRF.part.offset(), clk::PCLK_VO1GRF.gate).map_err(at(GRF, Error::Gate))?;
     let sync = dw::vo1_con0_sync_word(Port::Hdmi0, dw::linux_sync_field(&cfg.mode));
-    for (addr, word) in
-        [(b.vop_grf + dw::grf::VOP_CON2, vop2::hdmi_vop_grf(HdmiPort::Hdmi0)), (b.vo1_grf + dw::grf::VO1_CON0, sync)]
+    for (grf, base, word) in
+        [(GrfWord::VopCon2, b.vop_grf, vop2::hdmi_vop_grf(HdmiPort::Hdmi0)), (GrfWord::Vo1Con0, b.vo1_grf, sync)]
     {
+        let addr = base + grf.offset();
         m.write32(addr, word);
         let now = m.read32(addr);
         let mask = word >> 16;
         if now & mask != word & mask {
-            return Err(Failed { stage: GRF, error: Error::Grf(addr, now) });
+            return Err(Failed { stage: GRF, error: Error::Grf(grf, now) });
         }
     }
     done(cfg, GRF)?;

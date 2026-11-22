@@ -105,7 +105,8 @@ pub enum ColdError {
     /// `index`: 1 a clock, 2 a domain (`refusal`: the `PdRefusal`), 3 a
     /// gate; `detail`: the word read.
     Display = 7,
-    /// `index`: the GRF word's address (low 32 bits), `detail`: the word read.
+    /// `index`: which GRF in 31:16 (`chain::GrfWord`: 1 vop_grf, 2 vo1_grf)
+    /// and the word's offset in it in 15:0; `detail`: the word read.
     Grf = 8,
     /// `detail`: the CLKGATE_CON read.
     Gate = 9,
@@ -155,7 +156,7 @@ impl Cold {
             }
             Error::Display(DisplayError::Domain(e)) => (ColdError::Display, e.why as u32, 2, e.read),
             Error::Display(DisplayError::Gate(_, w)) => (ColdError::Display, 0, 3, w),
-            Error::Grf(addr, w) => (ColdError::Grf, 0, addr as u32, w),
+            Error::Grf(g, w) => (ColdError::Grf, 0, (g as u32) << 16 | g.offset() as u32, w),
             Error::Gate(w) => (ColdError::Gate, 0, 0, w),
             Error::DclkMux(w) => (ColdError::DclkMux, 0, 0, w),
             Error::Hdmi(r) => (ColdError::Hdmi, r.why as u32, 0, r.found),
