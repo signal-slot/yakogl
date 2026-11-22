@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Mesa 26.2.1 v3d_shc --device 71 (rev 7, compat_rev 0) over the dEQP-GLES2
+# shader constants of tests/deqp_repro_shaders.rs and tests/mali_deqp_*.rs
+# (dEQP, Apache-2.0; names and counts only); made by
+# V3D_SHC=<v3d_shc> tools/cts/deqp-repro-ref71.sh. A lone stage was run with a
+# stub partner whose numbers are not here.
+# programs: 3, rows: 4, compiled: 3, refused: 1
+# columns: case, stage, compiled, reason, instructions, threads, uniforms
+deqp_repro_shaders.loops_do_while_only_continue	fs	yes	ok	11	4	3
+deqp_repro_shaders.random_af_frag64	fs	yes	ok	15	4	2
+deqp_repro_shaders.random_af_frag64	vs	yes	ok	24	4	18
+deqp_repro_shaders.uniform_api_random_23	fs	no	v3d_shc killed by signal 6: v3d_shc: ../src/compiler/nir/nir_lower_samplers.c:45: lower_tex_src_to_offset: Assertion `deref->deref_type == nir_deref_type_array' failed.	-	-	-
