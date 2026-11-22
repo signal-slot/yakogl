@@ -223,7 +223,26 @@ pub fn cold(
 }
 
 /// Step 1 of the module text: reads only, of the PMU, the CRU and (when the
-/// PHY can be read) the PHY's GRF.
+/// PHY can be read) the PHY's GRF. A read of a block whose bus clock is
+/// gated may hang the bus, with a missing line as the only trace, so each
+/// read here is of a block Linux cannot gate (Linux v6.18):
+///
+/// - the PMU (0xfd8d8000): `pclk_pmu1_root`, `pclk_pmu0_root`, `pclk_pmu1`
+///   are `CLK_IS_CRITICAL` (clk-rk3588.c:2175, :2178, :2223);
+/// - the CRU: `pclk_cru` is `CLK_IS_CRITICAL` (clk-rk3588.c:793), under the
+///   critical `pclk_top_root` (:752); the PMU1 CRU (+0x30000) has no gate of
+///   its own and sits under `pclk_pmu1_root`;
+/// - hdptxphy0_grf (0xfd5e0000): its node names no clock
+///   (rk3588-base.dtsi:724-727) and clk-rk3588.c has no gate for it (its
+///   only GRF gates are `pclk_npu_grf`, `pclk_vo0grf` and `pclk_vo1grf`,
+///   :1412, :2435, :2436). It is still read only when the PHY itself can
+///   be read ([`rk3588_display::ready`] of `HDPTX0`), as the chain's START
+///   does.
+///
+/// VOP2, its `vop_mmu`, the HDMI controller and vo1_grf (`PCLK_VO1GRF`,
+/// rk3588-base.dtsi:611) are not read here; the chain reads each only after
+/// [`rk3588_display::ready`] or after opening its gate. sys_grf and vop_grf
+/// name no clock either (rk3588-base.dtsi:582-585, :597-600).
 fn before(m: &impl Mmio, b: &ColdBases, env: &impl Env) {
     let d = &b.display;
     let vop = PdRegs::of(m, d.pmu, &PD_VOP);
