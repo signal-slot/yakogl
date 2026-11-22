@@ -777,6 +777,9 @@ pub struct Nir<'s> {
     numbering_walk: bool,
     /// The walk made such a fold ([`vs_fmul`]).
     late_fold: bool,
+    /// The program's arithmetic is exact (an invariant output's,
+    /// [`build`]): no late fusion of the shader's own nodes ([`fuse`]).
+    exact: bool,
     /// The attribute locations Mesa numbers, one bit each
     /// ([`Nir::attribute_record`]); set by [`build`].
     pub counted: u64,
@@ -816,10 +819,11 @@ pub(super) const CUBE_S_MASK: u32 = 0x1fff_ffff;
 /// 1.0 and no maximum).
 const F16_ONE: u32 = 0x3c00;
 
-/// Every store to an invariant output is a copy: an attribute, a uniform
-/// or a constant, read directly or through locals stored the same way (no
-/// ALU operation, no look-up, no indexed read).
-fn invariant_copies(m: &Module<'_>) -> bool {
+/// Every store to an invariant output (`invariant`; to a non-invariant one
+/// when false) is a copy: an attribute, a uniform or a constant, read
+/// directly or through locals stored the same way (no ALU operation, no
+/// look-up, no indexed read).
+fn output_copies(m: &Module<'_>, invariant: bool) -> bool {
     fn copy(m: &Module<'_>, v: ValueId, depth: u8) -> bool {
         match m.def(v) {
             Some(IrOp::LoadInput { .. } | IrOp::LoadUniform { .. } | IrOp::ConstF32(_)) => true,
@@ -833,7 +837,9 @@ fn invariant_copies(m: &Module<'_>) -> bool {
         }
     }
     m.instrs.iter().all(|op| match op {
-        IrOp::StoreOutput { slot, src } if m.outputs.iter().any(|o| o.is_invariant() && o.slot() == *slot) => {
+        IrOp::StoreOutput { slot, src }
+            if m.outputs.iter().any(|o| o.is_invariant() == invariant && o.slot() == *slot) =>
+        {
             copy(m, src.val, 0)
         }
         _ => true,
@@ -1278,6 +1284,7 @@ impl<'s> Nir<'s> {
             uniform_load: scratch.alloc_filled(MAX_NODES, u16::MAX).map_err(oom)?,
             numbering_walk: false,
             late_fold: false,
+            exact: false,
             counted: 0,
             output_inputs: 0,
             lane_inputs: [0; 4 * MAX_VARYINGS],
@@ -5370,10 +5377,21 @@ fn walk<'s>(
      * wider than Mesa's ([`super::mesa_invariant`]): a shader under
      * `#pragma STDGL invariant(all)` with no declared output is refused
      * too (unless its outputs are copies), though Mesa compiles it as
-     * without the pragma */
-    if m.outputs.iter().any(|o| o.is_invariant()) && !invariant_copies(m) {
+     * without the pragma. Lowered: a shader whose arithmetic all goes to
+     * outputs declared invariant (every other output a copy, no pragma)
+     * is built exact, with no late fusion ([`fuse`]): an exact `fmul`
+     * stays `FMA.f32 a, b, -0` and its `fadd` a separate `FADD.f32`, the
+     * viewport transform still fused, as made
+     * (deqp_misc2_invariant_posonly). An invariant output beside a
+     * computed non-invariant one (`nir_opt_cse` carries `exact` into a
+     * shared term, deqp_misc2_invariant_cse) stays refused, and so does
+     * the pragma's */
+    let exact = m.outputs.iter().any(|o| o.is_invariant()) && !output_copies(m, true);
+    let pragma = m.outputs.iter().any(|o| o.invariant == crate::shaderc::online::ir::Invariance::Pragma);
+    if exact && (pragma || !output_copies(m, false)) {
         return Err(MaliError::Invariant);
     }
+    vs.exact = exact;
     /* the locations the output lanes read, whichever the fragment shader
      * reads ([`build`]) */
     if numbering {
@@ -5936,7 +5954,9 @@ pub(super) fn bcsel_fadd16(vs: &mut Nir<'_>, scratch: &Arena<'_>) -> Result<(), 
 pub(super) fn fuse(vs: &mut Nir<'_>) {
     for k in (0..vs.len).rev() {
         let x = vs.order[k] as usize;
-        if vs.nodes[x].kind != Kind::Alu(Alu::Fadd) {
+        /* an exact `fadd` is not fused; the viewport transform, made after
+         * the shader's own nodes, is not exact ([`Nir::exact`]) */
+        if vs.nodes[x].kind != Kind::Alu(Alu::Fadd) || (vs.exact && x < vs.user_end) {
             continue;
         }
         /* the rules in their list order (nir_opt_algebraic.py:3816-3820),

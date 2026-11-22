@@ -1178,9 +1178,14 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
-        /* an invariant output with arithmetic (a copy compiles:
-         * deqp_misc_invariant_position) */
-        (VS, "invariant gl_Position; attribute vec4 p; void main(){ gl_Position = p * p; }", MaliError::Invariant),
+        /* an invariant output with arithmetic beside a computed
+         * non-invariant one (a copy compiles: deqp_misc_invariant_position;
+         * the invariant arithmetic alone: deqp_misc2_invariant_posonly) */
+        (
+            VS,
+            "invariant gl_Position; attribute vec4 p; varying vec4 v; void main(){ v = p + p; gl_Position = p * p; }",
+            MaliError::Invariant,
+        ),
         /* the pragma alone: refused as the specification reads it, wider
          * than Mesa, which gives the pragma to no built-in (nir.rs `build`) */
         (
