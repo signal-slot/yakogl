@@ -844,9 +844,12 @@ mod gl_api {
     /// [0, 1] in halves (`state::clear_words`), the fragment shader writes
     /// f16 pairs with no TLB config of its own, and a clear quad is the float
     /// program with the colour as four f32 words. Nothing of it is refused
-    /// but the scissored or masked clear of sRGB beside another attachment,
-    /// which is the several-attachment refusal every class gets
-    /// (`a_scissored_clear_of_srgb_beside_another_is_the_mrt_refusal_today`).
+    /// (the scissored or masked clear of sRGB beside another attachment is
+    /// the several-attachment clear quad every class gets, `src/v3d/clear_mrt.rs`
+    /// and `draw_clear_quad` in `src/v3d/backend.rs`, pinned by
+    /// `a_scissored_clear_of_srgb_beside_another_is_the_several_attachment_quad`;
+    /// the per-RT colour mask of `per_target_masks` and `int_clear_channels`
+    /// in `src/gl/draw.rs` only concerns integer and wide R/RG targets, src/gl/draw.rs:2747 and :2977 at this tip).
     mod srgb {
         use super::*;
 
