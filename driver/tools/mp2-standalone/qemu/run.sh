@@ -12,7 +12,8 @@
 # Environment: MP2_QEMU or QEMU_SYSTEM_AARCH64 (the QEMU binary, else
 # qemu-system-aarch64 on PATH), UBOOT_V2023_10_SRC, CROSS_COMPILE,
 # MP2S_QEMU_CACHE (see build-uboot.sh), MP2S_QEMU_KEEP=1 (keeps the run
-# directory; a failing run keeps it anyway), MP2S_QEMU_ONLY=NAME (one case).
+# directory; a failing run keeps it anyway), MP2S_QEMU_ONLY=NAME (the case NAME, or
+# every case NAME_*: prod_redund runs all prod_redund_* cases).
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -41,11 +42,11 @@ uboot=$(bash "$here/build-uboot.sh") || rc=$?
 [ "$rc" -eq 0 ] || { echo "run.sh: build-uboot.sh failed ($rc)"; exit 1; }
 uboot=$(echo "$uboot" | tail -n 1)
 echo "run.sh: U-Boot $uboot"
-# The env_* cases run the redund U-Boot (the DK's two environment copies on
-# the microSD); built only when one of them runs.
+# The env_* and prod_redund_* cases run the redund U-Boot (the DK's two
+# environment copies on the microSD); built only when one of them runs.
 redund=()
 case "${MP2S_QEMU_ONLY:-env_}" in
-env_*)
+env_* | prod_redund*)
 	r=$(bash "$here/build-uboot.sh" redund) || rc=$?
 	[ "$rc" -eq 0 ] || { echo "run.sh: build-uboot.sh redund failed ($rc)"; exit 1; }
 	redund=(--uboot-redund "$(echo "$r" | tail -n 1)")

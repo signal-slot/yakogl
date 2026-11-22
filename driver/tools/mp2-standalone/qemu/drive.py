@@ -25,7 +25,10 @@ Prints one line per assertion and "run.sh: N ok, M failed" last; exit 0 only
 when nothing failed. More cases: add a Case to cases() (qemu-run's job).
 The env_* cases run --uboot-redund (the environment in two copies on the
 disk, as on the DK), read both copies after each boot and break their CRCs
-between boots.
+between boots. The prod_redund_* cases do the same with the real product
+script (../mp2-standalone.cmd, built by ../build.sh) as a counted default of
+2: a power cut at each of its saves, and both copies bad. --only prod_redund
+runs them all (--only NAME: NAME or every NAME_*).
 """
 import argparse
 import importlib.util
@@ -88,13 +91,20 @@ class Case:
     redund: run the redund U-Boot (the environment in two copies on the disk's
     u-boot-env partition, as on the DK); between: {n: f(disk)} run on the disk
     image after boot n, f returns assertions; bad_crc: the boots whose console
-    must say "bad CRC" (every other boot must not)."""
+    must say "bad CRC" (every other boot must not).
+    product: stage ../build.sh's boot.scr.uimg of the product script as
+    /yakogl/standalone/boot.scr.uimg and the stand-in image as its default.bin;
+    the harness's per-boot "unchanged" check then compares the protected
+    variables (boot_prefixes left out: the product restores it) with the
+    environment the boot loaded (the stored copy, or the defaults when both
+    are bad), and each Boot gets loaded/saved/defaults (redund only)."""
     def __init__(self, name, script, presets, boots, check, files=None, corrupt=(),
-                 redund=False, between=None, bad_crc=()):
+                 redund=False, between=None, bad_crc=(), product=False):
         self.name, self.script, self.presets = name, script, presets
         self.boots, self.check = boots, check
         self.files, self.corrupt = files or {}, corrupt
         self.redund, self.between, self.bad_crc = redund, between or {}, bad_crc
+        self.product = product
 
 
 def demo_check(setup_env, boots):
@@ -238,7 +248,9 @@ def env_vars(copy):
 def describe(copy):
     if not copy.crc_ok:
         return "%s bad CRC" % copy.label
-    return "%s flags %d mp2s_test=%s" % (copy.label, copy.flags, env_vars(copy).get("mp2s_test"))
+    v = env_vars(copy)
+    k = "mp2s_left" if "mp2s_left" in v and "mp2s_test" not in v else "mp2s_test"   # prod_redund_*
+    return "%s flags %d %s=%s" % (copy.label, copy.flags, k, v.get(k))
 
 
 def break_crc(disk, copy):
@@ -344,10 +356,174 @@ def both_bad_check(setup_env, boots):
              s3 is not None and s2 is not None and s3.raw == s2.raw, "")]
 
 
+# The prod_redund_* cases: the real product script (../mp2-standalone.cmd,
+# built by ../build.sh) as a counted default of 2 on the redund U-Boot, through
+# the legacy loop (prefixes /yakogl/standalone/ then the stock /mmc0_), with
+# ST's env_check run first as ST's bootcmd_stm32mp does. A power cut at each
+# saveenv the script does (cut_newer after boot 1, 2, 3) and one with both
+# copies bad. The claim (docs/notes/stm32mp257f-dk-standalone.md, section 8):
+# after any single cut the next boots end in the stock path within the count
+# that was left, and the count never grows. Console lines: section 7.
+P_UNDO = "mp2s: undo: setenv mp2s_left 0; saveenv; boot   (or a PC: delete yakogl/standalone/boot.scr.uimg)"
+P_LEFT = "mp2s: default /yakogl/standalone/default.bin, boots left %d"
+P_USEDUP = "mp2s: default used up, booting Linux"
+P_LOADED = "mp2s: loaded 1000 bytes at 0xa0000000, RAM footprint 0x2000 of the 0x10000000-byte window"
+P_GO = "mp2s: go 0xa0000000"
+P_RETURNED = "mp2s: the image returned, booting Linux"
+P_IMAGE = "mp2q: image ran at its link address 0xa0000000"
+P_STOCK = "mp2q: stock path /mmc0_ reached (on the DK: ST extlinux, OpenSTLinux)"
+P_ROOT = "mp2q: stock root /boot.scr.uimg reached (default environment; on the DK: OpenSTLinux)"
+P_FOUND = "Found U-Boot script /yakogl/standalone/boot.scr.uimg"
+P_FOUND_STOCK = "Found U-Boot script /mmc0_boot.scr.uimg"
+P_FAILED = "SCRIPT FAILED: continuing..."
+P_STOCK_PREFIXES = "/mmc0_"
+P_OURS = "/yakogl/standalone/ " + P_STOCK_PREFIXES
+P_MP2S = ("mp2s_left", "mp2s_ver", "mp2s_prefixes")
+# Never in a boot's saved-environment diff (the item's contract).
+P_NEVER = ("bootcmd", "bootcount", "altbootcmd")
+# What the script may change in the saved environment, and only that.
+P_MAY = P_MP2S + ("boot_prefixes",)
+# The variables the loop itself sets before it sources the script (the same
+# on the DK); a saveenv of the script stores them with the count. fileaddr and
+# filesize are set by boot_a_script's load of the script itself.
+P_LOOP_VARS = ("devtype", "devnum", "distro_bootpart", "fileaddr", "filesize")
+# The legacy loop as LEGACY_LOOP, with ST's env_check first; bootcount and
+# altbootcmd get a value so "unchanged" compares a real byte string (QEMU has
+# no bootcount driver, ST's bootcount lives outside the environment).
+P_LOOP = LEGACY_LOOP[:-1] + [
+    "setenv bootcmd 'run env_check; setenv devtype mmc; setenv devnum 0; setenv distro_bootpart 2; "
+    "run scan_dev_for_boot; echo LOOP DONE'",
+    "setenv bootcount 0", "setenv altbootcmd 'echo mp2q: altbootcmd ran'"]
+# "default 2" as the runner saves it; the trailing saves make three from a
+# blank partition, so both copies hold it before boot 1 (as env_* do).
+P_PRESETS = P_LOOP + ["setenv boot_prefixes '%s'" % P_OURS, "setenv mp2s_prefixes '%s'" % P_STOCK_PREFIXES,
+                      "setenv mp2s_ver 1", "setenv mp2s_left 2", "saveenv", "saveenv"]
+P_FILES = {STOCK: "prod-stock.cmd", "boot.scr.uimg": "prod-root-stock.cmd"}
+
+
+def default_env():
+    """The redund U-Boot's compiled-in default environment (redund-default.env):
+    what a boot starts from when both stored copies are bad."""
+    env = {}
+    with open(os.path.join(HERE, "redund-default.env")) as f:
+        for ln in f:
+            ln = ln.rstrip("\n")
+            if ln and not ln.startswith("#") and "=" in ln:
+                k, v = ln.split("=", 1)
+                env[k] = v
+    return env
+
+
+def loaded_env(store):
+    """The environment a boot starts from on this store: the copy a load takes,
+    else (both bad) the defaults."""
+    ok = [c for c in store if c.crc_ok]
+    if not ok:
+        return default_env()
+    return env_vars(store[UENV.active_index(*store)] if len(ok) == 2 else ok[0])
+
+
+def p_kind(b):
+    """What a boot did: ("image", left), ("usedup",), ("stock",) (the script is
+    no longer reached), ("root",) (the defaults' scan), or ("other",)."""
+    left = [int(ln.rsplit(" ", 1)[1]) for ln in b.lines if re.fullmatch(re.escape(P_LEFT[:-2]) + r"\d+", ln)]
+    if P_IMAGE in b.lines and len(left) == 1:
+        return ("image", left[0])
+    if P_USEDUP in b.lines:
+        return ("usedup",)
+    if P_ROOT in b.lines and not any(ln.startswith("mp2s:") for ln in b.lines):
+        return ("root",)
+    if P_STOCK in b.lines and not any(ln.startswith("mp2s:") for ln in b.lines):
+        return ("stock",)
+    return ("other",)
+
+
+def p_boot(b, want):
+    """The assertions of one boot of the expected kind."""
+    k = want[0]
+    if k == "image":
+        pats = [P_FOUND, P_UNDO, P_LEFT % want[1], P_LOADED, P_GO, P_IMAGE, P_RETURNED, P_FAILED,
+                P_FOUND_STOCK, P_STOCK, "LOOP DONE"]
+    elif k == "usedup":
+        pats = [P_FOUND, P_UNDO, P_USEDUP, P_FAILED, P_FOUND_STOCK, P_STOCK, "LOOP DONE"]
+    elif k == "stock":
+        pats = ["Scanning mmc 0:2...", P_FOUND_STOCK, P_STOCK, "LOOP DONE"]
+    else:
+        pats = ["Hit any key to stop autoboot", P_ROOT]
+    out = [ordered("%s" % " ".join(map(str, want)), b, pats),
+           ("boot %d: it did %r" % (b.n, want), p_kind(b) == want, "did %r" % (p_kind(b),))]
+    if k != "image":
+        out += [absent(b, P_GO), absent(b, P_IMAGE)]
+    if k in ("stock", "root"):
+        out.append(absent(b, P_FOUND))
+    return out
+
+
+def p_store_after(b, want):
+    """What the next boot loads after this one (a cut, if any, is applied later)."""
+    s = stored(b)
+    e = env_vars(s) if s is not None else {}
+    k = want[0]
+    if k == "image":
+        return [("boot %d: stored mp2s_left %d, boot_prefixes ours" % (b.n, want[1]),
+                 e.get("mp2s_left") == str(want[1]) and e.get("boot_prefixes") == P_OURS,
+                 "mp2s_left %r boot_prefixes %r" % (e.get("mp2s_left"), e.get("boot_prefixes")))]
+    if k == "usedup":
+        return [("boot %d: stored boot_prefixes back to %r, mp2s_* gone" % (b.n, P_STOCK_PREFIXES),
+                 e.get("boot_prefixes") == P_STOCK_PREFIXES and not any(v in e for v in P_MP2S),
+                 "boot_prefixes %r, %r" % (e.get("boot_prefixes"), [v for v in P_MP2S if v in e]))]
+    if b.defaults:
+        d = default_env()
+        return [("boot %d: env_check saved the defaults: bootcmd the default one, no mp2s_*, "
+                 "boot_prefixes not ours" % b.n,
+                 s is not None and e.get("bootcmd") == d["bootcmd"] and not any(v in e for v in P_MP2S)
+                 and e.get("boot_prefixes") != P_OURS, "%r" % sorted(e))]
+    return [("boot %d: stored environment as the boot loaded it (nothing saved)" % b.n,
+             s is not None and env_vars(s) == b.loaded, "")]
+
+
+def p_left(env):
+    """The count a boot loads: the number, or -1 once mp2s_left is gone."""
+    v = env.get("mp2s_left")
+    return int(v) if v is not None and v.isdigit() else -1
+
+
+def prod_check(expect, extra):
+    """expect: the kind of each boot; extra: the image boots beyond N=2 the
+    cut may cost (0 or 1)."""
+    def check(setup_env, boots):
+        out = []
+        for b, want in zip(boots, expect):
+            out += p_boot(b, want) + p_store_after(b, want)
+            diff = sorted(k for k in set(b.loaded) | set(b.saved)
+                          if b.loaded.get(k) != b.saved.get(k))
+            out.append(("boot %d: %s not in the saved environment diff (diff %s)"
+                        % (b.n, ", ".join(P_NEVER), ", ".join(diff) or "empty"),
+                        not set(diff) & set(P_NEVER), ""))
+            if not b.defaults:
+                out.append(("boot %d: the saves changed only %s and the loop's own variables"
+                            % (b.n, ", ".join(P_MAY)),
+                            set(diff) <= set(P_MAY + P_LOOP_VARS), "diff %r" % diff))
+        loads = [p_left(b.loaded) for b in boots]
+        out.append(("the count each boot loads never grows (%s)" % ", ".join(map(str, loads)),
+                    all(x >= y for x, y in zip(loads, loads[1:])), ""))
+        shown = [k[1] for k in map(p_kind, boots) if k[0] == "image"]
+        out.append(("console boots left never grows (%s)" % ", ".join(map(str, shown)),
+                    all(x >= y for x, y in zip(shown, shown[1:])), ""))
+        out.append(("image boots %d, at most N + %d = %d" % (len(shown), extra, 2 + extra),
+                    len(shown) <= 2 + extra, ""))
+        last = p_kind(boots[-1])
+        out.append(("the last boot ends in the stock path (%s)" % last[0], last[0] in ("stock", "root"), ""))
+        return out
+    return check
+
+
 def cases(here):
     def c(f):
         return os.path.join(here, "cases", f)
     p = "/yakogl/standalone/ /mmc0_"
+    pf = {d: c(f) for d, f in P_FILES.items()}
+    i1, i0, u, s, r = ("image", 1), ("image", 0), ("usedup",), ("stock",), ("root",)
     return [Case("demo-counter", os.path.join(here, "demo-counter.cmd"),
                  [MMC_ONLY, "setenv mp2s_test 3"], 3, demo_check),
             Case("loop_exit_continues", None, loop_presets(p), 1, exit_check,
@@ -368,7 +544,24 @@ def cases(here):
                  redund=True, between={1: cut_newer}),
             Case("env_both_bad_default", os.path.join(here, "demo-counter.cmd"),
                  ["setenv mp2s_test 3", "saveenv", "saveenv"], 3, both_bad_check,
-                 redund=True, between={1: cut_both}, bad_crc=(2,))]
+                 redund=True, between={1: cut_both}, bad_crc=(2,)),
+            # The product's default 2 uncut: the baseline of the cuts below.
+            Case("prod_redund_nocut", None, P_PRESETS, 4, prod_check([i1, i0, u, s], 0), pf,
+                 redund=True, product=True),
+            # A cut at boot 1's save (2 -> 1): boot 1 is done again.
+            Case("prod_redund_cut_save1", None, P_PRESETS, 5, prod_check([i1, i1, i0, u, s], 1), pf,
+                 redund=True, product=True, between={1: cut_newer}),
+            # A cut at boot 2's save (1 -> 0).
+            Case("prod_redund_cut_save2", None, P_PRESETS, 5, prod_check([i1, i0, i0, u, s], 1), pf,
+                 redund=True, product=True, between={2: cut_newer}),
+            # A cut at boot 3's save (the used-up branch's restore): the count
+            # stays 0, boot 4 restores again, no image.
+            Case("prod_redund_cut_restore", None, P_PRESETS, 5, prod_check([i1, i0, u, u, s], 0), pf,
+                 redund=True, product=True, between={3: cut_newer}),
+            # Both copies bad after boot 1: the defaults, env_check saves them,
+            # our prefix is gone: the stock root script on boots 2 and 3.
+            Case("prod_redund_both_bad", None, P_PRESETS, 3, prod_check([i1, r, r], 0), pf,
+                 redund=True, product=True, between={1: cut_both}, bad_crc=(2,))]
 
 
 def printenv(q):
@@ -397,7 +590,8 @@ def main():
                            "" if cond or not detail else ": " + detail), flush=True)
 
     for c in cases(HERE):
-        if a.only and a.only != c.name:
+        # --only NAME: the case NAME, or every case NAME_* (prod_redund).
+        if a.only and a.only != c.name and not c.name.startswith(a.only + "_"):
             continue
         if c.redund and not a.uboot_redund:
             print("skip %s: no --uboot-redund" % c.name, flush=True)
@@ -418,6 +612,15 @@ def main():
                 f.write(scr)
         with open(a.image, "rb") as f, open(os.path.join(stage, "yakogl", "mp2z.bin"), "wb") as g:
             g.write(f.read())
+        if c.product:                           # the real script, as build.sh builds it
+            r = subprocess.run(["bash", os.path.join(HERE, "..", "build.sh"), os.path.join(w, "scr")],
+                               check=True, capture_output=True, text=True)
+            print("     %s: %s" % (c.name, r.stdout.strip().splitlines()[-1]), flush=True)
+            os.makedirs(os.path.join(stage, "yakogl", "standalone"), exist_ok=True)
+            for src, dest in ((os.path.join(w, "scr", "boot.scr.uimg"), YAKOGL),
+                              (a.image, "yakogl/standalone/default.bin")):
+                with open(src, "rb") as f, open(os.path.join(stage, dest), "wb") as g:
+                    g.write(f.read())
         disk, flash = os.path.join(w, "sd.img"), os.path.join(w, "env.img")
         subprocess.run(["bash", os.path.join(HERE, "mkdisk.sh"), disk, stage] + (["env"] if c.redund else []),
                        check=True)
@@ -453,6 +656,7 @@ def main():
             continue
         boots = []
         for n in range(1, c.boots + 1):
+            before = env_store(disk) if c.redund else None
             def body(q, n=n):
                 q.wait_prompt()
                 lines = q.lines()
@@ -468,11 +672,26 @@ def main():
                 check("%s: boot %d: bad CRC, the default environment (as the case wants)" % (c.name, n), bad)
             else:
                 check("%s: boot %d: stored environment read (no bad CRC)" % (c.name, n), not bad)
-            for k in PROTECTED:
-                check("%s: boot %d: %s unchanged" % (c.name, n, k), b.env.get(k) == setup_env.get(k),
-                      "%r -> %r" % (setup_env.get(k), b.env.get(k)))
             if c.redund:                        # QEMU has exited: the disk is as the boot left it
                 b.store = env_store(disk)
+            if c.product:
+                b.defaults = not any(x.crc_ok for x in before)
+                b.loaded, b.saved = loaded_env(before), loaded_env(b.store)
+                for k in PROTECTED:
+                    if k == "boot_prefixes":
+                        continue
+                    check("%s: boot %d: %s as the boot loaded it%s" % (c.name, n, k,
+                          " (the defaults)" if b.defaults else ""), b.env.get(k) == b.loaded.get(k),
+                          "%r -> %r" % (b.loaded.get(k), b.env.get(k)))
+                    check("%s: boot %d: %s as the boot loaded it, in the saved environment"
+                          % (c.name, n, k), b.saved.get(k) == b.loaded.get(k),
+                          "%r -> %r" % (b.loaded.get(k), b.saved.get(k)))
+                print("     %s: boot %d: %s" % (c.name, n, " / ".join(
+                    ln for ln in b.lines if ln.startswith(("mp2s:", "mp2q:")))), flush=True)
+            else:
+                for k in PROTECTED:
+                    check("%s: boot %d: %s unchanged" % (c.name, n, k), b.env.get(k) == setup_env.get(k),
+                          "%r -> %r" % (setup_env.get(k), b.env.get(k)))
             if n in c.between:
                 for name, ok, detail in c.between[n](disk):
                     check("%s: after boot %d: %s" % (c.name, n, name), ok, detail)

@@ -8,9 +8,10 @@ environment** (CFI flash, `saveenv`) and a **GPT microSD image with an ext4
 `bootfs` partition**, as ST's distro loop sees the DK's card. A case is a boot
 script, environment presets and N boots; the N boots are N separate QEMU runs on
 the same flash and disk, so what a script saves is what the next boot reads.
-No board, no network. The harness has no product script of its own: the one
-case here, `demo-counter`, proves the harness (the product scripts and their
-cases are other items').
+No board, no network. `demo-counter` proves the harness; the `loop_*` and
+`env_*` cases prove the loop and environment claims with test scripts; the
+`prod_redund_*` cases run the real product script `../mp2-standalone.cmd`
+under the redundant environment.
 
 | file | job |
 | --- | --- |
@@ -76,9 +77,59 @@ image; between two boots a `Case(between={n: f})` breaks stored CRCs:
   script finds no `mp2s_test`; boot 3 loads the saved defaults and
   `env_check` saves nothing.
 
+The `prod_redund_*` cases run the **real product script** under the same
+redundant environment: `../build.sh` builds `../mp2-standalone.cmd` into the
+case's `boot.scr.uimg`, staged as `/yakogl/standalone/boot.scr.uimg` with the
+stand-in image as `/yakogl/standalone/default.bin`. The bootfs also holds
+`/mmc0_boot.scr.uimg` (`cases/prod-stock.cmd`, the stock prefix: on the DK
+ST's extlinux) and `/boot.scr.uimg` (`cases/prod-root-stock.cmd`, what the
+default environment's `bootflow scan` finds: on the DK ST's root script). The
+setup presets the legacy loop (as the `loop_*` cases, with ST's `env_check`
+run first, as `bootcmd_stm32mp` does), `bootcount=0`, an `altbootcmd`, and
+"default 2" as the runner saves it (`boot_prefixes=/yakogl/standalone/ /mmc0_`,
+`mp2s_prefixes=/mmc0_`, `mp2s_ver=1`, `mp2s_left=2`), saved three times so both
+copies hold it. The script saves once per boot that loads a count of 1-9 and
+once in the used-up branch (section 3 of
+`docs/notes/stm32mp257f-dk-standalone.md`); each case cuts one of those saves
+(`cut_newer` after that boot) or breaks both copies:
+
+| case | after boot | boots, as the console shows them (section 7) |
+| --- | --- | --- |
+| `prod_redund_nocut` | (no cut) | left 1 + image, left 0 + image, used up, stock |
+| `prod_redund_cut_save1` | 1 (2 to 1) | left 1 + image, **left 1** + image, left 0 + image, used up, stock |
+| `prod_redund_cut_save2` | 2 (1 to 0) | left 1 + image, left 0 + image, **left 0** + image, used up, stock |
+| `prod_redund_cut_restore` | 3 (the restore) | left 1 + image, left 0 + image, used up, **used up**, stock |
+| `prod_redund_both_bad` | 1, both copies | left 1 + image; `bad CRC`, the defaults, `env_check` saves them, the stock root script; the stock root script |
+
+"image" is the ordered run `Found U-Boot script /yakogl/standalone/...`, the
+undo line, `boots left n`, `loaded ...`, `go 0xa0000000`, the stand-in's line,
+`the image returned`, `SCRIPT FAILED: continuing...`, the stock prefix's line;
+"used up" is `default used up, booting Linux` then the stock prefix, and the
+store after it has `boot_prefixes=/mmc0_` and no `mp2s_*`; "stock" is the stock
+prefix with no `mp2s:` line. Each case asserts the section 8 claim: after a
+single cut the next boots end in the stock path within the count that was left
+(the image runs at most N + 1 = 3 times), the count each boot loads never grows
+(e.g. `2, 2, 1, 0, -1` for `cut_save1`, -1 once `mp2s_left` is gone), and the
+console's `boots left` never grows. Per boot the harness compares `bootcmd`,
+`boot_targets`, `bootcount`, `bootlimit`, `altbootcmd`, `upgrade_available`
+(printenv and the stored copy) with the environment the boot **loaded** (the
+copy a load takes, or `redund-default.env` when both are bad), and asserts that
+`bootcmd`, `bootcount` and `altbootcmd` are never in the boot's saved-env diff
+(stored after the boot against loaded before it). A boot that loaded a stored
+copy may change only `mp2s_*`, `boot_prefixes` and what the loop itself sets
+before it sources the script (`devtype`, `devnum`, `distro_bootpart`, and the
+script load's `fileaddr`, `filesize`); a both-bad boot's diff is `env_check`'s
+save of the defaults plus U-Boot's runtime variables (`ethaddr`,
+`fdtcontroladdr`, `stdin`, `stdout`, `stderr`).
+
+```sh
+MP2S_QEMU_ONLY=prod_redund driver/tools/mp2-standalone/qemu/run.sh   # the five prod_redund_* cases
+```
+
 To add a case, add a `Case(name, script, presets, boots, check)` to `cases()` in
-`drive.py`; `MP2S_QEMU_ONLY=name` runs one. `run.sh` builds the `redund` U-Boot
-only when an `env_*` case runs.
+`drive.py`; `MP2S_QEMU_ONLY=name` runs the case `name`, or every case
+`name_*` (`prod_redund` selects all `prod_redund_*`). `run.sh` builds the
+`redund` U-Boot only when an `env_*` or `prod_redund*` case runs.
 
 ## Tools and environment
 
