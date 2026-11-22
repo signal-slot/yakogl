@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# Sources outside tools/shaders/es100 that the V3D 7.1 online back end refuses
+# (tests/shaderc71_tree_corpus.rs; the es100 and qpu_corpus_71 refusals are in
+# known-uncompilable-v3d71.txt). `<key>: <exact message>`: the key is the
+# source's path under tools/shaders (compiled with a stub of the other stage)
+# or `<vert>+<frag>` for a linked pair; the message is the front end's
+# (`front end <source>: <message>`) or V3d71Error's Debug form. A refusal not
+# listed, a changed message, a listed entry that now compiles, and a mark
+# below that disagrees with the 4.2 compile in the same test all fail it.
+# Each block's reason says `4.2 also refuses` or `7.1-only`.
+
+# 4.2 also refuses all of these (known-uncompilable-v3d.txt lists them with the
+# 4.2 front end's own message): the source is desktop GLSL (`#version 1xx`) and
+# the front end is an OpenGL ES compiler. Not a 7.1 defect; 18 sources. No refusal
+# in the tree outside es100 is one that 4.2 does not make.
+armselect.frag: front end armselect.frag: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.frag: front end color_uv.frag: desktop GLSL source; this is an OpenGL ES compiler
+color_uv.vert: front end color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+compact.frag: front end compact.frag: desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.frag: front end internal/clear.frag: desktop GLSL source; this is an OpenGL ES compiler
+internal/clear.vert: front end internal/clear.vert: desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.frag: front end internal/fbload.frag: desktop GLSL source; this is an OpenGL ES compiler
+internal/fbload.vert: front end internal/fbload.vert: desktop GLSL source; this is an OpenGL ES compiler
+interp_color.frag: front end interp_color.frag: desktop GLSL source; this is an OpenGL ES compiler
+mvp.vert: front end mvp.vert: desktop GLSL source; this is an OpenGL ES compiler
+mvp_color.vert: front end mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler
+passthrough.vert: front end passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler
+points.vert: front end points.vert: desktop GLSL source; this is an OpenGL ES compiler
+texture.frag: front end texture.frag: desktop GLSL source; this is an OpenGL ES compiler
+texture2.frag: front end texture2.frag: desktop GLSL source; this is an OpenGL ES compiler
+uniform_color.frag: front end uniform_color.frag: desktop GLSL source; this is an OpenGL ES compiler
+uv.vert: front end uv.vert: desktop GLSL source; this is an OpenGL ES compiler
+zorder.vert: front end zorder.vert: desktop GLSL source; this is an OpenGL ES compiler
