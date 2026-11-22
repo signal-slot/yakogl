@@ -15,14 +15,14 @@ change turns the committed words into the backend's table entry.
 
 Two steps, so that the second needs no Mesa build:
 
-  gen_spm_load.py capture <capture_spm_load> [--check]
+  gen_spm_load.py capture <capture_spm_load> [--check] [--variant <dir>]
       Runs Mesa 26.2.1's pco through tools/pco_shc/capture_spm_load.c (built
       in a Mesa tree, README.md) and writes tools/pco_shc/spm_load/
       spm_load.hex (the machine code) and spm_load.meta.txt (what the
       compiler says about it). --check compares instead of writing: the
       regenerate-and-compare row of tools/check.sh.
 
-  gen_spm_load.py check
+  gen_spm_load.py check [--variant <dir>]
       Disassembles the committed words with `yakogl-tools usc-dis` (the
       online compiler's decoder, src/shaderc/online/powervr; YAKOGL_TOOLS
       names a built binary, else `cargo run -p yakogl-tools`) and checks
@@ -30,9 +30,14 @@ Two steps, so that the second needs no Mesa build:
       program, that the one `end` is on the last group, that every shared
       register the program reads lies in the block the PDS program DMAs
       (consts_dwords) and both state slots are read, that every temp lies
-      below `temps`, and that the last group writes pixel output 0 with
+      below `temps`, and that the last group writes the last pixel output with
       the output-register check. No Mesa build; the decode row of
       tools/check.sh.
+
+Variants (VARIANTS): spm_load (the backend's: 1 dword, 1 sample),
+spm_load_2dw (2 dwords, RGBA16F) and spm_load_msaa4 (1 dword, multisampled),
+each in its own directory with the same two file names. Without --variant
+both steps walk all three, so the two tools/check.sh rows cover them.
 
 Run from the repository root.
 """
@@ -43,15 +48,19 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT_DIR = os.path.join(ROOT, "tools/pco_shc/spm_load")
-HEX = os.path.join(OUT_DIR, "spm_load.hex")
-META = os.path.join(OUT_DIR, "spm_load.meta.txt")
-SCRATCH = os.path.join(ROOT, "build/spm_load")
+# The variants: directory under tools/pco_shc -> PROPS. The first is the
+# backend's configuration; select() points the globals below at one of them.
+# `capture` and `check` without --variant walk all of them.
+VARIANTS = {
+    "spm_load": ("1", "0", "0"),
+    "spm_load_2dw": ("2", "0", "0"),
+    "spm_load_msaa4": ("1", "0", "1"),
+}
+OUT_DIR = HEX = META = SCRATCH = PROPS = HEADER = None
 
 # struct pvr_spm_load_props (pvr_usc.h): output_reg_count, tile_buffer_count,
 # is_multisampled. The backend renders to one RGBA8 colour target (one output
 # dword), never to tile buffers, with one sample.
-PROPS = ("1", "0", "0")
 MESA = "26.2.1"
 DEVICE = "BXS-4-64 (BVNC 36.53.104.796, TI AM62P)"
 # Mesa's FRAG_RESULT_DATA0 (compiler/shader_enums.h): the colour output.
@@ -61,17 +70,28 @@ SPECIAL_PIXOUT0 = 32
 # ROGUE_NUM_TEXSTATE_DWORDS (hwdef/rogue_hw_defs.h): a sampler or image state.
 TEXSTATE_DWORDS = 4
 
-HEADER = [
-    "# SPDX-License-Identifier: Apache-2.0 AND MIT",
-    "# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.",
-    "# SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.",
-    f"# Mesa {MESA} pco, {DEVICE}: the SPM (partial render)",
-    "# background-object load shader, pvr_uscgen_spm_load() of",
-    "# src/imagination/vulkan/pvr_usc.c (MIT) with struct pvr_spm_load_props",
-    f"# {{ output_reg_count {PROPS[0]}, tile_buffer_count {PROPS[1]}, is_multisampled {PROPS[2]} }}.",
-    "# Written by: tools/pco_shc/gen_spm_load.py capture <mesa>/build/src/imagination/vulkan/capture_spm_load",
-    "# (tools/pco_shc/capture_spm_load.c, README.md). Do not edit.",
-]
+def make_header():
+    return [
+        "# SPDX-License-Identifier: Apache-2.0 AND MIT",
+        "# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.",
+        "# SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.",
+        f"# Mesa {MESA} pco, {DEVICE}: the SPM (partial render)",
+        "# background-object load shader, pvr_uscgen_spm_load() of",
+        "# src/imagination/vulkan/pvr_usc.c (MIT) with struct pvr_spm_load_props",
+        f"# {{ output_reg_count {PROPS[0]}, tile_buffer_count {PROPS[1]}, is_multisampled {PROPS[2]} }}.",
+        "# Written by: tools/pco_shc/gen_spm_load.py capture <mesa>/build/src/imagination/vulkan/capture_spm_load",
+        "# (tools/pco_shc/capture_spm_load.c, README.md). Do not edit.",
+    ]
+
+
+def select(name):
+    global OUT_DIR, HEX, META, SCRATCH, PROPS, HEADER
+    PROPS = VARIANTS[name]
+    OUT_DIR = os.path.join(ROOT, "tools/pco_shc", name)
+    HEX = os.path.join(OUT_DIR, "spm_load.hex")
+    META = os.path.join(OUT_DIR, "spm_load.meta.txt")
+    SCRATCH = os.path.join(ROOT, "build", name)
+    HEADER = make_header()
 
 
 def capture_run(capture_spm_load):
@@ -271,8 +291,9 @@ def check():
     temp = {int(i) for _, _, _, g in groups for bank, i in g["src"] + g["dst"] if bank == "temp"}
     expect(temp and max(temp) < temps, f"every temp lies below temps {temps} ({sorted(temp)})")
     last = groups[-1][3] if groups else {"hdr": {}, "dst": []}
-    expect(("special", str(SPECIAL_PIXOUT0)) in last["dst"] and last["hdr"].get("olchk") == "1",
-           "the last group writes pixel output 0 (special 32) with the output-register check")
+    last_po = SPECIAL_PIXOUT0 + int(PROPS[0]) - 1
+    expect(("special", str(last_po)) in last["dst"] and last["hdr"].get("olchk") == "1",
+           f"the last group writes pixel output {int(PROPS[0]) - 1} (special {last_po}) with the output-register check")
 
     if bad:
         for b in bad:
@@ -281,17 +302,28 @@ def check():
     print(f"gen_spm_load: spm_load.hex decodes (usc-dis): {len(groups)} instruction groups, {len(data)} bytes; "
           f"temps {temps} (r{min(temp)}..r{max(temp)} used); shared reads at {shared} of consts_dwords {consts} "
           f"(sampler sh[{smp_sh}..{smp_sh + ts}), texture sh[{tex_sh}..{tex_sh + ts})); "
-          f"pixout0 written with olchk on the ending group")
+          f"last pixout written with olchk on the ending group")
 
 
 def main():
     a = sys.argv[1:]
     is_check = "--check" in a
     a = [x for x in a if x != "--check"]
+    names = list(VARIANTS)
+    if "--variant" in a:
+        i = a.index("--variant")
+        if i + 1 >= len(a) or a[i + 1] not in VARIANTS:
+            sys.exit(__doc__)
+        names = [a[i + 1]]
+        del a[i:i + 2]
     if a == ["check"]:
-        check()
+        for n in names:
+            select(n)
+            check()
     elif a[:1] == ["capture"] and len(a) == 2:
-        capture(a[1], is_check)
+        for n in names:
+            select(n)
+            capture(a[1], is_check)
     else:
         sys.exit(__doc__)
 

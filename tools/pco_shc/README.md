@@ -125,6 +125,23 @@ that builds the background-object program:
   dwords (`usc_sharedsize` 1), board-checked, so this file does not repeat
   the words.
 
+Two more variants sit beside it, same file names and format, for the frame
+kinds the first leaves out (nothing under `src/` reads them yet):
+
+| directory | `output_reg_count, tile_buffer_count, is_multisampled` | for | words | groups | temps |
+|---|---|---|---|---|---|
+| `spm_load/` | 1, 0, false | RGBA8, one sample | 50 | 16 | 6 |
+| `spm_load_2dw/` | 2, 0, false | RGBA16F (two output dwords, `PIPE_FORMAT_R32G32_UINT`, po0..1) | 52 | 17 | 6 |
+| `spm_load_msaa4/` | 1, 0, true | 4x MSAA (`sample_shading` 1) | 58 | 18 | 7 |
+
+All three read the same shared slots (sampler sh0..3, texture sh4..7,
+`consts_dwords` 8). Without `--variant <directory>` both `gen_spm_load.py`
+steps walk all three, so the rows below cover them; `--variant spm_load_2dw`
+does one. For the 2-dword variant `check` expects the last group to write
+pixel output 1 (the last output dword). Captured 2026-11-22 with the
+`PCO_SHC` dependency's `capture_spm_load`; `capture --check` reproduces all
+three byte for byte, and `spm_load/` is unchanged.
+
 The two rows of `tools/check.sh`: `gen_spm_load.py check` (every pvr run;
 no Mesa) and `gen_spm_load.py capture --check` against `capture_spm_load`
 (the full run). The program is `tools/cts/deps.toml`'s
