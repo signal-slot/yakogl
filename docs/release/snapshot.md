@@ -197,72 +197,36 @@ from the first is "private classes not run", not a pass. The snapshot
 directory is removed after a rehearsal; nothing is pushed and no remote is
 added.
 
-### Rehearsal on the origin/main tip (2026-11-17)
+### Rehearsal on the origin/main tip (2026-11-22): blocked
 
-- **R** (source): `239b538dce0420f96a6dfbe46f7be60d62cf9cdd`, origin/main's
-  tip as held by the farm's read-only copies of the remote's refs (the two
-  copies of `main` both resolve to it; commit date 2026-11-17). A fresh
-  `git fetch origin` was not possible from the worker (host key
-  verification). R is a commit of origin/main, not of the integration
-  branch, and a descendant of the previous rehearsal's source
-  `cc2cc536c12a6778b348a28f3ef215127f509b78`.
-- **Identity and date**: `yakogl rehearsal <rehearsal@invalid>`,
-  `2026-01-01T00:00:00Z`, given as `--author` and `--date`.
-- **Tool output**: `source 239b538dce0420f96a6dfbe46f7be60d62cf9cdd`,
-  `snapshot fa5e7d71e70e115991cd6396a6904321430c2953`, `files 11098`,
-  `exclusions: none (tools/release/snapshot-exclude lists no path)`; exit 0.
-  The same command into a second output directory printed the same
-  `snapshot` hash: the tool is deterministic. Its `--self-test` is the
-  `tools/check.sh` row (held item snapshot-gate-row), not part of this
-  rehearsal.
-- **Shape**: `git rev-list --count fa5e7d71` 1; `git log --format=%P` empty
-  (one root commit, no parent); the snapshot's `.git/config` has no
-  `[remote]` section (no remote; none was added). Author and committer are
-  the rehearsal identity at `2026-01-01T00:00:00Z`. The snapshot's tree
-  (`37a1d7cb`) is R's tree byte for byte (equal `{tree}` ids), so a kept
-  submodule gitlink — which the tool refuses, exit 8 — never arose.
-- **Redaction scan, public classes**: exit **3**, "0 H/M finding(s), 3
-  class(es) not run, 98 informational, 132 look-alike(s) dropped: NOT
-  COMPLETE (private classes not run)" (10875 files scanned; `third_party/`
-  and `docs/release/redaction-audit.md` excluded, as Part 3 does). Exit 3
-  is not a pass for checklist line 8. The scan ran on the snapshot commit
-  through the Procedure's fallback (the worker cannot `cd` outside its
-  checkout): the snapshot was fetched into a clean source checkout
-  (`git fetch <outdir> HEAD`), `FETCH_HEAD` was scanned with
-  `--allow <outdir>/tools/release/redaction-scan.allow`, and the scan's
-  `redaction-scan.py` and allow file are byte-equal to the snapshot's
-  copies (blob `1e5a1d94`, blob `de757d79`, both unchanged at R).
-- **Redaction scan, private classes**: not run on this snapshot; no
-  private-values file exists on the farm and none was built. This is a gap,
-  not a pass. The last private run — a partial set held in process memory
-  only, as in `da99b2d7`, on the snapshot of an earlier tip (`2b94031f`) —
-  found the 7 `lab-host` hits below. `docs/notes/x2-glmark2-slow-scenes.md`
-  changed since (`6ca3428f` appended an eighth-attempt section), but the
-  three hit lines and their values are unchanged at R; a private run on R
-  still waits on the owner's full set.
-- **Licence audit** (`--root` the snapshot checkout, byte-equal script,
-  blob `74f70bcc`): exit **0** with the five `--fail-on` classes, exit **0**
-  with `,undecided` appended: 11064 files, 4145 with an SPDX line, 6208
-  allowlisted; missing-spdx 0, unknown-id 0, unused-license 0,
-  third-party-mismatch 0, undecided 0, generated 77 (mismatch 0),
-  third-party-unlabelled 13 (information); findings 0.
+- **R** (source): `756e1cd7a5a770f2389cf0426c55d5cf08ea7642`, a
+  descendant of the redaction cleanup (Part 4 at `3b8f4949`, the
+  `docs/release/snapshot.md` lab-host rule). origin/main's copy
+  (`7d248a8f`) holds the same defect.
+- **Tool output**: `make-snapshot: the tree keeps submodule gitlink(s), not
+  supported: before`, exit **8**, for both runs (`--author 'yakogl
+  rehearsal <rehearsal@invalid>' --date 2026-01-01T00:00:00Z`). No snapshot
+  was made, so there is no snapshot hash, determinism check or shape check
+  for R.
+- **Cause**: `a9ca11e1` ("Host dEQP-GLES3 read_pixels ...") committed an
+  empty directory `before` as a gitlink (mode 160000, `fa85a83567a7`, no
+  `.gitmodules`). The tool refuses a kept gitlink by design; the entry must
+  leave the tree in an ordinary commit (`git rm before`) before the real
+  snapshot. It is an accident, not a `snapshot-exclude` decision, and the
+  tool was not changed.
+- **Redaction scan, public classes, on R's tree** (not on a snapshot):
+  exit **3**, "0 H/M finding(s), 3 class(es) not run, 98 informational, 142
+  look-alike(s) dropped: NOT COMPLETE (private classes not run)".
+- **Redaction scan, private classes**: not run (no snapshot to scan); no
+  private value was written anywhere.
+- **Licence audit** (check 25's flags, on R's checkout, not a snapshot):
+  `findings: 0`.
+- The 7 `lab-host` hits at `docs/notes/x2-glmark2-slow-scenes.md:41-43`
+  of the 2026-11-17 rehearsal are closed by the x2-names-out and
+  redact-tree cleanups (Part 4 at `3b8f4949`: private exit 0, 0 H/M).
 
-H/M hits on the snapshot (masked; paths and lines in the snapshot): none on
-the public classes. R's allow file carries the rules for the three fixture
-values of `tools/probes/rpi5_display/verdicts_selftest.sh`; the scan dropped
-them, as in earlier runs. From the earlier private run, re-read at R:
-
-| Class | Where | Value | Disposition |
-|---|---|---|---|
-| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:41` | `L***[6]` ×2, `h***[4]` | open: farm machine names in a board note; plan #363's notes-hostnames item rewords the file |
-| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:42` | `n***[5]`, `n***[3]`, `s***[8]` | open: as above |
-| `lab-host` (M, private) | `docs/notes/x2-glmark2-slow-scenes.md:43` | `n***[5]` | open: as above |
-
-The same note also names a worker's host (`o***[5]`) at lines 32, 42, 52,
-62, 71, 79, 87 and 97; the partial set did not hold it, so whether the
-private class counts it is the owner's set to decide. The notes-hostnames
-item covers the file. None was fixed in the rehearsal. R does not meet line
-8: the private classes have not passed on it. Checklist row 8 is unchanged.
+Open: remove the `before` gitlink, then repeat this rehearsal (two runs for
+the hash, shape, both scans, the audit) on a descendant.
 
 The real snapshot of the commit to publish, line 8 on it with the owner's
 private file, D7 (promote and make public) and D8 (the date) are the
