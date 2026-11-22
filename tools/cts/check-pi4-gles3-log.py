@@ -42,13 +42,17 @@ SUMMARY = re.compile(
     r"deqp: summary: (\d+) cases begun, (\d+) with a result, (\d+) without")
 
 
-def labels_of(tree):
+def labels_of(tree, counts=None):
+    """Image labels of the tree; counts (a dict), if given, gets the case
+    count of each label from its '# image <LABEL>: <N>' header."""
     out = []
     with open(tree, encoding="utf-8") as f:
         for line in f:
-            m = re.match(r"#\s*image\s+([^\s:]+)\s*:", line)
+            m = re.match(r"#\s*image\s+([^\s:]+)\s*:\s*(\d+)?", line)
             if m and m.group(1) not in out:
                 out.append(m.group(1))
+                if counts is not None and m.group(2):
+                    counts[m.group(1)] = int(m.group(2))
     return out
 
 
@@ -61,6 +65,16 @@ def complete(path):
     return bool(m) and m.group(3) == "0" and m.group(1) == m.group(2)
 
 
+def refused_one_case(path):
+    """An image that ended with its own end line (a summary of 1 case
+    begun, 1 with a result, 0 without) but complete=0: a one-case image
+    (the tree header says 1 case) whose only case refused. No case of it is left without a result."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    m = SUMMARY.search(text)
+    return bool(m) and (m.group(1), m.group(2), m.group(3)) == ("1", "1", "0")
+
+
 def check(sha, tree, dirs):
     """Check the record; print the verdict, return the exit status."""
     dirs = [d for d in dirs if os.path.isdir(d)]
@@ -68,7 +82,8 @@ def check(sha, tree, dirs):
     if not dirs:
         problems.append("no session directory")
 
-    labels = labels_of(tree)
+    counts = {}
+    labels = labels_of(tree, counts)
     if not labels:
         problems.append("%s: no '# image <LABEL>:' lines" % tree)
     where = {}
@@ -102,7 +117,7 @@ def check(sha, tree, dirs):
                         problems.append("%s:%d: private detail %r" % (p, n, m.group(0)))
                         break
 
-    missing, aborted, dup = [], [], []
+    missing, aborted, dup, info = [], [], [], []
     for lab in labels:
         ps = where.get(lab, [])
         if not ps:
@@ -111,14 +126,26 @@ def check(sha, tree, dirs):
         if len(ps) > 1:
             dup.append(lab)
             problems.append("%s: tallies in %d directories: %s" % (lab, len(ps), ", ".join(ps)))
-        if not any(complete(p) for p in ps):
-            aborted.append(lab)
+        if any(complete(p) for p in ps):
+            continue
+        if counts.get(lab) == 1 and any(refused_one_case(p) for p in ps):
+            info.append("%s: refused (one-case image)" % lab)
+            continue
+        aborted.append(lab)
     if missing:
         problems.append("missing (%d): %s" % (len(missing), " ".join(missing)))
     if aborted:
         problems.append("aborted, no complete deqp summary (%d): %s"
                         % (len(aborted), " ".join(aborted)))
-    extra = sorted(set(where) - set(labels))
+    extra = []
+    for lab in sorted(set(where) - set(labels)):
+        subs = [l for l in labels if l.startswith(lab) and l != lab]
+        if subs:
+            info.append("superseded by re-split: %s -> %s" % (lab, " ".join(subs)))
+        else:
+            extra.append(lab)
+    for line in info:
+        print("info:", line)
     if extra:
         problems.append("tallies not in the tree: %s" % " ".join(extra))
 
@@ -162,7 +189,7 @@ def self_test():
             f.write("# image A1: dEQP-GLES3.a\n# image B2: dEQP-GLES3.b\n"
                     "# image C3: dEQP-GLES3.c\n")
 
-        def session(name, commit, labels, readme=None):
+        def session(name, commit, labels, readme=None, texts=None):
             d = os.path.join(td, name)
             os.makedirs(d)
             with open(os.path.join(d, "README.md"), "w", encoding="utf-8") as f:
@@ -170,7 +197,7 @@ def self_test():
             for lab in labels:
                 with open(os.path.join(d, lab + ".tally.txt"), "w",
                           encoding="utf-8") as f:
-                    f.write(tally)
+                    f.write((texts or {}).get(lab, tally))
             return d
 
         d1 = session("s1-rows1-2", good, ["A1", "B2"])
@@ -188,6 +215,42 @@ def self_test():
         rc, out = run(tree, [d1, d3])
         expect("session with another commit fails",
                rc == 1 and "names commit " + other in out)
+
+        # re-split / refused rules, on their own tree
+        tree2 = os.path.join(td, "tree2.txt")
+        with open(tree2, "w", encoding="utf-8") as f:
+            f.write("# image S1a: 3\n# image S1b: 2\n# image R1: 1\n"
+                    "# image M1: 7\n")
+        refused = ("deqp: complete=0\n"
+                   "deqp: summary: 1 cases begun, 1 with a result, 0 without\n")
+        multi = ("deqp: complete=0\n"
+                 "deqp: summary: 5 cases begun, 5 with a result, 0 without\n")
+
+        def run2(labels, texts=None, tag="x"):
+            d = session("t2-" + tag, good, labels, None, texts)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(good, tree2, [d])
+            return rc, buf.getvalue()
+
+        base = ["S1a", "S1b", "R1", "M1"]
+        rc, out = run2(base + ["S1"], {"R1": refused}, "a")
+        expect("superseded tally ok, one-case refused ok",
+               rc == 0 and "superseded by re-split: S1 -> S1a S1b" in out
+               and "R1: refused (one-case image)" in out)
+        rc, out = run2(base + ["Zzz"], {"R1": refused}, "b")
+        expect("unrelated extra tally still fails",
+               rc == 1 and "tallies not in the tree: Zzz" in out)
+        rc, out = run2(base, {"M1": multi, "R1": refused}, "c")
+        expect("multi-case complete=0 still aborted",
+               rc == 1 and "aborted, no complete deqp summary (1): M1" in out)
+        rc, out = run2(base, {"R1": multi.replace("complete=0", "complete=0")}, "d")
+        expect("multi-case image without complete summary fails",
+               rc == 1 and "R1" in out)
+
+        rc, out = run2(base, {"M1": refused}, "e")
+        expect("one case begun in a multi-case image is aborted, not refused",
+               rc == 1 and "aborted, no complete deqp summary (1): M1" in out)
 
         def readme_case(name, tag, text, want_ok):
             d = session("r-" + tag, good, ["C3"], text)
