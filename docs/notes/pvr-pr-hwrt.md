@@ -18,16 +18,32 @@ at the tip a85e3112. The three questions are items 4, 5 and 9 of
   `RTANum`, `MaxRTs`, `ui32RTACtlFlags` finds the struct
   (include/rogue/rgx_fwif_shared.h:1218-1230) and one trace string
   (include/rgx_fwif_sf.h:569). No `RTACtlFlags` bit is defined anywhere.
-- Upstream Linux `pvr_hwrt.c` and `pvr_free_list.c` at v6.12: **unread**.
-  The worker had no network (the fetch was refused) and no copy is on the
-  machine. What this tree already records of `pvr_free_list_reconstruct`
+- Upstream Linux `drivers/gpu/drm/imagination/pvr_hwrt.c` at tag v6.12,
+  **read** (facts only, cited as UP:line; nothing copied):
+  `hwrt_data_init_fw_structure` UP:356-430, `pvr_hwrt_dataset_create`
+  UP:456-501.
+- Upstream `pvr_free_list.c` at v6.12: **unread** (its fetch was not
+  allowed). What this tree already records of `pvr_free_list_reconstruct`
   (docs/notes/pvr-render-pool.md:1158-1177, read there from Linux 7.3-rc5)
   is used: upstream's reconstruction puts every HWRT data of the list into
   `RGXFWIF_RTDATA_STATE_HWR`, clears `HAS_LAST_GEOM` (our
   `HWRTDATA_HAS_LAST_TA`), and writes the stack top and the two allocated
-  counts. That record names no RTA word. Whether `pvr_hwrt.c` writes
-  `sRTACtl` at creation is **unread**; no verdict below leans on it, and the
-  last section says what reading it would settle. Nothing is copied.
+  counts. That record names no RTA word.
+
+## What upstream's `pvr_hwrt.c` does with `sRTACtl`, read
+
+At creation, per HWRT data (UP:385-409): `render_target_index` 0,
+`active_render_targets` 0, both array addresses 0, `max_rts` = the
+dataset's `layers` (UP:50, :391). Only when `layers > 1` does it create two
+firmware objects of `layers` dwords (`srtc_obj`, named the Shadow Render
+Target Cache, UP:35-36, :394-401, and `raa_obj`, the Renders Accumulation
+Array, UP:37-38, :402-408) and put their addresses into
+`valid_render_targets_fw_addr` and `rta_num_partial_renders_fw_addr`. The
+objects are created with no initialiser (NULL, UP:394-395, :402-403); that
+they are zero is the allocator's property, **unread** here. `ui32RTACtlFlags`
+is never written (the struct is copied from a zero-initialised dataset,
+UP:353, :464). Nothing in `pvr_hwrt.c` touches the RTA words after creation.
+Upstream's HWRT data is built once per dataset, never rebuilt.
 
 ## The structure, read
 
@@ -99,8 +115,9 @@ Evidence:
 - Upstream's reset as recorded here (pvr-render-pool.md:1161-1166): state,
   the has-last-geometry flag, the freelist counts; **no RTA word**. Ours adds
   `PARTIAL_RENDERED`, which upstream has no use for (an extra bit cleared,
-  never one left set). `pvr_hwrt.c` being unread, whether upstream clears the
-  counts elsewhere is **unread**.
+  never one left set). `pvr_hwrt.c` never touches the RTA words after
+  creation (UP:385-409, above), so the host-side counts are never reset
+  there; `pvr_free_list.c` itself is **unread** at v6.12.
 - A reconstruction runs only after a context reset (FREELISTS_RECONSTRUCTION,
   pvr-render-pool.md:1152-1156). A render that was partial-rendering at the
   reset leaves stale counts exactly as item 4 describes. Whether the
@@ -141,9 +158,16 @@ Evidence:
   allocation holds (0 on a fresh slot). A loop over the active count reads
   nothing; a loop over `ui32MaxRTs` reads three indices and three counts,
   all in the arrays. Neither loop is readable here (**inferred**).
-- Upstream's `ui32MaxRTs` is **unread**. The upstream uAPI's HWRT-dataset
-  create call carries a layer count, so a single-layer dataset plausibly
-  yields 1 (**inferred** from the API's shape only, not from code).
+- Upstream's `ui32MaxRTs` is the dataset's layer count (UP:50, :391), so 1
+  for a non-layered render, and for `layers <= 1` upstream leaves both
+  array addresses null (UP:389-390, arrays only for `layers > 1`,
+  UP:393-409). Upstream never runs a partial render, so the firmware's
+  null-array complaint (rgx_fwif_sf.h:569, a partial-render-path check,
+  **inferred** from its place among the trace strings) never fires for it.
+  Our 3 is a deviation from upstream's 1 in value, forced in the arrays by
+  the partial render's need for non-null ones; the value of `ui32MaxRTs`
+  itself is ours to choose and 1 is the one upstream's layout implies for a
+  one-layer render (**inferred**).
 
 Implied change: none now; keep 3. If the board dump shows
 `ui32ActiveRenderTargets` or `ui32CurrentRenderTarget` non-zero on a
@@ -161,10 +185,9 @@ frame on the same slot, and after a context reset with a reconstruction. The
 dump decoder prints the `sRTACtl` words raw (pr_diag.rs:105-129) and is wired
 by item pr-diag-wire; the count array is not in it and would need adding
 (read `HWRTDATA_RTA_CTL + RTA_CTL_NUM_PARTIAL_RENDERS`, then three dwords).
-Reading `pvr_hwrt.c` at v6.12 on a machine with network (what it writes into
-`sRTACtl` at creation, and whether the reconstruction touches it) would
-answer upstream's `ui32MaxRTs` (item 9) and whether the host ever writes the
-counts (items 4 and 5).
+`pvr_hwrt.c` is now read (above). Reading `pvr_free_list.c` at v6.12 is
+still open; it would only confirm that the reconstruction touches no RTA
+word, which the 7.3-rc5 record in pvr-render-pool.md already says.
 
 ## Summary
 
