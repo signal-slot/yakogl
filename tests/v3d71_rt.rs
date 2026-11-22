@@ -479,7 +479,7 @@ fn clif_value(l: &str) -> Option<(&str, &str)> {
     let l = l.strip_prefix("MESA: info:")?.trim();
     let rest = l.strip_prefix("/*")?;
     let (k, v) = rest.split_once("*/")?;
-    Some((k.trim().trim_end_matches(':'), v.trim().split_whitespace().next()?))
+    Some((k.trim().trim_end_matches(':'), v.split_whitespace().next()?))
 }
 
 /// Every `TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1` of a `.clif`, with the

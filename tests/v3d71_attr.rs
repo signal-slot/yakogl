@@ -19,9 +19,12 @@ fn read(rel: &str) -> String {
     std::fs::read_to_string(format!("{ROOT}/{rel}")).unwrap_or_else(|e| panic!("{rel}: {e}"))
 }
 
+type XmlFields = Vec<(String, u32, u32)>;
+type XmlValues = Vec<(String, u32)>;
+
 /// The xml struct's `<field name size start>` rows (start in bits; `Nb` is
 /// bytes) and the enum values of `Type`.
-fn xml_struct() -> (Vec<(String, u32, u32)>, Vec<(String, u32)>) {
+fn xml_struct() -> (XmlFields, XmlValues) {
     let xml = read("third_party/mesa-26.2.1/src/broadcom/cle/v3d_packet.xml");
     let s = xml.find("<struct name=\"GL Shader State Attribute Record\">").expect("struct");
     let body = &xml[s..s + xml[s..].find("</struct>").unwrap()];
@@ -160,7 +163,7 @@ fn dumps(file: &str) -> Vec<Dump> {
                 l.split(": */").nth(1).unwrap().trim()
             };
             let num = |k: &str| -> u32 { val(k).split_whitespace().next().unwrap().parse().unwrap() };
-            let flag = |k: &str| val(k).starts_with('0') == false;
+            let flag = |k: &str| !val(k).starts_with('0');
             let a = val("Address");
             let hex = a
                 .rsplit("/* 0x")

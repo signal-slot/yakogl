@@ -67,8 +67,8 @@ fn xml_packet(xml: &str, name: &str) -> XmlPacket {
         let tag = &rest[..tag_end];
         let selfclosed = tag.ends_with('/');
         let body_end = if selfclosed { tag_end } else { rest.find("</packet>").unwrap() };
-        let ok_ver = attr(tag, "max_ver").map_or(true, |v| v.parse::<u32>().unwrap() >= 71)
-            && attr(tag, "min_ver").map_or(true, |v| v.parse::<u32>().unwrap() <= 71);
+        let ok_ver = attr(tag, "max_ver").is_none_or(|v| v.parse::<u32>().unwrap() >= 71)
+            && attr(tag, "min_ver").is_none_or(|v| v.parse::<u32>().unwrap() <= 71);
         if attr(tag, "name").as_deref() == Some(name) && ok_ver {
             let body = &rest[tag_end..body_end];
             let mut fields = Vec::new();
@@ -439,7 +439,7 @@ fn describe(fr: &[Pk]) -> Frame71 {
     let bin = &fr[0];
     let common = fr.iter().find(|p| p.name == "TILE_RENDERING_MODE_CFG_COMMON").unwrap();
     let zs_clear = fr.iter().find(|p| p.name == "TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES").unwrap();
-    let list = tile_list(&fr);
+    let list = tile_list(fr);
     let end_loads = list.iter().position(|p| p.name == "END_LOADS").unwrap();
     let branch = list.iter().position(|p| p.name == "BRANCH_IMPLICIT_TILE").unwrap();
     let loads: Vec<&Pk> = list[..end_loads].iter().filter(|p| p.name == "LOAD").collect();
@@ -568,7 +568,7 @@ fn every_dump_frame_is_rebuilt_from_its_description() {
         let size = out.split("framebuffer ").nth(1).unwrap().split(',').next().unwrap().to_string();
         for (k, fr) in fs.iter().enumerate() {
             let what = format!("{shape} frame {k}");
-            let d = describe(&fr);
+            let d = describe(fr);
             assert_eq!(format!("{}x{}", d.width, d.height), size, "{what}: size");
             let plan = plan(&d).unwrap_or_else(|e| panic!("{what}: {}", e.message()));
             let get1 = |n: &str| fr.iter().find(|p| p.name == n).unwrap();
@@ -596,7 +596,7 @@ fn every_dump_frame_is_rebuilt_from_its_description() {
             assert_eq!(plan.supertiles, supers, "{what}: supertile coordinates");
 
             // the generic list
-            let list = tile_list(&fr);
+            let list = tile_list(fr);
             let el = list.iter().position(|p| p.name == "END_LOADS").unwrap();
             let loads: Vec<Op71> = list[..el].iter().filter(|p| p.name == "LOAD").filter_map(to_op).collect();
             assert_eq!(plan.list_loads, loads, "{what}: loads");

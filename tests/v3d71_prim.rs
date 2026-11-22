@@ -49,7 +49,7 @@ fn xml_packet(name: &str) -> (u8, Vec<(String, u32, u32)>) {
 fn xml_pack(name: &str, vals: &[(&str, u64)]) -> Vec<u8> {
     let (code, fields) = xml_packet(name);
     let bits = fields.iter().map(|f| f.1 + f.2).max().unwrap();
-    let mut b = vec![0u8; 1 + (bits as usize + 7) / 8];
+    let mut b = vec![0u8; 1 + (bits as usize).div_ceil(8)];
     b[0] = code;
     for (n, v) in vals {
         let (_, st, sz) = fields.iter().find(|f| f.0 == *n).unwrap_or_else(|| panic!("{n}"));

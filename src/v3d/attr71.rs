@@ -367,10 +367,7 @@ pub fn plan(
             cs_loaded_any = true;
         }
         /* GFXH-930 / GFXH-1602: the coordinate shader loads something */
-        if i == 0 && cs_builtins && !cs_loaded_any {
-            r.cs_values = 1;
-            cs_loaded_any = true;
-        } else if i == attrs.len() - 1 && !cs_loaded_any {
+        if ((i == 0 && cs_builtins) || i == attrs.len() - 1) && !cs_loaded_any {
             r.cs_values = 1;
             cs_loaded_any = true;
         }

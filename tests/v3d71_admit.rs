@@ -36,7 +36,6 @@ mod ident71;
 #[allow(dead_code)]
 mod limits71;
 #[path = "../src/v3d/record71.rs"]
-#[allow(dead_code)]
 mod record71;
 #[path = "../src/v3d/rt71.rs"]
 #[allow(dead_code)]
