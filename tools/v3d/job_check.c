@@ -972,6 +972,58 @@ static void part_tmu(void)
 			check(got == mcase[k].want[i], what);
 		}
 	}
+	/* several bound units, each with its own depth and layer count, and a
+	 * stream asking for words 46 and 47 of each in a mixed order: the
+	 * word comes from the record of its own unit (the unit field, not the
+	 * position in the array), up to the largest unit the struct holds */
+	static const struct v3d_uniform fs_mu[] = {
+		{ V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 9 }, { V3D_QUNIFORM_TEXTURE_DEPTH, 1 },
+		{ V3D_QUNIFORM_TEXTURE_DEPTH, 0xffffffffu }, { V3D_QUNIFORM_TEXTURE_DEPTH, 4 },
+		{ V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 1 }, { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 0xffffffffu },
+		{ V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 4 }, { V3D_QUNIFORM_TEXTURE_DEPTH, 9 },
+	};
+	const struct v3d_job_tmu multi[4] = {
+		{ 9, 0x00500080u, 0x005000a0u, 8, 8, 31, 91 },
+		{ 1, 0x00500040u, 0x00500060u, 4, 4, 12, 21 },
+		{ 0xffffffffu, 0x005000c0u, 0x005000e0u, 2, 2, 77, 88 },
+		{ 4, 0x00500000u, 0x00500020u, 16, 16, 53, 63 },
+	};
+	const uint32_t want_mu[8] = { 91, 12, 77, 53, 21, 88, 63, 31 };
+	struct v3d_fs_prog fs_multi = fs;
+	fs_multi.uniforms = fs_mu;
+	fs_multi.num_uniforms = 8;
+	r = d;
+	r.fs = &fs_multi;
+	r.tmu = multi;
+	r.num_tmu = 4;
+	check(v3d_job_draw(&j, &r, &lo) == V3D_JOB_OK, "a draw with units 1, 4, 9 and 0xffffffff, words 46/47 mixed, goes in");
+	for (int i = 0; i < 8; i++) {
+		char what[120];
+		uint32_t got = ind_word(lo.fs_uniforms + 4 * (uint32_t)i);
+		snprintf(what, sizeof(what), "multi-unit word 46/47 stream entry %d: %u, want %u", i, got, want_mu[i]);
+		check(got == want_mu[i], what);
+	}
+	/* unit 5 lies between the bound ones but is not bound: REFUSED */
+	static const struct v3d_uniform fs_u5d[] = { { V3D_QUNIFORM_TEXTURE_DEPTH, 4 },
+						     { V3D_QUNIFORM_TEXTURE_DEPTH, 5 } };
+	static const struct v3d_uniform fs_u5a[] = { { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 4 },
+						     { V3D_QUNIFORM_TEXTURE_ARRAY_SIZE, 5 } };
+	snapshot();
+	fs_multi.uniforms = fs_u5d;
+	fs_multi.num_uniforms = 2;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "word 46 for the unbound unit 5 between bound units: REFUSED, nothing left");
+	fs_multi.uniforms = fs_u5a;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "word 47 for the unbound unit 5 between bound units: REFUSED, nothing left");
+	/* unit 4 asked for but dropped from the draw's units */
+	fs_multi.uniforms = fs_mu;
+	fs_multi.num_uniforms = 8;
+	const struct v3d_job_tmu no4[3] = { multi[0], multi[1], multi[2] };
+	r.tmu = no4;
+	r.num_tmu = 3;
+	check(v3d_job_draw(&j, &r, NULL) == V3D_JOB_REFUSED && unchanged(),
+	      "words 46/47 of unit 4 when the draw bound only 9, 1 and 0xffffffff: REFUSED, nothing left");
 	struct v3d_job_clear c = { .rgba8 = 0xff202020u, .z = 1.0f };
 	check(v3d_job_end(&j, &c, NULL, NULL), "the textured job ends");
 }
@@ -2784,7 +2836,7 @@ int main(void)
 {
 	/* part 1: 14 checks; part 2: 11; part 3: 6 + 51 census + 2 + 47 fields;
 	 * part 4: 3 + 3 + 19 fields; part 5: 2 + 5 words + 2 refusals + 3 per
-	 * stage + 1 + 1 + 4 size words + 2 size refusals + 1 + 4 + 2 depth and layer-count words + 24 minified-size checks (4 draws + 20 words); part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
+	 * stage + 1 + 1 + 4 size words + 2 size refusals + 1 + 4 + 2 depth and layer-count words + 24 minified-size checks (4 draws + 20 words) + 12 multi-unit (1 draw + 8 words + 3 refusals); part 6: 2 + 1 + 2 + 2 + 4 point-coord + 2 point-coord
 	 * refusals + 4 refusals + 1 + 3 (the M5 frame);
 	 * part 7: 3 builds + 3 + 5 load fields + 1 + 5 store fields + 1 + 2 +
 	 * 3 builds + 8 apart;
@@ -2801,7 +2853,7 @@ int main(void)
 	 * part 19 (occlusion queries): 2 builds + 4;
 	 * part 20 (the render image): 1 build + 5 + 3 refusals;
 	 * part 21 (varying flag words 1 and 2): 1 build + 7 + 1 refusal */
-	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 51 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
+	const int planned = 14 + 11 + 6 + 51 + 2 + 47 + 3 + 3 + 19 + 63 + 21 + 31 + 13 + 10 + 8 + 7 + 15 + 11 + 28 +
 			    28 + 8 + 6 + 10 + 6 + 9 + 9;
 	part_identity();
 	part_rollback();
