@@ -8,7 +8,7 @@
 //! `sys_write32` (include/zephyr/arch/arm64/sys_io.h): a read is `ldr w`
 //! followed by `dmb sy`, a write is `dmb sy` followed by `str w`, inline, with
 //! no call per access. In the host tests it is the register model
-//! ([`crate::model`]), which sees the same addresses and records every access.
+//! (`crate::model`), which sees the same addresses and records every access.
 
 /// Register access by absolute (virtual) address.
 ///

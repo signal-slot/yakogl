@@ -1531,8 +1531,8 @@ pub fn classify(w: [u32; 4]) -> Class {
     }
 }
 
-/// PROGRESS' where as a label: image_start, kernel_up, render_step_<name>,
-/// sample_stage_<n>, progress_0x<hex>.
+/// PROGRESS' where as a label: image_start, kernel_up, `render_step_<name>`,
+/// `sample_stage_<n>`, `progress_0x<hex>`.
 pub fn write_where(out: &mut impl fmt::Write, where_: u32) -> fmt::Result {
     // gc_render.h, enum gc_render_step.
     const GPU_STEPS: [&str; 9] = ["", "enter", "dev_ready", "carveout", "hw", "mmu", "irq", "mmu_on", "ring"];
@@ -1719,7 +1719,7 @@ impl Throughput {
         (t.ms != 0 && t.px() != 0).then_some(t)
     }
 
-    /// From a run's records: the trio of [`Throughput::from_pair`], else the
+    /// From a run's records: the trio of `Throughput::from_pair`, else the
     /// last RATE record (the cluster's rate on a board that keeps one record:
     /// frames, ms and the window, no PERF page, so no draw part).
     pub fn from_records(recs: &[[u32; 4]]) -> Option<Self> {

@@ -5,7 +5,7 @@
 //!
 //! The Zephyr shim fills it with `k_busy_wait`, `k_msleep`, `LOG_*("%s")`,
 //! `i2c_write_dt` / `i2c_write_read_dt` and `gpio_pin_set_dt`; the host tests
-//! supply their own ([`crate::model`]). A driver never calls the OS any other
+//! supply their own (`crate::model`). A driver never calls the OS any other
 //! way, which is what lets the same code run against the register model.
 //!
 //! `bus` and `line` are indices the shim defines for its own device (its

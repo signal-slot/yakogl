@@ -8,7 +8,7 @@
 //! before to have armed WDOG1. A kexec entry
 //! finds it running with Linux's timeout (systemd: 30 s); a U-Boot entry
 //! finds it running with U-Boot's (when U-Boot's driver model watchdog
-//! autostarted it) or stopped. [`arm`] leaves it running with the timeout
+//! autostarted it) or stopped. `arm` leaves it running with the timeout
 //! asked for in every one of those cases, reads it back and reports what it
 //! found, so that the board says which case it was.
 //!
@@ -22,7 +22,7 @@
 //!
 //! 1. Every WDOG register is 16 bits wide (`WDOG_Type`: `uint16_t WCR` at 0h,
 //!    `WSR` at 2h, `WRSR` at 4h, `WICR` at 6h, `WMCR` at 8h), so the block is
-//!    accessed through [`Mmio16`] only.
+//!    accessed through `Mmio16` only.
 //! 2. The timeout is `(WT + 1) * 0.5 s`: the `WDOG_WCR_WT` value list,
 //!    "0b00000000..- 0.5 Seconds (Default)", "0b00000001..- 1.0 Seconds",
 //!    ..., "0b11111111..- 128 Seconds". The step does not depend on any
@@ -36,7 +36,7 @@
 //!    a Watchdog Time-out event"). The Verdin's U-Boot and Linux device trees
 //!    give WDOG1 `fsl,ext-reset-output` (records/imx8mp/netboot/
 //!    uboot-control-dt-2026-10-03.dts), i.e. the board resets through
-//!    `WDOG_B`; [`arm`] sets WDT when asked to (`ext_reset`).
+//!    `WDOG_B`; `arm` sets WDT when asked to (`ext_reset`).
 //! 5. The service sequence is 0x5555 then 0xAAAA written to `WSR` (hal_nxp
 //!    `fsl_wdog.h` `WDOG_Refresh`; the same sequence gc_sample.c has used on
 //!    this board since 2026-09-20).
@@ -44,13 +44,13 @@
 //!    left set, it resets the SoC some time after reset. U-Boot clears it on
 //!    i.MX 8M (`imx_set_wdog_powerdown(false)`, arch/arm/mach-imx/imx8m/soc.c
 //!    in U-Boot v2024.07, read for the fact only) and Linux's imx2_wdt does
-//!    too; [`arm`] clears it if it is still set and reads it back.
+//!    too; `arm` clears it if it is still set and reads it back.
 //!
 //! What a write of `WCR` does to a watchdog that is already running: the
 //! Linux and U-Boot drivers both rewrite `WT` of a running WDOG and then
 //! service it (U-Boot drivers/watchdog/imx_watchdog.c `imx_watchdog_init`,
 //! v2024.07, read for the fact only), and the new timeout counts from that
-//! service. [`arm`] does the same: write, then service, then read back.
+//! service. `arm` does the same: write, then service, then read back.
 //! Whether `WDE`, `WDT` and `WDZST` are write-once is not relied on: for a
 //! running WDOG they are written back as read.
 

@@ -3,7 +3,7 @@
 //! `yakogl-drivers`: the display and SoC drivers original to this project
 //! (docs/source-form.md, group E), written from reference manuals and
 //! datasheets, with register names and bit positions from NXP's BSD-3 hal_nxp
-//! headers ([`soc::imx8mp::regs`], generated).
+//! headers (`soc::imx8mp::regs`, generated).
 //!
 //! The crate is the register logic only. Zephyr sees C: each driver has a
 //! shim in `driver/drivers/<class>/` that registers a device
@@ -17,11 +17,11 @@
 //! - [`ip`]: drivers for an IP block, independent of the SoC that carries it.
 //! - [`soc`]: SoC glue (clock roots, gates) and the generated register maps.
 //! - [`gpu`]: the OS layer under vendored GPU code: the PowerVR DDK's
-//!   `rgxlayer.h` ([`gpu::pvr::rgxlayer`], feature `pvr`); and the
-//!   Vivante GC7000 kernel side ([`gpu::vivante`], feature `vivante`).
+//!   `rgxlayer.h` (`gpu::pvr::rgxlayer`, feature `pvr`); and the
+//!   Vivante GC7000 kernel side (`gpu::vivante`, feature `vivante`).
 //! - [`firmware`]: the SCMI codec (Arm DEN0056) and OP-TEE's message
 //!   protocol as its transport, no SoC ids.
-//! - [`mmio`]: register access; [`env`]: the services the OS lends.
+//! - [`mmio`]: register access; [`mod@env`]: the services the OS lends.
 //! - [`aarch64`]: the CPU's own registers an image entered from Linux needs
 //!   (the GICv3 EOI mode) and PSCI `SYSTEM_RESET`.
 //!

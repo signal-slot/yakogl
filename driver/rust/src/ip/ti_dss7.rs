@@ -10,8 +10,8 @@
 //! 14.8.9.1 ([`crate::soc::am62p::regs`]). What the code relies on, by
 //! section:
 //!
-//! - Reset (12.9.1.4.1.3): "set the DSS_COMMON_DSS_SYSCONFIG[1] SOFTRESET
-//!   bit to 0x1. The DSS_COMMON_DSS_SYSSTATUS[0] DISPC_FUNC_RESETDONE bit
+//! - Reset (12.9.1.4.1.3): "set the DSS_COMMON_DSS_SYSCONFIG\[1\] SOFTRESET
+//!   bit to 0x1. The DSS_COMMON_DSS_SYSSTATUS\[0\] DISPC_FUNC_RESETDONE bit
 //!   indicates that the software reset is complete ... the SOFTRESET bit is
 //!   automatically reset. Software must ensure that the software reset
 //!   completes before performing DISPC operations"; the video ports' reset

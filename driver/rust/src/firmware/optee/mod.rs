@@ -198,7 +198,7 @@ pub enum Event<'a> {
     ScmiReply(&'a [u8]),
 }
 
-/// The SMC conduit, injectable: the board's is [`HwSmc`], the host tests'
+/// The SMC conduit, injectable: the board's is `HwSmc`, the host tests'
 /// a scripted fake. `shm` is the memory the call may read and write (the
 /// fake answers through it; the hardware conduit hands its address to the
 /// `asm!` so the compiler sees it change).

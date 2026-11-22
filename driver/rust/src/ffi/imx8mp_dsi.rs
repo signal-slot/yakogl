@@ -90,7 +90,7 @@ pub struct YdLcdifScanout {
     pub height: u32,
     pub pitch: u32,
     pub bytes_pp: u32,
-    /// CTRLDESCL0_5[BPP] (0x4 RGB565, 0x9 ARGB8888, 0xA ABGR8888).
+    /// CTRLDESCL0_5\[BPP\] (0x4 RGB565, 0x9 ARGB8888, 0xA ABGR8888).
     pub bpp_code: u32,
     pub reserved: u32,
     pub phys: u64,

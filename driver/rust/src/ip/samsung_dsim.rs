@@ -27,7 +27,7 @@
 //!   is set "when the timer value in PLL timer register reads 0x00000000"
 //!   (13.6.5): it is a timer, not a lock detector, so `PLLTMR` must cover
 //!   the lock time. The lock time is "3000 x tp" (Figure 13-69, "PLL Locking
-//!   Time"). The timer counts "System clock cycle[s]" (13.6.9.1.28); the only
+//!   Time"). The timer counts "System clock cycle\[s\]" (13.6.9.1.28); the only
 //!   clock Table 13-24 lists for the block is PCLK, the APB clock, whose
 //!   root (MEDIA_APB) runs at most 200 MHz (Table 5-1).
 //! - `CLKCTRL` (13.6.9.1.6): `ByteClkSrc` "must be 2'b00" (D-PHY PLL, "PLL_out
@@ -47,7 +47,7 @@
 //!   clock lane, `[4:1]` data lanes; `Mflush_VS` 0 = the main FIFO is flushed
 //!   by VSYNC ("0 = Enable (default)"), `EoT_r03` 0 = EoT packets sent.
 //! - `MDRESOL` (13.6.9.1.10): resolutions 1-2047; "In Video mode, if
-//!   [MainStandby] is 0, data is not transferred". `MVPORCH` (13.6.9.1.11):
+//!   \[MainStandby\] is 0, data is not transferred". `MVPORCH` (13.6.9.1.11):
 //!   `CmdAllow` lines where command packets may go after the stable VFP,
 //!   `StableVfp` lines after the active region where they may not, `MainVbp`
 //!   in lines. `MSYNC` (13.6.9.1.13): `MainVsa` in lines.
@@ -69,7 +69,7 @@
 //!   setting: P 5, M 711, S 2, 426.6 MHz from the 12 MHz reference -- the
 //!   rate the bridge's `CHA_DSI_CLK_RANGE` 42 (210-215 MHz DSI clock, i.e.
 //!   420-430 Mbit/s) in the same dump confirms.
-//! - The unit of `PHYTIMING*` (13.6.9.1.33-35 give "M_TLPXCTL[7:0] to D-PHY"
+//! - The unit of `PHYTIMING*` (13.6.9.1.33-35 give "M_TLPXCTL\[7:0\] to D-PHY"
 //!   and nothing more): byte clocks. Of the clocks the DSIM has, only the
 //!   byte clock makes the golden values a working D-PHY timing (in UI,
 //!   CLK_ZERO 18 would be 42 ns against 300 ns - CLK_PREPARE; in escape
