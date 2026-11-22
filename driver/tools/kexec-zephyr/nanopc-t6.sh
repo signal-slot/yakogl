@@ -32,6 +32,18 @@
 #           reservation is made with t6-crashkernel.sh, beside this. The GPU
 #           and its firmware also stay running (section 2(a)). --crash with
 #           --no-linux-wdt is refused (below).
+#           The image adopts one mode only (ADOPT_MODE below), and Linux
+#           runs the sink's preferred mode (1920x1080 on a sink with an
+#           EDID). So before the jump --crash runs t6-kms-mode.py, beside
+#           this, on the board: it sets the adopt's mode on HDMI-A-1 as
+#           Linux's DRM master and holds it, and the jump ends Linux with
+#           that mode in the hardware. Then the script reads VP0's mode back
+#           from Linux (/sys/kernel/debug/dri/0/state) and jumps only when
+#           it is ADOPT_MODE. On every path that does not jump it stops the
+#           holder by its exact pid, and the holder gives Linux its own mode
+#           back (driver/docs/nanopc-t6-display.md, section 2(a), "The
+#           mode before the jump"). So --crash refuses without python3 on
+#           the board or without that debugfs file.
 # With --go it takes the board lock (board_lock.sh; it refuses, never waits,
 # while anyone holds it: see LOCK_WAIT), reads the board's state
 # again under the lock, starts the record (below), copies the loader, mmio_rd
@@ -127,6 +139,17 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 WINDOW_BASE=$((0x10000000))
 WINDOW_SIZE=$((256 << 20))
 STAGE=/tmp/yakogl-kexec
+# The mode the image adopts (board::nanopc_t6_display::MODE; the crash
+# route only): the clock in kHz and h 1024 1048 1184 1344, v 768 771 777
+# 806, in the order the DRM state prints them, and its sync flags (0xa:
+# both negative, not interlaced; the flags' low six bits are compared).
+# board_lock_selftest.sh, beside this, fails when these differ from the
+# Rust MODE.
+ADOPT_MODE="65000 1024 1048 1184 1344 768 771 777 806"
+ADOPT_FLAGS=0xa
+# How long t6-kms-mode.py holds the mode at most: it gives it back by
+# itself after that, also when this script is killed before it can stop it.
+MODE_HOLD=600
 
 die() { echo "nanopc-t6.sh: $*" >&2; exit 2; }
 refuse() { echo "nanopc-t6.sh: REFUSED: $*" >&2; echo "nanopc-t6.sh: nothing was copied, loaded or changed." >&2; exit 3; }
@@ -208,7 +231,38 @@ board() { timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 
 # who_remote, defined on the board ahead of the commands that call it: the
 # remote sessions without this ssh command's own (who_remote.sh).
 WHO_REMOTE=$(cat "$HERE/who_remote.sh") || die "cannot read $HERE/who_remote.sh"
-facts=$(board "$WHO_REMOTE"'
+# vp0_mode, defined on the board the same way: VP0's lines of the DRM state
+# on one line, "enable=1 active=1 mode: "1024x768": 60 65000 1024 1048 1184
+# 1344 768 771 777 806 0x40 0xa" (linux v6.18 drm_atomic.c:443-455, the
+# format DRM_MODE_FMT of include/drm/drm_modes.h:425-435: name, refresh,
+# clock, h, v, type, flags). The CRTC's name is the port's
+# (rockchip_drm_vop2.c:2457-2459). Empty when the file cannot be read.
+# hdmi_out: HDMI-A-1's output_bpc, output_format and tmds_char_rate from the
+# same file (drm_atomic.c:1198-1207), for the record.
+VP0_FN=$(cat <<'EOF'
+vp0_mode() {
+	awk '/^crtc\[/ { a = ($2 == "video_port0"); next } /^[^ \t]/ { a = 0 }
+		a && $1 ~ /^(enable|active)=/ { printf "%s ", $1 } a && $1 == "mode:" { print; exit }' \
+		/sys/kernel/debug/dri/0/state 2>/dev/null | tr -s " \t" " "
+}
+hdmi_out() {
+	awk '/^connector\[/ { a = ($2 == "HDMI-A-1"); next } /^[^ \t]/ { a = 0 }
+		a && $1 ~ /^(output_bpc|output_format|tmds_char_rate)=/ { printf "%s ", $1 }' \
+		/sys/kernel/debug/dri/0/state 2>/dev/null
+}
+EOF
+)
+# vp0_timing <a vp0_mode line>: "<clock> <h x4> <v x4> <flags>" when VP0
+# is on, the flags' low six bits (both syncs' polarities, interlace, double
+# scan); nothing when it is off or the line does not parse.
+vp0_timing() {
+	local re='^enable=1 active=1 mode: "[^"]*": [0-9]+ ([0-9]+( [0-9]+){8}) 0x[0-9a-f]+ 0x([0-9a-f]+)$'
+	[[ "$1" =~ $re ]] || return 0
+	printf '%s 0x%x\n' "${BASH_REMATCH[1]}" $((0x${BASH_REMATCH[3]} & 0x3f))
+}
+vp0_is_adopt() { [ "$(vp0_timing "$1")" = "$ADOPT_MODE $ADOPT_FLAGS" ]; }
+facts=$(board "$WHO_REMOTE
+$VP0_FN"'
 set -u
 printf "compatible=%s\n" "$(tr "\0" " " </proc/device-tree/compatible)"
 printf "kernel=%s\n" "$(uname -r)"
@@ -228,6 +282,8 @@ printf "wdt_users=%s\n" "$(fuser /dev/watchdog /dev/watchdog0 2>/dev/null | tr -
 printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
 printf "who_remote=%s\n" "$(who_remote)"
 printf "who_local=%s\n" "$(who | awk "\$2 !~ /^(pts|sshd)/ {print \$1\"@\"\$2}" | tr "\n" " ")"
+printf "python3=%s\n" "$(command -v python3 || echo absent)"
+printf "vp0=%s\n" "$(vp0_mode)"
 printf "gic_tables=%s\n" "$(dmesg | grep -oE "(LPI (property|pending) table|Devices|Interrupt Collections) @(0x)?[0-9a-f]+" | sed "s/.*@//; s/^0x//" | tr "\n" " ")"
 echo "iomem<<"; cat /proc/iomem; echo ">>"') || refuse "cannot read the board's facts over ssh ($BOARD_HOST)"
 fact() { printf '%s\n' "$facts" | sed -n "s/^$1=//p" | head -1; }
@@ -283,6 +339,12 @@ if [ "$CRASH" = 1 ]; then
 		refuse "--crash: /proc/sysrq-trigger is $(fact sysrq_trigger) (not writable): the panic that takes the crash route could not be started"
 	[ "$(fact kexec_crash_loaded)" = 0 ] ||
 		refuse "--crash: a crash image is already loaded (/sys/kernel/kexec_crash_loaded '$(fact kexec_crash_loaded)': a kdump service, or another run); loading this one would replace it"
+	# The mode before the jump: t6-kms-mode.py runs with the board's
+	# python3, and the read-back needs VP0's lines of the DRM state.
+	[ "$(fact python3)" != absent ] ||
+		refuse "--crash: the board has no python3: t6-kms-mode.py, which sets the adopt's mode before the jump, cannot run"
+	[ -n "$(fact vp0)" ] ||
+		refuse "--crash: no video_port0 in /sys/kernel/debug/dri/0/state (debugfs not mounted, or no rockchip DRM): VP0's mode cannot be read back before the jump"
 elif [ "$ck_s" -ge 0 ] && [ "$(fact kexec_crash_loaded)" != 0 ]; then
 	# The normal route writes the window at the reboot, over the loaded
 	# crash image's segment: a panic before that would enter a damaged image.
@@ -308,6 +370,11 @@ echo "board: up $(fact uptime) s, systemd '$(fact system)', boot_id $(fact boot_
 if [ "$CRASH" = 1 ]; then
 	echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and inside the crashkernel= reservation $(printf '0x%08x-0x%08x' "$ck_s" "$ck_e") (kexec_crash_size $(fact kexec_crash_size)), and overlaps no other /proc/iomem entry; no crash image is loaded"
 	echo "route: crash (--crash): kexec_load(KEXEC_ON_CRASH), then a panic; no device_shutdown, so the display and the GPU stay as Linux left them"
+	if vp0_is_adopt "$(fact vp0)"; then
+		echo "board: VP0 runs the adopt's mode already ($(fact vp0)); --go still sets and holds it with t6-kms-mode.py"
+	else
+		echo "board: VP0 runs '$(fact vp0)', not the adopt's mode ($ADOPT_MODE, flags $ADOPT_FLAGS); --go sets it first with t6-kms-mode.py ($(fact python3))"
+	fi
 else
 	if [ "$ck_s" -ge 0 ]; then
 		echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM; the window lies in the crashkernel= reservation $ck_line, and no crash image is loaded; it overlaps no other /proc/iomem entry"
@@ -356,7 +423,16 @@ if [ "$CRASH" = 1 ]; then
        no device_shutdown (VOP2, HDMI and the GPU keep running) and enters
        the image at EL2 with the MMU off; this ssh session ends there"
 	reread="kexec_loaded, kexec_crash_loaded"
+	copy_kms=", t6-kms-mode.py"
+	mode_step="
+     then the adopt's mode: python3 -I $STAGE/t6-kms-mode.py hold --max-hold $MODE_HOLD
+     sets $ADOPT_MODE (flags $ADOPT_FLAGS) on HDMI-A-1 as Linux's DRM
+     master and holds it (at most $MODE_HOLD s); VP0's mode is read back from
+     /sys/kernel/debug/dri/0/state, and unless it is that mode, the holder is
+     stopped by its pid (Linux's own mode comes back) and there is no jump"
 else
+	copy_kms=
+	mode_step=
 	how="= kexec_load(entry $load, 1 segment: $file_size bytes at $load, memsz $memsz)
        then reboot(LINUX_REBOOT_CMD_KEXEC): Linux shuts its devices down (PCI bus
        mastering cleared), stops the other CPUs and enters the image at EL2 with
@@ -374,8 +450,8 @@ plan (--go):
   2. the record: \$T6_RECORD_DIR/<date>-t6/, with the hand at the power switch;
      the UART (\$T6_UART, read only) into it until the board is back, and
      \`dmesg -w\` of the board until the jump
-  3. copy kexec_zephyr, mmio_rd and $(basename "$IMG") to $BOARD_HOST:$STAGE/, then
-     sync; read GLB_RST_ST, GLB_RST_CON, WDT0 CR and TORR into the record
+  3. copy kexec_zephyr, mmio_rd$copy_kms and $(basename "$IMG") to $BOARD_HOST:$STAGE/, then
+     sync; read GLB_RST_ST, GLB_RST_CON, WDT0 CR and TORR into the record$mode_step
   4. on the board: ${open_wdt}$STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg
      $how
   5. the image, on UART2 (1500000 baud, into uart.log): the raw early lines
@@ -414,12 +490,75 @@ done
 tmp=$(mktemp -d)
 dmesg_pid=
 uart_pid=
+mode_pid=
+mode_before=
+mode_back=0
 cleanup() {
 	if [ -n "$dmesg_pid" ]; then kill "$dmesg_pid" 2>/dev/null || true; fi
 	if [ -n "$uart_pid" ]; then kill "$uart_pid" 2>/dev/null || true; fi
+	mode_stop || true
 	rm -rf "$tmp"
 }
 trap cleanup EXIT
+# The holder's stop, on the board: $1 its pid, $2 the boot_id of the Linux
+# it runs in, $3 the stage. It kills only that pid, and only while it is
+# still the holder in that Linux (its command line names the script and
+# "hold"; argv[0] may be python3's full path), then waits up to 5 s for
+# it to end (a zombie counts as ended) and prints the holder's own last line
+# and VP0's mode.
+MODE_STOP=$(cat <<'EOF'
+p=$1 boot=$2 stage=$3
+if [ "$(cat /proc/sys/kernel/random/boot_id)" != "$boot" ]; then
+	echo "another Linux runs (boot_id changed): pid $p ended with the one that ran it"
+	exit 0
+fi
+pstate() { sed 's/.*) //' "/proc/$p/stat" 2>/dev/null | cut -d" " -f1; }
+cmd=$(tr "\0" " " <"/proc/$p/cmdline" 2>/dev/null)
+case "$cmd" in
+*" $stage/t6-kms-mode.py hold "*)
+	kill -TERM "$p"
+	i=0
+	while [ -n "$(pstate)" ] && [ "$(pstate)" != Z ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+	if [ -n "$(pstate)" ] && [ "$(pstate)" != Z ]; then
+		echo "pid $p did not end 5 s after SIGTERM"
+	else
+		echo "pid $p ended after SIGTERM"
+	fi
+	;;
+*) echo "pid $p is not the holder any more (command line '$cmd'): nothing killed" ;;
+esac
+cat "$stage/kms-mode.log" 2>/dev/null
+echo "vp0=$(vp0_mode)"
+EOF
+)
+# mode_stop: stops the holder (once) and records what the board says, and
+# whether VP0 runs Linux's own mode again (the mode it ran before the set).
+# A read that gave nothing, now or before the set, says neither.
+mode_stop() {
+	[ -n "$mode_pid" ] || return 0
+	local p=$mode_pid out now
+	mode_pid=
+	if [ "$mode_back" = 1 ]; then
+		rec "mode: holder pid $p ended with the Linux that ran it (the board came back with a new boot_id)"
+		return 0
+	fi
+	if ! out=$(board "$VP0_FN
+set -- $p $old_boot $STAGE
+$MODE_STOP"); then
+		rec "mode: could not reach the board to stop holder pid $p; it gives the mode back by itself $MODE_HOLD s after its start" >&2
+		return 0
+	fi
+	rec "mode: stop: $(grep -v '^vp0=' <<<"$out" | tr '\n' ' ')"
+	now=$(sed -n 's/^vp0=//p' <<<"$out")
+	if [ -z "$now" ] || [ -z "$mode_before" ]; then
+		rec "mode: VP0 was not read (now '${now:-unread}', before the set '${mode_before:-unread}'): nothing says that Linux's own mode is back" >&2
+	elif [ "$(vp0_timing "$now")" = "$(vp0_timing "$mode_before")" ] &&
+		{ [ -n "$(vp0_timing "$now")" ] || [ "$now" = "$mode_before" ]; }; then
+		rec "mode: Linux's own mode is back on VP0: $now"
+	else
+		rec "mode: VP0 does NOT run the mode it ran before the set: now '$now', before '$mode_before'" >&2
+	fi
+}
 HOLD_MAX=${HOLD_MAX:-$((bound_s + 600))}
 LOCK_WAIT=${LOCK_WAIT:-0}
 # shellcheck source=board_lock.sh
@@ -509,12 +648,61 @@ board "rm -rf $STAGE && mkdir -p $STAGE"
 bscp "${SSH_OPTS[@]}" "$LOADER" "$BOARD_HOST:$STAGE/kexec_zephyr"
 stage_mmio
 bscp "${SSH_OPTS[@]}" "$IMG" "$BOARD_HOST:$STAGE/zephyr.bin"
-want=$(sha256sum "$IMG" "$LOADER" | cut -d' ' -f1 | tr '\n' ' ')
-have=$(board "sha256sum $STAGE/zephyr.bin $STAGE/kexec_zephyr | cut -d' ' -f1 | tr '\n' ' '; sync")
+staged=("$IMG" "$LOADER")
+staged_on_board="$STAGE/zephyr.bin $STAGE/kexec_zephyr"
+if [ "$CRASH" = 1 ]; then
+	bscp "${SSH_OPTS[@]}" "$HERE/t6-kms-mode.py" "$BOARD_HOST:$STAGE/t6-kms-mode.py"
+	staged+=("$HERE/t6-kms-mode.py")
+	staged_on_board+=" $STAGE/t6-kms-mode.py"
+fi
+want=$(sha256sum "${staged[@]}" | cut -d' ' -f1 | tr '\n' ' ')
+have=$(board "sha256sum $staged_on_board | cut -d' ' -f1 | tr '\n' ' '; sync")
 [ "$want" = "$have" ] || { rec "the copies on the board differ (want $want, have $have); not jumping" >&2; exit 1; }
 regs=$(read_regs) || { rec "cannot read the registers with mmio_rd; not jumping" >&2; exit 1; }
 rec "registers before (GLB_RST_ST, GLB_RST_CON, WDT0 CR, TORR): $regs"
 rec "gpu power before: $(read_gpu_power || echo unread)"
+
+# The adopt's mode (the crash route only; driver/docs/nanopc-t6-display.md,
+# section 2(a), "The mode before the jump"). t6-kms-mode.py sets it and
+# leaves a holder; its line names the holder's pid. Then VP0's mode is read
+# back from Linux, and the jump goes on only when it is ADOPT_MODE. Every
+# path from here that does not jump stops the holder by that pid
+# (mode_refuse, finish, and the EXIT trap behind them).
+mode_refuse() {
+	rec "mode: REFUSED: $*; not jumping" >&2
+	mode_stop
+	exit 1
+}
+if [ "$CRASH" = 1 ]; then
+	mode_before=$(board "$VP0_FN
+vp0_mode") || mode_before=
+	rec "mode: VP0 before: ${mode_before:-unread}"
+	mode_rc=0
+	mode_out=$(board "python3 -I $STAGE/t6-kms-mode.py hold --max-hold $MODE_HOLD --log $STAGE/kms-mode.log" 2>&1) || mode_rc=$?
+	rec "mode: $(tr '\n' ' ' <<<"$mode_out")(rc $mode_rc)"
+	mode_re='; held by pid ([0-9]+) for at most [0-9]+ s$'
+	if [[ "$mode_out" =~ $mode_re ]]; then mode_pid=${BASH_REMATCH[1]}; fi
+	if [ "$mode_rc" != 0 ] || [ -z "$mode_pid" ]; then
+		# Exit 3 (refused) and 1 (given back) leave no holder. Anything
+		# else without a pid (ssh cut, a timeout) may have left one that
+		# cannot be named: it ends by itself.
+		case "$mode_pid:$mode_rc" in
+		:1 | :3) ;;
+		:*) rec "mode: no holder pid in the answer: if a holder runs, it gives the mode back by itself $MODE_HOLD s after its start" >&2 ;;
+		esac
+		mode_refuse "t6-kms-mode.py did not set and hold the adopt's mode (rc $mode_rc)"
+	fi
+	vp0=$(board "$VP0_FN
+vp0_mode") || vp0=
+	vp0_is_adopt "$vp0" ||
+		mode_refuse "VP0 does not run the adopt's mode ($ADOPT_MODE, flags $ADOPT_FLAGS) after the set: '${vp0:-unread}'"
+	rec "mode: VP0 reads back '$vp0': the adopt's mode, held by pid $mode_pid across the jump"
+	# For the record only: the adopt also compares VP0's DSP_CTRL with the
+	# build's HDMI RGB value, which an output in another depth or format
+	# changes (driver/docs/nanopc-t6-display.md, section 8, U15).
+	rec "mode: HDMI-A-1 output (DRM state): $(board "$VP0_FN
+hdmi_out" || true)"
+fi
 
 # What the jump command does when kexec_zephyr returns. On the normal route
 # the board is as it was: the magic close stops WDT0 from resetting it
@@ -576,6 +764,7 @@ fi
 # The capture ends by itself when the old Linux goes; it is stopped here in
 # any case, by its own pid.
 finish() {
+	mode_stop
 	if [ -n "$dmesg_pid" ]; then
 		kill "$dmesg_pid" 2>/dev/null || true
 		wait "$dmesg_pid" 2>/dev/null || true
@@ -599,6 +788,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
 	now_boot=$(board 'cat /proc/sys/kernel/random/boot_id' 2>/dev/null || true)
 	if [ -n "$now_boot" ] && [ "$now_boot" != "$old_boot" ]; then
 		rec "back in Armbian $(( $(date +%s) - t0 )) s after the jump (boot_id $now_boot, up $(board 'cut -d" " -f1 /proc/uptime') s)"
+		mode_back=1
 		# The reset cause first, before anything else runs on the board
 		# (the boot cleared /tmp/yakogl-kexec, so mmio_rd is staged again).
 		if stage_mmio && regs=$(read_regs); then
