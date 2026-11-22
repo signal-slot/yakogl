@@ -456,13 +456,18 @@ config GC_GL_TEST_HEIGHT
 	default 800
 endmenu
 
-menu "gl_test on the Raspberry Pi 4 (V3D 4.2)"
+menu "gl_test on the Raspberry Pi 4 (V3D 4.2) and the Raspberry Pi 5 (V3D 7.1)"
 	depends on YAKOGL_GPU_V3D
 
 config V3D_GL_TEST_CASES
 	string "The gl_test cases to run, in order, on one context"
+	default "5,58,59,66,67,102" if YAKOGL_GPU_V3D71
 	default "5,58,59,66,67,102,3,9,11,12,13,4,178"
 	help
+	  On the Pi 5 (YAKOGL_GPU_V3D71) the default is P9's six cases, the
+	  list the Pi 4 started with (docs/notes/pi4-v3d-bringup.md, "gl_test
+	  on the V3D"; docs/notes/v3d71-gl-table.md): 5 scissor, 58, 59, 66,
+	  67 and 102. On the Pi 4:
 	  Comma-separated case numbers of driver/tools/pvrlab/gl_test.c,
 	  walked through gl_test_set_list as the i.MX8MP's lists are. The
 	  default is M6 step B's evidence (the clears the TLB cannot do) and
@@ -548,6 +553,15 @@ config V3D_GL_TEST_HOLD_S
 	help
 	  rpi_wdog resets the board this long after boot (bounded, as every
 	  board image is): the run plus the time the record stays readable.
+	  On the Pi 5 the watchdog is the board layer's (YAKOGL_RPI5_WDOG,
+	  which YAKOGL_GPU_V3D71 selects), and this is its hold
+	  (YAKOGL_RPI5_WDOG_HOLD_S, below).
+
+# The Pi 5's PM watchdog is the board layer's (driver/zephyr/lib/board/Kconfig,
+# default 30 s for the probes); in this image it holds for the run and its
+# record, V3D_GL_TEST_HOLD_S. This default is read before the board layer's.
+config YAKOGL_RPI5_WDOG_HOLD_S
+	default V3D_GL_TEST_HOLD_S if YAKOGL_GPU_V3D71
 endmenu
 
 menu "gl_test on the NanoPC-T6 (Mali-G610)"

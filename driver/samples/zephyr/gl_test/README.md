@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
-# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4, NanoPC-T6)
+# gl_test (Zephyr: Verdin AM62P, Verdin iMX8M Plus, Armadillo-X2, STM32MP257F-DK, Raspberry Pi 4, Raspberry Pi 5, NanoPC-T6)
 
 Runs `driver/tools/pvrlab/gl_test.c`, YakoGL's on-silicon test suite, on the
 GPUs: the Verdin AM62P's PowerVR, the i.MX8M Plus's Vivante GC7000UL, the
@@ -201,6 +201,43 @@ prints SKIP unless `GL_MAX_DRAW_BUFFERS` is 4). The setters are the Rust
 `knob` item's (`src/v3d/knob.rs`, `src/pvr/knob.rs`): an image with a knob on
 links once they have merged; default images never reference them
 (`docs/notes/mrt4-v3d-pvr.md`, "The image knobs").
+
+## Raspberry Pi 5 (V3D 7.1)
+
+**Not complete yet: the image does not link.** The board files are here, but
+the 7.1 table and the sample's 7.1 build branch are not merged yet (plan
+#384, P9; `docs/notes/v3d71-gl-table.md`). The suite will run through
+YakoGL's GL core, its in-process compiler and the V3D backend's 7.1 table
+(cargo feature `gpu-v3d71`) on the OSAL `src/osal/zephyr_v3d71.c`, with the
+GL ES 1.00 shader set. The table is chosen when the image is built, not at
+run time (`v3d71-gl-table.md`, section 4). `boards/rpi_5.conf` sets
+`CONFIG_YAKOGL_GPU_V3D` and `CONFIG_YAKOGL_GPU_V3D71`, which selects the
+board layer's PM watchdog (`YAKOGL_RPI5_WDOG`) and firmware mailbox
+(`YAKOGL_RPI5_MBOX`). It also sets the 48 MiB carve-out, as on the Pi 4.
+`boards/rpi_5.overlay` makes `sram0` 96 MiB from 0x200000. That range is
+below 4 GiB and below the DTB the firmware places at 0x2efec600.
+
+The image has no screen. The console is uart10, as in the
+`tools/probes/rpi_5` probes, because the Pi 5's mailbox framebuffer
+(`YAKOGL_BOARD_RPI5`) is not proven on the board yet. The options are the
+Pi 4's menu, with these differences:
+
+- `V3D_GL_TEST_CASES` defaults to P9's six cases, `5,58,59,66,67,102`, the
+  list the Pi 4 started with (`docs/notes/pi4-v3d-bringup.md`, "gl_test on
+  the V3D").
+- `V3D_GL_TEST_HOLD_S` (200 s) is also the board layer watchdog's hold
+  (`YAKOGL_RPI5_WDOG_HOLD_S`, 30 s in the probes).
+
+```sh
+# from the top of the west workspace, as tools/check.sh's zephyr_werror_image
+# builds it (the module list comes from tools/cts/zephyr-modules.sh)
+west build -p always -b rpi_5 -d build/rpi5_gl_test yakogl/driver/samples/zephyr/gl_test -- \
+    "-DZEPHYR_MODULES=$(yakogl/tools/cts/zephyr-modules.sh "$PWD")" \
+    "-DYAKOGL_DIR=$PWD/yakogl" -DYAKOGL_WERROR=ON
+```
+
+On the board: not run yet. The session runs through `tools/board.sh pi5 run`
+(ssh and tryboot).
 
 ## NanoPC-T6 (Mali-G610)
 
