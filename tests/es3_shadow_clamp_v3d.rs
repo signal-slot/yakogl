@@ -80,9 +80,7 @@ fn compare(func: CompareFunc, reference: f32, d: f32) -> f32 {
     f32::from(u8::from(pass))
 }
 
-/// `vs` + `fs` compiled with the vertex key `vk` and the fragment key `fk`
-/// (the fragment stage reads its key from the compile key, which the GL
-/// core sets around a keyed compile; set here the same way and put back).
+/// `vs` + `fs` compiled with the vertex key `vk` and the fragment key `fk`.
 fn with_program<R>(vs: &str, fs: &str, vk: LodKey, fk: LodKey, f: impl FnOnce(&V3dProgram<'_>) -> R) -> R {
     let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
     let mut mem = vec![0u8; 16 << 20];
@@ -91,9 +89,7 @@ fn with_program<R>(vs: &str, fs: &str, vk: LodKey, fk: LodKey, f: impl FnOnce(&V
     let fs = a.alloc_str(fs).expect("arena");
     let v = lower::compile_to_ir(&a, sema::Stage::Vertex, vs).map_err(|e| e.msg.to_string()).expect("the VS lowers");
     let fr = lower::compile_to_ir(&a, sema::Stage::Fragment, fs).map_err(|e| e.msg.to_string()).expect("the FS lowers");
-    let old = yakogl::shaderc::set_compile_lod_key(fk);
     let p = compile_program_keyed(&v.module, &fr.module, Prim::Triangles, TARGET, vk, fk, &a);
-    yakogl::shaderc::set_compile_lod_key(old);
     let p = p.unwrap_or_else(|e| panic!("the program compiles: {e:?}"));
     f(&p)
 }

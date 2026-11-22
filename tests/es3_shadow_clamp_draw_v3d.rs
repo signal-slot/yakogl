@@ -560,9 +560,7 @@ fn compiled(fixed: bool) -> Fs {
     let v = lower::compile_to_ir(&a, sema::Stage::Vertex, vs).map_err(|e| e.msg.to_string()).expect("the VS lowers");
     let fr = lower::compile_to_ir(&a, sema::Stage::Fragment, fs).map_err(|e| e.msg.to_string()).expect("the FS lowers");
     let fk = LodKey { ret32: 1, fixed_depth: u32::from(fixed), ..LodKey::NONE };
-    let old = yakogl::shaderc::set_compile_lod_key(fk);
     let p = compile_program_keyed(&v.module, &fr.module, Prim::Triangles, TARGET, LodKey::NONE, fk, &a);
-    yakogl::shaderc::set_compile_lod_key(old);
     let p = p.unwrap_or_else(|e| panic!("the program compiles: {e:?}"));
     let code: &Code<'_> = &p.fs.code;
     Fs {

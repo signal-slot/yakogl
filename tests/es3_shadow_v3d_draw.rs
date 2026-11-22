@@ -659,9 +659,7 @@ fn with_program<R>(fs: &str, f: impl FnOnce(&V3dProgram<'_>) -> R) -> R {
     let v = lower::compile_to_ir(&a, sema::Stage::Vertex, vs).map_err(|e| e.msg.to_string()).expect("the VS lowers");
     let fr = lower::compile_to_ir(&a, sema::Stage::Fragment, fs).map_err(|e| e.msg.to_string()).expect("the FS lowers");
     let fk = LodKey { ret32: 1, ..LodKey::NONE };
-    let old = yakogl::shaderc::set_compile_lod_key(fk);
     let p = compile_program_keyed(&v.module, &fr.module, Prim::Triangles, TARGET, LodKey::NONE, fk, &a);
-    yakogl::shaderc::set_compile_lod_key(old);
     let p = p.unwrap_or_else(|e| panic!("the program compiles: {e:?}"));
     f(&p)
 }

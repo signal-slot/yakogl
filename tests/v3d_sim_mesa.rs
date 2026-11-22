@@ -2982,12 +2982,9 @@ fn ours_pair_keyed(vs_path: &str, fs_path: &str, vs_key: LodKey, fs_key: LodKey)
     let fsl = compile(&a, sema::Stage::Fragment, fs_path).map_err(fe)?;
     let vsl = compile(&a, sema::Stage::Vertex, vs_path).map_err(fe)?;
     let (fsm, vsm) = (&fsl.module, &vsl.module);
-    // The fragment stage reads its return-size key from the compile key the
-    // GL core sets around a keyed compile (select_fragment), the vertex
-    // stage from the argument.
-    let old = yakogl::shaderc::set_compile_lod_key(fs_key);
+    // Each stage's key is its argument: nothing here writes the compile key
+    // the tests of this binary share (issue #10540).
     let prog = compile_program_keyed(vsm, fsm, Prim::Triangles, TARGET, vs_key, fs_key, &a);
-    yakogl::shaderc::set_compile_lod_key(old);
     let prog = prog.map_err(|e| match e {
         V3dError::NotYet(what) => Ours::NotYet(what),
         e => Ours::Other(format!("{e:?}")),

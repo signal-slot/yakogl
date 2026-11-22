@@ -494,8 +494,9 @@ struct Sel<'a> {
     pending: AVec<'a, (u32, u32, bool)>,
     /// The bindings whose look-ups take the 32-bit TMU output
     /// (`LodKey::ret32` of the stage: the fragment stage's from the
-    /// compile's key, the vertex stage's from the program's vertex key,
-    /// [`select_vertex`]; the two stages number their bindings apart).
+    /// program's fragment key, [`select_fragment_keyed`], the vertex stage's
+    /// from the program's vertex key, [`select_vertex`]; the two stages
+    /// number their bindings apart).
     ret32: u32,
     /// The bindings whose shadow look-ups clamp the reference to [0, 1]
     /// before TMUDREF (`LodKey::fixed_depth`: a fixed-point depth texture),
@@ -2235,12 +2236,32 @@ fn merge_exits<'a>(a: &Arena<'a>, ops: &mut AVec<'a, VOp>) -> Result<(), SelectE
 /// Select a fragment shader. `inputs` is [`super::prepare::fragment_inputs`];
 /// bit i of `flat` says `inputs[i]` is flat (the program's
 /// `flat_shade_flags`), bit i of `centroid` that it is sampled at the
-/// centroid (`centroid_flags`).
+/// centroid (`centroid_flags`). No key: [`select_fragment_keyed`] with
+/// [`crate::shaderc::LodKey::NONE`].
 pub fn select_fragment<'a>(
     p: &Prepared<'_>,
     inputs: &[(u8, u8)],
     flat: u64,
     centroid: u64,
+    pressure: Pressure,
+    a: &Arena<'a>,
+) -> Result<Selected<'a>, SelectError> {
+    select_fragment_keyed(p, inputs, flat, centroid, crate::shaderc::LodKey::NONE, pressure, a)
+}
+
+/// [`select_fragment`] with the fragment key: its `ret32` and its
+/// `fixed_depth` ([`Sel::ret32`], [`Sel::fixed_depth`]). The key is this
+/// argument and never the ambient compile key
+/// ([`crate::shaderc::compile_lod_key`]): the caller that compiles for a
+/// draw reads the ambient key once and passes it down
+/// (`chain::compile_program`), so one compile sees one key, and a compile
+/// on another thread cannot change this one's code.
+pub fn select_fragment_keyed<'a>(
+    p: &Prepared<'_>,
+    inputs: &[(u8, u8)],
+    flat: u64,
+    centroid: u64,
+    key: crate::shaderc::LodKey,
     pressure: Pressure,
     a: &Arena<'a>,
 ) -> Result<Selected<'a>, SelectError> {
@@ -2257,8 +2278,8 @@ pub fn select_fragment<'a>(
         of: a.alloc_filled(p.ops.len(), Operand::None)?,
         tex_words: AVec::new(),
         pending: AVec::new(),
-        ret32: crate::shaderc::compile_lod_key().ret32,
-        fixed_depth: crate::shaderc::compile_lod_key().fixed_depth,
+        ret32: key.ret32,
+        fixed_depth: key.fixed_depth,
         pipelined: pressure < Pressure::Serial,
         attr_rows: &mut [],
         loop_counters: AVec::new(),
@@ -2484,8 +2505,8 @@ pub fn vattr_sizes(p: &Prepared<'_>, records: &[u8]) -> Result<[u8; 16], SelectE
 /// in record order (the vertex shader's; the coordinate shader reads a
 /// subset through the same records).
 /// `ret32`: the vertex stage's bindings whose texture is of a 32-bit class
-/// (`LodKey::ret32` of the vertex key, never the ambient compile key, which
-/// is the fragment stage's): their look-ups take the 32-bit TMU output, a
+/// (`LodKey::ret32` of the vertex key, never the fragment key): their
+/// look-ups take the 32-bit TMU output, a
 /// word per channel, as a fragment look-up does (Mesa keys each stage's
 /// samplers with their return size, docs/notes/v3d-vs-ret32.md). The
 /// vertex and the coordinate shader take the same mask.
@@ -2504,7 +2525,7 @@ pub fn select_vertex<'a>(
 
 /// [`select_vertex`] with the whole vertex key: its `ret32`, and its
 /// `fixed_depth` (the bindings whose shadow look-ups clamp the reference,
-/// as a fragment look-up's do from the compile key, [`Sel::fixed_depth`]).
+/// as a fragment look-up's do from the fragment key, [`Sel::fixed_depth`]).
 pub fn select_vertex_keyed<'a>(
     p: &Prepared<'_>,
     records: &[u8],

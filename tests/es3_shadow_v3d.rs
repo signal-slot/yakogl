@@ -207,10 +207,7 @@ fn listing(c: &Code<'_>) -> Vec<String> {
 
 /// `vs` + `fs` compiled for the V3D with the vertex key `vs_ret32` and the
 /// fragment key `fs_ret32` (the bindings whose texture returns 32 bits: a
-/// depth texture's does), handed to `f`. The fragment stage reads its key
-/// from the compile key the GL core sets around a keyed compile
-/// (`set_compile_lod_key`, `select_fragment`), so it is set here the same
-/// way and put back after.
+/// depth texture's does), handed to `f`.
 fn with_program<R>(vs: &str, fs: &str, vs_ret32: u32, fs_ret32: u32, f: impl FnOnce(&V3dProgram<'_>) -> R) -> R {
     let _g = COMPILING.lock().unwrap_or_else(|e| e.into_inner());
     let mut mem = vec![0u8; 16 << 20];
@@ -221,9 +218,7 @@ fn with_program<R>(vs: &str, fs: &str, vs_ret32: u32, fs_ret32: u32, f: impl FnO
     let fr = lower::compile_to_ir(&a, sema::Stage::Fragment, fs).map_err(|e| e.msg.to_string()).expect("the FS lowers");
     let vk = LodKey { ret32: vs_ret32, ..LodKey::NONE };
     let fk = LodKey { ret32: fs_ret32, ..LodKey::NONE };
-    let old = yakogl::shaderc::set_compile_lod_key(fk);
     let p = compile_program_keyed(&v.module, &fr.module, Prim::Triangles, TARGET, vk, fk, &a);
-    yakogl::shaderc::set_compile_lod_key(old);
     let p = p.unwrap_or_else(|e| panic!("the program compiles: {e:?}"));
     f(&p)
 }

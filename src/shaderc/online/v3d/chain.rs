@@ -26,7 +26,7 @@ use super::encode::{encode_program, ProgramEncodeError};
 use super::isa::Instr;
 use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with, PrepError, SOp};
 use super::sched::{schedule, SchedError};
-use super::select::{select_fragment, select_vertex_keyed, Pressure, SelectError, Selected, Uniform, VOp};
+use super::select::{select_fragment_keyed, select_vertex_keyed, Pressure, SelectError, Selected, Uniform, VOp};
 use super::verify::{branches_are_structured, registers_fit_threads, verify, VerifyError};
 use crate::shaderc::online::arena::{AVec, Arena, ArenaError};
 use crate::shaderc::online::ir::{self, IoKind};
@@ -400,11 +400,12 @@ pub fn compile_program<'a>(
 /// [`compile_program`] with each stage's [`crate::shaderc::LodKey`]: what a
 /// draw's bound samplers ask of the stage's code. The V3D's keys are
 /// `cube_noseam` (both stages: the cube look-ups of those bindings are
-/// emulated per face, docs/v3d-noseamless-cube.md) and `ret32` (both
-/// stages: the fragment key's read by select.rs from the compile's key, the
-/// vertex key's passed to the vertex and coordinate shaders here). The `mag_switch`
-/// remap is IR to IR and applied to the vertex module by the caller
-/// (`codegen::link_sources`).
+/// emulated per face, docs/v3d-noseamless-cube.md), `ret32` and
+/// `fixed_depth` (both stages: the fragment key's passed to the fragment
+/// shader, the vertex key's to the vertex and coordinate shaders). The two
+/// keys are these arguments and nothing else: no stage reads the ambient
+/// compile key below this entry. The `mag_switch` remap is IR to IR and
+/// applied to the vertex module by the caller (`codegen::link_sources`).
 pub fn compile_program_keyed<'a>(
     vs: &'a ir::Module<'a>,
     fs: &'a ir::Module<'a>,
@@ -536,7 +537,7 @@ pub fn compile_program_rt<'a>(
     /* LazyAttributes changes nothing in a fragment shader. */
     let (fsel, (fs_code, fs_threads)) = under_pressure(
         &[Pressure::None, Pressure::Remat, Pressure::Serial],
-        |pr| select_fragment(&fsp, inputs, flat, centroid, pr, a),
+        |pr| select_fragment_keyed(&fsp, inputs, flat, centroid, fs_key, pr, a),
         false,
         a,
     )?;
@@ -3698,6 +3699,52 @@ mod tests {
         assert!(count(&plain, "r0.l, r0.h") == 1 && count(&keyed, ".l") == 0 && count(&keyed, ".h") == 0, "{keyed:?}");
         assert_eq!(count(&keyed, "vfpack tlb, r0, r1"), 1, "{keyed:?}");
         assert_eq!((other_cfg, other), (plain_cfg, plain), "a key bit at a binding not read changes nothing");
+    }
+
+    /// The fragment key is [`compile_program_keyed`]'s argument and never the
+    /// ambient compile key (issue #10540: tests on parallel threads changed
+    /// each other's code through it). With the ambient key 0 the argument's
+    /// `ret32` bit gives the 32-bit look-up, and with the ambient bit set an
+    /// argument of 0 keeps the f16 one. Revert check: `Sel::ret32` read from
+    /// `compile_lod_key()` in select_fragment_keyed fails both assertions.
+    #[test]
+    fn the_fragment_key_is_the_argument_not_the_ambient_key() {
+        const VS: &str = "attribute vec4 p;\nvarying vec4 v;\nvoid main() { v = p; gl_Position = p; }\n";
+        const FS: &str = "precision mediump float;\nvarying vec4 v;\nuniform sampler2D s;\n\
+            void main() { gl_FragColor = texture2D(s, v.xy); }\n";
+        let compile = |ambient: u32, argument: u32| -> Vec<(u32, u32)> {
+            let _serial = store::test_lock();
+            let key = |ret32| crate::shaderc::LodKey { ret32, ..crate::shaderc::LodKey::NONE };
+            let old = crate::shaderc::set_compile_lod_key(key(ambient));
+            let cfg = store::with_scratch(|a| {
+                let vs = a.alloc_str(VS).unwrap();
+                let fs = a.alloc_str(FS).unwrap();
+                let v = lower::compile_to_ir(a, Stage::Vertex, vs).map_err(|e| e.msg).unwrap();
+                let fr = lower::compile_to_ir(a, Stage::Fragment, fs).map_err(|e| e.msg).unwrap();
+                let p = compile_program_keyed(
+                    &v.module,
+                    &fr.module,
+                    Prim::Triangles,
+                    TARGET,
+                    crate::shaderc::LodKey::NONE,
+                    key(argument),
+                    a,
+                )
+                .expect("compiles");
+                check_all(&p);
+                p.fs.code
+                    .uniforms
+                    .iter()
+                    .filter(|u| u.contents == 40 || u.contents == 41)
+                    .map(|u| (u.contents, u.data))
+                    .collect()
+            })
+            .expect("scratch");
+            crate::shaderc::set_compile_lod_key(old);
+            cfg
+        };
+        assert_eq!(compile(0, 1), [(40, 0xf), (41, 0x5)], "the argument's bit alone: 32-bit, four words");
+        assert_eq!(compile(1, 0), [(40, 0x3), (41, 0x4)], "the ambient bit alone: f16, two words");
     }
 
     /// The vertex twin of [`a_ret32_binding_reads_one_32_bit_word_per_channel`]

@@ -36,7 +36,9 @@ use super::prepare::{fragment_inputs, prepare_fragment_with, prepare_vertex_with
 use super::qpu_ffi::Gen;
 use super::sched71::{pack71, Sched71Error};
 use super::sched71_cf::{branches_are_structured71, schedule71, Scheduled71};
-use super::select::{select_fragment, select_vertex_keyed, tmu_input_writes, Pressure, SelectError, Selected, VOp};
+use super::select::{
+    select_fragment_keyed, select_vertex_keyed, tmu_input_writes, Pressure, SelectError, Selected, VOp,
+};
 use super::select71::{interleave71, select71, Select71Error};
 use super::verify71::{registers_fit_threads71, verify71, VerifyError};
 use super::vop71::{Instr71, Op71, Selected71, Uniform};
@@ -514,7 +516,7 @@ pub fn compile_program71_keyed<'a>(
      * build71. */
     let (fsel, (fs_code, fs_threads)) = under_pressure71(
         &[Pressure::None, Pressure::Remat, Pressure::Serial],
-        |pr| select_fragment(&fsp, inputs, flat, centroid, pr, a),
+        |pr| select_fragment_keyed(&fsp, inputs, flat, centroid, fs_key, pr, a),
         false,
         a,
     )?;
