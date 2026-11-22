@@ -22,7 +22,7 @@ Locally you run only what you added or changed (owner's decision of
   gate itself).
 
 The check is the CI gate: `.github/workflows/gate.yml` runs `tools/check.sh`
-on every pull request (`--changed <merge base> --no-clippy`: the rows the
+on every pull request (`--no-clippy --changed <merge base>`: the rows the
 diff reaches, no clippy),
 on each push to main as its header says, and nightly (every row). How to read
 its log:
@@ -35,7 +35,7 @@ its log:
 - Exit 2 before any row: the gate could not start (cargo, rustfmt or clippy
   missing from the toolchain). That is the runner, not the code.
 
-A pull request's CI gate runs `--changed <merge base> --no-clippy`: no
+A pull request's CI gate runs `--no-clippy --changed <merge base>`: no
 clippy row (owner, 2026-11-13). The clippy rows run in the nightly gate on
 main, which is clippy's gate. Run clippy yourself on the crates you touched
 when it is quick (`cargo clippy -p <crate> --all-targets`, with the crate's
