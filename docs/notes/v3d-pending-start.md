@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # V3D: starting the waiting job without the CPU in a wait (study)
 
 Candidate 2 of `pi4-terrain-cpu-left.md`: on the Pi 4 a job submitted while
