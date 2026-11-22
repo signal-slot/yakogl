@@ -828,7 +828,7 @@ pvr_resets() {
 t6_probe() {
     local c=$1 p
     { [ "$BOARD" = nanopc-t6 ] && [ -s "$c" ]; } || return 0
-    p=$(plain "$c" | sed -nE 's/^(t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit): build .*/\1/p' | head -1)
+    p=$(plain "$c" | sed -nE 's/^(t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display|t6_cold): build .*/\1/p' | head -1)
     [ -n "$p" ] || return 0
     if bash "$REPO/driver/tools/kexec-zephyr/t6-verdict.sh" "$p" "$c" > /dev/null 2>&1; then
         echo "pass $p"

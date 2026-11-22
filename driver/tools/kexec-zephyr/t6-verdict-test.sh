@@ -287,6 +287,53 @@ sed -e '/^t6_display: take-over/,/^t6_display: HDMI0 VIDEO_MONITOR/d' \
 	sed '/^t6_display: FAIL: adopt/i t6_display: adopt rc -5 stop 4 (VP0 is in STANDBY: no picture to adopt), refusal 0, index 0, detail 0x8000000f' >"$WORK/standby.log"
 check t6_display-standby 1 "VERDICT t6_display FAIL (18 of $DISP)" "$((DISP - 18)) 16 2" t6_display "$WORK/standby.log"
 
+# t6_cold (step D8): the line counts are the tables', read from the passing
+# records (a run to the end, a run stopped after stage 4 as asked)
+COLD=$(bash "$V" t6_cold "$D/t6_cold-pass.uart" | grep -c '^ok ' || true)
+COLD4=$(bash "$V" t6_cold "$D/t6_cold-stop4.uart" | grep -c '^ok ' || true)
+check t6_cold-pass 0 'VERDICT t6_cold PASS' "$COLD 0 0" t6_cold "$D/t6_cold-pass.uart"
+check t6_cold-stop4 0 'VERDICT t6_cold PASS' "$COLD4 0 0" t6_cold "$D/t6_cold-stop4.uart"
+# a stop after VOP: the picture is up, so the hold and the read-backs
+# follow (their overlay selects checked for form: no report line names
+# them), and STOPPED in place of PASS
+sed -e 's/stop after 0 (run to the end)/stop after 7 (VOP)/' -e '/^t6 display: stage 8 VIDEO$/,/^t6_cold: chain rc/d' \
+	-e 's/^t6_cold: PASS: .*/t6_cold: STOPPED: after stage 7 (VOP) as asked/' "$D/t6_cold-pass.uart" |
+	sed '/^t6_cold: holding/i t6 display: stopped after stage 7 VOP as asked\nt6_cold: chain rc -140 in 380 ms: stage 7 (VOP), error 1 (stopped as asked), refusal 0, index 0, detail 0x00000000' >"$WORK/cold7.log"
+check t6_cold-stop7 0 'VERDICT t6_cold PASS' "$((COLD - 8)) 0 0" t6_cold "$WORK/cold7.log"
+# a hang in stage 4 (WDT0 resets the board): the record ends with that
+# stage's line; the first line missing is stage 5's, and every line after it
+sed '/^t6 display: stage 5 DCLK$/,/^t6: t6_cold done/d' "$D/t6_cold-pass.uart" >"$WORK/hang.log"
+check t6_cold-hang 1 "VERDICT t6_cold FAIL (26 of $COLD)" "$((COLD - 26)) 26 0" t6_cold "$WORK/hang.log"
+first=$(bash "$V" t6_cold "$WORK/hang.log" | grep -v '^ok ' | sed -n 1p || true)
+runs=$((runs + 1))
+if [[ $first == 'missing  expected "t6 display: stage 5 DCLK";'* ]]; then
+	echo "ok   t6_cold-hang: the first line missing names stage 5"
+else
+	echo "FAIL t6_cold-hang: the first line not ok is not stage 5's: $first"
+	fails=$((fails + 1))
+fi
+# stage 4 failed: the chain's rc and the FAIL line differ, and so does the
+# failure line, which no record may have (it counts as a third, beyond the
+# table's lines); the stages after it, the report, the hold and the
+# read-backs are missing
+sed -e '/^t6 display: stage 5 DCLK$/,/^t6_cold: PASS: /d' "$D/t6_cold-pass.uart" |
+	sed '/^t6: t6_cold done/i t6 display: stage 4 PHY failed: Phy(Refused { why: LockTimeout, found: 6 })\nt6_cold: chain rc -5 in 170 ms: stage 4 (PHY), error 3 (the PHY), refusal 4, index 0, detail 0x00000006\nt6_cold: FAIL: stage 4 (PHY) failed' >"$WORK/phyfail.log"
+check t6_cold-phy-failed 1 "VERDICT t6_cold FAIL (26 of $COLD)" "$((COLD - 25)) 23 3" t6_cold "$WORK/phyfail.log"
+# a stage line lost in the middle is missing on its own
+sed '/^t6 display: stage 3 GRF$/d' "$D/t6_cold-pass.uart" >"$WORK/nogrf.log"
+check t6_cold-no-stage-3 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 1 0" t6_cold "$WORK/nogrf.log"
+# each pinned or derived value differs on its own line: another controller,
+# a pixel clock off by 7.7 %, Esmart0 on another address after the hold, an
+# overlay select that moved during the hold
+sed 's/CORE_ID 0x48515458/CORE_ID 0x48515459/' "$D/t6_cold-pass.uart" >"$WORK/core.log"
+check t6_cold-core-id 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/core.log"
+sed 's/pixel clock 65002 kHz/pixel clock 60000 kHz/' "$D/t6_cold-pass.uart" >"$WORK/cpclk.log"
+check t6_cold-pclk 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/cpclk.log"
+sed '/^t6_cold: VOP OVL_PORT_SEL/s/YRGB_MST 0x1001d000/YRGB_MST 0x1001e000/' "$D/t6_cold-pass.uart" >"$WORK/cmst.log"
+check t6_cold-mst 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/cmst.log"
+sed '/^t6_cold: VOP OVL_PORT_SEL/s/OVL_PORT_SEL 0x80007880/OVL_PORT_SEL 0x80007873/' "$D/t6_cold-pass.uart" >"$WORK/cops.log"
+check t6_cold-port-sel 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/cops.log"
+
 # Z1's record in the stop fixtures is what t6_z1.c prints (host cc, the
 # probes' printk as printf): a fixture cannot drift from the code
 P=$(cd "$HERE/../../.." && pwd)/tools/probes/nanopc_t6/common

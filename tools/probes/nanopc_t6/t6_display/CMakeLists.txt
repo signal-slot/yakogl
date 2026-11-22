@@ -25,7 +25,9 @@ endif()
 target_compile_definitions(app PRIVATE T6_DISPLAY_BUILD="${T6_DISPLAY_BUILD}")
 message(STATUS "t6_display build: ${T6_DISPLAY_BUILD}")
 
-target_sources(app PRIVATE src/main.c)
+# The picture, the hold and the read-backs, shared with t6_cold.
+target_sources(app PRIVATE src/main.c ../common/t6_picture.c)
+target_include_directories(app PRIVATE ../common)
 
 # Zero warnings in our C files: tools/check.sh builds this sample with
 # -DYAKOGL_WERROR=ON (the "zephyr" rows); off by default.

@@ -4758,6 +4758,9 @@ if [ "$QUICK" -eq 0 ]; then
     # D2's probe (the display adopt after a crash kexec) likewise.
     step "zephyr  nanopc_t6 t6_display image (D2, the display adopt), -Werror on our C files" \
       zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_display nanopc_t6_display
+    # D8's probe (the cold display bring-up after a normal kexec) likewise.
+    step "zephyr  nanopc_t6 t6_cold image (D8, the cold display bring-up), -Werror on our C files" \
+      zephyr_werror_image nanopc_t6 tools/probes/nanopc_t6/t6_cold nanopc_t6_cold
     # Z3's probe (the firmware boot): without the board's mali_csffw.bin and
     # without a header made from it the row is a gap naming the file.
     needs_mali_csffw() {
