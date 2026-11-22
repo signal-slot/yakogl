@@ -842,8 +842,10 @@ kill "$sp" 2>/dev/null
 wait "$sp" 2>/dev/null
 # ADOPT_MODE and ADOPT_FLAGS are the Rust MODE the image adopts with:
 # h = active, +front, +sync, +back; the same for v; the clock in kHz.
-rs=$here/../../rust/src/board/nanopc_t6_display.rs
-mode_rs=$(awk '/^pub const MODE: VideoMode = VideoMode \{/ { n = 1; next } n && /^\};/ { exit } n { gsub(/[ ,]/, ""); print }' "$rs")
+# The board's MODE names the display chain's constant: its fields are there.
+rs=$here/../../rust/src
+mode_name=$(sed -n 's/^pub const MODE: VideoMode = crate::soc::rk3588_display_chain::\([A-Z0-9_]*\);$/\1/p' "$rs/board/nanopc_t6_display.rs")
+mode_rs=$(awk -v first="pub const $mode_name: VideoMode = VideoMode {" '$0 == first { n = 1; next } n && /^\};/ { exit } n { gsub(/[ ,]/, ""); print }' "$rs/soc/rk3588_display_chain.rs")
 rsv() { sed -n "s/^$1://p" <<<"$mode_rs" | tr -d _; }
 want=
 if [ -n "$(rsv vback)" ]; then

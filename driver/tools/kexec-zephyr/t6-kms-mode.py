@@ -425,13 +425,17 @@ def self_test():
             (FB_CMD.size, 28, "sizeof(struct drm_mode_fb_cmd)")):
         check(got == want, "uapi: %s = 0x%x (kernel 0x%x)" % (what, got, want))
 
-    # MODE is the Rust MODE the image adopts with.
-    rs = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                      "../../rust/src/board/nanopc_t6_display.rs")
+    # MODE is the Rust MODE the image adopts with. The board's MODE names
+    # the display chain's constant: its fields are there.
+    rs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../rust/src")
     try:
-        with open(rs) as f:
+        with open(os.path.join(rs, "board/nanopc_t6_display.rs")) as f:
             text = f.read()
-        body = text.split("pub const MODE: VideoMode = VideoMode {", 1)[1].split("};", 1)[0]
+        name = text.split("pub const MODE: VideoMode = crate::soc::rk3588_display_chain::",
+                          1)[1].split(";", 1)[0]
+        with open(os.path.join(rs, "soc/rk3588_display_chain.rs")) as f:
+            text = f.read()
+        body = text.split("pub const %s: VideoMode = VideoMode {" % name, 1)[1].split("};", 1)[0]
         v = {}
         for line in body.splitlines():
             line = line.strip().rstrip(",")
