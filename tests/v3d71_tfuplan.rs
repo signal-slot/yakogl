@@ -70,11 +70,14 @@ fn rgba8_256_full_chain() {
     assert_eq!(j.ioc_mm, 1 | 8 << 4);
     assert_eq!(j.levels.len(), 8);
     // cpp 4: utile 4x4 texels, UIF block 8x8 texels = 256 bytes
-    assert_eq!((j.levels[0].width, j.levels[0].height, j.levels[0].bytes), (128, 128, 256 * 256));
-    assert_eq!(j.levels[1].offset, 256 * 256);
-    assert_eq!((j.levels[7].width, j.levels[7].height, j.levels[7].bytes), (1, 1, 256));
-    // 128 -> 256 blocks, 64 -> 64, 32 -> 16, 16 -> 4, then 8, 4, 2 -> 1 block each
-    assert_eq!(j.levels[7].offset, 256 * (256 + 64 + 16 + 4 + 1 + 1 + 1));
+    assert_eq!((j.levels[0].width, j.levels[0].height, j.levels[0].bytes), (128, 128, 128 * 128 * 4));
+    // the old pins (levels packed upward in whole UIF blocks) were not Mesa's
+    // layout: small levels are LINEARTILE/UBLINEAR and sit BELOW the base
+    // (v3d_setup_slices, v3d_resource.c:583-767; tests/v3d71_slices.rs)
+    assert_eq!((j.levels[7].width, j.levels[7].height, j.levels[7].bytes), (1, 1, 64));
+    assert!(j.levels.iter().all(|l| l.offset < j.base_offset));
+    assert!(j.levels.windows(2).all(|w| w[1].offset < w[0].offset));
+    assert_eq!(j.base_offset % 4096, 0);
 }
 
 #[test]
