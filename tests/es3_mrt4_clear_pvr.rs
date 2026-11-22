@@ -25,6 +25,9 @@
 //! (the load of render targets 0-2, a quad that writes register 3 alone) is
 //! pinned by tests/pvr_backend_rt4.rs. Before pvr-backend the kick had three
 //! targets and an integer clear of attachment 3 was refused at the flush.
+//! Pinned since the none-clear fix (same plan): a glClearBufferfv of a draw
+//! buffer that is GL_NONE is no error and records no clear, so the back end
+//! receives no frame (the float form used to clear that render target).
 //!
 //! Not measurable on the host: that the PBE stores render target 3 to memory
 //! (the board's: docs/notes/mrt4-v3d-pvr.md section 5).
@@ -682,6 +685,53 @@ fn glclearbufferfv_of_buffer_three_reaches_the_fourth_target() {
     for (rt, word) in k.frag.pbe_word.iter().enumerate() {
         assert_ne!(*word, [0, 0], "render target {rt} has its PBE state");
     }
+}
+
+/* ---- glClearBufferfv(GL_COLOR, 3, ...) with draw buffer 3 GL_NONE ------------ */
+
+/// ES 3.0 4.2.3: clearing a draw buffer that is GL_NONE, or whose attachment
+/// has no image, has no effect and is no error. Draw buffers
+/// {A0, A1, A2, GL_NONE} on four RGBA8 attachments: glClearBufferfv of draw
+/// buffer 3 raises no error and records no clear, so the back end receives
+/// no frame and attachment 3 is not cleared (the integer forms already return
+/// at their kind check; the float form used to clear render target 3 through
+/// it anyway, the core fix in src/gl/es3.rs, pinned for V3D by
+/// tests/v3d_clear_mrt4.rs). The control is the same scene and the same call
+/// with draw buffer 3 back on attachment 3: one kick of four targets whose
+/// render target 3 has its PBE state, so it is the GL_NONE that stops the
+/// clear, not the framebuffer.
+#[test]
+fn glclearbufferfv_of_a_none_drawbuffer_3_clears_nothing() {
+    let _g = rig();
+    let none3 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_NONE];
+    let real3 = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3];
+    fbo4([GL_RGBA8; 4]);
+    let k = kicks_of(|| {
+        // SAFETY: plain GL calls; C is four floats and the arrays four enums.
+        unsafe {
+            glDrawBuffers(4, none3.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+            glClearBufferfv(GL_COLOR, 3, C.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "a GL_NONE draw buffer is no error");
+        }
+    });
+    assert_eq!(error(), GL_NO_ERROR, "nothing is refused at the flush: {:?}", logs());
+    assert!(k.is_empty(), "no clear recorded, so no frame is submitted: {k:?} {:?}", logs());
+
+    /* control: the same clear of a real draw buffer 3 reaches render
+     * target 3 (as in glclearbufferfv_of_buffer_three_reaches_the_fourth_target) */
+    let k = kicks_of(|| {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glDrawBuffers(4, real3.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+            glClearBufferfv(GL_COLOR, 3, C.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+    });
+    assert_eq!(k.len(), 1, "the real draw buffer 3 clears: {:?}", logs());
+    assert_eq!(k[0].frag.num_rt, 4);
+    assert_ne!(attach3(&k[0]), [0, 0], "render target 3 has its PBE state");
 }
 
 /* ---- glClearBufferuiv / iv on an integer attachment 3 ------------------------- */
