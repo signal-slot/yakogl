@@ -2057,7 +2057,8 @@ t6_lifetime() {
 # /proc/iomem and the GIC tables, the board lock (taken there, LOCK_WAIT 0),
 # the state again under the lock (kexec_loaded, the GPU's users, remote
 # sessions, the watchdog's users), T6_HAND, the UART (a readable tty nobody
-# has open, set raw and read back) and the record directory; the copies read
+# has open, set raw and read back, and a marker line the board writes to its
+# console read back from it) and the record directory; the copies read
 # back; WDT_EN read back before the jump. The runner exits 3 for a refusal
 # before anything changed, makes its record directory (<rundir>/<date>-t6)
 # only after that, and writes there what happened: "jumping", then "back in
