@@ -1059,6 +1059,72 @@ mod tests {
     }
 
     #[test]
+    fn constants_and_tables_match_r3_1_ltdc_c() {
+        // ST r3.1 (v6.6-stm32mp-r3.1) drivers/gpu/drm/stm/ltdc.c, audited
+        // line by line; no discrepancy was found, this pins what agrees.
+        // global registers (:70-94) and versions (:55-59)
+        assert_eq!(
+            [IDR, LCR, SSCR, BPCR, AWCR, TWCR, GCR, GC2R, SRCR, BCCR, IER, ISR, ICR, LIPCR, EDCR, CCRCR, FUT],
+            [0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, 0x18, 0x20, 0x24, 0x2c, 0x34, 0x38, 0x3c, 0x40, 0x60, 0x7c, 0x90]
+        );
+        assert_eq!(
+            [HWVER_10200, HWVER_10300, HWVER_20101, HWVER_40100, HWVER_40101],
+            [0x010200, 0x010300, 0x020101, 0x040100, 0x040101]
+        );
+        // GCR :139-146, GC2R :169-171, SRCR/LxRCR :173-174, :253-255
+        assert_eq!(
+            [GCR_LTDCEN, GCR_ROTEN, GCR_DEN, GCR_CRCEN, GCR_PCPOL, GCR_DEPOL, GCR_VSPOL, GCR_HSPOL],
+            [1, 1 << 2, 1 << 16, 1 << 19, 1 << 28, 1 << 29, 1 << 30, 1 << 31]
+        );
+        assert_eq!((GC2R_BW, GC2R_ROTA, RCR_IMR, RCR_VBR), (0x70, 1 << 10, 1, 2));
+        // IER/ISR :188-205 (LIE 0, FUWIE 1, TERRIE 2, FUEIE 6, FURIE 8)
+        assert_eq!([INT_LINE, INT_FU_WARN, INT_TRANSFER_ERR, INT_FU_ERR, INT_FU_ROT], [1, 2, 4, 0x40, 0x100]);
+        assert_eq!(IER_ERRORS, 0x46);
+        // LXCR_MASK :216 (LEN|COLKEN|CLUTEN|HMEN|SCEN), BFCR :229-231/:260-263
+        assert_eq!((LXCR_MASK, LXCR_LEN), (0x513, 1));
+        assert_eq!((BFCR_MASK, BFCR_BOR, BFCR_ALPHA, BFCR_NO_ALPHA), (0x707, 0x7_0000, 0x600 | 0x7, 0x400 | 0x5));
+        // FUT_DFT :267, LTDC_MAX_LAYER ltdc.h:14, CRC_SKIP_FRAMES :274
+        assert_eq!((FUT_DEFAULT, MAX_LAYERS, CRC_SKIP_FRAMES), (128, 4, 2));
+        // conf_regs :495-516: a0 has 11-bit vertical fields (used for 0x010200
+        // only, :2482), a1 12 bits (0x010300 :2509, 0x020101 :2535, a2 :2556)
+        assert_eq!(timing_mask(HWVER_10200), 0x0fff_07ff);
+        for v in [HWVER_10300, HWVER_20101, HWVER_40100, HWVER_40101] {
+            assert_eq!(timing_mask(v), 0x0fff_0fff);
+        }
+        // pad_max_freq_hz: 65 MHz for 0x010200 (:2495), 150 MHz for 0x020101
+        // (:2541); 0x010300 and a2 take the platform data's value (:2476),
+        // ambiguous here: drv.c was not readable
+        assert_eq!((pad_max_hz(HWVER_10200), pad_max_hz(HWVER_20101)), (65_000_000, 150_000_000));
+        // layer register tables a0 :393, a1 :427, a2 :461
+        let a0 = [0x84, 0x88, 0x8c, 0x94, 0x98, 0x9c, 0xa0, 0xac, 0xb0, 0xb4];
+        let r = REGS_A0;
+        assert_eq!([r.cr, r.whpcr, r.wvpcr, r.pfcr, r.cacr, r.dccr, r.bfcr, r.cfbar, r.cfblr, r.cfblnr], a0);
+        assert_eq!((r.blcr, r.pcr, r.rcr), (None, None, None));
+        let a1 = [0x88, 0x8c, 0x90, 0x98, 0x9c, 0xa0, 0xa4, 0xac, 0xb0, 0xb4];
+        let r = REGS_A1;
+        assert_eq!([r.cr, r.whpcr, r.wvpcr, r.pfcr, r.cacr, r.dccr, r.bfcr, r.cfbar, r.cfblr, r.cfblnr], a1);
+        assert_eq!((r.blcr, r.pcr, r.rcr), (Some(0xa8), None, None));
+        let a2 = [0x10c, 0x110, 0x114, 0x11c, 0x120, 0x124, 0x128, 0x134, 0x138, 0x13c];
+        let r = REGS_A2;
+        assert_eq!([r.cr, r.whpcr, r.wvpcr, r.pfcr, r.cacr, r.dccr, r.bfcr, r.cfbar, r.cfblr, r.cfblnr], a2);
+        assert_eq!((r.blcr, r.pcr, r.rcr), (Some(0x12c), Some(0x130), Some(0x108)));
+        // probe picks the table by IDR (ltdc_get_caps :2479-2556)
+        for (v, want) in [
+            (HWVER_10200, REGS_A0),
+            (HWVER_10300, REGS_A0),
+            (HWVER_20101, REGS_A1),
+            (HWVER_40100, REGS_A2),
+            (HWVER_40101, REGS_A2),
+        ] {
+            assert_eq!(Ltdc::probe(&Fake::new(v, 3), B).unwrap().regs, want);
+        }
+        // pixel format codes :296-325 (ltdc_pix_fmt_a0/a1/a2): ARGB8888 0, RGB565 2/2/4
+        for (v, rgb565) in [(HWVER_10200, 2), (HWVER_10300, 2), (HWVER_20101, 2), (HWVER_40100, 4), (HWVER_40101, 4)] {
+            assert_eq!((Format::Argb8888.code(v), Format::Xrgb8888.code(v), Format::Rgb565.code(v)), (0, 0, rgb565));
+        }
+    }
+
+    #[test]
     fn color_bars_are_eight_equal_bars() {
         let mut buf = vec![0u32; 18 * 2];
         fill_color_bars(&mut buf, 16, 2, 18);
