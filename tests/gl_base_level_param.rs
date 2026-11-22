@@ -1,0 +1,665 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+//! `glTexParameter` / `glGetTexParameter` of `GL_TEXTURE_BASE_LEVEL` and
+//! `GL_TEXTURE_MAX_LEVEL` through the GL API (plan #382 item baseparam,
+//! issue #1261). The GL core only: the V3D host-test back end is the rig and
+//! no draw is made. The harness is tests/es3_texsize_base_level_v3d.rs's.
+//!
+//! What the spec says (OpenGL ES 3.0.6 3.8.7 and the glTexParameter man page):
+//! - the defaults are BASE_LEVEL 0 and MAX_LEVEL 1000;
+//! - a negative value of either is `GL_INVALID_VALUE`, and is not stored;
+//! - the integer and the float setters agree (2.3.1: a float given to an
+//!   integer parameter is rounded to the nearest integer);
+//! - glGetTexParameter returns the value last set. 3.8.13 clamps an immutable
+//!   texture's base level to `TEXTURE_IMMUTABLE_LEVELS - 1` where the level is
+//!   USED (completeness, sampling) and does not rewrite the parameter. Mesa's
+//!   main/texparam.c is not in third_party/, so this rests on the spec text;
+//! - the values belong to the texture object of the bound target.
+//!
+//! Every assert agrees with the spec today; none is a
+//! `_flip_when_spec_conformant` one.
+//!
+//! ```text
+//! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test gl_base_level_param
+//! ```
+#![allow(dead_code)] // the harness records draws; no draw is made here
+#![cfg(all(feature = "shaderc-online", feature = "gpu-v3d", feature = "host-test", not(feature = "report-es2")))]
+
+use core::ffi::{c_char, c_int, c_void, CStr};
+use std::collections::BTreeMap;
+use std::ffi::CString;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::{Mutex, MutexGuard, Once, OnceLock};
+use yakogl::gl::consts::*;
+use yakogl::gl::context;
+use yakogl::gl::state::*;
+use yakogl::gl::types::*;
+use yakogl::osal::{osal_set_ops, OsalGpuMem, OsalOps, OsalV3dCpuOf};
+use yakogl::v3d::backend::yakogl_backend_v3d;
+use yakogl::v3d::ffi::*;
+use yakogl::v3d::kick::V3dKick;
+
+/* ---- the job builder: records each draw's sampler bindings ---- */
+
+static LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// One draw handed to the job builder: its fragment-stage sampler bindings.
+#[derive(Clone)]
+struct Draw {
+    tmu: Vec<V3dJobTmu>,
+}
+static DRAWS: Mutex<Vec<Draw>> = Mutex::new(Vec::new());
+
+fn log_lines() -> Vec<String> {
+    LOG.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+fn draws() -> Vec<Draw> {
+    DRAWS.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// `n` records at `p`, or none.
+fn records(p: *const V3dJobTmu, n: u32) -> Vec<V3dJobTmu> {
+    if p.is_null() || n == 0 {
+        Vec::new()
+    } else {
+        // SAFETY: the draw's `n` records, live for the call.
+        unsafe { std::slice::from_raw_parts(p, n as usize) }.to_vec()
+    }
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_job_begin(
+    j: *mut V3dJob,
+    t: *const V3dJobTarget,
+    bcl: *mut V3dCl,
+    rcl: *mut V3dCl,
+    ind: *mut V3dCl,
+) -> bool {
+    // SAFETY: the backend passes its live job, target and lists.
+    let (j, t) = unsafe { (&mut *j, *t) };
+    *j = V3dJob { bcl, rcl, ind, t, draws: 0, defaults: 0, broken: false, pack: V3dJobPack::ZERO };
+    // SAFETY: as above.
+    unsafe {
+        (*bcl).used = 16;
+        (*ind).used = 256;
+    }
+    t.width != 0 && t.height != 0
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_job_draw(j: *mut V3dJob, d: *const V3dJobDraw, _layout: *mut c_void) -> i32 {
+    // SAFETY: the backend passes its live job and a draw whose pointers live for the call.
+    let d = unsafe { &*d };
+    let draw = Draw { tmu: records(d.tmu, d.num_tmu) };
+    DRAWS.lock().unwrap_or_else(|e| e.into_inner()).push(draw);
+    // SAFETY: the backend passes its live job.
+    unsafe {
+        (*j).draws += 1;
+        (*(*j).bcl).used += 120;
+    }
+    V3D_JOB_OK
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_job_end(
+    j: *mut V3dJob,
+    _c: *const V3dJobClear,
+    _tile_list_start: *mut u32,
+    _tile_list_end: *mut u32,
+) -> bool {
+    // SAFETY: the backend passes its live job; its lists are live.
+    unsafe {
+        (*(*j).bcl).used += 1;
+        (*(*j).rcl).used = 200;
+    }
+    true
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_tiling(width: u32, height: u32, t: *mut V3dTiling) {
+    // SAFETY: the backend's out-parameter, passed on.
+    unsafe { v3d_frame_tiling_bpp(width, height, 1, false, 0, t) }
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_tiling_rts(width: u32, height: u32, rts: u32, t: *mut V3dTiling) {
+    // SAFETY: the backend's out-parameter, passed on.
+    unsafe { v3d_frame_tiling_bpp(width, height, rts, false, 0, t) }
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_tiling_ms(width: u32, height: u32, rts: u32, msaa: bool, t: *mut V3dTiling) {
+    // SAFETY: the backend's out-parameter, passed on.
+    unsafe { v3d_frame_tiling_bpp(width, height, rts, msaa, 0, t) }
+}
+
+/// The tile-size table of v3d_frame.c, as the backend's unit tests fake it.
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_tiling_bpp(
+    width: u32,
+    height: u32,
+    rts: u32,
+    msaa: bool,
+    max_bpp: u32,
+    t: *mut V3dTiling,
+) {
+    const SIZES: [(u32, u32); 7] = [(64, 64), (64, 32), (32, 32), (32, 16), (16, 16), (16, 8), (8, 8)];
+    let idx = match rts {
+        0 | 1 => 0,
+        2 => 1,
+        _ => 2,
+    } + if msaa { 2 } else { 0 }
+        + max_bpp.min(2) as usize;
+    let (tw, th) = SIZES[idx];
+    let tiles = V3dTiling {
+        tile_w: tw,
+        tile_h: th,
+        tiles_x: width.div_ceil(tw),
+        tiles_y: height.div_ceil(th),
+        supertile_w: 1,
+        supertile_h: 1,
+        frame_w_supertiles: width.div_ceil(tw),
+        frame_h_supertiles: height.div_ceil(th),
+    };
+    // SAFETY: the backend's out-parameter.
+    unsafe { *t = tiles };
+}
+
+#[no_mangle]
+unsafe extern "C" fn v3d_frame_alloc_sizes(t: *const V3dTiling, _d: u32, _page: u32, ta: *mut u32, ts: *mut u32) {
+    // SAFETY: the backend's parameters.
+    unsafe {
+        let n = (*t).tiles_x * (*t).tiles_y;
+        *ta = n * 128 + 8192;
+        *ts = n * 256;
+    }
+}
+
+extern "C" {
+    fn dlopen(path: *const c_char, flags: c_int) -> *mut c_void;
+    fn dlsym(h: *mut c_void, name: *const c_char) -> *mut c_void;
+}
+
+/// `driver/src/v3d/v3d_tex.c` and the Mesa tiling it includes, as a shared
+/// object of this test's own, reached through the handle only (RTLD_LOCAL).
+fn lib() -> *mut c_void {
+    static L: OnceLock<usize> = OnceLock::new();
+    *L.get_or_init(|| {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("gl_base_level_param");
+        std::fs::create_dir_all(&dir).expect("the scratch directory");
+        let so = dir.join(format!("v3d_tex-{}.so", std::process::id()));
+        /* the compiler's own temporary files next to the object */
+        let st = Command::new("cc")
+            .current_dir(&root)
+            .env("TMPDIR", &dir)
+            .args(["-std=c11", "-O1", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror"])
+            .args(["-Idriver/src/v3d", "-Idriver/src/v3d/generated"])
+            .args(["-Ithird_party/mesa-26.2.1/src/broadcom", "-Ithird_party/mesa-26.2.1/src"])
+            .arg("-Ithird_party/mesa-26.2.1/include")
+            .args(["driver/src/v3d/v3d_tex.c", "driver/src/v3d/v3d_tiling_mesa.c", "-lm", "-o"])
+            .arg(&so)
+            .status()
+            .expect("cc runs");
+        assert!(st.success(), "driver/src/v3d/v3d_tex.c builds");
+        let path = CString::new(so.to_str().expect("a utf-8 path")).unwrap();
+        // SAFETY: a path of a library this test just built; RTLD_NOW.
+        let h = unsafe { dlopen(path.as_ptr(), 2) };
+        assert!(!h.is_null(), "the layout code loads");
+        let _ = std::fs::remove_file(&so);
+        h as usize
+    }) as *mut c_void
+}
+
+fn sym(name: &str) -> *mut c_void {
+    let c = CString::new(name).unwrap();
+    // SAFETY: a handle `lib` made and a NUL-terminated name.
+    let p = unsafe { dlsym(lib(), c.as_ptr()) };
+    assert!(!p.is_null(), "{name} in v3d_tex.c");
+    p
+}
+
+/// The trampolines: the library's `extern "C"` texture functions
+/// (src/v3d/ffi.rs), each handed to the real C.
+macro_rules! trampoline {
+    ($name:ident ( $($arg:ident : $ty:ty),* ) $(-> $ret:ty)?) => {
+        #[no_mangle]
+        unsafe extern "C" fn $name($($arg: $ty),*) $(-> $ret)? {
+            // SAFETY: the C function's own signature, as src/v3d/ffi.rs declares it.
+            let f: unsafe extern "C" fn($($ty),*) $(-> $ret)? =
+                unsafe { std::mem::transmute(sym(stringify!($name))) };
+            // SAFETY: the library's call, passed on.
+            unsafe { f($($arg),*) }
+        }
+    };
+}
+
+/* The signatures are src/v3d/ffi.rs's, kept as written (see
+ * tests/depth_resolve_v3d.rs: rustfmt releases wrap these differently). */
+#[rustfmt::skip]
+mod trampolines {
+    use super::*;
+
+    trampoline!(v3d_tex_layout(width: u32, height: u32, levels: u32, cpp: u32, l: *mut V3dTexLayout) -> bool);
+    trampoline!(v3d_tex_layout_msaa(width: u32, height: u32, cpp: u32, l: *mut V3dTexLayout) -> bool);
+    trampoline!(v3d_tex_store_level(image: *mut u8, l: *const V3dTexLayout, level: u32, src: *const u8, stride: u32));
+    trampoline!(v3d_tex_tfu_pack(l: *const V3dTexLayout, ttype: u32, src: u32, stride: u32, dst: u32,
+                                 j: *mut V3dTexTfuJob) -> bool);
+    trampoline!(v3d_tex_tfu_pack_mipmap(l: *const V3dTexLayout, ttype: u32, image: u32, j: *mut V3dTexTfuJob) -> bool);
+    trampoline!(v3d_tex_layer_stride(l: *const V3dTexLayout) -> u32);
+    trampoline!(v3d_tex_layers_size(l: *const V3dTexLayout, layers: u32, out: *mut u32) -> bool);
+    trampoline!(v3d_tex_store_box(image: *mut u8, l: *const V3dTexLayout, level: u32, x: u32, y: u32, w: u32, h: u32,
+                                  src: *const u8, stride: u32) -> bool);
+    trampoline!(v3d_tex_load_box(image: *const u8, l: *const V3dTexLayout, level: u32, x: u32, y: u32, w: u32, h: u32,
+                                 dst: *mut u8, stride: u32) -> bool);
+    trampoline!(v3d_tex_state_from_layout(s: *mut V3dTexState, l: *const V3dTexLayout));
+    trampoline!(v3d_tex_pack_state(out: *mut u8, s: *const V3dTexState) -> bool);
+    trampoline!(v3d_tex_pack_sampler(out: *mut u8, s: *const V3dSampler) -> bool);
+    trampoline!(v3d_tex_pack_sampler_compare(out: *mut u8, s: *const V3dSampler, compare_op: u32) -> bool);
+}
+
+/* ---- the platform: memory that answers, jobs that finish at once ---- */
+
+struct Alloc {
+    mem: Box<[u64]>,
+    size: usize,
+}
+struct Platform {
+    next: u64,
+    allocs: BTreeMap<u64, Alloc>,
+    submitted: usize,
+}
+static PLATFORM: Mutex<Option<Platform>> = Mutex::new(None);
+
+fn with_platform<R>(f: impl FnOnce(&mut Platform) -> R) -> R {
+    let mut g = PLATFORM.lock().unwrap_or_else(|e| e.into_inner());
+    f(g.get_or_insert_with(|| Platform { next: 0, allocs: BTreeMap::new(), submitted: 0 }))
+}
+
+unsafe extern "C" fn p_gpu_alloc(_heap: u64, size: usize, _flags: u32, out: *mut OsalGpuMem) -> i32 {
+    with_platform(|p| {
+        if size == 0 || size > 256 << 20 {
+            return -12;
+        }
+        let mut mem = vec![0u64; size.div_ceil(8)].into_boxed_slice();
+        let gpu = 0x0100_0000 + p.next;
+        p.next += (size as u64).div_ceil(4096) * 4096;
+        let cpu = mem.as_mut_ptr() as *mut c_void;
+        // SAFETY: the caller passes a writable descriptor.
+        unsafe { *out = OsalGpuMem { cpu, gpu, phys: gpu, size, impl_: cpu } };
+        p.allocs.insert(gpu, Alloc { mem, size });
+        0
+    })
+}
+unsafe extern "C" fn p_gpu_free(mem: *mut OsalGpuMem) -> i32 {
+    // SAFETY: the caller passes its descriptor.
+    let m = unsafe { *mem };
+    if !m.impl_.is_null() {
+        with_platform(|p| p.allocs.remove(&m.gpu));
+    }
+    0
+}
+unsafe extern "C" fn p_gpu_write(mem: *mut OsalGpuMem, off: usize, src: *const c_void, n: usize) -> i32 {
+    // SAFETY: the caller passes its descriptor.
+    let m = unsafe { *mem };
+    if m.cpu.is_null() || off.checked_add(n).is_none_or(|e| e > m.size) {
+        return -22;
+    }
+    // SAFETY: inside the allocation (checked above).
+    unsafe { core::ptr::copy_nonoverlapping(src as *const u8, (m.cpu as *mut u8).add(off), n) };
+    0
+}
+unsafe extern "C" fn p_cache(_cpu: *mut c_void, _n: usize) {}
+unsafe extern "C" fn p_submit(_kick: *const c_void, len: usize) -> i64 {
+    if len != size_of::<V3dKick>() {
+        return -22;
+    }
+    with_platform(|p| {
+        p.submitted += 1;
+        p.submitted as i64
+    })
+}
+unsafe extern "C" fn p_wait(_fence: i64, _timeout_us: i64) -> i32 {
+    0
+}
+unsafe extern "C" fn p_completed() -> i64 {
+    with_platform(|p| p.submitted as i64)
+}
+unsafe extern "C" fn p_query(what: u32, out: *mut c_void, out_sz: usize) -> i32 {
+    use yakogl::osal::{OSAL_QUERY_V3D_BIN_POOL, OSAL_QUERY_V3D_CPU_OF_GPU, OSAL_QUERY_V3D_VPM_BYTES};
+    if what == OSAL_QUERY_V3D_VPM_BYTES && out_sz == 4 {
+        // SAFETY: a u32 out-parameter.
+        unsafe { *(out as *mut u32) = 65536 };
+        return 0;
+    }
+    if what == OSAL_QUERY_V3D_CPU_OF_GPU && out_sz == size_of::<OsalV3dCpuOf>() {
+        // SAFETY: the backend's in/out struct of that size.
+        let q = unsafe { &mut *(out as *mut OsalV3dCpuOf) };
+        return with_platform(|p| match p.allocs.range(..=q.gpu).next_back() {
+            Some((base, a)) if q.gpu + q.bytes <= base + a.size as u64 => {
+                // SAFETY: inside the allocation.
+                q.cpu = unsafe { (a.mem.as_ptr() as *mut u8).add((q.gpu - base) as usize) } as *mut c_void;
+                0
+            }
+            _ => -22,
+        });
+    }
+    if what == OSAL_QUERY_V3D_BIN_POOL {
+        return -61;
+    }
+    -22
+}
+/// The library logs every line as `log("%s", line)` (`osal::log_str`).
+unsafe extern "C" fn p_log2(_fmt: *const c_char, line: *const c_char) {
+    // SAFETY: the library passes a NUL-terminated line.
+    let s = unsafe { CStr::from_ptr(line) }.to_string_lossy().into_owned();
+    LOG.lock().unwrap_or_else(|e| e.into_inner()).push(s);
+}
+unsafe extern "C" fn p_init(_platform_arg: *mut c_void) -> i32 {
+    0
+}
+
+type LogFn = unsafe extern "C" fn(*const c_char, ...);
+
+fn osal() -> &'static OsalOps {
+    // SAFETY: see p_log2: the library only ever calls it with ("%s", line).
+    let log = unsafe { core::mem::transmute::<unsafe extern "C" fn(*const c_char, *const c_char), LogFn>(p_log2) };
+    Box::leak(Box::new(OsalOps {
+        init: Some(p_init),
+        shutdown: None,
+        gpu_alloc: Some(p_gpu_alloc),
+        gpu_free: Some(p_gpu_free),
+        mmu_map: None,
+        map_phys: None,
+        gpu_write: Some(p_gpu_write),
+        gpu_read: None,
+        cache_flush: Some(p_cache),
+        cache_invd: Some(p_cache),
+        submit: Some(p_submit),
+        wait: Some(p_wait),
+        completed: Some(p_completed),
+        reg_read: None,
+        reg_write: None,
+        query: Some(p_query),
+        log: Some(log),
+        wait_vblank: None,
+        present: None,
+        lock: None,
+        unlock: None,
+        thread_id: None,
+        display_busy: None,
+    }))
+}
+
+/* ---- the context ---- */
+
+static LOCK: Mutex<()> = Mutex::new(());
+static ONCE: Once = Once::new();
+
+/// The one context and back end of the module; the tests take turns and
+/// each starts with nothing recorded and nothing pending. The lock also
+/// serialises the interpreter's own compiles with the GL core's.
+fn rig() -> MutexGuard<'static, ()> {
+    let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    ONCE.call_once(|| {
+        // SAFETY: statics; the lock serialises every GL call of the module.
+        unsafe {
+            osal_set_ops(osal());
+            yakogl::backend::g_backend = &yakogl_backend_v3d;
+            assert_eq!(yakogl::backend::init(), 0, "{:?}", log_lines());
+            assert!(!context::gl_context_create(32, 32).is_null(), "{:?}", log_lines());
+        }
+    });
+    // SAFETY: plain GL calls.
+    unsafe {
+        glFinish();
+        while glGetError() != GL_NO_ERROR {}
+    }
+    LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    DRAWS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    g
+}
+
+/* ---- helpers ---- */
+
+use yakogl::gl::texture::*;
+
+const TARGETS: [GLenum; 4] = [GL_TEXTURE_2D, GL_TEXTURE_3D, GL_TEXTURE_2D_ARRAY, GL_TEXTURE_CUBE_MAP];
+const PNAMES: [GLenum; 2] = [GL_TEXTURE_BASE_LEVEL, GL_TEXTURE_MAX_LEVEL];
+
+/// The error flag, drained: the first error since the last call.
+fn err() -> GLenum {
+    // SAFETY: plain GL calls.
+    unsafe {
+        let e = glGetError();
+        while glGetError() != GL_NO_ERROR {}
+        e
+    }
+}
+
+/// A new texture bound to `target`.
+fn bind_new(target: GLenum) -> GLuint {
+    let mut t: GLuint = 0;
+    // SAFETY: plain GL calls; one name.
+    unsafe {
+        glGenTextures(1, &mut t);
+        glBindTexture(target, t);
+    }
+    t
+}
+
+fn geti(target: GLenum, pname: GLenum) -> GLint {
+    let mut v: GLint = -7;
+    // SAFETY: one GLint.
+    unsafe { glGetTexParameteriv(target, pname, &mut v) };
+    v
+}
+
+fn getf(target: GLenum, pname: GLenum) -> GLfloat {
+    let mut v: GLfloat = -7.0;
+    // SAFETY: one GLfloat.
+    unsafe { glGetTexParameterfv(target, pname, &mut v) };
+    v
+}
+
+fn base_max(target: GLenum) -> (GLint, GLint) {
+    (geti(target, GL_TEXTURE_BASE_LEVEL), geti(target, GL_TEXTURE_MAX_LEVEL))
+}
+
+/* ---- tests ---- */
+
+#[test]
+fn the_defaults_are_0_and_1000_on_every_target() {
+    let _g = rig();
+    for target in TARGETS {
+        bind_new(target);
+        assert_eq!(base_max(target), (0, 1000), "0x{target:x}");
+        assert_eq!(getf(target, GL_TEXTURE_BASE_LEVEL), 0.0, "0x{target:x}");
+        assert_eq!(getf(target, GL_TEXTURE_MAX_LEVEL), 1000.0, "0x{target:x}");
+        assert_eq!(err(), GL_NO_ERROR);
+    }
+}
+
+#[test]
+fn a_negative_value_is_invalid_value_and_is_not_stored() {
+    let _g = rig();
+    for target in TARGETS {
+        bind_new(target);
+        for pname in PNAMES {
+            let (i, f) = (-3, -3.0f32);
+            // SAFETY: plain GL calls; one value each.
+            unsafe {
+                glTexParameteri(target, pname, -1);
+                assert_eq!(err(), GL_INVALID_VALUE, "0x{target:x} i 0x{pname:x}");
+                glTexParameteri(target, pname, i32::MIN);
+                assert_eq!(err(), GL_INVALID_VALUE, "0x{target:x} i MIN 0x{pname:x}");
+                glTexParameterf(target, pname, -1.0);
+                assert_eq!(err(), GL_INVALID_VALUE, "0x{target:x} f 0x{pname:x}");
+                glTexParameteriv(target, pname, &i);
+                assert_eq!(err(), GL_INVALID_VALUE, "0x{target:x} iv 0x{pname:x}");
+                glTexParameterfv(target, pname, &f);
+                assert_eq!(err(), GL_INVALID_VALUE, "0x{target:x} fv 0x{pname:x}");
+            }
+        }
+        assert_eq!(base_max(target), (0, 1000), "0x{target:x}: the failed calls changed nothing");
+    }
+}
+
+#[test]
+fn a_rejected_value_leaves_the_value_set_before() {
+    let _g = rig();
+    bind_new(GL_TEXTURE_2D);
+    // SAFETY: plain GL calls.
+    unsafe {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 2);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 5);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, -1);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, -1);
+    }
+    assert_eq!(err(), GL_INVALID_VALUE);
+    assert_eq!(base_max(GL_TEXTURE_2D), (2, 5));
+}
+
+#[test]
+fn the_query_round_trips_the_integer_setters() {
+    let _g = rig();
+    for target in TARGETS {
+        bind_new(target);
+        for v in [0, 1, 2, 7, 13, 999, 1000, 44524] {
+            for pname in PNAMES {
+                // SAFETY: plain GL calls.
+                unsafe { glTexParameteri(target, pname, v) };
+                assert_eq!(err(), GL_NO_ERROR, "0x{target:x} 0x{pname:x} {v}");
+                assert_eq!(geti(target, pname), v, "0x{target:x} 0x{pname:x} i");
+                assert_eq!(getf(target, pname), v as f32, "0x{target:x} 0x{pname:x} f query");
+                let iv = v + 1;
+                // SAFETY: one value.
+                unsafe { glTexParameteriv(target, pname, &iv) };
+                assert_eq!(geti(target, pname), v + 1, "0x{target:x} 0x{pname:x} iv");
+            }
+        }
+    }
+}
+
+/// 2.3.1: a float given to an integer parameter is rounded to the nearest
+/// integer; the float and the int setters agree on whole numbers.
+#[test]
+fn the_float_setters_agree_with_the_int_setters() {
+    let _g = rig();
+    for target in TARGETS {
+        bind_new(target);
+        for pname in PNAMES {
+            for (f, want) in [(0.0f32, 0), (3.0, 3), (3.4, 3), (3.5, 4), (3.6, 4), (1000.0, 1000)] {
+                // SAFETY: plain GL calls.
+                unsafe { glTexParameterf(target, pname, f) };
+                assert_eq!(err(), GL_NO_ERROR, "0x{target:x} 0x{pname:x} {f}");
+                assert_eq!(geti(target, pname), want, "0x{target:x} 0x{pname:x} f={f}");
+                // SAFETY: one value.
+                unsafe { glTexParameterfv(target, pname, &f) };
+                assert_eq!(geti(target, pname), want, "0x{target:x} 0x{pname:x} fv={f}");
+            }
+        }
+    }
+}
+
+/// A float that rounds to 0 is not negative: the parameter takes it.
+#[test]
+fn a_float_that_rounds_to_zero_is_accepted() {
+    let _g = rig();
+    bind_new(GL_TEXTURE_2D);
+    // SAFETY: plain GL calls.
+    unsafe { glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, -0.4) };
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(geti(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL), 0);
+}
+
+#[test]
+fn the_values_belong_to_the_texture_of_each_target() {
+    let _g = rig();
+    let names: Vec<GLuint> = TARGETS.iter().map(|&t| bind_new(t)).collect();
+    for (i, &target) in TARGETS.iter().enumerate() {
+        // SAFETY: plain GL calls.
+        unsafe {
+            glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, i as GLint + 1);
+            glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, i as GLint + 11);
+        }
+    }
+    for (i, &target) in TARGETS.iter().enumerate() {
+        assert_eq!(base_max(target), (i as GLint + 1, i as GLint + 11), "0x{target:x}");
+    }
+    /* two textures of one target do not share them; a rebind finds the old values */
+    let other = bind_new(GL_TEXTURE_2D);
+    assert_ne!(other, names[0]);
+    assert_eq!(base_max(GL_TEXTURE_2D), (0, 1000));
+    // SAFETY: plain GL calls.
+    unsafe { glBindTexture(GL_TEXTURE_2D, names[0]) };
+    assert_eq!(base_max(GL_TEXTURE_2D), (1, 11));
+    assert_eq!(err(), GL_NO_ERROR);
+}
+
+/// BASE_LEVEL above MAX_LEVEL is an incomplete texture at use, not a
+/// parameter error; the two are independent.
+#[test]
+fn base_level_above_max_level_is_accepted_and_independent() {
+    let _g = rig();
+    bind_new(GL_TEXTURE_2D);
+    // SAFETY: plain GL calls.
+    unsafe {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 4);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 2);
+    }
+    assert_eq!(err(), GL_NO_ERROR);
+    assert_eq!(base_max(GL_TEXTURE_2D), (4, 2));
+}
+
+/// 3.8.13: an immutable texture's base level is clamped where it is USED; the
+/// query returns the value the application set, and a value past the last
+/// level is not an error.
+#[test]
+fn an_immutable_texture_keeps_and_returns_the_value_set() {
+    let _g = rig();
+    for target in TARGETS {
+        bind_new(target);
+        // SAFETY: plain GL calls.
+        unsafe {
+            if target == GL_TEXTURE_2D || target == GL_TEXTURE_CUBE_MAP {
+                glTexStorage2D(target, 3, GL_RGBA8, 8, 8);
+            } else {
+                glTexStorage3D(target, 3, GL_RGBA8, 8, 8, 4);
+            }
+        }
+        assert_eq!(err(), GL_NO_ERROR, "0x{target:x} storage");
+        assert_eq!(geti(target, GL_TEXTURE_IMMUTABLE_FORMAT), 1, "0x{target:x}");
+        assert_eq!(geti(target, GL_TEXTURE_IMMUTABLE_LEVELS), 3, "0x{target:x}");
+        assert_eq!(base_max(target), (0, 1000), "0x{target:x}: the defaults of an immutable texture");
+        for (base, max) in [(1, 1), (2, 2), (3, 9), (100, 100)] {
+            // SAFETY: plain GL calls.
+            unsafe {
+                glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, base);
+                glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, max);
+            }
+            assert_eq!(err(), GL_NO_ERROR, "0x{target:x} {base} {max}");
+            assert_eq!(base_max(target), (base, max), "0x{target:x}: not clamped on the query");
+        }
+        // SAFETY: plain GL call.
+        unsafe { glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, -1) };
+        assert_eq!(err(), GL_INVALID_VALUE, "0x{target:x}: negative on an immutable texture");
+        assert_eq!(geti(target, GL_TEXTURE_BASE_LEVEL), 100, "0x{target:x}");
+    }
+}
+
+#[test]
+fn a_bad_target_is_invalid_enum_and_the_query_does_not_write() {
+    let _g = rig();
+    bind_new(GL_TEXTURE_2D);
+    let mut v: GLint = -7;
+    // SAFETY: plain GL calls.
+    unsafe {
+        glTexParameteri(GL_ARRAY_BUFFER, GL_TEXTURE_BASE_LEVEL, 1);
+        assert_eq!(err(), GL_INVALID_ENUM);
+        glGetTexParameteriv(GL_ARRAY_BUFFER, GL_TEXTURE_BASE_LEVEL, &mut v);
+        assert_eq!(err(), GL_INVALID_ENUM);
+    }
+    assert_eq!(v, -7);
+}
