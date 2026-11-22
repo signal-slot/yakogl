@@ -1,0 +1,1032 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 at b1b5b845, 2026-11-22, image T17b: UART console of the run, from the firmware's first line to the image's end line (README.md)
+  5.05 [sdcard] pieeprom.upd not found
+  5.06 [sdcard] recover4.elf not found
+  5.06 [sdcard] recovery.elf not found
+  5.92 Read start4.elf bytes  2299008 hnd 0x211ac
+  5.98 Read fixup4.dat bytes     5496 hnd 0x20bca
+  5.00 0x00d03114 0x00000000 0x00001fff
+  5.03 MEM GPU: 76 ARM: 948 TOTAL: 1024
+  5.40 Starting start4.elf @ 0xfec00200 partition 1
+  5.24 XHCI-STOP
+  5.24 xHC0 ver: 256 HCS: 05000420 fc000031 00e70004 HCC: 002841eb
+  5.24 USBSTS 18
+  5.25 PCI0 reset
+  5.26 +
+
+MESS:00:00:05.274643:0: arasan: arasan_emmc_open
+MESS:00:00:05.276301:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.396528:0: arasan: arasan_emmc_set_clock C0: 0x00800000 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 400000 max: 400000 delay: 5
+MESS:00:00:05.409397:0: arasan: arasan_emmc_set_clock C0: 0x00800f00 C1: 0x000e0047 emmc: 200000000 actual: 390625 div: 0x00000100 target: 400000 min: 390000 max: 400000 delay: 5
+MESS:00:00:05.443684:0: boot-part: 1 fs-type: 0
+MESS:00:00:05.445096:0: boot-part: 1 fs-type: 3
+MESS:00:00:05.449480:0: arasan: arasan_emmc_set_clock C0: 0x00800f06 C1: 0x000e0207 emmc: 200000000 actual: 50000000 div: 0x00000002 target: 50000000 min: 0 max: 50000000 delay: 1
+MESS:00:00:05.614181:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:05.617014:0: brfs: File read: 166 bytes
+MESS:00:00:05.709897:0: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:05.714405:0: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:05.730975:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.230053:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.235600:0: gpioman: gpioman_get_pin_num: pin DISPLAY_DSI_PORT not defined
+MESS:00:00:06.244636:0: *** Restart logging
+MESS:00:00:06.246408:0: brfs: File read: 166 bytes
+MESS:00:00:06.324999:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.330031:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.348321:0: hdmi: HDMI1:EDID error reading EDID block 0 attempt 0
+MESS:00:00:06.353392:0: hdmi: HDMI1:EDID giving up on reading EDID block 0
+MESS:00:00:06.358992:0: hdmi: HDMI:hdmi_get_state is deprecated, use hdmi_get_display_state instead
+MESS:00:00:06.367750:0: HDMI0: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.373248:0: HDMI1: hdmi_pixel_encoding: 300000000
+MESS:00:00:06.395246:0: dtb_file 'bcm2711-rpi-4-b.dtb'
+MESS:00:00:06.410788:0: brfs: File read: /mfs/sd/bcm2711-rpi-4-b.dtb
+MESS:00:00:06.414079:0: Loaded 'bcm2711-rpi-4-b.dtb' to 0x100 size 0xdbb9
+MESS:00:00:06.454839:0: brfs: File read: 56249 bytes
+MESS:00:00:06.474727:0: brfs: File read: /mfs/sd/overlays/overlay_map.dtb
+MESS:00:00:06.539689:0: brfs: File read: 5971 bytes
+MESS:00:00:06.546295:0: brfs: File read: /mfs/sd/tryboot.txt
+MESS:00:00:06.587427:0: brfs: File read: 166 bytes
+MESS:00:00:06.591544:0: brfs: File read: /mfs/sd/cmdline.txt
+MESS:00:00:06.594587:0: Read command line from file 'cmdline.txt':
+MESS:00:00:06.600436:0: 'console=serial0,115200 console=tty1 root=PARTUUID=269eab4a-02 rootfstype=ext4 fsck.repair=yes rootwait cfg80211.ieee80211_regdom=JP splash quiet'
+MESS:00:00:06.757434:0: brfs: File read: 145 bytes
+MESS:00:00:08.152503:0: brfs: File read: /mfs/sd/yakogl-T17b.bin
+MESS:00:00:08.155410:0: Loaded 'yakogl-T17b.bin' to 0x200000 size 0xfc6dc0
+MESS:00:00:08.162021:0: Device tree loaded to 0x2eff1f00 (size 0xe0a1)
+MESS:00:00:08.170809:0: uart: Set PL011 baud rate to 103448.300000 Hz
+MESS:00:00:08.177323:0: uart: Baud rate change done...
+MESS:00:00:08.179346:0:board: watchdog armed
+*** Booting Zephyr OS build af17c0c8aa2a ***
+I: shader compiler scratch: 4194304 bytes, keep: 1048576 bytes
+v3d_deqp: build b1b5b845
+board: PM watchdog resets the SoC ~250 s after boot (tryboot -> Linux)
+v3d_deqp: the record at 210 s after boot at the latest
+V3D clock 250000000 -> 500000000 Hz (0)
+deqp: case filter 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.*,dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.*,dEQP-GLES3.functional.texture.wrap.etc2_srgb8.*,dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.*,dEQP-GLES3.functional.texture.wrap.rgba8.*'
+Writing test log into deqp.qpa
+dEQP Core vulkan-cts-1.4.6.2-555-g93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL-Zephyr'
+I: V3D 4.2: 1 core(s), 8 QPUs, VPM 65536 bytes, PA 35 / VA 35 bits, MMU yes
+I: V3D raw: HUB_IDENT0..3 42554856 000e1124 00000100 00000e00 CTL_IDENT0..2 04443356 81001422 40078121 MMU_DEBUG_INFO 00000550
+osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+osal(v3d): UIFCFG 0x00000045
+osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+yakogl/v3d: depth and stencil apart (by renderbuffer), the platform's setting
+yakogl/v3d: job arenas for 1024 draws (the platform's budget): BCL 139264, indirect 458752, binner tile pool 1056768 bytes; tiled copies kept up to 16777216 bytes
+yakogl/v3d: two job arena sets (the second's texture arena 1048576 bytes): a job is recorded while the one before runs
+yakogl/v3d: clear program built: 408 bytes of code
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot
+v3d_deqp: case #0 N 147ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot
+v3d_deqp: case #1 N 35ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot
+v3d_deqp: case #2 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot
+v3d_deqp: case #3 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot
+v3d_deqp: case #4 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot
+v3d_deqp: case #5 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot
+v3d_deqp: case #6 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot
+v3d_deqp: case #7 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_npot
+v3d_deqp: case #8 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_pot
+v3d_deqp: case #9 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_npot
+v3d_deqp: case #10 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_pot
+v3d_deqp: case #11 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.clamp_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_npot
+v3d_deqp: case #12 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_pot
+v3d_deqp: case #13 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_npot
+v3d_deqp: case #14 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_pot
+v3d_deqp: case #15 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_npot
+v3d_deqp: case #16 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_pot
+v3d_deqp: case #17 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_npot
+v3d_deqp: case #18 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_pot
+v3d_deqp: case #19 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_npot
+v3d_deqp: case #20 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_pot
+v3d_deqp: case #21 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_npot
+v3d_deqp: case #22 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_pot
+v3d_deqp: case #23 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.mirror_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_npot
+v3d_deqp: case #24 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_pot
+v3d_deqp: case #25 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_npot
+v3d_deqp: case #26 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_pot
+v3d_deqp: case #27 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_npot
+v3d_deqp: case #28 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_pot
+v3d_deqp: case #29 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_npot
+v3d_deqp: case #30 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_pot
+v3d_deqp: case #31 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_npot
+v3d_deqp: case #32 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_pot
+v3d_deqp: case #33 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_npot
+v3d_deqp: case #34 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_pot
+v3d_deqp: case #35 N 36ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.repeat_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+v3d_deqp: case #36 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+v3d_deqp: case #37 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+v3d_deqp: case #38 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+v3d_deqp: case #39 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+v3d_deqp: case #40 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+v3d_deqp: case #41 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+v3d_deqp: case #42 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+v3d_deqp: case #43 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+v3d_deqp: case #44 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+v3d_deqp: case #45 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+v3d_deqp: case #46 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+v3d_deqp: case #47 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+v3d_deqp: case #48 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+v3d_deqp: case #49 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+v3d_deqp: case #50 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+v3d_deqp: case #51 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+v3d_deqp: case #52 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+v3d_deqp: case #53 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+v3d_deqp: case #54 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+v3d_deqp: case #55 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+v3d_deqp: case #56 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+v3d_deqp: case #57 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+v3d_deqp: case #58 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+v3d_deqp: case #59 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+v3d_deqp: case #60 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+v3d_deqp: case #61 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+v3d_deqp: case #62 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+v3d_deqp: case #63 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+v3d_deqp: case #64 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+v3d_deqp: case #65 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+v3d_deqp: case #66 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+v3d_deqp: case #67 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+v3d_deqp: case #68 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+v3d_deqp: case #69 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+v3d_deqp: case #70 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+v3d_deqp: case #71 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_rgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_npot
+v3d_deqp: case #72 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_pot
+v3d_deqp: case #73 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_npot
+v3d_deqp: case #74 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_pot
+v3d_deqp: case #75 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_npot
+v3d_deqp: case #76 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_pot
+v3d_deqp: case #77 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_npot
+v3d_deqp: case #78 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_pot
+v3d_deqp: case #79 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_npot
+v3d_deqp: case #80 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_pot
+v3d_deqp: case #81 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_npot
+v3d_deqp: case #82 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_pot
+v3d_deqp: case #83 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.clamp_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_npot
+v3d_deqp: case #84 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_pot
+v3d_deqp: case #85 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_npot
+v3d_deqp: case #86 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_pot
+v3d_deqp: case #87 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_npot
+v3d_deqp: case #88 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_pot
+v3d_deqp: case #89 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_npot
+v3d_deqp: case #90 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_pot
+v3d_deqp: case #91 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_npot
+v3d_deqp: case #92 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_pot
+v3d_deqp: case #93 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_npot
+v3d_deqp: case #94 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_pot
+v3d_deqp: case #95 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.mirror_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_npot
+v3d_deqp: case #96 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_pot
+v3d_deqp: case #97 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_npot
+v3d_deqp: case #98 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_pot
+v3d_deqp: case #99 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_npot
+v3d_deqp: case #100 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_pot
+v3d_deqp: case #101 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_npot
+v3d_deqp: case #102 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_pot
+v3d_deqp: case #103 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_npot
+v3d_deqp: case #104 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_pot
+v3d_deqp: case #105 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_npot
+v3d_deqp: case #106 N 33ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_pot
+v3d_deqp: case #107 N 34ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8.repeat_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+v3d_deqp: case #108 N 37ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+v3d_deqp: case #109 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+v3d_deqp: case #110 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+v3d_deqp: case #111 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+v3d_deqp: case #112 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+v3d_deqp: case #113 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+v3d_deqp: case #114 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+v3d_deqp: case #115 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+v3d_deqp: case #116 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+v3d_deqp: case #117 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+v3d_deqp: case #118 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+v3d_deqp: case #119 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.clamp_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+v3d_deqp: case #120 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+v3d_deqp: case #121 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+v3d_deqp: case #122 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+v3d_deqp: case #123 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+v3d_deqp: case #124 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+v3d_deqp: case #125 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+v3d_deqp: case #126 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+v3d_deqp: case #127 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+v3d_deqp: case #128 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+v3d_deqp: case #129 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+v3d_deqp: case #130 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+v3d_deqp: case #131 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.mirror_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+v3d_deqp: case #132 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+v3d_deqp: case #133 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+v3d_deqp: case #134 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+v3d_deqp: case #135 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_clamp_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+v3d_deqp: case #136 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+v3d_deqp: case #137 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+v3d_deqp: case #138 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+v3d_deqp: case #139 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_mirror_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+v3d_deqp: case #140 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+v3d_deqp: case #141 N 38ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_linear_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_npot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+v3d_deqp: case #142 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_npot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_pot'..
+deqp: NotSupported dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+v3d_deqp: case #143 N 39ms k2/6 c15272/15272 r0 dEQP-GLES3.functional.texture.wrap.etc2_srgb8_punchthrough_alpha1.repeat_repeat_nearest_pot
+  NotSupported (Compressed texture format not supported at gluTexture.cpp:142)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_npot'..
+osal(v3d): BASELINE after a completed job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+yakogl/v3d: binner pool after job 1: given 0x00b96000 + 1056768, BPCA 0x00b99000 BPCS 1044480 CT0QMA 0x00b96000 CT0QMS 1056768, overflow blocks 0 of 2 (262144 bytes each)
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_npot
+v3d_deqp: case #144 P 133ms k2/9 c15533/15606 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_pot
+v3d_deqp: case #145 P 93ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_npot
+v3d_deqp: case #146 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_pot
+v3d_deqp: case #147 P 67ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_npot
+v3d_deqp: case #148 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_pot
+v3d_deqp: case #149 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_npot
+v3d_deqp: case #150 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_pot
+v3d_deqp: case #151 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_npot
+v3d_deqp: case #152 P 92ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_pot
+v3d_deqp: case #153 P 93ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot
+v3d_deqp: case #154 P 67ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_pot
+v3d_deqp: case #155 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_npot
+v3d_deqp: case #156 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_pot
+v3d_deqp: case #157 P 95ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_npot
+v3d_deqp: case #158 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_pot
+v3d_deqp: case #159 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_npot
+v3d_deqp: case #160 P 95ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_pot
+v3d_deqp: case #161 P 96ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_npot
+v3d_deqp: case #162 P 69ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_pot
+v3d_deqp: case #163 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_npot
+v3d_deqp: case #164 P 96ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_pot
+v3d_deqp: case #165 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot
+v3d_deqp: case #166 P 69ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_pot
+v3d_deqp: case #167 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_npot
+v3d_deqp: case #168 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_pot
+v3d_deqp: case #169 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_npot
+v3d_deqp: case #170 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_pot
+v3d_deqp: case #171 P 67ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_clamp_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_npot
+v3d_deqp: case #172 P 95ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_pot
+v3d_deqp: case #173 P 95ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot
+v3d_deqp: case #174 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_pot
+v3d_deqp: case #175 P 69ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_npot
+v3d_deqp: case #176 P 94ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_pot
+v3d_deqp: case #177 P 95ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_linear_pot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot
+v3d_deqp: case #178 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot
+  Pass (Pass)
+
+Test case 'dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_pot'..
+deqp: Pass dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_pot
+v3d_deqp: case #179 P 68ms k2/9 c15533/15624 r0 dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_pot
+  Pass (Pass)
+
+DONE!
+
+Test run totals:
+  Passed:        36/180 (20.0%)
+  Failed:        0/180 (0.0%)
+  Not supported: 144/180 (80.0%)
+  Warnings:      0/180 (0.0%)
+  Waived:        0/180 (0.0%)
+deqp: done: 36 passed, 0 failed, 144 not supported, 0 warnings, complete=1
+deqp: summary: 180 cases begun, 180 with a result, 0 without
+v3d_deqp DONE, none failed: build b1b5b845, filter 'dEQP-GLES3.functional.texture.wrap.etc2_eac_srgb8_alpha8.*,dEQP-GLES3.functional.texture.wrap.etc2_rgb8_...
+  180 cases in 8339 ms, record at 8 s after boot, reset at ~250 s
+  totals: P 36 N 144  (R: not passed, a draw was refused in it; passed with one refused: 0)
+  done: 36 passed, 0 failed, 144 not supported, 0 warnings, complete=1
+  summary: 180 cases begun, 180 with a result, 0 without
+  keep region (KiB, of 1024): after #0 2, most 2 at #0, last 2, high-water 9, before #0 (first not passed) 0; slowest #0 147 ms
+  carve-out (KiB, of 48636): after #0 15272, last 15533, high-water 15624
+  jobs: slow in 0 cases; no job hung or timed out
+BASELINE (first completed) job 1: core_sts 0x0 hub_sts 0x0 err 0x1000 ct0 cs 0x0 ea 0x201085 ca 0x201085 ra 0x0 qba 0x201000 qea 0x201085 ct1 ca 0x223097 ra 0x223096 qba 0x223000 qea 0x223097
+FIRST FAILURE: none (no timeout)
+slow jobs: 0 (past 1000 ms, ended; the slowest 0 ms); MMU faults: 0; recoveries: 0; hung: none
+binner out of memory: 0 jobs (2 overflow blocks of 256 KiB, CONFIG_YAKOGL_V3D_BIN_OVERFLOW_BLOCKS; each such job ends in a GPU reset)
+binning by interrupt (IRQ 106): 72 interrupts, 0 overflow blocks fed by the ISR
+carve-out: 15377664 bytes used now, 15999744 at most, of 49803264; 0 frees held
+osal(v3d): pending frees: high-water 0/256, waits 0 (opt-in 0), refused 0 (0 unsubmitted, 0 no wait, 0 KiB kept)
+carve-out find: 165 calls, 9276 map reads (56 a call, at most 1153 in one); free runs 2, longest 34425088 bytes; small blocks from the top: off (CONFIG_YAKOGL_V3D_CARVEOUT_TOP_BELOW 0)
+packets (packet skip on, CONFIG_YAKOGL_V3D_PACK_SKIP): 72 jobs ended; emitted 1512, skipped 0; groups compared 0, mismatches 0
+allocations refused for lack of GPU memory: 0 (0 size slots; the line is printed at each size's 1st, 10th, 100th, ... refusal)
+UIFCFG 0x00000045 (read at init)
+log: 0 causes logged once, 0 repeats not printed
+case order: P pass F fail R refused N not supported Q quality C compat E resource I internal X crash T timeout
+    0 NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
+  128 NNNNNNNNNNNNNNNNPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+driver: osal(v3d): V3D 4.2, 8 QPUs, VPM 65536 bytes, MMU yes (identify 0)
+driver: osal(v3d): UIFCFG 0x00000045
+driver: osal(v3d): ready: carve-out 48 MiB at phys 0x2f09000, GPU VA 0x181000..0x3100000
+driver: ... 6 more lines (UART)
+not passed, by group (count, letters; reasons by count, F/R before N):
+  etc2_eac_srgb8_alpha8                                      36 N36                    36x Compressed texture format not supported at gluTexture.cpp:142
+  etc2_rgb8_punchthrough_alpha1                              36 N36                    36x Compressed texture format not supported at gluTexture.cpp:142
+  etc2_srgb8                                                 36 N36                    36x Compressed texture format not supported at gluTexture.cpp:142
+  etc2_srgb8_punchthrough_alpha1                             36 N36                    36x Compressed texture format not supported at gluTexture.cpp:142
+    0 N etc2_eac_srgb8_alpha8.clamp_clamp_linear_npot    147ms k2/6 c15272/15272         Compressed texture format not supported at gluTexture.cpp:142
+    1 N etc2_eac_srgb8_alpha8.clamp_clamp_linear_pot     35ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    2 N etc2_eac_srgb8_alpha8.clamp_clamp_nearest_npot   36ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    3 N etc2_eac_srgb8_alpha8.clamp_clamp_nearest_pot    36ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    4 N etc2_eac_srgb8_alpha8.clamp_mirror_linear_npot   36ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    5 N etc2_eac_srgb8_alpha8.clamp_mirror_linear_pot    36ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    6 N etc2_eac_srgb8_alpha8.clamp_mirror_nearest_npot  36ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+    7 N etc2_eac_srgb8_alpha8.clamp_mirror_nearest_pot   36ms k2/6 c15272/15272          Compressed texture format not supported at gluTexture.cpp:142
+  ... 136 more not passed (the UART has every line)
+v3d_deqp: build b1b5b845 DONE, none failed: 180 cases, P 36 F 0 R 0 N 144 other 0
