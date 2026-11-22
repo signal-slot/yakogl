@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
@@ -10,7 +10,7 @@
 # (alone, scaled, letterboxed, red/blue swapped, upside down), a blank
 # screen, the no-signal screen and colour bars. Exits 0 when all match.
 set -u
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+here=$(cd "$(dirname "$0")" && pwd)
 tool=$here/triangle.py
 work=$(mktemp -d "${TMPDIR:-/tmp}/triangle-selftest.XXXXXX") || exit 2
 trap 'rm -rf "$work"' EXIT
@@ -87,7 +87,9 @@ check() {
   out=$(python3 -I "$tool" "$@" 2>&1)
   got=$?
   n=$((n + 1))
-  if [ "$got" = "$want" ] && [[ $out == *"$text"* ]]; then
+  found=0
+  case $out in *"$text"*) found=1 ;; esac
+  if [ "$got" = "$want" ] && [ "$found" = 1 ]; then
     printf 'ok   %-10s %s\n' "$name" "$out"
   else
     printf 'FAIL %-10s exit %s (want %s), want "%s" in: %s\n' "$name" "$got" "$want" "$text" "$out"
