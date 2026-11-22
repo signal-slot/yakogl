@@ -37,6 +37,7 @@ pub mod isa;
 pub mod isa_tables;
 pub mod legalise;
 pub mod listing;
+pub mod ms_load;
 pub mod operands;
 pub mod pack;
 pub mod prepare;
