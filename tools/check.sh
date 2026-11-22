@@ -2352,6 +2352,8 @@ step "test    $V3D_ES2_CONFIG (tests/es2_program_binary_report.rs)" \
 scope vivante
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_float_sample.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_float_sample
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_texstore.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_texstore
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_more_clears
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_mipmap.rs)" \
