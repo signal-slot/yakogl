@@ -60,9 +60,17 @@ their offset from the start of a plane entry, each one
 
 The set is `<off>:skip|expect` items joined by `,` (offsets 0..62, at most
 4, each once), for example `-DRPI5_SCANOUT32_HW_WORDS="4:skip"`. The default
-is empty: every word is compared, as before. The build refuses a malformed
-set; the image prints `S5 hw words '<knob>': <set>`. The set is not chosen
-here; which word the hardware writes is a board answer.
+is `4:skip`: the plane entry's word 4 (the POS3 context word) is left out of
+the byte-equal compares and of the hash. Source: `rpi5_scanout16`'s board run
+of 2026-11-22 (its README, "Q2's list word"): `u3 q2: word 676 entry-off 4
+was 0x8000005d now 0x800000d2 per-frame no`, q2 verdict `hvs-writeback`. Read
+right after each of 32 FRCNT steps the word was 0x80008000, and at the hold
+samples it was a different 0x800000xx..0x800003xx value nearly every time:
+the HVS writes it while scanning, so it will not equal the snapshot after a
+swap. It is `skip` rather than `expect` because it is a hardware status
+word, not a rare firmware edit. Every other word stays compared;
+`-DRPI5_SCANOUT32_HW_WORDS=""` compares every word again. The build refuses a
+malformed set; the image prints `S5 hw words '<knob>': <set>`.
 
 Entries are found by `CTL0.NEXT` from the start of the reference words (the
 snapshot's, or the words written): the set applies to every entry of the

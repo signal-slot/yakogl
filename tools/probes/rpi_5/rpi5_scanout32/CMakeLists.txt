@@ -28,9 +28,10 @@ message(STATUS "rpi5_scanout32 build: ${RPI5_SCANOUT32_BUILD}")
 
 # Hardware-written words of a plane entry (README "Hardware-written words"):
 # "<off>:skip|expect" items joined by ',', offsets 0..62 from an entry's
-# start, at most 4, each once; empty (the default) compares every word.
+# start, at most 4, each once; "" compares every word. The default is the one
+# word the board showed changing (rpi5_scanout16 README "Q2's list word").
 #   -DRPI5_SCANOUT32_HW_WORDS="4:skip"
-set(RPI5_SCANOUT32_HW_WORDS "" CACHE STRING
+set(RPI5_SCANOUT32_HW_WORDS "4:skip" CACHE STRING
     "hardware-written plane-entry words, e.g. 4:skip or 4:skip,7:expect (empty: none)")
 if(NOT RPI5_SCANOUT32_HW_WORDS STREQUAL "")
   if(NOT RPI5_SCANOUT32_HW_WORDS MATCHES "^[0-9]+:(skip|expect)(,[0-9]+:(skip|expect))*$")
