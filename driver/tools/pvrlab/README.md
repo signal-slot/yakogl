@@ -214,3 +214,37 @@ knob) it prints `gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS N < 4)` and
 the Pi 4 image's verdict line reads `v3d_gl_test: case 245 SKIP`. Opt-in, by
 number (`CONFIG_V3D_GL_TEST_CASE=245` on the Pi 4, `CONFIG_GL_TEST_CASE=245` on
 the AM62P).
+
+## Case 248 (`tearbars`): moving bars and a frame counter for a camera
+
+Made for the AM62P's tear check (`docs/notes/am62p-flip-latch.md`, "Camera
+look procedure"): glmark2's scenes move little and are dark, so a torn frame
+on the panel would not show in them. The case opens a 1024x600 XRGB8888 window
+(`-DGL_TEST_TEAR_W`, `-DGL_TEST_TEAR_H`), a back-buffered one that the OSAL
+presents where it can, and draws 600 frames (`-DGL_TEST_TEAR_FRAMES`, through
+`EXTRA_CFLAGS`) with the plain `eglSwapBuffers` and the default swap interval:
+
+- a white background and eight black bars 48 pixels wide, 128 apart, that move
+  right by 64 pixels (1/16 of the width) a frame, wrapping: consecutive frames
+  put the bars at opposite phases;
+- in the top 32 rows a frame counter: 16 cells of 64 pixels, most significant
+  bit at the left, black = 1.
+
+A torn frame shows as bars at one phase above a horizontal line and at the other
+below it; the counter says which two frames the exposure caught.
+
+The case passes on its own: no GL error, one pixel of a bar black and one of the
+background white in the last frame (read before its swap), every swap
+`EGL_TRUE`. It ends with
+
+```
+gl_test: tear: frames 600, ms T, swaps 600, display_busy waits n/a
+gl_test: tear: dss vsyncs V
+```
+
+`waits` is `n/a`: no API exposes how often a swap waited for the display. The
+second line appears where the sample links `pvr_sample_vsync_count` (the AM62P
+images) and counts the DSS's vertical periods since boot. SKIP by name when the
+pool has no buffer for the window. It is not in the default list: run it by
+number (`CONFIG_GL_TEST_CASES="248"`, or `tools/cts/common-images.sh --cases
+248 am62p tools/cts/common-tree.txt <img-dir> GT`).
