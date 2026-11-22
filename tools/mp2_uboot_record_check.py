@@ -17,7 +17,10 @@ it may skip).  Exit 0 only when M is 0.
   2. console scan: phases stopped, script, go, image reached; back in Linux
   3. fw_printenv before == after (the diff is printed if not)
   4. /boot stock files identical; no entry beyond yakogl/; nothing left staged
-  5. u-boot-env dump sha256 before == after (skipped when neither was taken)
+  5. u-boot-env: env-before.bin / env-after.bin (the runner's dd of the
+     partition) both copies' CRC valid (tools/uboot_env.py check, the DK's
+     layout) and the two files identical; older u-boot-env-*.bin dumps and
+     meta sha256 are compared the same way (skipped when none was taken)
   6. redaction: no IP address, tty/serial path, USB serial or *.ts.net name
 
 The runner does not store its verdict line: it is taken from --verdict-line,
@@ -235,7 +238,53 @@ def env_dumps(rec, m):
     return got
 
 
+ENV_LAYOUT = ["--size", "0x2000", "--redundant", "--offset", "0x7e000", "--offset2", "0x7c000",
+              "--allow-blank-copy"]
+ENV_TOOL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uboot_env.py")
+
+
+def env_tool(*args):
+    r = subprocess.run([sys.executable, "-I", ENV_TOOL] + ENV_LAYOUT + list(args),
+                       capture_output=True, text=True)
+    return r.returncode, (r.stdout + r.stderr)
+
+
+def read_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def check_envbin(rec):
+    """None when the runner's dd copies are absent, else (ok, message)."""
+    a, b = os.path.join(rec, "env-before.bin"), os.path.join(rec, "env-after.bin")
+    ha, hb = os.path.isfile(a), os.path.isfile(b)
+    if not (ha or hb):
+        return None
+    if ha != hb:
+        return False, "only the %s env-*.bin is in the record" % ("before" if ha else "after")
+    bad = []
+    for side, p in (("before", a), ("after", b)):
+        rc, msg = env_tool("check", p)
+        if rc:
+            bad.append("env-%s.bin: bad CRC or layout (%s)" % (side, " ".join(msg.split())[:120]))
+    if bad:
+        return False, "; ".join(bad)
+    if read_bytes(a) != read_bytes(b):
+        _, d = env_tool("diff", a, b)
+        return False, "env-before.bin and env-after.bin differ (the runner documents no difference):\n" + d.rstrip("\n")
+    for side, p in (("before", a), ("after", b)):
+        t = os.path.join(rec, "env-%s.txt" % side)
+        if os.path.isfile(t):
+            rc, out = env_tool("print", p)
+            if rc == 0 and sorted(out.splitlines()) != sorted(read(t).splitlines()):
+                return False, "env-%s.txt is not the print of env-%s.bin" % (side, side)
+    return True, "env-before.bin == env-after.bin, both copies' CRC valid (%s)" % sha(a)[:16]
+
+
 def check_uenv(rec, m):
+    r = check_envbin(rec)
+    if r is not None:
+        return r
     g = env_dumps(rec, m)
     if not g:
         return None, "no u-boot-env dump in the record (not taken)"
@@ -482,6 +531,49 @@ def self_test():
         with open(os.path.join(uo, "u-boot-env-before.bin"), "wb") as f:
             f.write(b"x")
         only("u-boot-env: only one dump", uo, "u-boot-env", "only the before")
+
+        # 5b the runner's dd copies env-before.bin / env-after.bin
+        def envimg(path, vars_, bad=False, blank2=True):
+            import zlib
+            area = b"".join(v.encode() + b"\0" for v in vars_) + b"\0"
+            area += b"\xff" * (0x2000 - 5 - len(area))
+            img = bytearray(0x80000)
+            crc = zlib.crc32(area) ^ (1 if bad else 0)
+            img[0x7e000:0x7e000 + 0x2000] = crc.to_bytes(4, "little") + b"\x02" + area
+            if not blank2:
+                img[0x7c000:0x7c000 + 0x2000] = crc.to_bytes(4, "little") + b"\x01" + area
+            with open(path, "wb") as f:
+                f.write(img)
+
+        def dd_record(name, before, after, **kw):
+            d = make_record(root, name, **dict({"env-before.txt": txt, "env-after.txt": txt}, **kw))
+            envimg(os.path.join(d, "env-before.bin"), before)
+            if after is not None:
+                envimg(os.path.join(d, "env-after.bin"), after)
+            return d
+        ev = ["bootcmd=run bootcmd_stm32mp", "bootdelay=1", "scriptaddr=0x90100000"]
+        txt = "\n".join(sorted(ev)) + "\n"
+        d1 = dd_record("d1", ev, ev)
+        lines = []
+        run_checks(d1, None, out=lines.append)
+        n[0] += 1
+        t = lines[-1] == "record-check: 6 ok, 0 failed" and any("env-before.bin == env-after.bin" in l for l in lines)
+        print("%s env-*.bin: valid and identical pass" % ("ok  " if t else "FAIL"))
+        if not t:
+            fails.append("envbin ok")
+            print("\n".join(lines))
+        d1b = dd_record("d1b", ev, None)
+        for side in ("before", "after"):
+            envimg(os.path.join(d1b, "env-%s.bin" % side), ev, blank2=False)
+        expect("env-*.bin: two valid copies pass", d1b, False)
+        only("env-*.bin: bytes differ", dd_record("d2", ev, ev + ["mp2z_file=left"]), "u-boot-env", "differ")
+        d3 = dd_record("d3", ev, ev)
+        for side in ("before", "after"):
+            envimg(os.path.join(d3, "env-%s.bin" % side), ev, bad=True)
+        only("env-*.bin: bad CRC in both", d3, "u-boot-env", "bad CRC")
+        only("env-*.bin: only the before copy", dd_record("d4", ev, None), "u-boot-env", "only the before")
+        d5 = dd_record("d5", ev + ["x=y"], ev + ["x=y"])
+        only("env-*.bin: text is not the print of the bin", d5, "u-boot-env", "not the print")
 
         # 6 redaction. The private-looking values are built at run time: this
         # file is in the tree tools/release/redaction-scan.py scans

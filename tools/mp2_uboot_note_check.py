@@ -31,10 +31,13 @@ DEFAULT_NOTE = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardi
                             "docs", "notes", "stm32mp257f-dk-uboot-boot.md")
 HEAD_RX = re.compile(r"^##[ \t]+Board run[ \t]*$", re.M)
 # summarize.py prints its own "## fw_printenv diff" and "## /boot files" headings
-NEXT_RX = re.compile(r"^##[ \t]+(?!fw_printenv diff\b|/boot files\b)\S", re.M)
+NEXT_RX = re.compile(r"^##[ \t]+(?!(?:fw_printenv|environment|u-boot-env)(?: before/after)? diff\b|/boot files\b)\S", re.M)
 PLACEHOLDER_RX = re.compile(r"<[^<>\s][^<>\n]*>|TODO\(board-run\)")
 VERDICT_RX = re.compile(r"\brc=(-?\d+) verdict=(\S+)(.*)$")
-ENV_RX = re.compile(r"fw_printenv diff\W[^\n]*?\b(empty|\d+ variable\(s\))")
+# the runner's label (dd + uboot_env.py now): "fw_printenv before/after diff
+# (empty)"; also "environment diff" / "u-boot-env diff"; the old "fw_printenv
+# diff: empty" and summarize.py's "N variable(s)" stay accepted
+ENV_RX = re.compile(r"(?:fw_printenv|environment|u-boot-env)(?: before/after)? diff\W[^\n]*?\b(empty|changed|\d+ variable\(s\))")
 BOOT_RX = re.compile(r"/boot files outside yakogl/\W[^\n]*?\b(unchanged|\d+ differ)")
 RESULT_RX = re.compile(r"^\W*RESULT: (IDENTICAL|DIFFERENT[^\n]*)", re.M)
 
@@ -76,9 +79,9 @@ def check_verdict(sec):
 def check_env(sec):
     found = ENV_RX.findall(sec)
     if not found:
-        return False, "no 'fw_printenv diff: empty' line"
+        return False, "no 'fw_printenv diff: empty' (or 'fw_printenv before/after diff (empty)') line"
     if any(f != "empty" for f in found):
-        return False, "fw_printenv diff is not empty (%s)" % ", ".join(f for f in found if f != "empty")
+        return False, "environment diff is not empty (%s)" % ", ".join(f for f in found if f != "empty")
     return True, "fw_printenv diff empty"
 
 
@@ -124,14 +127,14 @@ def run(text, out=print):
 VLINE = "board-stm32mp2-uboot.sh stm32mp257f-dk mp2_hello rc=0 verdict=done boot=uboot-sd row boot_verdict=done result=pass:mp2_hello back_after=41s"
 
 
-def note(verdict=VLINE, env="empty", boot="unchanged", extra=""):
+def note(verdict=VLINE, env="empty", boot="unchanged", extra="", label="fw_printenv diff", suffix=""):
     return ("# Note\n\n## 11. Index\n\n| a | b |\n\n## Board run\n\n"
             "Run of 2026-11-20, image mp2_hello.\n\n1. Verdict:\n\n```\n%s\n```\n\n"
-            "## fw_printenv diff: %s\n\n"
+            "## %s: %s%s\n\n"
             "### u-boot-env image\n\n"
             "## /boot files outside yakogl/: %s\n\n%s"
             "RESULT: %s\n\n## Appendix\n\nafter the section <not> counted\n"
-            % (verdict, env, boot, extra,
+            % (verdict, label, env, suffix, boot, extra,
                "IDENTICAL" if env == "empty" and boot == "unchanged" else "DIFFERENT (1)"))
 
 
@@ -144,7 +147,12 @@ def self_test():
         ("rc not 0", note(VLINE.replace("rc=0", "rc=4")), 1, "rc=4"),
         ("blind run", note(VLINE.replace(" row ", " blind ")), 1, "not a row"),
         ("no verdict line", note("(none)"), 1, "no runner verdict line"),
-        ("non-empty diff", note(env="2 variable(s)"), 1, "fw_printenv diff is not empty"),
+        ("non-empty diff", note(env="2 variable(s)"), 1, "environment diff is not empty"),
+        ("runner label, empty", note(env="empty", label="fw_printenv before/after diff"), 0, "3 ok, 0 failed"),
+        ("runner label with the dd suffix", note(env="empty", label="fw_printenv before/after diff", suffix=" (u-boot-env via dd + uboot_env.py print)"), 0, "3 ok, 0 failed"),
+        ("environment diff label", note(env="empty", label="environment diff"), 0, "3 ok, 0 failed"),
+        ("runner label, changed", note(env="changed", label="fw_printenv before/after diff"), 1, "environment diff is not empty"),
+        ("heading with the runner label ends no section", note(env="empty", label="fw_printenv before/after diff").replace("## fw", "## fw", 1), 0, "3 ok"),
         ("changed sha256", note(boot="1 differ"), 1, "/boot stock files changed"),
         ("RESULT DIFFERENT only", note(extra="RESULT: DIFFERENT (1)\n"), 1, "RESULT: DIFFERENT"),
         ("placeholder <...>", note(VLINE.replace("rc=0", "rc=<rc>")), 2, "not run yet"),
