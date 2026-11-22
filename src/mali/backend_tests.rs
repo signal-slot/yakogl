@@ -72,6 +72,8 @@ pub(crate) struct Mock {
     held: Vec<(usize, u64, i64)>,
     /// Every `OSAL_QUERY_MALI_FRAME_OPEN` the backend sent, in order.
     frame_open: Vec<bool>,
+    /// The device answer when it is not the T6's ([`GPU`]): [`Rig::on_gpu`].
+    gpu: Option<OsalMaliGpu>,
 }
 
 static MOCK: Mutex<Option<Mock>> = Mutex::new(None);
@@ -206,7 +208,9 @@ unsafe extern "C" fn m_query(what: u32, out: *mut c_void, sz: usize) -> i32 {
     // SAFETY: the caller's out-parameter of `sz` bytes.
     unsafe {
         match what {
-            OSAL_QUERY_MALI_GPU if sz == core::mem::size_of::<OsalMaliGpu>() => *out.cast::<OsalMaliGpu>() = GPU,
+            OSAL_QUERY_MALI_GPU if sz == core::mem::size_of::<OsalMaliGpu>() => {
+                *out.cast::<OsalMaliGpu>() = with(|m| m.gpu).unwrap_or(GPU)
+            }
             OSAL_QUERY_MALI_TILER_HEAP if sz == core::mem::size_of::<OsalMaliHeap>() => {
                 *out.cast::<OsalMaliHeap>() = HEAP
             }
@@ -260,6 +264,13 @@ impl Rig {
         let osal = OwnOsal::new(&OPS, &yakogl_backend_mali);
         *MOCK.lock().unwrap_or_else(|e| e.into_inner()) = Some(Mock { mali, ..Mock::default() });
         Rig { _osal: osal }
+    }
+
+    /// A Mali OSAL whose device answer is `gpu`.
+    pub(crate) fn on_gpu(gpu: OsalMaliGpu) -> Rig {
+        let rig = Rig::new(true);
+        with(|m| m.gpu = Some(gpu));
+        rig
     }
 }
 
@@ -446,6 +457,36 @@ fn without_a_mali_osal_init_and_draws_are_refused() {
     blend.blend = true;
     // SAFETY: a valid draw.
     assert_eq!(unsafe { mali_draw(&blend) }, -ENOTSUP);
+}
+
+/// `GL_RENDERER` is the string of the model `init` found (issue #9204), read
+/// through the GL entry point: the NanoPC-T6's G610 keeps the bytes its dEQP
+/// records hold, a G310 names its variant as Mesa 26.2.1 does (the i.MX 95's
+/// `GPU_ID` 0xac740001, variants 0 and 3: the two tile buffers). Before
+/// `init`, after a refused one and after shutdown it names no model.
+#[test]
+fn gl_renderer_names_the_model_init_found() {
+    let renderer = || {
+        // SAFETY: glGetString returns a static NUL-terminated string.
+        unsafe { core::ffi::CStr::from_ptr(crate::gl::state::glGetString(crate::gl::consts::GL_RENDERER).cast()) }
+            .to_str()
+            .expect("ASCII")
+    };
+    let g310 = |variant| OsalMaliGpu { gpu_id: 0xac74_0001, core_features: variant, ..GPU };
+    for (gpu, want) in
+        [(GPU, "Arm Mali-G610 (YakoGL)"), (g310(0), "Arm Mali-G310v1 (YakoGL)"), (g310(3), "Arm Mali-G310v4 (YakoGL)")]
+    {
+        let _rig = Rig::on_gpu(gpu);
+        assert_eq!(renderer(), "Arm Mali (YakoGL)", "before init");
+        assert_eq!(mali_init(), 0);
+        assert_eq!(renderer(), want, "gpu_id {:#010x}, core_features {}", gpu.gpu_id, gpu.core_features);
+        mali_shutdown();
+        assert_eq!(renderer(), "Arm Mali (YakoGL)", "after shutdown");
+    }
+    /* a G710 (10.?.2): no row, init refuses, and no model is named */
+    let _rig = Rig::on_gpu(OsalMaliGpu { gpu_id: 0xa002_0000, ..GPU });
+    assert_eq!(mali_init(), -ENODEV);
+    assert_eq!(renderer(), "Arm Mali (YakoGL)");
 }
 
 /// The draw path end to end on the mock: the triangle with tri's programs

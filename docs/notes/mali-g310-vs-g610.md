@@ -334,6 +334,15 @@ The frame builder now follows the GPU's tile buffer as Mesa 26.2.1 does
   equal them (`frame_mrt_tests.rs`
   `three_and_four_targets_on_a_g310v1_are_mesa_s` and its G310v4 twin,
   `frame_split_tests.rs` `a_4x_frame_s_tile_follows_the_gpu_s_tile_buffer`).
+- **`GL_RENDERER` names the model.** Each row of `src/mali/model.rs`
+  carries its string, `Arm Mali-<Mesa's name> (YakoGL)`; the GL core's
+  `glGetString` asks the backend for the string of the model `init` found
+  (`mali::backend::renderer`). The NanoPC-T6 keeps
+  `"Arm Mali-G610 (YakoGL)"` byte for byte; a G310 says
+  `"Arm Mali-G310v1 (YakoGL)"` .. `"Arm Mali-G310v5 (YakoGL)"`, so dEQP
+  results of the two boards differ in `info.renderer`. The backend table's
+  name, which nothing reads, is `"Arm Mali Valhall (arch 10)"`: no board
+  and no model.
 
 What remains G610-specific in `src/mali/`:
 
@@ -346,10 +355,6 @@ What remains G610-specific in `src/mali/`:
   the 25.0.7 rule the board's dumps hold (254, and 255 for a 256-pixel
   tile); only max_levels 0 is refused. The boot log quoted in
   docs/notes/mali-gpu-model.md reads 0x809 (8 levels) on an i.MX 95.
-- `GL_RENDERER` (`"Arm Mali-G610 (YakoGL)"`, chosen by the GL core,
-  `src/gl/state.rs`) and the backend table's name
-  `"Arm Mali-G610 (NanoPC-T6)"` (`src/mali/backend.rs`) are the G610's on
-  every Mali GPU: issue #9204.
 - `src/mali/backend.rs`: the query block's comment that derives
   the G610's 19 from `shader_present 0x50005` (the block is sized for 64
   core ids, `QUERY_BLOCK_BYTES`, so any core mask fits).
