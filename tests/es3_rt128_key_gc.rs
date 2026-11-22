@@ -386,7 +386,9 @@ fn rt(mask: u8) -> RtPlanes {
 }
 
 /// Run the case on the stand-in OSAL with the Vivante back end up, the
-/// test hook cleared before and after.
+/// test hook cleared before and after. The hook and the log are process-
+/// wide, so both are touched only while `on_gc7000` holds `SERIAL`: a test
+/// that waits for its turn must not clear the hook under the running one.
 fn on_gc(case: impl FnOnce()) {
     struct Clear;
     impl Drop for Clear {
@@ -394,10 +396,12 @@ fn on_gc(case: impl FnOnce()) {
             set_rt_planes_test_targets(0);
         }
     }
-    LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    set_rt_planes_test_targets(0);
-    let _clear = Clear;
-    on_gc7000(case);
+    on_gc7000(|| {
+        LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        set_rt_planes_test_targets(0);
+        let _clear = Clear;
+        case();
+    });
 }
 
 /// The first refusal of a process is the only one whose text is logged, so
