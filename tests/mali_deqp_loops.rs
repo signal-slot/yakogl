@@ -134,7 +134,7 @@ fn fs_select() {
 }
 
 #[test]
-#[ignore = "refused: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, (`kept_loop` keeps a loop Mesa unrolls, `wrapper_unroll`), lowered by lower-loops-1"]
+#[ignore = "refused: control flow (if, a loop, a return before the end) (the loop goes as Mesa's `wrapper_unroll` drops it; the one pass's mediump `if` on `0 < ui_three` has no select of the varying's lanes outside a kept loop: Mesa's `MUX.v2i16` on the converted lanes), then lower-loops-1"]
 fn fs_uncond_break() {
     mali_ref::assert_matches("deqp_loops_fs_uncond_break");
 }
@@ -238,7 +238,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_loops_fs_dowhile_if", "control flow (if, a loop, a return before the end)"),
     ("deqp_loops_fs_float_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
     ("deqp_loops_fs_select", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("deqp_loops_fs_uncond_break", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
+    ("deqp_loops_fs_uncond_break", "control flow (if, a loop, a return before the end)"),
     ("deqp_loops_fs_vec_dyn", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
     ("deqp_loops_vs_dowhile_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
     ("deqp_loops_vs_float_uni", "a loop in a vertex shader"),

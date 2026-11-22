@@ -4932,6 +4932,22 @@ fn holds_look_up(m: &Module<'_>, nodes: &[Node]) -> bool {
     })
 }
 
+/// Run `nodes` ends in a `break`, only instructions after it (the front
+/// end's `for` step, dead behind the jump).
+fn ends_in_break(nodes: &[Node]) -> bool {
+    nodes.iter().rev().find(|n| !matches!(n, Node::Instr(_))) == Some(&Node::Break)
+}
+
+/// Run `nodes` holds a `continue` of its own loop (one in a nested loop is
+/// that loop's).
+fn holds_continue(m: &Module<'_>, nodes: &[Node]) -> bool {
+    nodes.iter().any(|n| match *n {
+        Node::Continue => true,
+        Node::If { then_, else_, .. } => holds_continue(m, m.nodes_of(then_)) || holds_continue(m, m.nodes_of(else_)),
+        _ => false,
+    })
+}
+
 /// The bound `C` of a loop whose body `nodes` begins with its test on a
 /// float counter, `if (i < C) {} else break;` (`Lower::break_unless`), and
 /// whose next control-flow node is the guard `if (i >= x) break;` at IR
@@ -5056,6 +5072,12 @@ fn kept_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MA
     /* a run-time bound on a counter that subscripts a local array: Mesa
      * unrolls it by the array's length ([`guessed_trips`]) */
     if guessed_trips(m, nodes).is_some() {
+        return false;
+    }
+    /* a body that ends in a `break` and has no `continue` runs once:
+     * `wrapper_unroll` (nir_opt_loop_unroll.c) drops the loop, its head
+     * test an `if` around the one pass (deqp_loops_fs_uncond_break) */
+    if ends_in_break(nodes) && !holds_continue(m, nodes) {
         return false;
     }
     let Some(head) = nodes.iter().find(|n| !matches!(n, Node::Instr(_))) else { return false };
@@ -5577,6 +5599,23 @@ fn walk_nodes(
                     if t == [Node::Break] {
                         return walk_guard(f, m, c, cond.val, &nodes[k + 1..], lp, vals, locals, prec);
                     }
+                }
+                /* the head test `if (c) {} else break;` of a loop whose body
+                 * ends in a `break` ([`kept_loop`]: `wrapper_unroll`): the
+                 * one pass under `c` */
+                if let (Some(lp), true, true) = (lp, t.is_empty(), e == [Node::Break]) {
+                    if ends_in_break(nodes) && lp.nodes.as_ptr() == nodes.as_ptr() {
+                        let Some(brk) = nodes.iter().rposition(|n| *n == Node::Break) else {
+                            return Err(MaliError::Defect(Defect::IrIndex));
+                        };
+                        let pass = &nodes[k + 1..brk];
+                        if walk_if(f, m, c, pass, &[], IfExit::Plain, vals, locals, prec, after)? != Flow::Next {
+                            return Err(MaliError::LoopForm);
+                        }
+                        return Ok(Flow::Break);
+                    }
+                }
+                if let (Some(_), true) = (lp, e.is_empty()) {
                     /* `if (c) { ...; continue; }`: the rest of the pass is
                      * its else side (`opt_loop_last_block`, nir_opt_loop.c:
                      * 208-300), the join the pass's end */
