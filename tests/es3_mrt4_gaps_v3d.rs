@@ -22,9 +22,11 @@
 //! into one by name (`state::unsupported`, src/v3d/state.rs: "draw buffer 0
 //! is GL_NONE while a later draw buffer is written"): the shader writes
 //! output i to RT i, and mapping the job's RTs back to draw-buffer order is
-//! `src/v3d/backend.rs`'s (`extra_targets`, `Target`). So three of the four
-//! shapes are cleared but not drawn today. The plain tests pin this; the
-//! `#[ignore]`d one holds ES 3.0's answer, named `defect: ...`.
+//! `src/v3d/backend.rs`'s: `state::draw_buffer_order` gives the draw with RT
+//! n as draw buffer n (address 0 for a GL_NONE one), and the back end's
+//! `draw_call` does not apply it yet. So three of the four shapes are
+//! cleared but not drawn today. The plain tests pin this; the `#[ignore]`d
+//! one holds ES 3.0's answer, named `defect: ...`.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_mrt4_gaps_v3d
@@ -892,24 +894,32 @@ fn a_clear_fused_into_a_refused_shifted_draw_is_refused_with_it() {
 /* ---- ES 3.0's answer for those lists ------------------------------------ */
 
 /// ES 3.0 4.2.1: a draw into `{NONE,NONE,NONE,A3}` writes attachment 3, the
-/// fragment's `location = 3` output. The job stores attachment 3.
+/// fragment's `location = 3` output. The job's RTs are in draw-buffer order
+/// (`state::draw_buffer_order`): RT n is draw buffer n, address 0 for a
+/// GL_NONE one, so RT 3 stores attachment 3 and takes output 3, and four RTs
+/// are configured.
 #[test]
-#[ignore = "defect: the V3D refuses a draw into a glDrawBuffers list whose draw buffer 0 is GL_NONE (src/v3d/state.rs refusal, review R-09; the job's RTs must be remapped to draw-buffer order in src/v3d/backend.rs extra_targets/Target first)"]
+#[ignore = "defect: the V3D refuses a draw into a glDrawBuffers list whose draw buffer 0 is GL_NONE (review R-09): src/v3d/state.rs draw_buffer_order builds the job's RTs in draw-buffer order, but src/v3d/backend.rs draw_call does not apply it yet (and opens no job for target_gpu 0 with several RTs)"]
 fn defect_shifted_lists_draw_attachment_3() {
     let _g = rig();
     for sh in &SHIFTED_LISTS {
         let fb = Fb::new(sh.attached);
-        let want = (sh.attached.len() == 4).then(|| attachment_addresses(&fb)[3]);
+        let at = (sh.attached.len() == 4).then(|| attachment_addresses(&fb));
         fb.list(&sh.list);
         let p = program(&[0, 1, 2, 3]);
         let r = capture(|| draw(p));
         assert_eq!((r.refused, r.error, r.seen.draws.len()), (0, GL_NO_ERROR, 1), "{}: {:?}", sh.name, r.seen.log);
-        let at = rt_addresses(&r.seen.jobs[0]);
-        assert!(
-            at.iter().any(|&a| a != 0 && want.is_none_or(|w| w == a)),
-            "{}: a job that stores attachment 3",
-            sh.name
-        );
+        let job = &r.seen.jobs[r.seen.jobs.len() - 1];
+        assert_eq!(job.rts, 4, "{}: RT 3 is reached, so four are configured", sh.name);
+        let got = rt_addresses(job);
+        for n in 0..4 {
+            let written = sh.list[n] == A[n];
+            match at {
+                Some(at) => assert_eq!(got[n], if written { at[n] } else { 0 }, "{}: RT {n}", sh.name),
+                None => assert_eq!(got[n] != 0, written, "{}: RT {n}", sh.name),
+            }
+        }
+        assert!(configures(&r.seen.draws[0], 3), "{}: output 3 is written to RT 3", sh.name);
     }
 }
 
