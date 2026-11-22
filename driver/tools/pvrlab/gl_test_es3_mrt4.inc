@@ -19,9 +19,22 @@
  *   part 2: one fullscreen quad of a four-output ES 3.00 fragment shader,
  *           location 0..3 = red, green, blue, yellow: attachment 3 yellow is
  *           the board's proof of the fourth target.
+ *   part 3: every attachment is cleared again as in part 1, then
+ *           glDrawBuffers({ATT0, GL_NONE, ATT2, ATT3}) and the same quad:
+ *           attachment 1 keeps its part-1 clear, 0, 2 and 3 get the shader's
+ *           colours (the GL_NONE slot must not write render target 1);
+ *   part 4: with all four draw buffers on again, GL_SCISSOR_TEST on a
+ *           sub-rectangle and glClearBufferfv(GL_COLOR, 3, magenta): inside
+ *           the rectangle attachment 3 is magenta, outside it keeps part 3's
+ *           yellow, and attachment 0 is untouched (red).
  * The one recorded check is a fail mask: bits 0-3 the clear, bits 4-7 the
- * draw, bit n of each group attachment n. Lines to read:
+ * draw, bit n of each group attachment n; bits 8-11 the GL_NONE draw,
+ * attachment n at bit 8+n; bit 12 attachment 3 inside the scissored clear,
+ * bit 13 attachment 3 outside it, bit 14 attachment 0 untouched. Lines to read:
  *   gl_test:   mrt4 clear|draw attachment N = 0x... want 0x...
+ *   gl_test:   mrt4 none-slot draw attachment N = 0x... want 0x...
+ *   gl_test:   mrt4 scissor clear attachment 3 inside|outside = 0x... want 0x...
+ *   gl_test:   mrt4 scissor clear attachment 0 = 0x... want 0x...
  *   gl_test:   mrt4 fail mask (...)  = 0  want 0  ok  [check N]
  *   gl_test: case 245 mrt4: SKIP (GL_MAX_DRAW_BUFFERS N < 4)
  * The per-case PASS/FAIL line is the harness's. A case returns 0 on a pass,
@@ -58,6 +71,15 @@ static uint32_t es3mrt4_read(int n)
 	return rgba_u32(px[0], px[1], px[2], px[3]);
 }
 
+static uint32_t es3mrt4_read_at(int n, int x, int y)
+{
+	uint8_t px[4] = { 0, 0, 0, 0 };
+
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + (GLenum)n);
+	glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	return rgba_u32(px[0], px[1], px[2], px[3]);
+}
+
 static int case_es3mrt4(void)
 {
 	static const float quad[6][4] = {
@@ -81,6 +103,15 @@ static int case_es3mrt4(void)
 		rgba_u32(255, 0, 0, 255), rgba_u32(0, 255, 0, 255),
 		rgba_u32(0, 0, 255, 255), rgba_u32(255, 255, 0, 255),
 	};
+	static const GLenum gap[4] = {
+		GL_COLOR_ATTACHMENT0, GL_NONE, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3,
+	};
+	static const GLfloat magenta[4] = { 1.0f, 0.0f, 1.0f, 1.0f };
+	const uint32_t none_want[4] = {
+		rgba_u32(255, 0, 0, 255), rgba_u32(255, 128, 128, 255),
+		rgba_u32(0, 0, 255, 255), rgba_u32(255, 255, 0, 255),
+	};
+	uint32_t got;
 	GLuint prog, fbo = 0, tex[4] = { 0, 0, 0, 0 };
 	GLint maxdb = 0, maxca = 0;
 	uint32_t fail = 0;
@@ -139,11 +170,47 @@ static int case_es3mrt4(void)
 			fail |= 1u << (4 + n);
 	}
 
+	/* part 3: a GL_NONE slot between written targets */
+	for (int n = 0; n < 4; n++)
+		glClearBufferfv(GL_COLOR, n, clr[n]);
+	glDrawBuffers(4, gap);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+	glFinish();
+	for (int n = 0; n < 4; n++) {
+		got = es3mrt4_read(n);
+		pr_info("gl_test:   mrt4 none-slot draw attachment %d = 0x%08x  want 0x%08x\n", n, got,
+			none_want[n]);
+		if (chan_diff(got, none_want[n]) > 2)
+			fail |= 1u << (8 + n);
+	}
+
+	/* part 4: scissored clear of attachment 3 */
+	glDrawBuffers(4, all);
+	glEnable(GL_SCISSOR_TEST);
+	glScissor(16, 16, 32, 32);
+	glClearBufferfv(GL_COLOR, 3, magenta);
+	glDisable(GL_SCISSOR_TEST);
+	glFinish();
+	got = es3mrt4_read_at(3, TW / 2, TH / 2);
+	pr_info("gl_test:   mrt4 scissor clear attachment 3 inside = 0x%08x  want 0x%08x\n", got,
+		rgba_u32(255, 0, 255, 255));
+	if (chan_diff(got, rgba_u32(255, 0, 255, 255)) > 2)
+		fail |= 1u << 12;
+	got = es3mrt4_read_at(3, 4, 4);
+	pr_info("gl_test:   mrt4 scissor clear attachment 3 outside = 0x%08x  want 0x%08x\n", got,
+		draw_want[3]);
+	if (chan_diff(got, draw_want[3]) > 2)
+		fail |= 1u << 13;
+	got = es3mrt4_read_at(0, TW / 2, TH / 2);
+	pr_info("gl_test:   mrt4 scissor clear attachment 0 = 0x%08x  want 0x%08x\n", got, draw_want[0]);
+	if (chan_diff(got, draw_want[0]) > 2)
+		fail |= 1u << 14;
+
 	glReadBuffer(GL_COLOR_ATTACHMENT0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glDeleteFramebuffers(1, &fbo);
 	glDeleteTextures(4, tex);
 	if (!check_gl_error("mrt4 teardown"))
 		return -1;
-	return expect_int("mrt4 fail mask (0-3 clear, 4-7 draw)", (long)fail, 0) ? 0 : -1;
+	return expect_int("mrt4 fail mask (0-3 clear, 4-7 draw, 8-11 none slot, 12-14 scissor)", (long)fail, 0) ? 0 : -1;
 }
