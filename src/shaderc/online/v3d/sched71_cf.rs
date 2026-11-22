@@ -1016,3 +1016,428 @@ mod tests {
         assert_eq!(refusal(&[ld, Op71::Label(Label(0)), to(0)]), Some(Sched71Error::ControlFlow(2)));
     }
 }
+
+/// Unit tests of the delay-slot rules and the error paths, each on its own:
+/// [`ok_in_branch_slot71`] on single words, [`branch_back`] on a packer of
+/// hand-placed words, `resolve` and `schedule71` on the errors the whole
+/// program tests do not reach.
+#[cfg(test)]
+mod slot_tests {
+    use super::*;
+    use crate::shaderc::online::arena::Arena;
+    use crate::shaderc::online::store;
+    use crate::shaderc::online::v3d::alloc71::Rf;
+    use crate::shaderc::online::v3d::isa::{small_imm_index, Pf, Uf};
+    use crate::shaderc::online::v3d::vop71::{FlagOp71, Label, Src71, V};
+
+    fn word() -> Word71 {
+        Word71::empty()
+    }
+    fn with_word(f: impl FnOnce(&mut Word71)) -> Word71 {
+        let mut w = word();
+        f(&mut w);
+        w
+    }
+    /// Accepted or refused, for an unconditional then a conditional branch.
+    fn verdicts(w: &Word71) -> (bool, bool) {
+        (ok_in_branch_slot71(w, false), ok_in_branch_slot71(w, true))
+    }
+    const BOTH: (bool, bool) = (true, true);
+    const NEITHER: (bool, bool) = (false, false);
+
+    fn branch(cond: BranchCond) -> Branch {
+        Branch {
+            cond,
+            msfign: Msfign::None,
+            bdi: BranchDest::Rel,
+            ub: true,
+            bdu: BranchDest::Rel,
+            raddr_a: 0,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn slot_accepts_a_nop_word_and_plain_arithmetic() {
+        assert_eq!(verdicts(&word()), BOTH);
+        /* adds and muls to the register file (not magic), small immediates */
+        let w = with_word(|w| {
+            w.alu.add.op = AddOp71::Fadd;
+            w.alu.add.magic = false;
+            w.alu.add.waddr = 4;
+            w.alu.mul.op = MulOp71::Fmul;
+            w.alu.mul.magic = false;
+            w.alu.mul.waddr = 5;
+            w.alu.sig.small_imm_a = true;
+            w.alu.sig.small_imm_b = true;
+            w.alu.sig.small_imm_c = true;
+            w.alu.sig.small_imm_d = true;
+        });
+        assert_eq!(verdicts(&w), BOTH);
+    }
+
+    #[test]
+    fn slot_refuses_a_branch_and_a_uniform() {
+        assert_eq!(verdicts(&with_word(|w| w.branch = Some(branch(BranchCond::Always)))), NEITHER);
+        /* the branch moves the uniform stream: a uniform read after it
+         * would read the target's */
+        assert_eq!(verdicts(&with_word(|w| w.uniform = Some(Uniform::constant(1)))), NEITHER);
+    }
+
+    #[test]
+    fn slot_refuses_every_signal_but_the_small_immediates() {
+        type Set = fn(&mut Sig71);
+        let sigs: [(&str, Set); 12] = [
+            ("thrsw", |s| s.thrsw = true),
+            ("ldunif", |s| s.ldunif = true),
+            ("ldunifa", |s| s.ldunifa = true),
+            ("ldunifrf", |s| s.ldunifrf = true),
+            ("ldunifarf", |s| s.ldunifarf = true),
+            ("ldtmu", |s| s.ldtmu = true),
+            ("ldvary", |s| s.ldvary = true),
+            ("ldtlb", |s| s.ldtlb = true),
+            ("ldtlbu", |s| s.ldtlbu = true),
+            ("ucb", |s| s.ucb = true),
+            ("rotate", |s| s.rotate = true),
+            ("wrtmuc", |s| s.wrtmuc = true),
+        ];
+        for (name, set) in sigs {
+            let w = with_word(|w| set(&mut w.alu.sig));
+            assert_eq!(verdicts(&w), NEITHER, "signal {name}");
+        }
+    }
+
+    #[test]
+    fn slot_refuses_tlb_and_tmu_accesses() {
+        assert_eq!(verdicts(&with_word(|w| w.tlb = true)), NEITHER);
+        assert_eq!(verdicts(&with_word(|w| w.tmu_write = true)), NEITHER);
+    }
+
+    #[test]
+    fn slot_refuses_a_flag_push_only_before_a_conditional_branch() {
+        let w = with_word(|w| w.flags_push = true);
+        assert_eq!(verdicts(&w), (true, false));
+    }
+
+    #[test]
+    fn slot_refuses_sfu_vpm_and_wait_operations() {
+        for op in [
+            AddOp71::Recip,
+            AddOp71::Rsqrt,
+            AddOp71::Exp,
+            AddOp71::Log,
+            AddOp71::Sin,
+            AddOp71::Rsqrt2,
+            AddOp71::Ballot,
+            AddOp71::Bcastf,
+            AddOp71::Alleq,
+            AddOp71::Allfeq,
+            AddOp71::Rotq,
+            AddOp71::Rot,
+            AddOp71::Shuffle,
+            AddOp71::Vpmsetup,
+            AddOp71::Vpmwt,
+            AddOp71::LdvpmvIn,
+            AddOp71::LdvpmvOut,
+            AddOp71::LdvpmdIn,
+            AddOp71::LdvpmdOut,
+            AddOp71::Ldvpmp,
+            AddOp71::LdvpmgIn,
+            AddOp71::LdvpmgOut,
+            AddOp71::Stvpmv,
+            AddOp71::Stvpmd,
+            AddOp71::Stvpmp,
+            AddOp71::Tmuwt,
+            AddOp71::Barrierid,
+        ] {
+            /* not a magic write: the operation alone refuses the word */
+            let w = with_word(|w| {
+                w.alu.add.op = op;
+                w.alu.add.magic = false;
+            });
+            assert_eq!(verdicts(&w), NEITHER, "{op:?}");
+        }
+    }
+
+    #[test]
+    fn slot_magic_writes_only_to_nop() {
+        /* a magic write to NOP is no write */
+        let nop = with_word(|w| {
+            w.alu.add.op = AddOp71::Fadd;
+            w.alu.add.magic = true;
+            w.alu.add.waddr = WADDR_NOP;
+            w.alu.mul.op = MulOp71::Fmul;
+            w.alu.mul.magic = true;
+            w.alu.mul.waddr = WADDR_NOP;
+        });
+        assert_eq!(verdicts(&nop), BOTH);
+        /* any other magic address (TLB, TMU, SFU result, ...) on either unit */
+        for waddr in [0u8, 1, 7, 9, 20, 36, 42] {
+            let w = with_word(|w| {
+                w.alu.add.op = AddOp71::Fadd;
+                w.alu.add.magic = true;
+                w.alu.add.waddr = waddr;
+            });
+            assert_eq!(verdicts(&w), NEITHER, "add magic {waddr}");
+            let w = with_word(|w| {
+                w.alu.mul.op = MulOp71::Fmul;
+                w.alu.mul.magic = true;
+                w.alu.mul.waddr = waddr;
+            });
+            assert_eq!(verdicts(&w), NEITHER, "mul magic {waddr}");
+        }
+        /* an unused unit's address is not a write */
+        let w = with_word(|w| {
+            w.alu.add.waddr = 1;
+            w.alu.mul.waddr = 1;
+        });
+        assert_eq!(verdicts(&w), BOTH);
+    }
+
+    #[test]
+    fn slot_refuses_multop_and_umul24() {
+        for op in [MulOp71::Multop, MulOp71::Umul24] {
+            let w = with_word(|w| {
+                w.alu.mul.op = op;
+                w.alu.mul.magic = false;
+                w.alu.mul.waddr = 4;
+            });
+            assert_eq!(verdicts(&w), NEITHER, "{op:?}");
+        }
+    }
+
+    /// A packer over one virtual register in rf4, handed to `f` with its
+    /// arena.
+    fn with_packer<R>(f: impl for<'a> FnOnce(&mut Packer71<'a, '_>, &Arena<'a>) -> R) -> R {
+        store::with_scratch(|a| {
+            let al = Allocation71 { reg: &[Rf(4)], rf_end: 5 };
+            let mut p = Packer71::new(&al, a).expect("packer");
+            f(&mut p, a)
+        })
+        .expect("scratch")
+    }
+    /// An `ldunif` (a word the slot rules refuse), alone in word `p.len()`.
+    fn put_refused<'a>(p: &mut Packer71<'a, '_>, a: &Arena<'a>) {
+        p.fence();
+        let op = Op71::Ldunif { dst: V(0), u: Uniform::constant(1) };
+        p.place(0, &op, None, a).expect("ldunif");
+        p.fence();
+    }
+    /// A flag push, alone in word `p.len()`.
+    fn put_push<'a>(p: &mut Packer71<'a, '_>, a: &Arena<'a>) {
+        p.fence();
+        let imm = Src71::SmallImm(small_imm_index(0).expect("0"));
+        let op =
+            Op71::Flags { unit: FlagOp71::Add(AddOp71::Xor), a: Src71::V(V(0)), b: imm, pf: Pf::PushZ, uf: Uf::None };
+        p.place(0, &op, None, a).expect("push");
+        p.fence();
+    }
+
+    #[test]
+    fn the_helpers_make_the_words_the_tests_mean() {
+        with_packer(|p, a| {
+            p.pad_to(1, a).unwrap();
+            put_refused(p, a);
+            put_push(p, a);
+            assert_eq!(p.len(), 3);
+            assert_eq!(verdicts(p.word(0).unwrap()), BOTH);
+            assert_eq!(verdicts(p.word(1).unwrap()), NEITHER);
+            assert_eq!(verdicts(p.word(2).unwrap()), (true, false));
+        });
+    }
+
+    #[test]
+    fn branch_back_moves_over_at_most_three_words() {
+        with_packer(|p, a| {
+            p.pad_to(5, a).unwrap();
+            assert_eq!(branch_back(p, 5, 0, false), 2);
+            assert_eq!(branch_back(p, 5, 0, true), 2);
+        });
+        /* fewer than three words: back to the program start */
+        with_packer(|p, a| {
+            p.pad_to(2, a).unwrap();
+            assert_eq!(branch_back(p, 2, 0, false), 0);
+        });
+        /* an empty program: nowhere to go */
+        with_packer(|p, _| assert_eq!(branch_back(p, 0, 0, false), 0));
+    }
+
+    #[test]
+    fn branch_back_never_goes_before_lo() {
+        with_packer(|p, a| {
+            p.pad_to(8, a).unwrap();
+            assert_eq!(branch_back(p, 8, 5, false), 5);
+            assert_eq!(branch_back(p, 8, 6, false), 6);
+            assert_eq!(branch_back(p, 8, 7, false), 7);
+            assert_eq!(branch_back(p, 8, 8, false), 8);
+            /* lo further back than three words: still three */
+            assert_eq!(branch_back(p, 8, 1, false), 5);
+            assert_eq!(branch_back(p, 8, 0, true), 5);
+        });
+    }
+
+    #[test]
+    fn branch_back_stops_at_a_word_that_may_not_be_in_a_slot() {
+        /* word 3 is refused: the branch lands right after it */
+        with_packer(|p, a| {
+            p.pad_to(3, a).unwrap();
+            put_refused(p, a);
+            p.pad_to(6, a).unwrap();
+            assert_eq!(branch_back(p, 6, 0, false), 4);
+            assert_eq!(branch_back(p, 6, 0, true), 4);
+        });
+        /* the refused word is the last one: no slot is filled */
+        with_packer(|p, a| {
+            p.pad_to(4, a).unwrap();
+            put_refused(p, a);
+            assert_eq!(p.len(), 5);
+            assert_eq!(branch_back(p, 5, 0, false), 5);
+        });
+        /* a branch word is not moved over either */
+        with_packer(|p, a| {
+            p.pad_to(2, a).unwrap();
+            p.insert_branch(2, branch(BranchCond::Always), a).unwrap();
+            assert_eq!(p.len(), 6);
+            /* words 3-5 are its slots (NOPs), which may be moved over; the
+             * branch itself at 2 is the stop */
+            assert_eq!(branch_back(p, 6, 0, false), 3);
+        });
+    }
+
+    #[test]
+    fn branch_back_a_flag_push_stops_only_a_conditional_branch() {
+        with_packer(|p, a| {
+            p.pad_to(2, a).unwrap();
+            put_push(p, a);
+            p.pad_to(4, a).unwrap();
+            /* words 0, 1 NOP, 2 the push, 3 NOP */
+            assert_eq!(p.len(), 4);
+            assert_eq!(branch_back(p, 4, 0, false), 1);
+            assert_eq!(branch_back(p, 4, 0, true), 3);
+        });
+        with_packer(|p, a| {
+            p.pad_to(1, a).unwrap();
+            put_push(p, a);
+            assert_eq!(branch_back(p, 2, 0, false), 0);
+            assert_eq!(branch_back(p, 2, 0, true), 2);
+        });
+    }
+
+    #[test]
+    fn branch_back_leaves_a_branch_that_is_not_at_the_end() {
+        with_packer(|p, a| {
+            p.pad_to(6, a).unwrap();
+            assert_eq!(branch_back(p, 4, 0, false), 4);
+            assert_eq!(branch_back(p, 7, 0, false), 7);
+        });
+    }
+
+    /// A `Cf` with a branch word at 3 (slots 4-6) and NOPs up to 12.
+    fn with_cf<R>(f: impl FnOnce(&mut Cf<'_, '_>) -> R) -> R {
+        store::with_scratch(|a| {
+            let al = Allocation71 { reg: &[Rf(4)], rf_end: 5 };
+            let mut cf = Cf { p: Packer71::new(&al, a).expect("packer"), last_target: None, last_branch: None };
+            cf.p.pad_to(3, a).unwrap();
+            cf.p.insert_branch(3, branch(BranchCond::AnyA), a).unwrap();
+            cf.p.pad_to(12, a).unwrap();
+            f(&mut cf)
+        })
+        .expect("scratch")
+    }
+
+    #[test]
+    fn resolve_counts_the_offset_from_after_the_slots_and_the_stream_in_bytes() {
+        with_cf(|cf| {
+            let br = branch(BranchCond::AnyA);
+            cf.resolve(3, 10, br).expect("resolves");
+            let w = cf.p.word(3).unwrap();
+            assert_eq!(w.branch.unwrap().offset, (10 - (3 + 4)) * 8);
+            /* no uniform between the branch and its target but its own:
+             * the stream word is (1 - (0 + 1)) * 4 */
+            assert_eq!(w.uniform.unwrap().data, 0);
+            /* a backward target: negative words in two's complement */
+            cf.resolve(3, 1, br).expect("resolves");
+            assert_eq!(cf.p.word(3).unwrap().branch.unwrap().offset, ((1i64 - 7) * 8) as u32);
+        });
+    }
+
+    #[test]
+    fn resolve_refuses_a_word_that_is_not_a_branch() {
+        with_cf(|cf| {
+            let br = branch(BranchCond::AnyA);
+            assert_eq!(cf.resolve(2, 4, br), Err(Sched71Error::NotPlaceable(2)));
+            /* past the last word */
+            assert_eq!(cf.resolve(40, 4, br), Err(Sched71Error::NotPlaceable(40)));
+        });
+    }
+
+    fn refusal(ops: &[Op71], vregs: u32) -> Option<Sched71Error> {
+        store::with_scratch(|a| {
+            let sel = Selected71 { ops, fragment: true, vregs };
+            let al = Allocation71 { reg: &[Rf(4), Rf(5)][..vregs as usize], rf_end: 6 };
+            schedule71(&sel, &al, a).err()
+        })
+        .expect("scratch")
+    }
+
+    #[test]
+    fn a_branch_to_a_label_never_defined_is_control_flow() {
+        /* label 1 is defined, label 0 (in range) never is */
+        let to0 = Op71::FwdBranch { cond: BranchCond::Always, msfign: Msfign::None, label: Label(0) };
+        let ld = Op71::Ldunif { dst: V(0), u: Uniform::constant(1) };
+        assert_eq!(refusal(&[ld, to0, Op71::Label(Label(1))], 1), Some(Sched71Error::ControlFlow(1)));
+    }
+
+    #[test]
+    fn a_back_edge_with_no_open_head_is_control_flow_at_the_edge() {
+        let edge = Op71::BackEdge { cond: BranchCond::AnyNA, msfign: Msfign::None };
+        assert_eq!(refusal(&[edge], 0), Some(Sched71Error::ControlFlow(0)));
+        /* a head closed once: a second edge has none */
+        assert_eq!(refusal(&[Op71::LoopHead, edge, edge], 0), Some(Sched71Error::ControlFlow(2)));
+    }
+
+    #[test]
+    fn nested_loop_heads_left_open_name_the_outer_one() {
+        let edge = Op71::BackEdge { cond: BranchCond::AnyNA, msfign: Msfign::None };
+        /* the inner closes; the outer, operation 0, stays open */
+        assert_eq!(refusal(&[Op71::LoopHead, Op71::LoopHead, edge], 0), Some(Sched71Error::ControlFlow(0)));
+    }
+
+    #[test]
+    fn a_forward_conditional_branch_needs_a_flag_push_a_back_edge_does_not() {
+        let cond = Op71::FwdBranch { cond: BranchCond::AnyA, msfign: Msfign::None, label: Label(0) };
+        assert_eq!(refusal(&[cond, Op71::Label(Label(0))], 0), Some(Sched71Error::CondWithoutFlags(0)));
+        /* an unconditional one needs none */
+        let always = Op71::FwdBranch { cond: BranchCond::Always, msfign: Msfign::None, label: Label(0) };
+        assert_eq!(refusal(&[always, Op71::Label(Label(0))], 0), None);
+        /* a back edge only waits for the last push, if there is one */
+        let edge = Op71::BackEdge { cond: BranchCond::AnyNA, msfign: Msfign::None };
+        let ld = Op71::Ldunif { dst: V(0), u: Uniform::constant(1) };
+        assert_eq!(refusal(&[Op71::LoopHead, ld, edge], 1), None);
+    }
+
+    #[test]
+    fn a_loop_with_an_empty_body_is_control_flow_at_its_edge() {
+        /* the branch cannot move before the word after the head, and with
+         * no body that word does not exist: the edge's word would be the
+         * head's, not after it */
+        let edge = Op71::BackEdge { cond: BranchCond::AnyNA, msfign: Msfign::None };
+        assert_eq!(refusal(&[Op71::LoopHead, edge], 0), Some(Sched71Error::ControlFlow(1)));
+    }
+
+    #[test]
+    fn a_scratch_arena_too_small_is_out_of_scratch() {
+        let mut buf = [0u8; 0];
+        let a = Arena::new(&mut buf);
+        let sel = Selected71 { ops: &[], fragment: true, vregs: 1 };
+        let al = Allocation71 { reg: &[Rf(4)], rf_end: 5 };
+        assert_eq!(schedule71(&sel, &al, &a).err(), Some(Sched71Error::OutOfScratch));
+    }
+
+    #[test]
+    fn the_packers_error_inside_a_loop_passes_through() {
+        /* v1 has no register: the packer's Unallocated, at its operation */
+        let ops = [Op71::LoopHead, Op71::Ldunif { dst: V(1), u: Uniform::constant(1) }];
+        assert_eq!(refusal(&ops, 1), Some(Sched71Error::Unallocated(1)));
+    }
+}
