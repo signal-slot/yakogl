@@ -11,8 +11,8 @@
 #
 # probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit, t6_display or t6_cold.
 # The expected lines are in order: the early banner (T6:A .. T6:A3,
-# board::nanopc_t6_early), the board glue's lines (T6:B, the marker, the two
-# GIC lines, the arming, T6:C, "board: watchdog armed";
+# board::nanopc_t6_early), the board glue's lines (T6:B, the marker, the
+# three GIC lines, the arming, T6:C, "board: watchdog armed";
 # driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
 # lines (tools/probes/nanopc_t6/<probe>/src/main.c) and the glue's reset
 # line. Each template below is the printf format with its conversions
@@ -148,6 +148,13 @@ table_boot() {
 	# ICC_CTLR_EL1 0x8402 says 5 priority bits (driver/rust/src/aarch64.rs,
 	# icc_ap1r_count)
 	e 't6: GICv3 CPU interface: ICC_AP1R0_EL1 0x{x8} ICC_BPR1_EL1 0x{x} as found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0'
+	# always printed, once: the interrupts Linux left Active at the
+	# distributor and at CPU 0's redistributor, recorded (issue #10530;
+	# driver/rust/src/aarch64.rs, gic_active_reset). The TYPER values, the
+	# count, the INTIDs and the words written are recorded; none may stay
+	# Active after the clear. No redistributor for CPU 0 is "differs".
+	e 't6: GIC active state: GICD_TYPER 0x{x8} GICR_TYPER 0x{x16} GICR_ISACTIVER0 0x{x8} as found, {d} INTID(s) active ({s}), {d} word(s) written ICACTIVER, 0 still active' \
+		'' gic_active_once
 	# two printks, one line; as found depends on --no-linux-wdt (was stopped)
 	# or not (was running): recorded. CR after is WDT_EN | RMOD.
 	e 't6: WDT0 armed: CR 0x{x8} -> 0x00000009 (was {s}), TORR 0x{x8} -> 0x{x8}, CCVR 0x{x8}, PARAM_1 0x{x8}, version 0x{x8}, flags 0x{x}: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s' \
@@ -163,6 +170,18 @@ t6a_sctlr() { is_x16 "${V[SA]}" && (( (16#${V[SA]} & SCTLR_MCI) == 0 )); }
 t6g_sctlr() {
 	is_x16 "${V[GF]}" && is_x16 "${V[GL]}" && (( (16#${V[GF]} & SCTLR_MCI) != 0 )) &&
 		(( (16#${V[GL]} & SCTLR_MCI) == 0 )) && [ "${V[GL]}" = "${V[SA]:-}" ]
+}
+
+# The GIC active state line is printed once per boot: a second one in the
+# record is a second boot, or a defect.
+gic_active_once() {
+	local n=0 l
+	for l in "${LINES[@]}"; do
+		if [[ $l == 't6: GIC active state: '* ]]; then
+			n=$((n + 1))
+		fi
+	done
+	[ "$n" -eq 1 ]
 }
 
 # nanopc_t6.c, t6_reset_to_linux, the probe's last line.

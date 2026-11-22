@@ -11,6 +11,7 @@ T6:A3 WDT0 arm rc 0 CR 0x00000009 period_ms 22369
 T6:B console up (uart2 through the ns16550 driver)
 yakogl-wdt: nanopc_t6 WDT0 armed at boot; top 13; lifetime_s 60; alive_s 5; proof 0; load 0x10000000
 t6: GICv3 CPU interface: ICC_AP1R0_EL1 0x00000000 ICC_BPR1_EL1 0x0 as found, 1 ICC_AP1Rn_EL1 and ICC_BPR1_EL1 now 0
+t6: GIC active state: GICD_TYPER 0x0000000f GICR_TYPER 0x0000000000000000 GICR_ISACTIVER0 0x00000000 as found, 0 INTID(s) active (none), 16 word(s) written ICACTIVER, 0 still active
 t6: WDT0 armed: CR 0x00000000 -> 0x00000009 (was stopped), TORR 0x0000000d -> 0x0000000d, CCVR 0x2a7f1c00, PARAM_1 0x12001f3a, version 0x3131302a, flags 0x1: period 22369 ms (TOP 13), fed until 60 s of uptime, alive window 5 s
 T6:C WDT0 armed, period 22369 ms
 board: watchdog armed
