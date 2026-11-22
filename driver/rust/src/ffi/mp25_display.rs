@@ -1473,7 +1473,8 @@ mod tests {
         assert!(ltdc_en < dsi_first, "the LTDC streams before the DSI host starts");
         assert!(dsien < video && video < pwr_up, "PHY on, then video mode, then PWR_UP");
         assert!(pwr_up < adv_first, "the DSI host streams before the ADV7535's first write");
-        assert_eq!(log[lanes], Ev::I2c(0x3c, 0x1c, 4 << 4));
+        // adv7533_mode_fixup (dsi:130-133): 74.25 MHz is below 80 MHz, so 3 lanes
+        assert_eq!(log[lanes], Ev::I2c(0x3c, 0x1c, 3 << 4));
         assert!(log[dsi_first..].iter().all(|x| !matches!(x, Ev::Ltdc(..))));
         drop(log);
 
@@ -1927,8 +1928,8 @@ mod tests {
         assert_eq!((ch.dd.pll_idf, ch.dd.pll_ndiv, ch.dd.pll_odf), (4, 66, 2));
         assert_eq!(m.dsi_reg(dr::VID_PKT_SIZE) & dr::VID_PKT_SIZE_MASK, 1280);
         assert_eq!(m.dsi_reg(dr::VID_VACTIVE_LINES), 720);
-        // adv7533_mode_set: four lanes in the CEC map, powered up, DVI
-        assert_eq!(adv.cec(0x1c), 4 << 4);
+        // adv7533_mode_fixup (dsi:130-133): 3 lanes below 80 MHz (host stays on 4 here), powered up, DVI
+        assert_eq!(adv.cec(0x1c), 3 << 4);
         assert_eq!(adv.reg(adv::reg::POWER) & adv::reg::POWER_DOWN, 0);
         assert_eq!(adv.cec(0x28), (1650 >> 4) as u8);
     }

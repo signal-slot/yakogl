@@ -218,7 +218,8 @@ fn bring_up(mode: VideoMode, edid: Vec<u8>) -> Up {
     b.init(&acfg).unwrap();
     let sink = Sink { hdmi: true, vic: vic_of(&mode), aspect_16_9: true, refresh_hz: 60 };
     b.start(&acfg, &mode, &sink).unwrap();
-    assert_eq!(adv.cec(0x1c), (LANES as u8) << 4, "DSI lanes");
+    // adv7533_mode_fixup (dsi:130-133): the part runs 3 lanes below 80 MHz
+    assert_eq!(adv.cec(0x1c), adv7535::dsi_lanes(&mode) << 4, "DSI lanes");
     assert_eq!(
         [tg(&adv, 0x28), tg(&adv, 0x2a), tg(&adv, 0x2c), tg(&adv, 0x2e)],
         [l_htotal, l_hsync, l_hfront, l_hback],
