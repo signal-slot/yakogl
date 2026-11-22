@@ -838,4 +838,99 @@ mod tests {
         ];
         assert_eq!(run(&ops, true, 1, 4), Err(Alloc71Error::UnmatchedBackEdge));
     }
+
+    fn payload_mov(d: u32, p: u8) -> Op71 {
+        Op71::Mul { op: MulOp71::Fmov, dst: Dst71::V(V(d)), a: Src71::Payload(p), b: Src71::None }
+    }
+
+    #[test]
+    fn rf_end_at_each_thread_level() {
+        assert_eq!(rf_end71(4), Some(32));
+        assert_eq!(rf_end71(2), Some(64));
+        assert_eq!(rf_end71(1), Some(64));
+        for t in [0, 3, 5, 8] {
+            assert_eq!(rf_end71(t), None, "{t}");
+        }
+    }
+
+    #[test]
+    fn a_value_live_across_a_payload_read_never_gets_that_register() {
+        /* n loads made before a read of payload register p, all read after
+         * it: none may take rf(p), which is still to be read */
+        for p in 1..=3u8 {
+            for loads in [28u32, 29, 30] {
+                let (ops, n) = with_payload_reads(loads, &[p], true);
+                let reg = run(&ops, true, n, 4).unwrap().0;
+                assert!(!reg[..loads as usize].contains(&Rf(p)), "p{p}: {reg:?}");
+            }
+            let (ops, n) = with_payload_reads(31, &[p], true);
+            assert_eq!(run(&ops, true, n, 4), Err(Alloc71Error::DoesNotFit), "p{p}");
+        }
+    }
+
+    #[test]
+    fn the_payload_registers_are_free_after_their_last_read() {
+        /* 28 loads fill rf4..rf31; a payload read of rf1 and then a copy of it
+         * made by that read, rf1 itself free once read: it takes rf1 */
+        let build = |late: bool| {
+            let mut ops: Vec<Op71> = (0..28).map(ldunif).collect();
+            ops.push(payload_mov(28, 1));
+            ops.push(fadd(29, 0, 1));
+            let mut acc = 29;
+            for i in 2..28 {
+                ops.push(fadd(28 + i, acc, i));
+                acc = 28 + i;
+            }
+            ops.push(fadd(60, acc, 29));
+            if late {
+                ops.push(payload_mov(61, 1));
+            }
+            ops
+        };
+        let reg = run(&build(false), true, 62, 4).unwrap().0;
+        assert_eq!(reg[28], Rf(1), "made by the last read, rf4..rf31 full: {reg:?}");
+        /* rf1 read again at the end: nothing made before that takes it */
+        let reg = run(&build(true), true, 62, 4).unwrap().0;
+        assert_ne!(reg[29], Rf(1), "{reg:?}");
+        assert_ne!(reg[28], Rf(1), "{reg:?}");
+    }
+
+    #[test]
+    fn a_vertex_shader_never_takes_rf1_to_rf3() {
+        /* no FS payload: even with payload reads in the ops, rf4 and up only */
+        let (ops, n) = with_payload_reads(25, &[1, 2, 3], false);
+        let reg = run(&ops, false, n, 4).unwrap().0;
+        assert_in_file(&reg, 32);
+        let (ops, n) = with_payload_reads(29, &[1], false);
+        assert_eq!(run(&ops, false, n, 4), Err(Alloc71Error::DoesNotFit));
+        let reg = run(&live_at_once(28), false, 56, 4).unwrap().0;
+        assert_in_file(&reg, 32);
+        assert_eq!(reg[0], Rf(4));
+        let reg = run(&live_at_once(60), false, 120, 1).unwrap().0;
+        assert_in_file(&reg, 64);
+    }
+
+    #[test]
+    fn the_thread_level_boundaries_differ_by_the_payload_registers() {
+        /* fragment: 31 live values at 4 threads (rf4..rf31 and rf1..rf3),
+         * 63 at 1 or 2; vertex: 28 and 60 */
+        for (t, fs, vs) in [(4u32, 31u32, 28u32), (2, 63, 60), (1, 63, 60)] {
+            assert!(run(&live_at_once(fs), true, 2 * fs, t).is_ok(), "fs {t}");
+            assert_eq!(run(&live_at_once(fs + 1), true, 2 * fs + 2, t), Err(Alloc71Error::DoesNotFit), "fs {t}");
+            assert!(run(&live_at_once(vs), false, 2 * vs, t).is_ok(), "vs {t}");
+            assert_eq!(run(&live_at_once(vs + 1), false, 2 * vs + 2, t), Err(Alloc71Error::DoesNotFit), "vs {t}");
+        }
+        /* a program that does not fit 4 threads fits 2; rf_end shows it */
+        assert_eq!(run(&live_at_once(40), true, 80, 4), Err(Alloc71Error::DoesNotFit));
+        assert_eq!(run(&live_at_once(40), true, 80, 2).map(|r| r.1), Ok(44));
+    }
+
+    #[test]
+    fn nothing_fits_is_refused_not_spilled() {
+        /* the allocator never spills: DoesNotFit, whatever the payload reads */
+        let (ops, n) = with_payload_reads(64, &[1, 2, 3], true);
+        assert_eq!(run(&ops, true, n, 4), Err(Alloc71Error::DoesNotFit));
+        assert_eq!(run(&live_at_once(64), true, 128, 4), Err(Alloc71Error::DoesNotFit));
+        assert_eq!(run(&live_at_once(64), true, 128, 1), Err(Alloc71Error::DoesNotFit));
+    }
 }
