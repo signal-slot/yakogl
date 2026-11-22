@@ -60,6 +60,11 @@ impl TileBuffer {
 pub struct Model {
     /// Mesa's name (`GL_RENDERER`'s first word, gallium pan_screen.c:1051-1054).
     pub name: &'static str,
+    /// Our `GL_RENDERER` on this model, NUL-terminated: `Arm Mali-<name>
+    /// (YakoGL)`, Mesa's model name in our form (Mesa says `Mali-G310v2 MC4
+    /// (Panfrost)`, docs/notes/mali-g310-vs-g610.md). dEQP records it in
+    /// every result file, so results of two models can be told apart.
+    pub renderer: &'static [u8],
     pub prod_id: u32,
     /// `CORE_FEATURES & 0xff`.
     pub variant: u32,
@@ -72,13 +77,22 @@ impl Model {
     }
 }
 
-const fn row(name: &'static str, prod_id: u32, variant: u32, colour: u32, z: u32) -> Model {
-    Model { name, prod_id, variant, tile_buffer: TileBuffer { colour, z } }
+/// A row, its renderer string made from its name at compile time.
+macro_rules! row {
+    ($name:literal, $prod_id:expr, $variant:expr, $colour:expr, $z:expr) => {
+        Model {
+            name: $name,
+            renderer: concat!("Arm Mali-", $name, " (YakoGL)\0").as_bytes(),
+            prod_id: $prod_id,
+            variant: $variant,
+            tile_buffer: TileBuffer { colour: $colour, z: $z },
+        }
+    };
 }
 
 /// pan_model.c:88: `VALHALL_MODEL(PAN_PROD_ID(10, 8, 7), 0, "G610", ...,
 /// MODEL_TB_SIZES(32768, 16384))`.
-pub const G610: Model = row("G610", prod_id(10, 8, 7), 0, 32768, 16384);
+pub const G610: Model = row!("G610", prod_id(10, 8, 7), 0, 32768, 16384);
 
 /// The models the backend draws for: pan_model.c:88 (the G610) and :91-99
 /// (the G310, `PAN_PROD_ID(10, 12, 4)`, variants 0-4: "G310v1".."G310v5";
@@ -87,11 +101,11 @@ pub const G610: Model = row("G610", prod_id(10, 8, 7), 0, 32768, 16384);
 /// does not draw for them, and neither does this backend.
 pub const MODELS: [Model; 6] = [
     G610,
-    row("G310v1", prod_id(10, 12, 4), 0, 16384, 8192),
-    row("G310v2", prod_id(10, 12, 4), 1, 16384, 8192),
-    row("G310v3", prod_id(10, 12, 4), 2, 16384, 8192),
-    row("G310v4", prod_id(10, 12, 4), 3, 32768, 16384),
-    row("G310v5", prod_id(10, 12, 4), 4, 32768, 16384),
+    row!("G310v1", prod_id(10, 12, 4), 0, 16384, 8192),
+    row!("G310v2", prod_id(10, 12, 4), 1, 16384, 8192),
+    row!("G310v3", prod_id(10, 12, 4), 2, 16384, 8192),
+    row!("G310v4", prod_id(10, 12, 4), 3, 32768, 16384),
+    row!("G310v5", prod_id(10, 12, 4), 4, 32768, 16384),
 ];
 
 /// The model of the GPU whose `GPU_ID` and `CORE_FEATURES` are these, as
@@ -133,6 +147,20 @@ mod tests {
             ]
         );
         assert_eq!(TileBudget::G610, large);
+        /* GL_RENDERER: the NanoPC-T6's bytes stay as its dEQP records have
+         * them; each G310 variant names itself */
+        let renderers: Vec<&[u8]> = MODELS.iter().map(|m| m.renderer).collect();
+        assert_eq!(
+            renderers,
+            [
+                &b"Arm Mali-G610 (YakoGL)\0"[..],
+                b"Arm Mali-G310v1 (YakoGL)\0",
+                b"Arm Mali-G310v2 (YakoGL)\0",
+                b"Arm Mali-G310v3 (YakoGL)\0",
+                b"Arm Mali-G310v4 (YakoGL)\0",
+                b"Arm Mali-G310v5 (YakoGL)\0"
+            ]
+        );
         /* the G710 (10.?.2) and G510 (10.?.3) have no row */
         assert_eq!(model(0xa002_0000, 0), None);
         assert_eq!(model(0xa003_0000, 0), None);

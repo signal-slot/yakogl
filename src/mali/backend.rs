@@ -336,6 +336,20 @@ pub extern "C" fn mali_init() -> i32 {
     }
 }
 
+/// `GL_RENDERER` before the backend found its GPU's model (no `init` yet,
+/// or a host test's mock backend): it names no model rather than a wrong one.
+pub const RENDERER_NO_MODEL: &[u8] = b"Arm Mali (YakoGL)\0";
+
+/// `GL_RENDERER`, NUL-terminated: the string of the model `init` found
+/// ([`super::model::Model::renderer`]), `"Arm Mali-G610 (YakoGL)"` on the
+/// NanoPC-T6; [`RENDERER_NO_MODEL`] without one. A context exists only after
+/// `init` succeeded (`eglInitialize`), so a GL client always sees a model.
+pub fn renderer() -> &'static [u8] {
+    // SAFETY: as in `mali_init`; the GL core calls this on its own thread.
+    let g = unsafe { STATE.get() };
+    g.model.map_or(RENDERER_NO_MODEL, |m| m.renderer)
+}
+
 /// Submit the open frame, wait for every frame, then give every buffer back.
 pub extern "C" fn mali_shutdown() {
     // SAFETY: as in `mali_init`.
@@ -780,6 +794,9 @@ const NO_CLEAR_PROGRAM: ClearProgram =
 
 struct MaliState {
     up: bool,
+    /// The GPU's model, found at init ([`super::model::model`]); `None`
+    /// before init and after shutdown.
+    model: Option<&'static super::model::Model>,
     user_regs: u32,
     ctx: Option<frame::Context>,
     context: OsalGpuMem,
@@ -836,6 +853,7 @@ const NO_SLOT: Slot =
 
 static STATE: Global<MaliState> = Global::new(MaliState {
     up: false,
+    model: None,
     user_regs: 0,
     ctx: None,
     context: OsalGpuMem::ZERO,
@@ -1177,6 +1195,7 @@ fn bring_up(g: &mut MaliState) -> Result<(), i32> {
         glog!("{} (gpu_id {:#010x}, core_features {:#x})", NOT_BUILT_GPU_MODEL, gpu.gpu_id, gpu.core_features);
         return Err(-ENODEV);
     };
+    g.model = Some(model);
     g.user_regs = user_regs;
     glog!(
         "mali: gpu_id {:#010x} ({}, core_features {:#x}), tiler_features {:#x}, {} user registers; tiler heap ctx {:#x}, first chunk {:#x}, chunk {:#x}",
@@ -1273,6 +1292,7 @@ fn release(g: &mut MaliState) {
     g.open = None;
     g.ctx = None;
     g.next = 0;
+    g.model = None;
 }
 
 /* ---- the clear program --------------------------------------------------- */
@@ -3733,7 +3753,10 @@ pub unsafe extern "C" fn mali_query_result(handle: u32, samples: *mut u64) -> i3
 
 /// The backend table of a `gpu-mali` build.
 pub static yakogl_backend_mali: YakoglBackend = YakoglBackend {
-    name: c"Arm Mali-G610 (NanoPC-T6)".as_ptr(),
+    /* no board and no model: the table serves every model of
+     * `super::model::MODELS`, and the one at hand is GL_RENDERER's
+     * ([`renderer`]) */
+    name: c"Arm Mali Valhall (arch 10)".as_ptr(),
     /* float32 is always included (the field's contract); the GL core
      * converts the rest, as for the other GPUs before their fetch formats */
     native_attrib_formats: gles_attribf_bit(GLES_ATTRIBF_FLOAT32),

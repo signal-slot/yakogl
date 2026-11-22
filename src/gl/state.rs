@@ -925,8 +925,10 @@ pub unsafe extern "C" fn glGetString(name: GLenum) -> *const GLubyte {
         GL_RENDERER => b"Vivante GC7000UL (YakoGL)\0",
         #[cfg(feature = "gpu-v3d")]
         GL_RENDERER => b"Broadcom V3D 4.2 (YakoGL)\0",
+        /* the model the backend found at init: "Arm Mali-G610 (YakoGL)" on
+         * the NanoPC-T6, "Arm Mali-G310v1 (YakoGL)" .. on a G310 */
         #[cfg(feature = "gpu-mali")]
-        GL_RENDERER => b"Arm Mali-G610 (YakoGL)\0",
+        GL_RENDERER => crate::mali::backend::renderer(),
         /* OpenGL ES 3.0: Qt's RHI takes the context version from this string
          * (QEGLPlatformContext::updateFormatFromGL) and, at 3.x, turns on the
          * features Qt Quick 3D needs (instancing, texelFetch, float and array
