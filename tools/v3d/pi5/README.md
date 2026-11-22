@@ -345,3 +345,30 @@ the others), and a texture and sampler record found by `texstate71.py` for
 the fragment shader of every job. On 2026-11-20: 12 files, 2432 packets,
 0 failed; 2 + 2 + 1 + 12 texture records. Two runs of the four shapes gave
 byte-identical files.
+
+## The P13 draw shapes, Mesa on the drm-shim at 7.1.10 (refs71b)
+
+The same method, build and command as the two sections above (Mesa 26.2.1,
+the same tarball and sha256, built on an x86_64 host with the `build` form of
+`drm_shim_ref.sh`; the same build reproduced `gl_scissor` and `gl_stencilops`
+byte for byte on a second run). Shapes of `src/gl_shapes.py` (`DRAW_SHAPES`;
+the docstring has every GL call) for the draws dEQP-GLES2 and glmark2 need
+beyond the six gl_test cases. Each is one job, so the packets between the draws
+of a job show what a state change emits. The vertex is gl_test's 40-byte cuv
+vertex and the window the one above, except where the row says otherwise.
+
+| File (`.clif`, `.stdout`) | Jobs | What the job holds |
+|---|---|---|
+| `gl_blend` | 1 | after a black clear, two quads with alpha 0.5: `glBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ZERO)` with `GL_FUNC_ADD`, then `(CONSTANT_COLOR, ONE_MINUS_CONSTANT_COLOR, ONE, ONE)` with `GL_FUNC_REVERSE_SUBTRACT` (colour) and `GL_MAX` (alpha) and `glBlendColor(0.25, 0.5, 0.75, 0.5)`: two `BLEND_CFG` (colour and alpha factors and modes) and the `BLEND_CCOLOR` of the constant |
+| `gl_depthfunc` | 1 | depth cleared to 0.5 with depth writes off: a quad at z -0.5 under `GL_LESS`, then a quad at z 0.75 under `GL_GEQUAL`: the `CFG_BITS` depth-test function (LESS, then GEQUAL) changing between two draws with Z updates off |
+| `gl_stencilops` | 1 | `GL_DEPTH24_STENCIL8`, stencil cleared to 0x10: a quad with `glStencilFunc(LEQUAL, 0x20, 0x3f)`, `glStencilOp(INCR, DECR, INVERT)`, write mask 0x0f and the depth test; a quad with different front (`REPLACE, KEEP, INCR_WRAP`) and back (`ZERO, DECR_WRAP, INVERT`) ops, `NOTEQUAL 0x05` mask 0xf0, write mask 0xff: three `STENCIL_CFG` (one for the first draw, front and back for the second) |
+| `gl_indexed` | 1 | `glDrawElements` of the quad's six vertices as `GL_TRIANGLES` with `GL_UNSIGNED_BYTE`, `GL_UNSIGNED_SHORT` (at byte offset 4) and `GL_UNSIGNED_INT` indices, and a `GL_TRIANGLE_STRIP` of u16 indices with an index restart (`GL_PRIMITIVE_RESTART_FIXED_INDEX`, 0xffff): four `INDEX_BUFFER_SETUP` and `INDEXED_PRIM_LIST`, the index type, and `Enable Primitive Restarts` 1 in the strip draw only |
+| `gl_instanced` | 1 | `glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 3)` with `a_pos` per vertex and `a_color` and `a_off` at `glVertexAttribDivisor` 1 from a second buffer: one `VERTEX_ARRAY_INSTANCED_PRIMS` and the attribute records' instance divisor |
+| `gl_prims` | 1 | `GL_POINTS` (4 vertices, `gl_PointSize` 8.0 in the vertex shader), `GL_LINES` (4 vertices, `glLineWidth(1.0)`) and `GL_TRIANGLE_STRIP` (4 vertices), as `VERTEX_ARRAY_PRIMS` of three primitive types with `POINT_SIZE` and `LINE_WIDTH` |
+
+`bash tools/v3d/pi5/src/decode71.sh` covers them with the earlier files (one
+job each, `V3D 7.1.10.2`, `glGetError 0x0`): 18 files, 2799 packets in 88
+commands of the 7.1 spec, 0 failed. The divergences from the board are those
+above (D0 draw-index shader records read by the dump with the plain 7.1
+layout; 4 KiB buffer alignment on the shim). The run writes `.stderr` files
+next to the outputs; they are not kept.

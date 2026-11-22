@@ -82,12 +82,43 @@ NDC (-1,-1)) at attributes 0 and 1. Their textures hold fixed bytes
                   glFinish, 12 jobs. An ES 3.0 context, so Mesa's core asks
                   for seamless cube filtering (v3d has no field for it).
 
+The P13 draw shapes (DRAW_SHAPES) use the same window and gl_test's 40-byte
+cuv vertex; each is one job (one glFinish), so that the packets between the
+draws of a job show what a state change emits:
+
+  blend      -    GL_BLEND on, a black clear, then in one job a quad with
+                  glBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ZERO)
+                  and GL_FUNC_ADD (colour alpha 0.5), and a quad with
+                  glBlendFuncSeparate(CONSTANT_COLOR, ONE_MINUS_CONSTANT_COLOR,
+                  ONE, ONE), glBlendEquationSeparate(GL_FUNC_REVERSE_SUBTRACT,
+                  GL_MAX) and glBlendColor(0.25, 0.5, 0.75, 0.5).
+  depthfunc  -    depth cleared to 0.5, depth writes off; a quad at z -0.5
+                  under GL_LESS, then a quad at z 0.75 under GL_GEQUAL.
+  stencilops -    D24S8 window, stencil cleared to 0x10; a quad with
+                  glStencilFunc(GL_LEQUAL, 0x20, 0x3f), glStencilOp(GL_INCR,
+                  GL_DECR, GL_INVERT), glStencilMask(0x0f) and the depth test
+                  (GL_LESS) on; a quad with front ops (REPLACE, KEEP, INCR_WRAP)
+                  and back ops (ZERO, DECR_WRAP, INVERT) through the Separate
+                  entry points, func NOTEQUAL 0x05 mask 0xf0, write mask 0xff.
+  indexed    -    glDrawElements of the quad's six vertices as GL_TRIANGLES with
+                  GL_UNSIGNED_BYTE, GL_UNSIGNED_SHORT (at a byte offset) and
+                  GL_UNSIGNED_INT indices, and a GL_TRIANGLE_STRIP of u16
+                  indices with an index restart (GL_PRIMITIVE_RESTART_FIXED_INDEX,
+                  0xffff).
+  instanced  -    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 3): a_pos per vertex,
+                  a_color and a_off (vec2) with glVertexAttribDivisor 1 from a
+                  second buffer (a shrunken quad moved by a_off).
+  prims      -    GL_POINTS (4 vertices, gl_PointSize 8.0 in the vertex shader),
+                  GL_LINES (4 vertices, glLineWidth(1.0)) and GL_TRIANGLE_STRIP
+                  (4 vertices) from one 12-vertex buffer.
+
 The vertex data is fixed in this file so that the jobs' bytes are the same on
 every run. Prints the renderer and glGetError; exits non-zero on any EGL or GL
 failure.
 """
 import ctypes as C
 import os
+import struct
 import subprocess
 import sys
 
@@ -114,6 +145,17 @@ GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE = 0x2802, 0x2803, 0x812F
 GL_SRGB8_ALPHA8, GL_RGB565, GL_UNSIGNED_SHORT_5_6_5 = 0x8C43, 0x8D62, 0x8363
 GL_TEXTURE_CUBE_MAP, GL_TEXTURE_CUBE_MAP_POSITIVE_X = 0x8513, 0x8515
 GL_TEXTURE0, GL_UNPACK_ALIGNMENT = 0x84C0, 0x0CF5
+GL_ZERO, GL_ONE = 0, 1
+GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA = 0x0302, 0x0303
+GL_CONSTANT_COLOR, GL_ONE_MINUS_CONSTANT_COLOR = 0x8001, 0x8002
+GL_FUNC_ADD, GL_FUNC_REVERSE_SUBTRACT, GL_MAX = 0x8006, 0x800B, 0x8008
+GL_LEQUAL, GL_GEQUAL, GL_NOTEQUAL = 0x0203, 0x0206, 0x0205
+GL_REPLACE, GL_INCR, GL_DECR, GL_INVERT = 0x1E01, 0x1E02, 0x1E03, 0x150A
+GL_INCR_WRAP, GL_DECR_WRAP = 0x8507, 0x8508
+GL_FRONT, GL_BACK = 0x0404, 0x0405
+GL_ELEMENT_ARRAY_BUFFER, GL_PRIMITIVE_RESTART_FIXED_INDEX = 0x8893, 0x8D69
+GL_UNSIGNED_SHORT, GL_UNSIGNED_INT = 0x1403, 0x1405
+GL_POINTS, GL_LINES, GL_TRIANGLE_STRIP = 0x0000, 0x0001, 0x0005
 T, F = 1, 0
 TW = TH = 64
 
@@ -135,6 +177,34 @@ precision mediump float;
 varying vec4 v_color;
 varying vec2 v_uv;
 void main() { gl_FragColor = v_color * vec4(v_uv, 1.0, 1.0); }
+"""
+# instanced: the cuv VS with a per-instance offset (a_off at attribute 2), the
+# quad shrunk to a quarter of the viewport.
+INST_VS = b"""#version 100
+attribute vec4 a_pos;
+attribute vec4 a_color;
+attribute vec2 a_off;
+varying vec4 v_color;
+varying vec2 v_uv;
+void main() {
+    gl_Position = vec4(a_pos.xy * 0.25 + a_off, a_pos.zw);
+    v_color = a_color;
+    v_uv = vec2(1.0, 1.0);
+}
+"""
+# prims: gl_test_vs_src with gl_PointSize.
+POINT_VS = b"""#version 100
+attribute vec4 a_pos;
+attribute vec4 a_color;
+attribute vec2 a_uv;
+varying vec4 v_color;
+varying vec2 v_uv;
+void main() {
+    gl_Position = a_pos;
+    gl_PointSize = 8.0;
+    v_color = a_color;
+    v_uv = a_uv;
+}
 """
 # gl_test_uv_vs_src and gl_test_texture_fs_src (gl_test_shaders_es100.h),
 # comments left out: tex2d, texfmt, mipgen.
@@ -187,6 +257,7 @@ LOWER_LEFT = ((-1, -1), (0, -1), (0, 0), (-1, -1), (0, 0), (-1, 0))
 
 SHAPES = ("scissor", "scisbox", "writemask", "viewport", "fbods", "colormask", "mrt4", "mrt8")
 TEX_SHAPES = ("tex2d", "texfmt", "mipgen", "cube")
+DRAW_SHAPES = ("blend", "depthfunc", "stencilops", "indexed", "instanced", "prims")
 
 
 class Gl:
@@ -220,11 +291,11 @@ def tex_bytes(w, h, bpp):
                  for j in range(h) for i in range(w) for k in range(bpp))
 
 
-def quad(corners, z, rgb):
-    """cuv_set() for each corner: pos (x, y, z, 1), colour (rgb, 1), uv (1, 1)."""
+def quad(corners, z, rgb, alpha=1.0):
+    """cuv_set() for each corner: pos (x, y, z, 1), colour (rgb, alpha), uv (1, 1)."""
     out = []
     for x, y in corners:
-        out += [float(x), float(y), z, 1.0, rgb[0], rgb[1], rgb[2], 1.0, 1.0, 1.0]
+        out += [float(x), float(y), z, 1.0, rgb[0], rgb[1], rgb[2], alpha, 1.0, 1.0]
     return out
 
 
@@ -672,6 +743,149 @@ class Case:
             gl.glFinish()
         gl.glViewport(0, 0, TW, TH)
 
+    # ---- the P13 draw shapes ----------------------------------------------------
+
+    def blend(self):
+        gl = self.gl
+        self.window()
+        self.program()
+        self.upload(quad(FULL, 0.0, (1.0, 0.5, 0.0), 0.5) + quad(FULL, 0.0, (0.0, 1.0, 1.0), 0.5))
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        gl.glEnable(GL_BLEND)
+        gl.glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO)
+        gl.glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD)
+        gl.glDrawArrays(GL_TRIANGLES, 0, 6)
+        gl.glBlendColor(0.25, 0.5, 0.75, 0.5)
+        gl.glBlendFuncSeparate(GL_CONSTANT_COLOR, GL_ONE_MINUS_CONSTANT_COLOR, GL_ONE, GL_ONE)
+        gl.glBlendEquationSeparate(GL_FUNC_REVERSE_SUBTRACT, GL_MAX)
+        gl.glDrawArrays(GL_TRIANGLES, 6, 6)
+        gl.glFinish()
+        gl.glDisable(GL_BLEND)
+
+    def depthfunc(self):
+        gl = self.gl
+        self.window()
+        self.program()
+        self.upload(quad(FULL, -0.5, (1.0, 0.0, 0.0)) + quad(FULL, 0.75, (0.0, 1.0, 0.0)))
+        gl.glClearColor(0.0, 0.0, 1.0, 1.0)
+        gl.glClearDepthf(0.5)
+        gl.glDepthMask(T)
+        gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        gl.glEnable(GL_DEPTH_TEST)
+        gl.glDepthMask(F)
+        gl.glDepthFunc(GL_LESS)
+        gl.glDrawArrays(GL_TRIANGLES, 0, 6)
+        gl.glDepthFunc(GL_GEQUAL)
+        gl.glDrawArrays(GL_TRIANGLES, 6, 6)
+        gl.glFinish()
+        gl.glDisable(GL_DEPTH_TEST)
+        gl.glDepthMask(T)
+
+    def stencilops(self):
+        gl = self.gl
+        self.window()
+        self.program()
+        self.upload(quad(FULL, 0.0, (1.0, 0.0, 0.0)) + quad(FULL, 0.25, (0.0, 1.0, 0.0)))
+        gl.glClearColor(0.0, 0.0, 1.0, 1.0)
+        gl.glClearDepthf(1.0)
+        gl.glStencilMask(0xff)
+        gl.glClearStencil(0x10)
+        gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
+        gl.glEnable(GL_STENCIL_TEST)
+        gl.glEnable(GL_DEPTH_TEST)
+        gl.glDepthFunc(GL_LESS)
+        gl.glStencilFunc(GL_LEQUAL, 0x20, 0x3f)
+        gl.glStencilOp(GL_INCR, GL_DECR, GL_INVERT)
+        gl.glStencilMask(0x0f)
+        gl.glDrawArrays(GL_TRIANGLES, 0, 6)
+        gl.glStencilMask(0xff)
+        gl.glStencilFuncSeparate(GL_FRONT, GL_NOTEQUAL, 0x05, 0xf0)
+        gl.glStencilFuncSeparate(GL_BACK, GL_NOTEQUAL, 0x05, 0xf0)
+        gl.glStencilOpSeparate(GL_FRONT, GL_REPLACE, GL_KEEP, GL_INCR_WRAP)
+        gl.glStencilOpSeparate(GL_BACK, GL_ZERO, GL_DECR_WRAP, GL_INVERT)
+        gl.glDrawArrays(GL_TRIANGLES, 6, 6)
+        gl.glFinish()
+        gl.glDisable(GL_STENCIL_TEST)
+        gl.glDisable(GL_DEPTH_TEST)
+
+    def indexed(self):
+        gl = self.gl
+        self.window()
+        self.program()
+        self.upload(quad(FULL, 0.0, (1.0, 1.0, 0.0)))
+        ibo = C.c_uint()
+        gl.glGenBuffers(1, C.byref(ibo))
+        gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo.value)
+
+        def indices(fmt, values):
+            data = struct.pack("<%d%s" % (len(values), fmt), *values)
+            gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, C.c_ssize_t(len(data)), data, GL_STATIC_DRAW)
+
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        indices("B", (0, 1, 2, 3, 4, 5))
+        gl.glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, C.c_void_p(0))
+        indices("H", (5, 5, 0, 1, 2, 3, 4, 5))
+        gl.glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, C.c_void_p(4))
+        indices("I", (0, 1, 2, 3, 4, 5))
+        gl.glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, C.c_void_p(0))
+        gl.glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX)
+        indices("H", (0, 1, 2, 0xffff, 3, 4, 5))
+        gl.glDrawElements(GL_TRIANGLE_STRIP, 7, GL_UNSIGNED_SHORT, C.c_void_p(0))
+        gl.glFinish()
+        gl.glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX)
+
+    def instanced(self):
+        gl = self.gl
+        self.window()
+        self.program(INST_VS, FS, (b"a_pos", b"a_color", b"a_off"))
+        # per vertex: a_pos at attribute 0, a 16-byte vertex
+        floats = []
+        for x, y in FULL:
+            floats += [float(x), float(y), 0.0, 1.0]
+        vbo = C.c_uint()
+        gl.glGenBuffers(1, C.byref(vbo))
+        gl.glBindBuffer(GL_ARRAY_BUFFER, vbo.value)
+        data = (C.c_float * len(floats))(*floats)
+        gl.glBufferData(GL_ARRAY_BUFFER, C.c_ssize_t(C.sizeof(data)), data, GL_STATIC_DRAW)
+        gl.glVertexAttribPointer(0, 4, GL_FLOAT, F, 16, C.c_void_p(0))
+        gl.glEnableVertexAttribArray(0)
+        # per instance (divisor 1): colour4 and offset2, 24 bytes
+        inst = [1.0, 0.0, 0.0, 1.0, -0.5, -0.5,
+                0.0, 1.0, 0.0, 1.0, 0.5, -0.5,
+                0.0, 0.0, 1.0, 1.0, 0.0, 0.5]
+        ibo = C.c_uint()
+        gl.glGenBuffers(1, C.byref(ibo))
+        gl.glBindBuffer(GL_ARRAY_BUFFER, ibo.value)
+        data = (C.c_float * len(inst))(*inst)
+        gl.glBufferData(GL_ARRAY_BUFFER, C.c_ssize_t(C.sizeof(data)), data, GL_STATIC_DRAW)
+        for i, (n, off) in ((1, (4, 0)), (2, (2, 16))):
+            gl.glVertexAttribPointer(i, n, GL_FLOAT, F, 24, C.c_void_p(off))
+            gl.glEnableVertexAttribArray(i)
+            gl.glVertexAttribDivisor(i, 1)
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        gl.glDrawArraysInstanced(GL_TRIANGLES, 0, 6, 3)
+        gl.glFinish()
+
+    def prims(self):
+        gl = self.gl
+        self.window()
+        self.program(POINT_VS, FS)
+        pts = ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))
+        lines = ((-0.9, -0.9), (0.9, -0.9), (0.9, 0.9), (-0.9, 0.9))
+        strip = ((-1, -1), (1, -1), (-1, 1), (1, 1))
+        self.upload(quad(pts, 0.0, (1.0, 1.0, 1.0)) + quad(lines, 0.0, (1.0, 1.0, 0.0))
+                    + quad(strip, 0.0, (0.0, 1.0, 1.0)))
+        gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+        gl.glDrawArrays(GL_POINTS, 0, 4)
+        gl.glLineWidth(1.0)
+        gl.glDrawArrays(GL_LINES, 4, 4)
+        gl.glDrawArrays(GL_TRIANGLE_STRIP, 8, 4)
+        gl.glFinish()
+
 
 def with_tfu_spy(libdir):
     """Run this program again with tfu_spy.c's ioctl() ahead of the drm-shim in
@@ -693,7 +907,7 @@ def with_tfu_spy(libdir):
 
 def main():
     args = sys.argv[1:]
-    if len(args) != 2 or args[1] not in SHAPES + TEX_SHAPES:
+    if len(args) != 2 or args[1] not in SHAPES + TEX_SHAPES + DRAW_SHAPES:
         print(__doc__, file=sys.stderr)
         return 2
     libdir, shape = args
