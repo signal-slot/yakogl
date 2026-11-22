@@ -47,7 +47,10 @@ check() { # <what> <0 = ok>
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-root=$tmp/board
+# The fake board's root has "yakogl" in its path on purpose: the gate's
+# TMPDIR in CI has it too (~/.cache/yakogl/tmp), and a check that looked for
+# the staged directory by that word alone failed there and nowhere else.
+root=$tmp/yakogl/board
 mkdir -p "$root/boot/dtb/rockchip" "$root/dt" "$tmp/fakebin"
 printf 'friendlyarm,nanopc-t6\0rockchip,rk3588\0' >"$root/dt/compatible"
 echo 0 >"$root/kexec_loaded"
@@ -97,7 +100,7 @@ rc=$?
 check "stage: exit 0, the copy is the image (rc $rc)" \
 	"$([ "$rc" = 0 ] && cmp -s "$tmp/t6_hello.bin" "$root/boot/yakogl/t6_hello.bin"; echo $?)"
 check "stage: the fingerprint was written before the copy: the 3 stock files and the stock link" \
-	"$([ "$(wc -l <"$fp")" = 4 ] && grep -q 'boot.link -> boot.scr$' "$fp" && ! grep -q yakogl "$fp"; echo $?)"
+	"$([ "$(wc -l <"$fp")" = 4 ] && grep -q 'boot.link -> boot.scr$' "$fp" && ! grep -qF "$root/boot/yakogl" "$fp"; echo $?)"
 check "stage: no .part file is left, the mode is 0644" \
 	"$([ ! -e "$root/boot/yakogl/.t6_hello.bin.part" ] && [ "$(stat -c %a "$root/boot/yakogl/t6_hello.bin")" = 644 ]; echo $?)"
 check "stage: the stock files keep their bytes" "$([ "$(stock)" = "$stock_before" ]; echo $?)"
