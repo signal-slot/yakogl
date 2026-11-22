@@ -53,7 +53,8 @@
 #              record; one fw_setenv that puts boot_prefixes back and deletes
 #              mp2s_*, read back; removes default.bin; compares /boot with the
 #              install record when the manifest tool is there. Safe to repeat.
-#   uninstall  nodefault, then removes the stage directory, then requires
+#   uninstall  nodefault, then removes the stage directory (and /boot/yakogl
+#              when that is empty then), then requires
 #              'mp2s-boot: same' between /boot and the install record.
 #
 # Everything sent to the board is built from fixed strings and from names that
@@ -68,8 +69,13 @@
 # (guard_path) and, through fw_setenv, the variables mp2s_ver, mp2s_left,
 # mp2s_prefixes and boot_prefixes of the u-boot-env partition of the SD card
 # /boot is on (dev_guard before each write, fwset_guard on every line). Never
-# the eMMC (mmcblk0), never fsbla1, fsbla2, metadata1, metadata2, fip-a, fip-b,
-# vendorfs, rootfs or userfs; the FWU metadata partitions are only read.
+# the eMMC (the disk whose type is MMC, whatever its number: on the DK the
+# card is mmcblk0 on one boot and mmcblk2 on another), never fsbla1, fsbla2,
+# metadata1, metadata2, fip-a, fip-b, vendorfs, rootfs or userfs; the FWU
+# metadata partitions are only read. On a board without /etc/fw_env.config
+# (the DK as shipped) the runner also writes two lines to
+# /run/mp2s-fw_env.config on the board's tmpfs, for fw_printenv and fw_setenv
+# -c, and removes the file when the run ends (fw_config).
 #
 # The host keeps, in MP2S_STATE_DIR (default records/stm32mp257f-dk/standalone,
 # gitignored): boot-sha256.txt (the install record), u-boot-env.bin (the
@@ -122,11 +128,13 @@ MARKER='gc_wdog_arm: armed'                         # the board layer's watchdog
 PRODUCT_MARKER='mp2_wdtr: product refresh armed'    # mp2_product's refresh (section 6)
 NOLIFE_MARKER='no lifetime of its own (product build)'   # mp2_product with LIFETIME_S=0
 NEVER_LABELS="fsbla1 fsbla2 metadata1 metadata2 fip-a fip-b vendorfs rootfs userfs"
-EMMC_RE='^/dev/mmcblk0(p[0-9]+)?$'
 PART_RE='^/dev/mmcblk[0-9]+p[0-9]+$'
 OUR_FILES="boot.scr.uimg boot.scr.uimg.sha256 boot-sha256.txt u-boot-env.bin default.bin"
 ENV_NAMES="mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"   # all fw_setenv may name
 ENV_SIZE=0x2000
+FWCFG_PATH=/run/mp2s-fw_env.config   # the runner's own fw_env.config, on the board's tmpfs
+FWCFG=0                              # 1: FWCFG_PATH was written (cleanup removes it)
+FWOPT=                               # " -c FWCFG_PATH" then, for fw_printenv and fw_setenv
 SU=${MP2_SUDO-sudo -n }
 PY=(python3 -I)
 MANIFEST=${MP2S_BOOT_MANIFEST:-$HERE/mp2s_boot_manifest.py}
@@ -144,7 +152,16 @@ skip() { echo "skip: $*"; }
 # ---- temp files, the cut-off message ---------------------------------------------------
 T=
 CUT="nothing was changed"     # what a signal leaves behind, set before each change
-cleanup() { local rc=$?; [ -z "$T" ] || rm -rf "$T"; exit "$rc"; }
+cleanup() {
+    local rc=$?
+    trap '' HUP INT TERM
+    if [ "$FWCFG" = 1 ]; then
+        timeout 30 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}rm -f -- $FWCFG_PATH" </dev/null >/dev/null 2>&1 ||
+            echo "$TAG: could not remove $FWCFG_PATH from the board's tmpfs (it is gone at the next boot)" >&2
+    fi
+    [ -z "$T" ] || rm -rf "$T"
+    exit "$rc"
+}
 cutoff() { trap '' HUP INT TERM; echo "$TAG: cut off: $CUT" >&2; exit "$1"; }
 trap cleanup EXIT
 trap 'cutoff 129' HUP
@@ -166,12 +183,12 @@ guard_path() {
     n=${p#"$STAGE_DIR"/}
     name_ok "$n" || die "REFUSED: not a plain file name ([A-Za-z0-9][A-Za-z0-9._-]*) in $STAGE_DIR"
 }
-# dev_guard DEV LABEL TABLE CARD: DEV may be written only if it is not the
-# eMMC, is a partition of CARD, is not a never-written label, and TABLE
-# ("PATH PARTLABEL" lines) says it carries LABEL. Pure.
+# dev_guard DEV LABEL TABLE CARD: DEV may be written only if it is a partition
+# of CARD (the disk /boot is on, whose type board_facts read as SD: the eMMC
+# says MMC and is never CARD, whatever its number), is not a never-written
+# label, and TABLE ("PATH PARTLABEL" lines) says it carries LABEL. Pure.
 dev_guard() {
     local dev=$1 want=$2 table=$3 card=$4 label l
-    [[ $dev =~ $EMMC_RE ]] && die "REFUSED: $dev is the eMMC (mmcblk0): never written"
     [[ $dev =~ $PART_RE ]] || die "REFUSED: $dev is not a partition of an mmcblk device"
     { [ -n "$card" ] && [ "${dev%p*}" = "$card" ]; } || die "REFUSED: $dev is not a partition of the SD card /boot is on (${card:-none found})"
     label=$(awk -v d="$dev" '$1 == d { print $2 }' <<<"$table" | head -1)
@@ -180,11 +197,11 @@ dev_guard() {
     done
     [ "$label" = "$want" ] || die "REFUSED: $dev is labelled '${label:-nothing}', not $want"
 }
-# read_guard DEV LABEL: a partition that is only read: of the card, not the
-# eMMC, labelled LABEL in TABLE
+# read_guard DEV LABEL: a partition that is only read: of the card (so not of
+# the eMMC), labelled LABEL in TABLE
 read_guard() {
     local dev=$1 want=$2
-    { [[ $dev =~ $PART_RE ]] && ! [[ $dev =~ $EMMC_RE ]] && [ "${dev%p*}" = "$CARD" ]; } || die "REFUSED: '$dev' is not a partition of the SD card"
+    { [[ $dev =~ $PART_RE ]] && [ -n "$CARD" ] && [ "${dev%p*}" = "$CARD" ]; } || die "REFUSED: '$dev' is not a partition of the SD card"
     [ "$(awk -v d="$dev" '$1 == d { print $2 }' <<<"$TABLE" | head -1)" = "$want" ] || die "REFUSED: $dev is not labelled $want"
 }
 # fwset_guard FILE: every line of a fw_setenv script names one of ENV_NAMES
@@ -259,9 +276,14 @@ board_rm() {
     done
     board_change "${SU}rm -f --$q"
 }
+# board_rm_stage: the stage directory, then its parent if install made it and
+# it is empty now (rmdir removes nothing else: tools/board-stm32mp2.sh keeps
+# files of its own in /boot/yakogl, and then it stays). Without this an empty
+# /boot/yakogl was left on the card (board run, 2026-11-22).
 board_rm_stage() {
     guard_path "$STAGE_DIR"
-    board_change "${SU}rm -rf -- $(printf '%q' "$STAGE_DIR")"
+    [ "${STAGE_DIR%/*}" = /boot/yakogl ] || die "REFUSED: the stage directory's parent is not /boot/yakogl"
+    board_change "${SU}rm -rf -- $(printf '%q' "$STAGE_DIR") && { ${SU}rmdir -- $(printf '%q' "${STAGE_DIR%/*}") 2>/dev/null || true; }"
 }
 
 # take_lock: one run per board at a time, the lock board_lock.sh uses for the
@@ -281,16 +303,18 @@ take_lock() {
 }
 
 # board_facts: /boot on a partition of an SD card (not the eMMC), its
-# partition table, the card's u-boot-env (CARD, TABLE, ENVDEV)
+# partition table, the card's u-boot-env (CARD, TABLE, ENVDEV). The eMMC is
+# known by its type (MMC), never by its number: on the DK the card's number
+# changes from boot to boot and can be the lowest one (board run, 2026-11-22;
+# tools/board-stm32mp2.sh found the same). Every run asks again.
 board_facts() {
     local junk kind
     bget junk ok "${SU}true" || die "$BOARD_HOST does not answer (ssh key login${SU:+ and $SU})"
     bget BOOTDEV /dev/mmcblk1p8 "findmnt -n -o SOURCE /boot" || die "cannot read the device /boot is mounted from"
     [[ $BOOTDEV =~ $PART_RE ]] || die "REFUSED: /boot is on '$BOOTDEV', not a partition of an mmcblk device"
-    [[ $BOOTDEV =~ $EMMC_RE ]] && die "REFUSED: /boot is on the eMMC (mmcblk0): never used"
     CARD=${BOOTDEV%p*}
     bget kind SD "cat -- $(printf '%q' "/sys/block/${CARD#/dev/}/device/type")" || die "cannot read the type of $CARD"
-    [ "$kind" = SD ] || die "REFUSED: $CARD says '$kind', not SD: /boot is not on the microSD"
+    [ "$kind" = SD ] || die "REFUSED: $CARD says '$kind', not SD: /boot is not on the microSD (MMC is the eMMC: never used)"
     bget TABLE "$DRY_TABLE" "lsblk -rno PATH,PARTLABEL -- $(printf '%q' "$CARD")" || die "cannot read the partitions of $CARD"
     dev_guard "$BOOTDEV" bootfs "$TABLE" "$CARD"
     ENVDEV=$(awk '$2 == "u-boot-env" { print $1 }' <<<"$TABLE" | head -1)
@@ -321,22 +345,50 @@ build_script() {
     note "script: boot.scr.uimg sha256 $SCRSUM (driver/tools/mp2-standalone/build.sh, checked by mp2s_uimg_check.py)"
 }
 
-# read_env: fw_printenv ($T/env-before.txt) and the partition ($T/part.bin),
-# both CRCs valid, and fw_printenv reads the partition read here (ENVLAY)
+# fw_config SIZE: how fw_printenv and fw_setenv find the environment. A board
+# with /etc/fw_env.config: as it is (fwenv_check judges that file). The DK as
+# shipped has none (a bare fw_printenv stops with "Cannot initialize
+# environment"; ST's /etc/fw_env.config.mmc names /dev/disk/by-partlabel/
+# u-boot-env, which the eMMC's partition answers to as well, and the same
+# offset twice): the runner then writes its own two lines, both copies of
+# ENVDEV (SIZE bytes) by its device node, to FWCFG_PATH on the board's tmpfs
+# and hands it over with -c (fwenv_check judges that one). Nothing is written
+# to the rootfs or the card for it; cleanup removes the file.
+fw_config() {
+    local have fs sz=$1
+    [ "$FWCFG" = 1 ] && return 0
+    bget have yes "test -e /etc/fw_env.config && echo yes || echo no" || die "cannot ask the board for /etc/fw_env.config"
+    [ "$have" = yes ] && return 0
+    [ "$have" = no ] || die "REFUSED: the board's answer about /etc/fw_env.config reads '$have'"
+    bget fs tmpfs "findmnt -n -o FSTYPE -T ${FWCFG_PATH%/*}" || die "cannot read the file system of ${FWCFG_PATH%/*}"
+    [ "$fs" = tmpfs ] || die "REFUSED: ${FWCFG_PATH%/*} on the board is '$fs', not a tmpfs: the runner writes no fw_env.config to a disk"
+    dev_guard "$ENVDEV" u-boot-env "$TABLE" "$CARD"
+    printf '%s 0x%x 0x%x\n' "$ENVDEV" $((sz - ENV_SIZE)) $((ENV_SIZE)) "$ENVDEV" $((sz - 2 * ENV_SIZE)) $((ENV_SIZE)) >"$T/fw_env.config"
+    FWCFG=1
+    b "${SU}tee -- $FWCFG_PATH >/dev/null" <"$T/fw_env.config" || die "cannot write $FWCFG_PATH on the board's tmpfs"
+    FWOPT=" -c $FWCFG_PATH"
+    note "the board has no /etc/fw_env.config: fw_printenv and fw_setenv get -c $FWCFG_PATH (the board's tmpfs; both copies of $ENVDEV; removed when this run ends; nothing on the rootfs or the card is written for it)"
+}
+# read_env: the partition ($T/part.bin), both CRCs valid, then fw_printenv
+# ($T/env-before.txt), which must read the partition read here (ENVLAY)
 read_env() {
     local sz out
-    bfile "$T/env-before.txt" "${SU}fw_printenv" || die "fw_printenv failed on the board"
-    bfile "$T/part.bin" "${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")" || die "cannot read $ENVDEV"
     if [ "$DRY" = 1 ]; then
+        echo "DRY board\$ test -e /etc/fw_env.config   # a board without it: fw_printenv and fw_setenv get -c $FWCFG_PATH, the runner's own two lines on the board's tmpfs"
+        bfile "$T/env-before.txt" "${SU}fw_printenv"
+        bfile "$T/part.bin" "${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")"
         ENVLAY=(--redundant --size "$ENV_SIZE" --offset 0x7e000 --offset2 0x7c000)
         host "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" check part.bin
         return 0
     fi
+    bfile "$T/part.bin" "${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")" || die "cannot read $ENVDEV"
     sz=$(stat -c %s "$T/part.bin")
     { [ "$sz" -ge $((2 * ENV_SIZE)) ] && [ "$sz" -lt 1048576 ]; } || die "REFUSED: $ENVDEV is $sz bytes: not the u-boot-env partition this runner knows"
     ENVLAY=(--redundant --size "$ENV_SIZE" --offset $((sz - ENV_SIZE)) --offset2 $((sz - 2 * ENV_SIZE)))
     out=$("${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" check "$T/part.bin" 2>&1) || die "REFUSED: an environment copy's CRC fails on $ENVDEV: $out"
     "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$T/part.bin" | sort >"$T/part.txt" || die "cannot print $ENVDEV's environment"
+    fw_config "$sz"
+    bfile "$T/env-before.txt" "${SU}fw_printenv$FWOPT" || die "fw_printenv failed on the board"
     sort "$T/env-before.txt" | cmp -s - "$T/part.txt" || die "REFUSED: fw_printenv does not show the environment of $ENVDEV: fw_env.config does not point at the card's u-boot-env"
 }
 # env_val NAME FILE: NAME's value in a fw_printenv text
@@ -345,9 +397,10 @@ env_val() { sed -n "s/^$1=//p" "$2" | head -1; }
 # fwenv_check: fw_env.config reaches only the card's u-boot-env (the tool
 # goes to the board's python3 on stdin; nothing is copied there)
 fwenv_check() {
-    local out
+    local out cfg=
     if [ "$DRY" = 1 ]; then echo "DRY board\$ python3 -I - --root /   # < tools/mp2s_fwenv_check.py"; return 0; fi
-    out=$(b "python3 -I - --root /" <"$HERE/mp2s_fwenv_check.py" 2>&1) || die "REFUSED: tools/mp2s_fwenv_check.py on the board: $out"
+    [ "$FWCFG" = 1 ] && cfg=" --config ${FWCFG_PATH#/}"
+    out=$(b "python3 -I - --root /$cfg" <"$HERE/mp2s_fwenv_check.py" 2>&1) || die "REFUSED: tools/mp2s_fwenv_check.py on the board: $out"
     note "$out"
 }
 # fwu_check: ST's firmware update is not in its trial state (both metadata
@@ -368,7 +421,9 @@ fwu_check() {
 # boot_listing OUT: the sha256 listing of every file under /boot, taken on the
 # board, made a manifest on the host
 boot_listing() {
-    bfile "$T/listing.txt" "${SU}sh -c 'cd /boot && find . -type f -print0 | sort -z | xargs -0 sha256sum'" || die "cannot list /boot"
+    # a read loop, not xargs -0: the DK's xargs is BusyBox's, without -0. A
+    # name sha256sum cannot open (one with a newline) fails the listing.
+    bfile "$T/listing.txt" "${SU}sh -c 'cd /boot && find . -type f | LC_ALL=C sort | while IFS= read -r f; do sha256sum \"\$f\" || exit 1; done'" || die "cannot list /boot"
     if [ "$DRY" = 1 ]; then host "${PY[@]}" "$MANIFEST" record --from listing.txt -o "${1##*/}"; return 0; fi
     "${PY[@]}" "$MANIFEST" record --from "$T/listing.txt" -o "$1" || die "mp2s_boot_manifest.py could not read the /boot listing"
 }
@@ -409,14 +464,14 @@ stage_file() {
 env_write() {
     fwset_guard "$1"
     dev_guard "$ENVDEV" u-boot-env "$TABLE" "$CARD"
-    change_in "$1" "$2" "${SU}fw_setenv -s -"
+    change_in "$1" "$2" "${SU}fw_setenv$FWOPT -s -"
 }
 # env_readback EXPECTED_IMAGE VERB: fw_printenv and the partition after the
 # write equal what mp2s_env_plan.py computed; else the values before it go
 # back (rc 4), or NEEDS A PERSON (rc 5)
 env_readback() {
     local want=$1 verb=$2 v out
-    bfile "$T/env-after.txt" "${SU}fw_printenv" || true
+    bfile "$T/env-after.txt" "${SU}fw_printenv$FWOPT" || true
     bfile "$T/part-after.bin" "${SU}head -c 1048576 -- $(printf '%q' "$ENVDEV")" || true
     if [ "$DRY" = 1 ]; then host "${PY[@]}" "$HERE/mp2s_env_plan.py" verify part.bin part-after.bin --expect "$verb"; return 0; fi
     "${PY[@]}" "$HERE/uboot_env.py" "${ENVLAY[@]}" print "$want" | sort >"$T/want.txt"
@@ -431,7 +486,7 @@ env_readback() {
         if grep -q "^$v=" "$T/env-before.txt"; then grep -m1 "^$v=" "$T/env-before.txt"; else echo "$v="; fi
     done >>"$T/restore.txt"
     env_write "$T/restore.txt" "the values before the write"
-    bfile "$T/env-restored.txt" "${SU}fw_printenv" || true
+    bfile "$T/env-restored.txt" "${SU}fw_printenv$FWOPT" || true
     if sort "$T/env-restored.txt" | cmp -s - <(sort "$T/env-before.txt"); then
         die "$verb: the environment did not read back; it is as it was before, nothing of it is left changed" 4
     fi
@@ -491,7 +546,11 @@ cmd_status() {
     [ $# -eq 0 ] || usage
     need_board
     b "ls -l -- $(printf '%q' "$STAGE_DIR")"
-    b "${SU}fw_printenv mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"
+    if [ "$DRY" = 1 ]; then b "${SU}fw_printenv mp2s_ver mp2s_left mp2s_prefixes boot_prefixes"; return 0; fi
+    mktmp
+    board_facts
+    read_env
+    grep -E '^(mp2s_ver|mp2s_left|mp2s_prefixes|boot_prefixes)=' "$T/env-before.txt"
 }
 cmd_install() {
     [ $# -eq 0 ] || usage
@@ -534,6 +593,7 @@ do_nodefault() {
     rec="$T/default-prefixes.txt"
     if [ "$DRY" = 0 ] && ! grep -q '^mp2s_' "$T/env-before.txt" && [[ $(env_val boot_prefixes "$T/env-before.txt") != /yakogl/standalone/* ]]; then
         note "no default is set in the environment: no environment write"
+        rm -f -- "$STATE/default-prefixes.txt"   # the count ran out by itself: its record is spent
     else
         if [ "$DRY" = 1 ]; then
             echo "DRY host\$ the default record: state/default-prefixes.txt, else boot_prefixes of the pristine u-boot-env.bin"

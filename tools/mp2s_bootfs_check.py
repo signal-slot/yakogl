@@ -20,9 +20,10 @@ and never touches a device.
 The eMMC carries ST's partition layout with the same labels as the card
 (section 1), so a label never decides alone. The source must be:
 
-  - exactly one device, a partition (lsblk TYPE "part") of a disk other
-    than mmcblk0 (the rule of board-stm32mp2.sh's dev_guard);
-  - on a disk whose sysfs type reads "SD";
+  - exactly one device, a partition (lsblk TYPE "part");
+  - on a disk whose sysfs type reads "SD" (the eMMC reads "MMC"; the number
+    never decides: on the DK the card is mmcblk0 on some boots and the eMMC
+    mmcblk1, board run of 2026-11-22);
   - labelled bootfs, as lsblk's PARTLABEL and as blkid's filesystem LABEL
     and PARTLABEL where blkid reports them, with no disagreement;
   - ext4;
@@ -75,8 +76,6 @@ def check(findmnt, lsblk, blkid, disk_type):
     disk = row.get("PKNAME", "")
     if not disk:
         raise Refused(f"{src} names no parent disk")
-    if disk == "mmcblk0":
-        raise Refused(f"{src} is on mmcblk0, never written")
     if disk_type.strip() != "SD":
         raise Refused(f"disk {disk} says {disk_type.strip()!r}, not 'SD' "
                       "(an eMMC says 'MMC' whatever its number)")

@@ -32,7 +32,13 @@
 #                       boot_prefixes (the counted default's used-up branch
 #                       deletes both). A failing fw_printenv is a FAIL,
 #                       never silence: the variables are not taken as unset
-#                       (tools/board-stm32mp2.sh's rule).
+#                       (tools/board-stm32mp2.sh's rule). The DK as shipped
+#                       has no /etc/fw_env.config, so its fw_printenv cannot
+#                       answer (board run, 2026-11-22): on such a board the
+#                       last 0x4000 bytes of the u-boot-env partition of the
+#                       disk /boot is on (both copies) are read instead and
+#                       decoded here by tools/uboot_env.py; a copy whose CRC
+#                       fails is a FAIL.
 #
 # Verdict lines start "comeback:" and are redacted: the ssh target, every
 # part of it four characters or longer, and any IPv4 or IPv6 the board
@@ -43,6 +49,7 @@
 # 4 no ssh within --wait (whole seconds 0..900; 0 means one try).
 # Selftest without a board: tools/mp2s_comeback_selftest.sh.
 set -u
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 usage() {
     echo "usage: mp2s_comeback.sh [--wait SECONDS] [--before-boot-id ID]" >&2
@@ -106,6 +113,10 @@ e=$(@SU@fw_printenv 2>/dev/null); erc=$?
 echo "env_rc=$erc"
 echo "env_mp2s=$(printf %s "$e" | sed -n "s/^\(mp2s_[A-Za-z0-9_]*\)=.*/\1/p" | tr "\n" " ")"
 echo "env_pfx=$(printf %s "$e" | sed -n "s/^boot_prefixes=//p" | head -n1)"
+if [ "$erc" != 0 ] && [ ! -e /etc/fw_env.config ]; then
+p=$(lsblk -rno PATH,PARTLABEL -- "$d" 2>/dev/null | sed -n "s/ u-boot-env\$//p" | head -n1)
+case $p in "$d"p[0-9]*) echo "env_b64=$(@SU@tail -c 16384 -- "$p" 2>/dev/null | base64 -w0)" ;; esac
+fi
 echo "end=1"
 '
 REMOTE=${REMOTE//@SU@/$SU}
@@ -135,6 +146,19 @@ root_mount=$(g root_mount)
 env_rc=$(g env_rc)
 env_mp2s=$(g env_mp2s)
 env_pfx=$(g env_pfx)
+env_how=
+# a board without /etc/fw_env.config: the two copies, decoded here
+if [ "$env_rc" != 0 ] && [ -n "$(g env_b64)" ]; then
+    EL=(--redundant --size 0x2000 --offset 0x2000 --offset2 0)
+    if g env_b64 | base64 -d >"$TMP/env.bin" 2>/dev/null && [ "$(stat -c %s "$TMP/env.bin")" = 16384 ] &&
+        python3 -I "$HERE/uboot_env.py" "${EL[@]}" check "$TMP/env.bin" >/dev/null 2>&1 &&
+        python3 -I "$HERE/uboot_env.py" "${EL[@]}" print "$TMP/env.bin" >"$TMP/env.txt" 2>/dev/null; then
+        env_rc=0
+        env_mp2s=$(sed -n 's/^\(mp2s_[A-Za-z0-9_]*\)=.*/\1/p' "$TMP/env.txt" | tr '\n' ' ')
+        env_pfx=$(sed -n 's/^boot_prefixes=//p' "$TMP/env.txt" | head -n1)
+        env_how=" (no /etc/fw_env.config on the board: both copies of the card's u-boot-env were read and decoded on the host)"
+    fi
+fi
 
 fails=()
 if [ -z "$boot_id" ]; then
@@ -152,7 +176,7 @@ else
     [ "$boot_fstype" = ext4 ] || fails+=("/boot is '$boot_fstype', not ext4")
 fi
 [ "$boot_type" = SD ] ||
-    fails+=("the disk /boot is on reads '${boot_type:-unreadable}', not SD (MMC is the eMMC, mmcblk0: the board must come back on the microSD)")
+    fails+=("the disk /boot is on reads '${boot_type:-unreadable}', not SD (MMC is the eMMC: the board must come back on the microSD)")
 [ -n "$root_mount" ] || fails+=("/ not mounted")
 case $env_rc in
 0) : ;;
@@ -179,6 +203,6 @@ if [ -n "$BEFORE" ]; then
 else
     nb="boot id not compared (no --before-boot-id)"
 fi
-say "comeback: ok OpenSTLinux kernel ${kernel:-unreadable}, /boot on $boot_src ($boot_fstype, disk type SD), / on ${root_mount%% *}, the environment holds no mp2s_* and no /yakogl/standalone/ prefix, $nb"
+say "comeback: ok OpenSTLinux kernel ${kernel:-unreadable}, /boot on $boot_src ($boot_fstype, disk type SD), / on ${root_mount%% *}, the environment holds no mp2s_* and no /yakogl/standalone/ prefix$env_how, $nb"
 say "comeback: uptime $(g uptime) s"
 exit 0

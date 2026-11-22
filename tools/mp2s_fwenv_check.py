@@ -21,8 +21,8 @@ means exactly two lines, one per copy.
 Passes only if every device
   - resolves, through symlinks under root, to a partition (sys/class/block/
     <name>/partition) of a disk whose sys/block/<disk>/device/type is "SD"
-    (an eMMC says "MMC" whatever its number; mmcblk0 is refused as well:
-    tools/board-stm32mp2.sh dev_guard),
+    (an eMMC says "MMC" whatever its number; the number never decides: on
+    the DK the card is mmcblk0 on some boots),
   - is on the disk holding the partition mounted on /boot,
   - is a partition named u-boot-env (uevent PARTNAME),
   - has an env size equal to --env-size (default 0x2000, the CONFIG_ENV_SIZE
@@ -162,8 +162,6 @@ def check(root, cfgrel, env_size):
         if kind != "SD":
             raise Refuse("%s is on a disk of type '%s', not SD (eMMC?)"
                          % (dev, kind if kind is not None else "unknown"))
-        if disk == "mmcblk0":
-            raise Refuse("%s is on mmcblk0 (the eMMC's index)" % dev)
         if disk != bdisk:
             raise Refuse("%s is not on the disk holding /boot" % dev)
         if partname != "u-boot-env":

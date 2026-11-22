@@ -113,7 +113,7 @@ has 'the reason' 'no boot id'
 reset; B_TYPE=MMC; mk; run_tool
 expect 1 'an MMC /boot FAILs'
 has 'the reason names the type' 'reads '\''MMC'\'', not SD'
-has 'the reason names the eMMC' 'mmcblk0'
+has 'the reason names the eMMC' 'MMC is the eMMC'
 reset; B_FSTYPE=vfat; mk; run_tool
 expect 1 'a vfat /boot FAILs'
 has 'the reason' 'not ext4'
@@ -130,6 +130,19 @@ has 'the reason' '/ not mounted'
 reset; B_RC=1; mk; run_tool
 expect 1 'a failing fw_printenv FAILs'
 has 'the variables are not taken as unset' 'not taken as unset'
+# the DK as shipped: no /etc/fw_env.config, fw_printenv fails, and the two
+# copies of the card's u-boot-env come back as base64 and are decoded here
+FIXENV=$HERE/testdata/mp2s-env
+b64env() { echo "env_b64=$(base64 -w0 <"$1")"; }
+reset; B_RC=1; mk; sed -i '$d' "$FAKE_OUT"; { b64env "$FIXENV/pristine.bin"; echo end=1; } >>"$FAKE_OUT"; run_tool
+expect 0 'no fw_env.config: a clean environment read from the partition is ok'
+has 'the verdict says how it was read' 'no /etc/fw_env.config on the board'
+reset; B_RC=1; mk; sed -i '$d' "$FAKE_OUT"; { b64env "$FIXENV/counting2.bin"; echo end=1; } >>"$FAKE_OUT"; run_tool
+expect 1 'no fw_env.config: a counting default read from the partition FAILs'
+has 'the names are listed from the partition' 'mp2s_* left in the environment: '
+reset; B_RC=1; mk; sed -i '$d' "$FAKE_OUT"; { b64env "$FIXENV/both-bad.bin"; echo end=1; } >>"$FAKE_OUT"; run_tool
+expect 1 'no fw_env.config: a partition whose copies do not check FAILs'
+has 'the variables are not taken as unset then' 'not taken as unset'
 reset; B_MP2S='mp2s_left mp2s_prefixes mp2s_ver'; mk; run_tool
 expect 1 'left mp2s_* FAILs'
 has 'the names are listed' 'mp2s_* left in the environment: mp2s_left mp2s_prefixes mp2s_ver'
