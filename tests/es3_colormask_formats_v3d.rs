@@ -11,9 +11,18 @@
 //! builds: `target_format` and `target_alpha_bits` as
 //! `framebuffer::fb_target_alpha_bits_n` and the format-to-surface mapping give
 //! them, `color_mask` / `clear_color_mask` as glColorMask left them (the GL
-//! core does not trim a mask to the format's channels). No job builder is
+//! core trims a mask to the format's channels itself, see below). No job builder is
 //! needed: `colormask` is a field of the `V3dJobState` the back end hands the
 //! job builder unchanged.
+//!
+//! The GL core limits the write mask to the format's channels only for the
+//! wide stores of R/RG integer textures and RG32F textures
+//! (`framebuffer::fb_target_channel_mask_n`, src/gl/framebuffer.rs:1126, applied
+//! at src/gl/draw.rs:5147 and per target by `per_target_masks`, draw.rs:2747;
+//! `int_clear_channels`, draw.rs:2977, for clears). `state.rs` never sees the
+//! format's channels, so these tests, which feed `state.rs` the untrimmed GL
+//! mask, still pin the V3D side as taking only alpha out. Renderbuffers and
+//! R8/RG8/RGB8/R16F/RG16F... textures are not trimmed by the GL core.
 //!
 //! Two kinds of test. The plain ones pin today's behaviour: the V3D takes
 //! only alpha out of the write mask (`st.colormask &= 0x7` when the target
@@ -169,7 +178,7 @@ fn draw_missing_channel_mask_is_not_empty_today() {
 /// GL mask limited to the channels the format has, so `R8` under
 /// glColorMask(0,1,1,0) writes nothing.
 #[test]
-#[ignore = "the V3D takes only alpha out of the write mask (state.rs:670); a format's missing G and B stay writable (v3d-fbo-render.md D4; needs GlesDraw::target_channels from the GL core)"]
+#[ignore = "state.rs:706 takes only alpha out of the mask; the GL core trims to the format's channels (draw.rs:5147) only for R/RG integer and RG32F textures, so R8/RG8/RGB8/R16F... and renderbuffers keep their missing channels writable (v3d-fbo-render.md D4)"]
 fn draw_colormask_limited_to_the_formats_channels() {
     for f in FORMATS {
         for mask in 0..16u8 {
@@ -252,7 +261,7 @@ fn tlb_clear_words_keep_the_missing_channels_today() {
 /// channel the format has is a plain TLB clear (RGB8 under glColorMask(1,1,1,0),
 /// R8 under (1,0,0,0)); one that misses a present channel is a quad.
 #[test]
-#[ignore = "colour_needs_quad tests the four GL channels, not the format's (state.rs:89-91); needs the format's channels from the GL core (v3d-fbo-render.md D4)"]
+#[ignore = "colour_needs_quad (state.rs:94) tests the four GL channels; int_clear_channels (draw.rs:2977) widens the mask for R/RG integer textures only, so R8, RG8, RGB8 and float formats still take the quad for a mask of their present channels (v3d-fbo-render.md D4)"]
 fn clear_needs_a_quad_only_for_a_present_channel_masked() {
     for f in FORMATS {
         for mask in 1..16u8 {
