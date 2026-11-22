@@ -1776,6 +1776,18 @@ t6run back "$S/t6/hello-crash.uart" T6_CRASH=1
 check "nanopc-t6 with T6_CRASH=1: the runner got --go --crash, the record's jump line names the crash route, the same verdict" \
     eval 'grep -qx "argv=$S/img/nanopc-t6.bin --go --crash" "$S/t6/args" && grep -q " jumping (linux_wdt 1, route crash)$" "$T6_RD/record.txt" &&
           [ "$T6_RC" = 0 ] && grep -q "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_hello .*back_after=37s" <<<"$T6_OUT"'
+# the display probes' records are judged by their own tables too: t6_cold
+# by a normal kexec (a run to the end, and one stopped after stage 4 as
+# asked), t6_display by the crash route
+t6run back "$KT/t6_cold-pass.uart"
+check "nanopc-t6 back with t6_cold's passing record: rc 0, done, t6-verdict.sh's PASS" \
+    eval '[ "$T6_RC" = 0 ] && grep -q "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_cold " <<<"$T6_OUT"'
+t6run back "$KT/t6_cold-stop4.uart"
+check "nanopc-t6 back with t6_cold stopped after stage 4 as asked: rc 0, done (its table expects the stop)" \
+    eval '[ "$T6_RC" = 0 ] && grep -q "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_cold " <<<"$T6_OUT"'
+t6run back "$KT/t6_display-pass.uart" T6_CRASH=1
+check "nanopc-t6 back with t6_display's passing record by the crash route: rc 0, done, t6-verdict.sh's PASS" \
+    eval '[ "$T6_RC" = 0 ] && grep -q "rc=0 verdict=done boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_display " <<<"$T6_OUT"'
 t6run back "$KT/t6_mmu-differs.uart"
 check "nanopc-t6 back with t6_mmu's differing record: failed rc 4, t6-verdict.sh's FAIL" \
     eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=failed boot=kexec-dev DEV boot_verdict=complete result=legacy:t6-verdict_t6_mmu " <<<"$T6_OUT"'

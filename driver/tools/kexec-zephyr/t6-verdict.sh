@@ -9,10 +9,11 @@
 #
 #   T6_ROUTE=uboot t6-verdict.sh <probe> <uart.log>
 #
-# probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit or t6_display. The expected lines are in order: the
-# early banner (T6:A .. T6:A3, board::nanopc_t6_early), the board glue's
-# lines (T6:B, the marker, the two GIC lines, the arming, T6:C, "board: watchdog
-# armed"; driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
+# probe: t6_hello, t6_gpu, t6_mmu, t6_fw, t6_submit, t6_display or t6_cold.
+# The expected lines are in order: the early banner (T6:A .. T6:A3,
+# board::nanopc_t6_early), the board glue's lines (T6:B, the marker, the two
+# GIC lines, the arming, T6:C, "board: watchdog armed";
+# driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c), the probe's own
 # lines (tools/probes/nanopc_t6/<probe>/src/main.c) and the glue's reset
 # line. Each template below is the printf format with its conversions
 # replaced: a value driver/docs/nanopc-t6-mali.md predicts exactly is written
@@ -89,7 +90,7 @@
 set -euo pipefail
 export LC_ALL=C
 
-usage() { echo "usage: [T6_ROUTE=kexec|uboot] $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display} <uart.log>" >&2; exit 2; }
+usage() { echo "usage: [T6_ROUTE=kexec|uboot] $0 {t6_hello|t6_gpu|t6_mmu|t6_fw|t6_submit|t6_display|t6_cold} <uart.log>" >&2; exit 2; }
 [ $# -eq 2 ] || usage
 ROUTE=${T6_ROUTE:-kexec}
 case "$ROUTE" in kexec | uboot) ;; *) usage ;; esac
@@ -415,11 +416,13 @@ table_t6_fw() {
 	table_reset t6_fw
 }
 
-# t6_display: the frame buffer's %p is its PA (the identity map); FB8 is the
-# PA as the later lines print it (%08x)
+# t6_display, t6_cold: the frame buffer's %p is its PA (the identity map);
+# FB8 is the PA as the later lines print it (%08x), FBX as the drivers
+# crate's lines do ({:#x})
 display_fb() {
 	[ $((16#${V[FBV]})) -eq $((16#${V[FB]})) ] || return 1
 	V[FB8]=$(printf '%08x' $((16#${V[FB]})))
+	V[FBX]=$(printf '%x' $((16#${V[FB]})))
 }
 
 # the pixel clock (decimal kHz) within 0.5 % of the mode's 65 MHz
@@ -430,6 +433,32 @@ display_phy() { (((16#${V[PHY]} & 0xe) == 0xe)); }
 
 # the controller's clock monitor reads locked (CMU_STATUS & 0x3f = 0x15)
 display_cmu() { (((16#${V[CMU]} & 0x3f) == 0x15)); }
+
+# t6_cold's stage names (soc::rk3588_display_chain::stage), by number
+COLD_STAGES=(none START POWER GRF PHY DCLK CONTROLLER VOP VIDEO)
+
+# table_picture_status <probe> [any]: the hold and the read-backs after it,
+# as common/t6_picture.c prints them for both display probes. The status
+# must read back the buffer (FB8) and the overlay selects the probe wrote
+# (OLS, OPS: otherwise Esmart0 may be outside VP0's layers and the screen
+# shows only the background); with "any" the selects are checked for form
+# only (a run whose record does not print what it wrote).
+table_picture_status() {
+	local p=$1 ops='{=OPS}' ols='{=OLS}'
+	if [ "${2:-}" = any ]; then ops='{x8}' ols='{x8}'; fi
+	e "$p: holding the picture for 30 s: red top left, green top right, blue bottom left, yellow bottom right, white 1-pixel border"
+	local i
+	for i in 10 20 30; do
+		e "$p: held $i s"
+	done
+	e "$p: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x{x8}"
+	e "$p: 60 frames in {d} us: {d} mHz, pixel clock {@PCLK} kHz" "^$p: ([0-9]+ frames in|no frame timed) " display_pclk
+	e "$p: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} REG_CFG_DONE 0x{x8} DSP_IF_EN 0x{x8} DSP_CTRL 0x0000000f HTOTAL_HS_END 0x05400088 VTOTAL_VS_END 0x03260006"
+	e "$p: VOP OVL_PORT_SEL 0x$ops OVL_LAYER_SEL 0x$ols Esmart0 REGION0_CTRL 0x00000001 YRGB_MST 0x{=FB8} VIR 0x00000400 INT_RAW_STATUS 0x{x8} SYS0 0x{x8} SYS1 0x{x8}"
+	e "$p: HPD 1 (SOC_STATUS1 0x{x8}), PHY0 GRF STATUS 0x{@PHY}" '' display_phy
+	e "$p: HDMI0 CMU_STATUS 0x{@CMU} VIDQPCLK_FREQ {d} LINKQPCLK_FREQ {d}" '' display_cmu
+	e "$p: HDMI0 VIDEO_MONITOR_STATUS0-6 0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300 0x{x8}"
+}
 
 # Step D2, tools/probes/nanopc_t6/t6_display/src/main.c on the success path
 # (driver/docs/nanopc-t6-display.md, section 2 route (a), section 5). Pinned:
@@ -459,20 +488,81 @@ table_t6_display() {
 	e 't6_display: window: Esmart0 on 0x{=FB8} stride 4096; REG_CFG_DONE 0x{x8} after the write, 0x{x8} after the frame start ({d} us)'
 	e 't6_display: shown: YRGB_MST 0x{=FB8} REGION0_CTRL 0x00000001 OVL_PORT_SEL 0x{=OPS} OVL_LAYER_SEL 0x{=OLS}'
 	e 't6_display: adopt rc 0 stop 0 (none), refusal 0, index 0, detail 0x00000000' 't6_display: adopt rc'
-	e 't6_display: holding the picture for 30 s: red top left, green top right, blue bottom left, yellow bottom right, white 1-pixel border'
-	local i
-	for i in 10 20 30; do
-		e "t6_display: held $i s"
-	done
-	e 't6_display: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x{x8}'
-	e 't6_display: 60 frames in {d} us: {d} mHz, pixel clock {@PCLK} kHz' '' display_pclk
-	e 't6_display: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} REG_CFG_DONE 0x{x8} DSP_IF_EN 0x{x8} DSP_CTRL 0x0000000f HTOTAL_HS_END 0x05400088 VTOTAL_VS_END 0x03260006'
-	e 't6_display: VOP OVL_PORT_SEL 0x{=OPS} OVL_LAYER_SEL 0x{=OLS} Esmart0 REGION0_CTRL 0x00000001 YRGB_MST 0x{=FB8} VIR 0x00000400 INT_RAW_STATUS 0x{x8} SYS0 0x{x8} SYS1 0x{x8}'
-	e 't6_display: HPD 1 (SOC_STATUS1 0x{x8}), PHY0 GRF STATUS 0x{@PHY}' '' display_phy
-	e 't6_display: HDMI0 CMU_STATUS 0x{@CMU} VIDQPCLK_FREQ {d} LINKQPCLK_FREQ {d}' '' display_cmu
-	e 't6_display: HDMI0 VIDEO_MONITOR_STATUS0-6 0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300 0x{x8}'
+	table_picture_status t6_display
 	e 't6_display: PASS: Esmart0 of VP0 shows 0x{=FB8}, frames run, no underflow, no bus error' 't6_display: (PASS|FAIL)'
 	table_reset t6_display
+}
+
+# Step D8, tools/probes/nanopc_t6/t6_cold/src/main.c, after a normal kexec
+# (driver/docs/nanopc-t6-display.md, section 2 route (c), sections 5 and 7).
+# The stop the image was built with (its "options:" line, T6_COLD_STOP_AFTER)
+# chooses the lines: every run has the reads before the chain (form only:
+# what Linux's shutdown left is recorded, not predicted) and one line per
+# stage up to the stop, in order, so a run that hangs is "missing" from the
+# stage after the last one it reached. A run to the end has the chain's
+# report (CORE_ID, VERSION_INFO, the video check pinned; the overlay
+# selects captured), its rc 0, the hold, the read-backs as t6_display's and
+# PASS. A run stopped as asked has the stop line, its rc with error 1, then,
+# when the picture is up (a stop after VOP or VIDEO), the hold and the
+# read-backs, and STOPPED in place of PASS. A failed stage's line never
+# passes. What the display shows only a person can say.
+table_t6_cold() {
+	table_boot
+	local n=0 l re='^t6_cold: options: power-cycle 1, force-cold [01], stop after ([0-8]) '
+	for l in "${LINES[@]}"; do
+		if [[ $l =~ $re ]]; then
+			n=${BASH_REMATCH[1]}
+			break
+		fi
+	done
+	local last=$n name=${COLD_STAGES[$n]}
+	[ "$n" != 0 ] || last=8
+	e 't6_cold: build {s}'
+	e 't6_cold: WDT0 period 22369 ms, fed until 60000 ms of uptime'
+	if [ "$n" = 0 ]; then
+		e 't6_cold: options: power-cycle 1, force-cold {d}, stop after 0 (run to the end)'
+	else
+		e "t6_cold: options: power-cycle 1, force-cold {d}, stop after $n ($name)"
+	fi
+	e 't6_cold: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
+	e 't6 display: before: PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8}'
+	e 't6 display: before: PD_VOP powered {d} usable {d}, PD_VO1 powered {d} usable {d} (IDLE_REQ 0x{x8})'
+	e 't6 display: before: vop {s}' '^t6 display: before: vop '
+	e 't6 display: before: hdmi-tx0 {s}' '^t6 display: before: hdmi-tx0 '
+	e 't6 display: before: hdptx0 {s}' '^t6 display: before: hdptx0 '
+	e 't6 display: before: CLKSEL_CON(112) 0x{x8} (DCLK_VOP0 mux {d}), {s}'
+	e 't6 display: stage 1 START' '^t6 display: stage 1 '
+	e 't6 display: found VOP {s} DSP_CTRL 0x{x} 0x{x} 0x{x} 0x{x}, PHY STATUS 0x{x}' '^t6 display: found VOP '
+	local s
+	for ((s = 2; s <= last; s++)); do
+		e "t6 display: stage $s ${COLD_STAGES[s]}" "^t6 display: stage $s "
+	done
+	never '^t6 display: stage [0-9]+ [A-Z_]+ failed: '
+	if [ "$n" = 0 ]; then
+		e 't6 display: up, 1024x768 at 0x{=FBX}, PHY lock {d} us, CMU 0x{x}'
+		e 't6 display: START: running 0x{x}, stopped 0x{x}, no pixel clock 0x{x}, PHY powered off {d}'
+		e 't6 display: POWER: ACLK_VOP set {d}, PD_VOP was on {d} waited {d}/{d}/{d} us, PD_VO1 was on {d} waited {d}/{d}/{d} us'
+		e 't6 display: PHY: locked after {d} us, CON0 0x{x8} STATUS 0x{@PHY}' '' display_phy
+		e 't6 display: CONTROLLER: CORE_ID 0x48515458 VER_NUMBER 0x{x8} VER_TYPE 0x{x8} CONFIG 0x{x8}'
+		e 't6 display: VOP: VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} -> 0x{x8}, vop_mmu STATUS 0x{x8} 0x{x8} -> 0x{x8} 0x{x8}'
+		e 't6 display: VOP: overlay OVL_LAYER_SEL 0x{@OLS} OVL_PORT_SEL 0x{@OPS}, in force after {d} us'
+		e 't6 display: VIDEO: frame start 1 underflow 0 bus error 0 0, YRGB_MST 0x{=FB8}, REG_CFG_DONE 0x{x8}, CMU_STATUS 0x{x8}, HPD 1'
+		e 't6_cold: chain rc 0 in {d} ms: stage 0 (none), error 0 (none), refusal 0, index 0, detail 0x00000000' 't6_cold: chain rc'
+		table_picture_status t6_cold
+		e 't6_cold: PASS: Esmart0 of VP0 shows 0x{=FB8}, frames run, no underflow, no bus error' 't6_cold: (PASS|FAIL|STOPPED)'
+	else
+		e "t6 display: stopped after stage $n $name as asked"
+		e "t6_cold: chain rc {d} in {d} ms: stage $n ($name), error 1 (stopped as asked), refusal 0, index 0, detail 0x00000000" 't6_cold: chain rc'
+		if [ "$n" -ge 7 ]; then
+			# the picture is up, but the chain's report (its overlay
+			# line) is printed only by a run to the end
+			table_picture_status t6_cold any
+			e "t6_cold: STOPPED: after stage $n ($name) as asked" 't6_cold: (PASS|FAIL|STOPPED)'
+		else
+			e "t6_cold: STOPPED: after stage $n ($name) as asked, nothing scans out" 't6_cold: (PASS|FAIL|STOPPED)'
+		fi
+	fi
+	table_reset t6_cold
 }
 
 # the target's counts (printed in decimal) add up to the pixels read
@@ -523,7 +613,7 @@ table_t6_submit() {
 }
 
 case "$PROBE" in
-t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_display) "table_$PROBE" ;;
+t6_hello | t6_gpu | t6_mmu | t6_fw | t6_submit | t6_display | t6_cold) "table_$PROBE" ;;
 *) usage ;;
 esac
 

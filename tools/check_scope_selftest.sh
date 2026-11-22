@@ -134,6 +134,7 @@ want tools/mali/panthor/src/dev.rs mali
 want tools/osal/linux_heap_check.c osal
 want driver/samples/zephyr/gl_test/src/main_rpi4.c samples
 want tools/probes/nanopc_t6/t6_hello/src/main.c samples
+want tools/probes/nanopc_t6/common/t6_picture.c samples
 # the STM32MP257F-DK's Zephyr board, SoC, board layer and probes reach its
 # image rows; its GPU row's host checks are the Vivante scope's
 want driver/boards/st/stm32mp257f_dk/board.yml drivers
@@ -269,6 +270,8 @@ out=$(plan driver/zephyr/lib/board/nanopc_t6/nanopc_t6.c)
 expect "nanopc_t6 glue: its image" '^plan  zephyr  nanopc_t6 t6_hello image' "$out"
 expect "nanopc_t6 glue: the GPU sample's image" '^plan  zephyr  nanopc_t6 t6_gpu image' "$out"
 expect "nanopc_t6 glue: the MMU probe's image" '^plan  zephyr  nanopc_t6 t6_mmu image' "$out"
+expect "nanopc_t6 glue: the display adopt probe's image" '^plan  zephyr  nanopc_t6 t6_display image \(D2' "$out"
+expect "nanopc_t6 glue: the cold display probe's image" '^plan  zephyr  nanopc_t6 t6_cold image \(D8' "$out"
 # Z3's probe (on a run, a gap naming the firmware without it, as the row below)
 expect "nanopc_t6 glue: the firmware probe's image" '^plan  zephyr  nanopc_t6 t6_fw image' "$out"
 expect "nanopc_t6 glue: the submit probe's image" '^plan  zephyr  nanopc_t6 t6_submit image \(Z4\)' "$out"
