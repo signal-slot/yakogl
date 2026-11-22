@@ -2207,6 +2207,8 @@ step "test    $V3D_CONFIG (tests/es3_shadow_v3d_draw.rs)" \
 # report-es2.
 step "test    $V3D_CONFIG (tests/es3_msaa_gl.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl
+step "test    $V3D_CONFIG (tests/es3_msaa_gl_srgb.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_CONFIG" --test es3_msaa_gl_srgb
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_msaa_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_msaa_pvr
 step "test    host-test,gpu-vivante,shaderc-online (tests/es3_msaa_gc.rs)" \
