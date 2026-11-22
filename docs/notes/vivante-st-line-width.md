@@ -6,21 +6,21 @@ supports, what our GL core reports and programs today, which cases depend on
 it, and the decision for P9 (`docs/notes/pre-study-stm32mp257f-dk.md`, Q11 and
 the P9 row). Nothing here was measured on the board.
 
-`[unread]` marks a source this note could not open. Mesa's tree was not
-available: `$MESA_ETNA_TREE` is unset here, no etnaviv source is under
-`$CONNECTED_DEPS_DIR`, and fetching it needs network approval this run did not
-have. Every Mesa claim below is therefore second-hand, from the repository's
-own record of it, and carries `[unread]`. Whoever has a Mesa 26.2.1 tree reads
-`src/gallium/drivers/etnaviv/etnaviv_screen.c:366-368` and the etnaviv hwdb row
-and confirms the three cited lines.
+`[unread]` marks a source this note could not open. Mesa 26.2.1's
+`src/gallium/drivers/etnaviv/etnaviv_screen.c` (tag `mesa-26.2.1`, fetched
+because `$MESA_ETNA_TREE` is unset) was read: `:358-359` minimum line width,
+`:364` granularity 0.1, and `:366-368`
+`max_line_width = max_line_width_aa = VIV_FEATURE(screen,
+ETNA_FEATURE_WIDELINE_TRIANGLE_EMU) ? 1.0f : 8192.0f`. The hwdb lines
+(`:5182`, `:19297`) and the dEQP sources were not opened and stay `[unread]`.
 
 ## 1. What the row supports
 
 | Fact | Value | Source |
 | --- | --- | --- |
 | Feature bit `WIDELINE_TRIANGLE_EMU` | set on the ST row, clear on the i.MX8MP's GC7000UL | `src/vivante/profile.rs:152` (ST), `:117` (i.MX8MP); the hwdb lines `:5182` (ST) and `:19297` (i.MX8MP) are quoted there, [unread] |
-| What the bit means | the driver draws wide lines as triangles; Mesa then reports a line width of 1.0 at most | `src/vivante/profile.rs:61-64`, citing `etnaviv_screen.c:366-368` [unread] |
-| Mesa's range on the i.MX8MP / the ST row | 1..8192 / 1..1 | `tools/vivante/README.md:737` (a Mesa 26.2.1 run on drm-shim, per that section; the Mesa source itself [unread]) |
+| What the bit means | the driver draws wide lines as triangles; Mesa then reports a line width of 1.0 at most | `src/vivante/profile.rs:61-64`, citing `etnaviv_screen.c:366-368` (read) |
+| Mesa's range on the i.MX8MP / the ST row | 1..8192 / 1..1 | `tools/vivante/README.md:737` (a Mesa 26.2.1 run on drm-shim, per that section; the Mesa source `etnaviv_screen.c:366-368` read) |
 | What Mesa programs for `glLineWidth(4)` | `PA_LINE_WIDTH` and `PA_WIDE_LINE_WIDTH0/1` hold 0.5 on the ST row (clamped to 1.0, registers hold half the width), 2.0 on the i.MX8MP | `tools/vivante/README.md:739-743` |
 | The profile's range | `[1.0, 1.0]`, "until a board test says what the wide-line registers do" | `src/vivante/profile.rs:163-165`; the i.MX8MP row is `[1.0, 16.0]` (`:128-130`) |
 
