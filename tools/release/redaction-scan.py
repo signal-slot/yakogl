@@ -901,7 +901,7 @@ def self_test():
         xml_h = "driver/src/vivante/hw/state.xml.h"
         regs = "driver/rust/src/soc/imx8mp/regs.rs"
         snap = "docs/release/snapshot.md"
-        pad ="tools/y.sh"
+        pad = "tools/y.sh"
         rules = [
             ("home-path", pad, "drop", ["/ho", "me/..."], ["/ho", "me/.cache"]),
             ("login-at-host", pad, "drop", ["root", "@BOARD"], ["root", "@BOARD2"]),
