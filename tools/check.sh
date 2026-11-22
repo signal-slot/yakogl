@@ -2304,6 +2304,10 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
 # glCopyTex* answers (0658692a) in the ES 2.0 context, every source x destination.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_copytex.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_copytex
+# The TMU base level stays 0 and max level as before for ES 2.0 textures
+# (337a9453 adds texture::state_at; ES 2.0 has no GL_TEXTURE_BASE_LEVEL).
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_base_level.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_base_level
 # The ES 2.0 varying and uniform limits keep their answers (the ES 3.0 raises
 # of plan #359 do not show under report-es2); the PowerVR and GC7000
 # report-es2 rows run it with the rest of tests/.
