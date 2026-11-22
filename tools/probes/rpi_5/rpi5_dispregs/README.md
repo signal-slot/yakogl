@@ -69,3 +69,60 @@ answers and the skipped HDMI path.
 
 ## On the board
 
+2026-11-22, one tryboot session on the Pi 5 (BCM2712 D0). The image was
+built with `-DYAKOGL_WERROR=ON` from `a9ca11e1` (it printed
+`rpi5_dispregs: build a9ca11e1`; Zephyr `af17c0c8aa2a`; image sha256
+`e579e282`, 61728 bytes). The board came back to Linux by itself, through
+the PM watchdog and tryboot, 168 s after the reboot. `get_throttled` read
+0x0 before and after the run, and no image file or `tryboot.txt` was left
+under `/boot/firmware`.
+
+End line:
+
+```
+rpi5_dispregs: done (pv 2 of 2, clock tags 16 of 16, hdmi read)
+```
+
+`verdicts.sh` on the console with its `HH:MM:SS ` prefix stripped: exit 0.
+
+```
+rpi5_dispregs verdict: q3 pv0: running clk_select 0 pixel_rep 0 active 960x1080 vic 0; hvs ch0 fwidth 1919 lines 1079
+rpi5_dispregs verdict: q3 pv1: running clk_select 0 pixel_rep 0 active 320x480 vic 0; hvs ch1 fwidth 639 lines 479
+rpi5_dispregs verdict: q3: pv0 runs (both valves run) (the repo maps pv0 to HDMI0, pv1 to HDMI1); two pixels per clock: unknown (valve active width 960, HVS FWIDTH 1919)
+rpi5_dispregs verdict: q5 clock core (4): state on rate 500000000 measured 910010752 max 910000000
+rpi5_dispregs verdict: q5 clock hsm (13): state on rate 0 measured 648006592 max 648000000
+rpi5_dispregs verdict: q5 clock bvb (14): state off rate 0 measured 324003296 max 324000000
+rpi5_dispregs verdict: q5 clock disp (16): state off rate 0 measured 648009856 max 648000000
+rpi5_dispregs verdict: q5: hsm on measured 648006592, bvb off measured 324003296, disp off measured 648009856
+rpi5_dispregs verdict: q6: displays: 1, settings: answered, hdmi: hdmi0 hotplug 1 hd_vid_ctl enable 1, hdmi1 hotplug 0 hd_vid_ctl enable 1; the firmware drives HDMI0
+rpi5_dispregs verdict: end: done (pv 2 of 2, clock tags 16 of 16, hdmi read)
+rpi5_dispregs verdict: done
+```
+
+The raw words behind them, as the image printed them:
+
+```
+rpi5_dispregs: pv0 regs control 0x07174001 vcontrol 0x00000003 horza 0x004a0016 horzb 0x002c03c0 verta 0x00240005 vertb 0x00040438
+rpi5_dispregs: pv1 regs control 0x07174001 vcontrol 0x00000003 horza 0x00180030 horzb 0x00080140 verta 0x00210002 vertb 0x000a01e0
+rpi5_dispregs: display_settings words 0x00000000 0x00000780 0x00000438 0x00000010 0x00000f00 0x00000780 0x00000438 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000
+```
+
+GET_DISPLAY_SETTINGS answered 1920x1080 at 16 bpp, pitch 3840: the
+firmware's FB0 that the boot loader logged (`1920x1080 stride 3840 base
+0x3f800000`). pv0's active width of 960 is half the HVS channel 0's 1920
+(FWIDTH 1919). This is consistent with two pixels per clock, but
+`verdicts.sh` leaves it as unknown. Both valves and both HVS channels run.
+HDMI1 has no hotplug, yet its HD_VID_CTL reads enabled, with 0x98010000
+against HDMI0's 0x80010000. The HSM, bvb and disp clocks answer a
+GET_CLOCK_RATE of 0, while their measured rates sit at the max. Of the four
+clocks only core (4) and hsm (13) answer state on.
+
+The run was captured as in `rpi5_scanout16`: the farm's console lease holds
+the serial bridge, so `BOARD_UART` was a local `am62p_netboot_uart.py feed`
+relay of the lease's copy of the same console. The copy left out the boot
+loader's lines before `Starting OS` and Zephyr's three `xlat tables` log
+lines; every `rpi5_dispregs:` line is as the board printed it. `board.sh`
+saw the end line (`boot_verdict=complete`) but named no result
+(`verdict=no_record`, rc 4), because its pi5 label table does not know
+`rpi5_dispregs` yet. The run directory is outside the tree (gitignored
+`build/`).
