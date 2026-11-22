@@ -44,6 +44,25 @@ trap cleanup EXIT
 stage=$run/stage/yakogl tftp=$run/tftp
 mkdir -p "$stage" "$tftp" "$run/logs" "$run/img"
 
+# build-uboot.sh's fetch, on an annotated tag made here (no network): it
+# checks out the tag's commit and prints nothing, and it refuses a tag that
+# names another commit. One line from git fails the gate's row (issue #10552).
+fetch_check() {
+	local f=$run/fetch want out
+	local id=(-c user.name=run.sh -c user.email=run.sh@example.invalid -c commit.gpgsign=false -c tag.gpgSign=false)
+	git -c init.defaultBranch=main init -q "$f/src"
+	git "${id[@]}" -C "$f/src" commit -q --allow-empty -m one
+	git "${id[@]}" -C "$f/src" tag -a v1 -m v1
+	want=$(git -C "$f/src" rev-parse 'v1^{commit}')
+	out=$(mp2_qemu_fetch "file://$f/src" v1 "$want" "$f/a" 2>&1) || { echo "run.sh: mp2_qemu_fetch failed: $out"; return 1; }
+	[ -z "$out" ] || { echo "run.sh: mp2_qemu_fetch printed: $out"; return 1; }
+	[ "$(git -C "$f/a" rev-parse HEAD)" = "$want" ] || { echo "run.sh: mp2_qemu_fetch: HEAD is not the tag's commit"; return 1; }
+	if mp2_qemu_fetch "file://$f/src" v1 "${want//[0-9a-f]/0}" "$f/b" > /dev/null 2>&1; then
+		echo "run.sh: mp2_qemu_fetch took a tag that names another commit"; return 1
+	fi
+}
+fetch_check || { rc=1; exit 1; }
+
 # The scripts, with the mkimage of the same U-Boot build (build.sh takes
 # mkimage from PATH).
 SOURCE_DATE_EPOCH=0 PATH="$(dirname "$uboot")/tools:$PATH" bash "$here/../build.sh" "$run/scr" > /dev/null
