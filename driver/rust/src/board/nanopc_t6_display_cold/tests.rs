@@ -9,15 +9,33 @@ use crate::env::{Level, LINE_MAX};
 use crate::ip::hdptx::Refusal as PhyRefusal;
 use crate::mmio::Mmio;
 use crate::model_rk3588_display::{
-    gate_addr, sel_addr, Faults, Rk3588Display, CRU, HDMI, MMU, PHY, PHY_GRF, PMU, SYS_GRF, VO1_GRF, VOP, VOP_GRF,
+    gate_addr, sel_addr, virt, Faults, Mapped, Rk3588Display, CRU, HDMI, MMU, PHY, PHY_GRF, PMU, SYS_GRF, VO1_GRF, VOP,
+    VOP_GRF,
 };
 
-// The model's addresses (the real ones, restated by the model).
-const B: ColdBases = ColdBases {
+// The physical addresses (the real ones, restated by the model).
+const PHYS: ColdBases = ColdBases {
     display: Bases { vop: VOP, vop_mmu: MMU, pmu: PMU, cru: CRU, sys_grf: SYS_GRF, phy_grf: PHY_GRF, hdmi: HDMI },
     vop_grf: VOP_GRF,
     vo1_grf: VO1_GRF,
     phy: PHY,
+};
+
+// What the probe passes: every base mapped, none at its physical address
+// (model_rk3588_display::Mapped translates them back).
+const B: ColdBases = ColdBases {
+    display: Bases {
+        vop: virt(VOP),
+        vop_mmu: [virt(MMU[0]), virt(MMU[1])],
+        pmu: virt(PMU),
+        cru: virt(CRU),
+        sys_grf: virt(SYS_GRF),
+        phy_grf: virt(PHY_GRF),
+        hdmi: virt(HDMI),
+    },
+    vop_grf: virt(VOP_GRF),
+    vo1_grf: virt(VO1_GRF),
+    phy: virt(PHY),
 };
 
 const FB: u64 = 0x1001_2000;
@@ -49,7 +67,7 @@ fn has(m: &Rk3588Display, start: &str) -> bool {
 fn after_normal_kexec() -> Rk3588Display {
     let m = chip(Faults::default());
     // the chain stands in for Linux's bring-up; then Linux's mode words
-    assert_eq!(cold(&m, &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
     // VP0: htotal 2200, hsync 44; hact 192..2112; vtotal 1125, vsync 5; vact 41..1121
     for (off, w) in
         [(0xc48, 2200 << 16 | 44), (0xc4c, 192 << 16 | 2112), (0xc50, 1125 << 16 | 5), (0xc54, 41 << 16 | 1121)]
@@ -71,7 +89,7 @@ fn after_normal_kexec() -> Rk3588Display {
 #[test]
 fn a_cold_chip_shows_the_buffer_and_logs_every_stage() {
     let m = chip(Faults::default());
-    assert_eq!(cold(&m, &B, &m, flags::POWER_CYCLE, 0, FB), Ok(Cold::default()));
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB), Ok(Cold::default()));
     assert_eq!(m.refused(), Vec::<String>::new());
     assert!(m.port_runs(0));
     assert_eq!(m.fetching(), WIN_ESMART0);
@@ -115,7 +133,7 @@ fn after_a_normal_kexec_from_another_mode_the_power_cycle_runs_through() {
     // port running and powers everything off first; Linux's mode is not
     // looked at
     let m = after_normal_kexec();
-    assert_eq!(cold(&m, &B, &m, flags::POWER_CYCLE, 0, FB), Ok(Cold::default()));
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB), Ok(Cold::default()));
     assert_eq!(m.refused(), Vec::<String>::new());
     assert!(m.port_runs(0) && m.fetching() == WIN_ESMART0);
     assert_eq!(m.peek(VO1_GRF) & 3 << 5, 0, "the sync field is the mode's (both negative)");
@@ -126,7 +144,7 @@ fn after_a_normal_kexec_from_another_mode_the_power_cycle_runs_through() {
     // without it: VOP2 is powered but its bus clocks are gated, so whether
     // a port runs is not known; refused before any write
     let m = after_normal_kexec();
-    let c = cold(&m, &B, &m, 0, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, 0, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.index), (stage::START, ColdError::VopUnreadable as u32, 2));
     assert!(m.writes().is_empty());
     assert!(m
@@ -137,7 +155,7 @@ fn after_a_normal_kexec_from_another_mode_the_power_cycle_runs_through() {
     // and with its bus clocks open the gated pixel clock refuses it
     let m = after_normal_kexec();
     m.poke(gate_addr(0, 52), m.peek(gate_addr(0, 52)) & !(1 << 9 | 1 << 8));
-    let c = cold(&m, &B, &m, flags::FORCE_COLD, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, flags::FORCE_COLD, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.detail), (stage::START, ColdError::Unclocked as u32, 1));
     assert!(m.writes().is_empty());
 }
@@ -145,12 +163,12 @@ fn after_a_normal_kexec_from_another_mode_the_power_cycle_runs_through() {
 #[test]
 fn a_port_left_running_is_refused_without_force_cold() {
     let m = chip(Faults::default());
-    assert_eq!(cold(&m, &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
+    assert_eq!(cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, 0x2000_0000), Ok(Cold::default()));
     m.leave_linux_running(false);
     m.clear_lines();
-    let c = cold(&m, &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!(c, Cold { stage: stage::START, error: ColdError::FoundRunning as u32, detail: 1, ..Cold::default() });
-    let c = cold(&m, &B, &m, flags::POWER_CYCLE | flags::FORCE_COLD, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE | flags::FORCE_COLD, 0, FB).unwrap();
     assert_eq!(c, Cold::default());
     assert_eq!(m.fetching(), WIN_ESMART0);
 }
@@ -159,7 +177,7 @@ fn a_port_left_running_is_refused_without_force_cold() {
 fn each_stop_after_is_reported_as_asked_and_names_its_stage_last() {
     for n in stage::START..=stage::VIDEO {
         let m = chip(Faults::default());
-        let c = cold(&m, &B, &m, flags::POWER_CYCLE, n, FB).unwrap();
+        let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, n, FB).unwrap();
         assert_eq!(c, Cold { stage: n, error: ColdError::Stopped as u32, ..Cold::default() }, "stop_after {n}");
         let l = lines(&m);
         let last_stage = l.iter().rfind(|x| x.starts_with("t6 display: stage ")).unwrap();
@@ -172,26 +190,30 @@ fn each_stop_after_is_reported_as_asked_and_names_its_stage_last() {
 #[test]
 fn a_failure_is_recorded_with_its_stage_and_numbers() {
     let m = chip(Faults { phy_no_lock: true, ..Faults::default() });
-    let c = cold(&m, &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.refusal), (stage::PHY, ColdError::Phy as u32, PhyRefusal::LockTimeout as u32));
     assert!(m.lines().iter().any(|(lv, l)| *lv == Level::Err && l.starts_with("t6 display: stage 4 PHY failed: Phy(")));
     let m = chip(Faults { underflow: true, ..Faults::default() });
-    let c = cold(&m, &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.detail), (stage::VIDEO, ColdError::Video as u32, chain::video_check::UNDERFLOW));
     let m = chip(Faults { dead: Some("vo1"), ..Faults::default() });
-    let c = cold(&m, &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
+    let c = cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, 0, FB).unwrap();
     assert_eq!((c.stage, c.error, c.index), (stage::POWER, ColdError::Display as u32, 2));
 }
 
 #[test]
 fn bad_arguments_are_refused_before_anything_is_read() {
     let m = chip(Faults::default());
-    assert_eq!(cold(&m, &B, &m, 1 << 2, 0, FB), Err(Refused::Flags(1 << 2)));
-    assert_eq!(cold(&m, &B, &m, flags::POWER_CYCLE, stage::SHUT_DOWN, FB), Err(Refused::StopAfter(stage::SHUT_DOWN)));
+    assert_eq!(cold(&Mapped(&m), &B, &m, 1 << 2, 0, FB), Err(Refused::Flags(1 << 2)));
+    assert_eq!(
+        cold(&Mapped(&m), &B, &m, flags::POWER_CYCLE, stage::SHUT_DOWN, FB),
+        Err(Refused::StopAfter(stage::SHUT_DOWN))
+    );
     assert!(m.writes().is_empty() && m.lines().is_empty());
 }
 
 #[test]
 fn the_bases_map_onto_the_chains() {
-    assert_eq!(B.chain(), chain::RK3588);
+    assert_eq!(PHYS.chain(), chain::RK3588);
+    assert_eq!(B.chain(), crate::model_rk3588_display::chain_bases());
 }

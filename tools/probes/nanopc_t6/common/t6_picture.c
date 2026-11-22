@@ -45,13 +45,13 @@ void t6_picture_map(struct yd_t6_display_bases *b, size_t cru_bytes, size_t hdmi
 {
 	mm_reg_t vop, mmu, pmu, cru, sys_grf, phy_grf, hdmi;
 
-	device_map(&vop, T6_PICTURE_VOP_PHYS, T6_PICTURE_VOP_MAP, K_MEM_CACHE_NONE);
-	device_map(&mmu, T6_PICTURE_VOP_MMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&pmu, T6_PICTURE_PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&cru, T6_PICTURE_CRU_PHYS, cru_bytes, K_MEM_CACHE_NONE);
-	device_map(&sys_grf, T6_PICTURE_SYS_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&phy_grf, T6_PICTURE_PHY_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&hdmi, T6_PICTURE_HDMI_PHYS, hdmi_bytes, K_MEM_CACHE_NONE);
+	device_map(&vop, YD_T6_DISPLAY_VOP_PHYS, T6_PICTURE_VOP_MAP, K_MEM_CACHE_NONE);
+	device_map(&mmu, YD_T6_DISPLAY_VOP_MMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&pmu, YD_T6_DISPLAY_PMU_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&cru, YD_T6_DISPLAY_CRU_PHYS, cru_bytes, K_MEM_CACHE_NONE);
+	device_map(&sys_grf, YD_T6_DISPLAY_SYS_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&phy_grf, YD_T6_DISPLAY_HDPTX0_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&hdmi, YD_T6_DISPLAY_HDMI0_PHYS, hdmi_bytes, K_MEM_CACHE_NONE);
 	*b = (struct yd_t6_display_bases){
 		.vop = vop,
 		.vop_mmu = { mmu + 0xe00, mmu + 0xf00 },
