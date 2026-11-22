@@ -14,16 +14,25 @@
 //!
 //! The words are built in `driver/src/v3d/v3d_job.c` (C), which a host test
 //! does not reach; the test goes as far as `V3dJobState`, what `emit_state`
-//! reads. It has ONE `colormask` (`state::job_state`: the GL mask, `& 0x7`
-//! when attachment 0 has no alpha), and `v3d_job.c:701-705` writes
-//! `off | off << 4 | off << 8 | off << 12` from it. `carried_word()` models
-//! that, `expected_word()` is the Mesa word. The tests that pin today pass; the
-//! per-RT words are `#[ignore]`d with their owner:
+//! reads. `colormask` is RT 0's mask (`state::job_state`: the GL mask, `& 0x7`
+//! when attachment 0 has no alpha). Since 48f6017c / d319c89c the V3D also
+//! takes a mask per RT, but only where the GL core asks for it:
+//! `GlesDraw::per_target_mask` (`src/gl/draw.rs` `per_target_masks`) is set
+//! for an R or RG integer texture drawn as its four-channel store beside a
+//! target with other channels, and then `V3dJobState::rt_colormask_own` /
+//! `rt_colormask` (`src/v3d/state.rs:714-719`) carry RT 1..3's masks and
+//! `v3d_job.c:776-784` writes them. Otherwise every RT repeats `colormask`.
+//! `carried_word()` models that fallback, `expected_word()` is the Mesa word;
+//! the per-RT integer-store masks are es3_v3d_int_rg_mrt_mask's. Two pins stay
+//! `#[ignore]`d with their remaining cause:
 //!
-//! - V3D (note section (e) items 2-4): a `rt[4]` array in `struct
-//!   v3d_job_state`, `job_state` filling it, `emit_state` packing it;
-//! - GL core (note Draft 1): per-buffer masks, and alpha bits per target
-//!   (`GlesDraw::target_alpha_bits` is attachment 0 only).
+//! - alpha per target: `per_target_masks` narrows only R/RG integer
+//!   stores, and `GlesDraw::target_alpha_bits` is attachment 0's
+//!   (`src/gl/draw.rs:2661`), so an RGB565 RT 0 still drops alpha for an
+//!   RGBA8 RT 1;
+//! - the XRGB R/B swap: `job_state` gives the GL channel order and
+//!   `v3d_job.c:778-784` has no swap (the TLB swaps the bytes,
+//!   `src/v3d/backend.rs:2789`, not the mask word).
 //!
 //! The BLEND_ENABLES mask is es3_mrt_blend_v3d's; a partial mask on formats
 //! lacking channels is es3_colormask_formats_v3d's.
@@ -32,7 +41,6 @@
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_rt_masks_v3d
 //! ```
 
-#![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
 #![cfg(all(feature = "host-test", feature = "shaderc-online", feature = "gpu-v3d", not(feature = "report-es2")))]
 
 use core::ffi::{c_char, c_void};
@@ -454,7 +462,7 @@ fn alpha_less_rt0_masks_alpha_of_rt1_today() {
 
 /// Mesa's word: RT 0 loses alpha, RT 1 (RGBA8) keeps it (nibbles 0x8, 0x0).
 #[test]
-#[ignore = "V3dJobState has one colormask and v3d_job.c:701-705 repeats it per RT (note v3d-draw-buffers-indexed.md (e) items 2-4); alpha bits are attachment 0's only (GL core, Draft 1)"]
+#[ignore = "per_target_masks (src/gl/draw.rs) narrows R/RG integer stores only and target_alpha_bits is attachment 0's (src/gl/draw.rs:2661), so RT 1 keeps RT 0's alpha drop (state.rs:700-702)"]
 fn alpha_less_rt0_keeps_alpha_of_rt1() {
     let _g = context();
     let s = masked(&[GL_RGB565, GL_RGBA8], &["vec4", "vec4"], 0xf);
@@ -503,12 +511,12 @@ fn xrgb_expected_nibble_swaps_r_and_b() {
     assert_eq!(expected_word(0b0011, &[(false, false), (false, true)]), 0b1001_1100);
 }
 
-/// The swap is the job builder's (`v3d_job.c` has no per-RT word and no swap
+/// The swap would be the job builder's (`v3d_job.c:778-784` has no swap
 /// today). Unclear whether the TLB's B,G,R,X load/store swap
-/// (`src/v3d/backend.rs:2684`) already compensates in the mask; settle that
-/// with the per-RT implementation before enabling.
+/// (`src/v3d/backend.rs:2789`) already compensates in the mask; settle that
+/// before enabling.
 #[test]
-#[ignore = "emit_state has no per-RT nibble and no XRGB swap (v3d_job.c:701-705, note (e) item 3); check against the TLB swap at backend.rs:2684"]
+#[ignore = "job_state gives the GL channel order and v3d_job.c:778-784 has no XRGB R/B swap of the nibble (the TLB swap, backend.rs:2789, moves bytes, not the mask)"]
 fn xrgb_rt_word_swaps_r_and_b() {
     let _g = context();
     let s = masked(&[GL_RGBA8], &["vec4"], 0b0001);
