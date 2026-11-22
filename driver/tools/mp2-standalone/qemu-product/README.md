@@ -118,3 +118,30 @@ FAILED: continuing...`.
   `u-boot-env` partition. A cut lands after `saveenv` has returned, not in
   the middle of it (that is the `qemu-env-redundancy` item's case).
 - No BL2 IWDG: a hang is bounded only by the harness timeouts.
+
+## Rehearsal of the c6 verdict: `rehearse.sh`
+
+`rehearse.sh` runs case `a_default_2` (through `run.sh`, which it leaves
+unchanged apart from printing the log directory when `MP2S_QEMU_KEEP=1`), joins
+the console logs of boots 1 to 3 into one record and runs
+
+```sh
+python3 -I tools/mp2s_record_check.py RECORD --count 2 \
+    --image-line 'mp2q: image ran at its link address 0xa0000000' \
+    --linux-line 'mp2q: stock path /mmc0_ reached'
+```
+
+the verdict the board run uses on the real console, so a drift between the
+script's console lines and the verdict's regexes shows before the board run.
+It prints the checker's table and its `VERDICT: PASS ...` or `VERDICT: FAIL
+<step>` line; exit 0 on PASS. Same inputs as `run.sh`; when one is missing it
+prints `skip: <input>` and exits 0. `MP2S_REHEARSE_LOG=FILE` keeps the record.
+
+**Synthetic lines.** QEMU has no BL2, and `mp2s_record_check.py` splits boots at
+`NOTICE:  BL2: v<n>` / `Reset reason:` lines. The only synthetic lines are
+the three that `rehearse.sh` writes in front of boots 1, 2 and 3:
+`NOTICE:  BL2: v2.10-synthetic (rehearsal boot <n>)`. Everything else is
+QEMU's console, byte for byte. Boot 4 (stock only, no `mp2s:` line) is left
+out, since the record check counts it as an extra boot after Linux. The
+`Reset reason:` lines are absent, so the supply and watchdog checks do not run
+here. The product script and the record check are not changed.

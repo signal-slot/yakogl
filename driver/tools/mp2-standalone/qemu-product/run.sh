@@ -67,5 +67,6 @@ python3 -I "$pdir/product.py" --qemu "$qemu" --uboot "$uboot" --image "$run/stan
 	--fixture "$pdir/../st-env/stm32mp25-dk-initial-env.txt" \
 	--work "$run/work" --logs "$run/logs" \
 	--uboot-script "$pdir/../../../../tools/uboot_script.py" ${only[@]+"${only[@]}"} || rc=$?
+if [ "${MP2S_QEMU_KEEP:-}" = 1 ]; then echo "run.sh: logs in $run/logs"; fi
 if [ "$rc" -ne 0 ]; then echo "run.sh: run directory and console logs kept in $run"; fi
 exit "$rc"
