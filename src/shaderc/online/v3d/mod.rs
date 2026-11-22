@@ -87,6 +87,12 @@ pub mod verify;
 pub mod verify71;
 pub mod vop71;
 
+// The GL link entry at 7.1 (`codegen::link_sources` with `chain71` in place
+// of `chain`) and the linked program's `ShcShader` in `v3d_abi`'s layout.
+// Nothing calls them until a 7.1 table does; the 4.2 entry is unchanged.
+pub mod abi71;
+pub mod link71;
+
 #[cfg(test)]
 mod diff71;
 #[cfg(test)]
