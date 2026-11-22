@@ -16,7 +16,25 @@ board sessions; each commits one slice directory
                     InternalError, ResourceError, counts as Fail). Cases outside the
                     mustpass list are ignored; a case twice with different statuses
                     (in one slice or two) is an error.
+        console*.txt  optional, one per image run: the redacted UART console. It names
+                    the cause of the cases without a result, see "NoResult causes".
         (totals)    the README may carry the session's totals; this script recounts.
+
+NoResult causes. A mustpass case with no status gets a message "<cause>: ..."
+when a console of its slice shows the image died (no "deqp: done:" / "deqp: summary"
+line). The case dEQP had begun (#beginTestCaseResult, no #endTestCaseResult) when
+the image died gets the cause of the death, the other no-result cases of that slice
+get "not-reached". Causes, by the first marker found in this order:
+  crash       "deqp: fatal:", "FATAL ERROR", "deqp: exception:" (driver/samples/zephyr/
+              deqp/src/main.cpp: die() hook, k_panic, uncaught exception), or the
+              image ended with none of the markers below
+  watchdog    "RTI feeder lifetime over" (what tools/board.sh calls watchdog_end), or a
+              second "rti_arm: armed" (the RTI's 600 s bound reset the board and the image
+              booted again; CONFIG_YAKOGL_AM62P_WDT_SECONDS, docs/notes/pvr-3d-mipmap-hang.md)
+  gpu-reset   "render: HWR during fence" or "GPU recoveries N" with N > 0 (the PowerVR
+              firmware's recovery lines that tools/board.sh pvr_resets reads)
+Without a console, or when the console shows the image finished, the message stays empty
+as before: output for records with no console is unchanged.
 
 The commit is the <sha8> of the directory name; README.md's "commit:" line must
 say the same. Every slice must name the same commit.
@@ -30,6 +48,7 @@ QualityWarning, no result; they sum to the mustpass size, 42,810) and, with
 dot-separated parts of the case name, default 5). Exit 1 on any refusal.
 """
 import argparse
+import glob
 import os
 import re
 import sys
@@ -86,6 +105,63 @@ def read_cases(d, into):
             into[case] = (status, msg, d)
 
 
+BEGIN_RE = re.compile(r"#beginTestCaseResult\s+(\S+)")
+FATAL_RE = re.compile(r"deqp: fatal:|FATAL ERROR|deqp: exception:")
+WDOG_RE = re.compile(r"RTI feeder lifetime over")
+ARMED_RE = re.compile(r"rti_arm: armed")
+HWR_RE = re.compile(r"render: HWR during fence|GPU recoveries ([1-9]\d*)")
+DONE_RE = re.compile(r"deqp: done:|deqp: summary")
+
+
+def read_console(path):
+    """(running case or None, cause or None) of one console; cause None when the
+    image reached its end."""
+    began, ended, armed, fatal, wdog, hwr, done = None, True, 0, False, False, False, False
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = BEGIN_RE.search(line)
+            if m:
+                began, ended = m.group(1), False
+            elif "#endTestCaseResult" in line:
+                ended = True
+            if FATAL_RE.search(line):
+                fatal = True
+            if WDOG_RE.search(line):
+                wdog = True
+            if ARMED_RE.search(line):
+                armed += 1
+            if HWR_RE.search(line):
+                hwr = True
+            if DONE_RE.search(line):
+                done = True
+    if done and not fatal:
+        return None, None
+    if fatal:
+        cause = "crash"
+    elif wdog or armed > 1:
+        cause = "watchdog"
+    elif hwr:
+        cause = "gpu-reset"
+    else:
+        cause = "crash"
+    return (None if ended else began), cause
+
+
+def no_result_causes(slices):
+    """(case -> cause of the case that was running, the first death or None)
+    from the consoles of the slices."""
+    running, died = {}, None
+    for d in slices:
+        for c in sorted(glob.glob(os.path.join(d, "console*.txt"))):
+            case, cause = read_console(c)
+            if cause is None:
+                continue
+            died = died or (case, cause)
+            if case:
+                running[case] = cause
+    return running, died
+
+
 def read_tsv(path):
     out = {}
     with open(path, encoding="utf-8") as f:
@@ -120,12 +196,17 @@ def main():
     with open(a.mustpass, encoding="utf-8") as f:
         mustpass = [l.strip() for l in f if l.strip() and not l.startswith("#")]
 
+    running, died = no_result_causes(a.slices)
     count = dict.fromkeys(OUTCOMES, 0)
     rows = []
     for case in mustpass:
         s = seen.get(case)
         if s is None:
             out, msg = "NoResult", ""
+            if case in running:
+                msg = "%s: the image died while this case ran" % running[case]
+            elif died:
+                msg = "not-reached: the image died (%s) before this case" % died[1]
         else:
             out = norm(s[0])
             msg = s[1] or (s[0] if out == "Fail" else "")
