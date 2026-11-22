@@ -55,9 +55,6 @@ BUILD_ASSERT(T6_COLD_STOP_AFTER >= 0 && T6_COLD_STOP_AFTER <= YD_T6_DISPLAY_COLD
 	     "T6_COLD_STOP_AFTER: 0 or a stage");
 BUILD_ASSERT(T6_COLD_FORCE_COLD == 0 || T6_COLD_FORCE_COLD == 1, "T6_COLD_FORCE_COLD: 0 or 1");
 
-#define VOP_GRF_PHYS 0xfd5a4000UL
-#define VO1_GRF_PHYS 0xfd5a8000UL
-#define PHY_PHYS     0xfed60000UL
 /* The CRU with the PMU1 CRU at +0x30000 (the PHY's reference clock and
  * resets), and the HDMI QP TX0 up to its interrupt words at 0x3000. */
 #define CRU_MAP  0x31000
@@ -134,9 +131,9 @@ int main(void)
 		t6_reset_to_linux("t6_cold done");
 	}
 	t6_picture_map(&b.display, CRU_MAP, HDMI_MAP);
-	device_map(&vop_grf, VOP_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&vo1_grf, VO1_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
-	device_map(&phy, PHY_PHYS, 0x2000, K_MEM_CACHE_NONE);
+	device_map(&vop_grf, YD_T6_DISPLAY_VOP_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&vo1_grf, YD_T6_DISPLAY_VO1_GRF_PHYS, 0x1000, K_MEM_CACHE_NONE);
+	device_map(&phy, YD_T6_DISPLAY_HDPTX0_PHYS, 0x2000, K_MEM_CACHE_NONE);
 	b.vop_grf = vop_grf;
 	b.vo1_grf = vo1_grf;
 	b.phy = phy;

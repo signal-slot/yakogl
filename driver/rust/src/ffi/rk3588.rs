@@ -2628,11 +2628,27 @@ mod display_tests {
             let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
             // the value, before the comment: a number or "(1u << N)"
             let v = l[format!("#define {name} ").len()..].split("/*").next().expect(name).trim();
+            if let Some(hex) = v.strip_prefix("0x").and_then(|s| s.strip_suffix('u')) {
+                return u32::from_str_radix(hex, 16).unwrap_or_else(|_| panic!("{name}"));
+            }
             match v.strip_prefix("(1u << ").and_then(|s| s.strip_suffix(')')) {
                 Some(shift) => 1 << shift.parse::<u32>().unwrap_or_else(|_| panic!("{name}")),
                 None => v.parse().unwrap_or_else(|_| panic!("{name}")),
             }
         };
+        // the physical bases: the chain's, HDMI0's controller, PHY and GRF
+        {
+            use crate::ip::{dw_hdmi_qp, hdptx};
+            use crate::soc::rk3588_display_chain::RK3588 as P;
+            let phys = |name: &str| def(&format!("YD_T6_DISPLAY_{name}_PHYS")) as usize;
+            assert_eq!(phys("VOP"), P.vop);
+            assert_eq!((phys("VOP_MMU") + 0xe00, phys("VOP_MMU") + 0xf00), (P.vop_mmu[0], P.vop_mmu[1]));
+            assert_eq!((phys("PMU"), phys("CRU")), (P.pmu, P.cru));
+            assert_eq!((phys("SYS_GRF"), phys("VOP_GRF"), phys("VO1_GRF")), (P.sys_grf, P.vop_grf, P.vo1_grf));
+            assert_eq!((phys("HDMI0"), P.hdmi), (dw_hdmi_qp::TX0_BASE, dw_hdmi_qp::TX0_BASE));
+            assert_eq!((phys("HDPTX0"), phys("HDPTX0_GRF")), (hdptx::PHY0.phy, hdptx::PHY0.grf));
+            assert_eq!(P.phy, hdptx::PHY0);
+        }
         assert_eq!(def("YD_T6_DISPLAY_COLD_POWER_CYCLE"), flags::POWER_CYCLE);
         assert_eq!(def("YD_T6_DISPLAY_COLD_FORCE_COLD"), flags::FORCE_COLD);
         for n in stage::START..=stage::VIDEO {

@@ -1050,6 +1050,24 @@ uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_scr
  * (0xfd7c0000, 0x31000 bytes), and the HDMI QP TX0's covers 0x5000 bytes;
  * then vop_grf (0xfd5a4000) and vo1_grf (0xfd5a8000), a page each, and the
  * HDPTX PHY0 (0xfed60000, 0x2000 bytes). */
+/* The physical bases the display probes map (driver/docs/nanopc-t6-display.md
+ * section 1; soc::rk3588_display_chain::RK3588). The entries take mappings,
+ * and a mapped address says nothing about which block it is: the chain is
+ * HDMI0's (it binds the controller as Port::Hdmi0, routes VP0 to HDMI0 and
+ * runs PHY0), so the controller, the PHY and its GRF mapped must be HDMI0's,
+ * and this list is where that is fixed. A Rust test holds each value to the
+ * crate's constant. */
+#define YD_T6_DISPLAY_VOP_PHYS        0xfdd90000u
+#define YD_T6_DISPLAY_VOP_MMU_PHYS    0xfdd97000u /* the page of the two sets, +0xe00 and +0xf00 */
+#define YD_T6_DISPLAY_PMU_PHYS        0xfd8d8000u
+#define YD_T6_DISPLAY_CRU_PHYS        0xfd7c0000u /* the PMU1 CRU at +0x30000 */
+#define YD_T6_DISPLAY_SYS_GRF_PHYS    0xfd58c000u
+#define YD_T6_DISPLAY_VOP_GRF_PHYS    0xfd5a4000u
+#define YD_T6_DISPLAY_VO1_GRF_PHYS    0xfd5a8000u
+#define YD_T6_DISPLAY_HDMI0_PHYS      0xfde80000u /* DW HDMI QP TX0 */
+#define YD_T6_DISPLAY_HDPTX0_PHYS     0xfed60000u /* HDMI0's PHY */
+#define YD_T6_DISPLAY_HDPTX0_GRF_PHYS 0xfd5e0000u /* hdptxphy0_grf */
+
 #define YD_T6_DISPLAY_COLD_POWER_CYCLE (1u << 0) /* every block off and in reset first */
 #define YD_T6_DISPLAY_COLD_FORCE_COLD  (1u << 1) /* stop a port found running */
 

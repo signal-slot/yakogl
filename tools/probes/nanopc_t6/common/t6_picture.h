@@ -30,15 +30,9 @@
 #define T6_PICTURE_CHECK_WAIT_US 100000
 #define T6_PICTURE_TIMED_FRAMES  60
 
-/* The physical bases (driver/docs/nanopc-t6-display.md, section 1). */
-#define T6_PICTURE_VOP_PHYS     0xfdd90000UL
-#define T6_PICTURE_VOP_MAP      0x2000
-#define T6_PICTURE_VOP_MMU_PHYS 0xfdd97000UL /* the two sets at +0xe00, +0xf00 */
-#define T6_PICTURE_PMU_PHYS     0xfd8d8000UL
-#define T6_PICTURE_CRU_PHYS     0xfd7c0000UL
-#define T6_PICTURE_SYS_GRF_PHYS 0xfd58c000UL
-#define T6_PICTURE_PHY_GRF_PHYS 0xfd5e0000UL
-#define T6_PICTURE_HDMI_PHYS    0xfde80000UL
+/* The VOP's registers below 0x2000 are the only ones the probes use. The
+ * physical bases are yakogl_drivers.h's YD_T6_DISPLAY_*_PHYS: HDMI0's. */
+#define T6_PICTURE_VOP_MAP 0x2000
 
 /* Draw the section 5 pattern (red, green / blue, yellow quadrants, a white
  * 1-pixel border) into the image's frame buffer (in its .bss, so below
