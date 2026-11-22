@@ -498,8 +498,11 @@ table_t6_display() {
 # The stop the image was built with (its "options:" line, T6_COLD_STOP_AFTER)
 # chooses the lines: every run has the reads before the chain (form only:
 # what Linux's shutdown left is recorded, not predicted) and one line per
-# stage up to the stop, in order, so a run that hangs is "missing" from the
-# stage after the last one it reached. A run to the end has the chain's
+# stage up to the stop, in order; each stage's line comes before its first
+# access. A record without the chain's rc line ends in a hang or a reset: an
+# "ends" line names where, the last stage line printed or, before the
+# first one, the reads before the chain (and the last of them). A run to
+# the end has the chain's
 # report (CORE_ID, VERSION_INFO, the video check pinned; the overlay
 # selects captured), its rc 0, the hold, the read-backs as t6_display's and
 # PASS. A run stopped as asked has the stop line, its rc with error 1, then,
@@ -707,6 +710,22 @@ if [ "$ROUTE" = kexec ]; then
 			bad=$((bad + 1))
 		fi
 	done
+fi
+
+# t6_cold: a record without the chain's rc line stopped inside the chain
+# (a hang, then WDT0's reset): name where, as the stage lines tell it.
+# Every such record already fails on its missing lines; this line is not
+# counted, it says which stage to look at.
+if [ "$PROBE" = t6_cold ] && ! seen_line '^t6_cold: chain rc '; then
+	where='before the drivers crate printed anything'
+	for l in "${LINES[@]}"; do
+		if [[ $l == 't6 display: before: '* ]]; then
+			where="the reads before the chain, after \"$l\""
+		elif [[ $l =~ ^t6\ display:\ stage\ ([0-9]+)\ ([A-Z_]+)$ ]]; then
+			where="stage ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+		fi
+	done
+	printf 'ends     no "t6_cold: chain rc" line: the run stopped inside %s\n' "$where"
 fi
 
 # t6_fw, t6_submit: the stop line of a run that did not reach the end (the
