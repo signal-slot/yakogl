@@ -27,6 +27,10 @@
  *   km_check render-verbose
  *                    the same with PVR_RENDER_VERBOSE (a shorter run); must
  *                    equal render-verbose-674ea1cf.rec
+ *   km_check render-pr
+ *                    the render service with the partial-render knob on
+ *                    (Rust only: the C of 674ea1cf has no partial render);
+ *                    must equal render-pr.norm in records.sha256
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -201,6 +205,9 @@ static void r_fw_offsets_setup(uint32_t hwrinfobuf, uint32_t tracebuf, uint32_t 
 	km.tracebuf_off = tracebuf;
 	km.trace_buf_off = ring;
 }
+/* rr.cfg.partial_render, the knob render.rs's host tests set (rig()); the
+ * other cfg writers leave it alone. */
+static void r_render_pr(uint32_t on) { rr.cfg.partial_render = on; }
 static void r_render_cfg(const uint32_t c[10])
 {
 	rr.cfg.combined_kick = c[0];
@@ -297,6 +304,7 @@ static const struct km_api r_api = {
 	.render_wait = r_render_wait,
 	.render_completed = r_render_completed,
 	.render_offsets = r_render_offsets,
+	.render_pr = r_render_pr,
 };
 
 static int pins(void)
@@ -367,6 +375,12 @@ int main(int argc, char **argv)
 		rec_dump_memory();
 		return 0;
 	}
-	fprintf(stderr, "usage: km_check pins|mem|ccb|fwinit-former|fwinit|render|render-verbose\n");
+	if (argc == 2 && !strcmp(argv[1], "render-pr")) {
+		km_setup();
+		scenario_render_pr(&r_api);
+		rec_dump_memory();
+		return 0;
+	}
+	fprintf(stderr, "usage: km_check pins|mem|ccb|fwinit-former|fwinit|render|render-verbose|render-pr\n");
 	return 2;
 }
