@@ -168,6 +168,19 @@ url = "file://$T/a.tar"
 sha256_from = "$T/UPSTREAM:fake"
 
 [[dep]]
+name = "P"
+path = "p"
+marker = "p/done"
+build = 'mkdir -p "\$DEPS/p" "\$DEPS/h" && touch "\$DEPS/p/done" "\$DEPS/h/done"'
+
+[[dep]]
+name = "H"
+path = "h"
+marker = "h/done"
+requires = ["P"]
+build = 'exit 1'
+
+[[dep]]
 name = "W"
 path = "w-{board}"
 marker = "w-{board}/done"
@@ -180,6 +193,9 @@ out=$("$ENV_SH" --build B 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "--build B (requires A) succeeds" || bad "--build B: rc $rc: $out"
 check "--build makes the required entry first" "build    A" "$out"
 [ "$(cat "$L/b/done" 2>/dev/null)" = payload ] && ok "B's build saw A's tree" || bad "B's marker is wrong"
+out=$("$ENV_SH" --build H 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "--build H succeeds when its required entry made H's marker" || bad "--build H: rc $rc: $out"
+check "--build H does not run H's own build" "present  H" "$out"
 out=$("$ENV_SH" --check 2>&1 | grep -E '^ok +(A|B) ' | wc -l)
 [ "$out" -eq 2 ] && ok "--check turns A and B ok" || bad "--check ok lines for A and B: $out"
 out=$("$ENV_SH" --build A_ALIAS B 2>&1); rc=$?

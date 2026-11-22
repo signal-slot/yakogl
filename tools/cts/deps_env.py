@@ -213,6 +213,13 @@ def build(d, by_name, deps, board, done):
         if not build(by_name[r], by_name, deps, board, done):
             print(f"failed   {name}: needs {r}")
             return False
+    if os.path.exists(marker):
+        # an entry it requires made this one on the way (HAL_NXP_DIR: the
+        # west update of ZEPHYR_WS fetches hal_nxp, and `west update hal_nxp`
+        # is refused for a project resolved by an import)
+        print(f"present  {name}  {marker}")
+        done[name] = True
+        return True
     if "build" not in d:
         print(f"nobuild  {name}: {d.get('note', 'no build recipe')}")
         return False
