@@ -22,13 +22,13 @@ at the tip a85e3112. The three questions are items 4, 5 and 9 of
   **read** (facts only, cited as UP:line; nothing copied):
   `hwrt_data_init_fw_structure` UP:356-430, `pvr_hwrt_dataset_create`
   UP:456-501.
-- Upstream `pvr_free_list.c` at v6.12: **unread** (its fetch was not
-  allowed). What this tree already records of `pvr_free_list_reconstruct`
-  (docs/notes/pvr-render-pool.md:1158-1177, read there from Linux 7.3-rc5)
-  is used: upstream's reconstruction puts every HWRT data of the list into
-  `RGXFWIF_RTDATA_STATE_HWR`, clears `HAS_LAST_GEOM` (our
-  `HWRTDATA_HAS_LAST_TA`), and writes the stack top and the two allocated
-  counts. That record names no RTA word.
+- Upstream `pvr_free_list.c` at v6.12, **read** (facts only):
+  `pvr_free_list_reconstruct` UP-FL:560-605 rebuilds the page list, sets the
+  firmware's stack top and zeroes the two allocated counts (:585-588), then
+  for each HWRT data of the list sets state `HWR` and clears
+  `HWRTDATA_HAS_LAST_GEOM` (our `HAS_LAST_TA`) in the flags (:590-600).
+  **No RTA word is touched.** (Matches the 7.3-rc5 record in
+  docs/notes/pvr-render-pool.md:1158-1177.)
 
 ## What upstream's `pvr_hwrt.c` does with `sRTACtl`, read
 
@@ -117,7 +117,7 @@ Evidence:
   `PARTIAL_RENDERED`, which upstream has no use for (an extra bit cleared,
   never one left set). `pvr_hwrt.c` never touches the RTA words after
   creation (UP:385-409, above), so the host-side counts are never reset
-  there; `pvr_free_list.c` itself is **unread** at v6.12.
+  there; `pvr_free_list_reconstruct` touches none either (UP-FL:590-600).
 - A reconstruction runs only after a context reset (FREELISTS_RECONSTRUCTION,
   pvr-render-pool.md:1152-1156). A render that was partial-rendering at the
   reset leaves stale counts exactly as item 4 describes. Whether the
@@ -185,9 +185,7 @@ frame on the same slot, and after a context reset with a reconstruction. The
 dump decoder prints the `sRTACtl` words raw (pr_diag.rs:105-129) and is wired
 by item pr-diag-wire; the count array is not in it and would need adding
 (read `HWRTDATA_RTA_CTL + RTA_CTL_NUM_PARTIAL_RENDERS`, then three dwords).
-`pvr_hwrt.c` is now read (above). Reading `pvr_free_list.c` at v6.12 is
-still open; it would only confirm that the reconstruction touches no RTA
-word, which the 7.3-rc5 record in pvr-render-pool.md already says.
+Both upstream files are read (above); neither writes an RTA word after creation, so upstream gives no answer to what the firmware does with the counts: only the board does.
 
 ## Summary
 
