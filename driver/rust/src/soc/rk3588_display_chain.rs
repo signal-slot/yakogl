@@ -12,7 +12,9 @@
 //! Stages ([`stage`]) are numbered so that a board with no picture can be
 //! bisected: `stop_after` = N returns [`Error::Stopped`] once stage N is
 //! done, leaving the hardware as it is. Every failure names its stage
-//! ([`Failed`]).
+//! ([`Failed`]). Each stage logs one line before its first access
+//! ("t6 display: stage N NAME"), so a stage that hangs the bus is the last
+//! one named in the log.
 //!
 //! 1. START: the configuration is checked before anything is written: the
 //!    mode against VP0 ([`vop2::vp_timing`]) and the controller
@@ -117,6 +119,22 @@ pub mod stage {
     pub const VIDEO: u32 = 8;
     /// Not a bring-up stage: a failure of [`super::shut_down`].
     pub const SHUT_DOWN: u32 = 9;
+
+    /// The stage's name in the log ("?" for a number that is none).
+    pub const fn name(n: u32) -> &'static str {
+        match n {
+            START => "START",
+            POWER => "POWER",
+            GRF => "GRF",
+            PHY => "PHY",
+            DCLK => "DCLK",
+            CONTROLLER => "CONTROLLER",
+            VOP => "VOP",
+            VIDEO => "VIDEO",
+            SHUT_DOWN => "SHUT_DOWN",
+            _ => "?",
+        }
+    }
 }
 
 /// The build's fixed mode: what Linux runs the T6's display at, since the
@@ -293,6 +311,11 @@ pub struct Failed {
 
 fn at<E>(stage: u32, f: impl Fn(E) -> Error) -> impl Fn(E) -> Failed {
     move |e| Failed { stage, error: f(e) }
+}
+
+/// The stage's line, before its first access.
+fn begin(env: &impl Env, n: u32) {
+    ylog!(env, Inf, "t6 display: stage {} {}", n, stage::name(n));
 }
 
 fn done(cfg: &Config, stage: u32) -> Result<(), Failed> {
@@ -486,6 +509,7 @@ pub fn bring_up(
     let mut delay = |us| env.busy_wait_us(us);
 
     // 1: check, then read what runs
+    begin(env, START);
     let timing = vop2::vp_timing(&cfg.mode, Vp::Vp0).map_err(|_| Failed { stage: START, error: Error::Mode })?;
     dw::tmds_char_rate(&cfg.mode).map_err(|_| Failed { stage: START, error: Error::Mode })?;
     cfg.image.check().map_err(at(START, Error::Phy))?;
@@ -558,10 +582,12 @@ pub fn bring_up(
     done(cfg, START)?;
 
     // 2: power, clocks, resets
+    begin(env, POWER);
     let power = display_on(m, b.cru, b.pmu, &mut delay).map_err(at(POWER, Error::Display))?;
     done(cfg, POWER)?;
 
     // 3: the VOP's HDMI0 words in the GRFs
+    begin(env, GRF);
     gate_open(m, b.cru + clk::PCLK_VO1GRF.part.offset(), clk::PCLK_VO1GRF.gate).map_err(at(GRF, Error::Gate))?;
     let sync = dw::vo1_con0_sync_word(Port::Hdmi0, dw::linux_sync_field(&cfg.mode));
     for (addr, word) in
@@ -577,6 +603,7 @@ pub fn bring_up(
     done(cfg, GRF)?;
 
     // 4: the PHY
+    begin(env, PHY);
     let host = PhyHost { m, cru: b.cru, env };
     let phy = match hdptx::power_on(m, &host, &b.phy, &cfg.plan, &cfg.image) {
         Ok(p) => p,
@@ -588,6 +615,7 @@ pub fn bring_up(
     done(cfg, PHY)?;
 
     // 5: VP0's pixel clock from the PHY
+    begin(env, DCLK);
     reset_release(m, b.cru, reset::D_VOP0);
     let mux = clk::DCLK_VOP0_MUX;
     let sel = b.cru + mux.offset();
@@ -600,12 +628,14 @@ pub fn bring_up(
     done(cfg, DCLK)?;
 
     // 6: the controller
+    begin(env, CONTROLLER);
     let bases = dw::Bases { ctrl: b.hdmi, sys_grf: b.sys_grf, vo1_grf: b.vo1_grf };
     let ident = dw::bind(m, &bases, Port::Hdmi0, &cfg.bind).map_err(at(CONTROLLER, Error::Hdmi))?;
     dw::enable(m, b.hdmi, cfg.sink).map_err(at(CONTROLLER, Error::Hdmi))?;
     done(cfg, CONTROLLER)?;
 
     // 7: VOP2
+    begin(env, VOP);
     let vop = vop2::init(m, b.vop).map_err(at(VOP, Error::Vop))?;
     let iommu = rk_iommu::paging_off(m, &b.vop_mmu, &mut delay).map_err(at(VOP, Error::Iommu))?;
     if let Some(t) = iommu.timeout {
@@ -620,6 +650,7 @@ pub fn bring_up(
     done(cfg, VOP)?;
 
     // 8: the read-backs
+    begin(env, VIDEO);
     let frame =
         vop2::frame_check(m, b.vop, Vp::Vp0, 2 * frame_us(&cfg.mode), &mut delay).map_err(at(VIDEO, Error::Vop))?;
     let read_back = vop2::read_back(m, b.vop, Vp::Vp0, Esmart::E0);

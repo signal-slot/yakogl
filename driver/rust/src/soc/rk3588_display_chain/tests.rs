@@ -145,6 +145,31 @@ fn every_stop_after_stops_there_and_leaves_the_next_stage_untouched() {
     assert_eq!((m.peek(sel_addr(0, 112)) >> 7) & 3, 1);
 }
 
+/// The "stage N NAME" lines of a run, in order.
+fn stage_lines(m: &Rk3588Display) -> Vec<String> {
+    m.lines().into_iter().map(|(_, l)| l).filter(|l| l.starts_with("t6 display: stage ")).collect()
+}
+
+#[test]
+fn each_stage_logs_one_line_and_the_last_line_is_the_stage_that_stopped() {
+    let all: Vec<String> =
+        (stage::START..=stage::VIDEO).map(|n| format!("t6 display: stage {n} {}", stage::name(n))).collect();
+    assert_eq!(all[3], "t6 display: stage 4 PHY");
+    let m = Rk3588Display::cold();
+    up(&m, &cfg()).unwrap();
+    assert_eq!(stage_lines(&m), all);
+    for n in stage::START..=stage::VIDEO {
+        let m = Rk3588Display::cold();
+        let _ = up(&m, &Config { stop_after: n, ..cfg() });
+        assert_eq!(stage_lines(&m), all[..n as usize], "stop_after {n}");
+    }
+    // a failure: the stage that failed is the last one named
+    let m = Rk3588Display::with_faults(Faults { phy_no_lock: true, ..Faults::default() });
+    assert_eq!(up(&m, &cfg()).err().map(|f| f.stage), Some(stage::PHY));
+    assert_eq!(stage_lines(&m).last().map(String::as_str), Some("t6 display: stage 4 PHY"));
+    assert_eq!((stage::name(stage::SHUT_DOWN), stage::name(0), stage::name(10)), ("SHUT_DOWN", "?", "?"));
+}
+
 #[test]
 fn each_injected_failure_names_its_stage() {
     let cases: [(Faults, u32); 8] = [
