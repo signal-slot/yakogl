@@ -2484,6 +2484,64 @@ pub unsafe extern "C" fn yd_t6_screen_busy(
     crate::board::nanopc_t6_display::busy(&hw, b, s, addrs)
 }
 
+/// Step D8, the display brought up from cold
+/// ([`crate::board::nanopc_t6_display_cold`]): `struct
+/// yd_t6_display_cold_bases` and `struct yd_t6_display_cold` are the board
+/// module's own `#[repr(C)]` records.
+pub use crate::board::nanopc_t6_display_cold::{Cold as YdT6DisplayCold, ColdBases as YdT6DisplayColdBases};
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(size_of::<YdT6DisplayColdBases>() == 88);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(offset_of!(YdT6DisplayColdBases, vop_grf) == 64);
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(offset_of!(YdT6DisplayColdBases, phy) == 80);
+const _: () = assert!(size_of::<YdT6DisplayCold>() == 4 * 5);
+const _: () = assert!(offset_of!(YdT6DisplayCold, error) == 4);
+const _: () = assert!(offset_of!(YdT6DisplayCold, detail) == 16);
+
+/// The display chain from cold ([`crate::board::nanopc_t6_display_cold::cold`])
+/// on the blocks of `b`, showing the buffer at physical `fb_pa` (1024x768
+/// XRGB8888, stride 4096, drawn and cleaned by the caller). `flags` are
+/// `YD_T6_DISPLAY_COLD_*`; `stop_after` 0 runs to the end, N stops after
+/// stage N. Every line goes to `env`'s log as it happens. 0 when the chain
+/// ran through, `-ECANCELED` when it stopped after `stop_after` as asked,
+/// `-EIO` when a stage failed (`out` names it), `-EINVAL` for a null
+/// argument, an unknown flag or a `stop_after` past the last stage
+/// (nothing read).
+///
+/// # Safety
+/// Every base of `*b` is mapped device memory covering what the chain
+/// reads and writes: as [`yd_t6_display_adopt`]'s, with the CRU mapping
+/// also covering the PMU1 CRU at +0x30000 and the HDMI controller's up to
+/// 0x5000; vop_grf and vo1_grf a page each, the PHY 0x2000 bytes. `b`,
+/// `env` and `out` are valid.
+#[no_mangle]
+pub unsafe extern "C" fn yd_t6_display_cold(
+    b: *const YdT6DisplayColdBases,
+    env: *const crate::env::YdEnv,
+    flags: u32,
+    stop_after: u32,
+    fb_pa: u64,
+    out: *mut YdT6DisplayCold,
+) -> i32 {
+    if b.is_null() || env.is_null() || out.is_null() {
+        return -EINVAL;
+    }
+    // SAFETY: the caller's contract.
+    let (hw, b, env) = unsafe { (Hw::new(), &*b, &*env) };
+    let Ok(c) = crate::board::nanopc_t6_display_cold::cold(&hw, b, env, flags, stop_after, fb_pa) else {
+        return -EINVAL;
+    };
+    // SAFETY: the caller's contract.
+    unsafe { *out = c };
+    match c.error {
+        0 => 0,
+        e if e == crate::board::nanopc_t6_display_cold::ColdError::Stopped as u32 => -crate::errno::ECANCELED,
+        _ => -EIO,
+    }
+}
+
 #[cfg(test)]
 mod display_tests {
     use super::*;
@@ -2559,6 +2617,76 @@ mod display_tests {
             let pin = format!("_Static_assert({what} == {v},");
             assert!(H.contains(&pin), "{pin}");
         }
+    }
+
+    #[test]
+    fn the_c_header_has_the_d8_numbers_and_layout() {
+        use crate::board::nanopc_t6_display_cold::{flags, ColdError};
+        use crate::soc::rk3588_display_chain::stage;
+        const H: &str = include_str!("../../include/yakogl_drivers.h");
+        let def = |name: &str| -> u32 {
+            let l = H.lines().find(|l| l.starts_with(&format!("#define {name} "))).expect(name);
+            // the value, before the comment: a number or "(1u << N)"
+            let v = l[format!("#define {name} ").len()..].split("/*").next().expect(name).trim();
+            match v.strip_prefix("(1u << ").and_then(|s| s.strip_suffix(')')) {
+                Some(shift) => 1 << shift.parse::<u32>().unwrap_or_else(|_| panic!("{name}")),
+                None => v.parse().unwrap_or_else(|_| panic!("{name}")),
+            }
+        };
+        assert_eq!(def("YD_T6_DISPLAY_COLD_POWER_CYCLE"), flags::POWER_CYCLE);
+        assert_eq!(def("YD_T6_DISPLAY_COLD_FORCE_COLD"), flags::FORCE_COLD);
+        for n in stage::START..=stage::VIDEO {
+            assert_eq!(def(&format!("YD_T6_DISPLAY_COLD_STAGE_{}", stage::name(n))), n);
+        }
+        for (name, v) in [
+            ("NONE", ColdError::None),
+            ("STOPPED", ColdError::Stopped),
+            ("MODE", ColdError::Mode),
+            ("PHY", ColdError::Phy),
+            ("VOP", ColdError::Vop),
+            ("FOUND_RUNNING", ColdError::FoundRunning),
+            ("STANDBY", ColdError::Standby),
+            ("DISPLAY", ColdError::Display),
+            ("GRF", ColdError::Grf),
+            ("GATE", ColdError::Gate),
+            ("DCLK_MUX", ColdError::DclkMux),
+            ("HDMI", ColdError::Hdmi),
+            ("IOMMU", ColdError::Iommu),
+            ("VIDEO", ColdError::Video),
+            ("VOP_UNREADABLE", ColdError::VopUnreadable),
+            ("UNCLOCKED", ColdError::Unclocked),
+        ] {
+            assert_eq!(def(&format!("YD_T6_DISPLAY_COLD_ERROR_{name}")), v as u32, "{name}");
+        }
+        let pins = [
+            ("sizeof(struct yd_t6_display_cold_bases)", size_of::<YdT6DisplayColdBases>()),
+            ("offsetof(struct yd_t6_display_cold_bases, vop_grf)", offset_of!(YdT6DisplayColdBases, vop_grf)),
+            ("offsetof(struct yd_t6_display_cold_bases, vo1_grf)", offset_of!(YdT6DisplayColdBases, vo1_grf)),
+            ("offsetof(struct yd_t6_display_cold_bases, phy)", offset_of!(YdT6DisplayColdBases, phy)),
+            ("sizeof(struct yd_t6_display_cold)", size_of::<YdT6DisplayCold>()),
+            ("offsetof(struct yd_t6_display_cold, error)", offset_of!(YdT6DisplayCold, error)),
+            ("offsetof(struct yd_t6_display_cold, refusal)", offset_of!(YdT6DisplayCold, refusal)),
+            ("offsetof(struct yd_t6_display_cold, index)", offset_of!(YdT6DisplayCold, index)),
+            ("offsetof(struct yd_t6_display_cold, detail)", offset_of!(YdT6DisplayCold, detail)),
+        ];
+        for (what, v) in pins {
+            let pin = format!("_Static_assert({what} == {v},");
+            assert!(H.contains(&pin), "{pin}");
+        }
+    }
+
+    #[test]
+    fn the_cold_entry_refuses_a_null_argument_before_anything_is_touched() {
+        let mut out = YdT6DisplayCold { stage: 7, ..YdT6DisplayCold::default() };
+        let live_b = core::ptr::NonNull::<YdT6DisplayColdBases>::dangling().as_ptr().cast_const();
+        let live_env = core::ptr::NonNull::<crate::env::YdEnv>::dangling().as_ptr().cast_const();
+        // SAFETY: each call is refused before it dereferences anything.
+        unsafe {
+            assert_eq!(yd_t6_display_cold(core::ptr::null(), live_env, 1, 0, 0, &mut out), -EINVAL);
+            assert_eq!(yd_t6_display_cold(live_b, core::ptr::null(), 1, 0, 0, &mut out), -EINVAL);
+            assert_eq!(yd_t6_display_cold(live_b, live_env, 1, 0, 0, core::ptr::null_mut()), -EINVAL);
+        }
+        assert_eq!(out.stage, 7, "the record is not written");
     }
 
     #[test]

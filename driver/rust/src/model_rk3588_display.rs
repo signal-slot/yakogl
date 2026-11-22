@@ -450,6 +450,10 @@ impl Rk3588Display {
     pub fn lines(&self) -> Vec<(Level, String)> {
         self.lines.borrow().clone()
     }
+    /// Forget the log lines (the writes stay: [`Self::clear_log`]).
+    pub fn clear_lines(&self) {
+        self.lines.borrow_mut().clear();
+    }
     pub fn now_us(&self) -> u64 {
         *self.now_us.borrow()
     }

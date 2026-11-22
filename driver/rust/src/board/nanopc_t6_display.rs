@@ -65,21 +65,9 @@ use crate::video::VideoMode;
 
 /// The mode the build adopts: 1024x768 at 60 Hz, 65 MHz, H 1024 1048 1184
 /// 1344, V 768 771 777 806, both syncs negative (VESA DMT; what Linux ran on
-/// the board's display in the dump of 2026-11-12).
-pub const MODE: VideoMode = VideoMode {
-    pixel_clock_hz: 65_000_000,
-    hactive: 1024,
-    hfront: 24,
-    hsync: 136,
-    hback: 160,
-    vactive: 768,
-    vfront: 3,
-    vsync: 6,
-    vback: 29,
-    hsync_high: false,
-    vsync_high: false,
-    de_high: true,
-};
+/// the board's display in the dump of 2026-11-12). The cold bring-up
+/// (step D8) programs the same mode: one constant for both.
+pub const MODE: VideoMode = crate::soc::rk3588_display_chain::MODE_1024X768_60;
 
 /// The port, the window and the HDMI output the adopt uses.
 pub const PORT: Vp = Vp::Vp0;

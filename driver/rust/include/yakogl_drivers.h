@@ -1034,6 +1034,71 @@ int yd_t6_screen_show(const struct yd_t6_display_bases *b, struct yd_t6_screen *
 uint32_t yd_t6_screen_busy(const struct yd_t6_display_bases *b, struct yd_t6_screen *s,
 			   const uint64_t *phys, size_t n);
 
+/* D8, the display brought up from cold after a normal kexec
+ * (board::nanopc_t6_display_cold over soc::rk3588_display_chain with the
+ * T6's configuration; feature rk3588): power, clocks and resets, the GRF
+ * words, the PHY at 65 MHz, DCLK_VOP0 on the PHY, the HDMI controller in
+ * DVI, VP0 at 1024x768@60 with Esmart0 on the buffer at physical fb_pa
+ * (1024x768 XRGB8888, stride 4096, below 4 GiB, drawn and cleaned by the
+ * caller), then the video check. Each stage logs a line on env before its
+ * first access ("t6 display: stage N NAME"), so a hang names its stage.
+ * stop_after 0 runs to the end, N (1..8) stops after stage N. 0 when the
+ * chain ran through, -ECANCELED when it stopped after stop_after as asked,
+ * -EIO when a stage failed (out names it), -EINVAL for a null argument, an
+ * unknown flag or stop_after > 8 (nothing read). The bases are those of
+ * the adopt with two differences: the CRU mapping covers the PMU1 CRU too
+ * (0xfd7c0000, 0x31000 bytes), and the HDMI QP TX0's covers 0x5000 bytes;
+ * then vop_grf (0xfd5a4000) and vo1_grf (0xfd5a8000), a page each, and the
+ * HDPTX PHY0 (0xfed60000, 0x2000 bytes). */
+#define YD_T6_DISPLAY_COLD_POWER_CYCLE (1u << 0) /* every block off and in reset first */
+#define YD_T6_DISPLAY_COLD_FORCE_COLD  (1u << 1) /* stop a port found running */
+
+#define YD_T6_DISPLAY_COLD_STAGE_START      1 /* the checks; what runs read (and stopped, powered off) */
+#define YD_T6_DISPLAY_COLD_STAGE_POWER      2 /* PD_VOP, PD_VO1, the gates and resets */
+#define YD_T6_DISPLAY_COLD_STAGE_GRF        3 /* vop_grf GRF_VOP_CON2, vo1_grf GRF_VO1_CON0 */
+#define YD_T6_DISPLAY_COLD_STAGE_PHY        4 /* the PHY's PLL locked, its lanes ready */
+#define YD_T6_DISPLAY_COLD_STAGE_DCLK       5 /* DCLK_VOP0 on the PHY's PLL */
+#define YD_T6_DISPLAY_COLD_STAGE_CONTROLLER 6 /* the HDMI controller bound and enabled */
+#define YD_T6_DISPLAY_COLD_STAGE_VOP        7 /* VP0 runs, Esmart0 on the buffer */
+#define YD_T6_DISPLAY_COLD_STAGE_VIDEO      8 /* the read-backs of the picture */
+
+#define YD_T6_DISPLAY_COLD_ERROR_NONE           0  /* ran through */
+#define YD_T6_DISPLAY_COLD_ERROR_STOPPED        1  /* stop_after reached */
+#define YD_T6_DISPLAY_COLD_ERROR_MODE           2  /* the mode does not fit VP0 or the controller */
+#define YD_T6_DISPLAY_COLD_ERROR_PHY            3  /* refusal: hdptx Refusal, detail: its word */
+#define YD_T6_DISPLAY_COLD_ERROR_VOP            4  /* refusal: vop2 Refusal, detail: its read-back */
+#define YD_T6_DISPLAY_COLD_ERROR_FOUND_RUNNING  5  /* detail: the ports running, bit n = VPn */
+#define YD_T6_DISPLAY_COLD_ERROR_STANDBY        6  /* as _VOP: a running port did not stop */
+#define YD_T6_DISPLAY_COLD_ERROR_DISPLAY        7  /* index: 1 clock, 2 domain (refusal: PdRefusal), 3 gate; detail */
+#define YD_T6_DISPLAY_COLD_ERROR_GRF            8  /* index: the GRF address, detail: the word read */
+#define YD_T6_DISPLAY_COLD_ERROR_GATE           9  /* detail: the CLKGATE_CON read */
+#define YD_T6_DISPLAY_COLD_ERROR_DCLK_MUX       10 /* detail: CLKSEL_CON(112) read */
+#define YD_T6_DISPLAY_COLD_ERROR_HDMI           11 /* refusal: dw_hdmi_qp Refusal, detail: its word */
+#define YD_T6_DISPLAY_COLD_ERROR_IOMMU          12 /* refusal: rk_iommu Refusal, index: set, detail: STATUS */
+#define YD_T6_DISPLAY_COLD_ERROR_VIDEO          13 /* detail: the video checks that failed */
+#define YD_T6_DISPLAY_COLD_ERROR_VOP_UNREADABLE 14 /* index: 1 domain, 2 gate, 3 reset */
+#define YD_T6_DISPLAY_COLD_ERROR_UNCLOCKED      15 /* detail: the ports without a pixel clock */
+
+struct yd_t6_display_cold_bases {
+	struct yd_t6_display_bases display; /* the adopt's; cru and hdmi mapped larger */
+	uintptr_t vop_grf;
+	uintptr_t vo1_grf;
+	uintptr_t phy;
+};
+
+/* What stopped the chain; all 0 when it ran through. The log has the rest. */
+struct yd_t6_display_cold {
+	uint32_t stage;   /* YD_T6_DISPLAY_COLD_STAGE_*, 0 none */
+	uint32_t error;   /* YD_T6_DISPLAY_COLD_ERROR_* */
+	uint32_t refusal;
+	uint32_t index;
+	uint32_t detail;
+};
+
+int yd_t6_display_cold(const struct yd_t6_display_cold_bases *b, const struct yd_env *env,
+		       uint32_t flags, uint32_t stop_after, uint64_t fb_pa,
+		       struct yd_t6_display_cold *out);
+
 /* ---- TI SN65DSI83/84 (ip::sn65dsi8x; yakogl,sn65dsi8x) ------------------
  * I2C bus 0 of the env is the bridge; GPIO line 0 its EN pin, line 1 the
  * display adapter's reset (logical, 1 = asserted). */
@@ -2178,6 +2243,15 @@ _Static_assert(offsetof(struct yd_t6_screen, width) == 32, "yd_t6_screen.width")
 _Static_assert(offsetof(struct yd_t6_screen, height) == 36, "yd_t6_screen.height");
 _Static_assert(offsetof(struct yd_t6_screen, stride) == 40, "yd_t6_screen.stride");
 _Static_assert(offsetof(struct yd_t6_screen, flips) == 44, "yd_t6_screen.flips");
+_Static_assert(sizeof(struct yd_t6_display_cold_bases) == 88, "struct yd_t6_display_cold_bases");
+_Static_assert(offsetof(struct yd_t6_display_cold_bases, vop_grf) == 64, "yd_t6_display_cold_bases.vop_grf");
+_Static_assert(offsetof(struct yd_t6_display_cold_bases, vo1_grf) == 72, "yd_t6_display_cold_bases.vo1_grf");
+_Static_assert(offsetof(struct yd_t6_display_cold_bases, phy) == 80, "yd_t6_display_cold_bases.phy");
+_Static_assert(sizeof(struct yd_t6_display_cold) == 20, "struct yd_t6_display_cold");
+_Static_assert(offsetof(struct yd_t6_display_cold, error) == 4, "yd_t6_display_cold.error");
+_Static_assert(offsetof(struct yd_t6_display_cold, refusal) == 8, "yd_t6_display_cold.refusal");
+_Static_assert(offsetof(struct yd_t6_display_cold, index) == 12, "yd_t6_display_cold.index");
+_Static_assert(offsetof(struct yd_t6_display_cold, detail) == 16, "yd_t6_display_cold.detail");
 _Static_assert(sizeof(struct yd_sn65dsi8x_config) == 8, "struct yd_sn65dsi8x_config");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, flags) == 0, "yd_sn65dsi8x_config.flags");
 _Static_assert(offsetof(struct yd_sn65dsi8x_config, lanes) == 4, "yd_sn65dsi8x_config.lanes");
