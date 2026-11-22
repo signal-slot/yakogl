@@ -83,6 +83,39 @@ website/og-image.png | Apache-2.0 | written by tools/website-og-image.py (byte f
 # board runs, or inputs written for this project.
 tests/fixtures/deqp_random_dead_cube/* | Apache-2.0 | shaders from the dEQP random generator (VK-GL-CTS is Apache-2.0, NOTICE 5); the source hash is a test input
 tools/cts/testdata/* | Apache-2.0 | self-test inputs and expected outputs of tools/cts; compared byte for byte
+# tools/mali/testdata families whose provenance is not "probe shaders written
+# for this project". Each row below is narrower than the catch-all row after
+# the block (first match wins); none matches a file the catch-all does not.
+# Near-verbatim glmark2 22c527cb data/shaders text, comments dropped (glmark2 is
+# GPL-3.0, its README); the #version line and the case comment are ours. NOTICE
+# has no glmark2 entry for these files yet (plan #391).
+tools/mali/testdata/gm2_tc425_*.vert | Apache-2.0 AND GPL-3.0-only | light-basic.vert of glmark2 22c527cb (GPL-3.0-only) with the texture scene's constants (vs ace2 of the Mesa 26.2.1 drm-shim references)
+tools/mali/testdata/gm2_tc425_*.frag | Apache-2.0 AND GPL-3.0-only | light-basic-tex.frag of glmark2 22c527cb (GPL-3.0-only), mediump default (fs 425b of the Mesa 26.2.1 drm-shim references)
+tools/mali/testdata/gm2_fsop_1.frag | Apache-2.0 AND GPL-3.0-only | gradient.frag of glmark2 22c527cb (GPL-3.0-only) at mediump (commit c9b1dc96)
+tools/mali/testdata/gm2_fsop_2.frag | Apache-2.0 AND GPL-3.0-only | gradient.frag of glmark2 22c527cb (GPL-3.0-only) at highp (commit c9b1dc96)
+tools/mali/testdata/gm2_fsop_*.vert | Apache-2.0 AND GPL-3.0-only | gradient.vert of glmark2 22c527cb (GPL-3.0-only), comments dropped
+# The other gm2_* cases are original reductions of glmark2 shader shapes. Their
+# commit bodies say "no glmark2 text"; a line comparison against glmark2
+# 22c527cb data/shaders finds only attribute/uniform names and one-line idioms.
+tools/mali/testdata/gm2_*.frag | Apache-2.0 | original reduction of a glmark2 fragment shader shape, no glmark2 text (Mesa 26.2.1 drm-shim reference alongside)
+tools/mali/testdata/gm2_*.vert | Apache-2.0 | original reduction of a glmark2 vertex shader shape, no glmark2 text (Mesa 26.2.1 drm-shim reference alongside)
+# femtovg 0.26.0 shaders: byte for byte the files of tools/shaders/femtovg and tools/shaders/offarm.
+tools/mali/testdata/fvg_*.frag | MIT OR Apache-2.0 | femtovg 0.26.0 main-fs.glsl as assembled in tools/shaders/femtovg or offarm, byte for byte (NOTICE 8)
+tools/mali/testdata/fvg_*.vert | MIT OR Apache-2.0 | femtovg 0.26.0 main-vs.glsl as assembled in tools/shaders/femtovg or offarm, byte for byte (NOTICE 8)
+# dEQP-GLES2 shaders as the suite writes them (VK-GL-CTS 93bca01, Apache-2.0, NOTICE 5), or our reductions of them.
+tools/mali/testdata/deqp_*.frag | Apache-2.0 | dEQP-GLES2 fragment shader (VK-GL-CTS, Apache-2.0, NOTICE 5) or our reduction of one
+tools/mali/testdata/deqp_*.vert | Apache-2.0 | dEQP-GLES2 vertex shader (VK-GL-CTS, Apache-2.0, NOTICE 5) or our reduction of one
+tools/mali/testdata/deqp_*.bind | Apache-2.0 | uniform bindings of a dEQP-GLES2 case (VK-GL-CTS, Apache-2.0, NOTICE 5), written by our deqp tools
+# Output of Mesa tools over our shaders: ISA mnemonics from ISA.xml, descriptor field names from genxml (MIT, NOTICE 1b, 1e3).
+tools/mali/testdata/*.trace | Apache-2.0 AND MIT | pandecode command-stream dump of Mesa 26.2.1 panfrost (drm-shim): mnemonics from its ISA.xml, field names from its genxml (MIT, NOTICE 1b, 1e3)
+tools/mali/testdata/*.pandecode | Apache-2.0 AND MIT | pandecode dump of Mesa 25.0.7 on the board: mnemonics from its ISA.xml, field names from its genxml (MIT, NOTICE 1b, 1e3)
+tools/mali/testdata/*.stderr | Apache-2.0 AND MIT | Mesa 26.2.1 panfrost debug output of the drm-shim run (NIR and shader dumps; MIT, NOTICE 1b)
+tools/mali/testdata/*.disasm | Apache-2.0 AND MIT | Mesa 26.2.1 valhall disassembly (mnemonics from its ISA.xml, MIT, NOTICE 1e3) of the words pan_shc compiled for our shaders
+tools/mali/testdata/pan_tex_ref/*.desc | Apache-2.0 AND MIT | descriptor dump of Mesa 26.2.1 panfrost (pandecode; field names from its genxml, MIT, NOTICE 1b)
+tools/mali/testdata/pan_blend_ref/shaders/*.txt | Apache-2.0 AND MIT | Mesa 26.2.1 blend shader words with their valhall disassembly (mnemonics from ISA.xml, MIT, NOTICE 1e3), written by pan_blend_ref.py
+tools/mali/testdata/blend_case*.txt | Apache-2.0 AND MIT | Mesa 26.2.1 blend shader words with their valhall disassembly (mnemonics from ISA.xml, MIT, NOTICE 1e3)
+tools/mali/testdata/*.words | Apache-2.0 | machine words Mesa 26.2.1 compiles for our blend states: data, no Mesa text (as tools/v3d/qpu_corpus.txt)
+tools/mali/testdata/*.stdout | Apache-2.0 | output of our gl_ref.py under drm-shim
 tools/mali/testdata/* | Apache-2.0 | probe shaders written for this project and their disassembly / traces; compared byte for byte
 tools/mali/panthor/uapi_pins.expected | Apache-2.0 | expected output of the panthor UAPI pin check
 tools/mali/isa-ref/board-2026-10-18.txt | Apache-2.0 | disassembly of our board run
