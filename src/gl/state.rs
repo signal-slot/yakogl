@@ -194,6 +194,12 @@ pub(crate) const COLOR_BUFFER_FLOAT_EXTENSION: bool =
 /// How many names at the end of the list are the ES 2.0 surface's own:
 /// GL_OES_texture_npot and the depth-texture pair.
 const ES2_ONLY_NAMES: usize = 3;
+/// `GL_ALIASED_LINE_WIDTH_RANGE`: the Vivante part's profile
+/// (`vivante::profile::ACTIVE`), [1.0, 16.0] elsewhere.
+#[cfg(feature = "gpu-vivante")]
+pub(crate) const ALIASED_LINE_WIDTH_RANGE: [f32; 2] = crate::vivante::backend::LINE_WIDTH_RANGE;
+#[cfg(not(feature = "gpu-vivante"))]
+pub(crate) const ALIASED_LINE_WIDTH_RANGE: [f32; 2] = [1.0, 16.0];
 /// GL_OES_texture_npot is claimed on the ES 2.0 surface of every GPU (the
 /// list above says how each backend holds the chain); ES 3.0 has it in core.
 /// On the GC7000 the claim is the part's: it holds only while the hardware's
@@ -1036,8 +1042,9 @@ fn get_floatv(c: &GlContext, pname: GLenum, out: &mut [GLfloat; STATE_VALUES]) -
             1
         }
         GL_ALIASED_LINE_WIDTH_RANGE => {
-            out[0] = 1.0;
-            out[1] = 16.0;
+            let [lo, hi] = ALIASED_LINE_WIDTH_RANGE;
+            out[0] = lo;
+            out[1] = hi;
             2
         }
         GL_ALIASED_POINT_SIZE_RANGE => {
