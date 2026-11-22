@@ -14,15 +14,18 @@
 # tools/mp2s_protect_scan.py on the runner.
 #
 # The live verbs run against a fake board: ssh, sudo, findmnt, lsblk,
-# fw_printenv and fw_setenv are stubs on PATH. The fake ssh logs each command
+# fw_printenv, fw_setenv and dd are stubs on PATH. The fake ssh logs each command
 # and runs it on a fake root in this test's temp directory ($FK/boot, $FK/dev,
 # $FK/sys, $FK/proc: every /boot, /dev, /sys and /proc of the command is
 # rewritten there, and a command that still names a real one is not run).
-# fw_printenv and fw_setenv read and edit $FK/dev/mmcblk1p7, a 512 KiB
-# u-boot-env partition made from tools/testdata/mp2s-env/ (copy 1 at 0x7e000,
-# copy 2 at 0x7c000), with tools/uboot_env.py. No network, no board. Proven
-# there: bootcmd, bootcount and altbootcmd keep their values and are never
-# named by fw_setenv; no command names the eMMC (mmcblk0) or a partition
+# fw_printenv and fw_setenv fail as the DK's do (no /etc/fw_env.config) and
+# log any call; the runner reads $FK/dev/mmcblk1p7, a 512 KiB u-boot-env
+# partition made from tools/testdata/mp2s-env/ (copy 1 at 0x7e000, copy 2 at
+# 0x7c000), with head and writes one copy of it with dd, which the dd stub
+# logs. No network, no board. Proven there: fw_printenv and fw_setenv are
+# never called; every write is one dd of one 8 KiB copy of the card's
+# u-boot-env; bootcmd, bootcount and altbootcmd keep their values; no
+# command names the eMMC (mmcblk0) or a partition
 # labelled fsbla1, fsbla2, metadata1, metadata2, fip-a or fip-b, and their
 # fake bytes never change; a refused verb changes nothing (the fake root's
 # sha256 before and after); a write that does not read back is undone.
@@ -77,17 +80,12 @@ shift
 cmd="$*"
 printf '%s\n' "$cmd" >>"$FK/ssh.log"
 [ -e "$FK/down" ] && exit 255
-if [ "$cmd" = "python3 -I - --root /" ]; then
-    grep -q mp2s_fwenv_check || { echo "fake: stdin is not mp2s_fwenv_check.py"; exit 9; }
-    cat "$FK/fwenv.out"
-    exit "$(cat "$FK/fwenv.rc")"
-fi
 c=$(printf '%s' "$cmd" | perl -pe 's#(?<![\w.-])/(boot|dev|sys|proc)(?=/|\s|$|[;\x27"])#$ENV{FK}/$1#g')
 if printf '%s' "$c" | grep -Eq "(^|[^A-Za-z0-9_.-])/(boot|dev|sys|proc|etc)(/|\$|[ ;'\"])"; then
     echo "UNSAFE: $cmd" >>"$FK/ssh.log"
     exit 99
 fi
-exec bash -c "$c"
+MP2S_ON_BOARD=1 exec bash -c "$c"
 EOF
 cat >"$W/bin/sudo" <<'EOF'
 #!/bin/bash
@@ -101,32 +99,27 @@ exit 1
 EOF
 printf '#!/bin/sh\ncat "$FK/findmnt.out"\n' >"$W/bin/findmnt"
 printf '#!/bin/sh\ncat "$FK/lsblk.txt"\n' >"$W/bin/lsblk"
-cat >"$W/bin/fw_printenv" <<'EOF'
+cat >"$W/bin/dd" <<'EOF'
 #!/bin/bash
-img=$FK/dev/mmcblk1p7
-[ -e "$FK/fwprint.img" ] && img=$FK/fwprint.img   # a fw_env.config that points elsewhere
-exec python3 -I "$REPO/tools/uboot_env.py" --redundant --size 0x2000 --offset 0x7e000 --offset2 0x7c000 print "$img" "$@"
+# dd on the fake board (run through the fake ssh): a write to the fake root
+# (of=$FK/...) is logged in dd.log with its arguments, its bytes kept in
+# dd-N.bin; with $FK/dd.lie it is swallowed. The test's own dd is plain dd.
+of=
+for a in "$@"; do case $a in of=*) of=${a#of=} ;; esac; done
+case ${MP2S_ON_BOARD:-}:$of in
+1:"$FK"/*)
+    n=$(($(wc -l <"$FK/dd.log") + 1))
+    printf '%s\n' "${*//"$FK"/}" >>"$FK/dd.log"
+    cat >"$FK/dd-$n.bin"
+    [ -e "$FK/dd.lie" ] && exit 0
+    exec /bin/dd "$@" if="$FK/dd-$n.bin"
+    ;;
+esac
+exec /bin/dd "$@"
 EOF
-cat >"$W/bin/fw_setenv" <<'EOF'
-#!/bin/bash
-# the fake fw_setenv -s -: NAME=VALUE sets, NAME= deletes; every line logged
-[ "$*" = "-s -" ] || { echo "fake fw_setenv: only -s -" >&2; exit 1; }
-L=(--redundant --size 0x2000 --offset 0x7e000 --offset2 0x7c000)
-img=$FK/dev/mmcblk1p7
-sets=()
-unsets=()
-while IFS= read -r l || [ -n "$l" ]; do
-    printf '%s\n' "$l" >>"$FK/fw_setenv.log"
-    if [ -n "${l#*=}" ]; then sets+=("$l"); else unsets+=("${l%%=*}"); fi
+for t in fw_printenv fw_setenv; do
+    printf '#!/bin/sh\necho "%s: Cannot initialize environment" >&2\necho "%s $*" >>"$FK/fw.log"\nexit 1\n' "$t" "$t" >"$W/bin/$t"
 done
-[ -e "$FK/setenv.lie" ] && exit 0
-if [ ${#sets[@]} -gt 0 ]; then
-    python3 -I "$REPO/tools/uboot_env.py" "${L[@]}" set "$img" "$img.new" "${sets[@]}" >/dev/null && mv "$img.new" "$img" || exit 1
-fi
-if [ ${#unsets[@]} -gt 0 ]; then
-    python3 -I "$REPO/tools/uboot_env.py" "${L[@]}" unset "$img" "$img.new" "${unsets[@]}" >/dev/null && mv "$img.new" "$img" || exit 1
-fi
-EOF
 chmod +x "$W/bin"/*
 export PATH="$W/bin:$PATH"
 
@@ -165,7 +158,7 @@ open(sys.argv[1], "wb").write(struct.pack("<I", zlib.crc32(body)) + body + b"\xf
 # fake FIXTURE [installed]: a fresh fake board with that environment
 fake() {
     rm -rf "$FK"
-    mkdir -p "$FK/boot/mmc0_extlinux" "$FK/dev" "$FK/sys/block/mmcblk1/device" "$FK/proc/sys/vm"
+    mkdir -p "$FK/boot/mmc0_extlinux" "$FK/dev" "$FK/sys/block/mmcblk1/device" "$FK/sys/block/mmcblk0/device" "$FK/proc/sys/vm"
     echo "stock kernel" >"$FK/boot/Image.gz"
     echo "stock script" >"$FK/boot/boot.scr.uimg"
     echo "stock dtb" >"$FK/boot/stm32mp257f-dk.dtb"
@@ -173,6 +166,7 @@ fake() {
     : >"$FK/dev/null"
     : >"$FK/proc/sys/vm/drop_caches"
     echo SD >"$FK/sys/block/mmcblk1/device/type"
+    echo MMC >"$FK/sys/block/mmcblk0/device/type"
     for p in 1 2 5 6; do head -c 4096 /dev/urandom >"$FK/dev/mmcblk1p$p"; done
     mkfwu "$FK/dev/mmcblk1p3" fcfcffff
     cp "$FK/dev/mmcblk1p3" "$FK/dev/mmcblk1p4"
@@ -182,17 +176,18 @@ fake() {
         "/dev/mmcblk1p4 metadata2" "/dev/mmcblk1p5 fip-a" "/dev/mmcblk1p6 fip-b" \
         "/dev/mmcblk1p7 u-boot-env" "/dev/mmcblk1p8 bootfs" "/dev/mmcblk1p9 vendorfs" >"$FK/lsblk.txt"
     echo /dev/mmcblk1p8 >"$FK/findmnt.out"
-    echo "fwenv: ok (fake board)" >"$FK/fwenv.out"
-    echo 0 >"$FK/fwenv.rc"
     if [ "${2:-}" = installed ]; then
         mkdir -p "$FK/boot/yakogl/standalone"
         cp "$SCR" "$FK/boot/yakogl/standalone/boot.scr.uimg"
     fi
     : >"$FK/ssh.log"
-    : >"$FK/fw_setenv.log"
+    : >"$FK/dd.log"
+    : >"$FK/fw.log"
     rm -rf "$MP2S_STATE_DIR"
     protect_record
     stock_sum >"$W/stock.sum"
+    BC0=$(env_print -n bootcmd)
+    ABC0=$(env_print -n altbootcmd)
 }
 protect_record() { (cd "$FK" && sha256sum dev/mmcblk1p1 dev/mmcblk1p2 dev/mmcblk1p3 dev/mmcblk1p4 dev/mmcblk1p5 dev/mmcblk1p6 dev/mmcblk0p7) >"$W/protected.sum"; }
 stock_sum() { (cd "$FK/boot" && sha256sum Image.gz boot.scr.uimg stm32mp257f-dk.dtb mmc0_extlinux/stm32mp257f-dk_extlinux.conf); }
@@ -203,18 +198,35 @@ env_print() { python3 -I "$REPO/tools/uboot_env.py" "${ENVL[@]}" print "$FK/dev/
 others() { env_print | grep -Ev '^(mp2s_ver|mp2s_left|mp2s_prefixes|boot_prefixes)='; }
 live() { env BOARD_HOST=u@fake "$R" "$@"; }
 
+# renumber: the card becomes mmcblk0 and the eMMC mmcblk1, as the DK's Linux
+# numbered them on 2026-11-22 (the card was mmcblk2 on the boot before)
+renumber() {
+    local p
+    mv "$FK/dev/mmcblk0p7" "$W/emmc-env.bin"
+    for p in 1 2 3 4 5 6 7; do mv "$FK/dev/mmcblk1p$p" "$FK/dev/mmcblk0p$p"; done
+    mv "$W/emmc-env.bin" "$FK/dev/mmcblk1p7"
+    echo SD >"$FK/sys/block/mmcblk0/device/type"
+    echo MMC >"$FK/sys/block/mmcblk1/device/type"
+    sed -i 's#/dev/mmcblk1p#/dev/mmcblk0p#' "$FK/lsblk.txt"
+    echo /dev/mmcblk0p8 >"$FK/findmnt.out"
+}
+# board_cmds: the commands sent, without the reads of a disk's sysfs type
+# (reading the eMMC's type is how it is told apart, never a write)
+board_cmds() { grep -Ev '^cat -- /sys/block/mmcblk[0-9]+/device/type$' "$FK/ssh.log"; }
+
 # the invariants of every live run: protected names and partitions
 protected() {
     local what=$1
     if (cd "$FK" && sha256sum -c --quiet "$W/protected.sum" >/dev/null 2>&1); then ok "$what: fsbla1/2, metadata1/2, fip-a/b and the eMMC unchanged"; else bad "$what: protected bytes" "changed"; fi
-    if grep -Eq 'mmcblk0|fsbla|metadata|fip-' "$FK/ssh.log"; then bad "$what: no command names the eMMC or a protected partition" "$(grep -E 'mmcblk0|fsbla|metadata|fip-' "$FK/ssh.log")"; else ok "$what: no command names the eMMC or a protected partition"; fi
+    if board_cmds | grep -Eq 'mmcblk0|fsbla|metadata|fip-'; then bad "$what: no command names the eMMC or a protected partition" "$(board_cmds | grep -E 'mmcblk0|fsbla|metadata|fip-')"; else ok "$what: no command names the eMMC or a protected partition"; fi
     if grep -q UNSAFE "$FK/ssh.log"; then bad "$what: every command stayed on the fake root" "$(grep UNSAFE "$FK/ssh.log")"; else ok "$what: every command stayed on the fake root"; fi
-    if grep -Evq '^(mp2s_ver|mp2s_left|mp2s_prefixes|boot_prefixes)=' "$FK/fw_setenv.log"; then bad "$what: fw_setenv names only mp2s_* and boot_prefixes" "$(cat "$FK/fw_setenv.log")"; else ok "$what: fw_setenv names only mp2s_* and boot_prefixes"; fi
-    if grep -Eq '(^|[^A-Za-z_])(bootcmd|bootcount|altbootcmd)' "$FK/fw_setenv.log"; then bad "$what: bootcmd, bootcount, altbootcmd never written" "$(cat "$FK/fw_setenv.log")"; else ok "$what: bootcmd, bootcount, altbootcmd never written"; fi
+    if [ -s "$FK/fw.log" ]; then bad "$what: fw_printenv and fw_setenv are never called" "$(cat "$FK/fw.log")"; else ok "$what: fw_printenv and fw_setenv are never called"; fi
+    if grep -Evq '^of=/dev/mmcblk1p7 bs=8192 seek=6[23] count=1 iflag=fullblock conv=notrunc,fsync status=none$' "$FK/dd.log"; then bad "$what: every write is one 8 KiB copy of the card's u-boot-env" "$(cat "$FK/dd.log")"; else ok "$what: every write is one 8 KiB copy of the card's u-boot-env"; fi
+    if [ "$(env_print -n bootcmd)" = "$BC0" ] && [ "$(env_print -n altbootcmd)" = "$ABC0" ] && ! env_print bootcount >/dev/null; then ok "$what: bootcmd, altbootcmd as before, no bootcount"; else bad "$what: bootcmd, bootcount, altbootcmd" "changed"; fi
 }
 
 # 1. dry runs
-for v in status install uninstall nodefault; do
+for v in status printenv install uninstall nodefault; do
     expect "dry-run $v" 0 "$R" --dry-run "$v"
     has "dry-run $v prints board lines" 'DRY board$'
 done
@@ -225,7 +237,9 @@ undo_ln=$(grep -n UNDO <<<"$OUT" | head -1 | cut -d: -f1)
 dry_ln=$(grep -n 'DRY board' <<<"$OUT" | head -1 | cut -d: -f1)
 if [ "$undo_ln" -lt "$dry_ln" ]; then ok "the undo comes before the first board line"; else bad "undo first" "$OUT"; fi
 has "default 2 says nothing was rebooted" 'nothing was rebooted'
-has "default 2 writes the environment with fw_setenv" 'fw_setenv -s -'
+has "default 2 writes one copy of the environment with dd" 'dd of=/dev/mmcblk1p7 bs=8192 seek='
+hasnt "default 2 never calls fw_setenv" 'fw_setenv'
+hasnt "default 2 never calls fw_printenv" 'fw_printenv'
 has "default 2 writes mp2s_left=2 in that one write" 'mp2s_left=2'
 hasnt "default 2 never names the eMMC" mmcblk0
 hasnt "default never touches bootcmd" 'bootcmd'
@@ -328,8 +342,12 @@ if python3 -I "$HERE/mp2s_protect_scan.py" "$R" >"$W/scan.out" 2>&1; then ok "mp
 fake "$FIX/pristine.bin" installed
 BEFORE_ALL=$(env_print)
 BEFORE_OTHERS=$(others)
+ACTIVE0=$(python3 -I "$REPO/tools/uboot_env.py" "${ENVL[@]}" check "$FK/dev/mmcblk1p7" | sed -n 's/^active: copy //p')
+if [ "$ACTIVE0" = 1 ]; then INACTIVE=2 ISEEK=62; else INACTIVE=1 ISEEK=63; fi
 BC=$(env_print -n bootcmd)
 ABC=$(env_print -n altbootcmd)
+if [ "$(live printenv 2>/dev/null)" = "$BEFORE_ALL" ]; then ok "printenv prints the active copy of the card's u-boot-env"; else bad "printenv" "$(live printenv 2>&1 | head -5)"; fi
+[ ! -s "$FK/dd.log" ] && [ ! -s "$FK/fw.log" ] && ok "printenv writes nothing and calls no fw_printenv" || bad "printenv" "$(cat "$FK/dd.log" "$FK/fw.log")"
 expect "live default 2" 0 live default "$IMG" 2
 has "it prints the undo" 'UNDO, from Linux'
 has "it says nothing was rebooted" 'default set for 2 boots; nothing was rebooted.'
@@ -342,7 +360,9 @@ if cmp -s "$IMG" "$FK/boot/yakogl/standalone/default.bin"; then ok "default.bin 
 if [ "$(others)" = "$BEFORE_OTHERS" ]; then ok "every other variable kept its value"; else bad "other variables" "$(diff <(echo "$BEFORE_OTHERS") <(others))"; fi
 [ "$(env_print -n bootcmd)" = "$BC" ] && [ "$(env_print -n altbootcmd)" = "$ABC" ] && ! env_print bootcount >/dev/null &&
     ok "bootcmd and altbootcmd as before, no bootcount" || bad "bootcmd/altbootcmd/bootcount" "changed"
-[ "$(wc -l <"$FK/fw_setenv.log")" = 4 ] && ok "one environment write of four lines" || bad "one write" "$(cat "$FK/fw_setenv.log")"
+[ "$(wc -l <"$FK/dd.log")" = 1 ] && ok "one environment write" || bad "one write" "$(cat "$FK/dd.log")"
+grep -q "seek=$ISEEK " "$FK/dd.log" && ok "the write is copy $INACTIVE, the inactive one" || bad "the inactive copy" "$(cat "$FK/dd.log")"
+python3 -I "$REPO/tools/uboot_env.py" "${ENVL[@]}" check "$FK/dev/mmcblk1p7" | grep -q "^active: copy $INACTIVE" && ok "copy $INACTIVE is active after the write" || bad "active copy" "$(python3 -I "$REPO/tools/uboot_env.py" "${ENVL[@]}" check "$FK/dev/mmcblk1p7")"
 if stock_sum | cmp -s - "$W/stock.sum"; then ok "ST's files under /boot unchanged"; else bad "stock files" "changed"; fi
 if grep -q '/boot/yakogl/standalone/default-prefixes.txt\|default-prefixes' "$FK/ssh.log"; then bad "the default record stays on the host" "sent"; else ok "the default record stays on the host"; fi
 [ "$(cat "$MP2S_STATE_DIR/default-prefixes.txt")" = '/ /boot/' ] && ok "the default record holds the live boot_prefixes" || bad "default record" "$(cat "$MP2S_STATE_DIR/default-prefixes.txt" 2>&1)"
@@ -350,10 +370,10 @@ protected "default 2"
 
 # a second default refuses and changes nothing
 snap >"$W/snap1"
-: >"$FK/fw_setenv.log"
+: >"$FK/dd.log"
 expect "a second default refuses" 3 live default "$IMG" 3
 has "it says nodefault first" 'nodefault first'
-snap | cmp -s - "$W/snap1" && [ ! -s "$FK/fw_setenv.log" ] && ok "the refused default changed nothing" || bad "refused default" "changed the fake board"
+snap | cmp -s - "$W/snap1" && [ ! -s "$FK/dd.log" ] && ok "the refused default changed nothing" || bad "refused default" "changed the fake board"
 expect "a forever default while counting refuses too" 3 env BOARD_PERSON_PRESENT=1 BOARD_HOST=u@fake "$R" default "$PROD" forever
 
 expect "live nodefault" 0 live nodefault
@@ -365,10 +385,21 @@ if [ "$(env_print)" = "$BEFORE_ALL" ]; then ok "the environment's variables are 
 [ -e "$FK/boot/yakogl/standalone/boot.scr.uimg" ] && ok "the installed script stays" || bad "boot.scr.uimg" "removed by nodefault"
 [ ! -e "$MP2S_STATE_DIR/default-prefixes.txt" ] && ok "the default record is dropped" || bad "default record" "left"
 protected "nodefault"
-: >"$FK/fw_setenv.log"
+: >"$FK/dd.log"
 expect "nodefault again (safe to repeat)" 0 live nodefault
 has "it writes no environment" 'no default is set in the environment'
-[ ! -s "$FK/fw_setenv.log" ] && ok "the repeated nodefault sent no fw_setenv" || bad "repeated nodefault" "$(cat "$FK/fw_setenv.log")"
+[ ! -s "$FK/dd.log" ] && ok "the repeated nodefault wrote no environment" || bad "repeated nodefault" "$(cat "$FK/dd.log")"
+
+# the count ran out on the board (the script put the environment back):
+# nodefault writes nothing, removes default.bin and drops the stale record
+fake "$FIX/pristine.bin" installed
+expect "live default 2 (to run out)" 0 live default "$IMG" 2
+mkpart "$FIX/pristine.bin" "$FK/dev/mmcblk1p7"
+: >"$FK/dd.log"
+expect "nodefault after the count ran out" 0 live nodefault
+[ ! -s "$FK/dd.log" ] && ok "it wrote no environment" || bad "ran-out nodefault" "$(cat "$FK/dd.log")"
+[ ! -e "$MP2S_STATE_DIR/default-prefixes.txt" ] && ok "the stale default record is dropped" || bad "stale record" "left"
+[ ! -e "$FK/boot/yakogl/standalone/default.bin" ] && ok "default.bin removed after the count ran out" || bad "default.bin" "left"
 
 # forever with a person, then nodefault without the host's record (the pristine image is the record)
 fake "$FIX/pristine.bin" installed
@@ -386,9 +417,9 @@ fake "$FIX/pristine.bin" installed
 expect "live default 1" 0 live default "$IMG" 1
 printf '/mmc0_' >"$MP2S_STATE_DIR/default-prefixes.txt"
 snap >"$W/snap1"
-: >"$FK/fw_setenv.log"
+: >"$FK/dd.log"
 expect "nodefault refuses a record that differs from mp2s_prefixes" 3 live nodefault
-snap | cmp -s - "$W/snap1" && [ ! -s "$FK/fw_setenv.log" ] && ok "the refused nodefault changed nothing" || bad "refused nodefault" "changed the fake board"
+snap | cmp -s - "$W/snap1" && [ ! -s "$FK/dd.log" ] && ok "the refused nodefault changed nothing" || bad "refused nodefault" "changed the fake board"
 
 # refusals on the board: each changes nothing
 refuses() { # NAME SETUP...: the setup on a fresh installed fake, then default 2 must refuse and change nothing
@@ -397,9 +428,11 @@ refuses() { # NAME SETUP...: the setup on a fresh installed fake, then default 2
     fake "$FIX/pristine.bin" installed
     "$@"
     protect_record
+    BC0=$(env_print -n bootcmd)
+    ABC0=$(env_print -n altbootcmd)
     snap >"$W/snap1"
     expect "default refuses: $name" 3 live default "$IMG" 2
-    if snap | cmp -s - "$W/snap1" && [ ! -s "$FK/fw_setenv.log" ]; then ok "$name: nothing changed"; else bad "$name: nothing changed" "$(diff <(cat "$W/snap1") <(snap))"; fi
+    if snap | cmp -s - "$W/snap1" && [ ! -s "$FK/dd.log" ]; then ok "$name: nothing changed"; else bad "$name: nothing changed" "$(diff <(cat "$W/snap1") <(snap))"; fi
     protected "$name"
 }
 refuses "one environment copy bad" mkpart "$FIX/one-copy-bad.bin" "$FK/dev/mmcblk1p7"
@@ -410,15 +443,27 @@ refuses "a one-shot (yako_*) armed" mkpart "$W/yako.bin" "$FK/dev/mmcblk1p7"
 python3 -I "$REPO/tools/uboot_env.py" --redundant --size 0x2000 set "$FIX/pristine.bin" "$W/prefix.bin" "boot_prefixes=/yakogl/standalone/ / /boot/" >/dev/null
 refuses "our prefix left in boot_prefixes" mkpart "$W/prefix.bin" "$FK/dev/mmcblk1p7"
 refuses "ST's firmware update in trial" eval 'mkfwu "$FK/dev/mmcblk1p3" fefcffff; cp "$FK/dev/mmcblk1p3" "$FK/dev/mmcblk1p4"'
-refuses "fw_env.config not on the card" eval 'echo "fwenv: REFUSE fake" >"$FK/fwenv.out"; echo 2 >"$FK/fwenv.rc"'
+refuses "no u-boot-env on the card (only the eMMC has one)" eval 'grep -v u-boot-env "$FK/lsblk.txt" >"$FK/l"; mv "$FK/l" "$FK/lsblk.txt"'
 refuses "/boot on the eMMC" eval 'echo /dev/mmcblk0p8 >"$FK/findmnt.out"'
 refuses "/boot on a disk that says MMC" eval 'echo MMC >"$FK/sys/block/mmcblk1/device/type"'
+refuses "/boot on the eMMC, numbered mmcblk1" eval 'renumber; echo /dev/mmcblk1p8 >"$FK/findmnt.out"'
 refuses "not installed" rm -rf "$FK/boot/yakogl"
 refuses "a staged script that is not this commit's" eval 'echo old >"$FK/boot/yakogl/standalone/boot.scr.uimg"'
 refuses "a foreign file in the stage directory" mkdir "$FK/boot/yakogl/standalone/extlinux"
 refuses "the card undo applied" mv "$FK/boot/yakogl/standalone/boot.scr.uimg" "$FK/boot/yakogl/standalone/boot.scr.uimg.off"
-refuses "fw_printenv reads another environment" mkpart "$FIX/installed.bin" "$FK/fwprint.img"
 refuses "the board does not answer" touch "$FK/down"
+
+# the card as mmcblk0, the eMMC as mmcblk1: the runner goes by the disk's
+# type, so printenv and status read the card's u-boot-env (board, 2026-11-22:
+# an index rule refused this card as "the eMMC (mmcblk0)")
+fake "$FIX/pristine.bin" installed
+renumber
+expect "printenv with the card as mmcblk0" 0 live printenv
+has "printenv with the card as mmcblk0: the card's partition" "/dev/mmcblk0p7: active"
+has "printenv with the card as mmcblk0: its variables" "boot_prefixes="
+hasnt "printenv with the card as mmcblk0: never the eMMC's partition" "mmcblk1p7"
+expect "status with the card as mmcblk0" 0 live status
+if grep -q 'mmcblk1p' "$FK/ssh.log"; then bad "the card as mmcblk0: no command names the eMMC's partitions" "$(grep 'mmcblk1p' "$FK/ssh.log")"; else ok "the card as mmcblk0: no command names the eMMC's partitions"; fi
 
 # no board line at all for a refusal made on the host
 fake "$FIX/pristine.bin" installed
@@ -428,12 +473,12 @@ expect "live LIFETIME_S=0 under a count" 3 live default "$NOLIFE" 2
 
 # a write that does not read back is undone
 fake "$FIX/pristine.bin" installed
-touch "$FK/setenv.lie"
+touch "$FK/dd.lie"
 BEFORE_ALL=$(env_print)
 expect "a default whose write does not read back" 4 live default "$IMG" 2
 has "it says the environment is as before" 'nothing of it is left changed'
 [ "$(env_print)" = "$BEFORE_ALL" ] && ok "the environment is as before" || bad "after a failed read-back" "changed"
-grep -q '^boot_prefixes=/ /boot/$' "$FK/fw_setenv.log" && ok "the restore wrote the old boot_prefixes" || bad "restore" "$(cat "$FK/fw_setenv.log")"
+[ "$(wc -l <"$FK/dd.log")" = 2 ] && cmp -s "$FK/dd-2.bin" <(dd if="$FK/dev/mmcblk1p7" bs=8192 skip=63 count=1 status=none) && ok "the restore wrote the copy's old bytes back" || bad "restore" "$(cat "$FK/dd.log")"
 protected "failed read-back"
 
 # 8. install and uninstall: the manifest tool
@@ -460,7 +505,7 @@ else
     done
     cmp -s "$SCR" "$FK/boot/yakogl/standalone/boot.scr.uimg" && ok "the staged script is this commit's build" || bad "staged script" "differs"
     cmp -s "$FK/dev/mmcblk1p7" "$FK/boot/yakogl/standalone/u-boot-env.bin" && ok "u-boot-env.bin is the pristine partition" || bad "u-boot-env.bin" "differs"
-    [ "$(env_print)" = "$BEFORE_ALL" ] && [ ! -s "$FK/fw_setenv.log" ] && ok "install wrote no environment" || bad "install" "wrote the environment"
+    [ "$(env_print)" = "$BEFORE_ALL" ] && [ ! -s "$FK/dd.log" ] && ok "install wrote no environment" || bad "install" "wrote the environment"
     ls "$FK/boot/yakogl/standalone" | grep -q '\.part$' && bad "install" "a .part is left" || ok "install left no .part"
     stock_sum | cmp -s - "$W/stock.sum" && ok "install left ST's files alone" || bad "install" "stock files changed"
     expect "install again: nothing to do" 0 live install

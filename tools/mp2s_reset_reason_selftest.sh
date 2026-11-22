@@ -55,6 +55,15 @@ REC=$(boot "System reset (SYSRST)" c0; boot "Power-on reset (por_rstn)" 1; boot 
 run mixed-boot2 3 'boot 2: .*: supply'
 run mixed-summary 3 'summary: 3 boot\(s\): 1 supply, 1 watchdog, 1 software, 0 unknown'
 
+# the DK's order: Reset reason first, then the banner (board, 2026-11-22)
+dkboot() {
+    printf 'NOTICE:  Reset reason: %s (0x%s). Warm boot.\n' "$1" "$2"
+    printf 'NOTICE:  BL2: v2.10-stm32mp2-r2.0(debug):x\n'
+}
+REC=$(dkboot "System reset (SYSRST)" 2074; dkboot "Brownout reset (bor_rstn)" 2; dkboot "System reset (SYSRST)" 2074)
+run dk-order-boot2 3 'boot 2: Brownout reset \(bor_rstn\): supply'
+run dk-order-summary 3 'summary: 3 boot\(s\): 1 supply, 0 watchdog, 2 software, 0 unknown'
+
 REC=
 run empty 0 'summary: 0 boot\(s\)'
 run empty-expect0 0 'summary: 0 boot' --expect 0
