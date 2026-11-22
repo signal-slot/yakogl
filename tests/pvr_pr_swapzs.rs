@@ -749,7 +749,7 @@ fn option_on_swapped_frame_pr_block_stores_and_loads_depth() {
         k.frag.cmd_flags,
     );
     let pr = bytes(&k.frag_pr);
-    let has = |v: u64| pr.chunks_exact(8).any(|c| u64::from_le_bytes(c.try_into().unwrap()) == v);
+    let has = |v: u64| pr.as_chunks::<8>().0.iter().any(|c| u64::from_le_bytes(*c) == v);
     assert!(has(w.isp_zlsctl), "no ZLSCTL with the store bits on in {:?}", k.frag_pr);
     assert!(has(w.zload_base), "the frame's depth buffer is not named in {:?}", k.frag_pr);
 }
