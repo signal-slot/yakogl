@@ -168,3 +168,113 @@ local relay on the host that passed on the lease's transcript of the same
 console. The relay's copy condensed the 55 repeated 0xb0b0b0b0 list lines into
 two; every verdict line is as the board printed it. The run directory was
 outside the checkout and is not committed.
+
+### Q2's list word (2026-11-22)
+
+Ran on 2026-11-22 on the Pi 5 (tryboot, one run, image built with
+`-DYAKOGL_WERROR=ON` from `ed71b85b`, `image_sha256` e4852862, 74016 bytes,
+default hold 240000 ms; the PM watchdog reset the board and it came back to
+Linux by itself; `get_throttled` 0x0 before and after; the staged image was
+removed and the card left without a tryboot.txt, as before the run). The boot
+loader again chose 1920x1080 at 60 Hz on HDMI0 with `FB0 ... base
+0x3f800000`. As on 2026-11-21, `BOARD_UART` was a local feed
+(`tools/am62p_netboot_uart.py feed`) that the agent filled from the lease's
+console transcript; the 0xb0b0b0b0 list lines were condensed there, every
+verdict and q2 line is as the board printed it. The run, with
+`BOARD_END_RE='^rpi5_scanout16: (PASS|FAIL)'`:
+
+```
+board.sh pi5 rpi5_scanout16 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_scanout16_pass resets=0 record=absent back_after=406s
+```
+
+The end line, and `verdicts.sh` on the captured console (prefix stripped),
+exit 0:
+
+```
+rpi5_scanout16: PASS (plane adopted, 16 text rows and the pattern read back byte-equal twice, 238370 ms hold, FRCNT advanced, EN and VIDEN set)
+```
+
+```
+  [10] u3 hold: 238370 ms plane=kept bytes=0 list=changed words=1
+  missing: none
+q2: yes, list changed (1 list words changed in 238370 ms); word 676 entry-off 4 was 0x8000005d now 0x800000d2 per-frame no: hvs-writeback
+verdicts: PASS (plane adopted, both read-backs match, frcnt 35 -> 38 advanced, EN and VIDEN set)
+```
+
+Lines [1] to [7], [9] and [12] read as on 2026-11-21; [8] was `u3 frcnt:
+before 35 after 38`, and [11] is the end line above. The plane entry at word 672 was `0x600cc004 0x00000000
+0x0000fff0 0x0437077f 0x8000005d 0x00000000 0x3f800000 0x00000f00` when the
+list was snapshotted. The q2 lines, verbatim (the `q2 sample:` lines between
+them all read `1 list words differ from the snapshot`):
+
+```
+rpi5_scanout16: q2 burst reference frame 0 FRCNT 44: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 1 FRCNT 45: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 2 FRCNT 46: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 3 FRCNT 47: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 4 FRCNT 48: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 5 FRCNT 49: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 6 FRCNT 50: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 7 FRCNT 51: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 8 FRCNT 52: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 9 FRCNT 53: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 10 FRCNT 54: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 11 FRCNT 55: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 12 FRCNT 56: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 13 FRCNT 57: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 14 FRCNT 58: w676=0x80008000
+rpi5_scanout16: q2 burst reference frame 15 FRCNT 59: w676=0x80008000
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000103
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x8000002a
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800003b2
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800002d9
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000244
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000192
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800000a1
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000007
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800003a1
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800002ac
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x8000020a
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000123
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000075
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800003f4
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000351
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000265
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800001bf
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800000d4
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x8000002e
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x8000039f
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800002f6
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x8000020c
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x80000163
+rpi5_scanout16: q2 burst end frame 0 FRCNT 10: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 1 FRCNT 11: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 2 FRCNT 12: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 3 FRCNT 13: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 4 FRCNT 14: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 5 FRCNT 15: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 6 FRCNT 16: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 7 FRCNT 17: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 8 FRCNT 18: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 9 FRCNT 19: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 10 FRCNT 20: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 11 FRCNT 21: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 12 FRCNT 22: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 13 FRCNT 23: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 14 FRCNT 24: w676=0x80008000
+rpi5_scanout16: q2 burst end frame 15 FRCNT 25: w676=0x80008000
+rpi5_scanout16: q2 word 676 off 4 entry-off 4 was 0x8000005d now 0x800000d2
+rpi5_scanout16: q2 entry words 32 ctx-off 4
+u3 q2: word 676 entry-off 4 was 0x8000005d now 0x800000d2 per-frame no
+```
+
+The changing word is list word 676, offset 4 in the 32-word plane entry,
+which is the entry's POS3 context word (`ctx-off 4`). It was 0x8000005d in
+the snapshot. Read right after each of the 32 FRCNT steps it was 0x80008000.
+At the 23 hold samples, taken every 10 s and not aligned to the frame, it was a
+different 0x800000xx..0x800003xx value every time (low bits 0x007 to 0x3f4).
+So the HVS writes it back while it scans the plane, and the firmware does not
+edit the list: `verdicts.sh` classifies it as `hvs-writeback` because the
+word sits at the context offset. The probe's `per-frame no` only says that
+the value read just after each FRCNT step did not change from frame to frame.
+No other list word changed, and LPTRS stayed 0x2a0.
