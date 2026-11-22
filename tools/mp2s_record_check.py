@@ -10,7 +10,9 @@ sections 7 and "Board run").
 For `default <image> N` the record must show boots left N-1 .. 0, each with the
 image's line after `mp2s: go 0xa0000000`, then one boot with `default used up,
 booting Linux`, `SCRIPT FAILED: continuing...` and a Linux userspace line.
-Boots are split at BL2's banner / `Reset reason:` lines. A Power-on or Brownout
+Boots are split at BL2's banner / `Reset reason:` lines, in either order: the
+DK's BL2 prints `Reset reason:` before its `BL2: v` banner (board, 2026-11-22),
+and one boot has one of each. A Power-on or Brownout
 reset after the first boot is a supply suspect; an IWDG reset is a watchdog
 reset (the image ends with PSCI SYSTEM_RESET, so neither belongs in the run).
 Prints `VERDICT: PASS ...` or `VERDICT: FAIL <first broken step>`; exit 0/1.
@@ -37,6 +39,7 @@ def clean(text):
 class Boot:
     def __init__(self):
         self.reason = None
+        self.banner = False
         self.lines = []  # (kind, text) in order
 
     def mp2s(self):
@@ -47,11 +50,17 @@ def split(lines, image_re, linux_re):
     boots, cur = [], None
     for ln in lines:
         m = RESET.search(ln)
-        if BANNER.search(ln) or (m and (cur is None or cur.reason is not None)):
+        banner = BANNER.search(ln)
+        # a banner opens a boot unless the open one has none yet (its Reset
+        # reason line came first, as on the DK); a Reset reason line opens
+        # one unless the open one has none yet (its banner came first)
+        if (banner and (cur is None or cur.banner)) or (m and (cur is None or cur.reason is not None)):
             cur = Boot()
             boots.append(cur)
         if cur is None:
             continue
+        if banner:
+            cur.banner = True
         if m:
             cur.reason = m.group(1)
         s = MP2S.search(ln)
@@ -141,6 +150,10 @@ def _self_test():
     def bl2(r="System reset (SYSRST)"):
         return f"NOTICE:  BL2: v2.10-stm32mp-r3.1(release):\r\nNOTICE:  Reset reason: {r} (0x4).\r\n"
 
+    def dk(r="System reset (SYSRST)"):
+        # the DK's order: Reset reason first, then the banner
+        return f"NOTICE:  Reset reason: {r} (0x2074). Warm boot.\r\nNOTICE:  BL2: v2.10-stm32mp2-r2.0(debug):x\r\n"
+
     def left(n):
         return f"\x1b[0mmp2s: default /yakogl/standalone/default.bin, boots left {n}\r\n"
 
@@ -167,11 +180,16 @@ def _self_test():
          + image + bl2() + linux, "watchdog reset"),
         ("refused", 2, bl2() + left(1) + load + image + bl2() + refused + linux, "refused: image too big"),
         ("order", 1, bl2() + load + left(0) + image + bl2() + linux, "comes after the load"),
+        ("dk-order", 2, dk() + left(1) + load + image + dk() + left(0) + load + image + dk() + linux, None),
+        ("dk-brownout", 2, dk() + left(1) + load + image + dk("Brownout reset (bor_rstn)") + left(0) + load + image
+         + dk() + linux, "boot 2: 'Brownout reset (bor_rstn)'"),
     ]
     bad = 0
     for name, count, text, want in cases:
         boots = split(clean(text), re.compile(DEF_IMAGE), re.compile(DEF_LINUX))
         got = check(boots, count)
+        if name.startswith("dk-") and len(boots) != 3:
+            got = f"{len(boots)} boots split, want 3"
         good = got is None if want is None else (got is not None and want in got)
         print(("ok   " if good else "FAIL ") + name + ("" if good else f": got {got!r}, want {want!r}"))
         bad += not good

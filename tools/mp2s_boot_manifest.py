@@ -16,8 +16,9 @@ The manifest is sorted lines: per regular file '<sha256>  <path>' plus
 '@link<TAB><target><TAB><path>'.  Paths are relative to the recorded
 directory, '/'-separated, no './' and no '..'.  Only regular files and
 symlinks are recorded; DIR is read only.  A
-`find . -type f -print0 | sort -z | xargs -0 sha256sum` listing, run inside
-DIR, parses as a manifest: its './' is stripped and its absolute paths are
+`find . -type f -exec sha256sum -- {} + | LC_ALL=C sort -k 2` listing, run
+inside DIR, parses (not `xargs -0`: the DK's xargs is BusyBox's, which has
+no -0, and that pipeline lists nothing with exit 0) as a manifest: its './' is stripped and its absolute paths are
 kept as they are.  Such a listing tracks neither modes nor symlinks, so a
 mode is compared only when both sides recorded one, and a symlink entry on
 one side is not a difference when the other side recorded no symlink at all.

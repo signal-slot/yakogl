@@ -146,7 +146,8 @@ def rd(root, rel):
 
 def check_bootfs(root):
     """/boot is mounted from a partition named bootfs on a disk that says SD
-    and is not mmcblk0 (tools/board-stm32mp2.sh dev_guard)."""
+    (the eMMC says MMC; no mmcblk index stands for it: the DK's card was
+    mmcblk2 on one boot and mmcblk0 on the next)."""
     src = None
     for ln in (rd(root, "proc/self/mountinfo") or "").splitlines():
         f = ln.split()
@@ -160,8 +161,6 @@ def check_bootfs(root):
         raise Refuse("/boot is mounted from %s, not a partition of an mmcblk "
                      "disk" % src)
     disk = m.group(1)
-    if disk == "mmcblk0":
-        raise Refuse("/boot is on mmcblk0 (the eMMC's index): never written")
     kind = rd(root, "sys/block/%s/device/type" % disk)
     if kind != "SD":
         raise Refuse("/boot is on %s of type '%s', not SD (the eMMC?)"
