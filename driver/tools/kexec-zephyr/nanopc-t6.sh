@@ -46,7 +46,8 @@
 #           the board or without that debugfs file.
 # With --go it takes the board lock (board_lock.sh; it refuses, never waits,
 # while anyone holds it: see LOCK_WAIT), reads the board's state
-# again under the lock, starts the record (below), copies the loader, mmio_rd
+# again under the lock, proves the UART path (see T6_UART), starts the
+# record (below), copies the loader, mmio_rd
 # and the image to /tmp/yakogl-kexec on the board and jumps; then it waits for
 # the board to come back into Armbian, prints how long that took and
 # completes the record.
@@ -125,6 +126,15 @@
 #                   script sets it raw with no echo (stty, which writes no
 #                   data) and only reads it with cat; it refuses when the tty
 #                   is absent, already open, or the settings do not hold.
+#                   Then, under the lock and before anything is copied, it
+#                   proves the path: a temporary capture reads the tty, the
+#                   board writes one marker line with a per-run nonce to its
+#                   serial console (the last console=ttyS entry of its
+#                   kernel command line; no such entry is refused), and the
+#                   capture must read the line back within 5 s. Otherwise
+#                   it refuses (exit 3) and names the bytes read and whether
+#                   the board's write succeeded (2026-11-22: a jump with
+#                   uart.log 0 bytes, the wire delivering nothing).
 #   MMIO_RD         a built mmio_rd; otherwise it is built like kexec_zephyr.
 #   T6_ALLOW_SESSIONS=1  --go even when `who` lists remote (pts, sshd) sessions
 #                   on the board other than this script's own ssh command
@@ -150,6 +160,10 @@ ADOPT_FLAGS=0xa
 # How long t6-kms-mode.py holds the mode at most: it gives it back by
 # itself after that, also when this script is killed before it can stop it.
 MODE_HOLD=600
+# --go: how long the UART proof waits for the marker line the board wrote
+# to its console (see T6_UART). At 1500000 baud the line takes well under
+# a millisecond; the ssh command that writes it returns before the wait.
+UART_PROOF_S=5
 
 die() { echo "nanopc-t6.sh: $*" >&2; exit 2; }
 refuse() { echo "nanopc-t6.sh: REFUSED: $*" >&2; echo "nanopc-t6.sh: nothing was copied, loaded or changed." >&2; exit 3; }
@@ -283,6 +297,7 @@ printf "gpu_users=%s\n" "$(fuser /dev/dri/* 2>/dev/null | tr -s " " || true)"
 printf "who_remote=%s\n" "$(who_remote)"
 printf "who_local=%s\n" "$(who | awk "\$2 !~ /^(pts|sshd)/ {print \$1\"@\"\$2}" | tr "\n" " ")"
 printf "python3=%s\n" "$(command -v python3 || echo absent)"
+printf "console=%s\n" "$(tr " " "\n" </proc/cmdline | sed -n "s/^console=\(ttyS[0-9]*\).*/\1/p" | tail -n 1)"
 printf "vp0=%s\n" "$(vp0_mode)"
 printf "gic_tables=%s\n" "$(dmesg | grep -oE "(LPI (property|pending) table|Devices|Interrupt Collections) @(0x)?[0-9a-f]+" | sed "s/.*@//; s/^0x//" | tr "\n" " ")"
 echo "iomem<<"; cat /proc/iomem; echo ">>"') || refuse "cannot read the board's facts over ssh ($BOARD_HOST)"
@@ -401,6 +416,11 @@ if [ -n "${T6_UART:-}" ]; then
 else
 	echo "uart: T6_UART is not set: --go would refuse"
 fi
+if [ -n "$(fact console)" ]; then
+	echo "uart: the board's serial console (its kernel command line): /dev/$(fact console); --go has the board write one marker line to it and reads it back from T6_UART before it copies anything"
+else
+	echo "uart: the board's kernel command line has no console=ttyS entry: --go would refuse (no console to prove the UART path with)"
+fi
 echo "board: GPU device users '$(fact gpu_users)'; remote sessions '$(fact who_remote)', console logins '$(fact who_local)'"
 
 # ---- 3. the plan ------------------------------------------------------------
@@ -446,7 +466,8 @@ plan (--go):
   1. take the board lock (driver/tools/kexec-zephyr/board_lock.sh, per BOARD_HOST);
      read $reread, the GPU users, the remote sessions and boot_id again under
      it and decide on those values; refuse without T6_HAND, T6_RECORD_DIR and
-     T6_UART
+     T6_UART; prove the UART path: the board writes one marker line to its
+     console, and it must be read back from T6_UART within $UART_PROOF_S s
   2. the record: \$T6_RECORD_DIR/<date>-t6/, with the hand at the power switch;
      the UART (\$T6_UART, read only) into it until the board is back, and
      \`dmesg -w\` of the board until the jump
@@ -490,12 +511,14 @@ done
 tmp=$(mktemp -d)
 dmesg_pid=
 uart_pid=
+proof_pid=
 mode_pid=
 mode_before=
 mode_back=0
 cleanup() {
 	if [ -n "$dmesg_pid" ]; then kill "$dmesg_pid" 2>/dev/null || true; fi
 	if [ -n "$uart_pid" ]; then kill "$uart_pid" 2>/dev/null || true; fi
+	if [ -n "$proof_pid" ]; then kill "$proof_pid" 2>/dev/null || true; fi
 	mode_stop || true
 	rm -rf "$tmp"
 }
@@ -590,6 +613,73 @@ fi
 old_boot=$(fresh_fact boot_id)
 [ -n "$old_boot" ] || refuse "under the lock: the board gave no boot_id"
 
+# The UART path, proven before anything is copied or loaded: the run is
+# judged from uart.log, so a wire that delivers nothing spends the jump for
+# no verdict (2026-11-22: uart.log 0 bytes; a line the board wrote to its
+# own console moved its tx counter, and the host read nothing). A temporary
+# capture reads T6_UART the way the real one does (cat, read only); the
+# board writes one marker line with this run's nonce to its serial console
+# (the last console=ttyS entry of its kernel command line, from the facts);
+# the capture must read it back within UART_PROOF_S seconds (above). The
+# host never writes to T6_UART. The capture is stopped by its pid and
+# waited for before anything else, so the real capture below is the only
+# reader. Its bytes, the marker line among them, are not part of uart.log.
+console=$(fact console)
+[[ "$console" =~ ^ttyS[0-9]+$ ]] ||
+	refuse "the board's kernel command line has no console=ttyS entry ('$console'): there is no serial console to write the UART proof's marker line to, so the path to $T6_UART cannot be proven"
+now_ms() { echo $(($(date +%s%N) / 1000000)); }
+secs() { printf '%d.%d' $(($1 / 1000)) $(($1 % 1000 / 100)); }
+proof_log=$tmp/uart-proof.log
+uart_dev=$(readlink -f "$T6_UART")
+cat <"$T6_UART" >"$proof_log" &
+proof_pid=$!
+t_open=$(now_ms)
+# The board's line is lost unless the tty is open when it arrives: wait
+# until the capture holds it as its input.
+opened=0
+for _ in $(seq 50); do
+	if [ "$(readlink "/proc/$proof_pid/fd/0" 2>/dev/null)" = "$uart_dev" ]; then opened=1; break; fi
+	kill -0 "$proof_pid" 2>/dev/null || break
+	sleep 0.1
+done
+proof_stop() {
+	kill "$proof_pid" 2>/dev/null || true
+	wait "$proof_pid" 2>/dev/null || true
+	proof_pid=
+}
+if [ "$opened" = 0 ]; then
+	proof_stop
+	refuse "the UART proof's capture (cat <$T6_UART) did not open $T6_UART within 5 s; nothing was written to the board's console"
+fi
+marker="yakogl-uart-proof $(od -A n -N 8 -t x1 /dev/urandom | tr -d ' \n')"
+t_write=$(now_ms)
+write_rc=0
+board "printf '\\r\\n%s\\r\\n' '$marker' >/dev/$console" >/dev/null 2>&1 || write_rc=$?
+if [ "$write_rc" = 0 ]; then
+	written="the board wrote one marker line to its console /dev/$console (ssh rc 0)"
+else
+	written="the ssh command that writes one marker line to the board's console /dev/$console failed (rc $write_rc), so the line may not have been written"
+fi
+got_ms=
+deadline_ms=$(($(now_ms) + UART_PROOF_S * 1000))
+while :; do
+	if grep -qaF "$marker" "$proof_log"; then got_ms=$(($(now_ms) - t_write)); break; fi
+	[ "$(now_ms)" -lt "$deadline_ms" ] || break
+	kill -0 "$proof_pid" 2>/dev/null || break
+	sleep 0.1
+done
+proof_stop
+# A capture that ended by itself may have written the line after the last look.
+if [ -z "$got_ms" ] && grep -qaF "$marker" "$proof_log"; then got_ms=$(($(now_ms) - t_write)); fi
+open_ms=$(($(now_ms) - t_open))
+proof_bytes=$(wc -c <"$proof_log")
+if [ -z "$got_ms" ]; then
+	if [ "$proof_bytes" = 0 ]; then
+		refuse "UART path not proven: the capture of $T6_UART read 0 bytes in $(secs "$open_ms") s, and $written. Check first the wire between the board's debug header (UART2: its TX to the adapter's RX, and GND) and the host's adapter"
+	fi
+	refuse "UART path not proven: the capture of $T6_UART read $proof_bytes bytes in $(secs "$open_ms") s, but not the marker line, and $written. The bytes are not that line: check that T6_UART is this board's debug UART (not another board's console) and that it runs at 1500000 baud"
+fi
+
 REC=$T6_RECORD_DIR/$(date +%Y%m%d-%H%M%S)-t6
 mkdir "$REC" || die "cannot make the record directory $REC"
 rec() { printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$REC/record.txt"; }
@@ -598,6 +688,7 @@ rec "build $(git -C "$HERE" describe --always --dirty 2>/dev/null || echo unknow
 rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $T6_HAND; linux_wdt $LINUX_WDT; route $([ "$CRASH" = 1 ] && echo "crash (reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e"))" || echo normal)"
 rec "image $IMG, sha256 $(sha256sum "$IMG" | cut -d' ' -f1): $markers"
 rec "bound: back in reset by $bound_s s after the jump at the latest"
+rec "uart: proven before anything was copied: the marker line '$marker' the board wrote to /dev/$console was read back from $T6_UART $got_ms ms after the write began; that capture read $proof_bytes bytes in $(secs "$open_ms") s (not part of uart.log)"
 
 build_tool() {
 	"${CROSS_GCC:-aarch64-linux-gnu-gcc}" -O2 -static -nostdlib -ffreestanding -fno-stack-protector \

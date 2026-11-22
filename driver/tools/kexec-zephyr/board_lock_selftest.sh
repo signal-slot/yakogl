@@ -131,6 +131,18 @@
 # mode rule, the set and give-back order on a made-up card, the holder's
 # stop) runs from here as one check.
 #
+# A twelfth (issue #10591): on 2026-11-22 a --go run jumped although the
+# debug UART delivered nothing (uart.log 0 bytes). nanopc-t6.sh --go now
+# has the board write one marker line to its console and reads it back from
+# T6_UART before it copies anything. Here T6_UART is a pseudo terminal
+# (wire.py) whose other end the fake board's console writes into, not
+# /dev/null. The checks: the marker is written before anything is staged,
+# read back and recorded, and is not in uart.log; each run has its own
+# nonce; no byte, a failed write and bytes without the marker are each
+# refused (rc 3, no record directory, no scp, no capture left on the tty);
+# a board without a console=ttyS entry is refused; the host never writes a
+# byte into the tty; the dry run names the console and writes nothing.
+#
 # The T6's other runner on the lock, driver/tools/uboot-t6/prompt-reads.sh
 # (the reads at the U-Boot prompt), is held to the same rule: LOCK_WAIT 0
 # before it sources board_lock.sh. The tool it starts on the UART,
@@ -445,6 +457,12 @@ case "\$last" in
 	if [ ! -e "$tmp/mode-held" ]; then cat "$tmp/vp0-1080"
 	elif [ -n "\${T6_FAKE_VP0_HELD+set}" ]; then printf '%s\n' "\$T6_FAKE_VP0_HELD"
 	else cat "$tmp/vp0-adopt"; fi ;;
+*'yakogl-uart-proof '*)
+	case "\${T6_FAKE_UART:-marker}" in
+	marker) printf '\r\n%s\r\n' "\$(grep -o 'yakogl-uart-proof [0-9a-f]*' <<<"\$last")" > "$tmp/wire.fifo" ;;
+	noise) cat "$tmp/noise" > "$tmp/wire.fifo" ;;
+	fail) exit 255 ;;
+	esac ;;
 *sha256sum*) printf '%s' "\$T6_FAKE_SHAS" ;;
 *'/kexec_zephyr '*)
 	if [ -n "\${T6_FAKE_JUMP_RC:-}" ]; then
@@ -458,7 +476,7 @@ exit 0
 EOS
 printf '#!/bin/sh\ncase " $* " in *" -a "*) echo "speed 1500000 baud; line = 0; -parenb cs8 -cstopb clocal -icrnl -ixon -opost -icanon -echo" ;; esac\n' > "$tmp/fakebin/stty"
 printf '#!/bin/sh\nexit 1\n' > "$tmp/fakebin/fuser"
-printf '#!/bin/sh\nexit 0\n' > "$tmp/fakebin/scp"
+printf '#!/bin/sh\necho "$*" >> "%s/scp.log"\n' "$tmp" > "$tmp/fakebin/scp"
 chmod +x "$tmp/fakebin/ssh" "$tmp/fakebin/stty" "$tmp/fakebin/fuser" "$tmp/fakebin/scp"
 t6_image "$tmp/top13.bin" 'board: watchdog armed'
 sed -i 's/; top 9; /; top 13; /' "$tmp/top13.bin"
@@ -469,7 +487,7 @@ t6_board_run() {
 			wdt_identity=dw_wdt wdt_state=inactive wdt_timeout=44 wdt_nowayout=0 wdt_users= \
 			"config_crash_dump=${t6_crash_dump:-CONFIG_CRASH_DUMP=y}" "kexec_crash_loaded=${t6_crash_loaded:-0}" \
 			"kexec_crash_size=${t6_crash_size:-0}" "sysrq_trigger=${t6_sysrq:-writable}" \
-			"python3=${t6_python3-/usr/bin/python3}" "vp0=${t6_vp0-$vp0_1080}" \
+			"python3=${t6_python3-/usr/bin/python3}" "vp0=${t6_vp0-$vp0_1080}" "console=${t6_console-ttyS2}" \
 			"gic_tables=$2" 'iomem<<' '00200000-e143ffff : System RAM'
 		printf '%s\n' "$1" '>>'
 	} > "$tmp/facts"
@@ -477,13 +495,57 @@ t6_board_run() {
 }
 kernel='  02000000-0432ffff : Kernel code'
 gic_out='100220000 100230000 1002f0000 '
+# The UART: a pseudo terminal whose other end stands for the wire to the
+# board's debug header. wire.py holds both ends; what the fake board writes
+# to its console (the fake ssh writes it into wire.fifo) comes out of the
+# tty, and any byte the host writes into the tty lands in wire.host, which
+# must stay empty. The tty is raw with no echo, as the fake stty would leave
+# the real one.
+cat > "$tmp/wire.py" <<'EOS'
+import os, pty, select, sys, tty
+fifo, host, name = sys.argv[1:4]
+m, s = pty.openpty()
+tty.setraw(s)
+f = os.open(fifo, os.O_RDWR)
+with open(name + ".new", "w") as o:
+    o.write(os.ttyname(s) + "\n")
+os.rename(name + ".new", name)
+while True:
+    r, _, _ = select.select([f, m], [], [])
+    if f in r:
+        os.write(m, os.read(f, 4096))
+    if m in r:
+        d = os.read(m, 4096)
+        with open(host, "ab") as o:
+            o.write(d)
+EOS
+mkfifo "$tmp/wire.fifo"
+python3 -I "$tmp/wire.py" "$tmp/wire.fifo" "$tmp/wire.host" "$tmp/wire.name" &
+wire_pid=$!
+for _ in $(seq 50); do [ -s "$tmp/wire.name" ] && break; sleep 0.1; done
+wire_tty=$(cat "$tmp/wire.name" 2>/dev/null)
+check "the stand-in UART is a pseudo terminal ($wire_tty, pid $wire_pid)" "$([ -c "$wire_tty" ]; echo $?)"
+# wire_users: the processes of the test, the wire's excepted, that hold the
+# stand-in UART open (a capture left behind).
+wire_users() {
+	local p f
+	for p in $(marked); do
+		[ "$p" = "$wire_pid" ] && continue
+		for f in /proc/"$p"/fd/*; do
+			[ "$(readlink "$f" 2>/dev/null)" = "$wire_tty" ] && { printf '%s ' "$p"; break; }
+		done
+	done
+}
+printf 'bytes from another console\r\n' > "$tmp/noise"
 # t6_go_run <iomem lines> [--crash]: --go to the end on the fake board, with
-# T6_HAND, a record directory, /dev/null as the UART (the fake stty and
-# fuser pass it) and stand-ins for the two tools. The read under the lock
-# gives kexec_crash_loaded $t6_fresh_crash (default 0). The jump command
-# reaches the fake ssh's log.
+# T6_HAND, a record directory, the stand-in UART (the fake stty and fuser
+# pass it) and stand-ins for the two tools. The read under the lock gives
+# kexec_crash_loaded $t6_fresh_crash (default 0). The jump command reaches
+# the fake ssh's log; the fake board writes the UART proof's marker line
+# back on the wire unless T6_FAKE_UART says otherwise (none: nothing; noise:
+# other bytes; fail: the ssh command fails).
 t6_go_run() {
-	rm -rf "$tmp/rec" "$tmp/jumped" "$tmp/ssh.log" "$tmp/mode-held"
+	rm -rf "$tmp/rec" "$tmp/jumped" "$tmp/ssh.log" "$tmp/scp.log" "$tmp/mode-held"
 	mkdir "$tmp/rec"
 	printf 'kexec_loaded=0\nkexec_crash_loaded=%s\nboot_id=boot-before\ngpu_users=\nwdt_users=\nwho_remote=\n' \
 		"${t6_fresh_crash:-0}" > "$tmp/fresh"
@@ -492,7 +554,7 @@ t6_go_run() {
 	local staged=("$tmp/top13.bin" "$tmp/kz")
 	[ "${2:-}" != --crash ] || staged+=("$here/t6-kms-mode.py")
 	T6_FAKE_SHAS=$(sha256sum "${staged[@]}" | cut -d' ' -f1 | tr '\n' ' ') \
-		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=/dev/null KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
+		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=$wire_tty KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
 		BOARD_LOCK=$tmp/t6go.lock t6_board_run "$1" "$gic_out" --go ${2:+"$2"}
 }
 out=$(t6_board_run "$kernel" "$gic_out")
@@ -597,6 +659,64 @@ check "nanopc-t6.sh: --go without --crash sends the jump without it (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qE 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000; rc=' <<<"$jump" && grep -qF 'route normal' "$tmp"/rec/*/record.txt; echo $?)"
 check "nanopc-t6.sh: the normal route neither copies nor starts t6-kms-mode.py" \
 	"$(! grep -qF 't6-kms-mode.py' "$tmp/ssh.log"; echo $?)"
+
+# The UART proof (issue #10591), on the run above: before anything was
+# copied, the board wrote one marker line with a per-run nonce to the console
+# its kernel command line names, the capture read it back, and the record
+# says so. The marker line is not in uart.log (the proof's capture had it),
+# no capture holds the tty after the run, and the host wrote no byte to it.
+rec=$(cat "$tmp"/rec/*/record.txt 2>/dev/null)
+proof_re="uart: proven before anything was copied: the marker line 'yakogl-uart-proof ([0-9a-f]{16})' the board wrote to /dev/ttyS2 was read back from $wire_tty [0-9]+ ms after the write began; that capture read [0-9]+ bytes in [0-9]+\.[0-9] s \(not part of uart.log\)"
+nonce1=
+[[ "$rec" =~ $proof_re ]] && nonce1=${BASH_REMATCH[1]}
+mark_at=$(grep -n "^printf '.r.n%s.r.n' 'yakogl-uart-proof $nonce1' >/dev/ttyS2\$" "$tmp/ssh.log" | head -1 | cut -d: -f1)
+stage_at=$(grep -n '^rm -rf /tmp/yakogl-kexec && mkdir -p /tmp/yakogl-kexec$' "$tmp/ssh.log" | head -1 | cut -d: -f1)
+check "nanopc-t6.sh: --go writes the marker to the board's console before it stages anything, and records it read back (nonce ${nonce1:-none}, lines ${mark_at:-none} < ${stage_at:-none})" \
+	"$([ "$rc" = 0 ] && [ -n "$nonce1" ] && [ -n "$mark_at" ] && [ -n "$stage_at" ] && [ "$mark_at" -lt "$stage_at" ] && [ -s "$tmp/scp.log" ]; echo $?)"
+users=$(wire_users)
+check "nanopc-t6.sh: the marker is not in uart.log, no capture holds the tty after the run (${users:-none}), the host wrote nothing to it" \
+	"$(! grep -qaF yakogl-uart-proof "$tmp"/rec/*/uart.log && [ -z "$users" ] && [ ! -s "$tmp/wire.host" ]; echo $?)"
+out=$(t6_go_run "$kernel")
+rc=$?
+rec=$(cat "$tmp"/rec/*/record.txt 2>/dev/null)
+nonce2=
+[[ "$rec" =~ $proof_re ]] && nonce2=${BASH_REMATCH[1]}
+check "nanopc-t6.sh: each run's marker has its own nonce (${nonce1:-none}, ${nonce2:-none}; rc $rc)" \
+	"$([ "$rc" = 0 ] && [ -n "$nonce2" ] && [ "$nonce1" != "$nonce2" ]; echo $?)"
+# uart_refused <case>: rc 3 with refuse's second line, no record
+# directory, nothing copied or staged, no jump, no capture left on the tty
+# and no byte written to it by the host.
+uart_refused() {
+	local users
+	users=$(wire_users)
+	[ "$rc" = 3 ] && grep -qF 'nanopc-t6.sh: nothing was copied, loaded or changed.' <<<"$out" &&
+		[ -z "$(ls -A "$tmp/rec")" ] && [ ! -e "$tmp/scp.log" ] &&
+		! grep -qF 'mkdir -p /tmp/yakogl-kexec' "$tmp/ssh.log" && ! grep -qF '/kexec_zephyr ' "$tmp/ssh.log" &&
+		[ -z "$users" ] && [ ! -s "$tmp/wire.host" ]
+}
+t0=$(date +%s)
+out=$(T6_FAKE_UART=none t6_go_run "$kernel")
+rc=$?
+t1=$(date +%s)
+check "nanopc-t6.sh: no byte on the UART is refused within $((t1 - t0)) s: 0 bytes, the board's write ok, the wire first (rc $rc)" \
+	"$(uart_refused && grep -qE "REFUSED: UART path not proven: the capture of $wire_tty read 0 bytes in [5-9]\.[0-9] s, and the board wrote one marker line to its console /dev/ttyS2 \(ssh rc 0\)\. Check first the wire between the board's debug header" <<<"$out" && [ $((t1 - t0)) -le 15 ]; echo $?)"
+out=$(T6_FAKE_UART=fail t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: a failed write on the board is named in the refusal (rc $rc)" \
+	"$(uart_refused && grep -qF 'read 0 bytes in' <<<"$out" && grep -qF "the ssh command that writes one marker line to the board's console /dev/ttyS2 failed (rc 255), so the line may not have been written" <<<"$out"; echo $?)"
+out=$(T6_FAKE_UART=noise t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: bytes without the marker are refused with their count and the speed and board named (rc $rc)" \
+	"$(uart_refused && grep -qF "REFUSED: UART path not proven: the capture of $wire_tty read $(wc -c <"$tmp/noise") bytes in " <<<"$out" && grep -qF 'but not the marker line, and the board wrote one marker line to its console /dev/ttyS2 (ssh rc 0). The bytes are not that line' <<<"$out" && grep -qF '1500000 baud' <<<"$out"; echo $?)"
+out=$(t6_console= t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: a board without a console=ttyS entry is refused, nothing written to it (rc $rc)" \
+	"$(uart_refused && grep -qF "REFUSED: the board's kernel command line has no console=ttyS entry" <<<"$out" && ! grep -qF yakogl-uart-proof "$tmp/ssh.log"; echo $?)"
+rm -f "$tmp/ssh.log"
+out=$(t6_board_run "$kernel" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the dry run names the board's console and writes no marker (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF "uart: the board's serial console (its kernel command line): /dev/ttyS2; --go has the board write one marker line" <<<"$out" && ! grep -qF yakogl-uart-proof "$tmp/ssh.log"; echo $?)"
 
 # The crash route's mode step (issue #10520): t6-kms-mode.py sets the
 # adopt's mode and holds it, VP0's mode is read back from Linux, and the jump
@@ -1079,6 +1199,10 @@ uboot_value() {
 got="$(uboot_value t6z_load) $(uboot_value t6z_entry) $(uboot_value t6z_window)"
 check "t6-zephyr.cmd: t6z_load t6z_entry t6z_window ($got) are nanopc_t6.dts's zephyr,sram ($win_base $win_base $win_size)" \
 	"$([ -n "$win_size" ] && [ "$got" = "$win_base $win_base $win_size" ]; echo $?)"
+
+# The stand-in UART's wire, by its pid.
+kill "$wire_pid" 2>/dev/null
+wait "$wire_pid" 2>/dev/null
 
 # The test leaves no process behind: the sweep ends every marked process,
 # and a known one, started here, shows that the search finds what it looks
