@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 #
@@ -12,7 +12,7 @@
 # verdict and the exit code. Prints each case's verdict; exits 0 when all
 # match.
 set -u
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+here=$(cd "$(dirname "$0")" && pwd)
 tool=$here/colorbars.py
 work=$(mktemp -d "${TMPDIR:-/tmp}/colorbars-selftest.XXXXXX") || exit 2
 trap 'rm -rf "$work"' EXIT
@@ -81,7 +81,9 @@ check() {
   out=$(python3 -I "$tool" "$@" 2>&1)
   got=$?
   n=$((n + 1))
-  if [ "$got" = "$want" ] && [[ $out == *"$text"* ]]; then
+  found=0
+  case $out in *"$text"*) found=1 ;; esac
+  if [ "$got" = "$want" ] && [ "$found" = 1 ]; then
     printf 'ok   %-10s %s\n' "$name" "$out"
   else
     printf 'FAIL %-10s exit %s (want %s), want "%s" in: %s\n' "$name" "$got" "$want" "$text" "$out"
@@ -100,10 +102,13 @@ check half      1 "colorbars: FAIL: partial: 5 of 8" "$work/half.png"
 check scaled    1 "colorbars: FAIL: scaled" "$work/scaled.png"
 check order     1 "colorbars: FAIL: wrong order" "$work/order.png"
 check missing   2 "unreadable input" "$work/none.png"
-apex=(--triangle --apex 0.5,0.1 --apex 0.15,0.9 --apex 0.85,0.9)
-check tri       0 "triangle: PASS" "${apex[@]}" --color 255,128,0 "$work/tri.png"
-check tri_empty 1 "triangle: FAIL: apex 0" "${apex[@]}" --color 255,128,0 "$work/tri_empty.png"
-check tri_color 1 "triangle: FAIL" "${apex[@]}" --color 0,0,255 "$work/tri.png"
+apex="--triangle --apex 0.5,0.1 --apex 0.15,0.9 --apex 0.85,0.9"
+# shellcheck disable=SC2086 # $apex is a word list on purpose (POSIX sh: no arrays)
+check tri       0 "triangle: PASS" $apex --color 255,128,0 "$work/tri.png"
+# shellcheck disable=SC2086
+check tri_empty 1 "triangle: FAIL: apex 0" $apex --color 255,128,0 "$work/tri_empty.png"
+# shellcheck disable=SC2086
+check tri_color 1 "triangle: FAIL" $apex --color 0,0,255 "$work/tri.png"
 
 echo "selftest: $((n - fail)) ok, $fail failed"
 [ "$fail" = 0 ]
