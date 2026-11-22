@@ -212,7 +212,7 @@ scope_of_path() {
   # gl_FragDepth's shape test (tests/es3_fragdepth_cases.rs) pins its verdicts
   # on both GPUs: a change there reaches both fragdepth rows, and nothing else
   tests/es3_fragdepth_cases*) echo "vivante v3d" ;;
-  src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | tests/es3_half_float_rt_pvr* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
+  src/shaderc/online/powervr/* | src/pvr/* | driver/src/pvr/* | driver/src/pvr_* | driver/src/fw/* | driver/compat/* | tools/pvr/* | tools/pco_shc/* | tools/pco-isa/* | tools/isa-extract/* | tools/glsl2usc.sh | driver/tools/offsetof/* | tests/reference/* | tests/es3_half_float_rt_pvr* | tests/es3_rgba32f_pvr* | driver/rust/src/soc/am62p/* | tools/ti-zephyr/* | tools/ti-trm/*) echo pvr ;;
   driver/tools/pvrlab/*) echo gltest ;;
   # the DK's U-Boot one-shot (scripts, mkimage step, runner, QEMU test): the
   # tools rows that run its self-tests
@@ -1986,6 +1986,8 @@ step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_mrt_gc.
 scope pvr
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_rt_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_rt_pvr
+step "test    host-test,gpu-powervr,shaderc-online (tests/es3_rgba32f_pvr.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_rgba32f_pvr
 scope v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)

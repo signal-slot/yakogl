@@ -6543,8 +6543,10 @@ static TEST_RGBA32F_OWN_CLASS: core::sync::atomic::AtomicBool = core::sync::atom
 /// holds the class (`backend::GC_SAMPLED_TEXFMTS`, `8f019dae`): it
 /// samples the class as two G32R32 planes (docs/notes/gc-128bit-swizzle.md),
 /// and RG32F / RGB32F take the class there too (es3_formats `F32_ST`). The
-/// PowerVR and the V3D sample the class as well but keep GL_RGBA32F as
-/// halves, byte for byte as before, except where GL_EXT_color_buffer_float
+/// PowerVR opts in as well (its TPU samples the class as R32G32B32A32_FLOAT;
+/// dEQP fills float textures with values beyond the half maximum 65504, as
+/// the V3D's cdb74fd2 did for it). The V3D samples the class but keeps
+/// GL_RGBA32F as halves, byte for byte as before, except where GL_EXT_color_buffer_float
 /// makes GL_RGBA32F colour-renderable (`framebuffer::ext_float_color_renderable`):
 /// a render target of the name holds 32-bit floats, so the texture is
 /// stored as the RGBA32F surface it is drawn as. The Mali samples no class
@@ -6552,9 +6554,9 @@ static TEST_RGBA32F_OWN_CLASS: core::sync::atomic::AtomicBool = core::sync::atom
 fn rgba32f_own_class() -> bool {
     let renderable = framebuffer::ext_float_color_renderable(GL_RGBA32F);
     #[cfg(not(test))]
-    let opted_in = cfg!(feature = "gpu-vivante") || renderable;
+    let opted_in = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr")) || renderable;
     #[cfg(test)]
-    let opted_in = cfg!(feature = "gpu-vivante")
+    let opted_in = cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"))
         || renderable
         || TEST_RGBA32F_OWN_CLASS.load(core::sync::atomic::Ordering::Relaxed);
     !crate::REPORT_ES2 && opted_in && backend::sampled_texfmts() & backend::gles_texfmt_bit(GLES_TEXFMT_RGBA32F) != 0
@@ -12258,7 +12260,7 @@ mod tests {
         let gl = TestGl::new(4, 4);
         /* the GC build as it is (its mask holds the class); any other build
          * through the hooks */
-        let _own = (!cfg!(feature = "gpu-vivante")).then(|| OwnClass::set(true, true));
+        let _own = (!cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr"))).then(|| OwnClass::set(true, true));
         for (ifmt, format, comps) in [(GL_RGBA32F, GL_RGBA, 4), (GL_RGB32F, GL_RGB, 3), (GL_RG32F, GL_RG, 2)] {
             /* glTexImage2D: the floats as given, 16 bytes a texel */
             let name = new_tex();
@@ -12328,8 +12330,11 @@ mod tests {
         /* this build as it is, on a back end other than the GC: GL_RGBA32F
          * is halves (they do not opt in); then the GC's choice with the
          * class out of the mask, where the three names are halves alike */
-        let cases: &[(bool, Option<bool>)] =
-            if cfg!(feature = "gpu-vivante") { &[(true, Some(false))] } else { &[(false, None), (true, Some(false))] };
+        let cases: &[(bool, Option<bool>)] = if cfg!(any(feature = "gpu-vivante", feature = "gpu-powervr")) {
+            &[(true, Some(false))]
+        } else {
+            &[(false, None), (true, Some(false))]
+        };
         for &(own, sampled) in cases {
             let _own = sampled.map(|s| OwnClass::set(own, s));
             let names: &[(GLenum, GLenum, usize)] = if sampled.is_some() {
