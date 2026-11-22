@@ -114,6 +114,7 @@ unsafe extern "C" fn v3d_job_begin(
         (*ind).used = 256;
     }
     with_builder(|b| b.jobs.push(SeenJob { target: t, clear: None, draws: 0 }));
+    trace(Ev::Begin);
     t.width != 0 && t.height != 0
 }
 
@@ -188,6 +189,7 @@ unsafe extern "C" fn v3d_job_draw(j: *mut V3dJob, d: *const V3dJobDraw, layout: 
         }
         b.draws.push(seen);
     });
+    trace(Ev::Draw);
     V3D_JOB_OK
 }
 
@@ -368,12 +370,53 @@ struct Platform {
     /// Allocations `capacity` refused: with frees held, and with none.
     enomem_held: usize,
     enomem_none_held: usize,
+    /// Record the OSAL calls and the jobs' starts into `events`
+    /// (docs/notes/v3d-pending-start.md (f)).
+    trace: bool,
+    events: Vec<Ev>,
+    /// A `completed()` call finishes the running job when one is parked
+    /// behind it, as the OSAL's register look does once the GPU is done.
+    look_completes: bool,
+    /// The newest job that has started on the GPU, and the newest fence
+    /// waited for (a job submitted past it is outstanding).
+    started: usize,
+    waited: usize,
+}
+
+/// What the traced platform saw, in order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ev {
+    Submit(usize),
+    Wait(usize),
+    /// A `completed()` call, and whether a job was outstanding then.
+    Look {
+        outstanding: bool,
+    },
+    /// The job of this fence started (the one before it had completed).
+    Start(usize),
+    /// `v3d_job_begin` and `v3d_job_draw` (the job's records).
+    Begin,
+    Draw,
+}
+
+fn trace(e: Ev) {
+    with_platform(|p| {
+        if p.trace {
+            p.events.push(e);
+        }
+    });
 }
 
 impl Platform {
     /// Give back the held frees whose job has run (v3d_frees_drain).
     fn drain(&mut self) {
         let done = self.completed;
+        /* one job runs at a time: the next starts once the one before it
+         * has completed */
+        while self.trace && self.started < self.kicks.len() && self.started <= done {
+            self.started += 1;
+            self.events.push(Ev::Start(self.started));
+        }
         self.held.retain(|&(_, fence)| fence > done);
         let (now, later): (Vec<_>, Vec<_>) = self.renders.iter().partition(|r| r.0 <= done);
         self.renders = later;
@@ -499,6 +542,9 @@ unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
     with_platform(|p| {
         p.kicks.push(k);
         let fence = p.kicks.len();
+        if p.trace {
+            p.events.push(Ev::Submit(fence));
+        }
         /* the OSAL keeps one job running and one waiting behind it: a third
          * finishes the running one first (zephyr_v3d.c z_submit) */
         p.completed = if p.async_jobs { p.completed.max(fence.saturating_sub(2)) } else { fence };
@@ -509,6 +555,10 @@ unsafe extern "C" fn p_submit(kick: *const c_void, len: usize) -> i64 {
 
 unsafe extern "C" fn p_wait(fence: i64, _timeout_us: i64) -> i32 {
     with_platform(|p| {
+        if p.trace {
+            p.events.push(Ev::Wait(fence as usize));
+        }
+        p.waited = p.waited.max(fence.max(0) as usize);
         if fence > 0 {
             p.completed = p.completed.max((fence as usize).min(p.kicks.len()));
             p.drain();
@@ -518,7 +568,16 @@ unsafe extern "C" fn p_wait(fence: i64, _timeout_us: i64) -> i32 {
 }
 
 unsafe extern "C" fn p_completed() -> i64 {
-    with_platform(|p| p.completed as i64)
+    with_platform(|p| {
+        if p.trace {
+            p.events.push(Ev::Look { outstanding: p.kicks.len() > p.waited });
+        }
+        if p.look_completes && p.kicks.len() >= p.completed + 2 {
+            p.completed += 1;
+            p.drain();
+        }
+        p.completed as i64
+    })
 }
 
 /// The asynchronous OSAL's jobs so far complete, as when the GPU is done.
@@ -10276,4 +10335,146 @@ fn a_uniform_block_of_16384_bytes_reaches_the_stream_whole() {
     // SAFETY: a live name.
     unsafe { glDeleteBuffers(1, &buf) };
     gl_release(p, &[1], &[rb]);
+}
+
+/* ---- the pending-job look (docs/notes/v3d-pending-start.md (f)) ---------- */
+
+/// The second framebuffer of the terrain-shaped frame.
+const TARGET_B: u64 = TARGET + 0x0010_0000;
+
+/// A terrain-shaped frame on the async OSAL with the trace on: 8 jobs of one
+/// draw each, alternating two framebuffers, the second one's job starting
+/// with its clear; then the swap's flush and a finish. `look_completes`: the
+/// fake's `completed()` finishes the running job when one is parked behind
+/// it. The events the platform saw.
+fn terrain_shaped_trace(look_completes: bool) -> Vec<Ev> {
+    let rig = Rig::new();
+    with_platform(|p| (p.async_jobs, p.trace, p.look_completes) = (true, true, look_completes));
+    rig.init();
+    with_platform(|p| p.events.clear());
+    for k in 0..8 {
+        let mut d = rig.draw();
+        d.do_clear = k % 2 == 1;
+        if k % 2 == 1 {
+            d.target_gpu = TARGET_B;
+        }
+        assert_eq!(draw(&d), 0, "{:?}", rig.gl.logs());
+    }
+    assert_eq!(v3d_flush(), 0);
+    assert_eq!(v3d_finish(), 0);
+    assert_eq!(rig.jobs().len(), 8, "8 jobs, one a draw");
+    assert!(rig.jobs().iter().all(|j| j.draws == 1));
+    with_platform(|p| core::mem::take(&mut p.events))
+}
+
+/// The trace as one line: `S3` submit of fence 3, `W3` wait, `+3` job 3
+/// started, `L` a `completed()` call with a job outstanding (`l`: none),
+/// `B` a job begun, `D` a draw recorded.
+fn tokens(ev: &[Ev]) -> String {
+    let t: Vec<String> = ev
+        .iter()
+        .map(|e| match *e {
+            Ev::Submit(f) => format!("S{f}"),
+            Ev::Wait(f) => format!("W{f}"),
+            Ev::Start(f) => format!("+{f}"),
+            Ev::Look { outstanding: true } => String::from("L"),
+            Ev::Look { outstanding: false } => String::from("l"),
+            Ev::Begin => String::from("B"),
+            Ev::Draw => String::from("D"),
+        })
+        .collect();
+    t.join(" ")
+}
+
+/// The submits and waits alone, in order.
+fn fences(ev: &[Ev]) -> String {
+    tokens(&ev.iter().copied().filter(|e| matches!(e, Ev::Submit(_) | Ev::Wait(_))).collect::<Vec<_>>())
+}
+
+/// The submit and wait sequence of the terrain-shaped frame before the
+/// pending-job look existed (3691e957): 8 jobs, 8 waits, each job waited
+/// for in order, the older of two outstanding before the third is
+/// submitted, the last two at the finish.
+const TERRAIN_FENCES: &str = "S1 S2 W1 S3 W2 S4 W3 S5 W4 S6 W5 S7 W6 S8 W7 W8";
+
+/// `kick_pending_look` (docs/notes/v3d-pending-start.md (f)): a draw, a
+/// clear and a job's start ask the OSAL's `completed` once while a job is
+/// outstanding, and nothing else moves.
+///
+/// (i) The submits and waits, their fences and the wait count are the
+/// sequence before the look (`TERRAIN_FENCES`), whether or not a look
+/// finishes a job. (ii) Where `completed` is called, in full: per job after
+/// the first, the draw's look (`draw_in_job`), the job's (`begin_job`), then
+/// `choose_arenas`' own looks (`holder`: one, or three with a wait for the
+/// older job); a clear job begins with the clear's look and records its draw
+/// after the draw's look (`B L D`). No call with nothing outstanding, and
+/// none between `flush_job`'s wait and its submit. (iii) With a look that
+/// finds job K-1 done, job K starts at the draw's look, before the next wait
+/// and before anything of the job after it is recorded.
+///
+/// Revert checks: without the look, (ii)'s traces lose the draw's and the
+/// job's `L` in every job after the first, and the clear's (the trace of
+/// 3691e957 is "B D S1 +1 L B D S2 L L L W1 +2 B
+/// D ..."), and (iii)'s `+2` comes after `choose_arenas`' look, not the
+/// draw's; any change to the jobs or waits fails (i).
+#[test]
+fn the_pending_job_look_keeps_the_submits_and_waits_and_starts_a_parked_job_early() {
+    let parked = terrain_shaped_trace(false);
+    let looked = terrain_shaped_trace(true);
+
+    /* (i) */
+    assert_eq!(fences(&parked), TERRAIN_FENCES);
+    assert_eq!(fences(&looked), TERRAIN_FENCES);
+    assert_eq!(parked.iter().filter(|e| matches!(e, Ev::Wait(_))).count(), 8, "8 waits a frame");
+
+    /* (ii) the OSAL as before: a parked job starts at a wait (or a submit) */
+    assert_eq!(
+        tokens(&parked),
+        "B D S1 +1 L L L B L D \
+         S2 L L L L L W1 +2 B D \
+         S3 L L L L L W2 +3 B L D \
+         S4 L L L L L W3 +4 B D \
+         S5 L L L L L W4 +5 B L D \
+         S6 L L L L L W5 +6 B D \
+         S7 L L L L L W6 +7 B L D \
+         S8 W7 +8 W8"
+    );
+    for ev in [&parked, &looked] {
+        assert!(!ev.contains(&Ev::Look { outstanding: false }), "a look with no job outstanding: {}", tokens(ev));
+        /* flush_job: wait_queued, then submit_job, nothing between */
+        for (i, e) in ev.iter().enumerate() {
+            if let Ev::Submit(_) = e {
+                let before: Vec<_> =
+                    ev[..i].iter().rev().take_while(|e| matches!(e, Ev::Look { .. } | Ev::Start(_))).collect();
+                let at = i - before.len();
+                let after_wait = at > 0 && matches!(ev[at - 1], Ev::Wait(_));
+                assert!(
+                    !(after_wait && before.iter().any(|e| matches!(e, Ev::Look { .. }))),
+                    "a look between a wait and the submit after it: {}",
+                    tokens(ev)
+                );
+            }
+        }
+    }
+
+    /* (iii) a look that finds job K-1 done starts job K at once */
+    assert_eq!(
+        tokens(&looked),
+        "B D S1 +1 L L L B L D \
+         S2 L +2 L L L L B D W1 \
+         S3 L +3 L L L L B L D W2 \
+         S4 L +4 L L L L B D W3 \
+         S5 L +5 L L L L B L D W4 \
+         S6 L +6 L L L L B D W5 \
+         S7 L +7 L L L L B L D W6 \
+         S8 W7 +8 W8"
+    );
+    for k in 2..=7 {
+        let pos = |e: Ev| looked.iter().position(|x| *x == e).unwrap();
+        let (submit, start) = (pos(Ev::Submit(k)), pos(Ev::Start(k)));
+        assert_eq!(start, submit + 2, "job {k} starts at the draw's look, right after its submit");
+        assert_eq!(looked[start - 1], Ev::Look { outstanding: true });
+        let next_wait = looked[submit..].iter().position(|e| matches!(e, Ev::Wait(_))).unwrap() + submit;
+        assert!(start < next_wait, "job {k} started before the next wait");
+    }
 }

@@ -2666,6 +2666,7 @@ pub extern "C" fn v3d_split_zs(on: bool) -> bool {
 /// loaded unless a clear replaces it, and depth/stencil started from what the
 /// history says they hold.
 fn begin_job(g: &mut V3dState, target: Target) -> i32 {
+    kick_pending_look(g);
     let rc = choose_arenas(g);
     if rc < 0 {
         return rc;
@@ -3193,6 +3194,22 @@ fn fence_done(fence: i64) -> bool {
         // SAFETY: a plain query.
         Some(c) => (unsafe { c() }) >= fence,
         None => false,
+    }
+}
+
+/// Let the OSAL look at the job in flight so that a job parked behind a
+/// finished one starts now, not at the next wait: the OSAL runs one job at a
+/// time and starts the parked one only when the CPU next asks
+/// (docs/notes/v3d-pending-start.md). One call to `completed`, only while a
+/// job is outstanding; the answer is not used, so the jobs, their order,
+/// fences and waits stay as they were.
+fn kick_pending_look(g: &V3dState) {
+    if g.in_flight.is_none() {
+        return;
+    }
+    if let Some(c) = osal::ops().and_then(|o| o.completed) {
+        // SAFETY: a plain query.
+        let _ = unsafe { c() };
     }
 }
 
@@ -6139,6 +6156,7 @@ fn black_cube_binding() -> GlesTextureBind {
 /// Record one draw of the open job's target, in a new job when the open one
 /// is full.
 fn draw_in_job(g: &mut V3dState, target: Target, d: &GlesDraw, st: &V3dJobState, fs: &ShcShader) -> i32 {
+    kick_pending_look(g);
     let mut retried_for_memory = false;
     for attempt in 0..2 {
         if !g.j.open {
@@ -6938,6 +6956,7 @@ unsafe fn draw_call(draw: *const GlesDraw) -> i32 {
      * partial clear whose other half must be loaded goes to the quad. */
     let (mut quad_depth, mut quad_stencil) = (false, false);
     if tlb_colour || tlb_depth || tlb_stencil {
+        kick_pending_look(g);
         if g.j.open && g.j.job.draws > 0 {
             let rc = flush_job(g);
             if rc < 0 {
