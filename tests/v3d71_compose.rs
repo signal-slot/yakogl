@@ -39,11 +39,15 @@
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test v3d71_compose
 //! ```
+// The lints below fire in the src module itself, which this test only
+// includes by path (it is not in the lib, so no other row lints it); the code
+// is deliberate (NaN test in a const fn, packet-field layout) and src/ is not
+// this file's to edit.
 #[path = "../src/v3d/attr71.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::if_same_then_else)]
 mod attr71;
 #[path = "../src/v3d/draw71.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::manual_range_contains, clippy::neg_cmp_op_on_partial_ord)]
 mod draw71;
 #[path = "../src/v3d/frame71.rs"]
 #[allow(dead_code)]
@@ -52,7 +56,7 @@ mod frame71;
 #[allow(dead_code)]
 mod ident71;
 #[path = "../src/v3d/rt71.rs"]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::eq_op)]
 mod rt71;
 
 use std::collections::BTreeMap;
