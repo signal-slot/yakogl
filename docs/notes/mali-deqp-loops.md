@@ -1511,3 +1511,20 @@ and `FCMP_OR.v2f16` head), `fs_vec_dyn` (F10 vector ladders, two loops),
 head test and the stores' `F16_TO_F32` in `nir.rs`/`select.rs`; the last
 four behind the unitype texts first), `vs_idx_dyn`/`vs_idx_static`
 (constop), `vs_nested_const` (the vertex unroll of nested loops).
+
+## 11. The `wrapper_unroll` decision (spike-loops-rest2, at 0f0b1ec9)
+
+HOST-ONLY. `kept_loop` (`nir_fs.rs`) no longer keeps a loop whose body
+ends in a `break` (only the front end's dead `for` step after it) and holds
+no `continue` of its own: `nir_opt_loop_unroll`'s `wrapper_unroll` drops
+such a loop. `walk_passes` then walks its one pass, and `walk_nodes` takes the
+head test `if (c) {} else break;` with a run-time `c` as `if (c) { pass }`
+(`ends_in_break`, `holds_continue`). No reference becomes byte-equal from
+this alone: `fs_uncond_break` (F6) now stops at `ControlFlow` in
+`walk_if16`. That `if` sits in a mediump shader with no kept loop. Its sides are
+the varying's 32-bit lanes (`res.yzwx` against `res`) under an integer
+compare (`0 < ui_three`), and `sel` takes fp16 lanes under an integer mask
+only inside a kept loop. Mesa's words (one `ICMP_OR` on `ui_three`, three
+`MUX.v2i16`) need the loop16 route's input conversion
+(`convert_inputs16`) and that select for this `if` too: the next step. No
+glmark2 verdict, in-crate test or other loops reference moved.
