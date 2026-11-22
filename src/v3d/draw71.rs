@@ -1229,7 +1229,7 @@ pub fn scissor_box(d: &DrawState) -> Option<[u32; 4]> {
 }
 
 fn to_pixel(v: f32) -> Result<u32, Refusal71> {
-    if v >= 0.0 && v < 65536.0 {
+    if (0.0..65536.0).contains(&v) {
         Ok(v as u32)
     } else {
         Err(Refusal71::ClipWindowRange)
@@ -1238,7 +1238,7 @@ fn to_pixel(v: f32) -> Result<u32, Refusal71> {
 
 /// A float as an unsigned 14.8 fixed-point field value (round to nearest).
 fn to_u14_8(v: f32) -> Result<u32, Refusal71> {
-    if !(v >= 0.0) {
+    if v.is_nan() || v < 0.0 {
         return Err(Refusal71::ViewportOffsetRange);
     }
     let x = f64::from(v) * 256.0 + 0.5;
@@ -1361,7 +1361,7 @@ pub fn translate(d: &DrawState) -> Result<StatePackets71, Refusal71> {
 
     /* the viewport: XY in 1/64 pixel at 7.1; a |Z scale| under 0.01 is the
      * no-guardband packet, refused */
-    if !(scale[2].abs() >= 0.01) {
+    if scale[2].is_nan() || scale[2].abs() < 0.01 {
         return Err(Refusal71::DepthScaleTooSmall);
     }
     let clipper_xy = ClipperXy { half_height_1_64: scale[1] * 64.0, half_width_1_64: scale[0] * 64.0 };

@@ -52,7 +52,6 @@ mod limits71;
 #[path = "../src/v3d/prim71.rs"]
 mod prim71;
 #[path = "../src/v3d/record71.rs"]
-#[allow(dead_code)]
 mod record71;
 #[path = "../src/v3d/rt71.rs"]
 #[allow(dead_code)]

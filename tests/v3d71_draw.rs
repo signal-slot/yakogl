@@ -50,8 +50,8 @@ fn attr<'a>(line: &'a str, key: &str) -> Option<&'a str> {
 
 /// Whether a tag's min_ver/max_ver reach version 71.
 fn is_71(line: &str) -> bool {
-    attr(line, "min_ver").map_or(true, |v| v.parse::<u32>().unwrap() <= 71)
-        && attr(line, "max_ver").map_or(true, |v| v.parse::<u32>().unwrap() >= 71)
+    attr(line, "min_ver").is_none_or(|v| v.parse::<u32>().unwrap() <= 71)
+        && attr(line, "max_ver").is_none_or(|v| v.parse::<u32>().unwrap() >= 71)
 }
 
 /// (code, [(name, start, size, type)]) of the `<packet name=xml_name>` that
@@ -129,7 +129,7 @@ fn lengths_and_opcodes_are_the_generated_71_packers() {
         let len_def = format!("#define V3D71_{}_length", spec.c_name);
         let len: usize = lines
             .iter()
-            .find(|l| l.starts_with(&len_def) && l[len_def.len()..].starts_with(|c: char| c == ' ' || c == '\t'))
+            .find(|l| l.starts_with(&len_def) && l[len_def.len()..].starts_with([' ', '\t']))
             .unwrap_or_else(|| panic!("{}: no length", spec.c_name))
             .split_whitespace()
             .last()

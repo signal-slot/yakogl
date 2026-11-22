@@ -286,7 +286,7 @@ fn gl_fbods() {
         assert_eq!(d.rect, Rect { x: 16, y: 16, w: 32, h: 32 });
     }
     // draws of the dump: 2 + 1 + 1 + 1 + 1 + 2 + 2 explicit, three clear draws
-    check("fbods", &[f1, f2, f3, f4, f6a, f6b, f7a, f7b, f7a, f7b], 10 + 0, 0);
+    check("fbods", &[f1, f2, f3, f4, f6a, f6b, f7a, f7b, f7a, f7b], 10, 0);
 }
 
 #[test]

@@ -296,7 +296,7 @@ const fn pack_rgba8(c: [f32; 4]) -> u32 {
     let mut i = 0;
     while i < 4 {
         let v = c[i];
-        let x = if v != v || v < 0.0 {
+        let x = if v.is_nan() || v < 0.0 {
             0.0
         } else if v > 1.0 {
             255.0
