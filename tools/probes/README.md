@@ -32,16 +32,16 @@ bring-up samples `gc_fence` and `gc_clear`; `triangle` and `slint` are under
   crash kexec, it adopts the display Linux left running (board module
   `driver/rust/src/board/nanopc_t6_display.rs`, C entries
   `yd_t6_display_adopt` and `yd_t6_display_status`), shows a CPU-drawn
-  pattern in Esmart0, prints the section 5 read-backs, holds the picture
-  30 s and resets. `driver/tools/kexec-zephyr/t6-verdict.sh t6_display`
+  pattern in Esmart0, holds the picture 30 s, then prints the section 5
+  read-backs and resets. `driver/tools/kexec-zephyr/t6-verdict.sh t6_display`
   judges its record.
 - `nanopc_t6/t6_cold`: step D8 of the T6 display (section 2 route (c)):
   started by a normal kexec, which turns the display off, it brings the
   whole chain up from cold with power-cycle (board module
   `driver/rust/src/board/nanopc_t6_display_cold.rs` over
   `soc::rk3588_display_chain`, C entry `yd_t6_display_cold`), prints a line
-  before each stage, shows the same pattern in Esmart0, prints the same
-  read-backs, holds the picture 30 s and resets. The stage to stop after is a
+  before each stage, shows the same pattern in Esmart0, holds the picture
+  30 s, then prints the same read-backs and resets. The stage to stop after is a
   build option (`-DT6_COLD_STOP_AFTER=N`, 1..8; `-DT6_COLD_FORCE_COLD=ON`
   stops a port found running). `t6-verdict.sh t6_cold` judges its record,
   a stopped one included.

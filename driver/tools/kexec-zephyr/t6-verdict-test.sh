@@ -312,6 +312,36 @@ else
 	echo "FAIL t6_cold-hang: the first line not ok is not stage 5's: $first"
 	fails=$((fails + 1))
 fi
+# the "ends" line names where a record without the chain's rc line
+# stopped: inside stage 8 VIDEO (its line is the last), inside the reads
+# before the chain, and inside stage 4 (the hang above)
+cold_ends() {
+	local got
+	got=$(bash "$V" t6_cold "$2" | grep '^ends ' || true)
+	runs=$((runs + 1))
+	if [ "$got" = "ends     no \"t6_cold: chain rc\" line: the run stopped inside $3" ]; then
+		echo "ok   $1: $got"
+	else
+		echo "FAIL $1: '$got' (want the run stopped inside $3)"
+		fails=$((fails + 1))
+	fi
+}
+cold_ends t6_cold-ends-in-phy "$WORK/hang.log" 'stage 4 PHY'
+sed '/^t6 display: up, /,/^t6: t6_cold done/d' "$D/t6_cold-pass.uart" >"$WORK/hang8.log"
+check t6_cold-hang-video 1 "VERDICT t6_cold FAIL (22 of $COLD)" "$((COLD - 22)) 22 0" t6_cold "$WORK/hang8.log"
+cold_ends t6_cold-ends-in-video "$WORK/hang8.log" 'stage 8 VIDEO'
+sed '/^t6 display: before: hdmi-tx0 /,/^t6: t6_cold done/d' "$D/t6_cold-pass.uart" >"$WORK/hangbefore.log"
+check t6_cold-hang-before 1 "VERDICT t6_cold FAIL (34 of $COLD)" "$((COLD - 34)) 34 0" t6_cold "$WORK/hangbefore.log"
+cold_ends t6_cold-ends-in-before "$WORK/hangbefore.log" \
+	'the reads before the chain, after "t6 display: before: vop not readable: Gated(Clk { part: Cru, gate: Gate { con: 52, bit: 9 } })"'
+# a record that has its rc line has no "ends" line
+runs=$((runs + 1))
+if bash "$V" t6_cold "$D/t6_cold-pass.uart" | grep -q '^ends '; then
+	echo "FAIL t6_cold-pass: an ends line in a record that has the chain's rc"
+	fails=$((fails + 1))
+else
+	echo "ok   t6_cold-pass: no ends line"
+fi
 # stage 4 failed: the chain's rc and the FAIL line differ, and so does the
 # failure line, which no record may have (it counts as a third, beyond the
 # table's lines); the stages after it, the report, the hold and the

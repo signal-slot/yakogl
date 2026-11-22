@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # t6_display: step D2 on the NanoPC-T6 (driver/docs/nanopc-t6-display.md,
 # section 2 route (a)): after a crash kexec, adopt the display Linux left
-# running, show a CPU-drawn pattern in Esmart0, print the section 5
-# read-backs, hold the picture, then the reset back into Armbian.
+# running, show a CPU-drawn pattern in Esmart0, hold the picture, print
+# the section 5 read-backs, then the reset back into Armbian.
 #
 #   west build -p always -b nanopc_t6 -d build/t6_display yakogl/tools/probes/nanopc_t6/t6_display
 cmake_minimum_required(VERSION 3.20.0)

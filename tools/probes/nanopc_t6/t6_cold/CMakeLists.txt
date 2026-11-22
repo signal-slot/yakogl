@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # t6_cold: step D8 on the NanoPC-T6 (driver/docs/nanopc-t6-display.md,
 # section 2 route (c)): after a normal kexec, bring the display chain up
-# from cold with power-cycle, show a CPU-drawn pattern in Esmart0, print
-# the section 5 read-backs, hold the picture, then the reset back into
+# from cold with power-cycle, show a CPU-drawn pattern in Esmart0, hold
+# the picture, print the section 5 read-backs, then the reset back into
 # Armbian. The chain's stage to stop after is a build option, for a board
 # run that bisects:
 #
