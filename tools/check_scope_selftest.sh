@@ -478,15 +478,28 @@ expect "tests: no image" '^skip  zephyr  am62p gl_test image, -Werror' "$tests_p
 expect "tests: no table proof" '^skip  gen     precompiled table gpu-powervr:' "$tests_plan"
 expect "tests: fmt and the licence audit run" '^plan  cargo fmt --check$' "$tests_plan"
 expect "tests: the licence audit" '^plan  tools   licence audit' "$tests_plan"
-if printf '%s\n' "$tests_plan" | grep -qE '^plan  (zephyr|cc  |run  |check  |tools  (check|board)|clippy  yakogl-)'; then
-  echo "FAIL tests: an image, driver, sample, cc, run or tool row is planned"; fails=$((fails + 1))
+# The rows a change confined to tests/ never plans: an image, a driver, cc, run
+# or check row, a check.sh or board tool. `+` after a kind, not a count of
+# spaces: a label pads its kind to eight columns (`tools   check.sh ...`), and
+# a pattern with one space too few matches no row at all.
+not_for_tests='^plan +((zephyr|cc|run|check) |tools +(tools/)?(check|board)|clippy +yakogl-)'
+if printf '%s\n' "$tests_plan" | grep -qE "$not_for_tests"; then
+  echo "FAIL tests: an image, driver, cc, run, check or tool row is planned"; fails=$((fails + 1))
 fi
 checks=$((checks + 1))
 # the tree-wide redaction scan runs whatever test file changed
 expect "tests: redaction_scan is a target of every narrowed run" 'targets .*redaction_scan' "$(plan tests/es3_srgb.rs)"
 # a shared module reaches the targets that use it, and a mix with src/ is every row
 expect "tests: a shared module reaches its users" 'targets .*es3_gc_const_array' "$(plan tests/common/mod.rs)"
-expect "tests: a tests/ and src/ mix is every row" 'scopes: all' "$(plan "tests/es3_tf_api.rs src/gl/draw.rs")"
+mix_plan=$(plan "tests/es3_tf_api.rs src/gl/draw.rs")
+expect "tests: a tests/ and src/ mix is every row" 'scopes: all' "$mix_plan"
+# The control of the check above: in a plan of every row the pattern names a
+# row of each kind, so a tests-only plan that held one would be refused.
+refused=$(printf '%s\n' "$mix_plan" | grep -E "$not_for_tests")
+for kind in 'zephyr  ' 'cc      ' 'run     ' 'check   ' 'tools   check\.sh ' 'tools   board\.sh ' \
+  'tools   tools/check_' 'tools   tools/board_' 'clippy  yakogl-'; do
+  expect "tests: the pattern refuses a '$kind' row" "^plan  $kind" "$refused"
+done
 # a fixture a tool outside tests/ reads is every row
 expect "tests: a fixture a tool reads is every row" 'scopes: all' "$(plan tests/fixtures/v3d_texref.txt)"
 # the glmark2 corpus test runs from a wrapper row, the knob tests from theirs
