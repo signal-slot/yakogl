@@ -2381,6 +2381,8 @@ step "test    host-test,gpu-powervr,report-es2 (tests/gl_es2ctx_sweep_program_hi
 step "test    host-test,gpu-powervr,report-es2 (tests/gl_es2ctx_sweep_texslot_mark.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,report-es2 --test gl_es2ctx_sweep_texslot_mark
 scope v3d
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_colormask.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_colormask
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_more_clears
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_pending_clear.rs)" \
