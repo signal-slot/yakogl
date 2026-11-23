@@ -36,6 +36,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 CHECK = os.path.join(HERE, 'check-pi4-gles3-log.py')
 NOTPASS = os.path.join(HERE, 'gles3-notpass.py')
+SCAN = os.path.join(HERE, 'pi4-console-scan.py')
+SCAN_ROW = re.compile(r'^(\S+)\s+start .*?\brun\s+(\?|[\d.]+ s\+?)\s+cases\s+(\d+)\s+recoveries\s+(\d+)\s+'
+                      r'job timeouts\s+(\d+)\s+hung\s+(-|job \d+)\s+MMU faults\s+(\d+)\s+slow\s+(\d+)\s+'
+                      r'resets\s+(\d+)\s+faults\s+(\d+)\s+(.*)$')
+SUPERSEDED = re.compile(r'^info: superseded by re-split: (\S+) ->')
 COMMIT_LINE = re.compile(r'^commit:?[ \t]+`?([0-9a-f]{7,40})\b', re.M | re.I)
 HEX40 = re.compile(r'\b[0-9a-f]{40}\b')
 TOTAL_ROW = re.compile(r'^TOTAL\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$', re.M)
@@ -125,6 +130,70 @@ def read_tallies(dirs):
     return res, bad
 
 
+def console_figures(dirs, superseded):
+    """Run times, GPU recoveries, hangs, resets, unfinished images from pi4-console-scan.py.
+
+    Returns (figures dict, problem or None). One row per label (the last one wins); labels in
+    `superseded` (a later re-split replaced them) are left out of every figure.
+    """
+    consoles = [d for d in dirs if os.path.isdir(d) and any(f.endswith('.console.txt') for f in os.listdir(d))]
+    if not consoles:
+        return None, None
+    rc, o, e = run([SCAN, '-q'] + consoles)
+    if rc not in (0, 1):
+        return None, 'pi4-console-scan.py could not run: %s' % (e.strip() or o.strip() or 'exit %d' % rc)
+    rows = {}
+    for l in o.splitlines():
+        m = SCAN_ROW.match(l)
+        if m:
+            rows[m.group(1)] = m.groups()
+    f = dict(images=0, secs=0.0, secs_unknown=0, partial_secs=0, rec=0, hang=0, wdog=0, unfinished=0,
+             rec_l=[], hang_l=[], wdog_l=[], unf_l=[], skipped=sorted(l for l in rows if l in superseded))
+    for lab, (_, run_t, _, rec, _, hung, _, _, resets, _, end) in rows.items():
+        if lab in superseded:
+            continue
+        f['images'] += 1
+        if run_t == '?':
+            f['secs_unknown'] += 1
+        else:
+            f['secs'] += float(run_t.rstrip('s+ '))
+            f['partial_secs'] += run_t.endswith('+')
+        if int(rec):
+            f['rec'] += int(rec)
+            f['rec_l'].append(lab)
+        if hung != '-':
+            f['hang'] += 1
+            f['hang_l'].append(lab)
+        if int(resets):
+            f['wdog'] += int(resets)
+            f['wdog_l'].append(lab)
+        if end.startswith('!! NO FINISH'):
+            f['unfinished'] += 1
+            f['unf_l'].append(lab)
+    return f, None
+
+
+def hms(sec):
+    sec = int(round(sec))
+    return '%d h %02d min' % (sec // 3600, sec % 3600 // 60) if sec >= 3600 else '%d min %02d s' % (sec // 60, sec % 60)
+
+
+def figures_text(f, ja=False):
+    """The run-time / recovery / hang / reset totals as one sentence (English, or Japanese for STATUS.md)."""
+    if f is None:
+        return '実行時間・復旧・ハングはコンソール記録なし' if ja else 'run times, recoveries and hangs: no console records'
+    named = sorted(set(f['rec_l'] + f['hang_l'] + f['wdog_l'] + f['unf_l']))
+    labs = ' '.join(named) if named else ('なし' if ja else 'none')
+    extra = ''
+    if f['secs_unknown'] or f['partial_secs']:
+        extra = ('（時間不明 %d・途中 %d）' if ja else ' (%d without a time, %d partial)') % (f['secs_unknown'], f['partial_secs'])
+    if ja:
+        return ('実行時間の合計 %s%s、GPU 復旧 %d、ハング %d、ウォッチドッグ/リセット %d、未完了 %d（該当: %s）' % (
+            hms(f['secs']), extra, f['rec'], f['hang'], f['wdog'], f['unfinished'], labs))
+    return ('summed run times %s%s, GPU recoveries %d, hangs %d, watchdog resets %d, unfinished images %d (images with any: %s)' % (
+        hms(f['secs']), extra, f['rec'], f['hang'], f['wdog'], f['unfinished'], labs))
+
+
 def recoveries(dirs):
     tot, seen = 0, False
     for d in dirs:
@@ -184,9 +253,13 @@ def report(args, out):
 
     ok = True
     aborted = []
+    superseded = set()
     if sha and re.fullmatch(r'[0-9a-f]{40}', sha):
         rc, o, e = run([CHECK, '--commit', sha, '--tree', args.table] + dirs)
         for l in o.splitlines():
+            m = SUPERSEDED.match(l)
+            if m:
+                superseded.add(m.group(1))
             if l.startswith('FAIL:'):
                 p = l[5:].strip()
                 problems.append(p)
@@ -214,6 +287,9 @@ def report(args, out):
             if m:
                 none_by[m.group(1)] = none_by.get(m.group(1), 0) + 1
 
+    figs, fprob = console_figures(dirs, superseded)
+    if fprob:
+        problems.append(fprob)
     ok = not problems
     npass = sum(t[0] for t in tallies.values())
     nfail = sum(t[1] for t in tallies.values())
@@ -227,6 +303,9 @@ def report(args, out):
     aborted = [l for l in labels if l in aborted]
     rec = recoveries(dirs)
     rec_txt = 'GPU recoveries: %s' % ('%d' % rec if rec is not None else 'not stated in the READMEs')
+    fig_en, fig_ja = figures_text(figs), figures_text(figs, ja=True)
+    if figs and figs['skipped']:
+        fig_en += '; superseded by a re-split and not counted: %s' % ' '.join(figs['skipped'])
     full = sha or 'an unnamed commit'
     short = full[:8]
     dirs_txt = ', '.join('`%s/`' % rel(d) for d in dirs)
@@ -250,6 +329,7 @@ def report(args, out):
         'mustpass cases of %s in them, %s pass / %s fail / %s NotSupported / %s other / %s without a result, %s; %s. '
         'Records: %s. Every case that is not Pass: `docs/es3/pi4-gles3-fails.tsv`.' % (
             partial, full, img_all, args.date, imgs, n(in_run), n(mustpass), *five, ab_txt, rec_txt, dirs_txt))
+    results_txt += ' Console scan (`tools/cts/pi4-console-scan.py`): %s.' % fig_en
     if not_run:
         results_txt += ' %s mustpass cases are in images not run.' % n(not_run)
     for p in problems:
@@ -261,6 +341,7 @@ def report(args, out):
                   '%s（失敗の一覧は docs/es3/pi4-gles3-fails.tsv）。' % (
                       '（途中、記録が不完全）' if not ok else '', img_all, img_run, short, args.date, n(in_run), *five, ab_ja,
                       'GPU 復旧 %d' % rec if rec is not None else 'GPU 復旧は README に記載なし'))
+    status_txt += fig_ja + '。'
     P(status_txt)
     P()
     P('--- ROADMAP.md (stage 4, Raspberry Pi 4 line) ---')
@@ -276,6 +357,7 @@ def report(args, out):
     P('- Images run: %s (table `tools/cts/pi4-gles3-tree.txt`); %s.' % (imgs, ab_txt))
     P('- Records: %s.' % dirs_txt)
     P('- %s.' % rec_txt)
+    P('- Console scan: %s.' % fig_en)
     P('- Totals (mustpass %s; %s in the images run): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result.'
       % (n(mustpass), n(in_run), *five))
     left = [p for p in problems]
@@ -356,6 +438,19 @@ def self_test():
             'B1': 'deqp: Fail dEQP-GLES3.b.zeta\ndeqp: Crash dEQP-GLES3.b.alpha\ndeqp: summary: 2 cases begun, 2 with a result, 0 without\n',
             'C1': 'deqp: NotSupported dEQP-GLES3.c.unsupported\ndeqp: Pass dEQP-GLES3.c.pass\ndeqp: summary: 2 cases begun, 2 with a result, 0 without\n',
         }
+        # run time, recovery, hang and reset figures: synthetic consoles in the style of pi4-console-scan.py
+        def rec_block(ms):
+            return ('v3d_deqp DONE: build %s, filter x\n  2 cases in %d ms, record at %d s after boot, reset at ~250 s\n'
+                    'v3d_deqp: build %s DONE: 2 cases, 2 with a result\n' % ('a' * 40, ms, ms // 1000, 'a' * 40))
+
+        run_hdr = ('deqp: case filter \'dEQP-GLES3.x.*\'\n')
+        con['A1'] = ('*** Booting Zephyr OS build x ***\n' + run_hdr
+                     + 'osal(v3d): job 4: GPU reset (recovery 1)\n' + con['A1']
+                     + rec_block(90000))
+        con['B1'] = ('*** Booting Zephyr OS build x ***\n' + run_hdr + con['B1']
+                     + rec_block(30000))
+        con['C1'] = ('*** Booting Zephyr OS build x ***\n' + run_hdr + con['C1']
+                     + rec_block(15000))
         s1 = session('s1-rows0-1', ['A1', 'B1'], con, '2 GPU recoveries\n')
         s2 = session('s2-rows2-2', ['C1'], con)
 
@@ -386,6 +481,17 @@ def self_test():
         expect('anchors found with their line numbers',
                'RESULTS.md Pi 4 ES 3.0 entry: tools/cts/RESULTS.md line 3' in out
                and 'ROADMAP.md stage 4 Pi 4 bullet: ROADMAP.md line 2' in out, out)
+        figs, prob = console_figures([s1, s2], set())
+        expect('scan figures: three images, 135 s, one recovery in A1',
+               figs is not None and figs['images'] == 3 and figs['unfinished'] == 0 and figs['hang'] == 0
+               and figs['rec'] == 1 and figs['rec_l'] == ['A1'] and figs['secs'] == 135.0
+               and figs['secs_unknown'] == 0, repr((figs, prob)))
+        expect('scan figures in the RESULTS, STATUS and issue drafts',
+               out.count('GPU recoveries 1,') >= 2 and '実行時間の合計' in out and 'GPU 復旧 2' in out
+               and 'hangs 0, watchdog resets 0, unfinished images 0 (images with any: A1)' in out
+               and 'Console scan:' in out, out)
+        figs, prob = console_figures([s1, s2], {'A1'})
+        expect('a superseded label is not counted', figs['images'] == 2 and figs['secs'] == 45.0 and figs['rec'] == 0 and figs['skipped'] == ['A1'], repr(figs))
         expect('no absolute path in the output', td not in out and '/home/' not in out, out)
 
         os.remove(os.path.join(s2, 'C1.tally.txt'))
