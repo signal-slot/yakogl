@@ -15,6 +15,31 @@ The image is `driver/samples/zephyr/glmark2/`. Upstream is compiled by path,
 unchanged except one file (`libmatrix/util.cc`, patched in the build
 directory).
 
+**The stage-2 criterion** (`ROADMAP.md`, section 2). On each board (AM62P,
+Raspberry Pi 4, i.MX8MP), booted from its own storage with no host,
+glmark2-es2 at 800x600 runs all 33 scenes with no failed scene, no GL error
+and no scene out of GPU memory; every scene's picture is checked; a frame
+rate is recorded for each scene. The current scores, the ms a frame and the
+commit each was measured at are in `README.md` (the glmark2 Status table) and
+`tools/cts/RESULTS.md` (the common set's rows); this document keeps none.
+
+**What the sample's own verdict checks, and what it does not.** The
+`glmark2: PASS` line (`board_finish`) and the record's status are a pass when
+at least one scene ran, **no scene failed** (set-up failed) and the score is
+not 0 (`driver/samples/zephyr/glmark2/src/main.cpp:1662`). It does **not**
+fail on an unsupported scene (the run prints "no scene failed; N unsupported,
+left out of the score (not a pass or a fail)"), on a GL error or an
+incomplete-texture draw (counted and printed, never a verdict), on a scene
+that ran out of GPU memory (a console line only), on a black or wrong
+picture, or on a list shorter than 33 entries. So a PASS is not the
+criterion. The criterion is checked from the tally and the record: the
+summary line's counts (33 ran, 0 failed, 0 unsupported), the GL error
+counters, the per-scene bad lines (GL error, incomplete texture, refused
+draw, out of GPU memory, refused tiled copy) and the picture judgement, all
+read by `tools/cts/common-tally.py` (the glmark2 block of a GM row,
+"Reading a run" below), and the ms a frame per scene by
+`tools/cts/glmark2-ms.py`.
+
 ## 1. What glmark2-es2 needs, and what the port gives it
 
 Paths are in the upstream tree (`src/`) at the pinned commit.
@@ -58,18 +83,14 @@ not have, so they are refused too.
 | refract (1) | two FBO passes, a depth texture (`scene-refract.cpp:92-99`) | `models/bunny.obj`, `textures/nasa1.png` |
 | conditionals, function, loop (3 + 2 + 3) | branches, function calls and loops in shaders | none |
 
-**Static gaps in YakoGL that decide part of the score** (read from our tree,
-not measured):
-- GL_OES_mapbuffer: fixed. It is advertised and `glMapBufferOES` exists
-  (land183, 985077e1; gl_test case 176 mapbuf passed on all three boards).
-  Before that, `buffer:...update-method=map` (2 of 33 entries) reported
-  "Unsupported" on every board.
-- GL_OES_depth_texture: advertised with `REPORT_ES2` on every GPU
-  (`DEPTH_TEXTURE_EXTENSIONS`, `src/gl/state.rs`). Until v3d/depth-texture
-  the V3D did not claim it, so shadow and refract (2 of 33) were
-  "Unsupported" on the Pi 4. gl_test case 169 dstex passed on the Pi 4 on
-  2026-10-04 (`tools/cts/RESULTS.md`). glmark2's shadow also needs a
-  depth-only framebuffer on the V3D (`DRAWS_WITHOUT_COLOUR`, case 177).
+**Extensions and limits that decide part of the score** (read from our tree;
+the results are in `tools/cts/RESULTS.md`):
+- GL_OES_mapbuffer is advertised and `glMapBufferOES` exists; without it
+  `buffer:...update-method=map` (2 of 33 entries) is "Unsupported".
+- GL_OES_depth_texture is advertised with `REPORT_ES2` on every GPU
+  (`DEPTH_TEXTURE_EXTENSIONS`, `src/gl/state.rs`); without it shadow and
+  refract (2 of 33) are "Unsupported". glmark2's shadow also needs a
+  depth-only framebuffer on the V3D (`DRAWS_WITHOUT_COLOUR`, gl_test case 177).
 - terrain needs vertex texture units. YakoGL reports 16
   (`src/backend.rs:220-252`), except on the GC7000 when its `vs_units16`
   switch is off.
@@ -83,17 +104,24 @@ not measured):
 - The score is the integer mean of those values **over the scenes whose
   set-up succeeded** (`main-loop.cpp:115-120`, `:53-58`). A scene that is
   unsupported or fails is left out of both the sum and the count, so a run
-  with fewer scenes can score higher. Our summary line prints the counts;
-  the run's verdict (`board_finish`) is a pass only when no scene failed or
-  was unsupported and the score is not 0.
+  with fewer scenes can score higher. Our summary line prints the counts.
+  The run's verdict (`board_finish`) is a fail when a scene failed or the
+  score is 0; an unsupported scene does not fail it (see the criterion
+  above).
 - The printed per-scene FPS is `ceil(1 / average frame time)`
   (`main-loop.cpp:178`), which rounds the other way from the score's
   truncation.
 
 ### What a run prints (UART on the AM62P and the Pi 4; the i.MX8MP: section 2, "Per scene without a console")
 
-After each scene's line the sample prints `glmark2-frame:` (the cost per
-frame), `glmark2-picture:` (the picture value, below) and `glmark2-mem:`.
+Besides upstream's lines the sample prints, per scene, `glmark2-mem:` (before
+the entry's set-up and again after it: `entry N <when>: <GPU memory line>`),
+then after the scene's result line `glmark2-frame:` (the cost per frame),
+`glmark2-steps:`, `glmark2-counters:`, `glmark2-jobs:` (where the image
+carries them) and `glmark2-picture:` (the picture value, below). An entry
+that is unsupported or failed prints `glmark2: entry N <scene>: unsupported`
+or `... failed, why <w>` and has no frame or picture line
+(`driver/samples/zephyr/glmark2/src/main.cpp:1210,1218`).
 
 ```text
 glmark2: upstream 22c527cb... (2023.01), size 800x600, args ""
@@ -108,7 +136,9 @@ glmark2: upstream 22c527cb... (2023.01), size 800x600, args ""
                                   glmark2 Score: <n>
 =======================================================
 glmark2: score <n>: <r> scenes ran, <f> failed, <u> unsupported (33 list entries); window 800x600, shown yes, GPU resets <g>
-glmark2: PASS | glmark2: FAIL rc=<rc>                      (board_finish)
+glmark2: GL errors raised <e>, draws that sampled an incomplete texture <i> (GL errors recorded <k>)
+[glmark2: GL error <k> of <e>: 0x.. in gl.., entry <n> ...]        (one per kept error, section 2)
+glmark2: PASS | glmark2: FAIL rc=<rc>                      (board_finish, src/main.cpp:1662)
 yk-record: 594b02.. ...                                   (kind APP: the verdict)
 ```
 
@@ -119,14 +149,19 @@ driver/samples/zephyr/glmark2/
   CMakeLists.txt     checks GLMARK2_SRC is the pinned commit with no local change;
                      builds upstream's common sources + glad + gl-state-egl and the
                      three image libraries as static libraries (upstream's warnings);
-                     links the 134 data files with .incbin (glmark2_assets.S)
+                     links the 134 data files with .incbin (glmark2_assets.S,
+                     generated in the build directory)
   Kconfig            GLMARK2_SIZE (default 800x600), GLMARK2_ARGS (default empty:
-                     the default list)
+                     the default list), GLMARK2_FRAME_DUMP (below) and two
+                     measurement knobs, GLMARK2_PVR_ONE_KICK_IN_FLIGHT and
+                     GLMARK2_GC_TILED_RT, off for a score
   prj.conf           C++ runtime, POSIX getopt, online shader compiler, 1 MiB stack,
-                     96 MiB heap, watchdog lifetime 900 s
-  boards/            per board, as slint/boards (all three boards); the
-                     NanoPC-T6's file adds to its board layer's app.conf,
-                     which CMakeLists.txt takes as the examples do
+                     96 MiB heap, board lifetime 900 s (CONFIG_YAKOGL_BOARD_LIFETIME_S)
+  boards/            a .conf (and, where the board needs one, an .overlay) per
+                     board: Verdin AM62P, Verdin iMX8M Plus, Raspberry Pi 4,
+                     NanoPC-T6, Armadillo-X2 and STM32MP257F-DK. The common
+                     set builds this image for the first three only
+                     (`common-images.sh`)
   patches/libmatrix-util-zephyr.patch
   include/           dlfcn.h, getopt.h, unistd.h, glmark2_platform.h
   src/main.cpp       NativeStateBoard, the run, the outcome counts, board_finish
@@ -145,8 +180,23 @@ west build -p always -d <ws>/build/gm2-am62p -b verdin_am62p/am62p54/a53 \
 RUN_BOUND=960 tools/board.sh am62p run <ws>/build/gm2-am62p/zephyr/zephyr.bin <logdir> glmark2
 ```
 
+The common set's GM image is built from the checkout's HEAD by the stage
+script, with `GLMARK2_SRC` naming the pinned upstream checkout (the build
+refuses another commit or a modified tree, `driver/samples/zephyr/glmark2/CMakeLists.txt:46-71`):
+
+```sh
+GLMARK2_SRC=<glmark2 checkout> tools/cts/board-stage.sh <am62p|pi4|imx8mp> common
+```
+
+`board-stage.sh` builds the rows of `tools/cts/common-tree.txt` (GM: this
+sample; GT: `gl_test`) through `tools/cts/common-images.sh` into
+`build/common/<board>-<sha8>/` (`--dry-run` prints the cmake arguments and
+builds nothing) and runs them with `tools/board.sh <board> tree`; the records
+go to `records/<board>/common-<sha8>`. The Armadillo-X2 and the STM32MP257F-DK
+have no glmark2 image in the common set (they build `gl_test` alone).
+
 `RUN_BOUND=960`: the default list is 33 x 10 s plus set-up (shader compiles
-take about 0.2 s each on the A53, `deqp/README.md`), about 6-7 minutes, past
+take about 0.2 s each on the A53, `driver/samples/zephyr/deqp/README.md`), about 6-7 minutes, past
 the runner's default 420 s bound.
 
 ### Why 800x600 on every board
@@ -158,7 +208,7 @@ the runner's default 420 s bound.
 - The common "--fullscreen 1920x1080" runs cannot be on-screen here (no panel
   has 1080 lines). For those, `GLMARK2_SIZE="1920x1080"` with
   `GLMARK2_ARGS="--off-screen"` renders into FBOs of that size (the AM62P
-  window may be up to 8100 KiB, `boards/verdin_am62p_am62p54_a53.conf`).
+  window may be up to 8100 KiB, `driver/samples/zephyr/glmark2/boards/verdin_am62p_am62p54_a53.conf`).
   Off-screen is a different measurement from on-screen (section 3).
 - Compare per pixel when the sizes differ (Mpx/s = fps x W x H / 10^6).
 
@@ -232,7 +282,8 @@ glmark2-fb: end crc32 <hex>
 waits for it (the readback is outside the score either way). Every row has its
 number and a CRC-16/CCITT-FALSE (the picture value's), and the end line has
 the CRC-32 of all rows, so a lossy UART costs the rows it touched and says
-which. `tools/cts/glmark2-fb.py <console log> <out.png> [--scene S]` writes the
+which. `tools/cts/glmark2-fb.py <console log> <out.png> [--scene SUBSTRING]` (or
+`--rundir <run directory> <png directory>`) writes the
 PNG (damaged or missing rows magenta), lists those rows and exits 1; rerun the
 board then, pixels are never patched. With every row good it checks the crc32,
 then recomputes the probes, crc16, crc16q and mean of the scene's
@@ -249,34 +300,33 @@ the three JPEGs to 2.4 MB: 24.3 MB, about 4.6 times the 5.28 MB of compressed te
 own readers would also no longer be the ones running. Decoding happens in a
 scene's set-up, which is not timed (section 1, the score).
 
-| Board | Image (zephyr.bin) | RAM footprint | Status |
-|---|---|---|---|
-| Verdin AM62P | 12,755,176 B (sha256 `0ec6383ca936f803...` at e0eacc3e) | 156,311,552 B (incl. the 96 MiB heap, the 8100 KiB window buffer, the 1 MiB stack) | built, links |
-| Verdin iMX8M Plus | 12,256,088 B (sha256 `e8f4aa37562c67b7...` at e0eacc3e) | 156,192 KiB of the 256 MiB RAM region | built, links (no UART: the GLMARK2 record carries the numbers) |
-| Raspberry Pi 4 | 12,325,040 B (sha256 `8f72f7f52a98182c...` at e0eacc3e) | 194,192 KiB of the 224 MiB region at the 48 MiB carve-out; the carve-out is now 96 MiB (refract's 56.2 MB peak, terrain's NPOT chains) and the region 288 MiB (`boards/rpi_4b.overlay`, ends at 0x12200000, below the firmware's 0x3c100000), not rebuilt since; kernel VM 512 MiB as v3d_deqp | built, links; `board.sh --dry-run pi4 run` rc 0 |
-| NanoPC-T6 | 14,968,480 B (the two-scene image `-b build -b shading`, sha256 `a11fab031a882409...`, build v0.1.0-3108-g24e03e6ea) | 261,111,808 B of the 256 MiB kexec window (incl. the 96 MiB heap and the 96 MiB carve-out, `boards/nanopc_t6.conf`) | build and shading ran on the HDMI screen by crash kexec on 2026-11-23, read from the record screen (no UART wired): `tools/cts/RESULTS.md`. The on-screen score is the display's flip rule, about 120 (`driver/docs/nanopc-t6-display.md`, section 4). The default list has not run |
+The image sizes, RAM footprints and which boards ran which image are
+volatile; they are in `tools/cts/RESULTS.md` (not here). What the layout
+fixes:
 
-The whole set fits each board's RAM. The Pi 4's ~12 MB of free space was
-for an image that also carries the cluster demo; this image does not, and
-its region is 288 MiB (the decode buffers come from the 96 MiB heap inside
-it). The Pi 4's boot partition must hold the 12.3 MB image (check `df`
-before staging). If a
+| Board | RAM region the image sits in |
+|---|---|
+| Verdin AM62P | the 96 MiB heap, the window buffer (up to `CONFIG_YAKOGL_BOARD_WINDOW_MAX_KB=8100`) and the 1 MiB stack, `driver/samples/zephyr/glmark2/boards/verdin_am62p_am62p54_a53.conf` |
+| Verdin iMX8M Plus | the 256 MiB RAM region; no UART: the GLMARK2 record carries the numbers (section 2) |
+| Raspberry Pi 4 | `&sram0` of 288 MiB from 0x200000 (`driver/samples/zephyr/glmark2/boards/rpi_4b.overlay`, ends at 0x12200000, below the firmware's 0x3c100000); the V3D carve-out is 96 MiB (refract's peak and terrain's NPOT chains); kernel VM 512 MiB. The earlier 224 MiB region at a 48 MiB carve-out took 194,192 KiB |
+| NanoPC-T6 | Linux, not this image for the stage-2 benchmark (section 4); `driver/samples/zephyr/glmark2/boards/nanopc_t6.conf` is the 96 MiB Mali carve-out of the Zephyr image that ran on the display |
+
+The whole set fits each board's RAM. The Pi 4's boot partition must hold the
+~12 MB image (check `df` before staging). If a
 smaller set is ever needed, the default list does not use
 `textures/nasa2.png` and `nasa3.png` (1.04 MB).
 
 Beside the 96 MiB carve-out, the Pi 4's glmark2 image raises the V3D's
 tiled-copy budget to 24 MiB
-(`CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES=25165824` in `boards/rpi_4b.conf`;
+(`CONFIG_YAKOGL_V3D_TILED_COPIES_BYTES=25165824` in `driver/samples/zephyr/glmark2/boards/rpi_4b.conf`;
 the Kconfig default stays 8 MiB for the other boards). refract's 1600x1200
 RGBA8 colour render target tiles to 11,001,856 B with its mip chain, over
-the 8 MiB default, so one of its draws was refused (3 x GL error 0x505).
-Measured on the host harness at the 96 MiB carve-out: 24 MiB clears the
-refusal and keeps the 7,684,096 B depth copy beside it (refract peak
-69,093,376 B of the carve-out, 0 refused allocations across the whole
-list; 16 MiB also clears it but evicts the depth copy every frame and peaks
-higher, at 70,146,048 B; both run refract at 23 FPS, so the choice rests on
-memory, not speed) - `tools/hostharness/glmark2/FINDINGS-refract-budget.md` sections
-3.2-3.4. The budget was a workaround for the per-frame CPU tiled copy of a
+the 8 MiB default, so one of its draws was refused (GL error 0x505).
+Measured on the host harness (`tools/hostharness/glmark2/FINDINGS-refract-budget.md`,
+sections 3.2-3.4): 24 MiB clears the refusal and keeps the depth copy beside
+it with no refused allocation across the whole list; 16 MiB also clears it
+but evicts the depth copy every frame and peaks higher, and both run refract
+at the same rate, so the choice rests on memory, not speed. The budget was a workaround for the per-frame CPU tiled copy of a
 render target. Since item `v3d-rt-sample` a colour render target the scene
 samples is stored by the tile list into a render image the TMU reads as it
 is, and its glGenerateMipmap (refract's and terrain's, every frame) is one
@@ -289,11 +339,11 @@ has read the "render images" and "tiled copies high-water" lines at this
 setting (`docs/online-shaderc/v3d-backend.md`, "Render targets sampled from
 their render image").
 
-### The record: kind 18 GLMARK2 (`record.rs`)
+### The record: kind 18 GLMARK2 (`driver/rust/src/board/record.rs`)
 
 The i.MX8MP has no UART and its SNVS keeps only the last record, so the run
 ends with one record that is also its verdict, stored after the summary
-line and kept by `board_finish`. `record.rs` (the `GLMARK2` row of `KINDS`,
+line and kept by `board_finish`. `driver/rust/src/board/record.rs` (the `GLMARK2` row of `KINDS`,
 `glmark2_words`) is the definition; today's images write this layout (flags
 `GLMARK2_SCENES` and `GLMARK2_GL`, plus `GLMARK2_OFFSCREEN` = 1 off-screen):
 
@@ -328,7 +378,7 @@ w2 = flags << 28 | status << 24 | ran << 16 | failed << 8 | unsupported,
 w3 = W << 16 | H.
 
 `yakogl-tools record 594b120e 44960027 62781093 fb258320` (a synthetic
-outcome, `record.rs`'s packing example) prints
+outcome, the packing example of `driver/rust/src/board/record.rs`) prints
 `GLMARK2 (18) seq 14: score 39 status 2 (fail) scenes ran 30 failed 1 unsupported 2 size 800x600 on-screen; first failed: entry 22 (default list: terrain), why 2 (fragment shader); unsupported: entry 17 (...), entry 19 (...); GL errors raised 11, draws that sampled an incomplete texture 15 or more`.
 A run that fails before the benchmark loop ends with `board_finish`'s APP
 record instead. Per-scene numbers on the i.MX8MP come from page runs (kind
@@ -370,7 +420,7 @@ FPS and picture values travel in pages, one page a boot, chosen by the
 selector (the design: `docs/notes/imx8mp-gm-record.md`). With the selector
 `GM_SEL | t << 6 | n` (`GM_SEL` = 0x400) the image cuts its benchmark list
 to the page's entries, runs them, stores GLMARK2 as always and then the page
-as the run's last record. `record.rs` (`gm_page_words`, `GmPage`,
+as the run's last record. `driver/rust/src/board/record.rs` (`gm_page_words`, `GmPage`,
 `write_gm_lines`) is the definition:
 
 | t | page | entries run | w1 | w2 | w3 |
@@ -492,12 +542,39 @@ known words, then each page decoded by `yakogl-tools record`).
   which no real count reaches, so an image without the counters cannot be
   read as zero. A scene with no frames gives 0, as on the other pages.
 
+### Reading a run: the tally and the ms table
+
+Both scripts read the console log (the AM62P and the Pi 4) or, for the
+i.MX8MP, the records; they judge nothing the sample did not print.
+
+- `tools/cts/glmark2-ms.py [--cells] <console log>`: a Markdown table of
+  `| scene | FrameTime ms | FPS |` per scene and the final `glmark2 Score`;
+  `--cells` prints `terrain 178.86 ms (6 FPS), shadow ..., refract ...`
+  instead. Exit 0 parsed; 1 a damaged or missing scene line, a ran count
+  that disagrees with the lines, no score (or, with `--cells`, a requested
+  scene without a time); 2 no glmark2 output.
+- `tools/cts/common-tally.py <board> <outdir> [--prev <earlier outdir>]` (or
+  `<board> --row LABEL=<rundir> ...`): per row the verdict and, for GM, the
+  score, the ran / failed / unsupported counts, the per-scene bad lines, the
+  pictures against the board's column of `tools/cts/glmark2-pictures.txt`
+  and the cell (green, amber, failed). The speed-only forms
+  `--gm-table <console or rundir>` and `--gm-diff <A> <B>` print FPS and ms a
+  frame per scene; `--gm-pictures <console or rundir> <column> [--table
+  <file>]` judges the pictures (exit 1 unless every scene matches) and
+  `--gm-picture-lines <console or rundir> <column>` prints them in the
+  table's form to review and paste into `glmark2-pictures.txt`;
+  `--check-records <dir>` and `--self-test` are the others.
+  `tools/cts/README.md` ("The glmark2 picture") has the judgement classes.
+- `tools/cts/readme-glmark2-check.py [--readme F] [--results F] [--ref R]
+  [--scenes LIST]` checks that the README's glmark2 table names one main
+  commit for all three boards.
+
 ## 3. Public scores (opened 2026-10-03)
 
 Reference only: these are Linux stacks with the vendor or Mesa driver, under
 the conditions each row states. They are not our measurement and not a
 comparison we make (the website quotes them the same way). The first runs of
-our image are `ab43a20c5:tools/cts/log/benchmarks-baseline/glmark2-first-runs-2026-10.md`.
+our image, and every later one, are in `tools/cts/RESULTS.md`.
 
 Every row was read from the page itself. Rows marked (*) were also re-opened
 by the author of this file, and the quoted lines matched.
@@ -594,7 +671,7 @@ tools/cts/mali-glmark2-build.sh --check <outdir>
   the pair defines every `gl*` and `egl*` name the program imports and glad
   loads.
 
-The per-scene runner `tools/cts/mali-glmark2-run.sh`, the results
-(`tools/cts/RESULTS.md` "Mali"; the `mali` column of
-`tools/cts/glmark2-pictures.txt`) and what the frame time measures
-(`docs/notes/mali-glmark2-frametime.md`) follow when they merge.
+The per-scene runner is `tools/cts/mali-glmark2-run.sh`, the results are in
+`tools/cts/RESULTS.md` ("Mali"; the `mali` column of
+`tools/cts/glmark2-pictures.txt`) and what the frame time measures is in
+`docs/notes/mali-glmark2-frametime.md`.
