@@ -378,7 +378,7 @@ fn ts_resolve_tiled_source_and_ts_mode() {
     assert_eq!(get(GC_TS_COLOR_SURFACE_BASE), 0xffff_7000);
     assert_eq!(get(GC_TS_COLOR_CLEAR_VALUE), 0xff40_80bf);
     assert_eq!(get(GC_TS_COLOR_CLEAR_VALUE_EXT), 0xff40_80bf);
-    assert_eq!(get(GC_RS_SOURCE_STRIDE), 0x400 | GC_RS_SOURCE_STRIDE_TILING);
+    assert_eq!(get(GC_RS_SOURCE_STRIDE), 0x400);
     assert_eq!(get(GC_RS_CONFIG) & GC_RS_DEST_TILED, 0);
     assert_ne!(get(GC_RS_CONFIG) & GC_RS_SOURCE_TILED, 0);
     assert_eq!(get(GC_RS_DEST_STRIDE), 0x100);

@@ -184,13 +184,11 @@ fn run(w: u32, h: u32, l: Layout, swap_rb: bool) {
 }
 
 #[test]
-#[ignore = "ts_resolve(Tiled) sets RS_SOURCE_STRIDE TILING, which rs_interp (and Mesa: TILING only with SUPER_TILED_NEW) reads as super-tiled; see the report"]
 fn glmark2_size_800x600() {
     run(800, 600, Layout::Tiled, false);
 }
 
 #[test]
-#[ignore = "ts_resolve(Tiled) sets RS_SOURCE_STRIDE TILING, which rs_interp (and Mesa: TILING only with SUPER_TILED_NEW) reads as super-tiled; see the report"]
 fn glmark2_size_swap_rb() {
     run(800, 600, Layout::Tiled, true);
 }
@@ -198,7 +196,6 @@ fn glmark2_size_swap_rb() {
 /// 37x13 pads to 48x16: ts_resolve takes it (the window is the padded size)
 /// and the padded part resolves like the rest.
 #[test]
-#[ignore = "ts_resolve(Tiled) sets RS_SOURCE_STRIDE TILING, which rs_interp (and Mesa: TILING only with SUPER_TILED_NEW) reads as super-tiled; see the report"]
 fn size_not_a_multiple_of_the_tile() {
     run(37, 13, Layout::Tiled, false);
     run(37, 13, Layout::Tiled, true);
