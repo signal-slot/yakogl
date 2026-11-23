@@ -459,8 +459,31 @@ display_fb() {
 	V[FBX]=$(printf '%x' $((16#${V[FB]})))
 }
 
-# the pixel clock (decimal kHz) within 0.5 % of the mode's 65 MHz
-display_pclk() { [[ ${V[PCLK]} =~ ^[0-9]+$ ]] && ((10#${V[PCLK]} >= 64675 && 10#${V[PCLK]} <= 65325)); }
+# The modes the display probes may find on VP0 (board::nanopc_t6_display::
+# MODES; t6_cold programs the first): VP0's four timing words, the HDMI
+# controller's video monitor words 0-5 (the dumps of 2026-11-12 and
+# 2026-11-23) and the pixel clock in kHz. display_mode picks one by the
+# timing words the record's "found VP0 timing" line names (the first when
+# it names none of them); display_pclk then checks the clock against it.
+MODE_1024X768=(1024x768 '0x05400088 0x01280528 0x03260006 0x00230323'
+	'0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300' 65000)
+MODE_1920X1080=(1920x1080 '0x0898002c 0x00c00840 0x04650005 0x00290461'
+	'0x002c0058 0x01180094 0x08980780 0x00050004 0x002d0024 0x04650438' 148500)
+display_mode() { # <probe>: sets M_NAME, M_TIMING, M_MONITOR, M_KHZ
+	local l m=("${MODE_1024X768[@]}")
+	for l in "${LINES[@]}"; do
+		if [[ $l == "$1: found VP0 timing ${MODE_1920X1080[1]} "* ]]; then
+			m=("${MODE_1920X1080[@]}")
+			break
+		fi
+	done
+	M_NAME=${m[0]} M_TIMING=${m[1]} M_MONITOR=${m[2]} M_KHZ=${m[3]}
+}
+
+# the pixel clock (decimal kHz) within 0.5 % of the mode's
+display_pclk() {
+	[[ ${V[PCLK]} =~ ^[0-9]+$ ]] && (((10#${V[PCLK]} - M_KHZ) * 200 <= M_KHZ && (M_KHZ - 10#${V[PCLK]}) * 200 <= M_KHZ))
+}
 
 # the HDPTX PHY0 GRF STATUS has PLL_LOCK_DONE, PHY_CLK_RDY and PHY_RDY
 display_phy() { (((16#${V[PHY]} & 0xe) == 0xe)); }
@@ -487,34 +510,39 @@ table_picture_status() {
 	done
 	e "$p: frame check over 100 ms: frame start 1, underflow 0, bus error 0 0, VP0 INT_RAW_STATUS 0x{x8}"
 	e "$p: 60 frames in {d} us: {d} mHz, pixel clock {@PCLK} kHz" "^$p: ([0-9]+ frames in|no frame timed) " display_pclk
-	e "$p: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} REG_CFG_DONE 0x{x8} DSP_IF_EN 0x{x8} DSP_CTRL 0x0000000f HTOTAL_HS_END 0x05400088 VTOTAL_VS_END 0x03260006"
+	local t
+	read -ra t <<<"$M_TIMING"
+	e "$p: VOP VERSION_INFO 0x40176786 SYS_PD_CTRL 0x{x8} REG_CFG_DONE 0x{x8} DSP_IF_EN 0x{x8} DSP_CTRL 0x0000000f HTOTAL_HS_END ${t[0]} VTOTAL_VS_END ${t[2]}"
 	e "$p: VOP OVL_PORT_SEL 0x$ops OVL_LAYER_SEL 0x$ols Esmart0 REGION0_CTRL 0x00000001 YRGB_MST 0x{=FB8} VIR 0x00000400 INT_RAW_STATUS 0x{x8} SYS0 0x{x8} SYS1 0x{x8}"
 	e "$p: HPD 1 (SOC_STATUS1 0x{x8}), PHY0 GRF STATUS 0x{@PHY}" '' display_phy
 	e "$p: HDMI0 CMU_STATUS 0x{@CMU} VIDQPCLK_FREQ {d} LINKQPCLK_FREQ {d}" '' display_cmu
-	e "$p: HDMI0 VIDEO_MONITOR_STATUS0-6 0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300 0x{x8}"
+	e "$p: HDMI0 VIDEO_MONITOR_STATUS0-6 $M_MONITOR 0x{x8}"
 }
 
 # Step D2, tools/probes/nanopc_t6/t6_display/src/main.c on the success path
 # (driver/docs/nanopc-t6-display.md, section 2 route (a), section 5). Pinned:
-# what the adopt requires (VERSION_INFO, VP0's DSP_CTRL and 1024x768@60
-# timing words, Esmart0 off as found), what it writes (the buffer's address,
+# what the adopt requires (VERSION_INFO, VP0's DSP_CTRL and the timing
+# words of 1024x768@60 or 1920x1080@60, display_mode, Esmart0 off as
+# found), what it writes (the buffer's address,
 # stride 4096, REGION0_CTRL 1, VIR 0x400, and the overlay selects of the
 # "overlay:" line, which the "shown:" line and the status after the hold
 # must read back: otherwise Esmart0 may be outside VP0's layers and the
 # screen shows only the background), the frame check (a frame start, no
 # underflow, no bus error), HPD, and the controller's video monitor words of
-# the mode (the board dump of 2026-11-12). Linux's other words as found, the
+# the mode (the board dumps of 2026-11-12 and 2026-11-23). The buffer is the
+# probe's 1024x768 in either mode. Linux's other words as found, the
 # overlay values written (they follow Linux's selects), the IOMMU status and the timing of
 # the waits are tokens; the pixel clock, the PHY status and the CMU status
 # are checked by hooks. What the display shows only a person can say.
 table_t6_display() {
+	display_mode t6_display
 	table_boot
 	e 't6_display: build {s}'
 	e 't6_display: WDT0 period 22369 ms, fed until 60000 ms of uptime'
 	e 't6_display: frame buffer 0x{@FBV} at PA 0x{@FB}, 1024x768 XRGB8888 stride 4096, pattern rc 0, clean rc 0' '' display_fb
 	e 't6_display: found PD_VOP PWR 0x{x8} STATUS 0x{x8} IDLE_REQ 0x{x8} IDLE_ACK 0x{x8} IDLE_ST 0x{x8} REPAIR 0x{x8} CLKGATE_CON(52) 0x{x8}'
 	e 't6_display: found VERSION_INFO 0x40176786 DSP_CTRL 0x0000000f 0x{x8} 0x{x8} 0x{x8} DSP_IF_EN 0x{x8} SYS_PD_CTRL 0x{x8}'
-	e 't6_display: found VP0 timing 0x05400088 0x01280528 0x03260006 0x00230323 OVL_LAYER_SEL 0x{x8} OVL_PORT_SEL 0x{x8}'
+	e "t6_display: found VP0 timing $M_TIMING OVL_LAYER_SEL 0x{x8} OVL_PORT_SEL 0x{x8}"
 	e 't6_display: found Cluster0 0x{x8} 0x{x8} Esmart0 0x00000000 vop_mmu STATUS 0x{x8} 0x{x8} DTE_ADDR 0x{x8} 0x{x8}'
 	e 't6_display: take-over: running ports 0x{x}, windows off 0x{x}'
 	e 't6_display: vop_mmu: STATUS 0x{x8} 0x{x8} after paging off, stall time-out {d}'
@@ -544,6 +572,8 @@ table_t6_display() {
 # read-backs, and STOPPED in place of PASS. A failed stage's line never
 # passes. What the display shows only a person can say.
 table_t6_cold() {
+	# the cold bring-up programs 1024x768 itself
+	display_mode t6_cold
 	table_boot
 	local n=0 l re='^t6_cold: options: power-cycle 1, force-cold [01], stop after ([0-8]) '
 	for l in "${LINES[@]}"; do

@@ -922,13 +922,14 @@ int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
 /* D2, the display a crash kexec left running, adopted (board::nanopc_t6_display
  * over ip::vop2 and ip::rk_iommu; feature rk3588): read what Linux left
  * (PD_VOP usable, its CRU gates open, VERSION_INFO, VP0 running in
- * 1024x768@60 with DSP_CTRL 0xf, HDMI0 fed by VP0, the Esmart power on),
- * then turn every window but Esmart0 off and wait a frame, turn both vop_mmu
- * sets' paging off, make Esmart0 VP0's only layer, show the buffer at
- * physical fb_pa (1024x768 XRGB8888, stride 4096, below 4 GiB) and wait a
- * frame. 0 when Esmart0 shows it, -EIO when a step stopped (stop names
- * it; the steps up to _ESMART_POWER write nothing), -EINVAL for a null
- * argument. The bases are mappings: the VOP (0xfdd90000, 0x2000 bytes),
+ * 1024x768@60 or 1920x1080@60 with DSP_CTRL 0xf and DSP_BG 0, HDMI0 fed by
+ * VP0, the Esmart power on), then turn every window but Esmart0 off and wait
+ * a frame, turn both vop_mmu sets' paging off, make Esmart0 VP0's only layer,
+ * show the buffer at physical fb_pa (1024x768 XRGB8888, stride 4096, below
+ * 4 GiB) at the screen's origin and wait a frame. 0 when Esmart0 shows it,
+ * -EIO when a step stopped (stop names it; the steps up to _ESMART_POWER
+ * write nothing), -EINVAL for a null argument. The bases are mappings: the
+ * VOP (0xfdd90000, 0x2000 bytes),
  * the two vop_mmu sets (0xfdd97e00, 0xfdd97f00), the PMU (0xfd8d8000), the
  * CRU (0xfd7c0000; CLKGATE_CON(52) and (60) are read), sys_grf
  * (0xfd58c000), the HDPTX PHY0 GRF (0xfd5e0000) and the HDMI QP TX0
@@ -938,8 +939,8 @@ int yd_t6_osal_counts(struct yd_t6_osal_counts *out);
 #define YD_T6_DISPLAY_STOP_VOP_CLOCK    2 /* a PD_VOP clock or HCLK_VOP gated (index: bit, detail: CLKGATE_CON(52)) */
 #define YD_T6_DISPLAY_STOP_VERSION      3 /* VERSION_INFO is not 0x40176786 (detail) */
 #define YD_T6_DISPLAY_STOP_STANDBY      4 /* VP0 in STANDBY (detail: DSP_CTRL) */
-#define YD_T6_DISPLAY_STOP_VP_STATE     5 /* VP0 DSP_CTRL not 0xf (detail) */
-#define YD_T6_DISPLAY_STOP_MODE         6 /* VP0 timing word index differs (detail: read) */
+#define YD_T6_DISPLAY_STOP_VP_STATE     5 /* VP0 DSP_CTRL not 0xf (index 0) or DSP_BG not 0 (index 1) (detail) */
+#define YD_T6_DISPLAY_STOP_MODE         6 /* VP0 timing none of the modes: word index differs (detail: read) */
 #define YD_T6_DISPLAY_STOP_ROUTE        7 /* HDMI0 not enabled on VP0 (detail: DSP_IF_EN) */
 #define YD_T6_DISPLAY_STOP_ESMART_POWER 8 /* SYS_PD_CTRL bit 7 set (detail) */
 #define YD_T6_DISPLAY_STOP_TAKE_OVER    9 /* vop2 take_over (refusal: vop2 Refusal, detail) */

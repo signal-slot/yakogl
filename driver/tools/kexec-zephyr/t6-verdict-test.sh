@@ -322,6 +322,43 @@ sed -e '/^t6_display: take-over/,/^t6_display: HDMI0 VIDEO_MONITOR/d' \
 	sed '/^t6_display: FAIL: adopt/i t6_display: adopt rc -5 stop 4 (VP0 is in STANDBY: no picture to adopt), refusal 0, index 0, detail 0x8000000f' >"$WORK/standby.log"
 check t6_display-standby 1 "VERDICT t6_display FAIL (18 of $DISP)" "$((DISP - 18)) 16 2" t6_display "$WORK/standby.log"
 
+# t6_display on Linux's 1920x1080 (the adopt keeps it; the buffer is still
+# the probe's 1024x768): the pass record with what differs in that mode,
+# from the dump of 2026-11-23 (driver/docs/
+# nanopc-t6-display-dump-linux-1920x1080.txt): HDMI0 alone in DSP_IF_EN,
+# VP0's timing words, Linux's overlay selects and those the adopt writes,
+# the vop_mmu DTE, the pixel clock of 2200 x 1125 at 60.006 Hz, the totals,
+# the HPD word, the CMU counts and the monitor words. The 1024x768 pixel
+# clock on it differs, and so do 1024x768's monitor words: the mode is taken
+# from the "found VP0 timing" line only.
+D1080=$WORK/t6_display-1920x1080-pass.log
+sed -e 's/DSP_IF_EN 0x00040028/DSP_IF_EN 0x00000008/g' \
+	-e 's/found VP0 timing 0x05400088 0x01280528 0x03260006 0x00230323 OVL_LAYER_SEL 0x76513240 OVL_PORT_SEL 0xa0547873/found VP0 timing 0x0898002c 0x00c00840 0x04650005 0x00290461 OVL_LAYER_SEL 0x76543210 OVL_PORT_SEL 0xa0507873/' \
+	-e 's/DTE_ADDR 0x0ad17100 0x0ad17100/DTE_ADDR 0x02cad100 0x02cad100/' \
+	-e 's/0x76513042/0x76543012/g' -e 's/0xa0547880/0xa0507880/g' \
+	-e 's/pixel clock 65002 kHz/pixel clock 148514 kHz/' \
+	-e 's/HTOTAL_HS_END 0x05400088 VTOTAL_VS_END 0x03260006/HTOTAL_HS_END 0x0898002c VTOTAL_VS_END 0x04650005/' \
+	-e 's/SOC_STATUS1 0x001da240/SOC_STATUS1 0x001d6240/' \
+	-e 's/VIDQPCLK_FREQ 16250 LINKQPCLK_FREQ 16249/VIDQPCLK_FREQ 35471 LINKQPCLK_FREQ 36863/' \
+	-e 's/0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300/0x002c0058 0x01180094 0x08980780 0x00050004 0x002d0024 0x04650438/' \
+	"$D/t6_display-pass.uart" >"$D1080"
+if [ "$(diff "$D/t6_display-pass.uart" "$D1080" | grep -c '^>')" = 11 ]; then
+	echo "ok   t6_display-1920x1080: 11 lines of the pass record changed"
+else
+	echo "FAIL t6_display-1920x1080: not 11 lines of the pass record changed (a sed above no longer matches)"
+	fails=$((fails + 1))
+fi
+runs=$((runs + 1))
+check t6_display-1920x1080-pass 0 'VERDICT t6_display PASS' "$DISP 0 0" t6_display "$D1080"
+sed 's/pixel clock 148514 kHz/pixel clock 65002 kHz/' "$D1080" >"$WORK/pclk1080.log"
+check t6_display-1920x1080-pclk 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/pclk1080.log"
+sed 's/0x002c0058 0x01180094 0x08980780 0x00050004 0x002d0024 0x04650438/0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300/' "$D1080" >"$WORK/mon1080.log"
+check t6_display-1920x1080-monitor 1 "VERDICT t6_display FAIL (1 of $DISP)" "$((DISP - 1)) 0 1" t6_display "$WORK/mon1080.log"
+# a mode that is neither: judged against 1024x768, so the timing line, the
+# status line's totals, the pixel clock and the monitor words differ
+sed -e 's/found VP0 timing 0x0898002c/found VP0 timing 0x06720028/' "$D1080" >"$WORK/other.log"
+check t6_display-other-mode 1 "VERDICT t6_display FAIL (4 of $DISP)" "$((DISP - 4)) 0 4" t6_display "$WORK/other.log"
+
 # t6_cold (step D8): the line counts are the tables', read from the passing
 # records (a run to the end, a run stopped after stage 4 as asked)
 COLD=$(bash "$V" t6_cold "$D/t6_cold-pass.uart" | grep -c '^ok ' || true)

@@ -17,18 +17,19 @@
 //!    (`soc::rk3588::PdRegs`; a VOP register read with its domain off may
 //!    hang the bus, U5), the VOP's CRU gates open (PD_VOP's clocks and
 //!    HCLK_VOP), `VERSION_INFO`, VP0 running (STANDBY clear) with
-//!    `DSP_CTRL` exactly what the build would write for HDMI RGB, VP0's four timing words those of [`MODE`], HDMI0
-//!    enabled and fed by VP0 (`DSP_IF_EN`), the Esmart windows' internal
-//!    power on (`SYS_PD_CTRL` bit 7). Anything else is a state this code
-//!    does not know, and it refuses by name.
+//!    `DSP_CTRL` exactly what the build would write for HDMI RGB and
+//!    `DSP_BG` black, VP0's four timing words those of one of [`MODES`],
+//!    HDMI0 enabled and fed by VP0 (`DSP_IF_EN`), the Esmart windows'
+//!    internal power on (`SYS_PD_CTRL` bit 7). Anything else is a state this
+//!    code does not know, and it refuses by name.
 //! 2. `vop2::take_over` keeping Esmart0: every window off, `REG_CFG_DONE`
 //!    on the running ports, one frame start on each.
 //! 3. `rk_iommu::paging_off` on both `vop_mmu` sets; a set that keeps paging
 //!    is [`Stop::Iommu`].
 //! 4. `vop2::overlay_single`: Esmart0 the only, bottom layer of VP0.
-//! 5. `vop2::window_show`: Esmart0 on the caller's window (the probe's is
-//!    [`mode_window`]: [`MODE`]'s size, stride [`FB_STRIDE`]); `REG_CFG_DONE`
-//!    for VP0 (bit 15 | bit 16 | bit 0).
+//! 5. `vop2::window_show`: Esmart0 on the caller's window, inside
+//!    [`WINDOW_AREA`] at the screen's origin (the probe's window is
+//!    [`probe_window`]); `REG_CFG_DONE` for VP0 (bit 15 | bit 16 | bit 0).
 //! 6. One frame start, then the read-back of section 5's "our buffer is the
 //!    one shown": `YRGB_MST`, `REGION0_CTRL` enable, the two overlay selects.
 //!
@@ -43,7 +44,8 @@
 //! Step D3 is the board layer's `board_show()` and `board_display_busy()`
 //! over a [`Screen`] the caller keeps. The first [`show`] is the adopt, with
 //! the window the GL side renders into, in place at the screen's origin: no
-//! copy. A later [`show`] of another buffer is `vop2::window_flip` (the
+//! copy. The window keeps its own size, inside [`WINDOW_AREA`] in every
+//! accepted mode. A later [`show`] of another buffer is `vop2::window_flip` (the
 //! address, then `REG_CFG_DONE`) and returns without waiting for the frame
 //! start that takes it; until then the display scans an earlier buffer, and
 //! [`busy`] says which buffers that may be. The geometry is the first show's:
@@ -63,22 +65,71 @@ use crate::soc::rk3588::{clkgate_con, PdRegs, PD_VO1, PD_VOP};
 use crate::soc::rk3588_display::clk as display_clk;
 use crate::video::VideoMode;
 
-/// The mode the build adopts: 1024x768 at 60 Hz, 65 MHz, H 1024 1048 1184
-/// 1344, V 768 771 777 806, both syncs negative (VESA DMT; what Linux ran on
-/// the board's display in the dump of 2026-11-12). The cold bring-up
-/// (step D8) programs the same mode: one constant for both.
-pub const MODE: VideoMode = crate::soc::rk3588_display_chain::MODE_1024X768_60;
+/// 1024x768 at 60 Hz, 65 MHz, H 1024 1048 1184 1344, V 768 771 777 806,
+/// both syncs negative (VESA DMT): what Linux runs on a display without an
+/// EDID (driver/docs/nanopc-t6-display-dump-linux.txt).
+pub const MODE_1024X768: VideoMode = VideoMode {
+    pixel_clock_hz: 65_000_000,
+    hactive: 1024,
+    hfront: 24,
+    hsync: 136,
+    hback: 160,
+    vactive: 768,
+    vfront: 3,
+    vsync: 6,
+    vback: 29,
+    hsync_high: false,
+    vsync_high: false,
+    de_high: true,
+};
+
+/// 1920x1080 at 60 Hz, 148.5 MHz, H 1920 2008 2052 2200, V 1080 1084 1089
+/// 1125, both syncs positive (CEA-861 VIC 16): what Linux runs on a sink
+/// whose EDID prefers it (driver/docs/nanopc-t6-display-dump-linux-1920x1080.txt).
+pub const MODE_1920X1080: VideoMode = VideoMode {
+    pixel_clock_hz: 148_500_000,
+    hactive: 1920,
+    hfront: 88,
+    hsync: 44,
+    hback: 148,
+    vactive: 1080,
+    vfront: 4,
+    vsync: 5,
+    vback: 36,
+    hsync_high: true,
+    vsync_high: true,
+    de_high: true,
+};
+
+/// The modes the adopt accepts: VP0's timing must be one of them, else it
+/// stops at [`Stop::Mode`]. The adopt keeps the mode it finds and never
+/// writes a timing word. The cold bring-up (step D8) has its own mode
+/// (`soc::rk3588_display_chain::t6`), since it programs the PHY itself.
+pub const MODES: [VideoMode; 2] = [MODE_1024X768, MODE_1920X1080];
+
+/// Where a window may lie: the screen's top left 1024x768, the smallest
+/// active area of [`MODES`]. A window that fits is shown the same in every
+/// accepted mode; the window's size never depends on the mode found. On a
+/// larger screen the rest is VP0's background colour `DSP_BG`, which Linux
+/// sets to 0 (black) when it starts the port (`ip::vop2` fact 8) and which
+/// step 1 checks.
+pub const WINDOW_AREA: (u32, u32) = (1024, 768);
 
 /// The port, the window and the HDMI output the adopt uses.
 pub const PORT: Vp = Vp::Vp0;
 pub const WINDOW: Esmart = Esmart::E0;
 pub const HDMI: HdmiPort = HdmiPort::Hdmi0;
 
-/// The frame buffer's row stride: [`MODE`]'s width in XRGB8888, a multiple
-/// of 64 bytes.
-pub const FB_STRIDE: u32 = 1024 * 4;
+/// The probes' frame buffer (`t6_display`, `t6_cold`; tools/probes/
+/// nanopc_t6/common/t6_picture.h): 1024x768 XRGB8888. Its size is the
+/// probes', not the mode's: it fills [`WINDOW_AREA`], and the cold
+/// bring-up's mode has the same size.
+pub const FB_WIDTH: u32 = 1024;
+pub const FB_HEIGHT: u32 = 768;
+/// The frame buffer's row stride in XRGB8888, a multiple of 64 bytes.
+pub const FB_STRIDE: u32 = FB_WIDTH * 4;
 /// The frame buffer's size in bytes.
-pub const FB_BYTES: usize = FB_STRIDE as usize * 768;
+pub const FB_BYTES: usize = FB_STRIDE as usize * FB_HEIGHT as usize;
 
 /// Physical bases of the blocks (rk3588-base.dtsi; driver/docs/
 /// nanopc-t6-display.md section 1). The VOP's registers below 0x2000 are
@@ -162,12 +213,14 @@ pub enum Stop {
     Version = 3,
     /// VP0 is in STANDBY: nothing scans out to adopt (`detail`: `DSP_CTRL`).
     Standby = 4,
-    /// VP0's `DSP_CTRL` is not what the build writes for HDMI RGB
-    /// (`detail`).
+    /// VP0's `DSP_CTRL` is not what the build writes for HDMI RGB (`index`
+    /// 0), or its background `DSP_BG` is not black (`index` 1); `detail`:
+    /// the word read.
     VpState = 5,
-    /// VP0's timing is not [`MODE`]'s (`index`: 0 `DSP_HTOTAL_HS_END`, 1
-    /// `DSP_HACT_ST_END`, 2 `DSP_VTOTAL_VS_END`, 3 `DSP_VACT_ST_END`;
-    /// `detail`: the word read).
+    /// VP0's timing is none of [`MODES`] (`index`: the first word that
+    /// differs from the mode that matches the most words in order, 0
+    /// `DSP_HTOTAL_HS_END`, 1 `DSP_HACT_ST_END`, 2 `DSP_VTOTAL_VS_END`, 3
+    /// `DSP_VACT_ST_END`; `detail`: that word as read).
     Mode = 6,
     /// HDMI0 is not enabled or not fed by VP0 (`detail`: `DSP_IF_EN`).
     Route = 7,
@@ -263,14 +316,14 @@ impl Adopt {
     }
 }
 
-/// The window the adopt probe shows: [`MODE`]'s size in XRGB8888 at the
-/// screen's origin, a buffer of [`FB_BYTES`] at stride [`FB_STRIDE`] at
-/// physical `fb_pa`.
-pub fn mode_window(fb_pa: u64) -> Window {
+/// The window the adopt probe shows: its frame buffer ([`FB_WIDTH`] x
+/// [`FB_HEIGHT`] XRGB8888, [`FB_BYTES`] at stride [`FB_STRIDE`]) at physical
+/// `fb_pa`, at the screen's origin, whatever the mode.
+pub fn probe_window(fb_pa: u64) -> Window {
     Window {
         addr: fb_pa,
-        width: MODE.hactive,
-        height: MODE.vactive,
+        width: FB_WIDTH,
+        height: FB_HEIGHT,
         stride_bytes: FB_STRIDE,
         x: 0,
         y: 0,
@@ -326,16 +379,30 @@ pub fn adopt(m: &impl Mmio, b: &Bases, w: &Window, delay_us: &mut impl FnMut(u32
     if dsp & vp::DSP_CTRL_STANDBY != 0 {
         return a.stopped(Stop::Standby, 0, 0, dsp);
     }
-    // MODE is a constant the tests pin: its words always exist
-    let Ok(t) = vop2::vp_timing(&MODE, PORT) else {
-        return a.stopped(Stop::Mode, 0, 0, 0);
-    };
-    if dsp != t.dsp_ctrl {
+    // MODES are constants the tests pin: their words always exist. DSP_CTRL
+    // depends on the port only, so every mode gives the same.
+    let mut want = [[0; 4]; MODES.len()];
+    let mut dsp_want = 0;
+    for (w, mode) in want.iter_mut().zip(&MODES) {
+        let Ok(t) = vop2::vp_timing(mode, PORT) else {
+            return a.stopped(Stop::Mode, 0, 0, 0);
+        };
+        *w = [t.htotal_hs_end, t.hact_st_end, t.vtotal_vs_end, t.vact_st_end];
+        dsp_want = t.dsp_ctrl;
+    }
+    if dsp != dsp_want {
         return a.stopped(Stop::VpState, 0, 0, dsp);
     }
-    let want = [t.htotal_hs_end, t.hact_st_end, t.vtotal_vs_end, t.vact_st_end];
-    if let Some(i) = (0..4).find(|&i| a.timing[i] != want[i]) {
-        return a.stopped(Stop::Mode, 0, i as u32, a.timing[i]);
+    // outside the window the screen shows VP0's background
+    let bg = m.read32(vb + vp::DSP_BG);
+    if bg != 0 {
+        return a.stopped(Stop::VpState, 0, 1, bg);
+    }
+    // how many words, in order, each mode matches; 4 is the whole mode
+    let matched = want.map(|w| (0..4).find(|&i| a.timing[i] != w[i]).unwrap_or(4));
+    let best = matched.into_iter().max().unwrap_or(0);
+    if best < 4 {
+        return a.stopped(Stop::Mode, 0, best as u32, a.timing[best]);
     }
     let route = vop2::hdmi_if(PORT, HDMI);
     if a.dsp_if_en & route.if_en_mask != route.if_en {
@@ -383,7 +450,7 @@ pub fn adopt(m: &impl Mmio, b: &Bases, w: &Window, delay_us: &mut impl FnMut(u32
     }
 
     // 5. our buffer
-    if let Err(r) = vop2::window_show(m, v, PORT, WINDOW, w, (MODE.hactive, MODE.vactive)) {
+    if let Err(r) = vop2::window_show(m, v, PORT, WINDOW, w, WINDOW_AREA) {
         return a.stopped(Stop::Window, r.why as u32, 0, r.read_back);
     }
     // window_show refuses an address at or above 4 GiB
@@ -454,8 +521,9 @@ pub struct Screen {
 /// call is [`adopt`] with this window, its record in `a`; a later call with
 /// another address is a flip, which never waits (`a` is left as it is).
 /// Returns 0, or
-/// - `-ENOTSUP`: a window the VOP cannot scan (`vop2::window_check`), or one
-///   whose size or stride is not the first show's. Nothing was read or
+/// - `-ENOTSUP`: a window outside [`WINDOW_AREA`] or one the VOP cannot scan
+///   (`vop2::window_check`), or one whose size or stride is not the first
+///   show's. Nothing was read or
 ///   written; the screen stays as it was.
 /// - `-ENODEV`: the adopt stopped (`a.stop` names the step), now or at the
 ///   first show. A screen that stopped is not tried again.
@@ -475,7 +543,7 @@ pub fn show(
         return -ENODEV;
     }
     let w = Window { addr, width, height, stride_bytes, x: 0, y: 0, format: Format::Xrgb8888 };
-    if vop2::window_check(&w, MODE.hactive, MODE.vactive).is_err() {
+    if vop2::window_check(&w, WINDOW_AREA.0, WINDOW_AREA.1).is_err() {
         return -ENOTSUP;
     }
     if s.state == SCREEN_NEW {
@@ -492,7 +560,7 @@ pub fn show(
     }
     settle(m, b, s);
     // the check above is window_flip's own: it writes or refuses as a whole
-    if vop2::window_flip(m, b.vop, PORT, WINDOW, &w, (MODE.hactive, MODE.vactive)).is_err() {
+    if vop2::window_flip(m, b.vop, PORT, WINDOW, &w, WINDOW_AREA).is_err() {
         return -ENOTSUP;
     }
     // The display scans `last`, or a buffer already held, until a frame

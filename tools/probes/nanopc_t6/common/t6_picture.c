@@ -101,9 +101,11 @@ int t6_picture_status(const char *probe, const struct yd_t6_display_bases *b,
 	       probe, T6_PICTURE_CHECK_WAIT_US / 1000, s->frame_start, s->underflow,
 	       s->bus_error[0], s->bus_error[1], s->raw);
 	if (s->frames != 0 && s->frames_us != 0) {
+		/* htotal and vtotal of the mode VP0 runs: the upper halves of
+		 * DSP_HTOTAL_HS_END and DSP_VTOTAL_VS_END as read back */
+		uint64_t htotal = v[5] >> 16, vtotal = v[6] >> 16;
 		uint64_t mhz = (uint64_t)s->frames * 1000000000ULL / s->frames_us;
-		uint64_t khz = (uint64_t)T6_PICTURE_HTOTAL * T6_PICTURE_VTOTAL * s->frames *
-			       1000ULL / s->frames_us;
+		uint64_t khz = htotal * vtotal * s->frames * 1000ULL / s->frames_us;
 
 		printk("%s: %u frames in %u us: %u mHz, pixel clock %u kHz\n", probe, s->frames,
 		       s->frames_us, (uint32_t)mhz, (uint32_t)khz);

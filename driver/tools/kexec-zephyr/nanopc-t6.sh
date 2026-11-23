@@ -32,14 +32,16 @@
 #           reservation is made with t6-crashkernel.sh, beside this. The GPU
 #           and its firmware also stay running (section 2(a)). --crash with
 #           --no-linux-wdt is refused (below).
-#           The image adopts one mode only (ADOPT_MODE below), and Linux
-#           runs the sink's preferred mode (1920x1080 on a sink with an
-#           EDID). So before the jump --crash runs t6-kms-mode.py, beside
-#           this, on the board: it sets the adopt's mode on HDMI-A-1 as
-#           Linux's DRM master and holds it, and the jump ends Linux with
+#           The image adopts the modes of ADOPT_MODES below only, and Linux
+#           runs the sink's preferred mode. So before the jump --crash runs
+#           t6-kms-mode.py, beside this, on the board: it holds the mode VP0
+#           runs when that is an adopted one (no size change: an HDMI
+#           capture unit gives no picture after one), else it sets 1024x768,
+#           on HDMI-A-1 as Linux's DRM master. The hold keeps fbdev from
+#           changing the screen until the jump, and the jump ends Linux with
 #           that mode in the hardware. Then the script reads VP0's mode back
 #           from Linux (/sys/kernel/debug/dri/0/state) and jumps only when
-#           it is ADOPT_MODE. On every path that does not jump it stops the
+#           it is the mode held. On every path that does not jump it stops the
 #           holder by its exact pid, and the holder gives Linux its own mode
 #           back (driver/docs/nanopc-t6-display.md, section 2(a), "The
 #           mode before the jump"). So --crash refuses without python3 on
@@ -149,14 +151,15 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 WINDOW_BASE=$((0x10000000))
 WINDOW_SIZE=$((256 << 20))
 STAGE=/tmp/yakogl-kexec
-# The mode the image adopts (board::nanopc_t6_display::MODE; the crash
-# route only): the clock in kHz and h 1024 1048 1184 1344, v 768 771 777
-# 806, in the order the DRM state prints them, and its sync flags (0xa:
-# both negative, not interlaced; the flags' low six bits are compared).
-# board_lock_selftest.sh, beside this, fails when these differ from the
-# Rust MODE.
-ADOPT_MODE="65000 1024 1048 1184 1344 768 771 777 806"
-ADOPT_FLAGS=0xa
+# The modes the image adopts (board::nanopc_t6_display::MODES; the crash
+# route only), one per line: the name t6-kms-mode.py --mode takes, the
+# clock in kHz, h and v in the order the DRM state prints them, and the
+# sync flags (the flags' low six bits: 0xa both negative, 0x5 both
+# positive, not interlaced). The first is the one set when VP0 runs none of
+# them. board_lock_selftest.sh, beside this, fails when these differ from
+# the Rust MODES.
+ADOPT_MODES="1024x768 65000 1024 1048 1184 1344 768 771 777 806 0xa
+1920x1080 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x5"
 # How long t6-kms-mode.py holds the mode at most: it gives it back by
 # itself after that, also when this script is killed before it can stop it.
 MODE_HOLD=600
@@ -274,7 +277,22 @@ vp0_timing() {
 	[[ "$1" =~ $re ]] || return 0
 	printf '%s 0x%x\n' "${BASH_REMATCH[1]}" $((0x${BASH_REMATCH[3]} & 0x3f))
 }
-vp0_is_adopt() { [ "$(vp0_timing "$1")" = "$ADOPT_MODE $ADOPT_FLAGS" ]; }
+# adopt_name <a vp0_mode line>: the name of the adopted mode VP0 runs;
+# nothing when it runs none of ADOPT_MODES (or is off, or unread).
+adopt_name() {
+	local t n rest
+	t=$(vp0_timing "$1")
+	[ -n "$t" ] || return 0
+	while read -r n rest; do
+		if [ "$rest" = "$t" ]; then
+			echo "$n"
+			return 0
+		fi
+	done <<<"$ADOPT_MODES"
+}
+# The mode the hold sets: VP0's own when adopted, else the first.
+ADOPT_SET=${ADOPT_MODES%% *}
+hold_mode() { local n; n=$(adopt_name "$1"); echo "${n:-$ADOPT_SET}"; }
 facts=$(board "$WHO_REMOTE
 $VP0_FN"'
 set -u
@@ -385,10 +403,10 @@ echo "board: up $(fact uptime) s, systemd '$(fact system)', boot_id $(fact boot_
 if [ "$CRASH" = 1 ]; then
 	echo "board: window $(printf '0x%08x-0x%08x' "$wb" "$we") is inside System RAM and inside the crashkernel= reservation $(printf '0x%08x-0x%08x' "$ck_s" "$ck_e") (kexec_crash_size $(fact kexec_crash_size)), and overlaps no other /proc/iomem entry; no crash image is loaded"
 	echo "route: crash (--crash): kexec_load(KEXEC_ON_CRASH), then a panic; no device_shutdown, so the display and the GPU stay as Linux left them"
-	if vp0_is_adopt "$(fact vp0)"; then
-		echo "board: VP0 runs the adopt's mode already ($(fact vp0)); --go still sets and holds it with t6-kms-mode.py"
+	if [ -n "$(adopt_name "$(fact vp0)")" ]; then
+		echo "board: VP0 runs an adopted mode, $(adopt_name "$(fact vp0)") ($(fact vp0)); --go holds it with t6-kms-mode.py, no size change"
 	else
-		echo "board: VP0 runs '$(fact vp0)', not the adopt's mode ($ADOPT_MODE, flags $ADOPT_FLAGS); --go sets it first with t6-kms-mode.py ($(fact python3))"
+		echo "board: VP0 runs '$(fact vp0)', none of the adopted modes; --go sets $ADOPT_SET first with t6-kms-mode.py ($(fact python3))"
 	fi
 else
 	if [ "$ck_s" -ge 0 ]; then
@@ -445,11 +463,13 @@ if [ "$CRASH" = 1 ]; then
 	reread="kexec_loaded, kexec_crash_loaded"
 	copy_kms=", t6-kms-mode.py"
 	mode_step="
-     then the adopt's mode: python3 -I $STAGE/t6-kms-mode.py hold --max-hold $MODE_HOLD
-     sets $ADOPT_MODE (flags $ADOPT_FLAGS) on HDMI-A-1 as Linux's DRM
-     master and holds it (at most $MODE_HOLD s); VP0's mode is read back from
-     /sys/kernel/debug/dri/0/state, and unless it is that mode, the holder is
-     stopped by its pid (Linux's own mode comes back) and there is no jump"
+     then the adopt's mode: python3 -I $STAGE/t6-kms-mode.py hold --mode $(hold_mode "$(fact vp0)") --max-hold $MODE_HOLD
+     holds that mode on HDMI-A-1 as Linux's DRM master (at most $MODE_HOLD s):
+     VP0's own mode when it is adopted (no size change), else $ADOPT_SET,
+     decided on VP0's mode read again under the lock; VP0's mode is read back
+     from /sys/kernel/debug/dri/0/state, and unless it is the mode held, the
+     holder is stopped by its pid (Linux's own mode comes back) and there is
+     no jump"
 else
 	copy_kms=
 	mode_step=
@@ -754,9 +774,10 @@ rec "registers before (GLB_RST_ST, GLB_RST_CON, WDT0 CR, TORR): $regs"
 rec "gpu power before: $(read_gpu_power || echo unread)"
 
 # The adopt's mode (the crash route only; driver/docs/nanopc-t6-display.md,
-# section 2(a), "The mode before the jump"). t6-kms-mode.py sets it and
-# leaves a holder; its line names the holder's pid. Then VP0's mode is read
-# back from Linux, and the jump goes on only when it is ADOPT_MODE. Every
+# section 2(a), "The mode before the jump"). t6-kms-mode.py holds VP0's own
+# mode when it is one of ADOPT_MODES, else it sets ADOPT_SET, and leaves a
+# holder; its line names the holder's pid. Then VP0's mode is read back
+# from Linux, and the jump goes on only when it is the mode held. Every
 # path from here that does not jump stops the holder by that pid
 # (mode_refuse, finish, and the EXIT trap behind them).
 mode_refuse() {
@@ -768,8 +789,14 @@ if [ "$CRASH" = 1 ]; then
 	mode_before=$(board "$VP0_FN
 vp0_mode") || mode_before=
 	rec "mode: VP0 before: ${mode_before:-unread}"
+	held=$(hold_mode "$mode_before")
+	if [ -n "$(adopt_name "$mode_before")" ]; then
+		rec "mode: VP0 runs an adopted mode: hold $held, no size change"
+	else
+		rec "mode: VP0 runs none of the adopted modes: set $held"
+	fi
 	mode_rc=0
-	mode_out=$(board "python3 -I $STAGE/t6-kms-mode.py hold --max-hold $MODE_HOLD --log $STAGE/kms-mode.log" 2>&1) || mode_rc=$?
+	mode_out=$(board "python3 -I $STAGE/t6-kms-mode.py hold --mode $held --max-hold $MODE_HOLD --log $STAGE/kms-mode.log" 2>&1) || mode_rc=$?
 	rec "mode: $(tr '\n' ' ' <<<"$mode_out")(rc $mode_rc)"
 	mode_re='; held by pid ([0-9]+) for at most [0-9]+ s$'
 	if [[ "$mode_out" =~ $mode_re ]]; then mode_pid=${BASH_REMATCH[1]}; fi
@@ -785,9 +812,9 @@ vp0_mode") || mode_before=
 	fi
 	vp0=$(board "$VP0_FN
 vp0_mode") || vp0=
-	vp0_is_adopt "$vp0" ||
-		mode_refuse "VP0 does not run the adopt's mode ($ADOPT_MODE, flags $ADOPT_FLAGS) after the set: '${vp0:-unread}'"
-	rec "mode: VP0 reads back '$vp0': the adopt's mode, held by pid $mode_pid across the jump"
+	[ "$(adopt_name "$vp0")" = "$held" ] ||
+		mode_refuse "VP0 does not run the mode held ($(grep "^$held " <<<"$ADOPT_MODES")) after the set: '${vp0:-unread}'"
+	rec "mode: VP0 reads back '$vp0': the adopt's mode $held, held by pid $mode_pid across the jump"
 	# For the record only: the adopt also compares VP0's DSP_CTRL with the
 	# build's HDMI RGB value, which an output in another depth or format
 	# changes (driver/docs/nanopc-t6-display.md, section 8, U15).

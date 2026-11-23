@@ -17,12 +17,12 @@
 
 #include <yakogl_drivers.h>
 
-/* The mode both probes show (board::nanopc_t6_display::MODE). */
+/* The buffer both probes draw and show at the screen's origin
+ * (board::nanopc_t6_display::FB_WIDTH, FB_HEIGHT): the probes' size, not
+ * the mode's. On a larger screen the rest is VP0's background. */
 #define T6_PICTURE_WIDTH  1024
 #define T6_PICTURE_HEIGHT 768
 #define T6_PICTURE_STRIDE (T6_PICTURE_WIDTH * 4)
-#define T6_PICTURE_HTOTAL 1344
-#define T6_PICTURE_VTOTAL 806
 
 /* The picture is held this long for the person at the display. */
 #define T6_PICTURE_HOLD_S 30
