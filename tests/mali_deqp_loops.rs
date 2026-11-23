@@ -25,10 +25,13 @@
 #![cfg(all(feature = "shaderc-online", feature = "gpu-mali"))]
 mod mali_ref;
 
+/// Compiles (101 passes, past Mesa's unroll limit: kept as a do-while,
+/// nir_fs.rs `rotated_loop`). A kept loop: its words are Mesa's with the
+/// loop cap's, compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_101_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside, lowered by lower-loops-1"]
 fn fs_101() {
-    mali_ref::assert_matches("deqp_loops_fs_101");
+    compiles("deqp_loops_fs_101");
 }
 
 /// Compiles (step 2b: the `break` merged into the head's exit test). A kept loop: its words are Mesa's with
@@ -55,10 +58,13 @@ fn fs_double_continue() {
     compiles("deqp_loops_fs_double_continue");
 }
 
+/// Compiles (the do-while's tail test its terminator, the `if` four
+/// `MUX.v2i16`). A kept loop: its words are Mesa's with the loop cap's,
+/// compared in `src/shaderc/online/mali/tests.rs`
+/// `deqp_loops_fs_dowhile_if_is_mesa_26_2_1_with_the_loop_cap`.
 #[test]
-#[ignore = "refused: control flow (if, a loop, a return before the end), lowered by lower-loops-1"]
 fn fs_dowhile_if() {
-    mali_ref::assert_matches("deqp_loops_fs_dowhile_if");
+    compiles("deqp_loops_fs_dowhile_if");
 }
 
 /// Compiles (step 1b: the do-while). A kept loop: its words are Mesa's with
@@ -133,8 +139,11 @@ fn fs_select() {
     mali_ref::assert_matches("deqp_loops_fs_select");
 }
 
+/// Byte-equal: the loop goes as Mesa's `wrapper_unroll` drops it, its one
+/// pass the else side of the head test's inverse compare
+/// (`opt_if_simplification`), the varying's lanes converted and selected
+/// by `MUX.v2i16` (nir_fs.rs `walk_if16`, `Fs::sel16`).
 #[test]
-#[ignore = "refused: control flow (if, a loop, a return before the end) (the loop goes as Mesa's `wrapper_unroll` drops it; the one pass's mediump `if` on `0 < ui_three` has no select of the varying's lanes outside a kept loop: Mesa's `MUX.v2i16` on the converted lanes), then lower-loops-1"]
 fn fs_uncond_break() {
     mali_ref::assert_matches("deqp_loops_fs_uncond_break");
 }
@@ -197,8 +206,10 @@ fn vs_idx_static() {
     mali_ref::assert_matches("deqp_loops_vs_idx_static");
 }
 
+/// Unrolled as Mesa unrolls it: counted loops nested in a counted loop, the
+/// vertex walk's nested `LoopBegin` steps (nir.rs `vs_loop_shape`,
+/// `put_loop`).
 #[test]
-#[ignore = "refused: a loop in a vertex shader, lowered by lower-loops-1"]
 fn vs_nested_const() {
     mali_ref::assert_matches("deqp_loops_vs_nested_const");
 }
@@ -234,18 +245,14 @@ fn compiles(name: &str) {
 /// The first refusal of each reference at the tip, without the "Valhall: "
 /// prefix and the " is not lowered yet" suffix.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_loops_fs_101", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
-    ("deqp_loops_fs_dowhile_if", "control flow (if, a loop, a return before the end)"),
     ("deqp_loops_fs_float_uni", "a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge)"),
     ("deqp_loops_fs_select", "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"),
-    ("deqp_loops_fs_uncond_break", "control flow (if, a loop, a return before the end)"),
     ("deqp_loops_fs_vec_dyn", "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,"),
     ("deqp_loops_vs_dowhile_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
     ("deqp_loops_vs_float_uni", "a loop in a vertex shader"),
     ("deqp_loops_vs_for_uni", "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member,"),
     ("deqp_loops_vs_idx_dyn", "a constant operation on or to a value that is not a finite normal float"),
     ("deqp_loops_vs_idx_static", "a constant operation on or to a value that is not a finite normal float"),
-    ("deqp_loops_vs_nested_const", "a loop in a vertex shader"),
     ("deqp_loops_vs_select", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
     ("deqp_loops_vs_vector", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
 ];

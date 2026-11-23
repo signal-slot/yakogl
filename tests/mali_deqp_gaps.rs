@@ -6,8 +6,10 @@
 //! `tools/mali/testdata/deqp_shapes/index.tsv` that no other reference drew,
 //! each drawn from its `deqp_shapes/<family>_<shape>` example pair with
 //! `tools/mali/deqp_ref.sh` (the drm-shim instrument). One test per
-//! reference. Four compile byte-equal and run ([`MATCHED`]). Two compile
-//! and differ ([`DIFFERS`]) and four are refused ([`REFUSED`], the whole
+//! reference. Four compile byte-equal and run ([`MATCHED`]); one kept loop
+//! compiles to Mesa's words with the loop cap's ([`CAPPED`], compared in
+//! `src/shaderc/online/mali/tests.rs`). One compiles and differs
+//! ([`DIFFERS`]) and four are refused ([`REFUSED`], the whole
 //! `MaliError` message): those tests are `#[ignore]`d, and
 //! `refusals_pinned` asserts each one's state now. The lowering that moves
 //! one moves its entry in the same commit.
@@ -22,7 +24,12 @@ mod mali_ref;
 const MATCHED: &[&str] = &["intval_bool_literal", "intval_float_compare", "intval_harness_isok", "intval_other"];
 
 /// The references that compile and differ from their expect.json.
-const DIFFERS: &[&str] = &["loops_fs_kept_while", "mixprec_fs_varying_plain"];
+const DIFFERS: &[&str] = &["mixprec_fs_varying_plain"];
+
+/// The kept loops that compile: their words are Mesa's with the loop cap's
+/// (the pass counter, which the shared compare does not edit), compared in
+/// `src/shaderc/online/mali/tests.rs` (`deqp_gaps_<name>_is_mesa_26_2_1_with_the_loop_cap`).
+const CAPPED: &[&str] = &["loops_fs_kept_while"];
 
 /// Every refused reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
@@ -92,10 +99,14 @@ fn loops_fs_kept_for_index() {
 
 /// loops/fs_kept_while: a while loop with a selected iteration count
 /// (`loops.while_constant_iterations.select_iteration_count_fragment`).
+/// A kept loop: it compiles, and its words are Mesa's with the loop cap's
+/// ([`CAPPED`]).
 #[test]
-#[ignore = "differs: fs.fragment is 22 words ours, 19 Mesa's (the kept loop's body); pinned by refusals_pinned"]
 fn loops_fs_kept_while() {
-    mali_ref::assert_matches("deqp_gaps_loops_fs_kept_while");
+    let r = mali_ref::Reference::load("deqp_gaps_loops_fs_kept_while");
+    if let Err(e) = mali_ref::compile_pair(&r.vs, &r.fs) {
+        panic!("deqp_gaps_loops_fs_kept_while: refused: {e}");
+    }
 }
 
 /// mixprec/fs_mixed_other: a random-shader fragment shader of int, bool
@@ -124,8 +135,8 @@ fn mixprec_fs_varying_plain() {
 }
 
 /// Each of [`REFUSED`] is refused with exactly its message (not a
-/// substring), each of [`DIFFERS`] compiles and differs, and the three
-/// lists cover every `deqp_gaps_*` reference on disk.
+/// substring), each of [`DIFFERS`] compiles and differs, and the four
+/// lists ([`CAPPED`] too) cover every `deqp_gaps_*` reference on disk.
 #[test]
 fn refusals_pinned() {
     let mut on_disk: Vec<String> = std::fs::read_dir("tools/mali/testdata")
@@ -134,7 +145,8 @@ fn refusals_pinned() {
         .filter_map(|n| n.strip_prefix("deqp_gaps_")?.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut listed: Vec<&str> = MATCHED.iter().chain(DIFFERS).copied().chain(REFUSED.iter().map(|(n, _)| *n)).collect();
+    let mut listed: Vec<&str> =
+        MATCHED.iter().chain(DIFFERS).chain(CAPPED).copied().chain(REFUSED.iter().map(|(n, _)| *n)).collect();
     listed.sort_unstable();
     assert_eq!(on_disk, listed, "a deqp_gaps_* reference has no entry here");
     let mut changed = Vec::new();

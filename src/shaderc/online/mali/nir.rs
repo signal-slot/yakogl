@@ -3798,9 +3798,12 @@ enum Step {
 /// docs/notes/mali-int-loops.md): instructions and one head test `if (c)
 /// {} else break;` (`Lower::break_unless`), the first control-flow node,
 /// nothing else. A `for` of a constant bound is unrolled ([`walk`]), one of
-/// a run-time bound kept (gm2_cf_loop_uni_vs, glmark2 loop's vs 3cb0); a
-/// nested loop, an `if`, a `continue` or a second `break` has no vertex
-/// reference (`intloop_loop_nested_vs` keeps the refusal).
+/// a run-time bound kept (gm2_cf_loop_uni_vs, glmark2 loop's vs 3cb0); an
+/// `if`, a `continue` or a second `break` has no vertex reference. A loop
+/// of this form after the head test nests (deqp_loops_vs_nested_const:
+/// counted loops in a counted loop, all unrolled, the inner ones first as
+/// `nir_opt_loop_unroll` takes them); a kept one nested in another, or
+/// around one, is refused when it is walked (`intloop_loop_nested_vs`).
 fn vs_loop_shape(m: &Module<'_>, body: ir::Range) -> bool {
     let mut head = false;
     for nd in m.nodes_of(body) {
@@ -3809,10 +3812,51 @@ fn vs_loop_shape(m: &Module<'_>, body: ir::Range) -> bool {
             IrNode::If { then_, else_, .. } if !head && then_.is_empty() && m.nodes_of(else_) == [IrNode::Break] => {
                 head = true
             }
+            IrNode::Loop { body } if head && vs_loop_shape(m, body) => {}
             _ => return false,
         }
     }
     head
+}
+
+/// The steps [`vs_steps`] makes of a loop of [`vs_loop_shape`]'s form.
+fn vs_loop_steps(m: &Module<'_>, body: ir::Range) -> usize {
+    2 + m
+        .nodes_of(body)
+        .iter()
+        .map(|nd| match *nd {
+            IrNode::Loop { body } => vs_loop_steps(m, body),
+            _ => 1,
+        })
+        .sum::<usize>()
+}
+
+/// The steps of loop `body` ([`vs_loop_shape`]) into `steps` from `k`:
+/// [`Step::LoopBegin`], the body's instructions, its head test and its
+/// nested loops, then [`Step::LoopEnd`].
+fn put_loop(m: &Module<'_>, body: ir::Range, steps: &mut [Step], k: &mut usize) {
+    let begin = *k;
+    steps[*k] = Step::LoopBegin(body, (begin + vs_loop_steps(m, body) - 1) as u32);
+    *k += 1;
+    for nd in m.nodes_of(body) {
+        match *nd {
+            IrNode::Instr(id) => {
+                steps[*k] = Step::Instr(id);
+                *k += 1;
+            }
+            IrNode::If { cond, .. } => {
+                steps[*k] = Step::Head(cond);
+                *k += 1;
+            }
+            IrNode::Loop { body } => put_loop(m, body, steps, k),
+            _ => {
+                steps[*k] = Step::Refuse(MaliError::LoopVertex);
+                *k += 1;
+            }
+        }
+    }
+    steps[*k] = Step::LoopEnd(begin as u32);
+    *k += 1;
 }
 
 /// The vertex shader's body as [`Step`]s. An `if` is flattened when each
@@ -3848,7 +3892,7 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
     for nd in nodes {
         n += match *nd {
             IrNode::If { then_, else_, .. } => flat(then_, else_).map_or(1, |k| k + 3),
-            IrNode::Loop { body } if vs_loop_shape(m, body) => body.len as usize + 2,
+            IrNode::Loop { body } if vs_loop_shape(m, body) => vs_loop_steps(m, body),
             _ => 1,
         };
     }
@@ -3865,18 +3909,7 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
             IrNode::Instr(id) => put!(Step::Instr(id)),
             IrNode::Return if j + 1 == nodes.len() => {}
             /* a counted or uniform-bounded `for` ([`vs_loop_shape`]) */
-            IrNode::Loop { body } if vs_loop_shape(m, body) => {
-                let begin = k as u32;
-                put!(Step::LoopBegin(body, begin + 1 + body.len));
-                for nd in m.nodes_of(body) {
-                    match *nd {
-                        IrNode::Instr(id) => put!(Step::Instr(id)),
-                        IrNode::If { cond, .. } => put!(Step::Head(cond)),
-                        _ => put!(Step::Refuse(MaliError::LoopVertex)),
-                    }
-                }
-                put!(Step::LoopEnd(begin));
-            }
+            IrNode::Loop { body } if vs_loop_shape(m, body) => put_loop(m, body, steps, &mut k),
             /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
             IrNode::Loop { .. } => put!(Step::Refuse(MaliError::LoopVertex)),
             IrNode::If { then_, else_, .. } if flat(then_, else_).is_err() => {
@@ -4389,6 +4422,10 @@ fn walk<'s>(
     let mut varying_origins = [[0u16; 4]; MAX_VARYINGS];
     /* the loop being walked ([`Step::LoopBegin`]) */
     let mut lp = VsLoop::None;
+    /* the loops around it, innermost last (a nested counted loop,
+     * [`vs_loop_shape`]) */
+    let mut outer = [VsLoop::None; 4];
+    let mut nouter = 0;
     let mut kept_loop: Option<KeptLoop> = None;
     let steps = vs_steps(m, scratch)?;
     let mut k = 0;
@@ -4411,7 +4448,16 @@ fn walk<'s>(
                     return Err(MaliError::Defect(Defect::IrIndex));
                 };
                 let guess = super::nir_fs::guessed_trips(m, m.nodes_of(body));
-                lp = if super::nir_fs::ir_folds(m, head.val, &w.locals, 0) || guess.is_some() {
+                let counted = super::nir_fs::ir_folds(m, head.val, &w.locals, 0) || guess.is_some();
+                /* a loop in a loop: both unrolled, or no reference */
+                if !matches!(lp, VsLoop::None) {
+                    if matches!(lp, VsLoop::Kept) || !counted || nouter == outer.len() {
+                        return Err(MaliError::LoopVertex);
+                    }
+                    outer[nouter] = lp;
+                    nouter += 1;
+                }
+                lp = if counted {
                     VsLoop::Unroll { end: end as usize, pass: 0, first: vs.n, guess }
                 } else {
                     kept_loop = Some(vs_kept_begin(&mut vs, m, body, &mut w.locals)?);
@@ -4436,6 +4482,10 @@ fn walk<'s>(
                             return Err(MaliError::LoopVertex);
                         }
                         lp = VsLoop::None;
+                        if nouter > 0 {
+                            nouter -= 1;
+                            lp = outer[nouter];
+                        }
                         k = end + 1;
                     }
                     (VsLoop::Unroll { .. }, _) if matches!(c, Val::Const(_)) => {}
