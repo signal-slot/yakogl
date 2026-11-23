@@ -64,7 +64,7 @@ and warnings; the <a href="#records">records</a> list them.</p>
 <tbody>
 <tr id="mali"><th scope="row"><a href="https://wiki.friendlyelec.com/wiki/index.php/NanoPC-T6">FriendlyElec NanoPC-T6</a></th><td>Arm Mali-G610</td>
 <td>On the board's Linux, 165 of 256 <code>gl_test</code> cases pass (2026-11-12) and
-dEQP-GLES2 reads 5,456 passes of 17,165 cases (2026-11-15).
+dEQP-GLES2 reads 7,353 passes of 17,165 cases (2026-11-21, 25 rows rerun over the 2026-11-15 tree).
 On Zephyr, the regression set of <code>gl_test</code> passes 50 of 50 cases, drawn off-screen
 (2026-11-16, started from the board's Linux by kexec), and dEQP-GLES2 reads 6,644 passes,
 9,545 failures and 973 not-supported cases of 17,165, all 76 images finished (2026-11-17);
@@ -80,9 +80,10 @@ No image has run on the board yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-stm32mp257f-dk.md">Details</a></td></tr>
 <tr id="pi5"><th scope="row"><a href="https://www.raspberrypi.com/products/raspberry-pi-5/">Raspberry Pi 5</a></th><td>Broadcom V3D 7.1</td>
 <td>The frame path runs against a simulator on the host. Probe images have run on the board
-(2026-11-19 to 2026-11-21): the GPU identity words, a first clear, a triangle (Mesa's shaders
-and ours) and a texture-unit mip-chain job pass, and the firmware's property mailbox answers.
-There is no dEQP result and no display yet.
+(2026-11-19 to 2026-11-22): the GPU identity words, a first clear, a triangle (Mesa's shaders
+and ours) and a texture-unit mip-chain job pass, the firmware's property mailbox answers, and the firmware's display plane is adopted
+and its pixel valve, clock and HDMI registers are read (no register written).
+There is no dEQP result and no display of our own yet.
 <a href="https://github.com/signal-slot/yakogl/blob/main/docs/notes/pre-study-rpi5.md">Details</a></td></tr>
 </tbody>
 </table></div>
