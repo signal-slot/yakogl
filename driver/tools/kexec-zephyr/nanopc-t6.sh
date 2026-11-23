@@ -91,7 +91,8 @@
 # seconds after the jump, from the jump until the board is back in Armbian
 # or the deadline passes) and screen.log (the capture tool's error output
 # for each request that failed), record.txt (this script's lines, the hand,
-# the registers before and after), linux-before.dmesg-w (`dmesg -w` of the old
+# the registers before and after, the CPU clock before the jump: see
+# T6_CPU_KHZ), linux-before.dmesg-w (`dmesg -w` of the old
 # Linux, from before the jump until the connection drops), linux-after.dmesg
 # (`dmesg` of the Linux that came back). The registers, read with mmio_rd:
 # GLB_RST_ST 0xfd7c0c04, GLB_RST_CON 0xfd7c0c10, WDT0 WDT_CR and WDT_TORR.
@@ -182,6 +183,35 @@
 #                   (who_remote.sh; the jump ends them; ask whoever holds them
 #                   first). Console logins (tty1, ttyS2, seat0: Armbian's
 #                   autologin) are printed, not refused.
+#   T6_CPU_KHZ      --go: hold the cpufreq policy of the CPU the jump runs on
+#                   at this step, in kHz (e.g. 1800000), across the jump
+#                   (issue #11468: the image does not set the CPU clock; it
+#                   runs at the one Linux left). It must be one of the
+#                   policy's scaling_available_frequencies; otherwise the dry
+#                   run and --go refuse (exit 3) and list the steps. Before
+#                   the jump, after every other step that can refuse, the
+#                   board sets scaling_min_freq and scaling_max_freq to it
+#                   (in the order that keeps min <= max) and reads
+#                   scaling_cur_freq back until it is the step, at most
+#                   CPU_HOLD_DS tenths of a second; otherwise it writes the
+#                   old min and max back and there is no jump. When the jump
+#                   is refused or does not happen after the hold, the old min
+#                   and max are written back too (only in the Linux that
+#                   made the hold: its boot_id). No module is loaded, the
+#                   governor is not changed. Unset (or empty): nothing is
+#                   written, the governor chooses the clock.
+#                   Either way the record holds the policy's facts read
+#                   right before the jump ("cpufreq: before the jump: ...":
+#                   the governor, the driver, scaling_cur_freq, _min_freq,
+#                   _max_freq, _available_frequencies, cpuinfo_cur_freq) and
+#                   the jump command's own read of scaling_cur_freq
+#                   ("cpufreq: at the jump: ..."). The CPU: the crash route
+#                   jumps on CPU 0, the normal route on reboot_cpu
+#                   (/sys/kernel/reboot/cpu, or the first online CPU when
+#                   that one is offline); t6-cpufreq.sh, beside this, says
+#                   why and does the reads and writes on the board. When the
+#                   CPU is not known, every policy is recorded and
+#                   T6_CPU_KHZ is refused.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -212,6 +242,10 @@ UART_PROOF_S=5
 # least three requests; 90 s leaves room for a slow unit.
 SCREEN_PROOF_S=${SCREEN_PROOF_S:-90}
 SCREEN_SHOT_S=30
+# --go with T6_CPU_KHZ: how long the board reads scaling_cur_freq back
+# after the hold's writes, in tenths of a second. The governor applies new
+# limits in the write itself, so the first read is expected to match.
+CPU_HOLD_DS=50
 
 die() { echo "nanopc-t6.sh: $*" >&2; exit 2; }
 refuse() { echo "nanopc-t6.sh: REFUSED: $*" >&2; echo "nanopc-t6.sh: nothing was copied, loaded or changed." >&2; exit 3; }
@@ -240,6 +274,8 @@ if [ "$CRASH" = 1 ] && [ "$LINUX_WDT" = 0 ]; then
 	echo "nanopc-t6.sh: REFUSED: --crash needs the Linux watchdog (drop --no-linux-wdt): if the crash kexec does not happen, only WDT0 brings the board back" >&2
 	exit 3
 fi
+ROUTE=normal
+[ "$CRASH" = 0 ] || ROUTE=crash
 : "${BOARD_HOST:?set BOARD_HOST=root@<the NanoPC-T6>}"
 # shellcheck disable=SC2206  # options are words
 SSH_OPTS=(${BOARD_SSH_OPTS:-})
@@ -293,6 +329,9 @@ board() { timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 
 # who_remote, defined on the board ahead of the commands that call it: the
 # remote sessions without this ssh command's own (who_remote.sh).
 WHO_REMOTE=$(cat "$HERE/who_remote.sh") || die "cannot read $HERE/who_remote.sh"
+# The cf_ functions (t6-cpufreq.sh), sent the same way: the facts of the
+# jump CPU's cpufreq policy, the hold and its undo.
+CPUFREQ_FN=$(cat "$HERE/t6-cpufreq.sh") || die "cannot read $HERE/t6-cpufreq.sh"
 # vp0_mode, defined on the board the same way: VP0's lines of the DRM state
 # on one line, "enable=1 active=1 mode: "1024x768": 60 65000 1024 1048 1184
 # 1344 768 771 777 806 0x40 0xa" (linux v6.18 drm_atomic.c:443-455, the
@@ -339,7 +378,9 @@ adopt_name() {
 ADOPT_SET=${ADOPT_MODES%% *}
 hold_mode() { local n; n=$(adopt_name "$1"); echo "${n:-$ADOPT_SET}"; }
 facts=$(board "$WHO_REMOTE
-$VP0_FN"'
+$VP0_FN
+$CPUFREQ_FN
+cf_facts $ROUTE"'
 set -u
 printf "compatible=%s\n" "$(tr "\0" " " </proc/device-tree/compatible)"
 printf "kernel=%s\n" "$(uname -r)"
@@ -498,6 +539,27 @@ else
 fi
 [ -n "${T6_UART:-}${T6_SCREEN:-}" ] || echo "paths: neither T6_UART nor T6_SCREEN is set: --go would refuse"
 echo "board: GPU device users '$(fact gpu_users)'; remote sessions '$(fact who_remote)', console logins '$(fact who_local)'"
+# The CPU clock (T6_CPU_KHZ). cpu_desc <fact function>: the jump CPU and
+# its policy's facts (cf_facts' lines), as the record says them.
+cpu_desc() {
+	if [ -n "$("$1" cpufreq_cpu)" ]; then
+		printf 'the jump runs on CPU %s (%s); %s\n' "$("$1" cpufreq_cpu)" "$("$1" cpufreq_why)" "$("$1" cpufreq_line)"
+	else
+		printf 'the jump CPU is not known (%s); %s\n' "$("$1" cpufreq_why)" "$("$1" cpufreq_line)"
+	fi
+}
+# cpu_step_ok <steps>: T6_CPU_KHZ is one of them.
+cpu_step_ok() { [[ "$T6_CPU_KHZ" =~ ^[0-9]+$ ]] && [[ " $1 " == *" $T6_CPU_KHZ "* ]]; }
+echo "cpufreq: $(cpu_desc fact)"
+if [ -n "${T6_CPU_KHZ:-}" ]; then
+	{ [ -n "$(fact cpufreq_policy)" ] && [ "$(fact cpufreq_policy)" != absent ]; } ||
+		refuse "T6_CPU_KHZ=$T6_CPU_KHZ: the cpufreq policy of the CPU the jump runs on is not known: $(cpu_desc fact)"
+	cpu_step_ok "$(fact cpufreq_steps)" ||
+		refuse "T6_CPU_KHZ=$T6_CPU_KHZ is not one of $(fact cpufreq_policy)'s steps (scaling_available_frequencies, kHz): $(fact cpufreq_steps)"
+	echo "cpufreq: T6_CPU_KHZ=$T6_CPU_KHZ: --go holds $(fact cpufreq_policy) at $T6_CPU_KHZ kHz right before the jump, and writes its scaling_min_freq $(fact cpufreq_min) and scaling_max_freq $(fact cpufreq_max) back when there is no jump"
+else
+	echo "cpufreq: T6_CPU_KHZ is not set: --go records the clock before the jump and writes nothing; the governor chooses it"
+fi
 
 # ---- 3. the plan ------------------------------------------------------------
 open_wdt=
@@ -548,6 +610,16 @@ else
 	reread="kexec_loaded"
 	[ "$ck_s" -lt 0 ] || reread="kexec_loaded, kexec_crash_loaded"
 fi
+cpu_plan="
+     then the CPU clock: $(fact cpufreq_policy)'s cpufreq facts into the record"
+if [ -n "${T6_CPU_KHZ:-}" ]; then
+	cpu_plan+="; $(fact cpufreq_policy) held at
+     $T6_CPU_KHZ kHz (scaling_min_freq and scaling_max_freq, in the order that
+     keeps min <= max) and scaling_cur_freq read back until it is $T6_CPU_KHZ
+     (at most $((CPU_HOLD_DS / 10)) s); otherwise the old values are written back and there is
+     no jump; they are written back too when the jump is refused or does
+     not happen"
+fi
 cat <<EOF
 plan (--go):
   1. take the board lock (driver/tools/kexec-zephyr/board_lock.sh, per BOARD_HOST);
@@ -560,7 +632,7 @@ plan (--go):
      and the paths the run has; with T6_UART the UART (read only) into it
      until the board is back, and \`dmesg -w\` of the board until the jump
   3. copy kexec_zephyr, mmio_rd$copy_kms and $(basename "$IMG") to $BOARD_HOST:$STAGE/, then
-     sync; read GLB_RST_ST, GLB_RST_CON, WDT0 CR and TORR into the record$mode_step
+     sync; read GLB_RST_ST, GLB_RST_CON, WDT0 CR and TORR into the record$mode_step$cpu_plan
   4. on the board: ${open_wdt}$STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg
      $how
   5. the image, on UART2 (1500000 baud, into uart.log): the raw early lines
@@ -627,6 +699,7 @@ cleanup() {
 	if [ -n "$uart_pid" ]; then kill "$uart_pid" 2>/dev/null || true; fi
 	if [ -n "$proof_pid" ]; then kill "$proof_pid" 2>/dev/null || true; fi
 	if [ -n "$screen_pid" ]; then kill "$screen_pid" 2>/dev/null || true; fi
+	cpu_restore || true
 	mode_stop || true
 	rm -rf "$tmp"
 }
@@ -688,6 +761,28 @@ $MODE_STOP"); then
 		rec "mode: Linux's own mode is back on VP0: $now"
 	else
 		rec "mode: VP0 does NOT run the mode it ran before the set: now '$now', before '$mode_before'" >&2
+	fi
+}
+# The hold of the CPU clock (T6_CPU_KHZ): "<policy> <old min> <old max>"
+# while the board may hold the policy, else empty. cpu_restore writes the
+# old min and max back (once), in the Linux that made the hold only
+# (cf_restore compares the boot_id), and records what the board says. After
+# the jump nothing is left to undo: the board came back with a new boot_id
+# (mode_back), so the Linux that held the clock is gone.
+cpu_held=
+cpu_restore() {
+	[ -n "$cpu_held" ] || return 0
+	local held=$cpu_held out
+	cpu_held=
+	if [ "$mode_back" = 1 ]; then
+		rec "cpufreq: the hold of ${held%% *} ended with the Linux that made it (the board came back with a new boot_id)"
+		return 0
+	fi
+	if out=$(board "$CPUFREQ_FN
+cf_restore $held $old_boot" 2>&1); then
+		rec "cpufreq: undo: $(tr '\n' ' ' <<<"$out")"
+	else
+		rec "cpufreq: undo FAILED: scaling_min_freq and scaling_max_freq of ${held%% *} were not written back to ${held#* } ($(tr '\n' ' ' <<<"$out")); they stay until Linux reboots or someone writes them" >&2
 	fi
 }
 HOLD_MAX=${HOLD_MAX:-$((bound_s + 600))}
@@ -1020,6 +1115,62 @@ hdmi_out" || true)"
 	if [ -n "${T6_SCREEN:-}" ]; then screen_proof; fi
 fi
 
+# The CPU clock (T6_CPU_KHZ; t6-cpufreq.sh), the last step before the jump
+# command: the jump CPU's policy read again, into the record, and with
+# T6_CPU_KHZ held at that step. A hold that does not take is undone on the
+# board (cf_hold); every refusal from here, a jump the board refuses and a
+# jump that does not happen undo it from here (cpu_refuse, finish and the
+# EXIT trap, through cpu_restore).
+cpu_refuse() {
+	rec "cpufreq: REFUSED: $*; not jumping" >&2
+	cpu_restore
+	mode_stop
+	exit 1
+}
+cf_rc=0
+if [ -n "${T6_CPU_KHZ:-}" ]; then
+	# The undo needs the old values even when the connection is cut in the
+	# middle: those read before the lock, until the board names its own.
+	cpu_held="$(fact cpufreq_policy) $(fact cpufreq_min) $(fact cpufreq_max)"
+	cf_out=$(board "$CPUFREQ_FN
+cf_hold $ROUTE $T6_CPU_KHZ $CPU_HOLD_DS" 2>&1) || cf_rc=$?
+else
+	cf_out=$(board "$CPUFREQ_FN
+cf_facts $ROUTE" 2>&1) || cf_rc=$?
+fi
+cf_fact() { printf '%s\n' "$cf_out" | sed -n "s/^$1=//p" | head -1; }
+if [ -n "$(cf_fact cpufreq_why)" ]; then
+	rec "cpufreq: before the jump: $(cpu_desc cf_fact)"
+else
+	rec "cpufreq: before the jump: not read (rc $cf_rc: $(tr '\n' ' ' <<<"$cf_out" | cut -c1-300))"
+fi
+cpu_policy=$(cf_fact cpufreq_policy)
+[ -n "$cpu_policy" ] || cpu_policy=$(fact cpufreq_policy)
+if [ -n "${T6_CPU_KHZ:-}" ]; then
+	cf_old=$(cf_fact cpufreq_old)
+	[ -z "$cf_old" ] || cpu_held="$cpu_policy $cf_old"
+	cf_writes=$({ grep '^cpufreq: ' <<<"$cf_out" || true; } | sed 's/^cpufreq: //' | tr '\n' ';' | sed 's/;$//; s/;/; /g')
+	rec "cpufreq: hold $T6_CPU_KHZ kHz on $cpu_policy (scaling_min_freq and scaling_max_freq were ${cf_old:-unread}): ${cf_writes:-no write} (rc $cf_rc)"
+	cf_held=$(cf_fact cpufreq_held)
+	case $cf_rc in
+	0)
+		read -r cf_cur cf_ds cf_hw <<<"$cf_held"
+		[ "${cf_cur:-}" = "$T6_CPU_KHZ" ] ||
+			cpu_refuse "the board's hold gave no read-back of $T6_CPU_KHZ ('$cf_held')"
+		rec "cpufreq: held: $cpu_policy's scaling_cur_freq reads $cf_cur kHz $((cf_ds / 10)).$((cf_ds % 10)) s after the writes, cpuinfo_cur_freq $cf_hw; scaling_min_freq and scaling_max_freq go back to ${cpu_held#* } if there is no jump"
+		;;
+	1)
+		cpu_held=
+		cpu_refuse "$cpu_policy did not take $T6_CPU_KHZ kHz; the board wrote scaling_min_freq and scaling_max_freq back ($(cf_fact cpufreq_restored))"
+		;;
+	3)
+		cpu_held=
+		cpu_refuse "the board refused the hold before any write"
+		;;
+	*) cpu_refuse "the hold did not complete (rc $cf_rc)" ;;
+	esac
+fi
+
 # What the jump command does when kexec_zephyr returns. On the normal route
 # the board is as it was: the magic close stops WDT0 from resetting it
 # (Linux feeds it again). On the crash route kexec_zephyr may have taken
@@ -1036,6 +1187,13 @@ else
 	return_wdt="printf V >&3; exec 3>&-
 echo \"linux-wdt: kexec_zephyr returned \$rc: magic close written, Linux feeds WDT0 from now on\""
 fi
+# The jump command's own read of the jump CPU's clock, the last one before
+# kexec_zephyr: it reaches the record with the command's other lines.
+at_jump=
+if [[ "$cpu_policy" =~ ^policy[0-9]+$ ]]; then
+	at_jump="echo \"cpufreq: at the jump: $cpu_policy scaling_cur_freq \$(cat /sys/devices/system/cpu/cpufreq/$cpu_policy/scaling_cur_freq 2>/dev/null || echo unread)\"
+"
+fi
 if [ "$LINUX_WDT" = 1 ]; then
 	# WDT_CR (0xfeaf0000) and WDT_TORR (+4) after the open, as mmio_rd
 	# prints them ("0xfeaf0000: 0x00000009"); WDT_EN is bit 0. The sleep
@@ -1050,12 +1208,12 @@ if [ -z \"\$cr\" ] || [ \$(( cr & 1 )) -ne 1 ]; then
   printf V >&3; exec 3>&-; exit 98
 fi
 echo \"linux-wdt: WDT0 CR \$cr TORR \$torr after the open: WDT_EN 1, jumping\"
-sleep 1
+${at_jump}sleep 1
 $STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg; rc=\$?
 $return_wdt
 exit \$rc"
 else
-	jump="sync; $STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg"
+	jump="sync; ${at_jump}$STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg"
 fi
 paths=
 [ -z "${T6_UART:-}" ] || paths="UART"
@@ -1089,6 +1247,7 @@ fi
 # The capture ends by itself when the old Linux goes; it is stopped here in
 # any case, by its own pid.
 finish() {
+	cpu_restore
 	mode_stop
 	if [ -n "$dmesg_pid" ]; then
 		kill "$dmesg_pid" 2>/dev/null || true

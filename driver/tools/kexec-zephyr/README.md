@@ -80,6 +80,24 @@ without it) stopped before any output and held the board until its power was
 cut. A WDT0 timeout brings this SoC back into Armbian (measured 2026-10-19:
 `driver/docs/nanopc-t6-mali.md`, "The watchdog proof and the trap").
 
+The image does not set the CPU clock: it runs at the frequency Linux's
+cpufreq governor left on the CPU at the jump (issue #11468). So the dry run
+prints, and `--go` records right before the jump, the cpufreq facts of the
+CPU the jump runs on (CPU 0 on the crash route; `reboot_cpu` on the normal
+route): the governor, the driver, `scaling_cur_freq`, `scaling_min_freq`,
+`scaling_max_freq`, `scaling_available_frequencies` and `cpuinfo_cur_freq`
+("cpufreq: before the jump: ..."), and the jump command reads
+`scaling_cur_freq` once more right before `kexec_zephyr` ("cpufreq: at the
+jump: ..."). `T6_CPU_KHZ=<one of the steps>` holds that policy at one step
+for the jump: the board sets `scaling_min_freq` and `scaling_max_freq` to it
+and reads `scaling_cur_freq` back until it is the step (at most 5 s). A
+value that is not a step is refused before anything changes, and the
+refusal lists the steps. A hold that does not take, a jump the board
+refuses and a jump that does not happen write the old min and max back.
+Without `T6_CPU_KHZ` nothing is written. `t6-cpufreq.sh`, beside this, does
+the reads and writes on the board; its header says why the jump runs on
+that CPU.
+
 The later probes go through the same script the same way: build the
 `t6_fw` (Z3) or `t6_submit` (Z4) image and pass its `zephyr.bin` in place of
 `t6_hello`'s, dry run first. `t6-verdict.sh` then judges the `uart.log` the
@@ -143,12 +161,16 @@ too (board.sh takes only its board lease, which waits no longer:
 `LOCK_WAIT` 0). The run's verdict comes from the `uart.log`: for a probe
 (`<probe>: build` in it) it is `t6-verdict.sh`'s PASS or FAIL, for a sample
 its result line (`gl_test: all:`, `deqp: summary:`). `<logdir>` must be
-outside any checkout, as `T6_RECORD_DIR` must.
+outside any checkout, as `T6_RECORD_DIR` must. The runner's other options
+(`T6_CPU_KHZ`, `T6_ALLOW_SESSIONS`, `SCREEN_PROOF_S`) reach it through the
+environment: board.sh passes its own environment on.
 
 ```sh
 BOARD_HOST=root@<t6> tools/board.sh --dry-run nanopc-t6 run build/t6_hello/zephyr/zephyr.bin <logdir>   # prints, touches nothing
 BOARD_HOST=root@<t6> BOARD_UART=<tty> T6_HAND=<name> \
   tools/board.sh nanopc-t6 run build/t6_hello/zephyr/zephyr.bin <logdir>                              # the jump
+BOARD_HOST=root@<t6> BOARD_UART=<tty> T6_HAND=<name> T6_CPU_KHZ=1800000 \
+  tools/board.sh nanopc-t6 run build/t6_hello/zephyr/zephyr.bin <logdir>                              # the jump, CPU clock held at 1.8 GHz
 BOARD_HOST=root@<t6> BOARD_UART=<tty> T6_HAND=<name> T6_CRASH=1 \
   tools/board.sh nanopc-t6 run build/t6_hello/zephyr/zephyr.bin <logdir>                              # the jump, crash route
 BOARD_HOST=root@<t6> BOARD_SCREEN=<unit> T6_HAND=<name> T6_CRASH=1 \

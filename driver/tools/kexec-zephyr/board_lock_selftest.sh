@@ -162,6 +162,20 @@
 # t6-screen-nonce.py's own self-test (the holder's drawing decoded back,
 # the pictures that must not pass, a JPEG round trip) runs as one check.
 #
+# A fourteenth (issue #11468): the image runs at the CPU clock Linux's
+# governor left at the jump. nanopc-t6.sh records the cpufreq facts of the
+# CPU the jump runs on, and T6_CPU_KHZ holds that policy at one step
+# (t6-cpufreq.sh). Its functions run here on a made-up sysfs, and the fake
+# board's ssh runs them there too. The checks: the jump CPU (CPU 0 on the
+# crash route, reboot_cpu on the normal one, the first online CPU when
+# reboot_cpu is offline, every policy when it is not known); min and max
+# written in the order that keeps min <= max for a step above, below and
+# inside the range; a value outside the steps refused with the steps listed,
+# before any write (dry run and --go); a hold whose scaling_cur_freq never
+# reads the step undone by the board, and no jump; a jump the board refuses
+# after the hold undone from the host; no undo after a jump, nor in another
+# Linux; without T6_CPU_KHZ the record lines and no write.
+#
 # The T6's other runners on the lock, driver/tools/uboot-t6/prompt-reads.sh
 # (the reads at the U-Boot prompt) and prompt-go.sh (an image started with
 # U-Boot's go), are held to the same rule: LOCK_WAIT 0 before they source
@@ -453,6 +467,46 @@ vp0_1080='enable=1 active=1 mode: "1920x1080": 60 148500 1920 2008 2052 2200 108
 vp0_adopt='enable=1 active=1 mode: "1024x768": 60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0xa'
 vp0_720='enable=1 active=1 mode: "1280x720": 60 74250 1280 1390 1430 1650 720 725 730 750 0x40 0x5'
 mkdir "$tmp/fakebin"
+# The board's cpufreq (t6-cpufreq.sh), a made-up /sys and /proc under
+# $tmp/cfroot: the T6's three policies (CPUs 0-3, 4-5, 6-7) and their steps,
+# reboot_cpu 0, all eight CPUs online, the boot_id the fake board reports
+# before the jump. cf_root [min max cur]: made again, policy0's
+# scaling_min_freq, scaling_max_freq and scaling_cur_freq as given (default
+# Linux's 408000 1800000 408000).
+cfroot=$tmp/cfroot
+cf_steps0='408000 600000 816000 1008000 1200000 1416000 1608000 1800000'
+cf_steps4='408000 600000 816000 1008000 1200000 1416000 1608000 1800000 2016000 2208000 2256000'
+cf_root() {
+	local c p
+	rm -rf "$cfroot"
+	mkdir -p "$cfroot/sys/kernel/reboot" "$cfroot/sys/devices/system/cpu/cpufreq" "$cfroot/proc/sys/kernel/random"
+	echo 0 > "$cfroot/sys/kernel/reboot/cpu"
+	echo 0-7 > "$cfroot/sys/devices/system/cpu/online"
+	echo boot-before > "$cfroot/proc/sys/kernel/random/boot_id"
+	for p in 0:"0 1 2 3":"$cf_steps0" 4:"4 5":"$cf_steps4" 6:"6 7":"$cf_steps4"; do
+		local n=${p%%:*} cpus steps d
+		cpus=${p#*:}; cpus=${cpus%%:*}; steps=${p##*:}
+		d=$cfroot/sys/devices/system/cpu/cpufreq/policy$n
+		mkdir "$d"
+		echo "$cpus" > "$d/related_cpus"
+		echo cpufreq-dt > "$d/scaling_driver"
+		echo ondemand > "$d/scaling_governor"
+		echo "$steps " > "$d/scaling_available_frequencies"
+		echo 408000 > "$d/scaling_min_freq"
+		echo "${steps##* }" > "$d/scaling_max_freq"
+		echo 408000 > "$d/scaling_cur_freq"
+		echo 408000 > "$d/cpuinfo_cur_freq"
+		for c in $cpus; do
+			mkdir -p "$cfroot/sys/devices/system/cpu/cpu$c"
+			ln -s ../cpufreq/policy$n "$cfroot/sys/devices/system/cpu/cpu$c/cpufreq"
+		done
+	done
+	d=$cfroot/sys/devices/system/cpu/cpufreq/policy0
+	echo "${1:-408000}" > "$d/scaling_min_freq"
+	echo "${2:-1800000}" > "$d/scaling_max_freq"
+	echo "${3:-408000}" > "$d/scaling_cur_freq"
+}
+cf_root
 printf '%s\n' "$vp0_1080" > "$tmp/vp0-1920x1080"
 printf '%s\n' "$vp0_adopt" > "$tmp/vp0-1024x768"
 printf '%s\n' 't6-kms-mode: HDMI-A-1 on CRTC 81: "1920x1080" 148500 kHz h 1920 2008 2052 2200 v 1080 1084 1089 1125 +hsync +vsync set (fb 60), read back; was fb 50, "1920x1080" 148500 kHz; held by pid 4242 for at most 600 s' > "$tmp/held-1920x1080"
@@ -465,6 +519,7 @@ linux_mode() { if [ -n "\${T6_FAKE_VP0_LINUX+set}" ]; then printf '%s\n' "\$T6_F
 case "\$last" in
 *'printf "compatible='*) cat "$tmp/facts" ;;
 *'printf "kexec_loaded='*) cat "$tmp/fresh" ;;
+*'cf_facts '* | *'cf_hold '* | *'cf_restore '*) T6CF_ROOT=$cfroot exec sh -c "\$last" ;;
 *'kill -TERM'*)
 	p=\$(sed -n 's/^set -- \([0-9]*\) .*/\1/p' <<<"\$last")
 	rm -f "$tmp/mode-held" "$tmp/screen-nonce"
@@ -557,8 +612,9 @@ t6_board_run() {
 			"config_crash_dump=${t6_crash_dump:-CONFIG_CRASH_DUMP=y}" "kexec_crash_loaded=${t6_crash_loaded:-0}" \
 			"kexec_crash_size=${t6_crash_size:-0}" "sysrq_trigger=${t6_sysrq:-writable}" \
 			"python3=${t6_python3-/usr/bin/python3}" "vp0=${t6_vp0-$vp0_1080}" "console=${t6_console-ttyS2}" \
-			"gic_tables=$2" 'iomem<<' '00200000-e143ffff : System RAM'
-		printf '%s\n' "$1" '>>'
+			"gic_tables=$2"
+		T6CF_ROOT=$cfroot sh -c ". '$here/t6-cpufreq.sh'; cf_facts $(case " ${3:-} ${4:-} " in *" --crash "*) echo crash ;; *) echo normal ;; esac)"
+		printf '%s\n' 'iomem<<' '00200000-e143ffff : System RAM' "$1" '>>'
 	} > "$tmp/facts"
 	PATH=$tmp/fakebin:$PATH BOARD_HOST=root@board.invalid bash "$t6" "${t6_img:-$tmp/top13.bin}" ${3:+"$3"} ${4:+"$4"} 2>&1
 }
@@ -975,6 +1031,207 @@ rc=$?
 check "nanopc-t6.sh: the --crash dry run with T6_SCREEN names the proof and the holder's nonce (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qF 'screen: T6_SCREEN is set: --go has the mode holder show this run'"'"'s nonce' <<<"$out" &&
 		grep -qF -- '--max-hold 600 --nonce <this run'"'"'s>' <<<"$out" && ! grep -qF 'would refuse' <<<"$out"; echo $?)"
+# The CPU clock (issue #11468): t6-cpufreq.sh on the made-up sysfs
+# ($cfroot), then nanopc-t6.sh with T6_CPU_KHZ on the fake board, whose ssh
+# runs the cf_ commands on that sysfs. cfsh <commands>: t6-cpufreq.sh's
+# functions run there, as the board runs them.
+cfsh() { T6CF_ROOT=$cfroot sh -c ". '$here/t6-cpufreq.sh'; $1" 2>&1; }
+p0=$cfroot/sys/devices/system/cpu/cpufreq/policy0
+p0_now() { echo "$(cat "$p0/scaling_min_freq") $(cat "$p0/scaling_max_freq")"; }
+p0_line="policy0 (CPUs 0 1 2 3): driver cpufreq-dt, governor ondemand, scaling_cur_freq 408000, scaling_min_freq 408000, scaling_max_freq 1800000, scaling_available_frequencies $cf_steps0, cpuinfo_cur_freq 408000"
+# cf_writes <output>: its write lines as "min|max <value>", in order.
+cf_writes() { sed -n 's/^cpufreq: write scaling_\(min\|max\)_freq \([0-9]*\)$/\1 \2/p' <<<"$1" | tr '\n' ' ' | sed 's/ $//'; }
+# cf_replay <min> <max> <output>: the writes applied in order from min and
+# max keep min <= max after each one.
+cf_replay() {
+	local lo=$1 hi=$2 w v
+	while read -r w v; do
+		[ -n "$w" ] || continue
+		if [ "$w" = min ]; then lo=$v; else hi=$v; fi
+		[ "$lo" -le "$hi" ] || return 1
+	done < <(sed -n 's/^cpufreq: write scaling_\(min\|max\)_freq \([0-9]*\)$/\1 \2/p' <<<"$3")
+}
+# A stand-in for the kernel applying new limits: policy0's scaling_cur_freq
+# follows its scaling_max_freq every 0.05 s, from gov_start to gov_stop
+# (by its pid). Without it scaling_cur_freq stays where it is: a hold that
+# does not take.
+gov_pid=
+gov_start() {
+	( while :; do
+		cat "$p0/scaling_max_freq" > "$p0/cur.new" 2>/dev/null && mv "$p0/cur.new" "$p0/scaling_cur_freq" 2>/dev/null
+		sleep 0.05
+	done ) &
+	gov_pid=$!
+}
+gov_stop() {
+	[ -n "$gov_pid" ] || return 0
+	kill "$gov_pid" 2>/dev/null
+	wait "$gov_pid" 2>/dev/null
+	gov_pid=
+	rm -f "$p0/cur.new"
+}
+cf_root
+out=$(cfsh 'cf_facts crash')
+check "t6-cpufreq.sh: the crash route jumps on CPU 0; its policy policy0 and each of its facts are printed" \
+	"$(grep -qx 'cpufreq_cpu=0' <<<"$out" && grep -qx 'cpufreq_policy=policy0' <<<"$out" && grep -qxF "cpufreq_steps=$cf_steps0" <<<"$out" &&
+		grep -qx 'cpufreq_min=408000' <<<"$out" && grep -qx 'cpufreq_max=1800000' <<<"$out" && grep -qxF "cpufreq_line=$p0_line" <<<"$out"; echo $?)"
+echo 6 > "$cfroot/sys/kernel/reboot/cpu"
+out=$(cfsh 'cf_facts normal')
+check "t6-cpufreq.sh: the normal route jumps on reboot_cpu (6, online): policy6" \
+	"$(grep -qx 'cpufreq_cpu=6' <<<"$out" && grep -qx 'cpufreq_policy=policy6' <<<"$out" && grep -qxF 'cpufreq_why=normal route: reboot_cpu 6 (/sys/kernel/reboot/cpu), online (0-7)' <<<"$out" && grep -qF 'cpufreq_line=policy6 (CPUs 6 7): ' <<<"$out"; echo $?)"
+out=$(cfsh 'cf_facts crash')
+check "t6-cpufreq.sh: the crash route stays on CPU 0 whatever reboot_cpu is" \
+	"$(grep -qx 'cpufreq_cpu=0' <<<"$out" && grep -qx 'cpufreq_policy=policy0' <<<"$out"; echo $?)"
+echo 0-3 > "$cfroot/sys/devices/system/cpu/online"
+out=$(cfsh 'cf_facts normal')
+check "t6-cpufreq.sh: reboot_cpu offline: the first online CPU, as migrate_to_reboot_cpu takes it" \
+	"$(grep -qx 'cpufreq_cpu=0' <<<"$out" && grep -qxF 'cpufreq_why=normal route: reboot_cpu 6 is offline, so the first online CPU (0-3)' <<<"$out"; echo $?)"
+rm "$cfroot/sys/kernel/reboot/cpu"
+out=$(cfsh 'cf_facts normal')
+check "t6-cpufreq.sh: no /sys/kernel/reboot/cpu: the CPU is not known, every policy is printed" \
+	"$(grep -qx 'cpufreq_cpu=' <<<"$out" && grep -qx 'cpufreq_policy=absent' <<<"$out" &&
+		grep -qE '^cpufreq_line=every policy: policy0 \(CPUs 0 1 2 3\): .*; policy4 \(CPUs 4 5\): .*; policy6 \(CPUs 6 7\): .*cpuinfo_cur_freq 408000$' <<<"$out"; echo $?)"
+out=$(cfsh 'cf_hold normal 1800000 3')
+rc=$?
+check "t6-cpufreq.sh: cf_hold refuses when the jump CPU is not known, before any write (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'cpufreq: REFUSED: the jump CPU or its policy is not known' <<<"$out" && [ -z "$(cf_writes "$out")" ] && [ "$(p0_now)" = '408000 1800000' ]; echo $?)"
+cf_root 600000 1008000 600000
+out=$(cfsh "cf_set '$p0' 1800000 1800000")
+rc=$?
+check "t6-cpufreq.sh: a step above the range: scaling_max_freq first, min <= max after each write ($(cf_writes "$out"); rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(cf_writes "$out")" = 'max 1800000 min 1800000' ] && cf_replay 600000 1008000 "$out" && [ "$(p0_now)" = '1800000 1800000' ]; echo $?)"
+cf_root 600000 1008000 600000
+out=$(cfsh "cf_set '$p0' 408000 408000")
+rc=$?
+check "t6-cpufreq.sh: a step below the range: scaling_min_freq first, min <= max after each write ($(cf_writes "$out"); rc $rc)" \
+	"$([ "$rc" = 0 ] && [ "$(cf_writes "$out")" = 'min 408000 max 408000' ] && cf_replay 600000 1008000 "$out" && [ "$(p0_now)" = '408000 408000' ]; echo $?)"
+cf_root 600000 1008000 600000
+out=$(cfsh "cf_set '$p0' 816000 816000")
+check "t6-cpufreq.sh: a step inside the range: scaling_min_freq first ($(cf_writes "$out"))" \
+	"$([ "$(cf_writes "$out")" = 'min 816000 max 816000' ] && cf_replay 600000 1008000 "$out"; echo $?)"
+cf_root
+out=$(cfsh 'cf_hold normal 1234 3')
+rc=$?
+check "t6-cpufreq.sh: cf_hold refuses a value outside the steps and lists them, before any write (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qxF "cpufreq: REFUSED: 1234 kHz is not one of policy0's steps ($cf_steps0)" <<<"$out" && [ -z "$(cf_writes "$out")" ] && [ "$(p0_now)" = '408000 1800000' ]; echo $?)"
+cf_root 600000 1008000 600000
+out=$(cfsh 'cf_hold normal 1800000 3')
+rc=$?
+check "t6-cpufreq.sh: a hold whose read-back never comes: the old min and max written back, min <= max throughout (rc $rc; $(cf_writes "$out"))" \
+	"$([ "$rc" = 1 ] && grep -qxF "cpufreq: scaling_cur_freq reads '600000', not 1800000, 3 tenths of a second after the writes" <<<"$out" &&
+		[ "$(cf_writes "$out")" = 'max 1800000 min 1800000 min 600000 max 1008000' ] && cf_replay 600000 1008000 "$out" &&
+		grep -qx 'cpufreq_restored=600000 1008000' <<<"$out" && [ "$(p0_now)" = '600000 1008000' ]; echo $?)"
+cf_root 600000 1008000 600000
+gov_start
+out=$(cfsh 'cf_hold normal 408000 50')
+rc=$?
+gov_stop
+check "t6-cpufreq.sh: a hold that takes: the read-back named, min and max at the step (rc $rc; $(grep '^cpufreq_held=' <<<"$out"))" \
+	"$([ "$rc" = 0 ] && grep -qE '^cpufreq_held=408000 [0-9]+ 408000$' <<<"$out" && grep -qx 'cpufreq_old=600000 1008000' <<<"$out" &&
+		[ "$(cf_writes "$out")" = 'min 408000 max 408000' ] && [ "$(p0_now)" = '408000 408000' ]; echo $?)"
+out=$(cfsh 'cf_restore policy0 600000 1008000 boot-another')
+rc=$?
+check "t6-cpufreq.sh: the undo writes nothing in another Linux (another boot_id; rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'another Linux runs' <<<"$out" && [ -z "$(cf_writes "$out")" ] && [ "$(p0_now)" = '408000 408000' ]; echo $?)"
+out=$(cfsh 'cf_restore policy0 600000 1008000 boot-before')
+rc=$?
+check "t6-cpufreq.sh: the undo in the Linux that made the hold writes the old values back (rc $rc; $(cf_writes "$out"))" \
+	"$([ "$rc" = 0 ] && [ "$(cf_writes "$out")" = 'max 1008000 min 600000' ] && cf_replay 408000 408000 "$out" && [ "$(p0_now)" = '600000 1008000' ]; echo $?)"
+
+# nanopc-t6.sh: the dry run.
+cf_root
+rm -f "$tmp/ssh.log"
+out=$(t6_board_run "$kernel" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the dry run names the jump CPU and its policy's facts, and without T6_CPU_KHZ writes nothing (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qxF "cpufreq: the jump runs on CPU 0 (normal route: reboot_cpu 0 (/sys/kernel/reboot/cpu), online (0-7)); $p0_line" <<<"$out" &&
+		grep -qF 'cpufreq: T6_CPU_KHZ is not set: --go records the clock before the jump and writes nothing' <<<"$out" &&
+		! grep -qE '^cf_hold ' "$tmp/ssh.log" && [ "$(p0_now)" = '408000 1800000' ]; echo $?)"
+echo 6 > "$cfroot/sys/kernel/reboot/cpu"
+out=$(t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+check "nanopc-t6.sh: the --crash dry run names CPU 0 and policy0 whatever reboot_cpu is" \
+	"$(grep -qxF "cpufreq: the jump runs on CPU 0 (crash route: kexec_zephyr panics only with CPU 0 the one online CPU); $p0_line" <<<"$out"; echo $?)"
+cf_root
+for v in 1234 1.8GHz '408000 600000'; do
+	out=$(T6_CPU_KHZ=$v t6_board_run "$kernel" "$gic_out")
+	rc=$?
+	check "nanopc-t6.sh: T6_CPU_KHZ='$v' is refused before any change, the steps listed (rc $rc)" \
+		"$([ "$rc" = 3 ] && grep -qF "REFUSED: T6_CPU_KHZ=$v is not one of policy0's steps (scaling_available_frequencies, kHz): $cf_steps0" <<<"$out" &&
+			grep -qF 'nanopc-t6.sh: nothing was copied, loaded or changed.' <<<"$out" && ! grep -qE '^cf_hold ' "$tmp/ssh.log" && [ "$(p0_now)" = '408000 1800000' ]; echo $?)"
+done
+rm "$cfroot/sys/kernel/reboot/cpu"
+out=$(T6_CPU_KHZ=1800000 t6_board_run "$kernel" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: T6_CPU_KHZ with the jump CPU not known is refused (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: T6_CPU_KHZ=1800000: the cpufreq policy of the CPU the jump runs on is not known: the jump CPU is not known (normal route: /sys/kernel/reboot/cpu unreadable' <<<"$out"; echo $?)"
+cf_root
+out=$(T6_CPU_KHZ=1800000 t6_board_run "$kernel" "$gic_out")
+rc=$?
+check "nanopc-t6.sh: the dry run with T6_CPU_KHZ a step names the hold and the plan holds it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'cpufreq: T6_CPU_KHZ=1800000: --go holds policy0 at 1800000 kHz right before the jump, and writes its scaling_min_freq 408000 and scaling_max_freq 1800000 back when there is no jump' <<<"$out" &&
+		grep -qF "then the CPU clock: policy0's cpufreq facts into the record; policy0 held at" <<<"$out" && [ "$(p0_now)" = '408000 1800000' ]; echo $?)"
+
+# nanopc-t6.sh --go on the fake board. cf_go: the normal route; sets out,
+# rc, rec.
+cf_go() {
+	out=$(t6_go_run "$kernel")
+	rc=$?
+	rec=$(cat "$tmp"/rec/*/record.txt 2>/dev/null)
+}
+# line_of <pattern> <text>: the number of the first line of text that has it.
+line_of() { grep -nF -- "$1" <<<"$2" | head -n 1 | cut -d: -f1; }
+cf_root
+cf_go
+before_at=$(line_of 'cpufreq: before the jump: ' "$rec")
+jump_at=$(line_of ' jumping (linux_wdt' "$rec")
+check "nanopc-t6.sh: --go without T6_CPU_KHZ records the clock before the jump and writes nothing (rc $rc; lines ${before_at:-none} < ${jump_at:-none})" \
+	"$([ "$rc" = 0 ] && grep -qF "cpufreq: before the jump: the jump runs on CPU 0 (normal route: reboot_cpu 0 (/sys/kernel/reboot/cpu), online (0-7)); $p0_line" <<<"$rec" &&
+		[ -n "$before_at" ] && [ -n "$jump_at" ] && [ "$before_at" -lt "$jump_at" ] &&
+		! grep -qE '^cf_(hold|restore) ' "$tmp/ssh.log" && ! grep -qF 'cpufreq: hold' <<<"$rec" && [ "$(p0_now)" = '408000 1800000' ]; echo $?)"
+# The jump command: the fake ssh's log entry (up to its ---- line) that
+# runs kexec_zephyr.
+jcmd=$(awk 'BEGIN { RS = "\n----\n" } /kexec_zephyr \/tmp\/yakogl-kexec\/zephyr.bin/ { print; exit }' "$tmp/ssh.log")
+at_jump=$(line_of 'echo "cpufreq: at the jump: policy0 scaling_cur_freq $(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null || echo unread)"' "$jcmd")
+kz_at=$(line_of 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$jcmd")
+check "nanopc-t6.sh: the jump command reads the jump CPU's scaling_cur_freq right before kexec_zephyr (its lines ${at_jump:-none} < ${kz_at:-none})" \
+	"$([ -n "$at_jump" ] && [ -n "$kz_at" ] && [ "$at_jump" -lt "$kz_at" ]; echo $?)"
+cf_root 600000 1008000 600000
+gov_start
+T6_CPU_KHZ=1800000 cf_go
+gov_stop
+hold_at=$(grep -nx 'cf_hold normal 1800000 50' "$tmp/ssh.log" | head -n 1 | cut -d: -f1)
+kz_at=$(grep -n 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" | head -n 1 | cut -d: -f1)
+check "nanopc-t6.sh: T6_CPU_KHZ above the range: max then min, read back, recorded, held before the jump (rc $rc; ssh lines ${hold_at:-none} < ${kz_at:-none})" \
+	"$([ "$rc" = 0 ] && grep -qF 'cpufreq: hold 1800000 kHz on policy0 (scaling_min_freq and scaling_max_freq were 600000 1008000): write scaling_max_freq 1800000; write scaling_min_freq 1800000 (rc 0)' <<<"$rec" &&
+		grep -qE "cpufreq: held: policy0's scaling_cur_freq reads 1800000 kHz [0-9]+\.[0-9] s after the writes, cpuinfo_cur_freq 408000; scaling_min_freq and scaling_max_freq go back to 600000 1008000 if there is no jump" <<<"$rec" &&
+		[ -n "$hold_at" ] && [ -n "$kz_at" ] && [ "$hold_at" -lt "$kz_at" ] && [ -e "$tmp/jumped" ]; echo $?)"
+check "nanopc-t6.sh: after a jump the hold is not undone: the Linux that made it is gone" \
+	"$(grep -qF 'cpufreq: the hold of policy0 ended with the Linux that made it (the board came back with a new boot_id)' <<<"$rec" && ! grep -qE '^cf_restore ' "$tmp/ssh.log" && [ "$(p0_now)" = '1800000 1800000' ]; echo $?)"
+cf_root 600000 1008000 600000
+gov_start
+T6_CPU_KHZ=408000 cf_go
+gov_stop
+check "nanopc-t6.sh: T6_CPU_KHZ below the range: min then max (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'cpufreq: hold 408000 kHz on policy0 (scaling_min_freq and scaling_max_freq were 600000 1008000): write scaling_min_freq 408000; write scaling_max_freq 408000 (rc 0)' <<<"$rec" && [ "$(p0_now)" = '408000 408000' ]; echo $?)"
+cf_root 600000 1008000 600000
+T6_CPU_KHZ=1800000 cf_go
+check "nanopc-t6.sh: a hold whose read-back never comes: no jump, the board wrote the old min and max back (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'cpufreq: REFUSED: policy0 did not take 1800000 kHz; the board wrote scaling_min_freq and scaling_max_freq back (600000 1008000); not jumping' <<<"$rec" &&
+		grep -qF "scaling_cur_freq reads '600000', not 1800000, 50 tenths of a second after the writes" <<<"$rec" &&
+		! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" && [ "$(p0_now)" = '600000 1008000' ]; echo $?)"
+cf_root 600000 1008000 600000
+gov_start
+T6_CPU_KHZ=1800000 T6_FAKE_JUMP_RC=98 cf_go
+gov_stop
+check "nanopc-t6.sh: a jump the board refuses after the hold: the old min and max written back (rc $rc)" \
+	"$([ "$rc" = 1 ] && grep -qF 'linux-wdt: REFUSED on the board, no jump' <<<"$rec" && grep -qx 'cf_restore policy0 600000 1008000 boot-before' "$tmp/ssh.log" &&
+		grep -qF 'cpufreq: undo: cpufreq: write scaling_min_freq 600000 cpufreq: write scaling_max_freq 1008000 cpufreq_restored=600000 1008000' <<<"$rec" && [ "$(p0_now)" = '600000 1008000' ]; echo $?)"
+cf_root
+T6_CPU_KHZ=1234 cf_go
+check "nanopc-t6.sh: --go with T6_CPU_KHZ outside the steps is refused before the lock, nothing copied (rc $rc)" \
+	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: T6_CPU_KHZ=1234 is not one of' <<<"$out" && [ -z "$(ls -A "$tmp/rec")" ] && [ ! -e "$tmp/scp.log" ] && ! grep -qE '^cf_hold ' "$tmp/ssh.log"; echo $?)"
+cf_root
 # t6-screen-nonce.py's own self-test. Its JPEG round trip needs cjpeg and
 # djpeg on this host; without them it is skipped, and the last line says so.
 got=$(python3 -I "$here/t6-screen-nonce.py" --self-test 2>&1)
