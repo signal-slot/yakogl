@@ -1,0 +1,37 @@
+decl_function main () (entrypoint)
+impl main {
+block b0: // preds:
+32 %0 = load_const (0x00000000)
+32x4 %1 = @load_input (%0 (0x0)) (base=16777216, range=1, component=0, dest_type=float32, io location=VERT_ATTRIB_GENERIC0 slots=1)
+32 %2 = frcp %1.w
+32 %3 = load_const (0xc7000000 = -32768.000000)
+32 %4 = fmax %2, %3 (-32768.000000)
+32 %5 = load_const (0x47000000 = 32768.000000)
+32 %6 = fmin %4, %5 (32768.000000)
+32 %7 = fmul %1.x, %6
+32 %8 = fmul %1.y, %6
+32 %9 = fmul %1.z, %6
+32 %10 = load_const (0x00000001 = 0.000000)
+32x3 %11 = @load_ubo (%10 (0x1), %0 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=4)
+32 %12 = load_const (0x00000010 = 16)
+32x3 %13 = @load_ubo (%10 (0x1), %12 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=0, range=4)
+32 %14 = ffma %7, %11.x, %13.x
+32 %15 = ffma %8, %11.y, %13.y
+32 %16 = ffma %9, %11.z, %13.z
+32 %17 = @load_idvs_output_buf_index_pan
+32 %18 = load_const (0x3d000000 = 0.031250 = 1023410176)
+32x2 %19 = @lea_buf_pan (%18 (0x3d000000), %17)
+64 %20 = pack_64_2x32 %19
+@store_global (%14, %20) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+64 %21 = load_const (0x0000000000000004)
+64 %22 = iadd %21 (0x4), %20
+@store_global (%15, %22) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+64 %23 = load_const (0x0000000000000008)
+64 %24 = iadd %23 (0x8), %20
+@store_global (%16, %24) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+64 %25 = load_const (0x000000000000000c = 12)
+64 %26 = iadd %25 (0xc), %20
+@store_global (%6, %26) (wrmask=x, access=istream-pan, align_mul=4, align_offset=0)
+// succs: b1
+block b1:
+}

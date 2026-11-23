@@ -1,0 +1,10 @@
+decl_function main () (entrypoint)
+impl main {
+block b0: // preds:
+32 %0 = deref_var &gl_Position (shader_out highp vec4)
+32 %1 = deref_var &a_pos (shader_in highp vec4)
+32x4 %2 = @load_deref (%1) (access=none)
+@store_deref (%0, %2) (wrmask=xyzw, access=none)
+// succs: b1
+block b1:
+}

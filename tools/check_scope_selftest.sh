@@ -84,6 +84,8 @@ want tools/mali/gate.env mali
 want tools/mali/check.sh mali
 want tools/mali/route.sh mali
 want tools/mali/route_cells.py mali
+want tools/mali/nir_refs.py mali
+want tools/mali/testdata/fbload_fbload.nir.sha mali
 # glsl2pan.py and gl_ref.py import es100.py: both rows
 want tools/vivante/es100.py "vivante mali"
 want tests/v3d_cube_noseamless.rs "v3d treekey"
