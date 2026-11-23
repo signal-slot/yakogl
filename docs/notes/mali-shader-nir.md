@@ -159,7 +159,7 @@ Instr  { block: BlockId, prev: InstrId, next: InstrId, pass_flags: u8,
 Kind   = Alu { op: NirOp, fp_math_ctrl: u8, nsw: bool, nuw: bool }
        | LoadConst { values: (first, count) }               // u64 per component, as nir_const_value
        | Undef
-       | Intrinsic { op: NirIntrinsic, indices: [u32; 8] }  // indices by nir_intrinsic_info order
+       | Intrinsic { op: NirIntrinsic, const_index: [i32; 9] } // Mesa's 9 slots (nir.h:2031), by nir_intrinsic_info order
        | Tex { op, dim, dest_type, texture_index, sampler_index, src_types: (first, count), ... }
        | Phi                                                // srcs in Mesa's list order; each with its pred
        | Jump { kind: Break | Continue | Return | Halt | Goto | GotoIf }
@@ -751,13 +751,43 @@ Two checkpoints, each against Mesa, never only against the old path:
 need every pass of section 5, so they give their first number late, and the
 questions that can change this design (Q1, Q3, R2, R3) are all about the
 translation. The shim reference is a debug build (`drm_shim_ref.sh:60`), so
-`NIR_DEBUG=print_vs,print_fs` works on it today. `nir_refs.sh` therefore
-also keeps the **first** NIR Mesa prints for each stage (the earliest dump
-after `glsl_to_nir`; step S12 names the exact pass), normalised the same
-way, as a `first` line in `<name>.nir.sha`. The shadow test compares the
-translation's output (plus the passes Mesa ran up to that dump) with it.
-This number needs only S1, S10a and the S12 script, and it is the first
-one the work produces.
+`NIR_DEBUG=print_vs` and `print_fs` work on it today. `nir_refs.sh`
+therefore also keeps one early point per stage, the line `ssa` in
+`<name>.nir.sha`.
+
+- **Why not `glsl_to_nir`'s own print.** It still holds Mesa's GLSL IR: an
+  empty function `gl_mesa_tmp_<hash of the source>`, user functions not
+  inlined, constructor and constant temporaries as variables (`vec_ctor`,
+  `const_temp`, `mat_ctor`, `flattening_tmp`) read through `deref_var`.
+  `ir::Module` records none of these, and Mesa's first variable passes
+  remove them all. (Measured for #11273 on the 1,575 pairs.)
+- **Where the point is.** `NIR_PASS` prints a pass's name before the pass
+  runs, and the NIR after it only when the pass changed the shader
+  (`nir.h:5264-5296`); both only for a stage `NIR_DEBUG` names. So a dump
+  alone does not say where in the chain it is, and the point is fixed by a
+  name instead: **the first `nir_opt_find_array_copies` in the stage's own
+  stream** (one draw with `print_vs`, one with `print_fs`). That name is
+  printed only by `gl_nir_opts` (`gl_nir_linker.c:67`), right after its
+  `nir_lower_vars_to_ssa` and `nir_remove_dead_variables` (`:55-66`), in the
+  first round the linker runs for the stage. The reference is the last dump
+  of the stage before that name: locals are SSA values, no optimisation of
+  `gl_nir_opts` has run.
+- **What the line holds.** `<variant> ssa : <sha256> : <pass>,<pass>,...`:
+  the hash of the normalised dump, and the names of the passes that printed
+  a dump before the point (the passes that changed this shader), in order.
+- **What the shadow test does with it.** The translation's output stands
+  for the passes that only undo GLSL IR form (`nir_lower_variable_initializers`,
+  `nir_lower_returns`, `nir_inline_functions`, `nir_opt_deref`,
+  `nir_split_var_copies`, `nir_lower_global_vars_to_local`,
+  `nir_lower_var_copies`); the test then runs `lower_vars_to_ssa` (S6b) and
+  the removal of dead variables. Any other name in the line's list is a pass
+  Mesa needed here: the test runs our port of it, or gives `refused` with
+  that name when there is none yet (`nir_lower_mediump_vars`,
+  `nir_opt_constant_folding`, ...). So the early number never reports a
+  `differ` that is only a pass not written yet.
+
+This number needs S1, S10a, S6b's `lower_vars_to_ssa` and the S12 script,
+and it is the first one the work produces.
 
 Per stage and pair the test gives one verdict: `equal` (both checkpoints
 equal), `nir-equal` (NIR equal, words not yet comparable before step S11),
@@ -823,7 +853,7 @@ current main and checked with `tools/check.sh --changed origin/main`.
 | **S11a** early BIR passes | `opt.rs`: `lower_swizzle`, `copy_prop`, `constant_fold`, `cse` (first), `finish_passes_nir` in `mod.rs` | 900 | 5 | BIR unit cases; the old path's words unchanged (all Mali rows) | none |
 | **S11b** selection, vertex | `snir/select.rs` (VS part), `snir/rows.rs`, `UboLayout::from_loads`, the `emit::Alu` move, VS record | 900 | 5 | VS words equal on the in-class pairs that are NIR-equal | S1, S9a, S11a |
 | **S11c** selection, fragment | `snir/select.rs` (FS part), FS record | 800 | 5 | FS words equal on the in-class pairs that are NIR-equal | S1, S9b, S11a |
-| **S12** references and shadow test | `tools/mali/nir_refs.sh` (+ normaliser), `tools/mali/testdata/*.nir.sha`, `tests/mali_snir_shadow.rs`, a self-test row in check.sh | 700 | 4 | the script's normalised text for `fbload_fbload` equals a hand-normalised copy (both the first dump and the one at selection); the test runs on all pairs and reports counts | S1 (printer) |
+| **S12** references and shadow test | `tools/mali/nir_refs.sh` (+ normaliser), `tools/mali/testdata/*.nir.sha`, `tests/mali_snir_shadow.rs`, a self-test row in check.sh | 700 | 4 | the script's normalised text for `fbload_fbload` equals a hand-normalised copy (both the `ssa` point and the one at selection); the test runs on all pairs and reports counts | S1 (printer) |
 | **S13** product hook and first move | `mod.rs` dispatch (`owns`, fallback), `cfg` widened | 300 | 3 | section 7.3 for the VS class | S11b, S12, #11252 |
 | **S14** (after step 1) look-ups | `pan_nir_lower_tex`, `nir_lower_tex` subset, `bi_emit_tex_valhall` (`bifrost_compile.c:3489`) | 1,500 | 6 | in-class pairs with `texture2D` equal | S11b/S11c |
 
@@ -851,8 +881,8 @@ week 5   S8b  S13
 **Which lane goes first.** The engine (S2 to S8) repeats what the blend
 engine already proved, so its risk is size, not design. The translation
 (S10a to S10c) is where this design can be wrong. When people are short, the
-lane S1, S12 script, S10a goes first, to get the early checkpoint of section
-7.2.
+lane S1, S12 script, S10a and S6b's `lower_vars_to_ssa` goes first, to get
+the early checkpoint of section 7.2.
 
 **The order after step 1.** Step 1 moves shaders the old path compiles
 already, so it adds no dEQP pass by itself. M2 (int, bool), M3 (precision),
@@ -861,8 +891,9 @@ refused must-pass cases per class, largest first, not by this note.
 
 **The first measurable numbers.**
 
-0. **S1 + S10a + the S12 script**: stages whose first NIR is Mesa's (the
-   early checkpoint of section 7.2), the first number for the translation.
+0. **S1 + S10a + S6b's `lower_vars_to_ssa` + the S12 script**: stages whose
+   NIR at the `ssa` point is Mesa's (the early checkpoint of section 7.2),
+   the first number for the translation.
 1. **S8**: 4,103 blend keys through the new engine (search, passes, generated
    tables). This is the first proof of the engine, before any translation.
 2. **S12 once S7, S9a and S10a are in**: "vertex shaders whose NIR at
