@@ -183,10 +183,12 @@ of it) and none run on a board yet:
    `fb_target_format_n` names the wide surface; `fb_target_channel_mask_n`
    limits `GlesDraw::color_mask` to the format's channels, which the job
    builder writes into `COLOR_WRITE_MASKS`; `glReadPixels` fills 0, 0, 1 for
-   the channels the format lacks. `build_common` refuses by name
-   (`refuse_uneven_target_masks`, `GL_INVALID_OPERATION`) a draw whose
-   targets' masks differ, where `ONE_COLOR_MASK` (`gpu-v3d`) says the back
-   end has one mask. No V3D code changes. Tests `tests/es3_v3d_fbo_int_rg.rs`,
+   the channels the format lacks. As committed, `build_common`
+   refused by name (`refuse_uneven_target_masks`, `GL_INVALID_OPERATION`) any
+   draw whose targets' masks differ, where `ONE_COLOR_MASK` (`gpu-v3d`) said
+   the back end had one mask, and the commit had no V3D code changes. That
+   was history from `48f6017c` (item 3): neither name exists at the tip, see
+   below. Tests `tests/es3_v3d_fbo_int_rg.rs`,
    `es3_narrow_int_rt_v3d.rs`, `es3_readback_v3d.rs`, `es3_int_rt.rs`.
 2. `ab0222cf` "clears of r and rg integer textures keep the wide store's
    absent channels at 0, 0, 1": `int_clear_channels` (`src/gl/draw.rs`) gives
@@ -201,10 +203,18 @@ of it) and none run on a board yet:
    `per_target_mask` and `target_color_mask[4]` (in `num_targets`' padding,
    `abi_layout` regenerated); `per_target_masks` (`draw.rs`, `gpu-v3d` only)
    sets them where the targets' masks differ; `state.rs` `job_state` puts
-   them in `V3dJobState::rt_colormask_own` / `rt_colormask` (RT 1..3). Still
-   refused by name: uneven masks under `glEnable(GL_BLEND)` with both
-   integer and non-integer targets (one `BLEND_ENABLES` and one `BLEND_CFG`
-   for every RT in `v3d_job.c`).
+   them in `V3dJobState::rt_colormask_own` / `rt_colormask` (RT 1..3). Pinned by
+   `tests/es3_v3d_int_rg_mrt_mask.rs`. The colour write mask is per RT now
+   (`PER_TARGET_MASK`, `src/gl/draw.rs:2723`; `rt_colormask_own` /
+   `rt_colormask`, `src/v3d/ffi.rs:391-394`, `driver/src/v3d/v3d_job.c:787-792`),
+   so an R8I texture beside an RGBA8 renderbuffer draws. What stays one for
+   all RTs is the blend state: one `BLEND_CFG` (RT 0's), and
+   `per_target_masks` (`src/gl/draw.rs:2747`) still refuses by name
+   (`GL_INVALID_OPERATION`) uneven masks under `glEnable(GL_BLEND)` with both
+   integer and non-integer targets (the G3 entry of
+   [v3d-format-matrix.md](v3d-format-matrix.md)). `9cccb4ae` made
+   `BLEND_ENABLES` per RT in the job builder (integer targets left out), but
+   the GL core's refusal is not lifted by it.
 
 The steps this section once listed (`V3D_SAMPLED_TEXFMTS` bits 26-39,
 `tmu_format` rows, `gles_texfmt_return_32`, a narrow `copy_image_for`) are

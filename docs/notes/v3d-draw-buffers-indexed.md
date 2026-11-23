@@ -106,27 +106,43 @@ hardware features; GL's `EXT_draw_buffers_indexed` maps onto
 
 ## (d) What the V3D back end carries today
 
+This section was written when one blend state and one colour mask served
+every RT. Marked below is what `48f6017c` (a colour write mask per RT) and
+`9cccb4ae` (BLEND_ENABLES per RT) changed.
+
 - `GlesDraw` (`src/backend.rs`) has one `blend`, one set of
   `blend_{src,dst}_{rgb,alpha}`, `blend_eq_{rgb,alpha}`, `blend_color`, one
-  `color_mask` and one `color_write`. `GlesDrawTarget` has `gpu`, `w`, `h`,
-  `format`, `out_shift` and no blend or mask.
+  `color_mask` and one `color_write`; since `48f6017c` also
+  `per_target_mask` and `target_color_mask[4]` (`src/backend.rs:1303-1304`),
+  set only where the targets' masks differ (`per_target_masks`,
+  `src/gl/draw.rs:2747`). Blend stays one state. `GlesDrawTarget` has `gpu`,
+  `w`, `h`, `format`, `out_shift` and no blend or mask of its own.
 - `src/v3d/state.rs` `job_state` fills `V3dJobState` from those: one
   `blend_enabled`, one factor set, one `colormask` (`d.color_mask & 0xf`,
-  `& 0x7` if RT 0 has no alpha). `dst_alpha_one` is `target_alpha_bits == 0`
-  of the frame target only.
+  `& 0x7` if RT 0 has no alpha); since `48f6017c` also `rt_colormask_own` /
+  `rt_colormask` for RT 1..3 (`src/v3d/state.rs:765`, `src/v3d/ffi.rs:391-394`)
+  and, since `9cccb4ae`, `rt_blend_own` / `rt_blend_mask`. `dst_alpha_one` is
+  `target_alpha_bits == 0` of the frame target only.
 - `driver/src/v3d/v3d_job.h`, `struct v3d_job_state`: "pipe_blend_state,
   render target 0": `blend_enabled`, `rgb_func/src/dst`, `alpha_*`,
-  `colormask`, `blend_color_f16`.
-- `driver/src/v3d/v3d_job.c`: `emit_blend` writes `BLEND_ENABLES.mask = 1`
-  (RT 0) and one `BLEND_CFG` with `render_target_mask = 0xf`; the
-  `emit_state` comment says "one render target, no independent blend".
-  `COLOR_WRITE_MASKS` is `off | off << 4 | off << 8 | off << 12`, RT 0's mask
-  for all four. The packet-skip key (`PACK(V3D_PACK_BLEND ...)`,
-  `V3D_PACK_COLOR_MASK`) lists exactly those inputs.
-- Consequence today (read from the code, not run): `BLEND_ENABLES.mask` is
-  1, so with several attachments only RT 0 blends; GL blends every enabled
-  draw buffer. That deviation exists without this extension; whether a host
-  test pins it is for `t-mrt-blend`.
+  `colormask`, `blend_color_f16` (and the per-RT fields above).
+- `driver/src/v3d/v3d_job.c` (the passage as first written said `emit_blend`
+  writes `BLEND_ENABLES.mask = 1` and `COLOR_WRITE_MASKS` is RT 0's mask for
+  all four; both are history). Now: `emit_blend` (`:701`) writes
+  `BLEND_ENABLES` from `blend_enables` (`:691`: the RTs of `rt_blend_mask`,
+  else 0xf) and one `BLEND_CFG` with `render_target_mask = 0xf`, so the
+  blend equation and factors are one state for all RTs; `COLOR_WRITE_MASKS`
+  takes RT 0's mask for every RT unless `rt_colormask_own`, when RT 1..3 take
+  their own (`:787-792`). The packet-skip key lists those inputs. Pinned by
+  `tests/es3_v3d_int_rg_mrt_mask.rs`.
+- Still true: independent blend (a `BLEND_CFG` per RT, a blend state per
+  draw buffer) does not exist, so a draw with uneven masks, `GL_BLEND` on
+  and both integer and non-integer targets is refused by name
+  (`per_target_masks`, `GL_INVALID_OPERATION`); G3 of
+  [v3d-format-matrix.md](v3d-format-matrix.md).
+
+- History (before `9cccb4ae`): `BLEND_ENABLES.mask` was 1, so with several
+  attachments only RT 0 blended; GL blends every enabled draw buffer.
 
 ## (e) The V3D and driver changes a fix needs
 
@@ -212,13 +228,17 @@ cases stay `NotSupported`). Needs: the V3D item below; `GL_MAX_DRAW_BUFFERS`
 Title: `V3D: BLEND_ENABLES/BLEND_CFG/COLOR_WRITE_MASKS per render target`
 
 Text: `driver/src/v3d/v3d_job.c` `emit_blend` and the `COLOR_WRITE_MASKS`
-emit take render target 0's state for all targets (`BLEND_ENABLES.mask = 1`,
-`render_target_mask 0xf`, RT 0's mask in every nibble). Mesa v3d emits a
+emit took render target 0's state for all targets (`BLEND_ENABLES.mask = 1`,
+`render_target_mask 0xf`, RT 0's mask in every nibble). That was the state
+when the draft was written; since `48f6017c` the colour mask is per RT
+(`rt_colormask_own`, `v3d_job.c:787-792`) and since `9cccb4ae`
+`BLEND_ENABLES` is per RT; one `BLEND_CFG` (`render_target_mask 0xf`) is
+what stays, and is what this draft still asks to change. Mesa v3d emits a
 per-RT enables mask, one `BLEND_CFG` per RT under independent blend and per-RT
 `COLOR_WRITE_MASKS` nibbles (`v3dx_emit.c`). Implement the same: per-RT array
 in `struct v3d_job_state` (with `ffi_layout_check.c`), per-RT `dst_alpha_one`,
 integer RTs never blend; this also fixes a several-attachment draw with blending
-on, which today blends RT 0 only. Needs the GL-core draft only for the
+on, which blended RT 0 only until `9cccb4ae`. Needs the GL-core draft only for the
 indexed calls; the non-indexed several-attachment case can be done first
 (host test with `t-mrt-blend`). Does not move any Pi 4 draw_buffers_indexed
 row on its own.
