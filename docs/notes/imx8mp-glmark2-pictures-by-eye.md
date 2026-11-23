@@ -42,8 +42,8 @@ part was done on its panel.
 ## Picture routes
 
 There are two routes to a picture, and each is its own corroboration. The route
-column of the table names which one a verdict rests on: `dump`, `photograph` or
-`both`.
+column of the table names which one a verdict rests on: `dump`, `photograph`,
+`both` or `photograph+probes`.
 
 - **dump**: the UART frame dump over the board's serial console, decoded and
   checked as above. It gives a value (crc, probes, mean) and a pixel-exact
@@ -52,6 +52,11 @@ column of the table names which one a verdict rests on: `dump`, `photograph` or
   `target:imx8mp-camera`). It shows what the panel displays, but is perspective
   corrected, rotated and colour-shifted by the camera, so it is judged by content
   only and carries no value.
+- **photograph+probes**: a camera photograph of the panel judged by content,
+  plus the `glmark2-picture:` value line (probes, crc16, mean) that the same
+  boot printed on the UART for that scene. It carries the value line, not a
+  pixel picture, so the verdict is `right` or `wrong`, never `seen without a
+  value`.
 
 A picture seen without a value (a photograph only, no dump) is written as such,
 as `docs/notes/gc-tiled-wire.md` does: the verdict cell says `seen without a
