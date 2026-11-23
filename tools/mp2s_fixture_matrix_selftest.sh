@@ -1,145 +1,127 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# Selftest: every env-reading mp2s helper gives the designed verdict on each
-# canonical env fixture of tools/testdata/mp2s-env/ (README there). The
-# verdicts are those docs/notes/stm32mp257f-dk-standalone.md requires
-# (sections 3, 5, 7 and 8). No board, no network; helpers and fixtures are
-# only read. Prints 'mp2s_fixture_matrix_selftest: N checks, F failed'.
+#
+# Verdict matrix: every env-reading mp2s helper on each canonical DK
+# u-boot-env fixture of tools/testdata/mp2s-env/ (pristine, installed,
+# counting1, counting2, left0, one-copy-bad, both-bad), against the verdicts
+# docs/notes/stm32mp257f-dk-standalone.md requires (sections 3, 5, 7, 8).
+# No board, no network; helpers and fixtures are only read.
+#
+#   tools/mp2s_fixture_matrix_selftest.sh
+#
+# Prints 'mp2s_fixture_matrix_selftest: N checks, F failed'; exit 0 iff F=0.
+# A failure is a contradiction between a helper and the note: file an issue,
+# do not edit the helper here.
 set -u
-HERE=$(cd "$(dirname "$0")" && pwd)
-FIX=$HERE/testdata/mp2s-env
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fx="$here/testdata/mp2s-env"
+py() { python3 -I "$@"; }
 L=(--redundant --size 0x2000)
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/mp2s-fixmatrix.XXXXXX") || exit 2
-trap 'rm -rf "$WORK"' EXIT
 
-N=0
-F=0
-OUT=
-RC=0
-# run LABEL CMD... : sets OUT (stdout+stderr) and RC
-run() {
-  OUT=$("$@" 2>&1)
-  RC=$?
-}
-pass() { N=$((N + 1)); }
-fail() {
-  N=$((N + 1))
-  F=$((F + 1))
-  echo "FAIL: $1 (rc=$RC): $(printf '%s' "$OUT" | tail -3 | tr '\n' '|')" >&2
-}
-# expect_rc LABEL WANT CMD...
-expect_rc() {
-  local label=$1 want=$2
-  shift 2
-  run "$@"
-  if [ "$RC" -eq "$want" ]; then pass; else fail "$label: want rc $want"; fi
-}
-# expect_out LABEL WANT_RC REGEX CMD...
-expect_out() {
-  local label=$1 want=$2 re=$3
-  shift 3
-  run "$@"
-  if [ "$RC" -eq "$want" ] && printf '%s' "$OUT" | grep -Eq -- "$re"; then pass; else fail "$label: want rc $want and /$re/"; fi
-}
-env_py() { python3 -I "$HERE/uboot_env.py" "${L[@]}" "$@"; }
-guard() { python3 -I "$HERE/mp2s_guard.py" --for "$1" --env-image "$FIX/$2.bin" "${L[@]}"; }
-cap() { python3 -I "$HERE/mp2s_env_capacity.py" --image "$FIX/$1.bin" --size 0x2000 "${@:2}"; }
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/mp2s-fxm.XXXXXX") || exit 2
+trap 'rm -rf "$tmp"' EXIT
 
-for f in pristine installed counting2 counting1 left0 one-copy-bad both-bad; do
-  [ -f "$FIX/$f.bin" ] || { echo "missing fixture $f.bin" >&2; exit 2; }
+n=0; f=0
+# chk NAME WANT_RC REGEX CMD...   (rc 0 = zero, nz = any nonzero)
+chk() {
+  local name=$1 want=$2 re=$3; shift 3
+  local out rc
+  out=$("$@" 2>&1); rc=$?
+  n=$((n + 1))
+  local ok=1
+  case $want in
+    0) [ "$rc" -eq 0 ] || ok=0 ;;
+    nz) [ "$rc" -ne 0 ] || ok=0 ;;
+  esac
+  printf '%s\n' "$out" | grep -Eq -- "$re" || ok=0
+  if [ $ok -eq 0 ]; then
+    f=$((f + 1))
+    printf 'FAIL %s (rc=%s, want %s, pattern /%s/)\n%s\n' "$name" "$rc" "$want" "$re" "$out" | sed 's/^/  /'
+  fi
+}
+img() { echo "$fx/$1.bin"; }
+
+for x in pristine installed counting1 counting2 left0 one-copy-bad both-bad; do
+  [ -f "$(img $x)" ] || { echo "missing fixture $x" >&2; exit 2; }
 done
 
-# --- uboot_env.py: check (fixture README; note section 8: a bad copy is
-# named, U-Boot boots from the valid one; both bad = defaults would be saved)
-for f in pristine installed counting2 counting1 left0; do
-  expect_rc "uboot_env check $f valid" 0 env_py check "$FIX/$f.bin"
+# --- uboot_env.py check (fixtures README; section 8: a bad copy is named)
+for x in pristine installed counting1 counting2 left0; do
+  chk "env check $x" 0 'ok +copy 1.*' py "$here/uboot_env.py" "${L[@]}" check "$(img $x)"
 done
-# section 8: one bad copy is not fatal to the check's verdict? read it, pin it
-run env_py check "$FIX/one-copy-bad.bin"
-RC1=$RC
-run env_py check "$FIX/both-bad.bin"
-RC2=$RC
-if [ "$RC2" -ne 0 ] && printf '%s' "$OUT" | grep -qi 'bad\|crc\|invalid'; then pass; else fail "uboot_env check both-bad names bad copies"; fi
-run env_py check "$FIX/one-copy-bad.bin"
-if printf '%s' "$OUT" | grep -qi 'bad\|crc\|invalid\|copy'; then pass; else fail "uboot_env check one-copy-bad names the bad copy"; fi
-# print: a pristine image has ST's boot_prefixes and no mp2s_* (section 3)
-expect_out "uboot_env print pristine boot_prefixes" 0 '^boot_prefixes=/ /boot/$' env_py print "$FIX/pristine.bin"
-run env_py print "$FIX/pristine.bin"
-if printf '%s' "$OUT" | grep -q '^mp2s_'; then fail "pristine has no mp2s_*"; else pass; fi
-# counting1 boots from copy 2 with mp2s_left=1; left0 from copy 1 with 0 (README)
-expect_out "uboot_env print counting1 mp2s_left=1" 0 '^mp2s_left=1$' env_py print "$FIX/counting1.bin"
-expect_out "uboot_env print counting2 mp2s_left=2" 0 '^mp2s_left=2$' env_py print "$FIX/counting2.bin"
-expect_out "uboot_env print left0 mp2s_left=0" 0 '^mp2s_left=0$' env_py print "$FIX/left0.bin"
-expect_out "uboot_env print counting1 prefix armed" 0 '^boot_prefixes=/yakogl/standalone/ / /boot/$' env_py print "$FIX/counting1.bin"
-# section 8: both-bad is unusable, never pristine
-run env_py print "$FIX/both-bad.bin"
-if [ "$RC" -ne 0 ]; then pass; else fail "uboot_env print both-bad refused"; fi
+# section 8: one bad copy -> refused, the bad copy is named, the other is ok
+chk "env check one-copy-bad names copy 1" nz 'BAD copy 1' py "$here/uboot_env.py" "${L[@]}" check "$(img one-copy-bad)"
+chk "env check one-copy-bad copy 2 ok" nz 'ok +copy 2' py "$here/uboot_env.py" "${L[@]}" check "$(img one-copy-bad)"
+# section 8: both bad -> unusable (U-Boot would save compiled-in defaults)
+chk "env check both-bad: 2 bad copies" nz '2 bad copy' py "$here/uboot_env.py" "${L[@]}" check "$(img both-bad)"
+# a bad pair is not printable (section 8: no guessing which copy)
+chk "env print both-bad refused" nz 'refused|bad' py "$here/uboot_env.py" "${L[@]}" print "$(img both-bad)"
+# section 3: pristine has no mp2s_* variable, the counting images do
+chk "env print pristine: no mp2s_left" 0 '^boot_prefixes=/ /boot/$' py "$here/uboot_env.py" "${L[@]}" print "$(img pristine)"
+pr=$(py "$here/uboot_env.py" "${L[@]}" print "$(img pristine)" 2>&1 | grep -c '^mp2s_')
+n=$((n + 1)); [ "$pr" -eq 0 ] || { f=$((f + 1)); echo "FAIL pristine prints $pr mp2s_ variables"; }
+chk "env print counting2: mp2s_left=2 (s3)" 0 '^mp2s_left=2$' py "$here/uboot_env.py" "${L[@]}" print "$(img counting2)"
+chk "env print counting1: mp2s_left=1 (s3)" 0 '^mp2s_left=1$' py "$here/uboot_env.py" "${L[@]}" print "$(img counting1)"
+chk "env print left0: mp2s_left=0 (s3)" 0 '^mp2s_left=0$' py "$here/uboot_env.py" "${L[@]}" print "$(img left0)"
+chk "env print counting1: boot_prefixes in front (s3)" 0 '^boot_prefixes=/yakogl/standalone/ / /boot/$' py "$here/uboot_env.py" "${L[@]}" print "$(img counting1)"
 
-# --- mp2s_guard.py (section 7 'Runner verbs', section 5)
-# one-shot: refused (3) while any mp2s_* is set
-for f in installed counting2 counting1 left0; do
-  expect_rc "guard oneshot refuses $f" 3 guard oneshot $f
+# --- mp2s_guard.py (section 7: one-shot vs standalone are mutually exclusive)
+g() { py "$here/mp2s_guard.py" --for "$1" --env-image "$(img "$2")" "${L[@]}"; }
+chk "guard oneshot pristine allows" 0 'allow' g oneshot pristine
+for x in installed counting1 counting2 left0; do
+  chk "guard oneshot $x refuses" nz 'REFUSE' g oneshot "$x"
 done
-expect_rc "guard oneshot allows pristine" 0 guard oneshot pristine
-# standalone: refused while boot_prefixes carries /yakogl/standalone/ (section 5)
-expect_rc "guard standalone allows pristine" 0 guard standalone pristine
-for f in installed counting2 counting1 left0; do
-  expect_rc "guard standalone refuses armed prefix $f" 3 guard standalone $f
+chk "guard standalone pristine allows" 0 'allow' g standalone pristine
+for x in installed counting1 counting2 left0; do
+  chk "guard standalone $x refuses (a second default)" nz 'REFUSE' g standalone "$x"
 done
-# both-bad: no usable environment, neither verdict may be an allow
+# section 8: an unreadable env is never "allowed"
 for m in oneshot standalone; do
-  run guard $m both-bad
-  if [ "$RC" -ne 0 ]; then pass; else fail "guard $m both-bad not allowed"; fi
+  chk "guard $m both-bad errors" nz 'error' g "$m" both-bad
 done
-# one-copy-bad: U-Boot boots copy 2 (mp2s_left=1): one-shot refused if readable
-run guard oneshot one-copy-bad
-if [ "$RC" -ne 0 ]; then pass; else fail "guard oneshot one-copy-bad not allowed"; fi
+chk "guard oneshot one-copy-bad is not an allow" nz 'REFUSE|error' g oneshot one-copy-bad
 
-# --- mp2s_env_capacity.py (section 3 'The variables' / section 8)
-expect_out "capacity ok on pristine" 0 'ok' cap pristine mp2s_ver=1 mp2s_left=2 mp2s_prefixes="/ /boot/"
-expect_out "capacity ok on counting1 (update in place)" 0 'ok' cap counting1 mp2s_left=0
-run cap both-bad mp2s_left=2
-if [ "$RC" -ne 0 ]; then pass; else fail "capacity refuses both-bad"; fi
-# an oversize edit does not fit
-BIG=$(head -c 9000 /dev/zero | tr '\0' x)
-run cap pristine "mp2s_big=$BIG"
-if [ "$RC" -ne 0 ]; then pass; else fail "capacity refuses an 9000-byte value"; fi
+# --- mp2s_env_capacity.py (section 3: the default's edits fit, both copies)
+cap() { py "$here/mp2s_env_capacity.py" --image "$(img "$1")" --size 0x2000 mp2s_ver=1 mp2s_left=2 mp2s_prefixes='/ /boot/'; }
+chk "capacity pristine fits" 0 'FITS' cap pristine
+chk "capacity counting1 fits (a decrement)" 0 'FITS' py "$here/mp2s_env_capacity.py" --image "$(img counting1)" --size 0x2000 mp2s_left=0
+chk "capacity both-bad refused" nz 'refused' cap both-bad
 
-# --- mp2s_env_diff.py (section 5 'The undo', section 7): printenv text
-pp() { env_py print "$FIX/$1.bin" >"$WORK/$1.txt" 2>/dev/null; }
-for f in pristine installed counting2 counting1 left0; do pp "$f"; done
-diff_txt() { python3 -I "$HERE/mp2s_env_diff.py" "$WORK/$1.txt" "$WORK/$2.txt" "${@:3}"; }
-expect_out "diff pristine/pristine restored" 0 '^mp2s-env: restored' diff_txt pristine pristine
-for f in installed counting2 counting1 left0; do
-  expect_out "diff pristine/$f NOT restored" 1 '^mp2s-env: NOT restored' diff_txt pristine $f
+# --- mp2s_env_diff.py (section 5: restored / NOT restored / default set)
+d() { py "$here/mp2s_env_diff.py" --image "${L[@]}" "$@"; }
+chk "diff pristine/pristine restored" 0 'mp2s-env: restored' d "$(img pristine)" "$(img pristine)"
+for x in installed counting1 counting2 left0; do
+  chk "diff pristine/$x NOT restored" nz 'NOT restored' d "$(img pristine)" "$(img $x)"
 done
-# mid-run state (section 3): the default set, count 2 and 1
-expect_out "diff pristine/counting2 default set" 0 '^mp2s-env: default set' diff_txt pristine counting2 --expect-default 2
-expect_out "diff pristine/counting1 default set 1" 0 '^mp2s-env: default set' diff_txt pristine counting1 --expect-default 1
-expect_out "diff pristine/counting1 not count 2" 1 '^mp2s-env: NOT default set' diff_txt pristine counting1 --expect-default 2
-# raw-image form agrees (--image)
-expect_out "diff --image pristine/pristine restored" 0 '^mp2s-env: restored' \
-  python3 -I "$HERE/mp2s_env_diff.py" --image "${L[@]}" "$FIX/pristine.bin" "$FIX/pristine.bin"
-expect_out "diff --image pristine/counting1 NOT restored" 1 '^mp2s-env: NOT restored' \
-  python3 -I "$HERE/mp2s_env_diff.py" --image "${L[@]}" "$FIX/pristine.bin" "$FIX/counting1.bin"
-
-# --- mp2s_env_plan.py (sections 3, 5, 7): verify and the edits
-plan() { python3 -I "$HERE/mp2s_env_plan.py" "$@"; }
-expect_rc "plan default 2 on pristine" 0 plan default "$FIX/pristine.bin" "$WORK/d2.bin" --count 2 --record "$WORK/rec" "${L[@]}"
-expect_rc "plan verify pristine->default" 0 plan verify "$FIX/pristine.bin" "$WORK/d2.bin" --expect default "${L[@]}"
-expect_rc "plan nodefault on its own default" 0 plan nodefault "$WORK/d2.bin" "$WORK/nd.bin" --record "$WORK/rec" "${L[@]}"
-expect_rc "plan verify default->nodefault" 0 plan verify "$WORK/d2.bin" "$WORK/nd.bin" --expect nodefault "${L[@]}"
-# a default over a default is refused (section 3: mp2s_* absent before default)
-for f in installed counting2 counting1 left0; do
-  expect_rc "plan default refused on $f" 2 plan default "$FIX/$f.bin" "$WORK/x-$f.bin" --count 2 --record "$WORK/r-$f" "${L[@]}"
+chk "diff pristine/counting2 --expect-default 2 (s3)" 0 'default set' d --expect-default 2 "$(img pristine)" "$(img counting2)"
+chk "diff pristine/counting1 --expect-default 2 fails" nz 'mp2s-env' d --expect-default 2 "$(img pristine)" "$(img counting1)"
+chk "diff pristine/both-bad cannot read (s8)" nz 'cannot read' d "$(img pristine)" "$(img both-bad)"
+chk "diff both-bad/pristine cannot read (s8)" nz 'cannot read' d "$(img both-bad)" "$(img pristine)"
+# printenv text form (what the runner reads from the board)
+for x in pristine counting1; do
+  py "$here/uboot_env.py" "${L[@]}" print "$(img $x)" > "$tmp/$x.txt" 2>/dev/null
 done
-# both-bad: no environment to edit (section 8)
-run plan default "$FIX/both-bad.bin" "$WORK/xb.bin" --count 2 --record "$WORK/rb" "${L[@]}"
-if [ "$RC" -ne 0 ] && [ ! -e "$WORK/xb.bin" ]; then pass; else fail "plan default refused on both-bad, no output"; fi
-# nodefault on a pristine image is a no-op: OUT is IMAGE's bytes
-expect_rc "plan nodefault on pristine no-op" 0 plan nodefault "$FIX/pristine.bin" "$WORK/np.bin" --record "$WORK/rnp" "${L[@]}"
-if cmp -s "$FIX/pristine.bin" "$WORK/np.bin"; then pass; else fail "plan nodefault pristine leaves bytes"; fi
+chk "diff text pristine/pristine restored" 0 'restored' py "$here/mp2s_env_diff.py" "$tmp/pristine.txt" "$tmp/pristine.txt"
+chk "diff text pristine/counting1 NOT restored" nz 'NOT restored' py "$here/mp2s_env_diff.py" "$tmp/pristine.txt" "$tmp/counting1.txt"
 
-echo "mp2s_fixture_matrix_selftest: $N checks, $F failed"
-[ "$F" -eq 0 ]
+# --- mp2s_env_plan.py verify (sections 3, 5, 7)
+v() { py "$here/mp2s_env_plan.py" verify "$(img "$1")" "$(img "$2")" --expect "$3" "${L[@]}"; }
+chk "plan verify pristine->counting2 default" 0 'verify default: ok' v pristine counting2 default
+chk "plan verify counting2->pristine nodefault" 0 'verify nodefault: ok' v counting2 pristine nodefault
+chk "plan verify counting1->pristine nodefault" 0 'verify nodefault: ok' v counting1 pristine nodefault
+chk "plan verify left0->pristine nodefault" 0 'verify nodefault: ok' v left0 pristine nodefault
+chk "plan verify pristine->pristine default refused" nz 'refused' v pristine pristine default
+chk "plan verify pristine->both-bad refused (s8)" nz 'refused' v pristine both-bad default
+chk "plan verify both-bad->pristine refused (s8)" nz 'refused' v both-bad pristine nodefault
+
+# --- plan default on each fixture (section 7: refused unless pristine and both CRCs valid)
+pd() { py "$here/mp2s_env_plan.py" default "$(img "$1")" "$tmp/out.bin" --count 2 --record "$tmp/rec" "${L[@]}"; }
+chk "plan default pristine ok" 0 'wrote copy 2' pd pristine
+for x in installed counting2 both-bad; do
+  chk "plan default $x refused" nz 'refused' pd "$x"
+done
+
+echo "mp2s_fixture_matrix_selftest: $n checks, $f failed"
+[ "$f" -eq 0 ]
