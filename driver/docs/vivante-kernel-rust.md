@@ -348,7 +348,7 @@ DK. How it differs from the i.MX8MP's GC7000UL:
   (`gc_power_mp2.c:19-20`, as in "Hardware findings that still hold").
 - **Samples.** `gc_fence` and `gc_clear` build for the DK's A35, with the
   power through `stm32mp2_gpu.h` (31e07d90, `driver/samples/zephyr/gc_fence/README.md`,
-  `gc_clear/README.md`). That commit's message says "Not run on a board".
+  `gc_clear/README.md`). That commit's message says "Not run on a board"; both have since run (items 8-10 below).
 
 Read on the board (2026-11-21, `mp2_gpu` from U-Boot's `go`, image
 `9e520020`, run `20261121-1107-mp2_gpu-9e520020`; the bring-up note's
@@ -367,7 +367,7 @@ gpu-identity`, `gpu-intr`, `gpu-idle`):
 4. `RCC_GPUCFGR` polarity: bit 0 set means the reset is asserted. It read
    0x6 at entry, 0x7 with the reset held, 0x6 after the release. The bit
    needed several reads after the release before it cleared in the first run
-   (rc=-5, `a=0x7`); the fix (a053c4aa, 2da6568d) waits a bounded number of
+   (rc=-5, `a=0x7`); the fix (2da6568d) waits a bounded number of
    reads, `rcc::RELEASE_READS`, and logs the count (1 in the re-run).
    Bit 2 reads set at entry and is not explained yet (bit 1 is the gate).
 5. SCMI and OP-TEE: capability 0x8074, PERFORMANCE domain 1 at 800000 kHz
@@ -377,15 +377,47 @@ gpu-identity`, `gpu-intr`, `gpu-idle`):
    off, x0 = 1; Q8), from the same boots.
 7. Nothing at or above 0x800 was read from the CPU, as the rule requires.
 
-Still unverified on the board (nothing has run past the identity and the
-reset yet):
+8. SPI 183 (INTID 215) reaches the A35: `gc_irq: spi=183 intid=215 enable=1
+   … target=0x01 … route=ours`, and the fence's interrupt arrived.
+   `GICD_IGROUPR6` reads 0 from non-secure (RAZ, `secext=1`), so
+   `igroupr=0x00000000 … mismatch` next to `route=ours` is the expected
+   pair, not a wrong group. `docs/notes/stm32mp257f-dk-bringup.md`,
+   "gc_fence".
+9. `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us`, PASS
+   (record `594b0206`).
+10. `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`, PASS:
+    the clear reads back through the resolve engine.
+11. 0x3A8 is not decoded on this board: `0xdeaddeac` after reset,
+    `0xdeaddeae` after init (the interconnect's pattern for no slave), so no
+    secure-AHB release is needed on the DK and the opt-in stays off. The
+    reset reached idle on the first attempt: `reset-attempt n=1
+    004=0x7fffffff`.
+12. The 64 MiB carveout at 0xfa800000 works mapped Normal non-cacheable by
+    the CPU (no cache maintenance) and identity-mapped by the GPU's MMU v2,
+    for the ring, the page tables, the fence, the clears and the triangle.
+13. The customer id read is 0x15 (`CHIP_CUSTOMER_ID`).
+14. `gc_triangle` passes (2026-11-23): the three-apex read-back (red
+    (128,19) = ee0809ff, green (35,111) = 09ee08ff, blue (220,111) =
+    0908eeff), the outside check and 10506 covered pixels (8388..12582
+    expected), `gc_triangle: PASS (0 failing checks)`, record
+    `594b0209 00000001 0000290a 01000080`. `gl_test` case 1 also passes
+    (10 checks ok, record `594b0103`). `docs/notes/stm32mp257f-dk-bringup.md`,
+    steps 7-8.
 
-1. SPI 183 reaching the A35 and the fence retiring with its interrupt
-   arriving (Q6; `gc_fence`).
-2. The clear reading back through the resolve engine (`gc_clear`).
-3. The core clock rate beyond the SCMI level read (`app.overlay:8-10`).
-4. The carveout's memory attributes and coherence with the A35 (Q14).
-5. Everything that draws: the triangle, the GL sample and the display.
+All of items 8-14 are in `docs/notes/stm32mp257f-dk-bringup.md`, "Board
+verdicts". The rule above still stands: nothing at or above 0x800 was read
+from the CPU in any of these runs.
+
+Still unverified on the board:
+
+1. The core clock rate beyond the SCMI level read: PERFORMANCE domain 1 read
+   back 800000 kHz, but the 800 MHz clock itself was never read
+   (`app.overlay:8-10`).
+2. A cacheable mapping of the carveout with clean/invalidate (Q14): only the
+   non-cacheable one was tried.
+3. The minimum reset assert time: the reset was held for one write and read
+   back, and the shortest assert that still resets is unknown.
+4. The GL regression set beyond case 1, and the display (P8, P9).
 
 ## Board runs, and what is left
 

@@ -771,6 +771,12 @@ so the runner's `result=` is right either way.
 
 ## What these runs answer
 
+Where the results are folded in: the pre-study's rows P6 and P7 (section 8),
+its section 6 and its questions Q1, Q4, Q6, Q8, Q10, Q12 and Q14
+(`docs/notes/pre-study-stm32mp257f-dk.md`), and the GC8000 section's "Read on
+the board" list in `driver/docs/vivante-kernel-rust.md` (the RCC reset fix is
+commit 2da6568d).
+
 - Q1 customer id (step 4 prints it; expected 0x15, never read;
   pre-study `:134-136,816`);
 - Q6 `CNTFRQ_EL0` from a CPU (steps 1-3 print `cntfrq=`; read 40 MHz) and
