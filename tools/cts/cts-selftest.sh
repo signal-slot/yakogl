@@ -196,9 +196,10 @@ fi
 # board sets, --present, --packages, --build / --build-missing against a fake
 # deps.toml in a scratch layout, the MALI_CSFFW entry's build on a stand-in download,
 # the retry of a cut download, the nanopc_t6 set's MALI_DEQP_TOOLCHAIN and the
-# MP2_QEMU entry's --check line and pinned sources). Its count is pinned like
+# MP2_QEMU entry's --check line and pinned sources, an entry its required entry
+# made is present, not built). Its count is pinned like
 # images-selftest's.
-DEPS_SELFTEST_CHECKS=69
+DEPS_SELFTEST_CHECKS=75
 echo
 echo "== 20b. deps-selftest.sh: deps.toml, deps-env.sh --check / --build"
 dout=$("$HERE/deps-selftest.sh" 2>&1)

@@ -181,6 +181,19 @@ url = "file://$T/a.tar"
 sha256_from = "$T/UPSTREAM:fake"
 
 [[dep]]
+name = "P"
+path = "p"
+marker = "p/done"
+build = 'mkdir -p "\$DEPS/p/q" && touch "\$DEPS/p/done" "\$DEPS/p/q/done"'
+
+[[dep]]
+name = "Q"
+path = "p/q"
+marker = "p/q/done"
+requires = ["P"]
+build = 'echo ran >> "\$DEPS/q.runs"; exit 1'
+
+[[dep]]
 name = "W"
 path = "w-{board}"
 marker = "w-{board}/done"
@@ -214,6 +227,22 @@ check "a wrong sha256 is reported" "expected 0000" "$out"
 [ ! -e "$L/f" ] && ok "a wrong sha256 builds nothing" || bad "F was built"
 out=$("$ENV_SH" --build G 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "sha256_from reads the digest from a file" || bad "--build G: rc $rc: $out"
+# An entry that its required entry's build made too (ZEPHYR_WS's `west update`
+# fetches HAL_NXP_DIR's tree) is present by then: its own build must not run.
+# On an empty layout HAL_NXP_DIR's build ran, failed and made the run exit 1.
+out=$("$ENV_SH" --build Q 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "--build of an entry its required entry made succeeds" || bad "--build Q: rc $rc: $out"
+check "the required entry is built" "built    P  $L/p/done" "$out"
+check "the entry is present after it" "present  Q  $L/p/q/done" "$out"
+[ ! -e "$L/q.runs" ] && ok "the entry's own build did not run" || bad "Q's build ran"
+rm -rf "$L/p"
+out=$("$ENV_SH" --build Q P 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "the same with the required entry named after it" || bad "--build Q P: rc $rc: $out"
+rm -f "$L/p/q/done"
+out=$("$ENV_SH" --build Q 2>&1); rc=$?
+[ "$rc" -eq 1 ] && [ "$(wc -l < "$L/q.runs" 2>/dev/null)" = 1 ] &&
+  ok "a missing entry whose required entry is present runs its own build" || bad "--build Q, P present: rc $rc: $out"
+: > "$L/p/q/done"
 out=$("$ENV_SH" --build NOSUCH 2>&1); rc=$?
 [ "$rc" -eq 2 ] && ok "--build of an unknown entry exits 2" || bad "--build NOSUCH: rc $rc"
 out=$("$ENV_SH" --build W 2>&1); rc=$?

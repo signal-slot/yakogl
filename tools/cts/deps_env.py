@@ -213,6 +213,13 @@ def build(d, by_name, deps, board, done):
         if not build(by_name[r], by_name, deps, board, done):
             print(f"failed   {name}: needs {r}")
             return False
+    # A required entry's build may have made this one too (ZEPHYR_WS's
+    # `west update` fetches hal_nxp, HAL_NXP_DIR's tree): look again, so a
+    # present entry is never touched.
+    if d.get("requires") and os.path.exists(marker):
+        print(f"present  {name}  {marker}")
+        done[name] = True
+        return True
     if "build" not in d:
         print(f"nobuild  {name}: {d.get('note', 'no build recipe')}")
         return False
