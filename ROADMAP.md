@@ -97,45 +97,63 @@ the website consistent with the status sources, this roadmap, and a green
 `tools/check.sh` on the tree to publish. A first version is tagged with its
 own `CHANGELOG.md` section.
 
-**State.** Not public yet (read 2026-11-16, main `e6e68ff7`). On 2026-10-21
+**State.** Not public yet (read 2026-11-23, main `83c4a779`). On 2026-10-21
 the owner decided how (issue #1606): a new public repository whose history
 starts with one fresh commit of the cleaned tree, and the order of the work.
 Stage 1, which this stage follows, is met. `CHANGELOG.md` has its `0.1.0`
 section (dated 2026-10-27, commit `625f82ce`); no version is tagged.
 `CONTRIBUTING.md`, `SECURITY.md`, `DESIGN.md`, this roadmap and the release
 building guide are in the tree. A rehearsal of the snapshot commit ran on
-2026-11-15 (`docs/release/snapshot.md`, source `cc2cc536`, one commit, no
-remote). The state of each checklist line is in
+2026-11-23 on the real commit `da11eb6b` (`docs/release/snapshot.md`,
+`45d5b03e`): the tool ran twice and printed the same snapshot hash
+(deterministic), the output is one root commit with no remote, nothing was
+pushed, and the accidental `before` gitlink that had blocked the tool is
+out of the tree (`da11eb6b`). The state of each checklist line is in
 `docs/release/checklist.md`. Still open:
 
 - The licence audit is clean with 0 findings (checklist line 7), and
   `undecided` is now a `--fail-on` class of check 25 of
-  `tools/cts/cts-selftest.sh`; the rehearsal's run on the snapshot exits 0
-  with it (`docs/release/snapshot.md`, 2026-11-15).
-- The redaction scan (line 8): the Pi 4 home-path finding is fixed; the run
-  of `ed76d276` (`76143e93`, 2026-11-11) and the re-run on `fb51ce43`
-  (`da99b2d7`, 2026-11-12, `docs/release/redaction-audit.md` Part 4) read
-  0 H/M findings. The public run exits 3 (the private classes not run: not a
-  pass) and the private run, with a partial value set, exits 0. The
-  snapshot rehearsal's public run is exit 3 as well, with 7 `lab-host`
-  hits in `docs/notes/x2-glmark2-slow-scenes.md` from an earlier private run
-  still open. The real snapshot has not passed with the owner's private
-  file.
-- The website: `bash tools/website-check.sh` exits 0 at this tip (5 pages, 19
-  figures), but `website/data.js` says it was checked against `6d360a03`
-  (2026-11-10); the glmark2 figures wait for #1196 (line 9).
+  `tools/cts/cts-selftest.sh`; the rehearsal's audit on the snapshot of
+  `da11eb6b` exits 0 with it: 15250 files, 5867 with an SPDX line, 7830
+  allowlisted, 0 in every fail-on class, findings 0
+  (`docs/release/snapshot.md`, 2026-11-23).
+- The redaction scan (line 8): Part 4 of `docs/release/redaction-audit.md`
+  was re-run on 2026-11-23 at `937161af5beb` (`eb83cbd5`), 15086 files.
+  The public run exits 3 with "0 H/M finding(s), 3 class(es) not run, 115
+  informational, 145 look-alike(s) dropped: NOT COMPLETE (private classes
+  not run)" — exit 3 is not a pass; the scan's self-test prints
+  "self-test passed" and `tests/redaction_scan.rs` passes 4. The private
+  run, with a partial value set held in one process's memory only (never
+  in a file, a log or a commit), exits 0 with 0 H/M findings: clean.
+  Nothing needed rewording: the `lab-host` findings of the earlier private
+  runs are gone from the tree (the X2 slow-scene notes no longer name the
+  lab's machines, `49f3a112`). The rehearsal's scan on the snapshot commit
+  of `da11eb6b` reads the same — public exit 3 with 0 H/M findings,
+  private exit 0 with a partial set; a broader private set holding the
+  public product and tool names read exit 1 with 165 H/M, all of them
+  those public names, and whether any of them must leave the tree is the
+  owner's call. Still open for line 8: the owner's run with
+  `YAKOGL_REDACTION_PRIVATE_FILE` (the full value set) on the real
+  snapshot commit, exit 0, and the history decisions D7/D8 (#1606 step 8).
+- The website (line 9): `bash tools/website-check.sh` exits 0 at this tip:
+  "website-check: ok (5 pages, 168 links and sources, 19 figures)".
+  `website/data.js` is checked against `3a45f7a8` (2026-11-23, `cfe028aa`):
+  its dEQP tables and the Mali and Pi 5 lines, and the NanoPC-T6 status
+  line of `status.html`, follow `tools/cts/RESULTS.md`, which the check
+  verifies against. The glmark2 figures wait for #1196.
 - The README glmark2 table from one commit (#1196): it still mixes the
   2026-10-20 run with the AM62P's `86d0b482` (2026-10-28).
 - The `CONTRIBUTING.md` walk (line 3): met on 2026-11-12, fresh clone of
   `570cd8c6`, `--quick` 181 ok, 0 failed, 0 gap(s).
-- A green full `tools/check.sh` on the snapshot (line 12): line 12 was met
-  at `c66bea9f` (2026-11-11, full gate 222 ok, 0 failed, 0 gap(s), recorded
-  in `4946e879`), which holds for that commit only. The nightly
-  `rust_eh_personality` link failure is fixed (`fce3e6aa`, `2e949ed5`).
-  Since `760aad3d` (2026-11-14, `cde1db8d`) the line is partial: the full
-  run failed 9 rows on `tests/redaction_scan.rs` (fixture values of
-  `tools/mp2_uboot_record_check.py`, fixed in `31608f8e`) and was cut by a
-  full disk, so the gate is re-run on the snapshot.
+- A green full `tools/check.sh` on the snapshot (line 12; its re-run is
+  #344's): line 12 was met at `c66bea9f` (2026-11-11, full gate 222 ok, 0
+  failed, 0 gap(s), recorded in `4946e879`), which holds for that commit
+  only. The nightly `rust_eh_personality` link failure is fixed
+  (`fce3e6aa`, `2e949ed5`). Since `760aad3d` (2026-11-14, `cde1db8d`) the
+  line is partial: the full run failed 9 rows on `tests/redaction_scan.rs`
+  (fixture values of `tools/mp2_uboot_record_check.py`, fixed in
+  `31608f8e`) and was cut by a full disk, so the gate is re-run on the
+  snapshot.
 
 ## 4. OpenGL ES 3.0
 
