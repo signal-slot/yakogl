@@ -197,57 +197,59 @@ from the first is "private classes not run", not a pass. The snapshot
 directory is removed after a rehearsal; nothing is pushed and no remote is
 added.
 
-### Rehearsal on the origin/main tip (2026-11-22)
+### Rehearsal on a real tip commit (2026-11-23)
 
-- **R** (source): `756e1cd7a5a770f2389cf0426c55d5cf08ea7642`, a
-  descendant of the redaction cleanup (Part 4 at `3b8f4949`, the
-  `docs/release/snapshot.md` lab-host rule). **The tool refuses R itself**:
-  `make-snapshot: the tree keeps submodule gitlink(s), not supported:
-  before`, exit **8**. `a9ca11e1` ("Host dEQP-GLES3 read_pixels ...")
-  committed an empty directory `before` as a gitlink (mode 160000,
-  `fa85a83567a7`, no `.gitmodules`); origin/main (`7d248a8f`) still has
-  it. It is an accident, not a `snapshot-exclude` decision; `git rm before`
-  in an ordinary commit is open and the tool was not changed.
-- **R'** (what was rehearsed): `20c9e3194f4ac87e1bcd570434f94fe43fc47f5a`,
-  a commit made only for this rehearsal (never on a branch) with R as its
-  parent and R's tree minus the `before` entry (tree `077c1290`). Everything
-  below is R' = R minus that one gitlink.
+- **Source** (a real commit, no throw-away commit):
+  `da11eb6b5881bf96bd64bffe9fe103d96e1ed515` ("tree: accidental gitlink
+  `before` (a9ca11e1) removed, the snapshot tool accepts the tree again"),
+  the commit that removed the `before` gitlink and a descendant of the
+  redaction cleanup (Part 4 at `3b8f4949`, the `docs/release/snapshot.md`
+  lab-host rule). Its tree (`8bf46873`) has no mode-160000 entry.
 - **Identity and date**: `yakogl rehearsal <rehearsal@invalid>`,
   `2026-01-01T00:00:00Z`, given as `--author` and `--date`.
 - **Tool output** (exit 0, both runs): `source
-  20c9e3194f4ac87e1bcd570434f94fe43fc47f5a`, `snapshot
-  1dead7cd3407c7c26c7c3d4f0459410202a97b71`, `files 14593`, `exclusions:
+  da11eb6b5881bf96bd64bffe9fe103d96e1ed515`, `snapshot
+  b346c645c57c8e59b848bfde4274b817bc4f43da`, `files 15284`, `exclusions:
   none (tools/release/snapshot-exclude lists no path)`. The same command
   into a second output directory printed the same `snapshot` hash: the tool
   is deterministic. `--self-test` passed.
-- **Shape** (read through `git fetch <outdir> HEAD`): `git rev-list --count
-  FETCH_HEAD` 1; the snapshot's tree is `077c1290`, R''s tree. The worker
-  could not run git inside the output directory, so the parent, remote and
-  author checks of the Procedure were not read there; the tool adds no
-  remote and no parent by construction (one root commit), and none was
-  added.
+- **Shape** (read through `git fetch <outdir> HEAD`; the worker could not
+  run `git -C <outdir>`): `git rev-list --count FETCH_HEAD` 1; the commit
+  has no parent; author and committer `yakogl rehearsal
+  <rehearsal@invalid>`, date `2026-01-01T00:00:00Z`; its tree `8bf46873` is
+  the tree of the source commit. The output directory's `.git/config` has no
+  `remote` section.
+- **Licence audit** (check 25's five `--fail-on` classes plus `undecided`,
+  `--root` the snapshot checkout): exit **0**: 15250 files, 5867 with an
+  SPDX line, 7830 allowlisted; missing-spdx 0, unknown-id 0,
+  unused-license 0, third-party-mismatch 0, undecided 0, generated 91
+  (mismatch 0), third-party-unlabelled 13 (information); findings 0.
 - **Redaction scan, public classes** (on the fetched snapshot commit with
   `--allow <outdir>/tools/release/redaction-scan.allow`): exit **3**, "0
-  H/M finding(s), 3 class(es) not run, 98 informational, 142 look-alike(s)
-  dropped: NOT COMPLETE (private classes not run)" (14370 files scanned;
-  `third_party/` and `docs/release/redaction-audit.md` excluded). Exit 3 is
-  not a pass for line 8.
-- **Redaction scan, private classes**: **not run**. The command with the
-  farm's values in an inline `YAKOGL_REDACTION_PRIVATE` was not approved on
-  this worker. This is a gap, not a pass. The last private run (in memory,
-  tip `3b8f4949`, Part 4) read exit 0, 0 H/M; the 7 `lab-host` hits at
-  `docs/notes/x2-glmark2-slow-scenes.md:41-43` of the 2026-11-17 rehearsal
-  were closed by `x2-names-out` and the redact-tree cleanup.
-- **Licence audit** (`--root` the snapshot checkout, check 25's five
-  `--fail-on` classes plus `undecided`): exit **0**: 14559 files, 5518 with
-  an SPDX line, 7586 allowlisted; missing-spdx 0, unknown-id 0,
-  unused-license 0, third-party-mismatch 0, undecided 0, generated 88
-  (mismatch 0), third-party-unlabelled 13 (information); findings 0.
+  H/M finding(s), 3 class(es) not run, 115 informational, 145 look-alike(s)
+  dropped: NOT COMPLETE (private classes not run)" (15061 files scanned;
+  `third_party/` and `docs/release/redaction-audit.md` excluded).
+- **Redaction scan, private classes** (same commit and allow file; one
+  `python3 -I -c` wrapper process held the values in the environment
+  variable `YAKOGL_REDACTION_PRIVATE` and checked that none of them appears
+  in the scan's output: 0 did): a **partial** set from `ask_farm` and the
+  resource list, as in Part 4 of `redaction-audit.md` (owner-login 1,
+  public-name 1, login 1, lab-host 39: the nodes, gateway and laptop, the
+  serial-bridge hosts under both names, the KVM hosts, the hardware ids of
+  USB adapters; not the board and product names). Exit **0**: "0 H/M
+  finding(s), 0 class(es) not run, 115 informational, 198 look-alike(s)
+  dropped: clean". A broader set that also holds the resource ids that are
+  at the same time public product or tool names (`armadillo-x2`,
+  `verdin-am62p`, `verdin-imx8mp`, `rpi5-console`, `tailvision-am62p`, the
+  `stm32mp257f-dk-*` ids; a login that is the owner's first name without
+  its `public-name` entry) read exit 1 with 165 H/M (164 `lab-host`, 86
+  files, 1 `owner-login`); all are those product, tool and public names,
+  none a farm machine name. Whether any of those ids should leave the tree
+  is the owner's call, not made here. No value was written to a file, a
+  log or a commit. Line 8's complete private run with the owner's own file
+  stays open.
 - The snapshot directories sit under `$TMPDIR` (removed with the task); no
   remote was added and nothing was pushed.
-
-Open before the real snapshot: `git rm before` (the gitlink), the private
-scan on the snapshot commit, then a rehearsal on a descendant.
 
 The real snapshot of the commit to publish, line 8 on it with the owner's
 private file, D7 (promote and make public) and D8 (the date) are the
