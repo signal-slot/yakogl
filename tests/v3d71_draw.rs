@@ -670,9 +670,9 @@ fn mrt8_eight_targets_and_no_state_packets() {
     // the module draws 8 targets, each with its own mask and blend bit
     let mut d = fbo(8);
     d.independent_blend = true;
-    for i in 0..8 {
-        d.targets[i].color_mask = i as u8 + 1;
-        d.targets[i].blend_enable = i % 2 == 1;
+    for (i, t) in d.targets.iter_mut().enumerate().take(8) {
+        t.color_mask = i as u8 + 1;
+        t.blend_enable = i % 2 == 1;
     }
     let p = translate(&d).unwrap();
     assert_eq!(p.blend_enables.mask, 0xaa);
