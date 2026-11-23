@@ -42,8 +42,9 @@
  * Refused (V3D_JOB71_REFUSED, or v3d_job71_begin false), never drawn wrong:
  * 4x multisampling (no field: not yet), a viewport whose |Z scale| is below
  * 0.01 (Mesa writes CLIPPER_Z_SCALE_AND_OFFSET_NO_GUARDBAND there, a packet
- * v3d_cl_packets.h does not have yet), the TMU configuration uniforms
- * (QUNIFORM_TMU_CONFIG_P0/P1: the 7.1 texture state is a later step), VPM
+ * v3d_cl_packets.h does not have yet), a TMU configuration uniform
+ * (QUNIFORM_TMU_CONFIG_P0/P1) whose sampler binding is not given or whose
+ * record address and payload share a bit, VPM
  * "separate segments" (no 7.1 record flag), a program reading the base
  * instance, transform feedback, primitive restart, a base vertex, early Z
  * (off: legal, only slower).
@@ -68,8 +69,15 @@
 
 /* Mesa's enum quniform_contents values the 7.1 builder reads besides
  * v3d_frame.h's (the same numbers as v3d_job.h, which a 7.1 build cannot
- * include): a texture's base level size, depth and layer count at sampler
- * binding `data`. The TMU configuration words (40, 41) are refused. */
+ * include): the TMU configuration words P0 and P1 of the sampler binding in
+ * bits 24..31 of `data` (struct v3d_job71_tmu's tex_state or sampler ORed
+ * with the low 24 bits, as v3d_uniforms.c write_tmu_p0 / write_tmu_p1), and
+ * a texture's base level size, depth and layer count at sampler binding
+ * `data`. */
+#ifndef V3D_QUNIFORM_TMU_CONFIG_P0
+#define V3D_QUNIFORM_TMU_CONFIG_P0 40
+#define V3D_QUNIFORM_TMU_CONFIG_P1 41
+#endif
 #ifndef V3D_QUNIFORM_TEXTURE_WIDTH
 #define V3D_QUNIFORM_TEXTURE_WIDTH      44
 #define V3D_QUNIFORM_TEXTURE_HEIGHT     45
@@ -169,11 +177,17 @@ struct v3d_job71_state {
 };
 
 /* One sampler binding of a stage (v3d_job.h struct v3d_job_tmu, the same
- * layout). At 7.1 only its sizes are read (the TEXTURE_* uniforms); the
- * record addresses wait for the 7.1 texture state. */
+ * layout). The TMU_CONFIG_P0/P1 uniforms read the record addresses, the
+ * TEXTURE_* uniforms the sizes; a field no uniform of the stream asks for
+ * is not read (its 0 is refused only when one does). */
 struct v3d_job71_tmu {
 	uint32_t unit;
+	/* GPU address of the 7.1 TEXTURE_SHADER_STATE record (v3d_tex71.h,
+	 * V3D_TEX71_RECORD_ALIGN): P0's address; its low 4 bits must be 0 */
 	uint32_t tex_state;
+	/* GPU address of the SAMPLER_STATE record, the variant the view needs
+	 * (write_tmu_p1's sampler_state_offset[variant]): P1's address; its low
+	 * 3 bits must be 0 */
 	uint32_t sampler;
 	uint32_t width;
 	uint32_t height;

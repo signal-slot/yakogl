@@ -52,6 +52,8 @@ fn rust_side_layout_is_compiled() {
     assert_eq!(core::mem::size_of::<V3dTfu71Job>(), 48);
     assert_eq!(V3D_JOB71_MAX_RTS, 8);
     assert_eq!(V3D_JOB71_MAX_SIZE, 7680);
+    // the TMU configuration words v3d_job71 writes (Mesa's quniform_contents)
+    assert_eq!((V3D_QUNIFORM_TMU_CONFIG_P0, V3D_QUNIFORM_TMU_CONFIG_P1), (40, 41));
     let j = V3dJob71::ZERO;
     assert!(j.bcl.is_null() && !j.broken && j.t.rt.len() == V3D_JOB71_MAX_RTS);
     let l = V3dJob71DrawLayout::ZERO;

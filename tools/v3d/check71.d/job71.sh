@@ -43,11 +43,11 @@
 #      which names it and gives its reason, or it fails; a gl.allow line that
 #      matches nothing fails too. Each reference also compares equal to
 #      itself, and a Z/S store put in place of writemask's Z-only one is found.
-# Also: v3d_job71.c built at 7.1 with -Wall -Wextra -Werror, and at 4.2
-# defines nothing.
-# Reference: tools/v3d/mesa_ref.sh (build/v3d-check/mesa), or MESA_V3D_TREE with
-# build-v3d as the v3d rows of tools/check.sh. Convention:
-# tools/v3d/check71.d/README.md.
+#  (g) tmu: the TMU config P0/P1 words v3d_job71 writes for the 16 jobs of
+#      gl_tex2d, gl_texfmt and gl_cube equal the references' (section (g)).
+# Also: v3d_job71.c -Wall -Wextra -Werror at 7.1, no symbol at 4.2. Reference:
+# tools/v3d/mesa_ref.sh (build/v3d-check/mesa), or MESA_V3D_TREE with build-v3d
+# as the v3d rows of tools/check.sh. Convention: tools/v3d/check71.d/README.md.
 # Run as `sh job71.sh` too: a POSIX shell hands it to bash before any bash syntax.
 if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -u
@@ -94,7 +94,7 @@ fail() {
       -o "$dir/v3d_job71.o" &&
     cc -O1 -std=c11 -Wall -Wextra -Werror "${inc[@]}" -c driver/src/v3d/v3d_job71.c \
       -o "$dir/v3d_job71_42.o" &&
-    cc -O1 -std=c11 -Wall -Werror -DV3D_CL_VER=71 "${inc[@]}" -Itools/v3d/tri-shaders71 \
+    cc -O1 -std=c11 -Wall -Werror -DV3D_CL_VER=71 "${inc[@]}" -Itools/v3d/tri-shaders71 -Itools/v3d/gltest-mesa71-tex \
       tools/v3d/job71_check.c "$dir/v3d_frame71.o" "$dir/v3d_job71.o" "${libs[@]}" \
       -o "$dir/job71_check"
 } >"$dir/build.log" 2>&1 || {
@@ -520,7 +520,126 @@ else
   gl_line="8 references, $jobs jobs, $packets packets, $diffs differences, $named named"
 fi
 
-summary="(a) clear: ${clear_line:-not run}; (b) triangle: ${triangle_line:-not run}; (c) multi; (d) ${refused:-?} refused; (e) G1: ${g1:-not run}; (f) gl: ${gl_line:-not run}"
+# ---- (g) tmu: the TMU configuration words of Mesa's 7.1 texture jobs ----
+# tmu.py reads every job of tools/v3d/pi5/gl_{tex2d,texfmt,cube}.clif (Mesa
+# 26.2.1 on the drm-shim at 7.1.10; tools/v3d/pi5/README.md, "The P10
+# texture shapes") with texstate71.py's dump reader and finds the texture
+# state and sampler state records the job samples by their contents (the
+# records of that README's table, which tex71.sh checks v3d_tex71 packs),
+# each at exactly one address of the right alignment (texture 32 bytes,
+# sampler 8): not read from the uniforms. It writes one line a job, the
+# label, those two addresses and the words of the job's fragment shader
+# uniform stream. job71_check tmu builds each job's draw with those record
+# addresses and Mesa's texture FS uniform list (QUNIFORM_TMU_CONFIG_P0 data
+# 3, P1 data 4) and compares the stream it writes word for word, then a
+# synthetic stream (P1's output type 32-bit and unnormalised bits, P0's
+# return words 15, bindings 2 and 5 found by unit). Negative control: a
+# reference word changed by one bit is found.
+cat >"$dir/tmu.py" <<'EOF'
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+"""tmu.py <out> <shape>...: one line a job of tools/v3d/pi5/gl_<shape>.clif:
+'<shape>.<job> <texture state address> <sampler address> <FS uniform words>'.
+The record addresses are found by the records' words, each at exactly one
+address (texture state 32-byte, sampler 8-byte aligned); exit 1 otherwise."""
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("texstate71", "tools/v3d/pi5/src/texstate71.py")
+ts = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ts)
+
+RGBA8 = [0x0000f000, 0x00000200, 0x00404001, 0x00b1a840, 0x000f0340, 0x00003c00]
+SRGB8_A8 = [0x0000f004] + RGBA8[1:]
+RGB565 = [0x0001b000, 0x00000100, 0x00404001, 0x0031a860, 0x001b0340, 0x00006c00]
+CUBE = [0x0000d000, 0x10000002, 0x01800400, 0x00b1a040, 0x000d0300, 0x00003400]
+NEAREST = [0x00100007, 0, 0, 0, 0, 0]
+LINEAR = [0x00100004, 0, 0, 0, 0, 0]
+CUBE_NEAREST = [0x00100007, 0x00490000, 0, 0, 0, 0]
+CUBE_LINEAR = [0x00100004, 0x00490000, 0, 0, 0, 0]
+# per shape, job by job: (texture state, sampler state) (README's table)
+JOBS = {
+    "tex2d": [(RGBA8, NEAREST), (RGBA8, LINEAR)],
+    "texfmt": [(SRGB8_A8, NEAREST), (RGB565, NEAREST)],
+    "cube": [(CUBE, CUBE_LINEAR if k % 2 else CUBE_NEAREST) for k in range(12)],
+}
+
+
+def find(mem, words, align):
+    return [a for a in mem if a % align == 0 and
+            all(mem.get(a + 4 * k) == w for k, w in enumerate(words))]
+
+
+def main():
+    bad = 0
+    out = []
+    for shape in sys.argv[2:]:
+        jobs = ts.parse_jobs("tools/v3d/pi5/gl_%s.clif" % shape)
+        if len(jobs) != len(JOBS[shape]):
+            print("tmu: gl_%s has %d jobs, expected %d" % (shape, len(jobs), len(JOBS[shape])))
+            bad += 1
+            continue
+        for n, ((mem, recs, unif), (tex, smp)) in enumerate(zip(jobs, JOBS[shape]), 1):
+            label = "%s.%d" % (shape, n)
+            ta, sa = find(mem, tex, 32), find(mem, smp, 8)
+            if len(recs) != 1 or len(ta) != 1 or len(sa) != 1:
+                print("tmu: %s: %d FS record(s), texture state at %s, sampler at %s" %
+                      (label, len(recs), [hex(a) for a in ta], [hex(a) for a in sa]))
+                bad += 1
+                continue
+            fs = recs[0]
+            later = [a for a in unif if a > fs]
+            end = min(later) if later else None
+            stream, a = [], fs
+            while a in mem and (end is None or a < end):
+                stream.append(mem[a])
+                a += 4
+            out.append("%s 0x%08x 0x%08x %s" % (label, ta[0], sa[0],
+                                                " ".join("0x%08x" % w for w in stream)))
+    with open(sys.argv[1], "w") as fh:
+        fh.write("\n".join(out) + "\n")
+    print("tmu: %d job(s) read, %d failed" % (len(out), bad))
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+
+tmu_line=""
+if ! python3 -I "$dir/tmu.py" "$dir/tmu.in" tex2d texfmt cube >"$dir/tmu.py.out" 2>&1; then
+  fail "(tmu) the references' records or streams were not read:"
+  sed 's/^/  /' "$dir/tmu.py.out"
+else
+  out=$(TMPDIR=$dir/tmp "$dir/job71_check" tmu "$dir/tmu.in" 2>&1)
+  rc=$?
+  printf '%s\n' "$out" >"$dir/tmu.out"
+  last=$(printf '%s\n' "$out" | tail -n 1)
+  njobs=$(grep -c '^job71_check: tmu [a-z0-9]*\.[0-9]* ' "$dir/tmu.out")
+  for s in tex2d texfmt cube; do
+    grep -q "^job71_check: tmu $s\.1 " "$dir/tmu.out" || fail "(tmu) no gl_$s job compared"
+  done
+  if [ "$rc" -ne 0 ] || ! printf '%s\n' "$last" | grep -q ": ok$" || [ "$njobs" -ne 16 ]; then
+    fail "(tmu) job71_check tmu: exit $rc, $njobs of 16 jobs"
+    printf '%s\n' "$out" | sed 's/^/  /'
+  else
+    echo "(tmu) ${last#job71_check: }"
+    sed -n 's/^job71_check: tmu \([a-z0-9]*\.1\) /(tmu)   \1 /p' "$dir/tmu.out"
+    tmu_line="${last#job71_check: tmu }"
+    tmu_line="${tmu_line%: ok}"
+  fi
+  # negative control: the first reference P1 word with its per-pixel mask
+  # bit cleared must be reported
+  sed '1s/^\([^ ]* [^ ]* [^ ]* [^ ]* 0x[0-9a-f]*\)c$/\18/' "$dir/tmu.in" >"$dir/tmu_mutated.in"
+  if cmp -s "$dir/tmu.in" "$dir/tmu_mutated.in" ||
+    TMPDIR=$dir/tmp "$dir/job71_check" tmu "$dir/tmu_mutated.in" >"$dir/tmu_mutated.out" 2>&1 ||
+    ! grep -q '^job71_check: FAIL tex2d.1: FS uniform 1 (contents 41): 0x0000107c, the reference 0x00001078$' \
+      "$dir/tmu_mutated.out"; then
+    fail "(tmu) a reference P1 word with its per-pixel mask bit cleared was not found"
+  fi
+fi
+
+summary="(a) clear: ${clear_line:-not run}; (b) triangle: ${triangle_line:-not run}; (c) multi; (d) ${refused:-?} refused; (e) G1: ${g1:-not run}; (f) gl: ${gl_line:-not run}; (g) tmu: ${tmu_line:-not run}"
 if [ "$fails" -ne 0 ]; then
   echo "$name: $summary, $fails failed"
   exit 1

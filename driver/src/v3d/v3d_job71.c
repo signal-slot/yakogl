@@ -268,6 +268,36 @@ static const struct v3d_job71_tmu *find_tmu(const struct v3d_job71_tmu *tmu, uin
 }
 
 /*
+ * QUNIFORM_TMU_CONFIG_P0 / _P1 (v3d_uniforms.c write_tmu_p0 / write_tmu_p1,
+ * V3D_VERSION 71): the texture state record's (P0) or the sampler state
+ * record's (P1) address ORed with the compiler's payload, the low 24 bits of
+ * the uniform's data (v3d_unit_data_get_offset; bits 24..31 are the sampler
+ * binding, v3d_unit_data_get_unit). The words are TMU Config Parameter 0
+ * (texture state address, return words of texture data: bits 0..3) and
+ * Parameter 1 (sampler state address, per-pixel mask enable, unnormalized
+ * coordinates, output type 32-bit: bits 0..2), one definition for 4.2 and 7.1
+ * (v3d_packet.xml:1534-1544). The record a binding names is the caller's:
+ * for P1 the sampler variant the view needs (write_tmu_p1's
+ * sampler_state_offset[variant]). False for a binding not given, an address
+ * 0, an address whose low bits are a field of the word (P0: 16-byte, P1:
+ * 8-byte aligned at least; Mesa's 7.1 references put samplers at 0x...78)
+ * or a payload bit outside the fields: never an address ORed over a flag.
+ */
+static bool tmu_config(const struct v3d_job71_tmu *tmu, uint32_t n, uint32_t contents, uint32_t data,
+		       uint32_t *out)
+{
+	const struct v3d_job71_tmu *t = find_tmu(tmu, n, data >> 24);
+	const uint32_t payload = data & 0xffffffu;
+	const bool p0 = contents == V3D_QUNIFORM_TMU_CONFIG_P0;
+	const uint32_t fields = p0 ? 0xfu : 0x7u;
+	const uint32_t addr = !t ? 0 : p0 ? t->tex_state : t->sampler;
+	if (addr == 0 || (addr & fields) || (payload & ~fields))
+		return false;
+	*out = addr | payload;
+	return true;
+}
+
+/*
  * v3d_uniforms.c v3d_write_uniforms for the contents this builder supports,
  * with the 7.1 clipper granularity (the viewport X and Y scales in 1/64
  * pixel). The stream starts 4-byte aligned and one more word than it holds
@@ -337,6 +367,13 @@ static bool write_uniforms(struct v3d_cl *cl, const struct v3d_uniform *u, uint3
 			}
 			break;
 		}
+		case V3D_QUNIFORM_TMU_CONFIG_P0:
+		case V3D_QUNIFORM_TMU_CONFIG_P1:
+			if (!tmu_config(tmu, num_tmu, u[i].contents, u[i].data, &v)) {
+				cl->bad_field = true;
+				return false;
+			}
+			break;
 		case V3D_QUNIFORM_FB_WPOS_Y_SCALE:
 		case V3D_QUNIFORM_FB_WPOS_Y_OFFSET:
 		case V3D_QUNIFORM_FB_PNTC_Y_SCALE:
@@ -347,8 +384,6 @@ static bool write_uniforms(struct v3d_cl *cl, const struct v3d_uniform *u, uint3
 			}
 			break;
 		default:
-			/* the TMU configuration words (40, 41) among them: the
-			 * 7.1 texture state is not written yet */
 			cl->bad_field = true;
 			return false;
 		}
