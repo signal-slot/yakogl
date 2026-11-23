@@ -17,8 +17,8 @@
 //!   `lz_scale`) and the random shaders' sums and products (`ck_rnd_*`,
 //!   `lz_rnd*`).
 //!
-//! Every reference is refused now, so each test is `#[ignore]`d with its
-//! refusal and [`refusals_pinned`] asserts the whole `MaliError` message of
+//! Every reference but [`MATCHED`] and [`DIFFERS`] is refused now, so each
+//! such test is `#[ignore]`d with its refusal and [`refusals_pinned`] asserts the whole `MaliError` message of
 //! each one exactly, and that every `deqp_mixcol_*` reference on disk is in
 //! [`REFUSALS`]. The lowering that lifts one removes its `ignore` and its
 //! entry in the same commit. The draws are `tools/mali/deqp_ref.sh
@@ -38,7 +38,12 @@ const LZ: &str = "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_T
 /// The references that compile byte-equal (their tests run): `hp_mat`, a
 /// shader with no default precision whose floats are all declared highp
 /// (mod.rs `FsPrecision::implicit_highp`).
-const MATCHED: &[&str] = &["hp_mat"];
+const MATCHED: &[&str] = &["hp_mat", "f2i_seq"];
+
+/// The references that compile and differ from their expect.json (their
+/// tests stay ignored): `f2i_dead` once the walk drops its dead values
+/// (`nir_fs.rs` `ir_live`).
+const DIFFERS: &[&str] = &["f2i_dead"];
 
 /// Every reference (without the `deqp_mixcol_` prefix) and the whole
 /// `MaliError` message the compiler refuses its pair with now.
@@ -55,9 +60,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("int_uniform_struct", MIX),
     /* mixprec, a mediump float converted to int: F32_TO_S32.rtz at 32 bits,
      * or folded or dead in Mesa */
-    ("f2i_seq", MIX),
     ("f2i_rnd", MIX),
-    ("f2i_dead", MIX),
     /* colourpair, the pair as an operand: MKVEC.v2i16 or U16_TO_U32, then
      * the operation on the word */
     ("ck_scale", CK),
@@ -117,7 +120,6 @@ fn mixcol_int_uniform_struct() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (f2i_seq)"]
 fn mixcol_f2i_seq() {
     mali_ref::assert_matches("deqp_mixcol_f2i_seq");
 }
@@ -129,7 +131,7 @@ fn mixcol_f2i_rnd() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (f2i_dead)"]
+#[ignore = "differs from its reference; pinned by refusals_pinned"]
 fn mixcol_f2i_dead() {
     mali_ref::assert_matches("deqp_mixcol_f2i_dead");
 }
@@ -188,7 +190,8 @@ fn refusals_pinned() {
         .filter_map(|n| n.strip_prefix("deqp_mixcol_")?.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut listed: Vec<&str> = REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
+    let mut listed: Vec<&str> =
+        REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).chain(DIFFERS.iter().copied()).collect();
     listed.sort_unstable();
     assert_eq!(on_disk, listed, "a deqp_mixcol_* reference has no entry in REFUSALS");
     let mut changed = Vec::new();
@@ -198,6 +201,16 @@ fn refusals_pinned() {
             Ok(_) => changed.push(format!("{name}: now compiles; remove its #[ignore] and its entry here")),
             Err(e) if e != *refused => changed.push(format!("{name}: the refusal changed to {e:?}")),
             Err(_) => {}
+        }
+    }
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(&format!("deqp_mixcol_{name}"));
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(pair) if mali_ref::differences(&r, &pair).is_empty() => {
+                changed.push(format!("{name}: now byte-equal; move it to MATCHED"))
+            }
+            Ok(_) => {}
+            Err(e) => changed.push(format!("{name}: now refused: {e}")),
         }
     }
     assert!(changed.is_empty(), "{}", changed.join("\n"));

@@ -108,8 +108,10 @@ const INVARIANT: &str = "an invariant output (Mesa keeps its arithmetic exact, u
 const REBALANCE: &str =
     "three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree)";
 /// The factored sum of constant products (nir_fs.rs `Fs::op`) moved these
-/// two past `AlgebraicForm`, to their next refusal.
-const INT_VALUE: &str = "an integer or boolean value";
+/// two past `AlgebraicForm`, and the walk dropping their dead int and bool
+/// values (`nir_fs.rs` `ir_live`) past the integer/boolean refusal.
+const COLOUR_PAIR: &str = "a colour pair of a constant then a varying lane";
+const FRAGCOLOR_LANE: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 const ATTRNUM: &str =
     "a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations";
 
@@ -120,8 +122,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc2_rebalance_invariant", REBALANCE),
     ("deqp_misc2_rebalance_random_fs", REBALANCE),
     ("deqp_misc2_rebalance_random_vs", REBALANCE),
-    ("deqp_misc2_algebraic_random13", INT_VALUE),
-    ("deqp_misc2_algebraic_random46", INT_VALUE),
+    ("deqp_misc2_algebraic_random13", COLOUR_PAIR),
+    ("deqp_misc2_algebraic_random46", FRAGCOLOR_LANE),
     ("deqp_misc2_attrnum_zero_lanes", ATTRNUM),
     ("deqp_misc2_attrnum_dead_attrs", ATTRNUM),
 ];

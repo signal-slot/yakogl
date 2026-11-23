@@ -6,8 +6,8 @@
 //! `tools/mali/testdata/deqp_shapes/index.tsv` that no other reference drew,
 //! each drawn from its `deqp_shapes/<family>_<shape>` example pair with
 //! `tools/mali/deqp_ref.sh` (the drm-shim instrument). One test per
-//! reference. Four compile byte-equal and run ([`MATCHED`]). Two compile
-//! and differ ([`DIFFERS`]) and four are refused ([`REFUSED`], the whole
+//! reference. Five compile byte-equal and run ([`MATCHED`]). Two compile
+//! and differ ([`DIFFERS`]) and three are refused ([`REFUSED`], the whole
 //! `MaliError` message): those tests are `#[ignore]`d, and
 //! `refusals_pinned` asserts each one's state now. The lowering that moves
 //! one moves its entry in the same commit.
@@ -19,7 +19,8 @@
 mod mali_ref;
 
 /// The references that compile byte-equal, without the `deqp_gaps_` prefix.
-const MATCHED: &[&str] = &["intval_bool_literal", "intval_float_compare", "intval_harness_isok", "intval_other"];
+const MATCHED: &[&str] =
+    &["intval_bool_literal", "intval_float_compare", "intval_harness_isok", "intval_other", "mixprec_fs_mixed_other"];
 
 /// The references that compile and differ from their expect.json.
 const DIFFERS: &[&str] = &["loops_fs_kept_while", "mixprec_fs_varying_plain"];
@@ -33,10 +34,6 @@ const REFUSED: &[(&str, &str)] = &[
     (
         "loops_fs_kept_for_index",
         "Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet",
-    ),
-    (
-        "mixprec_fs_mixed_other",
-        "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet",
     ),
     (
         "mixprec_fs_varying_other",
@@ -99,9 +96,9 @@ fn loops_fs_kept_while() {
 }
 
 /// mixprec/fs_mixed_other: a random-shader fragment shader of int, bool
-/// and mediump float globals (`random.conditionals.fragment.27`).
+/// and mediump float globals (`random.conditionals.fragment.27`), byte-equal
+/// once the walk drops its dead int and bool values (`nir_fs.rs` `ir_live`).
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp; pinned by refusals_pinned"]
 fn mixprec_fs_mixed_other() {
     mali_ref::assert_matches("deqp_gaps_mixprec_fs_mixed_other");
 }

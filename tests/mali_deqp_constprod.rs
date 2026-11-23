@@ -45,10 +45,8 @@ const REFUSED: &[(&str, &str)] = &[
         "constchain_degrees_vs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
     ),
-    (
-        "constchain_fs",
-        "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",
-    ),
+    /* its constant products are dead (`nir_fs.rs` `ir_live`) */
+    ("constchain_fs", "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet"),
     (
         "constchain_loop_vs",
         "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet",

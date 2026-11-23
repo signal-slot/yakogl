@@ -1100,6 +1100,10 @@ pub struct Fs<'s> {
     ir_vals: &'s [[Val; 4]],
     /// Bit `n % 64` of word `n / 64`: node `n` is read ([`Fs::mark_live`]).
     live: [u64; MAX_NODES / 64],
+    /// Bit `v % 64` of word `v / 64`: IR value `v` is read by what the
+    /// program keeps ([`ir_live`]); [`walk_nodes`] skips an ALU operation
+    /// that is not.
+    ir_live: [u64; MAX_VALUES / 64],
     /// The colour's lanes, once the shader stores it.
     pub(super) colour: Option<[Val; 4]>,
     /// The lanes of the outputs at locations 1.. (`layout(location = n)
@@ -4318,6 +4322,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         pool: scratch.alloc_filled((MAX_BREAKS + POOL_IF_TABLES) * m.locals.len(), [Val::Undef; 4]).map_err(oom)?,
         ptop: MAX_BREAKS,
         reg: nir::registration_order(m),
+        ir_live: ir_live(m),
     };
     let vals = scratch.alloc_filled(MAX_VALUES, [Val::Undef; 4]).map_err(oom)?;
     let mut locals = [[Val::Undef; 4]; MAX_LOCALS];
@@ -5517,6 +5522,155 @@ fn walk_kept_loop(
     Ok(())
 }
 
+/// Whether IR value `v` is kept ([`ir_live`]).
+fn kept(live: &[u64; MAX_VALUES / 64], v: u32) -> bool {
+    live.get(v as usize / 64).is_none_or(|w| w >> (v % 64) & 1 != 0)
+}
+
+/// The IR values the program keeps, as bits (`v % 64` of word `v / 64`),
+/// to a fixed point (`nir_opt_dce` and `nir_opt_dead_cf` as far as the
+/// dEQP random shaders need them): what an output store or a discard reads;
+/// what a store to a local reads once something kept loads that local (any
+/// element, any lane: a local's stores are kept or dropped together; `x =
+/// x` is no store); and the condition of an `if` with something kept on a
+/// side (a kept store, a discard, a jump, a loop). A module too large for
+/// the walk keeps every value. [`walk_nodes`] skips an ALU operation not
+/// kept, and an `if` whose condition is not.
+fn ir_live(m: &Module<'_>) -> [u64; MAX_VALUES / 64] {
+    let mut live = [0u64; MAX_VALUES / 64];
+    if m.instrs.len() > MAX_VALUES || m.locals.len() > MAX_LOCALS {
+        return [u64::MAX; MAX_VALUES / 64];
+    }
+    fn mark(live: &mut [u64; MAX_VALUES / 64], s: ir::Src) -> bool {
+        let v = s.val.0 as usize;
+        if v >= MAX_VALUES {
+            return false;
+        }
+        let new = live[v / 64] >> (v % 64) & 1 == 0;
+        live[v / 64] |= 1 << (v % 64);
+        new
+    }
+    /* `x = x`: a whole local stored back from its own load, lanes in place */
+    let self_copy = |op: &ir::Op| match *op {
+        ir::Op::StoreLocal { local, index: None, src, write_mask } => {
+            matches!(m.def(src.val), Some(&ir::Op::LoadLocal { local: l, index: None, .. }) if l == local)
+                && (0..4).all(|i| write_mask >> i & 1 == 0 || src.swizzle[i] as usize == i)
+        }
+        _ => false,
+    };
+    /* whether the run keeps something; marks the condition of each `if`
+     * that does */
+    fn effects(
+        m: &Module<'_>,
+        nodes: &[Node],
+        locals: &[bool; MAX_LOCALS],
+        live: &mut [u64; MAX_VALUES / 64],
+        dead_store: &dyn Fn(&ir::Op, usize) -> bool,
+        changed: &mut bool,
+        depth: usize,
+    ) -> bool {
+        let mut any = false;
+        for n in nodes {
+            any |= match *n {
+                Node::Instr(id) => match m.instr(id) {
+                    Some(ir::Op::StoreOutput { .. } | ir::Op::Discard) => true,
+                    Some(op @ ir::Op::StoreLocal { local, .. }) => {
+                        !dead_store(op, id.0 as usize) && locals.get(local.0 as usize).copied().unwrap_or(true)
+                    }
+                    _ => false,
+                },
+                Node::If { cond, then_, else_ } => {
+                    let t = depth > 64
+                        || effects(m, m.nodes_of(then_), locals, live, dead_store, changed, depth + 1)
+                            | effects(m, m.nodes_of(else_), locals, live, dead_store, changed, depth + 1);
+                    if t {
+                        *changed |= mark(live, cond);
+                    }
+                    t
+                }
+                Node::Loop { body } => {
+                    effects(m, m.nodes_of(body), locals, live, dead_store, changed, depth + 1);
+                    true
+                }
+                Node::Break | Node::Continue | Node::Return => true,
+            };
+        }
+        any
+    }
+    /* a whole-local store every lane of which a later store of the same
+     * run writes again, with no load of the local nor any other node
+     * between (`nir_opt_dead_write_vars`): dEQP's random shaders write
+     * gl_FragColor, held in a local while it is read back, several times */
+    let mut overwritten = [0u64; MAX_VALUES / 64];
+    fn overwrites(m: &Module<'_>, nodes: &[Node], out: &mut [u64; MAX_VALUES / 64], depth: usize) {
+        let mut covered = [0u8; MAX_LOCALS];
+        for n in nodes.iter().rev() {
+            match *n {
+                Node::Instr(id) => match m.instr(id) {
+                    Some(&ir::Op::StoreLocal { local, index: None, write_mask, .. }) => {
+                        if let Some(c) = covered.get_mut(local.0 as usize) {
+                            if write_mask & !*c == 0 && (id.0 as usize) < MAX_VALUES {
+                                out[id.0 as usize / 64] |= 1 << (id.0 % 64);
+                            }
+                            *c |= write_mask;
+                        }
+                    }
+                    Some(&ir::Op::LoadLocal { local, .. } | &ir::Op::StoreLocal { local, .. }) => {
+                        if let Some(c) = covered.get_mut(local.0 as usize) {
+                            *c = 0;
+                        }
+                    }
+                    _ => {}
+                },
+                Node::If { then_, else_, .. } => {
+                    covered = [0; MAX_LOCALS];
+                    if depth < 64 {
+                        overwrites(m, m.nodes_of(then_), out, depth + 1);
+                        overwrites(m, m.nodes_of(else_), out, depth + 1);
+                    }
+                }
+                Node::Loop { body } => {
+                    covered = [0; MAX_LOCALS];
+                    if depth < 64 {
+                        overwrites(m, m.nodes_of(body), out, depth + 1);
+                    }
+                }
+                Node::Break | Node::Continue | Node::Return => covered = [0; MAX_LOCALS],
+            }
+        }
+    }
+    overwrites(m, m.nodes_of(m.body), &mut overwritten, 0);
+    let dead_store = |op: &ir::Op, i: usize| self_copy(op) || overwritten[i / 64] >> (i % 64) & 1 != 0;
+    let mut locals = [false; MAX_LOCALS];
+    loop {
+        let mut changed = false;
+        effects(m, m.nodes_of(m.body), &locals, &mut live, &dead_store, &mut changed, 0);
+        for (i, op) in m.instrs.iter().enumerate().rev() {
+            let kept = live[i / 64] >> (i % 64) & 1 != 0;
+            let reads = match *op {
+                ir::Op::StoreOutput { .. } | ir::Op::Discard => true,
+                ir::Op::StoreLocal { local, .. } => {
+                    !dead_store(op, i) && locals.get(local.0 as usize).copied().unwrap_or(true)
+                }
+                _ => kept,
+            };
+            if !reads {
+                continue;
+            }
+            if let ir::Op::LoadLocal { local, .. } = *op {
+                if let Some(l) = locals.get_mut(local.0 as usize) {
+                    changed |= !*l;
+                    *l = true;
+                }
+            }
+            op.for_each_src(|s| changed |= mark(&mut live, s));
+        }
+        if !changed {
+            return live;
+        }
+    }
+}
+
 /// The nodes of one run: `main`'s body (`top`), a side of an `if`, or a
 /// pass of a loop being unrolled. `after` is where an `if` that ends the
 /// run joins: the instruction the run's successor begins with (the
@@ -5550,6 +5704,8 @@ fn walk_nodes(
             Node::Instr(id) => id,
             /* a `return` that ends `main` is the end of the program */
             Node::Return if top && k + 1 == nodes.len() => continue,
+            /* an `if` that keeps nothing ([`ir_live`]) is dead */
+            Node::If { cond, .. } if !kept(&f.ir_live, cond.val.0) => continue,
             Node::If { cond, then_, else_ } => {
                 let c = vals.get(cond.val.0 as usize).map_or(Val::Undef, |v| v[cond.swizzle[0] as usize & 3]);
                 /* the join's place: the instruction after the `if`, or the
@@ -5792,6 +5948,17 @@ fn walk_nodes(
             _ => return Err(MaliError::ControlFlow),
         };
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        /* an operation nothing kept reads is dead (`nir_opt_dce`): dEQP's
+         * random shaders compute int and bool values into statements and
+         * locals no output reads (deqp_intrnd_dead_*), which Mesa drops
+         * before any of them is lowered */
+        if matches!(op, ir::Op::Alu(..)) && !kept(&f.ir_live, id.0) {
+            continue;
+        }
+        /* a store [`ir_live`] drops: a kept one keeps its value */
+        if matches!(*op, ir::Op::StoreLocal { src, .. } if !kept(&f.ir_live, src.val.0)) {
+            continue;
+        }
         let lane = |vals: &[[Val; 4]], s: ir::Src, i: usize| -> Val {
             vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[i] as usize & 3])
         };

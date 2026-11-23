@@ -34,12 +34,16 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_intval3_` prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["rsg_sconv55_fs"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
 
 const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet";
+/// Past the integer text once the walk drops dead values (`nir_fs.rs` `ir_live`).
+const COLOUR_PAIR: &str = "Valhall: a colour pair of a constant then a varying lane is not lowered yet";
+const FRAGCOLOR_LANE: &str =
+    "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message (all 22 are
 /// the integer/boolean text at `3497799a`).
@@ -52,7 +56,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("opfs_notequal_ivec3_mediump", INT_VALUE),
     ("opfs_post_decrement_effect_ivec2_highp", INT_VALUE),
     ("opfs_pre_decrement_result_int_mediump", INT_VALUE),
-    ("opfs_sequence_bool_vec2_mediump", INT_VALUE),
+    ("opfs_sequence_bool_vec2_mediump", FRAGCOLOR_LANE),
     ("opfs_step_float_vec2_mediump", INT_VALUE),
     ("opfs_step_vec3_highp", INT_VALUE),
     ("reslib_const_int_vs", INT_VALUE),
@@ -63,9 +67,8 @@ const REFUSED: &[(&str, &str)] = &[
     ("rsg_cond12_fs", INT_VALUE),
     ("rsg_condcomb80_fs", INT_VALUE),
     ("rsg_exp76_fs", INT_VALUE),
-    ("rsg_sconv55_fs", INT_VALUE),
     ("rsg_sconv72_fs", INT_VALUE),
-    ("rsg_swizzle12_fs", INT_VALUE),
+    ("rsg_swizzle12_fs", COLOUR_PAIR),
 ];
 
 /// The words of each reference's `fs.fragment` region (Mesa's fragment
@@ -164,7 +167,7 @@ fn opfs_pre_decrement_result_int_mediump() {
 /// `shaders.operator.sequence.no_side_effects.mediump_bool_vec2_fragment`:
 /// `vec2(bool)` as an fp16 `.f1` compare, `F16_TO_S32` and `S32_TO_F32`.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn opfs_sequence_bool_vec2_mediump() {
     mali_ref::assert_matches("deqp_intval3_opfs_sequence_bool_vec2_mediump");
 }
@@ -252,7 +255,6 @@ fn rsg_exp76_fs() {
 /// `shaders.random.scalar_conversion.fragment.55`: `vec4(..., uniform int)`
 /// is `S32_TO_F32` of the FAU word; the `bvec4` local is dead.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
 fn rsg_sconv55_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_sconv55_fs");
 }
@@ -268,7 +270,7 @@ fn rsg_sconv72_fs() {
 /// `shaders.random.swizzle.fragment.12`: every int and bool value is a dead
 /// global or folds; no integer op is left.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a colour pair of a constant then a varying lane; pinned by refusals_pinned"]
 fn rsg_swizzle12_fs() {
     mali_ref::assert_matches("deqp_intval3_rsg_swizzle12_fs");
 }

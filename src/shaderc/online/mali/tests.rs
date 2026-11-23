@@ -5830,8 +5830,8 @@ fn the_femtovg_programs_byte_equal_to_the_shim_are_counted() {
 fn femtovg_filter_image_fits_the_tables() {
     use super::Table;
     for (name, use_) in [
-        ("filter_image", [214, 22, 1153, 1419, 946, 36, 41, 1, 0]),
-        ("filter_image_nodiscard", [210, 22, 1151, 1411, 936, 34, 41, 1, 0]),
+        ("filter_image", [214, 22, 1081, 1419, 946, 36, 41, 1, 0]),
+        ("filter_image_nodiscard", [210, 22, 1070, 1411, 936, 34, 41, 1, 0]),
     ] {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
         let fs = std::fs::read_to_string(root.join(format!("fvg_{name}.frag"))).expect("the reference");

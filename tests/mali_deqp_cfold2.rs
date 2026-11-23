@@ -73,6 +73,9 @@ cfold_ref! {
 
 /// `MaliError::ConstantFold`.
 const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
+/// `MaliError::TexForm`: `random_mixed_rcp16`'s constant operation is dead
+/// (`nir_fs.rs` `ir_live`), its texture look-up the first refusal.
+const TEX_FORM: &str = "a texture look-up other than texture2D(sampler2D, coordinate)";
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
@@ -85,7 +88,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_cfold2_random_mixed_f2i", CONSTANT_FOLD),
     ("deqp_cfold2_random_mixed_rcp_inf", CONSTANT_FOLD),
     ("deqp_cfold2_random_mixed_rsq_inf", CONSTANT_FOLD),
-    ("deqp_cfold2_random_mixed_rcp16", CONSTANT_FOLD),
+    ("deqp_cfold2_random_mixed_rcp16", TEX_FORM),
     ("deqp_cfold2_const_other_inot", CONSTANT_FOLD),
     ("deqp_cfold2_const_other_ior", CONSTANT_FOLD),
     ("deqp_cfold2_const_other_iabs", CONSTANT_FOLD),

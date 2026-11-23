@@ -226,6 +226,9 @@ fn ctrlflow_vs_varying_select() {
 
 /// `MaliError::ControlFlow`.
 const CONTROL_FLOW: &str = "control flow (if, a loop, a return before the end) is not lowered yet";
+/// `MaliError::ColourPair`: `fs_int_cond`'s `if` keeps nothing (`nir_fs.rs`
+/// `ir_live`).
+const COLOUR_PAIR: &str = "a colour pair of a constant then a varying lane";
 /// `MaliError::DiscardForm`.
 const DISCARD_FORM: &str = "a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) is not lowered yet";
 
@@ -241,7 +244,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_fs_float_cond_colour_read", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_float_cond_varying", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_frontfacing", CONTROL_FLOW),
-    ("deqp_ctrlflow_fs_int_cond", CONTROL_FLOW),
+    ("deqp_ctrlflow_fs_int_cond", COLOUR_PAIR),
     ("deqp_ctrlflow_fs_int_cond_colour", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_loop_break_continue", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_return_static_loop", CONTROL_FLOW),
