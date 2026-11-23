@@ -29,9 +29,11 @@
 //! `constglobal_reduced` compiles byte-equal (the -0.0 rule walks constant
 //! chains of any depth, folds `float()` of int and bool literals and reads a
 //! local's reaching store in `main`'s block). The others are ignored with
-//! their refusal quoted; only `mainbuiltin_fs` still stops at the -0.0 rule
-//! (`log` and `sqrt` of constants are not folded); the rest stop at
-//! arithmetic or a fused multiply-add after it. The lowering removes the
+//! their refusal quoted; none stops at the -0.0 rule any more (negzero N2:
+//! the rule folds `sqrt`, `inversesqrt`, `exp2`, `log2`, `sin` and `cos` of
+//! constants through `mesa_fold`, so `mainbuiltin_fs`'s `log2(float(18.625))`
+//! and `sqrt(float(6))` are known not to be -0.0); they stop at arithmetic or
+//! a fused multiply-add after it. The lowering removes the
 //! `ignore` and the reference's entry in `REFUSALS` together.
 //! `refusals_pinned` runs now: it asserts each ignored reference's exact
 //! current refusal and names every one that moved.
@@ -66,7 +68,7 @@ fn negzero_mainbuiltin_vs() {
 }
 
 #[test]
-#[ignore = "refused: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"]
 fn negzero_mainbuiltin_fs() {
     mali_ref::assert_matches("deqp_negzero_mainbuiltin_fs");
 }
@@ -95,7 +97,6 @@ fn negzero_array_inout_vs() {
     mali_ref::assert_matches("deqp_negzero_array_inout_vs");
 }
 
-const NEG_ZERO: &str = "a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)";
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)";
 const FMA: &str = "a fused multiply-add other than a matrix product's (a built-in function's)";
 
@@ -104,7 +105,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_negzero_constglobal_fs", ARITH),
     ("deqp_negzero_constglobal_vs", FMA),
     ("deqp_negzero_mainbuiltin_vs", ARITH),
-    ("deqp_negzero_mainbuiltin_fs", NEG_ZERO),
+    ("deqp_negzero_mainbuiltin_fs", ARITH),
     ("deqp_negzero_mainplain_vs", ARITH),
     ("deqp_negzero_mainplain_fs", ARITH),
     ("deqp_negzero_array_inout_fs", ARITH),
