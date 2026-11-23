@@ -1,0 +1,80 @@
+glmark2 22c527cb0556f3a1ac4445aaa52cc532760928d5 for tools/cts/glmark2-host-pose.sh:
+with GMREF_FIXED_DT_MS=<d>, the scene clock advances exactly d ms per frame
+instead of by wall time, so a scene ends on the pose of a renderer that takes
+d ms a frame. It changes src/scene.cpp only, so it applies alone or on top of
+tools/cts/glmark2-host-ref.patch (meson.build, src/main-loop.cpp).
+
+--- a/src/scene.cpp
++++ b/src/scene.cpp
+@@ -28,6 +28,44 @@
+ #include "util.h"
+ #include <sstream>
+ #include <algorithm>
++#include <cstdlib>
++#include <cmath>
++
++/*
++ * yakogl glmark2-host-pose (tools/cts/glmark2-host-pose.patch in yakogl): with
++ * GMREF_FIXED_DT_MS=<d> in the environment (a number of ms, 0 < d <= 10000),
++ * the scene clock that Scene::update() and the scenes' animations read
++ * (realTime_, whose elapsed() the build, texture, shading, bump, pulsar,
++ * buffer, terrain, shadow, refract, conditionals, function and loop scenes
++ * animate by) advances by exactly d ms per frame instead of by wall time:
++ * after the k-th update() it reads k * d ms. A scene thus runs
++ * ceil(duration / d) frames and ends on the pose that a renderer taking d ms
++ * per frame reaches, whatever the speed of the renderer that draws it. The
++ * desktop, ideas and jellyfish scenes animate by a wall clock of their own
++ * and are not fixed by this. Unset or empty: upstream's wall clock.
++ */
++namespace {
++
++double
++yk_fixed_dt_ms()
++{
++    static const double ms = [] {
++        const char *v = std::getenv("GMREF_FIXED_DT_MS");
++        if (!v || !*v)
++            return 0.0;
++        char *end = nullptr;
++        const double d = std::strtod(v, &end);
++        if (end == v || *end != '\0' || !std::isfinite(d) || !(d > 0.0) || d > 10000.0) {
++            Log::error("GMREF_FIXED_DT_MS='%s' is not a number of ms in (0, 10000]\n", v);
++            std::exit(2);
++        }
++        Log::info("glmark2-host-pose: the scene clock advances %s ms per frame\n", v);
++        return d;
++    }();
++    return ms;
++}
++
++} // namespace
+
+ using std::stringstream;
+ using std::string;
+@@ -109,7 +147,11 @@
+ void
+ Scene::update()
+ {
+-    realTime_.lastUpdate = Util::get_timestamp_us() / 1000000.0;
++    /* yakogl glmark2-host-pose: the k-th update() reads k * d ms */
++    if (yk_fixed_dt_ms() > 0.0)
++        realTime_.lastUpdate = (currentFrame_ + 1) * yk_fixed_dt_ms() / 1000.0;
++    else
++        realTime_.lastUpdate = Util::get_timestamp_us() / 1000000.0;
+
+     currentFrame_++;
+
+@@ -348,7 +390,12 @@
+ void
+ Scene::update_elapsed_times()
+ {
+-    realTime_.lastUpdate = Util::get_timestamp_us() / 1000000.0;
++    /* yakogl glmark2-host-pose: 0 at prepare(), frames * d at finish(), so the
++     * scene starts at 0 and its FPS line reads 1000 / d */
++    if (yk_fixed_dt_ms() > 0.0)
++        realTime_.lastUpdate = currentFrame_ * yk_fixed_dt_ms() / 1000.0;
++    else
++        realTime_.lastUpdate = Util::get_timestamp_us() / 1000000.0;
+     Util::get_process_times(&userTime_.lastUpdate, &systemTime_.lastUpdate);
+     idleTime_.lastUpdate = Util::get_idle_time();
+ }

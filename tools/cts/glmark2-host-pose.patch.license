@@ -1,0 +1,5 @@
+SPDX-License-Identifier: GPL-3.0-only
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+SPDX-FileCopyrightText: 2010-2011 Linaro Limited
+SPDX-FileCopyrightText: 2008 Ben Smith
+A patch to glmark2 22c527cb src/scene.cpp (GPL-3.0 or any later version, used under GPL-3.0), for tools/cts/glmark2-host-pose.sh; glmark2 is fetched, not vendored.
