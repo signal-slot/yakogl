@@ -2554,6 +2554,22 @@ step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uni
     --test mali_deqp_unitype --test mali_deqp_uniarray --test mali_deqp_mixprec \
     --test mali_deqp_colourpair --test mali_deqp_loops --test mali_deqp_misc \
     --test mali_ref_selftest
+# The corpus differential (tools/mali/corpus_diff.py, issue #11252): our side,
+# tests/mali_corpus_diff.rs, checks itself on committed references; then the
+# tool's self-test without Mesa or the CTS: the pairing of single shaders and
+# their partners, the dEQP and glmark2 inputs, the verdicts and the summary,
+# and the tool as a command on four committed programs (it runs the Rust test
+# on them); 9 planned tests.
+mali_corpus_diff_selftest() {
+  local out
+  out=$(PYTHONDONTWRITEBYTECODE=1 python3 -I tools/mali/test_corpus_diff.py 2>&1) ||
+    { printf '%s\n' "$out" | tail -30; return 1; }
+  printf '%s\n' "$out" | tail -4
+  printf '%s\n' "$out" | grep -q '^Ran 9 tests in ' || { echo "corpus_diff: not the 9 planned tests"; return 1; }
+}
+step "test    $MALI_CONFIG (tests/mali_corpus_diff.rs)" \
+  cargo_test --no-default-features --features "$MALI_CONFIG" --test mali_corpus_diff
+step "run     mali corpus_diff self-test (four committed programs, no Mesa)" mali_corpus_diff_selftest
 # Plan #367's glmark2 compile pins: each file compiles reductions of glmark2's
 # shader shapes (Mesa 26.2.1 references where the record has one) and pins the
 # program or the refusal. Feature sets are those of each file's header.

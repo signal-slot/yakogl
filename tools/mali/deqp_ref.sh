@@ -9,6 +9,7 @@
 #
 # Usage:
 #   tools/mali/deqp_ref.sh <in.vert> <in.frag> <out-prefix> [--instrument pan_shc|shim] [--prim triangles|points]
+#                          [--attrib-bindings L] [--zero-uniforms]
 #
 #   Example (the pair under testdata/deqp_shapes/, the reference beside it):
 #     tools/mali/deqp_ref.sh tools/mali/testdata/deqp_shapes/intval_1.vert \
@@ -30,6 +31,10 @@
 #   --attrib-bindings L   NAME=LOC,... : glBindAttribLocation before the link
 #                         (gl_ref.py; aliased locations allowed). Shim only:
 #                         the default instrument is then shim.
+#   --zero-uniforms       the shim draw without --uniform-values: every
+#                         uniform word is 0 (for a program whose uniforms
+#                         gl_ref.py cannot set, a uvec2 or a struct with a
+#                         sampler). Shim only, as --attrib-bindings.
 #
 # Environment (each is built the documented way into $CONNECTED_DEPS_DIR when
 # absent: the tarball of third_party/mesa-26.2.1/UPSTREAM, fetched there once):
@@ -44,18 +49,19 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 
-usage() { sed -n '9,11p' "$0" >&2; exit 2; }
+usage() { sed -n '9,12p' "$0" >&2; exit 2; }
 die() { echo "deqp_ref: $*" >&2; exit 1; }
 
 [ $# -ge 3 ] || usage
 VS=$1 FS=$2 OUT=$3
 shift 3
-INSTRUMENT="" PRIM=triangles BINDINGS=""
+INSTRUMENT="" PRIM=triangles BINDINGS="" VALUES=--uniform-values
 while [ $# -gt 0 ]; do
   case "$1" in
   --instrument) [ $# -ge 2 ] || usage; INSTRUMENT=$2; shift 2 ;;
   --prim) [ $# -ge 2 ] || usage; PRIM=$2; shift 2 ;;
   --attrib-bindings) [ $# -ge 2 ] || usage; BINDINGS=$2; shift 2 ;;
+  --zero-uniforms) VALUES=""; shift ;;
   *) usage ;;
   esac
 done
@@ -63,8 +69,8 @@ case "$INSTRUMENT" in ""|pan_shc|shim) ;; *) usage ;; esac
 case "$PRIM" in triangles|points) ;; *) usage ;; esac
 [ -f "$VS" ] && [ -f "$FS" ] || die "no such shader: $VS or $FS"
 
-if [ -n "$BINDINGS" ]; then
-  [ "${INSTRUMENT:-shim}" = shim ] || die "--attrib-bindings needs --instrument shim"
+if [ -n "$BINDINGS" ] || [ -z "$VALUES" ]; then
+  [ "${INSTRUMENT:-shim}" = shim ] || die "--attrib-bindings and --zero-uniforms need --instrument shim"
   INSTRUMENT=shim
 fi
 if [ -z "$INSTRUMENT" ]; then
@@ -106,7 +112,7 @@ if [ "$INSTRUMENT" = shim ]; then
      [ ! -f "$WORK/inst/lib/$(gcc -dumpmachine)/libpanfrost_noop_drm_shim.so" ]; then
     "$HERE/drm_shim_ref.sh" build "$(tarball)" "$WORK" >&2
   fi
-  "$HERE/drm_shim_ref.sh" run "$WORK" "$VS" "$FS" "$TMP/$NAME" --prim "$PRIM" --uniform-values ${BINDINGS:+--attrib-bindings "$BINDINGS"} >&2
+  "$HERE/drm_shim_ref.sh" run "$WORK" "$VS" "$FS" "$TMP/$NAME" --prim "$PRIM" ${VALUES:+"$VALUES"} ${BINDINGS:+--attrib-bindings "$BINDINGS"} >&2
   # the trace field is the trace's file name, so the trace carries <name>.trace
   python3 -I "$HERE/pan_ref_diff.py" extract "$TMP/$NAME.trace" --draw > "$TMP/expect.json"
 else

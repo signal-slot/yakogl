@@ -28,7 +28,8 @@
 //!   in gl_ref.py), and Mesa uploads a mediump member as an fp32 word
 //!   ([`uniform_value`]). Only the references drawn since gl_ref.py could
 //!   do so carry those values; which ones is not in the expect.json, so it
-//!   is the explicit list [`STRUCT_VALUES`]. Any other reference whose
+//!   is the explicit list [`STRUCT_VALUES`] ([`differences_members`]
+//!   takes it from the caller instead). Any other reference whose
 //!   program has a struct-member uniform row (`deqp_unitype_vsstruct_*`,
 //!   drawn before) is compared against every uniform word 0.
 //!   `tests/mali_ref_selftest.rs` checks the member values against
@@ -589,17 +590,25 @@ fn padded(words: usize) -> usize {
 /// Every difference of `pair` (built from `r`'s sources) against `r`'s
 /// expect.json, one entry each; empty when the words and facts are equal.
 pub fn differences(r: &Reference, pair: &Pair) -> Vec<String> {
+    differences_members(r, pair, STRUCT_VALUES.contains(&r.name.as_str()))
+}
+
+/// [`differences`] of a reference whose draw is known by other means than
+/// [`STRUCT_VALUES`]: `members_set` says that gl_ref.py set its struct
+/// members (a draw with `--uniform-values` since gl_ref.py could, as
+/// tools/mali/corpus_diff.py makes every reference).
+pub fn differences_members(r: &Reference, pair: &Pair, members_set: bool) -> Vec<String> {
     let mut d = Vec::new();
     let names: Vec<String> = uniform_leaves(&r.vs, &r.fs).into_iter().map(|l| l.0).collect();
     /* a reference with a struct-member uniform row is compared with
-     * gl_ref.py's member values when it is in [`STRUCT_VALUES`], else
+     * gl_ref.py's member values when `members_set` ([`differences`]: when
+     * it is in [`STRUCT_VALUES`]), else
      * against every uniform 0 (drawn before gl_ref.py set members:
      * deqp_unitype_vsstruct_*); so is one loaded with
      * [`Reference::load_unset`] (`uniform_values` false) */
     let member = |r: &(String, u16, u16, u16)| r.0.contains('.') && !r.0.starts_with("gl_");
-    let values = r.uniform_values
-        && (STRUCT_VALUES.contains(&r.name.as_str())
-            || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
+    let values =
+        r.uniform_values && (members_set || !pair.vs.uniforms.iter().chain(pair.fs.uniforms.iter()).any(member));
     let uv_v = |x: u16| if values { uniform_value(&names, &pair.vs.uniforms, x) } else { 0 };
     let uv_f = |x: u16| if values { uniform_value(&names, &pair.fs.uniforms, x) } else { 0 };
 
