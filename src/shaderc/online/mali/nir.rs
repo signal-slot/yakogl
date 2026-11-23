@@ -4284,35 +4284,81 @@ fn put_loop(m: &Module<'_>, body: ir::Range, steps: &mut [Step], k: &mut usize) 
     *k += 1;
 }
 
+/// How deep the vertex walk nests `if`s ([`vs_side`]): ideas vs 51b2's
+/// inlined `unitvec` is three.
+const VS_IF_DEPTH: usize = 4;
+
+/// The steps of one side of a flattened vertex `if` ([`vs_steps`]), or
+/// its refusal. A side of straight code holds at most
+/// [`PEEPHOLE_LIMIT_GL`] operations (the GL front end's peephole limit),
+/// counted as the IR's ALU instructions. A side holding an `if` (the early
+/// returns of an inlined function, ideas vs 51b2's `unitvec`:
+/// docs/notes/mali-control-flow.md) is counted by the walk instead, on the
+/// sides its folded conditions leave ([`VsIf`]); its `if`s nest at most
+/// [`VS_IF_DEPTH`] deep.
+fn vs_side(m: &Module<'_>, r: ir::Range, depth: usize) -> Result<usize, MaliError> {
+    let nodes = m.nodes_of(r);
+    let nested = nodes.iter().any(|n| matches!(n, IrNode::If { .. }));
+    if nested && depth >= VS_IF_DEPTH {
+        return Err(MaliError::ControlFlow);
+    }
+    let mut alu = 0;
+    let mut n = 0;
+    for nd in nodes {
+        match *nd {
+            IrNode::Instr(id) => match m.instr(id) {
+                Some(IrOp::Tex { .. } | IrOp::TexSize { .. } | IrOp::LoadUniformIdx { .. }) => {
+                    return Err(MaliError::ControlFlow)
+                }
+                Some(IrOp::Alu(..)) if alu == PEEPHOLE_LIMIT_GL && !nested => return Err(MaliError::ControlFlow),
+                Some(IrOp::Alu(..)) => alu += 1,
+                _ => {}
+            },
+            IrNode::If { then_, else_, .. } => n += vs_side(m, then_, depth + 1)? + vs_side(m, else_, depth + 1)? + 2,
+            IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
+            _ => return Err(MaliError::ControlFlow),
+        }
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// The steps of a side [`vs_side`] took, put at `steps[*k..]`.
+fn vs_put_side(m: &Module<'_>, r: ir::Range, steps: &mut [Step], k: &mut usize) {
+    for nd in m.nodes_of(r) {
+        match *nd {
+            IrNode::Instr(id) => {
+                steps[*k] = Step::Instr(id);
+                *k += 1;
+            }
+            IrNode::If { cond, then_, else_ } => {
+                steps[*k] = Step::If(cond);
+                *k += 1;
+                vs_put_side(m, then_, steps, k);
+                steps[*k] = Step::Else;
+                *k += 1;
+                vs_put_side(m, else_, steps, k);
+                steps[*k] = Step::EndIf;
+                *k += 1;
+            }
+            _ => {}
+        }
+    }
+}
+
 /// The vertex shader's body as [`Step`]s. An `if` is flattened when each
-/// side is straight code without a look-up (`nir_opt_peephole_select`
-/// turns it into selects, vsarith_188_predif: docs/notes/mali-vs-abs-if.md);
-/// a nested `if`, a loop, a jump, a look-up or more than
-/// [`PEEPHOLE_LIMIT_GL`] operations under it stays refused, at
-/// the `if`'s place in the walk (an earlier refusal comes first).
+/// side is straight code without a look-up, or holds `if`s of the same
+/// kind ([`vs_side`]): `nir_opt_peephole_select` turns it into selects,
+/// vsarith_188_predif: docs/notes/mali-vs-abs-if.md; one whose condition
+/// folds is the side it picks (`nir_opt_dead_cf`). A loop, a jump, a
+/// look-up or more than [`PEEPHOLE_LIMIT_GL`] operations under it stays
+/// refused, at the `if`'s place in the walk (an earlier refusal comes
+/// first).
 fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliError> {
     let nodes = m.nodes_of(m.body);
-    /* a side's operations, at most `PEEPHOLE_LIMIT_GL` (the GL front end's
-     * peephole limit), counted as the IR's ALU instructions */
-    let side = |r: ir::Range| -> Result<usize, MaliError> {
-        let mut alu = 0;
-        for nd in m.nodes_of(r) {
-            match *nd {
-                IrNode::Instr(id) => match m.instr(id) {
-                    Some(IrOp::Tex { .. } | IrOp::TexSize { .. } | IrOp::LoadUniformIdx { .. }) => {
-                        return Err(MaliError::ControlFlow)
-                    }
-                    Some(IrOp::Alu(..)) if alu == PEEPHOLE_LIMIT_GL => return Err(MaliError::ControlFlow),
-                    Some(IrOp::Alu(..)) => alu += 1,
-                    _ => {}
-                },
-                IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
-                _ => return Err(MaliError::ControlFlow),
-            }
-        }
-        Ok(r.len as usize)
+    let flat = |then_: ir::Range, else_: ir::Range| -> Result<usize, MaliError> {
+        Ok(vs_side(m, then_, 1)? + vs_side(m, else_, 1)?)
     };
-    let flat = |then_: ir::Range, else_: ir::Range| -> Result<usize, MaliError> { Ok(side(then_)? + side(else_)?) };
     let mut n = 0;
     for nd in nodes {
         n += match *nd {
@@ -4342,23 +4388,28 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
             }
             IrNode::If { cond, then_, else_ } => {
                 put!(Step::If(cond));
-                for nd in m.nodes_of(then_) {
-                    if let IrNode::Instr(id) = *nd {
-                        put!(Step::Instr(id));
-                    }
-                }
+                vs_put_side(m, then_, steps, &mut k);
                 put!(Step::Else);
-                for nd in m.nodes_of(else_) {
-                    if let IrNode::Instr(id) = *nd {
-                        put!(Step::Instr(id));
-                    }
-                }
+                vs_put_side(m, else_, steps, &mut k);
                 put!(Step::EndIf);
             }
             _ => put!(Step::Refuse(MaliError::ControlFlow)),
         }
     }
     Ok(&steps[..k])
+}
+
+/// A flattened vertex `if` the walk is in ([`vs_steps`]): its condition,
+/// the state before it and its then side's, and the operations walked on
+/// each side (`alu[0]` then, `alu[1]` else; a nested `if` adds the side
+/// its folded condition picks, or both and its selects). A side over
+/// [`PEEPHOLE_LIMIT_GL`] when the condition does not fold is refused.
+#[derive(Clone, Copy)]
+struct VsIf {
+    cond: Val,
+    pre: VsState,
+    then: Option<VsState>,
+    alu: [u32; 2],
 }
 
 /// What a side of a flattened vertex `if` writes: the locals and the
@@ -4395,6 +4446,19 @@ fn vs_join(
         }
         if a == Val::Undef || b == Val::Undef {
             return Err(MaliError::ControlFlow);
+        }
+        /* a negation on both sides is one negation of the select, which
+         * its readers then take (gm2_cf_earlyret_vs, ideas vs 51b2's
+         * `-v1` and `0.0 - v1.xyz / v1.w`: `CSEL.u32.eq r2, r0, 0x0, r2^,
+         * r7^` of the operands, the negation after `normalize`'s
+         * product, `FADD.f32 r0, r0^.neg, 0x0.neg` at the store) */
+        let neg = |vs: &Nir<'_>, v: Val| match v {
+            Val::Lane(id, 0) if vs.is_alu(v, Alu::Fneg) => Some(vs.nodes[id as usize].src[0]),
+            _ => None,
+        };
+        if let (Some(x), Some(y)) = (neg(vs, a), neg(vs, b)) {
+            let s = vs.alu(Alu::Bcsel, c, x, y)?;
+            return vs.alu(Alu::Fneg, s, Val::Undef, Val::Undef);
         }
         vs.alu(Alu::Bcsel, c, a, b)
     };
@@ -4869,8 +4933,8 @@ fn walk<'s>(
     let mut varyings: [Option<[Val; 4]>; MAX_VARYINGS] = [None; MAX_VARYINGS];
     /* a flattened `if` ([`vs_steps`]): its condition, the state before it
      * and its then side's; `phis`, the varying lanes it wrote ([`vs_join`]) */
-    let mut cond = Val::Undef;
-    let (mut pre, mut then) = (None::<VsState>, None::<VsState>);
+    let mut ifs = [None::<VsIf>; VS_IF_DEPTH];
+    let mut nifs = 0usize;
     let mut phis = 0u64;
     /* the constant lanes of a mediump vector stored beside computed ones,
      * which the vertex shader stores (the `StoreOutput` arm below) */
@@ -4986,35 +5050,61 @@ fn walk<'s>(
                 continue;
             }
             Step::If(c) => {
-                cond = lane(w, c, 0);
-                pre = Some(VsState { locals: w.locals, position, point_size, varyings });
+                let f = ifs.get_mut(nifs).ok_or(MaliError::ControlFlow)?;
+                *f = Some(VsIf {
+                    cond: lane(w, c, 0),
+                    pre: VsState { locals: w.locals, position, point_size, varyings },
+                    then: None,
+                    alu: [0; 2],
+                });
+                nifs += 1;
                 continue;
             }
             Step::Else => {
-                let p = pre.ok_or(MaliError::Defect(Defect::IrIndex))?;
-                then = Some(VsState { locals: w.locals, position, point_size, varyings });
+                let f = nifs.checked_sub(1).and_then(|i| ifs[i].as_mut()).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                f.then = Some(VsState { locals: w.locals, position, point_size, varyings });
+                let p = f.pre;
                 (w.locals, position, point_size, varyings) = (p.locals, p.position, p.point_size, p.varyings);
                 continue;
             }
             Step::EndIf => {
-                let (p, t) = pre.zip(then).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                nifs = nifs.checked_sub(1).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let f = ifs[nifs].take().ok_or(MaliError::Defect(Defect::IrIndex))?;
+                let (p, t) = (f.pre, f.then.ok_or(MaliError::Defect(Defect::IrIndex))?);
                 let mut e = VsState { locals: w.locals, position, point_size, varyings };
-                match cond {
+                /* the operations this `if` leaves in its parent's side */
+                let left = match f.cond {
                     /* a folded condition: the side it picks */
                     Val::Const(c) => {
                         if c != 0 {
                             e = t;
                         }
+                        f.alu[usize::from(c == 0)]
                     }
                     _ => {
-                        vs_join(&mut vs, cond, &p, &t, &mut e, &mut phis)?;
+                        /* a side over the peephole limit stays an `if`
+                         * Mesa keeps, as does one under another kept `if`
+                         * (no reference flattens two) */
+                        if f.alu.iter().any(|&a| a > PEEPHOLE_LIMIT_GL)
+                            || ifs[..nifs].iter().flatten().any(|o| !matches!(o.cond, Val::Const(_)))
+                        {
+                            return Err(MaliError::ControlFlow);
+                        }
+                        vs_join(&mut vs, f.cond, &p, &t, &mut e, &mut phis)?;
                         joined = true;
+                        f.alu[0] + f.alu[1] + 1
                     }
+                };
+                if let Some(o) = nifs.checked_sub(1).and_then(|i| ifs[i].as_mut()) {
+                    o.alu[usize::from(o.then.is_some())] += left;
                 }
                 (w.locals, position, point_size, varyings) = (e.locals, e.position, e.point_size, e.varyings);
                 continue;
             }
         };
+        if let (Some(IrOp::Alu(..)), Some(o)) = (m.instr(id), nifs.checked_sub(1).and_then(|i| ifs[i].as_mut())) {
+            o.alu[usize::from(o.then.is_some())] += 1;
+        }
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
         let width = m.comps_of(ValueId(id.0)) as usize;
         let mut out = [Val::Undef; 4];
@@ -5451,7 +5541,26 @@ fn walk<'s>(
                                 AluOp::Fdot3 => 3,
                                 _ => 4,
                             };
-                            let (va, vb) = (|i| lane(w, s[0], i), |i| lane(w, s[1], i));
+                            /* the dot product of two negated vectors is that
+                             * of the vectors (`fdot(fneg(a), fneg(b))`,
+                             * nir_opt_algebraic.py:4237-4239; `normalize` of
+                             * a select of negations, [`vs_join`]:
+                             * gm2_cf_earlyret_vs's `FMA.f32 r1, r2, r2,
+                             * 0x0.neg` of the select) */
+                            let unneg = |v: Val| match v {
+                                Val::Lane(id, 0) if vs.is_alu(v, Alu::Fneg) => Some(vs.nodes[id as usize].src[0]),
+                                _ => None,
+                            };
+                            let (mut la, mut lb) = ([Val::Undef; 4], [Val::Undef; 4]);
+                            for i in 0..n {
+                                (la[i], lb[i]) = (lane(w, s[0], i), lane(w, s[1], i));
+                            }
+                            if (0..n).all(|i| unneg(la[i]).is_some() && unneg(lb[i]).is_some()) {
+                                for i in 0..n {
+                                    (la[i], lb[i]) = (unneg(la[i]).unwrap_or(la[i]), unneg(lb[i]).unwrap_or(lb[i]));
+                                }
+                            }
+                            let (va, vb) = (|i: usize| la[i], |i: usize| lb[i]);
                             if let Some(c) = const_dot(n, va, vb)? {
                                 vs.note_user(Prod::Folded);
                                 c

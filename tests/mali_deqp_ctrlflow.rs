@@ -182,8 +182,9 @@ fn ctrlflow_vs_elseif() {
     mali_ref::assert_matches("deqp_ctrlflow_vs_elseif");
 }
 
+/// Byte-equal since plan #367 lower-ideas: the `if (false)` under a kept
+/// `if` folds to its else side (docs/notes/mali-control-flow.md).
 #[test]
-#[ignore = "refused: control flow (if, a loop, a return before the end)"]
 fn ctrlflow_vs_nested() {
     mali_ref::assert_matches("deqp_ctrlflow_vs_nested");
 }
@@ -251,7 +252,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_fs_struct_select", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_vec_cond", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_elseif", CONTROL_FLOW),
-    ("deqp_ctrlflow_vs_nested", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_nested_combined", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_nested_hsl", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_statement_side", CONTROL_FLOW),
@@ -260,8 +260,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_vs_varying_select", CONTROL_FLOW),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run).
+const MATCHED: &[&str] = &["deqp_ctrlflow_vs_nested"];
 
 #[test]
 fn refusals_pinned() {
