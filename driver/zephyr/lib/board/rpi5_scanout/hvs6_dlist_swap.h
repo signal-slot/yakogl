@@ -63,10 +63,12 @@
  *    wait (rpi:vc4_hvs.c:1166-1169, called at :1343-1346), after writing the
  *    whole new list including its END word (:1316).
  *  - There is no latch or pending bit in the channel registers
- *    (rpi:vc4_regs.h:564-622, :701-733). Hence nothing here claims that the
- *    HVS latched the pointer: the two results below (read-back, FRCNT moved)
- *    do not prove it. When the pointer takes effect (frame start or at once)
- *    only the board can show, and only through what it scans out.
+ *    (rpi:vc4_regs.h:564-622, :701-733). The read-back of LPTRS and FRCNT
+ *    moving do not show that the HVS took the pointer. Linux completes a flip
+ *    only once DISPx_DL.LACT equals the new head (rpi:vc4_crtc.c:832-855,
+ *    driver/docs/rpi5-v3d71-facts.md, "HVS-written words of a plane entry, and
+ *    list-pointer latching"), so that is the pickup criterion here; when in
+ *    the frame the pointer takes effect is not assumed (no vblank-only latch).
  *  - Linux frees an old list only once FRCNT moved past the frame of the
  *    swap, target (FRCNT + 1) & 63 (rpi:vc4_hvs.c:682-697). FRCNT is STATUS
  *    bits 21:16 (rpi:vc4_regs.h:605). Here: two advances, to be safe.
@@ -98,14 +100,21 @@
  *     layout), written and read back word by word; the cache cleaned over
  *     the list (fb_flush.h's line-rounded range) and a barrier; the bus
  *     address of the list from bus_addr.h recorded; then LPTRS, last, as
- *     one write. Then two results, each on its own: LPTRS read back as
- *     written, and FRCNT advanced (6-bit wrap aware), each within
- *     max_polls polls. FRCNT, STATUS.MODE, LPTRS, DL and CTRL1.BGENB are
- *     recorded at the write and after it. Then FRCNT must advance twice past
- *     the write before the old list is reused or checked.
+ *     one write. Then three results, each on its own: LPTRS read back as
+ *     written and FRCNT advanced (6-bit wrap aware), each within max_polls
+ *     polls, and the pickup, DL.LACT equal to our start, within
+ *     hvs6s_lact_limit polls (cfg.lact_polls, 0: max_polls) and, with
+ *     cfg.lact_frames set, before FRCNT moved more than that many frames
+ *     past the write (HVS6S_ERR_LACT_PICKUP otherwise). FRCNT, STATUS.MODE,
+ *     LPTRS, DL and CTRL1.BGENB are recorded at the write and after it, the
+ *     pickup's polls and FRCNT at the write and at the pickup. Then FRCNT
+ *     must advance twice past the write before the old list is reused or
+ *     checked.
  *  4. hvs6s_restore, always once the snapshot was taken, even after a
  *     failure in 2 or 3: the firmware's LPTRS written back, two FRCNT
- *     advances, then LPTRS and the firmware's words [HEADE, HEADE + fw_len)
+ *     advances and DL.LACT back on the firmware's LPTRS.HEADE (a positive
+ *     check, bounded as in 3; HVS6S_ERR_RESTORE_LACT otherwise), then LPTRS
+ *     and the firmware's words [HEADE, HEADE + fw_len)
  *     compared byte for byte with the snapshot; the first differing word is
  *     named. Our own list's words are left in list memory, not cleared.
  *
@@ -135,6 +144,19 @@
  * (hvs6s_hw_parse, hvs6s_hw_format) is "<off>:skip|expect[,...]", with ""
  * or "none" for the empty set. cfg.hw is checked by hvs6s_cfg_ok (a bad set
  * is HVS6S_ERR_ARG before anything is read or written).
+ *
+ * LACT pickup (swap-lact-lib, plan #390): a swap and a restore pass only
+ * once DL.LACT reads the head just written (above, 3 and 4). Only reads were
+ * added; the writes are the same. New: cfg.lact_polls, cfg.lact_frames
+ * (zeroed: max_polls polls, no frame bound), HVS6S_ERR_LACT_PICKUP and
+ * HVS6S_ERR_RESTORE_LACT (appended, the old codes keep their values), the
+ * report's lact_pickup/_polls/_frcnt_write/_frcnt_pickup/_want/_seen and
+ * restore_lact_ok/_polls/_want/_seen, restore_frcnt_write/_pickup. The old
+ * lact_follows is kept and now equals lact_pickup. hvs6s_lines prints
+ *   dlswap lact-pickup ok|FAIL polls=N frcnt=A..B want=W lact=L
+ * where it printed "lact-follows ... (record only, not a latch proof)", and
+ *   dlswap restore-lact ok|FAIL polls=N frcnt=A..B want=W lact=L
+ * after restore-lptrs.
  *
  * The list memory sits at HVS + 0x4000 and is device memory on the Pi 5's
  * Zephyr map; the clean is then a no-op, kept so that a staged list in
@@ -168,8 +190,9 @@
 /* STATUS.FRCNT, bits 21:16 (rpi:vc4_regs.h:605). */
 #define HVS6S_FRCNT_SHIFT 16u
 #define HVS6S_FRCNT_MASK 0x3fu
-/* DISPx_DL.LACT, bits 11:0, the list word being scanned (scanout_alive.h's
- * SA_DL_LACT_MASK, rpi:vc4_regs.h:619). Recorded, never a pass criterion. */
+/* DISPx_DL.LACT, bits 11:0, the list the channel is scanning (scanout_alive.h's
+ * SA_DL_LACT_MASK, rpi:vc4_regs.h:619). The pickup criterion of a swap and of
+ * the restore (swap-lact-lib): LACT equal to the head just written. */
 #define HVS6S_DL_LACT_MASK 0x00000fffu
 /* FRCNT advances to wait past a pointer write before the old list is reused. */
 #define HVS6S_SETTLE_FRAMES 2u
@@ -237,6 +260,12 @@ struct hvs6s_cfg {
 	uint32_t max_polls;    /* polls allowed per FRCNT wait and read-back */
 	struct hvs6w_plane plane;
 	struct hvs6s_hw_set hw; /* hardware-written words; zeroed = empty */
+	/* LACT pickup (swap-lact-lib): polls from the LPTRS write allowed for
+	 * DL.LACT to reach the new head; 0 means max_polls. */
+	uint32_t lact_polls;
+	/* and frames: the pickup fails once FRCNT moved more than this many
+	 * frames past the write without it; 0 means no frame bound. */
+	uint32_t lact_frames;
 };
 
 /* What failed, first failure only; HVS6S_OK when everything passed. */
@@ -261,6 +290,8 @@ enum hvs6s_err {
 	HVS6S_ERR_PLACE_USED,   /* a word of our target range is not zero */
 	HVS6S_ERR_PLACE_NOEND,  /* no END: our list does not fit wholly before HEADE */
 	HVS6S_ERR_PLACE_CHAN,   /* no END: another channel's LPTRS.HEADE is in our range */
+	HVS6S_ERR_LACT_PICKUP,  /* DL.LACT never reached our new head within the bound */
+	HVS6S_ERR_RESTORE_LACT, /* restore: DL.LACT never came back to the firmware's head */
 };
 
 static inline const char *hvs6s_err_name(enum hvs6s_err e)
@@ -286,6 +317,8 @@ static inline const char *hvs6s_err_name(enum hvs6s_err e)
 	case HVS6S_ERR_PLACE_USED: return "place: target range holds a non-zero word";
 	case HVS6S_ERR_PLACE_NOEND: return "place: no END, no room wholly before HEADE";
 	case HVS6S_ERR_PLACE_CHAN: return "place: another channel's LPTRS.HEADE in range";
+	case HVS6S_ERR_LACT_PICKUP: return "DL.LACT did not reach the new head";
+	case HVS6S_ERR_RESTORE_LACT: return "restore: DL.LACT not back on the firmware's head";
 	}
 	return "?";
 }
@@ -381,9 +414,16 @@ struct hvs6s_report {
 	uint32_t lptrs_poll;         /* polls before it read back (0: at once) */
 	int frcnt_ok;                /* result 2: FRCNT advanced */
 	uint32_t frcnt_polls;        /* polls before it advanced */
-	int lact_follows;            /* DL.LACT equals our start after (record only) */
+	int lact_follows;            /* = lact_pickup, the old name kept for callers */
 	int settle_ok;               /* two advances past the write */
 	uint32_t settle_polls;
+	/* result 3, a pass criterion: DL.LACT reached our start (the pickup) */
+	int lact_pickup;
+	uint32_t lact_polls;         /* polls from the write to the pickup, or spent without it */
+	uint32_t lact_frcnt_write;   /* FRCNT sampled just before the LPTRS write */
+	uint32_t lact_frcnt_pickup;  /* FRCNT at the pickup, or at the last poll without it */
+	uint32_t lact_want;          /* the head LACT had to reach (our start) */
+	uint32_t lact_seen;          /* DL.LACT at the pickup, or the last value read */
 
 	/* restore */
 	int restored;                /* the firmware's LPTRS was written back */
@@ -395,6 +435,13 @@ struct hvs6s_report {
 	int64_t diff_word;           /* first undeclared differing list word, -1 when none */
 	uint32_t diff_want, diff_got;
 	struct hvs6s_diffs rdiff;    /* every differing word of the firmware's span */
+	/* the restore's pickup, a pass criterion: DL.LACT back on the firmware's head */
+	int restore_lact_ok;
+	uint32_t restore_lact_polls;  /* polls from the write to the pickup, or spent */
+	uint32_t restore_frcnt_write; /* FRCNT sampled just before the write */
+	uint32_t restore_frcnt_pickup;/* FRCNT at the pickup, or at the last poll */
+	uint32_t restore_lact_want;   /* the firmware's LPTRS.HEADE */
+	uint32_t restore_lact_seen;   /* DL.LACT at the pickup, or the last value read */
 };
 
 static inline void hvs6s_report_init(struct hvs6s_report *r)
@@ -938,13 +985,21 @@ static inline int hvs6s_wait_frames(const struct hvs6s_io *io, const struct hvs6
 	}
 }
 
-/* 3. Write our list at start, then LPTRS last; the two results; the settle. */
+/* The polls allowed for DL.LACT to reach a new head: cfg.lact_polls, or
+ * max_polls when it is 0. */
+static inline uint32_t hvs6s_lact_limit(const struct hvs6s_cfg *c)
+{
+	return c->lact_polls ? c->lact_polls : c->max_polls;
+}
+
+/* 3. Write our list at start, then LPTRS last; the three results (LPTRS read
+ * back, FRCNT advanced, DL.LACT on our start); the settle. */
 static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
 					uint32_t start, struct hvs6s_report *r)
 {
 	uint32_t list[HVS6W_LIST_WORDS];
-	uint32_t f0, last, total = 0, lp_poll = 0, fr_poll = 0;
-	int n, lp_ok = 0, fr_ok = 0;
+	uint32_t f0, last, total = 0, lp_poll = 0, fr_poll = 0, la_poll = 0, la_lim;
+	int n, lp_ok = 0, fr_ok = 0, la_ok = 0;
 	uint64_t arm, bus;
 	uint32_t i;
 
@@ -994,11 +1049,17 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 	io->write32(io->ctx, hvs6s_lptrs_reg(c->chan), r->lptrs_written); /* the one write */
 	r->swapped = 1;
 
-	/* Results 1 and 2, polled together, each kept on its own. */
+	/* Results 1, 2 and 3, polled together, each kept on its own and each
+	 * with its own bound: LPTRS and FRCNT max_polls, the LACT pickup
+	 * hvs6s_lact_limit polls and, when set, lact_frames frames. */
 	r->lptrs_first = io->read32(io->ctx, hvs6s_lptrs_reg(c->chan));
+	r->lact_want = r->lptrs_written;
+	r->lact_frcnt_write = f0;
+	la_lim = hvs6s_lact_limit(c);
 	last = f0;
 	for (i = 0;; i++) {
 		struct hvs6s_regs s;
+		int lpfr_done, la_done;
 
 		hvs6s_sample(io, c->chan, &s);
 		if (!lp_ok && (s.lptrs & YD5_HVS6_LPTRS_HEADE_MASK) == r->lptrs_written) {
@@ -1011,8 +1072,16 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 			fr_ok = 1;
 			fr_poll = i;
 		}
+		r->lact_seen = s.dl & HVS6S_DL_LACT_MASK;
+		if (!la_ok && r->lact_seen == r->lact_want) {
+			la_ok = 1;
+			la_poll = i;
+			r->lact_frcnt_pickup = last;
+		}
 		r->after = s;
-		if ((lp_ok && fr_ok) || i >= c->max_polls)
+		lpfr_done = (lp_ok && fr_ok) || i >= c->max_polls;
+		la_done = la_ok || i >= la_lim || (c->lact_frames && total > c->lact_frames);
+		if (lpfr_done && la_done)
 			break;
 		io->wait(io->ctx);
 	}
@@ -1020,7 +1089,11 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 	r->lptrs_poll = lp_poll;
 	r->frcnt_ok = fr_ok;
 	r->frcnt_polls = fr_ok ? fr_poll : i;
-	r->lact_follows = (r->after.dl & HVS6S_DL_LACT_MASK) == start;
+	r->lact_pickup = la_ok;
+	r->lact_polls = la_ok ? la_poll : i;
+	if (!la_ok)
+		r->lact_frcnt_pickup = last;
+	r->lact_follows = la_ok; /* the old field, now the pickup itself */
 
 	/* Two advances past the write before the old list is touched. */
 	if (fr_ok) {
@@ -1037,16 +1110,21 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 		return HVS6S_ERR_LPTRS_READ;
 	if (!fr_ok)
 		return HVS6S_ERR_FRCNT;
+	if (!la_ok)
+		return HVS6S_ERR_LACT_PICKUP;
 	if (!r->settle_ok)
 		return HVS6S_ERR_SETTLE;
 	return HVS6S_OK;
 }
 
-/* 4. The firmware's LPTRS back, two advances, then the byte-equal compare. */
+/* 4. The firmware's LPTRS back; two advances and DL.LACT back on the
+ * firmware's head, polled together, each with its own bound; then the
+ * byte-equal compare. */
 static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
 					   const struct hvs6s_snap *s, struct hvs6s_report *r)
 {
-	uint32_t i, got;
+	uint32_t i, got, last, total = 0, fr_poll = 0, la_lim;
+	int fr_ok = 0, la_ok = 0;
 
 	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !s || !s->taken || !r)
 		return HVS6S_ERR_ARG;
@@ -1055,8 +1133,39 @@ static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const stru
 	io->write32(io->ctx, hvs6s_lptrs_reg(c->chan), s->lptrs);
 	r->hw = c->hw;
 	r->restored = 1;
-	r->restore_frcnt_ok = hvs6s_wait_frames(io, c, hvs6s_frcnt(r->at_restore.status),
-						 HVS6S_SETTLE_FRAMES, &r->restore_polls);
+	r->restore_lact_want = s->lptrs & YD5_HVS6_LPTRS_HEADE_MASK;
+	r->restore_frcnt_write = hvs6s_frcnt(r->at_restore.status);
+	la_lim = hvs6s_lact_limit(c);
+	last = r->restore_frcnt_write;
+	for (i = 0;; i++) {
+		uint32_t f = hvs6s_frcnt(io->read32(io->ctx, hvs6s_status_reg(c->chan)));
+		int fr_done, la_done;
+
+		total += hvs6s_frdelta(last, f);
+		last = f;
+		if (!fr_ok && total >= HVS6S_SETTLE_FRAMES) {
+			fr_ok = 1;
+			fr_poll = i;
+		}
+		r->restore_lact_seen = io->read32(io->ctx, hvs6s_dl_reg(c->chan)) & HVS6S_DL_LACT_MASK;
+		if (!la_ok && r->restore_lact_seen == r->restore_lact_want) {
+			la_ok = 1;
+			r->restore_lact_polls = i;
+			r->restore_frcnt_pickup = f;
+		}
+		fr_done = fr_ok || i >= c->max_polls;
+		la_done = la_ok || i >= la_lim || (c->lact_frames && total > c->lact_frames);
+		if (fr_done && la_done)
+			break;
+		io->wait(io->ctx);
+	}
+	r->restore_frcnt_ok = fr_ok;
+	r->restore_polls = fr_ok ? fr_poll : i;
+	r->restore_lact_ok = la_ok;
+	if (!la_ok) {
+		r->restore_lact_polls = i;
+		r->restore_frcnt_pickup = last;
+	}
 	hvs6s_sample(io, c->chan, &r->after_restore);
 
 	/* Compared even after a stall: the record says what was there. */
@@ -1083,6 +1192,8 @@ static inline enum hvs6s_err hvs6s_restore(const struct hvs6s_io *io, const stru
 		return HVS6S_ERR_RESTORE_FRCNT;
 	if (!r->restore_lptrs_ok)
 		return HVS6S_ERR_RESTORE_LPTRS;
+	if (!r->restore_lact_ok)
+		return HVS6S_ERR_RESTORE_LACT;
 	if (r->diff_word >= 0)
 		return HVS6S_ERR_RESTORE_WORD;
 	return HVS6S_OK;
@@ -1142,6 +1253,26 @@ static inline void hvs6s_regs_line(const struct hvs6s_emit *em, const char *step
 		       step, (unsigned)hvs6s_frcnt(g->status), (unsigned)hvs6s_mode(g->status),
 		       (unsigned)g->lptrs, (unsigned)(g->dl & HVS6S_DL_LACT_MASK),
 		       (unsigned)hvs6s_bgenb(g->ctrl1), (unsigned)g->status);
+	em->line(em->ctx, b);
+}
+
+/*
+ * One pickup result, step "lact-pickup" (the swap) or "restore-lact":
+ *   dlswap <step> ok polls=<n> frcnt=<a>..<b> want=<head> lact=<seen>
+ *   dlswap <step> FAIL polls=<n> frcnt=<a>..<b> want=<head> lact=<seen>
+ * polls from the LPTRS write to the pickup (or spent without it), FRCNT at
+ * the write and at the pickup (or at the last poll), the head LACT had to
+ * reach and the LACT value read there (or last).
+ */
+static inline void hvs6s_lact_line(const struct hvs6s_emit *em, const char *step, int ok,
+				   uint32_t polls, uint32_t fr_write, uint32_t fr_pick, uint32_t want,
+				   uint32_t seen)
+{
+	char b[160];
+
+	(void)snprintf(b, sizeof(b), HVS6S_TAG " %s %s polls=%u frcnt=%u..%u want=%u lact=%u", step,
+		       ok ? "ok" : "FAIL", (unsigned)polls, (unsigned)fr_write, (unsigned)fr_pick,
+		       (unsigned)want, (unsigned)seen);
 	em->line(em->ctx, b);
 }
 
@@ -1254,9 +1385,8 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " frcnt-advance %s polls=%u", r->frcnt_ok ? "ok" : "FAIL",
 			       (unsigned)r->frcnt_polls);
 		em->line(em->ctx, b);
-		(void)snprintf(b, sizeof(b), HVS6S_TAG " lact-follows %s (record only, not a latch proof)",
-			       r->lact_follows ? "yes" : "no");
-		em->line(em->ctx, b);
+		hvs6s_lact_line(em, "lact-pickup", r->lact_pickup, r->lact_polls, r->lact_frcnt_write,
+				r->lact_frcnt_pickup, r->lact_want, r->lact_seen);
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " settle %s polls=%u",
 			       r->settle_ok ? "ok" : (r->frcnt_ok ? "FAIL" : "skip"),
 			       (unsigned)r->settle_polls);
@@ -1280,6 +1410,9 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 			       r->restore_lptrs_ok ? "ok" : "FAIL", (unsigned)s->lptrs,
 			       (unsigned)r->after_restore.lptrs);
 		em->line(em->ctx, b);
+		hvs6s_lact_line(em, "restore-lact", r->restore_lact_ok, r->restore_lact_polls,
+				r->restore_frcnt_write, r->restore_frcnt_pickup, r->restore_lact_want,
+				r->restore_lact_seen);
 		n += hvs6s_diff_lines(em, "restore", &r->rdiff, &r->hw);
 		if (r->diff_word < 0 && !r->hw.n)
 			(void)snprintf(b, sizeof(b), HVS6S_TAG " restore-words ok fw %u..%u equal",
@@ -1296,7 +1429,7 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 				       HVS6S_TAG " restore-words FAIL word %u want=0x%08x got=0x%08x hwskip=%s",
 				       (unsigned)r->diff_word, (unsigned)r->diff_want, (unsigned)r->diff_got, set);
 		em->line(em->ctx, b);
-		n += 4;
+		n += 5;
 	} else {
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " restore FAIL not run");
 		em->line(em->ctx, b);
