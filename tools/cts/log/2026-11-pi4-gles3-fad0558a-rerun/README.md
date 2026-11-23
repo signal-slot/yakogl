@@ -6,6 +6,45 @@ commit: fad0558a7def0e5677761608eec56b12e9855d18
 
 Plan #380, step "the Pi 4's remaining GLES3 images" (issue #1261). The images of `tools/cts/pi4-gles3-tree.txt` whose `b1b5b845` result main has changed since (`../2026-11-18-pi4-gles3-ac2fe51f-map/README.md`), run again on the Raspberry Pi 4 from one commit, `fad0558a`. Every session of this rerun builds from this commit and adds its section below. Per-image files, relative to this directory: `<LABEL>.console.txt`, `<LABEL>.tally.txt`. Counts are the mustpass view of the tally's TOTAL line. "before" is the `b1b5b845` record (`../2026-11-pi4-gles3-b1b5b845-rows00-15/`, `-rows16-30/`, `-rows31-45/`, `-rows46-60/`, `-rows61-75/`), in the same view.
 
+## Result
+
+Plan #380, one commit `fad0558a`, four board sessions (this directory holds sessions 1-3; session 4 is `../2026-11-pi4-gles3-fad0558a-rerun-s4/README.md`, same commit) and the ES 2.0 regression rows (`../2026-11-pi4-es2-fad0558a/README.md`). Sessions 1-4 ran on the Raspberry Pi 4 (V3D 4.2, Zephyr af17c0c8, tryboot), 2026-11-19 to 2026-11-21.
+
+**Totals over the 50 rerun images** (mustpass view; 13 + 18 + 12 + 7 images; each total is the sum of the sessions' tables below and of the `-s4` table, and of the 50 `TOTAL` lines of the tallies): 15,099 mustpass cases, 15,099 with a result: **13,421 Pass, 1,124 Fail, 550 NotSupported, 4 QualityWarning (R1), 0 other, 0 never began**.
+
+| | cases | Pass | Fail | NotSupported | QualityWarning | other | never began |
+|---|---|---|---|---|---|---|---|
+| session 1 (13 images) | 6,662 | 5,667 | 542 | 449 | 4 | 0 | 0 |
+| session 2 (18 images) | 954 | 850 | 91 | 13 | 0 | 0 | 0 |
+| session 3 (12 images) | 2,443 | 1,936 | 491 | 16 | 0 | 0 | 0 |
+| session 4 (7 images, `-s4`) | 5,040 | 4,968 | 0 | 72 | 0 | 0 | 0 |
+| **total (50 images)** | **15,099** | **13,421** | **1,124** | **550** | **4** | **0** | **0** |
+| the same cases at `b1b5b845` | 15,099 | 11,596 | 2,499 | 740 | 4 | 3 (refused in an aborted run) | 257 |
+
+**1,825 more cases Pass than at `b1b5b845`, and none moved from Pass.** (Fail 2,499 to 1,124; NotSupported 740 to 550. The 257 cases that never began at `b1b5b845` are T17's 251, T05c's 3 and S32c2-S32c4's 3; the 3 "other" are the refused cases that ended an aborted run, T17's, T05c's and S32c1's. All 260 now have a result.)
+
+- **Images with `complete=1`: 50 of 50**, each `N cases begun, N with a result, 0 without`.
+- **Aborts: 0.** The three images that aborted at `b1b5b845` and are in the rerun now run to the end: T17 (504 cases, 432 Pass, 72 NotSupported), T05c (4 Pass), S32c (as S32c1-S32c4, 4 Fail with a result, no refusal).
+- **Re-splits: none needed.** No rerun image aborted or overran (longest run T09, 97.5 s of the 210 s record deadline). The tree's own later re-splits (T05c into T05c, T05ca-T05cc and T17 into T17, T17a, T17b, `a69d005b`) were not run: the rerun ran T05c as its 4 cases and T17 as its 504 cases in one image each; `gles3-notpass.py --pi4` reads them over the union of the tree's parts. T05c and T05d can be merged back into one image, T17 needs no split.
+- **GPU recoveries: 0. Hangs: none** (`pi4-console-scan.py` over each session: 0 recoveries, 0 job timeouts, 0 hung jobs, 0 MMU faults, 0 resets before the end of any run, in all 50 runs).
+- **ES 2.0 regression rows** (`../2026-11-pi4-es2-fad0558a/`): D, FB1, T1, T3, TF, 1,184 of 1,184 mustpass cases Pass, all equal to `b1b5b845`: the stage-1 ES 2.0 result stays the same.
+
+**Where the 1,124 Fail and 550 NotSupported are** (Fail per image, mustpass view; causes are in the issue drafts of the report): FB4 329 (`fbo.render` 275, `fbo.msaa` 34, `fbo.invalidate` 20), FB3 81, FB1 12, FB2 3, FR2 31, S10 70, A1 2, M1 6, R1 2, SQ 6, S32a 53, S32b 34, S32c1-S32c4 4, T05a 2, T06 6, T07 28, T08 288, T09 150, T10 7, T11 1, T12 3, T13 6 (1,124 in all). T08 and T09's shadow look-ups and T07's 3D LOD cases, and S32b / S32c1-S32c4's textureSize, were refusals or compile failures at `b1b5b845` and are wrong images now.
+
+**No change expected** (not rerun; their `b1b5b845` result stands; the rerun map's verdict): B1 C1 D1 FO1 FO2 FO3 FO4 FO5 FO6 PR S01 S02 S09 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27 S5f S5v S30 S31 T01 T02 T04 F3F5 T15 T16 VA1 VA2 (41 images). **Plan #376's** (the V3D refusal of targets past 2048, its board rerun): S03 S03a S04 S05 S06 S07 S08 (S03-S08), T14 T14a T14b, TF1 TF1a TF1b TF1c, TF2 TF2a TF2b TF2c (18 labels). Covered by a rerun image above: T05ca T05cb T05cc (in T05c), T17a T17b (in T17).
+
+Checks (run on this directory and the `-s4` one, from the checkout of the commit that adds this section):
+
+```
+$ python3 tools/cts/check-pi4-gles3-log.py --commit fad0558a7def0e5677761608eec56b12e9855d18 tools/cts/log/2026-11-pi4-gles3-fad0558a-rerun tools/cts/log/2026-11-pi4-gles3-fad0558a-rerun-s4
+FAIL: missing (64): B1 C1 D1 FO1 FO2 FO3 FO4 FO5 FO6 PR S01 S02 S03 S03a S04 S05 S06 S07 S08 S09 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27 S5f S5v S30 S31 T01 T02 T04 F3F5 T05ca T05cb T05cc T14 T14a T14b T15 T16 T17a T17b TF1 TF1a TF1b TF1c TF2 TF2a TF2b TF2c VA1 VA2
+114 images, 50 with a tally, 64 missing, 0 duplicated, 0 aborted, commit fad0558a
+$ python3 tools/cts/check-gles3-tree.py tools/cts/pi4-gles3-tree.txt
+check-gles3-tree: tools/cts/pi4-gles3-tree.txt: 114 images, 42810 matched once, 0 not matched, 0 matched more than once, 0 empty images
+```
+
+The checker exits 1 only for the 64 "missing", which are the labels above this section's list: 41 no-change-expected, 18 plan #376's, 5 covered by T05c and T17. On this directory alone it also lists T17, UB1-UB3 and UA1-UA3 as missing (their tallies are in the `-s4` directory): `114 images, 43 with a tally, 71 missing, 0 duplicated, 0 aborted`. 0 duplicated and 0 aborted in both. The tree matches 42,810 cases exactly once.
+
 ## Session 1 (G1)
 
 Thirteen images of the table's A1..S31 part: A1 FB1 FB2 FB3 FB4 FR1 FR2 LT M1 R1 SQ S10 S16 (rows 1, 5-8, 15-18, 20, 21, 31, 37 counted from 1; `TREE_ROWS=0,4-7,14-17,19,20,30,36`).
