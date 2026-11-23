@@ -90,6 +90,8 @@ struct hvs {
 	uint32_t tpf;         /* polls per frame */
 	uint32_t tick;
 	int64_t corrupt_word; /* changed at the first edge showing our list */
+	int64_t wb_word;      /* set to wb_val at that edge (the HVS's write-back) */
+	uint32_t wb_val;
 	uint32_t our_start;
 	struct event log[LOGN];
 	uint32_t nlog;
@@ -194,6 +196,10 @@ static void m_wait(void *ctx)
 		h->mem[h->corrupt_word] ^= 0x00010000u;
 		h->corrupt_word = -1;
 	}
+	if (h->wb_word >= 0 && h->lact == h->our_start) {
+		h->mem[h->wb_word] = h->wb_val;
+		h->wb_word = -1;
+	}
 }
 
 /* The firmware's state: a 10-word Linux-layout list at fw_head, a known
@@ -215,6 +221,7 @@ static void model_init(struct hvs *h, uint32_t fw_head)
 	h->corrupt_word = -1;
 	h->our_start = 0xffffffffu;
 	h->stick_word = -1;
+	h->wb_word = -1;
 }
 
 static struct hvs6s_io model_io(struct hvs *h)
@@ -1489,6 +1496,68 @@ static void case_hw_readback(void)
 		   "0:skip,8:skip: the inner END (40, off 8) differing is skipped");
 }
 
+/* The board's answer (rpi5_scanout16, Q2): list word 676, entry 0 offset 4
+ * (the context word), was 0x8000005d and later 0x800000d2. */
+#define BCTX_WAS 0x8000005du
+#define BCTX_NOW 0x800000d2u
+
+static void board_ctx(struct hvs *h, int change)
+{
+	model_board(h, BHEAD, 1);
+	h->mem[BHEAD + 4u] = BCTX_WAS;
+	if (change) {
+		h->wb_word = BHEAD + 4u;
+		h->wb_val = BCTX_NOW;
+		h->our_start = 32;
+	}
+}
+
+static void case_hw_ctx4(void)
+{
+	struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "hw-ctx4";
+
+	board_ctx(&h, 1);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 676 && r.diff_want == BCTX_WAS &&
+		      r.diff_got == BCTX_NOW && r.rdiff.undeclared == 1,
+		   "empty set: the board's write-back to word 676 fails, old and new values kept");
+	name_check(t, has_line("dlswap restore-diff word 676 entry 0 off 4 was 0x8000005d now 0x800000d2 hw=no") &&
+		      has_line("dlswap restore-words FAIL word 676 want=0x8000005d got=0x800000d2 hwskip=none"),
+		   "empty set: the failure names word 676, entry 0, off 4, 0x8000005d, 0x800000d2");
+
+	board_ctx(&h, 1);
+	(void)hvs6s_hw_parse("4:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.restore_equal && r.rdiff.skip == 1 && r.rdiff.undeclared == 0 &&
+		      has_line("dlswap restore-diff word 676 entry 0 off 4 was 0x8000005d now 0x800000d2 hw=skip"),
+		   "4:skip: the board's write-back to 676 is accepted and named");
+
+	board_ctx(&h, 1);
+	(void)hvs6s_hw_parse("4:expect", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.rdiff.expect == 1 && r.rdiff.undeclared == 0 &&
+		      has_line("dlswap restore-diff word 676 entry 0 off 4 was 0x8000005d now 0x800000d2 hw=expect"),
+		   "4:expect: the change is accepted and reported hw=expect");
+
+	board_ctx(&h, 0);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.rdiff.total == 0 && r.rdiff.expect == 0 && r.rdiff.hw_words == 1 &&
+		      !has_sub("restore-diff word"),
+		   "4:expect, no change: ok, no word reported (the documented outcome)");
+
+	board_ctx(&h, 1);
+	(void)hvs6s_hw_parse("0:skip,8:skip", &c.hw);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_WORD && r.diff_word == 676 && r.rdiff.undeclared == 1 &&
+		      has_line("dlswap restore-diff word 676 entry 0 off 4 was 0x8000005d now 0x800000d2 hw=no"),
+		   "0:skip,8:skip: the offset-4 write-back still fails, named");
+}
+
 int main(void)
 {
 	case_pass();
@@ -1516,6 +1585,7 @@ int main(void)
 	case_hw_badcfg();
 	case_hw_restore();
 	case_hw_readback();
+	case_hw_ctx4();
 	printf("hvs6_dlist_swap_mock: %d of %d checks, %d failed\n", total - failed, total, failed);
 	return failed ? 1 : 0;
 }
