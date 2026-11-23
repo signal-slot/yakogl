@@ -104,6 +104,6 @@ flash.
   and the BL2 IWDG bounds it unless it refreshes the watchdog (design note,
   section on the hang bound). QEMU has no IWDG.
 - The stock path is a stand-in script, not ST's extlinux and OpenSTLinux.
-- `--env-size 0x2000` is passed explicitly. The card tool's default is
-  0x20000, which is not the DK's `CONFIG_ENV_SIZE` (0x2000; see
+- `--env-size 0x2000` is passed explicitly, though it is also the card
+  tool's default: the DK's `CONFIG_ENV_SIZE` (see
   `tools/mp2s_env_capacity.py`).
