@@ -1138,6 +1138,10 @@ pub struct Fs<'s> {
     /// The varying lanes its fp16 operations read were converted explicitly
     /// ([`convert_inputs16`], the colour-of-booleans route).
     pub(super) inputs16: bool,
+    /// A mediump shader with no kept loop selects varying lanes under an
+    /// integer compare ([`walk_if16`]): [`loop16`]'s route, its lanes
+    /// converted first (deqp_loops_fs_uncond_break).
+    pub(super) sel16: bool,
     /// Each node's IR instruction (its place in NIR's order, [`keys`]).
     origin: &'s mut [u16],
     /// Each node's pass of the unrolled loop that made it (0 outside a
@@ -1291,6 +1295,11 @@ pub struct Fs<'s> {
     /// That loop's pass counter, until its head test takes it
     /// ([`LoopCap`]).
     cap: Option<LoopCap>,
+    /// The nodes of every kept loop's cap (its phi, its step, its compare
+    /// with 0): the scheduler leaves them out of Mesa's schedule
+    /// (`Prog::cap`, sched.rs `schedule_capped`).
+    cap_nodes: [u16; 3 * nir::MAX_LOOPS],
+    ncap: u8,
     /// The `break`s of the kept loops walked so far ([`BreakEdge`]).
     breaks: [BreakEdge; MAX_BREAKS],
     nbreaks: usize,
@@ -4413,6 +4422,9 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         /* a precision statement or declaration the walk does not see */
         mixed: prec.mixed,
         inputs16: false,
+        sel16: false,
+        cap_nodes: [0; 3 * nir::MAX_LOOPS],
+        ncap: 0,
         origin: scratch.alloc_filled(MAX_NODES, 0u16).map_err(oom)?,
         pass: scratch.alloc_filled(MAX_NODES, 0u8).map_err(oom)?,
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
@@ -4939,6 +4951,19 @@ fn walk_if16(
         _ if f.kept.is_some() && f.loops == 0 && f.mask_lane(cond) && f.is_f16(t) && f.is_f16(e) => {
             f.node(Alu::Bcsel, [cond, t, e], join)
         }
+        /* a mediump shader's varying lanes under an integer compare, no
+         * loop kept (the one pass of a loop `wrapper_unroll` drops,
+         * deqp_loops_fs_uncond_break's `res = res.yzwx` under `0 <
+         * ui_three`): the lanes converted as `nir_lower_mediump_io` does,
+         * then `MUX.v2i16` on the mask's low half ([`loop16`]'s route) */
+        _ if f.kept.is_none()
+            && f.nir.nloops == 0
+            && f.mask_lane(cond)
+            && [t, e].iter().all(|&v| f.input_lane(v).is_some()) =>
+        {
+            f.sel16 = true;
+            f.node(Alu::Bcsel, [cond, t, e], join)
+        }
         _ => Err(MaliError::ControlFlow),
     };
     for (l, lanes) in locals.iter_mut().enumerate().take(f.nl) {
@@ -5092,6 +5117,15 @@ fn ends_in_break(nodes: &[Node]) -> bool {
     nodes.iter().rev().find(|n| !matches!(n, Node::Instr(_))) == Some(&Node::Break)
 }
 
+/// Run `nodes` holds a jump or a loop, itself or in a nested `if`.
+fn jumps_in(m: &Module<'_>, nodes: &[Node]) -> bool {
+    nodes.iter().any(|n| match *n {
+        Node::Instr(_) => false,
+        Node::If { then_, else_, .. } => jumps_in(m, m.nodes_of(then_)) || jumps_in(m, m.nodes_of(else_)),
+        Node::Loop { .. } | Node::Break | Node::Continue | Node::Return => true,
+    })
+}
+
 /// Run `nodes` holds a `continue` of its own loop (one in a nested loop is
 /// that loop's).
 fn holds_continue(m: &Module<'_>, nodes: &[Node]) -> bool {
@@ -5236,6 +5270,23 @@ fn kept_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MA
     }
     let Some(head) = nodes.iter().find(|n| !matches!(n, Node::Instr(_))) else { return false };
     let Node::If { cond, then_, else_ } = *head else { return false };
+    /* a mediump `do .. while` whose body opens with a plain `if`: its
+     * test `if (c) {} else break;` is the body's last control node and its
+     * one terminator, at the bottom (deqp_loops_fs_dowhile_if's `do if (i <
+     * 2) ..; while (++i < ui_three);`, kept; the `if` a `bcsel`) */
+    let tail = nodes.iter().rev().find(|n| !matches!(n, Node::Instr(_)));
+    if let (false, Some(&Node::If { cond: tc, then_: tt, else_: te })) = (f.prec.highp, tail) {
+        let plain = |n: &Node| match *n {
+            Node::Instr(_) => true,
+            Node::If { then_, else_, .. } => !jumps_in(m, m.nodes_of(then_)) && !jumps_in(m, m.nodes_of(else_)),
+            _ => false,
+        };
+        let opens_plain = !(then_.len == 0 && m.nodes_of(else_) == [Node::Break]) && plain(head);
+        if opens_plain && tt.len == 0 && m.nodes_of(te) == [Node::Break] {
+            let k = nodes.len() - 1 - nodes.iter().rev().position(|n| !matches!(n, Node::Instr(_))).unwrap_or(0);
+            return nodes[..k].iter().all(plain) && !ir_folds(m, tc.val, locals, 0);
+        }
+    }
     /* or `for (;;) { ..; if (c) break; .. }`, that `if` its one control
      * node: its one terminator, which no constant decides
      * (deqp_loops_fs_inf_break: kept, the test on `i == ui_one`) */
@@ -5247,6 +5298,40 @@ fn kept_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MA
     }
     let _ = f;
     !ir_folds(m, cond.val, locals, 0)
+}
+
+/// A counted loop Mesa keeps, its head test the place this returns: one
+/// whose test folds at the first pass ([`kept_loop`] unrolls those) but
+/// whose trip count is past [`MAX_UNROLL_ITERATIONS`], so
+/// `nir_opt_loop_unroll` leaves it (nir_opt_loop_unroll.c:1112-1150).
+/// Mesa's words have its test at the bottom, on the stepped counter, a
+/// do-while (deqp_loops_fs_101's `for (i = 0; i < 101; i++)`: `IADD_IMM`,
+/// `ICMP_OR.s32.ge` with the bound 101 pushed, `BRANCHZ`, then the body's
+/// `MKVEC`s on the back edge; deqp_loops3_fs_for_highp_40's 40 passes, its
+/// `FMA`s before the test). Taken for a body of instructions and plain
+/// `if`s after the test, and instructions alone before it.
+fn rotated_loop(f: &Fs<'_>, m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MAX_LOCALS]) -> Option<usize> {
+    let nodes = m.nodes_of(body);
+    let k = nodes.iter().position(|n| !matches!(n, Node::Instr(_)))?;
+    let Node::If { cond, then_, else_ } = nodes[k] else { return None };
+    if then_.len != 0 || m.nodes_of(else_) != [Node::Break] || !ir_folds(m, cond.val, locals, 0) {
+        return None;
+    }
+    let plain = |n: &Node| match *n {
+        Node::Instr(_) => true,
+        Node::If { then_, else_, .. } => !jumps_in(m, m.nodes_of(then_)) && !jumps_in(m, m.nodes_of(else_)),
+        _ => false,
+    };
+    if !nodes[k + 1..].iter().all(plain) || f.kept.is_some() || f.loops > 0 {
+        return None;
+    }
+    let init = |l: ir::LocalId, _float: bool| match locals.get(l.0 as usize).map(|v| v[0]) {
+        Some(Val::Const(bits)) => Some(bits),
+        _ => None,
+    };
+    let entries = crate::shaderc::online::loop_count::constant_loop_entries(m, body, &init)?;
+    /* the passes are the entries but the last, whose test fails */
+    (entries as usize - 1 > MAX_UNROLL_ITERATIONS).then_some(k)
 }
 
 /// IR value `v` folds to a constant from the constants and the locals'
@@ -5418,6 +5503,10 @@ fn loop_cap_limit(m: &Module<'_>, body: ir::Range, locals: &[[Val; 4]; MAX_LOCAL
 /// the locals are those of the `break` (one) or their phis (two), its
 /// `continue`s branches over the rest of the body to the latch
 /// ([`walk_nodes`]). A kept loop may nest in another (intloop_divnest).
+///
+/// `rotated`: the place of the head test of a loop [`rotated_loop`] keeps.
+/// The body after it is walked first, then the instructions before it and
+/// the test itself, on the stepped counter: the do-while Mesa makes of it.
 fn walk_kept_loop(
     f: &mut Fs<'_>,
     m: &Module<'_>,
@@ -5425,6 +5514,7 @@ fn walk_kept_loop(
     vals: &mut [[Val; 4]],
     locals: &mut [[Val; 4]; MAX_LOCALS],
     prec: FsPrecision,
+    rotated: Option<usize>,
 ) -> Result<(), MaliError> {
     /* a mediump shader's kept loop: Mesa carries its fp16 lanes across the
      * back edge as 16-bit vectors, and the mediump selection has no blocks
@@ -5545,7 +5635,17 @@ fn walk_kept_loop(
     let first_break = f.nbreaks;
     (f.kept, f.kept_body, f.loops, f.guard, f.cap) =
         (Some(lp), (nodes.as_ptr() as usize, nodes.len()), 0, u32::MAX, Some(cap));
-    let flow = walk_nodes(f, m, nodes, vals, locals, prec, false, last, None);
+    let flow = match rotated {
+        None => walk_nodes(f, m, nodes, vals, locals, prec, false, last, None),
+        Some(k) => walk_nodes(f, m, &nodes[k + 1..], vals, locals, prec, false, last, None).and_then(|flow| {
+            if flow != Flow::Next {
+                return Err(MaliError::LoopForm);
+            }
+            let head = &nodes[..=k];
+            f.kept_body = (head.as_ptr() as usize, head.len());
+            walk_nodes(f, m, head, vals, locals, prec, false, last, None)
+        }),
+    };
     let cap = f.cap;
     (f.kept, f.kept_body, f.loops, f.guard, f.cap) = (outer_kept, outer_body, outer_loops, outer_guard, outer_cap);
     /* a body that always breaks runs once: no reference */
@@ -5763,7 +5863,16 @@ fn walk_nodes(
                             return Err(MaliError::Defect(Defect::IrIndex));
                         };
                         let pass = &nodes[k + 1..brk];
-                        if walk_if(f, m, c, pass, &[], IfExit::Plain, vals, locals, prec, after)? != Flow::Next {
+                        /* `opt_if_simplification` swaps the empty then side
+                         * under `inot(c)`, the inverse compare: the pass is
+                         * the else side (deqp_loops_fs_uncond_break's
+                         * `ICMP_OR.s32.ge`, the `MUX`es' sides swapped). A
+                         * highp shader's `if` is a region, as it stood */
+                        let (c, t, e) = match prec.highp {
+                            true => (c, pass, &[][..]),
+                            false => (f.inverse_compare(c)?, &[][..], pass),
+                        };
+                        if walk_if(f, m, c, t, e, IfExit::Plain, vals, locals, prec, after)? != Flow::Next {
                             return Err(MaliError::LoopForm);
                         }
                         return Ok(Flow::Break);
@@ -5805,6 +5914,12 @@ fn walk_nodes(
                         let stop = f.op32(Alu::Icmp(Cmpf::Lt), [next, Val::Const(0), Val::Undef], at)?;
                         c = f.op32(Alu::Ior, [c, stop, Val::Undef], at)?;
                         f.cap = Some(LoopCap { next, ..cap });
+                        for v in [Val::Lane(cap.phi, 0), next, stop] {
+                            if let (Val::Lane(n, _), Some(slot)) = (v, f.cap_nodes.get_mut(usize::from(f.ncap))) {
+                                *slot = n;
+                                f.ncap += 1;
+                            }
+                        }
                     }
                     /* the head test then `if (c2) break;` with only
                      * instructions between: one terminator
@@ -5934,7 +6049,11 @@ fn walk_nodes(
                 continue;
             }
             Node::Loop { body } if kept_loop(f, m, body, locals) => {
-                walk_kept_loop(f, m, body, vals, locals, prec)?;
+                walk_kept_loop(f, m, body, vals, locals, prec, None)?;
+                continue;
+            }
+            Node::Loop { body } if rotated_loop(f, m, body, locals).is_some() => {
+                walk_kept_loop(f, m, body, vals, locals, prec, rotated_loop(f, m, body, locals))?;
                 continue;
             }
             Node::Loop { body } => {
@@ -12140,7 +12259,7 @@ const PAIR: u8 = 0x80;
 
 /// The mediump shader `f` keeps a loop ([`walk_kept_loop`]).
 pub fn loop16(f: &Fs<'_>) -> bool {
-    !f.prec.highp && f.nir.nloops > 0
+    !f.prec.highp && (f.nir.nloops > 0 || f.sel16)
 }
 
 /// The mediump shader `f` keeps an `if` as blocks with a branch: a look-up
@@ -13383,9 +13502,22 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
                 Kind::Store { .. } | Kind::Discard => 1,
                 _ => 0,
             };
-            for v in &nd.src[..arity] {
+            /* a loop header's phi reads its sources at the end of the
+             * pre-header and of the latch: a varying lane the loop carries
+             * from its entry (`vec4 c = v; for (..) c = c * v;`, highp) is
+             * loaded before the loop (deqp_loops3_fs_for_highp_40's
+             * `LD_VAR_BUF_IMM` then the four `MOV.i32` of the phis' copies) */
+            let header = match nd.kind {
+                Kind::Phi => f.nir.loops[..f.nir.nloops].iter().find(|r| r.header == f.nir.block[id as usize]),
+                _ => None,
+            };
+            for (s, v) in nd.src[..arity].iter().enumerate() {
                 if load_lane(f, *v)?.is_some_and(|(u, j, _)| !u && j as usize == k) {
-                    let b = f.nir.block[id as usize];
+                    let b = match header {
+                        Some(r) if s == 0 => r.pre,
+                        Some(r) => r.latch,
+                        None => f.nir.block[id as usize],
+                    };
                     block = Some(block.map_or(b, |x| f.nir.lca(x, b)));
                     readers |= 1 << (b & 31);
                 }
@@ -13984,6 +14116,11 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
     let col = alu(p, Op::Collect, &out)?;
     blend(p, 0, col, t, 2, false, false)?;
     f.rows = rows;
+    for &n in &f.cap_nodes[..usize::from(f.ncap)] {
+        if let Some(v) = val.get(usize::from(n)).copied().flatten().and_then(|s| s.ssa_value()) {
+            p.cap.set(v);
+        }
+    }
     preloads(p)
 }
 

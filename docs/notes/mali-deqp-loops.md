@@ -1528,3 +1528,47 @@ only inside a kept loop. Mesa's words (one `ICMP_OR` on `ui_three`, three
 `MUX.v2i16`) need the loop16 route's input conversion
 (`convert_inputs16`) and that select for this `if` too: the next step. No
 glmark2 verdict, in-crate test or other loops reference moved.
+
+## 12. Five more loops references (spike-loops-rest3, at 8fe07a2a)
+
+HOST-ONLY. Five references move; no glmark2 verdict moves
+(`mali_glmark2_corpus`), and no FMA path changes (#367 lower-fma).
+
+1. **`fs_uncond_break`, byte-equal.** The one pass of a loop
+   `wrapper_unroll` drops is the *else* side of the head test's inverse
+   compare (`opt_if_simplification` swaps the empty then side:
+   `ICMP_OR.s32.ge`), in a mediump shader only; a highp shader's `if`
+   stays as it was (no reference). `walk_if16` selects a varying's lanes
+   under an integer compare with no loop kept (`Fs::sel16`), and that
+   shader takes `loop16`'s route (`convert_inputs16`, then `MUX.v2i16`).
+2. **The cap no longer moves Mesa's schedule** (`sched.rs`
+   `schedule_capped`). The pass counter's nodes (phi, step, compare with 0)
+   are recorded (`Fs::cap_nodes`, `Prog::cap`). A block they reach is
+   scheduled as Mesa schedules it without them: their instructions are
+   left out of the DAG, and their values are not SSA values for the
+   pressure. Each cap word then goes right before its first reader. Without
+   this, `fs_dowhile_if`'s head test rose above the body's selects and
+   cost a `MOV`. The 13 earlier capped compares are unchanged.
+3. **`fs_dowhile_if`, Mesa's words with the cap.** A mediump `do .. while`
+   whose body opens with a plain `if` is kept (`kept_loop`): its tail
+   `if (c) {} else break;` is the terminator.
+4. **`fs_101` and loops3 `fs_for_highp_40`, Mesa's words with the cap.** A
+   counted loop of more than 32 passes is kept as a do-while
+   (`rotated_loop`): the body after the head test is walked first, then the
+   instructions before it and the test on the stepped counter. The cap's
+   limit is the loop's own entry count (0x66, 0x29). For highp, a varying
+   lane that a header phi carries in is loaded in the pre-header (the
+   phi's source block), not the header. Before this fix every highp kept
+   loop whose phi took a varying lane failed with
+   `Defect(IrIndex)`. That defect predates this work: at the tip, the probe
+   `vec4 c = v; for (int i = 0; i < n; i++) c = c * v;` fails with it.
+5. **`vs_nested_const`, byte-equal.** The vertex walk's loop steps nest
+   (`vs_loop_shape`, `put_loop`, the `outer` stack): counted loops in a
+   counted loop are unrolled. A kept loop inside or around another is
+   refused (`LoopVertex`).
+6. **gaps `loops_fs_kept_while`.** It already compiled to Mesa's words
+   with the cap's. It is now a `CapEdit` compare
+   (`deqp_gaps_loops_fs_kept_while_is_mesa_26_2_1_with_the_loop_cap`).
+
+`CapEdit::Add` now takes any immediate for the pre-header limit, because a
+counted loop's limit is its own entry count.

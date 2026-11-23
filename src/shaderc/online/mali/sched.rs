@@ -21,7 +21,7 @@
 //! (bi_liveness.c:26-104, [`liveness_ssa`]): a phi's write is killed and
 //! its source for the predecessor made live on that edge.
 
-use super::bir::{props, Idx, Ins, Msg, Op, Prog, MAX_BLOCKS, MAX_INSTRS, MAX_NODES};
+use super::bir::{props, Dest, Idx, Ins, Msg, Op, Prog, Src, MAX_BLOCKS, MAX_INSTRS, MAX_NODES};
 use super::MaliError;
 use crate::shaderc::online::arena::Arena;
 
@@ -35,15 +35,15 @@ pub const MAX_BLOCK_INSTRS: usize = 512;
 
 /// A set of SSA values.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Live([u64; WORDS]);
+pub struct Live(pub [u64; WORDS]);
 
 impl Live {
     pub const EMPTY: Live = Live([0; WORDS]);
 
-    fn test(&self, v: u16) -> bool {
+    pub fn test(&self, v: u16) -> bool {
         self.0[v as usize / 64] >> (v % 64) & 1 != 0
     }
-    fn set(&mut self, v: u16) {
+    pub fn set(&mut self, v: u16) {
         self.0[v as usize / 64] |= 1 << (v % 64);
     }
     fn clear(&mut self, v: u16) {
@@ -168,6 +168,10 @@ struct Tables<'s> {
     parents: &'s mut [u16],
     heads: &'s mut [u16],
     schedule: &'s mut [u16],
+    /// [`schedule_capped`]'s place of each instruction it schedules, and
+    /// which of the cap's it has placed.
+    index: &'s mut [u16],
+    placed: &'s mut [bool],
 }
 
 impl<'s> Dag<'s> {
@@ -284,6 +288,9 @@ fn schedule_block(
     tables: &mut Tables<'_>,
     out: &mut [Ins],
 ) -> Result<(), MaliError> {
+    if (start..end).any(|k| touches(&p.ins[k], &p.cap)) {
+        return schedule_capped(p, (start, stop, end), live_out, tables, out);
+    }
     let (mut pressure, mut orig_max) = (0i32, 0i32);
     let mut live = *live_out;
     for k in (start..end).rev() {
@@ -337,6 +344,175 @@ fn schedule_block(
     Ok(())
 }
 
+/// Instruction `i` reads or writes a value of the kept-loop cap (`cap`,
+/// [`Prog::cap`]).
+fn touches(i: &Ins, cap: &Live) -> bool {
+    ssa_dests(i).any(|(_, v)| cap.test(v)) || ssa_srcs(i).any(|(_, v)| cap.test(v))
+}
+
+/// Instruction `i` computes a value of the cap (its counter's step or its
+/// compare with 0; not its phi, which stays with the block's phis).
+fn of_cap(i: &Ins, cap: &Live) -> bool {
+    i.op != Op::Phi && ssa_dests(i).any(|(_, v)| cap.test(v))
+}
+
+/// [`schedule_block`] of a block the kept-loop cap reaches (nir_fs.rs
+/// `loop_cap_limit`, a DELIBERATE deviation from Mesa, which has no pass
+/// counter): the schedule Mesa makes of the block without the cap, then
+/// each word of the cap right before the first instruction that reads it.
+/// The DAG and the pressure are those of the block with the cap's own
+/// instructions left out and its values read or written by the others
+/// (the phi, the head test's third source) as no SSA values, so the cap
+/// moves no instruction of Mesa's (deqp_loops_fs_dowhile_if: the body's
+/// four `MUX.v2i16` before the counter's step and the tail test, as
+/// Mesa's, the cap's two words before that test).
+fn schedule_capped(
+    p: &mut Prog<'_>,
+    (start, stop, end): (usize, usize, usize),
+    live_out: &Live,
+    tables: &mut Tables<'_>,
+    out: &mut [Ins],
+) -> Result<(), MaliError> {
+    let cap = p.cap;
+    /* the block without the cap: `out[..m]` its instructions before the
+     * branch, then its branch and after; `index[j]` the place of `out[j]` */
+    let blind = |i: &Ins| {
+        let mut i = *i;
+        for d in i.dest[..i.nd as usize].iter_mut() {
+            if matches!(d.idx, Idx::Ssa(v, _) if cap.test(v)) {
+                *d = Dest::NULL;
+            }
+        }
+        for x in i.src[..i.ns as usize].iter_mut() {
+            if x.ssa_value().is_some_and(|v| cap.test(v)) {
+                *x = Src::NULL;
+            }
+        }
+        i
+    };
+    let index = &mut *tables.index;
+    let mut m = 0;
+    for k in start..stop {
+        if !of_cap(&p.ins[k], &cap) {
+            out[m] = blind(&p.ins[k]);
+            index[m] = k as u16;
+            m += 1;
+        }
+    }
+    let mut e = m;
+    for k in stop..end {
+        out[e] = blind(&p.ins[k]);
+        e += 1;
+    }
+    let mut live_out = *live_out;
+    for (w, c) in live_out.0.iter_mut().zip(cap.0.iter()) {
+        *w &= !c;
+    }
+    let (mut pressure, mut orig_max) = (0i32, 0i32);
+    let mut live = live_out;
+    for i in out[..e].iter().rev() {
+        pressure += delta(i, &live);
+        orig_max = orig_max.max(pressure);
+        update(&mut live, i);
+    }
+    if m == 0 {
+        return Ok(());
+    }
+    tables.edges[..m * m].fill(0);
+    tables.nedges[..m].fill(0);
+    tables.parents[..m].fill(0);
+    let mut dag = Dag::new(m, &mut *tables.edges, &mut *tables.nedges, &mut *tables.parents, &mut *tables.heads);
+    create_dag(&out[..m], &mut dag);
+    let mut live = live_out;
+    let (mut pressure, mut max) = (0i32, 0i32);
+    let schedule = &mut *tables.schedule;
+    let mut ns = 0usize;
+    while dag.nheads > 0 {
+        let mut best = None;
+        let mut min = i32::MAX;
+        for &h in &dag.heads[..dag.nheads] {
+            let d = delta(&out[h as usize], &live);
+            if d < min {
+                min = d;
+                best = Some(h);
+            }
+        }
+        let b = best.ok_or(MaliError::Defect(super::Defect::Schedule))?;
+        pressure += delta(&out[b as usize], &live);
+        max = max.max(pressure);
+        dag.prune(b);
+        schedule[ns] = b;
+        ns += 1;
+        update(&mut live, &out[b as usize]);
+    }
+    if ns != m {
+        return Err(MaliError::Defect(super::Defect::Schedule));
+    }
+    if max >= orig_max {
+        return Ok(());
+    }
+    /* Mesa's order (the bottom-up one reversed), each cap word placed
+     * before its first reader there, in the block's order; one no
+     * instruction before the branch reads goes before the branch */
+    let n = stop - start;
+    let placed = &mut *tables.placed;
+    placed[..n].fill(false);
+    let mut o = 0usize;
+    let ordered = &mut out[m..m + n];
+    for k in (0..ns).rev() {
+        let at = index[schedule[k] as usize] as usize;
+        place_caps(p, start, stop, &p.ins[at], &cap, placed, ordered, &mut o);
+        ordered[o] = p.ins[at];
+        o += 1;
+    }
+    for k in start..stop {
+        if !placed[k - start] && of_cap(&p.ins[k], &cap) {
+            placed[k - start] = true;
+            ordered[o] = p.ins[k];
+            o += 1;
+        }
+    }
+    if o != n {
+        return Err(MaliError::Defect(super::Defect::Schedule));
+    }
+    p.ins[start..stop].copy_from_slice(&out[m..m + n]);
+    Ok(())
+}
+
+/// The cap's instructions of `p.ins[start..stop]` that `i` reads, not yet
+/// placed, each after those it reads in turn, appended to `ordered`; none
+/// for a phi.
+#[allow(clippy::too_many_arguments)]
+fn place_caps(
+    p: &Prog<'_>,
+    start: usize,
+    stop: usize,
+    i: &Ins,
+    cap: &Live,
+    placed: &mut [bool],
+    ordered: &mut [Ins],
+    o: &mut usize,
+) {
+    /* a phi reads the cap's step on the back edge, from the latch */
+    if i.op == Op::Phi {
+        return;
+    }
+    for (_, v) in ssa_srcs(i) {
+        if !cap.test(v) {
+            continue;
+        }
+        let Some(k) = (start..stop).find(|&k| ssa_dests(&p.ins[k]).any(|(_, d)| d == v)) else { continue };
+        if placed[k - start] || !of_cap(&p.ins[k], cap) {
+            continue;
+        }
+        placed[k - start] = true;
+        let c = p.ins[k];
+        place_caps(p, start, stop, &c, cap, placed, ordered, o);
+        ordered[*o] = c;
+        *o += 1;
+    }
+}
+
 /// `bi_pressure_schedule` (:278-293): each block, with its live-out set.
 pub fn pressure_schedule(p: &mut Prog<'_>, scratch: &Arena<'_>) -> Result<(), MaliError> {
     if p.n > MAX_INSTRS {
@@ -362,6 +538,8 @@ pub fn pressure_schedule(p: &mut Prog<'_>, scratch: &Arena<'_>) -> Result<(), Ma
         parents: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
         heads: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
         schedule: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
+        index: scratch.alloc_filled(max_n, 0u16).map_err(oos)?,
+        placed: scratch.alloc_filled(max_n, false).map_err(oos)?,
     };
     let out = scratch.alloc_filled(MAX_INSTRS, Ins::NOP).map_err(|_| MaliError::OutOfScratch)?;
     for b in 0..p.nblocks {

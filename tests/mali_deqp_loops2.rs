@@ -82,7 +82,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("fs_ret_dyn", LOOP_FORM),
     ("fs_ret_dynamic_loop_never", LOOP_FORM),
     ("fs_struct_local", LOOP_MEDIUMP),
-    ("fs_wh_con_101_iterations", LOOP_FORM),
     ("fs_wh_dyn_basic_highp_float", LOOP_MEDIUMP),
     ("fs_wh_dyn_nested", LOOP_MEDIUMP),
     ("fs_wh_uni_nested", LOOP_MEDIUMP),
@@ -105,7 +104,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_for_dyn_basic_mediump_float", LOOP_VERTEX),
     ("vs_for_dyn_conditional_body", LOOP_VERTEX),
     ("vs_for_dyn_conditional_break", LOOP_VERTEX),
-    ("vs_for_dyn_nested", LOOP_VERTEX),
+    ("vs_for_dyn_nested", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
     ("vs_for_uni_basic_lowp_float", LOOP_VERTEX),
     ("vs_for_uni_conditional_body", LOOP_VERTEX),
     ("vs_for_uni_conditional_break", LOOP_VERTEX),
@@ -139,7 +138,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("vs_wh_dyn_basic_highp_float", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_body", LOOP_VERTEX),
     ("vs_wh_dyn_conditional_break", LOOP_VERTEX),
-    ("vs_wh_dyn_nested_sequence", LOOP_VERTEX),
+    ("vs_wh_dyn_nested_sequence", "a uniform other than a float, vec2, vec3, vec4 or mat4"),
     ("vs_wh_uni_conditional_body", LOOP_VERTEX),
     ("vs_wh_uni_conditional_break", LOOP_VERTEX),
     ("vs_wh_uni_conditional_continue", LOOP_VERTEX),
@@ -153,7 +152,13 @@ const REFUSALS: &[(&str, &str)] = &[
 /// fragment words are Mesa's with the loop cap's added and its registers
 /// moved (checked by the spike's word alignment; no `CapEdit` list pins them
 /// yet) or differ in form (a `while (i++ < n)` counter, a loop Mesa deletes,
-/// a look-up's kept branch).
+/// a look-up's kept branch). The `while (i++ < n)` forms are `false` since
+/// the pre-RA scheduler schedules a capped block as Mesa's without the cap
+/// (sched.rs `schedule_capped`, spike-loops-rest3): the counter Mesa carries
+/// as `i + 1` leaves our step before the test and a phi copy, which the cap's
+/// pressure used to hide. `fs_wh_con_101_iterations` compiles since the
+/// counted loop past 32 passes is kept (nir_fs.rs `rotated_loop`), in the
+/// same `while (i++ < 101)` form.
 const COMPILED: &[(&str, bool)] = &[
     ("fs_disc_texture", false),
     ("fs_do_con_select_iteration_count", true),
@@ -171,11 +176,12 @@ const COMPILED: &[(&str, bool)] = &[
     ("fs_for_uni_function_call_inout", true),
     ("fs_for_uni_single_iteration", true),
     ("fs_scope_while", false),
-    ("fs_wh_dyn_101_iterations", true),
+    ("fs_wh_dyn_101_iterations", false),
+    ("fs_wh_con_101_iterations", false),
     ("fs_wh_dyn_conditional_body", false),
-    ("fs_wh_dyn_conditional_break", true),
+    ("fs_wh_dyn_conditional_break", false),
     ("fs_wh_uni_101_iterations", false),
-    ("fs_wh_uni_compound_statement", true),
+    ("fs_wh_uni_compound_statement", false),
     ("fs_wh_uni_conditional_body", false),
     ("fs_wh_uni_conditional_break", true),
     ("fs_wh_uni_conditional_continue", false),

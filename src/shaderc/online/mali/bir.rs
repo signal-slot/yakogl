@@ -1337,6 +1337,11 @@ pub struct Prog<'s> {
     pub nblocks: u8,
     /// The block [`Prog::push`] emits into (`ctx->current_block`).
     pub cur: u8,
+    /// The SSA values of the kept loops' pass counters (nir_fs.rs
+    /// `loop_cap_limit`, a DELIBERATE deviation from Mesa): the pre-RA
+    /// scheduler schedules a block as Mesa does without them
+    /// (sched.rs `schedule_capped`).
+    pub cap: super::sched::Live,
 }
 
 /// The program would not fit one of its tables.
@@ -1352,7 +1357,16 @@ pub enum Full {
 
 impl<'s> Prog<'s> {
     pub fn new(ins: &'s mut [Ins]) -> Prog<'s> {
-        Prog { ins, n: 0, ssa_alloc: 0, peak: 0, blocks: [Block::NONE; MAX_BLOCKS], nblocks: 1, cur: 0 }
+        Prog {
+            ins,
+            n: 0,
+            ssa_alloc: 0,
+            peak: 0,
+            blocks: [Block::NONE; MAX_BLOCKS],
+            nblocks: 1,
+            cur: 0,
+            cap: super::sched::Live::EMPTY,
+        }
     }
 
     pub fn as_slice(&self) -> &[Ins] {

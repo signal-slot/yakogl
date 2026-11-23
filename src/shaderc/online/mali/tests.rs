@@ -313,7 +313,8 @@ fn assert_words(name: &str, ours: &[u64], theirs: &[u64]) {
 #[derive(Clone, Copy, Debug)]
 enum CapEdit {
     /// A word of the cap, inserted at this position: the pre-header's
-    /// `IADD_IMM.i32.reconverge rc, 0x0, #0x1000` (LOOP_CAP), the header's
+    /// `IADD_IMM.i32.reconverge rc, 0x0, #0x1000` (LOOP_CAP, or a counted
+    /// loop's own count of head entries: `#0x66` for 101 passes), the header's
     /// `IADD_IMM.i32 rc, rc^, #0xFFFFFFFF` and `ICMP_OR.s32.lt.m1 rs, rc,
     /// 0x0, 0x0`, and after a float test the `LSHIFT_OR.i32 .., 0x0.b00, rs^`
     /// that ORs `rs` in (an integer test takes it as its third source).
@@ -332,7 +333,9 @@ fn capped(mut r: Region, edits: &[CapEdit]) -> Region {
         match e {
             CapEdit::Add(at, w) => {
                 let t = text(w);
-                let cap = (t.starts_with("IADD_IMM.i32.reconverge ") && t.ends_with(", 0x0, #0x1000"))
+                /* the pre-header's limit: LOOP_CAP, or a counted loop's own
+                 * count of head entries (`loop_cap_limit`) */
+                let cap = (t.starts_with("IADD_IMM.i32.reconverge ") && t.contains(", 0x0, #0x"))
                     || (t.starts_with("IADD_IMM.i32 ") && t.ends_with("^, #0xFFFFFFFF"))
                     || (t.starts_with("ICMP_OR.s32.lt.m1 ") && t.ends_with(", 0x0, 0x0"))
                     || (t.starts_with("LSHIFT_OR.i32 ") && t.contains(", 0x0.b00, "));
@@ -1291,10 +1294,10 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision highp float; varying vec4 v; void main(){ if (int(v.x) < 2) discard; gl_FragColor = v; }", MaliError::DiscardForm),
         (FS, "precision highp float; varying vec4 v; uniform float u; void main(){ bool b = v.y < u; if (v.x < 0.5) { if (b) discard; } gl_FragColor = v; }", MaliError::DiscardForm),
         /* a loop whose break hides behind a run-time condition (femtovg's
-         * filter_image: Mesa's complex_unroll), and one of more than 32
-         * passes */
+         * filter_image: Mesa's complex_unroll); one of more than 32 passes
+         * is kept as a do-while (nir_fs.rs `rotated_loop`,
+         * deqp_loops3_fs_for_highp_40) */
         (FS, "precision highp float; varying vec4 v; uniform float u; void main(){ vec4 c = v; for (float i = 0.0; i < 8.0; i += 1.0) { if (i >= u) break; if (i >= v.x) break; c = c + v; } gl_FragColor = c; }", MaliError::LoopForm),
-        (FS, "precision highp float; varying vec4 v; void main(){ vec4 c = v; for (int i = 0; i < 40; i++) c = c * v; gl_FragColor = c; }", MaliError::LoopForm),
         /* gl_FragCoord's w; its lanes out of order in a mediump shader and
          * a product of the built-in itself in a highp one (both fp16 in
          * Mesa: gl_FragCoord is mediump in ES 1.00), forms no reference
@@ -7596,6 +7599,134 @@ fn deqp_loops_fs_dowhile_uni_is_mesa_26_2_1_with_the_loop_cap() {
             CapEdit::Fix(16, 0x00a1c00010050440), // MKVEC.v2i16 r0, r0^.h1, r4.h0 (Mesa: MKVEC.v2i16 r0, r0^.h1, r3.h0)
             CapEdit::Fix(17, 0x48a1c10010058544), // MKVEC.v2i16.wait r1, r4^.h1, u2.w1.h0 (Mesa: MKVEC.v2i16.wait r1, r3^.h1, u2.w1.h0)
         ],
+    );
+}
+
+/// deqp_loops_fs_dowhile_if, a mediump kept loop (docs/notes/mali-deqp-loops.md
+/// section 12): `do if (i < 2) res = res.yzwx; while (++i < ui_three);`, the
+/// tail test the loop's terminator (nir_fs.rs `kept_loop`), the `if` four
+/// `MUX.v2i16` in the reverse of lane order, as Mesa's pre-RA schedule has
+/// them without the cap (sched.rs `schedule_capped`), the cap's step and
+/// compare right before the tail test.
+#[test]
+fn deqp_loops_fs_dowhile_if_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_loop(
+        td!("deqp_loops_fs_dowhile_if.vert"),
+        td!("deqp_loops_fs_dowhile_if.frag"),
+        td!("deqp_loops_fs_dowhile_if.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x00f8c40498c0c802), // ICMP_OR.s32.lt.m1 r4, r2, 0x3020100.b2, 0x0 (Mesa: r3)
+            CapEdit::Fix(6, 0x00b9c50130040001), // MUX.v2i16 r5, r1.h11, r0.h00, r4.h00 (Mesa: r4, .., r3.h00)
+            CapEdit::Fix(7, 0x00b9c6010c040101), // MUX.v2i16 r6, r1.h00, r1.h11, r4.h00 (Mesa: r5, .., r3.h00)
+            CapEdit::Fix(8, 0x00b9c70130044100), // MUX.v2i16 r7, r0.h11, r1^.h00, r4.h00 (Mesa: r6, .., r3.h00)
+            CapEdit::Fix(9, 0x00b9c0010c444040), // MUX.v2i16 r0, r0^.h00, r0^.h11, r4^.h00 (Mesa: r3^.h00)
+            CapEdit::Add(11, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(12, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(13, 0x00f8c10280418402), // ICMP_OR.s32.ge.m1 r1, r2, u2.w0, r1^ (Mesa: .., 0x0)
+            CapEdit::Fix(15, 0x00a1c10000054546), // MKVEC.v2i16 r1, r6^.h0, r5^.h0 (Mesa: r5^.h0, r4^.h0)
+            CapEdit::Fix(16, 0x00a1c00000054740), // MKVEC.v2i16 r0, r0^.h0, r7^.h0 (Mesa: r6^.h0)
+            CapEdit::Fix(17, 0x501fc017fffff3c0), // BRANCHZ.eq.reconverge 0x0, offset:-13 (Mesa: offset:-11)
+            CapEdit::Fix(20, 0x00a1c00000054740), // MKVEC.v2i16 r0, r0^.h0, r7^.h0 (Mesa: r6^.h0)
+            CapEdit::Fix(21, 0x48a1c10000058546), // MKVEC.v2i16.wait r1, r6^.h0, u2.w1.h0 (Mesa: r5^.h0)
+        ],
+    );
+}
+
+/// deqp_loops_fs_101, a mediump counted loop of 101 passes, past Mesa's
+/// unroll limit (docs/notes/mali-deqp-loops.md section 12): kept as the
+/// do-while Mesa makes of it (nir_fs.rs `rotated_loop`), the counter's step
+/// and the test on the stepped counter (the bound 101 pushed) before the
+/// back edge's two `MKVEC.v2i16`; the cap's limit is the loop's own count
+/// of head entries (0x66).
+#[test]
+fn deqp_loops_fs_101_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_loop(
+        td!("deqp_loops_fs_101.vert"),
+        td!("deqp_loops_fs_101.frag"),
+        td!("deqp_loops_fs_101.expect.json"),
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300000066c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x66
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(7, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(8, 0x00f8c10480c0c003), // ICMP_OR.s32.lt.m1 r1, r3, 0x0, 0x0
+            CapEdit::Fix(9, 0x00f8c10280418402), // ICMP_OR.s32.ge.m1 r1, r2, u2.w0, r1^ (Mesa: .., 0x0)
+            CapEdit::Fix(11, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(12, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(13, 0x501fc017fffff7c0), // BRANCHZ.eq.reconverge 0x0, offset:-9 (Mesa: offset:-7)
+            CapEdit::Fix(16, 0x00a1c00010050440), // MKVEC.v2i16 r0, r0^.h1, r4.h0 (Mesa: r3.h0)
+            CapEdit::Fix(17, 0x48a1c10010058544), // MKVEC.v2i16.wait r1, r4^.h1, u2.w1.h0 (Mesa: r3^.h1)
+        ],
+    );
+}
+
+/// deqp_loops3_fs_for_highp_40, a highp counted loop of 40 passes past
+/// Mesa's unroll limit (docs/notes/mali-deqp-loops.md section 12): the
+/// do-while of `rotated_loop`, its `vec4` carried from the varying loaded
+/// before the loop (the four `MOV.i32` of the phis' copies), the four
+/// `FMA.f32` before the test on the stepped counter; the cap's limit 0x29.
+#[test]
+fn deqp_loops3_fs_for_highp_40_is_mesa_26_2_1_with_the_loop_cap() {
+    check_deqp_loop(
+        td!("deqp_loops3_fs_for_highp_40.vert"),
+        td!("deqp_loops3_fs_for_highp_40.frag"),
+        td!("deqp_loops3_fs_for_highp_40.expect.json"),
+        &[
+            CapEdit::Fix(5, 0x0110c800000000c0), // IADD_IMM.i32 r8, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r8, 0x0, #0x0)
+            CapEdit::Add(6, 0x5110c900000029c0), // IADD_IMM.i32.reconverge r9, 0x0, #0x29
+            CapEdit::Add(12, 0x0110c9ffffffff49), // IADD_IMM.i32 r9, r9^, #0xFFFFFFFF
+            CapEdit::Add(13, 0x00f8ca0480c0c009), // ICMP_OR.s32.lt.m1 r10, r9, 0x0, 0x0
+            CapEdit::Fix(14, 0x00f8ca02804a8408), // ICMP_OR.s32.ge.m1 r10, r8, u2.w0, r10^ (Mesa: r9, .., 0x0)
+            CapEdit::Fix(15, 0x501fc0200000014a), // BRANCHZ.reconverge r10^.h0, offset:1 (Mesa: r9^.h0)
+            CapEdit::Fix(16, 0x501fc017fffff6c0), // BRANCHZ.eq.reconverge 0x0, offset:-10 (Mesa: offset:-8)
+        ],
+    );
+}
+
+/// deqp_gaps_loops_fs_kept_while, a mediump kept loop (docs/notes/mali-deqp-loops.md
+/// section 12): `while (i < (ub_true ? 3 : 0))`, the bound's `CSEL.u32.eq` of
+/// the bool uniform in the header, Mesa's words with the cap's. Drawn with
+/// dEQP's own uniform values (tools/mali/deqp_ref.sh), not gl_ref.py's: the
+/// bool's word is `~0`, the ints their names' numbers.
+#[test]
+fn deqp_gaps_loops_fs_kept_while_is_mesa_26_2_1_with_the_loop_cap() {
+    let (vs, fs, json) = (
+        td!("deqp_gaps_loops_fs_kept_while.vert"),
+        td!("deqp_gaps_loops_fs_kept_while.frag"),
+        td!("deqp_gaps_loops_fs_kept_while.expect.json"),
+    );
+    let (v, f) = compile_linked(vs, fs);
+    let ints = ["ui_zero", "ui_one", "ui_two", "ui_three", "ui_four", "ui_five", "ui_six"];
+    let uv = |rows: &[(String, u16, u16)], d: u16| {
+        let (name, ..) = rows.iter().find(|r| d >= r.1 && d < r.1 + r.2).expect("a uniform row holds the dword");
+        match ints.iter().position(|n| n == name) {
+            Some(k) => k as u32,
+            None => {
+                assert_eq!(name, "ub_true");
+                u32::MAX
+            }
+        }
+    };
+    check_vs_stage_with(&v, json, VIEWPORT_64X64, &|d| uv(&v.uniforms, d));
+    check_fs_stage_with(
+        &f,
+        json,
+        VIEWPORT_64X64,
+        &[
+            CapEdit::Fix(3, 0x0110c200000000c0), // IADD_IMM.i32 r2, 0x0, #0x0 (Mesa: IADD_IMM.i32.reconverge r2, 0x0, #0x0)
+            CapEdit::Add(4, 0x5110c300001000c0), // IADD_IMM.i32.reconverge r3, 0x0, #0x1000
+            CapEdit::Fix(5, 0x0091c40000000041), // MOV.i32 r4, r1^ (Mesa: MOV.i32 r3, r1^)
+            CapEdit::Add(8, 0x0110c3ffffffff43), // IADD_IMM.i32 r3, r3^, #0xFFFFFFFF
+            CapEdit::Add(9, 0x00f8c50480c0c003), // ICMP_OR.s32.lt.m1 r5, r3, 0x0, 0x0
+            CapEdit::Fix(10, 0x00f8c10280454102), // ICMP_OR.s32.ge.m1 r1, r2, r1^, r5^ (Mesa: .., 0x0)
+            CapEdit::Fix(12, 0x00a1c10010050004), // MKVEC.v2i16 r1, r4.h1, r0.h0 (Mesa: r3.h1)
+            CapEdit::Fix(13, 0x00a1c00010054440), // MKVEC.v2i16 r0, r0^.h1, r4^.h0 (Mesa: r3^.h0)
+            CapEdit::Fix(15, 0x501fc017fffff5c0), // BRANCHZ.eq.reconverge 0x0, offset:-11 (Mesa: offset:-9)
+            CapEdit::Fix(18, 0x48a1c10000058644), // MKVEC.v2i16.wait r1, r4^.h0, u3.w0.h0 (Mesa: r3^.h0)
+        ],
+        &|d| uv(&f.uniforms, d),
     );
 }
 
