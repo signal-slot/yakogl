@@ -2346,6 +2346,10 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_refusals.rs)" \
 # glCopyTex* answers (0658692a) in the ES 2.0 context, every source x destination.
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_copytex.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_copytex
+# The uniform answers (3cbecbb9: past 255 active uniforms, the location pool)
+# in the ES 2.0 context: names, sizes, types, locations, values, errors.
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_uniforms.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_uniforms
 # The ES 2.0 varying and uniform limits keep their answers (the ES 3.0 raises
 # of plan #359 do not show under report-es2); the PowerVR and GC7000
 # report-es2 rows run it with the rest of tests/.
