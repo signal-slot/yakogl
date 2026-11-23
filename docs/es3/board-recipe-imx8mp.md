@@ -337,7 +337,36 @@ serial bridge or a local device whose address comes from the environment (`BOARD
 into a file or a commit). **Sessions run with `BOARD_UART` unset.** The farm's console resource gave no output in
 the read-only probe of 2026-11-15 (and no text in the three `9bc82915` sessions, below); `BOARD_UART` is set
 only after a person confirms that the console delivers text. The commands in this recipe that show
-`BOARD_UART=<local feed bridge>` are for that case only. What the code does:
+`BOARD_UART=<local feed bridge>` are for that case only.
+**Which UART, which baud (re-derived from the tree).**
+
+- *UART:* the deqp image prints on i.MX8MP UART3, the Verdin UART_3 on the Mallow debug header X11
+  (`driver/samples/zephyr/deqp/boards/verdin_imx8mp_mimx8ml8_a53.conf:7-9`;
+  `tools/cts/imx8mp-console.conf:4-6`). The sample has no devicetree overlay for this board
+  (`driver/samples/zephyr/deqp/boards/` holds overlays only for the Pi 4, AM62P and DK); `zephyr,console =
+  &uart3` comes from the Zephyr board devicetree, which lives outside this repository. The image prints
+  nothing unless built with `IMX8MP_CONSOLE=1` (`boards/verdin_imx8mp_mimx8ml8_a53.conf:28`,
+  `CONFIG_UART_CONSOLE=n`, against `tools/cts/imx8mp-console.conf:9`).
+- *Baud:* `board.sh` sets the capture side to 115200 8N1 (`tools/board.sh:1746`, `stty ... 115200 cs8 -cstopb
+  -parenb raw -echo`). The image's own baud is the Zephyr board devicetree's `current-speed`, not stated
+  anywhere in this repository, and `tools/cts/imx8mp-console-scan.py` assumes none (it reads text, see its
+  header, lines 7-10). 115200 is therefore the expected value, not a confirmed one.
+- *U-Boot:* which UART and baud U-Boot prints on is **not confirmed**; nothing in this repository states it.
+  Do not take it to be UART3 at 115200 until a console shows its text.
+- *A silent console.* The farm's console resource exists, but it gave no output on 2026-11-15, and nothing in
+  the three `9bc82915` sessions either (below). The most likely reason is that the resource is wired to a
+  UART other than UART3 (or to the header of another UART); a dead adapter or an open wire cannot be told
+  apart from the host. A silent console therefore says nothing about the board: it does not mean the image
+  is not running, and it is not a failed row.
+- *Authority and first check.* The SNVS record ("How records are read") stays the authority for every
+  verdict. s01 runs with `BOARD_UART` unset unless the console shows output first. Its first console step
+  is read-only: with the board in Linux or U-Boot, open the console resource without sending a byte (no
+  Enter, no marker line, no `stty` change on the board), watch for a few minutes across one reboot of the
+  boot route check, and see whether any text arrives (U-Boot banner, kernel log or the image's `deqp:` lines).
+  Text arrives: note which stage printed it, then `BOARD_UART` may be set after a person confirms it. Nothing
+  arrives: leave `BOARD_UART` unset and carry on with the record path alone.
+
+What the code does:
 
 - **What the sample prints.** When a console is attached, the deqp sample (`deqp_log.c`) prints
   `deqp: <Status> <case name>` per case, `deqp: selector <n>`, `deqp: done: ...` and
