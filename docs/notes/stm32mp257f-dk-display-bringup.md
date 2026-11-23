@@ -821,6 +821,34 @@ Rows run on the DK (`resource:<dk>`, with its console resource `resource:<dk-con
 
 The `mp2_display` verdict line itself and the GPU-rendered scan-out row belong to the board items that produce them (board-display; gpu-scanout, ordered after #349's triangle-run per the plan): this skeleton leaves them open.
 
+## Golden comparison against the real Linux dump (state-probe, host only)
+
+`driver/docs/stm32mp257f-dk-display-dump-linux.txt` (217 registers, 0 ERR,
+1920x1080@60, committed as 171f4876) is in the tree. `cd driver/rust && cargo
+test -p yakogl-drivers --features stm32mp2 --lib -- --ignored
+linux_dump_matches` **fails**: 20 registers differ, so the `#[ignore]` in
+`model_mp25_display/golden.rs` stays and no allow-list entry was added (none
+was justified by a session record). The mismatches, by group:
+
+- `DSI_WPCR0` (0x48000418): ours 0x0, Linux 0x10.
+- `LTDC_LCR` (0x48010004): ours 0x2, Linux 0x3 (layer count bit 0).
+- `LTDC_GCR` (0x48010018): ours 0xc0000001, Linux 0xc0002221 (bits 0x2220).
+- `LTDC_GC1R`, `LTDC_GC2R`: Linux has 0x6be4d888 and 0xbf30; the model has 0
+  and 0x30.
+- Layers 1 to 3 (0x48010100 to 0x48010378): Linux's reset or leftover layer
+  registers (0xff50a075, 0x80000007, 0x21100, 0x123110, ...) against zeros in
+  the model, which Linux leaves set but our driver does not program.
+
+These are the host model's reset values against a live Linux state, not yet
+decided register by register: each is either a model default to correct or an
+allow-list entry with a reason, and that is the next item's work.
+
+**Not recorded here:** the board session's runner verdict lines
+(`mp2_display: PASS`, `mp2_gpu_scanout`), the KVM observation and the
+restored boot files were not part of this item's input, so the "Board
+scan-out record" and a "GPU buffer scan-out" section are not written and no
+PASS is claimed. They need the `board-display` report's text.
+
 ## Corrections and additions to the pre-study and to D349 (not made there)
 
 - Pre-study `:219-222` ("the DK board file does not enable" the LVDS
