@@ -526,6 +526,25 @@ What this does not fix: the cache a run needs grows with every test file.
 At 0.144 GiB each, the 88 GiB are about 600 more test files, two weeks at
 the rate of those three days. Issue #10653 holds that.
 
+### 3.7 A full run's disk (2026-11-14)
+
+The full gate of `760aad3d` (2026-11-14, `tools/check.sh --jobs 2`) passed
+`tools/setup-gate-host.sh --check`, then its shared cargo target directory
+reached 180 GB, 80 GB of it `debug/incremental`, on a 193 GB disk. The last 15
+Zephyr image rows and the summary line failed with "No space left on device".
+
+For a full run: `export CARGO_INCREMENTAL=0` (no incremental files), a
+`CARGO_TARGET_DIR` on a disk with at least 120 GB free (never under /tmp), and
+`cargo clean` of an old target first. `setup-gate-host.sh --check` prints the
+target directory (from `cargo metadata`, as check.sh reads it), the free space
+and CARGO_INCREMENTAL as `gate-target-dir`, `gate-disk` and
+`gate-cargo-incremental`. The minimum is `GATE_MIN_FREE_GB` (default 120).
+
+Those lines are `warn` (never counted, exit status unchanged) by default: the
+CI gate job's `--check` step runs on a warm cache and does not set
+CARGO_INCREMENTAL, so it ignores them. `GATE_FULL_RUN=1 tools/setup-gate-host.sh
+--check` makes them `missing` and the exit status 1; use it before a full run.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;
