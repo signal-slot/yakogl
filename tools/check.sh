@@ -2442,6 +2442,8 @@ step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_more_clears
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_pending_clear.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_pending_clear
+step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_tile_pool.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_tile_pool
 step "test    $V3D_ES2_CONFIG (tests/v3d_es2ctx_drift_msaa.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$V3D_ES2_CONFIG" --test v3d_es2ctx_drift_msaa
 step "test    $V3D_ES2_CONFIG (tests/gl_es2ctx_buffer_rename.rs)" \
