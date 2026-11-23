@@ -47,6 +47,7 @@ driver/tools/mp2-standalone/qemu-product/README.md :: public upstream URL source
 driver/tools/mp2-standalone/qemu/README.md :: public upstream URL source.denx.de
 driver/tools/mp2-standalone/qemu/build-uboot.sh :: public upstream URL source.denx.de
 tools/mp2s_fakeboard_selftest.sh :: the literal ts.net as a search needle
+tools/mp2s_tree_redact_selftest.sh :: this file: its allow list quotes the needles, its self-check a fake 100.64 address
 tools/mp2s_redact_check.py :: the checker's own docstring names /dev/tty patterns
 tools/mp2s_redact_check_selftest.sh :: deliberate fake secrets, the redaction selftest's inputs
 tools/mp2s_report.py :: docstring names /dev/tty patterns
