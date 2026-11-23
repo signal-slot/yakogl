@@ -1,0 +1,7 @@
+# synthetic tree for pi4-session-tally-selftest.sh: only the '# image <LABEL>:' lines are read
+# image S01: 4 (round 1, aborts at c2)
+# image S01a: 1 (round 2: the refusing case alone)
+# image S01b: 2 (round 2: the rest)
+# image S01b1: 1 (round 3: the case S01b refused)
+# image S01b2: 1 (round 3: the case after it)
+# image T01: 2 (texture, runs through)
