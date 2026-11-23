@@ -1426,6 +1426,19 @@ pub struct GlesDraw {
     pub depth_texels: *const f32,
     /// Floats a row of [`GlesDraw::depth_texels`] (at least `ds_w`).
     pub depth_texels_pitch: u32,
+    /// The channels (bit 0 R .. bit 3 A) `targets[k]`'s GL format does not
+    /// have though its surface stores them: an R or RG format kept in an
+    /// RGBA8888 or RGBA16F store (GL_R8, GL_RG8, GL_RG16F, a GL_RED / GL_RG
+    /// texture), a GL_RGB one without alpha. GL says a missing red, green or
+    /// blue reads 0 and a missing alpha 1 (ES 3.0 4.3.2, table 3.23 for the
+    /// texture), so what is stored there must be that whatever the fragment
+    /// wrote. 0 (the [`GlesDraw::ZERO`] value) for a target whose surface is
+    /// exactly its format, every integer and single-channel float one
+    /// included. The PowerVR back end writes the constants with the PBE's
+    /// swizzle (SWIZ.ZERO / SWIZ.ONE); the other back ends read
+    /// `target_alpha_bits` and the colour masks instead. Sits after the old
+    /// tail, in its padding.
+    pub target_missing_channels: [u8; GLES_MAX_TARGETS],
 }
 
 /// Attachment 0's row pitch in pixels: [`GlesDraw::target_pitch`], else the
@@ -1541,6 +1554,7 @@ impl GlesDraw {
         target_cpu: core::ptr::null_mut(),
         depth_texels: core::ptr::null(),
         depth_texels_pitch: 0,
+        target_missing_channels: [0; GLES_MAX_TARGETS],
     };
 }
 

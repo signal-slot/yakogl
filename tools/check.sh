@@ -2023,6 +2023,14 @@ step "test    host-test,gpu-vivante,shaderc-online (tests/es3_half_float_mrt_gc.
 scope pvr
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_half_float_rt_pvr.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_half_float_rt_pvr
+# The PowerVR's R, RG and RGB colour targets kept in a four-channel store
+# (#313, the dEQP fbo.color / fbo.render / fbo.blit r8, rg8, rg16f rows): the
+# PBE's swizzle writes 0 into a colour lane the GL format lacks and 1 into a
+# missing alpha lane, per attachment, for the clear and every draw; the lanes
+# and the glReadPixels read-back through a stand-in PBE store. Compiles to
+# nothing under report-es2.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_fbo_channels.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_fbo_channels
 scope v3d
 # The V3D samples the ES 3.0 storage classes (formats-v3d): each class's
 # texture shader state record (packed by the real driver/src/v3d/v3d_tex.c)
