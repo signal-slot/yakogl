@@ -53,6 +53,9 @@
 #    run whose name exists already takes the next -2, -3, ... (before
 #    3b6d50fb's selftest was made deterministic, a second run in the same
 #    second died on "exists" and a refusal case failed at random).
+# 5b. The card is found through the disk /boot is on (type SD, lsblk PARTLABEL), never by
+#    mmcblk number or by-partlabel: the board's numbering, a renumbered card, an MMC /boot,
+#    no or two u-boot-env, the dd lines, a renumbering by the reset (env_dev_before/after).
 # 6. The board's sessions (prechecks, tools/board-session-lib.sh): our own
 #    ssh seen from a forwarding address is ours, a third address is refused
 #    with the same message, an empty seen address keeps the old rule (only
@@ -65,7 +68,7 @@ export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2-uboot.sh"
-WANT_CHECKS=110
+WANT_CHECKS=122
 
 S=$(mktemp -d)
 trap 'pkill -f "$S/" 2>/dev/null; rm -rf "$S"' EXIT
@@ -139,7 +142,7 @@ for verb in status disarm; do
 done
 out=$(BOARD_HOST=$FAKE_HOST dry status 2>&1)
 check "status: reads the environment (dd of u-boot-env), the mount of /boot, lists the staged files, prints the undo (disarm)" \
-    eval 'grep -q "^DRY board\$ dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none   # > <tmp>/env.now.bin (read-only" <<<"$out" && grep -q "findmnt -n -v -o SOURCE,FSTYPE -T /boot" <<<"$out" &&
+    eval 'grep -q "^DRY board\$ dd if=/dev/<card>p<N> bs=64k status=none  # > <tmp>/env.now.bin (read-only" <<<"$out" && grep -q "findmnt -n -v -o SOURCE,FSTYPE -T /boot" <<<"$out" &&
           grep -q "ls -d /boot/yakogl/mp2z-\*" <<<"$out" && grep -q "UNDO: of anything staged: tools/board-stm32mp2-uboot.sh disarm" <<<"$out"'
 check "status (dd): uboot_env.py check and print with the DK layout (0x2000 at 0x7e000 and 0x7c000), no fw_printenv run" \
     eval 'grep -qF "DRY host\$ python3 -I tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 --allow-blank-copy check <tmp>/env.now.bin" <<<"$out" &&
@@ -150,7 +153,7 @@ rc=$?
 check "run uboot-mmc: rc 0, no stub ran, no run directory made, no leak" \
     eval '[ "$rc" = 0 ] && untouched && [ -z "$(ls -A "$S/logs")" ] && ! leaks "$out"'
 check "run uboot-mmc: lock, console probe, the environment (dd, uboot_env.py print) and the /boot sha256 before, the staging, the reboot" \
-    eval 'grep -q "board_lock.sh" <<<"$out" && grep -q "probe <BOARD_UART>" <<<"$out" && grep -q "^DRY board\$ dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none   # > <tmp>/env-before.bin" <<<"$out" &&
+    eval 'grep -q "board_lock.sh" <<<"$out" && grep -q "probe <BOARD_UART>" <<<"$out" && grep -q "^DRY board\$ dd if=/dev/<card>p<N> bs=64k status=none  # > <tmp>/env-before.bin" <<<"$out" &&
           grep -q "uboot_env.py .* print <tmp>/env-before.bin | sort   # > .*/env-before.txt" <<<"$out" &&
           grep -q "sha256sum   # > .*/boot-sha256.txt" <<<"$out" && grep -q "cat > /boot/yakogl/mp2z-mp2_hello-.*\.bin\.part" <<<"$out" && grep -q "systemctl reboot" <<<"$out"'
 check "run uboot-mmc: tools/mp2s_guard.py --for oneshot on the environment read, before the staging" \
@@ -270,22 +273,35 @@ check "both typed lines are under CONFIG_SYS_CBSIZE (1024)" eval '[ ${#TLM} -lt 
 
 echo "== 4. a fake board and a fake console"
 F=$S/board
-mkdir -p "$F/boot/mmc0_extlinux" "$F/bin" "$F/proc/sys/vm" "$F/sys/block/mmcblk1/device" "$F/state" "$S/fakebin" "$S/tftp"
+mkdir -p "$F/boot/mmc0_extlinux" "$F/bin" "$F/proc/sys/vm" "$F/state" "$S/fakebin" "$S/tftp"
 printf 'kernel\n' > "$F/boot/Image.gz"
 printf 'dtb\n' > "$F/boot/stm32mp257f-dk.dtb"
 printf 'label stock\n' > "$F/boot/mmc0_extlinux/stock.conf"
-printf 'SD\n' > "$F/sys/block/mmcblk1/device/type"
 ENV0='arch=arm
 bootcmd=run bootcmd_stm32mp
 bootdelay=1
 ethaddr=00:80:e1:00:00:01
 scriptaddr=0x90100000'
+# layout.sh CARD EMMC [BOOTON]: the board's disks as Linux numbered them (the DK:
+# microSD mmcblk0, type SD, /boot = p8, u-boot-env = p7; eMMC mmcblk1, type MMC)
+cat > "$F/layout.sh" <<'EOF'
+#!/bin/sh
+F=$(dirname "$0")
+rm -rf "$F/sys/block"
+mkdir -p "$F/sys/block/$1/device" "$F/sys/block/$2/device" "$F/state"
+printf 'SD\n' > "$F/sys/block/$1/device/type"
+printf 'MMC\n' > "$F/sys/block/$2/device/type"
+printf '%s\n' "$1" > "$F/state/card"
+printf '%s\n' "$2" > "$F/state/emmc"
+printf '/dev/%sp8 ext4\n' "${3:-$1}" > "$F/state/findmnt"
+EOF
+chmod +x "$F/layout.sh"
 reset_board() {
     rm -rf "$F/state" "$F/boot/yakogl"
     mkdir -p "$F/state"
     printf '%s\n' "$ENV0" > "$F/env.txt"
     printf '1000.00 1000.00\n' > "$F/proc/uptime"
-    printf '/dev/mmcblk1p8 ext4\n' > "$F/state/findmnt"
+    "$F/layout.sh" mmcblk0 mmcblk1   # the board's real numbering: the microSD is mmcblk0, the eMMC mmcblk1
     : > "$F/ssh.log"
     : > "$F/typed.lines"
     rm -f "$S/board.mp2u-left"
@@ -322,7 +338,28 @@ exit 0
 EOF
 chmod +x "$F/mkenv"
 printf '#!/bin/sh\ncat "%s/state/findmnt"\n' "$F" > "$F/bin/findmnt"
-printf '#!/bin/sh\necho bootfs\n' > "$F/bin/lsblk"
+# lsblk: NAME,PARTLABEL,SIZE rows of the disk given (the whole-disk row has no label, as on the board),
+# every other call answers bootfs. state/envnone: no u-boot-env on the card; state/envdup: two.
+cat > "$F/bin/lsblk" <<EOF
+#!/bin/sh
+F="$F"
+card=\$(cat "\$F/state/card"); emmc=\$(cat "\$F/state/emmc")
+for a; do last=\$a; done
+d=\${last##*/}
+case "\$*" in
+*NAME,PARTLABEL,SIZE*)
+    sz=524288; [ -e "\$F/state/bigpart" ] && sz=1048576
+    if [ "\$d" = "\$card" ]; then
+        echo "\$card  7948206080"
+        [ -e "\$F/state/envnone" ] || echo "\${card}p7 u-boot-env \$sz"
+        [ -e "\$F/state/envdup" ] && echo "\${card}p9 u-boot-env \$sz"
+        echo "\${card}p8 bootfs 4294967296"
+    else
+        echo "\$emmc  7818182656"; echo "\${emmc}p5 u-boot-env 1048576"; echo "\${emmc}p8 bootfs 4294967296"
+    fi ;;
+*) echo bootfs ;;
+esac
+EOF
 printf '#!/bin/sh\necho fakeboard\n' > "$F/bin/uname"
 printf '#!/bin/sh\nexit 0\n' > "$F/bin/who"
 cat > "$F/bin/systemctl" <<EOF
@@ -335,7 +372,7 @@ noreboot) ;;
 hang) sleep 30 ;;
 envchange) echo "mp2z_file=left" >> "$F/env.txt"; printf '0.00 0.00\n' > "$F/proc/uptime"; touch "$F/state/rebooted" ;;
 bootchange) echo changed >> "$F/boot/stm32mp257f-dk.dtb"; printf '0.00 0.00\n' > "$F/proc/uptime"; touch "$F/state/rebooted" ;;
-*) printf '0.00 0.00\n' > "$F/proc/uptime"; touch "$F/state/rebooted" ;;
+*) printf '0.00 0.00\n' > "$F/proc/uptime"; touch "$F/state/rebooted"; [ -e "$F/state/renum" ] && "$F/layout.sh" \$(cat "$F/state/renum") ;;
 esac
 EOF
 # the fake ssh: options skipped, the host ignored, the command logged and run
@@ -349,10 +386,13 @@ cmd="\$*"
 printf '%s\n' "\$cmd" >> "\$F/ssh.log"
 [ -e "\$F/state/dead" ] && exit 255
 case "\$cmd" in *".part"*) echo "fake-ssh: staging" >&2 ;; esac
-case "\$cmd" in *"/dev/disk/by-partlabel/u-boot-env"*) "\$F/mkenv" >&2 || exit 1 ;; esac
+case "\$cmd" in *"dd if=/dev/"*)
+    e=\$(cat "\$F/state/emmc")
+    case "\$cmd" in *"dd if=/dev/\$e"*) echo "fake-ssh: dd of the eMMC" >&2; exit 1 ;; esac
+    "\$F/mkenv" >&2 || exit 1 ;; esac
 cmd=\$(printf '%s' "\$cmd" | sed -E -e "s#/boot(/|[ );']|\\\$)#\$F/boot\\1#g" -e "s#/proc/uptime#\$F/proc/uptime#g" \\
     -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/sys/vm/drop_caches#g" \\
-    -e "s#/dev/disk/by-partlabel/u-boot-env#\$F/dev/u-boot-env#g")
+    -e "s#dd if=/dev/mmcblk[0-9]+p[0-9]+#dd if=\$F/dev/u-boot-env#g")
 PATH="\$F/bin:\$PATH" exec sh -c "\$cmd"
 EOF
 printf '#!/bin/sh\n[ -e "%s/state/tftpdead" ] && exit 28\necho canary\n' "$F" > "$S/fakebin/curl"
@@ -405,8 +445,8 @@ LEFTF=$S/board.mp2u-left
 staged_on_card() { ls "$F/boot/yakogl/" 2>/dev/null | grep -q '^mp2z-'; }
 log_clean() { # the board commands never write the environment or a device, nor touch modules or services
     # (the one dd allowed is the read of u-boot-env, exactly as the runner spells it)
-    ! grep -vxE "(sudo -n )?dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none" "$F/ssh.log" |
-        grep -qE "save""env|fw_set""env|fw_printenv|dd |of=|mmcblk0|modprobe|insmod|rmmod|tailscale|sshd|setenv"
+    ! grep -vxE "(sudo -n )?dd if=/dev/mmcblk[0-9]+p[0-9]+ bs=64k status=none" "$F/ssh.log" |
+        grep -qE "save""env|fw_set""env|fw_printenv|dd |of=|modprobe|insmod|rmmod|tailscale|sshd|setenv"
 }
 vline() { grep '^board-stm32mp2-uboot.sh stm32mp257f-dk ' <<<"$out" | tail -1; }
 
@@ -429,7 +469,7 @@ check "mmc run: the record is redacted (MAC, host, address)" \
 check "mmc run (dd): env-before.txt is uboot_env.py print of the dd'd image, sorted: the same variables as the board's text (MAC redacted)" \
     eval 'printf "%s\n" "$ENV0" | sort | sed "s/^ethaddr=.*/ethaddr=<redacted>/" | cmp -s - "$RD/env-before.txt"'
 check "mmc run (dd): u-boot-env read with dd twice, no fw_printenv; the raw images stay out of the record, their sha256 in meta.txt" \
-    eval '[ "$(grep -cx "dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none" "$F/ssh.log")" = 2 ] && ! grep -q fw_printenv "$F/ssh.log" &&
+    eval '[ "$(grep -cx "dd if=/dev/mmcblk0p7 bs=64k status=none" "$F/ssh.log")" = 2 ] && ! grep -q fw_printenv "$F/ssh.log" &&
           ! ls "$RD"/*.bin > /dev/null 2>&1 && grep -qE "^env_before_bin_sha256=[0-9a-f]{64}$" "$RD/meta.txt" &&
           [ "$(sed -n "s/^env_before_bin_sha256=//p" "$RD/meta.txt")" = "$(sed -n "s/^env_after_bin_sha256=//p" "$RD/meta.txt")" ]'
 check "mmc run: the stock files are byte for byte unchanged" eval 'grep -qx kernel "$F/boot/Image.gz" && grep -qx dtb "$F/boot/stm32mp257f-dk.dtb"'
@@ -578,10 +618,11 @@ check "a run whose directory name exists takes the next (-2), the existing one s
           [ -z "$(ls -A "$S/runs/$(date -d "@$now" +%Y%m%d-%H%M%S)-mp2_hello-$SHA8")" ]'
 reset_board; touch "$F/state/badcopy2"
 live_refused "copy 2 (0x7c000) neither valid nor blank: a bad CRC" "REFUSED: a bad CRC in the stored environment"
+check "the refusals on the environment read ran dd of the card's u-boot-env, never fw_printenv, and wrote nothing" \
+    eval 'grep -qx "dd if=/dev/mmcblk0p7 bs=64k status=none" "$F/ssh.log" && ! grep -q fw_printenv "$F/ssh.log" && log_clean'
 reset_board; touch "$F/state/bigpart"
-live_refused "a u-boot-env of another size than 512 KiB" "read 1048576 bytes, not the 512 KiB u-boot-env"
-check "the refusals on the environment read ran dd of u-boot-env, never fw_printenv, and wrote nothing" \
-    eval 'grep -qx "dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none" "$F/ssh.log" && ! grep -q fw_printenv "$F/ssh.log" && log_clean'
+live_refused "a u-boot-env of another size than 512 KiB (from lsblk)" "is 1048576 bytes, not the 512 KiB u-boot-env"
+check "that refusal came before any dd" eval '! grep -q "dd if=" "$F/ssh.log" && log_clean'
 reset_board; printf '%s\n' "$ENV0" | grep -v '^bootcmd=' > "$F/env.txt"
 live_refused "no bootcmd in the stored environment" "the stored environment has no bootcmd"
 reset_board; printf '%s\n' "$ENV0" | grep -v scriptaddr > "$F/env.txt"
@@ -590,8 +631,14 @@ reset_board; printf '%s\n' "$ENV0" | sed 's/^scriptaddr=.*/scriptaddr=0xa8000000
 live_refused "scriptaddr inside the go window" "inside or next to the go window"
 reset_board; printf 'mp2s_left=3\n' >> "$F/env.txt"
 live_refused "a standalone default set (mp2s_guard.py --for oneshot)" "REFUSED: mp2s-guard: REFUSE: a standalone default is set (mp2s_left=3)"
-reset_board; printf '/dev/mmcblk0p8 ext4\n' > "$F/state/findmnt"
-live_refused "/boot on the eMMC" "eMMC"
+reset_board; "$F/layout.sh" mmcblk0 mmcblk1 mmcblk1
+live_refused "(c) /boot on a disk of type MMC (the eMMC, mmcblk1)" "says 'MMC', not SD"
+reset_board; "$F/layout.sh" mmcblk1 mmcblk0 mmcblk0
+live_refused "(c) /boot on a disk of type MMC even when it is called mmcblk0" "says 'MMC', not SD"
+reset_board; touch "$F/state/envdup"
+live_refused "(d) two u-boot-env partitions on the card" "2 partitions labelled u-boot-env on the card"
+reset_board; touch "$F/state/envnone"
+live_refused "(d) no u-boot-env partition on the card" "0 partitions labelled u-boot-env on the card"
 reset_board; mkdir -p "$F/boot/yakogl"; : > "$F/boot/yakogl/mp2z-old.bin"
 live_refused "files of an earlier run on the card" "disarm' first"
 rm -rf "$F/boot/yakogl"
@@ -615,6 +662,42 @@ check "a dead TFTP server: refused within the IWDG's ~32 s, nothing in the root"
 check "every live refusal: the board commands never wrote anything" log_clean
 check "every live refusal under one name got a run directory of its own" \
     eval '[ $(($(ls -d "$S/runs"/*-mp2_hello-"$SHA8"* | wc -l) - ndirs0)) = $((nrefusal - nrefusal0)) ] && [ $((nrefusal - nrefusal0)) -ge 10 ]'
+
+echo "== 5b. which disk is the card (never by number or by-partlabel)"
+# dd_ok CARD EMMC: every dd names CARD's partition 7, none names /dev/disk/ or the eMMC's disk
+dd_ok() {
+    grep -q "^dd if=/dev/${1}p7 bs=64k status=none$" "$F/ssh.log" && ! grep -q '/dev/disk/' "$F/ssh.log" &&
+        ! grep -E 'dd if=' "$F/ssh.log" | grep -q "/dev/$2"
+}
+reset_board
+out=$(live run "$S/img/mp2_hello.bin" "$S/runs" numa 2>&1); rc=$?
+RA=$(ls -d "$S/runs"/*-numa-* 2>/dev/null | head -1)
+check "(a) the card is mmcblk0 (the board's numbering): the run proceeds, rc 0, both reads of mmcblk0p7" \
+    eval '[ "$rc" = 0 ] && [ "$(grep -cx "dd if=/dev/mmcblk0p7 bs=64k status=none" "$F/ssh.log")" = 2 ] && dd_ok mmcblk0 mmcblk1 && log_clean'
+check "(e) the dd lines never name /dev/disk/ or the eMMC's disk (mmcblk1)" eval 'dd_ok mmcblk0 mmcblk1'
+check "(a) meta.txt: env_dev_before and env_dev_after are both mmcblk0p7" \
+    eval 'grep -qx "env_dev_before=mmcblk0p7" "$RA/meta.txt" && grep -qx "env_dev_after=mmcblk0p7" "$RA/meta.txt"'
+reset_board; "$F/layout.sh" mmcblk2 mmcblk0
+out=$(live run "$S/img/mp2_hello.bin" "$S/runs" numb 2>&1); rc=$?
+RB=$(ls -d "$S/runs"/*-numb-* 2>/dev/null | head -1)
+check "(b) the card is mmcblk2 and the eMMC mmcblk0: the run proceeds, both reads of mmcblk2p7, the eMMC's disk never named" \
+    eval '[ "$rc" = 0 ] && [ "$(grep -cx "dd if=/dev/mmcblk2p7 bs=64k status=none" "$F/ssh.log")" = 2 ] && dd_ok mmcblk2 mmcblk0 && log_clean'
+check "(b) meta.txt: env_dev_before and env_dev_after are mmcblk2p7" \
+    eval 'grep -qx "env_dev_before=mmcblk2p7" "$RB/meta.txt" && grep -qx "env_dev_after=mmcblk2p7" "$RB/meta.txt"'
+reset_board; "$F/layout.sh" mmcblk2 mmcblk0
+printf 'mmcblk0 mmcblk1\n' > "$F/state/renum"
+out=$(live run "$S/img/mp2_hello.bin" "$S/runs" numf 2>&1); rc=$?
+RF=$(ls -d "$S/runs"/*-numf-* 2>/dev/null | head -1)
+check "(f) the card is renumbered by the reset (mmcblk2 before, mmcblk0 after): rc 0, the after read resolves again" \
+    eval '[ "$rc" = 0 ] && grep -qx "dd if=/dev/mmcblk2p7 bs=64k status=none" "$F/ssh.log" && grep -qx "dd if=/dev/mmcblk0p7 bs=64k status=none" "$F/ssh.log" && ! grep -q "/dev/disk/" "$F/ssh.log"'
+check "(f) meta.txt says so: env_dev_before=mmcblk2p7, env_dev_after=mmcblk0p7; the environment diff is empty" \
+    eval 'grep -qx "env_dev_before=mmcblk2p7" "$RF/meta.txt" && grep -qx "env_dev_after=mmcblk0p7" "$RF/meta.txt" && grep -qx "env_diff=empty" "$RF/meta.txt"'
+reset_board; "$F/layout.sh" mmcblk0 mmcblk1
+printf 'mmcblk1 mmcblk0\n' > "$F/state/renum"
+out=$(live run "$S/img/mp2_hello.bin" "$S/runs" numg 2>&1); rc=$?
+check "(f) a reset that renumbers the card to mmcblk1 (the eMMC's old name) is followed, never the old node: rc 0, the second dd on mmcblk1p7" \
+    eval '[ "$rc" = 0 ] && grep -qx "dd if=/dev/mmcblk0p7 bs=64k status=none" "$F/ssh.log" && grep -qx "dd if=/dev/mmcblk1p7 bs=64k status=none" "$F/ssh.log"'
+reset_board
 
 echo "== 6. the board's sessions (prechecks)"
 # A session is ours when it comes from one of this host's addresses or from
