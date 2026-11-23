@@ -10,7 +10,10 @@
 # LPTRS, against a model of one D0 channel, including the board's layout
 # (HEADE=672), and the declared hardware-written words (SKIP/EXPECT by
 # plane-entry offset, every differing word named, at the restore and at our
-# slot's read-back)
+# slot's read-back), and the DL.LACT pickup as a pass criterion (a swap only
+# once LACT reads our new head, a restore only once it reads the firmware's
+# head again, each bounded by polls and frames; no pickup and a restore with
+# LACT elsewhere fail, named)
 # (driver/zephyr/lib/board/test/hvs6_dlist_swap_mock.c), with -std=c11
 # -Wall -Wextra -Werror and AddressSanitizer + UBSan; the header also
 # compiles alone under -std=c11 -pedantic.

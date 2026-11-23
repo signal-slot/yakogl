@@ -42,6 +42,15 @@
  * empty set and is skipped with 4:skip, off 5 still fails, our list END is
  * in no entry.
  *
+ * DL.LACT pickup (swap-lact-lib): a swap passes only once LACT reads our
+ * start, a restore only once it reads the firmware's head again: pickup at
+ * the first poll, pickup three frames late (polls and FRCNT recorded), no
+ * pickup (HVS6S_ERR_LACT_PICKUP, the restore still runs and passes), the
+ * bounds (lact_frames, lact_polls, lact_polls over max_polls), the restore
+ * back on HEADE 672, and LACT staying at 900 or on our list after the
+ * restore (HVS6S_ERR_RESTORE_LACT although LPTRS and words are equal); the
+ * writes stay the pass path's in each.
+ *
  * Build: tools/v3d/check71.d/hvs6_dlist_swap.sh. Prints one line per check,
  * then "hvs6_dlist_swap_mock: N of N checks, 0 failed"; exits nonzero on a
  * failure.
@@ -100,6 +109,14 @@ struct hvs {
 	uint32_t olptrs[3];         /* LPTRS of the other channels (read only) */
 	int64_t stick_word;         /* a write to this word stores stick_val (HVS write-back) */
 	uint32_t stick_val;
+	/* DL.LACT (swap-lact-lib): by default it follows LPTRS at the next edge */
+	int lact_frozen;            /* LACT never moves */
+	int lact_now;               /* LACT follows an LPTRS write at once */
+	uint32_t lact_lag;          /* edges a new LPTRS waits before LACT follows it */
+	uint32_t lag_left, lact_target;
+	int64_t lact_from;          /* LACT would show this head: it shows lact_to instead */
+	uint32_t lact_to;
+	uint32_t dl_reads;          /* DL reads of channel CH */
 };
 
 static void logev(struct hvs *h, enum ev k, uint32_t off, uint32_t val)
@@ -130,8 +147,10 @@ static uint32_t m_read(void *ctx, uint32_t off)
 		return h->lptrs;
 	if (off == hvs6s_status_reg(CH))
 		return (h->frcnt << 16) | (YD5_HVS6_STATUS_MODE_RUN << 13) | (h->tick & 0x7ffu);
-	if (off == hvs6s_dl_reg(CH))
+	if (off == hvs6s_dl_reg(CH)) {
+		h->dl_reads++;
 		return h->lact;
+	}
 	if (off == hvs6s_ctrl1_reg(CH))
 		return h->ctrl1;
 	for (unsigned int ch = 0; ch < 3; ch++)
@@ -157,6 +176,8 @@ static void m_write(void *ctx, uint32_t off, uint32_t val)
 	if (off == hvs6s_lptrs_reg(CH)) {
 		if (h->lmode == L_NOW)
 			h->lptrs = val;
+		if (h->lact_now && h->lmode != L_NEVER && !h->lact_frozen)
+			h->lact = val & 0xfffu;
 		if (h->lmode != L_NEVER) {
 			h->pending = val;
 			h->has_pending = 1;
@@ -191,7 +212,18 @@ static void m_wait(void *ctx)
 		h->lptrs = h->pending;
 		h->has_pending = 0;
 	}
-	h->lact = h->lptrs & 0xfffu;
+	if (!h->lact_frozen) {
+		uint32_t want = h->lptrs & 0xfffu;
+
+		if (want != h->lact_target) {
+			h->lact_target = want;
+			h->lag_left = h->lact_lag;
+		}
+		if (h->lag_left)
+			h->lag_left--;
+		else
+			h->lact = (int64_t)want == h->lact_from ? h->lact_to : want;
+	}
 	if (h->corrupt_word >= 0 && h->lact == h->our_start) {
 		h->mem[h->corrupt_word] ^= 0x00010000u;
 		h->corrupt_word = -1;
@@ -222,6 +254,8 @@ static void model_init(struct hvs *h, uint32_t fw_head)
 	h->our_start = 0xffffffffu;
 	h->stick_word = -1;
 	h->wb_word = -1;
+	h->lact_target = fw_head;
+	h->lact_from = -1;
 }
 
 static struct hvs6s_io model_io(struct hvs *h)
@@ -697,6 +731,7 @@ static void model_board(struct hvs *h, uint32_t head, int end)
 	}
 	h->lptrs = head;
 	h->lact = head;
+	h->lact_target = head;
 }
 
 static void case_board_672(void)
@@ -1558,6 +1593,247 @@ static void case_hw_ctx4(void)
 		   "0:skip,8:skip: the offset-4 write-back still fails, named");
 }
 
+/* ---- DL.LACT pickup (swap-lact-lib) -------------------------------------- */
+
+/* The writes of two runs, in order, are the same: the pickup adds reads only. */
+static int same_writes(const struct hvs *a, const struct hvs *b)
+{
+	uint32_t i = 0, j = 0;
+
+	if (a->nlog > LOGN || b->nlog > LOGN)
+		return 0;
+	for (;;) {
+		while (i < a->nlog && a->log[i].kind != EV_WRITE)
+			i++;
+		while (j < b->nlog && b->log[j].kind != EV_WRITE)
+			j++;
+		if (i >= a->nlog || j >= b->nlog)
+			return i >= a->nlog && j >= b->nlog;
+		if (a->log[i].off != b->log[j].off || a->log[i].val != b->log[j].val)
+			return 0;
+		i++;
+		j++;
+	}
+}
+
+static struct hvs ref_h; /* the pass path's writes, for same_writes */
+
+static void ref_run(void)
+{
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	struct hvs6s_io io;
+
+	model_init(&ref_h, 0);
+	io = model_io(&ref_h);
+	(void)hvs6s_run(&io, &c, &s, &r);
+}
+
+/* LACT on our start at the first poll after the write. */
+static void case_lact_once(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "lact-once";
+
+	model_init(&h, 0);
+	h.lact_now = 1;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.lact_pickup && r.lact_follows, "run ok, pickup recorded");
+	name_check(t, r.lact_polls == 0 && r.lact_frcnt_write == 10 && r.lact_frcnt_pickup == 10 &&
+		      r.lact_want == 32 && r.lact_seen == 32,
+		   "pickup at poll 0, FRCNT 10..10, want 32, LACT 32");
+	name_check(t, r.frcnt_ok && r.settle_ok, "FRCNT advance and settle still waited for");
+	name_check(t, has_line("dlswap lact-pickup ok polls=0 frcnt=10..10 want=32 lact=32"),
+		   "line: dlswap lact-pickup ok polls=0 frcnt=10..10 want=32 lact=32");
+	name_check(t, !has_sub("record only") && !has_sub("lact-follows"),
+		   "no 'record only' or lact-follows line any more");
+	name_check(t, r.restore_lact_ok && r.restore_lact_polls == 0 && r.restore_lact_want == 0,
+		   "restore: LACT back on head 0 at poll 0");
+	name_check(t, count_writes(&h, hvs6s_lptrs_reg(CH)) == 2 && writes_confined(&h, 32, 10) &&
+		      same_writes(&h, &ref_h),
+		   "writes: the pass path's, LPTRS twice");
+}
+
+/* LACT follows LPTRS only three edges after the write. */
+static void case_lact_lag(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "lact-lag";
+
+	model_init(&h, 0);
+	h.lact_lag = 2;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.lact_pickup, "run ok once LACT got there");
+	name_check(t, r.lptrs_ok && r.frcnt_ok && r.frcnt_polls == 3,
+		   "LPTRS at once and FRCNT at poll 3, before the pickup");
+	name_check(t, r.lact_polls == 9 && r.lact_frcnt_write == 10 && r.lact_frcnt_pickup == 13,
+		   "pickup after 9 polls, FRCNT 10..13");
+	name_check(t, (r.after.dl & HVS6S_DL_LACT_MASK) == 32 && hvs6s_frcnt(r.after.status) == 13,
+		   "the after sample is the pickup's");
+	name_check(t, has_line("dlswap lact-pickup ok polls=9 frcnt=10..13 want=32 lact=32"),
+		   "line: dlswap lact-pickup ok polls=9 frcnt=10..13 want=32 lact=32");
+	name_check(t, r.restore_lact_ok && r.restore_lact_polls == 9 && r.restore_frcnt_write == 13 &&
+		      r.restore_frcnt_pickup == 16 && r.restore_frcnt_ok && r.restore_polls == 6,
+		   "restore: two advances at poll 6, LACT back on 0 at poll 9 (FRCNT 13..16)");
+	name_check(t, has_line("dlswap restore-lact ok polls=9 frcnt=13..16 want=0 lact=0"),
+		   "line: dlswap restore-lact ok polls=9 frcnt=13..16 want=0 lact=0");
+	name_check(t, same_writes(&h, &ref_h), "writes: the pass path's");
+}
+
+/* LACT never leaves the firmware's head: the swap fails, the restore passes. */
+static void case_lact_never(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "lact-never";
+
+	model_init(&h, 0);
+	h.lact_frozen = 1;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_LACT_PICKUP && r.err == HVS6S_ERR_LACT_PICKUP,
+		   "fails as HVS6S_ERR_LACT_PICKUP");
+	name_check(t, strcmp(hvs6s_err_name(r.err), "DL.LACT did not reach the new head") == 0,
+		   "named 'DL.LACT did not reach the new head'");
+	name_check(t, r.lptrs_ok && r.frcnt_ok && !r.lact_pickup && !r.lact_follows,
+		   "LPTRS read back and FRCNT moved, yet no pickup: not a swap");
+	name_check(t, r.lact_polls == c.max_polls && r.lact_seen == 0 && r.lact_frcnt_write == 10 &&
+		      r.lact_frcnt_pickup == 23,
+		   "bounded: max_polls polls, LACT still 0, FRCNT 10..23");
+	name_check(t, has_line("dlswap lact-pickup FAIL polls=40 frcnt=10..23 want=32 lact=0"),
+		   "line: dlswap lact-pickup FAIL polls=40 frcnt=10..23 want=32 lact=0");
+	name_check(t, has_line("dlswap result FAIL DL.LACT did not reach the new head"),
+		   "line: dlswap result FAIL DL.LACT did not reach the new head");
+	name_check(t, r.restored && r.restore_lact_ok && r.restore_equal && h.lptrs == 0,
+		   "the restore still ran; LACT on the firmware's head 0, words equal");
+	name_check(t, same_writes(&h, &ref_h) && h.dl_reads > c.max_polls,
+		   "writes: the pass path's; only DL reads were added");
+}
+
+/* The pickup's own bounds: lact_frames, lact_polls, and lact_polls above
+ * max_polls. */
+static void case_lact_bounds(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "lact-bounds";
+
+	model_init(&h, 0);
+	h.lact_lag = 2;
+	c.lact_frames = 1;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_LACT_PICKUP && !r.lact_pickup && r.lact_polls == 6 &&
+		      r.lact_frcnt_pickup == 12,
+		   "lact_frames 1, pickup 3 frames late: fails at the second frame (poll 6)");
+	name_check(t, r.restored && r.restore_lact_ok && r.restore_lact_polls == 0,
+		   "LACT never left the firmware's head 0: the restore's pickup at poll 0");
+
+	/* the restore's own frame bound: LACT stays on our list after it */
+	model_init(&h, 0);
+	h.lact_from = 0;
+	h.lact_to = 32;
+	c = base_cfg();
+	c.lact_frames = 2;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, r.lact_pickup && e == HVS6S_ERR_RESTORE_LACT && !r.restore_lact_ok &&
+		      r.restore_frcnt_ok && r.restore_lact_polls == 9 && r.restore_lact_seen == 32,
+		   "lact_frames 2, LACT left on our list: the restore's pickup fails at the third frame "
+		   "(poll 9), not after max_polls");
+
+	model_init(&h, 0);
+	h.lact_lag = 2;
+	c = base_cfg();
+	c.lact_polls = 4;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_LACT_PICKUP && r.lact_polls == 4 && r.frcnt_ok,
+		   "lact_polls 4, pickup at poll 9: fails after 4 polls");
+
+	model_init(&h, 0);
+	h.lact_lag = 2;
+	h.tpf = 2;
+	c = base_cfg();
+	c.max_polls = 5;
+	c.lact_polls = 20;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.lact_pickup && r.lact_polls == 6 && r.frcnt_polls == 2,
+		   "lact_polls 20 over max_polls 5: pickup at poll 6 passes");
+	name_check(t, r.restore_lact_ok && r.restore_frcnt_ok && r.restore_polls == 4 &&
+		      r.restore_lact_polls == 6,
+		   "restore: two advances at poll 4 (within 5), LACT back at poll 6 (within 20)");
+}
+
+/* The board's layout: the restore passes only with LACT back on 672. */
+static void case_lact_restore_back(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "lact-restore-back";
+
+	model_board(&h, BHEAD, 1);
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_OK && r.lact_pickup && r.lact_want == 32, "swap picked up at 32");
+	name_check(t, r.restore_lact_ok && r.restore_lact_want == BHEAD && r.restore_lact_seen == BHEAD,
+		   "restore: LACT back on the firmware's head 672");
+	name_check(t, has_line("dlswap restore-lact ok polls=3 frcnt=12..13 want=672 lact=672"),
+		   "line: dlswap restore-lact ok polls=3 frcnt=12..13 want=672 lact=672");
+}
+
+/* The restore with LACT elsewhere: not on the firmware's head fails, both
+ * outside our slot (900) and on our list (32). */
+static void case_lact_restore_elsewhere(void)
+{
+	static struct hvs h;
+	struct hvs6s_cfg c = base_cfg();
+	struct hvs6s_snap s;
+	struct hvs6s_report r;
+	enum hvs6s_err e;
+	const char *t = "lact-restore-elsewhere";
+
+	model_board(&h, BHEAD, 1);
+	h.lact_from = BHEAD;
+	h.lact_to = 900;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, r.lact_pickup && e == HVS6S_ERR_RESTORE_LACT && r.err == HVS6S_ERR_RESTORE_LACT,
+		   "LACT at 900, outside our slot: fails as HVS6S_ERR_RESTORE_LACT");
+	name_check(t,
+		   strcmp(hvs6s_err_name(r.err), "restore: DL.LACT not back on the firmware's head") == 0,
+		   "named 'restore: DL.LACT not back on the firmware's head'");
+	name_check(t, r.restore_frcnt_ok && r.restore_lptrs_ok && r.restore_equal && r.diff_word == -1,
+		   "LPTRS and every word equal: only the pickup fails");
+	name_check(t, !r.restore_lact_ok && r.restore_lact_seen == 900 && r.restore_lact_want == BHEAD &&
+		      r.restore_lact_polls == c.max_polls,
+		   "bounded: max_polls polls, LACT 900, want 672");
+	name_check(t, has_sub("dlswap restore-lact FAIL polls=40 ") && has_sub(" want=672 lact=900") &&
+		      has_line("dlswap result FAIL restore: DL.LACT not back"),
+		   "lines: restore-lact FAIL ... want=672 lact=900, result FAIL");
+
+	model_board(&h, BHEAD, 1);
+	h.lact_from = BHEAD;
+	h.lact_to = 32;
+	run_lines(&h, &c, &s, &r, &e);
+	name_check(t, e == HVS6S_ERR_RESTORE_LACT && r.restore_lact_seen == 32 && r.restore_equal,
+		   "LACT still on our list at 32: fails as HVS6S_ERR_RESTORE_LACT");
+	name_check(t, count_writes(&h, hvs6s_lptrs_reg(CH)) == 2 && writes_confined(&h, 32, 10),
+		   "writes: our list and LPTRS twice, nothing more");
+}
+
 int main(void)
 {
 	case_pass();
@@ -1586,6 +1862,13 @@ int main(void)
 	case_hw_restore();
 	case_hw_readback();
 	case_hw_ctx4();
+	ref_run();
+	case_lact_once();
+	case_lact_lag();
+	case_lact_never();
+	case_lact_bounds();
+	case_lact_restore_back();
+	case_lact_restore_elsewhere();
 	printf("hvs6_dlist_swap_mock: %d of %d checks, %d failed\n", total - failed, total, failed);
 	return failed ? 1 : 0;
 }
