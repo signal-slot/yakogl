@@ -31,7 +31,13 @@
 //!   stage), its locations past the index byte and their values;
 //! - the location pool: deleting and relinking a program leaves the
 //!   locations and values of the programs after it as they were;
-//! - draws with these programs are accepted (no GL error, no refused draw).
+//! - an array member of a struct (`s.m[0]` active, `s.m` and `s.m[1]`
+//!   located and set) and a bool array;
+//! - programs of one struct-array element per vec4 row near
+//!   GL_MAX_VERTEX_UNIFORM_VECTORS / GL_MAX_FRAGMENT_UNIFORM_VECTORS (638
+//!   active uniforms; at both limits, 766, is a known defect, `#[ignore]`d);
+//! - draws with these programs are accepted (no GL error, no refused draw),
+//!   and the job's vertex and fragment uniform blocks hold the values set.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table,report-es2 --test v3d_es2ctx_drift_uniforms
@@ -81,12 +87,34 @@ unsafe extern "C" fn v3d_job_begin(
     t.width != 0 && t.height != 0
 }
 
+/// The GL uniform blocks (vertex, fragment) of the last draw the job builder
+/// was handed, as raw words.
+static STREAMS: Mutex<(Vec<u32>, Vec<u32>)> = Mutex::new((Vec::new(), Vec::new()));
+
+fn streams() -> (Vec<u32>, Vec<u32>) {
+    STREAMS.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// A stage's GL uniform block, empty when the draw names none.
+///
+/// # Safety
+/// `s` is a block of a live draw: `count` words at `words`.
+unsafe fn block(s: V3dUniformStorage) -> Vec<u32> {
+    if s.words.is_null() || s.count == 0 {
+        return Vec::new();
+    }
+    // SAFETY: the caller's block, as long as it says.
+    unsafe { core::slice::from_raw_parts(s.words, s.count as usize) }.to_vec()
+}
+
 #[no_mangle]
-unsafe extern "C" fn v3d_job_draw(j: *mut V3dJob, _d: *const V3dJobDraw, _layout: *mut c_void) -> i32 {
-    // SAFETY: the backend passes its live job.
+unsafe extern "C" fn v3d_job_draw(j: *mut V3dJob, d: *const V3dJobDraw, _layout: *mut c_void) -> i32 {
+    // SAFETY: the backend passes its live job and a draw whose blocks live for the call.
     unsafe {
         (*j).draws += 1;
         (*(*j).bcl).used += 120;
+        let s = (block((*d).vs_storage), block((*d).fs_storage));
+        *STREAMS.lock().unwrap_or_else(|e| e.into_inner()) = s;
     }
     V3D_JOB_OK
 }
@@ -398,6 +426,260 @@ fn osal() -> &'static OsalOps {
     }))
 }
 
+/* ---- struct members that are arrays, bool arrays ---- */
+
+const VS_SM: &str = "attribute vec4 p;\n\
+    struct T { vec2 m[3]; float k; };\n\
+    uniform T s;\n\
+    uniform bool ba[2];\n\
+    void main() {\n\
+      vec4 a = p + vec4(s.m[0] + s.m[1] + s.m[2], s.k, 0.0);\n\
+      if (ba[0]) a.x += 1.0;\n\
+      if (ba[1]) a.y += 1.0;\n\
+      gl_Position = a;\n\
+    }\n";
+
+/// The words of `w` lie one after the other somewhere in `s`.
+fn holds(s: &[u32], w: &[u32]) -> bool {
+    !w.is_empty() && s.windows(w.len()).any(|x| x == w)
+}
+
+fn bits(v: &[f32]) -> Vec<u32> {
+    v.iter().map(|f| f.to_bits()).collect()
+}
+
+/// `s.m[1]`, `s.m` and `ba` (ES 2.0 2.10.4: an array member of a struct is
+/// one active uniform named `s.m[0]`; its own name is its element 0; each
+/// element has its location), their values, the setter errors on them, and
+/// a draw whose uniform blocks hold the values set.
+#[test]
+fn array_members_of_a_struct_and_bool_arrays() {
+    let _g = rig();
+    let p = link(VS_SM, FS_PLAIN);
+    let want: Vec<(String, GLint, GLenum)> =
+        [("ba[0]", 2, GL_BOOL), ("col", 1, GL_FLOAT_VEC4), ("s.k", 1, GL_FLOAT), ("s.m[0]", 3, GL_FLOAT_VEC2)]
+            .iter()
+            .map(|&(n, s, t)| (n.to_owned(), s, t))
+            .collect();
+    assert_eq!(iv(p, GL_ACTIVE_UNIFORMS), 4);
+    assert_eq!(actives(p), want);
+    /* "s.m[0]" and its NUL */
+    assert_eq!(iv(p, GL_ACTIVE_UNIFORM_MAX_LENGTH), 7);
+
+    let m: Vec<GLint> = (0..3).map(|e| loc(p, &format!("s.m[{e}]"))).collect();
+    assert!(m.iter().all(|&l| l >= 0), "{m:?}");
+    assert!(m[0] != m[1] && m[1] != m[2] && m[0] != m[2], "{m:?}");
+    assert_eq!(loc(p, "s.m"), m[0]);
+    assert_eq!(loc(p, "ba"), loc(p, "ba[0]"));
+    assert!(loc(p, "ba[1]") >= 0 && loc(p, "ba[1]") != loc(p, "ba[0]"));
+    for name in ["s.m[3]", "s", "s.m[1].x", "ba[2]"] {
+        assert_eq!(loc(p, name), -1, "{name}");
+    }
+
+    // SAFETY: plain GL calls with the program current; each array holds what its call reads.
+    unsafe {
+        glUseProgram(p);
+        glUniform2f(m[1], 3.5, -1.25);
+        assert_eq!(err(), GL_NO_ERROR);
+    }
+    assert_eq!(getf(p, m[0], 2), [0.0, 0.0]);
+    assert_eq!(getf(p, m[1], 2), [3.5, -1.25]);
+    assert_eq!(getf(p, m[2], 2), [0.0, 0.0]);
+    let sm = [1.5f32, 2.5, 3.5, 4.5, 5.5, 6.5];
+    // SAFETY: as above.
+    unsafe {
+        glUniform2fv(loc(p, "s.m"), 3, sm.as_ptr());
+        glUniform1f(loc(p, "s.k"), 9.75);
+        glUniform1iv(loc(p, "ba"), 2, [0, 5].as_ptr());
+        glUniform4f(loc(p, "col"), 0.125, 0.25, 0.375, 0.5);
+        assert_eq!(err(), GL_NO_ERROR);
+        glUniform1f(m[1], 1.0);
+        assert_eq!(err(), GL_INVALID_OPERATION, "float setter on a vec2 element");
+        glUniform2i(m[1], 1, 2);
+        assert_eq!(err(), GL_INVALID_OPERATION, "ivec2 setter on a vec2 element");
+        glUniform1f(-1, 1.0);
+        assert_eq!(err(), GL_NO_ERROR, "location -1 is ignored");
+    }
+    for e in 0..3 {
+        assert_eq!(getf(p, m[e], 2), sm[e * 2..e * 2 + 2], "s.m[{e}]");
+    }
+    assert_eq!(getf(p, loc(p, "s.k"), 1), [9.75]);
+    assert_eq!(geti(p, loc(p, "ba[0]"), 1), [0]);
+    assert_eq!(geti(p, loc(p, "ba[1]"), 1), [1], "bool set to 5 reads 1");
+    assert_eq!(getf(p, loc(p, "ba[1]"), 1), [1.0]);
+
+    draws(p, "struct array members");
+    let (vs, fs) = streams();
+    for e in 0..3 {
+        assert!(holds(&vs, &bits(&sm[e * 2..e * 2 + 2])), "s.m[{e}] in the VS block {vs:x?}");
+    }
+    assert!(holds(&vs, &bits(&[9.75])), "s.k in the VS block {vs:x?}");
+    assert!(holds(&fs, &bits(&[0.125, 0.25, 0.375, 0.5])), "col in the FS block {fs:x?}");
+    delete(p);
+}
+
+/// The uniform blocks of a draw with the mixed program hold the values the
+/// setters stored (what the shaders read; dEQP-GLES2 uniform_api.value.*
+/// renders with them).
+#[test]
+fn the_draw_carries_the_values_set() {
+    let _g = rig();
+    let p = link(VS_MIX, FS_MIX);
+    let arr: [f32; 12] = core::array::from_fn(|i| i as f32 + 100.5);
+    // SAFETY: plain GL calls with the program current; each array holds what its call reads.
+    unsafe {
+        glUseProgram(p);
+        glUniform1f(loc(p, "s.f"), 1.5);
+        glUniform3f(loc(p, "s.v"), 2.0, -3.0, 4.25);
+        glUniform4fv(loc(p, "arr"), 3, arr.as_ptr());
+        glUniform3f(loc(p, "lights[0].c"), 0.5, 0.25, 0.125);
+        glUniform1f(loc(p, "lights[0].w"), 8.0);
+        glUniform3f(loc(p, "lights[1].c"), 9.0, 10.0, 11.0);
+        glUniform1f(loc(p, "lights[1].w"), -2.0);
+    }
+    assert_eq!(err(), GL_NO_ERROR, "the setters");
+    draws(p, "the mixed program");
+    let (vs, fs) = streams();
+    assert!(holds(&vs, &bits(&[1.5])), "s.f in the VS block {vs:x?}");
+    assert!(holds(&vs, &bits(&[2.0, -3.0, 4.25])), "s.v in the VS block {vs:x?}");
+    for e in 0..3 {
+        assert!(holds(&vs, &bits(&arr[e * 4..e * 4 + 4])), "arr[{e}] in the VS block {vs:x?}");
+    }
+    assert!(holds(&fs, &bits(&[0.5, 0.25, 0.125])), "lights[0].c in the FS block {fs:x?}");
+    assert!(holds(&fs, &bits(&[8.0])), "lights[0].w in the FS block {fs:x?}");
+    assert!(holds(&fs, &bits(&[9.0, 10.0, 11.0])), "lights[1].c in the FS block {fs:x?}");
+    assert!(holds(&fs, &bits(&[-2.0])), "lights[1].w in the FS block {fs:x?}");
+
+    /* a value changed between two draws reaches the second */
+    // SAFETY: a plain GL call with the program current.
+    unsafe { glUniform3f(loc(p, "s.v"), 7.0, 7.5, 8.0) };
+    draws(p, "the mixed program, again");
+    let (vs, _) = streams();
+    assert!(holds(&vs, &bits(&[7.0, 7.5, 8.0])), "the new s.v in the VS block {vs:x?}");
+    delete(p);
+}
+
+/* ---- near the limits ---- */
+
+fn limit(pname: GLenum) -> usize {
+    let mut v = -1;
+    // SAFETY: a plain GL call with room for one value.
+    unsafe { glGetIntegerv(pname, &mut v) };
+    assert_eq!(err(), GL_NO_ERROR, "glGetIntegerv {pname:#x}");
+    v as usize
+}
+
+/// `vec4 r` = the sum of `a[0].a` .. `a[n - 1].a`, added 16 terms at a time
+/// into one variable (one expression of hundreds of terms tests the
+/// parser's depth, and many partial sums the register file, not the
+/// uniforms).
+fn sum_of(n: usize, a: char) -> String {
+    let mut out = " vec4 r = vec4(0.0);\n".to_owned();
+    for c in 0..n.div_ceil(16) {
+        let t: Vec<String> = (c * 16..n.min(c * 16 + 16)).map(|i| format!("{a}[{i}].a")).collect();
+        out += &format!(" r += {};\n", t.join(" + "));
+    }
+    out
+}
+
+fn near_value(stage: usize, i: usize) -> [f32; 4] {
+    let b = (stage * 1000 + i) as f32 * 4.0;
+    [b + 0.5, b + 1.5, b + 2.5, b + 3.5]
+}
+
+/// GL_MAX_VERTEX_UNIFORM_VECTORS and GL_MAX_FRAGMENT_UNIFORM_VECTORS, checked
+/// against the ES 2.0 minimums (table 6.19: 128 and 16).
+fn limits() -> (usize, usize) {
+    let (mv, mf) = (limit(GL_MAX_VERTEX_UNIFORM_VECTORS), limit(GL_MAX_FRAGMENT_UNIFORM_VECTORS));
+    assert!(mv >= 128 && mf >= 16, "the ES 2.0 minimums: {mv} {mf}");
+    (mv, mf)
+}
+
+/// One struct-array element per vec4 row, `nv` rows in the vertex stage and
+/// `nf` in the fragment stage: the link (ES 2.0 Appendix A.7: what fits the
+/// reported vectors under the packing rules links), one active uniform per
+/// row, each row its own location, the values read back and carried by the
+/// draw, locations past the old index byte once there are more than 256.
+fn rows_program(nv: usize, nf: usize) {
+    let (vsum, fsum) = (sum_of(nv, 'v'), sum_of(nf, 'f'));
+    let vs = format!(
+        "attribute vec4 p;\nstruct V {{ vec4 a; }};\nuniform V v[{nv}];\nvoid main() {{\n{vsum} gl_Position = p + r;\n}}\n"
+    );
+    let fs = format!(
+        "precision mediump float;\nstruct F {{ vec4 a; }};\nuniform F f[{nf}];\n\
+         void main() {{\n{fsum} gl_FragColor = r;\n}}\n"
+    );
+    let p = link(&vs, &fs);
+    assert_eq!(iv(p, GL_ACTIVE_UNIFORMS), (nv + nf) as GLint);
+    let names = |stage: usize| -> Vec<String> {
+        let (c, n) = if stage == 0 { ('v', nv) } else { ('f', nf) };
+        (0..n).map(|i| format!("{c}[{i}].a")).collect()
+    };
+    let mut want: Vec<(String, GLint, GLenum)> =
+        (0..2).flat_map(|s| names(s).into_iter().map(|n| (n, 1, GL_FLOAT_VEC4))).collect();
+    want.sort();
+    assert_eq!(actives(p), want);
+    let longest = names(0).iter().chain(names(1).iter()).map(String::len).max().unwrap();
+    assert_eq!(iv(p, GL_ACTIVE_UNIFORM_MAX_LENGTH), longest as GLint + 1);
+
+    let mut seen = BTreeMap::new();
+    // SAFETY: a plain GL call.
+    unsafe { glUseProgram(p) };
+    for s in 0..2 {
+        for (i, name) in names(s).iter().enumerate() {
+            let l = loc(p, name);
+            assert!(l >= 0, "{name}: {l}");
+            assert!(seen.insert(l, name.clone()).is_none(), "{name} shares location {l:#x}");
+            assert_eq!(getf(p, l, 4), [0.0; 4], "{name} before");
+            let [x, y, z, w] = near_value(s, i);
+            // SAFETY: a plain GL call with the program current.
+            unsafe { glUniform4f(l, x, y, z, w) };
+        }
+    }
+    assert_eq!(err(), GL_NO_ERROR, "the setters");
+    if nv + nf > 256 {
+        assert!(seen.keys().any(|&l| l & 0xffff > 255), "{seen:?}");
+    }
+    for s in 0..2 {
+        for (i, name) in names(s).iter().enumerate() {
+            assert_eq!(getf(p, loc(p, name), 4), near_value(s, i), "{name}");
+        }
+    }
+    draws(p, "near the limits");
+    let (vsb, fsb) = streams();
+    for i in 0..nv {
+        assert!(holds(&vsb, &bits(&near_value(0, i))), "v[{i}].a in the VS block");
+    }
+    for i in 0..nf {
+        assert!(holds(&fsb, &bits(&near_value(1, i))), "f[{i}].a in the FS block");
+    }
+    delete(p);
+}
+
+/// One row under the vertex limit and 255 fragment rows: 638 active
+/// uniforms on the 384 + 384 rows V3D reports, past the old 255 records in
+/// one stage and in the program.
+#[test]
+fn a_program_near_the_vertex_uniform_limit() {
+    let _g = rig();
+    let (mv, mf) = limits();
+    rows_program(mv - 1, (mf - 1).min(255));
+}
+
+/// One row under each stage's limit (383 + 383 on V3D 4.2). Each stage alone
+/// at 383 rows links, and 383 + 255 or 255 + 383 does; from about 640 rows
+/// together on, glLinkProgram fails with "online shaderc: this fragment
+/// shader does not fit the scratch arena (0 bytes left); raise
+/// shaderc::online::store::SCRATCH_BYTES" (4 MiB on the host). ES 2.0
+/// Appendix A.7 says a program within the reported vectors links.
+#[test]
+#[ignore = "defect: a program at both stages' uniform limits overflows the online compiler's scratch arena"]
+fn a_program_near_both_uniform_limits() {
+    let _g = rig();
+    let (mv, mf) = limits();
+    rows_program(mv - 1, mf - 1);
+}
+
 /* ---- the context ---- */
 
 static LOCK: Mutex<()> = Mutex::new(());
@@ -430,6 +712,7 @@ fn rig() -> MutexGuard<'static, ()> {
         while glGetError() != GL_NO_ERROR {}
     }
     LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    *STREAMS.lock().unwrap_or_else(|e| e.into_inner()) = (Vec::new(), Vec::new());
     g
 }
 
