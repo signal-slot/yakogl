@@ -2837,7 +2837,8 @@ if command -v cc >/dev/null 2>&1; then
   # (tools/pvr/km/scenario.h) whose records must hash to tools/pvr/km/
   # records.sha256: the records of the C it replaced (record_c.sh, cut out of
   # origin/main 674ea1cf), and fwinit-step7 for the DDK sizes
-  # (fwinit-step7.diff). tools/pvr/km/README.md explains each.
+  # (fwinit-step7.diff), and render-pr (the partial-render knob on, Rust
+  # only). tools/pvr/km/README.md explains each.
   pvr_km_check() {
     local out d=build/pvr-check/km s a=build/pvr-check/rgx-target/debug/libyakogl_drivers.a
     mkdir -p "$d" || return 1
@@ -2865,6 +2866,9 @@ if command -v cc >/dev/null 2>&1; then
       "$d/km_check" "$s" > "$d/$s.rec" || return 1
       python3 tools/pvr/km/rec_normalize.py < "$d/$s.rec" > "$d/$s-674ea1cf.norm" || return 1
     done
+    # render-pr: the partial-render knob on, Rust only (no C counterpart)
+    "$d/km_check" render-pr > "$d/render-pr.rec" || return 1
+    python3 tools/pvr/km/rec_normalize.py < "$d/render-pr.rec" > "$d/render-pr.norm" || return 1
     cp tools/pvr/km/records.sha256 "$d/" || return 1
     (cd "$d" && sha256sum --quiet -c records.sha256) || {
       echo "a kernel-side record moved: tools/pvr/km/README.md says how to diff it against the C"
