@@ -82,7 +82,85 @@ website/og-image.png | Apache-2.0 | written by tools/website-og-image.py (byte f
 # a header would change what the test checks. Output of our own tools and
 # board runs, or inputs written for this project.
 tests/fixtures/deqp_random_dead_cube/* | Apache-2.0 | shaders from the dEQP random generator (VK-GL-CTS is Apache-2.0, NOTICE 5); the source hash is a test input
+tools/cts/testdata/pr-c7-check/mk.sh | Apache-2.0 | our script that writes the pr-c7-check fixture trees beside it (commit fec1e65b); kept beside the fixtures it documents, not a fixture itself
+tools/cts/testdata/pr-c7-check/* | Apache-2.0 | synthetic Kconfig, note and README stubs written by pr-c7-check/mk.sh for tools/cts/pr-c7-check.sh's self-test
 tools/cts/testdata/* | Apache-2.0 | self-test inputs and expected outputs of tools/cts; compared byte for byte
+#
+# tools/mali/testdata: rows narrower than the catch-all row after them (first
+# match wins); each matches only files the catch-all matched before.
+#
+# gm2_* cases whose GLSL is glmark2's own text, verbatim or with identifiers
+# renamed and statements dropped: compared statement by statement, after
+# identifier renaming, with glmark2 22c527cb data/shaders and the program text
+# its src/scene-*.cpp assembles. glmark2 is GPL-3.0-or-later (its source
+# headers; COPYING); offered here as GPL-3.0-only, as
+# tools/hostharness/glmark2/host_main.cpp is, until
+# LICENSES/GPL-3.0-or-later.txt exists. NOTICE has no entry for them yet
+# (plan #391). Their .expect.json (Mesa output only) carry no glmark2 text.
+tools/mali/testdata/gm2_ideas_[123].frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-logo-shadow.frag, ideas-logo.frag, ideas-lamp-lit.frag with identifiers renamed
+tools/mali/testdata/gm2_ideas_[23].vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-logo.vert with identifiers renamed
+tools/mali/testdata/gm2_texcoord_1.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-logo-shadow.frag with identifiers renamed (the text of gm2_ideas_1.frag)
+tools/mali/testdata/gm2_cf_earlyret_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-logo.frag's light function and main with identifiers renamed
+tools/mali/testdata/gm2_cf_earlyret_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-logo.vert with identifiers renamed
+tools/mali/testdata/gm2_cf_constloop_struct_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-lamp-lit.frag (its lamp struct, light function and loop) with identifiers renamed
+tools/mali/testdata/gm2_intloop_*_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb conditionals.frag / function.frag / loop.frag base and their step-*.all bodies, and ideas-lamp-lit.frag's lamp loop (lamp_fs), identifiers renamed
+tools/mali/testdata/gm2_intloop_*_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb conditionals.vert / loop.vert with their step-*.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_ifelse_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb conditionals.frag base with conditionals-step-conditional.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_ifelse_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb conditionals.vert with conditionals-step-conditional.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_call_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb function.frag base with function-call.all / conditionals-step-simple.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_call_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb function.vert base with function-call.all / conditionals-step-simple.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_loop_*_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb loop.frag / conditionals.frag base with loop-step-loop.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_loop_uni_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb loop.vert base with loop-step-loop.all bodies, identifiers renamed
+tools/mali/testdata/gm2_cf_loop1_if_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb terrain.frag's point-light loop (range attenuation) with identifiers renamed
+tools/mali/testdata/gm2_cf_calls_fs.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb terrain-noise.frag's noise functions with identifiers renamed
+tools/mali/testdata/gm2_locals_noise.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb terrain-noise.frag's noise functions with identifiers renamed
+tools/mali/testdata/gm2_fsarith2_6.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb terrain-noise.frag statements with identifiers renamed
+tools/mali/testdata/gm2_cf_ifand_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-paper.vert / ideas-table.vert lighting statements with identifiers renamed
+tools/mali/testdata/gm2_cf_ifuni_vs.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-text.vert with identifiers renamed and its time test reduced
+tools/mali/testdata/gm2_arithconst_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb shadow.vert (_1), ideas-text.vert (_2), light-basic.vert (_3, _4) statements, verbatim or with identifiers renamed
+tools/mali/testdata/gm2_fma_[12].vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-lamp-lit.vert (_1) and ideas-text.vert (_2) statements verbatim
+tools/mali/testdata/gm2_fma_4.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb jellyfish.vert's offset and displacement expressions with identifiers renamed
+tools/mali/testdata/gm2_cprod_[456].vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb jellyfish.vert's sine displacement (_4, _5) and fresnel colour (_6) with identifiers renamed
+tools/mali/testdata/gm2_cprod_[23].frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb light-refract.frag / light-phong.frag eye, normal and refract/reflect statements with identifiers renamed
+tools/mali/testdata/gm2_fclane_[23].frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb jellyfish.frag's colour, caustic and alpha statements with identifiers renamed
+tools/mali/testdata/gm2_texcoord_2.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb jellyfish.frag's caustic texture coordinate with identifiers renamed
+tools/mali/testdata/gm2_varylink_partial_jelly.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb jellyfish.vert declarations and statements, verbatim, with the body reduced
+tools/mali/testdata/gm2_varylink_partial_jelly.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb jellyfish.frag declarations and its colour-map look-up, verbatim, with the body reduced
+tools/mali/testdata/gm2_varylink_dup_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb ideas-table.vert (dup_attr, dup_scaled) and ideas-text.vert (dup_uniform), names kept and bodies reduced
+tools/mali/testdata/gm2_varylink_constw_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb light-basic.vert / light-basic-texgen.vert diffuse colour statements, verbatim
+tools/mali/testdata/gm2_tc425_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb light-basic.vert with the texture scene's constants, comments dropped
+tools/mali/testdata/gm2_tc425_*.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb light-basic-tex.frag, comments dropped
+tools/mali/testdata/gm2_fsarith_*.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb bump-normals(-tangent).frag (_1, _2, _6), light-phong.frag (_3, _4), light-cel.frag (_5), shadow.frag (_7) statements with identifiers renamed
+tools/mali/testdata/gm2_nonfin_[45].frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb light-cel.frag's light vector, attenuation and threshold statements with identifiers renamed
+tools/mali/testdata/gm2_nbshrf_[125].frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb shadow.frag's shadow test and colour with identifiers renamed
+tools/mali/testdata/gm2_faupage_2.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb light-refract.vert with identifiers renamed
+tools/mali/testdata/gm2_faupage_3.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb terrain.vert (normal, tangent, displacement) with identifiers renamed
+tools/mali/testdata/gm2_texvert_3.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb terrain.vert's displacement and normal-map look-ups with identifiers renamed
+tools/mali/testdata/gm2_vsarith_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb conditionals.vert / function.vert / loop.vert with their step-*.all bodies
+tools/mali/testdata/gm2_fsop_*.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb gradient.frag (_1 mediump, _2 highp) and edits of it keeping its names and mix (_3.._9) (commit c9b1dc96)
+tools/mali/testdata/gm2_fsop_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb gradient.vert, comments dropped
+tools/mali/testdata/gm2_fsmisc_6.frag | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb buffer-wireframe.frag with identifiers renamed
+tools/mali/testdata/gm2_constfold_*.frag | Apache-2.0 AND GPL-3.0-only | the desktop blur program glmark2 22c527cb src/scene-desktop.cpp assembles into desktop-blur.frag (Kernel / TextureStep constants and the convolution sum)
+tools/mali/testdata/gm2_constfold_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb desktop.vert, comments dropped
+tools/mali/testdata/gm2_fx2d_*.frag | Apache-2.0 AND GPL-3.0-only | the 3x3 convolution program glmark2 22c527cb src/scene-effect-2d.cpp assembles into effect-2d-convolution.frag (Laplace, sharpen, emboss kernels)
+tools/mali/testdata/gm2_fx2d_*.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb effect-2d.vert, comments dropped
+tools/mali/testdata/gm2_locals_box.vert | Apache-2.0 AND GPL-3.0-only | glmark2 22c527cb effect-2d.vert, comments dropped
+tools/mali/testdata/gm2_texmulti_[356].frag | Apache-2.0 AND GPL-3.0-only | the tilt-shift blur program glmark2 22c527cb src/scene-terrain/blur-renderer.cpp assembles, identifiers renamed
+# The other gm2_* cases: written for this project after a glmark2 scene's
+# shader shape. Against glmark2 22c527cb (same comparison) they share at most
+# declarations, attribute / varying names, pass-through bodies and single
+# generic statements (a perspective divide, a texture look-up, one
+# gl_FragCoord product); no glmark2 function or statement sequence.
+tools/mali/testdata/gm2_*.frag | Apache-2.0 | reduction written for this project after a glmark2 22c527cb fragment shader's shape; at most names and single generic statements in common with glmark2 (Mesa 26.2.1 drm-shim reference alongside)
+tools/mali/testdata/gm2_*.vert | Apache-2.0 | reduction written for this project after a glmark2 22c527cb vertex shader's shape; at most names and pass-through statements in common with glmark2 (Mesa 26.2.1 drm-shim reference alongside)
+# dEQP-GLES2 cases (VK-GL-CTS 93bca01, Apache-2.0, NOTICE 5).
+tools/mali/testdata/deqp_*.frag | Apache-2.0 | dEQP-GLES2 fragment shader as the case writes it (VK-GL-CTS 93bca01, Apache-2.0, NOTICE 5) or our reduction of one
+tools/mali/testdata/deqp_*.vert | Apache-2.0 | dEQP-GLES2 vertex shader as the case writes it (VK-GL-CTS 93bca01, Apache-2.0, NOTICE 5) or our reduction of one
+tools/mali/testdata/deqp_*.bind | Apache-2.0 | uniform values of a dEQP-GLES2 case (VK-GL-CTS 93bca01, NOTICE 5) as our deqp tools wrote them
+# Mesa output: pandecode prints the command stream with field names from
+# Panfrost's genxml and shader blocks in its Valhall disassembly (MIT, NOTICE
+# 1e2, 1e3), as the v3d CLIF dumps above.
+tools/mali/testdata/*.trace | Apache-2.0 AND MIT | pandecode dump of Mesa 26.2.1 panfrost on its drm-shim (shim-25.0.7/: Mesa 25.0.7) for our shaders, written by tools/mali/drm_shim_ref.sh (genxml field names, Valhall mnemonics: MIT, NOTICE 1e2, 1e3)
 tools/mali/testdata/* | Apache-2.0 | probe shaders written for this project and their disassembly / traces; compared byte for byte
 tools/mali/panthor/uapi_pins.expected | Apache-2.0 | expected output of the panthor UAPI pin check
 tools/mali/isa-ref/board-2026-10-18.txt | Apache-2.0 | disassembly of our board run
