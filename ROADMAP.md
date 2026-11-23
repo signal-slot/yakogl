@@ -158,13 +158,13 @@ On the boards (`tools/cts/RESULTS.md`, "ES 3.0"):
   `ffee428a` (on the board at `be84094b`, 2026-10-25), and the tree is now
   31 images, 5 of them run since. Images 20 and 21 hang the GPU in
   `texture.filtering.3d` (#1285).
-- Raspberry Pi 4: 9 of its 91 images at `925dbca9` (2026-10-22): 4,917
-  cases, 3,943 pass / 643 fail / 331 NotSupported, 0 without a result (#1261).
-  A later record, not yet in `RESULTS.md`, holds rows 9-20 at `0ff58329`
-  (2026-11-01, `tools/cts/log/2026-10-31-pi4-gles3-a/README.md`): 5,749
-  cases, 5,343 pass / 97 fail / 204 NotSupported / 4 QualityWarning /
-  2 ResourceError, 99 never began (a scissored or masked clear of an integer
-  target aborts images FO6 and M1).
+- Raspberry Pi 4: the whole tree (114 rows, the 91 images re-split where dEQP
+  aborted) at `b1b5b845` (2026-11-23): 42,810 cases, 35,922 pass / 2,683 fail /
+  2,197 NotSupported / 29 other / 1,979 without a result, 0 GPU recoveries
+  (#1261). The 1,979 are cases that never began in nine images dEQP aborts on a
+  refused draw (S03a, S07, T14a, T17a, TF1a, TF1b, TF2a, TF2b, TF2c); they
+  still need one-case images, and the images plan #184's V3D work changes need
+  a rerun.
 - i.MX8MP: not run on the board yet (#24); the recipe
   (`docs/es3/board-recipe-imx8mp.md`) and the preflight
   (`tools/cts/imx8mp-gles3-preflight.sh`) are in the tree.
