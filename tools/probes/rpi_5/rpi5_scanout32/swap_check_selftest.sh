@@ -6,6 +6,9 @@
 # src/swap_check.h) with the host cc under -std=c11 -Wall -Wextra -Werror
 # into build/rpi5_scanout32/ and runs it. Last line:
 # "swap_check_selftest: N checks, 0 failed"; exit 0. No cc: a gap, exit 77.
+# Covers the DL.LACT pickup helpers too (lact-probe-a): swap_named,
+# swap_seq_judge_lact, swap_restore_lact (the swap-1-only path),
+# swap_restore_pass and swap_clear_ok.
 cd "$(dirname "$0")/../../../.." || exit 1
 cc=${CC:-cc}
 out=build/rpi5_scanout32

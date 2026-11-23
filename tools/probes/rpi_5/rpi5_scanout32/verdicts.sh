@@ -42,7 +42,7 @@
 #       so the 6-bit wrap counts; 0 is a stall; scanout_alive.h)
 #   u3 named: yes|no <free text>
 #       whether channel 0's list pointer read back as our list after the
-#       first swap
+#       first swap and DL.LACT picked it up (the probe says yes only then)
 #   u3 restore: PASS|FAIL <free text>
 #       the firmware's list words and pointer byte-equal to the snapshot.
 #       A PASS carrying hash=0x<hex> must equal the snapshot's hash; a
@@ -53,13 +53,37 @@
 # is printed too and is not required. A probe prints every line even when
 # a step failed: a skipped line makes the log incomplete.
 #
+# DL.LACT pickup (lact-probe-a; hvs6_dlist_swap.h, swap-lact-lib). A swap
+# counts only once channel 0's DISPx_DL.LACT read the head just written, a
+# restore only once DL.LACT is back on the firmware's LPTRS.HEADE. Lines,
+# anywhere in the log:
+#
+#   dlswap lact-pickup ok|FAIL polls=<n> frcnt=<a>..<b> want=<w> lact=<l>
+#       one per swap made, in swap order: the k-th is swap k's (swap 1's is
+#       in hvs6s_run's record, the others follow their dlswap swap<k> line)
+#   dlswap restore-lact ok|FAIL polls=<n> frcnt=<a>..<b> want=<w> lact=<l>
+#       one per restore (swap 1's own restore, then the final one)
+#   dlswap swap<k> FAIL DL.LACT did not reach the new head ...
+#   ... restore: DL.LACT not back on the firmware's head ...
+#       hvs6_dlist_swap.h's two error names (HVS6S_ERR_LACT_PICKUP,
+#       HVS6S_ERR_RESTORE_LACT); the first stands for a swap's missing
+#       lact-pickup line, both name the cause of a 'u3 restore: FAIL'
+#
+# A swap with no lact-pickup line or a FAIL one fails q4 (q4 is never 'yes'
+# without every pickup) and the verdict; a 'u3 restore: PASS' needs every
+# pickup ok and at least one restore-lact line, all ok. A probe stops at the
+# first failed swap: when the last of fewer than MIN_SWAPS swap lines failed
+# its pickup, or the only swap line is followed by swap 1's restore-lact
+# FAIL, the log is judged (FAIL, q4 no), not incomplete.
+#
 # Output: the seen lines, 'missing:' naming absent lines (after the last
 # seen one: the image stopped there; between two seen ones: a gap), then
 #   verdicts: PASS (...)            all of: placement valid (no overlap with
 #                                   the firmware span, within 4096), our list
-#                                   named, every swap's FRCNT advanced, the
-#                                   buffers alternated, restore PASS, the
-#                                   probe's own line not FAIL
+#                                   named, every swap's FRCNT advanced and
+#                                   DL.LACT picked it up, the buffers
+#                                   alternated, restore PASS with DL.LACT
+#                                   back, the probe's own line not FAIL
 #   verdicts: FAIL (reasons)        complete log, one of those not met
 #   verdicts: FAIL (placement refused: <text>) for a 'refused' line, with
 #   q4: unanswered (placement refused)
@@ -68,7 +92,8 @@
 #   q4: yes|no|unanswered (...)     can channel 0's list pointer be swapped
 #                                   at vblank under a running scanout:
 #                                   from the swap lines, 'yes' needs the
-#                                   swaps, FRCNT and naming to hold (the
+#                                   swaps, FRCNT, every DL.LACT pickup and
+#                                   naming to hold (the
 #                                   restore is judged separately), 'no'
 #                                   names the first swap that failed,
 #                                   'unanswered' for an incomplete log
@@ -146,6 +171,47 @@ done < <(awk '
 NSW=${#SW[@]}
 [ "$NSW" -ge "$MIN_SWAPS" ] && SEEN[4]=${SW[0]}
 
+# DL.LACT pickup lines (lact-probe-a): LP[j] is swap j+1's, RL every restore's.
+LP=() RL=()
+while IFS= read -r l; do LP+=("$l"); done < <(grep -E '^dlswap lact-pickup (ok|FAIL) polls=' "$TMP")
+while IFS= read -r l; do RL+=("$l"); done < <(grep -E '^dlswap restore-lact (ok|FAIL) polls=' "$TMP")
+ERR_PICKUP="DL.LACT did not reach the new head"
+ERR_RLACT="restore: DL.LACT not back on the firmware's head"
+# swap k's pickup: ok|FAIL|"" (no line); the line, or the swap<k> FAIL line
+pickup_of() {
+    local j=$1 k=$2 l=${LP[$1]:-}
+    if [ -n "$l" ]; then
+        PU_LINE=$l
+        PU=$(sed -E 's/^dlswap lact-pickup (ok|FAIL) .*/\1/' <<< "$l")
+    elif l=$(grep -m 1 -F "dlswap swap$k FAIL $ERR_PICKUP" "$TMP"); then
+        PU_LINE=$l PU=FAIL
+    else
+        PU_LINE="" PU=""
+    fi
+}
+lact_vals() { # "want=W lact=L" of a lact line; a dlswap swap<k> line has none
+    local w
+    w=$(grep -oE 'want=[0-9]+ lact=[0-9]+' <<< "$1" | head -n 1)
+    printf '%s' "${w:-named on its dlswap swap line}"
+}
+# The probe stops at the first failed swap, and after swap 1 when swap 1's
+# own restore did not bring DL.LACT back: fewer than MIN_SWAPS swap lines
+# whose last failed its pickup, or one swap line with swap 1's restore-lact
+# FAIL, are a finished run, judged below.
+STOPPED=0 STOP_WHY=""
+if [ "$NSW" -ge 1 ] && [ "$NSW" -lt "$MIN_SWAPS" ]; then
+    kl=$(sed -E 's/^u3 swap ([0-9]+):.*/\1/' <<< "${SW[$((NSW - 1))]}")
+    pickup_of $((NSW - 1)) "$kl"
+    if [ "$PU" = FAIL ]; then
+        STOPPED=$kl STOP_WHY="swap $kl's failed DL.LACT pickup"
+    elif [ "$NSW" -eq 1 ] && [ "$PU" = ok ]; then
+        case "${RL[0]:-}" in
+        "dlswap restore-lact FAIL "*) STOPPED=1 STOP_WHY="swap 1's restore: DL.LACT not back on the firmware's head" ;;
+        esac
+    fi
+    [ "$STOPPED" -ne 0 ] && SEEN[4]=${SW[0]}
+fi
+
 REFUSED=0
 case "${SEEN[2]:-}" in "u3 dlist: refused"*) REFUSED=1 ;; esac
 # a refused placement needs only the snapshot, the dlist line and the
@@ -166,6 +232,7 @@ if [ "$LASTKEY" -eq 4 ] && [ "$NSW" -gt 0 ]; then LASTLINE=${SW[$((NSW - 1))]}; 
 say "$PROG: $nseen of $nreq expected verdict lines in $LOG ($NSW swap line(s))"
 for i in 1 2 3; do [ -n "${SEEN[$i]:-}" ] && say "  [$i] ${SEEN[$i]}"; done
 for ((j = 0; j < NSW; j++)); do say "  [4] ${SW[$j]}"; done
+for l in ${LP[@]+"${LP[@]}"} ${RL[@]+"${RL[@]}"}; do say "  [l] $l"; done
 for i in 5 6 7; do [ -n "${SEEN[$i]:-}" ] && say "  [$i] ${SEEN[$i]}"; done
 if [ -n "${SEEN[8]:-}" ] && [ "${SEEN[8]}" != "${SEEN[7]:-}" ]; then say "  [8] ${SEEN[8]}"; fi
 
@@ -244,10 +311,34 @@ for ((j = 0; j < NSW; j++)); do
     prev_buf=$buf
 done
 
+# ---- DL.LACT pickup per swap (lact-probe-a) -----------------------------------
+pick_bad=0 pick1=""
+for ((j = 0; j < NSW; j++)); do
+    k=$(sed -E 's/^u3 swap ([0-9]+):.*/\1/' <<< "${SW[$j]}")
+    pickup_of "$j" "$k"
+    [ "$j" -eq 0 ] && pick1=$PU
+    if [ -z "$PU" ]; then
+        pick_bad=1
+        [ -z "$swap_fail" ] && swap_fail="swap $k: no dlswap lact-pickup line, DL.LACT pickup not shown"
+        other+=("swap $k: no dlswap lact-pickup line (DL.LACT pickup not shown)")
+    elif [ "$PU" != ok ]; then
+        pick_bad=1
+        v=$(lact_vals "$PU_LINE")
+        [ -z "$swap_fail" ] && swap_fail="swap $k: $ERR_PICKUP ($v)"
+        other+=("$ERR_PICKUP at swap $k ($v)")
+    fi
+done
+if [ "$STOPPED" -ne 0 ]; then
+    [ -z "$swap_fail" ] && swap_fail="$STOP_WHY; the probe stopped after swap $STOPPED"
+    other+=("$NSW of $MIN_SWAPS swaps made: the probe stopped at $STOP_WHY")
+fi
+
 named=$(grep -oE '(yes|no)' <<< "${SEEN[5]}" | head -n 1)
 if [ "$named" != "yes" ]; then
     [ -z "$swap_fail" ] && swap_fail="channel 0 did not name our list after the first swap"
     other+=("our list was not named")
+elif [ "$pick1" != ok ]; then
+    other+=("u3 named: yes although swap 1's DL.LACT pickup is not ok")
 fi
 
 word=$(sed -E 's/^u3 dlist: placed word ([0-9]+) len ([0-9]+).*/\1/' <<< "${SEEN[2]}")
@@ -262,7 +353,28 @@ fi
 grep -qE '\bfmt=XRGB8888( |$)' <<< "${SEEN[3]}" || other+=("plane fmt is not XRGB8888")
 
 rst=$(grep -oE 'PASS|FAIL' <<< "${SEEN[6]}" | head -n 1)
-[ "$rst" = "PASS" ] || other+=("restore FAIL")
+if [ "$rst" != "PASS" ]; then
+    case "${SEEN[6]}" in
+    *"$ERR_RLACT"*) other+=("restore FAIL ($ERR_RLACT)") ;;
+    *"$ERR_PICKUP"*) other+=("restore FAIL (a swap's $ERR_PICKUP)") ;;
+    *) other+=("restore FAIL") ;;
+    esac
+fi
+# every restore's DL.LACT back on the firmware's head
+rl_bad=0
+for l in ${RL[@]+"${RL[@]}"}; do
+    case "$l" in
+    "dlswap restore-lact ok "*) ;;
+    *) rl_bad=1; other+=("$ERR_RLACT ($(lact_vals "$l"))") ;;
+    esac
+done
+if [ "$rst" = "PASS" ]; then
+    if [ "$NSW" -gt 0 ] && [ "${#RL[@]}" -eq 0 ]; then
+        other+=("restore PASS without a dlswap restore-lact line (DL.LACT back not shown)")
+    fi
+    [ "$rl_bad" -eq 1 ] && other+=("restore PASS although DL.LACT did not come back to the firmware's head")
+    [ "$pick_bad" -eq 1 ] && other+=("restore PASS although a swap's DL.LACT pickup is not ok")
+fi
 if [ "$rst" = "PASS" ]; then
     rh=$(grep -oE 'hash=0x[[:xdigit:]]+' <<< "${SEEN[6]}" | head -n 1)
     sh=$(grep -oE 'hash=0x[[:xdigit:]]+' <<< "${SEEN[1]}" | head -n 1)
@@ -369,11 +481,11 @@ grep -qE '^rpi5_scanout32: FAIL' <<< "${SEEN[7]}" && other+=("the probe's own li
 if [ -n "$swap_fail" ]; then
     say "q4: no ($swap_fail)"
 else
-    say "q4: yes (channel 0's list pointer swapped $NSW times under the running scanout, named after the first swap, FRCNT advanced through every swap)"
+    say "q4: yes (channel 0's list pointer swapped $NSW times under the running scanout, named after the first swap, DL.LACT picked up every swap, FRCNT advanced through every swap)"
 fi
 
 if [ ${#other[@]} -eq 0 ]; then
-    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, FRCNT advanced, firmware list restored byte-equal${hw_note})"
+    say "verdicts: PASS ($NSW swaps alternating, our list named at word $word beside the firmware's at $heade, DL.LACT picked up each swap and came back, FRCNT advanced, firmware list restored byte-equal${hw_note})"
     exit 0
 fi
 r=""
