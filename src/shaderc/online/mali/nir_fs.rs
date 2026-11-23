@@ -559,14 +559,24 @@ fn call_returns(m: &Module<'_>, n: usize, keys: &mut [u32]) {
 /// `FMA.f32` of the right side, then `FADD.f32` of `a - b`). A vector
 /// compare is `lessThanEqual` and the like, a call whose operands are its
 /// parameters' temporaries in order (deqp_varylink_swz_xx: `a - b` first).
+/// So is `clamp(x, lo, hi)`, the inlined `min(max(x, lo), hi)` whose
+/// parameters are grafted into the body: the front end reads every
+/// argument before the `fmax`, glsl_to_nir visits `max`'s tree before
+/// `hi` (deqp_arith_op_common_clamp_fs_mediump: `in2`'s load and
+/// conversion after the `FMAX.v2f16`).
 fn swapped_compares(m: &Module<'_>, n: usize, grafted: &[Option<ir::ValueId>; MAX_LOCALS], keys: &mut [u32]) {
     for v in 0..n {
-        let ir::Op::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Ilt | AluOp::Ile), s) = m.instrs[v] else { continue };
-        if keys[v] == u32::MAX || m.comps_of(ir::ValueId(v as u32)) != 1 {
+        let ir::Op::Alu(op @ (AluOp::Flt | AluOp::Fle | AluOp::Ilt | AluOp::Ile | AluOp::Fmin), s) = m.instrs[v] else {
+            continue;
+        };
+        if keys[v] == u32::MAX || (op != AluOp::Fmin && m.comps_of(ir::ValueId(v as u32)) != 1) {
+            continue;
+        }
+        if op == AluOp::Fmin && !matches!(m.instrs.get(s[0].val.0 as usize), Some(ir::Op::Alu(AluOp::Fmax, _))) {
             continue;
         }
         let (first, second) = match op {
-            AluOp::Flt | AluOp::Ilt => (s[0].val, s[1].val),
+            AluOp::Flt | AluOp::Ilt | AluOp::Fmin => (s[0].val, s[1].val),
             _ => (s[1].val, s[0].val),
         };
         /* each tree's instructions of the statement, a grafted local's read
@@ -614,6 +624,19 @@ fn swapped_compares(m: &Module<'_>, n: usize, grafted: &[Option<ir::ValueId>; MA
         for (u, place) in members[..k].iter().zip(places[..k].iter()) {
             keys[*u as usize] = *place;
         }
+        /* a grafted local's tree stands where its read does (the clamp's
+         * `hi` varying load at its read, after the `fmax`) */
+        if op == AluOp::Fmin {
+            for &u in &members[..k] {
+                if let ir::Op::LoadLocal { local, index: None, .. } = m.instrs[u as usize] {
+                    if let Some(src) = grafted.get(local.0 as usize).copied().flatten() {
+                        if (src.0 as usize) < n && tree[src.0 as usize] != 0 {
+                            keys[src.0 as usize] = keys[u as usize];
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -654,7 +677,15 @@ fn grafted_locals(m: &Module<'_>, n: usize) -> [Option<ir::ValueId>; MAX_LOCALS]
             Some(c @ 1..=4) if write_mask == (1u8 << c) - 1 => c as usize,
             _ => width_of(m, src.val),
         };
-        let whole = write_mask == (1u8 << comps) - 1 && (0..comps).all(|c| src.swizzle[c] as usize == c);
+        /* or a scalar local assigned one lane of a varying, an rvalue
+         * (`ir_swizzle` of the varying's dereference) grafted as any other
+         * (deqp_arith_op_common_clamp_fs_mediump's `in2 = v_in2.y`: its
+         * load and conversion stand after the `FMAX` of `in0` and `in1`) */
+        let varying_lane = comps == 1
+            && write_mask == 1
+            && matches!(m.instrs.get(src.val.0 as usize), Some(ir::Op::LoadInput { slot: IoSlot::Varying(_), .. }));
+        let whole =
+            write_mask == (1u8 << comps) - 1 && ((0..comps).all(|c| src.swizzle[c] as usize == c) || varying_lane);
         let texel = write_mask.count_ones() == 1
             && matches!(
                 m.instrs.get(src.val.0 as usize),
@@ -814,7 +845,7 @@ fn highp_copy(m: &Module<'_>, id: u32) -> bool {
 fn highp_locals_copy(m: &Module<'_>, prec: &FsPrecision, vals: &[[Val; 4]]) -> bool {
     let named = |h: u64| prec.highp_locals.contains(&h) && h != 0;
     m.locals.iter().enumerate().filter(|(_, d)| named(super::name_hash(d.name))).all(|(l, _)| {
-        if folded_counter(m, l, vals) {
+        if folded_counter(m, l, vals) || fne_copy(m, l) {
             return true;
         }
         let mut stores = 0usize;
@@ -828,6 +859,38 @@ fn highp_locals_copy(m: &Module<'_>, prec: &FsPrecision, vals: &[[Val; 4]]) -> b
         });
         all && stores > 0
     })
+}
+
+/// Highp local `l` copies varyings' lanes that only float `!=` compares
+/// read: every store to it stores a varying's load, and every read of it
+/// is an `fne` operand. Mesa compares the varyings' fp32 words at either
+/// precision (the walk's `Fne` arm), so no fp32 value meets a mediump one
+/// (deqp_arith_op_binary_not_equal_fs_highp's `highp float in0 = v_in0.z`
+/// and op_float_notequal_fs_highp: the mediump shapes' words).
+fn fne_copy(m: &Module<'_>, l: usize) -> bool {
+    let mut stores = 0usize;
+    let mut loads = [0u64; MAX_VALUES / 64];
+    for (id, op) in m.instrs.iter().enumerate().take(MAX_VALUES) {
+        match *op {
+            ir::Op::StoreLocal { local, index, src, .. } if local.0 as usize == l => {
+                let varying = matches!(m.def(src.val), Some(ir::Op::LoadInput { slot: IoSlot::Varying(_), .. }));
+                if index.is_some() || !varying {
+                    return false;
+                }
+                stores += 1;
+            }
+            ir::Op::LoadLocal { local, index: None, .. } if local.0 as usize == l => loads[id / 64] |= 1 << (id % 64),
+            ir::Op::LoadLocal { local, .. } if local.0 as usize == l => return false,
+            _ => {}
+        }
+    }
+    let is_load = |v: ir::ValueId| (v.0 as usize) < MAX_VALUES && loads[v.0 as usize / 64] >> (v.0 % 64) & 1 != 0;
+    let readers_fne = m.instrs.iter().all(|op| {
+        let mut reads = false;
+        op.for_each_src(|s| reads |= is_load(s.val));
+        !reads || matches!(op, ir::Op::Alu(AluOp::Fne, _))
+    });
+    stores > 0 && readers_fne
 }
 
 /// Highp local `l` is a loop counter the walk folded away: every value it
@@ -6786,16 +6849,27 @@ fn walk_nodes(
                 }
             }
             /* `ceil` of a computed lane: `fceil` (cflow_71_deadloop's `%4 =
-             * fceil %3.x`, `FROUND.v2f16.rtp r1, r0.h00`); of a constant the
-             * front end folds, of anything else no reference */
-            ir::Op::Alu(AluOp::Fceil, s) => {
+             * fceil %3.x`, `FROUND.v2f16.rtp r1, r0.h00`); `floor` and `ceil`
+             * of a varying's lane: the lane narrowed, then `FROUND.v2f16.rtn`
+             * / `.rtp` (deqp_arith_op_common_{floor,ceil}_fs_mediump:
+             * `FADD.f32.discard r0.h0, r2^, 0x0.neg`, `FROUND.v2f16.rtn r0,
+             * r0^.h00`); of a constant the front end folds, of anything else
+             * (a uniform's lane; `floor` of a computed lane, `fract`'s arm
+             * aside) no reference. A highp operation on a varying's lane is
+             * Mesa's fp32 one (op_common_floor_fs_highp's `FROUND.f32.rtn`,
+             * then the narrowing): no form here yet */
+            ir::Op::Alu(a @ (AluOp::Fceil | AluOp::Ffloor), s) => {
+                let op = if a == AluOp::Fceil { Alu::Fceil } else { Alu::Ffloor };
+                let high = m.prec_of(ir::ValueId(id.0)) == ir::Prec::High;
                 let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
-                    if f.alu_of(x).is_none() {
+                    let varying = f.input_lane(x).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS) && !high;
+                    let computed = f.alu_of(x).is_some() && a == AluOp::Fceil;
+                    if !computed && !varying {
                         return Err(MaliError::Arithmetic);
                     }
-                    *o = f.node(Alu::Fceil, [x, Val::Undef, Val::Undef], at)?;
+                    *o = f.node(op, [x, Val::Undef, Val::Undef], at)?;
                 }
             }
             /* `dFdx` / `dFdy` of a varying's lane or of the narrowed
@@ -6898,8 +6972,19 @@ fn walk_nodes(
                     let (x, y) = if matches!(x, Val::Const(_)) { (y, x) } else { (x, y) };
                     let u = Val::Undef;
                     /* of two computed lanes (gm2_fsmisc_6's `min(x * w, min(y
-                     * * w, z * w))`: `FMIN.v2f16 r1, r0.h11, r1^.h00`) */
-                    if f.is_f16(x) && f.is_f16(y) {
+                     * * w, z * w))`: `FMIN.v2f16 r1, r0.h11, r1^.h00`), or of
+                     * varyings' lanes, each narrowed (deqp_arith_op_common
+                     * _clamp_fs_mediump's `clamp(in0, in1, in2)`: `FADD.f32
+                     * r1.h0, r2^, 0x0.neg` a lane, `FMAX.v2f16 r0, r0^.h00,
+                     * r1^.h00`, then `FMIN.v2f16`); a highp one is Mesa's fp32
+                     * operation (op_common_clamp_fs_highp's `FMAX.f32`), no
+                     * form here yet */
+                    let high = m.prec_of(ir::ValueId(id.0)) == ir::Prec::High;
+                    let varying = |f: &Fs<'_>, v: Val| {
+                        !high && f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS)
+                    };
+                    let lane16 = |f: &Fs<'_>, v: Val| f.is_f16(v) || varying(f, v);
+                    if lane16(f, x) && lane16(f, y) {
                         *o = f.node(if a == AluOp::Fmax { Alu::Fmax } else { Alu::Fmin }, [x, y, u], at)?;
                         continue;
                     }
@@ -7144,6 +7229,65 @@ fn walk_nodes(
                     let fl = f.node(Alu::Ffloor, [x, Val::Undef, Val::Undef], at)?;
                     let ng = f.neg(fl, at)?;
                     *o = f.node(Alu::Fadd, [x, ng, Val::Undef], at)?;
+                }
+            }
+            /* `sign` of a mediump lane: `lower_fsign` (nir_opt_algebraic.py:
+             * 2818), `fsub(b2f(flt(0.0, a)), b2f(flt(a, 0.0)))`, each `b2f16`
+             * folded into its compare's `.f1` result
+             * (deqp_arith_op_common_sign_fs_mediump: `FCMP_OR.v2f16.lt.f1 r1,
+             * 0x0, r0.h00`, `FCMP_OR.v2f16.lt.f1 r0, r0^.h00, 0x0`, `FADD.v2f16
+             * r0, r1^.h00, r0^.neg.h00`). Of a constant the front end folds.
+             * A highp `sign` is Mesa's fp32 one: of a highp value
+             * (op_common_sign_fs_highp's `FCMP_OR.f32.lt.f1`), and `asin`'s
+             * and `acos`'s, which the front end builds at 32 bits as Mesa
+             * does (lower.rs; op_angle_acos_fs_mediump's `FCMP_OR.f32`): no
+             * form here yet */
+            ir::Op::Alu(AluOp::Fsign, _) if m.prec_of(ir::ValueId(id.0)) == ir::Prec::High => {
+                return Err(MaliError::Arithmetic);
+            }
+            ir::Op::Alu(AluOp::Fsign, s) => {
+                let w = width_of(m, ir::ValueId(id.0));
+                let u = Val::Undef;
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let x = f.fp16_operand(lane(vals, s[0], i));
+                    match x {
+                        Val::Undef => return Err(MaliError::ColourForm),
+                        Val::Const(_) => return Err(MaliError::Arithmetic),
+                        _ => {}
+                    }
+                    let p = f.node(Alu::Fcmp(Cmpf::Lt), [Val::Const(0), x, u], at)?;
+                    let p = f.node(Alu::B2f, [p, u, u], at)?;
+                    let q = f.node(Alu::Fcmp(Cmpf::Lt), [x, Val::Const(0), u], at)?;
+                    let q = f.node(Alu::B2f, [q, u, u], at)?;
+                    let n = f.neg(q, at)?;
+                    *o = f.node(Alu::Fadd, [p, n, u], at)?;
+                }
+            }
+            /* float `!=` of two varyings' lanes: Mesa compares their fp32
+             * words at either precision (`fneu_pan`, the `f2fmp` of each
+             * gone at the link), the mask 32-bit and its `b2f16` a 16-bit
+             * select (deqp_arith_op_binary_not_equal_fs_{mediump,highp},
+             * op_float_notequal_fs_*: `FCMP_OR.f32.ne.m1 r0, r4^, r0^`, then
+             * `MUX.v2i16 r0, 0x0, 0x3C000000.h11, r0^.h00`). The lanes are
+             * read raw, so a highp varying does not make the shader mixed;
+             * another operand (a computed fp16 lane, a uniform) has no
+             * reference */
+            ir::Op::Alu(AluOp::Fne, s) => {
+                let w = width_of(m, ir::ValueId(id.0));
+                let varying =
+                    |f: &Fs<'_>, v: Val| f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS);
+                for (i, o) in out.iter_mut().enumerate().take(w) {
+                    let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
+                    if x == Val::Undef || y == Val::Undef {
+                        if i > 0 {
+                            break;
+                        }
+                        return Err(MaliError::ColourForm);
+                    }
+                    if !varying(f, x) || !varying(f, y) {
+                        return Err(MaliError::Arithmetic);
+                    }
+                    *o = f.op32(Alu::Fcmp(Cmpf::Ne), [x, y, Val::Undef], at)?;
                 }
             }
             ir::Op::Alu(..) => return Err(MaliError::Arithmetic),
@@ -8407,16 +8551,36 @@ fn kept_whole(
             && f.prec.other >> (l & 31) & 1 == 0
             && m.inputs.iter().any(|d| d.kind == IoKind::Varying && d.location == l && is_float_varying(d.gl_type))
     };
+    let reads = |src: &[Val]| src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node));
+    let reached =
+        |id: u16, width: u8| (0..width.max(1)).any(|k| roots.iter().any(|&r| reaches(f, r, Val::Lane(id, k))));
+    let order = &f.nir.order[..f.nir.len];
+    /* a vector float `!=` of the lanes (the walk's `Fne` arm, fp32 at
+     * either precision) keeps the varying whole in a mediump shader, its
+     * operands highp or not, as a vector conversion through a swizzle does
+     * (below). Measured: deqp_arith_op_float_notequal_fs_highp's
+     * `notEqual(in0, in1)` of `highp vec2 in0 = v_in0.wy` loads both
+     * varyings `.v4`, where the scalar `v_in0.z != v_in1.x` of
+     * op_binary_not_equal_fs_highp reads the lanes */
+    let vector_fne = !f.prec.highp
+        && (loc as usize) < MAX_VARYINGS
+        && order.iter().any(|&id| {
+            let nd = f.nir.nodes[id as usize];
+            nd.kind == Kind::Alu(Alu::Fcmp(Cmpf::Ne))
+                && nd.bits == 32
+                && reads(&nd.src[..2])
+                && reached(id, 1)
+                && f.is_vector_node(id)
+        });
+    if vector_fne {
+        return Ok(true);
+    }
     /* a highp shader (fsload_highp), a highp varying (fsload_hp_var2), an
      * integer one (intbool_89_flatlast's v_idx): no `f2fmp`, the lanes
      * read */
     if !mediump(loc) {
         return Ok(false);
     }
-    let reads = |src: &[Val]| src.iter().any(|s| matches!(*s, Val::Lane(n, _) if n == node));
-    let reached =
-        |id: u16, width: u8| (0..width.max(1)).any(|k| roots.iter().any(|&r| reaches(f, r, Val::Lane(id, k))));
-    let order = &f.nir.order[..f.nir.len];
     /* an fp16 operation reads a lane: arithmetic, a phi or a compare of
      * the lowered tree (fsvec_fract_mediump.expect.json loads `.v4` where
      * `fract(v.x)` reads one lane; discard_81_branchquad's compares read
@@ -8454,7 +8618,16 @@ fn kept_whole(
         let nd = f.nir.nodes[id as usize];
         nd.kind == Kind::Alu(Alu::F2i) && reads(&nd.src[..1]) && reached(id, 1) && f.is_vector_node(id)
     });
-    if fp16_op || int_of || vector_int {
+    /* a float `!=` of the lanes, which Mesa compares at fp32 (the walk's
+     * `Fne` arm): the `f2fmp` of each operand is still read at the link.
+     * Measured: deqp_arith_op_binary_not_equal_fs_mediump's `v_in0.z !=
+     * v_in1.x` and op_float_notequal_fs_mediump's `notEqual(v_in0.wy,
+     * v_in1.yx)` load both varyings `.v4` */
+    let fne = order.iter().any(|&id| {
+        let nd = f.nir.nodes[id as usize];
+        nd.kind == Kind::Alu(Alu::Fcmp(Cmpf::Ne)) && nd.bits == 32 && reads(&nd.src[..2]) && reached(id, 1)
+    });
+    if fp16_op || int_of || vector_int || fne {
         return Ok(true);
     }
     /* the colour takes a lane as it is: converted with the colour's tree
@@ -10624,7 +10797,7 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
             let x = lane_tree(f, pr, s[0], pair, ubo)?;
             return lone_node(pr, P::Op(Alu::Frcp, [x, 0, 0]), (place.0, place.1 + 2));
         }
-        (Some((op @ (Alu::Frsq | Alu::Frcp | Alu::Ffloor), s)), ..) => {
+        (Some((op @ (Alu::Frsq | Alu::Frcp | Alu::Ffloor | Alu::Fceil), s)), ..) => {
             P::Op(op, [lane_tree(f, pr, s[0], pair, ubo)?, 0, 0])
         }
         (None, Some((j, c)), _) => P::Leaf(Leaf::TexLane(j as u8, c)),
