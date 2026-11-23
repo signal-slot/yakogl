@@ -117,3 +117,8 @@ drop | tailnet-dns | tools/mp2s_redact_check_selftest.sh | \bzzhost9\.tail1234\.
 drop | tailnet-dns | tools/mp2s_redact_check_selftest.sh | \bzzh9\.tail1\.ts\.net\b | fake tailnet host name input of the same self-test (--fix)
 drop | password | tools/mp2s_redact_check_selftest.sh | \bhunter2\b | fake secret value input of the redact check's self-test
 drop | password | tools/mp2s_redact_check_selftest.sh | \bs3cret\b | fake secret value input of the same self-test
+# The DK U-Boot redact check (tools/mp2_uboot_redact_check.py) and its self-test:
+# the tool's own description of the tailnet range and the fake inputs it must flag.
+drop | private-ipv4 | tools/mp2_uboot_redact_check.py | 100\.64\.0\.0/10 | the tailnet range the check documents and tests against (a range, not an address)
+drop | private-ipv4 | tools/mp2_uboot_redact_selftest.sh | \b100\.(100\.100\.1|64\.0\.9)\b | fake tailnet addresses the check must flag
+drop | tailnet-dns | tools/mp2_uboot_redact_selftest.sh | \bdk-lab\.tail1234\.ts\.net\b | fake tailnet host name input of the check's self-test
