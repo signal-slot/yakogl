@@ -37,6 +37,7 @@ use super::kick_times::{self, YdPvrKickTimes};
 use super::km::{km, YdPvrKm, FL_MAX};
 use super::mem::{bo_alloc, bo_alloc_pm, heap_alloc, round_up, PvrGpuBo, L0_FLAGS_DATA};
 use super::mmu;
+use super::pr_diag;
 use super::rgxlayer::read64;
 use crate::errno;
 use crate::km_log;
@@ -1949,6 +1950,65 @@ fn dump_last_frag_cmd(k: &YdPvrKm, r: &YdPvrRender, fence: u32) {
     }
 }
 
+/// Forwards each line of what is written to `km_log!` (Err level); a line
+/// longer than the buffer is cut. No allocation: the crate is `no_std`.
+struct LogLines<'a> {
+    k: &'a YdPvrKm,
+    buf: [u8; 320],
+    len: usize,
+}
+
+impl core::fmt::Write for LogLines<'_> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for &c in s.as_bytes() {
+            if c == b'\n' {
+                let line = core::str::from_utf8(&self.buf[..self.len]).unwrap_or("?");
+                km_log!(self.k, Err, "{}", line);
+                self.len = 0;
+            } else if self.len < self.buf.len() {
+                self.buf[self.len] = c;
+                self.len += 1;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The knob-on stall dump's partial-render section (`pr_diag::fmt_pr_stall`):
+/// the firmware's assert buffer, the last kick's HWRT data, the last fragment
+/// command's words and the last kick's buffers by name. Only called with
+/// `cfg.partial_render` set. (The kick keeps no 3D_PR command: `c3d_pr` None.)
+fn pr_stall_dump(k: &YdPvrKm, r: &YdPvrRender) {
+    let ab = k.heap_cpu(k.tracebuf_off + TRACEBUF_ASSERT_BUF as u32);
+    k.invd(ab, FILE_INFO_BUF_LINE_NUM + 4);
+    // SAFETY: the trace buffer's assert record, inside the firmware heap.
+    let assert_b = unsafe { core::slice::from_raw_parts(ab, FILE_INFO_BUF_LINE_NUM + 4) };
+    let hs = if r.last_hs >= 0 { r.hwrt.get(r.last_hs as usize).filter(|h| h.fw_built != 0) } else { None };
+    let hwrt_b = hs.map(|h| {
+        let p = k.heap_cpu(h.hrt_off);
+        k.invd(p, HWRTDATA_SIZE);
+        // SAFETY: the HWRT data, inside the firmware heap.
+        unsafe { core::slice::from_raw_parts(p, HWRTDATA_SIZE) }
+    });
+    let mut ranges = [("", 0u64, 0u64); 4];
+    let mut n = 0;
+    if let Some(h) = hs {
+        ranges = [
+            ("tpc", h.tpc.gpu, h.tpc_alloc as u64),
+            ("vheap", h.vheap.gpu, VHEAP_BYTES as u64),
+            ("rgnhdr", h.rgnhdr.gpu, h.rgn_alloc as u64),
+            ("macrotile", h.macrotile.gpu, 4096),
+        ];
+        n = ranges.len();
+    }
+    let mut addrs = [0u64; 4];
+    for (a, x) in addrs.iter_mut().zip(&ranges[..n]) {
+        *a = x.1;
+    }
+    let mut w = LogLines { k, buf: [0; 320], len: 0 };
+    let _ = pr_diag::fmt_pr_stall(&mut w, Some(assert_b), hwrt_b, &r.last_frag_cmd, None, &addrs[..n], &ranges[..n]);
+}
+
 /// The commands a client CCB holds but the firmware has not read, and what
 /// each FENCE/UPDATE needs (`from` the firmware's read offset, `to` ours).
 fn dump_cccb_pending(k: &YdPvrKm, what: &str, ring: *const u8, from: u32, to: u32) {
@@ -2554,6 +2614,9 @@ pub fn wait_for_at(k: &mut YdPvrKm, r: &mut YdPvrRender, fence: u32, timeout_ms:
             k.fl_grows_done
         );
         trace_tail(k, true, "stall: FW trace ", 600);
+    }
+    if r.cfg.partial_render != 0 {
+        pr_stall_dump(k, r);
     }
     -errno::ETIMEDOUT
 }
@@ -3292,6 +3355,25 @@ mod wait_tests {
         assert_eq!(t.sim.steps.borrow().len(), 3000 / WAIT_POLL_US as usize);
         let log = t.log();
         assert!(log.contains("render: fence 7 timeout (ufo=6) waiting on the test"), "log:\n{log}");
+    }
+
+    /// The knob-on stall dump carries the pr_diag section, the knob-off one
+    /// no `render: stall: FW assert` / `HWRT` / `c3d` line of it.
+    #[test]
+    fn the_knob_on_stall_dump_prints_the_pr_diag_section() {
+        let mut t = rig(7, 6, None);
+        t.r.cfg.partial_render = 1;
+        assert_eq!(t.wait(3), -errno::ETIMEDOUT);
+        let log = t.log();
+        let lines: Vec<&str> = log.lines().collect();
+        let at = lines.iter().position(|l| l.starts_with("render: stall: FW assert")).expect(&log);
+        assert_eq!(lines[at], "render: stall: FW assert none");
+        assert_eq!(lines[at + 1], "render: stall: HWRT unread");
+        assert!(lines[at + 2].starts_with("render: stall: c3d: 80 words"), "log:\n{log}");
+
+        let mut off = rig(7, 6, None);
+        assert_eq!(off.wait(3), -errno::ETIMEDOUT);
+        assert!(!off.log().contains("render: stall:"), "log:\n{}", off.log());
     }
 
     #[test]
