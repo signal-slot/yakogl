@@ -1,0 +1,5 @@
+vs ssa : 777ac49021a1a9058714d8a028ebdd02bca1bf7d6a85f887508978b7bc2f5a57 : nir_inline_functions,nir_split_var_copies,nir_lower_var_copies
+vs.position select : b5c9c872f9c76cab56a23fc9f9d3530d6b78579f75221b18b9c35978ea663a23
+vs.varying select : 91cd4e25242798401cfaf14c9e218825939e2c14efa92ba47bd65b19a49768df
+fs ssa : f7a2182a9aef02ff27cfd3166622a553bbb97ceb5f0269642e6d54c946529105 : nir_inline_functions
+fs select : 3c41172ecf66001462426321124fca58d73827581eea5999195f7e0e50c86d71
