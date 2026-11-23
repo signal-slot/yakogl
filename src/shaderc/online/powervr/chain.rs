@@ -264,8 +264,15 @@ fn invariant_slots<'a>(m: &ir::Module<'_>, a: &'a Arena<'a>) -> Result<&'a [ir::
 /// The largest shader image the chain builds into, in bytes. It was 16 KiB,
 /// four times the vertex corpus peak (574 dwords); pco's own program for
 /// sceneeffects' bloom (96bc0c44f5554256.frag) is 30,096 bytes with no loop
-/// in it, so the online program for it is at least that long.
-pub const MAX_IMAGE_BYTES: usize = 64 << 10;
+/// in it, so the online program for it is at least that long. It was then
+/// 64 KiB, until dEQP-GLES3 `uniform_api.random.83`'s vertex shader (50
+/// struct-array uniforms of matrices and samplers, each compared in line)
+/// built to 75,832 bytes and `encode_closed` refused it ("the shader does
+/// not fit the buffer"; tests/es3_pvr_random83.rs). Each compile takes the
+/// buffer from the 4 MiB scratch arena, which that program still fits; the
+/// 65,536 bytes more per compile moved `usc_limits`'s chain bound for
+/// light_amount.14omni (deqp_shapes_that_ran_the_scratch_arena_out_now_fit_it).
+pub const MAX_IMAGE_BYTES: usize = 128 << 10;
 
 /// The register-file bounds the product builds against. `temps` is the PDS
 /// DOUTU field's measured 252. `shared` is what an operand can address: the

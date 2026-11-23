@@ -7905,10 +7905,17 @@ void main()
 /// those through idx0 as pco does (a sh256+k read returned sh<k> on the
 /// AM62P). The pass copies the group list once, with one idx0 write per such
 /// read: 1,882,660 -> 2,001,456 bytes (b7c5cedf -> am62p/sh-index).
+///
+/// 14omni's bound was re-derived again on 2026-11-23 (2.12 MB -> 2.19 MB):
+/// the image buffer each stage takes from the arena grew from 64 KiB to 128
+/// KiB (`chain::MAX_IMAGE_BYTES`, for dEQP-GLES3 `uniform_api.random.83`,
+/// tests/es3_pvr_random83.rs), 65,536 bytes more in every compile: 14omni
+/// 2,098,256 -> 2,163,792 bytes (arena peak 2,200,188 of 4 MiB). tmp_array
+/// holds 189,696 and keeps its bound.
 #[test]
 fn deqp_shapes_that_ran_the_scratch_arena_out_now_fit_it() {
     for (name, stage, src, bound) in [
-        ("light_amount.14omni", Stage::Vertex, DEQP_LIGHT_AMOUNT_14OMNI_VS, 2_120_000usize),
+        ("light_amount.14omni", Stage::Vertex, DEQP_LIGHT_AMOUNT_14OMNI_VS, 2_190_000usize),
         ("tmp_array vec3 static", Stage::Fragment, DEQP_TMP_ARRAY_VEC3_STATIC_FS, 1_450_000),
     ] {
         let _scratch = scratch_lock();
