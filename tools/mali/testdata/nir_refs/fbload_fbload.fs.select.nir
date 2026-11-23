@@ -1,0 +1,26 @@
+decl_function main () (entrypoint)
+impl main {
+block b0: // preds:
+16x2 %0 = @load_pixel_coord
+32 %1 = u2f32 %0.y
+32 %2 = load_const (0x3f000000 = 0.500000)
+32 %3 = fadd %1, %2 (0.500000)
+32 %4 = load_const (0x00000010 = 16)
+32 %5 = load_const (0x00000000)
+32x2 %6 = @load_ubo (%5 (0x0), %4 (0x10)) (access=none, align_mul=1073741824, align_offset=16, range_base=16, range=16)
+32 %7 = ffma %3, %6.x, %6.y
+32 %8 = u2u32 %0.x
+32x2 %9 = @load_ubo (%5 (0x0), %5 (0x0)) (access=none, align_mul=1073741824, align_offset=0, range_base=0, range=8)
+32 %10 = ffma %7, %9.x, %9.y
+32 %11 = f2i32 %10
+32x2 %12 = vec2 %8, %11
+32x2 %13 = load_const (0x20001800, 0x00000000) = (536877056, 0)
+32x4 %14 = (float32)txf %13 (0x20001800, 0x0) (texture_handle), %12 (backend1), 67108864 (texture), 2D
+32 %15 = @load_cumulative_coverage_pan
+32 %16 = mov %14.w
+32 %17 = @atest_pan (%15, %16)
+64 %18 = @load_blend_descriptor_pan (base=0)
+@blend_pan (%17, %18, %14) (io location=FRAG_RESULT_DATA0 slots=1, src_type=float32)
+// succs: b1
+block b1:
+}
