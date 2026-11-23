@@ -980,7 +980,9 @@ and is empty now, `rmdir /boot/yakogl` puts back the directory listing too
 
 ## Board run
 
-2026-11-22, `resource:stm32mp257f-dk` with its console and reset resources.
+2026-11-23, `resource:stm32mp257f-dk` with its console and reset resources:
+the run of 2026-11-22 repeated by hand, step by step, with the merged tools
+at `1b9d4d16`. The result is the same; the values below are this run's.
 OpenSTLinux Starter Package v26.06.10 on the microSD; TF-A
 v2.10-stm32mp2-r2.0, OP-TEE 4.0.0, U-Boot 2023.10-stm32mp-r3.1. No person was
 present: no `forever`, and the reset resource was not used. The console was
@@ -991,9 +993,9 @@ the image, the kernel and the login), with the host name replaced. The
 board's address and console path came from the lease and appear nowhere here.
 
 1. **The image and the build.** `mp2_hello`, built as its README says from
-   this change's tree (it prints `mp2_hello: build 063a6db8`, a local commit
-   of that tree), run with `MP2_NO_WATCHDOG=1`. `zephyr.bin` is 41224 bytes,
-   sha256 `585734ca8227f497fe3de070888c98f7acf6252573c1a38baaa542456983dead`,
+   the tree at `1b9d4d16` (it prints `mp2_hello: build 1b9d4d16`), run with
+   `MP2_NO_WATCHDOG=1`. `zephyr.bin` is 41224 bytes,
+   sha256 `69d553de06d51407fd098b476f74758c2f0df18871618ea01f07e13299f3e136`,
    and its header `image_size` is 638976 bytes. The script built by
    `driver/tools/mp2-standalone/build.sh` (`boot.scr.uimg`, 5525 bytes) has
    sha256 `3a4679c55c40e442db4caa30fe030954a76f60f45b9a0b441efff403492898bc`.
@@ -1007,7 +1009,7 @@ board's address and console path came from the lease and appear nowhere here.
    uninstall` first and wrote no environment. The dry run of `default`
    passes `mp2s_undo_order.py` (2 changes, each after its undo). `default`
    printed both undo lines and `fwu: bank 0 accepted`. It then wrote copy 2
-   with flags 0x4b and left copy 1 (flags 0x4a, active) alone, read the
+   with flags 0x59 and left copy 1 (flags 0x58, active) alone, read the
    partition back (`verify default: ok`, changed `boot_prefixes`,
    `mp2s_left`, `mp2s_prefixes`, `mp2s_ver`) and said `default set for 2
    boots; nothing was rebooted.` `status` then read
@@ -1039,12 +1041,14 @@ board's address and console path came from the lease and appear nowhere here.
    cycle(s))`. `mp2s_record_check.py --count 2`: `VERDICT: PASS 2 image
    boot(s) then Linux, 3 boot(s) in the record`. `mp2s_reset_reason.py`: 3
    boots, 0 supply, 0 watchdog, 3 software.
-5. **After.** Linux now called the card `mmcblk0` (section 1), and the
-   runner, which tells the eMMC by `device/type` alone, read it at once
-   (`/dev/mmcblk0p7: active: copy 1`). `mp2s_comeback.sh --before-boot-id`:
-   `comeback: ok OpenSTLinux kernel 6.6.129, /boot on /dev/mmcblk0p8 (ext4,
+5. **After.** Linux still called the card `mmcblk2` (on 2026-11-22 it came
+   back as `mmcblk0`, section 1; the runner tells the eMMC by `device/type`
+   alone, so either name reads at once: `/dev/mmcblk2p7: active: copy 1`).
+   `mp2s_comeback.sh --before-boot-id`:
+   `comeback: ok OpenSTLinux kernel 6.6.129, /boot on /dev/mmcblk2p8 (ext4,
    disk type SD) ... no mp2s_* and no /yakogl/standalone/ prefix, new boot`.
-   The environment against the one before: `mp2s-env: restored`.
+   The environment against the one before: `mp2s-env: restored` (only
+   `api_address` differs).
    `mp2s_guard.py --for oneshot`: `allow`. Still no `ubootefi.var`.
    `nodefault` wrote no environment (`no default is set`) and said
    `mp2s-boot: allowed`. `uninstall` removed the stage directory and said
@@ -1054,7 +1058,8 @@ board's address and console path came from the lease and appear nowhere here.
    25 files`).
 6. **Failures.** None in the boot chain. Every reset was `System reset
    (SYSRST)` (PSCI or systemd), so there was no supply or watchdog event.
-   What the first run of this session's tools found is fixed in the tools:
+   What the first run of this session's tools found (2026-11-22) is fixed
+   in the tools:
    - The runner, `mp2s_session.sh`, `mp2s_bootfs_check.py`, `mp2s_stage.py`
      and `mp2s_fwenv_check.py` refused any `/boot` or `u-boot-env` on
      `mmcblk0` as "the eMMC", on top of their `device/type` check. After a
