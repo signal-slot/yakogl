@@ -5095,6 +5095,155 @@ mod gl {
         }
     }
 
+    /// The swizzle of the colour preload's texture in a frame's stream
+    /// (pre frame 0's DCD, resource table entry 3), or None when the frame
+    /// does not preload the colour.
+    fn colour_preload_swizzle(words: &[u64]) -> Option<u32> {
+        use crate::mali::genxml::v10::{Draw, FramebufferParameters, PrePostFrameShaderMode, Resource, Texture};
+        let fbd = fbd_at_fragment(words)?;
+        let params = FramebufferParameters::unpack(&with(|m| m.read(fbd, 64)).try_into().unwrap()).unwrap();
+        if params.pre_frame_0 == PrePostFrameShaderMode::NEVER {
+            return None;
+        }
+        let dcd = with(|m| m.read(params.frame_shader_dcds, Draw::LENGTH));
+        let dcd = Draw::unpack(&dcd[..].try_into().unwrap()).unwrap();
+        let table = dcd.shader.resources & !63;
+        let entry = with(|m| m.read(table + 3 * Resource::LENGTH as u64, Resource::LENGTH));
+        let texture = Resource::unpack(&entry[..].try_into().unwrap()).unwrap().address;
+        let tex = with(|m| m.read(texture, Texture::LENGTH));
+        Some(Texture::unpack(&tex[..].try_into().unwrap()).unwrap().swizzle)
+    }
+
+    /// dEQP-GLES2 fbo.render.recreate_colorbuffer.rebind_* with a stencil
+    /// buffer (issue #11329) through the GL core on the mock. The scissored
+    /// stencil clear the GL core holds past the colour buffer's new storage
+    /// opens the last frame, so the frame preloads the new storage (zeroed
+    /// by the GL core) and the colour clear is a quad. A colour format
+    /// without alpha (GL_RGB565, a GL_RGB texture) is RGBA8 storage that
+    /// must hold alpha 1 (ES 2.0 4.3.1): its draws and that clear quad leave
+    /// alpha alone (`TargetFormat::draw_mask`), so the preload must read
+    /// alpha as 1. It read the stored 0, and the board read alpha 0 in every
+    /// pixel. A format with alpha (GL_RGBA4, a GL_RGBA texture) preloads
+    /// its alpha and its clear quad writes it.
+    #[test]
+    fn a_recreated_colour_buffer_without_alpha_keeps_alpha_1() {
+        use crate::gl::state::{glClearStencil, glDisable, glFinish, glScissor, glStencilFunc};
+        const VS: &str = "attribute highp vec4 a_position; void main(){ gl_Position = a_position; }";
+        const FS: &str = "precision mediump float; void main(){ gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); }";
+        const ALL: GLbitfield = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+        /* sglr::drawQuad as in `zs_cases_through_the_gl_core` */
+        unsafe fn quad(z0: f32, z1: f32) -> GLenum {
+            let mid = 0.5 * (z0 + z1);
+            let corners = [[-1.0, -1.0, z0, 1.0], [-1.0, 1.0, mid, 1.0], [1.0, -1.0, mid, 1.0], [1.0, 1.0, z1, 1.0f32]];
+            let pos: Vec<f32> = [0, 2, 1, 2, 1, 3].iter().flat_map(|&i: &usize| corners[i]).collect();
+            // SAFETY: the caller's context; client arrays read at the draw.
+            unsafe {
+                glEnableVertexAttribArray(0);
+                glVertexAttribPointer(0, 4, GL_FLOAT, 0, 0, pos.as_ptr().cast());
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                glGetError()
+            }
+        }
+        /* new storage for colour buffer `name` and attach it, as the case's
+         * Framebuffer and its recreate step do */
+        unsafe fn colour(texture: bool, format: GLenum, name: GLuint) {
+            // SAFETY: the caller's context.
+            unsafe {
+                if texture {
+                    glBindTexture(GL_TEXTURE_2D, name);
+                    glTexImage2D(
+                        GL_TEXTURE_2D,
+                        0,
+                        format as GLint,
+                        64,
+                        64,
+                        0,
+                        format,
+                        GL_UNSIGNED_BYTE,
+                        core::ptr::null(),
+                    );
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, name, 0);
+                } else {
+                    glBindRenderbuffer(GL_RENDERBUFFER, name);
+                    glRenderbufferStorage(GL_RENDERBUFFER, format, 64, 64);
+                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, name);
+                }
+            }
+        }
+        /* (texture, format, whether the format has alpha) */
+        let cases = [(false, GL_RGB565, false), (true, GL_RGB, false), (false, GL_RGBA4, true), (true, GL_RGBA, true)];
+        for (texture, format, alpha) in cases {
+            let case = format!("{} 0x{format:x}", if texture { "tex2d" } else { "rbo" });
+            let _rig = Rig::new(true);
+            assert_eq!(backend::init(), 0);
+            // SAFETY: the rig serialises the library; plain GL calls.
+            unsafe {
+                let ctx = context::gl_context_create(64, 64);
+                assert!(!ctx.is_null());
+                let p = glCreateProgram();
+                glAttachShader(p, shader(GL_VERTEX_SHADER, VS));
+                glAttachShader(p, shader(GL_FRAGMENT_SHADER, FS));
+                glLinkProgram(p);
+                glUseProgram(p);
+                let (mut f, mut c, mut s) = (0, 0, 0);
+                glGenFramebuffers(1, &mut f);
+                glBindFramebuffer(GL_FRAMEBUFFER, f);
+                if texture {
+                    glGenTextures(1, &mut c);
+                } else {
+                    glGenRenderbuffers(1, &mut c);
+                }
+                colour(texture, format, c);
+                glGenRenderbuffers(1, &mut s);
+                glBindRenderbuffer(GL_RENDERBUFFER, s);
+                glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, 64, 64);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, s);
+                assert_eq!(glCheckFramebufferStatus(GL_FRAMEBUFFER), GL_FRAMEBUFFER_COMPLETE, "{case}");
+                glViewport(0, 0, 64, 64);
+                glClearColor(1.0, 0.0, 0.0, 1.0);
+                glClear(ALL);
+                glEnable(GL_DEPTH_TEST);
+                assert_eq!(quad(0.0, 0.0), GL_NO_ERROR, "{case}: the first quad");
+                glEnable(GL_SCISSOR_TEST);
+                glScissor(16, 16, 32, 32);
+                glClearStencil(1);
+                glClear(GL_STENCIL_BUFFER_BIT);
+                glDisable(GL_SCISSOR_TEST);
+                if texture {
+                    glDeleteTextures(1, &c);
+                } else {
+                    glDeleteRenderbuffers(1, &c);
+                }
+                colour(texture, format, c);
+                glClearColor(0.0, 0.0, 1.0, 0.0);
+                glClearStencil(0);
+                glClear(GL_COLOR_BUFFER_BIT);
+                glEnable(GL_STENCIL_TEST);
+                glStencilFunc(GL_EQUAL, 0, 0xff);
+                let kicks = with(|m| m.submits.len());
+                assert_eq!(quad(1.0, -1.0), GL_NO_ERROR, "{case}: the last quad");
+                glFinish();
+                let frames: Vec<Vec<u64>> = with(|m| m.submits[kicks..].iter().map(|s| s.1.clone()).collect());
+                assert_eq!(frames.len(), 1, "{case}: the last frame");
+                let regs = regs_at_each_idvs(&frames[0]);
+                assert_eq!(regs.len(), 3, "{case}: the held stencil clear, the colour clear, the quad");
+                let masks: Vec<u32> = regs.iter().map(super::quad_colour_mask).collect();
+                let swizzle = colour_preload_swizzle(&frames[0]).expect("the frame preloads the new storage");
+                if alpha {
+                    assert_eq!(masks, [0, 0xf, 0xf], "{case}: the clear and the quad write alpha");
+                    assert_eq!(swizzle, frame::SWIZZLE_RGBA, "{case}: the preload reads the stored alpha");
+                } else {
+                    assert_eq!(masks, [0, 0x7, 0x7], "{case}: no draw writes alpha");
+                    assert_eq!(swizzle, frame::SWIZZLE_RGB1, "{case}: the preload reads alpha 1");
+                }
+                glDisable(GL_STENCIL_TEST);
+                glDisable(GL_DEPTH_TEST);
+                assert_eq!(glGetError(), GL_NO_ERROR, "{case}");
+                context::gl_context_destroy(ctx);
+            }
+        }
+    }
+
     /// The draw of a program whose only varying is a constant (issue #6521;
     /// tools/mali/testdata/route_const_only, the shape of dEQP
     /// `shaders.matrix.add.const_highp_mat2_mat2_vertex`). glLinkProgram

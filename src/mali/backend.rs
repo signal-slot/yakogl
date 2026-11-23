@@ -451,6 +451,9 @@ struct TargetKey {
     /// The same memory in another format, or rasterised at another sample
     /// count, is another target.
     format: frame::TargetFormat,
+    /// `GlesDraw::target_alpha_bits`: the frame's colour preload reads
+    /// alpha 1 for a GL format without alpha ([`frame::OpenFrame::alpha_bits`]).
+    alpha_bits: u8,
     samples: u8,
     ds_id: u32,
     /// The depth and the stencil object (`GlesDraw::depth_id`,
@@ -2878,6 +2881,7 @@ impl TargetKey {
             h: d.target_h,
             row_stride,
             format,
+            alpha_bits: d.target_alpha_bits,
             samples: d.samples.max(1),
             ds_id: d.ds_id,
             objects: [(d.depth_id, d.depth_gen), (d.stencil_id, d.stencil_gen)],
@@ -2978,6 +2982,7 @@ fn open_frame(g: &mut MaliState, key: TargetKey, target: frame::Target, clear: O
     } else {
         frame::begin_frame_targets(&mut a.desc, &mut cs, &more[..n])?
     };
+    f.alpha_bits = key.alpha_bits;
     let store = if target.samples == 4 && !depth_only { sample_store(g, &target) } else { None };
     let mut kept = None;
     if let Some((gpu, surface_stride)) = store {
