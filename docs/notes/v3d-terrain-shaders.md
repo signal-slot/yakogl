@@ -43,9 +43,9 @@ no board run. Code is read at `537da3a8`. glmark2 is the pinned `22c527cb`
   layout or TMU set-up: about **0 ms**. Every fix is in
   `src/shaderc/online/v3d/**` (plan #308).
 - **Not run here:** Mesa's 4.2 `v3d_shc` (it needs a Mesa tree, and
-  unpacking the archive was refused in this session), the glmark2 host
-  harness corpus (`run.sh` was refused) and any board run. Each Mesa 4.2
-  count below is an estimate and is marked as one.
+  unpacking the archive was refused in this session) and any board run.
+  Each Mesa 4.2 count below is an estimate and is marked as one. Our counts
+  are of the exact texts the host harness records.
 
 ## 1. How it was measured
 
@@ -57,9 +57,20 @@ the tree. It depends on this checkout with
 "shaderc-online", "no-shader-table"]`, and is run with:
 
 ```sh
-cargo run --release --manifest-path "$CONNECTED_DEPS_DIR/scratch-v3d-terrain/Cargo.toml" -- <out dir>
-cargo run --release --manifest-path "$CONNECTED_DEPS_DIR/scratch-v3d-terrain/Cargo.toml" -- corpus > corpus.tsv
+GM2_WRITE=0 GM2_ENTRIES='^terrain$' GM2_FRAMES=1 \
+    tools/hostharness/glmark2/run.sh "$GLMARK2_SRC" build/glmark2-host vivante
+cargo run --release --manifest-path "$CONNECTED_DEPS_DIR/scratch-v3d-terrain/Cargo.toml" -- \
+    build/glmark2-host/shaders <listing out dir>
 ```
+
+The first command writes the 11 texts glmark2 passes to `glShaderSource`
+for terrain (`build/glmark2-host/shaders/terrain-*.glsl`, GPL text, never
+committed). The crate pairs `terrain-8b696c50...vert` (`terrain-texture.vert`)
+with every fragment text, and `terrain-18bca803...vert` (`terrain.vert`)
+with `terrain-4d266cda...frag`. A first version of the crate also had a
+`corpus` mode (section "Mesa" below), which compiled every pair of
+`tools/v3d/qpu_counts_42.tsv` with ours. That version is gone from the deps
+cache; its figures are quoted as it printed them.
 
 Per program it does what `tests/v3d_varyings_compile.rs:171-185` does:
 `lower::compile_to_ir` for each stage, then
@@ -67,7 +78,7 @@ Per program it does what `tests/v3d_varyings_compile.rs:171-185` does:
 65536 }, ..)`. That is the link-time compile of `codegen::compile_program`
 (`src/shaderc/online/codegen.rs:1015-1048`) with the default sampler key,
 so no binding is `ret32` and every look-up returns 16 bits. It writes each
-stage's listing through `v3d::listing::write_instr` (`<prog>.<fs|vs|cs>.qpu`
+stage's listing through `v3d::listing::write_instr` (`<fs hash>.<fs|vs|cs>.qpu`
 in the out dir) and counts the words, threads and signals of the listing:
 
 - `words`: `Code::words.len()`, one 64-bit instruction each.
@@ -80,17 +91,14 @@ in the out dir) and counts the words, threads and signals of the listing:
 - Spills: none can exist. The allocator has no spilling and falls back to 2
   threads instead (`alloc.rs:38-40`).
 
-The texts are rebuilt from glmark2's sources the way `ShaderSource` builds
-them. They are not copied from a harness run, because `run.sh` was refused.
-Each text starts with the precision macros of
-`libmatrix/shader-source.cc:493-505`. The fragment texts also get
-`precision mediump float;` (an assumption: our front end refuses a
-fragment text with no default float precision). The blur bodies come from
-`scene-terrain/blur-renderer.cpp:76-163`, with the radius, sigma and
-tilt-shift values of `scene-terrain.cpp:88-120`: tilt-shift radius 4,
-sigma 2.7, tilt 0.5; bloom radius 2, sigma 4.0, tilt 1.0. On V3D the
-precision does not change the code (every ALU operation is 32-bit). The
-constants' digits do not change the counts either.
+The texts are the harness's, so they are exactly the ones the board
+compiles (`gc-terrain-shaders.md:106-108` matched the same files to the
+GC7000's traced counts). An earlier pass of this study rebuilt the texts by
+hand from `blur-renderer.cpp:76-163`. Its counts equal the harness texts'
+for every program except bloom: the hand-built bloom assumed tilt 1.0
+(a constant step) and gave 46, while glmark2's bloom text computes its step
+from `TiltShift` and compiles to 48 and 50. The table uses the harness
+texts.
 
 ### Mesa
 
@@ -103,9 +111,9 @@ constants' digits do not change the counts either.
   count of the noise shader, at 7.1 or at 4.2**. The fragment files map to
   roles as `gc-terrain-shaders.md:60-71` gives them: `8c866224` tilt V,
   `bbba1ac2` tilt H, `4d266cda` terrain, `bdfd8dd6` and `e043e1e8` bloom.
-  The 14- and 15-instruction pair (`895a73bc`, `d697bb50`) is
-  luminance/overlay, and `c549a79a` (28) is the normal map. The last two
-  mappings are by lookup count and are inferred, not checked.
+  Read from the texts: `e043e1e8` is bloom H (it has `stepX`), `bdfd8dd6`
+  bloom V, `895a73bc` the overlay (`tDiffuse * opacity`), `d697bb50` the
+  luminance pass, `c549a79a` the normal map.
 - **4.2: not measured.** `tools/v3d/README.md:10-29` builds `v3d_shc` in a
   Mesa 26.2.1 tree. `$CONNECTED_DEPS_DIR/downloads/mesa-26.2.1.tar.xz` is
   on this host, but this session's sandbox refused `tar`. As an estimate,
@@ -133,12 +141,12 @@ vs threads, fs threads). Mesa 4.2: estimate, not measured.
 |---|---|---:|---:|---|---:|---:|---:|---|---:|---|---:|
 | noise (`terrain-noise.frag`) | fs | **1495** | **2** | 872 / 830 | 0 | 0 | 3 | 21 / 21 | 0 | not compiled (translator) | not measured |
 | normal map | fs | 35 | 4 | 16 / 17 | 3 | 3 | 3 | 3 / 9 | 0 | 28, 4 | 35 |
-| luminance (set-up only) | fs | 14 | 4 | - | 1 | 2 | 3 | 3 / 5 | 0 | 14 or 15, 4 | 17 to 19 |
+| luminance (set-up only) | fs | 14 | 4 | 6 / 7 | 1 | 2 | 3 | 3 / 5 | 0 | 15, 4 | 19 |
 | terrain (`terrain.frag`) | fs | 160 | 4 | 89 / 119 | 5 | 9 | 5 | 39 / 49 | 0 | 136, 4 | 169 |
 | terrain (`terrain.vert`) | vs | 172 | **2** | 109 / 98 | 2 | 3 | 3 | 85 / 89 | 0 | 132, 4 | 164 |
 | terrain (`terrain.vert`) | cs (bin) | 97 | 4 | 60 / 54 | 1 | 1 | 3 | 63 / 65 | 0 | not in the table | not measured |
-| bloom H / V (radius 2) | fs | 46 / 46 | 4 | 20 / 27 | 5 | 10 | 5 | 7 / 17 | 0 | 39 and 40, 4 | 48 to 50 |
-| overlay | fs | 14 | 4 | 4 / 8 | 1 | 2 | 3 | 1 / 3 | 0 | 14 or 15, 4 | 17 to 19 |
+| bloom H / V (radius 2) | fs | 48 / 50 | 4 | 22 / 31 | 5 | 10 | 5 | - / 16 | 0 | 39 / 40, 4 | 48 / 50 |
+| overlay | fs | 14 | 4 | 4 / 8 | 1 | 2 | 3 | 1 / 3 | 0 | 14, 4 | 17 |
 | tilt-shift H (radius 4) | fs | **78** | 4 | 38 / 56 | 9 | 18 | 7 | 10 / 28 | 0 | 64, 4 | 79 |
 | tilt-shift V (radius 4) | fs | **80** | 4 | 38 / 56 | 9 | 18 | 7 | 10 / 28 | 0 | 66, 4 | 82 |
 | `terrain-texture.vert` (every pass but terrain) | vs / cs | 26 / 21 | 4 / 4 | - | 0 | 0 | 1 | 19 / 19 | 0 | not compiled (translator) | not measured |
@@ -157,12 +165,12 @@ share, `16 / 4 = 4` words (`TMU_OUTPUT_WORDS`, `select.rs:1960-1969`, Mesa's
 `ntq_tmu_fifo_overflow`, `nir_to_vir.c:251-258`). So a blur runs 5 batches
 of at most 2 look-ups, each behind a `thrsw`. Its 7 `thrsw` are those 5
 (the fifth is the doubled "last thread switch" at words 69-70 of
-`tilt_v.fs.qpu`) plus the program end. Mesa's 4.2 code follows the same
+`8c8662245addb598.fs.qpu`, tilt V) plus the program end. Mesa's 4.2 code follows the same
 rules (the cited Mesa lines are the ones our selection transcribes), so its
 batching would be the same. Its listing was not produced here (not
 measured).
 
-**Where the noise shader's words go** (`noise.fs.qpu`). It has 690 `fmul`,
+**Where the noise shader's words go** (`1637be2eef2e8a5e.fs.qpu`). It has 690 `fmul`,
 373 `fadd`, 245 `fsub`, 152 `ffloor` (the `mod289` and `floor` calls), 140
 `mov`s of several kinds, and 28 each of `fcmp`/`fmax`/`not`. That is 872
 add-half and 830 mul-half operations in 1495 words. Only 5 words have both
@@ -235,7 +243,7 @@ Assumptions, each marked:
 | noise 256x256 | 65,536 x 1495 = 98.0 M: **6.12 ms** | 0 | 0.26 MB: 0.06 | **6.1** (ALU) |
 | normal map 256x256 | 65,536 x 35: 0.14 | 196,608: 0.18 | 0.06 | 0.2 |
 | terrain draw 800x600 | FS 442k x 160 = 70.7 M, VS 393,216 x 172 = 67.6 M: **8.65 ms** (lower bound) | FS 5 x 442k + VS 2 x 393k = 3.0 M: 2.8 | 3.84 MB: 0.86 | **>= 8.7** (ALU) |
-| bloom H 256x256 | 65,536 x 46: 0.19 | 327,680: 0.30 | 0.06 | 0.3 |
+| bloom H 256x256 | 65,536 x 48: 0.20 | 327,680: 0.30 | 0.06 | 0.3 |
 | bloom V 256x256 | the same | the same | 0.06 | 0.3 |
 | overlay 800x600 | 480,000 x 14: 0.42 | 480,000: 0.44 | 3.84 MB loaded and 3.84 MB stored, colour and depth: 1.7 | 0.4 to 1.7 |
 | tilt-shift H 800x600 | 480,000 x 78: 2.34 | 4.32 M: **3.97** | 1.92 MB: 0.43 | **<= 4.0** (TMU) |
@@ -341,9 +349,6 @@ entries before the terrain draw; "the terrain entry" is the one before the
   `v3d_shc` (`tools/v3d/README.md:10-36`); this session could not unpack
   the Mesa archive. Mesa 7.1 has no noise count, because its translator
   refuses the `MEDIUMP_OR_DEFAULT vec2 uvScale` declarator.
-- **The harness texts**: rebuilt by hand from glmark2's sources, not taken
-  from `tools/hostharness/glmark2/run.sh` (refused here). The precision line
-  is an assumption (section 1).
 - **Quad helper lanes, per-tile vertex re-shading, instruction-cache size,
   the V3D clock**: not measured. Each one makes the terrain and noise
   models larger, never smaller.
