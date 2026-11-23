@@ -50,8 +50,9 @@
 //! Mesa's drm-shim with `--uniform-values` (`tools/mali/deqp_ref.sh
 //! --instrument shim`).
 //!
-//! None compiles at the tip: each test is ignored with its refusal quoted;
-//! the lowering removes the `ignore` and the reference's entry in
+//! `vs_nested` compiles byte-equal (the constrnd lowering's `if` of a
+//! constant condition). Every other test is ignored with its refusal
+//! quoted; the lowering removes the `ignore` and the reference's entry in
 //! [`REFUSALS`] together, and lists it in [`MATCHED`]. `refusals_pinned`
 //! runs now: it asserts each ignored reference's exact current refusal and
 //! names every one that moved.
@@ -182,8 +183,9 @@ fn ctrlflow_vs_elseif() {
     mali_ref::assert_matches("deqp_ctrlflow_vs_elseif");
 }
 
+/// Its inner `if (false)` is the taken side, inline (nir.rs `vs_const_cond`,
+/// as Mesa's GLSL optimizer removes it): byte-equal.
 #[test]
-#[ignore = "refused: control flow (if, a loop, a return before the end)"]
 fn ctrlflow_vs_nested() {
     mali_ref::assert_matches("deqp_ctrlflow_vs_nested");
 }
@@ -251,7 +253,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_fs_struct_select", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_vec_cond", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_elseif", CONTROL_FLOW),
-    ("deqp_ctrlflow_vs_nested", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_nested_combined", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_nested_hsl", CONTROL_FLOW),
     ("deqp_ctrlflow_vs_statement_side", CONTROL_FLOW),
@@ -260,8 +261,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_vs_varying_select", CONTROL_FLOW),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run).
+const MATCHED: &[&str] = &["deqp_ctrlflow_vs_nested"];
 
 #[test]
 fn refusals_pinned() {

@@ -54,7 +54,7 @@ fn negzero_constglobal_reduced() {
 }
 
 #[test]
-#[ignore = "refused: a fused multiply-add other than a matrix product's (a built-in function's)"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (its constant fused multiply-adds fold now)"]
 fn negzero_constglobal_vs() {
     mali_ref::assert_matches("deqp_negzero_constglobal_vs");
 }
@@ -97,12 +97,11 @@ fn negzero_array_inout_vs() {
 
 const NEG_ZERO: &str = "a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)";
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)";
-const FMA: &str = "a fused multiply-add other than a matrix product's (a built-in function's)";
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_negzero_constglobal_fs", ARITH),
-    ("deqp_negzero_constglobal_vs", FMA),
+    ("deqp_negzero_constglobal_vs", ARITH),
     ("deqp_negzero_mainbuiltin_vs", ARITH),
     ("deqp_negzero_mainbuiltin_fs", NEG_ZERO),
     ("deqp_negzero_mainplain_vs", ARITH),

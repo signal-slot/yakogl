@@ -32,6 +32,16 @@
 //! (`all_features.fragment.43`). Its constant fold now compiles, and its
 //! first refusal is #367's fragment ARITH.
 //!
+//! The lowering (nir.rs: the vertex walk's fold of constant lanes, `sqrt`
+//! and `ffma` of constants, `frcp(0.0)` as IEEE's infinity, an `if` of a
+//! constant condition taken inline, the explicit level's `f2i16` of a
+//! constant) makes `lod_const_vs` byte-equal, and `atan_zero_lanes_vs`
+//! with the unitype lowering of its mediump int uniform; `sqrt_zero_vs` and
+//! `atan_const_vs` fold their constants and refuse later. `int_bits_vs` keeps the constant fold's refusal: its int and bool
+//! compares of constants fold exactly, but they let through shapes whose
+//! programs differ from Mesa's (light_amount_2_2, deqp_cfold2_zero_operand_icmp),
+//! so `fold_int_const` takes only the folds a reference draws byte-equal.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_constrnd
 //! ```
@@ -45,36 +55,37 @@ fn constrnd_rnd_fragment43() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (sqrt(0.0) in a global initializer)"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (log2(35.625) of a constant, Mesa's libm fold; then exp of an attribute, plan #367's vertex ARITH)"]
 fn constrnd_sqrt_zero_vs() {
     mali_ref::assert_matches("deqp_constrnd_sqrt_zero_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (atan of a vec4 with 0 lanes)"]
 fn constrnd_atan_zero_lanes_vs() {
     mali_ref::assert_matches("deqp_constrnd_atan_zero_lanes_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (integer and boolean constants read as float bits)"]
+#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (the int and bool compares of constants, which nir.rs fold_int_const leaves refused: the uniform-array select chain they let through differs from Mesa's)"]
 fn constrnd_int_bits_vs() {
     mali_ref::assert_matches("deqp_constrnd_int_bits_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (textureCubeLod at a constant level)"]
 fn constrnd_lod_const_vs() {
     mali_ref::assert_matches("deqp_constrnd_lod_const_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (atan of non-zero constants)"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (log2(30.0) of a constant, Mesa's libm fold; then cos and log of an attribute, plan #367's vertex ARITH)"]
 fn constrnd_atan_const_vs() {
     mali_ref::assert_matches("deqp_constrnd_atan_const_vs");
 }
 
-/// The refusal text of the constant folds this file's shape is named after.
+/// The vertex walk's arithmetic refusal (a libm fold of a constant, or
+/// #367's vertex ARITH).
+const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
+/// The refusal of a fold of constants that are not finite normal floats.
 const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
 
 /// Every ignored reference above, and the refusal the compiler gives it now.
@@ -83,11 +94,9 @@ const REFUSED: &[(&str, &str)] = &[
         "deqp_constrnd_rnd_fragment43",
         "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)",
     ),
-    ("deqp_constrnd_sqrt_zero_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_atan_zero_lanes_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_sqrt_zero_vs", ARITH),
     ("deqp_constrnd_int_bits_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_lod_const_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_atan_const_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_atan_const_vs", ARITH),
 ];
 
 #[test]

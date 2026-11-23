@@ -12,9 +12,12 @@
 //!
 //! One test per reference, each a pair verbatim from dEQP's `.qpa` (the
 //! `.license` sidecar names the case) drawn on Mesa's drm-shim with
-//! `tools/mali/deqp_ref.sh --instrument shim`. Every one is refused at the
-//! tip, so every test is ignored with its refusal quoted; the lowering
-//! removes the `ignore` and the reference's entry in `REFUSALS` together.
+//! `tools/mali/deqp_ref.sh --instrument shim`. `fma_constmat_mat`,
+//! `fma_const_reflect` and `fma_const_matmat` compile byte-equal since the
+//! vertex walk folds an `ffma` of three constants (the constrnd lowering).
+//! Every other one is refused, its test ignored with its refusal quoted; the
+//! lowering removes the `ignore` and the reference's entry in `REFUSALS`
+//! together.
 //! `refusals_pinned` runs now: it asserts each reference's current refusal
 //! and names every one that moved.
 //!
@@ -32,7 +35,6 @@ const TEX_KIND: &str = "a texture look-up other than texture2D(sampler2D, coordi
 /// and the whole colour, so the link moves it into the fragment shader
 /// (no varying program).
 #[test]
-#[ignore = "refused: a fused multiply-add other than a matrix product's (a built-in function's)"]
 fn fmaloc_fma_constmat_mat() {
     mali_ref::assert_matches("deqp_fmaloc_fma_constmat_mat");
 }
@@ -90,15 +92,17 @@ fn fmaloc_fma_reflect_float() {
 /// `const float cval = asin(vec2(0.0)).y`: a constant expression; Mesa's
 /// GLSL front end folds it and the link moves `out0` into the fragment
 /// shader.
+/// Its constant `ffma`s and `sqrt` fold now; the constant varying of 0.0
+/// meets the fragment shader's defect, which a vertex shader of `out0 =
+/// 0.0;` meets alone too (it predates the fold).
 #[test]
-#[ignore = "refused: a fused multiply-add other than a matrix product's (a built-in function's)"]
+#[ignore = "refused: Valhall back end defect (IrIndex) of the fragment shader reading a constant varying"]
 fn fmaloc_fma_const_asin() {
     mali_ref::assert_matches("deqp_fmaloc_fma_const_asin");
 }
 
 /// `const float cval = reflect(1.0, 1.0)`.
 #[test]
-#[ignore = "refused: a fused multiply-add other than a matrix product's (a built-in function's)"]
 fn fmaloc_fma_const_reflect() {
     mali_ref::assert_matches("deqp_fmaloc_fma_const_reflect");
 }
@@ -106,7 +110,6 @@ fn fmaloc_fma_const_reflect() {
 /// `const mat3 a = mat3(3.0) * mat3(4.0)` and the constant matrix chain of
 /// `constant_expressions.operators.math_mat`.
 #[test]
-#[ignore = "refused: a fused multiply-add other than a matrix product's (a built-in function's)"]
 fn fmaloc_fma_const_matmat() {
     mali_ref::assert_matches("deqp_fmaloc_fma_const_matmat");
 }
@@ -196,7 +199,6 @@ fn fmaloc_tk_rnd_bias() {
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_fmaloc_fma_constmat_mat", FMA),
     ("deqp_fmaloc_fma_constmat_vec", FMA),
     ("deqp_fmaloc_fma_attrmat_vec", FMA),
     ("deqp_fmaloc_fma_attrmat_unimat", FMA),
@@ -204,9 +206,7 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_fmaloc_fma_atan", FMA),
     ("deqp_fmaloc_fma_atan2", FMA),
     ("deqp_fmaloc_fma_reflect_float", FMA),
-    ("deqp_fmaloc_fma_const_asin", FMA),
-    ("deqp_fmaloc_fma_const_reflect", FMA),
-    ("deqp_fmaloc_fma_const_matmat", FMA),
+    ("deqp_fmaloc_fma_const_asin", "an invariant of the pipeline did not hold (IrIndex)"),
     ("deqp_fmaloc_tc_cube_face", TEX_COORD),
     ("deqp_fmaloc_tc_cube_const", TEX_COORD),
     ("deqp_fmaloc_tc_cube_rnd_sub", TEX_COORD),

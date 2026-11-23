@@ -394,8 +394,9 @@ fn pairs() -> Vec<Pair> {
 /// the M.2 kind (the compiler plans' to lift), named after the entry:
 const COMPILER_REFUSED: &[&str] = &[
     // a fused multiply-add other than a matrix product's
-    "matrix_mul_mat2_const_vertex",
-    "matrix_mul_vec_mat4_const_vertex",
+    // (`matrix_mul_mat2_const_vertex` and `matrix_mul_vec_mat4_const_vertex`
+    // were refused so until the constrnd lowering folded an `ffma` of three
+    // constants in the vertex walk: their constant products draw since)
     "matrix_mul_mat2_attribute_vertex",
     "matrix_mul_mat4_attribute_vertex",
     "matrix_mixed_const_attribute_vertex",
