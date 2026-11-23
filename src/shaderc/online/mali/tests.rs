@@ -9374,8 +9374,10 @@ fn attribute_rows(vs: &str) -> (Vec<AttribRowOf>, Vec<(u8, u8)>) {
 /// base location, `vi_reg` the base (the GL core stages column k at
 /// `vi_reg + k`); two columns read leave one row, not two; an unread `vec4`
 /// between read ones has no row. Every location a record reads lies in the
-/// column range of a row, so the back end finds a staged attribute for each
-/// (`vertex_attributes`, NOT_BUILT_ATTRIBUTE_RECORDS before this).
+/// column range of a row's `vi_reg`, so the back end finds a staged
+/// attribute for each (`vertex_attributes`, NOT_BUILT_ATTRIBUTE_RECORDS
+/// before this). The rows' GL locations are the active attributes' run from
+/// 0, in declaration order: an attribute with no row takes none (#11307).
 #[test]
 fn attribute_rows_cover_the_matrix_columns_read() {
     let _serial = store::test_lock();
@@ -9398,17 +9400,36 @@ fn attribute_rows_cover_the_matrix_columns_read() {
         let mut want_names: Vec<&str> = want.iter().map(|w| w.0).collect();
         want_names.sort_unstable();
         assert_eq!(names, want_names, "one row per attribute read:\n{vs}");
-        for (name, loc, vi_reg) in &rows {
-            assert_eq!(loc, vi_reg, "{name}: vi_reg is the base location");
+        let cols = |name: &str| want.iter().find(|w| w.0 == name).expect("a named row").1;
+        let mut next = 0;
+        for (name, loc, _) in &rows {
+            assert_eq!(*loc, next, "{name}: the GL locations run from 0 over the rows:\n{vs}");
+            next += cols(name);
         }
         for &(loc, rec) in &records {
-            let covered = rows.iter().any(|(name, base, _)| {
-                let cols = want.iter().find(|w| w.0 == name).expect("a named row").1;
-                (*base..base + cols).contains(&loc)
-            });
-            assert!(covered, "record {rec} reads location {loc}, which no row covers: {rows:?}\n{vs}");
+            let covered = rows.iter().any(|(name, _, base)| (*base..base + cols(name)).contains(&loc));
+            assert!(covered, "record {rec} reads location {loc}, which no row's vi_reg covers: {rows:?}\n{vs}");
         }
     }
+}
+
+/// The rows of a vertex shader whose reads sit under `if`s: a read in the
+/// side of an `if` its constant condition does not take is no read, as
+/// Mesa's compile drops that side (`do_if_simplification`); a read under a
+/// condition of a uniform stays one even if the side never runs (the static
+/// use of #11239). `(name, GL location, vi_reg)`, in declaration order.
+#[test]
+fn a_read_in_a_side_a_constant_condition_does_not_take_is_no_row() {
+    let _serial = store::test_lock();
+    let vs = "attribute vec4 a0;\nattribute vec4 a1;\nattribute vec4 a2;\nattribute vec4 a3;\n\
+        attribute vec4 a4;\nattribute vec4 a5;\nuniform float u;\n\
+        void main() {\n vec4 c = a0;\n if (0 != 0) { c += a1; }\n if (u == 0.0) { c += a2; }\n\
+         if (1.0 < 2.0 && !(3 > 4)) { c += a3; }\n if (2.0 < 1.0) { c += a4; }\n if (false) { c += a5; }\n\
+         gl_Position = c;\n}\n";
+    let (rows, _) = attribute_rows(vs);
+    let want = [("a0", 0, 0), ("a2", 1, 2), ("a3", 2, 3)];
+    let want: Vec<AttribRowOf> = want.iter().map(|&(n, l, v)| (n.to_string(), l, v)).collect();
+    assert_eq!(rows, want);
 }
 
 /* ---- the ES 2.0 magnification switch of a vertex look-up --------------- */

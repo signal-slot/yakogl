@@ -85,22 +85,81 @@ active attributes, where the PowerVR, Vivante and V3D back ends list it
 2.10.4), and gl_test case 1 failed on the NanoPC-T6 (#11239).
 
 So `record` lists a row for every attribute the vertex shader statically
-reads (a load anywhere in the front end's IR, taken or not) and for every
+reads (a load anywhere in the front end's IR, taken or not, less the side
+of a constant `if` not taken: next section) and for every
 attribute a record names, in declaration order. An attribute with a row and
 no record is staged by the GL core and left out of the attribute table, like
 the unread matrix column above.
+
+## A read Mesa's compile drops, and the GL location (#11307)
+
+dEQP-GLES2 attribute_location.bind_aliasing.max_inactive_* declares two
+attributes per run of locations of its type over the 16 (32 floats, 8
+mat4s), reads one of each pair under `if (u_A != 0.0)` and the other under
+`if (0 != 0)`, and binds the pair to its run. The link must pass: the ones
+in the never-taken side are not active and take no location.
+
+Mesa:
+
+- The compile runs `do_common_optimization` once
+  (`M:compiler/glsl/glsl_parser_extras.cpp:2291`, from `opt_shader` at
+  `:2496`), whose `do_if_simplification` (`:2598`) puts the side an `if` of
+  a constant condition takes in its place and drops the other
+  (`M:compiler/glsl/opt_if_simplification.cpp:87-98`). After it nothing
+  reads `a_16`..`a_31`.
+- The link removes the inputs nothing reads
+  (`remove_dead_varyings_pre_linking`,
+  `M:compiler/glsl/gl_nir_linker.c:1183-1191`, called at `:4103-4104`)
+  before it assigns a location to any (`:4108`). An ES 3.00 vertex shader
+  is the exception (`:4103`): its declared attributes all take one.
+
+Ours had two faults on the way. With the rows of #11239 every load in the
+front end's IR counted, the `if (0 != 0)` side's too (the front end keeps
+the `if`): 32 rows, more than the record holds, and the compile was refused
+(`Defect(IrIndex)`). Before #11239 the rows were the records' 16, but each
+at the front end's location, which counts every declared attribute: in the
+float case `a_8`, the 17th declared, has location 16, and the GL core
+refused the link (`attribute 'a_8' has location 16, beyond the 16 vertex
+inputs`).
+
+So `record` now:
+
+- leaves out a load in the side of an `if` whose condition the front end's
+  constants alone decide, the side not taken (`dead_sides`, `const_lane`:
+  integer and bool operations, and the float ones `fold::fold_float` folds
+  exactly). A condition it does not fold keeps both sides, so a read is
+  dropped only where Mesa drops it;
+- gives the rows of an ES 1.00 shader the GL locations of the active
+  attributes from 0, in declaration order (the GL core's own layout,
+  gl/program.rs `attrib_layout`, makes the same choice), and keeps `vi_reg`
+  the front end's location, which the records name. An ES 3.00 shader keeps
+  the front end's locations (`layout(location)` among them).
+
+Not the same as Mesa yet: a condition that reads a `const` variable (a load
+of a local in our IR) is not folded, so its never-taken side still counts;
+and Mesa places the unbound attributes largest first
+(`M:compiler/glsl/gl_nir_link_varyings.c:60-70, 1453`), ours in declaration
+order.
 
 ## The tests
 
 - `tests/mali_attr_active.rs` (GL on the Mali mock): gl_test case 1's pair,
   plain and with `a_pos` bound to 3; the active attributes and their
-  locations, and a draw that is not refused.
+  locations, and a draw that is not refused. And the 7 max_inactive_*
+  shaders with dEQP's bindings: the link passes, 16 / columns attributes
+  are active, each at its binding, and the never-read ones have location -1.
+- `src/shaderc/online/mali/tests.rs`,
+  `a_read_in_a_side_a_constant_condition_does_not_take_is_no_row`: reads
+  under `if (0 != 0)`, `if (2.0 < 1.0)` and `if (false)` give no row, a read
+  under a uniform's condition and under a folded true one do; the GL
+  locations run from 0.
 
 - `src/shaderc/online/mali/tests.rs`,
   `attribute_rows_cover_the_matrix_columns_read`: a `mat2` with column 1
   read, a `mat3` with columns 1 and 2 read (one row, not two), each with a
   tail attribute, and `a0`, unread `a1`, `a2`; every record's location lies
-  in the column range of a row and `vi_reg` is the base location.
+  in the column range of a row's `vi_reg` (the base location), and the GL
+  locations run from 0 over the rows.
 - `tests/mali_attr_gap.rs` (GL on the Mali mock, through `glLinkProgram`
   and `glDrawArrays`): the control, an unread attribute last or between read
   ones, a dead read between read ones (`v_c = a1; v_c = a2;`), the `mat2`

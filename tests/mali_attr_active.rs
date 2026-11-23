@@ -7,7 +7,9 @@
 //! fragment shader does not read. gl_test case 1 (`uniform`) links such a
 //! pair and asks the program for its attributes; this test asks the same
 //! questions through the GL entry points, into the real Mali back end over a
-//! mock of its OSAL.
+//! mock of its OSAL. An attribute read only in the side of an `if` its
+//! constant condition does not take is not active and takes no location
+//! (#11307, dEQP-GLES2 attribute_location.bind_aliasing.max_inactive_*).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_attr_active
@@ -276,4 +278,68 @@ fn a_bound_position_keeps_the_other_attribute_active() {
     let p = link("bound", VS, FS, &[(c"a_pos", 3)]);
     assert_eq!(active(p), both(&[("a_pos", 3), ("a_color", 1)]));
     draw("bound", p, 3, 1);
+}
+
+/// dEQP-GLES2 attribute_location.bind_aliasing.max_inactive_<type>'s vertex
+/// shader (glsAttributeLocationTests.cpp, `BindInactiveAliasingAttributeTest`):
+/// for each location run of the type, from the top down, `a_k` read under
+/// `if (u_A != 0.0)` and `a_(k+16)` under `if (0 != 0)`, both bound to the
+/// run. 32 declared attributes, 16 locations.
+fn max_inactive(ty: &str, columns: u32) -> (String, Vec<(String, GLuint, bool)>) {
+    let to_vec4 = |n: &str| match ty {
+        "vec2" => format!("vec4({n}.xy, {n}.yx)"),
+        "vec3" => format!("vec4({n}.xyz, {n}.x)"),
+        _ => format!("vec4({n})"),
+    };
+    let mut attrs = Vec::new();
+    let mut loc = 16 - columns as i32;
+    let mut k = 0;
+    while loc >= 0 {
+        attrs.push((format!("a_{k}"), loc as GLuint, true));
+        attrs.push((format!("a_{}", k + 16), loc as GLuint, false));
+        loc -= columns as i32;
+        k += 1;
+    }
+    let mut s = String::from("#version 100\nvarying mediump vec4 v_color;\n");
+    for (n, _, _) in &attrs {
+        s += &format!("attribute mediump {ty} {n};\n");
+    }
+    s += "\nuniform mediump float u_A;\n\nvoid main (void)\n{\n\tmediump vec4 color = vec4(0.0);\n\n";
+    for (n, _, active) in &attrs {
+        let cond = if *active { "u_A != 0.0" } else { "0 != 0" };
+        s += &format!("\tif ({cond})\n\t{{\n\t\tcolor += {};\n\t}}\n", to_vec4(n));
+    }
+    s += "\n\tv_color = color;\n\tgl_Position = color;\n}\n";
+    (s, attrs)
+}
+
+/// The fragment shader of the attribute_location cases.
+const DEQP_FS: &str =
+    "#version 100\n\nvarying mediump vec4 v_color;\nvoid main (void)\n{\n\tgl_FragColor = v_color;\n}\n";
+
+/// An attribute read only under `if (0 != 0)` is not active: it takes no
+/// location, so binding it to an active one's location is no alias and the
+/// 16 active ones fit the 16 locations (#11307). What the dEQP case checks:
+/// the link passes and every active attribute is listed at its binding.
+#[test]
+fn an_attribute_read_only_in_a_never_taken_branch_takes_no_location() {
+    let _g = context();
+    for (ty, columns) in [("float", 1), ("vec2", 1), ("vec3", 1), ("vec4", 1), ("mat2", 2), ("mat3", 3), ("mat4", 4)] {
+        let (vs, attrs) = max_inactive(ty, columns);
+        let names: Vec<CString> = attrs.iter().map(|(n, _, _)| CString::new(n.as_str()).unwrap()).collect();
+        let binds: Vec<(&CStr, GLuint)> = names.iter().zip(&attrs).map(|(n, a)| (n.as_c_str(), a.1)).collect();
+        let p = link(ty, &vs, DEQP_FS, &binds);
+        // SAFETY: plain GL calls; the names are NUL-terminated.
+        unsafe {
+            let mut n: GLint = 0;
+            glGetProgramiv(p, GL_ACTIVE_ATTRIBUTES, &mut n);
+            assert_eq!(n, 16 / columns as GLint, "{ty}: the active attributes");
+            for ((_, at, active), name) in attrs.iter().zip(&names) {
+                let l = glGetAttribLocation(p, name.as_ptr());
+                let want = if *active { *at as GLint } else { -1 };
+                assert_eq!(l, want, "{ty}: glGetAttribLocation({name:?})");
+            }
+            glDeleteProgram(p);
+        }
+    }
 }

@@ -1739,12 +1739,109 @@ fn compile_stage<'s>(
 
 use super::ir as ir_mod;
 
+/// Per instruction of `m`: it lies in the side of an `if` that Mesa's
+/// compile removes, so nothing it loads is read. `do_common_optimization`
+/// (glsl_parser_extras.cpp:2291, from `opt_shader` at :2496) runs
+/// `do_if_simplification` (:2598), which puts the side an `if` of a constant
+/// condition takes in its place and drops the other
+/// (opt_if_simplification.cpp:87-98): `if (0 != 0) { c += a; }` reads no
+/// `a`. The condition is constant when [`const_lane`] folds it; one it does
+/// not fold keeps both sides, so a load is dropped only where Mesa drops it.
+fn dead_sides<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], CompileError> {
+    let dead = scratch
+        .alloc_filled(m.instrs.len(), false)
+        .map_err(|_| CompileError::OutOfMemory { which: Which::Scratch, left: scratch.left() })?;
+    for node in m.nodes {
+        if let ir_mod::Node::If { cond, then_, else_ } = *node {
+            match const_lane(m, cond.val, cond.swizzle[0], 0) {
+                Some(0) => mark_dead(m, then_, dead),
+                Some(_) => mark_dead(m, else_, dead),
+                None => {}
+            }
+        }
+    }
+    Ok(dead)
+}
+
+/// Marks every instruction of the nodes in `r`, and of the blocks nested in
+/// them, in `dead`.
+fn mark_dead(m: &ir_mod::Module<'_>, r: ir_mod::Range, dead: &mut [bool]) {
+    for node in m.nodes_of(r) {
+        match *node {
+            ir_mod::Node::Instr(id) => {
+                if let Some(d) = dead.get_mut(id.0 as usize) {
+                    *d = true;
+                }
+            }
+            ir_mod::Node::If { then_, else_, .. } => {
+                mark_dead(m, then_, dead);
+                mark_dead(m, else_, dead);
+            }
+            ir_mod::Node::Loop { body } => mark_dead(m, body, dead),
+            ir_mod::Node::Break | ir_mod::Node::Continue | ir_mod::Node::Return => {}
+        }
+    }
+}
+
+/// Lane `lane` of value `v` when the front end's constants alone make it,
+/// the bits as the IR keeps them (a bool's true is all ones): GLSL's
+/// `constant_expression_value` on the IR's form of the condition. A float
+/// operation folds as `fold_float` (fold.rs) does (exactly, or not at all);
+/// anything else that is not an integer or bool operation below, and any
+/// load, is not constant (None). `depth` bounds the walk.
+fn const_lane(m: &ir_mod::Module<'_>, v: ir_mod::ValueId, lane: u8, depth: u8) -> Option<u32> {
+    use ir_mod::AluOp as A;
+    let b = |c: bool| if c { u32::MAX } else { 0 };
+    let lane = usize::from(lane & 3);
+    match *m.instrs.get(v.0 as usize)? {
+        ir_mod::Op::ConstF32(x) => Some(x[lane]),
+        ir_mod::Op::ConstI32(x) => Some(x[lane] as u32),
+        ir_mod::Op::ConstBool(x) => Some(b(x[lane])),
+        ir_mod::Op::Alu(op, srcs) if depth < 32 => {
+            let mut k = [0u32; 3];
+            for (k, s) in k.iter_mut().zip(srcs).take(op.arity()) {
+                *k = const_lane(m, s.val, s.swizzle[lane], depth + 1)?;
+            }
+            let (x, y, z) = (k[0], k[1], k[2]);
+            let (i, j) = (x as i32, y as i32);
+            Some(match op {
+                A::Ieq => b(x == y),
+                A::Ine => b(x != y),
+                A::Ilt => b(i < j),
+                A::Ile => b(i <= j),
+                A::Iand => x & y,
+                A::Ior => x | y,
+                A::Ixor => x ^ y,
+                A::Inot => !x,
+                A::Bnot => b(x == 0),
+                A::Iadd => i.wrapping_add(j) as u32,
+                A::Imul => i.wrapping_mul(j) as u32,
+                A::Ineg => i.wrapping_neg() as u32,
+                A::Imin => i.min(j) as u32,
+                A::Imax => i.max(j) as u32,
+                A::B2i => u32::from(x != 0),
+                A::I2b => b(x != 0),
+                A::Bcsel => {
+                    if x != 0 {
+                        y
+                    } else {
+                        z
+                    }
+                }
+                _ => super::fold::fold_float(op, x, y, z)?,
+            })
+        }
+        _ => None,
+    }
+}
+
 /// The record of a compiled stage: the front end's reflection, the code in
 /// `usc` (as 32-bit words, little endian, the position program first) and
 /// the [`MaliShader`] in `priv_`, all in keep.
 fn record(
     stage: u32,
     l: &super::lower::Lowered<'_>,
+    es3: bool,
     sc: &StageCode<'_>,
     scratch: &Arena<'_>,
     keep: &'static Arena<'static>,
@@ -1792,38 +1889,60 @@ fn record(
         /* The active attributes, as glGetActiveAttrib and glGetAttribLocation
          * report them: the ones the shader statically reads (a load anywhere
          * in its IR, taken or not: ES 2.0 2.10.4, the rule of the other back
-         * ends, `ShcAttribBinding::active`), in declaration order. Not the
-         * ones the code reads: the program's vertex shader is built for its
-         * fragment shader's reads (`vs_for_fragment`) and loads no attribute
-         * that feeds only a varying the link removed (gl_test case 1:
-         * `v_color = a_color` under a fragment shader that reads no varying).
-         * Such an attribute has a row here and no record: the GL core stages
-         * it and the frame builder, which goes by the records
-         * (`MaliShader::attributes`, src/mali/backend.rs `vertex_attributes`),
-         * leaves it. A location with a record always has its row (the back
-         * end's late fold keeps a record whose load it removed).
+         * ends, `ShcAttribBinding::active`), less the loads in the side of an
+         * `if` whose condition is a constant expression and that side is not
+         * the one taken (Mesa's compile drops it first, [`dead_sides`]), in
+         * declaration order. Not the ones the code reads: the program's
+         * vertex shader is built for its fragment shader's reads
+         * (`vs_for_fragment`) and loads no attribute that feeds only a
+         * varying the link removed (gl_test case 1: `v_color = a_color`
+         * under a fragment shader that reads no varying). Such an attribute
+         * has a row here and no record: the GL core stages it and the frame
+         * builder, which goes by the records (`MaliShader::attributes`,
+         * src/mali/backend.rs `vertex_attributes`), leaves it. A location
+         * with a record always has its row (the back end's late fold keeps
+         * a record whose load it removed).
          *
          * A matrix is one row at its base location, the GL core stages each
          * column at vi_reg + k (gl/draw.rs `vertex_inputs`): a column read
          * beyond column 0 finds its matrix by the column range
-         * (docs/notes/mali-attribute-records.md) */
+         * (docs/notes/mali-attribute-records.md).
+         *
+         * `vi_reg` is the front end's location, which the records name.
+         * `location` is the GL location (the GL core's default index for
+         * the attribute): in an ES 1.00 shader an attribute that is not
+         * active takes none, so the active ones take the locations from 0
+         * in declaration order, as the GL core's own layout does
+         * (gl/program.rs `attrib_layout`). Mesa removes the attributes
+         * nothing reads before it assigns any location
+         * (gl_nir_linker.c:4103-4108, `remove_dead_varyings_pre_linking`,
+         * :1183-1191, then `gl_assign_attribute_or_color_locations`). An ES
+         * 3.00 shader keeps the front end's locations: there Mesa assigns
+         * them to the attributes declared (the same lines, by the ES 3.2
+         * aliasing rule), and a `layout(location)` is the front end's
+         * location already (dEQP-GLES2 attribute_location.bind_aliasing.
+         * max_inactive_*: 32 declared, 16 active, #11307). */
+        let dead = dead_sides(m, scratch)?;
         let mut n = 0usize;
+        let mut next = 0u8;
         for a in l.reflection.attribs.iter() {
-            let columns = a.location..a.location.saturating_add(glsl::columns(a.gl_type));
-            let loaded = m.instrs.iter().any(
-                |op| matches!(op, ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Attrib(l), .. } if columns.contains(l)),
-            );
+            let width = glsl::columns(a.gl_type);
+            let columns = a.location..a.location.saturating_add(width);
+            let loaded = m.instrs.iter().zip(dead.iter()).any(|(op, dead)| {
+                !dead && matches!(op, ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Attrib(l), .. } if columns.contains(l))
+            });
             let recorded = sc.attributes[..sc.nattr].iter().any(|(loc, _)| columns.contains(loc));
             if !loaded && !recorded {
                 continue;
             }
             let dst = sh.attribs.get_mut(n).ok_or(refused(MaliError::Defect(Defect::IrIndex)))?;
             crate::util::set_name(&mut dst.name, a.name.as_bytes());
-            dst.location = a.location;
+            dst.location = if es3 { a.location } else { next };
             dst.components = a.components;
             dst.vi_reg = a.location;
             dst.format = 0;
             dst.gl_type = a.gl_type;
+            next = next.saturating_add(width);
             n += 1;
         }
         sh.num_attribs = n as u8;
@@ -1919,7 +2038,7 @@ fn compile_lowered<'s>(
         r => r,
     }
     .map_err(refused)?;
-    let sh = record(stage, &l, &sc, scratch, keep)?;
+    let sh = record(stage, &l, decls.es3(), &sc, scratch, keep)?;
     let blocks = (l.reflection.blocks, l.reflection.block_members, [l.reflection.uniforms, &[][..]]);
     Ok((sh, blocks))
 }
@@ -2041,7 +2160,7 @@ pub fn compile_vs_for_reads<'s>(
     let mut mv = [motion::Moved::NONE; motion::MAX_MOVED];
     let n = motion::decode(moved, &mut mv).map_err(refused)?;
     let sc = compile_module_for(&l.module, decls.uniforms, Some(reads), &mv[..n], scratch).map_err(refused)?;
-    let sh = record(SHC_STAGE_VERTEX, &l, &sc, scratch, keep)?;
+    let sh = record(SHC_STAGE_VERTEX, &l, decls.es3(), &sc, scratch, keep)?;
     let blocks = (l.reflection.blocks, l.reflection.block_members, [l.reflection.uniforms, &[][..]]);
     Ok((sh, blocks))
 }
