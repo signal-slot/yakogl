@@ -67,6 +67,7 @@ mk() {
     cp "$2" "$1/u-boot-env.bin"
     python3 -I "$envtool" "${L[@]}" print "$2" > "$1/fw_printenv.txt" 2> /dev/null
     echo /dev/mmcblk1p7 > "$1/u-boot-env.dev"
+    echo SD > "$1/disk-type.txt"
     echo "/dev/mmcblk1p8 ext4" > "$1/boot-mount.txt"
     printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/mmcblk1p8 120000 20000 100000 17%% /boot\n' > "$1/boot-df.txt"
     printf '%s  ./Image\n%s  ./stm32mp257f-dk.dtb\n%s  ./extlinux/extlinux.conf\n%s  ./yakogl/mp2_hello.bin\n' \
@@ -147,9 +148,11 @@ cat > "$T/bin/ssh" <<'EOF'
 cmd=${*: -1}
 echo "$cmd" >> "$FAKE/ssh.log"
 case $cmd in
-    findmnt*) echo "/dev/mmcblk1p8 ext4" ;;
-    "lsblk -rno"*) printf '/dev/mmcblk1 \n/dev/mmcblk1p7 u-boot-env\n/dev/mmcblk1p8 bootfs\n' ;;
-    "lsblk -o"*) echo "NAME SIZE TYPE PARTLABEL MOUNTPOINT"; echo "mmcblk1p8 1G part bootfs /boot" ;;
+    findmnt*) echo "/dev/${CARD:-mmcblk1}p8 ext4" ;;
+    "cat /sys/block/"*) case $cmd in *"/${CARD:-mmcblk1}/"*) echo "${CTYPE:-SD}" ;; *) echo MMC ;; esac ;;
+    "lsblk -rno"*) c=${CARD:-mmcblk1}
+        printf '/dev/%s \n/dev/%sp7 u-boot-env\n/dev/%sp8 bootfs\n' "$c" "$c" "$c" ;;
+    "lsblk -o"*) echo "NAME SIZE TYPE PARTLABEL MOUNTPOINT"; echo "${CARD:-mmcblk1}p8 1G part bootfs /boot" ;;
     *fw_printenv*) cat "$FAKE/a/fw_printenv.txt" ;;
     *"dd if="*) cat "$FAKE/a/u-boot-env.bin" ;;
     "ls -lR"*) echo "total 0" ;;
@@ -170,6 +173,21 @@ sed -i 's|^    \*fw_printenv\*) cat .*|    *fw_printenv*) if [ -n "${FWFAIL:-}" 
 PATH=$T/bin:$PATH FWFAIL=1 BOARD_HOST=user@board MP2_SUDO= expect "collect.sh tolerates a failing fw_printenv" 0 bash "$col" "$T/got3"
 has "failing fw_printenv: error kept" 'fw_printenv failed'
 expect "failing fw_printenv: partition equals the fixture" 0 python3 -I "$sum" "$T/a" "$T/got3"
+# the real numbering (card mmcblk0, eMMC mmcblk1 with the same labels), a
+# renumbered card (mmcblk2), an MMC-type /boot (refused)
+for c in mmcblk0 mmcblk2; do
+    PATH=$T/bin:$PATH CARD=$c BOARD_HOST=user@board MP2_SUDO= expect "collect.sh: card on $c" 0 bash "$col" "$T/g-$c"
+    has "card on $c: resolved node recorded" "card /dev/$c, u-boot-env /dev/${c}p7"
+    if [ "$(cat "$T/g-$c/u-boot-env.dev")" = "/dev/${c}p7" ] && [ "$(cat "$T/g-$c/disk-type.txt")" = SD ]; then ok "card on $c: u-boot-env.dev and disk-type.txt"; else bad "card on $c: u-boot-env.dev and disk-type.txt"; fi
+done
+PATH=$T/bin:$PATH CARD=mmcblk1 CTYPE=MMC BOARD_HOST=user@board MP2_SUDO= expect "collect.sh: MMC-type /boot is refused" 2 bash "$col" "$T/g-mmc"
+has "MMC /boot: reason" 'not SD'
+if [ -e "$T/g-mmc/u-boot-env.bin" ]; then bad "MMC /boot: nothing of the partition was read"; else ok "MMC /boot: nothing of the partition was read"; fi
+# before on mmcblk2, after on mmcblk0: the same fixture, an empty diff
+expect "renumbered card: empty diff" 0 python3 -I "$sum" "$T/g-mmcblk2" "$T/g-mmcblk0"
+has "renumbered card: identical" 'RESULT: IDENTICAL'
+mkdir -p "$T/mmcdir"; cp -r "$T/same/." "$T/mmcdir/"; echo MMC > "$T/mmcdir/disk-type.txt"
+expect "a non-SD read in a comparison differs" 1 python3 -I "$sum" "$T/a" "$T/mmcdir"
 # every command sent is one of the read-only ones
 if grep -Eq 'fw_setenv|dd of=|mount|modprobe|rmmod|insmod|tailscale|sshd|systemctl| > /dev|tee ' "$T/ssh.log"; then
     bad "no write command was sent to the board"; cat "$T/ssh.log"

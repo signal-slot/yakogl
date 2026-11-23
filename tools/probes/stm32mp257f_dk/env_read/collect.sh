@@ -21,7 +21,8 @@
 #   boot-mount.txt   /boot's source device and file system (findmnt)
 #   partitions.txt   lsblk of the card /boot is on, then /proc/partitions
 #   u-boot-env.bin   the whole u-boot-env partition (dd if=, bs=64k)
-#   u-boot-env.dev   its device path
+#   u-boot-env.dev   its device path (resolved by label on /boot's disk)
+#   disk-type.txt    /sys/block/<disk>/device/type of that disk (must be SD)
 #   boot-ls.txt      ls -lR /boot
 #   boot-sizes.txt   "size ./name" for every regular file under /boot
 #   boot-sha256.txt  sha256sum of the same files, paths from /boot
@@ -50,6 +51,10 @@ rd 60 boot-mount.txt 'findmnt -n -v -o SOURCE,FSTYPE -T /boot'
 read -r BOOT_DEV FSTYPE < "$OUT/boot-mount.txt"
 [[ ${BOOT_DEV:-} =~ $PART_RE ]] || die "/boot's source '${BOOT_DEV:-}' is not a partition of an mmcblk device"
 DISK=${BOOT_DEV%p*}
+# the card is the SD disk /boot is on, whatever its number (mmcblk0 on the
+# DK, mmcblk2 after some reboots); an MMC-type disk is the eMMC: refuse
+rd 60 disk-type.txt "cat /sys/block/${DISK#/dev/}/device/type"
+[ "$(tr -d '[:space:]' < "$OUT/disk-type.txt")" = SD ] || die "/boot is on $DISK, whose device type is '$(tr -d '\n' < "$OUT/disk-type.txt")', not SD: refusing (the eMMC is never read)" 2
 rd 60 partitions.txt "lsblk -o NAME,SIZE,TYPE,PARTLABEL,MOUNTPOINT $DISK; echo; cat /proc/partitions"
 rd 60 .lsblk-labels "lsblk -rno PATH,PARTLABEL $DISK"
 ENV_DEV=$(awk '$2 == "u-boot-env" { print $1 }' "$OUT/.lsblk-labels" | head -1)
@@ -66,4 +71,4 @@ rd 60 boot-ls.txt 'ls -lR /boot'
 rd 60 boot-sizes.txt "cd /boot && find . -type f -printf '%s %p\\n' | sort -k2"
 rd 300 boot-sha256.txt "cd /boot && find . -type f -print0 | sort -z | ${SU}xargs -0 sha256sum"
 rd 60 boot-df.txt 'df -P /boot'
-echo "$TAG: read into $OUT (fstype ${FSTYPE:-?})"
+echo "$TAG: read into $OUT (fstype ${FSTYPE:-?}, card $DISK, u-boot-env $ENV_DEV)"
