@@ -36,7 +36,11 @@
 #              MP2_NO_WATCHDOG=1 waives both), and a refusal of a
 #              LIFETIME_S=0 product build under a count (its line 'no
 #              lifetime of its own (product build)': it never resets, so the
-#              count would never run out). Then, read-only: /boot on the SD
+#              count would never run out). Under a count the image's own
+#              marker 'yakogl-lifetime-s=<N>' (NUL-terminated, mp2_product) is
+#              read too: N=0 (indefinite, also '00'), or the marker twice with
+#              different values, is refused; only 'forever' with a person may
+#              carry it. An image without the marker is accepted. Then, read-only: /boot on the SD
 #              card, the staged script equal to this commit's build, the
 #              card's u-boot-env partition (found in lsblk of that card, never
 #              by /dev/disk/by-partlabel, which may name the eMMC's) read
@@ -516,6 +520,16 @@ check_image() {
     if [ "$n" != forever ]; then
         if [ "${MP2_NO_WATCHDOG:-0}" != 1 ] && ! grep -aqF -e "$MARKER" -e "$PRODUCT_MARKER" "$img"; then
             die "image has no watchdog marker '$MARKER' or '$PRODUCT_MARKER': BL2's IWDG would reset it in about 32 s. MP2_NO_WATCHDOG=1 accepts that on purpose"
+        fi
+        # the structured marker 'yakogl-lifetime-s=<N>' + NUL (mp2_product): N=0 is indefinite
+        local lt
+        lt=$("${PY[@]}" -c 'import re, sys
+v = {int(m) for m in re.findall(rb"yakogl-lifetime-s=([0-9]+)\0", open(sys.argv[1], "rb").read())}
+print("zero" if 0 in v else "conflict" if len(v) > 1 else "ok")' "$img") || die "cannot read the image: $img" 2
+        if [ "$lt" = zero ]; then
+            die "REFUSED: the image carries 'yakogl-lifetime-s=0' (an indefinite build): it never resets, so a count of $n would never run out. Use 'forever' with a person, or a build with a lifetime"
+        elif [ "$lt" = conflict ]; then
+            die "REFUSED: the image carries 'yakogl-lifetime-s=' more than once with different values (ambiguous; 'yakogl-lifetime-s=0' cannot be ruled out). Use 'forever' with a person, or a build with a lifetime"
         fi
         if grep -aqF -e "$NOLIFE_MARKER" "$img"; then
             die "REFUSED: the image is a LIFETIME_S=0 product build ('$NOLIFE_MARKER'): it never resets, so a count of $n would never run out. Use 'forever' with a person, or a build with a lifetime"

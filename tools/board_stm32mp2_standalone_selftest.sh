@@ -133,6 +133,11 @@ PROD=$W/prod.bin
 { head -c 56 /dev/zero; printf 'ARMd'; head -c 4000 /dev/zero; printf 'lifetime %%u s (PSCI SYSTEM_RESET)\0mp2_wdtr: product refresh armed'; } >"$PROD"
 NOLIFE=$W/nolife.bin
 { head -c 56 /dev/zero; printf 'ARMd'; head -c 4000 /dev/zero; printf 'no lifetime of its own (product build)\0mp2_wdtr: product refresh armed'; } >"$NOLIFE"
+mklt() { { head -c 56 /dev/zero; printf 'ARMd'; head -c 4000 /dev/zero; printf 'gc_wdog_arm: armed'; for m in "$@"; do printf 'yakogl-lifetime-s=%s\0' "$m"; done; } >"$W/lt-$1-$#.bin"; echo "$W/lt-$1-$#.bin"; }
+LT0=$(mklt 0)
+LT120=$(mklt 120)
+LTBOTH=$(mklt 120 0)
+LT00=$(mklt 00)
 BADHDR=$W/badhdr.bin
 head -c 4096 /dev/zero >"$BADHDR"
 BIG=$W/big.bin
@@ -289,6 +294,17 @@ has "it names the product marker" 'mp2_wdtr: product refresh armed'
 expect "a LIFETIME_S=0 build under a count" 3 "$R" --dry-run default "$NOLIFE" 2
 has "it says why" 'LIFETIME_S=0'
 expect "a LIFETIME_S=0 build under a count, MP2_NO_WATCHDOG=1" 3 env MP2_NO_WATCHDOG=1 "$R" --dry-run default "$NOLIFE" 9
+expect "lifetime-0 marker under a count" 3 "$R" --dry-run default "$LT0" 2
+has "it names the marker" 'yakogl-lifetime-s=0'
+has "it starts REFUSED:" 'REFUSED:'
+expect "lifetime-0 marker under a count, MP2_NO_WATCHDOG=1" 3 env MP2_NO_WATCHDOG=1 "$R" --dry-run default "$LT0" 2
+expect "lifetime-120 marker under a count" 0 "$R" --dry-run default "$LT120" 2
+expect "markers 120 and 0 under a count" 3 "$R" --dry-run default "$LTBOTH" 2
+has "conflicting markers name the marker" 'yakogl-lifetime-s='
+expect "marker =00 is 0" 3 "$R" --dry-run default "$LT00" 2
+has "=00 names the marker" 'yakogl-lifetime-s=0'
+expect "lifetime-0 marker under forever with a person" 0 env BOARD_PERSON_PRESENT=1 MP2_NO_WATCHDOG=1 "$R" --dry-run default "$LT0" forever
+expect "image without any marker under a count" 0 "$R" --dry-run default "$IMG" 2
 expect "default without args" 2 "$R" --dry-run default
 expect "unknown verb" 2 "$R" --dry-run frobnicate
 expect "no verb" 2 "$R"
@@ -469,6 +485,7 @@ if grep -q 'mmcblk1p' "$FK/ssh.log"; then bad "the card as mmcblk0: no command n
 fake "$FIX/pristine.bin" installed
 expect "live forever without a person" 2 env -u BOARD_PERSON_PRESENT BOARD_HOST=u@fake "$R" default "$PROD" forever
 expect "live LIFETIME_S=0 under a count" 3 live default "$NOLIFE" 2
+expect "live lifetime-0 marker under a count" 3 live default "$LT0" 2
 [ ! -s "$FK/ssh.log" ] && ok "host-side refusals sent nothing to the board" || bad "host-side refusals" "$(cat "$FK/ssh.log")"
 
 # a write that does not read back is undone
