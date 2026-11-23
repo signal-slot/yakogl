@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Harvested dEQP-GLES2 programs (tools/cts/deqp-es2-programs.sh) that the 4.2
+# back end compiles and the V3D 7.1 online back end refuses
+# (tests/shaderc71_deqp_programs.rs). `<program id>: <exact message>`, the
+# message being V3d71Error's Debug form. A refusal not listed, a changed
+# message and a listed program that now compiles all fail the test.
+
+# 7.1-only, harness: dEQP-GLES2.functional.attribute_location.bind_aliasing.
+# max_cond_{float,vec2,vec3,vec4,mat2,mat3}. The vertex shader declares more
+# than 16 attributes and the case aliases several of them to one location with
+# glBindAttribLocation. The harvest holds the shader text only, not the
+# bindings, so this harness sees every declared attribute and chain71 refuses
+# above 16; the 4.2 run compiled them through the GL with the bindings. The
+# bindings are not in index.tsv or programs/, so the harness cannot honour
+# them. Not a back-end defect.
+016a206a31f8f211: Chain(NotYet("more than 16 vertex attributes"))
+0bb58d4b9d48e3ec: Chain(NotYet("more than 16 vertex attributes"))
+3e3e588f2c00e2ce: Chain(NotYet("more than 16 vertex attributes"))
+a6e80f0513a4176f: Chain(NotYet("more than 16 vertex attributes"))
+d575a06ead6d52a3: Chain(NotYet("more than 16 vertex attributes"))
+db3328c4bfc47f49: Chain(NotYet("more than 16 vertex attributes"))
