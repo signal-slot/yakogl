@@ -1357,6 +1357,46 @@ fn is_float_uniform(gl_type: u16) -> bool {
     !matches!(gl_type, 0x1404 | 0x1405 | 0x8B53..=0x8B58 | 0x8DC6..=0x8DC8)
 }
 
+/// A mediump fragment shader's walk `f` reads two words of a struct's float
+/// members that are not next to each other in the block. Mesa keeps the
+/// members fp32 and loads each word the shader reads alone; two loads of
+/// neighbouring words are joined (`nir_opt_load_store_vectorize`), and only
+/// then are their narrowings one `V2F32_TO_V2F16` (linkage.uniform_struct:
+/// `val.a`, `val.b`, `V2F32_TO_V2F16.discard r0, u2.w1, u2.w0`). Words apart
+/// are narrowed alone (linkage.uniform_struct_vec4's `val.b.y + val.a.x`:
+/// `FADD.f32 r0.h0, u2.w0, 0x0.neg` and `FADD.f32 r1.h0, u2.w1, 0x0.neg`).
+/// The routes of a colour of booleans and of integers' floats pair them
+/// anyway: a value Mesa's, words not. A built-in's members (`gl_DepthRange`)
+/// are not a struct uniform's here.
+fn reads_member_words_apart(m: &ir_mod::Module<'_>, f: &nir_fs::Fs<'_>) -> bool {
+    let member = |d: u16| {
+        m.uniforms.iter().any(|u| {
+            u.dword_off != crate::shaderc::SHC_UNIFORM_NO_BLOCK
+                && u.name.contains('.')
+                && !u.name.starts_with("gl_")
+                && is_float_uniform(u.gl_type)
+                && d >= u.dword_off
+                && d < u.dword_off + u.dwords.max(1)
+        })
+    };
+    let mut words = [0u16; 4];
+    let mut n = 0;
+    for &id in &f.nir.order[..f.nir.len] {
+        if let nir::Kind::Uniform { dword, .. } = f.nir.nodes[id as usize].kind {
+            if member(dword) && !words[..n].contains(&dword) {
+                /* more words than any reference reads */
+                if n == words.len() {
+                    return true;
+                }
+                words[n] = dword;
+                n += 1;
+            }
+        }
+    }
+    words[..n].sort_unstable();
+    words[..n].windows(2).any(|w| w[1] != w[0] + 1)
+}
+
 fn compile_stage<'s>(
     m: &ir_mod::Module<'_>,
     precision: &[super::reflect::UniformDecl<'_>],
@@ -1634,18 +1674,25 @@ fn compile_stage<'s>(
             /* a mediump shader's colour of booleans with fp16 compares on
              * varying lanes (dEQP's `isOk` chains, deqp_intval_reslib_*): the
              * lanes converted as `nir_lower_mediump_io` does, then a highp
-             * shader's program with the fp16 lanes paired */
-            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
-            nir_fs::convert_inputs16(&mut f)
+             * shader's program with the fp16 lanes paired. The block is
+             * laid out as the walk reads it: a struct's float member fp32
+             * (`FsPrecision::fp32_uniforms`), not fp16 halves the code would
+             * read as fp32 words (linkage.uniform_struct) */
+            let highp = |name: &str| fp32(name);
+            let member = if reads_member_words_apart(m, &f) { Err(MaliError::FsUniform) } else { Ok(()) };
+            member
+                .and_then(|()| nir_fs::convert_inputs16(&mut f))
                 .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else if nir_fs::int_colour16(&f) {
             /* a mediump shader's colour of integers' floats, narrowed where
              * they are stored and paired by the colour's arithmetic (dEQP's
              * operator suite, deqp_intval_opfs_add_int_mediump): a highp
-             * shader's program */
-            let highp = |name: &str| matches!(prec(name), Some(Precision::High));
-            select::UboLayout::fs16(m, &f.nir, &highp)
+             * shader's program; the block as the walk reads it, as above */
+            let highp = |name: &str| fp32(name);
+            let member = if reads_member_words_apart(m, &f) { Err(MaliError::FsUniform) } else { Ok(()) };
+            member
+                .and_then(|()| select::UboLayout::fs16(m, &f.nir, &highp))
                 .and_then(|ubo| nir_fs::select_highp(&mut p, &mut f, &ubo, scratch).map(|()| ubo))
         } else if nir_fs::loop16(&f) {
             /* a mediump shader's kept loop (docs/notes/mali-deqp-loops.md

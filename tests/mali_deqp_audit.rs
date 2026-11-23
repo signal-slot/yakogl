@@ -58,6 +58,13 @@ const LOWERED: &[&str] = &[
     "l1_matrix_sub_uniform_mediump_mat3_vs",
 ];
 
+/// The references the compiler refuses, with the text of the refusal: a
+/// shape that compiled to other words than Mesa's and is now named instead.
+const REFUSED: &[(&str, &str)] = &[
+    /* two struct members' words apart, narrowed as a pair (tests/mali_deqp_structmember.rs) */
+    ("o_linkage_uniform_struct_vec4", "a mediump fragment shader uniform other than"),
+];
+
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[
     "a1_op_greater_or_equal_highp_float_vs",
@@ -80,7 +87,6 @@ const DIFFERS: &[&str] = &[
     "m1_matrix_mul_uniform_highp_mat2_vs",
     "m1_uniform_initial_mat4_vs",
     "o_fragdata_valid_dynamic_index",
-    "o_linkage_uniform_struct_vec4",
     "r1_idx_vec2_static_loop_write_component_read_fs",
     "r1_swz_mediump_vec4_qpts_vs",
     "r1_swz_mediump_vec4_xyzw_vs",
@@ -386,10 +392,10 @@ fn o_fragdata_valid_dynamic_index() {
     mali_ref::assert_matches("deqp_audit_o_fragdata_valid_dynamic_index");
 }
 
-/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4` (cause other): a varying computed from uniforms only, which Mesa's link moves into the fragment shader; Mesa cancels `(s+d)-d`.
+/// `dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4` (cause other): a varying computed from uniforms only, which Mesa's link moves into the fragment shader; Mesa cancels `(s+d)-d`. Refused now: the fragment shader reads two members' words apart (`val.b.y + val.a.x`), which Mesa narrows apart and this route pairs (`MaliError::FsUniform`).
 /// Rebuilt from linkage.test `uniform_struct_vec4` (the vertex and fragment bodies verbatim, the output check as the ShaderLibrary writes it).
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
+#[ignore = "refused: two struct members' words apart, narrowed as a pair; pinned by differs_pinned"]
 fn o_linkage_uniform_struct_vec4() {
     mali_ref::assert_matches("deqp_audit_o_linkage_uniform_struct_vec4");
 }
@@ -427,9 +433,9 @@ fn region_words(json: &str, region: &str) -> Option<Result<usize, String>> {
 #[test]
 fn references_parse() {
     let names = on_disk();
-    let mut listed: Vec<&str> = LOWERED.iter().chain(DIFFERS).copied().collect();
+    let mut listed: Vec<&str> = LOWERED.iter().chain(DIFFERS).copied().chain(REFUSED.iter().map(|r| r.0)).collect();
     listed.sort_unstable();
-    assert_eq!(names, listed, "a deqp_audit_* reference is in neither LOWERED nor DIFFERS");
+    assert_eq!(names, listed, "a deqp_audit_* reference is in none of LOWERED, DIFFERS and REFUSED");
     let mut bad = Vec::new();
     for name in &names {
         let r = mali_ref::Reference::load(&format!("deqp_audit_{name}"));
@@ -453,8 +459,8 @@ fn references_parse() {
 }
 
 /// Each DIFFERS shape still compiles and still is not Mesa's words; each
-/// LOWERED one is byte-equal. A lowering step that moves one changes the
-/// lists in the same commit.
+/// LOWERED one is byte-equal; each REFUSED one is refused with its text. A
+/// step that moves one changes the lists in the same commit.
 #[test]
 fn differs_pinned() {
     let mut changed = Vec::new();
@@ -480,6 +486,9 @@ fn differs_pinned() {
             }
             Err(e) => changed.push(format!("{name}: now refused: {e}")),
         }
+    }
+    for (name, text) in REFUSED {
+        changed.extend(mali_ref::refusal_change(&format!("deqp_audit_{name}"), text));
     }
     assert!(changed.is_empty(), "{}", changed.join("\n"));
 }
