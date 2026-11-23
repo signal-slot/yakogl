@@ -27,7 +27,22 @@ mod mali_ref;
 
 /// The references the lowering made byte-equal, without the `deqp_arith_`
 /// prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &["matrix_div_fs_highp"];
+const LOWERED: &[&str] = &[
+    "matrix_div_fs_highp",
+    /* arith step 3: floor, ceil, sign of a mediump varying lane, float `!=`
+     * of varying lanes (fp32 at either precision) */
+    "op_binary_not_equal_fs_highp",
+    "op_binary_not_equal_fs_mediump",
+    "op_common_ceil_fs_mediump",
+    "op_common_floor_fs_mediump",
+    "op_common_sign_fs_mediump",
+    "op_float_notequal_fs_highp",
+    "op_float_notequal_fs_mediump",
+    /* arith step 4a: min, max, clamp of mediump varying lanes */
+    "op_common_clamp_fs_mediump",
+    "op_common_max_fs_mediump",
+    "op_common_min_fs_mediump",
+];
 
 /// The references that compile with other words than Mesa's. None yet.
 const DIFFERS: &[&str] = &[];
@@ -143,10 +158,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("op_binary_mul_assign_fs_mediump", OPERAND),
     /* op.binary.mul fs mediump: 6 cases of shaders.operator.binary_operator.mul.mediump_float_vec3_fragment */
     ("op_binary_mul_fs_mediump", OPERAND),
-    /* op.binary.not_equal fs highp: 4 cases of shaders.operator.binary_operator.not_equal.highp_float_fragment */
-    ("op_binary_not_equal_fs_highp", ARITH),
-    /* op.binary.not_equal fs mediump: 8 cases of shaders.operator.binary_operator.not_equal.mediump_float_fragment */
-    ("op_binary_not_equal_fs_mediump", ARITH),
     /* op.binary.not_equal vs highp: 6 cases of shaders.operator.binary_operator.not_equal.highp_ivec2_vertex */
     ("op_binary_not_equal_vs_highp", ARITH),
     /* op.binary.not_equal vs mediump: 12 cases of shaders.operator.binary_operator.not_equal.mediump_ivec2_vertex */
@@ -165,36 +176,26 @@ const REFUSED: &[(&str, &str)] = &[
     ("op_common_abs_fs_mediump", OPERAND),
     /* op.common.ceil fs highp: 4 cases of shaders.operator.common_functions.ceil.highp_float_fragment */
     ("op_common_ceil_fs_highp", ARITH),
-    /* op.common.ceil fs mediump: 8 cases of shaders.operator.common_functions.ceil.mediump_float_fragment */
-    ("op_common_ceil_fs_mediump", ARITH),
     /* op.common.ceil vs highp: 4 cases of shaders.operator.common_functions.ceil.highp_float_vertex */
     ("op_common_ceil_vs_highp", ARITH),
     /* op.common.ceil vs mediump: 8 cases of shaders.operator.common_functions.ceil.mediump_float_vertex */
     ("op_common_ceil_vs_mediump", ARITH),
     /* op.common.clamp fs highp: 7 cases of shaders.operator.common_functions.clamp.highp_float_fragment */
     ("op_common_clamp_fs_highp", ARITH),
-    /* op.common.clamp fs mediump: 14 cases of shaders.operator.common_functions.clamp.mediump_float_fragment */
-    ("op_common_clamp_fs_mediump", ARITH),
     /* op.common.clamp vs highp: 7 cases of shaders.operator.common_functions.clamp.highp_float_vertex */
     ("op_common_clamp_vs_highp", ARITH),
     /* op.common.clamp vs mediump: 14 cases of shaders.operator.common_functions.clamp.mediump_float_vertex */
     ("op_common_clamp_vs_mediump", ARITH),
     /* op.common.floor fs highp: 4 cases of shaders.operator.common_functions.floor.highp_float_fragment */
     ("op_common_floor_fs_highp", ARITH),
-    /* op.common.floor fs mediump: 8 cases of shaders.operator.common_functions.floor.mediump_float_fragment */
-    ("op_common_floor_fs_mediump", ARITH),
     /* op.common.max fs highp: 7 cases of shaders.operator.common_functions.max.highp_float_fragment */
     ("op_common_max_fs_highp", ARITH),
-    /* op.common.max fs mediump: 14 cases of shaders.operator.common_functions.max.mediump_float_fragment */
-    ("op_common_max_fs_mediump", ARITH),
     /* op.common.max vs highp: 7 cases of shaders.operator.common_functions.max.highp_float_vertex */
     ("op_common_max_vs_highp", ARITH),
     /* op.common.max vs mediump: 14 cases of shaders.operator.common_functions.max.mediump_float_vertex */
     ("op_common_max_vs_mediump", ARITH),
     /* op.common.min fs highp: 7 cases of shaders.operator.common_functions.min.highp_float_fragment */
     ("op_common_min_fs_highp", ARITH),
-    /* op.common.min fs mediump: 14 cases of shaders.operator.common_functions.min.mediump_float_fragment */
-    ("op_common_min_fs_mediump", ARITH),
     /* op.common.min vs highp: 7 cases of shaders.operator.common_functions.min.highp_float_vertex */
     ("op_common_min_vs_highp", ARITH),
     /* op.common.min vs mediump: 14 cases of shaders.operator.common_functions.min.mediump_float_vertex */
@@ -207,8 +208,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("op_common_mod_fs_mediump", ARITH),
     /* op.common.sign fs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_fragment */
     ("op_common_sign_fs_highp", ARITH),
-    /* op.common.sign fs mediump: 8 cases of shaders.operator.common_functions.sign.mediump_float_fragment */
-    ("op_common_sign_fs_mediump", ARITH),
     /* op.common.sign vs highp: 4 cases of shaders.operator.common_functions.sign.highp_float_vertex */
     ("op_common_sign_vs_highp", ARITH),
     /* op.common.sign vs mediump: 8 cases of shaders.operator.common_functions.sign.mediump_float_vertex */
@@ -253,10 +252,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("op_exponential_pow_vs_highp", ARITH),
     /* op.exponential.pow vs mediump: 4 cases of shaders.operator.exponential.pow.mediump_float_vertex */
     ("op_exponential_pow_vs_mediump", ARITH),
-    /* op.float.notEqual fs highp: 3 cases of shaders.operator.float_compare.notEqual.highp_vec2_fragment */
-    ("op_float_notequal_fs_highp", ARITH),
-    /* op.float.notEqual fs mediump: 6 cases of shaders.operator.float_compare.notEqual.mediump_vec2_fragment */
-    ("op_float_notequal_fs_mediump", ARITH),
     /* op.geometric.cross fs mediump: 1 cases of shaders.operator.geometric.cross.mediump_vec3_fragment */
     ("op_geometric_cross_fs_mediump", OPERAND),
     /* op.geometric.faceforward fs highp: 4 cases of shaders.operator.geometric.faceforward.highp_float_fragment */
@@ -633,13 +628,11 @@ fn op_binary_mul_fs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.binary.not_equal, fs, highp; 4 cases)"]
 fn op_binary_not_equal_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_binary_not_equal_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.binary.not_equal, fs, mediump; 8 cases)"]
 fn op_binary_not_equal_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_binary_not_equal_fs_mediump");
 }
@@ -699,7 +692,6 @@ fn op_common_ceil_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.ceil, fs, mediump; 8 cases)"]
 fn op_common_ceil_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_ceil_fs_mediump");
 }
@@ -723,7 +715,6 @@ fn op_common_clamp_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.clamp, fs, mediump; 14 cases)"]
 fn op_common_clamp_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_clamp_fs_mediump");
 }
@@ -747,7 +738,6 @@ fn op_common_floor_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.floor, fs, mediump; 8 cases)"]
 fn op_common_floor_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_floor_fs_mediump");
 }
@@ -759,7 +749,6 @@ fn op_common_max_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.max, fs, mediump; 14 cases)"]
 fn op_common_max_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_max_fs_mediump");
 }
@@ -783,7 +772,6 @@ fn op_common_min_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.min, fs, mediump; 14 cases)"]
 fn op_common_min_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_min_fs_mediump");
 }
@@ -825,7 +813,6 @@ fn op_common_sign_fs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.common.sign, fs, mediump; 8 cases)"]
 fn op_common_sign_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_common_sign_fs_mediump");
 }
@@ -963,13 +950,11 @@ fn op_exponential_pow_vs_mediump() {
 }
 
 #[test]
-#[ignore = "refused: arith (op.float.notEqual, fs, highp; 3 cases)"]
 fn op_float_notequal_fs_highp() {
     mali_ref::assert_matches("deqp_arith_op_float_notequal_fs_highp");
 }
 
 #[test]
-#[ignore = "refused: arith (op.float.notEqual, fs, mediump; 6 cases)"]
 fn op_float_notequal_fs_mediump() {
     mali_ref::assert_matches("deqp_arith_op_float_notequal_fs_mediump");
 }
