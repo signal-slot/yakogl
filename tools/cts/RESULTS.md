@@ -727,6 +727,39 @@ record screen on the capture unit's pictures
   GL_TRUE" 3, 1 without a text. The picture on the screen was not checked:
   the images draw to their own surface and read it back.
 
+## Vivante: STM32MP257F-DK (GC8000) on Zephyr (one-shot off the card's U-Boot)
+
+The DK's images (`stm32mp257f_dk/stm32mp257fxx/a35`, `-DYAKOGL_WERROR=ON`)
+loaded and started by ST's own U-Boot through the runner-owned `preboot` of
+`tools/board-stm32mp2.sh`, one boot each; the card's environment is put back
+afterwards. A bring-up result, not the sign-off (the boot from the DK's own
+storage through `tools/board.sh`, P10, has not run). The USART2 text was read
+through connected's serial tools (`MP2_NO_CONSOLE=1`) and judged by
+`tools/probes/stm32mp257f_dk/verdict/dk_verdict.py` and the runner's `judge`.
+The steps, their expected lines and the findings are in
+`docs/notes/stm32mp257f-dk-bringup.md`. The GPU reads model 0x8000, revision
+0x6205, product 0x80003, customer 0x15; every boot's BL2 reset reason was a
+warm SYSRST or IWDG1 one, never a supply event.
+
+| Step | Image | Result | Build | Run | Record |
+|---|---|---|---|---|---|
+| 1 return trial: banner, PSCI reset, back in ST's Linux | `mp2_hello` | **PASS**: `verdict=done rc=0`, back after 47 s | `e07d066a` | 2026-11-21 | `20261121-1054-mp2_hello-405d515b` |
+| 2 return trial: a hang caught by OP-TEE's SMC watchdog | `mp2_hello` (`CONFIG_MP2_HELLO_HANG=y`) | **PASS**: `verdict=watchdog_reset rc=0` (BL2: `IWDG1SYSRSTF`), back after 89 s | `e07d066a` | 2026-11-21 | `20261121-1055-mp2_hello_hang-832dda7e` |
+| 3 board layer and the OP-TEE watchdog armed | `mp2_identify` | **PASS**: `verdict=done rc=0`, `mp2_identify: PASS: watchdog armed (32 s), 3 PETs`, back after 59 s | `e07d066a` | 2026-11-21 | `20261121-1058-mp2_identify-58f413f3` |
+| 4 GPU power and identity | `mp2_gpu` | **PASS**: `mp2_gpu: verdict PASS model=0x8000 rev=0x6205 product=0x80003 eco=0x0 customer=0x15 intr=ok idle=ok` (`HI_INTR_ENBL` reads back 0xffffffff, reset reaches idle); the first run (`20261121-1059-mp2_gpu-e0ee66cb`) `verdict=failed rc=4`, fixed by `2da6568d` (the RCC reset) | `e07d066a` (image from the source of `2da6568d`) | 2026-11-21 | `20261121-1107-mp2_gpu-9e520020` |
+| 5 a fence retires and its interrupt arrives | `gc_fence` | **PASS**: `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us`, SPI 183 `route=ours`; runner rc=6 from its own post-cycle fault (stale card device after the reboot), the board was fine | `6612c6cb` | 2026-11-21 | `20261121-1855-gc_fence-55ae8385` |
+| 6 a clear reads back through the resolve engine | `gc_clear` | **PASS**: `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`, back after 45 s | `6612c6cb` | 2026-11-21 | `20261121-1859-gc_clear-e1a37b77` |
+| 7 the first triangle: three-apex read-back | `gc_triangle` | **PASS**: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, back after 44 s | `8fe07a2a` | 2026-11-23 | `20261123-0451-gc_triangle-250f61d4` |
+| 8 GL core, `gl_test` case 1 (`uniform`) only | `gl_test` (`CONFIG_GL_TEST_MP2_SET_HEAD=y`) | **PASS**: `gl_test: case 1 uniform: PASS` (10 checks), back after 57 s; no `gl_test: all:` tally line (the one-case image prints none) | `8fe07a2a` | 2026-11-23 | `20261123-0454-gl_test_case1-ed1e6361` |
+
+- Q1, Q6 and Q8 are read: customer 0x15, `CNTFRQ_EL0` 40 MHz, U-Boot hands
+  over at EL2 with the MMU and caches off.
+- Not yet run: the gl_test regression set (P9), the dEQP-GLES2 sweep with the
+  line-width decision (P9, Q11), glmark2, the display (P8), and the boot from
+  the DK's own storage through `tools/board.sh` (P10). A cacheable carveout
+  mapping was not tried (the Normal non-cacheable mapping read back right in
+  steps 5 to 8).
+
 ## V3D 7.1: Raspberry Pi 5 on Zephyr
 
 The Pi 5 bring-up (BCM2712 D0, V3D 7.1.10; ROADMAP stage 5, issue #7):
