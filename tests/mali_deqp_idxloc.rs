@@ -36,27 +36,37 @@ const LOOP_MEDIUMP: &str =
 /// `MaliError::LoopVertex`.
 const LOOP_VERTEX: &str = "a loop in a vertex shader";
 
+/// The arithmetic refusal of a fragment shader.
+const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)";
+/// A gl_FragColor lane that is not the varying's own or a constant.
+const FRAGCOLOR: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
+/// Control flow.
+const CTRL: &str = "control flow (if, a loop, a return before the end)";
+/// A loop past Mesa's unroll limits.
+const UNROLL: &str = "a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside,";
+/// A constant operation on a value that is not a finite normal float.
+const NONFINITE: &str = "a constant operation on or to a value that is not a finite normal float";
+
 /// Every reference (without the `deqp_idxloc_` prefix) still refused, with the
 /// first refusal of its pair at the tip, without the "Valhall: " prefix and
 /// the " is not lowered yet" suffix.
 const REFUSALS: &[(&str, &str)] = &[
-    ("fs_mat2_dd", LOOP_MEDIUMP),
-    ("fs_mat3_dl_sl", LOOP_MEDIUMP),
+    ("fs_mat2_dd", ARITH),
+    ("fs_mat3_dl_sl", FRAGCOLOR),
     ("fs_struct_loop_assign", LOOP_MEDIUMP),
     ("fs_struct_nested_array", LOOP_MEDIUMP),
-    ("fs_struct_nested_loop_assign", LOOP_MEDIUMP),
+    ("fs_struct_nested_loop_assign", CTRL),
     ("fs_struct_uni_nested_array", LOOP_MEDIUMP),
     ("fs_tmp_float_cd", LOOP_MEDIUMP),
-    ("fs_tmp_vec2_dl_sl", LOOP_MEDIUMP),
     ("fs_tmp_vec3_sl_dl", LOOP_MEDIUMP),
     ("fs_uni_vec3", LOOP_MEDIUMP),
     ("fs_var_float_sd", LOOP_MEDIUMP),
     ("fs_var_vec3_sd", LOOP_MEDIUMP),
-    ("fs_vec2_dl_static", LOOP_MEDIUMP),
+    ("fs_vec2_dl_static", UNROLL),
     ("fs_vec3_component_dl", LOOP_MEDIUMP),
-    ("vs_mat2_dl_d", LOOP_VERTEX),
-    ("vs_tmp_vec2_dl_sl", LOOP_VERTEX),
-    ("vs_var_float_dl_s", LOOP_VERTEX),
+    ("vs_mat2_dl_d", NONFINITE),
+    ("vs_tmp_vec2_dl_sl", NONFINITE),
+    ("vs_var_float_dl_s", NONFINITE),
     ("vs_vec3_dl_component", LOOP_VERTEX),
 ];
 
@@ -93,6 +103,20 @@ fn compares() {
     }
 }
 
+/// References that compile at the tip with other words than Mesa's:
+/// `fs_tmp_vec2_dl_sl`'s second fp16 `FMA` takes its operands in the other
+/// order. Not refused, so not in [`REFUSALS`].
+const DIFFERS: &[&str] = &["fs_tmp_vec2_dl_sl"];
+
+#[test]
+fn differences_pinned() {
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(&format!("deqp_idxloc_{name}"));
+        let pair = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: refused: {e}"));
+        assert!(!mali_ref::differences(&r, &pair).is_empty(), "{name}: now byte-equal; add it to MATCHED");
+    }
+}
+
 #[test]
 fn matched_compile() {
     for name in MATCHED {
@@ -112,8 +136,11 @@ fn references_listed() {
         })
         .collect();
     on_disk.sort();
-    let mut listed: Vec<String> =
-        REFUSALS.iter().map(|(n, _)| n.to_string()).chain(MATCHED.iter().map(|n| n.to_string())).collect();
+    let mut listed: Vec<String> = REFUSALS
+        .iter()
+        .map(|(n, _)| n.to_string())
+        .chain(MATCHED.iter().chain(DIFFERS).map(|n| n.to_string()))
+        .collect();
     listed.sort();
     assert_eq!(on_disk, listed, "a deqp_idxloc_* reference is not listed, or the other way round");
 }
