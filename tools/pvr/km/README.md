@@ -10,12 +10,12 @@ proves, before any board, that the Rust does what the C it replaced did.
 | file | what |
 |---|---|
 | `rec.h` | the recording platform: a 64 MiB carveout at 0xC0000000 in host memory, a register file, and the record both sides write (cleans `F`, invalidates `I`, barriers `B`, waits `D`, register writes `W` and reads `R`, log lines `L<level>`, results `=`, and at the end every non-zero word of the carveout `M`) |
-| `scenario.h` | the scenarios, over a table of functions each side fills: `mem` (the allocators, the page tables), `ccb` (130 KCCB posts, the FWCCB service: grows from a pool and from a reserve, refusals, reconstructions, a context reset, an unknown command; the freelist audit), `fwinit` (the FWIF structures, the boot wait: started on the third tick, then a timeout with its trace and assert dump), `render` (a firmware model takes the kicks: renders of several sizes and sample counts, separate and combined kicks, the member-in-flight and UFO-ring waits, a dropped kick and the re-post, the MMUCACHE probes, a hardware recovery, two stalls with their dumps, HWRT recycles with and without the cleanup, a refused cleanup, the client CCBs round the ring) |
+| `scenario.h` | the scenarios, over a table of functions each side fills: `mem` (the allocators, the page tables), `ccb` (130 KCCB posts, the FWCCB service: grows from a pool and from a reserve, refusals, reconstructions, a context reset, an unknown command; the freelist audit), `fwinit` (the FWIF structures, the boot wait: started on the third tick, then a timeout with its trace and assert dump), `render` (a firmware model takes the kicks: renders of several sizes and sample counts, separate and combined kicks, the member-in-flight and UFO-ring waits, a dropped kick and the re-post, the MMUCACHE probes, a hardware recovery, two stalls with their dumps, HWRT recycles with and without the cleanup, a refused cleanup, the client CCBs round the ring); `render-pr` (Rust only: the same start with the partial-render knob on, see below) |
 | `record_c.sh`, `record_c.c` | cut the C out of origin/main 674ea1cf (`pvr_fw_boot.c`: allocators, MMU, FWIF globals, CCB, freelists, FWIF setup, boot wait, accessors; `pvr_render.c` whole) and run the scenarios on it; `record_c_verbose` is the same with `PVR_RENDER_VERBOSE` |
-| `km_check.c` | the same scenarios on the Rust (`libyakogl_drivers.a` for the host, feature `pvr`), and `km_check pins`, the Rust layout numbers as `PIN(value, expression)` lines |
+| `km_check.c` | the same scenarios on the Rust (`libyakogl_drivers.a` for the host, feature `pvr`), `km_check render-pr` (no C counterpart), and `km_check pins`, the Rust layout numbers as `PIN(value, expression)` lines |
 | `pins_check.c` | compiles those lines into `_Static_assert`s against the vendored DDK headers (driver/tools/offsetof's way), compares the alignment-check table with `RGXFW_ALIGN_CHECKS_INIT_KM` and the MH tag names with `rgxmhdefs_km.h` |
 | `rec_normalize.py` | sorts each run of consecutive `R`/`I` lines (see below) |
-| `records.sha256` | the hashes the records must have (the records are not committed: about 2 MB of text) |
+| `records.sha256` | the hashes the records must have (the records are not committed: about 2 MB of text); `render-pr.norm` is the Rust's own record, not the C's |
 | `fwinit-step7.diff` | the object table of the FWIF structures before and after the switch to the DDK sizes |
 | `hostshim/` | the Zephyr headers the cut-out C includes |
 
@@ -95,6 +95,27 @@ gate needs only the hashes, not the commit.
   from kick 5, for the kick four back: 1013 waits of 1000 us against the
   C's 1018. In section I the second pair holds a slot, so the recycles start
   one size sooner (8 against 7). 33,377 lines. Nothing else moves.
+- `render-pr` (Rust only, 15,838 lines; hashed after `rec_normalize.py`
+  like `render`): the render scenario's start with the partial-render knob
+  on (`km_api.render_pr`, which sets `cfg.partial_render` as render.rs's
+  host tests do in `rig()`; `record_c.c` leaves it NULL). The C of
+  674ea1cf has no partial render, so there is nothing to compare against:
+  the hash pins today's Rust, and a change to the partial-render words
+  moves it. Four 1024x600 kicks, each followed by its client CCB commands
+  (`= geom ccb ...`, `= frag ccb ...`): (A) a zero `frag_pr`: the geometry
+  command's PR fence {timeline, seq - 1}, the second geometry UPDATE on the
+  timeline, the fragment FENCE_PR, 3D_PR and UPDATE on the timeline before
+  the frame's FENCE, 3D and UPDATE, and "3D_PR: a byte copy of the 3D
+  command"; (B) a filled `frag_pr` (the values of render.rs's
+  `filled_frag_pr`: PBE pairs 0xB0..0xB7, EOT data 0xC0): both commands
+  carry the SPM scratch flag (flags 0x00080180) and the 3D_PR differs in
+  11 dwords (dw15 the PR EOT data, dw30..45 the PR PBE words), each listed
+  against the 3D's; (C) the same kick with the firmware model stopped: the
+  stall dump (FENCE_PR unmet), a refused grow of list 3, the dump again,
+  then released; (D) a zero block again, a byte copy. The firmware model
+  passes FENCE_PR without testing it (it only knows FENCE and UPDATE); it
+  does not run a partial render. `km_check render-pr` reproduces the record;
+  there is no C record to diff it against.
 
 ## Not covered
 

@@ -76,6 +76,11 @@ struct km_api {
 	uint32_t (*render_completed)(void);
 	/* rc, gcccb ctl, gcccb, fcccb ctl, fcccb, gufo, fufo, mc sync */
 	void (*render_offsets)(uint32_t out[8]);
+	/* the partial-render knob (render.rs cfg.partial_render), kept across
+	 * render_cfg and render_init; set it before render_init. Rust only: the
+	 * C of 674ea1cf has no partial render, record_c.c leaves it NULL and
+	 * runs no scenario that uses it. */
+	void (*render_pr)(uint32_t on);
 };
 
 /* The heaps and leaf flags (rgxheapconfig.h, rgxmmudefs_km.h; the host check
@@ -669,13 +674,16 @@ static void sc_wait(const struct km_api *a, uint32_t fence, uint32_t timeout)
 	printf("= wait %u rc %d completed %u\n", fence, rc, a->render_completed());
 }
 
-static void scenario_render(const struct km_api *a, bool verbose_subset)
+/* The render scenarios' common start: the rings, the firmware buffers, the
+ * MMU, the render service's init with the default configuration, a VDM
+ * stream and a PDS segment, the kick, and the firmware model hooked into the
+ * busy-wait ticks. Prints nothing before "= render rc ...". */
+static void sc_render_setup(const struct km_api *a)
 {
 	uint32_t kctl, kcmds, krtn, fctl, fcmds, hwrinfo, tbuf, ring, o[8];
-	uint32_t vbump = 0x30000000u, pbump = 0x10000000u, f = 0;
+	uint32_t vbump = 0x30000000u, pbump = 0x10000000u;
 	struct km_bo vdm, pds;
 
-	printf("= scenario render%s\n", verbose_subset ? " (verbose)" : "");
 	a->heap_set_next(0xa1000u);
 	kctl = a->heap_alloc(24, 8);
 	kcmds = a->heap_alloc(SC_KCCB_SLOTS * SC_CMD, 8);
@@ -730,6 +738,14 @@ static void scenario_render(const struct km_api *a, bool verbose_subset)
 	fw.hwrinfo = hwrinfo;
 	rec_tick = fw_step;
 	rec_wtick = fw_doorbell;
+}
+
+static void scenario_render(const struct km_api *a, bool verbose_subset)
+{
+	uint32_t f = 0;
+
+	printf("= scenario render%s\n", verbose_subset ? " (verbose)" : "");
+	sc_render_setup(a);
 
 	/* A: the first renders, a pair built and reused */
 	for (int i = 0; i < 3; i++) {
@@ -826,6 +842,152 @@ static void scenario_render(const struct km_api *a, bool verbose_subset)
 		sc_wait(a, f, 100);
 	}
 out:
+	rec_tick = NULL;
+	rec_wtick = NULL;
+	fw.a = NULL;
+}
+
+/* ---- render-pr: the render service with the partial-render knob on ---- */
+
+static const char *sc_ccb_type(uint32_t t)
+{
+	switch (t) {
+	case 0x2ABC80C9u: return "GEOM";
+	case 0x2ABC80CBu: return "3D";
+	case 0x2ABC80CCu: return "3D_PR";
+	case 0x2ABC00D4u: return "FENCE";
+	case 0x2ABC00D5u: return "UPDATE";
+	case 0x2ABC00D7u: return "FENCE_PR";
+	case 0x2ABC00DDu: return "PADDING";
+	default: return "?";
+	}
+}
+
+/* The client CCB commands of one context (0 geometry, 1 fragment) between
+ * two write offsets: each command's type and size; a fence or update's
+ * {address, value}; the geometry command's partial-render fence words
+ * (dwords 13-14); a 3D's flags (dword 76, the SPM scratch flag is bit 19);
+ * and each 3D_PR against the 3D command that follows it, as "a byte copy"
+ * or dword by dword where they differ. */
+static void sc_ccb_dump(const struct km_api *a, int which, uint32_t from, uint32_t to)
+{
+	const uint8_t *ring = a->heap_cpu(fw.ring[which]);
+	const uint8_t *pr = NULL;
+	uint32_t pr_size = 0;
+
+	for (uint32_t rd = from; rd != to;) {
+		const uint8_t *h = ring + rd;
+		uint32_t type = sc_r32(h), size = sc_r32(h + 4);
+		const uint8_t *b = h + 16;
+
+		printf("= %s ccb @0x%04x %s (0x%08x) size %u", which ? "frag" : "geom", rd, sc_ccb_type(type), type,
+		       size);
+		if (type == 0x2ABC00D4u || type == 0x2ABC00D5u || type == 0x2ABC00D7u) {
+			printf(" ufo 0x%08x = %u", sc_r32(b), sc_r32(b + 4));
+		} else if (type == 0x2ABC80C9u) {
+			printf(" pr fence 0x%08x = %u", sc_r32(b + 52), sc_r32(b + 56));
+		} else if (type == 0x2ABC80CBu || type == 0x2ABC80CCu) {
+			printf(" flags 0x%08x", sc_r32(b + 4 * 76));
+		}
+		printf("\n");
+		if (type == 0x2ABC80CCu) {
+			pr = b;
+			pr_size = size;
+		} else if (type == 0x2ABC80CBu && pr) {
+			unsigned ndiff = 0;
+
+			if (pr_size == size && !memcmp(pr, b, size)) {
+				printf("= frag 3D_PR: a byte copy of the 3D command (%u bytes)\n", size);
+			} else {
+				for (uint32_t i = 0; i < (size < pr_size ? size : pr_size) / 4; i++) {
+					if (sc_r32(pr + 4 * i) != sc_r32(b + 4 * i)) {
+						printf("= frag 3D_PR dw%u 0x%08x (3D 0x%08x)\n", i, sc_r32(pr + 4 * i),
+						       sc_r32(b + 4 * i));
+						ndiff++;
+					}
+				}
+				printf("= frag 3D_PR: built from frag_pr, %u dwords differ from the 3D command\n",
+				       ndiff);
+			}
+			pr = NULL;
+		}
+		rd = (rd + 16u + size) & (32u * 1024u - 1u);
+	}
+}
+
+static uint32_t sc_wo(const struct km_api *a, int which)
+{
+	return sc_r32(a->heap_cpu(fw.ctl[which]));
+}
+
+/* Submit, wait as given (several timeouts: the firmware model may be stopped
+ * in between, see the caller), then dump what the kick put in both client
+ * CCBs (the model sets each write offset when it takes the kick). */
+static void sc_pr_render(const struct km_api *a, uint32_t w, uint32_t h)
+{
+	uint32_t g = sc_wo(a, 0), fr = sc_wo(a, 1);
+
+	sc_wait(a, sc_submit(a, w, h, 1), 100);
+	sc_ccb_dump(a, 0, g, sc_wo(a, 0));
+	sc_ccb_dump(a, 1, fr, sc_wo(a, 1));
+}
+
+/* A synthetic filled frag_pr, the values of render.rs's host tests
+ * (filled_frag_pr, the g3_* tests). */
+static void sc_frag_pr_fill(struct pvr_render_frag_pr *p)
+{
+	static const uint64_t pbe[4][2] = { { 0xB0, 0xB1 }, { 0xB2, 0xB3 }, { 0xB4, 0xB5 }, { 0xB6, 0xB7 } };
+
+	memset(p, 0, sizeof(*p));
+	p->spm_scratch_gpu = SC_GENERAL + 0xA000u;
+	p->spm_scratch_bytes = 1920000u;
+	memcpy(p->pbe_word, pbe, sizeof(pbe));
+	p->eot_pds_data = 0xC0u;
+	p->eot_pds_data_bytes = 44u;
+	p->pds_pr_bgnd[0] = 0xD0u;
+	p->pds_pr_bgnd[1] = 0xD1u;
+	p->pds_pr_bgnd[2] = 0xD2u;
+}
+
+/* The render scenario's start with the partial-render knob on (Rust only,
+ * see km_api.render_pr), then: a kick with a zero frag_pr (the 3D_PR a byte
+ * copy of the 3D command), one with a filled frag_pr (the 3D_PR built from
+ * it, both commands with the SPM scratch flag), a stall across a refused
+ * grow of the local list (the firmware model stopped; the wait dumps, the
+ * refusal, the release), and a last zero-block kick. Each kick's client CCB
+ * commands are in the record: the geometry command's PR fence words, the
+ * second geometry UPDATE on the timeline, and the fragment FENCE_PR, 3D_PR
+ * and UPDATE before the frame's FENCE, 3D and UPDATE. */
+static void scenario_render_pr(const struct km_api *a)
+{
+	uint32_t f, g, fr;
+
+	printf("= scenario render-pr (partial-render knob on)\n");
+	a->render_pr(1);
+	sc_render_setup(a);
+
+	/* A: a zero frag_pr block */
+	sc_pr_render(a, 1024, 600);
+	/* B: a filled frag_pr block */
+	sc_frag_pr_fill(&sc_kick.frag_pr);
+	sc_pr_render(a, 1024, 600);
+	/* C: a stall across a refused grow (list 3 cannot grow), the block
+	 * still filled */
+	g = sc_wo(a, 0);
+	fr = sc_wo(a, 1);
+	fw.stopped = true;
+	f = sc_submit(a, 1024, 600, 1);
+	sc_wait(a, f, 25);
+	sc_fw_grow(3);
+	sc_wait(a, f, 25);
+	fw.stopped = false;
+	sc_wait(a, f, 100);
+	sc_ccb_dump(a, 0, g, sc_wo(a, 0));
+	sc_ccb_dump(a, 1, fr, sc_wo(a, 1));
+	/* D: a zero block again after the refusal */
+	memset(&sc_kick.frag_pr, 0, sizeof(sc_kick.frag_pr));
+	sc_pr_render(a, 1024, 600);
+
 	rec_tick = NULL;
 	rec_wtick = NULL;
 	fw.a = NULL;
