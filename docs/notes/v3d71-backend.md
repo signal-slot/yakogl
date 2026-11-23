@@ -948,36 +948,82 @@ Mesa's, printed, not enforced (the packer is not Mesa's list scheduler):
 
 ### The corpora (`tests/v3d71_online_corpus.rs`: 3 passed)
 
-- **es100**: 126 programs, **125 compile at 7.1** (19 with a branch), 1
-  refused: `es100/varyings15.frag: Alloc(DoesNotFit)` — alloc71 has no
-  spilling yet ((b), an open item). Since then alloc71 hands out rf1..rf3
-  in a fragment shader after their last payload read (Mesa: rf1..rf3 are
-  plain registers after the start-of-program payload MOVs,
-  nir_to_vir.c:4851-4858, vir_register_allocate.c:989-1004), and
-  varyings15 compiles at 2 threads: es100 126 of 126, qpu_corpus_71 874
-  of 1090; the figures below are of the first cut. Mesa's table refused two ours compiles
-  (`es100/vtex_struct_sampler.vert`, `es100/vtex_struct_sampler_array.vert`).
-  On the 123 both compile: ours 8318 instructions, Mesa 4865
-  (`es100_counts_71.tsv`).
-- **qpu_corpus_71**: 1090 programs, **873 compile at 7.1** (212 with a
-  branch), 217 refused — every one listed by name in
-  `tools/shaders/known-uncompilable-v3d71.txt`. 216 are programs carrying a
-  desktop-GLSL source our ES-only front end refuses (the same sources
-  `known-uncompilable-v3d.txt` lists at 4.2; Mesa's counts come from
-  glsl2v3d.py's translation): `passthrough.vert` × 55, `points.vert` × 31,
-  `color_uv.vert` × 30, `mvp_color.vert` × 29, `zorder.vert` × 29,
-  `uv.vert` × 19, `mvp.vert` × 17, `interp_color.frag` × 4,
-  `internal/clear.vert` × 1, `internal/fbload.vert` × 1. The 217th is the
-  `es100/varyings15.vert + es100/varyings15.frag` pair, `Alloc(DoesNotFit)`.
-  On the 873 ours has [43151, 51290, 29268] fs/vs/cs instructions against
-  Mesa's [28118, 29584, 19446] (`qpu_counts_71.tsv`): reported, not enforced.
-  sched71's first cut carries none of the shortening passes of (e) (no
-  `hoist`, no `ldvary_back`, no reorder, no +1 SFU read), which is where
-  much of the gap sits.
+- **es100**: 126 programs, **126 compile at 7.1** (`ES100_COMPILED`), none
+  refused. Mesa's table refused two ours compiles
+  (`es100/vtex_struct_sampler.vert`, `es100/vtex_struct_sampler_array.vert`;
+  `es100_counts_71.tsv`: 126 programs, 124 compiled, 2 refused).
+- **qpu_corpus_71**: 1090 programs, **874 compile at 7.1**
+  (`CORPUS_COMPILED`), 216 refused, every one named in
+  `tools/shaders/known-uncompilable-v3d71.txt` (216 entries): programs
+  carrying a desktop-GLSL source our ES-only front end refuses (the same
+  sources `known-uncompilable-v3d.txt` lists at 4.2; Mesa's counts come from
+  glsl2v3d.py's translation).
+- Instruction and thread totals are not here: they moved with the
+  shortening passes of (e) and (h) after this run, and the current ceilings
+  are in `tests/shaderc71_count_bounds.rs` (see "Measured coverage over the
+  P13 shader sets" below).
 - A program that compiles has passed `verify71`, `registers_fit_threads71`
   and the codec71 round trip inside `build71`; the test re-checks them on the
-  returned code, and `branches_are_structured71` covers the 19 + 212 branched
-  ones.
+  returned code, and `branches_are_structured71` covers the branched ones.
+
+### Measured coverage over the P13 shader sets
+
+Taken from the pins at the tip (`1e4669e8`), not from a run of this
+section: each figure is a constant or a header the named file holds. Every
+program that compiles at 7.1 in these tests has each word decoded by
+`codec71` (`same_instr71`) and its instructions through `verify71`,
+`registers_fit_threads71` and `branches_are_structured71`. Feature set
+`--no-default-features --features
+host-test,gpu-v3d,shaderc-online,no-shader-table`. The corpora marked
+"external" are never committed and the test skips without them
+(`GLMARK2_CORPUS` or `build/glmark2-host/shaders`, `DEQP_GLES2_TEST_DIR`,
+`DEQP_ES2_PROGRAMS`); a variable that names an empty directory fails.
+
+| set | test | programs | compile at 7.1 | refused at 7.1 | Mesa 7.1 (table header) |
+|---|---|---|---|---|---|
+| tools/shaders/es100 | `v3d71_online_corpus.rs` | 126 | 126 | 0 | 124 of 126 (`es100_counts_71.tsv`) |
+| qpu_corpus_71 | `v3d71_online_corpus.rs` | 1090 | 874 | 216 (listed) | counts in `qpu_counts_71.tsv` |
+| tools/shaders outside es100 | `shaderc71_tree_corpus.rs` | 198 sources | 190 programs | 18 listed (`-v3d71-tree.txt`) | none |
+| glmark2-es2 (external) | `shaderc71_glmark2_corpus.rs` | 69 shaders, 93 pairs | 69 pairs link | 0 (no list) | 69 of 93 (`glmark2_counts_71.tsv`) |
+| dEQP-GLES2 `.test` library (external) | `shaderc71_es2_corpus.rs` | 1778 | 1778 | 0 (list empty) | 1819 of 1832 stage rows (`deqp_es2_lib_counts_71.tsv`) |
+| dEQP-GLES2 harvested programs (external) | `shaderc71_deqp_programs.rs` | 10599 | 9720 | 879, 6 of them 7.1-only | 9760 of 10599 (`deqp_es2_gen_counts_71.tsv`) |
+| in-tree dEQP repro shaders | `shaderc71_deqp_repro.rs` | 3 | 3 (4.2: 3) | 0 | 4 rows, 3 compiled, 1 refused (`deqp_repro_counts_71.tsv`) |
+
+- **glmark2**: the other 24 of the 93 pairs are the cross product of an
+  index entry's vertex and fragment shaders in which the fragment shader
+  reads a varying the vertex shader does not write
+  (`Chain(VaryingWithoutVertexOutput)`, `MISMATCH`); GL's link fails them
+  too, and Mesa's 7.1 table has exactly 24 rows refused, every one a
+  `link: FS input ... has no VS output` message. They are printed, not
+  listed. `tools/shaders/known-uncompilable-v3d71-glmark2.txt` is absent: no
+  pair is refused.
+- **dEQP-GLES2 library**: the expect-pass, `version 100` programs of
+  VK-GL-CTS 93bca01 `data/gles2/shaders`; Mesa's table has 1778 programs as
+  1832 stage rows, 1819 compiled, 13 refused. We refuse none.
+- **Harvested programs**: VK-GL-CTS 93bca01. 9723 compile at 4.2, 9720 at
+  7.1, 3 compile at 7.1 only (`COMPILED_71_ONLY`). The six 7.1-only refusals
+  are six `bind_aliasing` programs (ids `016a206a31f8f211`,
+  `0bb58d4b9d48e3ec`, `3e3e588f2c00e2ce`, `a6e80f0513a4176f`,
+  `d575a06ead6d52a3`, `db3328c4bfc47f49`) with the message
+  `Chain(NotYet("more than 16 vertex attributes"))`, all listed in
+  `known-uncompilable-v3d71-deqp-gen.txt`; the other 873 refusals are
+  refused at 4.2 as well. Mesa's table: 10599 programs, 9760 compiled, 839
+  refused; 21198 program stages, 19520 compiled, 1678 refused.
+- **Prims**: `shaderc71_prims.rs` compiles es100 at Triangles, Points and
+  Lines: 126 of 126 at each (`ES100_COMPILED`), 2 sources read
+  `gl_PointCoord` (the only ones whose Lines variant differs).
+- **Cost ceilings** (`shaderc71_count_bounds.rs`, measured at `b953cc96`):
+  es100 12973 words, 1502 threads, 0 programs over 2x Mesa; qpu_corpus_71
+  107796 words, 10408 threads, 164 over 2x. Pins: `COUNT_CEILING` 120769,
+  `THREAD_FLOOR` 11910, `OVER_2X_CEILING` 164.
+- **Robustness**: `shaderc71_malformed.rs` pins 27 front-end errors, 3 link
+  errors and 6 successes over its fixed inputs (never a panic);
+  `shaderc71_determinism.rs` compiles the 126 es100 programs forward,
+  reversed and interleaved and compares the words.
+- **Not here**: `tools/mali/testdata` at 7.1 has no test on the tip (Mesa's
+  table: 1515 programs, 1454 compiled, 61 refused,
+  `mali_testdata_counts_71.tsv`), and the `tests/mali_deqp_*.rs` shaders have
+  none either; their counts are the item that adds them to give.
 
 ### The 7.1 unit rows (`--lib`: 53 passed)
 
