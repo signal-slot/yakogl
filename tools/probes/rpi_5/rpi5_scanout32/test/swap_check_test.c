@@ -390,6 +390,114 @@ static void test_names(void)
 	CHECK(!strcmp(swap_restore_reason_name(SWAP_RESTORE_WORD_DIFF), "word-differs"));
 	CHECK(!strcmp(swap_restore_reason_name(SWAP_RESTORE_PTR_DIFF), "pointer-differs"));
 	CHECK(!strcmp(swap_reason_name((enum swap_reason)99), "?"));
+	CHECK(!strcmp(swap_seq_reason_name(SWAP_SEQ_NO_PICKUP), "lact-no-pickup"));
+}
+
+/* (l) DL.LACT pickup (lact-probe-a): named, the sequence, the restore. */
+static void lact_steps(struct swap_step *s, unsigned int n)
+{
+	for (unsigned int i = 0; i < n; i++) {
+		s[i].sample = good();
+		s[i].sample.status_before = st(10 + i);
+		s[i].sample.status_after = st(11 + i);
+		s[i].expected_addr = (i & 1) ? 0x30000000ull : 0x10000000ull;
+		s[i].plane_addr = s[i].expected_addr;
+	}
+}
+
+static void test_lact_named(void)
+{
+	/* pickup yes: LPTRS names slot 32 and DL.LACT reached it */
+	CHECK(swap_named(0x20, 32, true));
+	CHECK(swap_named(0xf0000020u, 32, true)); /* bits above HEADE ignored */
+	/* pickup no: LPTRS reads back as written, the HVS never took it */
+	CHECK(!swap_named(0x20, 32, false));
+	/* LPTRS not ours, or unclocked: no, whatever LACT says */
+	CHECK(!swap_named(0x2a0, 32, true));
+	CHECK(!swap_named(SWAP_UNCLOCKED, 0xfff, true));
+}
+
+static void test_lact_seq(void)
+{
+	struct swap_step s[4];
+	bool yes[4] = { true, true, true, true };
+	bool no2[4] = { true, true, false, true };
+	bool no0[4] = { false, true, true, true };
+	struct swap_seq_verdict v;
+
+	lact_steps(s, 4);
+	/* pickup yes on every swap: pass, as the old judge */
+	v = swap_seq_judge_lact(s, NULL, yes, 4, NULL);
+	CHECK(v.pass && v.reason == SWAP_SEQ_PASS && v.index == -1);
+	/* NULL pickup: the old judge */
+	v = swap_seq_judge_lact(s, NULL, NULL, 4, NULL);
+	CHECK(v.pass && v.reason == SWAP_SEQ_PASS);
+	/* pickup no at swap 3: fails there, although LPTRS named ours */
+	v = swap_seq_judge_lact(s, NULL, no2, 4, NULL);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_NO_PICKUP && v.index == 2 && v.swap == SWAP_OURS);
+	CHECK(swap_seq_judge_hw(s, NULL, 4, NULL).pass); /* the old judge did not see it */
+	/* pickup no at swap 1 */
+	v = swap_seq_judge_lact(s, NULL, no0, 4, NULL);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_NO_PICKUP && v.index == 0);
+	/* swap-1-only: one step, picked up -> pass; not -> no pickup */
+	v = swap_seq_judge_lact(s, NULL, yes, 1, NULL);
+	CHECK(v.pass && v.index == -1);
+	v = swap_seq_judge_lact(s, NULL, no0, 1, NULL);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_NO_PICKUP && v.index == 0);
+	/* the swap's own reason comes first: stalled at swap 3 with no pickup */
+	s[2].sample.status_after = s[2].sample.status_before;
+	v = swap_seq_judge_lact(s, NULL, no2, 4, NULL);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_SWAP_FAILED && v.index == 2 &&
+	      v.swap == SWAP_FRCNT_STALLED);
+	lact_steps(s, 4);
+	/* picked up, but the wrong buffer at swap 4: index is 3 */
+	s[3].plane_addr = 0x10000000ull;
+	v = swap_seq_judge_lact(s, NULL, yes, 4, NULL);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_WRONG_BUFFER && v.index == 3);
+	v = swap_seq_judge_lact(s, NULL, yes, 0, NULL);
+	CHECK(!v.pass && v.reason == SWAP_SEQ_EMPTY);
+	CHECK(swap_pickups_all(yes, 4));
+	CHECK(!swap_pickups_all(no2, 4));
+	CHECK(swap_pickups_all(no2, 2)); /* only the swaps made count */
+	CHECK(swap_pickups_all(NULL, 0));
+	CHECK(!swap_pickups_all(NULL, 1));
+}
+
+static void test_lact_restore(void)
+{
+	/* which restore's DL.LACT decides: the final one after swaps 2.. */
+	CHECK(swap_restore_lact(true, true, true, false));
+	CHECK(!swap_restore_lact(true, true, false, true));
+	/* swap-1-only path: hvs6s_run's own restore */
+	CHECK(swap_restore_lact(false, true, false, true));
+	CHECK(!swap_restore_lact(false, true, true, false));
+	/* nothing written: nothing to come back from */
+	CHECK(swap_restore_lact(false, false, false, false));
+
+	/* u3 restore: PASS needs all five */
+	CHECK(swap_restore_pass(true, true, true, true, true));
+	CHECK(!swap_restore_pass(true, true, true, true, false)); /* pickup no */
+	CHECK(!swap_restore_pass(true, true, true, false, true)); /* restore-lact failed */
+	CHECK(!swap_restore_pass(false, true, true, true, true));
+	CHECK(!swap_restore_pass(true, false, true, true, true));
+	CHECK(!swap_restore_pass(true, true, false, true, true));
+	/* swap-1-only, its restore's LACT not back: not PASS although the words
+	 * and pointer are equal */
+	CHECK(!swap_restore_pass(true, true, true, swap_restore_lact(false, true, false, false),
+				 true));
+	CHECK(swap_restore_pass(true, true, true, swap_restore_lact(false, true, false, true),
+				true));
+
+	/* our words (32..51) cleared only once DL.LACT is back on 672 */
+	CHECK(swap_clear_ok(true, true, 0x2a0, 672, 672, 32, 20));
+	CHECK(!swap_clear_ok(true, false, 0x2a0, 672, 672, 32, 20)); /* restore-lact failed */
+	CHECK(!swap_clear_ok(false, true, 0x2a0, 672, 672, 32, 20)); /* frames */
+	CHECK(!swap_clear_ok(true, true, 0x20, 672, 672, 32, 20));   /* LPTRS on ours */
+	CHECK(!swap_clear_ok(true, true, 0x2a0, 40, 672, 32, 20));   /* LACT inside ours */
+	CHECK(!swap_clear_ok(true, true, 0x2a0, 51, 672, 32, 20));
+	CHECK(swap_clear_ok(true, true, 0x2a0, 52, 672, 32, 20));    /* just past ours */
+	CHECK(!swap_clear_ok(true, true, 0x2a4, 672, 672, 32, 20));  /* not the fw head */
+	CHECK(!swap_clear_ok(true, true, SWAP_UNCLOCKED, 672, 0xfff, 32, 20));
 }
 
 int main(void)
@@ -402,6 +510,9 @@ int main(void)
 	test_hw_restore();
 	test_hw_seq();
 	test_names();
+	test_lact_named();
+	test_lact_seq();
+	test_lact_restore();
 	printf("swap_check_test: %d checks, %d failed\n", checks, failed);
 	return failed ? 1 : 0;
 }

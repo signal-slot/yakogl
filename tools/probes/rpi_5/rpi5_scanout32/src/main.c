@@ -35,13 +35,16 @@
  *   S8  swap 1 is hvs6s_run with cfg.start = slot A: its own snapshot, the
  *       placement checked again, the swap to buffer A and its restore, with
  *       the dlswap record of that run. Then slot B checked (hvs6s_place_io)
- *       and swaps 2..SWAPS, B, A, B ... (hvs6s_swap). Every swap judged by
- *       swap_check.h                          -> u3 swap <k>, u3 named
+ *       and swaps 2..SWAPS, B, A, B ... (hvs6s_swap), only while swap 1's
+ *       DL.LACT picked our list up and came back to the firmware's head, and
+ *       up to the first failed swap. Every swap judged by swap_check.h,
+ *       DL.LACT pickup included          -> u3 swap <k>, u3 named
  *   S9  a sample of each buffer read back after a clean+invalidate
  *   S10 the restore (hvs6s_restore) after swaps 2..SWAPS: the firmware's
- *       LPTRS written back, two frames; then LPTRS and the firmware's words
- *       compared with the snapshot through swap_check.h's swap_restore_judge,
- *       and our span written back to zero once channel 0 is off it
+ *       LPTRS written back, two frames and DL.LACT back on the firmware's
+ *       head; then LPTRS and the firmware's words compared with the snapshot
+ *       through swap_check.h's swap_restore_judge, and our span written back
+ *       to zero once channel 0 is off it and DL.LACT is back
  *                                                        -> u3 restore
  *   then the end line.
  *
@@ -53,6 +56,20 @@
  *
  * The console lines named u3 and the end line are the formats of
  * verdicts.sh's header.
+ *
+ * DL.LACT pickup (lact-probe-a, after swap-lact-lib): a swap counts only once
+ * channel 0's DL.LACT read the head just written, and a restore only once
+ * DL.LACT read the firmware's LPTRS.HEADE again (hvs6_dlist_swap.h's
+ * lact_pickup and restore_lact_ok). Each swap prints
+ *   dlswap lact-pickup ok|FAIL polls=N frcnt=A..B want=W lact=L
+ * (swap 1's inside hvs6s_run's record, swaps 2.. after their dlswap swap<k>
+ * line: the k-th such line of the log is swap k's), each restore
+ *   dlswap restore-lact ok|FAIL polls=N frcnt=A..B want=W lact=L
+ * (swap 1's restore inside the record, the final one after restore-frcnt).
+ * 'u3 named: yes' needs swap 1's pickup; 'u3 restore: PASS' needs the
+ * restore's DL.LACT back (the final restore's, or swap 1's own when only
+ * swap 1 ran) and every swap made picked up; our list words are cleared only
+ * once the restore's DL.LACT is back. verdicts.sh judges q4 by the same lines.
  *
  * Hardware-written words (swap-hwword): RPI5_SCANOUT32_HW_WORDS, the CMake
  * knob of the same name ("" by default, e.g. "4:skip" or "4:skip,7:expect"),
@@ -114,6 +131,12 @@
 #define PAIR_WORDS (2u * SLOT_WORDS)
 #define FRCNT_READS  6u  /* S2: STATUS reads to show FRCNT advancing */
 #define FRCNT_GAP_MS 20u /* about 1.2 frames at 60 Hz: well under 64 frames */
+/* cfg.lact_frames: the HVS takes a list pointer at a frame start, so DL.LACT
+ * should read the new head one frame after the write; a write just after a
+ * frame edge and the 1 ms poll gap can add one more. Four frames leave margin
+ * and stay well under MAX_POLLS' ~12 frames and FRCNT's 64-frame aliasing.
+ * A pickup later than that is a FAIL, not a late pass. */
+#define LACT_FRAMES 4u
 
 /* The hardware-written words, from CMakeLists.txt (empty by default). */
 #ifndef RPI5_SCANOUT32_HW_WORDS
@@ -305,6 +328,7 @@ static uint64_t slot_read(uint32_t start, const struct hvs6w_plane *plane, unsig
  * against. */
 static struct hvs6s_snap plansnap, fwsnap;
 static struct swap_step steps[SWAPS];
+static bool pickups[SWAPS]; /* DL.LACT reached swap k's head (report.lact_pickup) */
 static struct swap_slot slots[SWAPS];
 static struct swap_diffs rdiffs;
 static uint32_t fw_rb[HVS6S_FW_MAX];
@@ -358,20 +382,25 @@ static void fill_step(struct swap_step *st, struct swap_slot *sl, unsigned int k
 	}
 }
 
-/* The dlswap summary and u3 swap lines of swap k (and u3 named after swap
- * 1); returns the judge's reason. */
+/* The dlswap summary, DL.LACT pickup and u3 swap lines of swap k (and u3
+ * named after swap 1); returns the judge's reason. Swap 1's pickup line is
+ * in hvs6s_run's record (hvs6s_lines), so the k-th 'dlswap lact-pickup' line
+ * of the log is swap k's. */
 static enum swap_reason swap_lines(unsigned int k, const struct swap_step *st,
 				   const struct hvs6s_report *r, enum hvs6s_err e, bool *named)
 {
 	enum swap_reason why = swap_judge(&st->sample);
 	uint32_t slot_word = st->sample.expected_word;
 
-	printk("dlswap swap%u %s %s lptrs-readback %s frcnt-advance %s settle %s "
-	       "lact-follows %s (record only)\n",
+	printk("dlswap swap%u %s %s lptrs-readback %s frcnt-advance %s settle %s\n",
 	       k + 1u, e == HVS6S_OK ? "ok" : "FAIL", hvs6s_err_name(e),
 	       r->lptrs_ok ? "ok" : "FAIL", r->frcnt_ok ? "ok" : "FAIL",
-	       r->settle_ok ? "ok" : (r->frcnt_ok ? "FAIL" : "skip"),
-	       r->lact_follows ? "yes" : "no");
+	       r->settle_ok ? "ok" : (r->frcnt_ok ? "FAIL" : "skip"));
+	if (k != 0) {
+		hvs6s_lact_line(&emit, "lact-pickup", r->lact_pickup, r->lact_polls,
+				r->lact_frcnt_write, r->lact_frcnt_pickup, r->lact_want,
+				r->lact_seen);
+	}
 	printk("u3 swap %u: buf %c list-ptr=0x%08x frcnt %u -> %u judge=%s slot=%u "
 	       "plane=0x%010llx fw=%u+%u ours=%u\n",
 	       k + 1u, (k & 1u) ? 'B' : 'A', st->sample.ptr_after,
@@ -379,12 +408,11 @@ static enum swap_reason swap_lines(unsigned int k, const struct swap_step *st,
 	       swap_reason_name(why), slot_word, (unsigned long long)st->plane_addr,
 	       st->sample.fw_start, st->sample.fw_words, st->sample.our_words);
 	if (k == 0) {
-		*named = st->sample.ptr_after != ALL_ONES &&
-			 (st->sample.ptr_after & SWAP_LPTRS_MASK) == slot_word;
+		*named = swap_named(st->sample.ptr_after, slot_word, r->lact_pickup);
 		printk("u3 named: %s LPTRS 0x%08x after swap 1, our list at word %u, "
-		       "first read 0x%08x poll %u\n",
+		       "first read 0x%08x poll %u, DL.LACT pickup %s (want %u lact %u)\n",
 		       *named ? "yes" : "no", st->sample.ptr_after, slot_word, r->lptrs_first,
-		       r->lptrs_poll);
+		       r->lptrs_poll, r->lact_pickup ? "ok" : "FAIL", r->lact_want, r->lact_seen);
 	}
 	return why;
 }
@@ -572,6 +600,8 @@ int main(void)
 	cfg.list_arm = HVS_BASE + HVS6_DLIST_OFFSET;
 	cfg.cache_line = (uint32_t)sys_cache_data_line_size_get();
 	cfg.max_polls = MAX_POLLS;
+	cfg.lact_polls = 0; /* the pickup's poll bound: max_polls */
+	cfg.lact_frames = LACT_FRAMES;
 	hvs6s_report_init(&plan);
 	{
 		int hrc = hvs6s_hw_parse(RPI5_SCANOUT32_HW_WORDS, &cfg.hw);
@@ -763,11 +793,12 @@ int main(void)
 			  hvs_rd(hvs6s_lptrs_reg(CHAN)), hvs_rd(hvs6s_status_reg(CHAN)), slot[0],
 			  bus[0], &fwsnap);
 		nsteps = 1;
+		pickups[0] = runrep.lact_pickup;
 		w = swap_lines(0, &steps[0], &runrep, run_err, &named);
 		if (run_err != HVS6S_OK && first_err == HVS6S_OK) {
 			first_err = run_err;
 		}
-		if (run_err == HVS6S_OK && w == SWAP_OURS) {
+		if (run_err == HVS6S_OK && w == SWAP_OURS && runrep.lact_pickup) {
 			swaps_ok++;
 		}
 		if (!same_snap && fail == NULL) {
@@ -778,7 +809,10 @@ int main(void)
 
 	/* Slot B, read and checked before its first write, as slot A was. */
 	{
-		bool go = ran && runrep.swapped && runrep.restore_equal && same_snap;
+		/* swaps 2.. only after swap 1's list was picked up and DL.LACT came
+		 * back to the firmware's head at its restore */
+		bool go = ran && runrep.swapped && runrep.lact_pickup && runrep.restore_lact_ok &&
+			  runrep.restore_equal && same_snap;
 
 		if (go) {
 			static struct hvs6s_report bplace;
@@ -814,6 +848,8 @@ int main(void)
 		} else if (ran) {
 			snprintk(why, sizeof(why), "swap 1: %s",
 				 !runrep.swapped ? "LPTRS was not written"
+				 : !runrep.lact_pickup ? "DL.LACT did not reach the new head"
+				 : !runrep.restore_lact_ok ? "DL.LACT not back on the firmware's head"
 				 : !runrep.restore_equal ? "the run's restore was not byte-equal"
 				 : "the run's snapshot differed from the plan's");
 		} else {
@@ -847,6 +883,7 @@ int main(void)
 				  hvs_rd(hvs6s_lptrs_reg(CHAN)), hvs_rd(hvs6s_status_reg(CHAN)), slot[b],
 				  bus[b], &fwsnap);
 			nsteps = k + 1u;
+			pickups[k] = r.lact_pickup;
 			w = swap_lines(k, &steps[k], &r, e, &named);
 			if (e != HVS6S_OK && first_err == HVS6S_OK) {
 				first_err = e;
@@ -856,7 +893,7 @@ int main(void)
 				go = false;
 				snprintk(why, sizeof(why), "swap %u failed", k + 1u);
 			}
-			if (e == HVS6S_OK && w == SWAP_OURS) {
+			if (e == HVS6S_OK && w == SWAP_OURS && r.lact_pickup) {
 				swaps_ok++;
 			}
 			k_msleep(HOLD_MS);
@@ -865,7 +902,7 @@ int main(void)
 	if (!ran) {
 		printk("u3 named: no (no swap was made)\n");
 	} else {
-		struct swap_seq_verdict v = swap_seq_judge_hw(steps, slots, nsteps, &shw);
+		struct swap_seq_verdict v = swap_seq_judge_lact(steps, slots, pickups, nsteps, &shw);
 
 		printk("rpi5_scanout32: S8 sequence %s (%s) index %d swap %s, %u of %u swaps ok\n",
 		       v.pass ? "ok" : "FAIL", swap_seq_reason_name(v.reason), v.index,
@@ -892,7 +929,7 @@ int main(void)
 			fail = failbuf;
 		}
 		if (!named && fail == NULL) {
-			fail = "channel 0 did not name our list after swap 1";
+			fail = "channel 0 did not name our list after swap 1 (LPTRS and DL.LACT)";
 		}
 	}
 
@@ -929,20 +966,31 @@ int main(void)
 			enum hvs6s_err e = HVS6S_OK;
 			struct swap_restore_verdict vf;
 			uint32_t rb_ptr, rb_lact;
-			bool cleared = true, settled;
+			bool cleared = true, settled, lact_ok, picked;
 
 			if (wrote_more) {
 				e = hvs6s_restore(&io, &cfg, &fwsnap, &rrest);
 				hvs6s_regs_line(&emit, "restore-after", &rrest.after_restore);
 				printk("dlswap restore-frcnt %s polls=%u\n",
 				       rrest.restore_frcnt_ok ? "ok" : "FAIL", rrest.restore_polls);
+				hvs6s_lact_line(&emit, "restore-lact", rrest.restore_lact_ok,
+						rrest.restore_lact_polls, rrest.restore_frcnt_write,
+						rrest.restore_frcnt_pickup, rrest.restore_lact_want,
+						rrest.restore_lact_seen);
 				settled = rrest.restore_frcnt_ok;
 			} else if (ran) {
 				printk("rpi5_scanout32: S10 restore write skip: no swap after swap 1; "
-				       "hvs6s_run's own restore %s; compare only\n",
+				       "hvs6s_run's own restore %s, its DL.LACT %s; compare only\n",
 				       runrep.restored ? "wrote the firmware's LPTRS back"
-				       : "did not run");
+				       : "did not run",
+				       runrep.restore_lact_ok ? "back on the firmware's head"
+				       : "NOT back on the firmware's head");
 				settled = runrep.restore_frcnt_ok;
+				/* swap 1's own restore (its restore-lact line is in the
+				 * record) decides the restore's DL.LACT here */
+				if (!runrep.restore_lact_ok) {
+					e = HVS6S_ERR_RESTORE_LACT;
+				}
 			} else {
 				printk("rpi5_scanout32: S10 restore write skip: nothing was written; "
 				       "read-only compare\n");
@@ -960,12 +1008,14 @@ int main(void)
 			/* Our span back to zero (it read zero before the first write),
 			 * once channel 0 is back on the firmware's list, frames have
 			 * passed and neither its LPTRS nor DL.LACT is inside it. */
+			lact_ok = swap_restore_lact(wrote_more, ran, rrest.restore_lact_ok,
+						    runrep.restore_lact_ok);
+			picked = swap_pickups_all(pickups, nsteps);
 			if (wrote_list) {
-				bool back = settled &&
-					    (rb_ptr & YD5_HVS6_LPTRS_HEADE_MASK) == ref->fw_head &&
-					    !hvs6s_overlap(pair, PAIR_WORDS,
-							   rb_ptr & YD5_HVS6_LPTRS_HEADE_MASK, 1) &&
-					    !hvs6s_overlap(pair, PAIR_WORDS, rb_lact, 1);
+				/* only once the restore's DL.LACT is back (a positive
+				 * check), the frames passed and LPTRS is the firmware's */
+				bool back = swap_clear_ok(settled, lact_ok, rb_ptr, rb_lact,
+							  ref->fw_head, pair, PAIR_WORDS);
 				int bad = -1;
 
 				if (back) {
@@ -983,11 +1033,17 @@ int main(void)
 				printk("rpi5_scanout32: S10 our words %u..%u %s\n", pair,
 				       pair + PAIR_WORDS - 1u,
 				       !back ? "left in place: channel 0 is not back on the firmware's "
-					       "list"
+					       "list (frames, LPTRS or DL.LACT)"
 				       : bad < 0 ? "back to zero" : "NOT back to zero");
 			}
 
-			restore_pass = e == HVS6S_OK && vf.pass && cleared;
+			restore_pass = swap_restore_pass(e == HVS6S_OK, vf.pass, cleared, lact_ok,
+							 picked);
+			if (e == HVS6S_OK && !picked) {
+				/* the restore went through, but some swap's list was
+				 * never picked up by the HVS: not a PASS */
+				e = HVS6S_ERR_LACT_PICKUP;
+			}
 			printk("rpi5_scanout32: S10 dlswap restore %s (%s); fw %u..+%u %s index %d "
 			       "want 0x%08x got 0x%08x\n",
 			       !wrote_more ? "skip" : e == HVS6S_OK ? "ok" : "FAIL",
@@ -1008,10 +1064,12 @@ int main(void)
 				       swap_words_hash(&shw, ref->fw, fw_rb, ref->fw_len), hwtxt,
 				       wrote_list ? "" : " (nothing was written)");
 			} else {
-				printk("u3 restore: FAIL %s list-ptr=0x%08x want 0x%08x (%s%s) "
+				printk("u3 restore: FAIL %s list-ptr=0x%08x want 0x%08x (%s%s%s%s) "
 				       "hash=0x%08x hwskip=%s undeclared=%u\n",
 				       hvs6s_err_name(e), rb_ptr, ref->lptrs,
 				       swap_restore_reason_name(vf.reason),
+				       lact_ok ? "" : " / DL.LACT not back",
+				       picked ? "" : " / a swap's DL.LACT never reached its head",
 				       cleared ? "" : " / our words not cleared",
 				       swap_words_hash(&shw, ref->fw, fw_rb, ref->fw_len), hwtxt,
 				       rdiffs.undeclared);
@@ -1046,8 +1104,9 @@ int main(void)
 		fail = hvs6s_err_name(first_err);
 	}
 	if (fail == NULL) {
-		printk("rpi5_scanout32: PASS (%u swaps alternating A/B, list at word %u, FRCNT "
-		       "advanced, buffers read back, firmware list restored byte-equal%s%s)\n",
+		printk("rpi5_scanout32: PASS (%u swaps alternating A/B, list at word %u, DL.LACT "
+		       "picked up each and came back, FRCNT advanced, buffers read back, firmware "
+		       "list restored byte-equal%s%s)\n",
 		       nsteps, pair, shw.n ? " except hw words off " : "", shw.n ? hwoffs : "");
 	} else {
 		printk("rpi5_scanout32: FAIL (%s)\n", fail);

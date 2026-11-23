@@ -28,10 +28,10 @@ Every step prints a line, also when it fails or cannot run.
 | S5 | the plan's `hvs6s_snapshot`, read only: `LPTRS` and the firmware's list from `HEADE`, walked entry by entry (`CTL0.NEXT`) to its END word, at most 256 words; refused (`FW_NOEND`, `FW_WALK`) when the walk reaches no END, and then nothing is written. FNV-1a hash of the words `[HEADE, HEADE + fw_len)`, leaving out the declared hardware-written words | `S5 dlswap snapshot ok\|FAIL ... entries .., walk stopped at word ..`, `S5 hw words '<knob>': <set>`, `u3 snapshot: list-ptr=0x.. heade=<n> words=<fw_len> hash=0x.. hwskip=<set>` (`words=0 ... FAIL` when refused) |
 | S6 | the plan's `hvs6s_place_io`, read only: one span of 20 words, slot A (10 words) and slot B (the next 10), the first at or after word 32 whose words all read zero, clear of words 0..31 and of the firmware's span `[HEADE, HEADE + fw_len)`, within `mem_words` and the 12-bit `HEADE`; then refused if any channel's `LPTRS.HEADE` or `DL.LACT` is inside it. A refusal writes nothing | `rpi5_scanout32: S6 ch<n> ...`, `S6 placement check ok\|FAIL\|skip ...`, `u3 dlist: placed word <n> len 20 ...` or `u3 dlist: refused <reason>` |
 | S7 | buffers A and B (`.bss`, 1920x1080 or the firmware plane's size if smaller, pitch `w*4`): A the `pattern.h` bars as XRGB8888, B the same bars with red and blue exchanged; cleaned with `sys_cache_data_flush_range` | `u3 plane: addr=0x.. fmt=XRGB8888 pitch=.. w=.. h=.. addr_b=0x..` |
-| S8 | 8 swaps, A, B, A, B ... Swap 1 is `hvs6s_run` with `cfg.start` = slot A: its own snapshot (compared with the plan's), slot A read and checked again, the swap to A and that run's restore, with its `dlswap` record. Slot B is then read and checked by `hvs6s_place_io`, and swaps 2..8 go through `hvs6s_swap` (only when swap 1 wrote `LPTRS` and its restore was byte-equal). `hvs6s_swap` writes the slot's list (`hvs6_dlist_write.h`, NEXT=9, inner and list END, CTL2 0xfff0, alpha-mask FIXED), reads it back, then writes `LPTRS` once; waits for the read-back and an `FRCNT` advance, then two frames past the write before the other slot is touched. Each swap is judged by `swap_check.h`'s `swap_judge`, its sample filled with the firmware's span (`fw_start` = `HEADE`, `fw_words` = the walked length) and ours (`our_words` = 10); the sequence by `swap_seq_judge` (the plane entry read back from the slot must name the step's buffer). Each buffer stays up 1 s | `dlswap at-write/after ...`, `dlswap swap<k> ...`, `u3 swap <k>: buf A\|B list-ptr=0x.. frcnt <before> -> <after> judge=... fw=<heade>+<words> ours=10`, `u3 named: yes\|no ...` after swap 1; `dlswap readback-diff ...` for a slot word that did not read back as written |
+| S8 | 8 swaps, A, B, A, B ... Swap 1 is `hvs6s_run` with `cfg.start` = slot A: its own snapshot (compared with the plan's), slot A read and checked again, the swap to A and that run's restore, with its `dlswap` record. Slot B is then read and checked by `hvs6s_place_io`, and swaps 2..8 go through `hvs6s_swap` (only when swap 1 wrote `LPTRS`, its `DL.LACT` picked our list up, its restore brought `DL.LACT` back to the firmware's head and was byte-equal; and only up to the first failed swap). `hvs6s_swap` writes the slot's list (`hvs6_dlist_write.h`, NEXT=9, inner and list END, CTL2 0xfff0, alpha-mask FIXED), reads it back, then writes `LPTRS` once; waits for the read-back, an `FRCNT` advance and the `DL.LACT` pickup (within `MAX_POLLS` polls and `LACT_FRAMES` = 4 frames past the write), then two frames past the write before the other slot is touched. Each swap is judged by `swap_check.h`'s `swap_judge`, its sample filled with the firmware's span (`fw_start` = `HEADE`, `fw_words` = the walked length) and ours (`our_words` = 10); the sequence by `swap_seq_judge_lact` (every swap picked up, the plane entry read back from the slot must name the step's buffer). `u3 named: yes` needs `LPTRS` on slot A and swap 1's pickup (`swap_named`). Each buffer stays up 1 s | `dlswap at-write/after ...`, `dlswap swap<k> ...`, `dlswap lact-pickup ok\|FAIL polls=N frcnt=A..B want=W lact=L` (the k-th is swap k's: swap 1's in the record, the others after their `dlswap swap<k>` line), `u3 swap <k>: buf A\|B list-ptr=0x.. frcnt <before> -> <after> judge=... fw=<heade>+<words> ours=10`, `u3 named: yes\|no ... DL.LACT pickup ok\|FAIL (want W lact L)` after swap 1; `dlswap readback-diff ...` for a slot word that did not read back as written |
 | S9 | a 16-pixel grid of each buffer read back after a clean+invalidate (`pattern_check`) | `rpi5_scanout32: S9 readback ...` |
-| S10 | `hvs6s_restore` after swaps 2..8: the firmware's `LPTRS` written back, two frames; then `LPTRS` and the firmware's words `[HEADE, HEADE + fw_len)` compared with the snapshot through `swap_check.h`'s `swap_restore_judge`; our 20 words written back to zero once channel 0's `LPTRS` and `DL.LACT` are off them. When nothing more was written, only the compare runs | `dlswap restore-diff ...` per differing word and `dlswap restore-diffs total=..`, `rpi5_scanout32: S10 ...`, `u3 restore: PASS byte-equal [except hw words off <offs> (..)] list-ptr=0x.. heade=<n> words=<n> hash=0x.. hwskip=<set>` or `u3 restore: FAIL ... hwskip=<set> undeclared=<n>` |
-| | the `hvs6_dlist_swap.h` record (`hvs6s_lines`): after `hvs6s_run` in S8, or of the plan when nothing ran | `dlswap snapshot ok\|FAIL ... entries=N end=W\|stop=W word=0x..`, `dlswap place ok ... skipped=N\|FAIL ...`, `dlswap restore-diffs ...`, `dlswap restore-words ok fw A..B equal` (`... byte-equal except hw words off <offs> (<n> differed) hwskip=<set>` with a set), `dlswap result ok\|FAIL ...` |
+| S10 | `hvs6s_restore` after swaps 2..8: the firmware's `LPTRS` written back, two frames and `DL.LACT` back on the firmware's `HEADE`; then `LPTRS` and the firmware's words `[HEADE, HEADE + fw_len)` compared with the snapshot through `swap_check.h`'s `swap_restore_judge`; our 20 words written back to zero only once the restore's `DL.LACT` is back, the frames passed and channel 0's `LPTRS` and `DL.LACT` are off them (`swap_clear_ok`). When nothing more was written, only the compare runs, and the restore's `DL.LACT` is swap 1's own (`runrep.restore_lact_ok`, `swap_restore_lact`). `u3 restore: PASS` needs that `DL.LACT` back and every swap made picked up (`swap_restore_pass`); a restore after a swap the HVS never took is `FAIL DL.LACT did not reach the new head` | `dlswap restore-lact ok\|FAIL polls=N frcnt=A..B want=W lact=L` (the final restore's, after `dlswap restore-frcnt`), `dlswap restore-diff ...` per differing word and `dlswap restore-diffs total=..`, `rpi5_scanout32: S10 ...`, `u3 restore: PASS byte-equal [except hw words off <offs> (..)] list-ptr=0x.. heade=<n> words=<n> hash=0x.. hwskip=<set>` or `u3 restore: FAIL ... hwskip=<set> undeclared=<n>` |
+| | the `hvs6_dlist_swap.h` record (`hvs6s_lines`): after `hvs6s_run` in S8, or of the plan when nothing ran | `dlswap snapshot ok\|FAIL ... entries=N end=W\|stop=W word=0x..`, `dlswap place ok ... skipped=N\|FAIL ...`, swap 1's `dlswap lact-pickup ...` and its restore's `dlswap restore-lact ...`, `dlswap restore-diffs ...`, `dlswap restore-words ok fw A..B equal` (`... byte-equal except hw words off <offs> (<n> differed) hwskip=<set>` with a set), `dlswap result ok\|FAIL ...` |
 | | the end line, then the watchdog is no longer fed | `rpi5_scanout32: PASS (...)` or `rpi5_scanout32: FAIL (reason)`, then `rpi5_scanout32: feeding stopped, reset expected ...` |
 
 The restore runs whenever anything was written, whatever failed after it.
@@ -40,7 +40,10 @@ was clear) the probe prints `u3 dlist: refused <reason>` and the swap lines
 read `u3 swap <k>: skipped (...)`; `verdicts.sh` then gives `FAIL (placement
 refused: ...)` and Q4 `unanswered`. Swaps skipped after swap 1 (slot B
 refused, or swap 1's restore not byte-equal) are not counted by
-`verdicts.sh`: with fewer than 4 swap lines the log is `incomplete`.
+`verdicts.sh`: with fewer than 4 swap lines the log is `incomplete`. A stop
+at a failed `DL.LACT` pickup (the last swap line's `lact-pickup FAIL`), or
+after swap 1 when its own restore's `restore-lact` is `FAIL`, is judged
+instead: `FAIL`, Q4 `no`.
 
 Buffers A and B are RAM in the image's own cacheable mapping; they are never
 mapped a second time (`device_map` of a RAM page is `-EBUSY` and a panic, as
@@ -120,10 +123,11 @@ The rules of `tools/probes/rpi_5/README.md` apply. A run that does not come
 back is reported as needing a person.
 
 Host checks: `sh tools/probes/rpi_5/rpi5_scanout32/verdicts_selftest.sh`
-(the verdict script, 104 checks), `sh tools/probes/rpi_5/rpi5_scanout32/swap_check_selftest.sh`
-(the decision header `src/swap_check.h`, 108 checks) and
-`sh tools/v3d/check71.d/hvs6_dlist_swap.sh` (`hvs6_dlist_swap.h` against its
-channel model, 185 checks).
+(the verdict script, 147 checks), `sh tools/probes/rpi_5/rpi5_scanout32/swap_check_selftest.sh`
+(the decision header `src/swap_check.h`, 151 checks),
+`sh tools/probes/rpi_5/rpi5_scanout32/io_filter_selftest.sh` (the write
+filter, 51 checks) and `sh tools/v3d/check71.d/hvs6_dlist_swap.sh`
+(`hvs6_dlist_swap.h` against its channel model, 230 checks).
 
 ## What it proves
 
@@ -133,19 +137,30 @@ channel model, 185 checks).
 - our list was placed at or after word 32, in words that read zero, clear of
   the firmware's list `[HEADE, HEADE + fw_len)` walked to its END, and of
   every channel's list pointer;
-- channel 0's `LPTRS` read back as our list after the first swap, and every
-  swap, alternating A and B at least 4 times, saw `FRCNT` advance (the
-  channel kept scanning across the pointer write);
+- channel 0's `LPTRS` read back as our list after the first swap and its
+  `DL.LACT` reached our list's head, and every swap, alternating A and B at
+  least 4 times, saw `FRCNT` advance (the channel kept scanning across the
+  pointer write) and its own `dlswap lact-pickup ok` (the HVS took the new
+  list: Linux completes a flip only then, `rpi:vc4_crtc.c:832-855`);
 - the firmware's `LPTRS` and its words `[HEADE, HEADE + fw_len)` read back
   byte-equal to the snapshot (hash equal) after the restore, except the
   declared hardware-written words when a set is given (`hwskip=`, every
-  differing word named), and our words were back to zero. Words 0..31 are never written (placement refuses them)
+  differing word named), every `dlswap restore-lact` line is `ok` (`DL.LACT`
+  back on the firmware's head), and our words were back to zero. Words 0..31 are never written (placement refuses them)
   and no longer compared.
+
+`q4: yes` needs every swap's pickup; a swap without a `lact-pickup` line (an
+older probe, which printed `lact-follows ... (record only)`) or with a `FAIL`
+one makes it `no`, and the restore PASS is then refused too. The two error
+names of `hvs6_dlist_swap.h`, `DL.LACT did not reach the new head` and
+`restore: DL.LACT not back on the firmware's head`, are named as the cause
+of a `u3 restore: FAIL`.
 
 It answers Q4 of `docs/notes/rpi5-display.md`: whether channel 0's list
 pointer can be swapped at vblank under a running scanout. It does not prove
-that the HVS fetched our buffer: there is no latch bit (linuxdesk), `DL.LACT`
-following our list is recorded only (`lact-follows`), and the farm has no
-camera on the Pi 5. The plane's UPM bits that Linux sets in PTR0 are not
+that the HVS fetched our buffer's pixels: there is no latch bit (linuxdesk),
+`DL.LACT` shows only that the channel runs our list, whether the write
+landed in vblank is not reported yet, and the farm has no camera on the
+Pi 5. The plane's UPM bits that Linux sets in PTR0 are not
 written (`hvs6_dlist_write.h`); whether a raw RGB plane needs them is a board
 question this probe can only bound.

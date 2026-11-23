@@ -363,6 +363,7 @@ enum swap_seq_reason {
 	SWAP_SEQ_WRONG_BUFFER,   /* the plane entry names another buffer */
 	SWAP_SEQ_EMPTY,          /* no steps */
 	SWAP_SEQ_SLOT_DIFF,      /* an undeclared word of our slot changed */
+	SWAP_SEQ_NO_PICKUP,      /* DL.LACT never reached the step's head (swap_seq_judge_lact) */
 };
 
 struct swap_seq_verdict {
@@ -387,6 +388,8 @@ static inline const char *swap_seq_reason_name(enum swap_seq_reason r)
 		return "empty";
 	case SWAP_SEQ_SLOT_DIFF:
 		return "slot-word-differs";
+	case SWAP_SEQ_NO_PICKUP:
+		return "lact-no-pickup";
 	}
 	return "?";
 }
@@ -534,6 +537,108 @@ static inline struct swap_restore_verdict swap_restore_judge(const uint32_t *sav
 		v.got = read_ptr;
 	}
 	return v;
+}
+
+/* (l) DL.LACT pickup (lact-probe-a, plan #390). hvs6_dlist_swap.h judges a
+ * swap by DISPx_DL.LACT reaching the head just written (report.lact_pickup,
+ * HVS6S_ERR_LACT_PICKUP) and a restore by DL.LACT back on the firmware's
+ * LPTRS.HEADE (report.restore_lact_ok, HVS6S_ERR_RESTORE_LACT): Linux
+ * completes a flip only then (rpi:vc4_crtc.c:832-855). LPTRS reading back
+ * as written does not show that the HVS scanned the list. The probe's
+ * verdicts use these: */
+
+/* 'u3 named: yes': LPTRS names our slot after swap 1 and DL.LACT picked the
+ * slot up. */
+static inline bool swap_named(uint32_t ptr_after, uint32_t slot_word, bool lact_pickup)
+{
+	return ptr_after != SWAP_UNCLOCKED && (ptr_after & SWAP_LPTRS_MASK) == slot_word &&
+	       lact_pickup;
+}
+
+/* The sequence with each step's pickup: swap_seq_judge_hw, and step i fails
+ * with SWAP_SEQ_NO_PICKUP when pickup[i] is false (after the swap reason,
+ * before the slot and the address). pickup NULL is swap_seq_judge_hw. */
+static inline struct swap_seq_verdict swap_seq_judge_lact(const struct swap_step *st,
+							  const struct swap_slot *slots,
+							  const bool *pickup, unsigned int n,
+							  const struct swap_hw_set *hw)
+{
+	struct swap_seq_verdict v = { n != 0, n ? SWAP_SEQ_PASS : SWAP_SEQ_EMPTY, -1, SWAP_OURS,
+				      -1, 0, 0 };
+
+	if (!pickup)
+		return swap_seq_judge_hw(st, slots, n, hw);
+	for (unsigned int i = 0; i < n; i++) {
+		struct swap_seq_verdict one;
+		enum swap_reason r = swap_judge(&st[i].sample);
+
+		if (r == SWAP_OURS && !pickup[i]) {
+			v.pass = false;
+			v.reason = SWAP_SEQ_NO_PICKUP;
+			v.index = (int)i;
+			return v;
+		}
+		one = swap_seq_judge_hw(&st[i], slots ? &slots[i] : NULL, 1, hw);
+		if (!one.pass) {
+			one.index = (int)i;
+			return one;
+		}
+	}
+	return v;
+}
+
+/* True when every one of the n swaps made picked up (n 0: true). */
+static inline bool swap_pickups_all(const bool *pickup, unsigned int n)
+{
+	for (unsigned int i = 0; i < n; i++)
+		if (!pickup || !pickup[i])
+			return false;
+	return true;
+}
+
+/* The restore's DL.LACT result that S10 goes by: the final hvs6s_restore's
+ * after swaps 2.. (wrote_more), else swap 1's own restore inside hvs6s_run
+ * (ran: only swap 1 ran), else true (nothing was written, nothing to come
+ * back from). */
+static inline bool swap_restore_lact(bool wrote_more, bool ran, bool final_lact_ok,
+				     bool run_lact_ok)
+{
+	if (wrote_more)
+		return final_lact_ok;
+	if (ran)
+		return run_lact_ok;
+	return true;
+}
+
+/* Our list words go back to zero only once channel 0 is back on the
+ * firmware's list: the restore's frames passed (settled), DL.LACT came back
+ * to the firmware's head (lact_ok, a positive check), LPTRS.HEADE is the
+ * firmware's head, and neither LPTRS.HEADE nor DL.LACT is inside our span
+ * [pair, pair + words). */
+static inline bool swap_clear_ok(bool settled, bool lact_ok, uint32_t lptrs, uint32_t lact,
+				 uint32_t fw_head, uint32_t pair, uint32_t words)
+{
+	uint32_t head = lptrs & SWAP_LPTRS_MASK;
+	uint64_t p0 = pair, p1 = p0 + words;
+
+	if (!settled || !lact_ok || lptrs == SWAP_UNCLOCKED || head != fw_head)
+		return false;
+	if (head >= p0 && head < p1)
+		return false;
+	if (lact >= p0 && lact < p1)
+		return false;
+	return true;
+}
+
+/* 'u3 restore: PASS': the restore call passed (restore_ok), the firmware's
+ * words and pointer judged equal (words_pass), our words cleared, DL.LACT
+ * back on the firmware's head (lact_ok, swap_restore_lact), and every swap
+ * made picked up our list (pickups_ok, swap_pickups_all): a restore from a
+ * list the HVS never scanned shows nothing about giving the list back. */
+static inline bool swap_restore_pass(bool restore_ok, bool words_pass, bool cleared, bool lact_ok,
+				     bool pickups_ok)
+{
+	return restore_ok && words_pass && cleared && lact_ok && pickups_ok;
 }
 
 #endif /* RPI5_SCANOUT32_SWAP_CHECK_H */
