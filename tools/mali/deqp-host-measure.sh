@@ -11,7 +11,8 @@
 # the refusal text and its shape from the refusing shader's source.
 #
 #   tools/mali/deqp-host-measure.sh [--out DIR] [--cts DIR] [--jobs N] [--chunk N]
-#                                   [--slice DIR]... [--filter STR] [--stage all|build|deqp|lib|run|extract]
+#                                   [--slice DIR]... [--cases FILE] [--filter STR]
+#                                   [--stage all|build|deqp|lib|run|extract]
 #
 # What it measures, and what it cannot
 # ------------------------------------
@@ -37,7 +38,9 @@
 #            <repo>/build/host-deqp-mali/ (reused when present); `deqp` and
 #            `lib` are its two halves alone
 #   run      the case list from the slices' refusals.tsv (the cases whose
-#            text holds "online shaderc: the code generator refused"), in
+#            text holds "online shaderc: the code generator refused"), or
+#            every case of --cases FILE (for example tools/cts/gles2-mustpass.txt,
+#            the whole tree; the slices still give board.tsv), in
 #            fresh-process chunks as host-deqp-run.sh runs them (a chunk whose
 #            process stops early goes on in a fresh process), logs in OUT
 #   extract  measure.tsv, summary.md, shapes/ and the other outputs below
@@ -63,6 +66,13 @@
 #   not-reproduced.tsv  cases whose host first refusal is not the board's
 #   shapes/<family>_<shape>.vert|.frag  one representative pair per shape,
 #                    verbatim from the .qpa (plus .case naming the case)
+#   programs.tsv     every program of every case that logs both sources
+#                    (whatever its outcome): "<program>\t<case>", one row per
+#                    program and case, in case order; programs/<program>.vert
+#                    and .frag hold the two sources (each ending in a newline),
+#                    <program> the first 16 hex digits of the SHA-256 of
+#                    "<vs>\0<fs>" of those texts (one file pair
+#                    per distinct text). The input of tools/mali/corpus_diff.py.
 #   commit           the tip, the CTS commit and the command line
 #
 # Environment:
@@ -80,11 +90,11 @@ CTS_COMMIT=93bca01861b0e3ef3c387027a9791e6d065f900c
 REFUSED='online shaderc: the code generator refused'
 
 usage() {
-	sed -n '13,15p' "$0" | sed 's/^# \{0,1\}//' >&2
+	sed -n '13,16p' "$0" | sed 's/^# \{0,1\}//' >&2
 	exit 2
 }
 
-out= cts=${DEQP_WORK:-} stage=all filter=
+out= cts=${DEQP_WORK:-} stage=all filter= caselist=
 jobs=${JOBS:-$(( $(nproc) > 1 ? $(nproc) - 1 : 1 ))}
 chunk=${CHUNK:-100}
 slices=()
@@ -96,6 +106,7 @@ while [ $# -gt 0 ]; do
 	--chunk) chunk=${2:?--chunk needs a number}; shift 2 ;;
 	--slice) slices+=("${2:?--slice needs a directory}"); shift 2 ;;
 	--filter) filter=${2:?--filter needs a string}; shift 2 ;;
+	--cases) caselist=$(realpath "${2:?--cases needs a file}"); shift 2 ;;
 	--stage) stage=${2:?--stage needs all|build|run|extract}; shift 2 ;;
 	-h | --help) sed -n '5,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "$me: unknown argument '$1'" >&2; usage ;;
@@ -233,8 +244,9 @@ extern void osal_set_ops(const struct osal_ops *ops);
 #define HM_KEEP_BYTES (512u << 10)
 #define OSAL_QUERY_MALI_GPU 15u
 #define OSAL_QUERY_MALI_TILER_HEAP 16u
+/* src/osal/osal_internal.h's layout (20 bytes since core_features) */
 struct osal_mali_gpu {
-	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count;
+	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count, core_features;
 };
 struct osal_mali_heap {
 	uint64_t ctx_gpu, first_chunk_gpu;
@@ -283,7 +295,7 @@ static int hm_query(uint32_t what, void *out, size_t out_sz)
 	if (what == OSAL_QUERY_MALI_GPU) {
 		static const struct osal_mali_gpu gpu = {
 			.gpu_id = 0xa8670005u, .tiler_features = 0x809,
-			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4,
+			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4, .core_features = 0,
 		};
 
 		if (!out || out_sz != sizeof(gpu))
@@ -404,20 +416,25 @@ run_cases() {
 		index($2, want) {ref[$1] = $2}
 		END {for (c in ref) print c, (c in st ? st[c] : "?"), ref[c]}' \
 		$(for s in "${slices[@]}"; do echo "$s/results.tsv" "$s/refusals.tsv"; done) | sort > "$out/board.tsv"
-	# in mustpass order
-	awk -F'\t' 'FNR == NR {want[$1] = 1; next} ($0 in want)' "$out/board.tsv" "$MUSTPASS" > "$out/cases.txt"
+	# in mustpass order; --cases: that list as it is
+	if [ -n "$caselist" ]; then
+		[ -f "$caselist" ] || { echo "$me: no case list $caselist" >&2; exit 1; }
+		grep -v '^[[:space:]]*\(#\|$\)' "$caselist" > "$out/cases.txt" || true
+	else
+		awk -F'\t' 'FNR == NR {want[$1] = 1; next} ($0 in want)' "$out/board.tsv" "$MUSTPASS" > "$out/cases.txt"
+	fi
 	if [ -n "$filter" ]; then
 		grep -F -- "$filter" "$out/cases.txt" > "$out/cases.filtered" || true
 		mv "$out/cases.filtered" "$out/cases.txt"
 	fi
 	n=$(wc -l < "$out/cases.txt")
 	[ "$n" -gt 0 ] || { echo "$me: no case to run" >&2; exit 1; }
-	echo "$me: $n refused case(s) of ${#slices[@]} slice(s) ($(wc -l < "$out/board.tsv") in board.tsv)"
+	echo "$me: $n case(s)${caselist:+ of $caselist} (${#slices[@]} slice(s), $(wc -l < "$out/board.tsv") refused cases in board.tsv)"
 	(cd "$out" && split -l "$chunk" -d -a 3 cases.txt c_)
 	{
 		echo "tip=$COMMIT"
 		echo "cts=$(git -C "$cts" rev-parse HEAD 2>/dev/null || echo "$CTS_COMMIT")"
-		echo "command=$0 --out $out --cts $cts --jobs $jobs --chunk $chunk${filter:+ --filter $filter}"
+		echo "command=$0 --out $out --cts $cts --jobs $jobs --chunk $chunk${caselist:+ --cases $caselist}${filter:+ --filter $filter}"
 		echo "slices=${slices[*]}"
 		echo "library=$LIB (osal-linux gpu-mali shaderc-online no-shader-table report-es2)"
 	} > "$out/commit"
@@ -795,6 +812,31 @@ def first_refusal(programs):
             st = stage_of(link)
             return st or 'link', link, (vs if st == 'vs' else fs), (fs if st == 'vs' else vs), ''
     return '', '', '', '', ''
+
+# every program that logs both sources, for tools/mali/corpus_diff.py:
+# programs/<program>.vert|.frag once per distinct text, programs.tsv one row
+# per program and case (a case's repeated program once)
+import hashlib
+pdir = os.path.join(out, 'programs')
+os.makedirs(pdir, exist_ok=True)
+with open(os.path.join(out, 'programs.tsv'), 'w') as ptsv:
+    ptsv.write('program\tcase\n')
+    written = set()
+    for c in order:
+        seen = set()
+        for vs, fs, _vl, _fl, _link in cases.get(c, ('', []))[1]:
+            if not vs or not fs:
+                continue
+            vs, fs = (s if s.endswith('\n') else s + '\n' for s in (vs, fs))
+            key = hashlib.sha256((vs + '\0' + fs).encode()).hexdigest()[:16]
+            if key not in written:
+                for ext, s in (('.vert', vs), ('.frag', fs)):
+                    with open(os.path.join(pdir, key + ext), 'w') as f:
+                        f.write(s)
+                written.add(key)
+            if key not in seen:
+                seen.add(key)
+                ptsv.write('%s\t%s\n' % (key, c))
 
 rows = []
 shapes = OrderedDict()
