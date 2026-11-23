@@ -1,5 +1,9 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: GPL-3.0-only */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* SPDX-FileCopyrightText: 2008 Ben Smith */
+/* SPDX-FileCopyrightText: 2010-2012 Linaro Limited */
+/* Derived from glmark2 src/main.cpp (22c527cb), GPL-3.0-or-later upstream; offered here under
+ * GPL-3.0-only until LICENSES/GPL-3.0-or-later.txt exists. */
 /*
  * host_main.cpp - glmark2-es2 on the host against YakoGL, the Linux OSAL
  * (src/osal/linux.c: GPU memory is malloc'd, every submit completes at once,
