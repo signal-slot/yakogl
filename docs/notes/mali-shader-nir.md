@@ -747,6 +747,18 @@ Two checkpoints, each against Mesa, never only against the old path:
    against the reference's (`tests/mali_ref/mod.rs:583` `differences`), and
    against the old path's output.
 
+**An early checkpoint for the translation alone.** The two checkpoints above
+need every pass of section 5, so they give their first number late, and the
+questions that can change this design (Q1, Q3, R2, R3) are all about the
+translation. The shim reference is a debug build (`drm_shim_ref.sh:60`), so
+`NIR_DEBUG=print_vs,print_fs` works on it today. `nir_refs.sh` therefore
+also keeps the **first** NIR Mesa prints for each stage (the earliest dump
+after `glsl_to_nir`; step S12 names the exact pass), normalised the same
+way, as a `first` line in `<name>.nir.sha`. The shadow test compares the
+translation's output (plus the passes Mesa ran up to that dump) with it.
+This number needs only S1, S10a and the S12 script, and it is the first
+one the work produces.
+
 Per stage and pair the test gives one verdict: `equal` (both checkpoints
 equal), `nir-equal` (NIR equal, words not yet comparable before step S11),
 `refused` (with the guard or gap text), or `differ`. **The test fails on any
@@ -805,13 +817,13 @@ current main and checked with `tools/check.sh --changed origin/main`.
 | **S8b** blend switch | `blend.rs` reads `snir`; delete `blend_nir.rs`'s passes, `blend_nir_rules.rs`, `gen_blend_nir_rules.py` and their check.sh row | -4,000 | 2 | the blend gate rows and tests unchanged | S8 |
 | **S9a** IO, vertex | `snir/io_vs.rs`: outputs at the end (`nir_lower_io_vars_to_temporaries` model), `load_ubo` form, `nir_lower_viewport_transform`, `nir_lower_point_size`, `panfrost_nir_lower_sysvals` (viewport), `pan_nir_lower_vs_outputs`, `nir_lower_mem_access_bit_sizes` (stores, UBO loads), `nir_opt_load_store_vectorize` (UBO) | 1,400 | 5 | per pass, NIR before and after on hand cases taken from shim dumps | S1 |
 | **S9b** IO, fragment | `snir/io_fs.rs`: `nir_lower_fragcolor`, `panfrost_nir_remove_fragcolor_stores`, `pan_nir_lower_fs_inputs`, `pan_nir_lower_fs_outputs` | 800 | 4 | as S9a | S1 |
-| **S10a** translation core | `snir/from_ir.rs`, `snir/scope.rs` (section 1 classifier, `Unknown` refused), `glsl::passes` entry for the new path | 1,200 | 5 | the classifier's in-class count over the committed pairs is printed; translation of 10 hand shaders printed and read against Mesa's NIR after `glsl_to_nir` | S1, S2, #11266 |
+| **S10a** translation core | `snir/from_ir.rs`, `snir/scope.rs` (section 1 classifier, `Unknown` refused), `glsl::passes` entry for the new path | 1,200 | 5 | the classifier's in-class count over the committed pairs is printed; translation of 10 hand shaders printed and read against Mesa's NIR after `glsl_to_nir`; then the early checkpoint of section 7.2 over the in-class pairs | S1, S2, #11266 |
 | **S10b** origin table | `ir.rs` (`Origin`), `lower.rs`, `builtin_call.rs` record it | 400 | 4 | the other back ends' gate rows unchanged; front-end unit tests per origin; `Module::prec` unchanged on all pairs | S10a's classifier (to count origins in class) |
 | **S10c** built-ins as Mesa | `snir/builtins.rs`: `builtin_functions.cpp` bodies of the ES 2 float built-ins in class | 800 | 5 | NIR-equal on the references that call each built-in | S10a, S10b |
 | **S11a** early BIR passes | `opt.rs`: `lower_swizzle`, `copy_prop`, `constant_fold`, `cse` (first), `finish_passes_nir` in `mod.rs` | 900 | 5 | BIR unit cases; the old path's words unchanged (all Mali rows) | none |
 | **S11b** selection, vertex | `snir/select.rs` (VS part), `snir/rows.rs`, `UboLayout::from_loads`, the `emit::Alu` move, VS record | 900 | 5 | VS words equal on the in-class pairs that are NIR-equal | S1, S9a, S11a |
 | **S11c** selection, fragment | `snir/select.rs` (FS part), FS record | 800 | 5 | FS words equal on the in-class pairs that are NIR-equal | S1, S9b, S11a |
-| **S12** references and shadow test | `tools/mali/nir_refs.sh` (+ normaliser), `tools/mali/testdata/*.nir.sha`, `tests/mali_snir_shadow.rs`, a self-test row in check.sh | 700 | 4 | the script's normalised text for `fbload_fbload` equals a hand-normalised copy; the test runs on all pairs and reports counts | S1 (printer) |
+| **S12** references and shadow test | `tools/mali/nir_refs.sh` (+ normaliser), `tools/mali/testdata/*.nir.sha`, `tests/mali_snir_shadow.rs`, a self-test row in check.sh | 700 | 4 | the script's normalised text for `fbload_fbload` equals a hand-normalised copy (both the first dump and the one at selection); the test runs on all pairs and reports counts | S1 (printer) |
 | **S13** product hook and first move | `mod.rs` dispatch (`owns`, fallback), `cfg` widened | 300 | 3 | section 7.3 for the VS class | S11b, S12, #11252 |
 | **S14** (after step 1) look-ups | `pan_nir_lower_tex`, `nir_lower_tex` subset, `bi_emit_tex_valhall` (`bifrost_compile.c:3489`) | 1,500 | 6 | in-class pairs with `texture2D` equal | S11b/S11c |
 
@@ -836,8 +848,21 @@ week 5   S8b  S13
 - Generated files have one owner each (S2: opcodes, S3: rules, S4: folds),
   so two pull requests never regenerate the same file.
 
+**Which lane goes first.** The engine (S2 to S8) repeats what the blend
+engine already proved, so its risk is size, not design. The translation
+(S10a to S10c) is where this design can be wrong. When people are short, the
+lane S1, S12 script, S10a goes first, to get the early checkpoint of section
+7.2.
+
+**The order after step 1.** Step 1 moves shaders the old path compiles
+already, so it adds no dEQP pass by itself. M2 (int, bool), M3 (precision),
+M4 (control flow) and look-ups (S14) are ordered by #11252's count of
+refused must-pass cases per class, largest first, not by this note.
+
 **The first measurable numbers.**
 
+0. **S1 + S10a + the S12 script**: stages whose first NIR is Mesa's (the
+   early checkpoint of section 7.2), the first number for the translation.
 1. **S8**: 4,103 blend keys through the new engine (search, passes, generated
    tables). This is the first proof of the engine, before any translation.
 2. **S12 once S7, S9a and S10a are in**: "vertex shaders whose NIR at
