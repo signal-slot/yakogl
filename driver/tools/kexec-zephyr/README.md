@@ -105,13 +105,16 @@ been run on the board.
 The display probe `t6_display` (step D2, `driver/docs/nanopc-t6-display.md`,
 section 2 route (a)) adopts the picture Linux leaves running, so it needs the
 crash route (`--crash`: `kexec --crash` into a `crashkernel=` reservation that
-holds the image window), not the normal kexec. The adopt accepts one mode,
-1024x768 at 60 Hz, so before the jump `--crash --go` runs `t6-kms-mode.py`
-(beside this) on the board: it sets that mode on HDMI-A-1 and holds it. The
-script reads VP0's mode back from Linux and jumps only when it is that mode;
-otherwise it stops the holder by its pid and Linux's own mode comes back
-(section 2(a), "The mode before the jump"). Its record is judged with `t6-verdict.sh t6_display`
-(fixture `testdata/t6_display-pass.uart`). The
+holds the image window), not the normal kexec. The adopt accepts two modes,
+1024x768 and 1920x1080 at 60 Hz, so before the jump `--crash --go` runs
+`t6-kms-mode.py` (beside this) on the board: it holds the mode Linux runs on
+HDMI-A-1 when it is one of the two (no size change), else it sets 1024x768
+and holds that. The script reads VP0's mode back from Linux and jumps only
+when it is the mode held; otherwise it stops the holder by its pid and
+Linux's own mode comes back (section 2(a), "The mode before the jump"). Its
+record is judged with `t6-verdict.sh t6_display` against the mode it found
+(fixture `testdata/t6_display-pass.uart`; `t6-verdict-test.sh` makes the
+1920x1080 record from it). The
 display probe `t6_cold` (step D8, section 2 route (c)) brings the display up
 from cold, so it takes the normal route, which turns Linux's display off.
 Its record is judged with `t6-verdict.sh t6_cold` (fixtures
