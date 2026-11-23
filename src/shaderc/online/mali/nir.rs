@@ -2308,7 +2308,12 @@ impl<'s> Nir<'s> {
         match op {
             Alu::Fmul if uniform && (is_zero(a) || is_zero(b)) => {
                 self.note_user(Prod::Identity);
-                return Ok(Val::Const(F32_ZERO));
+                /* the zero's own sign: GLSL's `-0.0` is `neg(0.0)`, and
+                 * `fmul(a, fneg(b))` is `fneg(fmul(a, b))` before
+                 * `fmul(a, 0.0)` is 0.0 (nir_opt_algebraic.py:277), so
+                 * `a * -0.0` is -0.0 (deqp_constop_nz_shared_vs: Mesa's
+                 * `bcsel(c, -0.0, ..)` of `a_position * z`) */
+                return Ok(if is_zero(a) { a } else { b });
             }
             /* `ffma(0.0, a, b)` is `b` (nir_opt_algebraic.py:305-306) */
             Alu::Ffma if uniform && (is_zero(a) || is_zero(b)) => {
@@ -2718,7 +2723,11 @@ fn vs_fmul(vs: &mut Nir<'_>, split: [bool; 2], a: Val, b: Val) -> Result<Val, Ma
         }
         vs.late_fold = true;
     }
-    vs.alu(Alu::Fmul, a, b, Val::Undef)
+    let r = vs.alu(Alu::Fmul, a, b, Val::Undef)?;
+    /* the back end's `fmul(a, 0.0)` and `fmul(a, -0.0)` on a lane of a
+     * `load_const`: +0.0 either way (nir_opt_algebraic.py:277-278), not
+     * the zero's sign the whole-vector rule keeps ([`Nir::alu`]) */
+    Ok(if late.is_some() && matches!(r, Val::Const(_)) { Val::Const(F32_ZERO) } else { r })
 }
 
 /// "Propagate constants up multiplication chains" (nir_opt_algebraic.py:2393):
@@ -5644,8 +5653,26 @@ fn walk<'s>(
     let scale = vs.load(Kind::Sysval(Sysval::ViewportScale))?;
     let offset = vs.load(Kind::Sysval(Sysval::ViewportOffset))?;
     vs.note(if matches!(p[3], Val::Const(_)) { Prod::ViewportConstW } else { Prod::ViewportW });
-    let r = vs.alu(Alu::Frcp, p[3], Val::Undef, Val::Undef)?;
-    let r = vs.alu(Alu::Fmax, r, Val::Const(W_RECIP_MIN), Val::Undef)?;
+    /* a w that selects between constants none of which is below zero:
+     * Mesa's range analysis takes a zero of either sign as zero, so `1/w`
+     * is not negative and the clamp's `fmax` goes, and the w the
+     * reciprocal reads is the +0.0 one (deqp_constop_nz_shared_vs's `w`
+     * of `a_position * -0.0` or 1.0: `CSEL ... 0x3F800000, 0x0`, then
+     * `FRCP`, `FMIN` alone) */
+    let nonneg = |v: Val| matches!(v, Val::Const(k) if k == F32_NEG_ZERO || (k >> 31 == 0 && plain(k)));
+    let pz = |v: Val| if v == Val::Const(F32_NEG_ZERO) { Val::Const(F32_ZERO) } else { v };
+    let mut w = p[3];
+    let mut clamp_low = true;
+    if let Some((Alu::Bcsel, [c, a, b])) = vs_alu_of(&vs, w) {
+        if nonneg(a) && nonneg(b) {
+            if a == Val::Const(F32_NEG_ZERO) || b == Val::Const(F32_NEG_ZERO) {
+                w = vs.alu(Alu::Bcsel, c, pz(a), pz(b))?;
+            }
+            clamp_low = false;
+        }
+    }
+    let r = vs.alu(Alu::Frcp, w, Val::Undef, Val::Undef)?;
+    let r = if clamp_low { vs.alu(Alu::Fmax, r, Val::Const(W_RECIP_MIN), Val::Undef)? } else { r };
     let wr = vs.alu(Alu::Fmin, r, Val::Const(W_RECIP_MAX), Val::Undef)?;
     let mut ndc = [Val::Undef; 3];
     for (c, d) in ndc.iter_mut().enumerate() {
