@@ -98,25 +98,44 @@ def parse_int(s):
     return int(s) if re.fullmatch(r'\d+', s) else None
 
 
-def collision_names(field):
+def collision_groups(field):
     """Failing names of a results.tsv cell. `a,b` is one CRC the pages could not tell apart (board.sh prints the
     candidates comma-joined). When the same k-name group is listed k times in the cell, every candidate failed
     once (one page per case): the group counts once. Fewer repeats leave it ambiguous and a longer run is a
     real duplicate; both are left as listed."""
     parts = [[n for n in part.split(',') if n] for part in field.split(';')]
+    parts = [g for g in parts if g]
     groups = {}
     for g in parts:
         if len(g) > 1:
             groups[tuple(g)] = groups.get(tuple(g), 0) + 1
-    names, kept = [], set()
+    out, kept = [], set()
     for g in parts:
         t = tuple(g)
         if len(g) > 1 and groups[t] == len(g):
             if t in kept:
                 continue
             kept.add(t)
-        names.extend(g)
-    return names
+        out.append(g)
+    return out
+
+
+def collision_names(field):
+    """The flat candidate list of collision_groups."""
+    return [n for g in collision_groups(field) for n in g]
+
+
+def failure_units(groups, must):
+    """How many failures a cell's groups stand for in the mustpass set: a name counts once however often it is
+    listed, and a CRC group of k candidates is one failure (not k)."""
+    singles, multi = set(), 0
+    for g in groups:
+        c = [n for n in g if n in must]
+        if len(g) == 1 and c:
+            singles.add(c[0])
+        elif len(g) > 1 and c:
+            multi += 1
+    return len(singles) + multi
 
 
 def read_rows(path):
@@ -138,8 +157,9 @@ def read_rows(path):
         tally = None if any(n is None for n in nums[1:5]) else [n or 0 for n in nums]
         if tally is not None and nums[0] is None:
             tally[0] = sum(tally[1:6])
-        names = [] if f[8] in ("-", "") else collision_names(f[8])
-        rows.append((idx, f[1], tally, names, f[2:8]))
+        groups = [] if f[8] in ("-", "") else collision_groups(f[8])
+        names = [n for g in groups for n in g]
+        rows.append((idx, f[1], tally, names, f[2:8], groups))
     return rows
 
 
@@ -164,7 +184,7 @@ class Merge:
                 self.problems.append('different commits: %s (%s) and %s (%s)' % (self.commits[0][0], known[0], d, c))
         for i, d in sorted(self.dash.items()):
             if i not in self.rec:      # no input has a real row: a no-record entry
-                self.rec[i] = dict(dir=d, tally=None, names=[], outside=0, crc=0)
+                self.rec[i] = dict(dir=d, tally=None, names=[], outside=0, crc=0, units=0)
         self.check_verdicts()
         self.listed = {}
         for i in sorted(self.rec):
@@ -186,7 +206,7 @@ class Merge:
         if not path:
             self.problems.append('%s: no results.tsv' % d)
             return
-        for idx, filt, tally, names, raw in read_rows(path):
+        for idx, filt, tally, names, raw, groups in read_rows(path):
             if not 0 <= idx < len(self.table):
                 self.problems.append('%s: entry %d is not in the table (%d entries)' % (d, idx, len(self.table)))
                 continue
@@ -208,7 +228,8 @@ class Merge:
                     crc += 1
                 else:
                     outside += 1
-            self.rec[idx] = dict(dir=d, tally=tally, names=placed, outside=outside, crc=crc)
+            self.rec[idx] = dict(dir=d, tally=tally, names=placed, outside=outside, crc=crc,
+                                 units=failure_units(groups, must))
 
     def read_verdicts(self, d):
         """{entry: (verdict, resets, rc)} from the `board.sh <board> e<NN> rc=.. verdict=.. resets=..` lines."""
@@ -305,21 +326,26 @@ def span(ids):
     return ','.join(out) or 'none'
 
 
-def do_notpass(m, out):
+def do_notpass(m, out, skip_noresult=False):
     commits = sorted({c for _, c in m.commits if c})
     out.write('# i.MX8MP dEQP-GLES3 at %s: every case that is not Pass, per entry of tools/cts/imx8mp-gles3-tree.txt\n'
               % (' and '.join(commits) or 'an unnamed commit'))
     out.write('# rows: e<i>:<status> <case>, in entry then mustpass order (NoResult = the entry has no usable record; '
               'a record names only the failing cases, so n.s./other/none cases show in the unresolved counts)\n')
-    run = sorted(m.rec)
+    run = [i for i in sorted(m.rec) if m.counts(i) is not None]
     out.write('# entries run (%d of %d): %s\n' % (len(run), len(m.table), span(run)))
-    for i in run:
+    norec = [i for i in range(len(m.table)) if m.counts(i) is None]
+    if norec:
+        out.write('# entries without a record (%d): %s%s\n' % (len(norec), span(norec),
+                  '; their NoResult rows are left out (--skip-noresult)' if skip_noresult else ''))
+    for i in sorted(m.rec):
         r = m.rec[i]
         c = m.counts(i)
         if c is None:
             out.write('# e%d: no usable record, %d mustpass cases without a result\n' % (i, len(m.per[i])))
-            for case in m.per[i]:
-                out.write('e%d:NoResult %s\n' % (i, case))
+            if not skip_noresult:
+                for case in m.per[i]:
+                    out.write('e%d:NoResult %s\n' % (i, case))
             continue
         mp, b, p, f, s, o, _ = c
         src = sourced(m, i)
@@ -327,10 +353,19 @@ def do_notpass(m, out):
         shown = {n: 'Fail' for n in fails if n not in src}
         shown.update((n, st) for n, st in src.items() if st != 'Pass')
         named = fails | {n for n, st in src.items() if st != 'Pass'}
-        unresolved = max(0, mp - p - len(named))
-        if unresolved or r['crc'] or r['outside'] or f != len(r['names']) or b < mp:
-            out.write('# e%d: unresolved %d (mustpass %d, begun %d, pass %d, fail %d of which %d named, n.s. %d, other %d%s%s)\n'
-                      % (i, unresolved, mp, b, p, f, len(r['names']), s, o,
+        # Each name once, and an ambiguous CRC group (a,b: one failure, k candidates) is one failure, not k.
+        extra = len(fails) - r['units']
+        nfail = len(fails) - extra
+        unresolved = max(0, mp - p - (len(named) - extra))
+        if unresolved or r['crc'] or r['outside'] or f != nfail or extra or b < mp:
+            out.write('# e%d: unresolved %d (mustpass %d, begun %d, pass %d, fail %d of which %d named, n.s. %d, other %d%s%s%s%s)\n'
+                      % (i, unresolved, mp, b, p, f, nfail, s, o,
+                         ', %d of the names are not counted Fail: the record also names n.s./other cases '
+                         '(shown as Fail unless a console says otherwise)' % (nfail - f)
+                         if f < nfail <= f + s + o else
+                         ', %d names more than fails, not explained by n.s./other' % (nfail - f) if nfail > f else '',
+                         ', %d more candidate names of ambiguous crc groups listed as Fail, each group counted once' % extra
+                         if extra else '',
                          ', %d names unresolved crc' % r['crc'] if r['crc'] else '',
                          ', %d names outside the mustpass' % r['outside'] if r['outside'] else ''))
         order = {n: k for k, n in enumerate(m.per[i])}
@@ -362,6 +397,8 @@ def run(argv, out=None):
     g.add_argument('--notpass', action='store_true')
     g.add_argument('--totals', action='store_true')
     g.add_argument('--check', action='store_true')
+    ap.add_argument('--skip-noresult', action='store_true',
+                    help='--notpass: leave out the e<i>:NoResult rows of entries without a usable record (interim views)')
     ap.add_argument('--partial', action='store_true', help='--check: allow entries no input has a record for')
     ap.add_argument('dirs', nargs='+')
     a = ap.parse_args(argv)
@@ -378,7 +415,10 @@ def run(argv, out=None):
         return 1 if m.problems else 0
     for p in m.problems:
         print('warning:', p, file=sys.stderr)
-    (do_notpass if a.notpass else do_totals)(m, out)
+    if a.notpass:
+        do_notpass(m, out, a.skip_noresult)
+    else:
+        do_totals(m, out)
     return 0
 
 
@@ -514,7 +554,25 @@ def selftest():
         expect('notpass: a name outside the mustpass is dropped', not any('nonmust' in l for l in lines))
         expect('notpass: the no-record entry is NoResult per case', lines.count('e3:NoResult dEQP-GLES3.e.0') == 1)
         expect('notpass: the early row has its unresolved count', '# e2: unresolved 2 ' in out)
-        expect('notpass: entries run are named', '(4 of 4): 0-3' in out)
+        expect('notpass: only the recorded entries are run', '# entries run (3 of 4): 0-2' in out)
+        expect('notpass: the entry without a record is listed apart', '# entries without a record (1): 3' in out)
+        expect('notpass: NoResult rows stay by default', 'e3:NoResult dEQP-GLES3.e.0' in out)
+        rc, out2, _ = call(*base_args, '--notpass', '--skip-noresult', A, B)
+        expect('skip-noresult: no NoResult row', 'NoResult dEQP' not in out2)
+        expect('skip-noresult: the header lines stay', '# e3: no usable record' in out2 and
+               '# entries without a record (1): 3' in out2)
+        expect('skip-noresult: the Fail rows are unchanged',
+               [l for l in out.splitlines() if l.startswith('e1:')] == [l for l in out2.splitlines() if l.startswith('e1:')])
+        DUP = slice_('nmdup', c1, [(2, entries[2], 5, 4, 1, 0, 0, 0, 'dEQP-GLES3.d.0;dEQP-GLES3.d.0')])
+        rc, out, _ = call(*base_args, '--notpass', DUP)
+        expect('dup: a failing name listed twice is counted once, nothing unresolved',
+               not re.search(r'^# e\d+: unresolved', out, re.M) and
+               [l for l in out.splitlines() if l.startswith('e2:')] == ['e2:Fail dEQP-GLES3.d.0'])
+        AMB = slice_('ambgrp', c1, [(2, entries[2], 5, 4, 1, 0, 0, 0, 'dEQP-GLES3.d.1,dEQP-GLES3.d.2')])
+        rc, out, _ = call(*base_args, '--notpass', AMB)
+        expect('amb: an ambiguous crc group of two is one failure, both candidates still listed',
+               'fail 1 of which 1 named' in out and '1 more candidate names' in out and
+               [l for l in out.splitlines() if l.startswith('e2:')] == ['e2:Fail dEQP-GLES3.d.1', 'e2:Fail dEQP-GLES3.d.2'])
 
         rc, out, _ = call(*base_args, '--totals', A, B)
         expect('totals: overall row', re.search(r'^total\s+14\s+11\s+8\s+1\s+1\s+0\s+4$', out, re.M) is not None)
