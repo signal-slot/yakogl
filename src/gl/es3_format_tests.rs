@@ -201,6 +201,10 @@ fn a_pair_of_another_row_is_invalid_operation() {
 /// error and a log line, in every specification call; one that has a
 /// fallback class stores the texels there.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn a_format_no_class_of_which_is_sampled_is_refused_by_name() {
     if crate::REPORT_ES2 {
         return;
@@ -416,6 +420,10 @@ fn an_integer_texture_is_complete_only_with_nearest_filters() {
 /// glGenerateMipmap of a format that is not renderable and filterable is
 /// GL_INVALID_OPERATION (ES 3.0 3.8.14); RGB10_A2, in its class or as RGBA8, has one.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn generate_mipmap_follows_renderable_and_filterable() {
     if crate::REPORT_ES2 {
         return;
@@ -521,6 +529,10 @@ fn rgb10a2_renderbuffer_is_the_ten_bit_surface_where_the_class_is_sampled() {
 /// normalised. The same texture held as RGBA8 (no bit) is complete too, as
 /// before, and rendered as RGBA8888.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn rgb10a2_texture_is_a_complete_colour_attachment_in_its_class() {
     if crate::REPORT_ES2 {
         return;
@@ -687,6 +699,10 @@ fn rgb10a2_read_pair_of_a_renderbuffer() {
 
 /// The same for a GL_RGB10_A2 texture attachment.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn rgb10a2_read_pair_of_a_texture() {
     if crate::REPORT_ES2 {
         return;

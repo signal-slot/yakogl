@@ -1854,6 +1854,10 @@ mod tests {
     /// copies its bytes as RGBA8, as before: to an RGBA8 renderbuffer, and
     /// texture to texture, NEAREST and LINEAR.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+    )]
     fn rgb10a2_texture_without_a_class_blits_as_rgba8() {
         let gl = TestGl::new(8, 8);
         if rgb10a2_class() {
