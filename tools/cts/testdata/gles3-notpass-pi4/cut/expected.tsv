@@ -1,0 +1,6 @@
+# Pi 4 dEQP-GLES3 at abcdef1234567890abcdef1234567890abcdef12: every case that is not Pass, per image of tools/cts/pi4-gles3-tree.txt
+# rows: <record>:<status> <case>, sorted by case name   (<image>.console.txt = the UART console of the image, the records of s1, s2; NoResult = the case never began)
+# images run (3 of 3): A1 B1 B1x
+B1.console.txt:Crash dEQP-GLES3.b.alpha
+B1x.console.txt:Fail dEQP-GLES3.b.never
+B1.console.txt:Fail dEQP-GLES3.b.zeta
