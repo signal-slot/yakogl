@@ -77,7 +77,8 @@ pull request (step 1 above).
   the `shaderc-online` tests: `tools/cts/deps-env.sh --check` says which
   entries this host's dependency layout has, and
   `export $(tools/cts/deps-env.sh)` sets them all from it before the run.
-  On a new host, build the entries the layout lacks, first, as one command:
+  On a host whose layout has the gate image's trees, build the entries it
+  lacks, first, as one command:
   `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR LZ4`
   (the Mali firmware, "The PowerVR firmware" below; the dEQP GLES3 shader
   corpus, which the `shaderc-online` tests and the corpus test read; and
@@ -86,6 +87,16 @@ pull request (step 1 above).
   `hal_nxp` checkout, which the imx8mp `regs.rs` regenerate row reads, a
   gap without it; and the `lz4` program of the am62p second-stage vectors,
   built from source without root).
+  On a new host the layout is empty or not there yet (`--check` then names
+  every entry missing): that command also makes the Zephyr workspace and
+  `pco_shc` the entries need, but not the Zephyr SDK (the aarch64 C
+  compiler of the `xbuild71` row and the image rows), `MESA_PAN_TREE` or
+  `GLMARK2_SRC`, so follow it with `tools/cts/deps-env.sh --build-missing`,
+  which makes every entry still absent. From an empty layout on 4 cores
+  (2026-11-23, a fresh clone of `75d895ce`, rustc 1.99.1) the one command
+  took 251 s and `--build-missing` 92 s, 5.5 GB in all;
+  `--build-missing` exits 1 for the PowerVR firmware header alone, which no
+  build makes ("The PowerVR firmware" below).
   On the `ed15e1be` walk (2026-11-09) the firmware and the corpus took
   seconds and the capture program 85 s (97 s on a retry here after a reset
   download); run the build once at a time, two at once share `PCO_SHC.src` and
