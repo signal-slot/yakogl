@@ -180,8 +180,20 @@ def single(d):
     return bad
 
 
+def not_sd(d):
+    """True when disk-type.txt exists and the disk is not an SD card."""
+    t = text(d, "disk-type.txt")
+    return t is not None and t.strip() != "SD"
+
+
 def compare(a, b):
     diffs = 0
+    # the device node (mmcblk0 / mmcblk2) is never compared: Linux renumbers
+    # the card across reboots; only "is an SD disk" matters
+    for d in (a, b):
+        if not_sd(d):
+            print("env_read: %s was read from a disk whose type is not SD" % d, file=sys.stderr)
+            diffs += 1
     ea, eb = env_vars(a), env_vars(b)
     if ea is None or eb is None:
         print("env_read: a directory has no readable u-boot-env.bin", file=sys.stderr)
