@@ -523,6 +523,8 @@ fn es2_report_answers_are_unchanged() {
         512.0
     } else if cfg!(feature = "gpu-vivante") {
         64.0
+    } else if cfg!(feature = "gpu-mali") {
+        4095.9375 // mali::backend::POINT_SIZE_MAX, Mesa's max_point_size
     } else {
         511.0
     }; // gl/state.rs POINT_SIZE_MAX
@@ -569,7 +571,8 @@ fn es2_report_answers_are_unchanged() {
     {
         assert_eq!(error_of(p), GL_INVALID_ENUM, "{name} must be GL_INVALID_ENUM in an ES 2.0 report");
     }
-    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), 3, "MAX_COLOR_ATTACHMENTS(_NV)");
+    /* the back end's count: 3, or 4 on the Mali (mali::backend::DRAW_TARGETS) */
+    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), yakogl::backend::DRAW_TARGETS as GLint, "MAX_COLOR_ATTACHMENTS(_NV)");
     assert_eq!(geti_n(GL_MAX_VIEWPORT_DIMS), [4096, 4096], "MAX_VIEWPORT_DIMS");
     assert_eq!(getf_n(GL_ALIASED_LINE_WIDTH_RANGE), [1.0, 16.0], "ALIASED_LINE_WIDTH_RANGE");
     assert_eq!(getf_n(GL_ALIASED_POINT_SIZE_RANGE), [1.0, point_max], "ALIASED_POINT_SIZE_RANGE");
