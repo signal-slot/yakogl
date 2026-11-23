@@ -706,8 +706,11 @@ install_distro() {
       return 0
     fi
     if sudo -n true 2>/dev/null; then
+      # A runner that has just started runs its own unattended upgrade, which
+      # holds the dpkg lock: apt-get waits for it (up to 10 minutes) instead
+      # of failing at once (#11147; DPkg::Lock::Timeout, apt 1.9.11 and later).
       # shellcheck disable=SC2086 # the names are one per line, no spaces
-      run sudo -n apt-get install -y $missing && return 0
+      run sudo -n apt-get -o DPkg::Lock::Timeout=600 install -y $missing && return 0
       return 1
     fi
     echo "no passwordless sudo here; owner command:"
