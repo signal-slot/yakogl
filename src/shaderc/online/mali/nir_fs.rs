@@ -1130,6 +1130,14 @@ pub struct Fs<'s> {
     /// An identity on every lane is folded at the link (the walk's `Fmul`
     /// and `Fadd` arm), so its operand is the colour's own lane.
     folded: [u8; MAX_VARYINGS],
+    /// The values of the lanes the walk made one lane at a time from a
+    /// pair of 16-bit lanes `nir_lower_alu_width` splits (a mixed
+    /// constructor's constants across two pairs, the `Fmul` and `Fadd`
+    /// arm): [`vectorise`] pairs nothing across them, each lane its own
+    /// tree and the word packed (deqp_colourpair_rnd_fs_zk_tree,
+    /// _ck_madd).
+    split: [Val; 8],
+    nsplit: usize,
     pcoord_key: u32,
     /// gl_FragCoord's first read in a highp shader ([`FRAG_Z`]).
     fz_key: u32,
@@ -1374,6 +1382,11 @@ impl<'s> Fs<'s> {
         let id = self.nir.push_node(nd)?;
         self.origin[id as usize] = at as u16;
         Ok(Val::Lane(id, 0))
+    }
+
+    /// Lane `v` is one the walk made alone from a split pair ([`Fs::split`]).
+    fn is_split(&self, v: Val) -> bool {
+        v != Val::Undef && self.split[..self.nsplit].contains(&v)
     }
 
     /// Operand `v` of an fp16 operation the walk folds away: a varying's
@@ -4275,6 +4288,8 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         nmoved: 0,
         var_key: [u32::MAX; MAX_VARYINGS],
         folded: [0; MAX_VARYINGS],
+        split: [Val::Undef; 8],
+        nsplit: 0,
         pcoord_key: u32::MAX,
         fz_key: u32::MAX,
         inputs: [None; MAX_VARYINGS],
@@ -6259,8 +6274,49 @@ fn walk_nodes(
                 if a == AluOp::Fadd && mixed && !whole {
                     return Err(MaliError::FsVaryingLoad);
                 }
+                /* a pair of constant lanes of a vector constructor with a
+                 * computed lane, whose constants straddle a pair of the
+                 * constructor's one constant, is split into its lanes, each
+                 * lane's own rule holding. The mechanism is read from Mesa's
+                 * source, not traced pass by pass: GLSL packs a
+                 * constructor's constants into one `ir_constant` in lane
+                 * order (ast_function.cpp `emit_inline_vector_constructor`),
+                 * so `vec4(0.5, c, 0.0, -1.0)` is `vec4(k.x, c, k.y, k.z)`;
+                 * `nir_opt_copy_prop` makes the pair's source `k.yz`, a
+                 * swizzle across two 16-bit pairs, and `nir_lower_alu_width`
+                 * splits the operation into lanes
+                 * (`alu_is_swizzled_in_bounds`). Measured:
+                 * deqp_colourpair_rnd_fs_zk_tree's `0 * a.z` is 0.0
+                 * and `-1.0 * a.w` an fneg (`FADD.v2f16 r1, r2^.neg.h00`,
+                 * then `MKVEC.v2i16 r1, 0x0.h0, r1^.h0`), _ck_madd's `0.0 +
+                 * b.z * -1.0` the product's lane (`MKVEC.v2i16 r1, r2^.h0,
+                 * r1^.h0`). An operand of constants only is one `ir_constant`
+                 * whose pairs are in bounds (_ck_madd's `vec4(a, 1, -1, -2)`
+                 * keeps `FMA.v2f16 .., 0x3C003400`) */
+                let straddles = |pair: usize| {
+                    (0..2).any(|k| {
+                        let c = |i: usize| matches!(lane(vals, s[k], i), Val::Const(_));
+                        pair + 1 < w
+                            && c(pair)
+                            && c(pair + 1)
+                            && (0..w).any(|i| !c(i))
+                            && (0..pair).filter(|&i| c(i)).count() % 2 == 1
+                    })
+                };
+                let mut groups = [(0usize, 0usize, false); 4];
+                let mut ng = 0;
                 for pair in (0..w).step_by(2) {
-                    let lanes = pair..w.min(pair + 2);
+                    if straddles(pair) {
+                        groups[ng] = (pair, pair + 1, true);
+                        groups[ng + 1] = (pair + 1, pair + 2, true);
+                        ng += 2;
+                    } else {
+                        groups[ng] = (pair, w.min(pair + 2), false);
+                        ng += 1;
+                    }
+                }
+                for &(g0, g1, split) in &groups[..ng] {
+                    let lanes = g0..g1;
                     let all = |k: usize, bits: &[u32]| lanes.clone().all(|i| f.is_const(lane(vals, s[k], i), bits));
                     let rule = if all(1, ident) {
                         Rule::IdentitySecond
@@ -6333,6 +6389,10 @@ fn walk_nodes(
                             }
                         }
                         out[i] = f.op(a, x, y, at, rule, Some(vec_neg))?;
+                        if split && f.nsplit < f.split.len() {
+                            f.split[f.nsplit] = out[i];
+                            f.nsplit += 1;
+                        }
                         /* an identity on some lanes of the operation only:
                          * at the link the operation is still an fp16 one
                          * whose operand the tree's `f2fmp` converts
@@ -8719,6 +8779,10 @@ enum Leaf {
     Lane {
         x: u8,
         half: u16,
+        /// The constant is the low half: `MKVEC.v2i16 <half>.h0, x`
+        /// (deqp_colourpair_rnd_fs_uniform_tz_ck's `MKVEC.v2i16 r1,
+        /// u3.w1.h0, r1^.h0` of `vec2(1.0, a)`, `a` a uniform).
+        first: bool,
     },
     /// Texel `c` of look-up `j`'s fp16 result alone: its half of word
     /// `c / 2` in both lanes (a one-lane operation's source, `%35^.h00` in
@@ -8845,7 +8909,15 @@ impl Pairs {
 
     /// The productions of the tree under `x` (`at`: where it stands).
     fn note(&self, x: u8, at: Place, prods: &mut u128) {
-        *prods |= prod(self.form(x), at);
+        /* a constant then a load's lane as a product's second factor: the
+         * constant-first `MKVEC` alone (deqp_colourpair_rnd_fs_ck_product:
+         * `MKVEC.v2i16 r3, u2.w0.h0, r0.h0`, then `FMA.v2f16 r1, r1^, r3^,
+         * 0x0.neg`); the lane-first one there has no reference (`Mk` at
+         * `MulB` stays out of [`ADMITTED`]: deqp_arith_op_binary_mul_assign_fs_mediump) */
+        let mk_first = matches!(self.nodes[x as usize], P::Leaf(Leaf::Mk { first: true, .. }));
+        if !(mk_first && at == Place::MulB) {
+            *prods |= prod(self.form(x), at);
+        }
         /* a one-lane tree's own forms are [`lone_tree`]'s, checked there
          * (one read by a two-lane operation: [`vectorise`]) */
         if self.scalar[x as usize] {
@@ -8929,7 +9001,7 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
         (Some((Alu::Fadd, _)) | None, _) if matches!(b, Val::Const(_)) && f.ubo_word_tree(a) => {
             let Val::Const(c) = b else { return Err(MaliError::Defect(Defect::IrIndex)) };
             let x = scalar(f, pr, a, pair)?;
-            P::Leaf(Leaf::Lane { x, half: f16(c)? })
+            P::Leaf(Leaf::Lane { x, half: f16(c)?, first: false })
         }
         /* a vec2, vec3 or vec4 array element's word read at a run-time
          * index more than once ([`Leaf::UboWord`]) */
@@ -8976,6 +9048,34 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
             }
             let raw = pr.push(P::Leaf(Leaf::Raw { k, h: i / 2 }), place)?;
             P::Op(Alu::Fexp2, [raw, 0, 0])
+        }
+        /* the two lanes of a pair the walk made one at a time
+         * ([`Fs::split`]): two computed lanes, each its own tree (a lane of
+         * a vector operation the half of its pair's, [`lane_tree`]), the
+         * word packed (deqp_colourpair_rnd_fs_ck_madd's `FMA.v2f16 r2,
+         * u2.w1, r2^, 0x0.neg` of the product, `FADD.v2f16 r1, u3.w1,
+         * r2.h11` of the w lane's sum, then `MKVEC.v2i16 r1, r2^.h0,
+         * r1^.h0`) */
+        _ if a != b && f.alu_of(a).is_some() && f.alu_of(b).is_some() && f.is_split(a) && f.is_split(b) => {
+            pr.hint = None;
+            let x = lane_tree(f, pr, a, pair, ubo)?;
+            let y = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Pack { x, y })
+        }
+        /* a constant, then a computed lane of such a pair, as a word of
+         * the colour: the lane alone and the constant first,
+         * `MKVEC.v2i16 <constant>.h0, x.h0` (deqp_colourpair_rnd_fs_zk_tree's
+         * `vec2(0 * a.z, -1 * a.w)`: `FADD.v2f16 r1, r2^.neg.h00, 0x0.neg`,
+         * then `MKVEC.v2i16 r1, 0x0.h0, r1^.h0`) */
+        (None, Some(_))
+            if matches!(a, Val::Const(_))
+                && f.is_split(b)
+                && f.colour.is_some_and(|c| (a, b) == (c[0], c[1]) || (a, b) == (c[2], c[3])) =>
+        {
+            let Val::Const(c) = a else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let half = f16(c)?;
+            let x = lane_tree(f, pr, b, pair, ubo)?;
+            P::Leaf(Leaf::Lane { x, half, first: true })
         }
         _ if a != b
             && f.alu_of(a).is_some()
@@ -9039,7 +9139,7 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                     if half == 0 {
                         P::Leaf(Leaf::Zext(x))
                     } else {
-                        P::Leaf(Leaf::Lane { x, half })
+                        P::Leaf(Leaf::Lane { x, half, first: false })
                     }
                 }
             }
@@ -9259,12 +9359,9 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                 let half = f16(c)?;
                 /* `MKVEC.v2i16 x, #0` is `U16_TO_U32 x` (bi_lower_mkvec_swz.c:256-257,
                  * opt.rs `lower_mkvec_swz`), drawn as a word of the colour
-                 * (deqp_colourpair_default_attrib's `U16_TO_U32 r0, r0.h0`);
-                 * as an operation's operand it has no reference */
-                let word = |c: [Val; 4]| (a, b) == (c[0], c[1]) || (a, b) == (c[2], c[3]);
-                if half == 0 && !f.colour.is_some_and(word) {
-                    return Err(MaliError::ColourZeroHalf);
-                }
+                 * (deqp_colourpair_default_attrib's `U16_TO_U32 r0, r0.h0`),
+                 * and as an operation's operand, the word the operation
+                 * reads (deqp_mixcol_lz_scale's `color * 0.5 + 0.5`) */
                 let (k, c) = index(f, v, i)?;
                 P::Leaf(Leaf::Mk { k, c, half, first: false })
             }
@@ -9290,16 +9387,22 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                     };
                     P::Leaf(Leaf::Uniform { base, comp: (w - base) as u8, swz })
                 }
+                /* a constant, then a uniform's component, as a word of the
+                 * colour: `MKVEC.v2i16 <constant>.h0, u.h0`
+                 * (deqp_colourpair_rnd_fs_uniform_tz_ck's `vec2(1.0, a)`:
+                 * `MOV.i32 r1, u2.w0`, `MKVEC.v2i16 r1, u3.w1.h0, r1^.h0`) */
+                (None, Some(_), Val::Const(c), _) if f.colour.is_some_and(|w| (a, b) == (w[2], w[3])) => {
+                    let half = f16(c)?;
+                    let x = lane_tree(f, pr, b, pair, ubo)?;
+                    P::Leaf(Leaf::Lane { x, half, first: true })
+                }
                 (Some(_), ..) | (_, Some(_), ..) => return Err(MaliError::FsUniform),
                 /* a constant, then a load's lane: the constant is the low
                  * half (deqp_colourpair_ck_lane_highpcolour), as a word of
-                 * the colour; as an operation's operand it has no form here
-                 * ([`conversion_order`]) */
+                 * the colour and as an operation's operand
+                 * (deqp_colourpair_rnd_fs_ck_product's `MKVEC.v2i16 r3,
+                 * u2.w0.h0, r0.h0` read by the `FMA.v2f16`) */
                 (None, None, Val::Const(c), _) if f.input_lane(b).is_some() => {
-                    let word = |c: [Val; 4]| (a, b) == (c[0], c[1]) || (a, b) == (c[2], c[3]);
-                    if !f.colour.is_some_and(word) {
-                        return Err(MaliError::ColourPair);
-                    }
                     let half = f16(c)?;
                     let Some((v, i)) = f.input_lane(b) else { return Err(MaliError::Defect(Defect::IrIndex)) };
                     let (k, c) = index(f, v, i)?;
@@ -9358,13 +9461,9 @@ fn conversion_order(
         if roots.contains(&(i as u8)) {
             continue;
         }
-        /* a constant then a lane as an operation's operand: Mesa computes
-         * the lane alone and joins the halves after
-         * (deqp_colourpair_rnd_fs_ck_madd, _zk_tree, _ck_product), a form
-         * not built here; as a colour word it is the `MKVEC` */
-        if matches!(x, P::Leaf(Leaf::Mk { first: true, .. })) {
-            return Err(MaliError::ColourPair);
-        }
+        /* a constant then a lane as an operation's operand is its tree's
+         * lane, converted at the load (deqp_colourpair_rnd_fs_ck_product's
+         * `FADD.f32 r0.h0` of `d`, read by both `MKVEC`s) */
         for (k, c) in lanes_of(x).into_iter().flatten() {
             tree[k as usize] |= 1 << c;
         }
@@ -9655,13 +9754,14 @@ fn lane_word(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
     let half = f16_rtne(c).ok_or(MaliError::Fp16Inexact)?;
     /* `vec2(x, 0.0)` is `U16_TO_U32 x` ([`Leaf::Zext`]): drawn for a tree
      * of [`vec_tree`]'s forms (fsvec_length_mediump's `U16_TO_U32 r0,
-     * r0^.h0` of the length), for no other */
-    if half == 0 && !vec_tree(f, a) && !uniform_sum(f, a) {
+     * r0^.h0` of the length) and of a uniform's sums ([`uniform_sum`],
+     * [`uniform_tree`]), for no other (a texel's has no reference) */
+    if half == 0 && !vec_tree(f, a) && !uniform_sum(f, a) && !uniform_tree(f, a) {
         return Err(MaliError::ColourZeroHalf);
     }
     pr.hint = Some(2 * pair as usize);
     let x = lane_tree(f, pr, a, pair, ubo)?;
-    let leaf = if half == 0 { Leaf::Zext(x) } else { Leaf::Lane { x, half } };
+    let leaf = if half == 0 { Leaf::Zext(x) } else { Leaf::Lane { x, half, first: false } };
     pr.push(P::Leaf(leaf), (f.key(a), pair)).map(Some)
 }
 
@@ -9674,6 +9774,23 @@ fn uniform_sum(f: &Fs<'_>, v: Val) -> bool {
         Some(_) => false,
         None => f.uniform_dword(v).is_some(),
     }
+}
+
+/// Lane `v` is sums of uniform components and constants, negated or not,
+/// with a uniform among them (deqp_colourpair_rnd_fs_uniform_tz_ck's `b -
+/// -4.5` beside the colour's 0.0: `FADD.v2f16 r0, u2.w1.h00, r0^` of the
+/// constant's pair, then `U16_TO_U32 r0, r0^.h0`).
+fn uniform_tree(f: &Fs<'_>, v: Val) -> bool {
+    fn walk(f: &Fs<'_>, v: Val) -> Option<bool> {
+        match (f.alu_of(v), v) {
+            (Some((Alu::Fadd, s)), _) => Some(walk(f, s[0])? | walk(f, s[1])?),
+            (Some((Alu::Fneg, s)), _) => walk(f, s[0]),
+            (Some(_), _) => None,
+            (None, Val::Const(_)) => Some(false),
+            (None, _) => f.uniform_dword(v).map(|_| true),
+        }
+    }
+    walk(f, v) == Some(true)
 }
 
 /// Lane `v` is sums and products of fp16 texels and constants, with a
@@ -9882,7 +9999,10 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
     let hint = pr.hint.take();
     if let Some((lanes, i, w)) = f.pair_lane(v, hint) {
         let h = i / 2;
-        if 2 * h + 1 < w {
+        /* a pair the walk split ([`Fs::split`]) is no operation of two
+         * lanes: each lane its own tree, below */
+        let split = f.is_split(lanes[2 * h]) && f.is_split(lanes[(2 * h + 1) & 3]);
+        if 2 * h + 1 < w && !split {
             let (a, b) = (lanes[2 * h], lanes[2 * h + 1]);
             let x = pair_node(f, pr, a, b, h as u8, ubo)?;
             return lone_node(pr, P::Leaf(Leaf::Part { x, h: (i % 2) as u8 }), place);
@@ -10884,6 +11004,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         (None, P::Leaf(Leaf::Uniform { base, comp, swz })) => {
             Src::of(Idx::Ubo { base, comp }).swz(if swz == Swz::H00 { Swz::H00 } else { Swz::H11 })
         }
+        /* a constant then a uniform's component: the component's own half
+         * (deqp_colourpair_rnd_fs_uniform_tz_ck's `ATEST .. u2.w0.h0`, then
+         * `MKVEC.v2i16 r1, u3.w1.h0, r1^.h0`) */
+        (None, P::Leaf(Leaf::Lane { x, first: true, .. })) => lane_srcs(&pr, x, 0, true, &lv, &val)?[1],
         /* a packed word is made after ATEST, which reads its high lane's
          * half (fsarith_77_transc: `ATEST .. r3.h0`, then `MKVEC.v2i16`) */
         (None, P::Leaf(Leaf::Pack { y, .. })) => match pr.nodes[y as usize] {
@@ -10925,8 +11049,8 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                 let s = [operand(&pr, x, &lv, &val)?];
                 Src::ssa(row(p, &mut rows, Row { op: Alu::U2u32, bits: 32, width: 1 }, &s)?)
             }
-            P::Leaf(Leaf::Lane { x, half }) => {
-                let s = [operand(&pr, x, &lv, &val)?.swz(Swz::H00), Src::of(Idx::Const(half as u32)).swz(Swz::H00)];
+            P::Leaf(Leaf::Lane { x, half, first }) => {
+                let s = lane_srcs(&pr, x, half, first, &lv, &val)?;
                 Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?)
             }
             P::Leaf(Leaf::Pack { x, y }) => {
@@ -13928,6 +14052,26 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
     })
 }
 
+/// The two sources of [`Leaf::Lane`]'s `MKVEC.v2i16`: node `x`'s lane (a
+/// uniform's component its own half, any other node its low half) and the
+/// constant's half, the constant first when `first`.
+fn lane_srcs(
+    pr: &Pairs,
+    x: u8,
+    half: u16,
+    first: bool,
+    lv: &Leaves,
+    val: &[Option<Src>; MAX_PAIRS],
+) -> Result<[Src; 2], MaliError> {
+    let v = operand(pr, x, lv, val)?;
+    let v = match pr.nodes[x as usize] {
+        P::Leaf(Leaf::Uniform { .. }) => v,
+        _ => v.swz(Swz::H00),
+    };
+    let k = Src::of(Idx::Const(half as u32)).swz(Swz::H00);
+    Ok(if first { [k, v] } else { [v, k] })
+}
+
 /// Operation `x` as its row, its `vec2` operands just before it.
 fn op(
     p: &mut Prog<'_>,
@@ -13974,8 +14118,8 @@ fn op(
                 let s = [operand(pr, z, lv, val)?];
                 val[*y as usize] = Some(Src::ssa(row(p, rows, Row { op: Alu::U2u32, bits: 32, width: 1 }, &s)?));
             }
-            P::Leaf(Leaf::Lane { x: z, half }) if val[*y as usize].is_none() => {
-                let s = [operand(pr, z, lv, val)?.swz(Swz::H00), Src::of(Idx::Const(half as u32)).swz(Swz::H00)];
+            P::Leaf(Leaf::Lane { x: z, half, first }) if val[*y as usize].is_none() => {
+                let s = lane_srcs(pr, z, half, first, lv, val)?;
                 val[*y as usize] = Some(Src::ssa(row(p, rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &s)?));
             }
             _ => {}

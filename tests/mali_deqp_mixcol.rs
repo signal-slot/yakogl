@@ -17,13 +17,17 @@
 //!   `lz_scale`) and the random shaders' sums and products (`ck_rnd_*`,
 //!   `lz_rnd*`).
 //!
-//! Every reference is refused now, so each test is `#[ignore]`d with its
-//! refusal and [`refusals_pinned`] asserts the whole `MaliError` message of
-//! each one exactly, and that every `deqp_mixcol_*` reference on disk is in
-//! [`REFUSALS`]. The lowering that lifts one removes its `ignore` and its
-//! entry in the same commit. The draws are `tools/mali/deqp_ref.sh
-//! --instrument shim` (drm-shim, `--uniform-values`, GPU g610; the G310's
-//! words are the same, `docs/notes/mali-g310-vs-g610.md`).
+//! `ck_scale`, `ck_sum` and `lz_scale` are byte-equal since plan #377's
+//! spike-colourpair-rest ([`LOWERED`]): the pair `MKVEC.v2i16` (a
+//! constant first) or `U16_TO_U32` (a load's lane and 0.0) as the
+//! operation's operand. Every other reference is refused, so its test is
+//! `#[ignore]`d with its refusal and [`refusals_pinned`] asserts the whole
+//! `MaliError` message of each one exactly, and that every `deqp_mixcol_*`
+//! reference on disk is in [`REFUSALS`], [`LOWERED`] or [`MATCHED`]. The lowering that
+//! lifts one removes its `ignore` and moves its entry in the same commit.
+//! The draws are `tools/mali/deqp_ref.sh --instrument shim` (drm-shim,
+//! `--uniform-values`, GPU g610; the G310's words are the same,
+//! `docs/notes/mali-g310-vs-g610.md`).
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_mixcol
@@ -32,8 +36,13 @@
 mod mali_ref;
 
 const MIX: &str = "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
-const CK: &str = "Valhall: a colour pair of a constant then a varying lane is not lowered yet";
-const LZ: &str = "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet";
+/// The later refusals of the colourpair rows spike-colourpair-rest lifted
+/// past their pair: the colour's lane forms and the conversions.
+const FORM: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+const LOAD: &str = "Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes converted out of Mesa's order) is not lowered yet";
+
+/// The references byte-equal now, their tests running.
+const LOWERED: &[&str] = &["ck_scale", "ck_sum", "lz_scale"];
 
 /// The references that compile byte-equal (their tests run): `hp_mat`, a
 /// shader with no default precision whose floats are all declared highp
@@ -58,15 +67,12 @@ const REFUSALS: &[(&str, &str)] = &[
     ("f2i_seq", MIX),
     ("f2i_rnd", MIX),
     ("f2i_dead", MIX),
-    /* colourpair, the pair as an operand: MKVEC.v2i16 or U16_TO_U32, then
-     * the operation on the word */
-    ("ck_scale", CK),
-    ("ck_scale_highp", CK),
-    ("ck_sum", CK),
-    ("ck_rnd_other", CK),
-    ("lz_scale", LZ),
-    ("lz_rnd", LZ),
-    ("lz_rnd_other", LZ),
+    /* colourpair, the pair as an operand past its pair: a highp varying's
+     * lanes in the mediump colour, and the random shaders' other lanes */
+    ("ck_scale_highp", LOAD),
+    ("ck_rnd_other", FORM),
+    ("lz_rnd", FORM),
+    ("lz_rnd_other", LOAD),
 ];
 
 #[test]
@@ -135,50 +141,47 @@ fn mixcol_f2i_dead() {
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane (ck_scale)"]
 fn mixcol_ck_scale() {
     mali_ref::assert_matches("deqp_mixcol_ck_scale");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane (ck_scale_highp)"]
+#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (ck_scale_highp)"]
 fn mixcol_ck_scale_highp() {
     mali_ref::assert_matches("deqp_mixcol_ck_scale_highp");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane (ck_sum)"]
 fn mixcol_ck_sum() {
     mali_ref::assert_matches("deqp_mixcol_ck_sum");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a constant then a varying lane (ck_rnd_other)"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (ck_rnd_other)"]
 fn mixcol_ck_rnd_other() {
     mali_ref::assert_matches("deqp_mixcol_ck_rnd_other");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) (lz_scale)"]
 fn mixcol_lz_scale() {
     mali_ref::assert_matches("deqp_mixcol_lz_scale");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) (lz_rnd)"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant (lz_rnd)"]
 fn mixcol_lz_rnd() {
     mali_ref::assert_matches("deqp_mixcol_lz_rnd");
 }
 
 #[test]
-#[ignore = "refused: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) (lz_rnd_other)"]
+#[ignore = "refused: a fragment varying load or conversion of a form no reference draws (lz_rnd_other)"]
 fn mixcol_lz_rnd_other() {
     mali_ref::assert_matches("deqp_mixcol_lz_rnd_other");
 }
 
 /// Each reference is refused with exactly its text in [`REFUSALS`] (the
-/// whole `MaliError` message, not a substring), and the table covers every
-/// `deqp_mixcol_*` reference on disk.
+/// whole `MaliError` message, not a substring), and the table with
+/// [`LOWERED`] and [`MATCHED`] covers every `deqp_mixcol_*` reference on disk.
 #[test]
 fn refusals_pinned() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tools/mali/testdata");
@@ -188,7 +191,8 @@ fn refusals_pinned() {
         .filter_map(|n| n.strip_prefix("deqp_mixcol_")?.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut listed: Vec<&str> = REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
+    let mut listed: Vec<&str> =
+        REFUSALS.iter().map(|(n, _)| *n).chain(LOWERED.iter().copied()).chain(MATCHED.iter().copied()).collect();
     listed.sort_unstable();
     assert_eq!(on_disk, listed, "a deqp_mixcol_* reference has no entry in REFUSALS");
     let mut changed = Vec::new();
