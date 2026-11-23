@@ -9,6 +9,10 @@
 //! scan that stops seeing a home path fails the test. This file is in the
 //! scanned tree: it builds every fixture value at run time and never holds
 //! one literally.
+//!
+//! Run: `cargo test --test redaction_scan --features gpu-vivante,shaderc-online`
+//! (the crate needs one GPU feature and one shader back end; without them the
+//! library does not compile. About 80 s, mostly the tree scan.)
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
