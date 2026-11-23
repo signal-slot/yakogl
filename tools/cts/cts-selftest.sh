@@ -1044,6 +1044,17 @@ else
     bad "licence audit --fail-on: the equal lists lack undecided ($f57_chk)"
 fi
 
+# 60: glmark2-mipmap-edge.py on synthetic 800x600 PNGs (the cube's edge, d from
+# two rows, tl's pixel, the black rim, the verdict line and exit codes).
+echo
+echo "== 60. glmark2-mipmap-edge-selftest.sh"
+if mp_out=$(TMPDIR="${TMPDIR:-/tmp}" bash "$HERE/glmark2-mipmap-edge-selftest.sh" 2>&1); then
+    ok "glmark2-mipmap-edge.py: synthetic edges measured"
+else
+    bad "glmark2-mipmap-edge-selftest.sh failed"
+    printf '%s\n' "$mp_out" | tail -8 | sed 's/^/        | /'
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "== all checks passed"
 else
