@@ -2391,6 +2391,8 @@ step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_d
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_float_sample
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_texstore.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_texstore
+step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_drift_msaa.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_drift_msaa
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_clears.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-vivante,shaderc-online,report-es2 --test gc_es2ctx_more_clears
 step "test    host-test,gpu-vivante,shaderc-online,report-es2 (tests/gc_es2ctx_more_mipmap.rs)" \
