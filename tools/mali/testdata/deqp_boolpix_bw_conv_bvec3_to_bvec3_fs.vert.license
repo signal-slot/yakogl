@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vert shader of a plan #387 item fclane-lower-2 pair: dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_bvec3_fragment, rebuilt from data/gles2/shaders/conversions.test through the ShaderLibrary template (VK-GL-CTS 93bca01, glsShaderLibraryCase.cpp, gluShaderLibrary.cpp genCompareFunctions), docs/notes/mali-deqp-boolpix.md.
