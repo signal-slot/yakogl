@@ -2313,7 +2313,15 @@ impl<'s> Nir<'s> {
                 return Ok(Val::Const(r));
             }
             let f = |k: usize| f32::from_bits(consts[k].unwrap_or(0));
-            if consts[..op.arity()].iter().any(|c| !plain(c.unwrap_or(0))) {
+            /* the viewport transform's clamp of `1/w`: `frcp` of a zero w
+             * is the IEEE infinity of its sign, which `fmax` and `fmin`
+             * with ±2^15 take to a bound (nir_lower_viewport_transform.c:
+             * 83-88; deqp_cfold2_zero_operand_rcp_inf, `gl_Position =
+             * vec4(0.0)`: w is 32768.0). The shader's own code still
+             * refuses an infinity in or out */
+            let clamp_inf = !self.user && bits == 32 && matches!(op, Alu::Fmax | Alu::Fmin);
+            let ok = |c: u32| plain(c) || (clamp_inf && f32::from_bits(c).is_infinite());
+            if consts[..op.arity()].iter().any(|c| !ok(c.unwrap_or(0))) {
                 return Err(MaliError::ConstantFold);
             }
             /* exact, from the shared fold (no libm): what the GLSL front
@@ -2424,8 +2432,8 @@ impl<'s> Nir<'s> {
              * the front end's `atan` a constant select drops (`u =
              * bcsel(|x| <= 1.0, x, rcp(x))`, deqp_constrnd_atan_zero_lanes_vs's
              * 0 lanes). An infinity that another fold reads is not
-             * `plain` and stays refused there (the clamp of `1/w` of a
-             * constant `w` of 0.0) */
+             * `plain` and stays refused there, but in the viewport
+             * transform's clamp of `1/w` (`clamp_inf` above) */
             let ieee = (matches!(op, Alu::Fadd | Alu::Fmul | Alu::Fmin | Alu::Fmax) && !r.is_nan())
                 || (op == Alu::Frcp && r.is_infinite());
             if !plain(r.to_bits()) && !ieee {
@@ -6421,6 +6429,25 @@ fn walk<'s>(
      * `FRCP`, `FMIN` alone) */
     let nonneg = |v: Val| matches!(v, Val::Const(k) if k == F32_NEG_ZERO || (k >> 31 == 0 && plain(k)));
     let pz = |v: Val| if v == Val::Const(F32_NEG_ZERO) { Val::Const(F32_ZERO) } else { v };
+    /* a w of ±0.0: `frcp` is ±inf, which the clamp takes to ±2^15 only
+     * when the whole position is a constant vector (the first
+     * nir_opt_constant_folding folds the chain:
+     * deqp_cfold2_zero_operand_rcp_inf). With a lane not constant
+     * (`vec4(p, 0.0, 0.0)`) the w reaches `frcp` as a constant only after
+     * copy propagation, and nir_opt_algebraic drops the clamp first: Mesa
+     * stores w = +inf (pan_shc), not lowered. The constant vector is the
+     * IR's: one store of a constant, not lanes the walk folded */
+    let mut stores = m.instrs.iter().filter_map(|op| match op {
+        IrOp::StoreOutput { slot: IoSlot::Position, src } => Some(src.val),
+        _ => None,
+    });
+    let const_position = match (stores.next(), stores.next()) {
+        (Some(v), None) => matches!(m.def(v), Some(IrOp::ConstF32(_))),
+        _ => false,
+    };
+    if is_zero(p[3]) && !const_position {
+        return Err(MaliError::ConstantFold);
+    }
     let mut w = p[3];
     let mut clamp_low = true;
     if let Some((Alu::Bcsel, [c, a, b])) = vs_alu_of(&vs, w) {

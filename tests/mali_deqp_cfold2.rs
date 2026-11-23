@@ -26,10 +26,12 @@
 //! are `tools/mali/deqp_ref.sh --instrument shim`.
 //!
 //! `const_other_ior` compiles byte-equal (the constrnd lowering's `ior` of
-//! constants), and so does `random_mixed_f2i` (its constants fold, and its
-//! mediump int uniform is the unitype lowering's); `random_mixed_rcp_inf`
-//! and `random_mixed_rsq_inf` fold their constants and refuse later. Every other
-//! test is ignored with its refusal quoted; the lowering removes the `ignore`, moves the name from `REFUSALS` to
+//! constants), and so do `random_mixed_f2i` (its constants fold, and its
+//! mediump int uniform is the unitype lowering's) and `zero_operand_rcp_inf`
+//! (the viewport transform's clamp of `1/w` of a constant zero w);
+//! `random_mixed_rcp_inf` and `random_mixed_rsq_inf` fold their constants and
+//! refuse later. Every other test is ignored with its refusal quoted; the
+//! lowering removes the `ignore`, moves the name from `REFUSALS` to
 //! `MATCHED` in the same commit. `refusals_pinned` runs now: it asserts each
 //! ignored reference's exact current refusal, names every one that moved,
 //! and fails when a `deqp_cfold2_*` reference is in neither list.
@@ -55,7 +57,6 @@ macro_rules! cfold_ref {
 cfold_ref! {
     cfold2_zero_operand_icmp => "deqp_cfold2_zero_operand_icmp",
     cfold2_zero_operand_inot => "deqp_cfold2_zero_operand_inot",
-    cfold2_zero_operand_rcp_inf => "deqp_cfold2_zero_operand_rcp_inf",
     cfold2_zero_operand_rcp16 => "deqp_cfold2_zero_operand_rcp16",
     cfold2_random_mixed_icmp => "deqp_cfold2_random_mixed_icmp",
     cfold2_random_mixed_inot => "deqp_cfold2_random_mixed_inot",
@@ -99,6 +100,13 @@ fn cfold2_random_mixed_rsq_inf() {
     mali_ref::assert_matches("deqp_cfold2_random_mixed_rsq_inf");
 }
 
+/// dEQP's smallest vertex shader, `gl_Position = vec4(0.0)`: the viewport
+/// transform's `frcp` of the zero w is +inf, clamped to 2^15 (issue #11328).
+#[test]
+fn cfold2_zero_operand_rcp_inf() {
+    mali_ref::assert_matches("deqp_cfold2_zero_operand_rcp_inf");
+}
+
 /// `MaliError::ConstantFold`.
 const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
 
@@ -106,7 +114,6 @@ const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_cfold2_zero_operand_icmp", CONSTANT_FOLD),
     ("deqp_cfold2_zero_operand_inot", CONSTANT_FOLD),
-    ("deqp_cfold2_zero_operand_rcp_inf", CONSTANT_FOLD),
     ("deqp_cfold2_zero_operand_rcp16", CONSTANT_FOLD),
     ("deqp_cfold2_random_mixed_icmp", CONSTANT_FOLD),
     ("deqp_cfold2_random_mixed_inot", CONSTANT_FOLD),
@@ -124,7 +131,8 @@ const REFUSALS: &[(&str, &str)] = &[
 ];
 
 /// The references that compile byte-equal (their tests run).
-const MATCHED: &[&str] = &["deqp_cfold2_const_other_ior", "deqp_cfold2_random_mixed_f2i"];
+const MATCHED: &[&str] =
+    &["deqp_cfold2_const_other_ior", "deqp_cfold2_random_mixed_f2i", "deqp_cfold2_zero_operand_rcp_inf"];
 
 #[test]
 fn refusals_pinned() {

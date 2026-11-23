@@ -1182,6 +1182,9 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
             "uniform highp float u[2]; uniform mediump int i; void main(){ gl_Position = vec4(u[i]); }",
             MaliError::UniformPrecision,
         ),
+        /* a zero w beside a lane that is not constant: Mesa drops the
+         * viewport clamp and stores w = +inf (a constant vector's zero w is
+         * deqp_cfold2_zero_operand_rcp_inf's, clamped to 2^15) */
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
         /* reflect(i, 0): the dot and its scale fold, the fma stays */
         (VS, "attribute vec4 p; void main(){ gl_Position = reflect(p, vec4(0.0)); }", MaliError::FusedMultiplyAdd),
