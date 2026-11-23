@@ -88,6 +88,10 @@ struct Tree<'m, 'a> {
     /// What [`Tree::fold`] makes of each value, its lanes unswizzled, once
     /// [`Tree::fill_folds`] has run (empty for a stage with no compare).
     folds: &'a [Cell<Option<[Lane; 4]>>],
+    /// Per value, then per local: it reads an input, a uniform or a texel
+    /// somewhere under it ([`Tree::fill_varies`]; empty for a stage with no
+    /// compare).
+    varying: &'a mut [bool],
 }
 
 /// A child of an expression record in [`dsw`]: an expression or a leaf.
@@ -177,7 +181,8 @@ pub(super) fn passes<'s>(
         instrs.iter().any(|op| matches!(op, IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, _)));
     let folds = scratch.alloc_filled(if compares { n } else { 0 }, None).map_err(oom)?;
     let folds = Cell::from_mut(folds).as_slice_of_cells();
-    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds };
+    let varying = scratch.alloc_filled(if compares { n + m.locals.len() } else { 0 }, false).map_err(oom)?;
+    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds, varying };
     t.count();
     t.rebalance()?;
     t.reassociate()?;
@@ -1825,6 +1830,7 @@ impl Tree<'_, '_> {
         let n = self.instrs.len();
         let mut any = false;
         let mut folded = false;
+        self.fill_varies();
         /* each compare decides on the constants as written; a constant
          * whose -0.0 lanes the compares turn into 0.0 is rewritten after
          * all of them (a `feq(-0.0, a)` after another compare of the same
@@ -1837,7 +1843,7 @@ impl Tree<'_, '_> {
             /* a compare of two constant expressions (no input, uniform or
              * texel under either side) folds to a constant boolean: no
              * operand is encoded, and -0.0 and 0.0 compare the same */
-            if !self.varies(s[0], 0, 0) && !self.varies(s[1], 0, 0) {
+            if !self.varies(s[0]) && !self.varies(s[1]) {
                 continue;
             }
             if !folded {
@@ -2137,12 +2143,113 @@ impl Tree<'_, '_> {
                 if compares <= 1 && v[..w].iter().all(|l| *l == Lane::K(F32_NEG_ZERO)) {
                     return Ok(Some(s));
                 }
-                if v[..w].iter().any(|l| l.may_be_neg0()) {
+                if (0..w).any(|l| v[l].may_be_neg0() && !self.sum_off_zero(s, l)) {
                     return Err(MaliError::NegZeroShared);
                 }
                 Ok(None)
             }
         }
+    }
+
+    /// What each lane of load `load` (a whole local, in `main`'s own block)
+    /// holds as copy propagation sees it: the value the last store before
+    /// it in that block writes to the lane, or `None` where no store has
+    /// (an unwritten lane). `None` for the whole load: it is in a nested
+    /// block, or an `if` or a loop between the store and the load may
+    /// write the lane, or a store at a run-time index does. A local stored
+    /// twice (`g = -12.0 * 0.75 + g;`, `j = vec4(..) * j;`: the mainplain
+    /// shape of deqp_negzero_*) is then the store the load reads, not the
+    /// union of both.
+    fn reaching_stores(&self, load: usize) -> Option<[Option<Src>; 4]> {
+        let Some(&IrOp::LoadLocal { local, index: None, .. }) = self.instrs.get(load) else { return None };
+        let body = self.m.body;
+        let p = *self.pos.get(load)?;
+        if p < body.first || p >= body.first + body.len {
+            return None;
+        }
+        let mut out = [None; 4];
+        let mut open = 0xfu8;
+        for k in (body.first..p).rev() {
+            if open == 0 {
+                break;
+            }
+            match *self.m.nodes.get(k as usize)? {
+                IrNode::Instr(id) => match self.instrs.get(id.0 as usize) {
+                    Some(&IrOp::StoreLocal { local: to, index, src, write_mask }) if to == local => {
+                        if index.is_some() {
+                            return None;
+                        }
+                        for (l, o) in out.iter_mut().enumerate() {
+                            if open & write_mask & (1 << l) != 0 {
+                                *o = Some(src);
+                            }
+                        }
+                        open &= !write_mask;
+                    }
+                    _ => {}
+                },
+                IrNode::If { then_, else_, .. } => {
+                    if self.block_writes(then_, local, 0) & open != 0 || self.block_writes(else_, local, 0) & open != 0
+                    {
+                        return None;
+                    }
+                }
+                IrNode::Loop { body } => {
+                    if self.block_writes(body, local, 0) & open != 0 {
+                        return None;
+                    }
+                }
+                IrNode::Break | IrNode::Continue | IrNode::Return => {}
+            }
+        }
+        Some(out)
+    }
+
+    /// The lanes of `local` some store in block `r` (nested blocks too)
+    /// writes; all of them for a store at a run-time index or a nest too
+    /// deep.
+    fn block_writes(&self, r: Range, local: crate::shaderc::online::ir::LocalId, depth: usize) -> u8 {
+        if depth > 16 {
+            return 0xf;
+        }
+        let mut lanes = 0u8;
+        for k in r.first..r.first + r.len {
+            lanes |= match self.m.nodes.get(k as usize) {
+                Some(&IrNode::Instr(id)) => match self.instrs.get(id.0 as usize) {
+                    Some(&IrOp::StoreLocal { local: to, index, write_mask, .. }) if to == local => {
+                        if index.is_some() {
+                            0xf
+                        } else {
+                            write_mask
+                        }
+                    }
+                    _ => 0,
+                },
+                Some(&IrNode::If { then_, else_, .. }) => {
+                    self.block_writes(then_, local, depth + 1) | self.block_writes(else_, local, depth + 1)
+                }
+                Some(&IrNode::Loop { body }) => self.block_writes(body, local, depth + 1),
+                Some(_) => 0,
+                None => 0xf,
+            };
+        }
+        lanes & 0xf
+    }
+
+    /// Lane `l` of `s` is a sum with a constant that is neither zero nor
+    /// infinite: never `-0.0`, whatever the other operand folds to. An IEEE
+    /// sum is `-0.0` only of two `-0.0`s; a cancelling one (`x + -x`) is
+    /// `+0.0` when rounded to nearest, as NIR folds it. The compare of
+    /// `float ak = float(vec4(.., asin(float(-1)), ..).t)` with `ak + 0.001`
+    /// (deqp_negzero_constglobal_fs: the built-in on a constant is not
+    /// folded here, and may be negative).
+    fn sum_off_zero(&self, s: Src, l: usize) -> bool {
+        let Some(&IrOp::Alu(AluOp::Fadd, [p, q, _])) = self.instrs.get(s.val.0 as usize) else { return false };
+        let lane = s.swizzle[l] as usize & 3;
+        [p, q].iter().any(|x| match self.folded(*x)[lane] {
+            Lane::K(k) => k & !F32_NEG_ZERO != 0 && f32::from_bits(k).is_finite(),
+            _ => false,
+        })
     }
 
     /// What NIR's constant folding can make of each lane `s` reads
@@ -2222,6 +2329,23 @@ impl Tree<'_, '_> {
             | IrOp::LoadUniformIdx { .. }
             | IrOp::Tex { .. }
             | IrOp::TexSize { .. } => NONE,
+            /* `float(-7)`, `float(true)` of a literal: the float NIR folds
+             * it to */
+            IrOp::Alu(op @ (AluOp::I2f | AluOp::B2f), [a, ..])
+                if matches!(
+                    (op, self.instrs.get(a.val.0 as usize)),
+                    (AluOp::I2f, Some(IrOp::ConstI32(_))) | (AluOp::B2f, Some(IrOp::ConstBool(_)))
+                ) =>
+            {
+                core::array::from_fn(|i| {
+                    let l = a.swizzle[i] as usize & 3;
+                    Lane::K(match self.instrs.get(a.val.0 as usize) {
+                        Some(&IrOp::ConstI32(k)) => (k[l] as f32).to_bits(),
+                        Some(&IrOp::ConstBool(k)) if k[l] => 0x3f80_0000,
+                        _ => 0,
+                    })
+                })
+            }
             /* a negated zero is -0.0 */
             IrOp::Alu(AluOp::Fneg, [a, ..]) => {
                 let (v, r) = self.fold(a, depth + 1, assumed);
@@ -2272,7 +2396,7 @@ impl Tree<'_, '_> {
                     let neg0 = konst
                         && match op {
                             AluOp::Bcsel => l.iter().skip(1).any(|x| x.may_be_neg0()),
-                            _ if cancel => false,
+                            _ if cancel || never_neg0(op) => false,
                             _ if product => l.iter().any(|x| sign(x) || zero_k(x)),
                             _ => l.iter().any(sign),
                         };
@@ -2288,6 +2412,23 @@ impl Tree<'_, '_> {
             IrOp::LoadLocal { local, .. } => {
                 if let Some((k, v)) = assumed.get(local.0) {
                     return (v, Reach { assumed: 1 << k, cut: false });
+                }
+                if let Some(stores) = self.reaching_stores(id) {
+                    let mut v = [Lane::Var { konst: false, neg0: false }; 4];
+                    for (l, st) in stores.iter().enumerate() {
+                        if let Some(src) = st {
+                            let (x, r) =
+                                self.fold(Src { val: src.val, swizzle: [src.swizzle[l]; 4] }, depth + 1, assumed);
+                            reach = reach.and(r);
+                            v[l] = x[0];
+                        }
+                    }
+                    if reach == Reach::WHOLE {
+                        if let Some(f) = self.folds.get(id) {
+                            f.set(Some(v));
+                        }
+                    }
+                    return (v, reach);
                 }
                 /* the slot this local takes in the table: what the walk
                  * read of it is the fixed point's own */
@@ -2321,38 +2462,65 @@ impl Tree<'_, '_> {
     }
 
     /// Value `s` reads an input, a uniform or a texel somewhere under it
-    /// (through a local's stores too): it is no constant expression. A
-    /// local read again under its own stores adds nothing; one past the
-    /// first 64, or a walk too deep, counts as varying.
-    fn varies(&self, s: Src, depth: usize, seen: u64) -> bool {
-        if depth > 16 {
-            return true;
+    /// (through a local's stores too): it is no constant expression, as
+    /// [`Tree::fill_varies`] found.
+    fn varies(&self, s: Src) -> bool {
+        self.varying.get(s.val.0 as usize).copied().unwrap_or(true)
+    }
+
+    /// [`Tree::varies`] of every value, and per local whether a store
+    /// writes it a value that varies (or at an index that does): run to a
+    /// fixed point, so that a local read before its stores (a loop's) and a
+    /// chain of any depth (the constant globals of
+    /// `shaders.random.all_features.fragment.13`, some 20 operations and
+    /// locals deep: deqp_negzero_constglobal_*) are walked whole. A local
+    /// read again under its own stores adds nothing.
+    fn fill_varies(&mut self) {
+        let n = self.instrs.len();
+        if self.varying.len() < n {
+            return;
         }
-        match self.instrs.get(s.val.0 as usize) {
-            None => true,
-            Some(
-                IrOp::LoadInput { .. }
-                | IrOp::LoadUniform { .. }
-                | IrOp::LoadUniformIdx { .. }
-                | IrOp::Tex { .. }
-                | IrOp::TexSize { .. },
-            ) => true,
-            Some(&IrOp::LoadLocal { local, index, .. }) => {
-                let Some(bit) = 1u64.checked_shl(local.0) else { return true };
-                if seen & bit != 0 {
-                    return false;
+        self.varying.fill(false);
+        loop {
+            let mut grew = false;
+            for i in 0..n {
+                let op = self.instrs[i];
+                let (v, local) = match op {
+                    IrOp::LoadInput { .. }
+                    | IrOp::LoadUniform { .. }
+                    | IrOp::LoadUniformIdx { .. }
+                    | IrOp::Tex { .. }
+                    | IrOp::TexSize { .. } => (true, None),
+                    IrOp::LoadLocal { local, index, .. } => {
+                        let l = self.varying.get(n + local.0 as usize).copied().unwrap_or(true);
+                        (l || index.is_some_and(|x| self.varies(x)), None)
+                    }
+                    IrOp::StoreLocal { local, .. } => {
+                        let mut v = false;
+                        op.for_each_src(|x| v |= self.varies(x));
+                        (false, v.then_some(n + local.0 as usize))
+                    }
+                    _ => {
+                        let mut v = false;
+                        op.for_each_src(|x| v |= self.varies(x));
+                        (v, None)
+                    }
+                };
+                if v && !self.varying[i] {
+                    self.varying[i] = true;
+                    grew = true;
                 }
-                index.is_some_and(|x| self.varies(x, depth + 1, seen))
-                    || self.instrs.iter().any(|st| {
-                        matches!(*st, IrOp::StoreLocal { local: to, src, index, .. } if to == local
-                            && (self.varies(src, depth + 1, seen | bit)
-                                || index.is_some_and(|x| self.varies(x, depth + 1, seen | bit))))
-                    })
+                if let Some(l) = local {
+                    if let Some(x) = self.varying.get_mut(l) {
+                        if !*x {
+                            *x = true;
+                            grew = true;
+                        }
+                    }
+                }
             }
-            Some(op) => {
-                let mut v = false;
-                op.for_each_src(|x| v |= self.varies(x, depth + 1, seen));
-                v
+            if !grew {
+                break;
             }
         }
     }
@@ -2440,6 +2608,65 @@ enum Lane {
     /// No value yet: a local's lane no store has made, while
     /// [`Tree::fold`] runs a loop's stores to their fixed point.
     Bot,
+}
+
+/// Operation `op` never gives a float `-0.0`, whatever its operands, as
+/// NIR's constant folding computes it: a conversion to float of an int or a
+/// bool (`+0.0` at most), a value that is no float (a compare, an integer or
+/// a boolean operation, a conversion to int or bool), and `abs`,
+/// `inversesqrt` (`-inf` of `-0.0`), `exp2` (`+0.0` at most), `log2` (`+0.0`
+/// of `1.0` only) and `cos` (never exactly zero). The front end's
+/// `float(b) + 0.001` of a folded compare `b`, `inversesqrt(exp(5.0 + p))`
+/// (deqp_negzero_constglobal_*): Mesa folds them to a constant that is not
+/// `-0.0`.
+fn never_neg0(op: AluOp) -> bool {
+    use AluOp::*;
+    matches!(
+        op,
+        B2f | I2f
+            | U2f
+            | Fabs
+            | Frsq
+            | Fexp2
+            | Flog2
+            | Fcos
+            | Flt
+            | Fle
+            | Feq
+            | Fne
+            | Ilt
+            | Ile
+            | Ieq
+            | Ine
+            | Ult
+            | Ule
+            | Iadd
+            | Imul
+            | Idiv
+            | Imod
+            | Ineg
+            | Ishl
+            | Ishr
+            | Iand
+            | Ior
+            | Ixor
+            | Udiv
+            | Umod
+            | Ushr
+            | Imin
+            | Imax
+            | Umin
+            | Umax
+            | Inot
+            | B2i
+            | F2i
+            | F2u
+            | F2b
+            | I2b
+            | Bnot
+            | Bany
+            | Ball
+    )
 }
 
 /// The locals [`Tree::fold`] is folding, each with what its stores make
