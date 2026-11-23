@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Pi 4 dEQP-GLES3 aborts2 fixture image B2: synthetic console (the selftest reads no content)
+deqp: Pass dEQP-GLES3.info.vendor
+deqp: done: 1 passed, 0 failed, 0 not supported, 0 warnings, complete=1
+deqp: summary: 1 cases begun, 1 with a result, 0 without
