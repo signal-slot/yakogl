@@ -1,0 +1,7 @@
+# Fixture Pi 4 table for tools/cts/pi4-gles3-aborts2-acceptance-selftest.sh:
+# the four cases of gles3-mustpass.txt in 2 images, one CONFIG_DEQP_CASE per
+# line, the format of the real pi4-gles3-tree.txt.
+# image A1: the functional cases
+dEQP-GLES3.functional.*
+# image B2: the info case
+dEQP-GLES3.info.*
