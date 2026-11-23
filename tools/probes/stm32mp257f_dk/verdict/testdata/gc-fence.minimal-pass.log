@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+MP2:A EL2
+MP2:A1
+MP2:B console up (USART2, polled)
+*** Booting Zephyr OS build v0.0.0 ***
+I: irq 215 connected
+gc_irq: spi=183 intid=215 enable=1 cfg=1 target=0x01 self=0x01 prio=0x80 group=0 pend=0 active=0 gicd_ctlr=0x13 typer=0x3e0 secext=1 gicc_ctlr=0x7 pmr=0xff route=ours
+gc_irq: igroupr=0x00000000 (GICD_IGROUPR6) bit23=0 expect=1 mismatch
+gc_fence: GPU model 0x8000 revision 0x6205 product 0x80003 customer 0x0000aaaa eco 0
+gc_fence: fence 1 irqs 1 elapsed 120 us irq-latency 100 us (completed 1, wait 0)
+yk-record: 594b0201 00000001 00000001 01000078
+gc_fence: PASS

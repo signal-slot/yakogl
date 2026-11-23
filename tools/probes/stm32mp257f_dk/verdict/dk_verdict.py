@@ -37,7 +37,8 @@ STATUS_PASS = 1
 # board-stm32mp2.sh plain(): a leading "HH:MM:SS " or "<secs>.<frac> " stamp.
 STAMP = re.compile(r"^([0-9:]{8}|[0-9]{9,}\.[0-9]+) ")
 # Zephyr LOG_INF: "[00:00:01.234,000] <inf> gpu_gc: " before the message.
-ZLOG = re.compile(r"^\[[0-9:.,]+\] <[a-z]{3}> [A-Za-z0-9_]+: ")
+# CONFIG_LOG_MODE_MINIMAL=y (gc_fence, gc_clear, gc_triangle): "I: " before the message.
+ZLOG = re.compile(r"^(?:\[[0-9:.,]+\] <[a-z]{3}> [A-Za-z0-9_]+: |[IWEFM]: )")
 
 
 def clean(text, last_run=True):
@@ -394,7 +395,11 @@ def run(text, expect, only, ring=False):
             fields = FUNCS[c](subject)
             if lost:
                 fields.append(("ring", "FAIL:ring-wrapped:%d-bytes-lost" % lost))
-            bad = any(v.startswith("FAIL") or (k, v) == ("igroupr", "mismatch") or
+            # igroupr=mismatch is the expected pair with route=ours: from
+            # non-secure EL1 on the GIC-400 with security extensions
+            # GICD_IGROUPRn reads as zero (gc_irq_mp2.c).
+            ours = ("route", "PASS:ours") in fields
+            bad = any(v.startswith("FAIL") or ((k, v) == ("igroupr", "mismatch") and not ours) or
                       (k in ("intr", "idle") and v != "ok") for k, v in fields)
             judged = fields != [("boot", "not-in-ring")]
             line = "verdict %s %s" % (c, " ".join("%s=%s" % kvp for kvp in fields))
