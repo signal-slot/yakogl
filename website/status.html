@@ -67,8 +67,10 @@ and warnings; the <a href="#records">records</a> list them.</p>
 dEQP-GLES2 reads 7,353 passes of 17,165 cases (2026-11-21, 25 rows rerun over the 2026-11-15 tree).
 On Zephyr, the regression set of <code>gl_test</code> passes 50 of 50 cases, drawn off-screen
 (2026-11-16, started from the board's Linux by kexec), and dEQP-GLES2 reads 6,644 passes,
-9,545 failures and 973 not-supported cases of 17,165, all 76 images finished (2026-11-17);
-there is no display yet.
+9,545 failures and 973 not-supported cases of 17,165, all 76 images finished (2026-11-17).
+Our own display path now shows pictures on HDMI (2026-11-23): the triangle example passes with every pixel read back,
+two glmark2 scenes run with 0 failed and 0 unsupported, and the Slint cluster passes its check.
+It is a development result: the image is still started from the board's Linux, and booting from the board's own storage has not run.
 <a href="https://github.com/signal-slot/yakogl/blob/main/driver/docs/nanopc-t6-mali.md">Details</a></td></tr>
 <tr id="x2"><th scope="row"><a href="https://armadillo.atmark-techno.com/armadillo-x2">Atmark Techno Armadillo-X2</a></th><td>Vivante GC7000UL</td>
 <td>The same SoC and GPU as the Verdin iMX8M Plus. Zephyr starts from the board's
