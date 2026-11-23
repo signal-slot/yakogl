@@ -47,6 +47,7 @@ pub(super) fn poke_st_identity(m: &Model) {
         (0x24, 0x6205),
         (0x28, 0x2020_0129),
         (0x2c, 0x0000_1234),
+        (0x30, 0x15),
         (0xa8, 0x80003),
         (0xe8, 0),
         (0x1c, 0xe068_7ca5),
@@ -296,4 +297,24 @@ fn a_submit_outside_the_carveout_is_refused_on_the_st_identity() {
     let mut b = bring_up(BASE_STM32MP257F);
     let s = GcSubmit { cmd_gpu: BASE_IMX8MP as u32, cmd_bytes: 64, flags: 0 };
     assert_eq!(cmdbuf::ring_submit(&mut b.c, &b.e, &s, 0, 1, CLOCK_HZ), Err(-EFAULT));
+}
+
+fn st_identity(customer_id: u32) -> GcIdentity {
+    GcIdentity { model: 0x8000, revision: 0x6205, product_id: 0x80003, eco_id: 0, customer_id, ..Default::default() }
+}
+
+#[test]
+fn the_st_row_matches_customer_0x15_and_refuses_another() {
+    assert!(hw::DB_STM32MP257F.matches(&st_identity(0x15)));
+    assert!(!hw::DB_STM32MP257F.matches(&st_identity(0)));
+    assert!(!hw::DB_STM32MP257F.matches(&st_identity(0x16)));
+}
+
+#[test]
+fn the_imx8mp_row_ignores_the_customer_id_and_not_the_st_one() {
+    for customer_id in [0, 0x15] {
+        let id = GcIdentity { model: 0x7000, revision: 0x6204, product_id: 0x70003, customer_id, ..Default::default() };
+        assert!(hw::DB_IMX8MP.matches(&id));
+        assert!(!hw::DB_STM32MP257F.matches(&id));
+    }
 }
