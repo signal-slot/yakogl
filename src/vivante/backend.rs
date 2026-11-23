@@ -2704,6 +2704,25 @@ fn tiled_rt_untile(w: &mut GcCmd, t: &Track) {
     emit_rs(w, &tiled_rt::untile(&t.spec, t.shadow));
 }
 
+/// W10's lazy write-back (`storage.rs`): `b` at the end of the open stream,
+/// or of a stream of its own when none is open or it has no room, then every
+/// kick waited for. 0, or the error; -1 before [`gc_init`].
+pub(super) fn rs_resolve_and_finish(b: &RsBlit) -> i32 {
+    let g = g();
+    if !g.inited {
+        return -1;
+    }
+    let w = &g.frames[g.cur].w;
+    if g.recording && w.used + tiled_rt::RESERVE_WORDS > w.cap && frame_submit() != 0 {
+        return -1;
+    }
+    if !g.recording && frame_open(0, 0, 0) != 0 {
+        return -1;
+    }
+    emit_rs(&mut g.frames[g.cur].w, b);
+    finish()
+}
+
 /// Bring the open stream's shadow to what `gl` needs, before anything of the
 /// draw is recorded (and again when the draw is recorded again in a new
 /// frame): `want` is the shadow it renders into, if any.
