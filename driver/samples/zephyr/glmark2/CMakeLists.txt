@@ -30,6 +30,12 @@ endif()
 if(BOARD MATCHES "^stm32mp257f_dk")
   set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/stm32mp2/app.conf" ${EXTRA_CONF_FILE})
 endif()
+# The NanoPC-T6 takes its board layer's app.conf the same way (the Mali back
+# end, the console, the MMU's tables), as the examples do
+# (examples/zephyr.cmake); boards/nanopc_t6.conf adds glmark2's own needs.
+if(BOARD MATCHES "^nanopc_t6")
+  set(EXTRA_CONF_FILE "${PVR_REPO}/zephyr/lib/board/nanopc_t6/app.conf" ${EXTRA_CONF_FILE})
+endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(glmark2_zephyr)
