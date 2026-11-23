@@ -13,7 +13,9 @@
 //! - the five points of [`REFERENCE`], each channel within [`TOLERANCE`] of
 //!   the AM62P's reading;
 //! - no pixel of the window keeps the CPU's [`SENTINEL`] (the whole window
-//!   was drawn), and every pixel's alpha byte is 255 (the cluster is opaque);
+//!   was drawn), and every pixel's alpha byte is 255 (the cluster is opaque;
+//!   RGBA8888 memory only: an XRGB8888 window has no alpha and its X byte is
+//!   not judged);
 //! - the [`GUARD_ROWS`] rows after the window's memory still hold what they
 //!   held before the frame (the GPU wrote nothing past the window): the
 //!   sample's snapshot of them ([`Frame::with_guard`]), or [`GUARD`] when no
@@ -46,7 +48,11 @@ pub const GUARD_ROWS: u32 = 8;
 /// (B in XRGB8888), alpha 0. Near black, so a view (the window on the screen
 /// itself) shows nothing a user would see before the first frame lands; and
 /// an opaque drawn pixel never has alpha 0, so a pixel that keeps it was not
-/// drawn.
+/// drawn. In an XRGB8888 window of a back end that stores 0 in the X byte
+/// (the Mali one) a drawn pixel has 0 there too, and only the colour tells
+/// the sentinel apart: blue 1, red and green 0, which the cluster's first
+/// frame does not have (0 such pixels on the NanoPC-T6, 2026-11-23). A drawn
+/// pixel of that colour would fail the check, never pass it.
 pub const SENTINEL: u32 = 0x0000_0001;
 /// What the guard rows hold in the host tests' synthetic frames; on a board
 /// they hold whatever they held before the frame (the sample's snapshot).
@@ -198,11 +204,16 @@ impl<'a> Frame<'a> {
         self.mem_row(mem_row)
     }
 
-    /// A memory word as R, G, B, A (A is the X byte of XRGB8888).
+    /// A memory word as R, G, B, A. An XRGB8888 word has no alpha: it reads
+    /// 255, as glReadPixels reads it, whatever the X byte holds. The byte
+    /// means nothing to the scan-out and the back ends store different
+    /// things there (the Mali one 0, as Mesa's B8G8R8X8 writeback does; the
+    /// others the alpha the draw wrote), so the check does not judge it
+    /// (the triangle check has the same rule).
     fn rgba(&self, px: u32) -> [u8; 4] {
         let b = px.to_le_bytes();
         if self.xrgb {
-            [b[2], b[1], b[0], b[3]]
+            [b[2], b[1], b[0], 0xff]
         } else {
             b
         }
@@ -431,6 +442,39 @@ mod tests {
         // so -2 never wraps).
         assert!(REFERENCE.iter().all(|p| p.want.iter().all(|&c| c >= 2)));
         assert_eq!(cases, 60);
+    }
+
+    /// The X byte of an XRGB8888 window is not judged: it means nothing to
+    /// the scan-out, and glReadPixels reads alpha 255 whatever it holds. The
+    /// back ends store different things there: the Mali one 0, as Mesa's
+    /// B8G8R8X8 writeback does, the others the alpha the draw wrote. The
+    /// NanoPC-T6 run of 2026-11-23 drew the cluster right and failed on that
+    /// byte ("614400 with alpha != 255", every point "glReadPixels
+    /// DIFFERENT").
+    #[test]
+    fn the_x_byte_of_an_xrgb_window_is_not_judged() {
+        for format in [FORMAT_XRGB8888, FORMAT_XRGB8888 | FORMAT_BOTTOM_UP] {
+            for x in [0u32, 0x5a, 0xff] {
+                let mut px = frame(format, 0, 0, 0);
+                for w in px[..(W * H) as usize].iter_mut() {
+                    *w = (*w & 0x00ff_ffff) | (x << 24);
+                }
+                let f = Frame::new(&px, W, H, GUARD_ROWS, format).unwrap();
+                // A correct GL: the colour from memory, alpha 255.
+                let o = check(&f, |gx, gy| {
+                    let b = f.row(H - 1 - gy)[gx as usize].to_le_bytes();
+                    [b[2], b[1], b[0], 0xff]
+                });
+                assert_eq!(o.verdict(), None, "format {format:#x}, X byte {x:#x}: {o:?}");
+                assert_eq!((o.alpha_bad, o.reads_bad, o.sentinel_left), (0, 0, 0));
+                assert!(o.points.iter().all(|p| p[3] == 0xff), "X byte {x:#x}: {:?}", o.points);
+            }
+        }
+        // RGBA8888 memory has an alpha, and it is judged.
+        let mut px = frame(FORMAT_RGBA8888, 0, 0, 0);
+        px[7] &= 0x00ff_ffff;
+        let o = run(&px, FORMAT_RGBA8888);
+        assert_eq!((o.verdict(), o.alpha_bad), (Some(Failure::Alpha), 1));
     }
 
     #[test]
