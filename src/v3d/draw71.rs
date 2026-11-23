@@ -1375,12 +1375,12 @@ pub fn translate(d: &DrawState) -> Result<StatePackets71, Refusal71> {
     /* blend: the targets' equations (target 0's for all 8 without
      * independent blend, as one packet for all of them) */
     let eff = |i: usize| if d.independent_blend { d.targets[i] } else { d.targets[0] };
-    for i in 0..d.nr_targets as usize {
+    for (i, tgt) in d.targets.iter().enumerate().take(d.nr_targets as usize) {
         let t = eff(i);
         if t.blend_enable {
             let e = &t.blend;
             let reads = [e.rgb_src, e.rgb_dst, e.alpha_src, e.alpha_dst].into_iter().any(reads_dst_alpha);
-            if reads && !d.targets[i].has_alpha {
+            if reads && !tgt.has_alpha {
                 return Err(Refusal71::BlendReadsMissingAlpha);
             }
         }
@@ -1411,10 +1411,10 @@ pub fn translate(d: &DrawState) -> Result<StatePackets71, Refusal71> {
     let mut blend_cfg_count = 0;
     let mut enables = 0u8;
     if d.independent_blend {
-        for i in 0..d.nr_targets as usize {
-            if d.targets[i].blend_enable {
+        for (i, tgt) in d.targets.iter().enumerate().take(d.nr_targets as usize) {
+            if tgt.blend_enable {
                 enables |= 1 << i;
-                blend_cfg[blend_cfg_count] = Some(to_cfg(1 << i, &d.targets[i].blend));
+                blend_cfg[blend_cfg_count] = Some(to_cfg(1 << i, &tgt.blend));
                 blend_cfg_count += 1;
             }
         }
