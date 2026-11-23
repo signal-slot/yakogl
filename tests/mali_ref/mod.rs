@@ -457,6 +457,11 @@ pub fn uniform_leaves(vs: &str, fs: &str) -> Vec<(String, String)> {
 /// uniform 0. A reference redrawn with the members set joins this list in
 /// the commit that redraws it.
 pub const STRUCT_VALUES: &[&str] = &[
+    "deqp_boolpix_lk_uniform_struct",
+    "deqp_boolpix_lk_uniform_struct_fragment_only_vec4",
+    "deqp_boolpix_lk_uniform_struct_partial",
+    "deqp_boolpix_lk_uniform_struct_use_case_rip",
+    "deqp_boolpix_lk_uniform_struct_vec4",
     "deqp_fclane2_struct_arrmember_float",
     "deqp_fclane2_struct_array_float",
     "deqp_fclane2_struct_basic_bool",
