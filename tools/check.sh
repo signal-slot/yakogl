@@ -3029,7 +3029,13 @@ if command -v cc >/dev/null 2>&1; then
     out=$(tools/v3d/tex_check.sh 2>&1)
     status=$?
     printf '%s\n' "$out" | grep -E 'FAIL|checks run|boxes stored|no Mesa tree|error' | head -20
-    [ "$status" -eq 0 ] || return 1
+    if [ "$status" -ne 0 ]; then
+      # No result line: the build stopped (the reference, the shim or the
+      # link). The filter above keeps only `collect2: error`, so the end of
+      # the whole output goes into the log: it names the file.
+      printf '%s\n' "$out" | grep -q 'checks run' || printf '%s\n' "$out" | tail -n 20
+      return 1
+    fi
     printf '%s\n' "$out" |
       grep -qE '^tex_check: ([0-9]+) checks run \(planned \1\), 0 failed$' || {
       echo "tex_check exited 0 without its result line"
@@ -3114,7 +3120,10 @@ if command -v cc >/dev/null 2>&1; then
     [ "$status" -eq 77 ] && : > "$ROWS/$ROW_SEQ.gap"
     return "$status"
   }
+  # The scripts build the same reference (tools/v3d/mesa_ref.sh rewrites
+  # build/v3d-check/mesa in place), so the row is in the v3d rows' lane.
   scope v3d71
+  uses w:v3d-mesa
   step "run     v3d71 host checks (tools/v3d/check71.sh)" v3d71_checks
   # pan_shc, the Mali-G610 reference shader tool (tools/mali/README-pan_shc.md),
   # built from this checkout inside MESA_PAN_TREE (a Mesa 26.2.1 tree made by
