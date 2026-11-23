@@ -359,15 +359,26 @@ CAP=
 # background, waited for, killed by on_exit.
 FG=
 SIGNALLED=
-on_signal() { SIGNALLED=$1; echo "board-stm32mp2.sh: SIG$1: ending through the undo" >&2; exit "$2"; }
+# The script's own stdout and stderr stay on fds 6 and 7. bash runs a trap
+# with the redirections of the command it interrupts, so a signal that
+# arrives inside a function called as `mp2_ssh ... > FILE 2> FILE` (every
+# environment read) would send each line of the ending (the one below, the
+# undo's, what is left behind, the lock watchdog's) into those files under
+# $TMP, which on_exit removes: the run would end with rc 143 and say nothing
+# (issue #11043). own_output puts the two back; on_signal and on_exit begin
+# with it.
+exec 6>&1 7>&2
+own_output() { exec 1>&6 2>&7; }
+on_signal() { own_output; SIGNALLED=$1; echo "board-stm32mp2.sh: SIG$1: ending through the undo" >&2; exit "$2"; }
 trap 'on_signal TERM 143' TERM
 trap 'on_signal INT 130' INT
 trap 'on_signal HUP 129' HUP
 # fgw CMD...: CMD in the background (stdin kept: 0<&0), waited for; without
-# the lock's fd 9, so nothing it leaves behind holds the board lock
+# the lock's fd 9, so nothing it leaves behind holds the board lock, and
+# without fds 6 and 7, so nothing it leaves behind holds the caller's pipe
 fgw() {
     local r=0
-    "$@" 0<&0 9>&- &
+    "$@" 0<&0 6>&- 7>&- 9>&- &
     FG=$!
     wait "$FG" || r=$?
     FG=
@@ -1007,8 +1018,10 @@ take_lock() {
         return 0
     fi
     export HOLD_MAX
+    # (without fds 6 and 7: the lock starts its watchdog without the caller's
+    # stdout and stderr, so that it never holds the caller's pipe)
     # shellcheck source=/dev/null
-    . "$REPO/driver/tools/kexec-zephyr/board_lock.sh"
+    . "$REPO/driver/tools/kexec-zephyr/board_lock.sh" 6>&- 7>&-
     # on_exit does what the lock's own trap did (the watchdog ended, the
     # record emptied, a watchdog's lines shown), after the undo
     LOCKED=1
@@ -1042,6 +1055,9 @@ left_show() { # an earlier run's record, if any (to stderr)
 # on_exit: every verb ends here (the EXIT trap; a signal arrives through exit)
 on_exit() {
     local rc=$?
+    # an exit inside a redirected function call: the ending still speaks to
+    # the script's own stdout and stderr (own_output)
+    own_output
     # a second signal does not cut the undo short (the watchdog's KILL still does)
     trap '' TERM INT HUP
     kill_fg

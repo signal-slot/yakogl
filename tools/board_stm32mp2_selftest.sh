@@ -109,13 +109,14 @@
 #    address right after who and without MP2_SUDO.
 # Prints "board_stm32mp2_selftest: N checks, F failed"; exit 0 only when F is
 # 0 and N is the pinned count. About 90 s (the live runs poll every 5 s; the
-# watchdog case waits 12 s).
+# watchdog case waits 12 s, and longer on a host too slow to reach the fake
+# reboot in 12 s).
 set -uo pipefail
 export LC_ALL=C
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 B="$HERE/board-stm32mp2.sh"
-WANT_CHECKS=219
+WANT_CHECKS=220
 
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
@@ -848,7 +849,9 @@ manifest > "$S/boot-before.txt"
 # copy it did not load, with its flags + 1, uboot_saveenv below) unless
 # state/mode says otherwise, and starts a new boot (uptime 1 s) or, in mode
 # "die", never answers again; "noreboot" does nothing (the old boot goes on
-# answering), "hang" holds the ssh session 20 s and does nothing
+# answering), "hang" holds the ssh session 20 s (state/hang_s seconds when
+# that file is there), does nothing and leaves the time the hold began in
+# state/hang_from
 printf '#!/bin/sh\necho "Cannot initialize environment" >&2\nexit 1\n' > "$F/bin/fw_printenv"
 ln -s fw_printenv "$F/bin/fw_setenv"
 # the DK's xargs is BusyBox's (v1.36.1, /usr/bin/xargs -> busybox.nosuid),
@@ -896,6 +899,11 @@ grep -qxF "\${1##*/}" "$F/state/notblock" 2>/dev/null && exit 1
 exit 0
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$F/bin/who"
+# sync does nothing on the fake board (and the fake ssh takes conv=fsync out
+# of a dd): the host's sync waits for every dirty page of the host, so each
+# board command with one took as long as the host's other writers made it
+# (issue #11043)
+printf '#!/bin/sh\nexit 0\n' > "$F/bin/sync"
 cat > "$F/bin/systemctl" <<EOF
 #!/bin/sh
 case "\$1" in
@@ -927,7 +935,9 @@ reboot)
             sed s/mmcblk2/mmcblk0/g "$F/state/lsblk" > "$F/state/lsblk.n" && mv "$F/state/lsblk.n" "$F/state/lsblk" ;;
         esac
         printf '1.00 1.00\n' > "$F/proc/uptime" ;;
-    hang) sleep 20 ;;
+    hang)
+        date +%s > "$F/state/hang_from"
+        sleep "\$(cat "$F/state/hang_s" 2>/dev/null || echo 20)" ;;
     *)
         python3 -I "$F/bin/uboot_saveenv" "$F/dev/mmcblk0p7" yako_once &&
             mv "$F/dev/mmcblk0p7.new" "$F/dev/mmcblk0p7"
@@ -954,8 +964,11 @@ printf '%s\n' "\${opts# }" >> "\$F/ssh.opts"
 [ -e "\$F/state/ddfail" ] && case "\$cmd" in *"dd if="*) exit 255 ;; esac
 # state/slowdd: a write of the partition takes 3 s (a signal arrives in it)
 [ -e "\$F/state/slowdd" ] && case "\$cmd" in *"dd of="*) sleep 3 ;; esac
+# state/holdread: a read of the partition holds 100 s and returns nothing;
+# state/read_held is there from the moment it holds (a signal arrives in it)
+[ -e "\$F/state/holdread" ] && case "\$cmd" in *"dd if="*) echo held > "\$F/state/read_held"; exec sleep 100 ;; esac
 cmd=\$(printf '%s' "\$cmd" | sed -E -e "s#/boot(/|[ );']|\$)#\$F/boot\\1#g" -e "s#/dev/(mmcblk[0-9]+p[0-9]+)#\$F/dev/\\1#g" \\
-    -e "s#test -b #isblk #g" -e "s#/proc/uptime#\$F/proc/uptime#g" -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/drop_caches#g" -e "s#conv=fsync#conv=fsync,notrunc#g")
+    -e "s#test -b #isblk #g" -e "s#/proc/uptime#\$F/proc/uptime#g" -e "s#/sys/block/#\$F/sys/block/#g" -e "s#/proc/sys/vm/drop_caches#\$F/proc/drop_caches#g" -e "s#conv=fsync#conv=notrunc#g")
 PATH="\$F/bin:\$PATH" exec sh -c "\$cmd"
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$S/fakebin/stty"
@@ -1099,20 +1112,43 @@ check "live run whose boot left yako_once set: rc 6, verdict done, the one-shot 
 rm -f "$F/state/mode"
 
 # G11: the lock's watchdog sends TERM while the reboot's ssh is in the
-# foreground (state/mode hang: it holds the session 20 s); the run must end
-# at once through its undo, well inside the watchdog's 10 s before KILL
+# foreground (state/mode hang: it holds the session HOLD_MAX + 8 s); the run
+# must end at once through its undo, well inside the watchdog's 10 s before
+# KILL.
+# The watchdog counts HOLD_MAX from the lock, so this is that case only when
+# the run reached the reboot inside HOLD_MAX. 12 s is enough on an idle host
+# (the reboot comes about 5 s after the start) and not on a loaded one: on
+# 2026-11-23 a gate run had the watchdog fire before the arm, and the undo
+# check below failed on a run that had nothing to undo (issue #11043). So a
+# run the watchdog ended before the reboot is not judged: the case runs again
+# with HOLD_MAX doubled, and the first run that reached the reboot is the one
+# the two checks read. A run that ended any other way is judged as it is.
+# "Reached" is the fake board holding the reboot's ssh (state/hang_from), not
+# the ssh's line in ssh.log: that line comes a moment before the hold.
 echo hang > "$F/state/mode"
 printf '100.00 300.00\n' > "$F/proc/uptime"
-: > "$F/ssh.log"
-t0=$(date +%s)
-HOLD_MAX=12 live_bg run "$S/img/mp2.bin" "$S/live-logs" wdkill > "$S/wdkill.out" 2>&1 &
-pid=$!
-wait "$pid"
-rc=$?
-dt=$(($(date +%s) - t0))
-out=$(cat "$S/wdkill.out")
-check "G11: the lock's watchdog TERM at HOLD_MAX=12 during the reboot's ssh: rc 143 within 20 s (not after the 20 s ssh), the watchdog's lines shown" \
-    eval '[ "$rc" = 143 ] && [ "$dt" -lt 20 ] && grep -q "SIGTERM: ending through the undo" <<<"$out" && grep -q "held the board past 12s" <<<"$out"'
+reached=0
+for hold in 12 24 48 96; do
+    : > "$F/ssh.log"
+    rm -f "$F/state/hang_from"
+    echo $((hold + 8)) > "$F/state/hang_s"
+    HOLD_MAX=$hold live_bg run "$S/img/mp2.bin" "$S/live-logs" "wdkill$hold" > "$S/wdkill.out" 2>&1 &
+    pid=$!
+    wait "$pid"
+    rc=$?
+    end=$(date +%s)
+    out=$(cat "$S/wdkill.out")
+    if [ -s "$F/state/hang_from" ]; then
+        reached=1
+        break
+    fi
+    [ "$rc" = 143 ] && grep -q "held the board past ${hold}s" <<<"$out" || break
+    [ "$hold" = 96 ] || echo "  (HOLD_MAX=$hold: the watchdog fired before the run reached the reboot; the case again with twice the time)"
+done
+rm -f "$F/state/hang_s"
+[ "$reached" = 1 ] || echo "  (no run reached the reboot's ssh; the last one: HOLD_MAX=$hold, rc $rc. The two checks below read it and fail)"
+check "G11: the lock's watchdog TERM during the reboot's ssh (HOLD_MAX 12 s, doubled up to 96 s while the host does not reach the reboot in it): rc 143 before the held ssh would have ended, the watchdog's lines shown" \
+    eval '[ "$reached" = 1 ] && [ "$rc" = 143 ] && [ "$end" -lt "$(($(cat "$F/state/hang_from") + hold + 8))" ] && grep -q "SIGTERM: ending through the undo" <<<"$out" && grep -q "held the board past ${hold}s" <<<"$out"'
 check "G11: the undo ran: the pre-arm environment back (no yako_once, yako_file not this run's), the staged image removed, the state file cleared, the lock free" \
     eval '[ "$(vals "$PART" yako_once | head -1)" = - ] && ! vals "$PART" yako_file | grep -q wdkill &&[ -z "$(ls "$F"/boot/yakogl/once-* 2>/dev/null)" ] && [ ! -e "$LEFTF" ] &&
           grep -q "writing the pre-arm environment back" <<<"$out" && ! [ -s "$S/board.lock" ]'
@@ -1170,6 +1206,23 @@ rm -f "$F/state/slowdd"
 out=$(cat "$S/slowdd.out")
 check "G11: a TERM during an environment write: rc 143 after the write finished (both copies check, the one-shot gone), not cut in half" \
     eval '[ "$rc" = 143 ] && grep -q "waiting for the environment write in flight" <<<"$out" && ENVT check "$PART" >/dev/null && [ "$(vals "$PART" yako_once | head -1)" = - ]'
+# a TERM while an environment read is in flight. The runner calls the read as
+# a function with its stdout and stderr in files, and bash runs a trap with
+# the redirections of the command it interrupts: the ending's lines went into
+# those files and the run ended with rc 143 and no word (issue #11043)
+touch "$F/state/holdread"
+rm -f "$F/state/read_held"
+live_bg disarm > "$S/holdread.out" 2>&1 &
+pid=$!
+wait_for "$F/state/read_held" held 90
+held=$?
+kill -TERM "$pid"
+wait "$pid"
+rc=$?
+rm -f "$F/state/holdread" "$F/state/read_held"
+out=$(cat "$S/holdread.out")
+check "G11: a TERM during an environment read: rc 143, the ending's line on the run's own stderr (not in the read's files)" \
+    eval '[ "$held" = 0 ] && [ "$rc" = 143 ] && grep -q "SIGTERM: ending through the undo" <<<"$out"'
 
 echo die > "$F/state/mode"
 : > "$F/ssh.log"
