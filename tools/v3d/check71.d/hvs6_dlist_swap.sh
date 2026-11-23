@@ -13,7 +13,11 @@
 # slot's read-back), and the DL.LACT pickup as a pass criterion (a swap only
 # once LACT reads our new head, a restore only once it reads the firmware's
 # head again, each bounded by polls and frames; no pickup and a restore with
-# LACT elsewhere fail, named)
+# LACT elsewhere fail, named), and the LPTRS write after a vblank found by
+# STATUS reads only (FRCNT step; no step within the read bound fails as
+# HVS6S_ERR_VBLANK), the pickup timed by a tight bounded loop (line, FRCNT,
+# dt_us, read period, frame boundary), one forced mid-frame write recorded
+# off the boundary, and a tight bound that runs out with no pickup
 # (driver/zephyr/lib/board/test/hvs6_dlist_swap_mock.c), with -std=c11
 # -Wall -Wextra -Werror and AddressSanitizer + UBSan; the header also
 # compiles alone under -std=c11 -pedantic.
