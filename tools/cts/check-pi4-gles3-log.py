@@ -17,9 +17,17 @@ tools/cts/log/<YYYY-MM>-pi4-gles3-<sha8>-rowsAA-BB/. Exit 1 when:
   c) a README.md has no line starting 'commit: <sha>' (or 'commit <sha>'),
      or names another commit;
   d) a tally has no complete deqp summary line (complete=1 and
-     'summary: N cases begun, N with a result, 0 without'): aborted;
+     'summary: N cases begun, N with a result, 0 without'): aborted, unless
+     it is a cut (below);
   e) a file holds an absolute home path (/home/, /Users/), an IPv4
      address, a .ts.net name or a /dev/tty path.
+A cut is not a FAIL (an 'info: cut' line): an aborted image whose
+console and tally show (a) that every case of the label in the CURRENT tree
+began and the last case begun is the abort trigger (a ResourceError,
+InternalError, Crash or Timeout line), and (b) that each case the old
+console's filter never began is covered by another label of the tree that has
+its own tally. The cases come from the tree globs expanded against
+tools/cts/gles3-mustpass.txt (--mustpass). Anything else stays FAIL.
 On success prints '<N> images, <N> with a tally, 0 missing, 0 duplicated,
 commit <sha8>'.
 """
@@ -75,7 +83,123 @@ def refused_one_case(path):
     return bool(m) and (m.group(1), m.group(2), m.group(3)) == ("1", "1", "0")
 
 
-def check(sha, tree, dirs):
+ABORT = ("InternalError", "ResourceError", "Crash", "Timeout")
+CASE_LINE = re.compile(r"^Test case '(\S+)'\.\.")
+V3D_CASE = re.compile(r"^v3d_deqp: case #\d+ \S .*?(\S+)\s*$")
+STATUS_LINE = re.compile(
+    r"^(?:deqp: )?(Pass|Fail|NotSupported|QualityWarning|CompatibilityWarning|"
+    r"InternalError|ResourceError|Crash|Timeout) (dEQP-\S+)")
+FILTER_LINE = re.compile(r"^deqp: case filter '([^']*)'")
+
+
+def pattern_re(pat):
+    return re.compile(".*".join(re.escape(p) for p in pat.split("*")), re.S)
+
+
+def expand(filt, mustpass):
+    """Case names of a comma separated filter: '*' globs expand against the
+    mustpass list (in its order), other names stand for themselves."""
+    out, seen = [], set()
+    for ent in filt.split(","):
+        ent = ent.strip()
+        if not ent:
+            continue
+        if "*" in ent:
+            r = pattern_re(ent)
+            names = [n for n in mustpass if r.fullmatch(n)]
+        else:
+            names = [ent]
+        for n in names:
+            if n not in seen:
+                seen.add(n)
+                out.append(n)
+    return out
+
+
+def tree_cases(tree):
+    """{label: filter text}: the case lines under each '# image' header."""
+    out, cur = {}, None
+    with open(tree, encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"#\s*image\s+([^\s:]+)\s*:", line)
+            if m:
+                cur = m.group(1)
+                out.setdefault(cur, [])
+            elif cur and line.strip() and not line.lstrip().startswith("#"):
+                out[cur].append(line.strip())
+    return {k: ",".join(v) for k, v in out.items()}
+
+
+def read_mustpass(path):
+    with open(path, encoding="utf-8") as f:
+        return [l.strip() for l in f if l.strip() and not l.startswith("#")]
+
+
+def cut_verdict(lab, tallies, mustpass, expansions, where):
+    """(ok, text) for an aborted label: 'cut' when conditions (a) and (b) of
+    the module doc hold, else the reason it is not one."""
+    mine = expansions.get(lab)
+    if not mine:
+        return False, "no case list for it in the tree"
+    tally = tallies[0]
+    con = tally[: -len(".tally.txt")] + ".console.txt"
+    begun, status, last = [], {}, None
+    flt = None
+    texts = []
+    for p in (con, tally):
+        if os.path.isfile(p):
+            with open(p, encoding="utf-8", errors="replace") as f:
+                texts.append(f.read())
+    if not texts:
+        return False, "no console or tally"
+    for text in texts:
+        for line in text.splitlines():
+            line = line.rstrip("\r")
+            m = CASE_LINE.match(line) or V3D_CASE.match(line)
+            if m and m.group(1) not in begun:
+                begun.append(m.group(1))
+            m = STATUS_LINE.match(line)
+            if m:
+                if m.group(2) not in begun:
+                    begun.append(m.group(2))
+                status[m.group(2)] = m.group(1)
+            m = FILTER_LINE.match(line)
+            if m and flt is None:
+                flt = m.group(1)
+    nb = set(begun)
+    notbegun = [c for c in mine if c not in nb]
+    if notbegun:
+        return False, "%d case(s) of the tree label never began (first %s)" % (
+            len(notbegun), notbegun[0])
+    mine_set = set(mine)
+    inside = [c for c in begun if c in mine_set]
+    trigger = inside[-1] if inside else None
+    if trigger is None or begun[-1] != trigger or status.get(trigger) not in ABORT:
+        return False, "the last case begun is not an abort trigger"
+    if trigger != mine[-1]:
+        return False, "the abort trigger is not the last case of the tree label"
+    if flt is None:
+        return False, "no 'deqp: case filter' line in the console"
+    old = expand(flt, mustpass)
+    rest = [c for c in old if c not in nb]
+    owner = {}
+    for other, cs in expansions.items():
+        if other != lab and where.get(other):
+            for c in cs:
+                owner.setdefault(c, other)
+    unc = [c for c in rest if c not in owner]
+    if unc:
+        return False, "%d never-begun case(s) have no label with a tally (first %s)" % (
+            len(unc), unc[0])
+    subs = []
+    for c in rest:
+        if owner[c] not in subs:
+            subs.append(owner[c])
+    return True, "cut after abort trigger %s (%d begun, %d moved to %s)" % (
+        trigger, len(begun), len(rest), " ".join(subs) if subs else "no label")
+
+
+def check(sha, tree, dirs, mustpass=None):
     """Check the record; print the verdict, return the exit status."""
     dirs = [d for d in dirs if os.path.isdir(d)]
     problems = []
@@ -132,6 +256,18 @@ def check(sha, tree, dirs):
             info.append("%s: refused (one-case image)" % lab)
             continue
         aborted.append(lab)
+    if aborted:
+        try:
+            mp = read_mustpass(mustpass or os.path.join(HERE, "gles3-mustpass.txt"))
+        except OSError:
+            mp = []
+        filt = tree_cases(tree)
+        exps = {k: expand(v, mp) for k, v in filt.items()}
+        for lab in list(aborted):
+            ok, why = cut_verdict(lab, where[lab], mp, exps, where)
+            if ok:
+                aborted.remove(lab)
+                info.append("%s: %s" % (lab, why))
     if missing:
         problems.append("missing (%d): %s" % (len(missing), " ".join(missing)))
     if aborted:
@@ -252,6 +388,62 @@ def self_test():
         expect("one case begun in a multi-case image is aborted, not refused",
                rc == 1 and "aborted, no complete deqp summary (1): M1" in out)
 
+        # cut rules: label K keeps the cases up to the trigger, K2 the rest
+        tree3 = os.path.join(td, "tree3.txt")
+        mp3 = os.path.join(td, "mp3.txt")
+        names = ["dEQP-X.k.c%d" % i for i in range(1, 7)]
+        with open(mp3, "w", encoding="utf-8") as f:
+            f.write("\n".join(names) + "\n")
+        with open(tree3, "w", encoding="utf-8") as f:
+            f.write("# image K: 3\n%s\n# image K2: 3\ndEQP-X.k.c4,dEQP-X.k.c5,"
+                    "dEQP-X.k.c6\n" % ",".join(names[:3]))
+        abort = ("deqp: complete=0\n"
+                 "deqp: summary: 3 cases begun, 3 with a result, 0 without\n")
+        con = ("deqp: case filter 'dEQP-X.k.*'\n"
+               + "".join("Test case '%s'..\n  Pass (Pass)\n" % c for c in names[:2])
+               + "Test case '%s'..\ndeqp: ResourceError %s\n" % (names[2], names[2]))
+
+        def run3(labels, console, tag, con_text=con):
+            d = session("t3-" + tag, good, labels, None,
+                        {"K": abort, "K2": tally})
+            if console:
+                with open(os.path.join(d, "K.console.txt"), "w",
+                          encoding="utf-8") as f:
+                    f.write(con_text)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(good, tree3, [d], mp3)
+            return rc, buf.getvalue()
+
+        rc, out = run3(["K", "K2"], True, "ok")
+        expect("cut: abort at the last case, remainder label has a tally, ok",
+               rc == 0 and "info: K: cut after abort trigger" in out
+               and "moved to K2" in out)
+        rc, out = run3(["K"], True, "notally")
+        expect("cut: remainder label without a tally fails",
+               rc == 1 and "missing (1): K2" in out)
+        d = session("t3-nolabel", good, ["K", "K2"], None, {"K": abort, "K2": tally})
+        with open(os.path.join(d, "K.console.txt"), "w", encoding="utf-8") as f:
+            f.write(con)
+        with open(tree3, "w", encoding="utf-8") as f:
+            f.write("# image K: 3\n%s\n# image K2: 2\ndEQP-X.k.c4,dEQP-X.k.c5\n"
+                    % ",".join(names[:3]))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = check(good, tree3, [d], mp3)
+        expect("cut: a never-begun case no label covers fails",
+               rc == 1 and "aborted, no complete deqp summary (1): K" in buf.getvalue())
+        with open(tree3, "w", encoding="utf-8") as f:
+            f.write("# image K: 4\n%s\n# image K2: 2\ndEQP-X.k.c5,dEQP-X.k.c6\n"
+                    % ",".join(names[:4]))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = check(good, tree3, [d], mp3)
+        expect("cut: a tree case that never began fails",
+               rc == 1 and "aborted, no complete deqp summary (1): K" in buf.getvalue())
+        rc, out = run3(["K", "K2"], False, "nocon")
+        expect("cut: no console fails", rc == 1 and "(1): K" in out)
+
         def readme_case(name, tag, text, want_ok):
             d = session("r-" + tag, good, ["C3"], text)
             rc, out = run(tree, [d1, d])
@@ -276,6 +468,7 @@ def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", default=os.path.join(HERE, "pi4-gles3-tree.txt"))
+    ap.add_argument("--mustpass", default=os.path.join(HERE, "gles3-mustpass.txt"))
     ap.add_argument("--commit", help="full sha of the record")
     ap.add_argument("--self-test", action="store_true",
                     help="check the checker on a synthetic record")
@@ -290,7 +483,7 @@ def main():
         ap.error("--commit needs a full 40-digit sha")
     dirs = a.dirs or sorted(
         glob.glob(os.path.join(HERE, "log", "*-pi4-gles3-%s-*" % sha[:8])))
-    return check(sha, a.tree, dirs)
+    return check(sha, a.tree, dirs, a.mustpass)
 
 
 if __name__ == "__main__":
