@@ -2477,7 +2477,7 @@ pub unsafe extern "C" fn yd_t6_display_adopt(
     }
     // SAFETY: the caller's contract.
     let (hw, b) = unsafe { (Hw::new(), &*b) };
-    let w = crate::board::nanopc_t6_display::mode_window(fb_pa);
+    let w = crate::board::nanopc_t6_display::probe_window(fb_pa);
     let a = crate::board::nanopc_t6_display::adopt(&hw, b, &w, &mut |us| delay_us(us));
     // SAFETY: the caller's contract.
     unsafe { *out = a };

@@ -113,23 +113,26 @@
 # refusals (a crashkernel= already there, two extraargs= lines, undo without
 # set, a file changed after set, another board).
 #
-# An eleventh, for the crash route's mode (issue #10520): the image adopts
-# 1024x768 only, and since 2026-11-22 Linux runs 1920x1080 on the T6's HDMI
-# (a capture unit with an EDID). nanopc-t6.sh --crash --go now starts
-# t6-kms-mode.py, which sets the adopt's mode and holds it, reads VP0's mode
-# back from the DRM state and jumps only on the adopt's mode. On the fake
-# board: the holder is started before the jump; a refusal of the helper, an
-# answer without its pid, and each wrong read-back (Linux's 1920x1080, a
-# clock off by 1 kHz, a positive sync, interlace, VP0 off, nothing) stop the
-# run before the jump; every refusal after a holder was started stops it by
-# the pid its line named, also a jump the board refuses; the normal route
-# never starts it; the dry run refuses --crash without python3 or without VP0
-# in the DRM state. The board side of the stop runs here on a stand-in
-# holder: it kills that pid and no other, and nothing in another Linux.
-# vp0_mode reads VP0's lines of a DRM state in Linux's format. ADOPT_MODE is
-# the Rust MODE. The helper's own self-test (the uapi numbers on arm64, the
-# mode rule, the set and give-back order on a made-up card, the holder's
-# stop) runs from here as one check.
+# An eleventh, for the crash route's mode (issues #10520, #11001): the image
+# adopts 1024x768 and 1920x1080 (ADOPT_MODES), and an HDMI capture unit
+# gives no picture after a size change. nanopc-t6.sh --crash --go starts
+# t6-kms-mode.py, which holds VP0's own mode when it is adopted and else
+# sets 1024x768, reads VP0's mode back from the DRM state and jumps only on
+# the mode held. On the fake board: Linux's 1920x1080 and 1024x768 are held
+# with no size change, and 1280x720, a 1920x1080 with the wrong syncs, VP0
+# off and an unread VP0 get 1024x768; the holder is started before the
+# jump; a refusal of the helper, an answer without its pid, and each wrong
+# read-back (the other adopted mode, a clock off by 1 kHz, the wrong syncs,
+# interlace, VP0 off, nothing) stop the run before the jump; every refusal
+# after a holder was started stops it by the pid its line named, also a
+# jump the board refuses; the normal route never starts it; the dry run
+# names the mode it would hold, and refuses --crash without python3 or
+# without VP0 in the DRM state. The board side of the stop runs here on a
+# stand-in holder: it kills that pid and no other, and nothing in another
+# Linux. vp0_mode reads VP0's lines of a DRM state in Linux's format.
+# ADOPT_MODES are the Rust MODES. The helper's own self-test (the uapi
+# numbers on arm64, the mode rule, the set and give-back order on a
+# made-up card, the holder's stop) runs from here as one check.
 #
 # A twelfth (issue #10591): on 2026-11-22 a --go run jumped although the
 # debug UART delivered nothing (uart.log 0 bytes). nanopc-t6.sh --go now
@@ -423,23 +426,26 @@ check "nanopc-t6.sh: an image without the line is refused for it (rc $rc)" \
 # the board then comes back with another boot_id; anything else prints
 # nothing. stty, fuser and scp stand in for --go's UART checks and copies.
 # The crash route's mode step (t6-kms-mode.py): the holder's start answers
-# T6_FAKE_HOLD_OUT and exits T6_FAKE_HOLD_RC (default: held by pid 4242);
-# VP0's read-back answers T6_FAKE_VP0_HELD (default the adopt's mode) while
-# a holder runs and Linux's 1920x1080 otherwise; the stop takes the holder
-# away and answers T6_FAKE_VP0_AFTER (default Linux's 1920x1080) as VP0's
-# mode. A jump with T6_FAKE_JUMP_RC set is refused on the board with that
-# code (the linux-wdt check) and does not happen.
+# T6_FAKE_HOLD_OUT and exits T6_FAKE_HOLD_RC (default: the --mode it was
+# given, held by pid 4242); VP0's read-back answers T6_FAKE_VP0_HELD
+# (default the mode held) while a holder runs and Linux's own mode
+# otherwise (T6_FAKE_VP0_LINUX, default 1920x1080); the stop takes the
+# holder away and answers T6_FAKE_VP0_AFTER (default Linux's own mode) as
+# VP0's mode. A jump with T6_FAKE_JUMP_RC set is refused on the board with
+# that code (the linux-wdt check) and does not happen.
 vp0_1080='enable=1 active=1 mode: "1920x1080": 60 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0x5'
 vp0_adopt='enable=1 active=1 mode: "1024x768": 60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0xa'
-held_line='t6-kms-mode: HDMI-A-1 on CRTC 81: "1024x768" 65000 kHz h 1024 1048 1184 1344 v 768 771 777 806 -hsync -vsync set (fb 60), read back; was fb 50, "1920x1080" 148500 kHz; held by pid 4242 for at most 600 s'
+vp0_720='enable=1 active=1 mode: "1280x720": 60 74250 1280 1390 1430 1650 720 725 730 750 0x40 0x5'
 mkdir "$tmp/fakebin"
-printf '%s\n' "$vp0_1080" > "$tmp/vp0-1080"
-printf '%s\n' "$vp0_adopt" > "$tmp/vp0-adopt"
-printf '%s\n' "$held_line" > "$tmp/held-line"
+printf '%s\n' "$vp0_1080" > "$tmp/vp0-1920x1080"
+printf '%s\n' "$vp0_adopt" > "$tmp/vp0-1024x768"
+printf '%s\n' 't6-kms-mode: HDMI-A-1 on CRTC 81: "1920x1080" 148500 kHz h 1920 2008 2052 2200 v 1080 1084 1089 1125 +hsync +vsync set (fb 60), read back; was fb 50, "1920x1080" 148500 kHz; held by pid 4242 for at most 600 s' > "$tmp/held-1920x1080"
+printf '%s\n' 't6-kms-mode: HDMI-A-1 on CRTC 81: "1024x768" 65000 kHz h 1024 1048 1184 1344 v 768 771 777 806 -hsync -vsync set (fb 60), read back; was fb 50, "1920x1080" 148500 kHz; held by pid 4242 for at most 600 s' > "$tmp/held-1024x768"
 cat > "$tmp/fakebin/ssh" <<EOS
 #!/bin/bash
 for a; do last=\$a; done
 printf '%s\n----\n' "\$last" >> "$tmp/ssh.log"
+linux_mode() { if [ -n "\${T6_FAKE_VP0_LINUX+set}" ]; then printf '%s\n' "\$T6_FAKE_VP0_LINUX"; else cat "$tmp/vp0-1920x1080"; fi; }
 case "\$last" in
 *'printf "compatible='*) cat "$tmp/facts" ;;
 *'printf "kexec_loaded='*) cat "$tmp/fresh" ;;
@@ -447,15 +453,16 @@ case "\$last" in
 	p=\$(sed -n 's/^set -- \([0-9]*\) .*/\1/p' <<<"\$last")
 	rm -f "$tmp/mode-held"
 	printf 'pid %s ended after SIGTERM\nt6-kms-mode: pid %s: stop (signal SIGTERM): CRTC 81 back on fb 50; card closed\nvp0=' "\$p" "\$p"
-	if [ -n "\${T6_FAKE_VP0_AFTER+set}" ]; then printf '%s\n' "\$T6_FAKE_VP0_AFTER"; else cat "$tmp/vp0-1080"; fi ;;
-*'t6-kms-mode.py hold --max-hold'*)
-	[ "\${T6_FAKE_HOLD_RC:-0}" != 0 ] || touch "$tmp/mode-held"
-	if [ -n "\${T6_FAKE_HOLD_OUT+set}" ]; then printf '%s\n' "\$T6_FAKE_HOLD_OUT"; else cat "$tmp/held-line"; fi
+	if [ -n "\${T6_FAKE_VP0_AFTER+set}" ]; then printf '%s\n' "\$T6_FAKE_VP0_AFTER"; else linux_mode; fi ;;
+*'t6-kms-mode.py hold --mode '*)
+	m=\$(sed -n 's/.* hold --mode \([0-9x]*\) .*/\1/p' <<<"\$last")
+	[ "\${T6_FAKE_HOLD_RC:-0}" != 0 ] || printf '%s\n' "\$m" > "$tmp/mode-held"
+	if [ -n "\${T6_FAKE_HOLD_OUT+set}" ]; then printf '%s\n' "\$T6_FAKE_HOLD_OUT"; else cat "$tmp/held-\$m"; fi
 	exit "\${T6_FAKE_HOLD_RC:-0}" ;;
 *vp0_mode)
-	if [ ! -e "$tmp/mode-held" ]; then cat "$tmp/vp0-1080"
+	if [ ! -e "$tmp/mode-held" ]; then linux_mode
 	elif [ -n "\${T6_FAKE_VP0_HELD+set}" ]; then printf '%s\n' "\$T6_FAKE_VP0_HELD"
-	else cat "$tmp/vp0-adopt"; fi ;;
+	else cat "$tmp/vp0-\$(cat "$tmp/mode-held")"; fi ;;
 *'yakogl-uart-proof '*)
 	case "\${T6_FAKE_UART:-marker}" in
 	marker) printf '\r\n%s\r\n' "\$(grep -o 'yakogl-uart-proof [0-9a-f]*' <<<"\$last")" > "$tmp/wire.fifo" ;;
@@ -717,10 +724,11 @@ rc=$?
 check "nanopc-t6.sh: the dry run names the board's console and writes no marker (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qF "uart: the board's serial console (its kernel command line): /dev/ttyS2; --go has the board write one marker line" <<<"$out" && ! grep -qF yakogl-uart-proof "$tmp/ssh.log"; echo $?)"
 
-# The crash route's mode step (issue #10520): t6-kms-mode.py sets the
-# adopt's mode and holds it, VP0's mode is read back from Linux, and the jump
-# happens only when it is the adopt's. Every refusal after a holder was
-# started stops it by the pid its line named (4242 on the fake board).
+# The crash route's mode step (issues #10520, #11001): t6-kms-mode.py holds
+# VP0's own mode when it is one the image adopts (no size change), else it
+# sets 1024x768; VP0's mode is read back from Linux, and the jump happens
+# only when it is the mode held. Every refusal after a holder was started
+# stops it by the pid its line named (4242 on the fake board).
 ck_go() { # t6_go_run --crash on the reservation; sets out, rc, rec
 	out=$(t6_crash_size=268435456 t6_go_run "$kernel
 $ck" --crash)
@@ -728,30 +736,50 @@ $ck" --crash)
 	rec=$(cat "$tmp"/rec/*/record.txt 2>/dev/null)
 }
 stopped_4242() { grep -qF "set -- 4242 boot-before /tmp/yakogl-kexec" "$tmp/ssh.log" && grep -qF 'kill -TERM' "$tmp/ssh.log"; }
+# held_and_jumped <mode> <VP0's line>: the holder of that mode started
+# before the jump, and VP0 read back as that mode
+held_and_jumped() {
+	local hold_at jump_at
+	hold_at=$(grep -n "t6-kms-mode.py hold --mode $1 --max-hold 600 --log /tmp/yakogl-kexec/kms-mode.log" "$tmp/ssh.log" | head -1 | cut -d: -f1)
+	jump_at=$(grep -n 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash; rc=' "$tmp/ssh.log" | head -1 | cut -d: -f1)
+	[ "$rc" = 0 ] && [ -n "$hold_at" ] && [ -n "$jump_at" ] && [ "$hold_at" -lt "$jump_at" ] &&
+		[ "$(grep -c 't6-kms-mode.py hold' "$tmp/ssh.log")" = 1 ] &&
+		grep -qF "mode: VP0 reads back '$2': the adopt's mode $1, held by pid 4242 across the jump" <<<"$rec"
+}
 ck_go
-hold_at=$(grep -n 't6-kms-mode.py hold --max-hold 600 --log /tmp/yakogl-kexec/kms-mode.log' "$tmp/ssh.log" | head -1 | cut -d: -f1)
-jump_at=$(grep -n 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin 0x10000000 --crash; rc=' "$tmp/ssh.log" | head -1 | cut -d: -f1)
-check "nanopc-t6.sh: --crash --go starts the holder before the jump and reads the adopt's mode back (rc $rc)" \
-	"$([ "$rc" = 0 ] && [ -n "$hold_at" ] && [ -n "$jump_at" ] && [ "$hold_at" -lt "$jump_at" ] && grep -qF "mode: VP0 reads back 'enable=1 active=1 mode: \"1024x768\": 60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0xa': the adopt's mode, held by pid 4242 across the jump" <<<"$rec"; echo $?)"
+check "nanopc-t6.sh: --crash --go on Linux's 1920x1080, an adopted mode: it is held, no size change, and read back before the jump (rc $rc)" \
+	"$(held_and_jumped 1920x1080 "$vp0_1080" && grep -qF 'mode: VP0 runs an adopted mode: hold 1920x1080, no size change' <<<"$rec"; echo $?)"
 check "nanopc-t6.sh: after a jump that came back, the holder is not looked for (it ended with that Linux)" \
 	"$(! grep -qF 'kill -TERM' "$tmp/ssh.log" && grep -qF 'mode: holder pid 4242 ended with the Linux that ran it' <<<"$rec"; echo $?)"
-T6_FAKE_HOLD_RC=3 T6_FAKE_HOLD_OUT="t6-kms-mode: REFUSED: HDMI-A-1 lists no mode with the adopt's timing (9 modes; of size 1024x768: none); nothing was changed" ck_go
+T6_FAKE_VP0_LINUX=$vp0_adopt ck_go
+check "nanopc-t6.sh: --crash --go on Linux's 1024x768, an adopted mode: it is held, no size change (rc $rc)" \
+	"$(held_and_jumped 1024x768 "$vp0_adopt" && grep -qF 'mode: VP0 runs an adopted mode: hold 1024x768, no size change' <<<"$rec"; echo $?)"
+T6_FAKE_VP0_LINUX=$vp0_720 ck_go
+check "nanopc-t6.sh: --crash --go on Linux's 1280x720, not an adopted mode: 1024x768 is set (rc $rc)" \
+	"$(held_and_jumped 1024x768 "$vp0_adopt" && grep -qF 'mode: VP0 runs none of the adopted modes: set 1024x768' <<<"$rec"; echo $?)"
+for vp in "${vp0_1080/0x5/0xa}" "${vp0_1080/enable=1 active=1/enable=0 active=0}" ''; do
+	T6_FAKE_VP0_LINUX=$vp ck_go
+	check "nanopc-t6.sh: --crash --go on VP0 '${vp:-unread}', not an adopted mode: 1024x768 is set (rc $rc)" \
+		"$(held_and_jumped 1024x768 "$vp0_adopt" && grep -qF 'mode: VP0 runs none of the adopted modes: set 1024x768' <<<"$rec"; echo $?)"
+done
+T6_FAKE_HOLD_RC=3 T6_FAKE_HOLD_OUT="t6-kms-mode: REFUSED: HDMI-A-1 lists no mode with the adopt's 1920x1080 timing (9 modes; of size 1920x1080: none); nothing was changed" ck_go
 check "nanopc-t6.sh: a refusal of t6-kms-mode.py stops the run before the jump, and no stop is sent (no holder) (rc $rc)" \
 	"$([ "$rc" = 1 ] && grep -qF "mode: REFUSED: t6-kms-mode.py did not set and hold the adopt's mode (rc 3); not jumping" <<<"$out" && grep -qF 'lists no mode with the adopt' <<<"$rec" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" && ! grep -qF 'kill -TERM' "$tmp/ssh.log"; echo $?)"
 T6_FAKE_HOLD_OUT='t6-kms-mode: something else' ck_go
 check "nanopc-t6.sh: an answer without the holder's pid is refused and says the holder ends by itself (rc $rc)" \
 	"$([ "$rc" = 1 ] && grep -qF 'did not set and hold the adopt' <<<"$out" && grep -qF 'mode: no holder pid in the answer' <<<"$rec" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" && ! grep -qF 'kill -TERM' "$tmp/ssh.log"; echo $?)"
-# The read-back is the runner's own rule: each of these is refused, and the
-# holder is stopped and Linux's own mode is back.
-for vp in "$vp0_1080" \
-	'enable=1 active=1 mode: "1024x768": 60 65001 1024 1048 1184 1344 768 771 777 806 0x40 0xa' \
-	'enable=1 active=1 mode: "1024x768": 60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0x5' \
-	'enable=1 active=1 mode: "1024x768": 60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0x1a' \
-	'enable=0 active=0 mode: "1024x768": 60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0xa' \
+# The read-back is the runner's own rule: with 1920x1080 held, each of
+# these is refused (the other adopted mode too: it is not the mode held),
+# and the holder is stopped and Linux's own mode is back.
+for vp in "$vp0_adopt" \
+	'enable=1 active=1 mode: "1920x1080": 60 148501 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0x5' \
+	'enable=1 active=1 mode: "1920x1080": 60 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0xa' \
+	'enable=1 active=1 mode: "1920x1080": 60 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0x15' \
+	'enable=0 active=0 mode: "1920x1080": 60 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0x5' \
 	''; do
 	T6_FAKE_VP0_HELD=$vp ck_go
 	check "nanopc-t6.sh: VP0 reading back '${vp:-nothing}' is refused, the holder stopped by its pid, Linux's mode back (rc $rc)" \
-		"$([ "$rc" = 1 ] && grep -qF "mode: REFUSED: VP0 does not run the adopt's mode (65000 1024 1048 1184 1344 768 771 777 806, flags 0xa) after the set: '${vp:-unread}'; not jumping" <<<"$out" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" && stopped_4242 && grep -qF 'mode: stop: pid 4242 ended after SIGTERM' <<<"$rec" && grep -qF "mode: Linux's own mode is back on VP0" <<<"$rec"; echo $?)"
+		"$([ "$rc" = 1 ] && grep -qF "mode: REFUSED: VP0 does not run the mode held (1920x1080 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x5) after the set: '${vp:-unread}'; not jumping" <<<"$out" && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" && stopped_4242 && grep -qF 'mode: stop: pid 4242 ended after SIGTERM' <<<"$rec" && grep -qF "mode: Linux's own mode is back on VP0" <<<"$rec"; echo $?)"
 done
 T6_FAKE_JUMP_RC=98 ck_go
 check "nanopc-t6.sh: a jump the board refuses (linux-wdt) stops the holder and Linux's mode comes back (rc $rc)" \
@@ -762,13 +790,18 @@ T6_FAKE_JUMP_RC=98 T6_FAKE_VP0_AFTER= ck_go
 check "nanopc-t6.sh: a stop after which VP0 cannot be read does not record that Linux's mode is back" \
 	"$(stopped_4242 && ! grep -qF "mode: Linux's own mode is back on VP0" <<<"$rec" && grep -qF "mode: VP0 was not read (now 'unread', before the set '$vp0_1080'): nothing says that Linux's own mode is back" <<<"$rec"; echo $?)"
 T6_FAKE_JUMP_RC=98 T6_FAKE_VP0_AFTER=$vp0_adopt ck_go
-check "nanopc-t6.sh: a stop after which VP0 still runs the adopt's mode records that it does NOT run Linux's" \
+check "nanopc-t6.sh: a stop after which VP0 runs another mode records that it does NOT run Linux's" \
 	"$(stopped_4242 && ! grep -qF "mode: Linux's own mode is back on VP0" <<<"$rec" && grep -qF "mode: VP0 does NOT run the mode it ran before the set: now '$vp0_adopt', before '$vp0_1080'" <<<"$rec"; echo $?)"
 out=$(t6_crash_size=268435456 t6_board_run "$kernel
 $ck" "$gic_out" --crash)
 rc=$?
-check "nanopc-t6.sh: the --crash dry run names VP0's mode and the mode step of the plan (rc $rc)" \
-	"$([ "$rc" = 0 ] && grep -qF "board: VP0 runs '$vp0_1080', not the adopt's mode" <<<"$out" && grep -qF 'then the adopt'"'"'s mode: python3 -I /tmp/yakogl-kexec/t6-kms-mode.py hold --max-hold 600' <<<"$out"; echo $?)"
+check "nanopc-t6.sh: the --crash dry run names VP0's adopted mode and the plan holds it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF "board: VP0 runs an adopted mode, 1920x1080 ($vp0_1080); --go holds it with t6-kms-mode.py, no size change" <<<"$out" && grep -qF 'then the adopt'"'"'s mode: python3 -I /tmp/yakogl-kexec/t6-kms-mode.py hold --mode 1920x1080 --max-hold 600' <<<"$out"; echo $?)"
+out=$(t6_vp0=$vp0_720 t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: the --crash dry run on a mode not adopted plans to set 1024x768 (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF "board: VP0 runs '$vp0_720', none of the adopted modes; --go sets 1024x768 first" <<<"$out" && grep -qF 'then the adopt'"'"'s mode: python3 -I /tmp/yakogl-kexec/t6-kms-mode.py hold --mode 1024x768 --max-hold 600' <<<"$out"; echo $?)"
 out=$(t6_python3=absent t6_crash_size=268435456 t6_board_run "$kernel
 $ck" "$gic_out" --crash)
 rc=$?
@@ -840,25 +873,29 @@ check "nanopc-t6.sh: the board's stop ends the holder by its pid and prints its 
 	"$(grep -qx "pid $sp ended after SIGTERM" <<<"$out" && grep -qx 't6-kms-mode: stand-in: stop (signal SIGTERM)' <<<"$out" && grep -qx 'vp0=stand-in' <<<"$out"; echo $?)"
 kill "$sp" 2>/dev/null
 wait "$sp" 2>/dev/null
-# ADOPT_MODE and ADOPT_FLAGS are the Rust MODE the image adopts with:
-# h = active, +front, +sync, +back; the same for v; the clock in kHz.
-# The board's MODE names the display chain's constant: its fields are there.
+# ADOPT_MODES are the Rust MODES the image adopts, in their order: the
+# name (the mode's size), h = active, +front, +sync, +back; the same for v;
+# the clock in kHz; the sync flags. Each Rust mode is a VideoMode literal
+# in the same file.
 rs=$here/../../rust/src
-mode_name=$(sed -n 's/^pub const MODE: VideoMode = crate::soc::rk3588_display_chain::\([A-Z0-9_]*\);$/\1/p' "$rs/board/nanopc_t6_display.rs")
-mode_rs=$(awk -v first="pub const $mode_name: VideoMode = VideoMode {" '$0 == first { n = 1; next } n && /^\};/ { exit } n { gsub(/[ ,]/, ""); print }' "$rs/soc/rk3588_display_chain.rs")
-rsv() { sed -n "s/^$1://p" <<<"$mode_rs" | tr -d _; }
 want=
-if [ -n "$(rsv vback)" ]; then
-	want="$(($(rsv pixel_clock_hz) / 1000)) $(rsv hactive) $(($(rsv hactive) + $(rsv hfront))) $(($(rsv hactive) + $(rsv hfront) + $(rsv hsync))) $(($(rsv hactive) + $(rsv hfront) + $(rsv hsync) + $(rsv hback)))"
-	want+=" $(rsv vactive) $(($(rsv vactive) + $(rsv vfront))) $(($(rsv vactive) + $(rsv vfront) + $(rsv vsync))) $(($(rsv vactive) + $(rsv vfront) + $(rsv vsync) + $(rsv vback)))"
+for mode_name in $(sed -n 's/^pub const MODES: \[VideoMode; [0-9]*\] = \[\(.*\)\];$/\1/p' "$rs/board/nanopc_t6_display.rs" | tr -d ,); do
+	mode_rs=$(awk -v first="pub const $mode_name: VideoMode = VideoMode {" '$0 == first { n = 1; next } n && /^\};/ { exit } n { gsub(/[ ,]/, ""); print }' "$rs/board/nanopc_t6_display.rs")
+	rsv() { sed -n "s/^$1://p" <<<"$mode_rs" | tr -d _; }
+	if [ -z "$(rsv vback)" ]; then
+		want=
+		break
+	fi
 	hflag=2 vflag=8 # DRM_MODE_FLAG_NHSYNC, _NVSYNC; 1 and 4 are the positive ones
 	if [ "$(rsv hsync_high)" = true ]; then hflag=1; fi
 	if [ "$(rsv vsync_high)" = true ]; then vflag=4; fi
-	want+=" $(printf '0x%x' $((hflag | vflag)))"
-fi
-got="$(sed -n 's/^ADOPT_MODE="\(.*\)"$/\1/p' "$t6") $(sed -n 's/^ADOPT_FLAGS=//p' "$t6")"
-check "nanopc-t6.sh: ADOPT_MODE ADOPT_FLAGS ($got) are board::nanopc_t6_display::MODE (${want:-unread})" \
-	"$([ -n "$want" ] && [ "$got" = "$want" ]; echo $?)"
+	want+="${want:+
+}$(rsv hactive)x$(rsv vactive) $(($(rsv pixel_clock_hz) / 1000)) $(rsv hactive) $(($(rsv hactive) + $(rsv hfront))) $(($(rsv hactive) + $(rsv hfront) + $(rsv hsync))) $(($(rsv hactive) + $(rsv hfront) + $(rsv hsync) + $(rsv hback)))"
+	want+=" $(rsv vactive) $(($(rsv vactive) + $(rsv vfront))) $(($(rsv vactive) + $(rsv vfront) + $(rsv vsync))) $(($(rsv vactive) + $(rsv vfront) + $(rsv vsync) + $(rsv vback))) $(printf '0x%x' $((hflag | vflag)))"
+done
+got=$(awk '/^ADOPT_MODES="/ { n = 1; sub(/^ADOPT_MODES="/, "") } n { if (sub(/"$/, "")) { print; exit } print }' "$t6")
+check "nanopc-t6.sh: ADOPT_MODES ($(tr '\n' ';' <<<"$got")) are board::nanopc_t6_display::MODES ($(tr '\n' ';' <<<"${want:-unread}"))" \
+	"$([ "$(wc -l <<<"$want")" = 2 ] && [ "$got" = "$want" ]; echo $?)"
 # t6-kms-mode.py's own self-test: the uapi numbers, the mode rule, the hold
 # and give-back order on a made-up card, the holder's stop.
 got=$(python3 -I "$here/t6-kms-mode.py" --self-test 2>&1)

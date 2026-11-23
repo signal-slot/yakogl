@@ -8,7 +8,10 @@
 //! Addresses are restated here from driver/docs/nanopc-t6-display.md and
 //! the dump, not taken from the module, so a wrong constant cannot agree
 //! with itself. The show and busy tests (step D3) run on the same model:
-//! Esmart0's address in force is the buffer the display scans.
+//! Esmart0's address in force is the buffer the display scans. The adopt's
+//! modes are tested on the two whole dumps of driver/docs, 1024x768
+//! (nanopc-t6-display-dump-linux.txt, the same words as the one above) and
+//! 1920x1080 (nanopc-t6-display-dump-linux-1920x1080.txt).
 
 use super::*;
 use crate::model_rk3588_display::{virt, Mapped};
@@ -16,6 +19,8 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 const DUMP: &str = include_str!("../../../tests/t6-display/linux-dump-adopt.txt");
+const DUMP_1024X768: &str = include_str!("../../../../docs/nanopc-t6-display-dump-linux.txt");
+const DUMP_1920X1080: &str = include_str!("../../../../docs/nanopc-t6-display-dump-linux-1920x1080.txt");
 
 const VOP: usize = 0xfdd9_0000;
 const MMU0: usize = 0xfdd9_7e00;
@@ -57,7 +62,7 @@ const FB: u64 = 0x1040_0000;
 /// The buffers of the show tests (EGL keeps four on a board that answers
 /// "busy"): [`FB`] and three more, 4 MiB apart.
 const FBS: [u64; 4] = [FB, FB + 0x40_0000, FB + 0x80_0000, FB + 0xc0_0000];
-/// 1344 x 806 at 65 MHz.
+/// 1344 x 806 at 65 MHz (2200 x 1125 at 148.5 MHz is the same to 1 us).
 const FRAME_US: u64 = 16_666;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,7 +140,11 @@ fn parse_dump(text: &str) -> BTreeMap<usize, u32> {
 impl Soc {
     /// The dump with `edit` applied, `f` injected.
     fn with(f: Faults, edit: &[(usize, u32)]) -> Soc {
-        let mut regs = parse_dump(DUMP);
+        Soc::of(DUMP, f, edit)
+    }
+    /// The dump `text` with `edit` applied, `f` injected.
+    fn of(text: &str, f: Faults, edit: &[(usize, u32)]) -> Soc {
+        let mut regs = parse_dump(text);
         for (a, v) in edit {
             regs.insert(*a, *v);
         }
@@ -348,13 +357,19 @@ impl Mmio for Soc {
 }
 
 fn run(soc: &Soc, fb: u64) -> Adopt {
-    adopt(&Mapped(soc), &B, &mode_window(fb), &mut |us| soc.advance(us))
+    adopt(&Mapped(soc), &B, &probe_window(fb), &mut |us| soc.advance(us))
 }
 
 /// What the adopt must write from the dump's state, in order (section 2
 /// route (a), steps 2-5, and the module text). A read-modify-write that
 /// leaves the value unchanged is still a write.
 fn expected_writes() -> Vec<(usize, u32)> {
+    expected_writes_with(0xa054_7880, 0x7651_3042)
+}
+
+/// [`expected_writes`] with the overlay's port and layer selects, which
+/// follow the selects Linux left.
+fn expected_writes_with(port_sel: u32, layer_sel: u32) -> Vec<(usize, u32)> {
     let v = |off: usize, val: u32| (VOP + off, val);
     let mut w = vec![
         // take_over: every Cluster off (WIN_CTRL0 enable and YUV clip, then
@@ -391,9 +406,9 @@ fn expected_writes() -> Vec<(usize, u32)> {
         // layer select (Esmart0, id 2, on layer 0, Cluster0 to layer 2), the
         // mixer and the delays
         v(0x600, 0),
-        v(PORT_SEL, 0xa054_7880),
+        v(PORT_SEL, port_sel),
         v(CFG_DONE, 0x0001_8001),
-        v(LAYER_SEL, 0x7651_3042),
+        v(LAYER_SEL, layer_sel),
         v(0x6c0, 0),
         v(0x6f0, 0),
         v(0x6f8, 23),
@@ -459,7 +474,7 @@ fn each_state_it_does_not_know_is_refused_by_name_before_any_write() {
     let gate52 = CRU + 0x8d0;
     // name, the dump word changed, the stop, its index and detail
     type Case = (&'static str, (usize, u32), Stop, u32, u32);
-    let cases: [Case; 12] = [
+    let cases: [Case; 14] = [
         ("PD_VOP off", (pmu_repair, 0xfad4_0001), Stop::VopDomain, 0, 0xfad4_0001),
         ("PD_VOP idle requested", (PMU + 0x10c, 0x0000_a3cf), Stop::VopDomain, 0, 0xfad5_0001),
         ("ACLK_VOP gated", (gate52, 0x0600), Stop::VopClock, 9, 0x0600),
@@ -467,7 +482,11 @@ fn each_state_it_does_not_know_is_refused_by_name_before_any_write() {
         ("not the RK3588's VOP", (VOP + 0x004, 0x4015_8f45), Stop::Version, 0, 0x4015_8f45),
         ("VP0 in standby", (VOP + VP0_DSP_CTRL, 0x8000_000f), Stop::Standby, 0, 0x8000_000f),
         ("VP0 in P888", (VOP + VP0_DSP_CTRL, 0x0000_0000), Stop::VpState, 0, 0),
-        ("1920x1080's htotal", (VOP + 0xc48, 0x0898_002c), Stop::Mode, 0, 0x0898_002c),
+        ("a white background", (VOP + 0xc2c, 0x3fff_ffff), Stop::VpState, 1, 0x3fff_ffff),
+        ("1280x720's htotal", (VOP + 0xc48, 0x0672_0028), Stop::Mode, 0, 0x0672_0028),
+        // 1920x1080's first word, then 1024x768's: the closest mode is
+        // 1920x1080, which differs from the second word on
+        ("1920x1080's htotal only", (VOP + 0xc48, 0x0898_002c), Stop::Mode, 1, 0x0128_0528),
         ("another vertical start", (VOP + 0xc54, 0x0024_0324), Stop::Mode, 3, 0x0024_0324),
         ("HDMI0 on VP1", (VOP + 0x028, 0x0005_0028), Stop::Route, 0, 0x0005_0028),
         ("HDMI0 disabled", (VOP + 0x028, 0x0004_0020), Stop::Route, 0, 0x0004_0020),
@@ -597,17 +616,155 @@ fn the_hdmi_controller_is_not_read_with_its_pclk_gated() {
     assert_eq!((s.vo1_usable, s.cru_gate60, s.cmu[0]), (1, 0x06ff, 0x255));
 }
 
+/// Each accepted mode is its dump's: VP0's four timing words and its
+/// `DSP_CTRL`, the background black, and the mode line of the dump's header
+/// (clock in kHz, h and v as DRM prints them, the sync flags).
 #[test]
-fn the_mode_is_the_dumps() {
-    let t = vop2::vp_timing(&MODE, Vp::Vp0).unwrap();
-    let d = parse_dump(DUMP);
-    assert_eq!(
-        [t.htotal_hs_end, t.hact_st_end, t.vtotal_vs_end, t.vact_st_end, t.dsp_ctrl],
-        [d[&(VOP + 0xc48)], d[&(VOP + 0xc4c)], d[&(VOP + 0xc50)], d[&(VOP + 0xc54)], d[&(VOP + 0xc00)]]
-    );
-    assert_eq!((MODE.htotal(), MODE.vtotal(), MODE.refresh_mhz(MODE.pixel_clock_hz)), (1344, 806, 60_003));
+fn each_mode_is_its_dumps() {
+    for (mode, dump, line, refresh) in [
+        (MODE_1024X768, DUMP_1024X768, "60 65000 1024 1048 1184 1344 768 771 777 806 0x40 0xa", 60_003),
+        (MODE_1920X1080, DUMP_1920X1080, "60 148500 1920 2008 2052 2200 1080 1084 1089 1125 0x48 0x5", 60_000),
+    ] {
+        let t = vop2::vp_timing(&mode, Vp::Vp0).unwrap();
+        let d = parse_dump(dump);
+        assert_eq!(
+            [t.htotal_hs_end, t.hact_st_end, t.vtotal_vs_end, t.vact_st_end, t.dsp_ctrl, 0],
+            [
+                d[&(VOP + 0xc48)],
+                d[&(VOP + 0xc4c)],
+                d[&(VOP + 0xc50)],
+                d[&(VOP + 0xc54)],
+                d[&(VOP + 0xc00)],
+                d[&(VOP + 0xc2c)]
+            ],
+            "{line}"
+        );
+        let h = [mode.hactive, mode.hactive + mode.hfront, mode.hactive + mode.hfront + mode.hsync, mode.htotal()];
+        let v = [mode.vactive, mode.vactive + mode.vfront, mode.vactive + mode.vfront + mode.vsync, mode.vtotal()];
+        // DRM_MODE_FLAG_PHSYNC 1, NHSYNC 2, PVSYNC 4, NVSYNC 8
+        let flags = if mode.hsync_high { 1 } else { 2 } | if mode.vsync_high { 4 } else { 8 };
+        let nums = [mode.pixel_clock_hz / 1000, h[0], h[1], h[2], h[3], v[0], v[1], v[2], v[3]].map(|n| n.to_string());
+        let nums = nums.join(" ");
+        assert!(
+            line.starts_with(&format!("60 {nums} ")) && line.ends_with(&format!(" {flags:#x}")),
+            "{nums} {flags:#x}: {line}"
+        );
+        assert!(dump.contains(&format!("# Mode (drm_mode line of the active CRTC): \"{}x{}\": {line}\n", h[0], v[0])));
+        assert_eq!(mode.refresh_mhz(mode.pixel_clock_hz), refresh);
+    }
+    // the probes' buffer fills the window area, and the cold bring-up's mode
+    // has the buffer's size (it shows the buffer at its mode's size)
+    assert_eq!((FB_WIDTH, FB_HEIGHT), WINDOW_AREA);
     assert_eq!(FB_BYTES, 1024 * 768 * 4);
     assert_eq!(FB_STRIDE % 64, 0);
+    let cold = crate::soc::rk3588_display_chain::MODE_1024X768_60;
+    assert_eq!((cold.hactive, cold.vactive), (FB_WIDTH, FB_HEIGHT));
+    // the window area is the smallest active area of the modes
+    assert_eq!(WINDOW_AREA, MODES.iter().map(|m| (m.hactive, m.vactive)).min().unwrap());
+    assert!(MODES.iter().all(|m| m.hactive >= WINDOW_AREA.0 && m.vactive >= WINDOW_AREA.1));
+}
+
+/// The adopt on each whole dump: step 1 reads what the dump holds and
+/// accepts the mode, and the writes are the 1024x768 dump's but for the
+/// overlay selects, which follow Linux's. No timing word is written, and the
+/// window is the probe's 1024x768 at the origin on both screens.
+#[test]
+fn the_adopt_accepts_both_dumps_modes_and_keeps_them() {
+    // the dump, VP0's timing words, DSP_IF_EN, the selects as found, the
+    // selects written, the vop_mmu DTE as found
+    type Case = (&'static str, [u32; 4], u32, (u32, u32), (u32, u32), u32);
+    let cases: [Case; 2] = [
+        (
+            DUMP_1024X768,
+            [0x0540_0088, 0x0128_0528, 0x0326_0006, 0x0023_0323],
+            // HDMI0 on VP0 (bit 3, mux 17:16 = 0) and HDMI1 on VP1 (bit 5,
+            // mux 19:18 = 1), the second output Linux drove too
+            0x0004_0028,
+            (0x7651_3240, 0xa054_7873),
+            (0x7651_3042, 0xa054_7880),
+            0x0ad1_7100,
+        ),
+        (
+            DUMP_1920X1080,
+            [0x0898_002c, 0x00c0_0840, 0x0465_0005, 0x0029_0461],
+            // HDMI0 on VP0 only
+            0x0000_0008,
+            (0x7654_3210, 0xa050_7873),
+            (0x7654_3012, 0xa050_7880),
+            0x02ca_d100,
+        ),
+    ];
+    for (dump, timing, if_en, (layer_found, port_found), (layer, port), dte) in cases {
+        let soc = Soc::of(dump, Faults::default(), &[]);
+        let a = run(&soc, FB);
+        let name = &dump[dump.find("# Mode").unwrap()..][..60];
+        assert_eq!(a.stop, Stop::None as u32, "{name}: {a:?}");
+        // step 1, as found
+        assert_eq!(a.pd_vop[5], 0xfad5_0001, "{name}");
+        assert_eq!((a.cru_gate52, a.version), (0x400, 0x4017_6786), "{name}");
+        assert_eq!(a.dsp_ctrl, [0xf, 0x8000_000f, 0x8000_000f, 0x8000_000f], "{name}");
+        assert_eq!((a.timing, a.dsp_if_en, a.pd_ctrl), (timing, if_en, 0x70), "{name}");
+        assert_eq!((a.layer_sel, a.port_sel), (layer_found, port_found), "{name}");
+        assert_eq!(
+            (a.cluster0, a.esmart0_ctrl, a.mmu_status, a.mmu_dte),
+            ([1, 1], 0, [0x19, 0x19], [dte, dte]),
+            "{name}"
+        );
+        // what it did
+        assert_eq!((a.ovl_layer_sel, a.ovl_port_sel), (layer, port), "{name}");
+        assert_eq!(soc.writes(), expected_writes_with(port, layer), "{name}");
+        assert_eq!(a.shown, [FB as u32, 1, port, layer], "{name}");
+        assert_eq!(soc.violations(), Vec::<String>::new(), "{name}");
+    }
+}
+
+/// A third mode is refused by name on the 1920x1080 dump, before any
+/// write: 1280x720 at 60 Hz (CEA-861 VIC 4), the timing words Linux would
+/// leave for it.
+#[test]
+fn a_third_mode_is_refused_by_name_before_any_write() {
+    let p720 = [
+        (VOP + 0xc48, 0x0672_0028),
+        (VOP + 0xc4c, 0x0104_0604),
+        (VOP + 0xc50, 0x02ee_0005),
+        (VOP + 0xc54, 0x0019_02e9),
+    ];
+    let soc = Soc::of(DUMP_1920X1080, Faults::default(), &p720);
+    let a = run(&soc, FB);
+    assert_eq!((a.stop, a.index, a.detail), (Stop::Mode as u32, 0, 0x0672_0028), "{a:?}");
+    assert_eq!(a.timing, [0x0672_0028, 0x0104_0604, 0x02ee_0005, 0x0019_02e9]);
+    assert_eq!(soc.writes(), vec![]);
+    // 1920x1080 with another vertical total: the closest mode is 1920x1080,
+    // which differs at the third word
+    let soc = Soc::of(DUMP_1920X1080, Faults::default(), &[(VOP + 0xc50, 0x0466_0005)]);
+    let a = run(&soc, FB);
+    assert_eq!((a.stop, a.index, a.detail), (Stop::Mode as u32, 2, 0x0466_0005), "{a:?}");
+    assert_eq!(soc.writes(), vec![]);
+    // a background other than black outside the window is refused too
+    let soc = Soc::of(DUMP_1920X1080, Faults::default(), &[(VOP + 0xc2c, 0x0000_0001)]);
+    let a = run(&soc, FB);
+    assert_eq!((a.stop, a.index, a.detail), (Stop::VpState as u32, 1, 1), "{a:?}");
+    assert_eq!(soc.writes(), vec![]);
+}
+
+/// The window does not depend on the mode: on the 1920x1080 screen the
+/// first show takes a window inside the top left 1024x768 and refuses a
+/// larger one, the screen's own size included, before any access.
+#[test]
+fn the_window_area_is_the_same_on_a_1920x1080_screen() {
+    let soc = Soc::of(DUMP_1920X1080, Faults::default(), &[]);
+    let (mut s, mut a) = (Screen::default(), Adopt::default());
+    for (w, h) in [(1920, 1080), (1025, 768), (1024, 769)] {
+        let rc = show(&Mapped(&soc), &B, &mut s, FB, w, h, 7680, &mut |us| soc.advance(us), &mut a);
+        assert_eq!((rc, soc.ops(), s), (-ENOTSUP, vec![], Screen::default()), "{w}x{h}");
+    }
+    assert_eq!(show(&Mapped(&soc), &B, &mut s, FB, 800, 600, 3200, &mut |us| soc.advance(us), &mut a), 0);
+    assert_eq!((a.stop, s.state, s.width, s.height), (Stop::None as u32, SCREEN_SHOWN, 800, 600));
+    // Esmart0's size and place: 800x600 at (0, 0)
+    assert_eq!(
+        (soc.reg(VOP + E0 + 0x20), soc.reg(VOP + E0 + 0x24), soc.reg(VOP + E0 + 0x28)),
+        (0x0257_031f, 0x0257_031f, 0)
+    );
 }
 
 #[test]
@@ -634,10 +791,10 @@ fn the_pattern_has_four_quadrants_and_a_white_border() {
     assert!(fb.iter().all(|p| *p == 7));
 }
 
-/// [`show`] of a [`MODE`]-sized window at `addr`, on the model's clock.
+/// [`show`] of a window of the probe's size at `addr`, on the model's clock.
 fn show_at(soc: &Soc, s: &mut Screen, addr: u64) -> i32 {
     let mut a = Adopt::default();
-    show(&Mapped(soc), &B, s, addr, MODE.hactive, MODE.vactive, FB_STRIDE, &mut |us| soc.advance(us), &mut a)
+    show(&Mapped(soc), &B, s, addr, FB_WIDTH, FB_HEIGHT, FB_STRIDE, &mut |us| soc.advance(us), &mut a)
 }
 
 /// [`busy`] of the four buffers: bit k for `FBS[k]`.

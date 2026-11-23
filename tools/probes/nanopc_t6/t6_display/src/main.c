@@ -3,9 +3,9 @@
 /*
  * t6_display: step D2 on the NanoPC-T6 (driver/docs/nanopc-t6-display.md,
  * section 2 route (a), section 5). Started by a crash kexec, so Linux's
- * display chain still runs: VP0 scans 1024x768 at 60 Hz from Cluster0
- * through the VOP's IOMMU. Before main() the board glue has armed WDT0
- * (nanopc_t6.c). This draws the section 5 pattern into a buffer of this
+ * display chain still runs: VP0 scans 1024x768 or 1920x1080 at 60 Hz from
+ * Cluster0 through the VOP's IOMMU. Before main() the board glue has armed
+ * WDT0 (nanopc_t6.c). This draws the section 5 pattern into a buffer of this
  * image (red, green / blue, yellow quadrants, a white 1-pixel border),
  * cleans it to the point of coherency, then yd_t6_display_adopt
  * (board::nanopc_t6_display in the drivers crate): what Linux left is read
@@ -36,8 +36,8 @@ static const char *const stop_name[] = {
 	[YD_T6_DISPLAY_STOP_VOP_CLOCK] = "a clock of PD_VOP or HCLK_VOP is gated",
 	[YD_T6_DISPLAY_STOP_VERSION] = "VERSION_INFO is not the RK3588's",
 	[YD_T6_DISPLAY_STOP_STANDBY] = "VP0 is in STANDBY: no picture to adopt",
-	[YD_T6_DISPLAY_STOP_VP_STATE] = "VP0's DSP_CTRL is not HDMI RGB",
-	[YD_T6_DISPLAY_STOP_MODE] = "VP0's timing is not 1024x768@60",
+	[YD_T6_DISPLAY_STOP_VP_STATE] = "VP0's DSP_CTRL is not HDMI RGB or its background not black",
+	[YD_T6_DISPLAY_STOP_MODE] = "VP0's timing is neither 1024x768@60 nor 1920x1080@60",
 	[YD_T6_DISPLAY_STOP_ROUTE] = "HDMI0 is not fed by VP0",
 	[YD_T6_DISPLAY_STOP_ESMART_POWER] = "the Esmart windows' power is off",
 	[YD_T6_DISPLAY_STOP_TAKE_OVER] = "the take-over of Linux's windows stopped",

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-"""Hold the adopt's mode on the NanoPC-T6's HDMI under Linux, for a crash jump.
+"""Hold one of the adopt's modes on the NanoPC-T6's HDMI under Linux, for a crash jump.
 
-    t6-kms-mode.py hold [--card PATH] [--connector NAME] [--max-hold S] [--log FILE]
+    t6-kms-mode.py hold [--mode NAME] [--card PATH] [--connector NAME] [--max-hold S] [--log FILE]
         On the board, as root, with no display server. Opens the DRM card
         (default /dev/dri/card0) as its master, finds the connector (default
         HDMI-A-1) and the CRTC that drives it, and picks the connector's mode
-        whose timing is MODE exactly: the clock, the eight timing numbers and
-        both sync flags (mode_matches()). It sets that mode with a dumb
+        whose timing is MODES[NAME] exactly (default 1024x768; the names are
+        MODES' keys): the clock, the eight timing numbers and both sync flags
+        (mode_matches()). It sets that mode with a dumb
         buffer of its own (legacy SETCRTC), reads the CRTC back, prints one line
         and leaves a child process that holds the mode: the parent exits and
         the child keeps the card open as its master. The child gives the
@@ -21,12 +22,14 @@
         give-back order against a made-up DRM device. On the host, no board.
 
 Why it exists. The Zephyr image adopts the picture Linux leaves on the
-crash route and accepts one mode only, MODE below (the Rust
-board::nanopc_t6_display::MODE; the self-test compares the two). Linux
-picks the sink's preferred mode, so with a sink whose EDID prefers another
-mode (an HDMI capture unit: 1920x1080) the adopt would stop at its mode
-check. nanopc-t6.sh --crash runs this before the jump and reads VP0's mode
-back from Linux itself (driver/docs/nanopc-t6-display.md, section 2(a)).
+crash route and accepts the modes of MODES below only (the Rust
+board::nanopc_t6_display::MODES; the self-test compares the two). Linux
+picks the sink's preferred mode, which may be none of them. nanopc-t6.sh
+--crash runs this before the jump: with the mode VP0 runs when it is one of
+MODES, so the size does not change (an HDMI capture unit gives no picture
+after a size change), else with 1024x768. The hold also keeps fbdev from
+changing the screen until the jump. The runner reads VP0's mode back from
+Linux itself (driver/docs/nanopc-t6-display.md, section 2(a)).
 
 What it leaves behind: nothing that outlives the process. It writes no file
 (except --log, which the runner puts in /tmp/yakogl-kexec), loads no module
@@ -40,9 +43,10 @@ explicitly, with the CRTC's own values.
 Exit: 0 the mode is set and held (the line names the holder's pid). 3
 refused, nothing changed: no such card or connector, the connector is not
 connected or drives no CRTC, another master holds the card, or the
-connector lists no mode with MODE's timing (the line lists the modes of the
-same size). 1 the set or its read-back failed; the CRTC was given back
-before the exit (the line says whether that worked). 2 usage.
+connector lists no mode with the named mode's timing (the line lists the
+modes of the same size). 1 the set or its read-back failed; the CRTC was
+given back before the exit (the line says whether that worked). 2 usage
+(also a --mode that is not a key of MODES).
 
 Only the Python standard library: the board has python3 and no DRM tools.
 """
@@ -56,20 +60,31 @@ import struct
 import sys
 from collections import namedtuple
 
-# The mode the Zephyr image adopts (board::nanopc_t6_display::MODE): 1024x768
-# at 60 Hz, 65 MHz, VESA DMT. Clock in kHz as DRM gives it.
-MODE = {
-    "clock": 65000,
-    "hdisplay": 1024, "hsync_start": 1048, "hsync_end": 1184, "htotal": 1344,
-    "vdisplay": 768, "vsync_start": 771, "vsync_end": 777, "vtotal": 806,
-}
 # include/uapi/drm/drm_mode.h: DRM_MODE_FLAG_*
 FLAG_PHSYNC, FLAG_NHSYNC, FLAG_PVSYNC, FLAG_NVSYNC = 0x1, 0x2, 0x4, 0x8
 FLAG_INTERLACE, FLAG_DBLSCAN = 0x10, 0x20
 # The flags that change the signal: both polarities of both syncs, interlace
-# and double scan. MODE has negative syncs, progressive.
+# and double scan. Every mode of MODES is progressive.
 FLAG_TIMING = FLAG_PHSYNC | FLAG_NHSYNC | FLAG_PVSYNC | FLAG_NVSYNC | FLAG_INTERLACE | FLAG_DBLSCAN
-MODE_FLAGS = FLAG_NHSYNC | FLAG_NVSYNC
+# The modes the Zephyr image adopts (board::nanopc_t6_display::MODES), by
+# name: the timing (clock in kHz as DRM gives it) and the sync flags.
+# 1024x768 at 60 Hz, 65 MHz, VESA DMT, both syncs negative; 1920x1080 at
+# 60 Hz, 148.5 MHz, CEA-861 VIC 16, both syncs positive.
+MODES = {
+    "1024x768": ({
+        "clock": 65000,
+        "hdisplay": 1024, "hsync_start": 1048, "hsync_end": 1184, "htotal": 1344,
+        "vdisplay": 768, "vsync_start": 771, "vsync_end": 777, "vtotal": 806,
+    }, FLAG_NHSYNC | FLAG_NVSYNC),
+    "1920x1080": ({
+        "clock": 148500,
+        "hdisplay": 1920, "hsync_start": 2008, "hsync_end": 2052, "htotal": 2200,
+        "vdisplay": 1080, "vsync_start": 1084, "vsync_end": 1089, "vtotal": 1125,
+    }, FLAG_PHSYNC | FLAG_PVSYNC),
+}
+# The mode hold sets without --mode: the one the runner sets when VP0 runs
+# none of MODES.
+DEFAULT_MODE = "1024x768"
 CONNECTED = 1  # drm_mode_get_connector.connection: DRM_MODE_CONNECTED
 CONNECTOR_TYPES = {10: "DisplayPort", 11: "HDMI-A", 12: "HDMI-B", 14: "eDP", 16: "DSI"}
 
@@ -125,19 +140,22 @@ def mode_text(m):
         " interlace" if m.flags & FLAG_INTERLACE else "")
 
 
-def mode_matches(m):
-    """The rule: MODE's clock and eight timing numbers, negative syncs, not
-    interlaced, not double scan, no skew, no repeat of lines. The refresh,
-    the type bits and the name do not matter: they do not change the signal."""
-    return (all(getattr(m, k) == v for k, v in MODE.items())
-            and m.flags & FLAG_TIMING == MODE_FLAGS
+def mode_matches(m, name):
+    """The rule: MODES[name]'s clock and eight timing numbers, its sync
+    flags, not interlaced, not double scan, no skew, no repeat of lines. The
+    refresh, the type bits and the name do not matter: they do not change
+    the signal."""
+    timing, flags = MODES[name]
+    return (all(getattr(m, k) == v for k, v in timing.items())
+            and m.flags & FLAG_TIMING == flags
             and m.hskew == 0 and m.vscan in (0, 1))
 
 
-def mode_pick(modes):
-    """The first mode of the list that matches, or None. modes: raw bytes."""
+def mode_pick(modes, name):
+    """The first mode of the list that matches MODES[name], or None. modes:
+    raw bytes."""
     for raw in modes:
-        if mode_matches(mode_unpack(raw)):
+        if mode_matches(mode_unpack(raw), name):
             return raw
     return None
 
@@ -231,8 +249,8 @@ def connector_name(ctype, type_id):
     return "%s-%d" % (CONNECTOR_TYPES.get(ctype, "type%d" % ctype), type_id)
 
 
-def take(drm, name):
-    """Set MODE on the connector called name. Returns what give_back needs.
+def take(drm, name, want=DEFAULT_MODE):
+    """Set MODES[want] on the connector called name. Returns what give_back needs.
     Raises Refused before any change (a read the card refuses included); on
     a failure after a change it gives the CRTC back first and raises
     SetFailed."""
@@ -262,21 +280,21 @@ def take(drm, name):
     crtc = ask("read encoder %d of %s" % (eid, name), drm.encoder_crtc, eid) if eid else 0
     if not crtc:
         raise Refused("%s drives no CRTC (encoder %d): Linux shows nothing on it to adopt" % (name, eid))
-    raw = mode_pick(modes)
+    w, h = MODES[want][0]["hdisplay"], MODES[want][0]["vdisplay"]
+    raw = mode_pick(modes, want)
     if raw is None:
         same = [mode_text(mode_unpack(r)) for r in modes
-                if mode_unpack(r).hdisplay == MODE["hdisplay"] and mode_unpack(r).vdisplay == MODE["vdisplay"]]
-        raise Refused("%s lists no mode with the adopt's timing (%d modes; of size %dx%d: %s)"
-                      % (name, len(modes), MODE["hdisplay"], MODE["vdisplay"], "; ".join(same) or "none"))
+                if mode_unpack(r).hdisplay == w and mode_unpack(r).vdisplay == h]
+        raise Refused("%s lists no mode with the adopt's %s timing (%d modes; of size %dx%d: %s)"
+                      % (name, want, len(modes), w, h, "; ".join(same) or "none"))
     old = ask("read CRTC %d" % crtc, drm.get_crtc, crtc)
-    w, h = MODE["hdisplay"], MODE["vdisplay"]
     handle, pitch = ask("get a %dx%d buffer from the card" % (w, h), drm.create_dumb, w, h)
     state = {"crtc": crtc, "conn": cid, "old": old, "handle": handle, "fb": 0, "mode": raw}
     try:
         state["fb"] = drm.add_fb(w, h, pitch, handle)
         drm.set_crtc(crtc, state["fb"], 0, 0, [cid], raw)
         now = drm.get_crtc(crtc)
-        if now[0] != state["fb"] or not now[3] or not mode_matches(mode_unpack(now[4])):
+        if now[0] != state["fb"] or not now[3] or not mode_matches(mode_unpack(now[4]), want):
             raise RuntimeError("CRTC %d reads back fb %d, mode %s after the set"
                                % (crtc, now[0], mode_text(mode_unpack(now[4])) if now[3] else "none"))
     except (OSError, RuntimeError) as e:
@@ -313,7 +331,8 @@ def give_back(drm, state):
 
 def hold(argv, ioctl=fcntl.ioctl):
     """The command. ioctl is the made-up device in the self-test."""
-    opts = {"--card": "/dev/dri/card0", "--connector": "HDMI-A-1", "--max-hold": "600", "--log": ""}
+    opts = {"--mode": DEFAULT_MODE, "--card": "/dev/dri/card0", "--connector": "HDMI-A-1", "--max-hold": "600",
+            "--log": ""}
     if len(argv) % 2:
         return usage()
     for k, v in zip(argv[::2], argv[1::2]):
@@ -324,7 +343,7 @@ def hold(argv, ioctl=fcntl.ioctl):
         max_hold = int(opts["--max-hold"])
     except ValueError:
         return usage()
-    if max_hold <= 0:
+    if max_hold <= 0 or opts["--mode"] not in MODES:
         return usage()
     name = opts["--connector"]
     try:
@@ -333,7 +352,7 @@ def hold(argv, ioctl=fcntl.ioctl):
         return say(3, "REFUSED: cannot open %s: %s" % (opts["--card"], os.strerror(e.errno)))
     drm = Drm(fd, ioctl)
     try:
-        state = take(drm, name)
+        state = take(drm, name, opts["--mode"])
     except Refused as e:
         return say(3, "REFUSED: %s; nothing was changed" % e)
     except SetFailed as e:
@@ -378,8 +397,8 @@ def say(rc, line):
 
 
 def usage():
-    print("usage: t6-kms-mode.py hold [--card PATH] [--connector NAME] [--max-hold S] [--log FILE]\n"
-          "       t6-kms-mode.py --self-test", file=sys.stderr)
+    print("usage: t6-kms-mode.py hold [--mode %s] [--card PATH] [--connector NAME] [--max-hold S] [--log FILE]\n"
+          "       t6-kms-mode.py --self-test" % "|".join(MODES), file=sys.stderr)
     return 2
 
 
@@ -425,64 +444,78 @@ def self_test():
             (FB_CMD.size, 28, "sizeof(struct drm_mode_fb_cmd)")):
         check(got == want, "uapi: %s = 0x%x (kernel 0x%x)" % (what, got, want))
 
-    # MODE is the Rust MODE the image adopts with. The board's MODE names
-    # the display chain's constant: its fields are there.
+    # MODES are the Rust MODES the image adopts: the same names (each
+    # mode's size), timings and sync flags, no mode more or less. Each of
+    # the Rust modes is a VideoMode literal in the same file.
     rs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../rust/src")
+    rust = {}
     try:
         with open(os.path.join(rs, "board/nanopc_t6_display.rs")) as f:
             text = f.read()
-        name = text.split("pub const MODE: VideoMode = crate::soc::rk3588_display_chain::",
-                          1)[1].split(";", 1)[0]
-        with open(os.path.join(rs, "soc/rk3588_display_chain.rs")) as f:
-            text = f.read()
-        body = text.split("pub const %s: VideoMode = VideoMode {" % name, 1)[1].split("};", 1)[0]
-        v = {}
-        for line in body.splitlines():
-            line = line.strip().rstrip(",")
-            if ":" in line:
-                k, val = (s.strip() for s in line.split(":", 1))
-                v[k] = val.replace("_", "")
-        n = {k: int(v[k]) for k in ("pixel_clock_hz", "hactive", "hfront", "hsync", "hback",
-                                    "vactive", "vfront", "vsync", "vback")}
-        rust = {
-            "clock": n["pixel_clock_hz"] // 1000,
-            "hdisplay": n["hactive"], "hsync_start": n["hactive"] + n["hfront"],
-            "hsync_end": n["hactive"] + n["hfront"] + n["hsync"],
-            "htotal": n["hactive"] + n["hfront"] + n["hsync"] + n["hback"],
-            "vdisplay": n["vactive"], "vsync_start": n["vactive"] + n["vfront"],
-            "vsync_end": n["vactive"] + n["vfront"] + n["vsync"],
-            "vtotal": n["vactive"] + n["vfront"] + n["vsync"] + n["vback"],
-        }
-        rust_flags = ((FLAG_PHSYNC if v["hsync_high"] == "true" else FLAG_NHSYNC)
-                      | (FLAG_PVSYNC if v["vsync_high"] == "true" else FLAG_NVSYNC))
-        same = rust == MODE and rust_flags == MODE_FLAGS and n["pixel_clock_hz"] % 1000 == 0
+        names = text.split("pub const MODES: [VideoMode; ", 1)[1].split("= [", 1)[1].split("];", 1)[0]
+        for const in (n.strip() for n in names.split(",")):
+            body = text.split("pub const %s: VideoMode = VideoMode {" % const, 1)[1].split("};", 1)[0]
+            v = {}
+            for line in body.splitlines():
+                line = line.strip().rstrip(",")
+                if ":" in line:
+                    k, val = (s.strip() for s in line.split(":", 1))
+                    v[k] = val.replace("_", "")
+            n = {k: int(v[k]) for k in ("pixel_clock_hz", "hactive", "hfront", "hsync", "hback",
+                                        "vactive", "vfront", "vsync", "vback")}
+            timing = {
+                "clock": n["pixel_clock_hz"] // 1000 if n["pixel_clock_hz"] % 1000 == 0 else None,
+                "hdisplay": n["hactive"], "hsync_start": n["hactive"] + n["hfront"],
+                "hsync_end": n["hactive"] + n["hfront"] + n["hsync"],
+                "htotal": n["hactive"] + n["hfront"] + n["hsync"] + n["hback"],
+                "vdisplay": n["vactive"], "vsync_start": n["vactive"] + n["vfront"],
+                "vsync_end": n["vactive"] + n["vfront"] + n["vsync"],
+                "vtotal": n["vactive"] + n["vfront"] + n["vsync"] + n["vback"],
+            }
+            flags = ((FLAG_PHSYNC if v["hsync_high"] == "true" else FLAG_NHSYNC)
+                     | (FLAG_PVSYNC if v["vsync_high"] == "true" else FLAG_NVSYNC))
+            rust["%dx%d" % (n["hactive"], n["vactive"])] = (timing, flags)
+        same = len(rust) == 2 and rust == MODES
     except (OSError, IndexError, KeyError, ValueError) as e:
         rust, same = "unread (%s)" % e, False
-    check(same, "MODE is board::nanopc_t6_display::MODE (%s)" % (rust,))
+    check(same, "MODES are board::nanopc_t6_display::MODES (%s)" % (rust,))
+    check(DEFAULT_MODE in MODES, "the default mode %s is one of MODES" % DEFAULT_MODE)
 
-    def mk(clock=65000, h=(1024, 1048, 1184, 1344), v=(768, 771, 777, 806), flags=MODE_FLAGS,
+    def mk(clock=65000, h=(1024, 1048, 1184, 1344), v=(768, 771, 777, 806), flags=FLAG_NHSYNC | FLAG_NVSYNC,
            hskew=0, vscan=0, name="1024x768", vrefresh=60, mtype=0x40):
         return MODEINFO.pack(clock, h[0], h[1], h[2], h[3], hskew, v[0], v[1], v[2], v[3], vscan,
                              vrefresh, flags, mtype, name.encode())
 
     good = mk()
-    check(mode_matches(mode_unpack(good)), "rule: the DMT 1024x768 at 60 Hz matches")
-    check(mode_matches(mode_unpack(mk(name="other", vrefresh=59, mtype=0x48))),
-          "rule: name, refresh and type bits do not matter")
-    check(not mode_matches(mode_unpack(mk(clock=65001))), "rule: a clock of 65001 kHz does not match")
-    check(not mode_matches(mode_unpack(mk(clock=75000))), "rule: 1024x768 at 70 Hz (75 MHz) does not match")
-    check(not mode_matches(mode_unpack(mk(h=(1024, 1049, 1184, 1344)))), "rule: hsync_start off by one does not match")
-    check(not mode_matches(mode_unpack(mk(v=(768, 771, 777, 807)))), "rule: vtotal off by one does not match")
-    check(not mode_matches(mode_unpack(mk(flags=FLAG_PHSYNC | FLAG_NVSYNC))), "rule: a positive hsync does not match")
-    check(not mode_matches(mode_unpack(mk(flags=FLAG_NHSYNC | FLAG_PVSYNC))), "rule: a positive vsync does not match")
-    check(not mode_matches(mode_unpack(mk(flags=FLAG_NHSYNC))), "rule: no vsync flag does not match")
-    check(not mode_matches(mode_unpack(mk(flags=MODE_FLAGS | FLAG_INTERLACE))), "rule: interlace does not match")
-    check(not mode_matches(mode_unpack(mk(hskew=1))), "rule: a skew does not match")
     p1080 = mk(148500, (1920, 2008, 2052, 2200), (1080, 1084, 1089, 1125), FLAG_PHSYNC | FLAG_PVSYNC, name="1920x1080")
     p70 = mk(clock=75000, h=(1024, 1048, 1184, 1328), vrefresh=70)
-    check(mode_pick([p1080, p70, good]) == good, "pick: the matching mode out of a list of three")
-    check(mode_pick([p1080, p70]) is None, "pick: none out of a list without it")
-    check(mode_pick([]) is None, "pick: none out of an empty list")
+    x = "1024x768"
+    check(mode_matches(mode_unpack(good), x), "rule: the DMT 1024x768 at 60 Hz matches 1024x768")
+    check(mode_matches(mode_unpack(mk(name="other", vrefresh=59, mtype=0x48)), x),
+          "rule: name, refresh and type bits do not matter")
+    check(not mode_matches(mode_unpack(mk(clock=65001)), x), "rule: a clock of 65001 kHz does not match")
+    check(not mode_matches(mode_unpack(mk(clock=75000)), x), "rule: 1024x768 at 70 Hz (75 MHz) does not match")
+    check(not mode_matches(mode_unpack(mk(h=(1024, 1049, 1184, 1344))), x), "rule: hsync_start off by one does not match")
+    check(not mode_matches(mode_unpack(mk(v=(768, 771, 777, 807))), x), "rule: vtotal off by one does not match")
+    check(not mode_matches(mode_unpack(mk(flags=FLAG_PHSYNC | FLAG_NVSYNC)), x), "rule: a positive hsync does not match")
+    check(not mode_matches(mode_unpack(mk(flags=FLAG_NHSYNC | FLAG_PVSYNC)), x), "rule: a positive vsync does not match")
+    check(not mode_matches(mode_unpack(mk(flags=FLAG_NHSYNC)), x), "rule: no vsync flag does not match")
+    check(not mode_matches(mode_unpack(mk(flags=FLAG_NHSYNC | FLAG_NVSYNC | FLAG_INTERLACE)), x),
+          "rule: interlace does not match")
+    check(not mode_matches(mode_unpack(mk(hskew=1)), x), "rule: a skew does not match")
+    check(not mode_matches(mode_unpack(p1080), x), "rule: 1920x1080 does not match 1024x768")
+    f = "1920x1080"
+    check(mode_matches(mode_unpack(p1080), f), "rule: CEA 1920x1080 at 60 Hz matches 1920x1080")
+    check(not mode_matches(mode_unpack(good), f), "rule: 1024x768 does not match 1920x1080")
+    check(not mode_matches(mode_unpack(mk(148500, (1920, 2008, 2052, 2200), (1080, 1084, 1089, 1125))), f),
+          "rule: 1920x1080 with negative syncs does not match")
+    check(not mode_matches(mode_unpack(mk(148352, (1920, 2008, 2052, 2200), (1080, 1084, 1089, 1125),
+                                          FLAG_PHSYNC | FLAG_PVSYNC)), f),
+          "rule: 1920x1080 at 59.94 Hz (148352 kHz) does not match")
+    check(mode_pick([p1080, p70, good], x) == good, "pick: the matching mode out of a list of three")
+    check(mode_pick([good, p70, p1080], f) == p1080, "pick: 1920x1080 out of a list of three")
+    check(mode_pick([p1080, p70], x) is None, "pick: none out of a list without it")
+    check(mode_pick([], x) is None, "pick: none out of an empty list")
 
     # The made-up card reads and writes each field at the kernel's byte
     # offset (offsetof on the same headers, with gcc), not through the
@@ -504,7 +537,7 @@ def self_test():
     raw = bytearray(MODEINFO.size)
     for off, fmt, value in ((0, "I", 65000), (4, "H", 1024), (6, "H", 1048), (8, "H", 1184), (10, "H", 1344),
                             (14, "H", 768), (16, "H", 771), (18, "H", 777), (20, "H", 806), (24, "I", 60),
-                            (28, "I", MODE_FLAGS), (32, "I", 0x40)):
+                            (28, "I", FLAG_NHSYNC | FLAG_NVSYNC), (32, "I", 0x40)):
         put(raw, off, value, fmt)
     raw[36:44] = b"1024x768"
     check(bytes(raw) == good, "uapi: the mode written at the kernel's offsets is the mode the Struct packs")
@@ -616,16 +649,29 @@ def self_test():
     check(changes(fake.log[n:]) == ["SETCRTC 81 fb 50 at 0,0 conns [83] mode 1920x1080", "RMFB 60", "DESTROY_DUMB 7"],
           "give_back: CRTC 81 back on fb 50 at 1920x1080, then our fb and buffer away (%s)" % changes(fake.log[n:]))
     check(done.startswith("CRTC 81 back on fb 50"), "give_back: says so ('%s')" % done)
+    # The mode VP0 runs, when it is one of MODES, is held at its own size:
+    # a 1920x1080 buffer, SETCRTC with Linux's own mode again.
+    fake = Fake([good, p70, p1080])
+    drm = Drm(-1, fake)
+    state = take(drm, "HDMI-A-1", "1920x1080")
+    check(changes(fake.log) == ["CREATE_DUMB 1920x1080 bpp 32", "ADDFB 1920x1080 pitch 7680 bpp 32 depth 24 handle 7",
+                                "SETCRTC 81 fb 60 at 0,0 conns [83] mode 1920x1080"]
+          and state["mode"] == p1080,
+          "take: --mode 1920x1080 holds the mode Linux runs, at its size, with our buffer (%s)" % changes(fake.log))
+    n = len(fake.log)
+    give_back(drm, state)
+    check(changes(fake.log[n:]) == ["SETCRTC 81 fb 50 at 0,0 conns [83] mode 1920x1080", "RMFB 60", "DESTROY_DUMB 7"],
+          "give_back: CRTC 81 back on fb 50 after a 1920x1080 hold (%s)" % changes(fake.log[n:]))
 
-    def refused(fake, want):
+    def refused(fake, want, mode=DEFAULT_MODE):
         try:
-            take(Drm(-1, fake), "HDMI-A-1")
+            take(Drm(-1, fake), "HDMI-A-1", mode)
         except Refused as e:
             return want in str(e) and not changes(fake.log), str(e)
         return False, "not refused"
 
     for fake, want, what in (
-            (Fake([p1080, p70]), "lists no mode with the adopt's timing (2 modes; of size 1024x768: "
+            (Fake([p1080, p70]), "lists no mode with the adopt's 1024x768 timing (2 modes; of size 1024x768: "
              '"1024x768" 75000 kHz', "a list without the mode"),
             (Fake([p1080, p70, good], connection=2), "is not connected", "a connector that is not connected"),
             (Fake([p1080, p70, good], encoder=0), "drives no CRTC", "a connector with no CRTC"),
@@ -642,6 +688,9 @@ def self_test():
              "cannot get a 1024x768 buffer from the card (Cannot allocate memory)", "no memory for the buffer")):
         ok, text = refused(fake, want)
         check(ok, "take: refuses %s and changes nothing (%s)" % (what, text))
+    ok, text = refused(Fake([good, p70]), "lists no mode with the adopt's 1920x1080 timing (2 modes; of size 1920x1080: "
+                       "none)", "1920x1080")
+    check(ok, "take: refuses --mode 1920x1080 on a list without it and changes nothing (%s)" % text)
     try:
         take(Drm(-1, Fake([good])), "HDMI-A-2")
         ok, text = False, "not refused"
@@ -753,6 +802,16 @@ def self_test():
             os.kill(holder, signal.SIGKILL)
         if os.path.exists(log):
             os.unlink(log)
+        rc, out, eof, holder = run_hold(["--mode", "1920x1080", "--log", log, "--max-hold", "1"], Fake([good, p1080]))
+        ended = holder > 0 and gone(holder, 5)
+        text = read(log)
+        check(rc == 0 and ended and out.startswith('t6-kms-mode: HDMI-A-1 on CRTC 81: "1920x1080" 148500 kHz')
+              and "stop (max hold 1 s): CRTC 81 back on fb 50" in text,
+              "hold: --mode 1920x1080 sets and holds that mode (%s; %s)" % (out, text.strip()))
+        if holder and not ended:
+            os.kill(holder, signal.SIGKILL)
+        if os.path.exists(log):
+            os.unlink(log)
         rc, out, eof, holder = run_hold(["--log", log], Fake([p1080]))
         check(rc == 3 and eof and holder == 0 and not os.path.exists(log) and out.startswith("t6-kms-mode: REFUSED: HDMI-A-1 lists no mode")
               and out.endswith("; nothing was changed"), "hold: a refusal exits 3 with one line and leaves no holder (%s)" % out)
@@ -762,7 +821,8 @@ def self_test():
               "hold: a read the card refuses exits 3 with one line, no traceback (%s)" % out)
 
     check(usage_rc(["hold", "--max-hold"]) == 2 and usage_rc(["hold", "--bogus", "1"]) == 2
-          and usage_rc(["hold", "--max-hold", "0"]) == 2, "usage: a lone option, an unknown one and --max-hold 0 exit 2")
+          and usage_rc(["hold", "--max-hold", "0"]) == 2 and usage_rc(["hold", "--mode", "1280x720"]) == 2,
+          "usage: a lone option, an unknown one, --max-hold 0 and a mode not in MODES exit 2")
 
     # A call over several lines reports one of them, which one depends on
     # the Python version: any line of the call counts.
