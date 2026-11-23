@@ -301,7 +301,7 @@ def self_test():
         # scrub on its own
         ip = ".".join(("10", "1", "2", "3"))
         home = "/" + "home/"
-        s = scrub("x " + ip + ":5000 /dev/ttyACM0 a@b.c host.lan serial: ABCD1234 "
+        s = scrub("x " + ip + ":5000 /dev/ttyACM0 a@b.c host.lan serial: ABCD1234 " +
                   home + "u/r/f.png mean 0.03 ab12cd34")
         expect("scrub keeps numbers and hashes",
                "0.03" in s and "ab12cd34" in s and "f.png" in s and not any(
