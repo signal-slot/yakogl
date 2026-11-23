@@ -506,7 +506,7 @@ fn an_unknown_part_is_identified_from_registers_alone() {
 }
 
 fn poke_st_identity(m: &Model) {
-    for (off, v) in [(0x20, 0x8000), (0x24, 0x6205), (0xa8, 0x80003), (0xe8, 0)] {
+    for (off, v) in [(0x20, 0x8000), (0x24, 0x6205), (0xa8, 0x80003), (0xe8, 0), (0x30, 0x15)] {
         m.poke(GC, off, v);
     }
 }
@@ -518,7 +518,7 @@ fn every_database_row_identifies_from_the_table() {
         let e = TestEnv::default();
         poke_identity(&m);
         poke(&m);
-        // the customer id is not part of either row
+        // the customer id read on the DK: pinned by the ST row, not part of the i.MX8MP row
         m.poke(GC, 0x30, 0x15);
         let id = hw::identify(&m, m.base(GC), &e).unwrap();
         assert!(id.from_table, "{}", row.name);
@@ -552,8 +552,10 @@ fn every_database_row_identifies_from_the_table() {
 }
 
 #[test]
-fn the_st_row_wants_its_revision_product_and_eco() {
-    for (off, v) in [(0x24, 0x6204), (0x24, 0x6207), (0xa8, 0x80002), (0xe8, 1), (0x20, 0x7000)] {
+fn the_st_row_wants_its_revision_product_eco_and_customer() {
+    for (off, v) in
+        [(0x24, 0x6204), (0x24, 0x6207), (0xa8, 0x80002), (0xe8, 1), (0x20, 0x7000), (0x30, 0), (0x30, 0x16)]
+    {
         let m = Model::new();
         let e = TestEnv::default();
         poke_identity(&m);

@@ -4,7 +4,8 @@
 //! drive through `ffi::vivante` (identify, reset, hw init, the MMU, the
 //! ring, a submit with its event, the interrupt), on the model bus with the
 //! STM32MP257F's identity registers (model 0x8000, revision 0x6205, product
-//! 0x80003, eco 0; issue #1281) instead of the i.MX8MP's. The carveout runs
+//! 0x80003, eco 0, customer 0x15; issue #1281) instead of the i.MX8MP's. The
+//! carveout runs
 //! at the i.MX8MP's base and at the DK's `gpu-reserved` area (0xfa800000).
 //!
 //! The model holds registers only; it does not execute a command stream.
@@ -47,6 +48,7 @@ pub(super) fn poke_st_identity(m: &Model) {
         (0x24, 0x6205),
         (0x28, 0x2020_0129),
         (0x2c, 0x0000_1234),
+        (0x30, 0x15),
         (0xa8, 0x80003),
         (0xe8, 0),
         (0x1c, 0xe068_7ca5),
