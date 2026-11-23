@@ -13,9 +13,11 @@
 //! 26.2.1's G610 drm-shim). Every reference was drawn twice with the same
 //! bytes.
 //!
-//! At the tip every reference is refused with exactly the integer/boolean
-//! text, so each byte-compare is `#[ignore]`d and `refusals_pinned` holds the
-//! refusal ([`REFUSED`]). The lowering step that lifts one moves it to
+//! At the tip every reference is refused, so each byte-compare is
+//! `#[ignore]`d and `refusals_pinned` holds the refusal ([`REFUSED`]): the
+//! integer/boolean text, or for the three `dead_*` references the next one,
+//! since the walk builds nothing for the dead int and bool values
+//! (`nir_fs.rs` `ir_live`). The lowering step that lifts one moves it to
 //! [`LOWERED`] (byte-equal) or [`DIFFERS`] (compiles with other words than
 //! Mesa's) in the same commit and drops its `#[ignore]`. `references_parse`
 //! checks every file: the pair is there, each region's words are 64-bit hex,
@@ -41,14 +43,22 @@ const LOWERED: &[&str] = &[];
 const DIFFERS: &[&str] = &[];
 
 const INT_VALUE: &str = "Valhall: an integer or boolean value is not lowered yet";
+/// The later refusals of the `dead_*` references, their dead int and bool
+/// values left out of the walk.
+const LANECYCLE: &str = "Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)";
+const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
+const FRAGCOLOR: &str =
+    "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
 
 /// Every ignored reference with its whole `MaliError` message.
 const REFUSED: &[(&str, &str)] = &[
     ("bool_uniform_select_comb", INT_VALUE),
     ("bool_varying_lane_fs", INT_VALUE),
-    ("dead_bool_cmp_fs", INT_VALUE),
-    ("dead_cond_fs", INT_VALUE),
-    ("dead_ivec_uniform_fs", INT_VALUE),
+    /* the pair of a computed lane then a constant asked for again
+     * (mali-deqp-defects.md fix C) */
+    ("dead_bool_cmp_fs", LANECYCLE),
+    ("dead_cond_fs", FS_OPERAND),
+    ("dead_ivec_uniform_fs", FRAGCOLOR),
     ("int_uniform_lanes_fs", INT_VALUE),
     ("trunc_atan_fs", INT_VALUE),
     ("trunc_lane_fs", INT_VALUE),
@@ -93,7 +103,7 @@ fn bool_varying_lane_fs() {
 /// bool lanes and the statement `float(2) < float(4)` are dead; no integer
 /// op is left, only `FADD_IMM`/`FMA.v2f16` of the varyings and FAU constants.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a back end defect (LaneCycle); pinned by refusals_pinned"]
 fn dead_bool_cmp_fs() {
     mali_ref::assert_matches("deqp_intrnd_dead_bool_cmp_fs");
 }
@@ -102,7 +112,7 @@ fn dead_bool_cmp_fs() {
 /// `int(e) != i` and nested `if`s on folded bools; only the `uniform vec4`
 /// colour times a constant pair and one varying lane are left.
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a fragment shader operand of a form or in a place no reference draws; pinned by refusals_pinned"]
 fn dead_cond_fs() {
     mali_ref::assert_matches("deqp_intrnd_dead_cond_fs");
 }
@@ -112,7 +122,7 @@ fn dead_cond_fs() {
 /// colour is `vec4(0, c * b, a, 0)` (`FMA.v2f16`, `U16_TO_U32` of the lane
 /// beside 0.0).
 #[test]
-#[ignore = "refused: an integer or boolean value; pinned by refusals_pinned"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn dead_ivec_uniform_fs() {
     mali_ref::assert_matches("deqp_intrnd_dead_ivec_uniform_fs");
 }
