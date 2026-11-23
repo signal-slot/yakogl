@@ -88,6 +88,18 @@ pull request (step 1 above).
   built from source without root; and the `qemu-system-aarch64` of the
   uboot-mp2 QEMU row, built from pinned sources without root in about 7
   minutes on 4 cores, a gap without it).
+  That list is for a host whose layout already has the workspaces. On an
+  empty layout it also makes `PCO_SHC`, `ZEPHYR_WS` and `WEST_VENV` (the
+  entries the named ones require) and leaves `ZEPHYR_SDK_INSTALL_DIR` (the
+  aarch64 compiler of the host check's `aarch64-cc` line), `MESA_PAN_TREE`,
+  `GLMARK2_SRC` and `PVR_FW_BLOB` missing: there, run
+  `tools/cts/deps-env.sh --build-missing` instead, which makes every entry
+  that has a build (install the packages first, `tools/setup-gate-host.sh
+  --install`). The firmware header has no build: until it is in the layout
+  (`$(tools/cts/deps-env.sh --layout)/pvr_fw_blob.h`, "The PowerVR firmware"
+  below), `--build-missing` and `--check` exit 1 and name `PVR_FW_BLOB`, and
+  the header copy and the host check fail (the walk from an empty layout is
+  below).
   On the `ed15e1be` walk (2026-11-09) the firmware and the corpus took
   seconds and the capture program 85 s (97 s on a retry here after a reset
   download); run the build once at a time, two at once share `PCO_SHC.src` and
@@ -95,7 +107,10 @@ pull request (step 1 above).
   PowerVR header copy, as the CI does, `tools/setup-gate-host.sh --check`
   says whether this host has every tool and file the gate needs (it reads
   the same variables, so run before the export it reports a stale one as
-  missing; `tools/setup-gate-host.sh --install` installs the packages, `lz4`
+  missing, and `aarch64-cc` and `GLMARK2_SRC` as missing although the layout
+  has them; an unset `ZEPHYR_WS`, `HAL_NXP_DIR` or `PCO_SHC` is "ok" there,
+  whatever the layout holds, which `tools/cts/deps-env.sh --check` judges;
+  `tools/setup-gate-host.sh --install` installs the packages, `lz4`
   among them). The `lz4` command is a prerequisite of `--quick`: without it
   the `am62p second stage` row is a gap and the run is red (`apt install lz4`,
   Gentoo `app-arch/lz4`). A `CC_<target>` variable in the shell that names a
@@ -176,6 +191,41 @@ pull request (step 1 above).
   `gltest_guard` timing test did not fail in either walk (it did at
   `8a5da05e`). Record: GitHub issue 1606; a walk at a symlinked path is
   `docs/notes/gate-symlinked-path.md`.
+- The new-host steps above from an empty layout, without the gate
+  (2026-11-23): a fresh clone (over HTTPS) of `87388100` at a canonical
+  path, the layout directory new and empty, no gate variable set
+  (`ZEPHYR_WS`, `HAL_NXP_DIR`, `PCO_SHC`, `MESA_V3D_TREE`, `GLSLANG`, any
+  `CC_<target>`), the distribution packages already installed and no root
+  used (`tools/setup-gate-host.sh --install` was not run). Node with 4
+  cores, 7 GB and 45 GB free, Linux 7.0.0-38-generic, rustc 1.99.1, cargo
+  1.99.1. Exit code and wall time, in this order:
+
+  | command | exit | wall | what it said |
+  | --- | --- | --- | --- |
+  | `tools/cts/deps-env.sh --check` | 1 | 0.1 s | 13 entries missing; `GLSLANG`, `RUST_TARGET_AARCH64_LINUX`, `GLSL2USC_CACHE` ok |
+  | `tools/setup-gate-host.sh --check`, before the export | 1 | 1.1 s | 4 missing: `aarch64-cc`, `MALI_CSFFW`, `GLMARK2_SRC`, `pvr_fw_blob.h` |
+  | `tools/cts/deps-env.sh --build MALI_CSFFW DEQP_GLES3_TEST_DIR PCO_SPM_LOAD_CAPTURE HAL_NXP_DIR LZ4 MP2_QEMU` | 1 | 490.6 s | "not made: HAL_NXP_DIR", although its tree was there; the other five built, with `PCO_SHC`, `ZEPHYR_WS`, `WEST_VENV` |
+  | `tools/cts/deps-env.sh --check` | 1 | 0.5 s | 4 missing: `ZEPHYR_SDK_INSTALL_DIR`, `MESA_PAN_TREE`, `GLMARK2_SRC`, `PVR_FW_BLOB`; `HAL_NXP_DIR` ok |
+  | `export $(tools/cts/deps-env.sh)` | 0 | 0.3 s | |
+  | `mkdir -p driver/src/fw && cp "$PVR_FW_BLOB" driver/src/fw/` | 1 | 0.0 s | no such file: the layout has no header |
+  | `tools/setup-gate-host.sh --check`, after the export | 1 | 1.8 s | 3 missing: `aarch64-cc`, `GLMARK2_SRC`, `pvr_fw_blob.h` |
+  | `tools/cts/deps-env.sh --build-missing` | 1 | 51.6 s | built `ZEPHYR_SDK_INSTALL_DIR`, `MESA_PAN_TREE`, `GLMARK2_SRC`; "not made: PVR_FW_BLOB" |
+  | `tools/cts/deps-env.sh --check` | 1 | 0.1 s | 1 missing: `PVR_FW_BLOB` |
+  | `tools/setup-gate-host.sh --check`, after the export | 1 | 0.6 s | 1 missing: `pvr_fw_blob.h`; a warning for the disk (38 GB free, a full run needs 120 GB) and for `CARGO_INCREMENTAL` |
+
+  The layout was 5.7 GB at the end. The `--build` exit of 1 was two defects
+  of the tools, fixed since (`tools/cts/deps_env.py`, `tools/cts/deps.toml`,
+  `tools/cts/deps-selftest.sh`): `ZEPHYR_WS`'s `west update` fetches
+  `hal_nxp`, and the build then ran `HAL_NXP_DIR`'s own recipe on the
+  present tree; that recipe, `west update hal_nxp`, is refused by west 1.5
+  ("resolved via project imports"). The build now looks at an entry again
+  once its required entries are made, and the recipe is a plain `west
+  update`. With both, `tools/cts/deps-env.sh --build HAL_NXP_DIR` on a
+  second empty layout exits 0 in 116.2 s ("present  HAL_NXP_DIR" after the
+  workspace), and the recipe alone, in that workspace with `modules/hal/nxp`
+  removed, exits 0 in 24.7 s (1 in 0.3 s before the change). What a new host
+  cannot make is the firmware header, so this host ends with one missing
+  item and its AM62P image rows would be gaps.
 
 ## Branches and commits
 
