@@ -76,6 +76,20 @@
 //! fails on a skip or mismatch that is not listed and on a listed one that
 //! now runs or agrees.
 //!
+//! # The other in-tree sets
+//!
+//! [`SETS`] repeats the run over `gl_test_es100`, `gltest`, `femtovg` and
+//! the loose files at the top of `tools/shaders`, each an embedded list
+//! with its own the-list-is-the-directory test and its own pinned counts
+//! ([`Pin`]: programs compiled, stages agreeing, skips, mismatches,
+//! control-blind stages). Programs are paired with the es100 stubs, except
+//! femtovg, whose `.frag` variants take `femtovg/main.vert` (as femtovg
+//! itself pairs them; its text is already in the tree under tools/shaders/femtovg, PROVENANCE.md
+//! names no GPL source). List
+//! keys start with the set's name. The loose files that are desktop GLSL
+//! and the ES 3.00 fragment shaders of `gltest` with `in` varyings are
+//! skipped with their reasons.
+//!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --lib diff71
 //! ```
@@ -109,15 +123,17 @@ use std::string::{String, ToString};
 use std::vec;
 use std::vec::Vec;
 
-/// `(file name, source)` of every `tools/shaders/es100` source.
-macro_rules! es100 {
-    ($($f:literal),* $(,)?) => {
-        &[$(($f, include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders/es100/", $f)))),*]
+/// `(file name, source)` of the sources of one `tools/shaders` directory
+/// (`dir` ends in `/`, or is empty for the loose files at the top).
+macro_rules! sources {
+    ($dir:literal; $($f:literal),* $(,)?) => {
+        &[$(($f, include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tools/shaders/", $dir, $f)))),*]
     };
 }
 
 /// The sources, in the directory's sorted order.
-static ES100: &[(&str, &str)] = es100![
+static ES100: &[(&str, &str)] = sources![
+    "es100/";
     "absadd.frag",
     "affectand.frag",
     "anyall.vert",
@@ -246,10 +262,205 @@ static ES100: &[(&str, &str)] = es100![
     "xlink.vert",
 ];
 
+/// `tools/shaders/gl_test_es100`: the ES 1.00 twins of gl_test's shaders, sorted.
+static GL_TEST_ES100: &[(&str, &str)] = sources![
+    "gl_test_es100/";
+    "armselect.frag",
+    "color_uv.frag",
+    "color_uv.vert",
+    "compact.frag",
+    "interp_color.frag",
+    "mvp.vert",
+    "mvp_color.vert",
+    "passthrough.vert",
+    "points.vert",
+    "texture.frag",
+    "texture2.frag",
+    "uniform_color.frag",
+    "uv.vert",
+    "zorder.vert",
+];
+
+/// `tools/shaders/gltest`: the gl_test and board-probe shaders (some are ES 3.00 and are refused), sorted.
+static GLTEST: &[(&str, &str)] = sources![
+    "gltest/";
+    "blendonce_fs.frag",
+    "dep1_fs.frag",
+    "dep2_fs.frag",
+    "dep4_fs.frag",
+    "deqp_position.vert",
+    "es3trunc_fs.frag",
+    "es3trunc_vary_fs.frag",
+    "es3trunc_vs.vert",
+    "es3trunc_vsc.vert",
+    "f1_edge_fs.frag",
+    "f1_fs.frag",
+    "f1_mid_fs.frag",
+    "f3_fs.frag",
+    "f3_lit_fs.frag",
+    "f3_var_fs.frag",
+    "f3_var_vs.vert",
+    "fma_fs_ctrl.frag",
+    "fma_fs_fused.frag",
+    "fma_fs_varying.frag",
+    "fma_vs_ctrl.vert",
+    "fma_vs_fused.vert",
+    "fsat_fs_ctrl.frag",
+    "fsat_fs_folded.frag",
+    "fsat_vs_ctrl.vert",
+    "fsat_vs_folded.vert",
+    "fshp_vs.vert",
+    "intrt.frag",
+    "isamp.frag",
+    "kc_fadd_fs.frag",
+    "kc_fmul_fs.frag",
+    "kc_maxmul_fs.frag",
+    "kc_maxneg_fs.frag",
+    "kc_mulneg_fs.frag",
+    "mulone_fs_half.frag",
+    "mulone_fs_mods.frag",
+    "mulone_fs_one.frag",
+    "position_only.vert",
+    "position_only2.vert",
+    "predif_fs_coord.frag",
+    "predif_fs_uni.frag",
+    "predif_vs_uni.vert",
+    "predlive_fs_coord.frag",
+    "predlive_fs_uni.frag",
+    "psizvpm_plain_vs.vert",
+    "psizvpm_word_vs.vert",
+    "texcube_fs.frag",
+    "texcube_vs.vert",
+    "texcubemip_vs.vert",
+    "texcubenorm_fs.frag",
+    "tsf_fs.frag",
+    "tsf_vs.vert",
+    "uniform_color.frag",
+    "unipad_fs.frag",
+    "unipad_vs.vert",
+    "usamp.frag",
+    "varyfma_fs.frag",
+    "varyfma_vs.vert",
+    "vsunits_fs.frag",
+    "vtl_fs.frag",
+    "vtl_vs.vert",
+    "vtl_vs_const.vert",
+    "vtl_vs_grid.vert",
+    "vtxgrid_vs.vert",
+];
+
+/// `tools/shaders/femtovg`: femtovg 0.26.0's shader variants (each .frag pairs with main.vert), sorted.
+static FEMTOVG: &[(&str, &str)] = sources![
+    "femtovg/";
+    "fill_color.frag",
+    "fill_color.glyph.frag",
+    "fill_color.glyph.nodiscard.frag",
+    "fill_color.nodiscard.frag",
+    "fill_color.nodiscard.noscissor.frag",
+    "fill_gradient.frag",
+    "fill_gradient.glyph.frag",
+    "fill_gradient.glyph.nodiscard.frag",
+    "fill_gradient.nodiscard.frag",
+    "fill_gradient.nodiscard.noscissor.frag",
+    "fill_gradient_conic.frag",
+    "fill_gradient_conic.glyph.frag",
+    "fill_gradient_conic.glyph.nodiscard.frag",
+    "fill_gradient_conic.nodiscard.frag",
+    "fill_gradient_conic.nodiscard.noscissor.frag",
+    "fill_image.frag",
+    "fill_image.glyph.frag",
+    "fill_image.glyph.nodiscard.frag",
+    "fill_image.nodiscard.frag",
+    "fill_image.nodiscard.noscissor.frag",
+    "fill_image_gradient.frag",
+    "fill_image_gradient.glyph.frag",
+    "fill_image_gradient.glyph.nodiscard.frag",
+    "fill_image_gradient.nodiscard.frag",
+    "fill_image_gradient.nodiscard.noscissor.frag",
+    "fill_image_gradient_conic.frag",
+    "fill_image_gradient_conic.glyph.frag",
+    "fill_image_gradient_conic.glyph.nodiscard.frag",
+    "fill_image_gradient_conic.nodiscard.frag",
+    "fill_image_gradient_conic.nodiscard.noscissor.frag",
+    "filter_image.frag",
+    "filter_image.nodiscard.frag",
+    "main.vert",
+    "stencil.frag",
+    "stencil.nodiscard.frag",
+    "texture_copy_unclipped.frag",
+];
+
+/// the loose `.vert` and `.frag` files at the top of `tools/shaders`, sorted.
+static LOOSE: &[(&str, &str)] = sources![
+    "";
+    "armselect.frag",
+    "color_uv.frag",
+    "color_uv.vert",
+    "compact.frag",
+    "fvgtest_cover.frag",
+    "fvgtest_discard.frag",
+    "fvgtest_discard2.frag",
+    "fvgtest_ftcoord.frag",
+    "fvgtest_green.frag",
+    "fvgtest_inner.frag",
+    "interp_color.frag",
+    "mvp.vert",
+    "mvp_color.vert",
+    "passthrough.vert",
+    "points.vert",
+    "texture.frag",
+    "texture2.frag",
+    "uniform_color.frag",
+    "uv.vert",
+    "zorder.vert",
+];
+
 /// Programs either back end refuses (key: the source) and stages an
 /// interpreter cannot run at either generation (key: `<source> <stage>`),
 /// with the reason. Exact: see the module's header.
-const SKIPS: &[(&str, &str)] = &[];
+const ES3_SKIP: &str = "{}: GLSL ES 3.00 source; this differential is of the ES 1.00 programs";
+
+const SKIPS: &[(&str, &str)] = &[
+    (
+        "gltest/es3trunc_fs.frag",
+        "gltest/es3trunc_fs.frag: GLSL ES 3.00 source; this differential is of the ES 1.00 programs",
+    ),
+    (
+        "gltest/es3trunc_vary_fs.frag",
+        "gltest/es3trunc_vary_fs.frag: GLSL ES 3.00 source; this differential is of the ES 1.00 programs",
+    ),
+    (
+        "gltest/es3trunc_vs.vert",
+        "gltest/es3trunc_vs.vert: GLSL ES 3.00 source; this differential is of the ES 1.00 programs",
+    ),
+    (
+        "gltest/es3trunc_vsc.vert",
+        "gltest/es3trunc_vsc.vert: GLSL ES 3.00 source; this differential is of the ES 1.00 programs",
+    ),
+    ("gltest/intrt.frag", "gltest/intrt.frag: GLSL ES 3.00 source; this differential is of the ES 1.00 programs"),
+    ("gltest/isamp.frag", "gltest/isamp.frag: GLSL ES 3.00 source; this differential is of the ES 1.00 programs"),
+    ("gltest/usamp.frag", "gltest/usamp.frag: GLSL ES 3.00 source; this differential is of the ES 1.00 programs"),
+    ("loose/armselect.frag", "front end loose/armselect.frag: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/color_uv.frag", "front end loose/color_uv.frag: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/color_uv.vert", "front end loose/color_uv.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/compact.frag", "front end loose/compact.frag: desktop GLSL source; this is an OpenGL ES compiler"),
+    (
+        "loose/interp_color.frag",
+        "front end loose/interp_color.frag: desktop GLSL source; this is an OpenGL ES compiler",
+    ),
+    ("loose/mvp.vert", "front end loose/mvp.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/mvp_color.vert", "front end loose/mvp_color.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/passthrough.vert", "front end loose/passthrough.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/points.vert", "front end loose/points.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/texture.frag", "front end loose/texture.frag: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/texture2.frag", "front end loose/texture2.frag: desktop GLSL source; this is an OpenGL ES compiler"),
+    (
+        "loose/uniform_color.frag",
+        "front end loose/uniform_color.frag: desktop GLSL source; this is an OpenGL ES compiler",
+    ),
+    ("loose/uv.vert", "front end loose/uv.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+    ("loose/zorder.vert", "front end loose/zorder.vert: desktop GLSL source; this is an OpenGL ES compiler"),
+];
 
 /// Stages whose 4.2 and 7.1 outputs differ (key: `<source> <stage>`),
 /// with the reason. Exact: see the module's header.
@@ -282,6 +493,126 @@ const CONTROL_BLIND: &[(&str, &str)] = &[
     (
         "es100/varyings15.frag fs",
         "compares the varyings with fixed values neither input matches: the same `bad` in both runs",
+    ),
+    (
+        "femtovg/fill_color.glyph.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_color.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_gradient.glyph.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_gradient.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_gradient_conic.glyph.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_gradient_conic.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_image.glyph.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_image.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_image_gradient.glyph.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_image_gradient.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "femtovg/fill_image_gradient_conic.frag fs",
+        "the control does not run: 7.1 does not run: the control's coordinate falls on a texel edge (instruction 61 mul, coordinate 0.8571136), which sim71 refuses as ambiguous",
+    ),
+    (
+        "femtovg/fill_image_gradient_conic.glyph.frag fs",
+        "the control does not run: 7.1 does not run: the control's coordinate falls on a texel edge (instruction 61 mul, coordinate 0.8571136), which sim71 refuses as ambiguous",
+    ),
+    (
+        "femtovg/fill_image_gradient_conic.glyph.nodiscard.frag fs",
+        "the control does not run: 7.1 does not run: the control's coordinate falls on a texel edge (instruction 56 mul, coordinate 0.8571136), which sim71 refuses as ambiguous",
+    ),
+    (
+        "femtovg/fill_image_gradient_conic.nodiscard.frag fs",
+        "the control does not run: 7.1 does not run: the control's coordinate falls on a texel edge (instruction 61 mul, coordinate 0.8571136), which sim71 refuses as ambiguous",
+    ),
+    (
+        "femtovg/fill_image_gradient_conic.nodiscard.noscissor.frag fs",
+        "the control does not run: 7.1 does not run: the control's coordinate falls on a texel edge (instruction 61 mul, coordinate 0.8571136), which sim71 refuses as ambiguous",
+    ),
+    (
+        "femtovg/stencil.nodiscard.frag fs",
+        "the NO_DISCARD variant: its output does not move with the control's inputs (the uniform array frag[] selects the paint, and the control's pattern shift leaves the branch taken and the output the same)",
+    ),
+    (
+        "gl_test_es100/mvp.vert fs",
+        "the stub FS of a VS with no varyings writes a constant vec4(0.0)",
+    ),
+    (
+        "gltest/deqp_position.vert fs",
+        "the stub FS of a VS with no varyings writes a constant vec4(0.0)",
+    ),
+    (
+        "gltest/f1_edge_fs.frag fs",
+        "constant-folded arithmetic and a look-up at a constant coordinate: no input reaches the output",
+    ),
+    (
+        "gltest/f1_fs.frag fs",
+        "constant-folded arithmetic and a look-up at a constant coordinate: no input reaches the output",
+    ),
+    (
+        "gltest/f1_mid_fs.frag fs",
+        "constant-folded arithmetic and a look-up at a constant coordinate: no input reaches the output",
+    ),
+    (
+        "gltest/f3_fs.frag fs",
+        "constants only: gl_FragColor is a folded constant",
+    ),
+    (
+        "gltest/f3_lit_fs.frag fs",
+        "constants only: gl_FragColor is a folded constant",
+    ),
+    (
+        "gltest/fshp_vs.vert fs",
+        "the stub FS of a VS with no varyings writes a constant vec4(0.0)",
+    ),
+    (
+        "gltest/position_only.vert fs",
+        "the stub FS of a VS with no varyings writes a constant vec4(0.0)",
+    ),
+    (
+        "gltest/position_only2.vert fs",
+        "the stub FS of a VS with no varyings writes a constant vec4(0.0)",
+    ),
+    (
+        "gltest/texcube_fs.frag fs",
+        "the control's move of v_dir stays inside the same texel of the same cube face",
+    ),
+    (
+        "gltest/texcubenorm_fs.frag fs",
+        "the control's move of v_dir stays inside the same texel of the same cube face",
+    ),
+    (
+        "gltest/unipad_vs.vert fs",
+        "the stub FS of a VS with no varyings writes a constant vec4(0.0)",
+    ),
+    (
+        "loose/fvgtest_green.frag fs",
+        "a constant colour",
     ),
 ];
 
@@ -665,6 +996,14 @@ fn code(words: &[u64], us: &[Uniform], threads: u32) -> Code {
 
 /// Compile `vs` + `fs` at both generations; `Err` names the refusal.
 fn compile(names: [&str; 2], vs: &str, fs: &str) -> Result<Pair, String> {
+    // A GLSL ES 3.00 source is refused here, not by the front end: whether
+    // the front end takes it depends on the build (report-es2), and the
+    // lists below must be the same in every configuration the gate runs.
+    for (name, src) in [(names[0], vs), (names[1], fs)] {
+        if src.trim_start().starts_with("#version 300 es") {
+            return Err(ES3_SKIP.replace("{}", name));
+        }
+    }
     store::with_scratch(|a| {
         let mut m = Vec::new();
         for (stage, name, src) in [(Stage::Vertex, names[0], vs), (Stage::Fragment, names[1], fs)] {
@@ -852,19 +1191,100 @@ fn exact(what: &str, got: &BTreeMap<String, String>, listed: &[(&str, &str)]) ->
     bad
 }
 
+/// One in-tree set: its sources and the counts pinned for it.
+struct Set {
+    /// The key prefix of its list entries (`<name>/<file> <stage>`).
+    name: &'static str,
+    /// Its directory under `tools/shaders` (empty: the loose files at the
+    /// top).
+    dir: &'static str,
+    sources: &'static [(&'static str, &'static str)],
+    /// Every `.frag` pairs with `femtovg/main.vert` (femtovg's own pairing,
+    /// `main.vert` with each variant) instead of a stub vertex shader.
+    paired_with_main_vert: bool,
+    pin: Pin,
+}
+
+/// What a set's run came to: programs both back ends compile, stages that
+/// agree, entries skipped (programs and stages), stages that differ,
+/// agreeing stages blind to the control.
+#[derive(Debug, PartialEq)]
+struct Pin {
+    programs: usize,
+    agreed: usize,
+    skipped: usize,
+    differ: usize,
+    blind: usize,
+}
+
+const fn pin(programs: usize, agreed: usize, skipped: usize, differ: usize, blind: usize) -> Pin {
+    Pin { programs, agreed, skipped, differ, blind }
+}
+
+/// `femtovg/main.vert`, the vertex shader of every femtovg variant.
+fn femtovg_main_vert() -> &'static str {
+    FEMTOVG.iter().find(|f| f.0 == "main.vert").expect("femtovg/main.vert is listed").1
+}
+
+static SETS: &[Set] = &[
+    Set { name: "es100", dir: "es100", sources: ES100, paired_with_main_vert: false, pin: pin(126, 378, 0, 0, 11) },
+    Set {
+        name: "gl_test_es100",
+        dir: "gl_test_es100",
+        sources: GL_TEST_ES100,
+        paired_with_main_vert: false,
+        pin: pin(14, 42, 0, 0, 1),
+    },
+    Set { name: "gltest", dir: "gltest", sources: GLTEST, paired_with_main_vert: false, pin: pin(56, 168, 7, 0, 12) },
+    Set { name: "femtovg", dir: "femtovg", sources: FEMTOVG, paired_with_main_vert: true, pin: pin(35, 105, 0, 0, 16) },
+    Set { name: "loose", dir: "", sources: LOOSE, paired_with_main_vert: false, pin: pin(6, 18, 14, 0, 1) },
+];
+
 #[test]
 fn es100_at_4_2_and_7_1_agree_in_the_interpreters() {
+    measure(&SETS[0]);
+}
+
+#[test]
+fn gl_test_es100_at_4_2_and_7_1_agree_in_the_interpreters() {
+    measure(&SETS[1]);
+}
+
+#[test]
+fn gltest_at_4_2_and_7_1_agree_in_the_interpreters() {
+    measure(&SETS[2]);
+}
+
+#[test]
+fn femtovg_at_4_2_and_7_1_agree_in_the_interpreters() {
+    measure(&SETS[3]);
+}
+
+#[test]
+fn loose_shaders_at_4_2_and_7_1_agree_in_the_interpreters() {
+    measure(&SETS[4]);
+}
+
+/// Compile, run and compare every program of a set; the lists are checked
+/// and the counts compared with the set's pin.
+fn measure(set: &Set) {
     let mut skips = BTreeMap::new();
     let mut mismatches = BTreeMap::new();
     let mut agreed = 0usize;
+    let mut programs = 0usize;
     let mut st = Stats::default();
     // the control: stages that agree on the inputs and still agree when
     // only the 7.1 run's inputs move
     let mut blind = BTreeMap::new();
-    for (file, src) in ES100 {
-        let key = format!("es100/{file}");
+    for (file, src) in set.sources {
+        if set.paired_with_main_vert && *file == "main.vert" {
+            continue;
+        }
+        let key = format!("{}/{file}", set.name);
         let vary = varyings(src);
-        let (vs, fs, names) = if file.ends_with(".vert") {
+        let (vs, fs, names) = if set.paired_with_main_vert {
+            (femtovg_main_vert().to_string(), src.to_string(), ["femtovg/main.vert", key.as_str()])
+        } else if file.ends_with(".vert") {
             (src.to_string(), stub_fs(&vary), [key.as_str(), "<stub fs>"])
         } else {
             (stub_vs(&vary), src.to_string(), ["<stub vs>", key.as_str()])
@@ -876,6 +1296,7 @@ fn es100_at_4_2_and_7_1_agree_in_the_interpreters() {
                 continue;
             }
         };
+        programs += 1;
         let control = stages(&p, true, &mut Stats::default());
         for ((stage, v), (_, c)) in stages(&p, false, &mut st).into_iter().zip(control) {
             let k = format!("{key} {stage}");
@@ -901,9 +1322,11 @@ fn es100_at_4_2_and_7_1_agree_in_the_interpreters() {
             }
         }
     }
+    let got = pin(programs, agreed, skips.len(), mismatches.len(), blind.len());
     std::println!(
-        "diff71 es100: {} sources, {agreed} stages agree, {} skipped, {} differ",
-        ES100.len(),
+        "diff71 {}: {} sources, {programs} compiled, {agreed} stages agree, {} skipped, {} differ",
+        set.name,
+        set.sources.len(),
         skips.len(),
         mismatches.len()
     );
@@ -913,19 +1336,27 @@ fn es100_at_4_2_and_7_1_agree_in_the_interpreters() {
     for (k, m) in &mismatches {
         std::println!("  DIFFER {k}: {m}");
     }
-    std::println!("diff71 es100: compared {st:?}; {} agreeing stages blind to the control", blind.len());
+    std::println!("diff71 {}: compared {st:?}; {} agreeing stages blind to the control", set.name, blind.len());
     for (k, m) in &blind {
         std::println!("  blind {k}: {m}");
     }
-    let mut bad = exact("skip", &skips, SKIPS);
-    bad.extend(exact("mismatch", &mismatches, EXPECTED_MISMATCHES));
-    bad.extend(exact("control-blind stage", &blind, CONTROL_BLIND));
+    let mine = |l: &[(&'static str, &'static str)]| -> Vec<(&'static str, &'static str)> {
+        l.iter().copied().filter(|(k, _)| k.split('/').next() == Some(set.name)).collect()
+    };
+    let mut bad = exact("skip", &skips, &mine(SKIPS));
+    bad.extend(exact("mismatch", &mismatches, &mine(EXPECTED_MISMATCHES)));
+    bad.extend(exact("control-blind stage", &blind, &mine(CONTROL_BLIND)));
     assert!(bad.is_empty(), "diff71's lists are out of date:\n{}", bad.join("\n"));
-    assert!(agreed > 0, "nothing was compared");
-    assert!(
-        st.tlb_lanes > 0 && st.discarded > 0 && st.tmu_lookups > 0 && st.vpm_words > 0 && st.screen_off_by_one > 0,
-        "a part of the comparison compared nothing: {st:?}"
-    );
+    assert_eq!(got, set.pin, "{}: the pinned counts moved", set.name);
+    assert!(agreed > 0, "{}: nothing was compared", set.name);
+    // the es100 set has a program of every kind; the others only need to
+    // compare something
+    if set.name == "es100" {
+        assert!(
+            st.tlb_lanes > 0 && st.discarded > 0 && st.tmu_lookups > 0 && st.vpm_words > 0 && st.screen_off_by_one > 0,
+            "a part of the comparison compared nothing: {st:?}"
+        );
+    }
 }
 
 /// The lists are exact: [`exact`] names an entry that is not listed and a
@@ -941,16 +1372,43 @@ fn a_list_that_is_not_exact_is_named() {
     );
 }
 
-/// [`ES100`] is `tools/shaders/es100`'s `.vert` and `.frag` files, sorted.
-#[test]
-fn the_embedded_list_is_the_directory() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/shaders/es100");
+/// Each set's embedded list is its directory's `.vert` and `.frag` files,
+/// sorted (one test per set).
+fn list_is_the_directory(set: &Set) {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/shaders").join(set.dir);
     let mut files: Vec<String> = std::fs::read_dir(&dir)
-        .expect("tools/shaders/es100 is readable")
-        .map(|e| e.expect("a directory entry").file_name().to_string_lossy().into_owned())
+        .expect("the set's directory is readable")
+        .map(|e| e.expect("a directory entry"))
+        .filter(|e| e.path().is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
         .filter(|f| f.ends_with(".vert") || f.ends_with(".frag"))
         .collect();
     files.sort();
-    let embedded: Vec<&str> = ES100.iter().map(|e| e.0).collect();
-    assert_eq!(embedded, files, "add or remove the source in diff71.rs's ES100 list");
+    let embedded: Vec<&str> = set.sources.iter().map(|e| e.0).collect();
+    assert_eq!(embedded, files, "add or remove the source in diff71.rs's list of {}", set.name);
+}
+
+#[test]
+fn the_embedded_list_is_the_directory() {
+    list_is_the_directory(&SETS[0]);
+}
+
+#[test]
+fn the_gl_test_es100_list_is_the_directory() {
+    list_is_the_directory(&SETS[1]);
+}
+
+#[test]
+fn the_gltest_list_is_the_directory() {
+    list_is_the_directory(&SETS[2]);
+}
+
+#[test]
+fn the_femtovg_list_is_the_directory() {
+    list_is_the_directory(&SETS[3]);
+}
+
+#[test]
+fn the_loose_list_is_the_directory() {
+    list_is_the_directory(&SETS[4]);
 }
