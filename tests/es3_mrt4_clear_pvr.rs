@@ -684,6 +684,25 @@ fn glclearbufferfv_of_buffer_three_reaches_the_fourth_target() {
     }
 }
 
+/// Draw buffer 3 is GL_NONE: glClearBufferfv of it is no error and clears
+/// nothing (ES 3.0 4.2.3); attachment 3 gets no clear and nothing is kicked.
+#[test]
+fn glclearbufferfv_of_a_none_drawbuffer_3_clears_nothing() {
+    let _g = rig();
+    fbo4([GL_RGBA8; 4]);
+    let k = kicks_of(|| {
+        // SAFETY: plain GL calls; four floats.
+        unsafe {
+            let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_NONE];
+            glDrawBuffers(4, bufs.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+            glClearBufferfv(GL_COLOR, 3, C.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR, "{:?}", logs());
+        }
+    });
+    assert!(k.is_empty(), "attachment 3 stays uncleared, nothing kicked: {} kick(s) {:?}", k.len(), logs());
+}
+
 /* ---- glClearBufferuiv / iv on an integer attachment 3 ------------------------- */
 
 /// Attachment 3 as an integer buffer: the clear is accepted by the core and

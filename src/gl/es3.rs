@@ -1403,9 +1403,14 @@ pub unsafe extern "C" fn glClearBufferfv(buffer: GLenum, drawbuffer: GLint, valu
     match buffer {
         GL_COLOR => {
             /* ES 3.0 4.2.3: the float form clears a fixed or float buffer */
-            if clear_image_kind(c, drawbuffer).is_some_and(|k| k != ColorKind::Float) {
-                c.set_error(GL_INVALID_OPERATION, FUNC);
-                return;
+            match clear_image_kind(c, drawbuffer) {
+                Some(ColorKind::Float) => {}
+                Some(_) => {
+                    c.set_error(GL_INVALID_OPERATION, FUNC);
+                    return;
+                }
+                /* GL_NONE or no image: no effect, no error (4.2.3) */
+                None => return,
             }
             let save = c.clear_color;
             // SAFETY: value points at four GLfloats (GL contract), unaligned.
