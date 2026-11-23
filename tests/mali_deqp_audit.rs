@@ -51,9 +51,9 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_audit_` prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["l1_matrix_sub_uniform_mediump_mat3_vs"];
 
-/// The references that compile with other words than Mesa's (all, at the tip).
+/// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[
     "a1_op_greater_or_equal_highp_float_vs",
     "a1_op_greaterthan_highp_ivec2_vs",
@@ -73,7 +73,6 @@ const DIFFERS: &[&str] = &[
     "f1_swz_mediump_vec4_wwwy_fs",
     "f1_uniform_info_mat4_fs",
     "k1_cexpr_length_vec3_fs",
-    "l1_matrix_sub_uniform_mediump_mat3_vs",
     "l1_op_greaterthan_mediump_ivec2_fs",
     "l1_op_mul_highp_int_ivec2_fs",
     "m1_cexpr_greaterthan_ivec2_vs",
@@ -346,7 +345,6 @@ fn l1_op_greaterthan_mediump_ivec2_fs() {
 /// `dEQP-GLES2.functional.shaders.matrix.sub.uniform_mediump_mat3_mat3_vertex` (cause L1): the constant `1.0` lane folded into the fragment shader where Mesa keeps it in the flat `.v4`.
 /// Rebuilt from es2fShaderMatrixTests.cpp `ShaderMatrixCase::init`.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn l1_matrix_sub_uniform_mediump_mat3_vs() {
     mali_ref::assert_matches("deqp_audit_l1_matrix_sub_uniform_mediump_mat3_vs");
 }
