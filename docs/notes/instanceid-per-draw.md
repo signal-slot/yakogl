@@ -603,3 +603,9 @@ Board results (development runs on the X2, not conformance):
   divisors above 1). Rebuild the images (the earlier ones were removed with
   their task), run `SEL=0 tools/board.sh x2 run <img> <logdir>` for case 221,
   and run case 141 only if case 221 returns a verdict line.
+  2026-11-23 (`x2-instmix-dry`): still not measured. Both images were rebuilt
+  from `origin/main` `9f5f6e76` (each holds the `gc_wdog_arm: armed` marker,
+  `CONFIG_GC_BOARD_WDOG_SELF_ARM=y`) and passed `tools/board.sh --dry-run x2
+  run`, but no jump was made: the `target:x2` description still names only
+  the 2026-11-06 person-at-the-board declaration of the first jump, not one
+  for this session.
