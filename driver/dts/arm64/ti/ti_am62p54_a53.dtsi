@@ -1,6 +1,9 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2023 Enphase Energy
  * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * Derived from Zephyr dts/arm64/ti/ti_am62x_a53.dtsi (Apache-2.0).
  *
  * TI AM62P54 Cortex-A53 cluster.  Main-domain peripherals shared with the
  * AM62x generation come from Zephyr's k3-am62-main.dtsi; AM62P-specific
