@@ -25,7 +25,7 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_fclane_` prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &[];
+const LOWERED: &[&str] = &["tex_zw_lane"];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[];
@@ -55,7 +55,6 @@ const REFUSED: &[(&str, &str)] = &[
     ("rnd_vec4", COLOUR_FORM),
     ("struct_fields", COLOUR_FORM),
     ("tex_coord_ramp", COLOUR_FORM),
-    ("tex_zw_lane", COLOUR_FORM),
     ("varying_merged", COLOUR_FORM),
     ("vec3_local", COLOUR_FORM),
 ];
@@ -163,7 +162,6 @@ fn tex_coord_ramp() {
 }
 
 #[test]
-#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant; pinned by refusals_pinned"]
 fn tex_zw_lane() {
     mali_ref::assert_matches("deqp_fclane_tex_zw_lane");
 }

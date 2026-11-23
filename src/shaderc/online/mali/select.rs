@@ -1000,7 +1000,13 @@ pub fn vs_variant(
                      * (`bi_alu_src_index`; `FMA.v2f16 r0, r0^, 0x2E660000.h11,
                      * 0x38000000.h11`) */
                     if nd.bits == 16 && op != nir::Alu::F2f16 {
-                        let whole = matches!(v, nir::Val::Lane(m, _) if nd.width == 2 && vs.nodes[m as usize].width == 2)
+                        /* a `vec2` reads its sources one half each, a lane
+                         * of a two-lane node too (`MKVEC.v2i16` takes no
+                         * whole word; deqp_misc_spill_*'s `res[1].yzw`
+                         * across the fp16 product's pairs) */
+                        let vec2 = nd.kind == nir::Kind::Alu(nir::Alu::Vec2);
+                        let whole = matches!(v, nir::Val::Lane(m, _)
+                            if nd.width == 2 && vs.nodes[m as usize].width == 2 && !vec2)
                             || nir::vs_tex16_word(vs, &nd, v);
                         if whole {
                             *x = x.swz(Swz::H01);

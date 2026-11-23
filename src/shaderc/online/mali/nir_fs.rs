@@ -2717,6 +2717,74 @@ impl<'s> Fs<'s> {
         matches!(self.alu_of(v), Some((Alu::I2f | Alu::U2f, _))) && !self.prec.highp
     }
 
+    /// The `x` of the lanes `p + q` when they are `(x + d) + -d` or `(d +
+    /// x) + -d` ([`walk`]'s cancelling arm), `d` the same lane in both.
+    fn add_sub_cancel(&self, p: Val, q: Val) -> Option<Val> {
+        let (Alu::Fneg, [d, ..]) = self.alu_of(q)? else { return None };
+        let (Alu::Fadd, [a, b, _]) = self.alu_of(p)? else { return None };
+        if b == d {
+            Some(a)
+        } else if a == d {
+            Some(b)
+        } else {
+            None
+        }
+    }
+
+    /// The front-end dword of the int uniform word `v` converts, when `v`
+    /// is the `i2f32` of one (a mediump shader's `vec4(ivec)` lane).
+    fn int_uniform_float(&self, v: Val) -> Option<u16> {
+        let (Alu::I2f, [Val::Lane(n, _), ..]) = self.alu_of(v)? else { return None };
+        match self.nir.nodes[n as usize] {
+            NirNode { kind: Kind::Uniform { dword, comps: 1 }, bits: 32, .. } if !self.prec.highp => Some(dword),
+            _ => None,
+        }
+    }
+
+    /// `v` is an fp32 operation of a mediump shader on a float uniform Mesa
+    /// keeps fp32 and constants (the walk's highp arm over
+    /// [`Fs::narrowed_uniform`]): `ffma(u, a, b)` (the late fusion of
+    /// `fadd(fmul(u, a), b)`), `fmul(u, a)` or `fadd(u, a)`, with the
+    /// uniform's front-end dword and the constants.
+    fn wide32(&self, v: Val) -> Option<(Alu, u16, [u32; 2])> {
+        if self.prec.highp {
+            return None;
+        }
+        let word = |v: Val| match v {
+            Val::Lane(n, _) => match self.nir.nodes[n as usize] {
+                NirNode { kind: Kind::Uniform { dword, comps: 1 }, bits: 32, .. } => Some(dword),
+                _ => None,
+            },
+            _ => None,
+        };
+        let bits32 = |v: Val| matches!(v, Val::Lane(n, _) if self.nir.nodes[n as usize].bits == 32);
+        if !bits32(v) {
+            return None;
+        }
+        match self.alu_of(v)? {
+            (Alu::Fadd, [m, Val::Const(b), _]) if bits32(m) => match self.alu_of(m)? {
+                (Alu::Fmul, [u, Val::Const(a), _]) if self.used_once(m) => Some((Alu::Ffma, word(u)?, [a, b])),
+                _ => Some((Alu::Fadd, word(m)?, [b, 0])),
+            },
+            (op @ (Alu::Fadd | Alu::Fmul), [u, Val::Const(a), _]) => Some((op, word(u)?, [a, 0])),
+            _ => None,
+        }
+    }
+
+    /// The 32-bit uniform lane `v` narrows, when `v` is the `f2f16` of a
+    /// float uniform Mesa keeps fp32 in a mediump shader (the
+    /// `LoadUniform` arm's `wide` read, `FsPrecision::fp32_uniforms`).
+    fn narrowed_uniform(&self, v: Val) -> Option<Val> {
+        let Val::Lane(n, _) = v else { return None };
+        let NirNode { kind: Kind::Alu(Alu::F2f16), bits: 16, width: 1, src } = self.nir.nodes[n as usize] else {
+            return None;
+        };
+        let Val::Lane(u, _) = src[0] else { return None };
+        matches!(self.nir.nodes[u as usize], NirNode { kind: Kind::Uniform { .. }, bits: 32, .. })
+            .then_some(src[0])
+            .filter(|_| !self.prec.highp)
+    }
+
     /// `v` is an fp32 value of a mediump shader: an integer's conversion
     /// or arithmetic on one ([`Fs::int_lane`], the walk's fp32 arm).
     fn fp32_lane(&self, v: Val) -> bool {
@@ -6070,6 +6138,22 @@ fn walk_nodes(
                 }
             }
             ir::Op::LoadLocal { .. } | ir::Op::StoreLocal { .. } => return Err(MaliError::IndexedLocal),
+            /* `(x + d) - d` is `x`: `~fadd(fadd(a, b), fneg(b))` of
+             * nir_opt_algebraic.py, an inexact rule GLSL's values take (no
+             * `precise`), at the link (gl_nir_opts) before any lowering;
+             * the `d` no other operation reads is then left unread, a
+             * varying the link drops (deqp_unitype_vsstruct_add's
+             * `out0 + dummy - dummy`: the fragment shader's `val.b +
+             * val.a` alone, and no varying program) */
+            ir::Op::Alu(AluOp::Fadd, s)
+                if (0..width_of(m, ir::ValueId(id.0)))
+                    .all(|i| f.add_sub_cancel(lane(vals, s[0], i), lane(vals, s[1], i)).is_some()) =>
+            {
+                for (i, o) in out.iter_mut().enumerate().take(width_of(m, ir::ValueId(id.0))) {
+                    let x = f.add_sub_cancel(lane(vals, s[0], i), lane(vals, s[1], i));
+                    *o = x.ok_or(MaliError::Defect(Defect::IrIndex))?;
+                }
+            }
             /* fp32: one scalar node a lane, as the vertex stage builds it */
             ir::Op::Alu(a, s) if prec.highp => {
                 /* an operation on the mediump built-in itself is mediump
@@ -6225,6 +6309,29 @@ fn walk_nodes(
                     };
                 }
             }
+            /* a highp product or sum on a float uniform Mesa keeps fp32
+             * (`FsPrecision::fp32_uniforms`, gl_DepthRange) in a mediump
+             * shader: lower_precision leaves the operation at 32 bits (its
+             * operand is highp), the narrowing at the store
+             * (deqp_unitype_depthrange_fs: `diff * 0.5 + 0.5`, `FMA.f32
+             * r0, u3.w0, 0x38000000.h1, 0x38000000.h1`, then `FADD.f32
+             * r0.h0`) */
+            ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
+                if !prec.highp
+                    && m.prec_of(ir::ValueId(id.0)) == ir::Prec::High
+                    && (0..width_of(m, ir::ValueId(id.0))).all(|i| {
+                        let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
+                        let wide = |v: Val| f.narrowed_uniform(v).is_some() || f.fp32_lane(v);
+                        (wide(x) && matches!(y, Val::Const(_))) || (wide(y) && matches!(x, Val::Const(_)))
+                    }) =>
+            {
+                let op = if a == AluOp::Fmul { Alu::Fmul } else { Alu::Fadd };
+                for (i, o) in out.iter_mut().enumerate().take(width_of(m, ir::ValueId(id.0))) {
+                    let un = |v: Val| f.narrowed_uniform(v).unwrap_or(v);
+                    let (x, y) = (un(lane(vals, s[0], i)), un(lane(vals, s[1], i)));
+                    *o = f.op32(op, [x, y, Val::Undef], at)?;
+                }
+            }
             /* a product or sum on an fp32 value of a mediump shader (an
              * integer's conversion, case 79's `float(q.x) / 4.0`): lower_
              * precision leaves it at 32 bits, an operation the vertex stage
@@ -6373,6 +6480,23 @@ fn walk_nodes(
                         || !lanes.clone().any(|i| {
                             matches!((lane(vals, s[0], i), lane(vals, s[1], i)), (Val::Const(_), Val::Const(_)))
                         });
+                    /* one lane of two fp32 uniform words narrowed alone:
+                     * `nir_opt_vectorize` makes their two `f2f16` one of two
+                     * lanes, in the order the operation reads them
+                     * (deqp_unitype_vsstruct_add's `val.b + val.a`:
+                     * `V2F32_TO_V2F16 r0, u2.w1, u2.w0`, then `FADD.v2f16
+                     * r0, r0^.h00, r0^.h11`) */
+                    if w == 1 && a == AluOp::Fadd {
+                        let (p, q) = (lane(vals, s[0], 0), lane(vals, s[1], 0));
+                        if let (Some(up), Some(uq)) = (f.narrowed_uniform(p), f.narrowed_uniform(q)) {
+                            if up != uq {
+                                let n = f.node16(Alu::F2f16, [up, uq, Val::Undef], 2, at)?;
+                                let Val::Lane(n, _) = n else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                                out[0] = f.op(a, Val::Lane(n, 0), Val::Lane(n, 1), at, rule, Some(vec_neg))?;
+                                continue;
+                            }
+                        }
+                    }
                     for i in lanes.clone() {
                         let (mut x, mut y) = (f.fp16_operand(lane(vals, s[0], i)), f.fp16_operand(lane(vals, s[1], i)));
                         let mut rule = rule;
@@ -8844,6 +8968,26 @@ enum Leaf {
         base: u16,
         comp: u8,
     },
+    /// Words `comp` and `comp + 1` of an int uniform's load at word `base`
+    /// (an ivec's lanes), each converted (`i2f32`: lower_precision lowers
+    /// no conversion from an int) and the two narrowed together at the
+    /// colour's store: deqp_unitype_fsivec4's `vec4(fTest).xy`, `S32_TO_F32
+    /// r1, u2.w0`, `S32_TO_F32 r2, u2.w1`, `V2F32_TO_V2F16 r1, r1, r2^`.
+    IntWide {
+        base: u16,
+        comp: u8,
+    },
+    /// Word `comp` of that load in an fp32 operation with constants,
+    /// highp as its operand is, narrowed alone at the colour's store
+    /// ([`Fs::wide32`]): deqp_unitype_depthrange_fs's `diff * 0.5 + 0.5`,
+    /// `FMA.f32 r0, u3.w0, 0x38000000.h1, 0x38000000.h1` before the
+    /// store's narrowings, `FADD.f32 r0.h0, r0^, 0x0.neg` after them.
+    Wide32 {
+        base: u16,
+        comp: u8,
+        op: Alu,
+        k: [u32; 2],
+    },
 }
 
 /// The pair nodes: an operation of two lanes, or a leaf.
@@ -8911,8 +9055,8 @@ impl Pairs {
             P::Leaf(Leaf::Raw { .. }) => Form::Half,
             P::Leaf(Leaf::Part { .. }) => Form::Half,
             /* a conversion's value, as a varying pair's */
-            P::Leaf(Leaf::Wide { .. }) => Form::Half,
-            P::Leaf(Leaf::WideLane { .. }) => Form::Splat,
+            P::Leaf(Leaf::Wide { .. } | Leaf::IntWide { .. }) => Form::Half,
+            P::Leaf(Leaf::WideLane { .. } | Leaf::Wide32 { .. }) => Form::Splat,
             P::Leaf(Leaf::Const(_)) => Form::Const,
             P::Op(Alu::Fneg, _) => Form::Neg,
             P::Op(Alu::Fabs, _) => Form::Abs,
@@ -9109,6 +9253,18 @@ fn vectorise(f: &Fs<'_>, pr: &mut Pairs, a: Val, b: Val, pair: u8, ubo: &UboLayo
                 }
                 _ => return Err(MaliError::FsUniform),
             }
+        }
+        /* two lanes of an int uniform's float, in order ([`Leaf::IntWide`]) */
+        _ if f.int_uniform_float(a).is_some() && f.int_uniform_float(b).is_some() => {
+            let (Some(d), Some(e)) = (f.int_uniform_float(a), f.int_uniform_float(b)) else {
+                return Err(MaliError::Defect(Defect::IrIndex));
+            };
+            let w = ubo.word(d).ok_or(MaliError::FsUniform)?;
+            if ubo.word(e) != Some(w + 1) {
+                return Err(MaliError::FsUniform);
+            }
+            let (base, _) = ubo.load_of(w).ok_or(MaliError::FsUniform)?;
+            P::Leaf(Leaf::IntWide { base, comp: (w - base) as u8 })
         }
         (Some((Alu::Fexp2, [x, ..])), Some((Alu::Fexp2, [y, ..])))
             if f.input_lane(x).is_some() || f.input_lane(y).is_some() =>
@@ -10103,6 +10259,13 @@ fn lane_tree(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8, ubo: &UboLayout) -> R
          * gm2_fcoord16_1.expect.json's `FADD.f32 r0.h0`, `FADD.f32 r1.h0`,
          * then `FMA.v2f16 r0, r0^.h00, r1^.h00, 0x0.neg`) */
         _ if f.frag16_lane(v).is_some() => P::Leaf(Leaf::FragLane(f.frag16_lane(v).unwrap_or(0))),
+        /* an fp32 operation on an fp32 uniform's word ([`Leaf::Wide32`]) */
+        _ if f.wide32(v).is_some() => {
+            let (op, d, k) = f.wide32(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            let w = ubo.word(d).filter(|_| ubo.half(d).is_none()).ok_or(MaliError::FsUniform)?;
+            let (base, _) = ubo.load_of(w).ok_or(MaliError::FsUniform)?;
+            P::Leaf(Leaf::Wide32 { base, comp: (w - base) as u8, op, k })
+        }
         /* an fp32 uniform's word narrowed alone ([`Leaf::WideLane`]) */
         _ if f.wide_uniform(v).is_some() => {
             let d = f.wide_uniform(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
@@ -10627,7 +10790,10 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
      * ones read, packed ([`tex_mask`]), a layout the leaves here do not
      * index ([`Leaf::TexLane`] counts from the first texel); no reference
      * draws it */
-    if f.live_look_ups().any(|(_, t)| t.lanes & (t.lanes + 1) != 0) {
+    /* (an fp16 look-up whose texels read are whole aligned pairs, `.ba`,
+     * each pair's word indexes its packed register, [`tex`]) */
+    let pairs16 = |j: usize, t: &TexLookup| f.tex_f16(j) && !t.array && aligned_pairs(t.lanes);
+    if f.live_look_ups().any(|(j, t)| t.lanes & (t.lanes + 1) != 0 && !pairs16(j, t)) {
         return Err(MaliError::TexLanes);
     }
     /* more than one look-up: each at a vec2 varying read whole or two
@@ -11089,6 +11255,29 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
     if ubo_at_store && (0..pr.n).any(ubo_leaf) {
         ubo_load(p, f, &mut lv, &mut rows)?;
     }
+    /* the fp32 operations of the colour's lanes ([`Leaf::Wide32`]): the
+     * operation where the expression stands, before the store's
+     * narrowings; its own narrowing after them (lane order) */
+    let wide32 = |pr: &Pairs, r: u8| match pr.nodes[r as usize] {
+        P::Leaf(Leaf::Wide32 { .. }) => Some(r),
+        P::Leaf(Leaf::Lane { x, .. }) if matches!(pr.nodes[x as usize], P::Leaf(Leaf::Wide32 { .. })) => Some(x),
+        _ => None,
+    };
+    let mut fp32 = [None::<Src>; 2];
+    for (j, r) in roots.iter().enumerate() {
+        if let Some(x) = wide32(&pr, *r) {
+            let P::Leaf(Leaf::Wide32 { base, comp, op, k }) = pr.nodes[x as usize] else {
+                return Err(MaliError::Defect(Defect::IrIndex));
+            };
+            let u = Src::of(Idx::Ubo { base, comp });
+            let s = match op {
+                Alu::Ffma => [u, Src::of(Idx::Const(k[0])), Src::of(Idx::Const(k[1]))],
+                _ => [u, Src::of(Idx::Const(k[0])), Src::NULL],
+            };
+            let n = op.arity();
+            fp32[j] = Some(Src::ssa(row(p, &mut rows, Row { op, bits: 32, width: 1 }, &s[..n])?));
+        }
+    }
     /* the colour's fp32 uniform words, narrowed at its store as a
      * varying's (fshighp_color: two `V2F32_TO_V2F16`, then ATEST) */
     for r in roots {
@@ -11096,6 +11285,21 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
             if val[r as usize].is_none() {
                 val[r as usize] = Some(Src::ssa(wide(p, base, comp, &mut rows)?));
             }
+        }
+        if let P::Leaf(Leaf::IntWide { base, comp }) = pr.nodes[r as usize] {
+            if val[r as usize].is_none() {
+                let mut c = [Src::NULL; 2];
+                for (k, x) in c.iter_mut().enumerate() {
+                    let s = [Src::of(Idx::Ubo { base, comp: comp + k as u8 })];
+                    *x = Src::ssa(row(p, &mut rows, Row { op: Alu::I2f, bits: 32, width: 1 }, &s)?);
+                }
+                val[r as usize] = Some(Src::ssa(row(p, &mut rows, Row { op: Alu::F2f16, bits: 16, width: 2 }, &c)?));
+            }
+        }
+    }
+    for (j, r) in roots.iter().enumerate() {
+        if let (Some(x), Some(v)) = (wide32(&pr, *r), fp32[j]) {
+            val[x as usize] = Some(Src::ssa(row(p, &mut rows, Row { op: Alu::F2f16, bits: 16, width: 1 }, &[v])?));
         }
     }
     /* ATEST on the alpha: the constant's half, or the high half of the
@@ -13543,6 +13747,12 @@ fn tex_desc(p: &mut Prog<'_>, f: &Fs<'_>, lv: &mut Leaves, val: &mut [Option<Src
     Ok(())
 }
 
+/// `lanes` (a look-up's texels read) is whole aligned pairs: `.rg`, `.ba`
+/// or all four.
+fn aligned_pairs(lanes: u8) -> bool {
+    lanes != 0 && lanes & !0xf == 0 && (0..2).all(|h| matches!(lanes >> (2 * h) & 3, 0 | 3))
+}
+
 /// The texels look-up `t` writes: those the colour reads
 /// (`nir_def_components_read`, bifrost_compile.c:3522; case 42's `.a` of
 /// the fetch, texmore_2's `.rgb`, cflow_148_texbranch's `.r`, `.g` and `.b`
@@ -13990,6 +14200,21 @@ fn tex(p: &mut Prog<'_>, f: &Fs<'_>, j: usize, lv: &mut Leaves, computed: Option
     let r = alu(p, op, &srcs)?;
     let words = lv.tex.get_mut(j).ok_or(MaliError::Defect(Defect::IrIndex))?;
     *words = [None; 4];
+    /* fp16 texels of whole aligned pairs past a gap (`.ba`): the pairs'
+     * words in mask order, each at its pair's index (deqp_unitype_fsivec4's
+     * `texture2D(..).zw`, `TEX_SINGLE .. .16.ba` of one register) */
+    if f16 && !t.array && mask != tail && aligned_pairs(mask) {
+        let n = mask.count_ones() as usize / 2;
+        let w = if n == 1 { [r; 4] } else { split(p, r, n)? };
+        let mut k = 0;
+        for (h, x) in words.iter_mut().enumerate().take(2) {
+            if mask >> (2 * h) & 3 == 3 {
+                *x = Some(w[k]);
+                k += 1;
+            }
+        }
+        return Ok(());
+    }
     /* fp16 texels packed two a register in mask order (`bi_make_vec_to`'s
      * channels, bifrost_compile.c:3563-3573): the fetch's `.a` alone is
      * the low half of its one register */
@@ -14144,10 +14369,13 @@ fn operand(pr: &Pairs, x: u8, lv: &Leaves, val: &[Option<Src>; MAX_PAIRS]) -> Re
             | Leaf::Zext(_)
             | Leaf::Lane { .. }
             | Leaf::Pack { .. }
-            | Leaf::Wide { .. },
+            | Leaf::Wide { .. }
+            | Leaf::IntWide { .. },
         )
         | P::Op(..) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?,
-        P::Leaf(Leaf::WideLane { .. }) => val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(Swz::H00),
+        P::Leaf(Leaf::WideLane { .. } | Leaf::Wide32 { .. }) => {
+            val[x as usize].ok_or(MaliError::Defect(Defect::IrIndex))?.swz(Swz::H00)
+        }
         /* read by its `exp2` alone ([`op`]) */
         P::Leaf(Leaf::Raw { .. }) => return Err(MaliError::Defect(Defect::IrIndex)),
         P::Leaf(Leaf::Part { x, h }) => {

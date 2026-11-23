@@ -21,7 +21,7 @@ mod mali_ref;
 
 /// The references that compile byte-equal, without the `deqp_constprod_`
 /// prefix: each has a byte-compare test below, not ignored.
-const LOWERED: &[&str] = &["alg_constmat_fs"];
+const LOWERED: &[&str] = &["alg_constmat_fs", "fma_matmul_mat_vs"];
 
 /// The references that compile with other words than Mesa's: each has an
 /// ignored byte-compare test.
@@ -91,10 +91,6 @@ const REFUSED: &[(&str, &str)] = &[
     ),
     (
         "fma_matmul_dynamic_vs",
-        "Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet",
-    ),
-    (
-        "fma_matmul_mat_vs",
         "Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet",
     ),
     (
@@ -253,7 +249,6 @@ fn fma_matmul_dynamic_vs() {
 }
 
 #[test]
-#[ignore = "refused: matrix.mul.dynamic_lowp_mat3_mat3_vertex (pinned by refusals_pinned)"]
 fn fma_matmul_mat_vs() {
     mali_ref::assert_matches("deqp_constprod_fma_matmul_mat_vs");
 }
