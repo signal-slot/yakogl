@@ -374,13 +374,15 @@ pi5)
     # the Pi 4 samples' end lines and every tools/probes/rpi_5 probe's (its
     # README's table): rpi5_hello's count, rpi5_dtb's and rpi5_ident's done or
     # FAIL, rpi5_clear's and rpi5_triangle's v3d_clear / v3d_triangle verdict,
-    # rpi5_tfu's v3d_tfu verdict, rpi5_mbox's and rpi5_dispregs's done or FAIL,
+    # rpi5_tfu's v3d_tfu verdict, rpi5_tex's v3d_tex and v3d_cube verdicts (a
+    # FAIL of either ends the run; the PASS lines do not, rpi5_tex's own done
+    # or FAIL does), rpi5_mbox's and rpi5_dispregs's done or FAIL,
     # rpi5_scanout16's and
     # rpi5_scanout32's PASS or FAIL (the 'feeding stopped, reset expected'
     # line after each is the watchdog's tail, not an end), rpi5_wdog's FAIL
     # (its pass is the reset itself: the console goes quiet, so that run ends
     # at RUN_BOUND)
-    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|v3d_triangle: (PASS|FAIL)|v3d_tfu: (PASS|FAIL)|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_mbox: (done|FAIL)|rpi5_dispregs: (done|FAIL)|rpi5_scanout(16|32): (PASS|FAIL)|rpi5_wdog: FAIL)'
+    END_RE_DEFAULT='^(deqp: summary: |v3d_deqp: build [^ ]+ (DONE|INCOMPLETE|STOPPED)|v3d_gl_test RECORD end|v3d_clear: (PASS|FAIL)|v3d_triangle: (PASS|FAIL)|v3d_tfu: (PASS|FAIL)|v3d_tex: FAIL|v3d_cube: FAIL|rpi5_tex: (done|FAIL)|rpi5_hello: counted |rpi5_(dtb|ident): (done|FAIL)|rpi5_mbox: (done|FAIL)|rpi5_dispregs: (done|FAIL)|rpi5_scanout(16|32): (PASS|FAIL)|rpi5_wdog: FAIL)'
     LEGACY_RE=$END_RE_DEFAULT
     BOARD_HOST=${BOARD_HOST:-${PI5_HOST:-}}
     BOARD_UART=${BOARD_UART:-${PI5_UART:-}}
@@ -796,6 +798,17 @@ legacy_result() {
     "v3d_triangle: FAIL"*) echo v3d_triangle_fail ;;
     "v3d_tfu: PASS"*) echo v3d_tfu_pass ;;
     "v3d_tfu: FAIL"*) echo v3d_tfu_fail ;;
+    # rpi5_tex: two verdict lines, then its end line. A FAIL of either, or a
+    # missing PASS line, is never a pass, whatever the end line says.
+    "v3d_tex: FAIL"*) echo v3d_tex_fail ;;
+    "v3d_cube: FAIL"*) echo v3d_cube_fail ;;
+    "rpi5_tex: FAIL"*) echo rpi5_tex_fail ;;
+    "rpi5_tex: done"*)
+        if plain "$c" | grep -aq '^v3d_tex: FAIL'; then echo v3d_tex_fail
+        elif plain "$c" | grep -aq '^v3d_cube: FAIL'; then echo v3d_cube_fail
+        elif ! plain "$c" | grep -aq '^v3d_tex: PASS'; then echo v3d_tex_fail
+        elif ! plain "$c" | grep -aq '^v3d_cube: PASS seamless=yes'; then echo v3d_cube_fail
+        else echo rpi5_tex_pass; fi ;;
     "rpi5_hello: counted "*) echo rpi5_hello_counted ;;
     rpi5_dtb:\ done* | rpi5_ident:\ done*) echo "${l%%:*}_done" ;;
     rpi5_dtb:\ FAIL* | rpi5_ident:\ FAIL* | rpi5_mbox:\ FAIL* | rpi5_dispregs:\ FAIL* | rpi5_wdog:\ FAIL*) echo "${l%%:*}_fail" ;;
