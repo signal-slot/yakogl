@@ -18,9 +18,11 @@
 //! ([`nanopc_t6_display`]), or brought up from cold after a normal kexec
 //! ([`nanopc_t6_display_cold`]).
 //! The record screen, the console's last lines drawn over the picture when a
-//! run ends, is any board's ([`record_screen`]).
+//! run ends, is any board's ([`record_screen`]); the glmark2 sample's
+//! one line per scene at a run's end is worded by [`glmark2_list`].
 //! The C side reaches both through `ffi::board`.
 
+pub mod glmark2_list;
 pub mod imx8mp;
 pub mod nanopc_t6;
 #[cfg(any(feature = "rk3588", test))]

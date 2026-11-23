@@ -844,6 +844,11 @@ buffer the VOP already scans, so it writes no register. Three ends draw it:
 - a fatal error (`k_sys_fatal_error_handler`): Zephyr's register lines are in
   the ring; the image halts and the record stays until WDT0's reset.
 
+At the last two the sample's own last lines (`board_last_lines()`,
+`yakogl_board.h`) are printed first, so they are on the screen: glmark2's
+list of the entries so far (`driver/docs/glmark2.md`, "The list at the
+end").
+
 The window is 1024 pixels wide at most, so a row holds 128 characters of the
 8x16 font and a longer line continues on the next row.
 

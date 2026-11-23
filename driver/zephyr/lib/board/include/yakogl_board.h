@@ -277,6 +277,17 @@ void board_watchdog_feed(void);
 uint32_t board_gpu_resets(void);
 
 /*
+ * The sample's own last lines for a run that ends without board_finish():
+ * optional, a sample that keeps such lines defines it (common/board.c has an
+ * empty weak one). A board whose result is read from its record screen calls
+ * it right before it draws the screen for a fatal error or for a watchdog
+ * that stopped (the T6), so the lines are on the screen. Context: any, with
+ * interrupts locked: print with printk from memory kept ready, allocate and
+ * lock nothing.
+ */
+void board_last_lines(void);
+
+/*
  * End the run. Every path of a sample ends here, failures included; main
  * only. The same steps on every board:
  *  1. The verdict: rc == 0 is a pass, unless board_gpu_resets() != 0 (a
