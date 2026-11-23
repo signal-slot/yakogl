@@ -63,6 +63,18 @@ if(DEQP_MODULE STREQUAL "gles3" AND CONFIG_YAKOGL_REPORT_ES2)
   # DEQP_REPORT_ES2=n drops the select only; the library's default is y
   message(FATAL_ERROR "deqp: DEQP_MODULE=gles3 needs CONFIG_YAKOGL_REPORT_ES2=n too (the context must report ES 3.0)")
 endif()
+# The PowerVR hardware instance divisors (the tools/cts image arm
+# DEQP_PVR_INSTANCE_DIVISOR, README section 2e): CONFIG_YAKOGL_PVR_INSTANCE_
+# DIVISOR depends on YAKOGL_GPU_POWERVR, and Kconfig drops a
+# -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y for another board with no more than a
+# build-log warning, leaving a software-path image under the hardware arm's
+# name. After Zephyr's Kconfig step CLI_CONFIG_... holds what the command line
+# asked for and CONFIG_... what Kconfig kept; refuse the mismatch here, before
+# the build. check-deqp-images.py --pvr-instance-divisor holds the resolved
+# .config to the same rule.
+if(CLI_CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR MATCHES "^(y|1)$" AND NOT CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR)
+  message(FATAL_ERROR "deqp: -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y needs the PowerVR board (zephyr/Kconfig: depends on YAKOGL_GPU_POWERVR)")
+endif()
 string(SUBSTRING "${DEQP_MODULE}" 4 1 _deqp_ver)
 
 # the test data, embedded

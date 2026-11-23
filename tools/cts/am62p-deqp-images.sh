@@ -64,6 +64,14 @@
 #                 reports ES 3.0)
 #   DEQP_PVR_NATIVE_3D  optional, 0 or 1: -DCONFIG_DEQP_PVR_NATIVE_3D=<v> for every
 #                 image (unset: the Kconfig default -1, the library's default)
+#   DEQP_PVR_INSTANCE_DIVISOR  optional, 0 or 1: -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y/n
+#                 for every image (unset: the Kconfig default n): the PowerVR
+#                 hardware instance divisors (P3, docs/notes/instanceid-per-draw.md,
+#                 row "P3 (full path)"; the crate's pvr-instance-divisor feature).
+#                 An image built with 1 is checked to keep the symbol in its
+#                 resolved .config (check-deqp-images.py --pvr-instance-divisor):
+#                 a dropped Kconfig dependency cannot leave a software-path
+#                 image under the hardware arm's name.
 #   driver/src/fw/pvr_fw_blob.h in this checkout: generated from the board's
 #                 firmware by driver/tools/mkfwblob.sh, never committed
 set -euo pipefail
@@ -144,6 +152,13 @@ case "${DEQP_PVR_NATIVE_3D:-}" in
     0 | 1) MODARGS="$MODARGS -DCONFIG_DEQP_PVR_NATIVE_3D=$DEQP_PVR_NATIVE_3D" ;;
     *) die "DEQP_PVR_NATIVE_3D must be 0 or 1, not '$DEQP_PVR_NATIVE_3D'" ;;
 esac
+IDIV=
+case "${DEQP_PVR_INSTANCE_DIVISOR:-}" in
+    '') ;;
+    0) MODARGS="$MODARGS -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=n" ;;
+    1) MODARGS="$MODARGS -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y"; IDIV=y ;;
+    *) die "DEQP_PVR_INSTANCE_DIVISOR must be 0 or 1, not '$DEQP_PVR_INSTANCE_DIVISOR'" ;;
+esac
 [ -f "$DEQP_WORK/build/modules/$DEQP_MODULE/libdeqp-$DEQP_MODULE-package.a" ] || die "$DEQP_WORK has no $DEQP_MODULE stage 1 (cts-build-zephyr.sh MODULE=$DEQP_MODULE)"
 
 unset DEQP_GL_CONFIG_NAME
@@ -160,8 +175,8 @@ rows "$FILTERS" | while IFS=$'\t' read -r n lab labelled conf filt; do
     # precompiled tier, the render config the row asks for); one that is not is not built
     if [ "$rc" = 0 ]; then
         python3 "$HERE/check-deqp-images.py" --config "$B/zephyr/.config" ${conf:+--ms4} \
-            $([ "$DEQP_MODULE" = gles3 ] && echo --gles3) >> "$B.log" 2>&1 \
-            || rc=not-conformance
+            $([ "$DEQP_MODULE" = gles3 ] && echo --gles3) ${IDIV:+--pvr-instance-divisor} \
+            >> "$B.log" 2>&1 || rc=not-conformance
     fi
     # no zephyr.bin (a failed build) makes sha256sum fail; pipefail with set -e would end the sweep
     bin=$(sha256sum "$B/zephyr/zephyr.bin" 2>/dev/null | cut -c1-16) || bin=
