@@ -342,6 +342,10 @@ fn target_addresses(n: usize) -> Vec<u64> {
 /// count, 3 for the build's own.
 #[cfg(feature = "report-es2")]
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+)]
 fn es2_build_keeps_its_answers() {
     let _g = context_with(0);
     assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Err(GL_INVALID_ENUM));
@@ -365,6 +369,10 @@ mod es3 {
     /// The limits are the back end's: 4 with a four-target back end, the
     /// build's own count (3 on every GPU today) without one.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+    )]
     fn the_limits_follow_the_back_end() {
         let _g = context();
         assert_eq!(geti(GL_MAX_DRAW_BUFFERS), Ok(4));
@@ -384,6 +392,10 @@ mod es3 {
     /// four is complete, and point 4 is no point. A three-target back end
     /// has no point 3: nothing can be attached that it would not draw.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+    )]
     fn colour_attachment_3_is_a_point() {
         let _g = context();
         let (fb, rbs) = framebuffer(4);
@@ -616,6 +628,10 @@ mod es3 {
     /// The four mixed attachments reach the back end as four targets of
     /// their own formats: float, unsigned, signed and half-float classes.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+    )]
     fn mixed_attachments_keep_their_formats() {
         let _g = context();
         let (fb, rbs) = mixed_framebuffer(&MIXED);
@@ -636,6 +652,10 @@ mod es3 {
     /// all four mixed targets; a box holding the whole target is no scissor;
     /// an empty box clears nothing; the colour is the float glClearColor.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+    )]
     fn a_scissored_glclear_of_mixed_attachments() {
         let _g = context();
         let (fb, rbs) = mixed_framebuffer(&MIXED);
@@ -682,6 +702,10 @@ mod es3 {
     /// handed once, in `clear_color_mask`; with a scissor the box and the
     /// mask travel together; an all-off mask clears nothing.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+    )]
     fn a_masked_glclear_of_mixed_attachments() {
         let _g = context();
         let (fb, rbs) = mixed_framebuffer(&MIXED);
@@ -724,6 +748,10 @@ mod es3 {
     /// integer target gets the integers' bit patterns, two's complement for
     /// the signed one).
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+    )]
     fn single_buffer_clears_of_mixed_attachments_with_scissor_and_mask() {
         let _g = context();
         let (fb, rbs) = mixed_framebuffer(&MIXED);

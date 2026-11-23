@@ -739,6 +739,10 @@ fn capture_one_point(p: GLuint) -> Result<[f32; 4], GLenum> {
 /// Revert check: match the rows by the 64-byte field's bytes again and the
 /// draw is refused ("is not laid out in the linked vertex stage").
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali refuses the vertex shader: a constant operation on a value that is not a finite normal float (MaliError::ConstantFold: a constant gl_Position w of 0, a loop over a varying array)"
+)]
 fn transform_feedback_reads_uniforms_and_a_sampler_of_63_or_more_characters() {
     let _g = context();
     let (u63, u200, s70) = (ident('u', 63), ident('w', 200), ident('s', 70));

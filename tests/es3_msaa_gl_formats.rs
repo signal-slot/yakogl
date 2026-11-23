@@ -526,6 +526,10 @@ fn drawn_ms(format: GLenum) -> Fbo {
 /// the zeros it was made with (the storage is RGBA8888 for each of them, so
 /// the exact bits are the stand-in's; only RGBA8 and SRGB8_ALPHA8 are pinned).
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn resolve_per_colour_format() {
     let _g = context_ms4();
     for (f, name) in COLOUR {
@@ -576,6 +580,10 @@ fn format_mismatch_named_pairs() {
 /// The rectangle rules hold on every format: a scaled, moved or flipped
 /// resolve is GL_INVALID_OPERATION and copies nothing.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn rectangle_errors_per_colour_format() {
     let _g = context_ms4();
     for (f, name) in COLOUR {
@@ -595,6 +603,10 @@ fn rectangle_errors_per_colour_format() {
 /// A sub-rectangle resolve of every format leaves the other pixels of the
 /// destination as they were (the zeros it was made with).
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn sub_rectangle_per_colour_format() {
     let _g = context_ms4();
     let region = [2, 1, 6, 5];

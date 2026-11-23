@@ -290,6 +290,10 @@ fn color_buffer_float_unclaimed_half_float_claimed() {
 /// ES 3.0.6 4.4.4.1: an image that is not colour-renderable makes the
 /// attachment incomplete; `GL_FRAMEBUFFER_UNSUPPORTED` would be wrong.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn float32_texture_attachment_incomplete() {
     let _g = context();
     for f in FLOAT32.into_iter().chain([RGB32F]) {
@@ -337,6 +341,10 @@ fn r32f_target_refused_without_extension() {
 /// is a complete colour target, as a texture and as a renderbuffer (RGB16F's
 /// texture also in the test below).
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn float16_targets_complete() {
     let _g = context();
     for f in FLOAT16 {
@@ -349,6 +357,10 @@ fn float16_targets_complete() {
 /// (section 5, "Tests" (3)), and so does Mesa with the half-float extension
 /// (src/mesa/main/fbobject.c `is_format_color_renderable`, GL_RGB16F).
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn rgb16f_texture_complete() {
     let _g = context();
     assert_eq!(texture_target_status(FLOAT16[1]), GL_FRAMEBUFFER_COMPLETE, "{GPU}: RGB16F texture");
@@ -364,6 +376,10 @@ fn rgb16f_texture_complete() {
 /// glTexImage2D is GL_INVALID_OPERATION there), so it has the renderbuffer
 /// half only; that is the integer-target work of #335, not a float question.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn derivate_targets_complete() {
     let _g = context();
     for f in

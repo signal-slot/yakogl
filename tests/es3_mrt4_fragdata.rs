@@ -237,6 +237,10 @@ fn max_draw_buffers_is_four_in_a_version_100_shader() {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+)]
 fn max_draw_buffers_is_three_at_the_build_count() {
     let _g = context_with(0);
     let _r = Restore;

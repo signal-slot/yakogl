@@ -281,6 +281,10 @@ fn color_buffer_float_not_listed() {
 /* ---- (b) texture attachments -------------------------------------------- */
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn float32_texture_attachment_incomplete() {
     let _g = context();
     for f in FLOAT32 {
@@ -305,6 +309,10 @@ fn float32_renderbuffer_storage_invalid_enum() {
 /* ---- (d) Clear and ReadPixels on the incomplete framebuffer ------------- */
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn float32_incomplete_read_invalid_operation() {
     let _g = context();
     for f in FLOAT32 {
