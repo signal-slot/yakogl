@@ -211,20 +211,52 @@ side, under ssh before the Zephyr run, supplies the references
 3. **Which pixel valve feeds HDMI0, and does the firmware run it at two
    pixels per clock?** Linux reads 1920 active pixels, the firmware's valve
    960 (`dd:559-562`). Matters only for option (ii) and for any plane resize.
+   Answered 2026-11-22 by `rpi5_dispregs` (read-only, tryboot, image built
+   from `a9ca11e1`; record in `tools/probes/rpi_5/rpi5_dispregs/README.md`,
+   "On the board"). Both valves run: pv0 `clk_select 0 pixel_rep 0`, active
+   960x1080, HVS channel 0 FWIDTH 1919 and 1079 lines; pv1 active 320x480,
+   channel 1 FWIDTH 639 and 479 lines. The repo's mapping is pv0 to HDMI0
+   and pv1 to HDMI1, and with Q6's HDMI0 the firmware's picture comes from
+   pv0 and channel 0. The valve's active width (960) is half the channel's
+   1920 pixels, which is consistent with two pixels per clock, but the
+   probe's verdict is `two pixels per clock: unknown`: no register read
+   names it. Not needed for stage 1 or 2, which program neither valve.
 4. **Can channel 0's list pointer be changed under a running scanout without
    a visible glitch, and is the vblank the safe point?** Not read anywhere
    (`facts:354-383` shows Linux's enable path, not a hot swap). Stage 2's gate. The probe now prints `heade=` in its snapshot line.
 5. **Do the disp (16) and HSM (13) clocks matter to HVS register reads?** The
    HSM rate was never answered, so HDMI registers were skipped
    (`dd:541-543`); the HVS ones were read with the disp clock unknown
-   (`dd:456-458`).
+   (`dd:456-458`). Partly answered 2026-11-22 by `rpi5_dispregs` (image
+   built from `a9ca11e1`, same README): `q5: hsm on measured 648006592, bvb
+   off measured 324003296, disp off measured 648009856`. Per tag: core (4)
+   state on, rate 500000000, measured 910010752; hsm (13) state on, rate 0,
+   measured 648006592; bvb (14) state off, rate 0, measured 324003296; disp
+   (16) state off, rate 0, measured 648009856 (max 910000000, 648000000,
+   324000000, 648000000). GET_CLOCK_RATE answers 0 for hsm, bvb and disp
+   while the measured rates sit at the max, so the rate tag does not tell
+   the HDMI path's clocks; the HSM is on and measured, which is why the
+   HDMI registers could be read (`hdmi read`). The probe's HVS and pixel
+   valve reads came back live with disp reporting off, so the state tag is
+   not a gate for them. Whether a full mode set must enable disp or bvb
+   itself stays an option (ii) question.
 6. **HDMI0 or HDMI1, and a board without a sink.** The firmware drove HDMI0
    with hotplug seen on one port only (`dd:517-530`); with no sink or the other
    port the picture of the firmware may not exist, and option (ii) becomes
    necessary. On 2026-11-21 the boot loader again saw hotplug on HDMI0 and
    none on HDMI1, and logged `FB0 ... 1920x1080 stride 3840 base 0x3f800000`.
    That is the plane `rpi5_scanout16` adopted. The case with no sink, or a sink
-   on the other port, is still open.
+   on the other port, is still open. The registers answered the with-sink
+   half on 2026-11-22 (`rpi5_dispregs`, image built from `a9ca11e1`, same
+   README): `q6: displays: 1, settings: answered, hdmi: hdmi0 hotplug 1
+   hd_vid_ctl enable 1, hdmi1 hotplug 0 hd_vid_ctl enable 1; the firmware
+   drives HDMI0`. GET_DISPLAY_SETTINGS answered 1920x1080 at 16 bpp, pitch
+   3840, so the firmware leaves a picture without any mode set by Zephyr,
+   and the Decision stands. HDMI1 reads HD_VID_CTL enabled (0x98010000
+   against HDMI0's 0x80010000) with no hotplug, so that bit alone does not
+   say which port has a sink; hotplug does. A boot with no sink or with the
+   sink on HDMI1 was not run; the Decision's fallback (point 5) stays
+   unscheduled.
 7. **Is a 32 MiB 3840x2160 buffer ever wanted?** The board layer must take the
    granted size from the answer and refuse by name a window that does not fit
    the image's `sram0` (`dd:442-451`).
