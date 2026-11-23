@@ -124,7 +124,9 @@ driver/samples/zephyr/glmark2/
                      the default list)
   prj.conf           C++ runtime, POSIX getopt, online shader compiler, 1 MiB stack,
                      96 MiB heap, watchdog lifetime 900 s
-  boards/            per board, as slint/boards (all three boards)
+  boards/            per board, as slint/boards (all three boards); the
+                     NanoPC-T6's file adds to its board layer's app.conf,
+                     which CMakeLists.txt takes as the examples do
   patches/libmatrix-util-zephyr.patch
   include/           dlfcn.h, getopt.h, unistd.h, glmark2_platform.h
   src/main.cpp       NativeStateBoard, the run, the outcome counts, board_finish
@@ -252,6 +254,7 @@ scene's set-up, which is not timed (section 1, the score).
 | Verdin AM62P | 12,755,176 B (sha256 `0ec6383ca936f803...` at e0eacc3e) | 156,311,552 B (incl. the 96 MiB heap, the 8100 KiB window buffer, the 1 MiB stack) | built, links |
 | Verdin iMX8M Plus | 12,256,088 B (sha256 `e8f4aa37562c67b7...` at e0eacc3e) | 156,192 KiB of the 256 MiB RAM region | built, links (no UART: the GLMARK2 record carries the numbers) |
 | Raspberry Pi 4 | 12,325,040 B (sha256 `8f72f7f52a98182c...` at e0eacc3e) | 194,192 KiB of the 224 MiB region at the 48 MiB carve-out; the carve-out is now 96 MiB (refract's 56.2 MB peak, terrain's NPOT chains) and the region 288 MiB (`boards/rpi_4b.overlay`, ends at 0x12200000, below the firmware's 0x3c100000), not rebuilt since; kernel VM 512 MiB as v3d_deqp | built, links; `board.sh --dry-run pi4 run` rc 0 |
+| NanoPC-T6 | 14,968,480 B (the two-scene image `-b build -b shading`, sha256 `a11fab031a882409...`, build v0.1.0-3108-g24e03e6ea) | 261,111,808 B of the 256 MiB kexec window (incl. the 96 MiB heap and the 96 MiB carve-out, `boards/nanopc_t6.conf`) | build and shading ran on the HDMI screen by crash kexec on 2026-11-23, read from the record screen (no UART wired): `tools/cts/RESULTS.md`. The on-screen score is the display's flip rule, about 120 (`driver/docs/nanopc-t6-display.md`, section 4). The default list has not run |
 
 The whole set fits each board's RAM. The Pi 4's ~12 MB of free space was
 for an image that also carries the cluster demo; this image does not, and
