@@ -42,7 +42,7 @@ only streams of equal divisor. A chunk of a split draw starts at its first
 instance through P1's modifier (`PVR_PDS_ID_BASE_TO_STREAMS` = 0x100, set
 when a stream is per instance), never a base move. A divisor above 0xffff
 still takes the GL core's per-instance split. Pieces: the generator and its C
-test `0fbc924d`, the feature declaration `02e6fdfb`, gl_test case 243
+test `0fbc924d`, the feature declaration `3ef0bbef`, gl_test case 243
 `divmix` (`driver/tools/pvrlab/gl_test_es3_divmix.inc`, wired in `8b6b05ff`,
 built not run). Host results, HOST-ONLY, in sections 3 and 5. Not measured on
 a board.
