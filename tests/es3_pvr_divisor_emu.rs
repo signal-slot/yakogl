@@ -20,11 +20,6 @@
 //! only). tests/es3_pvr_divisor_split.rs and tests/es3_instanced_divisor_cap.rs
 //! hold the other split cases. The harness is copied from
 //! tests/es3_pvr_divisor_edges.rs. What the GPU draws is the AM62P board check.
-//! (B + i) / divisor from the stream's address and stride, which must equal
-//! the element floor(instance / divisor) of the array the test filled. The
-//! harness is copied from tests/es3_pvr_divisor.rs (the real PowerVR table
-//! with its `draw` recorded, stand-ins for the C command generators). What
-//! the GPU draws is the AM62P board check.
 #![cfg(all(
     feature = "host-test",
     feature = "gpu-powervr",
