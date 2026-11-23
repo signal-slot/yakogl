@@ -690,6 +690,18 @@ def pi4_self_test(check):
         check("pi4: a re-split part run beside its parent is refused", False, "(no error)")
     except NotpassError as e:
         check("pi4: a re-split part run beside its parent is refused", "B1a" in str(e), "(%s)" % e)
+    cd = os.path.join(d, "cut")
+    ctext, crun, cstopped = pi4_rows([os.path.join(cd, "s1"), os.path.join(cd, "s2")],
+                                     read_mustpass(os.path.join(cd, "mustpass.txt")),
+                                     read_tree(os.path.join(cd, "tree.txt")))
+    with open(os.path.join(cd, "expected.tsv"), encoding="utf-8") as f:
+        cwant = f.read()
+    check("pi4: a cut label's moved cases are counted once, under the new label, not as NoResult of the old console",
+          ctext == cwant and ":NoResult " not in ctext and "B1.console.txt:Fail dEQP-GLES3.b.never" not in ctext,
+          "(%s)" % ctext)
+    check("pi4: after a cut the images-run header counts both labels and marks none",
+          crun == ["A1", "B1", "B1x"] and cstopped == [] and "# images run (3 of 3): A1 B1 B1x\n" in ctext,
+          "(%s, %s)" % (crun, cstopped))
 
 
 def splice_self_test(check):
