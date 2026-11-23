@@ -3240,8 +3240,21 @@ if command -v cc >/dev/null 2>&1; then
     printf '%s\n' "$out" | tail -4
     printf '%s\n' "$out" | grep -q '^Ran 8 tests in ' || { echo "route_cells: not the 8 planned tests"; return 1; }
   }
+  # nir_refs.py (tools/mali/nir_refs.sh: Mesa's NIR per reference pair at
+  # two points, cut from the shim's prints and normalised) on fbload_fbload's
+  # streams against copies normalised by hand (testdata/nir_refs), the
+  # committed fbload_fbload.nir.sha, and small dumps and streams; 19 planned
+  # tests.
+  nir_refs_selftest() {
+    local out
+    out=$(PYTHONDONTWRITEBYTECODE=1 python3 -I tools/mali/test_nir_refs.py 2>&1) ||
+      { printf '%s\n' "$out" | tail -30; return 1; }
+    printf '%s\n' "$out" | tail -4
+    printf '%s\n' "$out" | grep -q '^Ran 19 tests in ' || { echo "nir_refs: not the 19 planned tests"; return 1; }
+  }
   step "run     mali pan_ref_diff and ref_cases self-test (no Mesa tree)" pan_ref_diff_selftest
   step "run     mali route_cells self-test" route_cells_selftest
+  step "run     mali nir_refs self-test" nir_refs_selftest
   step "run     mali sweep_passsets self-test" sweep_passsets_selftest
   step "run     mali valhall_src_info self-test" valhall_src_info_selftest
   if [ -n "${MESA_PAN_TREE:-}" ]; then

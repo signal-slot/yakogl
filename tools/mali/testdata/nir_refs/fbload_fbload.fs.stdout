@@ -1,0 +1,387 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+glsl_to_nir
+shader: MESA_SHADER_FRAGMENT
+max_subgroup_size: 128
+min_subgroup_size: 1
+decl_var system INTERP_MODE_NONE none highp vec4 gl_FragCoord (SYSTEM_VALUE_FRAG_COORD)
+decl_var uniform INTERP_MODE_NONE none highp sampler2D u_fb (~0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec2 u_flip (~0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 o_color (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_function gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd ()
+
+impl gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+decl_function main () (entrypoint)
+
+impl main {
+    decl_var  INTERP_MODE_NONE none highp float y
+    decl_var  INTERP_MODE_NONE none highp float assignment_tmp
+    decl_var  INTERP_MODE_NONE none highp ivec2 vec_ctor
+    decl_var  INTERP_MODE_NONE none highp vec4 texelFetch_retval
+    decl_var  INTERP_MODE_NONE none int const_temp = { 0x00000000 }
+    block b0:   // preds:
+    32     %0 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %1 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %2 = @load_deref (%1) (access=none)
+    32     %3 = mov %2.x
+    32     %4 = f2i32 %3
+    32x2   %5 = mov %4.xx
+                @store_deref (%0, %5) (wrmask=x, access=none)
+    32     %6 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %7 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %8 = @load_deref (%7) (access=none)
+    32     %9 = mov %8.y
+    32    %10 = deref_var &u_flip (uniform highp vec2)
+    32x2  %11 = @load_deref (%10) (access=none)
+    32    %12 = mov %11.x
+    32    %13 = fmul %9, %12
+    32    %14 = deref_var &u_flip (uniform highp vec2)
+    32x2  %15 = @load_deref (%14) (access=none)
+    32    %16 = mov %15.y
+    32    %17 = fadd %13, %16
+    32    %18 = f2i32 %17
+    32x2  %19 = mov %18.xx
+                @store_deref (%6, %19) (wrmask=y, access=none)
+    32    %20 = deref_var &o_color (shader_out highp vec4)
+    32    %21 = deref_var &u_fb (uniform highp sampler2D)
+    32    %22 = @deref_texture_src (%21)
+    32    %23 = deref_var &vec_ctor (function_temp highp ivec2)
+    32x2  %24 = @load_deref (%23) (access=none)
+    32    %25 = deref_var &const_temp (function_temp int)
+    32    %26 = @load_deref (%25) (access=none)
+    32x4  %27 = (float32)txf %22 (sampler_deref_intrinsic), %22 (texture_deref_intrinsic), %24 (coord), %26 (lod), 2D
+                @store_deref (%20, %27) (wrmask=xyzw, access=none)
+                // succs: b1
+    block b1:
+}
+
+nir_lower_variable_initializers
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x2fc6102d, 0x1b56c51b, 0xf281bffa, 0xcd496f41, 0x28424ab3, 0xc7a82ebb, 0xfb364a68, 0x1820dc57}
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+decl_var system INTERP_MODE_NONE none highp vec4 gl_FragCoord (SYSTEM_VALUE_FRAG_COORD)
+decl_var uniform INTERP_MODE_NONE none highp sampler2D u_fb (~0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec2 u_flip (~0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 o_color (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_function gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd ()
+
+impl gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+decl_function main () (entrypoint)
+
+impl main {
+    decl_var  INTERP_MODE_NONE none highp float y
+    decl_var  INTERP_MODE_NONE none highp float assignment_tmp
+    decl_var  INTERP_MODE_NONE none highp ivec2 vec_ctor
+    decl_var  INTERP_MODE_NONE none highp vec4 texelFetch_retval
+    decl_var  INTERP_MODE_NONE none int const_temp
+    block b0:   // preds:
+    32     %0 = deref_var &const_temp (function_temp int)
+    32     %1 = load_const (0x00000000)
+                @store_deref (%0, %1 (0x0)) (wrmask=x, access=none)
+                call gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd 
+    32     %2 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %3 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %4 = @load_deref (%3) (access=none)
+    32     %5 = mov %4.x
+    32     %6 = f2i32 %5
+    32x2   %7 = mov %6.xx
+                @store_deref (%2, %7) (wrmask=x, access=none)
+    32     %8 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %9 = deref_var &gl_FragCoord (system highp vec4)
+    32x4  %10 = @load_deref (%9) (access=none)
+    32    %11 = mov %10.y
+    32    %12 = deref_var &u_flip (uniform highp vec2)
+    32x2  %13 = @load_deref (%12) (access=none)
+    32    %14 = mov %13.x
+    32    %15 = fmul %11, %14
+    32    %16 = deref_var &u_flip (uniform highp vec2)
+    32x2  %17 = @load_deref (%16) (access=none)
+    32    %18 = mov %17.y
+    32    %19 = fadd %15, %18
+    32    %20 = f2i32 %19
+    32x2  %21 = mov %20.xx
+                @store_deref (%8, %21) (wrmask=y, access=none)
+    32    %22 = deref_var &o_color (shader_out highp vec4)
+    32    %23 = deref_var &u_fb (uniform highp sampler2D)
+    32    %24 = @deref_texture_src (%23)
+    32    %25 = deref_var &vec_ctor (function_temp highp ivec2)
+    32x2  %26 = @load_deref (%25) (access=none)
+    32    %27 = deref_var &const_temp (function_temp int)
+    32    %28 = @load_deref (%27) (access=none)
+    32x4  %29 = (float32)txf %24 (sampler_deref_intrinsic), %24 (texture_deref_intrinsic), %26 (coord), %28 (lod), 2D
+                @store_deref (%22, %29) (wrmask=xyzw, access=none)
+                // succs: b1
+    block b1:
+}
+
+nir_lower_returns
+nir_inline_functions
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x2fc6102d, 0x1b56c51b, 0xf281bffa, 0xcd496f41, 0x28424ab3, 0xc7a82ebb, 0xfb364a68, 0x1820dc57}
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+decl_var system INTERP_MODE_NONE none highp vec4 gl_FragCoord (SYSTEM_VALUE_FRAG_COORD)
+decl_var uniform INTERP_MODE_NONE none highp sampler2D u_fb (~0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec2 u_flip (~0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 o_color (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_function gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd ()
+
+impl gl_mesa_tmp_2d10c62f1bc5561bfabf81f2416f49cd {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+decl_function main () (entrypoint)
+
+impl main {
+    decl_var  INTERP_MODE_NONE none highp float y
+    decl_var  INTERP_MODE_NONE none highp float assignment_tmp
+    decl_var  INTERP_MODE_NONE none highp ivec2 vec_ctor
+    decl_var  INTERP_MODE_NONE none highp vec4 texelFetch_retval
+    decl_var  INTERP_MODE_NONE none int const_temp
+    block b0:   // preds:
+    32     %0 = deref_var &const_temp (function_temp int)
+    32     %1 = load_const (0x00000000)
+                @store_deref (%0, %1 (0x0)) (wrmask=x, access=none)
+    32     %2 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %3 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %4 = @load_deref (%3) (access=none)
+    32     %5 = mov %4.x
+    32     %6 = f2i32 %5
+    32x2   %7 = mov %6.xx
+                @store_deref (%2, %7) (wrmask=x, access=none)
+    32     %8 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %9 = deref_var &gl_FragCoord (system highp vec4)
+    32x4  %10 = @load_deref (%9) (access=none)
+    32    %11 = mov %10.y
+    32    %12 = deref_var &u_flip (uniform highp vec2)
+    32x2  %13 = @load_deref (%12) (access=none)
+    32    %14 = mov %13.x
+    32    %15 = fmul %11, %14
+    32    %16 = deref_var &u_flip (uniform highp vec2)
+    32x2  %17 = @load_deref (%16) (access=none)
+    32    %18 = mov %17.y
+    32    %19 = fadd %15, %18
+    32    %20 = f2i32 %19
+    32x2  %21 = mov %20.xx
+                @store_deref (%8, %21) (wrmask=y, access=none)
+    32    %22 = deref_var &o_color (shader_out highp vec4)
+    32    %23 = deref_var &u_fb (uniform highp sampler2D)
+    32    %24 = @deref_texture_src (%23)
+    32    %25 = deref_var &vec_ctor (function_temp highp ivec2)
+    32x2  %26 = @load_deref (%25) (access=none)
+    32    %27 = deref_var &const_temp (function_temp int)
+    32    %28 = @load_deref (%27) (access=none)
+    32x4  %29 = (float32)txf %24 (sampler_deref_intrinsic), %24 (texture_deref_intrinsic), %26 (coord), %28 (lod), 2D
+                @store_deref (%22, %29) (wrmask=xyzw, access=none)
+                // succs: b1
+    block b1:
+}
+
+nir_opt_deref
+nir_split_var_copies
+gl_nir_lower_blend_equation_advanced
+nir_lower_global_vars_to_local
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x2fc6102d, 0x1b56c51b, 0xf281bffa, 0xcd496f41, 0x28424ab3, 0xc7a82ebb, 0xfb364a68, 0x1820dc57}
+prev_stage: MESA_SHADER_VERTEX
+num_textures: 1
+outputs_written: 4
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_float: 0x20
+bit_sizes_int: 0x20
+known_interpolation_qualifiers: true
+decl_var system INTERP_MODE_NONE none highp vec4 gl_FragCoord (SYSTEM_VALUE_FRAG_COORD)
+decl_var uniform INTERP_MODE_NONE none highp sampler2D u_fb (~0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec2 u_flip (~0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 o_color (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    decl_var  INTERP_MODE_NONE none highp float y
+    decl_var  INTERP_MODE_NONE none highp float assignment_tmp
+    decl_var  INTERP_MODE_NONE none highp ivec2 vec_ctor
+    decl_var  INTERP_MODE_NONE none highp vec4 texelFetch_retval
+    decl_var  INTERP_MODE_NONE none int const_temp
+    decl_var  INTERP_MODE_NONE none bool discarded
+    block b0:   // preds:
+    32     %0 = deref_var &discarded (function_temp bool)
+    1      %1 = load_const (false)
+                @store_deref (%0, %1 (false)) (wrmask=x, access=none)
+    32     %2 = deref_var &const_temp (function_temp int)
+    32     %3 = load_const (0x00000000)
+                @store_deref (%2, %3 (0x0)) (wrmask=x, access=none)
+    32     %4 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %5 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %6 = @load_deref (%5) (access=none)
+    32     %7 = mov %6.x
+    32     %8 = f2i32 %7
+    32x2   %9 = mov %8.xx
+                @store_deref (%4, %9) (wrmask=x, access=none)
+    32    %10 = deref_var &vec_ctor (function_temp highp ivec2)
+    32    %11 = deref_var &gl_FragCoord (system highp vec4)
+    32x4  %12 = @load_deref (%11) (access=none)
+    32    %13 = mov %12.y
+    32    %14 = deref_var &u_flip (uniform highp vec2)
+    32x2  %15 = @load_deref (%14) (access=none)
+    32    %16 = mov %15.x
+    32    %17 = fmul %13, %16
+    32    %18 = deref_var &u_flip (uniform highp vec2)
+    32x2  %19 = @load_deref (%18) (access=none)
+    32    %20 = mov %19.y
+    32    %21 = fadd %17, %20
+    32    %22 = f2i32 %21
+    32x2  %23 = mov %22.xx
+                @store_deref (%10, %23) (wrmask=y, access=none)
+    32    %24 = deref_var &o_color (shader_out highp vec4)
+    32    %25 = deref_var &u_fb (uniform highp sampler2D)
+    32    %26 = deref_var &vec_ctor (function_temp highp ivec2)
+    32x2  %27 = @load_deref (%26) (access=none)
+    32    %28 = deref_var &const_temp (function_temp int)
+    32    %29 = @load_deref (%28) (access=none)
+    32x4  %30 = (float32)txf %25 (texture_deref), %25 (sampler_deref), %27 (coord), %29 (lod), 2D
+                @store_deref (%24, %30) (wrmask=xyzw, access=none)
+                // succs: b1
+    block b1:
+}
+
+nir_lower_var_copies
+nir_opt_barrier_modes
+gl_nir_lower_images
+nir_opt_constant_folding
+nir_opt_access
+nir_lower_clip_cull_distance_to_vec4s
+nir_lower_tess_level_array_vars_to_vec
+nir_merge_clip_cull_distance_vars
+nir_lower_vars_to_ssa
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x2fc6102d, 0x1b56c51b, 0xf281bffa, 0xcd496f41, 0x28424ab3, 0xc7a82ebb, 0xfb364a68, 0x1820dc57}
+prev_stage: MESA_SHADER_VERTEX
+num_textures: 1
+outputs_written: 4
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_float: 0x20
+bit_sizes_int: 0x20
+known_interpolation_qualifiers: true
+decl_var system INTERP_MODE_NONE none highp vec4 gl_FragCoord (SYSTEM_VALUE_FRAG_COORD)
+decl_var uniform INTERP_MODE_NONE none highp sampler2D u_fb (~0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec2 u_flip (~0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 o_color (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    decl_var  INTERP_MODE_NONE none highp float y
+    decl_var  INTERP_MODE_NONE none highp float assignment_tmp
+    decl_var  INTERP_MODE_NONE none highp ivec2 vec_ctor
+    decl_var  INTERP_MODE_NONE none highp vec4 texelFetch_retval
+    decl_var  INTERP_MODE_NONE none int const_temp
+    decl_var  INTERP_MODE_NONE none bool discarded
+    block b0:   // preds:
+    32x2   %0 = undefined
+    32     %1 = deref_var &discarded (function_temp bool)
+    1      %2 = load_const (false)
+    32     %3 = deref_var &const_temp (function_temp int)
+    32     %4 = load_const (0x00000000)
+    32     %5 = deref_var &vec_ctor (function_temp highp ivec2)
+    32     %6 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %7 = @load_deref (%6) (access=none)
+    32     %8 = mov %7.x
+    32     %9 = f2i32 %8
+    32x2  %10 = mov %9.xx
+    32x2  %11 = vec2 %10.x, %0.y
+    32    %12 = deref_var &vec_ctor (function_temp highp ivec2)
+    32    %13 = deref_var &gl_FragCoord (system highp vec4)
+    32x4  %14 = @load_deref (%13) (access=none)
+    32    %15 = mov %14.y
+    32    %16 = deref_var &u_flip (uniform highp vec2)
+    32x2  %17 = @load_deref (%16) (access=none)
+    32    %18 = mov %17.x
+    32    %19 = fmul %15, %18
+    32    %20 = deref_var &u_flip (uniform highp vec2)
+    32x2  %21 = @load_deref (%20) (access=none)
+    32    %22 = mov %21.y
+    32    %23 = fadd %19, %22
+    32    %24 = f2i32 %23
+    32x2  %25 = mov %24.xx
+    32x2  %26 = vec2 %11.x, %25.y
+    32    %27 = deref_var &o_color (shader_out highp vec4)
+    32    %28 = deref_var &u_fb (uniform highp sampler2D)
+    32    %29 = deref_var &vec_ctor (function_temp highp ivec2)
+    32x2  %30 = mov %26
+    32    %31 = deref_var &const_temp (function_temp int)
+    32    %32 = mov %4 (0x0)
+    32x4  %33 = (float32)txf %28 (texture_deref), %28 (sampler_deref), %30 (coord), %32 (lod), 2D
+                @store_deref (%27, %33) (wrmask=xyzw, access=none)
+                // succs: b1
+    block b1:
+}
+
+nir_remove_dead_variables
+shader: MESA_SHADER_FRAGMENT
+source_blake3: {0x2fc6102d, 0x1b56c51b, 0xf281bffa, 0xcd496f41, 0x28424ab3, 0xc7a82ebb, 0xfb364a68, 0x1820dc57}
+prev_stage: MESA_SHADER_VERTEX
+num_textures: 1
+outputs_written: 4
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+bit_sizes_float: 0x20
+bit_sizes_int: 0x20
+known_interpolation_qualifiers: true
+decl_var system INTERP_MODE_NONE none highp vec4 gl_FragCoord (SYSTEM_VALUE_FRAG_COORD)
+decl_var uniform INTERP_MODE_NONE none highp sampler2D u_fb (~0, 0, 0)
+decl_var uniform INTERP_MODE_NONE none highp vec2 u_flip (~0, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 o_color (FRAG_RESULT_DATA0.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:   // preds:
+    32x2   %0 = undefined
+    1      %1 = load_const (false)
+    32     %2 = load_const (0x00000000)
+    32     %3 = deref_var &gl_FragCoord (system highp vec4)
+    32x4   %4 = @load_deref (%3) (access=none)
+    32     %5 = mov %4.x
+    32     %6 = f2i32 %5
+    32x2   %7 = mov %6.xx
+    32x2   %8 = vec2 %7.x, %0.y
+    32     %9 = deref_var &gl_FragCoord (system highp vec4)
+    32x4  %10 = @load_deref (%9) (access=none)
+    32    %11 = mov %10.y
+    32    %12 = deref_var &u_flip (uniform highp vec2)
+    32x2  %13 = @load_deref (%12) (access=none)
+    32    %14 = mov %13.x
+    32    %15 = fmul %11, %14
+    32    %16 = deref_var &u_flip (uniform highp vec2)
+    32x2  %17 = @load_deref (%16) (access=none)
+    32    %18 = mov %17.y
+    32    %19 = fadd %15, %18
+    32    %20 = f2i32 %19
+    32x2  %21 = mov %20.xx
+    32x2  %22 = vec2 %8.x, %21.y
+    32    %23 = deref_var &o_color (shader_out highp vec4)
+    32    %24 = deref_var &u_fb (uniform highp sampler2D)
+    32x2  %25 = mov %22
+    32    %26 = mov %2 (0x0)
+    32x4  %27 = (float32)txf %24 (texture_deref), %24 (sampler_deref), %25 (coord), %26 (lod), 2D
+                @store_deref (%23, %27) (wrmask=xyzw, access=none)
+                // succs: b1
+    block b1:
+}
+
+nir_opt_find_array_copies
+nir_opt_copy_prop_vars

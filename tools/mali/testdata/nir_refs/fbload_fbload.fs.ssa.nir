@@ -1,0 +1,35 @@
+decl_function main () (entrypoint)
+impl main {
+block b0: // preds:
+32x2 %0 = undefined
+1 %1 = load_const (false)
+32 %2 = load_const (0x00000000)
+32 %3 = deref_var &gl_FragCoord (system highp vec4)
+32x4 %4 = @load_deref (%3) (access=none)
+32 %5 = mov %4.x
+32 %6 = f2i32 %5
+32x2 %7 = mov %6.xx
+32x2 %8 = vec2 %7.x, %0.y
+32 %9 = deref_var &gl_FragCoord (system highp vec4)
+32x4 %10 = @load_deref (%9) (access=none)
+32 %11 = mov %10.y
+32 %12 = deref_var &u_flip (uniform highp vec2)
+32x2 %13 = @load_deref (%12) (access=none)
+32 %14 = mov %13.x
+32 %15 = fmul %11, %14
+32 %16 = deref_var &u_flip (uniform highp vec2)
+32x2 %17 = @load_deref (%16) (access=none)
+32 %18 = mov %17.y
+32 %19 = fadd %15, %18
+32 %20 = f2i32 %19
+32x2 %21 = mov %20.xx
+32x2 %22 = vec2 %8.x, %21.y
+32 %23 = deref_var &o_color (shader_out highp vec4)
+32 %24 = deref_var &u_fb (uniform highp sampler2D)
+32x2 %25 = mov %22
+32 %26 = mov %2 (0x0)
+32x4 %27 = (float32)txf %24 (texture_deref), %24 (sampler_deref), %25 (coord), %26 (lod), 2D
+@store_deref (%23, %27) (wrmask=xyzw, access=none)
+// succs: b1
+block b1:
+}

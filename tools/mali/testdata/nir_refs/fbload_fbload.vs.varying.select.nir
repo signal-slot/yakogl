@@ -1,0 +1,5 @@
+decl_function main () (entrypoint)
+impl main {
+block b0: // preds:, succs: b1
+block b1:
+}

@@ -1,0 +1,110 @@
+gl_ref: renderer Mali-G610 MC4 (Panfrost)
+glsl_to_nir
+shader: MESA_SHADER_VERTEX
+max_subgroup_size: 128
+min_subgroup_size: 1
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp float gl_PointSize (VARYING_SLOT_PSIZ.x, 0, 0)
+decl_function gl_mesa_tmp_4c4956e95936e04c85c399dac9b795fb ()
+
+impl gl_mesa_tmp_4c4956e95936e04c85c399dac9b795fb {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:
+    32    %0 = deref_var &gl_Position (shader_out highp vec4)
+    32    %1 = deref_var &a_pos (shader_in highp vec4)
+               @copy_deref (%0, %1) (dst_access=0, src_access=0)
+               // succs: b1
+    block b1:
+}
+
+nir_lower_variable_initializers
+nir_lower_returns
+nir_inline_functions
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xe956494c, 0x4ce03659, 0xda99c385, 0xfb95b7c9, 0x6679bcb9, 0xb811a1d4, 0xf0dd7311, 0x1f69f8b5}
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp float gl_PointSize (VARYING_SLOT_PSIZ.x, 0, 0)
+decl_function gl_mesa_tmp_4c4956e95936e04c85c399dac9b795fb ()
+
+impl gl_mesa_tmp_4c4956e95936e04c85c399dac9b795fb {
+    block b0:  // preds:, succs: b1
+    block b1:
+}
+
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:
+    32    %0 = deref_var &gl_Position (shader_out highp vec4)
+    32    %1 = deref_var &a_pos (shader_in highp vec4)
+               @copy_deref (%0, %1) (dst_access=0, src_access=0)
+               // succs: b1
+    block b1:
+}
+
+nir_opt_deref
+nir_split_var_copies
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xe956494c, 0x4ce03659, 0xda99c385, 0xfb95b7c9, 0x6679bcb9, 0xb811a1d4, 0xf0dd7311, 0x1f69f8b5}
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp float gl_PointSize (VARYING_SLOT_PSIZ.x, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:
+    32    %0 = deref_var &gl_Position (shader_out highp vec4)
+    32    %1 = deref_var &a_pos (shader_in highp vec4)
+               @copy_deref (%0, %1) (dst_access=0, src_access=0)
+               // succs: b1
+    block b1:
+}
+
+nir_lower_global_vars_to_local
+nir_lower_var_copies
+shader: MESA_SHADER_VERTEX
+source_blake3: {0xe956494c, 0x4ce03659, 0xda99c385, 0xfb95b7c9, 0x6679bcb9, 0xb811a1d4, 0xf0dd7311, 0x1f69f8b5}
+next_stage: MESA_SHADER_FRAGMENT
+outputs_written: 0
+max_subgroup_size: 128
+min_subgroup_size: 1
+api_subgroup_size_draw_uniform: true
+decl_var shader_in INTERP_MODE_NONE none highp vec4 a_pos (VERT_ATTRIB_GENERIC0.xyzw, 0, 0)
+decl_var shader_out INTERP_MODE_NONE none highp vec4 gl_Position (VARYING_SLOT_POS.xyzw, 0, 0)
+decl_function main () (entrypoint)
+
+impl main {
+    block b0:  // preds:
+    32    %0 = deref_var &gl_Position (shader_out highp vec4)
+    32    %1 = deref_var &a_pos (shader_in highp vec4)
+    32x4  %2 = @load_deref (%1) (access=none)
+               @store_deref (%0, %2) (wrmask=xyzw, access=none)
+               // succs: b1
+    block b1:
+}
+
+nir_opt_barrier_modes
+gl_nir_lower_images
+nir_opt_constant_folding
+nir_opt_access
+nir_lower_clip_cull_distance_to_vec4s
+nir_lower_tess_level_array_vars_to_vec
+nir_merge_clip_cull_distance_vars
+nir_lower_vars_to_ssa
+nir_remove_dead_variables
+nir_opt_find_array_copies
+nir_opt_copy_prop_vars
