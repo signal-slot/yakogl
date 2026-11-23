@@ -1778,22 +1778,32 @@ fn record(
     }
     sh.num_varyings = n as u8;
     if stage == SHC_STAGE_VERTEX {
+        /* The active attributes, as glGetActiveAttrib and glGetAttribLocation
+         * report them: the ones the shader statically reads (a load anywhere
+         * in its IR, taken or not: ES 2.0 2.10.4, the rule of the other back
+         * ends, `ShcAttribBinding::active`), in declaration order. Not the
+         * ones the code reads: the program's vertex shader is built for its
+         * fragment shader's reads (`vs_for_fragment`) and loads no attribute
+         * that feeds only a varying the link removed (gl_test case 1:
+         * `v_color = a_color` under a fragment shader that reads no varying).
+         * Such an attribute has a row here and no record: the GL core stages
+         * it and the frame builder, which goes by the records
+         * (`MaliShader::attributes`, src/mali/backend.rs `vertex_attributes`),
+         * leaves it. A location with a record always has its row (the back
+         * end's late fold keeps a record whose load it removed).
+         *
+         * A matrix is one row at its base location, the GL core stages each
+         * column at vi_reg + k (gl/draw.rs `vertex_inputs`): a column read
+         * beyond column 0 finds its matrix by the column range
+         * (docs/notes/mali-attribute-records.md) */
         let mut n = 0usize;
-        for &(loc, _) in &sc.attributes[..sc.nattr] {
-            /* a matrix is one row at its base location, the GL core stages
-             * each column at vi_reg + k (gl/draw.rs `vertex_inputs`): a column
-             * read beyond column 0 finds its matrix by the column range, and a
-             * matrix with two columns read is listed once
-             * (docs/notes/mali-attribute-records.md) */
-            let Some(a) = l
-                .reflection
-                .attribs
-                .iter()
-                .find(|a| (a.location..a.location.saturating_add(glsl::columns(a.gl_type))).contains(&loc))
-            else {
-                continue;
-            };
-            if sh.attribs[..n].iter().any(|d| d.location == a.location) {
+        for a in l.reflection.attribs.iter() {
+            let columns = a.location..a.location.saturating_add(glsl::columns(a.gl_type));
+            let loaded = m.instrs.iter().any(
+                |op| matches!(op, ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Attrib(l), .. } if columns.contains(l)),
+            );
+            let recorded = sc.attributes[..sc.nattr].iter().any(|(loc, _)| columns.contains(loc));
+            if !loaded && !recorded {
                 continue;
             }
             let dst = sh.attribs.get_mut(n).ok_or(refused(MaliError::Defect(Defect::IrIndex)))?;
