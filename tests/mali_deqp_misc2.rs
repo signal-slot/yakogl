@@ -33,8 +33,9 @@
 //! of the item already have references of other items' tests, or no Mesa
 //! reference could be drawn here: the note says which and why.
 //!
-//! Only `invariant_posonly` compiles (byte-equal); each other test is
-//! ignored with its refusal quoted;
+//! Only `invariant_posonly` compiles (byte-equal), and `invariant_cse`'s
+//! vertex shader (`misc2_invariant_cse_vertex`, beside a plain fragment
+//! shader); each other test is ignored with its refusal quoted;
 //! the lowering removes the `ignore` and the reference's entry in
 //! `REFUSALS` together. `refusals_pinned` runs now: it asserts each ignored
 //! reference's exact current refusal and names every one that moved.
@@ -46,7 +47,7 @@
 mod mali_ref;
 
 #[test]
-#[ignore = "refused: an invariant output (Mesa keeps its arithmetic exact, unfused)"]
+#[ignore = "refused: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane (the fragment shader's `u_color` lanes beside `blue`; its vertex shader matches, misc2_invariant_cse_vertex)"]
 fn misc2_invariant_cse() {
     mali_ref::assert_matches("deqp_misc2_invariant_cse");
 }
@@ -104,7 +105,27 @@ fn misc2_attrnum_dead_attrs() {
     mali_ref::assert_matches("deqp_misc2_attrnum_dead_attrs");
 }
 
-const INVARIANT: &str = "an invariant output (Mesa keeps its arithmetic exact, unfused)";
+/// `invariant_cse`'s vertex shader, byte-equal in both vertex programs: the
+/// term the invariant `gl_Position` shares with `v_unrelated` exact in both
+/// (nir.rs `Nir::mark_exact`), the rest of `v_unrelated` fused. Its own
+/// fragment shader is refused (its uniform lanes, [`UNITYPE`]), so the
+/// pair here reads `v_unrelated` whole, every lane as the reference's
+/// `dot` does; only the vertex regions are compared.
+#[test]
+fn misc2_invariant_cse_vertex() {
+    let r = mali_ref::Reference::load("deqp_misc2_invariant_cse");
+    let fs = "varying mediump vec4 v_unrelated;\nvoid main ()\n{\n    gl_FragColor = v_unrelated;\n}\n";
+    let pair = mali_ref::compile_pair(&r.vs, fs).unwrap_or_else(|e| panic!("refused: {e}"));
+    let d: Vec<String> = mali_ref::differences(&r, &pair)
+        .into_iter()
+        .filter(|d| d.starts_with("vs") || d.starts_with("secondary"))
+        .collect();
+    assert!(d.is_empty(), "differs from deqp_misc2_invariant_cse:\n{}", d.join("\n"));
+}
+
+/// `invariant_cse`'s next refusal after the per-value exactness (nir.rs
+/// `Nir::mark_exact`): its fragment shader's uniform lanes (unitype).
+const UNITYPE: &str = "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane";
 const REBALANCE: &str =
     "three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree)";
 /// The factored sum of constant products (nir_fs.rs `Fs::op`) moved these
@@ -115,7 +136,7 @@ const ATTRNUM: &str =
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_misc2_invariant_cse", INVARIANT),
+    ("deqp_misc2_invariant_cse", UNITYPE),
     ("deqp_misc2_rebalance_funcsum_fs", REBALANCE),
     ("deqp_misc2_rebalance_invariant", REBALANCE),
     ("deqp_misc2_rebalance_random_fs", REBALANCE),
