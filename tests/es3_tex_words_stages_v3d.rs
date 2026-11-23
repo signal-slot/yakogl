@@ -443,10 +443,6 @@ fn shader(ty: GLenum, text: &str) -> GLuint {
     }
 }
 
-/// The plain vertex shader of the fragment cases.
-const VS: &str = "#version 300 es\nlayout(location = 0) in highp vec4 a_pos;\nout highp vec4 v;\n\
-                  void main() { v = a_pos; gl_Position = a_pos; }\n";
-
 /// A program of `vs` + `fs`, made current; each `(name, unit)` of `units`
 /// is set as a sampler uniform.
 fn program_units(vs: &str, fs: &str, units: &[(&str, i32)]) -> GLuint {
