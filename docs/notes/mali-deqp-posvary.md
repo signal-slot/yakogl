@@ -299,3 +299,42 @@ references with `drm_shim_ref.sh`'s meson options on this host (gcc 15,
 LLVM 21, no `LLVM_DIR`); Mesa's output does not depend on them. The
 `expect.json` of each reference was drawn once; the method of the other
 `deqp_*` references (two draws byte-identical) was not repeated.
+
+## 8. Lowered: P2 (= varylink2 V1) and the in-order part of P3/P4 (HOST-ONLY)
+
+Plan #387, item negzero-lower (a read-only prototype of steps P1-P5 of
+[`mali-posvary-lowering.md`](mali-posvary-lowering.md) section 10, landed by
+posvary-lower-2). The byte compares are `tests/mali_deqp_posvary.rs` and
+`tests/mali_deqp_varylink2.rs`; nothing was measured on the board or with
+the host dEQP run.
+
+| step | change (`src/shaderc/online/mali/`) | byte-equal now |
+|---|---|---|
+| P2 / V1 | `nir.rs` `Ffract` arm: a lane past the operand's is `Undef`, no `ffloor`. A highp `fadd` stored into a mediump local is narrowed (`f2f16`, right after the sum) where a 16-bit pair operation reads it (`vs_stored_sum`, `vs_pairs16`, `vs_alu16`), and stays the sum where a 32-bit one does (`f2f32(f2fmp(a))` is `a`: `deqp_colourpair_ck_lane` unchanged). A mediump `fract` of narrowed attribute lanes is fp16 (`vs_ffract16`: `nir_lower_alu_width`'s cut pairs, `nir_opt_vectorize`'s joined `ffloor`s, an attribute pair one lane of which is read narrowed alone); `shrink` loads an attribute up to the end of the pair a lone narrowing reads (`a_in0.zxy`: `.v4`) | `fract_highp_vec2`, `fract_highp_vec3`, `fract_mediump_vec2`, `fract_mediump_vec3`, `fract_lowp_vec2`, `fract_lowp_vec3`, `deqp_varylink2_fract_vec2` |
+| P3 / P4 / V5 (part) | `nir.rs` `fill` (`fs_assign_slot_groups`): over the stored lanes in scalar slot order, the convergent lanes after the interpolated ones fill the last interpolated vec4's free words (stored as they are, no `FMA x, 0, x`), the rest are flat in vec4s of their own; the vertex `flat && smooth` refusal goes. `nir_fs.rs` `layout` applies the same rule to the same lanes: `FsVarying.flat` is per 16-byte slot. A convergent lane laid out **before** an interpolated one (Mesa moves it after) is still refused | `tex_uniform_w`, `tex_uniform_w_array` |
+| P1 | none: the three `unwritten_*` of section 2 already match at the tip | (`unwritten_declared_dead_read` stays refused: the fragment shader alone selects its colour under `if (u_false)`, the ctrlflow family) |
+| P5 | none (tried and reverted): the vertex walk has no node for a thread-local array read, so a loop's phi over a scratch array (Mesa: divergent, a plain store) cannot be told from one over uniforms (convergent, flat); both references also meet the non-highp int uniform text first | |
+
+The references the rule reaches but that stay refused, with the text they
+now meet first: `flat_sep_kau_bs26` (the vertex shader compiles: `e` flat
+after the full vec4; the fragment shader alone, `arithmetic other than +,
+-, * ...`), `flat_sep_rnd13` (the fragment shader alone, `a constant product
+...`); out of order, still `computed from no attribute`: `flat_sep_vec4_bs51`
+(the uniform vec4 `a` is laid out before the float `b`), `flat_lane_vec4_v86`,
+`flat_lane_vec4_c30` (uniform lanes before attribute lanes in one vec4, and
+`c30`'s dead lanes of section 9.3 of the design), `deqp_varylink2_vec_uniform`
+(`vec4(i + h, g, f, b)`), `deqp_varylink2_scalar_uniform` (the vertex shader
+alone stores the uniform lanes between interpolated ones). They need the lane
+moves of the design's section 4.2 (a per-lane word and one link record per
+run, section 9.5).
+
+Forecast (HOST, from section 2's counts, not a host dEQP run): the six
+`shaders.operator.common_functions.fract.*_vertex` cases (the `fract_local`
+shape; their fragment shader is the 7-word colour load) and the two
+`shaders.struct.uniform.sampler{,_array}_vertex` cases (`tex_uniform_w`; the
+dEQP struct sampler is flattened in the reference, and the glmark2
+`vtex_struct_sampler{,_array}.vert` and `xlink.vert` now compile alone,
+`tools/mali/corpus-verdicts.txt`): **at most 8 cases** leave the three texts
+and should compile to Mesa's words. Up to 12 `flat_sep` cases of the
+`kau_bs26` form (a scalar after one vec4, by reading) move from `computed
+from no attribute` to a fragment text, no pass forecast.

@@ -3050,6 +3050,18 @@ fn vs_widen(vs: &mut Nir<'_>, v: Val) -> Result<Val, MaliError> {
     }
 }
 
+/// A lane of a mediump local's load that holds a highp `fadd` (32 bits):
+/// lower_precision's `f2fmp` at the assignment, which stays where a 16-bit
+/// operation reads it and folds away where a 32-bit one does (`f2f32(f2fmp(a))`
+/// is `a`, nir_opt_algebraic.py; deqp_colourpair_ck_lane stores the sum as
+/// it is). deqp_posvary_fract_highp_*: `color.yz = res` of `fract`'s `fadd`,
+/// read by `color * 0.80`.
+fn vs_stored_sum(vs: &Nir<'_>, m: &Module<'_>, s: ir::Src, v: Val) -> bool {
+    matches!(m.def(s.val), Some(IrOp::LoadLocal { local, .. }) if m.local_prec_of(*local) == Prec::Medium)
+        && matches!(v, Val::Lane(n, 0) if matches!(vs.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::Fadd), bits: 32, width: 1, .. }))
+}
+
 /// A two-lane 16-bit node, CSE'd (`nir_opt_cse`).
 fn vs_node16(vs: &mut Nir<'_>, op: Alu, src: [Val; 3]) -> Result<u16, MaliError> {
     let nd = NirNode { kind: Kind::Alu(op), src, bits: 16, width: 2 };
@@ -3131,13 +3143,15 @@ fn uniform_sum16(vs: &Nir<'_>, n: u16) -> bool {
 /// constants or 16-bit lanes, one at least a lane: the operation is fp16
 /// ([`vs_alu16`]). Another operand (an fp32 lane: a highp value, a boolean's
 /// float, which lower_precision does not narrow) keeps the fp32 walk.
-fn vs_pairs16(vs: &Nir<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> bool {
+fn vs_pairs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> bool {
     let mut any = false;
     for k in 0..2 {
         for i in 0..width {
             match lane(w, s[k], i) {
                 Val::Const(_) => {}
                 v if vs_is_f16(vs, v) => any = true,
+                /* narrowed where read ([`vs_stored_sum`]) */
+                v if vs_stored_sum(vs, m, s[k], v) => any = true,
                 _ => return false,
             }
         }
@@ -3159,6 +3173,7 @@ fn vs_pairs16(vs: &Nir<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> boo
 fn vs_alu16(
     vs: &mut Nir<'_>,
     a: AluOp,
+    m: &Module<'_>,
     w: &Walk<'_>,
     s: &[ir::Src; 3],
     width: usize,
@@ -3169,6 +3184,10 @@ fn vs_alu16(
     for k in 0..2 {
         for i in 0..width {
             x[k][i] = lane(w, s[k], i);
+            /* the `f2f16` right after the sum ([`vs_narrow_stored`]) */
+            if vs_stored_sum(vs, m, s[k], x[k][i]) {
+                x[k][i] = vs_narrow_stored(vs, x[k][i])?;
+            }
         }
     }
     let konst = |v: Val| matches!(v, Val::Const(_));
@@ -3350,6 +3369,156 @@ fn vs_fabs16(
             None => vs.push_node(nd)?,
         };
         *o = Val::Lane(id, 0);
+    }
+    Ok(())
+}
+
+/// A 16-bit node of one lane or two, CSE'd (`nir_opt_cse`).
+fn vs_node16w(vs: &mut Nir<'_>, op: Alu, src: [Val; 3], width: u8) -> Result<u16, MaliError> {
+    let nd = NirNode { kind: Kind::Alu(op), src, bits: 16, width };
+    if let Some(i) = vs.nodes[..vs.n].iter().position(|x| *x == nd) {
+        return Ok(i as u16);
+    }
+    vs.push_node(nd)
+}
+
+/// A mediump `fract` whose operand [`vs_abs16`] takes, as Mesa's NIR holds
+/// it (deqp_posvary_fract_{mediump,lowp}_{vec2,vec3}: `res = fract(in0)` of
+/// a `mediump vec2 in0 = a_in0.wy` or `vec3 in0 = a_in0.zxy`):
+/// `lower_ffract`'s `fadd(a, fneg(ffloor(a)))`
+/// on the vector at 16 bits, `a` the attribute's narrowed lanes
+/// ([`vs_narrow_input`]). `nir_lower_alu_width` cuts each operation into its
+/// aligned lane pairs, a pair whose two lanes are not one two-lane value's
+/// (`alu_is_swizzled_in_bounds`) into its lanes, the cut pair's results a
+/// `vec2`; `nir_opt_vectorize` then joins two `ffloor`s of one two-lane
+/// value's lanes 0 and 1 (`FROUND.v2f16.rtn r3, r0` of `vec3`'s x and y).
+/// The `fadd` of a cut pair reads the `ffloor` pair's `vec2` lane by lane
+/// (`FADD.v2f16 r1, r1^.h00, r2.neg.h00`, `r0^.h00, r2^.neg.h11`).
+fn vs_ffract16(
+    vs: &mut Nir<'_>,
+    m: &Module<'_>,
+    w: &Walk<'_>,
+    s: &[ir::Src; 3],
+    width: usize,
+    out: &mut [Val; 4],
+) -> Result<(), MaliError> {
+    let u = Val::Undef;
+    let narrow = medium_src(m, s[0]);
+    let wd = vs_width16(w, s, 1, width);
+    let mut x = [u; 4];
+    for (i, xi) in x.iter_mut().enumerate().take(wd) {
+        *xi = vs_lane16(vs, lane(w, s[0], i), narrow).ok_or(MaliError::Defect(Defect::IrIndex))?;
+    }
+    /* the attribute's lanes narrowed in lane order: an aligned pair both
+     * lanes of which are read is one `V2F32_TO_V2F16`
+     * ([`vs_narrow_input`]); a pair one lane of which is read is shrunk to
+     * that lane (`nir_opt_shrink_vectors`, `FADD.f32 r0.h0, r1^, 0x0.neg`
+     * of `a_in0.wy`'s y) */
+    let mut read = [0u8; MAX_NODES];
+    let mut inputs = [0u16; 4];
+    let mut ni = 0;
+    for &v in &x[..wd] {
+        match v {
+            Val::Lane(n, c) if !vs_is_f16(vs, v) => {
+                if read[n as usize] == 0 {
+                    inputs[ni] = n;
+                    ni += 1;
+                }
+                read[n as usize] |= 1 << c;
+            }
+            v if vs_is_f16(vs, v) => {}
+            _ => return Err(MaliError::Defect(Defect::IrIndex)),
+        }
+    }
+    let mut narrowed = [[u; 4]; 4];
+    for (k, &n) in inputs[..ni].iter().enumerate() {
+        let mask = read[n as usize];
+        for lo in (0..4u8).step_by(2) {
+            let pair = mask >> lo & 3;
+            if pair == 3 {
+                narrowed[k][lo as usize] = vs_narrow_input(vs, n, lo)?;
+                narrowed[k][lo as usize + 1] = vs_narrow_input(vs, n, lo + 1)?;
+                continue;
+            }
+            for c in lo..lo + 2 {
+                if pair >> (c - lo) & 1 != 0 {
+                    let id = vs_node16w(vs, Alu::F2f16, [Val::Lane(n, c), u, u], 1)?;
+                    narrowed[k][c as usize] = Val::Lane(id, 0);
+                }
+            }
+        }
+    }
+    for xi in x[..wd].iter_mut() {
+        if let Val::Lane(n, c) = *xi {
+            if !vs_is_f16(vs, *xi) {
+                let k = inputs[..ni].iter().position(|&i| i == n).ok_or(MaliError::Defect(Defect::IrIndex))?;
+                *xi = narrowed[k][c as usize];
+            }
+        }
+    }
+    /* a pair of lanes is one two-lane value's lanes 0 and 1 */
+    let whole = |vs: &Nir<'_>, p: Val, q: Val| matches!((p, q), (Val::Lane(a, 0), Val::Lane(b, 1)) if a == b && vs.nodes[a as usize].width == 2);
+    /* the `ffloor`s: a whole pair one node, a cut pair's lanes alone; a
+     * lane alone whose neighbour in its two-lane source is floored alone
+     * too is joined with it (`nir_opt_vectorize`) */
+    let mut fl = [u; 4];
+    let mut cut = [false; 2];
+    for k in (0..wd).step_by(2) {
+        if k + 1 < wd && whole(vs, x[k], x[k + 1]) {
+            let n = vs_node16w(vs, Alu::Ffloor, [x[k], u, u], 2)?;
+            fl[k] = Val::Lane(n, 0);
+            fl[k + 1] = Val::Lane(n, 1);
+        } else {
+            cut[k / 2] = k + 1 < wd;
+            for i in k..(k + 2).min(wd) {
+                fl[i] = u;
+            }
+        }
+    }
+    for i in 0..wd {
+        if fl[i] != u {
+            continue;
+        }
+        /* the lane's partner: lane 1 of the same two-lane value at another
+         * lane of the vector, also cut */
+        let partner = (0..wd).find(|&j| {
+            j != i
+                && fl[j] == u
+                && matches!((x[i], x[j]), (Val::Lane(a, 0), Val::Lane(b, 1)) if a == b && vs.nodes[a as usize].width == 2)
+        });
+        match partner {
+            Some(j) => {
+                let n = vs_node16w(vs, Alu::Ffloor, [x[i], u, u], 2)?;
+                fl[i] = Val::Lane(n, 0);
+                fl[j] = Val::Lane(n, 1);
+            }
+            None => {
+                let n = vs_node16w(vs, Alu::Ffloor, [x[i], u, u], 1)?;
+                fl[i] = Val::Lane(n, 0);
+            }
+        }
+    }
+    /* the `fadd`s, pair by pair as the `ffloor`s were cut */
+    for k in (0..wd).step_by(2) {
+        if k + 1 < wd && !cut[k / 2] {
+            let Val::Lane(f, _) = fl[k] else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let ng = vs_node16w(vs, Alu::Fneg, [Val::Lane(f, 0), u, u], 2)?;
+            let n = vs_node16w(vs, Alu::Fadd, [x[k], Val::Lane(ng, 0), u], 2)?;
+            out[k] = Val::Lane(n, 0);
+            out[k + 1] = Val::Lane(n, 1);
+        } else if k + 1 < wd {
+            let v = vs_vec16(vs, fl[k], fl[k + 1])?;
+            let Val::Lane(vn, _) = v else { return Err(MaliError::Defect(Defect::IrIndex)) };
+            let ng = vs_node16w(vs, Alu::Fneg, [Val::Lane(vn, 0), u, u], 2)?;
+            for i in 0..2 {
+                let n = vs_node16w(vs, Alu::Fadd, [x[k + i], Val::Lane(ng, i as u8), u], 1)?;
+                out[k + i] = Val::Lane(n, 0);
+            }
+        } else {
+            let ng = vs_node16w(vs, Alu::Fneg, [fl[k], u, u], 1)?;
+            let n = vs_node16w(vs, Alu::Fadd, [x[k], Val::Lane(ng, 0), u], 1)?;
+            out[k] = Val::Lane(n, 0);
+        }
     }
     Ok(())
 }
@@ -4808,9 +4977,9 @@ fn walk<'s>(
              * mediump local's narrowed lanes and constants: fp16, in lane
              * pairs ([`vs_alu16`]) */
             IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
-                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_pairs16(&vs, w, &s, width) =>
+                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_pairs16(&vs, m, w, &s, width) =>
             {
-                vs_alu16(&mut vs, a, w, &s, width, &mut out)?;
+                vs_alu16(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             /* one over fp16 uniforms and mediump attributes: fp16 too, the
              * uniform's words read whole ([`vs_alu16u`]) */
@@ -4823,6 +4992,12 @@ fn walk<'s>(
              * one lane at a time ([`vs_fabs16`]) */
             IrOp::Alu(AluOp::Fabs, s) if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_abs16(&vs, m, w, &s, width) => {
                 vs_fabs16(&mut vs, m, w, &s, width, &mut out)?;
+            }
+            /* `fract` of the same lanes: fp16 too ([`vs_ffract16`]) */
+            IrOp::Alu(AluOp::Ffract, s)
+                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_abs16(&vs, m, w, &s, width) =>
+            {
+                vs_ffract16(&mut vs, m, w, &s, width, &mut out)?;
             }
             IrOp::Alu(a, s) => {
                 /* a mediump operation of a lowp or mediump sampler's texels
@@ -5100,10 +5275,19 @@ fn walk<'s>(
                          * `fadd`; `FROUND.f32.rtn` and `FADD.f32 a, r.neg`
                          * (vsarith_fract.expect.json, whose pressure
                          * schedule differs in the lane-by-lane order) */
+                        AluOp::Ffract if x(0) == Val::Undef => Val::Undef,
                         AluOp::Ffract => {
                             if l == 0 {
+                                /* a lane past the operand's (a local vec2
+                                 * copy, the front end's four lanes) has no
+                                 * `ffloor` (deqp_posvary_fract_*) */
                                 for (i, h) in held.iter_mut().enumerate().take(width) {
-                                    *h = vs.alu(Alu::Ffloor, lane(w, s[0], i), Val::Undef, Val::Undef)?;
+                                    let a = lane(w, s[0], i);
+                                    *h = if a == Val::Undef {
+                                        Val::Undef
+                                    } else {
+                                        vs.alu(Alu::Ffloor, a, Val::Undef, Val::Undef)?
+                                    };
                                 }
                             }
                             let n = vs.alu(Alu::Fneg, held[l], Val::Undef, Val::Undef)?;
@@ -5669,10 +5853,12 @@ fn walk<'s>(
     compact_layout(&mut vs, reads);
     let mut seen = [(0u16, Val::Undef); 4 * MAX_VARYINGS];
     let mut nseen = 0;
-    /* (a lane of uniforms alone stored, an interpolated lane stored): the
-     * link packs flat lanes in slots of their own, a layout no reference
-     * draws beside interpolated ones */
-    let (mut flat, mut smooth) = (false, false);
+    /* each stored lane's class in scalar slot order (`fs_assign_slot_groups`,
+     * nir_opt_varyings.c:5228-5290): interpolated (`smooth`) or convergent
+     * (`flat`: uniforms alone, a constant the link sees computed by a phi
+     * or a vector operation of uniforms); [`fill`] packs them */
+    let mut classes = [(0u8, 0u8, false); 4 * MAX_VARYINGS];
+    let mut nclasses = 0;
     for k in 0..vs.nvar {
         let v = vs.varyings[k];
         if vs.masks[k] != (1 << v.comps) - 1 {
@@ -5700,14 +5886,16 @@ fn walk<'s>(
         });
         let stored = (0..v.comps as usize).filter(|&c| vs.masks[k] & (1 << c) != 0);
         for (c, l) in stored.map(|c| (c, lanes[c])) {
+            let (mut flat, mut smooth) = (false, false);
             match l {
                 Val::Undef => return Err(MaliError::VaryingForm),
                 Val::Const(_) if phis & (1 << (v.location as usize * 4 + c)) != 0 => flat = true,
                 /* a constant lane of a vector operation of uniforms: stored
                  * flat beside them (`kept_flat`) */
                 Val::Const(_) if kept_flat & (1 << (v.location as usize * 4 + c)) != 0 => {
-                    flat = true;
                     vs.prods |= 1 << Prod::VaryingComputed as u32;
+                    classes[nclasses] = (v.location, c as u8, true);
+                    nclasses += 1;
                     continue;
                 }
                 /* a lane the back end's fold made a constant, which the
@@ -5716,8 +5904,9 @@ fn walk<'s>(
                  * (gm2_arithconst_4), equal or not to another; a constant
                  * lane of a mediump vector the same (`kept`) */
                 Val::Const(_) if vs.late_fold || kept & (1 << (v.location as usize * 4 + c)) != 0 => {
-                    smooth = true;
                     vs.prods |= 1 << Prod::VaryingComputed as u32;
+                    classes[nclasses] = (v.location, c as u8, false);
+                    nclasses += 1;
                     continue;
                 }
                 Val::Const(_) => return Err(MaliError::VaryingNotFromAttribute),
@@ -5732,6 +5921,9 @@ fn walk<'s>(
                  * fragment shader loads them flat, varyconst_*.expect.json) */
                 Val::Lane(..) if divergent & (1 << (v.location as usize * 4 + c)) != 0 => smooth = true,
                 Val::Lane(n, _) if vs.uniform_only(n) => flat = true,
+                /* a look-up or a run-time indexed read with no attribute
+                 * behind it: convergent too (the conversion below) */
+                Val::Lane(n, _) if !vs.reads_attribute(n) && vs.convergent(n) => flat = true,
                 /* no attribute behind it, and no reference of its form
                  * (a phi of uniforms) */
                 Val::Lane(n, _) if !vs.reads_attribute(n) && !vs.reads_tex(n) && !vs.reads_indexed(n) => {
@@ -5740,6 +5932,9 @@ fn walk<'s>(
                 Val::Lane(..) => smooth = true,
                 Val::Pair(..) => return Err(MaliError::Defect(Defect::IrIndex)),
             }
+            debug_assert!(flat != smooth);
+            classes[nclasses] = (v.location, c as u8, flat);
+            nclasses += 1;
             let key = (varying_origins[v.location as usize & (MAX_VARYINGS - 1)][c], l);
             if seen[..nseen].contains(&key) {
                 return Err(MaliError::VaryingDuplicate);
@@ -5755,9 +5950,9 @@ fn walk<'s>(
             vs.note(Prod::Varying);
         }
     }
-    if flat && smooth {
-        return Err(MaliError::VaryingNotFromAttribute);
-    }
+    /* the convergent lanes that take the interpolated vec4's free words:
+     * stored as they are, no conversion */
+    let filled = fill(&classes[..nclasses])?;
     /* the viewport transform, before the position's store */
     vs.user = false;
     vs.user_end = vs.n;
@@ -5846,8 +6041,9 @@ fn walk<'s>(
                 if vs.masks[k] & (1 << c) == 0 || vs.reads_attribute(n) {
                     continue;
                 }
-                /* interpolated with its vector's other lanes (`divergent`) */
-                if divergent & (1 << (v.location as usize * 4 + c)) != 0 {
+                /* interpolated with its vector's other lanes (`divergent`),
+                 * or a convergent lane in an interpolated vec4 ([`fill`]) */
+                if (divergent | filled) & (1 << (v.location as usize * 4 + c)) != 0 {
                     continue;
                 }
                 if let Some(&(_, y)) = converted[..nconverted].iter().find(|x| x.0 == *l) {
@@ -5926,6 +6122,31 @@ fn walk<'s>(
      * each `MKVEC.v2i16` before its `FMA.v2f16`) */
     move_compares(&mut vs, scratch, true)?;
     Ok(vs)
+}
+
+/// `fs_assign_slot_groups` (nir_opt_varyings.c:5228-5290, documented at
+/// :419-425) over the stored lanes in scalar slot order, `(location, lane,
+/// convergent)`: the interpolated lanes take the first scalar slots, then the
+/// convergent ones fill the words left free in the last interpolated vec4
+/// (interpolated, stored as they are: deqp_posvary_tex_uniform_w's uniform
+/// alpha), and those left over are flat in vec4s of their own after them
+/// (`FMA x, 0, x`, `.src_flat32`; deqp_posvary_flat_sep_kau_bs26's `e` at
+/// word 4 after a full vec4). With no interpolated lane all are flat
+/// (varyconst_*). The lanes in another order (a convergent lane before an
+/// interpolated one, deqp_posvary_flat_sep_vec4_bs51) would move, which the
+/// per-varying layout cannot hold: refused. The
+/// convergent lanes left interpolated, as `location * 4 + lane` bits;
+/// [`super::nir_fs`]'s `layout` applies the same rule to the same lanes.
+pub(super) fn fill(lanes: &[(u8, u8, bool)]) -> Result<u64, MaliError> {
+    let interp = lanes.iter().filter(|l| !l.2).count();
+    if interp == 0 {
+        return Ok(0);
+    }
+    if lanes[..interp].iter().any(|l| l.2) {
+        return Err(MaliError::VaryingNotFromAttribute);
+    }
+    let free = (4 - interp % 4) % 4;
+    Ok(lanes[interp..].iter().take(free).fold(0u64, |m, l| m | 1 << (l.0 as u32 * 4 + l.1 as u32)))
 }
 
 /// Mesa's link keeps only the components the fragment shader reads
@@ -6386,8 +6607,18 @@ fn shrink(vs: &mut Nir<'_>, m: &Module<'_>) -> Result<(), MaliError> {
     for k in 0..vs.len {
         let id = vs.order[k];
         let mut top = 0u8;
+        let input = matches!(vs.nodes[id as usize].kind, Kind::Input { .. });
         for (u, s) in vs.uses(id) {
-            match vs.nodes[u as usize].src[s] {
+            let un = vs.nodes[u as usize];
+            match un.src[s] {
+                /* an attribute lane narrowed alone is lane `c` of the
+                 * `f2fmp` of the whole vector's aligned pair, shrunk only
+                 * after the load was (deqp_posvary_fract_mediump_vec3:
+                 * `a_in0.zxy` narrowed, `FADD.f32 r1.h0, r2^` of z, the
+                 * load `.v4`) */
+                Val::Lane(_, c) if input && un.kind == Kind::Alu(Alu::F2f16) && un.bits == 16 && un.width == 1 => {
+                    top = top.max((c | 1) + 1)
+                }
                 Val::Lane(_, c) => top = top.max(c + 1),
                 /* a 16-bit node's first word ([`vs_pair16`]) */
                 Val::Pair(_, Swz::H00) => top = top.max(1),
@@ -6397,8 +6628,8 @@ fn shrink(vs: &mut Nir<'_>, m: &Module<'_>) -> Result<(), MaliError> {
         }
         let nd = &mut vs.nodes[id as usize];
         match nd.kind {
-            Kind::Input { loc, .. } => {
-                nd.kind = Kind::Input { loc, comps: top };
+            Kind::Input { loc, comps } => {
+                nd.kind = Kind::Input { loc, comps: top.min(comps) };
                 vs.prods |= 1 << Prod::AttrLane as u32;
             }
             Kind::Uniform { dword, comps } => {
