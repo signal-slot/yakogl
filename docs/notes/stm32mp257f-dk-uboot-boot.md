@@ -686,7 +686,7 @@ command that could break them:
   write leaves a board whose ROM finds nothing), nor `vendorfs`, `rootfs`,
   `userfs`, nor `u-boot-env`: the one-shot does not write the environment.
   The only writes are the files under `/boot/yakogl/` on bootfs, from Linux.
-- **Never write the eMMC** (`mmcblk0`; the card is the disk `/boot` is mounted
+- **Never write the eMMC** (the disk whose type reads MMC, `mmcblk1` here; the card is the disk `/boot` is mounted
   from, and it must say it is an SD card). `mmc write`, `ext4write` and
   friends are not in the scripts.
 - **No repartitioning** (`gpt`, `part`, `sgdisk`), no filesystem creation, no
