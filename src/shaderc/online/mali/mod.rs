@@ -2311,7 +2311,12 @@ fn exact_values<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<&'s [
 /// computed from: the sources of a marked value, and the stores to a local
 /// (`local`) that a marked value loads. A marked value that `folded` is
 /// true of reads none of its sources.
-fn mark_reads(m: &ir_mod::Module<'_>, marked: &mut [bool], local: &mut [bool], folded: impl Fn(usize) -> bool) {
+pub(super) fn mark_reads(
+    m: &ir_mod::Module<'_>,
+    marked: &mut [bool],
+    local: &mut [bool],
+    folded: impl Fn(usize) -> bool,
+) {
     /* each round walks every instruction once */
     loop {
         let mut grew = false;

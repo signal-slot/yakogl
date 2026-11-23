@@ -1221,6 +1221,10 @@ pub struct Fs<'s> {
     /// Each IR instruction's lanes as the walk left them ([`Fs::pair_lane`];
     /// empty until the walk ends).
     ir_vals: &'s [[Val; 4]],
+    /// Each IR instruction is live ([`ir_live`]): the walk builds no node
+    /// for a dead one, as `nir_opt_dce` leaves none before any width or
+    /// form question.
+    ir_live: &'s [bool],
     /// Bit `n % 64` of word `n / 64`: node `n` is read ([`Fs::mark_live`]).
     live: [u64; MAX_NODES / 64],
     /// The colour's lanes, once the shader stores it.
@@ -4471,6 +4475,32 @@ impl<'s> Fs<'s> {
 /// `+`, `*`, an fneg, an fabs and the colour's store. Anything else is
 /// refused by name. `prec` is the shader's float precision: a highp
 /// shader's arithmetic is built as fp32 nodes ([`Fs::op32`]).
+/// The IR instructions of module `m` Mesa's `nir_opt_dce` keeps before the
+/// back end: the output stores, the discards and the `if` conditions, and
+/// to a fixed point what they read, through values and locals
+/// ([`super::mark_reads`]). The liveness is flow-insensitive (a store that
+/// a later one overwrites stays live), so it keeps at least what Mesa
+/// keeps; what it drops no output depends on (deqp_mixcol_f2i_seq's
+/// `in0 + vec4(in1)`, the sequence's first operand; deqp_mixcol_f2i_dead's
+/// `int d = int(e) - int(i)`, never read).
+fn ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliError> {
+    let oom = |_| MaliError::OutOfScratch;
+    let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
+    let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
+    for (l, op) in live.iter_mut().zip(m.instrs) {
+        *l = matches!(op, ir::Op::StoreOutput { .. } | ir::Op::Discard);
+    }
+    for n in m.nodes {
+        if let Node::If { cond, .. } = n {
+            if let Some(l) = live.get_mut(cond.val.0 as usize) {
+                *l = true;
+            }
+        }
+    }
+    super::mark_reads(m, live, live_local, |_| false);
+    Ok(live)
+}
+
 pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Result<Fs<'s>, MaliError> {
     if m.instrs.len() > MAX_VALUES {
         return Err(MaliError::TooManyValues);
@@ -4493,6 +4523,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
         keys: scratch.alloc_filled(MAX_VALUES, u32::MAX).map_err(oom)?,
         ir_comps: scratch.alloc_filled(MAX_VALUES, 0u8).map_err(oom)?,
         ir_vals: &[],
+        ir_live: ir_live(m, scratch)?,
         live: [0; MAX_NODES / 64],
         colour: None,
         targets: [None; MAX_TARGETS - 1],
@@ -6128,6 +6159,11 @@ fn walk_nodes(
             _ => return Err(MaliError::ControlFlow),
         };
         let op = m.instr(id).ok_or(MaliError::Defect(Defect::IrIndex))?;
+        /* a value no output, discard or condition reads: `nir_opt_dce`
+         * removed it before Mesa asks any width or form question */
+        if f.ir_live.get(id.0 as usize) == Some(&false) {
+            continue;
+        }
         let lane = |vals: &[[Val; 4]], s: ir::Src, i: usize| -> Val {
             vals.get(s.val.0 as usize).map_or(Val::Undef, |v| v[s.swizzle[i] as usize & 3])
         };
