@@ -242,9 +242,11 @@ records at the tip.
   reads PASS on the board (Results); the Zephyr images' window is
   256 MiB, tied in the dts, `nanopc-t6.sh` and the U-Boot script, with
   no jump while the GIC tables are unknown (`e1264cd1`);
-  `driver/tools/uboot-t6/t6-zephyr.cmd`, the draft sign-off route that
-  ext4loads a Zephyr image and runs `go`, uses only v2026.07 commands
-  and compiles with `mkimage` (`59fee21b`, `e0433194`).
+  the sign-off route from the U-Boot prompt is now tools: `stage.sh`
+  puts the image under the board's /boot and `prompt-go.sh` with
+  `prompt-go.py` ext4loads it, checks size, magic and CRC-32 and runs
+  `go`, replacing the script draft that needed commands the T6's U-Boot
+  lacks (`74c64e8a`, in `driver/tools/uboot-t6/`).
 - RK3588: the GPU clock set stays inside its CLKSEL and OPP range
   (`8e415597`) and `QosPolicy` with `qos_apply` drives the four GPU QoS
   blocks (`483a3037`).
