@@ -256,9 +256,14 @@ pub fn max_color_attachments() -> usize {
 /// what the fragment shader reads (the coordinate/vertex shader writes only
 /// the components the linked fragment shader asks for), so a vertex shader
 /// may declare 16 vec4 outputs as long as 15 are read.
-#[cfg(all(feature = "gpu-v3d", not(feature = "report-es2")))]
+///
+/// PowerVR: 64 for the same reason (design-vout64-pvr): the vertex output
+/// record is sized by what the fragment shader reads, so the 16th output vec4
+/// is carried by the compiler and back end. The Vivante arm stays at 60 until
+/// the GC7000UL is raised (#372).
+#[cfg(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2")))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = 64;
-#[cfg(not(all(feature = "gpu-v3d", not(feature = "report-es2"))))]
+#[cfg(not(all(any(feature = "gpu-v3d", feature = "gpu-powervr"), not(feature = "report-es2"))))]
 pub const MAX_VERTEX_OUTPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 pub const MAX_FRAGMENT_INPUT_COMPONENTS: usize = MAX_VARYING_VECTORS * 4;
 /// GL_MIN/MAX_PROGRAM_TEXEL_OFFSET, ES 3.0's minimum range: the values the
