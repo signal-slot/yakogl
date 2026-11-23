@@ -532,9 +532,9 @@ pub fn build_fragment_for<'a>(
     blend_key: u32,
 ) -> Result<BuiltFragment<'a>, ChainError> {
     if let Some((t, n)) = mixed_key_targets(blend_key) {
-        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]), None);
+        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]), None, None);
     }
-    build_fragment_with(m, limits, a, buf, blend_key, None, None)
+    build_fragment_with(m, limits, a, buf, blend_key, None, None, None)
 }
 
 /// The per-target list a mixed key (`crate::target_key`,
@@ -577,7 +577,7 @@ pub fn build_fragment_targets<'a>(
     buf: &mut [u8],
     targets: &[TargetPack],
 ) -> Result<BuiltFragment<'a>, ChainError> {
-    build_fragment_with(m, limits, a, buf, 0, Some(targets), None)
+    build_fragment_with(m, limits, a, buf, 0, Some(targets), None, None)
 }
 
 /// The class of a plain replace key (`SHC_BLEND_KEY_REPLACE` with no colour
@@ -601,6 +601,7 @@ fn build_fragment_with<'a>(
     blend_key: u32,
     targets: Option<&[TargetPack]>,
     layout: Option<SharedLayout<'a>>,
+    rewrite: Option<SelectedRewrite>,
 ) -> Result<BuiltFragment<'a>, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     use super::fragment::{coefficient_offsets, IterMode, Iterated};
@@ -612,6 +613,12 @@ fn build_fragment_with<'a>(
         return Err(ChainError::WrongStage);
     }
     let sel = select_in(m, a, layout).map_err(ChainError::Select)?;
+    /* An internal program's change to what selection made, before anything
+     * reads it ([`compile_fragment_rewritten`]). */
+    let sel = match rewrite {
+        Some(f) => f(sel, a)?,
+        None => sel,
+    };
     /* Where the driver's words start: past the whole array, or past the
      * shared prefix and the address pair when members are read with `ld`
      * (docs/notes/pvr-ubo-memory-load.md §8.4). */
@@ -2026,12 +2033,12 @@ pub fn compile_fragment_for<'a>(
      * carries the key the back end checks before it draws the targets. No
      * target reads the pixel, so `uses_fbfetch` stays 0. */
     if let Some((t, n)) = mixed_key_targets(blend_key) {
-        return compile_fragment_with(m, reflection, a, 0, Some(&t[..n])).map(|mut sh| {
+        return compile_fragment_with(m, reflection, a, 0, Some(&t[..n]), None).map(|mut sh| {
             sh.blend_key = blend_key;
             sh
         });
     }
-    compile_fragment_with(m, reflection, a, blend_key, None)
+    compile_fragment_with(m, reflection, a, blend_key, None, None)
 }
 
 /// [`compile_fragment`] for colour attachments of different classes
@@ -2044,7 +2051,23 @@ pub fn compile_fragment_targets<'a>(
     a: &'a Arena<'a>,
     targets: &[TargetPack],
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
-    compile_fragment_with(m, reflection, a, 0, Some(targets))
+    compile_fragment_with(m, reflection, a, 0, Some(targets), None)
+}
+
+/// A change an internal program makes to the selected program before the
+/// chain goes on ([`compile_fragment_rewritten`]): a form the front end has
+/// no GLSL for (`powervr::ms_load`'s multisample fetch).
+pub type SelectedRewrite = for<'b> fn(Selected<'b>, &'b Arena<'b>) -> Result<Selected<'b>, ChainError>;
+
+/// [`compile_fragment`], with `rewrite` applied to what selection made.
+/// Only internal programs use it; a user shader never does.
+pub fn compile_fragment_rewritten<'a>(
+    m: &'a ir::Module<'a>,
+    reflection: &crate::shaderc::online::reflect::Reflection<'a>,
+    a: &'a Arena<'a>,
+    rewrite: SelectedRewrite,
+) -> Result<crate::shaderc::ShcShader, ChainError> {
+    compile_fragment_with(m, reflection, a, 0, None, Some(rewrite))
 }
 
 /// [`compile_fragment_for`]'s body, and [`compile_fragment_targets`]'s.
@@ -2054,6 +2077,7 @@ fn compile_fragment_with<'a>(
     a: &'a Arena<'a>,
     blend_key: u32,
     targets: Option<&[TargetPack]>,
+    rewrite: Option<SelectedRewrite>,
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     let image = a.alloc_filled(MAX_IMAGE_BYTES, 0u8).map_err(|_| ChainError::OutOfScratch)?;
@@ -2076,10 +2100,19 @@ fn compile_fragment_with<'a>(
         int_dwords,
         tile_buffers,
         ubo,
-    } = build_fragment_with(m, LIMITS, a, image, blend_key, targets, {
-        let consts = super::blend::Blend::from_key(blend_key).ok().flatten().is_some_and(|b| b.reads_constants());
-        shared_layout(m, reflection, a, consts)?
-    })?;
+    } = build_fragment_with(
+        m,
+        LIMITS,
+        a,
+        image,
+        blend_key,
+        targets,
+        {
+            let consts = super::blend::Blend::from_key(blend_key).ok().flatten().is_some_and(|b| b.reads_constants());
+            shared_layout(m, reflection, a, consts)?
+        },
+        rewrite,
+    )?;
     let words = a.alloc_filled(len / 4, 0u32).map_err(|_| ChainError::OutOfScratch)?;
     for (w, c) in words.iter_mut().zip(image[..len].as_chunks::<4>().0) {
         *w = u32::from_le_bytes(*c);
