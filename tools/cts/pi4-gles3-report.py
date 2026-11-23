@@ -22,9 +22,31 @@ the tree R (default: this checkout), the current Pi 4 ES 3.0 text each draft
 replaces, found by matching in the file, with its line number. --apply R rewrites
 exactly those texts in R. It writes nothing and exits 1 when an anchor is missing or
 matches more than once, or when the drafts are PARTIAL.
+
+Mixed-commit tree. Without --mixed-commit all sessions must name one commit (the
+behaviour above, unchanged). A tree whose labels are recorded at two or more commits
+(for example the rows of b1b5b845 plus a later re-run of the labels that aborted) is
+accepted only when stated: --mixed-commit SHA, once per commit, full 40-digit sha. Then
+  - every session's README 'commit' line must be one of the stated commits, and every
+    stated commit must be named by a session;
+  - the sessions are in ORDER OF THE ARGUMENTS, earliest first: a label with a tally
+    in more than one session is taken from the LAST session that has it (the older
+    record is superseded, whatever commit it is at, and is listed in the drafts);
+    a record whose label is not in the table but has re-split sub-labels in it is
+    superseded too (as check-pi4-gles3-log.py reports);
+  - every label of the table must end with exactly one record, complete or a refused
+    one-case image; a label with none is missing, one whose last record is aborted
+    is aborted: both make the drafts PARTIAL (exit 1);
+  - only the resolved records are counted; 'without a result' is the mustpass cases of
+    a label's case filters minus its tally total;
+  - the drafts name each commit and the labels recorded at it (the commit with the
+    most labels as 'all the other labels').
+check-pi4-gles3-log.py is run once per commit group (its missing/aborted/duplicate
+findings are resolved here instead); gles3-notpass.py --pi4 is not run in this mode.
 """
 import argparse
 import datetime
+import importlib.util
 import os
 import re
 import shutil
@@ -233,20 +255,174 @@ def find_anchors(root, repl):
     return res
 
 
+def load(name):
+    """A sibling tool as a module (not modified, imported for its helpers)."""
+    spec = importlib.util.spec_from_file_location(name.replace('-', '_'), os.path.join(HERE, name + '.py'))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def mixed_resolve(args, problems):
+    """Resolve the labels of a mixed-commit tree. Returns a dict, problems get the findings.
+
+    keys: commits (stated, full), group (label -> commit of its record), tallies, none_by, aborted,
+    superseded (parent labels re-split), replaced [(label, older commit, newer commit, newer dir)], dirs_of.
+    """
+    check = load('check-pi4-gles3-log')
+    uart = load('deqp-uart-tally')
+    stated = []
+    for c in args.mixed_commit:
+        c = c.lower()
+        if not re.fullmatch(r'[0-9a-f]{40}', c):
+            problems.append('--mixed-commit %s is not a full 40-digit sha' % c)
+        elif c not in stated:
+            stated.append(c)
+    counts = {}
+    labels = check.labels_of(args.table, counts)
+    dirs = [d for d in args.dirs if os.path.isdir(d)]
+    for d in args.dirs:
+        if not os.path.isdir(d):
+            problems.append('%s: no such session directory' % d)
+    dir_commit = {}
+    for d in dirs:
+        c = commit_of(d)
+        c = expand(c) if c else None
+        hit = [s for s in stated if c and (s.startswith(c) or c.startswith(s))]
+        if not c:
+            problems.append('%s: no commit named (README.md "commit" line)' % rel(d))
+        elif not hit:
+            problems.append('%s names commit %s, not one of the --mixed-commit commits' % (rel(d), c[:8]))
+        else:
+            dir_commit[d] = hit[0]
+    for s in stated:
+        if s not in dir_commit.values():
+            problems.append('--mixed-commit %s: no session directory names it' % s[:8])
+    # per commit group: completeness findings other than the per-label ones, which are resolved below
+    superseded = set()
+    for s in stated:
+        group = [d for d in dirs if dir_commit.get(d) == s]
+        if not group:
+            continue
+        rc, o, e = run([CHECK, '--commit', s, '--tree', args.table] + group)
+        for l in o.splitlines():
+            m = SUPERSEDED.match(l)
+            if m:
+                superseded.add(m.group(1))
+            if l.startswith('FAIL:'):
+                p = l[5:].strip()
+                if re.match(r'(missing \(\d+\):|aborted, no complete deqp summary|.*: tallies in \d+ directories)', p):
+                    continue
+                problems.append(p)
+        if rc not in (0, 1):
+            problems.append('check-pi4-gles3-log.py could not run: %s' % (e.strip() or 'exit %d' % rc))
+    # label -> records in argument order; the last wins
+    where = {}
+    for d in dirs:
+        if d not in dir_commit:
+            continue
+        for fn in sorted(os.listdir(d)):
+            if fn.endswith('.tally.txt'):
+                where.setdefault(fn[:-len('.tally.txt')], []).append((d, os.path.join(d, fn)))
+    tallies, group, aborted, replaced, missing = {}, {}, [], [], []
+    for lab in labels:
+        recs = where.get(lab, [])
+        if not recs:
+            missing.append(lab)
+            continue
+        d, path = recs[-1]
+        for od, _ in recs[:-1]:
+            replaced.append((lab, dir_commit[od], dir_commit[d], d))
+        group[lab] = dir_commit[d]
+        m = TOTAL_ROW.search(read(path))
+        if m:
+            tallies[lab] = tuple(int(x) for x in m.groups())
+        else:
+            problems.append('%s.tally.txt has no TOTAL row' % lab)
+        if not (check.complete(path) or (counts.get(lab) == 1 and check.refused_one_case(path))):
+            aborted.append(lab)
+    if missing:
+        problems.append('missing (%d): %s' % (len(missing), ' '.join(missing)))
+    if aborted:
+        problems.append('aborted, no complete deqp summary (%d): %s' % (len(aborted), ' '.join(aborted)))
+    extra = sorted(l for l in where if l not in labels and l not in superseded)
+    if extra:
+        problems.append('tallies not in the tree: %s' % ' '.join(extra))
+    # cases without a result: the mustpass cases of the label's filters minus what its tally holds
+    filters, label = {}, None
+    for line in read(args.table).splitlines():
+        line = line.strip()
+        m = re.match(r'# image (\S+):', line)
+        if m:
+            label = m.group(1)
+        elif line and not line.startswith('#') and label:
+            filters[label] = line.split(',')
+            label = None
+    cases = [l for l in read(args.mustpass).splitlines() if l.strip() and not l.startswith('#')]
+    none_by = {}
+    for lab in tallies:
+        rx = uart.filter_regex(filters.get(lab, []))
+        inside = sum(1 for c in cases if rx and rx.match(c))
+        none_by[lab] = max(0, inside - sum(tallies[lab]))
+    return dict(commits=stated, group=group, tallies=tallies, none_by=none_by, aborted=aborted,
+                superseded=superseded, replaced=replaced, labels=labels)
+
+
+def groups_of(mixed):
+    """[(commit, [labels recorded at it])] in the order of the stated commits, labels in the table's order."""
+    return [(c, [l for l in mixed['labels'] if mixed['group'].get(l) == c]) for c in mixed['commits']]
+
+
+def replaced_txt(mixed):
+    seen, out = set(), []
+    for lab, old, new, _ in mixed['replaced']:
+        if lab not in seen:
+            seen.add(lab)
+            out.append('%s (%s%s)' % (lab, old[:8], '' if old == new else ' -> ' + new[:8]))
+    out += ['%s (re-split)' % p for p in sorted(mixed['superseded'])]
+    return ', '.join(out)
+
+
+def mixed_texts(mixed):
+    """(on_full, short for STATUS, short for ROADMAP, issue commit line) naming every commit and its labels."""
+    gs = groups_of(mixed)
+    most = max(range(len(gs)), key=lambda i: len(gs[i][1])) if gs else 0
+
+    def part(i, c, labs, ja=False):
+        if i == most and len(gs) > 1:
+            return ('その他の %d ラベル' if ja else 'the other %d labels') % len(labs)
+        if len(gs) == 1:
+            return ('全 %d ラベル' if ja else 'all %d labels') % len(labs)
+        return ('%d ラベル: %s' if ja else '%d labels: %s') % (len(labs), ' '.join(labs) or '-')
+    full = ' and '.join('`%s` (%s)' % (c, part(i, c, l)) for i, (c, l) in enumerate(gs))
+    ja = ' と '.join('%s（%s）' % (c[:8], part(i, c, l, True)) for i, (c, l) in enumerate(gs))
+    md = ' and '.join('`%s` (%s)' % (c[:8], part(i, c, l)) for i, (c, l) in enumerate(gs))
+    line = 'Commits (mixed-commit tree, a later session supersedes an earlier record of the same label): ' + '; '.join(
+        '`%s`: %s' % (c, part(i, c, l)) for i, (c, l) in enumerate(gs)) + '.'
+    return full, ja, md, line
+
+
 def report(args, out):
     dirs = args.dirs
     problems = []
     commits = []
-    for d in dirs:
-        c = commit_of(d) if os.path.isdir(d) else None
-        if c and not any(c.startswith(x) or x.startswith(c) for x in commits):
-            commits.append(c)
-    if args.commit:
-        sha = args.commit.lower()
+    mixed = None
+    if args.mixed_commit:
+        if args.commit:
+            problems.append('--commit and --mixed-commit together')
+        mixed = mixed_resolve(args, problems)
+        sha = mixed['commits'][0] if mixed['commits'] else None
     else:
-        sha = expand(commits[0]) if commits else None
-    if len(commits) > 1:
-        problems.append('the session directories name different commits: %s' % ', '.join(c[:8] for c in commits))
+        for d in dirs:
+            c = commit_of(d) if os.path.isdir(d) else None
+            if c and not any(c.startswith(x) or x.startswith(c) for x in commits):
+                commits.append(c)
+        if args.commit:
+            sha = args.commit.lower()
+        else:
+            sha = expand(commits[0]) if commits else None
+        if len(commits) > 1:
+            problems.append('the session directories name different commits: %s' % ', '.join(c[:8] for c in commits))
 
     labels = labels_of(args.table)
     mustpass = mustpass_count(args.mustpass)
@@ -254,7 +430,10 @@ def report(args, out):
     ok = True
     aborted = []
     superseded = set()
-    if sha and re.fullmatch(r'[0-9a-f]{40}', sha):
+    if mixed:
+        aborted = mixed['aborted']
+        superseded = set(mixed['superseded'])
+    elif sha and re.fullmatch(r'[0-9a-f]{40}', sha):
         rc, o, e = run([CHECK, '--commit', sha, '--tree', args.table] + dirs)
         for l in o.splitlines():
             m = SUPERSEDED.match(l)
@@ -273,19 +452,22 @@ def report(args, out):
     else:
         problems.append('no full 40-digit commit sha known (README.md "commit" line, or --commit)')
 
-    tallies, no_total = read_tallies(dirs)
-    for lab in no_total:
-        problems.append('%s.tally.txt has no TOTAL row' % lab)
-
     none_by = {}
-    rc, o, e = run([NOTPASS, '--pi4', '--mustpass', args.mustpass, '--tree', args.table] + dirs)
-    if rc != 0:
-        problems.append('gles3-notpass.py --pi4 could not run: %s' % (e.strip() or o.strip() or 'exit %d' % rc))
+    if mixed:
+        tallies, none_by = mixed['tallies'], mixed['none_by']
     else:
-        for l in o.splitlines():
-            m = re.match(r'(\S+)\.console\.txt:NoResult ', l)
-            if m:
-                none_by[m.group(1)] = none_by.get(m.group(1), 0) + 1
+        tallies, no_total = read_tallies(dirs)
+        for lab in no_total:
+            problems.append('%s.tally.txt has no TOTAL row' % lab)
+
+        rc, o, e = run([NOTPASS, '--pi4', '--mustpass', args.mustpass, '--tree', args.table] + dirs)
+        if rc != 0:
+            problems.append('gles3-notpass.py --pi4 could not run: %s' % (e.strip() or o.strip() or 'exit %d' % rc))
+        else:
+            for l in o.splitlines():
+                m = re.match(r'(\S+)\.console\.txt:NoResult ', l)
+                if m:
+                    none_by[m.group(1)] = none_by.get(m.group(1), 0) + 1
 
     figs, fprob = console_figures(dirs, superseded)
     if fprob:
@@ -315,6 +497,9 @@ def report(args, out):
     ab_ja = ('%d 画像が途中で止まった（%s）' % (len(aborted), ' '.join(aborted))) if aborted else '途中で止まった画像なし'
     imgs = '%d of %d images' % (img_run, img_all)
 
+    on_full, short_ja, short_md, commit_line = '`%s`' % full, short, '`%s`' % short, 'Commit: `%s`.' % full
+    if mixed:
+        on_full, short_ja, short_md, commit_line = mixed_texts(mixed)
     P = lambda s='': print(scrub(s, dirs), file=out)
     P('=== pi4-gles3-report: Pi 4 dEQP-GLES3 drafts (%s) ===' % args.date)
     if not ok:
@@ -324,12 +509,14 @@ def report(args, out):
     P()
     P('--- RESULTS.md (ES 3.0 section, replaces the Pi 4 entry "**Pi 4, first nine images**") ---')
     results_txt = (
-        '%s**Pi 4, whole tree** on `%s` (origin/main, tryboot, console through the UART bridge in `$BOARD_UART`;\n'
+        '%s**Pi 4, whole tree** on %s (origin/main, tryboot, console through the UART bridge in `$BOARD_UART`;\n'
         '`tools/cts/pi4-gles3-tree.txt`, %d images; recipe `docs/es3/board-recipe-pi4.md`), %s: %s run, %s '
         'mustpass cases of %s in them, %s pass / %s fail / %s NotSupported / %s other / %s without a result, %s; %s. '
         'Records: %s. Every case that is not Pass: `docs/es3/pi4-gles3-fails.tsv`.' % (
-            partial, full, img_all, args.date, imgs, n(in_run), n(mustpass), *five, ab_txt, rec_txt, dirs_txt))
+            partial, on_full, img_all, args.date, imgs, n(in_run), n(mustpass), *five, ab_txt, rec_txt, dirs_txt))
     results_txt += ' Console scan (`tools/cts/pi4-console-scan.py`): %s.' % fig_en
+    if mixed and mixed['replaced']:
+        results_txt += ' Superseded records (the later session replaces the earlier): %s.' % replaced_txt(mixed)
     if not_run:
         results_txt += ' %s mustpass cases are in images not run.' % n(not_run)
     for p in problems:
@@ -339,27 +526,29 @@ def report(args, out):
     P('--- STATUS.md (Japanese, current state only) ---')
     status_txt = ('Pi 4 は%s全 %d 画像のうち %d 画像を %s（%s）で実行し（全ツリー）、これらの画像の必須 %s 件中 合格 %s / 失敗 %s / 未対応 %s / その他 %s / 結果なし %s、%s、'
                   '%s（失敗の一覧は docs/es3/pi4-gles3-fails.tsv）。' % (
-                      '（途中、記録が不完全）' if not ok else '', img_all, img_run, short, args.date, n(in_run), *five, ab_ja,
+                      '（途中、記録が不完全）' if not ok else '', img_all, img_run, short_ja, args.date, n(in_run), *five, ab_ja,
                       'GPU 復旧 %d' % rec if rec is not None else 'GPU 復旧は README に記載なし'))
     status_txt += fig_ja + '。'
     P(status_txt)
     P()
     P('--- ROADMAP.md (stage 4, Raspberry Pi 4 line) ---')
-    roadmap_txt = ('- Raspberry Pi 4: %s%s of the dEQP-GLES3 tree at `%s` (%s): %s mustpass cases, %s Pass / %s Fail / '
+    roadmap_txt = ('- Raspberry Pi 4: %s%s of the dEQP-GLES3 tree at %s (%s): %s mustpass cases, %s Pass / %s Fail / '
                    '%s NotSupported / %s other / %s without a result, %s (#2).' % (
-                       partial, imgs, short, args.date, n(in_run), *five, ab_txt))
+                       partial, imgs, short_md, args.date, n(in_run), *five, ab_txt))
     P(roadmap_txt)
     P()
     P('--- GitHub issue #2 comment ---')
     P('%s**Pi 4 dEQP-GLES3, %s**' % (partial, args.date))
     P()
-    P('- Commit: `%s`.' % full)
+    P('- %s' % commit_line)
     P('- Images run: %s (table `tools/cts/pi4-gles3-tree.txt`); %s.' % (imgs, ab_txt))
     P('- Records: %s.' % dirs_txt)
     P('- %s.' % rec_txt)
     P('- Console scan: %s.' % fig_en)
     P('- Totals (mustpass %s; %s in the images run): %s Pass / %s Fail / %s NotSupported / %s other / %s without a result.'
       % (n(mustpass), n(in_run), *five))
+    if mixed and mixed['replaced']:
+        P('- Superseded records (the later session replaces the earlier): %s.' % replaced_txt(mixed))
     left = [p for p in problems]
     left.append('triage of the not-pass groups into issues (`docs/es3/pi4-gles3-fails.tsv`)')
     P('- Remains: %s.' % '; '.join(left))
@@ -523,6 +712,71 @@ def self_test():
         expect('--apply: a doubled anchor is refused and nothing is written',
                rc == 1 and 'matches 2 times' in out and same, out)
 
+    # mixed-commit tree: two commits, two rounds at the newer one (--mixed-commit)
+    sha_b = 'b' * 40
+    sha_c = 'c' * 40
+    with tempfile.TemporaryDirectory() as td:
+        with open(os.path.join(td, 'tree.txt'), 'w') as f:
+            f.write('# image A1: a\ndEQP-GLES3.a.*\n# image B1: b\ndEQP-GLES3.b.*\n# image C1: c\ndEQP-GLES3.c.*\n'
+                    '# image D1a: d1\ndEQP-GLES3.d.one,dEQP-GLES3.d.two\n# image D1b: d2\ndEQP-GLES3.d.three\n')
+        with open(os.path.join(td, 'mustpass.txt'), 'w') as f:
+            f.write('\n'.join('dEQP-GLES3.%s' % c for c in ('a.1', 'a.2', 'b.1', 'b.2', 'c.1', 'c.2', 'd.one', 'd.two', 'd.three')) + '\n')
+        full_ok = 'deqp: done: complete=1 | deqp: summary: %d cases begun, %d with a result, 0 without\n'
+        stopped = 'deqp: done: complete=0 | deqp: summary: %d cases begun, %d with a result, 0 without\n'
+
+        def msession(name, commit, entries):
+            """entries: {label: ((pass, fail, ns, other), complete)}"""
+            d = os.path.join(td, name)
+            os.makedirs(d)
+            with open(os.path.join(d, 'README.md'), 'w') as f:
+                f.write('# synthetic\n\ncommit: %s\n' % commit)
+            for lab, (tot, comp) in entries.items():
+                k = sum(tot)
+                with open(os.path.join(d, lab + '.console.txt'), 'w') as f:
+                    f.write('*** Booting Zephyr OS build x ***\ndeqp: case filter \'x\'\n' + (full_ok if comp else stopped) % (k, k))
+                with open(os.path.join(d, lab + '.tally.txt'), 'w') as f:
+                    f.write('%s.console.txt: %s' % (lab, (full_ok if comp else stopped) % (k, k)))
+                    f.write('TOTAL %d %d %d %d\n' % tot)
+            return d
+
+        # b1b5-like old session: A1 B1 complete; C1 aborted after one case; D1 (parent of D1a, D1b) aborted
+        old = msession('old-rows0-1', sha, {'A1': ((1, 1, 0, 0), True), 'B1': ((0, 1, 0, 1), True),
+                                           'C1': ((1, 0, 0, 0), False), 'D1': ((0, 0, 0, 1), False)})
+        r1 = msession('new-round1', sha_b, {'C1': ((1, 1, 0, 0), True), 'D1a': ((1, 1, 0, 0), True),
+                                            'D1b': ((0, 0, 0, 1), False)})
+        r2 = msession('new-round2', sha_b, {'D1b': ((0, 0, 1, 0), True)})
+        mx = ['--mixed-commit', sha, '--mixed-commit', sha_b]
+        rc, out = rep(td, *(mx + [old, r1, r2]))
+        expect('mixed: two commits, two rounds, a later session supersedes aborted C1 and D1b: exit 0', rc == 0, out)
+        expect('mixed: totals 9 mustpass, 3 pass / 4 fail / 1 NotSupported / 1 other / 0 without',
+               'mustpass 9' in out and '3 Pass / 4 Fail / 1 NotSupported / 1 other / 0 without a result' in out
+               and '5 of 5 images' in out and 'PARTIAL' not in out and 'none aborted' in out, out)
+        expect('mixed: both commits and their labels named',
+               sha in out and sha_b in out and '2 labels: A1 B1' in out and 'the other 3 labels' in out, out)
+        expect('mixed: superseded records listed',
+               'C1 (aaaaaaaa -> bbbbbbbb)' in out and 'D1b (bbbbbbbb)' in out and 'D1 (re-split)' in out, out)
+        expect('mixed: STATUS draft in Japanese names both commits',
+               'aaaaaaaa（2 ラベル: A1 B1） と bbbbbbbb（その他の 3 ラベル）' in out, out)
+        expect('mixed: no absolute path in the output', td not in out and '/home/' not in out, out)
+        rc, out = rep(td, *(mx + [old, r2, r1]))
+        expect('mixed: the order of the arguments decides: round 1 last leaves D1b aborted, PARTIAL, exit 1',
+               rc == 1 and 'PARTIAL' in out and 'aborted, no complete deqp summary (1): D1b' in out, out)
+        rc, out = rep(td, old, r1, r2)
+        expect('without --mixed-commit two commits stay PARTIAL', rc == 1 and 'name different commits' in out, out)
+        rc, out = rep(td, *(mx + [old, r1]))
+        expect('mixed: a label with an aborted last record only (D1b) is PARTIAL, not missing',
+               rc == 1 and 'aborted, no complete deqp summary (1): D1b' in out and 'missing' not in out, out)
+        rc, out = rep(td, *(mx + [old]))
+        expect('mixed: a stated commit no session names, labels missing: PARTIAL',
+               rc == 1 and 'no session directory names it' in out and 'missing (' in out, out)
+        rc, out = rep(td, '--mixed-commit', sha, old, r1, r2)
+        expect('mixed: a session at a commit that was not stated is a problem',
+               rc == 1 and 'not one of the --mixed-commit commits' in out, out)
+        rc, out = rep(td, *(mx + ['--commit', sha, old, r1, r2]))
+        expect('mixed: --commit together with --mixed-commit is refused', rc == 1 and '--commit and --mixed-commit' in out, out)
+        rc, out = rep(td, *(['--mixed-commit', sha, '--mixed-commit', sha_b[:8]] + [old, r1, r2]))
+        expect('mixed: a short sha is refused', rc == 1 and 'not a full 40-digit sha' in out, out)
+
     print('pi4-gles3-report self-test: %d of %d cases ok' % (len(cases) - len(fails), len(cases)))
     return 1 if fails else 0
 
@@ -533,6 +787,9 @@ def main():
     ap.add_argument('--mustpass', default=os.path.join(HERE, 'gles3-mustpass.txt'))
     ap.add_argument('--date', default=datetime.date.today().isoformat(), help='date of the drafts (default: today)')
     ap.add_argument('--commit', help='full sha of the record (default: from the session READMEs)')
+    ap.add_argument('--mixed-commit', action='append', default=[], metavar='SHA',
+                    help='accept a tree recorded at several commits: give each full sha once; the sessions are in '
+                         'argument order, a later one supersedes an earlier record of a label (see the module doc)')
     ap.add_argument('--root', default=ROOT, help='tree whose docs the anchors are read from')
     ap.add_argument('--apply', metavar='ROOT', help='rewrite the anchored texts in the tree ROOT (all or nothing)')
     ap.add_argument('--self-test', action='store_true')
