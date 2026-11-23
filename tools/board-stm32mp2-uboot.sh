@@ -83,6 +83,9 @@
 #      /boot on the SD card's bootfs, the console free (BOARD_UART, a probe),
 #      no staged file left by an earlier run, the free space, and reads the
 #      stored environment (all variables) with dd of the u-boot-env partition
+#      (the 512 KiB partition labelled u-boot-env on the SD disk /boot is on,
+#      found by lsblk PARTLABEL before each read, never by mmcblk number or
+#      /dev/disk/by-partlabel, which is the eMMC's)
 #      and tools/uboot_env.py check and print (Linux's fw_printenv does not
 #      run on the DK): a bad CRC on either copy is a
 #      refusal (ST's env_check would store the RAM environment at the next
@@ -206,7 +209,6 @@ HANG_LINE='mp2_hello: hanging on purpose'
 STAGE_DIR=/boot/yakogl            # on bootfs; U-Boot sees it as /yakogl
 PREFIX=mp2z-                      # every staged file's name starts with it
 BOOT_LABEL=bootfs
-EMMC_RE='^/dev/mmcblk0(p[0-9]+)?$'
 UB_DIR="$REPO/driver/tools/uboot-mp2"
 CBSIZE=1024                       # ST's CONFIG_SYS_CBSIZE: the typed line must be shorter
 TFTP_TMO=2000                     # the typed line's script fetch: ms a timeout, and
@@ -524,7 +526,6 @@ prechecks() {
         '/dev/mmcblkDp8 ext4 /dev/mmcblkD SD bootfs' || die "cannot read the mount of /boot"
     read -r BOOT_DEV fstype CARD_DISK dtype label <<<"$m"
     [ "$fstype" = ext4 ] || die "/boot is '$fstype', not ext4 (U-Boot's ext4size/ext4load read bootfs)"
-    [[ $CARD_DISK =~ $EMMC_RE ]] && die "REFUSED: /boot is on the eMMC (mmcblk0): this runner stages on the microSD only"
     [ "$dtype" = SD ] || die "REFUSED: /boot's disk says '${dtype:-unreadable}', not SD: this runner stages on the microSD only"
     [ "$label" = "$BOOT_LABEL" ] || die "REFUSED: /boot's partition is labelled '${label:-nothing}', not $BOOT_LABEL"
     [[ $BOOT_DEV =~ p([0-9]+)$ ]] || die "/boot's source is not a partition"
@@ -543,10 +544,42 @@ prechecks() {
 # --allow-blank-copy, as tools/board-stm32mp2.sh does; any other bad copy is
 # refused), no bootcmd, a scriptaddr unset or not clear of the window.
 # ENV_TXT: the text file read (the dry run's sample under --dry-run).
-ENV_DEV=/dev/disk/by-partlabel/u-boot-env
+# The partition is never found by a number or through /dev/disk/ (by-partlabel
+# names the eMMC's partitions on the DK; tools/board-stm32mp2.sh:147-153; the
+# note's section 1): resolve_env_dev asks the board, fresh before every
+# read, for the disk /boot is mounted from, which must say SD in
+# /sys/block/<disk>/device/type, and takes the one partition of that disk
+# whose lsblk PARTLABEL is u-boot-env, 512 KiB. Linux numbers the card and the
+# eMMC differently from one boot to the next, so the "after" read resolves
+# again; both nodes go into meta.txt (env_dev_before, env_dev_after).
+ENV_DEV=
 ENV_PART_SIZE=$((512 * 1024))   # u-boot-env on the DK's microSD (the note, section 1)
 ENV_LAYOUT=(--size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 --allow-blank-copy)
-ENV_DD="dd if=$ENV_DEV bs=64k status=none"
+# the disk of /boot and its type on the first line, then lsblk's NAME PARTLABEL SIZE rows of that disk
+RESOLVE_CMD='set -- $(findmnt -n -v -o SOURCE -T /boot); d=$1; p=${d%p*}; echo "$p $(cat /sys/block/${p##*/}/device/type 2>/dev/null)"; lsblk -brno NAME,PARTLABEL,SIZE "$p"'
+resolve_env_dev() {
+    local r disk dtype rows nrows name size
+    if [ "$DRY" = 1 ]; then
+        bget r "$RESOLVE_CMD" ''
+        echo "DRY host\$ take the one 'u-boot-env' row of that disk (type SD, 512 KiB); none or two: refused   # resolved fresh, never by number or /dev/disk/"
+        ENV_DEV=/dev/'<card>p<N>'
+        return 0
+    fi
+    bget r "$RESOLVE_CMD" || die "cannot read the disk of /boot on the board" 5
+    read -r disk dtype <<<"$(head -1 <<<"$r")"
+    [[ $disk == /dev/* ]] || die "REFUSED: cannot tell which disk /boot is on"
+    [ "$dtype" = SD ] || die "REFUSED: /boot's disk ${disk##*/} says '${dtype:-unreadable}', not SD: the u-boot-env of the microSD only"
+    rows=$(tail -n +2 <<<"$r" | awk '$2 == "u-boot-env" { print $1, $3 }')
+    nrows=0
+    [ -z "$rows" ] || nrows=$(wc -l <<<"$rows")
+    [ "$nrows" = 1 ] || die "REFUSED: $nrows partitions labelled u-boot-env on the card ${disk##*/} (exactly one expected)"
+    read -r name size <<<"$rows"
+    [[ $name == "${disk##*/}"p[0-9]* ]] || die "REFUSED: '$name' is not a partition of ${disk##*/}"
+    [ "$size" = "$ENV_PART_SIZE" ] ||
+        die "REFUSED: u-boot-env on ${disk##*/} is $size bytes, not the 512 KiB u-boot-env with its copies at 0x7e000 and 0x7c000"
+    ENV_DEV=/dev/$name
+}
+env_dd() { echo "dd if=$ENV_DEV bs=64k status=none"; }
 ENV_DRY='bootcmd=run bootcmd_stm32mp
 bootdelay=1
 scriptaddr=0x90100000'
@@ -555,18 +588,20 @@ env_read() {
     local out=$1 sa name bin msg sz
     name=$(basename "$out" .txt)
     bin=$TMP/$name.bin
+    resolve_env_dev
+    case $name in env-before) meta env_dev_before "${ENV_DEV##*/}" ;; env-after) meta env_dev_after "${ENV_DEV##*/}" ;; esac
     if [ "$DRY" = 1 ]; then
-        echo "DRY board\$ ${SU}$ENV_DD   # > <tmp>/$name.bin (read-only; not fw_printenv, which does not run on the DK)"
+        echo "DRY board\$ ${SU}$(env_dd)  # > <tmp>/$name.bin (read-only; not fw_printenv, which does not run on the DK)"
         echo "DRY host\$ python3 -I tools/uboot_env.py ${ENV_LAYOUT[*]} check <tmp>/$name.bin   # both copies' CRC, else refused"
         echo "DRY host\$ python3 -I tools/uboot_env.py ${ENV_LAYOUT[*]} print <tmp>/$name.bin | sort   # > ${out/#"$TMP"/<tmp>} (every variable)"
         printf '%s\n' "$ENV_DRY" > "$TMP/env.dry"
         out=$TMP/env.dry
     else
-        B_TIMEOUT=60 fgw b_ssh "${SU}$ENV_DD" > "$bin" 2>/dev/null ||
-            die "cannot read the environment (dd of $ENV_DEV over ssh failed)" 5
+        B_TIMEOUT=60 fgw b_ssh "${SU}$(env_dd)" > "$bin" 2>/dev/null ||
+            die "cannot read the environment (dd of ${ENV_DEV##*/} over ssh failed)" 5
         sz=$(stat -c %s "$bin")
         [ "$sz" = "$ENV_PART_SIZE" ] ||
-            die "REFUSED: $ENV_DEV read $sz bytes, not the 512 KiB u-boot-env with its copies at 0x7e000 and 0x7c000"
+            die "REFUSED: ${ENV_DEV##*/} read $sz bytes, not the 512 KiB u-boot-env with its copies at 0x7e000 and 0x7c000"
         msg=$(python3 -I "$TOOLS/uboot_env.py" "${ENV_LAYOUT[@]}" check "$bin" 2>&1) ||
             die "REFUSED: a bad CRC in the stored environment (tools/uboot_env.py check: $(tr '\n' ';' <<<"$msg" | cut -c1-160)): U-Boot runs on its defaults and ST's env_check would store the RAM environment at the next 'run bootcmd'"
         { python3 -I "$TOOLS/uboot_env.py" "${ENV_LAYOUT[@]}" print "$bin" 2>/dev/null || echo "uboot_env:print-failed"; } | sort > "$out"
