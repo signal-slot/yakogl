@@ -4,10 +4,10 @@
 
 Opened 2026-11-12 from the host-side studies, main `fb51ce43` (plan #349,
 roadmap stage 5, issues #7 and #1281; the pre-study's rows P6 and P7,
-`docs/notes/pre-study-stm32mp257f-dk.md:902-903`). **Steps 1-6 have run on
-the board (2026-11-21, "Board verdicts" below); steps 7-8 have not**:
-`tools/cts/RESULTS.md` has no DK row and `tools/cts/log/` has no DK
-directory at this tip. Every value in the step sections is marked
+`docs/notes/pre-study-stm32mp257f-dk.md:902-903`). **All eight steps have
+run on the board** (steps 1-6 on 2026-11-21, steps 7-8 on 2026-11-23;
+"Board verdicts" below), but `tools/cts/RESULTS.md` has no DK row and
+`tools/cts/log/` has no DK directory at this tip. Every value in the step sections is marked
 *expected* (a host source gives it) or *derived* (a study's reasoning, cited);
 a board item replaces a step's line in "Board verdicts" with the reading, and
 the current results then move to `tools/cts/RESULTS.md` and
@@ -279,9 +279,11 @@ Reading the run: the runner's verdict line
 `<prog>: FAIL at step N: ...` (`gc_fence`, `gc_clear`, `gc_triangle`),
 `mp2_gpu: verdict PASS|FAIL`, and `gl_test: all: N of M cases failed` (0 is
 `pass:gl_test`, anything else `fail:gl_test`). Sub-lines (`gc_triangle:
-linear: PASS ...`, `gl_test: case 1 ...: PASS`) are not results, so a
-`gl_test` run that stops before its tally reads `result=none`. A FAIL turns
-the verdict to `failed`.
+linear: PASS ...`, `gl_test: case 1 ...: PASS`) are not results. The
+sample's own last line `gl_test: PASS` matches the generic `<prog>: PASS`
+form, so the one-case image, which prints no tally (below, "How steps 7-8
+were run and judged"), still reads `result=pass:gl_test`; a run that stops
+before both reads `result=none`. A FAIL turns the verdict to `failed`.
 
 ## When it looks like a hardware fault: supply first
 
@@ -346,27 +348,31 @@ Reset reason: <text> (0x<RCC_C1BOOTRSTSCLRR>).<boot>
   at `plat/st/stm32mp2/bl2_plat_setup.c:536-540`), and a watchdog reset shows
   as the `IWDG system reset (iwdgX_out_rst)` text above. The `X` in the text
   is literal; only the raw word says which instance fired (bits 8-12).
-  **Unverified**: whether OP-TEE's SMC watchdog timeout sets `IWDG1SYSRSTF` or
-  `IWDG2SYSRSTF` (OP-TEE's sources are not in these two trees; only the
-  `IWDG1`/`IWDG2` base-to-instance mapping is,
-  `plat/st/stm32mp2/stm32mp2_private.c:646-656`). Either bit gives the same text.
+  **Answered by the board** (step 2, 2026-11-21): the SMC watchdog timeout
+  sets `IWDG1SYSRSTF`. The BL2 line after the watchdog-caught hang was
+  `Reset reason: IWDG system reset (iwdgX_out_rst) (0x2134). Warm boot.`, and
+  0x2134 has bit 8 set. OP-TEE's sources are not in these two trees, so the
+  source did not answer it; the `IWDG1`/`IWDG2` base-to-instance mapping is
+  `plat/st/stm32mp2/stm32mp2_private.c:646-656`. Either bit gives the same text.
 - the PSCI reset our image issues: `SYSTEM_RESET` goes to `stm32_system_reset`
   (`plat/st/stm32mp2/stm32mp2_pm.c:1230-1239`, `INFO("BL31: System cold
   reset")`), which sends SCMI `SYSTEM_POWER_STATE_SET` with the cold-reset
   type (`plat/st/stm32mp2/scmi/scmi_common.c:527-535`); the SCMI server then
-  resets the SoC. **Unverified**: which RCC flag that leaves (the server is
-  not in these sources), so the next BL2 text may be `System reset (SYSRST)`
-  or `Pin reset from NRST`; read it from the first return trial and record it
-  here. It is not a power-on text unless the supply fell.
+  resets the SoC. **Answered by the board** (step 1, 2026-11-21, and every
+  PSCI end since then, steps 3-8): the next BL2 prints
+  `Reset reason: System reset (SYSRST) (0x2074). Warm boot.` (`SYSC1RSTF`,
+  bit 6), not `Pin reset from NRST`. The server is not in these sources, so
+  the board is the only answer. It is not a power-on text unless the supply
+  fell.
 
 Only that line separates the causes:
 
 | what happened | console signature |
 | --- | --- |
-| PSCI reset by the image (normal end) | BL2 `Reset reason: System reset (SYSRST) (0x...)` or `Pin reset from NRST` (**unverified** which; no power-on text); the end line `mp2: <why>: PSCI SYSTEM_RESET at <n> ms` immediately before the new boot (`stm32mp2.c:156-158`; the runner's `END_RE`, `board-stm32mp2.sh:205`) |
+| PSCI reset by the image (normal end) | BL2 `Reset reason: System reset (SYSRST) (0x2074). Warm boot.` (read on the board, steps 1-8; no power-on text); the end line `mp2: <why>: PSCI SYSTEM_RESET at <n> ms` immediately before the new boot (`stm32mp2.c:156-158`; the runner's `END_RE`, `board-stm32mp2.sh:205`) |
 | lifetime reset (too long, not too long for the watchdog) | end line with `why = lifetime over` (`stm32mp2.c:236-239`) |
 | fatal error | `mp2: fatal error <reason>`, then the end line (`stm32mp2.c:163-168`) |
-| watchdog reset (a hang, or our own 32 s arm firing un-fed) | BL2 `Reset reason: IWDG system reset (iwdgX_out_rst) (0x...)`; no end line at all; the reset lands about 32 s after the stall — 32 s from BL2's IWDG, about 27 s after an OP-TEE panic (pre-study `:255-258`) |
+| watchdog reset (a hang, or our own 32 s arm firing un-fed) | BL2 `Reset reason: IWDG system reset (iwdgX_out_rst) (0x...)` (0x2134, `IWDG1SYSRSTF`, on the board in step 2); no end line at all; the reset lands about 32 s after the stall — 32 s from BL2's IWDG, about 27 s after an OP-TEE panic (pre-study `:255-258`) |
 | OP-TEE panic | the last logged request is the last line before the reset (every request is logged before it is sent, `power.rs:24-26`, pre-study `:872-881`); reset sooner, ~27 s |
 | supply loss / brown-out | BL2 `Reset reason: Power-on reset (por_rstn) (0x...)` or `Reset reason: Brownout reset (bor_rstn) (0x...)`, usually with ` Cold boot.`; or the console shows no BL2 lines at all (board silent: `boot_verdict=not_started/no_lines`, `board-stm32mp2.sh:129-133`) |
 
@@ -389,17 +395,17 @@ runner record directory name) and folds the findings into the pre-study
 | 1 return trial, ends | gpu-identity | **PASS** 2026-11-21, `20261121-1054-mp2_hello-405d515b`: `verdict=done rc=0`, back after 47 s |
 | 2 return trial, watchdog-caught hang | gpu-identity | **PASS** 2026-11-21, `20261121-1055-mp2_hello_hang-832dda7e`: `verdict=watchdog_reset rc=0`, back after 89 s |
 | 3 layer + OP-TEE watchdog armed | gpu-identity | **PASS** 2026-11-21, `20261121-1058-mp2_identify-58f413f3`: `verdict=done rc=0`, back after 59 s |
-| 4 power + identity (`mp2_gpu`) | gpu-identity | **PASS** 2026-11-21 after one fix (`a053c4aa`), `20261121-1107-mp2_gpu-9e520020`: `verdict=done rc=0`, back after 59 s; the first run (`20261121-1059-mp2_gpu-e0ee66cb`) `verdict=failed rc=4` |
+| 4 power + identity (`mp2_gpu`) | gpu-identity | **PASS** 2026-11-21 after one fix (`2da6568d`), `20261121-1107-mp2_gpu-9e520020`: `verdict=done rc=0`, back after 59 s; the first run (`20261121-1059-mp2_gpu-e0ee66cb`) `verdict=failed rc=4` |
 | 5 `gc_fence` | fence-clear | **PASS** 2026-11-21, `20261121-1855-gc_fence-55ae8385`: `gc_fence: fence 1 irqs 1 elapsed 4169 us irq-latency 21 us`, back after 58 s (runner rc=6: its own post-cycle fault, below; the board was fine) |
 | 6 `gc_clear` | fence-clear | **PASS** 2026-11-21, `20261121-1859-gc_clear-e1a37b77`: `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`, back after 45 s |
-| 7 `gc_triangle` | triangle-run | **not run yet** |
-| 8 `gl_test` case 1 (`gc_gl_triangle`) | gl-triangle-run | **not run yet** |
+| 7 `gc_triangle` | triangle-rerun | **PASS** 2026-11-23, `20261123-0451-gc_triangle-250f61d4`: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, `verdict=returned rc=0` (judged `verdict=done … result=pass:gc_triangle`), back after 44 s |
+| 8 `gl_test` case 1 (`gc_gl_triangle`) | triangle-rerun | **PASS** 2026-11-23, `20261123-0454-gl_test_case1-ed1e6361`: `gl_test: case 1 uniform: PASS` (10 checks), `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), back after 57 s; no `gl_test: all:` tally line (a defect of the one-case image, below) |
 
 ### How steps 1-4 were run and judged (2026-11-21)
 
-Runner `tools/board-stm32mp2.sh` at `8838d42b` (images built at `e07d066a`,
-the step 4 re-run's image at `a053c4aa`'s source, its banner
-`8838d42b-dirty`), `-DYAKOGL_WERROR=ON`, one-shot off the card's U-Boot
+Images built at `e07d066a` (the step 4 re-run's image from the source of
+the fix `2da6568d`, built before that commit), `-DYAKOGL_WERROR=ON`, run by
+`tools/board-stm32mp2.sh`, one-shot off the card's U-Boot
 through the runner-owned `preboot`. The console was reachable only through
 connected's serial tools, not as a device or bridge the runner opens, so
 every run was `MP2_NO_CONSOLE=1` (the runner's own line is
@@ -492,7 +498,7 @@ shared page unregistered at the end.
   - `verdict gpu-idle reset-idle=FAIL:absent idle=FAIL verdict=FAIL`
   - `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
   - `board-stm32mp2.sh stm32mp257f-dk mp2_gpu rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:mp2_gpu back_after=45s`
-- Fix `a053c4aa`: `power_up` and the reset-to-idle path read the register
+- Fix `2da6568d`: `power_up` and the reset-to-idle path read the register
   until the reset bit clears (at most `rcc::RELEASE_READS`, the count
   logged), and `power_up` also logs it at entry and with the reset held.
 - Re-run (image `9e520020`, `20261121-1107-mp2_gpu-9e520020`):
@@ -652,6 +658,117 @@ below are the parser's output on `console.mcp.txt` as saved.
   after the hand-over: the watchdog SMCs (step 3) and the SCMI session
   (step 4) both work.
 
+### How steps 7-8 were run and judged (2026-11-23)
+
+Both images were built at `8fe07a2a` (banner `sample: build tree=8fe07a2a
+table=6c5b8a70`, Zephyr `af17c0c8aa2a`) for
+`stm32mp257f_dk/stm32mp257fxx/a35` with `-DYAKOGL_WERROR=ON`. `gc_triangle`
+used its defaults (no `CONFIG_GC_TRIANGLE_LINEAR_OUT`) and was 103136 bytes.
+`gl_test` was built with `-DCONFIG_GL_TEST_MP2_SET_HEAD=y` (head of 1 case,
+`CONFIG_YAKOGL_STM32MP2_LIFETIME_S=100`) and was 2840528 bytes. Both ran on
+the same lease, one after the other, with `tools/board-stm32mp2.sh` at the
+same tip: `install`, then `run … gc_triangle`, then `run … gl_test_case1`.
+As in steps 1-6, every run was `MP2_NO_CONSOLE=1`. The USART2 text was read
+through connected's serial tools and saved as `console.mcp.txt` in each
+record, line by line, verbatim. Left out of that file: BL2's image-load
+`INFO` lines, the `optee msg` hex dumps, `gl_test`'s `px` picture rows and
+its `display_power: rif` lines. The verdicts are `dk_verdict.py --expect
+gc-triangle` / `--expect gl-case1` and `--expect supply` on that file, and
+`tools/board-stm32mp2.sh judge <record> console.mcp.txt`.
+
+The session's baseline was taken before `install` (dd of the card's
+`u-boot-env`, sha256 `3a1fe755…a766e7`; `/boot` 25 files, listing digest
+`dc6c9b99…`, the same as on 2026-11-21; no `/boot/yakogl`). The pristine
+image that `install` kept has the same sha256. After both runs, the 16 KiB
+of the two copies were written back from that image with the dd that
+`install` printed as its undo, and `/boot/yakogl` was removed. The whole
+512 KiB partition then read back as `3a1fe755…a766e7`, and `/boot` as the
+same 25 files with the same digest. `status` then printed `install: absent`
+and `left behind: nothing recorded`. The card was `mmcblk2` (type SD) and
+the eMMC was `mmcblk0` throughout. The board was back in ST's Linux
+(OpenSTLinux Weston) with Tailscale up. Every boot's BL2 printed
+`Reset reason: System reset (SYSRST) (0x2074). Warm boot.`, so no supply
+event occurred. The power path read as in steps 4-6: capability `0x8074`,
+every SCMI status 0, `rcc gpucfgr 0x00000006 at entry`, released after 1
+read, idle `0x7fffffff`, identity GC8000 0x6205 customer 0x15, `gc_irq: …
+route=ours`, 0x3A8 absent (`0xdeaddeac`), one reset attempt.
+
+**Step 7, `gc_triangle`: PASS.** The three-apex read-back passes on the
+first run. The five check lines and the final line, verbatim:
+
+```
+gc_triangle: red apex   PASS (128,19) = ee0809ff
+gc_triangle: green left PASS (35,111) = 09ee08ff
+gc_triangle: blue right PASS (220,111) = 0908eeff
+gc_triangle: outside     PASS (background kept outside the box and in the guard rows)
+gc_triangle: covered     PASS 10506 pixels (8388..12582 expected)
+gc_triangle: PASS (0 failing checks)
+```
+
+The record is `yk-record: 594b0209 00000001 0000290a 01000080`: kind APP,
+status 1, 0x290a = 10506 covered pixels, 256 << 16 | 128. The run ended with
+`mp2: board: run over: PSCI SYSTEM_RESET at 916 ms`. The 3D pipe drew into the
+`gpu-reserved` carveout, and the CPU read it back through its Normal
+non-cacheable mapping with no cache maintenance (Q14: GPU-to-CPU visibility
+works for the 3D pipe too, not only for the resolve engine).
+
+- `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c98 pc=0xa0006690 cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+- `verdict gc-irq connected=FAIL route=absent` (the parser's `I: ` prefix defect of steps 5-6; the line itself reads `route=ours`)
+- `verdict gc-triangle model=PASS apex-red=PASS apex-green=PASS apex-blue=PASS outside=PASS covered=PASS final=PASS record=PASS:kind=2`
+- `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+- runner: `board-stm32mp2.sh stm32mp257f-dk gc_triangle rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=44s`
+- judge: `board-stm32mp2.sh stm32mp257f-dk gc_triangle rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gc_triangle back_after=44s console=external`
+
+**Step 8, `gl_test` case 1: PASS.** The first case through YakoGL's GL
+core, the in-process compiler and the Vivante back end passes on the
+board. It printed `gl_test: the first 1 case(s) of the regression set, from
+case 1` and `gl_test: case 1 on the STM32MP257F-DK's GPU, skipping 10
+(lifetime 100000 ms)`. All 10 checks were `ok` (orange centroid and apex,
+background, cyan centroid, magenta via attribute 3, half inside/outside,
+shift). Then, verbatim:
+
+```
+gl_test: case 1 uniform: PASS
+gl_test: done
+gl_test: the suite took 411 ms
+```
+
+The record is `yk-record: 594b0103 0001ff01 0000000a 00000000`: kind CASE,
+case 1, no bad check (0xff), status 1, 10 checks. The sample's last line
+is `gl_test: PASS`, and the run ended with `mp2: board: run over: PSCI
+SYSTEM_RESET at 3308 ms`.
+
+- `verdict handover fields=PASS el=2 m=0 c=0 i=0 x0=0x1 x1=0xf8099c68 pc=0xa01fb2e0 cntfrq=40000000 mpidr=0x80000000 psci=0x10001`
+- `verdict gc-irq connected=FAIL route=absent` (the same parser defect)
+- `verdict gl-case1 case1=PASS tally=FAIL:absent final=PASS record=PASS:kind=1`
+- `verdict supply boot1=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF boot2=PASS:Warm:PADRSTF,VCORERSTF,VCPURSTF,SYSC1RSTF,C1RSTF`
+- runner: `board-stm32mp2.sh stm32mp257f-dk gl_test_case1 rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=57s`
+- judge: `board-stm32mp2.sh stm32mp257f-dk gl_test_case1 rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=pass:gl_test back_after=57s console=external`
+
+**Found defect: the one-case image prints no `gl_test: all:` tally.**
+`tally=FAIL:absent` is the only failing field of `gl-case1`. The board
+passed the case, and the same result came from triangle-run on
+2026-11-22. Two places expect the line: the step table (above) and
+`gl_test/README.md:14-16`. The defect is in the image, not the parser.
+`driver/samples/zephyr/gl_test/src/main_stm32mp2.c:132-135` sets `gl_case`
+to `set[0]` when the head is a single case, so `gl_test_run()` runs that
+case alone. Only the walk over a list prints `gl_test: all: …`
+(`driver/tools/pvrlab/runner/src/lib.rs:408-415`, `all_line`). The sample
+comment (`main_stm32mp2.c:39-40`) and its README promise the line anyway.
+
+Proposed fix (not made here; code is outside this item). Choose one:
+
+- make the one-case path print a one-case tally, `gl_test: all: <0|1> of 1
+  cases failed …`, from `report()` (`main_stm32mp2.c:89-111`) when `one` is
+  true. This keeps the kind-CASE single-case record that `dk_verdict.py`'s
+  `record` check reads.
+- or change the expectation: drop the tally from the step table and from
+  `gl_test/README.md` for `SET_HEAD_CASES=1`, and make `dk_verdict.py`'s
+  `tally` not judged (`tally=none`) when the log has no set walk.
+
+The first is the smaller change. `result_of` already reads `gl_test: PASS`,
+so the runner's `result=` is right either way.
+
 ## What these runs answer
 
 - Q1 customer id (step 4 prints it; expected 0x15, never read;
@@ -669,12 +786,18 @@ below are the parser's output on `console.mcp.txt` as saved.
   (`rcc.rs:18-21`): step 4's reset-to-idle is the answer;
 - Q14, the carveout's coherence with the A35 (pre-study `:829`): steps 5-6
   show a Normal non-cacheable CPU mapping with no maintenance works for the
-  ring, the MMU tables and a resolve-engine write read back by the CPU; step
-  7's CPU read-back of 3D-pipe output is the next reading, and a cacheable
-  mapping was not tried;
-- whether the ST row behaves like the i.MX8MP's end to end — steps 5-8 are
-  the fence, resolve-engine and 3D-pipe proof before any CTS row (pre-study
-  `:801-807`).
+  ring, the MMU tables and a resolve-engine write read back by the CPU.
+  Step 7 shows the same for 3D-pipe output (the three apexes and the
+  coverage read back right), and step 8 for a GL draw through the OSAL. A
+  cacheable mapping was not tried;
+- whether the ST row behaves like the i.MX8MP's end to end: **yes, for these
+  steps**. Steps 5-8 passed on the board: the fence, the resolve engine, the
+  3D pipe (`gc_triangle`'s five checks) and the GL core (`gl_test` case 1,
+  10 checks). They are the proof before any CTS row (pre-study `:801-807`).
+  What remains is the regression set and the dEQP-GLES2 sweep (P9, with the
+  Q11 line-width decision);
+- the supply check: every boot of steps 1-8 printed a warm SYSRST or IWDG1
+  reason, never a power-on or brown-out one.
 
 Out of this note's order: the display (P8, LTDC → DSI → ADV7535 → HDMI) is
 `docs/notes/stm32mp257f-dk-display.md` and its bring-up note; the gl_test
