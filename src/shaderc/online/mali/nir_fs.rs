@@ -4506,7 +4506,7 @@ fn ir_live<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [bool], MaliEr
             }
         }
     }
-    super::mark_reads(m, live, live_local, |_| false);
+    super::mark_reads(m, live, live_local, None, |_| false);
     Ok(live)
 }
 

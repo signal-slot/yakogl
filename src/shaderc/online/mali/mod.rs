@@ -2300,30 +2300,39 @@ pub fn program_reads(r: &MaliShader<'_>, fs_glsl: &[u8], scratch: &Arena<'_>) ->
 
 /// The lanes of each varying location that a live value of module `m`
 /// loads: a value is live when an output store, an `if` condition (a
-/// discard's among them) or another live value reads it, or a local that a
-/// live value loads stores it. A product Mesa folds to zero before its link
-/// reads neither operand ([`zero_product`], and not an exact one,
-/// [`exact_values`]). The liveness is flow-insensitive (a store overwritten
-/// later, or an `if` of a constant condition, keeps what it reads), so it
-/// keeps at least what Mesa's pre-link DCE keeps; a local nothing live
-/// loads, and what only it reads, is dead (femtovg's `scissor` in the
-/// stencil program).
+/// discard's among them) or another live value reads it, or a store to a
+/// local that a live load reads ([`LocalFlow`]). A product Mesa folds to
+/// zero before its link reads neither operand ([`zero_product`], and not an
+/// exact one, [`exact_values`]). Within one block a load reads the stores
+/// before it and a store a later one overwrites is dead, as after Mesa's
+/// pre-link copy and dead-write passes, and the branch an `if` of a
+/// constant condition does not take is dead ([`LocalFlow`]); across blocks
+/// the liveness is flow-insensitive (a store in a branch keeps what it
+/// reads), so it keeps at least what Mesa's pre-link DCE keeps; a local
+/// nothing live loads, and what only it reads, is dead (femtovg's `scissor`
+/// in the stencil program).
 fn live_varying_loads(m: &ir_mod::Module<'_>, scratch: &Arena<'_>) -> Result<[u8; select::MAX_VARYINGS], CompileError> {
     let oom = |_| CompileError::OutOfMemory { which: Which::Scratch, left: 0 };
     let exact = exact_values(m, scratch)?;
+    let flow = local_flow(m, scratch)?;
     let live = scratch.alloc_filled(m.instrs.len(), false).map_err(oom)?;
     let live_local = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
-    for (l, op) in live.iter_mut().zip(m.instrs) {
-        *l = matches!(op, ir_mod::Op::StoreOutput { .. });
+    /* an output store a later one overwrites, or one in a branch never
+     * taken, is no root; nor is the condition of an `if` never reached */
+    for ((l, op), k) in live.iter_mut().zip(m.instrs).zip(flow.killed) {
+        *l = matches!(op, ir_mod::Op::StoreOutput { .. }) && !k;
     }
     for n in m.nodes {
         if let ir_mod::Node::If { cond, .. } = n {
-            if let Some(l) = live.get_mut(cond.val.0 as usize) {
+            let i = cond.val.0 as usize;
+            if let Some(l) = live.get_mut(i).filter(|_| flow.unreached.get(i) == Some(&false)) {
                 *l = true;
             }
         }
     }
-    mark_reads(m, live, live_local, |i| exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32)));
+    mark_reads(m, live, live_local, Some(&flow), |i| {
+        exact.get(i) == Some(&false) && zero_product(m, ir_mod::ValueId(i as u32))
+    });
     let mut out = [0u8; select::MAX_VARYINGS];
     for (op, _) in m.instrs.iter().zip(live.iter()).filter(|(_, l)| **l) {
         if let ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Varying(loc), comps } = *op {
@@ -2332,6 +2341,285 @@ fn live_varying_loads(m: &ir_mod::Module<'_>, scratch: &Arena<'_>) -> Result<[u8
         }
     }
     Ok(out)
+}
+
+/// No store: a lane of [`LocalFlow::from`] that the load does not read.
+const NO_STORE: u32 = u32::MAX;
+
+/// The deepest value chain [`FlowWalk::lane_value`] follows.
+const MAX_CHAIN: u32 = 64;
+
+/// What Mesa's pre-link passes leave of the loads and stores of a module's
+/// locals and outputs within one block (a run of instructions with no
+/// control flow between them). gl_nir_opts (gl_nir_linker.c:46-116) runs
+/// nir_opt_copy_prop_vars and nir_opt_dead_write_vars (:68-69) on
+/// `gl_FragColor` too, a shader output the front end here stores directly
+/// or holds in a local, and nir_opt_dead_cf (:91):
+///
+/// - A load whose every lane a store before it in the block wrote reads
+///   those stores' values, and no longer the local
+///   (nir_opt_copy_prop_vars.c:747-831, `load_from_ssa_entry_value`: the
+///   load is removed only when every component is known).
+/// - A store whose lanes later stores in the block all write, before a
+///   load that is not forwarded reads the local, is removed
+///   (nir_opt_dead_write_vars.c:73-99 and :142-260, per block, by write
+///   mask). So is an output store another store of the output overwrites
+///   in its block.
+/// - An `if` whose condition is a constant is replaced by the branch it
+///   takes, which joins the block around it (nir_opt_dead_cf.c:72,
+///   `opt_constant_if`); the other branch is gone. A condition is a
+///   constant here when integer and bool operations compute it from
+///   constants through loads forwarded in its block
+///   ([`FlowWalk::lane_value`]): Mesa's front end folds such a `const`
+///   (dEQP's `if (bool(d.p))` with `const ivec4 d`).
+///
+/// dEQP shaders.random's `gl_FragColor = g * f; ...; gl_FragColor = a;`
+/// reads only `a` after them, so Mesa's link removes `g` from the vertex
+/// shader (issue #11309). Across blocks nothing else is forwarded or
+/// removed here (Mesa forwards into a branch, and makes the other locals
+/// SSA): a store there stays read by every load of its local, which keeps
+/// at least what Mesa keeps. A local of an array, or one accessed by an
+/// index, is never forwarded.
+pub(super) struct LocalFlow<'s> {
+    /// Per load instruction: the store of each lane it reads, when every
+    /// lane of the local was stored before it in its block; [`NO_STORE`] in
+    /// lane 0 otherwise.
+    from: &'s [[u32; 4]],
+    /// Per store instruction (a local's or an output's): no load reads it,
+    /// later stores of its block overwrite it or its branch is never taken.
+    killed: &'s [bool],
+    /// Per instruction: in a branch never taken.
+    unreached: &'s [bool],
+}
+
+impl LocalFlow<'_> {
+    /// The stores load `i` reads, when it is forwarded from its block.
+    fn from(&self, i: usize) -> Option<&[u32; 4]> {
+        self.from.get(i).filter(|s| s[0] != NO_STORE)
+    }
+}
+
+/// [`LocalFlow`] of module `m`.
+fn local_flow<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<LocalFlow<'s>, CompileError> {
+    let oom = |_| CompileError::OutOfMemory { which: Which::Scratch, left: 0 };
+    let n = m.instrs.len();
+    /* a local is followed lane by lane when it is one slot, never indexed */
+    let tracked = scratch.alloc_filled(m.locals.len(), false).map_err(oom)?;
+    for (t, d) in tracked.iter_mut().zip(m.locals) {
+        *t = d.array_len == 1;
+    }
+    for op in m.instrs {
+        if let ir_mod::Op::LoadLocal { local, index: Some(_), .. }
+        | ir_mod::Op::StoreLocal { local, index: Some(_), .. } = *op
+        {
+            if let Some(t) = tracked.get_mut(local.0 as usize) {
+                *t = false;
+            }
+        }
+    }
+    let mut w = FlowWalk {
+        m,
+        from: scratch.alloc_filled(n, [NO_STORE; 4]).map_err(oom)?,
+        killed: scratch.alloc_filled(n, false).map_err(oom)?,
+        unreached: scratch.alloc_filled(n, false).map_err(oom)?,
+        tracked,
+        /* (block, store) of each local's lanes, of its last store not yet
+         * read, and of each output's last store */
+        lane: scratch.alloc_filled(m.locals.len() * 4, (0u32, NO_STORE)).map_err(oom)?,
+        pending: scratch.alloc_filled(m.locals.len(), (0u32, NO_STORE)).map_err(oom)?,
+        output: scratch.alloc_filled(m.outputs.len(), (0u32, NO_STORE)).map_err(oom)?,
+        /* per store: the lanes no later store wrote yet, and the store of
+         * its local before it in the block not yet read */
+        left: scratch.alloc_filled(n, 0u8).map_err(oom)?,
+        prev: scratch.alloc_filled(n, NO_STORE).map_err(oom)?,
+        block: 1,
+    };
+    w.range(m.body, true);
+    Ok(LocalFlow { from: w.from, killed: w.killed, unreached: w.unreached })
+}
+
+/// A constant lane [`FlowWalk::lane_value`] computes.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Lane {
+    Int(i32),
+    Bool(bool),
+    /// The bits of a float constant (only converted to an integer).
+    Float(u32),
+}
+
+/// The walk of [`local_flow`] over the node tree, block by block.
+struct FlowWalk<'m, 'a, 's> {
+    m: &'m ir_mod::Module<'a>,
+    from: &'s mut [[u32; 4]],
+    killed: &'s mut [bool],
+    unreached: &'s mut [bool],
+    tracked: &'s [bool],
+    lane: &'s mut [(u32, u32)],
+    pending: &'s mut [(u32, u32)],
+    output: &'s mut [(u32, u32)],
+    left: &'s mut [u8],
+    prev: &'s mut [u32],
+    /// The current block's number; a table entry of another is stale.
+    block: u32,
+}
+
+impl FlowWalk<'_, '_, '_> {
+    /// The nodes of `r`; `reached` false for a branch never taken.
+    fn range(&mut self, r: ir_mod::Range, reached: bool) {
+        for node in self.m.nodes_of(r) {
+            match *node {
+                ir_mod::Node::Instr(id) if reached => self.instr(id.0 as usize),
+                ir_mod::Node::Instr(id) => {
+                    if let Some(i) = self.unreached.get_mut(id.0 as usize) {
+                        *i = true;
+                    }
+                    if let Some(k) = self.killed.get_mut(id.0 as usize) {
+                        *k = true;
+                    }
+                }
+                ir_mod::Node::If { cond, then_, else_ } => {
+                    let taken = if reached { self.lane_value(cond, 0, 0) } else { None };
+                    match taken {
+                        /* the branch taken joins this block */
+                        Some(Lane::Bool(c)) => {
+                            let (yes, no) = if c { (then_, else_) } else { (else_, then_) };
+                            self.range(no, false);
+                            self.range(yes, true);
+                        }
+                        _ => {
+                            self.block += 1;
+                            self.range(then_, reached);
+                            self.block += 1;
+                            self.range(else_, reached);
+                            self.block += 1;
+                        }
+                    }
+                }
+                ir_mod::Node::Loop { body } => {
+                    self.block += 1;
+                    self.range(body, reached);
+                    self.block += 1;
+                }
+                ir_mod::Node::Break | ir_mod::Node::Continue | ir_mod::Node::Return => self.block += 1,
+            }
+        }
+    }
+
+    fn instr(&mut self, i: usize) {
+        let b = self.block;
+        match self.m.instrs.get(i) {
+            Some(&ir_mod::Op::StoreOutput { slot, .. }) => {
+                let Some(o) = self.m.outputs.iter().position(|d| d.slot() == slot) else { return };
+                let (pb, j) = self.output[o];
+                if pb == b && j != NO_STORE {
+                    self.killed[j as usize] = true;
+                }
+                self.output[o] = (b, i as u32);
+            }
+            Some(&ir_mod::Op::StoreLocal { local, index: None, write_mask, .. }) => {
+                let l = local.0 as usize;
+                if self.tracked.get(l) != Some(&true) {
+                    return;
+                }
+                /* the stores of this block not read yet lose these lanes */
+                let first = match self.pending[l] {
+                    (pb, j) if pb == b => j,
+                    _ => NO_STORE,
+                };
+                let mut j = first;
+                while j != NO_STORE {
+                    let s = j as usize;
+                    self.left[s] &= !write_mask;
+                    if self.left[s] == 0 {
+                        self.killed[s] = true;
+                    }
+                    j = self.prev[s];
+                }
+                self.left[i] = write_mask;
+                self.prev[i] = first;
+                self.pending[l] = (b, i as u32);
+                for (k, e) in self.lane[l * 4..l * 4 + 4].iter_mut().enumerate() {
+                    if write_mask & (1 << k) != 0 {
+                        *e = (b, i as u32);
+                    }
+                }
+            }
+            Some(&ir_mod::Op::LoadLocal { local, index: None, .. }) => {
+                let l = local.0 as usize;
+                if self.tracked.get(l) != Some(&true) {
+                    return;
+                }
+                let comps = self.m.locals.get(l).map_or(4, |d| usize::from(d.ty.comps.clamp(1, 4)));
+                let lanes = &self.lane[l * 4..l * 4 + comps];
+                if lanes.iter().all(|&(lb, _)| lb == b) {
+                    for (f, &(_, s)) in self.from[i].iter_mut().zip(lanes) {
+                        *f = s;
+                    }
+                } else {
+                    /* a load that stays reads every store before it: none
+                     * of them is overwritten any more */
+                    self.pending[l] = (0, NO_STORE);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Lane `k` of `s` when integer and bool operations compute it from
+    /// constants, through loads forwarded in their block; `depth` the chain
+    /// followed so far. None for anything else (a float operation, which
+    /// Mesa folds in its own way, is never evaluated).
+    fn lane_value(&self, s: ir_mod::Src, k: usize, depth: u32) -> Option<Lane> {
+        use ir_mod::{AluOp, Op};
+        if depth > MAX_CHAIN {
+            return None;
+        }
+        let i = s.val.0 as usize;
+        let k = usize::from(*s.swizzle.get(k)?);
+        let src = |n: usize| match self.m.instrs.get(i) {
+            Some(Op::Alu(_, srcs)) => self.lane_value(srcs[n], k, depth + 1),
+            _ => None,
+        };
+        let int = |n: usize| match src(n)? {
+            Lane::Int(v) => Some(v),
+            _ => None,
+        };
+        let bool_ = |n: usize| match src(n)? {
+            Lane::Bool(v) => Some(v),
+            _ => None,
+        };
+        Some(match *self.m.instrs.get(i)? {
+            Op::ConstI32(c) => Lane::Int(*c.get(k)?),
+            Op::ConstBool(c) => Lane::Bool(*c.get(k)?),
+            Op::ConstF32(c) => Lane::Float(*c.get(k)?),
+            Op::LoadLocal { index: None, .. } => {
+                let store = *self.from.get(i).filter(|s| s[0] != NO_STORE)?.get(k)?;
+                match *self.m.instrs.get(store as usize)? {
+                    Op::StoreLocal { src, .. } => self.lane_value(src, k, depth + 1)?,
+                    _ => return None,
+                }
+            }
+            Op::Alu(op, _) => match op {
+                AluOp::Iadd => Lane::Int(int(0)?.wrapping_add(int(1)?)),
+                AluOp::Imul => Lane::Int(int(0)?.wrapping_mul(int(1)?)),
+                AluOp::Ineg => Lane::Int(int(0)?.wrapping_neg()),
+                AluOp::Ieq => Lane::Bool(int(0)? == int(1)?),
+                AluOp::Ine => Lane::Bool(int(0)? != int(1)?),
+                AluOp::Ilt => Lane::Bool(int(0)? < int(1)?),
+                AluOp::Ile => Lane::Bool(int(0)? <= int(1)?),
+                AluOp::B2i => Lane::Int(i32::from(bool_(0)?)),
+                AluOp::I2b => Lane::Bool(int(0)? != 0),
+                AluOp::Bnot => Lane::Bool(!bool_(0)?),
+                AluOp::F2i => match src(0)? {
+                    /* a float constant well inside the integer range */
+                    Lane::Float(f) if f32::from_bits(f).abs() < 2_147_483_520.0 => Lane::Int(f32::from_bits(f) as i32),
+                    _ => return None,
+                },
+                _ => return None,
+            },
+            _ => return None,
+        })
+    }
 }
 
 /// Whether Mesa 26.2.1 holds the output `d` invariant: the shader names
@@ -2365,26 +2653,31 @@ fn exact_values<'s>(m: &ir_mod::Module<'_>, scratch: &Arena<'s>) -> Result<&'s [
         *e = matches!(*op, ir_mod::Op::StoreOutput { slot, .. }
             if m.outputs.iter().any(|d| d.slot() == slot && mesa_invariant(d)));
     }
-    mark_reads(m, exact, exact_local, |_| false);
+    mark_reads(m, exact, exact_local, None, |_| false);
     Ok(exact)
 }
 
 /// Marks, to a fixed point, what the marked values of module `m` are
 /// computed from: the sources of a marked value, and the stores to a local
-/// (`local`) that a marked value loads. A marked value that `folded` is
-/// true of reads none of its sources.
+/// (`local`) that a marked value loads. With `flow`, a load forwarded from
+/// the stores before it in its block reads those stores only, and a store
+/// a later one in its block overwrites is read by no other load
+/// ([`LocalFlow`]); without it, every store to a loaded local is read. A
+/// marked value that `folded` is true of reads none of its sources.
 pub(super) fn mark_reads(
     m: &ir_mod::Module<'_>,
     marked: &mut [bool],
     local: &mut [bool],
+    flow: Option<&LocalFlow<'_>>,
     folded: impl Fn(usize) -> bool,
 ) {
+    let killed = |i: usize| flow.is_some_and(|f| f.killed.get(i) == Some(&true));
     /* each round walks every instruction once */
     loop {
         let mut grew = false;
         for (i, op) in m.instrs.iter().enumerate() {
             if let ir_mod::Op::StoreLocal { local: l, .. } = *op {
-                if marked.get(i) == Some(&false) && local.get(l.0 as usize) == Some(&true) {
+                if marked.get(i) == Some(&false) && local.get(l.0 as usize) == Some(&true) && !killed(i) {
                     marked[i] = true;
                     grew = true;
                 }
@@ -2393,9 +2686,21 @@ pub(super) fn mark_reads(
                 continue;
             }
             if let ir_mod::Op::LoadLocal { local: l, .. } = *op {
-                if let Some(l) = local.get_mut(l.0 as usize).filter(|l| !**l) {
-                    *l = true;
-                    grew = true;
+                match flow.and_then(|f| f.from(i)) {
+                    Some(stores) => {
+                        for &j in stores.iter().filter(|&&j| j != NO_STORE) {
+                            if let Some(d) = marked.get_mut(j as usize).filter(|d| !**d) {
+                                *d = true;
+                                grew = true;
+                            }
+                        }
+                    }
+                    None => {
+                        if let Some(l) = local.get_mut(l.0 as usize).filter(|l| !**l) {
+                            *l = true;
+                            grew = true;
+                        }
+                    }
                 }
             }
             if folded(i) {
