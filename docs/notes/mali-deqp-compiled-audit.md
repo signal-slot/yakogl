@@ -238,6 +238,13 @@ the estimated cases.
   All 13 are `_fragment` cases.
 - **Fix candidate:** take the lane's own half (`H11` for an odd lane).
   Mesa's words for the shape are the sampled pair's reference.
+- **Fixed (issue #11306).** The `b2i32` arm widens the half the lane's
+  source names. Four of the five D1 references are byte-equal now
+  (`LOWERED` in `tests/mali_deqp_audit.rs`). Of the issue's 10 `to ivec`
+  cases, 9 pairs are byte-equal; `bvec3_float_to_ivec4` and the fifth
+  reference (`d1_conv_bool_bool_to_ivec2_fs`) still differ in form only:
+  Mesa narrows and compares two varying lanes as one pair, ours one at a
+  time, each lane on its own mask.
 
 ### 4.2 V1: vertex mediump/lowp arithmetic at fp32 (Mesa narrows to fp16)
 

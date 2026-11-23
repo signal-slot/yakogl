@@ -8,9 +8,8 @@
 //! `tools/mali/deqp_ref.sh <vert> <frag> tools/mali/testdata/deqp_audit_<name> --instrument shim`
 //! (`drm_shim_ref.sh run ... --uniform-values` on Mesa 26.2.1's G610
 //! drm-shim, then `pan_ref_diff.py extract --draw`). `tests/mali_ref` does the
-//! compare. At the tip every one compiles and none is byte-equal, so each
-//! compare test is `#[ignore]`d and `differs_pinned` holds the shapes in
-//! [`DIFFERS`]. The lowering step that makes one byte-equal moves it to
+//! compare. A reference that compiles to other words has its compare test
+//! `#[ignore]`d, and `differs_pinned` holds the shapes in [`DIFFERS`]. The lowering step that makes one byte-equal moves it to
 //! [`LOWERED`] in the same commit and drops its `#[ignore]`; the cause tags
 //! (D1, V1, F1, S1, A1, M1, L1, R1, K1) are the audit note's section 4.
 //!
@@ -51,17 +50,19 @@ mod mali_ref;
 
 /// The references a lowering step made byte-equal, without the
 /// `deqp_audit_` prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &["l1_matrix_sub_uniform_mediump_mat3_vs"];
+const LOWERED: &[&str] = &[
+    "d1_conv_bvec2_int_to_ivec3_fs",
+    "d1_conv_bvec3_to_ivec3_fs",
+    "d1_conv_bvec4_to_ivec2_fs",
+    "d1_conv_vec2_bvec2_to_ivec4_fs",
+    "l1_matrix_sub_uniform_mediump_mat3_vs",
+];
 
 /// The references that compile with other words than Mesa's.
 const DIFFERS: &[&str] = &[
     "a1_op_greater_or_equal_highp_float_vs",
     "a1_op_greaterthan_highp_ivec2_vs",
     "d1_conv_bool_bool_to_ivec2_fs",
-    "d1_conv_bvec2_int_to_ivec3_fs",
-    "d1_conv_bvec3_to_ivec3_fs",
-    "d1_conv_bvec4_to_ivec2_fs",
-    "d1_conv_vec2_bvec2_to_ivec4_fs",
     "f1_conv_float_to_mat3_fs",
     "f1_conv_vec3_float_to_mat2_fs",
     "f1_op_distance_mediump_float_fs",
@@ -94,15 +95,14 @@ const DIFFERS: &[&str] = &[
     "v1_uniform_initial_float_vs",
 ];
 
-/// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_ivec3_fragment` (cause D1): the odd-lane miscompile: `ivec3(in0, in1)` reads lane x of the bvec2 for lane y (`nir_fs.rs:12205-12210`).
+/// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec2_int_to_ivec3_fragment` (cause D1): the odd-lane miscompile: `ivec3(in0, in1)` read lane x of the bvec2 for lane y; `b2i32` of a 16-bit mask now widens the lane's own half (`IADD.v2u16 r2, r0.h11, 0x0`).
 /// Rebuilt from conversions.test through the ShaderLibrary template of the existing `deqp_intval3_reslib_*` pairs.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_bvec2_int_to_ivec3_fs() {
     mali_ref::assert_matches("deqp_audit_d1_conv_bvec2_int_to_ivec3_fs");
 }
 
-/// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_ivec2_fragment` (cause D1): D1 again: two bool inputs widened to an ivec2.
+/// `dEQP-GLES2.functional.shaders.conversions.vector_combine.bool_bool_to_ivec2_fragment` (cause D1): two bool inputs widened to an ivec2. Each lane now widens its own mask; the words still differ: Mesa narrows and compares the two varyings as one pair (`V2F32_TO_V2F16`, `FCMP_OR.v2f16`), ours one at a time.
 /// Rebuilt from conversions.test through the ShaderLibrary template of the existing `deqp_intval3_reslib_*` pairs.
 #[test]
 #[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
@@ -113,7 +113,6 @@ fn d1_conv_bool_bool_to_ivec2_fs() {
 /// `dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec3_to_ivec3_fragment` (cause D1): D1 again: a whole bvec3 widened.
 /// Rebuilt from conversions.test through the ShaderLibrary template of the existing `deqp_intval3_reslib_*` pairs.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_bvec3_to_ivec3_fs() {
     mali_ref::assert_matches("deqp_audit_d1_conv_bvec3_to_ivec3_fs");
 }
@@ -121,7 +120,6 @@ fn d1_conv_bvec3_to_ivec3_fs() {
 /// `dEQP-GLES2.functional.shaders.conversions.vector_to_vector.bvec4_to_ivec2_fragment` (cause D1): D1 again: a bvec4 truncated to an ivec2.
 /// Rebuilt from conversions.test through the ShaderLibrary template of the existing `deqp_intval3_reslib_*` pairs.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_bvec4_to_ivec2_fs() {
     mali_ref::assert_matches("deqp_audit_d1_conv_bvec4_to_ivec2_fs");
 }
@@ -129,7 +127,6 @@ fn d1_conv_bvec4_to_ivec2_fs() {
 /// `dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_bvec2_to_ivec4_fragment` (cause D1): D1 again: a vec2 and a bvec2 into an ivec4.
 /// Rebuilt from conversions.test through the ShaderLibrary template of the existing `deqp_intval3_reslib_*` pairs.
 #[test]
-#[ignore = "compiles with other words than Mesa's; pinned by differs_pinned"]
 fn d1_conv_vec2_bvec2_to_ivec4_fs() {
     mali_ref::assert_matches("deqp_audit_d1_conv_vec2_bvec2_to_ivec4_fs");
 }
