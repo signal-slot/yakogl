@@ -227,7 +227,7 @@ scope_of_path() {
   # scope): the `tests` scope, the test rows of the targets it reaches
   # (tools/check_tests_reach.py)
   tests/*) echo tests ;;
-  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
+  tools/cts/* | tools/testdata/* | tools/*.py | tools/check_selftests_selftest.sh | tools/redact-diff-scan-selftest.sh | tools/board.sh | tools/board_selftest.sh | tools/board-stm32mp2.sh | tools/board_stm32mp2_selftest.sh | tools/board-stm32mp2-standalone.sh | tools/board_stm32mp2_standalone_selftest.sh | tools/setup-gate-host.sh | tools/env/* | tools/uboot-netboot-lib.sh | tools/website-check.sh | tools/hostharness/* | tools/README.md) echo tools ;;
   *) echo all ;;
   esac
 }

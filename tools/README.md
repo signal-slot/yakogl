@@ -650,6 +650,23 @@ the file `YAKOGL_REDACTION_PRIVATE_FILE` names. Exit 0 clean, 1 an H/M
 finding, 3 private classes not run; `--help` has the format, `--self-test`
 the fixtures (`tests/redaction_scan.rs` runs it).
 
+## redact-diff-scan.py — a redaction scan of a diff
+
+`python3 -I tools/redact-diff-scan.py [RANGE]` (default `origin/main..HEAD`)
+scans the added lines of RANGE for the values a commit must not hold: a
+non-documentation IPv4 address (the tailnet CGNAT range as its own class), a
+tailnet DNS name, a SoM-serial host name, `root@` with a host named
+outright, a serial-bridge port, a USB adapter's device path or a USB serial
+number value, a MAC address, a provider key by its shape, a credential
+assignment, a private-key header. It prints `file:line: class: line` per hit
+and exits 1 on any hit, 0 when the scan ran clean, 2 when it could not run.
+A fixture or rule line that holds such a pattern on purpose carries
+`redact-scan: ok` in a comment and is skipped. The tree scan above covers
+the whole tree and the private values; this covers what a range adds, and
+neither it nor its self-test holds a value its classes matches — the
+self-test commits copies of both files and scans them clean
+(`tools/redact-diff-scan-selftest.sh`).
+
 ## uboot_env.py — a U-Boot environment image, byte for byte
 
 `python3 -I tools/uboot_env.py print|set|unset|check|diff ...` reads and edits
