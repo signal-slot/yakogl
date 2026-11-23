@@ -174,7 +174,7 @@ fn build_with(vs_bin: &[u8], vs_meta: ShaderMeta, fs_bin: &[u8], fs_meta: Shader
                 front_cw: false,
                 cull: Cull::None,
                 textures: &[],
-                vs_texture: None,
+                vs_textures: &[],
                 occlusion_query: None,
                 alpha_to_coverage: false,
                 blend_shader: None,
@@ -627,7 +627,7 @@ fn each_draw_not_built_is_refused_by_name() {
         front_cw: false,
         cull: Cull::None,
         textures: &[],
-        vs_texture: None,
+        vs_textures: &[],
         occlusion_query: None,
         alpha_to_coverage: false,
         blend_shader: None,
@@ -682,7 +682,7 @@ fn each_draw_not_built_is_refused_by_name() {
                 front_cw: false,
                 cull: Cull::None,
                 textures: &[],
-                vs_texture: None,
+                vs_textures: &[],
                 attributes: &seventeen,
                 ..draw
             }),
@@ -720,7 +720,7 @@ fn each_draw_not_built_is_refused_by_name() {
                 front_cw: false,
                 cull: Cull::None,
                 textures: &[],
-                vs_texture: None,
+                vs_textures: &[],
                 fs: &fs_halves,
                 fs_uniforms: &four,
                 ..draw
@@ -806,7 +806,7 @@ fn each_draw_not_built_is_refused_by_name() {
         front_cw: false,
         cull: Cull::None,
         textures: &[],
-        vs_texture: None,
+        vs_textures: &[],
         scissor: Some([10, 10, 0, 5]),
         ..draw
     });

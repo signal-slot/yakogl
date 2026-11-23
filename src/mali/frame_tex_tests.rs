@@ -131,12 +131,12 @@ fn build(tex: SampledTexture) -> Built {
 /// FBO, or (`flip_y`) into the window surface, whose draws flip the
 /// viewport and the front face as the GL core asks for a window.
 fn build_draw(tex: Option<SampledTexture>, vs_tex: Option<SampledTexture>, flip_y: bool) -> Built {
-    build_textures(tex.as_slice(), vs_tex, flip_y)
+    build_textures(tex.as_slice(), vs_tex.as_slice(), flip_y)
 }
 
-/// The same frame with `textures` for the fragment stage, texture i at
-/// index i of its tables.
-fn build_textures(textures: &[SampledTexture], vs_tex: Option<SampledTexture>, flip_y: bool) -> Built {
+/// The same frame with `textures` for the fragment stage and `vs_textures`
+/// for the vertex stage, texture i at index i of its stage's tables.
+fn build_textures(textures: &[SampledTexture], vs_textures: &[SampledTexture], flip_y: bool) -> Built {
     let (mut desc_m, mut code_m, mut spd_m, mut ctx_m) =
         (vec![0u8; 0x4000], vec![0u8; 0x800], vec![0u8; 0x100], vec![0u8; 0x200]);
     let mut words = vec![0u64; 512];
@@ -157,7 +157,7 @@ fn build_textures(textures: &[SampledTexture], vs_tex: Option<SampledTexture>, f
         let mut code = Arena::new("code", 0x7fff_ffff_c000, &mut code_m).unwrap();
         let mut spds = Arena::new("spds", SPDS, &mut spd_m).unwrap();
         let bin = [0u8; 128];
-        let vs_meta = ShaderMeta { samples_texture: vs_tex.is_some(), ..meta(ShaderStage::VERTEX) };
+        let vs_meta = ShaderMeta { samples_texture: !vs_textures.is_empty(), ..meta(ShaderStage::VERTEX) };
         let fs_meta = ShaderMeta { samples_texture: !textures.is_empty(), ..meta(ShaderStage::FRAGMENT) };
         let vs = upload_program(&mut code, &mut spds, &bin, vs_meta).unwrap();
         let fs = upload_program(&mut code, &mut spds, &bin, fs_meta).unwrap();
@@ -191,7 +191,7 @@ fn build_textures(textures: &[SampledTexture], vs_tex: Option<SampledTexture>, f
             front_cw: false,
             cull: Cull::None,
             textures,
-            vs_texture: vs_tex,
+            vs_textures,
             blend: None,
             polygon_offset: None,
             occlusion_query: None,
@@ -420,7 +420,7 @@ fn a_texture_and_its_shader_must_agree() {
         front_cw: false,
         cull: Cull::None,
         textures,
-        vs_texture: None,
+        vs_textures: &[],
         blend: None,
         polygon_offset: None,
         occlusion_query: None,
@@ -694,7 +694,7 @@ const VTX: &str = include_str!("../../tools/mali/board-dump/vtxgrid-2026-10-20.t
 /// sampled by the vertex shader (`texture2DLod` in vtxgrid_vs.vert), built
 /// with the levels where Mesa put them and the storage the backend gives
 /// the GL core's GL_RGB (RGBA8 read through the RGB1 swizzle,
-/// backend.rs `sampled_texture`). Entries 3 (samplers) and 4 (textures) of
+/// backend.rs `stage_texture`). Entries 3 (samplers) and 4 (textures) of
 /// the vertex resource table, which both IDVS programs read, the sampler,
 /// the texture descriptor and its five planes are the dump's but for the
 /// named causes.
@@ -1009,7 +1009,8 @@ fn a_cube_map_s_planes_are_face_major() {
 }
 
 /// A vertex shader that samples and a draw without a vertex texture (or
-/// the other way round) is refused, as for the fragment stage.
+/// the other way round) is refused, as for the fragment stage, and so are
+/// more vertex textures than a stage's tables hold.
 #[test]
 fn a_vertex_texture_and_its_shader_must_agree() {
     let mut desc_m = vec![0u8; 0x4000];
@@ -1050,7 +1051,7 @@ fn a_vertex_texture_and_its_shader_must_agree() {
     let mut desc = Arena::new("desc", DESC, &mut desc_m).unwrap();
     let mut cs = Stream::new(&mut words, 92);
     let mut open = begin_frame(&mut desc, &mut cs).unwrap();
-    let draw = |vs, vs_texture| DrawCall {
+    let draw = |vs, vs_textures| DrawCall {
         sample_mask: 0xf,
         vs,
         fs: &fs,
@@ -1072,7 +1073,7 @@ fn a_vertex_texture_and_its_shader_must_agree() {
         front_cw: false,
         cull: Cull::None,
         textures: &[],
-        vs_texture,
+        vs_textures,
         blend: None,
         polygon_offset: None,
         occlusion_query: None,
@@ -1081,10 +1082,13 @@ fn a_vertex_texture_and_its_shader_must_agree() {
     };
     let mut misaligned = texture_of("nearest_clamp");
     misaligned.level[0] = TextureLevel { gpu: TEXELS + 32, row_stride: ROW_STRIDE };
+    let plain = texture_of("nearest_clamp");
+    let seventeen = [plain; MAX_STAGE_TEXTURES + 1];
     for (d, want) in [
-        (draw(&vs_tex, None), FrameError::Invalid(INVALID_TEXTURE)),
-        (draw(&vs_plain, Some(texture_of("nearest_clamp"))), FrameError::Invalid(INVALID_TEXTURE)),
-        (draw(&vs_tex, Some(misaligned)), FrameError::Invalid(INVALID_TEXTURE_ALIGN)),
+        (draw(&vs_tex, &[]), FrameError::Invalid(INVALID_TEXTURE)),
+        (draw(&vs_plain, &[plain]), FrameError::Invalid(INVALID_TEXTURE)),
+        (draw(&vs_tex, &[plain, misaligned]), FrameError::Invalid(INVALID_TEXTURE_ALIGN)),
+        (draw(&vs_tex, &seventeen), FrameError::NotBuilt(NOT_BUILT_TEXTURE_SIZE)),
     ] {
         let got = add_draw(&mut open, &mut desc, &mut cs, &ctx, &target, false, &d).map(|_| ());
         assert_eq!(got.map_err(|e| format!("{e}")), Err(format!("{want}")));
@@ -1338,15 +1342,25 @@ const TEXMORE_206_VOL: &str = include_str!("../../tools/mali/testdata/texmore_20
 /// shadowcmp_218: gl_test case 218's two sampler2DShadow over one 4x4
 /// DEPTH_COMPONENT32F texture (fsarith_218_shadowcmp.vert and .frag).
 const SHADOWCMP_218: &str = include_str!("../../tools/mali/testdata/shadowcmp_218.trace");
+/// vstex2_2d_cube with the memory dump: a vertex shader that reads a
+/// sampler2D at unit 0 (a 2x2 RGBA8, nearest, clamped) and a samplerCube at
+/// unit 1 (16x16 RGBA8 faces, five levels, nearest-mipmap-nearest,
+/// clamped), dEQP-GLES2 uniform_api `sampler2D_samplerCube_vertex`'s
+/// program with its struct members as plain uniforms (issue #11308). Drawn
+/// with the run form of tools/mali/drm_shim_ref.sh and `dump` added:
+/// `PAN_MESA_DEBUG=trace,dump`, gl_ref.py `vstex2_2d_cube.vert
+/// vstex2_2d_cube.frag --uniform-values`.
+const VSTEX2_2D_CUBE: &str = include_str!("../../tools/mali/testdata/vstex2_2d_cube_dump.trace");
 
 /// One decoded descriptor: pandecode's `Key: value` lines.
 type Fields = BTreeMap<String, String>;
 
-/// The fragment resource table of a shim trace as pandecode decodes it:
-/// each entry's address and size, the samplers of entry 3, the textures of entry 4 and
-/// each texture's planes, in table order.
+/// One resource table of a shim trace's first draw as pandecode decodes
+/// it: its address, each entry's address and size, the samplers of entry
+/// 3, the textures of entry 4 and each texture's planes, in table order.
 #[derive(Default)]
 struct ShimTables {
+    table: u64,
     address: BTreeMap<usize, u64>,
     size: BTreeMap<usize, u64>,
     samplers: Vec<Fields>,
@@ -1369,6 +1383,12 @@ fn shim_memory(trace: &str) -> BTreeMap<u64, [u8; 16]> {
 }
 
 fn shim_fragment_tables(trace: &str) -> ShimTables {
+    shim_tables(trace, "Fragment")
+}
+
+/// The resource table `stage` ("Fragment", "Position" or "Varying") of a
+/// shim trace's first draw ([`ShimTables`]).
+fn shim_tables(trace: &str, stage: &str) -> ShimTables {
     #[derive(PartialEq)]
     enum In {
         Entry,
@@ -1378,12 +1398,10 @@ fn shim_fragment_tables(trace: &str) -> ShimTables {
         Other,
     }
     let lines: Vec<&str> = trace.lines().collect();
-    let at = lines
-        .iter()
-        .position(|l| l.trim_start().starts_with("Fragment resources resource table @"))
-        .expect("a fragment resource table");
+    let head = format!("{stage} resources resource table @");
+    let at = lines.iter().position(|l| l.trim_start().starts_with(&head)).expect("the stage's resource table");
     let base = indent(lines[at]);
-    let mut t = ShimTables::default();
+    let mut t = ShimTables { table: hex(&lines[at].trim_start()[head.len()..]), ..Default::default() };
     let (mut entry, mut entry_indent, mut now) = (usize::MAX, 0, In::Other);
     for l in lines[at + 1..].iter().take_while(|l| indent(l) > base) {
         let s = l.trim();
@@ -1609,7 +1627,15 @@ fn stacked(gpu: u64, side: u32, layers: u32, levels: u32, wrap_r: WrapMode) -> S
 /// packed again, so the comparison is with Mesa's own words. Returns the
 /// differences named.
 fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture]) -> usize {
-    let shim = shim_fragment_tables(trace);
+    check_shim_stage_tables(name, trace, textures, false)
+}
+
+/// [`check_shim_tables`] for the fragment stage, or (`vertex`) for the
+/// vertex stage: the shim's Position resource table against our vertex
+/// resource table, with `textures` the vertex shader's and the fragment
+/// shader sampling none.
+fn check_shim_stage_tables(name: &'static str, trace: &str, textures: &[SampledTexture], vertex: bool) -> usize {
+    let shim = shim_tables(trace, if vertex { "Position" } else { "Fragment" });
     let mem = shim_memory(trace);
     /* Mesa's words, where the dump holds them */
     let words = |what: String, va: u64, packed: &[u8]| {
@@ -1617,9 +1643,15 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
             assert_eq!(trace::bytes(&mem, va, packed.len()), packed, "{name}: {what} at {va:#x} is not Mesa's words");
         }
     };
-    let b = build_textures(textures, None, false);
+    let b = if vertex { build_textures(&[], textures, false) } else { build_textures(textures, &[], false) };
+    let l = &b.layout;
+    let (resources, samplers, texture, planes) = if vertex {
+        (l.vs_resources, l.vs_sampler, l.vs_texture, l.vs_plane)
+    } else {
+        (l.fs_resources, l.fs_sampler, l.fs_texture, l.fs_plane)
+    };
     let ours = |gpu: u64, len: usize| b.desc[(gpu - DESC) as usize..(gpu - DESC) as usize + len].to_vec();
-    let table = ours(b.layout.fs_resources.expect("a fragment resource table").gpu, 7 * Resource::LENGTH);
+    let table = ours(resources.expect("the stage's resource table").gpu, 7 * Resource::LENGTH);
     let entry = |i: usize| Resource::unpack(table[16 * i..16 * i + 16].try_into().unwrap()).unwrap();
     let n = textures.len();
     assert_eq!((shim.samplers.len(), shim.textures.len()), (n, n), "{name}: the shim's tables hold {n} each");
@@ -1628,11 +1660,11 @@ fn check_shim_tables(name: &'static str, trace: &str, textures: &[SampledTexture
     assert_eq!((shim.size[&3], shim.size[&4]), (32 * n as u64, 32 * n as u64), "{name}: the shim's entry sizes");
     assert_eq!((o_samplers.size, o_textures.size), (32 * n as u64, 32 * n as u64), "{name}: our entry sizes");
     assert!(o_samplers.contains_descriptors && o_textures.contains_descriptors);
-    assert_eq!(o_samplers.address, b.layout.fs_sampler.expect("the samplers").gpu);
-    assert_eq!(o_textures.address, b.layout.fs_texture.expect("the textures").gpu);
+    assert_eq!(o_samplers.address, samplers.expect("the samplers").gpu);
+    assert_eq!(o_textures.address, texture.expect("the textures").gpu);
     let mut failures = Vec::new();
     let mut named = 0;
-    let mut planes_at = b.layout.fs_plane.expect("the planes").gpu;
+    let mut planes_at = planes.expect("the planes").gpu;
     for (i, tex) in textures.iter().enumerate() {
         /* the sampler: every byte equal */
         let m_s = shim_sampler(shim.samplers[i].clone()).pack().unwrap();
@@ -1797,6 +1829,56 @@ fn two_samplers_are_the_shim_s_tables() {
     /* per texture: the planes' address, texel interleave, clump ordering,
      * row stride and size */
     assert_eq!(check_shim_tables("texmore_2", TEXMORE_2, &textures), 2 * 5);
+}
+
+/// A vertex shader that reads two textures, a 2D texture and a cube map
+/// (vstex2_2d_cube, issue #11308): the vertex resource table's entries 3
+/// and 4 hold two samplers and two texture descriptors, texture i of
+/// sampler binding i, as Mesa 26.2.1 builds every stage's tables
+/// (`panfrost_emit_texture_descriptors`, `panfrost_emit_sampler_descriptors`,
+/// pan_cmdstream.c:1934-1985, 2022-2043). The textures are what the back end
+/// makes of the GL core's two bindings (`texture_of`), level 0 at the shim's
+/// plane pointers. Both IDVS programs read one table: the shim's Position
+/// and Varying tables are one, as ours (pan_csf.c:1726-1727). Every byte is
+/// Mesa's own words but for the named causes.
+#[test]
+fn a_vertex_2d_texture_and_cube_map_are_the_shim_s() {
+    assert!(!shim_memory(VSTEX2_2D_CUBE).is_empty(), "vstex2_2d_cube_dump holds the memory");
+    let shim = shim_tables(VSTEX2_2D_CUBE, "Position");
+    assert_eq!(shim.table, shim_tables(VSTEX2_2D_CUBE, "Varying").table, "one vertex table for both programs");
+    let fragment = shim_fragment_tables(VSTEX2_2D_CUBE);
+    assert!(fragment.textures.is_empty() && fragment.samplers.len() == 1, "the fragment stage samples nothing");
+    let pointer = |i: usize| hex(&shim.planes[i][0]["Pointer"]);
+    let texels = [0u8; 16 * 96 * 4];
+    let bind = |gpu: u64, cube: bool| crate::backend::GlesTextureBind {
+        format: crate::backend::GLES_TEXFMT_RGBA8,
+        type_: if cube { crate::backend::GLES_TEXTYPE_CUBE } else { crate::backend::GLES_TEXTYPE_2D },
+        layers: if cube { 6 } else { 1 },
+        base_gpu: gpu,
+        width: if cube { 16 } else { 2 },
+        height: if cube { 96 } else { 2 },
+        stride_texels: 16,
+        bytes: if cube { 16 * 96 * 4 } else { 2 * 16 * 4 },
+        mip_filter: u8::from(cube),
+        mip_levels: if cube { 5 } else { 0 },
+        wrap_s: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        wrap_t: crate::backend::GLES_WRAP_CLAMP_TO_EDGE,
+        cpu: texels.as_ptr().cast(),
+        ..crate::backend::GlesTextureBind::ZERO
+    };
+    let mut data_m = vec![0u8; 0x100];
+    let mut data = super::arena::Pool::new("data", 0x10_0000, &mut data_m).unwrap();
+    let textures = [
+        super::backend::texture_of(Some(&bind(pointer(0), false)), &mut data).unwrap(),
+        super::backend::texture_of(Some(&bind(pointer(1), true)), &mut data).unwrap(),
+    ];
+    assert!(!textures[0].is_cube() && textures[1].is_cube());
+    /* the 2D texture as texmore_2's (the planes' address, texel
+     * interleave, clump ordering, row stride, size); the cube: the planes'
+     * address and texel interleave, each of the 30 planes' clump ordering
+     * and row stride, the size of the 24 planes smaller than 16x16, and
+     * the pointer of every plane but face 0's level 0 */
+    assert_eq!(check_shim_stage_tables("vstex2_2d_cube", VSTEX2_2D_CUBE, &textures, true), 5 + 2 + 30 * 2 + 24 + 29);
 }
 
 /// gl_test case 218 (shadowcmp): two sampler2DShadow over one 4x4
@@ -2055,7 +2137,7 @@ fn a_volume_is_neither_a_cube_nor_an_array() {
     assert!(!v.is_cube(), "six slices are not six faces");
     assert_eq!((v.texture(0).dimension, v.texture(0).array_size), (TextureDimension::_3D, 1));
     assert_eq!(v.sampler().wrap_mode_r, WrapMode::CLAMP_TO_EDGE);
-    let b = build_textures(&[v, stacked(TEXELS + 0x4000, 8, 3, 1, WrapMode::REPEAT)], None, false);
+    let b = build_textures(&[v, stacked(TEXELS + 0x4000, 8, 3, 1, WrapMode::REPEAT)], &[], false);
     let planes = b.layout.fs_plane.expect("the planes");
     assert_eq!(planes.len, (2 + 3) * GenericPlane::LENGTH, "a volume's plane a level, an array's a layer");
     let plane = |k: u64| {
@@ -2075,7 +2157,7 @@ fn several_textures_planes_follow_one_another() {
     let cubeish = stacked(TEXELS + 0x1000, 8, 6, 1, WrapMode::REPEAT);
     assert!(!cubeish.is_cube() && cubeish.texture(0).dimension == TextureDimension::_2D);
     assert_eq!(cubeish.sampler().wrap_mode_r, WrapMode::REPEAT, "an array's R wrap is GL's");
-    let b = build_textures(&[a, cubeish], None, false);
+    let b = build_textures(&[a, cubeish], &[], false);
     let planes = b.layout.fs_plane.expect("the planes");
     assert_eq!(planes.len, (3 * 2 + 6) * GenericPlane::LENGTH);
     let textures = b.layout.fs_texture.expect("the textures");

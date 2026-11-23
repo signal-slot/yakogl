@@ -286,7 +286,7 @@ fn build_on(budget: TileBudget, n: u64, outputs: u32) -> Result<Built, FrameErro
             vs_uniforms: &[],
             fs_uniforms: &[],
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             alpha_to_coverage: false,
             blend_shader: None,

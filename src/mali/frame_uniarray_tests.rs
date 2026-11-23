@@ -127,7 +127,7 @@ fn block_of(stage: ShaderStage, ubo: &[UboRow], uniforms: &[u32]) -> Result<Vec<
             front_cw: false,
             cull: Cull::None,
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             blend_shader: None,
             alpha_to_coverage: false,

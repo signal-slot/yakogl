@@ -669,10 +669,9 @@ pub struct ShaderMeta<'a> {
     pub no_psiz_offset: Option<u32>,
     /// Fragment: the colour outputs written, bit n for target n.
     pub colour_outputs: u32,
-    /// The shader samples: a fragment shader one texture or more, texture i
-    /// at index i of its stage's texture and sampler tables
-    /// ([`DrawCall::textures`]), a vertex shader one, at index 0
-    /// ([`DrawCall::vs_texture`]).
+    /// The shader samples one texture or more, texture i at index i of its
+    /// stage's texture and sampler tables ([`DrawCall::textures`] for a
+    /// fragment shader, [`DrawCall::vs_textures`] for a vertex shader).
     pub samples_texture: bool,
     /// Mesa's `contains_barrier`: a barrier, or a fragment shader whose quads
     /// need their helper invocations (NIR's
@@ -1303,8 +1302,9 @@ pub struct TextureLevel {
 }
 
 /// The textures (and samplers) one stage's tables hold
-/// ([`DrawCall::textures`]): GL_MAX_TEXTURE_IMAGE_UNITS, the GL core's
-/// `CAP_SAMPLERS` (src/gl/context.rs).
+/// ([`DrawCall::textures`], [`DrawCall::vs_textures`]):
+/// GL_MAX_TEXTURE_IMAGE_UNITS (and GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS), the
+/// GL core's `CAP_SAMPLERS` (src/gl/context.rs).
 pub const MAX_STAGE_TEXTURES: usize = 16;
 
 /// The layers of a 2D array texture: ES 3.0's GL_MAX_ARRAY_TEXTURE_LAYERS
@@ -1666,10 +1666,12 @@ pub struct DrawCall<'a> {
     /// when it samples none ([`ShaderMeta::samples_texture`]). At most
     /// [`MAX_STAGE_TEXTURES`].
     pub textures: &'a [SampledTexture],
-    /// The texture the vertex shader samples, when it samples one: both
-    /// IDVS programs read it from the vertex resource table (Mesa 26.2.1
-    /// pan_csf.c:1726-1727 selects the vertex SRT for the varying shader).
-    pub vs_texture: Option<SampledTexture>,
+    /// The textures the vertex shader samples, as [`DrawCall::textures`]
+    /// for its stage (`MaliShader::samplers` of the vertex shader); empty
+    /// when it samples none. Both IDVS programs read them from the vertex
+    /// resource table (Mesa 26.2.1 pan_csf.c:1726-1727 selects the vertex
+    /// SRT for the varying shader). At most [`MAX_STAGE_TEXTURES`].
+    pub vs_textures: &'a [SampledTexture],
     /// The occlusion counter this draw's samples set, when an occlusion
     /// query counts it: its GPU address, 8-byte aligned. ES 3.0's targets
     /// (GL_ANY_SAMPLES_PASSED and its conservative twin) are gallium's
@@ -1711,8 +1713,8 @@ pub struct Layout {
     pub vs_sysvals: Option<Block>,
     pub vs_ubos: Option<Block>,
     pub vs_push: Option<Block>,
-    /// The vertex shader's texture descriptor and its planes, when it
-    /// samples one.
+    /// The vertex shader's texture descriptors, back to back, and every
+    /// texture's planes (texture 0's first), when it samples one.
     pub vs_texture: Option<Block>,
     pub vs_plane: Option<Block>,
     /// The fragment shader's samplers, one a texture (or the workaround
@@ -2589,11 +2591,11 @@ fn check_draw(
     require(fs.colour_outputs & 1 == 1 && fs.colour_outputs >> rt_count == 0, NOT_BUILT_FS_OUTPUTS)?;
     /* a blend shader is target 0's descriptor only */
     require(rt_count == 1 || d.blend_shader.is_none(), NOT_BUILT_MRT)?;
-    if fs.samples_texture == d.textures.is_empty() || vs.samples_texture != d.vs_texture.is_some() {
+    if fs.samples_texture == d.textures.is_empty() || vs.samples_texture == d.vs_textures.is_empty() {
         return Err(FrameError::Invalid(INVALID_TEXTURE));
     }
-    require(d.textures.len() <= MAX_STAGE_TEXTURES, NOT_BUILT_TEXTURE_SIZE)?;
-    for t in d.vs_texture.iter().chain(d.textures) {
+    require(d.textures.len().max(d.vs_textures.len()) <= MAX_STAGE_TEXTURES, NOT_BUILT_TEXTURE_SIZE)?;
+    for t in d.vs_textures.iter().chain(d.textures) {
         require(
             (1..=65536).contains(&t.width)
                 && (1..=65536).contains(&t.height)
@@ -3433,15 +3435,16 @@ fn emit_draw(
         desc.write(buffers, i * Buffer::LENGTH, &b.pack()?)?;
     }
 
-    /* the vertex stage's texture first, then its sampler and uniforms, in
+    /* the vertex stage's textures first, then its samplers and uniforms, in
      * `panfrost_update_shader_state`'s order (the board's vtxgrid dump puts
-     * the texture descriptor before the sampler) */
-    let vs_texture = match d.vs_texture {
-        Some(tex) => Some(texture_descriptors(desc, &[tex])?),
-        None => None,
+     * the texture descriptor before the sampler; the shim's vstex2_2d_cube
+     * trace both texture descriptors before both samplers) */
+    let vs_texture = match d.vs_textures {
+        [] => None,
+        textures => Some(texture_descriptors(desc, textures)?),
     };
     let (vs_ubos, vs_ubo_count, vs_sampler, vs_sysvals, vs_push) =
-        emit_stage_uniforms(desc, &vs.meta, d, t.height, d.vs_uniforms, d.vs_texture.as_slice())?;
+        emit_stage_uniforms(desc, &vs.meta, d, t.height, d.vs_uniforms, d.vs_textures)?;
     let fs_state = if fs_required {
         Some(emit_stage_uniforms(desc, &fs.meta, d, t.height, d.fs_uniforms, d.textures)?)
     } else {
@@ -3451,9 +3454,11 @@ fn emit_draw(
         Some(_) if !d.textures.is_empty() => Some(texture_descriptors(desc, d.textures)?),
         _ => None,
     };
-    /* the fragment tables' counts: Mesa's `sampler_count` and
-     * `sampler_view_count` (pan_cmdstream.c:1940-1942, 2029-2034), the
-     * stage's bound samplers, at least the workaround sampler */
+    /* each stage's table counts: Mesa's `sampler_count` and
+     * `sampler_view_count` (pan_cmdstream.c:1940-1942, 2029-2034, one
+     * function for every stage), the stage's bound samplers, at least the
+     * workaround sampler */
+    let vs_count = d.vs_textures.len().max(1) as u64;
     let fs_count = d.textures.len().max(1) as u64;
 
     /* csf_get_tiler_desc (pan_csf.c:654-665), filled by
@@ -3469,9 +3474,9 @@ fn emit_draw(
     resource(desc, vs_res, TABLE_UBO, vs_ubos.gpu, u64::from(vs_ubo_count))?;
     resource(desc, vs_res, TABLE_ATTRIBUTE, attributes.gpu, n as u64)?;
     resource(desc, vs_res, TABLE_ATTRIBUTE_BUFFER, buffers.gpu, n as u64)?;
-    resource(desc, vs_res, TABLE_SAMPLER, vs_sampler.gpu, 1)?;
+    resource(desc, vs_res, TABLE_SAMPLER, vs_sampler.gpu, vs_count)?;
     if let Some((texture, _)) = vs_texture {
-        resource(desc, vs_res, TABLE_TEXTURE, texture.gpu, 1)?;
+        resource(desc, vs_res, TABLE_TEXTURE, texture.gpu, vs_count)?;
     }
     let fs_res = match fs_state {
         Some((ubos, count, sampler, _, _)) => {

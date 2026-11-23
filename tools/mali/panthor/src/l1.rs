@@ -108,7 +108,7 @@ pub fn build_triangle_frame(
             front_cw: false,
             cull: frame::Cull::None,
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             alpha_to_coverage: false,
             blend_shader: None,

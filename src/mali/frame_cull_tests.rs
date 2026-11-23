@@ -110,7 +110,7 @@ fn build(flip_y: bool, front_cw: bool, cull: Cull, primitive: Topology) -> u32 {
                 front_cw,
                 cull,
                 textures: &[],
-                vs_texture: None,
+                vs_textures: &[],
                 occlusion_query: None,
                 alpha_to_coverage: false,
                 blend_shader: None,

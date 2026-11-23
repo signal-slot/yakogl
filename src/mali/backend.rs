@@ -283,11 +283,6 @@ pub const INVALID_TEXTURE_STORAGE: &str = "mali: a texture to copy without a CPU
 /// what the draw renders is undefined in GL (ES 2.0 4.4.3, a feedback loop).
 pub const NOT_BUILT_TEXTURE_FEEDBACK: &str =
     "mali: a draw that samples the texture its own frame renders into is not built yet";
-/// The vertex shader reads more than one sampler binding (case 149): the
-/// frame builds the vertex texture and sampler tables for one
-/// (`DrawCall::vs_texture`), and a look-up past it would read a descriptor
-/// out of the table (docs/notes/mali-vs-lookups.md §3.3 step 4).
-pub const NOT_BUILT_VERTEX_TEXTURES: &str = "mali: a vertex shader that reads more than one texture is not built yet";
 /// A frame starts from the old image and the preload program did not build
 /// at init (its log line says why).
 pub const NOT_BUILT_PRELOAD_PROGRAM: &str =
@@ -1850,9 +1845,10 @@ fn add_gl_draw(
     let (vs, fs) = shaders;
     let n = vertex_attributes(d, vs_attributes, &mut a.data, &mut attributes)?;
     /* the data arena's order: the attributes, the indices, the fragment
-     * textures, the vertex texture */
+     * textures, the vertex textures */
     let indices = indices(d, &mut a.data)?;
-    let fs_tex = fs_textures(d, &mut a.data)?;
+    let fs_tex = stage_textures(d, false, &mut a.data)?;
+    let vs_tex = stage_textures(d, true, &mut a.data)?;
     let programs = (
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, vs.code, vs.meta)?,
         frame::upload_program_cached(&mut open.programs, &mut a.code, &mut a.spds, fs.code, fs.meta)?,
@@ -1904,7 +1900,7 @@ fn add_gl_draw(
         front_cw: d.front_cw,
         cull: cull(d.cull)?,
         textures: fs_tex.as_ref().map_or(&[], |(t, n)| &t[..*n]),
-        vs_texture: sampled_texture(d, true, &mut a.data)?,
+        vs_textures: vs_tex.as_ref().map_or(&[], |(t, n)| &t[..*n]),
         occlusion_query: occlusion,
         blend_shader,
         /* the GL core's state is already "on and the target multisampled"
@@ -1915,11 +1911,10 @@ fn add_gl_draw(
 }
 
 /// The sampler bindings the draw's fragment shader (or, `vertex`, its
-/// vertex shader) reads, in descriptor index order: a fragment shader's
+/// vertex shader) reads, in descriptor index order: the shader's
 /// [`MaliShader::samplers`] (binding `samplers[i]` at index i of its
-/// texture and sampler tables), a vertex shader's alike (a record with no
-/// list, its one [`MaliShader::sampler`]); empty for a shader that samples
-/// nothing.
+/// stage's texture and sampler tables; a record with no list, its one
+/// [`MaliShader::sampler`]); empty for a shader that samples nothing.
 fn sampler_bindings(d: &GlesDraw, vertex: bool) -> &[u8] {
     let sh = if vertex { d.vs } else { d.fs };
     // SAFETY: the draw's records are null or live past the draw
@@ -2250,34 +2245,29 @@ fn texture_ready_one(g: &mut MaliState, t: &backend::GlesTextureBind) -> Result<
 /// its own fallback texture.
 const BLACK_TEXEL: [u8; 4] = [0, 0, 0, 0xff];
 
-/// The textures the draw's fragment shader reads, texture i of sampler
-/// binding [`MaliShader::samplers`]`[i]` ([`texture_of`]), and their
-/// count; None for a shader that samples nothing.
+/// The textures the draw's fragment shader (or, `vertex`, its vertex
+/// shader) reads, texture i of sampler binding
+/// [`MaliShader::samplers`]`[i]` ([`texture_of`]), and their count; None for
+/// a shader that samples nothing. Both stages' tables are built alike
+/// (`panfrost_emit_texture_descriptors` and
+/// `panfrost_emit_sampler_descriptors` take the stage, Mesa 26.2.1
+/// pan_cmdstream.c:1934-1985, 2022-2043).
 #[allow(clippy::type_complexity)]
-fn fs_textures(
+fn stage_textures(
     d: &GlesDraw,
+    vertex: bool,
     data: &mut Pool,
 ) -> Result<Option<([frame::SampledTexture; frame::MAX_STAGE_TEXTURES], usize)>, FrameError> {
-    let bindings = sampler_bindings(d, false);
+    let bindings = sampler_bindings(d, vertex);
     let Some(&first) = bindings.first() else { return Ok(None) };
     if bindings.len() > frame::MAX_STAGE_TEXTURES {
         return Err(FrameError::NotBuilt(frame::NOT_BUILT_TEXTURE_SIZE));
     }
-    let mut out = [stage_texture(d, false, 0, first, data)?; frame::MAX_STAGE_TEXTURES];
+    let mut out = [stage_texture(d, vertex, 0, first, data)?; frame::MAX_STAGE_TEXTURES];
     for (i, (slot, &b)) in out.iter_mut().zip(bindings).enumerate().skip(1) {
-        *slot = stage_texture(d, false, i, b, data)?;
+        *slot = stage_texture(d, vertex, i, b, data)?;
     }
     Ok(Some((out, bindings.len())))
-}
-
-/// The texture the vertex shader's look-up reads ([`texture_of`]), None
-/// for a vertex shader that samples nothing.
-fn sampled_texture(d: &GlesDraw, vertex: bool, data: &mut Pool) -> Result<Option<frame::SampledTexture>, FrameError> {
-    match sampler_bindings(d, vertex) {
-        [b] => stage_texture(d, vertex, 0, *b, data).map(Some),
-        [] => Ok(None),
-        _ => Err(FrameError::NotBuilt(NOT_BUILT_VERTEX_TEXTURES)),
-    }
 }
 
 /// The texture at descriptor index `index` of the draw's fragment (or,

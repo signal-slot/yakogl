@@ -1,0 +1,4 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+The vertex shader of dEQP-GLES2.functional.uniform_api.value.assigned.by_value.render.basic_struct.sampler2D_samplerCube_vertex (VK-GL-CTS 93bca01, tools/mali/testdata/deqp_vstex2_basic_struct.vert) with its two struct members made plain uniforms, so that tools/mali/gl_ref.py binds a texture to each (issue #11308).

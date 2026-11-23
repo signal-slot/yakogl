@@ -440,7 +440,12 @@ refusal of section 3.3 step 4), never the compiler half alone.
   (`w.x * texture2DLod(s, p.xy, 0.0) + w.y * texture2DLod(s, p.xy, 0.0)`).
   The same sampler at two different coordinates compiles (two
   `TEX_SINGLE` of one handle); no reference draws it.
-* **Frame half: not done** (step 4's fallback). `src/mali/backend.rs`
+* **Frame half: done in issue #11308** (step 4 as written: `vs_textures` a
+  slice, `stage_textures` for both stages, both counts `len().max(1)`; the
+  step-5 reference is the drm-shim's `vstex2_2d_cube_dump` trace, whose
+  Position and Varying tables are one table of two samplers and two
+  textures). What follows is the state before it.
+* **Frame half, before #11308** (step 4's fallback). `src/mali/backend.rs`
   `sampled_texture` returns `NOT_BUILT_VERTEX_TEXTURES` ("a vertex shader that
   reads more than one texture") when the vertex record names more than one
   binding, so case 149 moves from `REFUSED compile` to `REFUSED draw`, not to
@@ -560,7 +565,8 @@ an `f2f32`** (`uses_are_all_cvt`). So:
   program reads only through `f2f32` while the varying program reads it
   fp16 is fp16 in both; Mesa compiles the IDVS variants from one NIR, so
   this is expected to agree, but no reference draws it.
-* Section 3.3 step 4 (N vertex textures in the frame) is unchanged.
+* Section 3.3 step 4 (N vertex textures in the frame) was done in issue
+  #11308; the next lines are the state before it.
   Terrain draws two vertex samplers and so needs it on the board:
   `src/mali/backend.rs` refuses the draw with `NOT_BUILT_VERTEX_TEXTURES`
   (section 6), a separate item.

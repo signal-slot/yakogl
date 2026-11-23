@@ -1290,16 +1290,47 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
     // SAFETY: the texels the mock gave above; no frame holds them now.
     unsafe { m_free(&mut texels) };
     /* a vertex shader reading two samplers (vslookup_149_rank: `u_s2`,
-     * `u_s0`): the vertex tables hold one */
+     * `u_s0`, the record's bindings [0, 2]): the vertex tables hold two, as
+     * a fragment shader's (frame_tex_tests.rs
+     * `a_vertex_2d_texture_and_cube_map_are_the_shim_s`) */
     let two_vs = include_str!("../../tools/mali/testdata/vslookup_149_rank.vert");
     let two_fs = include_str!("../../tools/mali/testdata/vslookup_149_rank.frag");
+    // SAFETY: a valid out-parameter.
+    assert_eq!(unsafe { m_alloc(0, 16 * 16 * 4, OSAL_MEM_DATA, &mut texels) }, 0);
     with_programs(two_vs, two_fs, |vs, fs| {
         let mut draw = base;
         (draw.vs, draw.fs) = (vs, fs);
-        let got = why(&draw);
-        assert_eq!(got, not_built(NOT_BUILT_VERTEX_TEXTURES), "two vertex samplers");
-        reached.push(NOT_BUILT_VERTEX_TEXTURES);
+        let bind = |unit: u8| backend::GlesTextureBind {
+            unit,
+            format: backend::GLES_TEXFMT_RGBA8,
+            layers: 1,
+            base_gpu: texels.gpu,
+            width: 16,
+            height: 16,
+            stride_texels: 16,
+            bytes: 16 * 16 * 4,
+            ..backend::GlesTextureBind::ZERO
+        };
+        /* `u_w`'s storage */
+        let uniforms = [0u32; 16];
+        (draw.vs_uniform_cpu, draw.vs_uniform_dwords) = (uniforms.as_ptr().cast(), 16);
+        draw.num_vs_textures = 2;
+        (draw.vs_textures[0], draw.vs_textures[1]) = (bind(2), bind(0));
+        let mut one = draw;
+        one.num_vs_textures = 1;
+        let mut unbound = draw;
+        unbound.num_vs_textures = 0;
+        let cases: Vec<Case> = vec![
+            ("two vertex textures", why(&draw), built),
+            ("two vertex samplers, a texture on one of their units: black for the other", why(&one), built),
+            ("two vertex samplers, no texture on their units: black", why(&unbound), built),
+        ];
+        for (what, got, want) in &cases {
+            assert_eq!(got, want, "{what}");
+        }
     });
+    // SAFETY: the texels allocated above; no frame holds them now.
+    unsafe { m_free(&mut texels) };
     /* a cube look-up (fstex_cube_whole: `textureCube(u_s, v_dir)`, its
      * direction an attribute passed through): a complete cube of six faces
      * is built, and so is a unit with no texture or an incomplete cube map:
@@ -1378,7 +1409,6 @@ fn each_refusal_is_the_exact_line_of_its_cause() {
         NOT_BUILT_TEXTURE_NPOT_CHAIN,
         INVALID_TEXTURE_STORAGE,
         NOT_BUILT_TEXTURE_FEEDBACK,
-        NOT_BUILT_VERTEX_TEXTURES,
         frame::INVALID_TEXTURE_ALIGN,
         frame::NOT_BUILT_TEXTURE_SIZE,
     ];

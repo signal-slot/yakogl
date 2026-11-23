@@ -138,7 +138,7 @@ fn build_with(
         }];
         let mut draw = DrawCall {
             textures: &[],
-            vs_texture: None,
+            vs_textures: &[],
             occlusion_query: None,
             alpha_to_coverage: false,
             blend_shader: None,
@@ -497,7 +497,7 @@ fn build_207(draws: &[ZsDraw]) -> (Vec<u8>, Vec<u8>, Vec<u64>, Frame) {
         for &(zs, first_vertex, vertex_count) in draws {
             let draw = DrawCall {
                 textures: &[],
-                vs_texture: None,
+                vs_textures: &[],
                 occlusion_query: None,
                 alpha_to_coverage: false,
                 blend_shader: None,
