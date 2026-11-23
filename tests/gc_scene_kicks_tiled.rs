@@ -33,7 +33,7 @@
 //! CPU depth resolves       0       0       1       1       1       1
 //! RS tile-in               2       3       0       0       0       0
 //! RS copy back             0       2       0       0       0       0
-//! RS other                 11      11      3       3       4       4
+//! RS other                 9       9       3       3       4       4
 //! draws                    51      51      3       3       12      12
 //! draws, tiled shadow      0       2       0       0       0       0
 //! draws, early depth       0       2       0       0       0       0
@@ -159,7 +159,7 @@ fn check(sc: &Scene) {
 /// terrain. Knob off, `gc_scene_kicks.rs`'s frame: 11 kicks (the canvas clear
 /// with the height, normal and terrain passes in one stream, then the chains
 /// and passes after them, gc-frames-ring: under the ceiling of 14); the RS
-/// kicks are 2 tiled copies of the vertex-stage maps (tile-in shape) and 11
+/// kicks are 2 tiled copies of the vertex-stage maps (tile-in shape) and 9
 /// fills; no early depth.
 /// Knob on, the same 11 kicks and the same waits (a shadow is tiled in and
 /// copied back inside the stream that draws into it): 2 depth-tested draws
@@ -168,7 +168,9 @@ fn check(sc: &Scene) {
 /// depth). The RS kicks gain 1 tile-in and 2 copy backs (one at the end of
 /// each shadow's span; a span that opens with a whole colour clear tiles
 /// nothing in, `backend_tests_tiled_rt.rs`). The fills and the 2
-/// copies of the maps are the ones of knob off. No CPU tiled copy and no CPU
+/// copies of the maps are the ones of knob off (terrain's fills went from 11
+/// to 9 with 4255adf1, a full pending clear staying on its framebuffer across
+/// a bind). No CPU tiled copy and no CPU
 /// depth resolve, as off: terrain's depth is a renderbuffer, never sampled.
 #[test]
 fn terrain_with_gc_tiled_rt_on_beside_off() {
@@ -176,8 +178,8 @@ fn terrain_with_gc_tiled_rt_on_beside_off() {
         name: "terrain",
         run: terrain,
         ceilings: (OFF_TERRAIN_LAG, OFF_TERRAIN_DONE),
-        off: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(2, 0, 11, 51, 0, 0)),
-        on: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(3, 2, 11, 51, 2, 2)),
+        off: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(2, 0, 9, 51, 0, 0)),
+        on: (c(11, 11, 0, 0), c(11, 0, 0, 0), s(3, 2, 9, 51, 2, 2)),
     });
 }
 
