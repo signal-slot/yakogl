@@ -47,6 +47,13 @@ cp "$work/t.txt" "$work/ip.txt"
 py "$work/ip.txt" imx8mp "$work/console.txt" "${common[@]}" --header-text "$hdr" --in-place 2> /dev/null
 if cmp -s "$work/ip.txt" "$work/new.txt"; then ok "--in-place equals --out"; else bad "--in-place differs"; fi
 
+# a run directory source (a board leaves <run dir>/console.txt; common-tally.py reads it)
+mkdir -p "$work/run"
+cp "$work/console.txt" "$work/run/console.txt"
+py "$work/t.txt" imx8mp "$work/run" "${common[@]}" --header-text "$hdr" --out "$work/rd.txt" 2> /dev/null
+if cmp -s "$work/rd.txt" "$work/new.txt"; then ok "run dir source equals console file"
+else bad "run dir source differs"; fi
+
 refused() { # name, args...: exit 1 and "refused" on stderr
     local name=$1 rc; shift
     py "$@" > /dev/null 2> "$work/err"; rc=$?
