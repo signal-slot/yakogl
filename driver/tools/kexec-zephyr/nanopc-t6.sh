@@ -8,6 +8,8 @@
 #   BOARD_HOST=root@<t6> driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin>          # dry run
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=<tty> \
 #     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go [--no-linux-wdt] [--crash]  # the jump
+#   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_SCREEN=<unit> \
+#     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go --crash  # seen through the HDMI capture
 #
 # Without --go it checks the image on this host, makes read-only checks on the
 # board, prints exactly what --go would do, and changes nothing anywhere.
@@ -45,11 +47,13 @@
 #           holder by its exact pid, and the holder gives Linux its own mode
 #           back (driver/docs/nanopc-t6-display.md, section 2(a), "The
 #           mode before the jump"). So --crash refuses without python3 on
-#           the board or without that debugfs file.
+#           the board or without that debugfs file. With T6_SCREEN the
+#           holder's buffer shows this run's nonce, and the screen path is
+#           proven there, before the load (see T6_SCREEN).
 # With --go it takes the board lock (board_lock.sh; it refuses, never waits,
 # while anyone holds it: see LOCK_WAIT), reads the board's state
-# again under the lock, proves the UART path (see T6_UART), starts the
-# record (below), copies the loader, mmio_rd
+# again under the lock, proves the UART path (see T6_UART) when it is set,
+# starts the record (below), copies the loader, mmio_rd
 # and the image to /tmp/yakogl-kexec on the board and jumps; then it waits for
 # the board to come back into Armbian, prints how long that took and
 # completes the record.
@@ -79,10 +83,15 @@
 # nobody has open, :76-96).
 #
 # The record: one directory per --go run under $T6_RECORD_DIR, printed at the
-# start and at the end. uart.log (the board's debug UART, T6_UART, read
-# only, from before the jump until the board is back in Armbian),
-# record.txt (this script's lines, the hand, the registers before and
-# after), linux-before.dmesg-w (`dmesg -w` of the old
+# start and at the end. Its first lines say which paths out of the board
+# the run has (UART, screen or both) and how each is proven. uart.log (the
+# board's debug UART, T6_UART, read only, from before the jump until the
+# board is back in Armbian; only with T6_UART), with T6_SCREEN: proof-NN.jpg
+# (the screen proof's pictures), screen-SSS.jpg (a picture taken SSS
+# seconds after the jump, from the jump until the board is back in Armbian
+# or the deadline passes) and screen.log (the capture tool's error output
+# for each request that failed), record.txt (this script's lines, the hand,
+# the registers before and after), linux-before.dmesg-w (`dmesg -w` of the old
 # Linux, from before the jump until the connection drops), linux-after.dmesg
 # (`dmesg` of the Linux that came back). The registers, read with mmio_rd:
 # GLB_RST_ST 0xfd7c0c04, GLB_RST_CON 0xfd7c0c10, WDT0 WDT_CR and WDT_TORR.
@@ -121,7 +130,7 @@
 #                   into the record.
 #   T6_RECORD_DIR   --go only, required: an existing directory, outside any
 #                   checkout, in which the run's record directory is made.
-#   T6_UART         --go only, required: the host's tty on the T6's debug UART
+#   T6_UART         --go: the host's tty on the T6's debug UART
 #                   (UART2, 1500000 8N1; e.g. /dev/serial/by-id/usb-FTDI_...).
 #                   READ ONLY: Armbian runs an autologin root shell on ttyS2,
 #                   so any byte written to it runs on the board as root. The
@@ -137,6 +146,36 @@
 #                   it refuses (exit 3) and names the bytes read and whether
 #                   the board's write succeeded (2026-11-22: a jump with
 #                   uart.log 0 bytes, the wire delivering nothing).
+#                   --go needs T6_UART, T6_SCREEN or both; each one set
+#                   must be proven, and neither is refused.
+#   T6_SCREEN       --go --crash: the farm's name of the capture unit on the
+#                   board's HDMI output (`connected screenshot <unit> -o
+#                   <file>` writes a JPEG of what it shows). Refused without
+#                   --crash: the proof runs through the mode holder, which
+#                   only the crash route starts. The host needs connected,
+#                   djpeg and python3; they are checked before anything is
+#                   copied. The proof, in the mode step (after the holder
+#                   has the mode, before the load): the holder draws this
+#                   run's nonce as eight vertical bars (t6-kms-mode.py,
+#                   "The screen proof"; t6-screen-nonce.py, beside this,
+#                   makes the nonce and decodes a picture), and the script
+#                   asks the unit for pictures until one decodes to the
+#                   nonce, at most SCREEN_PROOF_S seconds. It does not count
+#                   on how old a picture is: on 2026-11-23 a picture showed
+#                   the screen of two requests ago (signal-slot/connected
+#                   #1714). Not proven: no load, no jump, the holder stopped
+#                   by its pid (the refusal names how many pictures came,
+#                   the unit's last error and what the last picture decoded
+#                   to). The unit gives no picture of any mode but 1920x1080
+#                   (measured 2026-11-23), so a run on which the holder had
+#                   to set 1024x768 is refused by that rule, not by a rule
+#                   of its own. Then a loop takes pictures from the jump
+#                   until the board is back in Armbian (screen-SSS.jpg); it
+#                   is stopped by its pid. The record never names the unit:
+#                   in the tool's error output it is written <T6_SCREEN>.
+#   SCREEN_PROOF_S  --go with T6_SCREEN: seconds the screen proof asks for
+#                   pictures (default 90, at most half of MODE_HOLD; each
+#                   request is bounded by SCREEN_SHOT_S, 30 s).
 #   MMIO_RD         a built mmio_rd; otherwise it is built like kexec_zephyr.
 #   T6_ALLOW_SESSIONS=1  --go even when `who` lists remote (pts, sshd) sessions
 #                   on the board other than this script's own ssh command
@@ -167,6 +206,12 @@ MODE_HOLD=600
 # to its console (see T6_UART). At 1500000 baud the line takes well under
 # a millisecond; the ssh command that writes it returns before the wait.
 UART_PROOF_S=5
+# --go with T6_SCREEN: how long the screen proof asks the capture unit for
+# pictures, and each request's bound. A request takes a few seconds and a
+# picture may show the screen of two requests ago, so the proof needs at
+# least three requests; 90 s leaves room for a slow unit.
+SCREEN_PROOF_S=${SCREEN_PROOF_S:-90}
+SCREEN_SHOT_S=30
 
 die() { echo "nanopc-t6.sh: $*" >&2; exit 2; }
 refuse() { echo "nanopc-t6.sh: REFUSED: $*" >&2; echo "nanopc-t6.sh: nothing was copied, loaded or changed." >&2; exit 3; }
@@ -432,13 +477,26 @@ if [ -n "${T6_UART:-}" ]; then
 		echo "uart: T6_UART $T6_UART is absent: --go would refuse"
 	fi
 else
-	echo "uart: T6_UART is not set: --go would refuse"
+	echo "uart: T6_UART is not set: no UART path"
 fi
 if [ -n "$(fact console)" ]; then
 	echo "uart: the board's serial console (its kernel command line): /dev/$(fact console); --go has the board write one marker line to it and reads it back from T6_UART before it copies anything"
 else
-	echo "uart: the board's kernel command line has no console=ttyS entry: --go would refuse (no console to prove the UART path with)"
+	echo "uart: the board's kernel command line has no console=ttyS entry: --go with T6_UART would refuse (no console to prove the UART path with)"
 fi
+if [ -n "${T6_SCREEN:-}" ]; then
+	if [ "$CRASH" = 1 ]; then
+		echo "screen: T6_SCREEN is set: --go has the mode holder show this run's nonce and asks the capture unit for pictures until one decodes to it (at most $SCREEN_PROOF_S s) before the load; then pictures from the jump until Armbian is back"
+	else
+		echo "screen: T6_SCREEN is set without --crash: --go would refuse (the proof runs through the mode holder, which only the crash route starts)"
+	fi
+	for t in connected djpeg python3; do
+		command -v "$t" >/dev/null || echo "screen: $t is not on this host: --go would refuse"
+	done
+else
+	echo "screen: T6_SCREEN is not set: no screen path"
+fi
+[ -n "${T6_UART:-}${T6_SCREEN:-}" ] || echo "paths: neither T6_UART nor T6_SCREEN is set: --go would refuse"
 echo "board: GPU device users '$(fact gpu_users)'; remote sessions '$(fact who_remote)', console logins '$(fact who_local)'"
 
 # ---- 3. the plan ------------------------------------------------------------
@@ -462,14 +520,23 @@ if [ "$CRASH" = 1 ]; then
        the image at EL2 with the MMU off; this ssh session ends there"
 	reread="kexec_loaded, kexec_crash_loaded"
 	copy_kms=", t6-kms-mode.py"
+	nonce_arg= screen_step=
+	if [ -n "${T6_SCREEN:-}" ]; then
+		nonce_arg=" --nonce <this run's>"
+		screen_step=";
+     the screen proof: the holder's buffer shows this run's nonce as eight
+     bars, and the capture unit (T6_SCREEN) is asked for pictures until one
+     decodes to it, at most $SCREEN_PROOF_S s (proof-NN.jpg); otherwise the
+     holder is stopped by its pid and there is no jump"
+	fi
 	mode_step="
-     then the adopt's mode: python3 -I $STAGE/t6-kms-mode.py hold --mode $(hold_mode "$(fact vp0)") --max-hold $MODE_HOLD
+     then the adopt's mode: python3 -I $STAGE/t6-kms-mode.py hold --mode $(hold_mode "$(fact vp0)") --max-hold $MODE_HOLD$nonce_arg
      holds that mode on HDMI-A-1 as Linux's DRM master (at most $MODE_HOLD s):
      VP0's own mode when it is adopted (no size change), else $ADOPT_SET,
      decided on VP0's mode read again under the lock; VP0's mode is read back
      from /sys/kernel/debug/dri/0/state, and unless it is the mode held, the
      holder is stopped by its pid (Linux's own mode comes back) and there is
-     no jump"
+     no jump$screen_step"
 else
 	copy_kms=
 	mode_step=
@@ -485,12 +552,13 @@ cat <<EOF
 plan (--go):
   1. take the board lock (driver/tools/kexec-zephyr/board_lock.sh, per BOARD_HOST);
      read $reread, the GPU users, the remote sessions and boot_id again under
-     it and decide on those values; refuse without T6_HAND, T6_RECORD_DIR and
-     T6_UART; prove the UART path: the board writes one marker line to its
-     console, and it must be read back from T6_UART within $UART_PROOF_S s
-  2. the record: \$T6_RECORD_DIR/<date>-t6/, with the hand at the power switch;
-     the UART (\$T6_UART, read only) into it until the board is back, and
-     \`dmesg -w\` of the board until the jump
+     it and decide on those values; refuse without T6_HAND and T6_RECORD_DIR,
+     and without both T6_UART and T6_SCREEN; with T6_UART, prove the UART
+     path: the board writes one marker line to its console, and it must be
+     read back from T6_UART within $UART_PROOF_S s
+  2. the record: \$T6_RECORD_DIR/<date>-t6/, with the hand at the power switch
+     and the paths the run has; with T6_UART the UART (read only) into it
+     until the board is back, and \`dmesg -w\` of the board until the jump
   3. copy kexec_zephyr, mmio_rd$copy_kms and $(basename "$IMG") to $BOARD_HOST:$STAGE/, then
      sync; read GLB_RST_ST, GLB_RST_CON, WDT0 CR and TORR into the record$mode_step
   4. on the board: ${open_wdt}$STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg
@@ -500,7 +568,8 @@ plan (--go):
      WDT0 armed), then through the console T6:B, the marker, "t6: WDT0 armed ...",
      T6:C, "board: watchdog armed", then the sample (T6:X: an exception taken
      to EL2, the image halted); it ends with PSCI SYSTEM_RESET, or WDT0 resets
-     the board by $bound_s s
+     the board by $bound_s s; with T6_SCREEN, a picture of the screen every
+     few seconds from the jump on (screen-SSS.jpg) until the board is back
   6. here: wait for ssh and a new boot_id (up to $((bound_s + 180)) s), print the
      time; save the new Linux's dmesg and the four registers to the record
 EOF
@@ -514,24 +583,42 @@ fi
 [ -n "${T6_HAND:-}" ] || refuse "--go needs T6_HAND=<the name of the person at the T6's power switch for this run>"
 { [ -n "${T6_RECORD_DIR:-}" ] && [ -d "$T6_RECORD_DIR" ]; } ||
 	refuse "--go needs T6_RECORD_DIR=<an existing directory outside the checkout> for the run's record"
-[ -n "${T6_UART:-}" ] || refuse "--go needs T6_UART=<the host tty on the T6's debug UART> (read only)"
-[ -c "$T6_UART" ] && [ -r "$T6_UART" ] || refuse "T6_UART $T6_UART is not a readable character device"
-if fuser "$T6_UART" >/dev/null 2>&1; then
-	refuse "T6_UART $T6_UART is already open (pids $(fuser "$T6_UART" 2>/dev/null | tr -s " " | cut -c1-80)): a second reader would split the bytes; stop the other capture first"
+[ -n "${T6_UART:-}${T6_SCREEN:-}" ] ||
+	refuse "--go needs T6_UART=<the host tty on the T6's debug UART> (read only), T6_SCREEN=<the capture unit on the board's HDMI output> (with --crash), or both: without one, nothing of the run is seen"
+if [ -n "${T6_SCREEN:-}" ]; then
+	[ "$CRASH" = 1 ] ||
+		refuse "T6_SCREEN needs --crash: the screen proof runs through the mode holder (t6-kms-mode.py), which only the crash route starts"
+	missing=
+	for t in connected djpeg python3; do command -v "$t" >/dev/null || missing+=" $t"; done
+	[ -z "$missing" ] ||
+		refuse "T6_SCREEN: this host has no$missing (the capture unit's pictures are taken with connected, turned into PPM with djpeg and read with python3)"
+	# The holder gives the mode back MODE_HOLD s after its start, and the
+	# proof runs inside that hold, before the load and the jump.
+	{ [[ "$SCREEN_PROOF_S" =~ ^[1-9][0-9]*$ ]] && [ "$SCREEN_PROOF_S" -le $((MODE_HOLD / 2)) ]; } ||
+		refuse "SCREEN_PROOF_S '$SCREEN_PROOF_S' is not a whole number of seconds up to $((MODE_HOLD / 2)) (half the holder's $MODE_HOLD s)"
+	screen_nonce=$(python3 -I "$HERE/t6-screen-nonce.py" new) && [[ "$screen_nonce" =~ ^[0-7]{8}$ ]] ||
+		refuse "T6_SCREEN: t6-screen-nonce.py new gave no nonce ('${screen_nonce:-}')"
 fi
-# raw, no echo: with echo on, the tty would send every received byte back
-# to the board's root shell.
-UART_STTY=(1500000 raw -echo -icrnl -ixon cs8 -cstopb -parenb clocal)
-stty -F "$T6_UART" "${UART_STTY[@]}" || refuse "stty on $T6_UART failed"
-uart_mode=$(stty -F "$T6_UART" -a | tr "\n;" "  ") || refuse "stty -a on $T6_UART failed"
-for w in 'speed 1500000' ' -echo ' ' -icrnl ' ' -ixon ' ' cs8 ' ' -cstopb ' ' -parenb ' ' clocal ' ' -opost ' ' -icanon '; do
-	[[ " $uart_mode " == *"$w"* ]] || refuse "$T6_UART does not read back '${w# }' after stty: $uart_mode"
-done
+if [ -n "${T6_UART:-}" ]; then
+	[ -c "$T6_UART" ] && [ -r "$T6_UART" ] || refuse "T6_UART $T6_UART is not a readable character device"
+	if fuser "$T6_UART" >/dev/null 2>&1; then
+		refuse "T6_UART $T6_UART is already open (pids $(fuser "$T6_UART" 2>/dev/null | tr -s " " | cut -c1-80)): a second reader would split the bytes; stop the other capture first"
+	fi
+	# raw, no echo: with echo on, the tty would send every received byte back
+	# to the board's root shell.
+	UART_STTY=(1500000 raw -echo -icrnl -ixon cs8 -cstopb -parenb clocal)
+	stty -F "$T6_UART" "${UART_STTY[@]}" || refuse "stty on $T6_UART failed"
+	uart_mode=$(stty -F "$T6_UART" -a | tr "\n;" "  ") || refuse "stty -a on $T6_UART failed"
+	for w in 'speed 1500000' ' -echo ' ' -icrnl ' ' -ixon ' ' cs8 ' ' -cstopb ' ' -parenb ' ' clocal ' ' -opost ' ' -icanon '; do
+		[[ " $uart_mode " == *"$w"* ]] || refuse "$T6_UART does not read back '${w# }' after stty: $uart_mode"
+	done
+fi
 # Before the lock: board_lock.sh chains the EXIT trap it finds.
 tmp=$(mktemp -d)
 dmesg_pid=
 uart_pid=
 proof_pid=
+screen_pid=
 mode_pid=
 mode_before=
 mode_back=0
@@ -539,6 +626,7 @@ cleanup() {
 	if [ -n "$dmesg_pid" ]; then kill "$dmesg_pid" 2>/dev/null || true; fi
 	if [ -n "$uart_pid" ]; then kill "$uart_pid" 2>/dev/null || true; fi
 	if [ -n "$proof_pid" ]; then kill "$proof_pid" 2>/dev/null || true; fi
+	if [ -n "$screen_pid" ]; then kill "$screen_pid" 2>/dev/null || true; fi
 	mode_stop || true
 	rm -rf "$tmp"
 }
@@ -644,60 +732,62 @@ old_boot=$(fresh_fact boot_id)
 # host never writes to T6_UART. The capture is stopped by its pid and
 # waited for before anything else, so the real capture below is the only
 # reader. Its bytes, the marker line among them, are not part of uart.log.
-console=$(fact console)
-[[ "$console" =~ ^ttyS[0-9]+$ ]] ||
-	refuse "the board's kernel command line has no console=ttyS entry ('$console'): there is no serial console to write the UART proof's marker line to, so the path to $T6_UART cannot be proven"
 now_ms() { echo $(($(date +%s%N) / 1000000)); }
 secs() { printf '%d.%d' $(($1 / 1000)) $(($1 % 1000 / 100)); }
-proof_log=$tmp/uart-proof.log
-uart_dev=$(readlink -f "$T6_UART")
-cat <"$T6_UART" >"$proof_log" &
-proof_pid=$!
-t_open=$(now_ms)
-# The board's line is lost unless the tty is open when it arrives: wait
-# until the capture holds it as its input.
-opened=0
-for _ in $(seq 50); do
-	if [ "$(readlink "/proc/$proof_pid/fd/0" 2>/dev/null)" = "$uart_dev" ]; then opened=1; break; fi
-	kill -0 "$proof_pid" 2>/dev/null || break
-	sleep 0.1
-done
-proof_stop() {
-	kill "$proof_pid" 2>/dev/null || true
-	wait "$proof_pid" 2>/dev/null || true
-	proof_pid=
-}
-if [ "$opened" = 0 ]; then
-	proof_stop
-	refuse "the UART proof's capture (cat <$T6_UART) did not open $T6_UART within 5 s; nothing was written to the board's console"
-fi
-marker="yakogl-uart-proof $(od -A n -N 8 -t x1 /dev/urandom | tr -d ' \n')"
-t_write=$(now_ms)
-write_rc=0
-board "printf '\\r\\n%s\\r\\n' '$marker' >/dev/$console" >/dev/null 2>&1 || write_rc=$?
-if [ "$write_rc" = 0 ]; then
-	written="the board wrote one marker line to its console /dev/$console (ssh rc 0)"
-else
-	written="the ssh command that writes one marker line to the board's console /dev/$console failed (rc $write_rc), so the line may not have been written"
-fi
-got_ms=
-deadline_ms=$(($(now_ms) + UART_PROOF_S * 1000))
-while :; do
-	if grep -qaF "$marker" "$proof_log"; then got_ms=$(($(now_ms) - t_write)); break; fi
-	[ "$(now_ms)" -lt "$deadline_ms" ] || break
-	kill -0 "$proof_pid" 2>/dev/null || break
-	sleep 0.1
-done
-proof_stop
-# A capture that ended by itself may have written the line after the last look.
-if [ -z "$got_ms" ] && grep -qaF "$marker" "$proof_log"; then got_ms=$(($(now_ms) - t_write)); fi
-open_ms=$(($(now_ms) - t_open))
-proof_bytes=$(wc -c <"$proof_log")
-if [ -z "$got_ms" ]; then
-	if [ "$proof_bytes" = 0 ]; then
-		refuse "UART path not proven: the capture of $T6_UART read 0 bytes in $(secs "$open_ms") s, and $written. Check first the wire between the board's debug header (UART2: its TX to the adapter's RX, and GND) and the host's adapter"
+if [ -n "${T6_UART:-}" ]; then
+	console=$(fact console)
+	[[ "$console" =~ ^ttyS[0-9]+$ ]] ||
+		refuse "the board's kernel command line has no console=ttyS entry ('$console'): there is no serial console to write the UART proof's marker line to, so the path to $T6_UART cannot be proven"
+	proof_log=$tmp/uart-proof.log
+	uart_dev=$(readlink -f "$T6_UART")
+	cat <"$T6_UART" >"$proof_log" &
+	proof_pid=$!
+	t_open=$(now_ms)
+	# The board's line is lost unless the tty is open when it arrives: wait
+	# until the capture holds it as its input.
+	opened=0
+	for _ in $(seq 50); do
+		if [ "$(readlink "/proc/$proof_pid/fd/0" 2>/dev/null)" = "$uart_dev" ]; then opened=1; break; fi
+		kill -0 "$proof_pid" 2>/dev/null || break
+		sleep 0.1
+	done
+	proof_stop() {
+		kill "$proof_pid" 2>/dev/null || true
+		wait "$proof_pid" 2>/dev/null || true
+		proof_pid=
+	}
+	if [ "$opened" = 0 ]; then
+		proof_stop
+		refuse "the UART proof's capture (cat <$T6_UART) did not open $T6_UART within 5 s; nothing was written to the board's console"
 	fi
-	refuse "UART path not proven: the capture of $T6_UART read $proof_bytes bytes in $(secs "$open_ms") s, but not the marker line, and $written. The bytes are not that line: check that T6_UART is this board's debug UART (not another board's console) and that it runs at 1500000 baud"
+	marker="yakogl-uart-proof $(od -A n -N 8 -t x1 /dev/urandom | tr -d ' \n')"
+	t_write=$(now_ms)
+	write_rc=0
+	board "printf '\\r\\n%s\\r\\n' '$marker' >/dev/$console" >/dev/null 2>&1 || write_rc=$?
+	if [ "$write_rc" = 0 ]; then
+		written="the board wrote one marker line to its console /dev/$console (ssh rc 0)"
+	else
+		written="the ssh command that writes one marker line to the board's console /dev/$console failed (rc $write_rc), so the line may not have been written"
+	fi
+	got_ms=
+	deadline_ms=$(($(now_ms) + UART_PROOF_S * 1000))
+	while :; do
+		if grep -qaF "$marker" "$proof_log"; then got_ms=$(($(now_ms) - t_write)); break; fi
+		[ "$(now_ms)" -lt "$deadline_ms" ] || break
+		kill -0 "$proof_pid" 2>/dev/null || break
+		sleep 0.1
+	done
+	proof_stop
+	# A capture that ended by itself may have written the line after the last look.
+	if [ -z "$got_ms" ] && grep -qaF "$marker" "$proof_log"; then got_ms=$(($(now_ms) - t_write)); fi
+	open_ms=$(($(now_ms) - t_open))
+	proof_bytes=$(wc -c <"$proof_log")
+	if [ -z "$got_ms" ]; then
+		if [ "$proof_bytes" = 0 ]; then
+			refuse "UART path not proven: the capture of $T6_UART read 0 bytes in $(secs "$open_ms") s, and $written. Check first the wire between the board's debug header (UART2: its TX to the adapter's RX, and GND) and the host's adapter"
+		fi
+		refuse "UART path not proven: the capture of $T6_UART read $proof_bytes bytes in $(secs "$open_ms") s, but not the marker line, and $written. The bytes are not that line: check that T6_UART is this board's debug UART (not another board's console) and that it runs at 1500000 baud"
+	fi
 fi
 
 REC=$T6_RECORD_DIR/$(date +%Y%m%d-%H%M%S)-t6
@@ -705,10 +795,25 @@ mkdir "$REC" || die "cannot make the record directory $REC"
 rec() { printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$REC/record.txt"; }
 echo "nanopc-t6.sh: record $REC"
 rec "build $(git -C "$HERE" describe --always --dirty 2>/dev/null || echo unknown)"
+# The paths out of the board this run has: the UART's proof is above, the
+# screen's comes in the mode step, before the load ("screen: proven ...").
+if [ -n "${T6_UART:-}" ]; then
+	paths="UART (proven before anything was copied, below)"
+else
+	paths="no UART (T6_UART not set: no uart.log)"
+fi
+if [ -n "${T6_SCREEN:-}" ]; then
+	paths+="; screen (T6_SCREEN: proven in the mode step before the load, else no jump; nonce $screen_nonce)"
+else
+	paths+="; no screen (T6_SCREEN not set)"
+fi
+rec "paths: $paths"
 rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $T6_HAND; linux_wdt $LINUX_WDT; route $([ "$CRASH" = 1 ] && echo "crash (reservation $(printf '0x%x-0x%x' "$ck_s" "$ck_e"))" || echo normal)"
 rec "image $IMG, sha256 $(sha256sum "$IMG" | cut -d' ' -f1): $markers"
 rec "bound: back in reset by $bound_s s after the jump at the latest"
-rec "uart: proven before anything was copied: the marker line '$marker' the board wrote to /dev/$console was read back from $T6_UART $got_ms ms after the write began; that capture read $proof_bytes bytes in $(secs "$open_ms") s (not part of uart.log)"
+if [ -n "${T6_UART:-}" ]; then
+	rec "uart: proven before anything was copied: the marker line '$marker' the board wrote to /dev/$console was read back from $T6_UART $got_ms ms after the write began; that capture read $proof_bytes bytes in $(secs "$open_ms") s (not part of uart.log)"
+fi
 
 build_tool() {
 	"${CROSS_GCC:-aarch64-linux-gnu-gcc}" -O2 -static -nostdlib -ffreestanding -fno-stack-protector \
@@ -721,9 +826,11 @@ MMIO=${MMIO_RD:-}
 
 # The UART, read only (cat opens it O_RDONLY), from before the jump until
 # the board is back in Armbian.
-cat <"$T6_UART" >"$REC/uart.log" &
-uart_pid=$!
-rec "UART capture started (pid $uart_pid, read only): $T6_UART -> $REC/uart.log"
+if [ -n "${T6_UART:-}" ]; then
+	cat <"$T6_UART" >"$REC/uart.log" &
+	uart_pid=$!
+	rec "UART capture started (pid $uart_pid, read only): $T6_UART -> $REC/uart.log"
+fi
 
 # dmesg -w of the old Linux, from here until the jump drops the connection
 # (ServerAlive ends it a few seconds after the board stops answering).
@@ -773,6 +880,93 @@ regs=$(read_regs) || { rec "cannot read the registers with mmio_rd; not jumping"
 rec "registers before (GLB_RST_ST, GLB_RST_CON, WDT0 CR, TORR): $regs"
 rec "gpu power before: $(read_gpu_power || echo unread)"
 
+# The capture unit (T6_SCREEN). shot_failed <file> <rc> <error file>: one
+# request that gave no picture, into screen.log: a line that names the file
+# it was for and the exit code, then the tool's error output, the unit's
+# name written as <T6_SCREEN>, on one line. It sets shot_err to the same,
+# cut to 300 characters, for a refusal.
+shot_failed() {
+	local why out
+	out=$(tr '\n' ' ' <"$3" | sed 's/ *$//')
+	out=${out//"$T6_SCREEN"/<T6_SCREEN>}
+	case $2 in
+	0) why="exit 0 but no picture written" ;;
+	124) why="no answer within $SCREEN_SHOT_S s" ;;
+	*) why="rc $2" ;;
+	esac
+	printf '%s %s: request failed (%s)%s\n' "$(date '+%F %T')" "${1##*/}" "$why" "${out:+: $out}" >>"$REC/screen.log"
+	shot_err="$why${out:+: ${out:0:300}}"
+}
+# screen_shot <file> <error file>: one picture from the unit into <file>,
+# bounded by SCREEN_SHOT_S. A request that fails or writes nothing leaves no
+# file and is logged (shot_failed).
+screen_shot() {
+	local rc=0
+	timeout "$SCREEN_SHOT_S" connected screenshot "$T6_SCREEN" -o "$1" </dev/null >/dev/null 2>"$2" || rc=$?
+	if [ "$rc" = 0 ] && [ -s "$1" ]; then return 0; fi
+	rm -f "$1"
+	shot_failed "$1" "$rc" "$2"
+	return 1
+}
+# The screen proof (T6_SCREEN), with the holder showing this run's nonce:
+# pictures (proof-NN.jpg, kept in the record) until one decodes to the
+# nonce or SCREEN_PROOF_S has passed. Each picture is read for itself: the
+# unit may give a picture of a screen several requests old (on 2026-11-23
+# the screen of two requests ago), so no request is assumed to be the
+# fresh one. Not proven: mode_refuse (no load, no jump, the holder stopped
+# by its pid), naming how many pictures came, the unit's last error and
+# what the last picture decoded to.
+screen_proof() {
+	local n=0 came=0 f dec dec_rc last_err=none last_pic="no picture came" end_ms
+	end_ms=$(($(now_ms) + SCREEN_PROOF_S * 1000))
+	while [ "$(now_ms)" -lt "$end_ms" ] && [ "$n" -lt 99 ]; do
+		n=$((n + 1))
+		f=$(printf '%s/proof-%02d.jpg' "$REC" "$n")
+		if ! screen_shot "$f" "$tmp/shot.err"; then
+			last_err=$shot_err
+			sleep 1
+			continue
+		fi
+		came=$((came + 1))
+		if ! djpeg -pnm "$f" >"$tmp/proof.ppm" 2>"$tmp/djpeg.err"; then
+			last_pic="${f##*/} is no JPEG djpeg reads ($(tr '\n' ' ' <"$tmp/djpeg.err" | cut -c1-200))"
+			continue
+		fi
+		dec_rc=0
+		dec=$(python3 -I "$HERE/t6-screen-nonce.py" decode "$tmp/proof.ppm" "$screen_nonce") || dec_rc=$?
+		last_pic="${f##*/}: ${dec#t6-screen-nonce: }"
+		if [ "$dec_rc" = 0 ]; then
+			rec "screen: proven: picture ${f##*/} (request $n, picture $came that came) shows this run's nonce $screen_nonce ($last_pic), $(secs $(($(now_ms) - t_hold))) s after the hold began"
+			return 0
+		fi
+	done
+	mode_refuse "screen path not proven: $came of $n requests to the capture unit (T6_SCREEN) gave a picture in $(secs $(($(now_ms) - t_hold))) s since the hold began, none with this run's nonce $screen_nonce; the unit's last error: $last_err; the last picture: $last_pic"
+}
+# The capture across the jump: from the jump until the board is back in
+# Armbian or the deadline ($1) passes, one picture after the other,
+# screen-SSS.jpg by the seconds after the jump (one per second at most).
+# finish() stops it by its pid; the request in flight is stopped with it.
+screen_loop() {
+	local c= f rc
+	trap 'if [ -n "$c" ]; then kill "$c" 2>/dev/null; wait "$c" 2>/dev/null; fi; exit 0' TERM
+	while [ "$(date +%s)" -lt "$1" ]; do
+		f=$(printf '%s/screen-%03d.jpg' "$REC" $(($(date +%s) - t0)))
+		if [ -e "$f" ]; then
+			sleep 1
+			continue
+		fi
+		timeout "$SCREEN_SHOT_S" connected screenshot "$T6_SCREEN" -o "$f" </dev/null >/dev/null 2>"$tmp/loop.err" &
+		c=$!
+		rc=0
+		wait "$c" || rc=$?
+		c=
+		if [ "$rc" != 0 ] || [ ! -s "$f" ]; then
+			rm -f "$f"
+			shot_failed "$f" "$rc" "$tmp/loop.err"
+			sleep 1
+		fi
+	done
+}
 # The adopt's mode (the crash route only; driver/docs/nanopc-t6-display.md,
 # section 2(a), "The mode before the jump"). t6-kms-mode.py holds VP0's own
 # mode when it is one of ADOPT_MODES, else it sets ADOPT_SET, and leaves a
@@ -796,7 +990,10 @@ vp0_mode") || mode_before=
 		rec "mode: VP0 runs none of the adopted modes: set $held"
 	fi
 	mode_rc=0
-	mode_out=$(board "python3 -I $STAGE/t6-kms-mode.py hold --mode $held --max-hold $MODE_HOLD --log $STAGE/kms-mode.log" 2>&1) || mode_rc=$?
+	nonce_arg=
+	[ -z "${T6_SCREEN:-}" ] || nonce_arg=" --nonce $screen_nonce"
+	t_hold=$(now_ms)
+	mode_out=$(board "python3 -I $STAGE/t6-kms-mode.py hold --mode $held --max-hold $MODE_HOLD --log $STAGE/kms-mode.log$nonce_arg" 2>&1) || mode_rc=$?
 	rec "mode: $(tr '\n' ' ' <<<"$mode_out")(rc $mode_rc)"
 	mode_re='; held by pid ([0-9]+) for at most [0-9]+ s$'
 	if [[ "$mode_out" =~ $mode_re ]]; then mode_pid=${BASH_REMATCH[1]}; fi
@@ -820,6 +1017,7 @@ vp0_mode") || vp0=
 	# changes (driver/docs/nanopc-t6-display.md, section 8, U15).
 	rec "mode: HDMI-A-1 output (DRM state): $(board "$VP0_FN
 hdmi_out" || true)"
+	if [ -n "${T6_SCREEN:-}" ]; then screen_proof; fi
 fi
 
 # What the jump command does when kexec_zephyr returns. On the normal route
@@ -859,7 +1057,16 @@ exit \$rc"
 else
 	jump="sync; $STAGE/kexec_zephyr $STAGE/zephyr.bin $load$crash_arg"
 fi
+paths=
+[ -z "${T6_UART:-}" ] || paths="UART"
+[ -z "${T6_SCREEN:-}" ] || paths="${paths:+$paths and }screen"
+rec "paths proven before the jump: $paths"
 t0=$(date +%s)
+if [ -n "${T6_SCREEN:-}" ]; then
+	screen_loop $((t0 + bound_s + 180)) &
+	screen_pid=$!
+	rec "screen: capture loop started (pid $screen_pid): screen-SSS.jpg, SSS the seconds after the jump; failed requests in screen.log"
+fi
 rec "jumping (linux_wdt $LINUX_WDT, route $([ "$CRASH" = 1 ] && echo crash || echo normal))"
 jump_rc=0
 timeout 30 ssh "${SSH_OPTS[@]}" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=3 \
@@ -893,7 +1100,18 @@ finish() {
 		wait "$uart_pid" 2>/dev/null || true
 		uart_pid=
 	fi
-	rec "linux-before.dmesg-w: $(wc -l <"$REC/linux-before.dmesg-w") lines; uart.log: $(wc -c <"$REC/uart.log") bytes"
+	if [ -n "$screen_pid" ]; then
+		local p=$screen_pid
+		kill "$p" 2>/dev/null || true
+		wait "$p" 2>/dev/null || true
+		screen_pid=
+		rec "screen: capture loop pid $p stopped: $(find "$REC" -maxdepth 1 -name 'screen-*.jpg' | wc -l) pictures, $(grep -cE '^[0-9-]+ [0-9:]+ screen-[0-9]+\.jpg: request failed' < <(cat "$REC/screen.log" 2>/dev/null)) failed requests"
+	fi
+	if [ -n "${T6_UART:-}" ]; then
+		rec "linux-before.dmesg-w: $(wc -l <"$REC/linux-before.dmesg-w") lines; uart.log: $(wc -c <"$REC/uart.log") bytes"
+	else
+		rec "linux-before.dmesg-w: $(wc -l <"$REC/linux-before.dmesg-w") lines; no uart.log (T6_UART not set)"
+	fi
 	echo "nanopc-t6.sh: record $REC"
 }
 if [ "$refused_on_board" = 1 ]; then

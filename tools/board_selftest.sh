@@ -47,9 +47,10 @@
 # 5. The NanoPC-T6 (kexec-dev through driver/tools/kexec-zephyr/nanopc-t6.sh)
 #    with a fake runner (T6_RUNNER) and an ssh that answers: what board.sh
 #    hands the runner (--go, and --crash after it only with T6_CRASH=1, the
-#    run directory as T6_RECORD_DIR, BOARD_UART as T6_UART, T6_HAND), the
+#    run directory as T6_RECORD_DIR, BOARD_UART as T6_UART, BOARD_SCREEN as
+#    T6_SCREEN, T6_HAND; the dry run names neither), the
 #    runner's record taken into the run directory and
-#    redacted, and the verdict of each way a run ends: back with a probe's
+#    redacted (the capture unit's name too; its pictures byte for byte), and the verdict of each way a run ends: back with a probe's
 #    record (t6-verdict.sh's PASS or FAIL, the testdata/ records), back with
 #    a gl_test set, Armbian not back, no jump, a refusal before any change
 #    (kept in meta.txt and tallied as verdict=refused with its exit code, as
@@ -264,6 +265,12 @@ check "nanopc-t6 run: board.sh takes no board lock of its own (the runner's woul
           grep -q "T6_UART=<BOARD_UART>" <<<"$out" && ! grep -q "ttyFAKE9" <<<"$out"'
 out=$(dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
 check "nanopc-t6 run without T6_HAND: the dry run says the runner refuses" grep -qF "T6_HAND=<unset: the runner refuses>" <<<"$out"
+out=$(BOARD_SCREEN=cap-unit-t6 T6_HAND=selftest T6_CRASH=1 dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+check "nanopc-t6 run with BOARD_SCREEN: the dry run hands it on as T6_SCREEN=<BOARD_SCREEN>, its name not printed" \
+    eval 'grep -qF "T6_UART= T6_SCREEN=<BOARD_SCREEN> T6_HAND=selftest" <<<"$out" && ! grep -q "cap-unit-t6" <<<"$out" && ! grep -q "neither BOARD_UART" <<<"$out"'
+out=$(BOARD_UART= T6_HAND=selftest dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
+check "nanopc-t6 run with neither BOARD_UART nor BOARD_SCREEN: the dry run says the runner refuses" \
+    grep -qF "neither BOARD_UART nor BOARD_SCREEN is set: the runner refuses" <<<"$out"
 out=$(T6_HAND=selftest T6_CRASH=1 dry nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/logs" 2>&1)
 check "nanopc-t6 run with T6_CRASH=1: the runner with --go --crash (the crash route)" \
     grep -qF "nanopc-t6.sh $S/img/nanopc-t6.bin --go --crash 2>&1" <<<"$out"
@@ -1742,7 +1749,7 @@ echo "== 5. NanoPC-T6 runs through a fake nanopc-t6.sh (T6_RUNNER) and an ssh th
 # FAKE_T6 names; FAKE_T6_UART is the uart.log it leaves.
 cat > "$S/fake-nanopc-t6.sh" <<'EOF'
 echo "runner" >> "${FAKE_T6_ARGS%/*}/ssh.log"
-printf 'argv=%s\nT6_RECORD_DIR=%s\nT6_UART=%s\nT6_HAND=%s\nBOARD_HOST=%s\n' "$*" "$T6_RECORD_DIR" "$T6_UART" "$T6_HAND" "$BOARD_HOST" > "$FAKE_T6_ARGS"
+printf 'argv=%s\nT6_RECORD_DIR=%s\nT6_UART=%s\nT6_SCREEN=%s\nT6_HAND=%s\nBOARD_HOST=%s\n' "$*" "$T6_RECORD_DIR" "$T6_UART" "$T6_SCREEN" "$T6_HAND" "$BOARD_HOST" > "$FAKE_T6_ARGS"
 if [ "$FAKE_T6" = refused ]; then echo "nanopc-t6.sh: REFUSED: under the lock: remote sessions on the board" >&2; exit 3; fi
 route=normal
 case " $* " in *" --crash "*) route=crash ;; esac
@@ -1752,6 +1759,12 @@ rec() { printf '2026-11-12 12:%s %s\n' "$1" "$2" >> "$r/record.txt"; }
 rec 00:00 "board $BOARD_HOST, boot_id 0; hand at the power switch: $T6_HAND; linux_wdt 1"
 rec 00:01 "UART capture started (pid 1, read only): $T6_UART -> $r/uart.log"
 cp "$FAKE_T6_UART" "$r/uart.log"
+# with T6_SCREEN: a picture (bytes that look like an address and the unit's
+# name, which redaction must leave alone) and a log line that names the unit
+if [ -n "$T6_SCREEN" ]; then
+    cp "$FAKE_T6_PIC" "$r/screen-003.jpg"
+    echo "2026-11-12 12:00:03 screen-002.jpg: request failed (rc 1): $T6_SCREEN busy" > "$r/screen.log"
+fi
 echo "[ 1.0] a line of the old Linux" > "$r/linux-before.dmesg-w"
 case $FAKE_T6 in
 back)
@@ -1780,7 +1793,7 @@ t6run() {
     local c=$1 u=$2
     shift 2
     T6_OUT=$(env BOARD_HOST=tester@t6fake-host BOARD_UART=/dev/ttyFAKE-T6 T6_HAND=selftest "$@" T6_RUNNER="$S/fake-nanopc-t6.sh" \
-        FAKE_T6="$c" FAKE_T6_UART="$u" FAKE_T6_ARGS="$S/t6/args" PATH="$S/okstub:$PATH" "$B" nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/t6/$c-${u##*/}" 2>&1)
+        FAKE_T6="$c" FAKE_T6_UART="$u" FAKE_T6_ARGS="$S/t6/args" FAKE_T6_PIC="$S/t6/pic.jpg" PATH="$S/okstub:$PATH" "$B" nanopc-t6 run "$S/img/nanopc-t6.bin" "$S/t6/$c-${u##*/}" 2>&1)
     T6_RC=$?
     T6_RD=$(ls -d "$S/t6/$c-${u##*/}"/*/ 2>/dev/null | head -1)
     T6_RD=${T6_RD%/}
@@ -1840,6 +1853,21 @@ check "nanopc-t6 back with a gl_test set that passed: done rc 0, result=legacy:g
 t6run back "$S/t6/gltest-fail.uart"
 check "nanopc-t6 back with a gl_test set with a failure: failed rc 4" \
     eval '[ "$T6_RC" = 4 ] && grep -q "rc=4 verdict=failed .*result=legacy:gl_test_all " <<<"$T6_OUT"'
+# BOARD_SCREEN (or T6_SCREEN) reaches the runner as T6_SCREEN, BOARD_UART
+# may be unset; the copies are redacted, the picture is not touched.
+# (198.51.100.7 is a documentation address that redact_dir would rewrite in
+# a text file: it leaves only 192.0.2.x alone)
+printf '\377\330 198.51.100.7 cap-unit-t6 \000\001 tester@t6fake-host' > "$S/t6/pic.jpg"
+cp "$S/t6/gltest-pass.uart" "$S/t6/screen-a.uart"
+cp "$S/t6/gltest-pass.uart" "$S/t6/screen-b.uart"
+t6run back "$S/t6/screen-a.uart" BOARD_UART= BOARD_SCREEN=cap-unit-t6 T6_CRASH=1
+check "nanopc-t6 with BOARD_SCREEN and no BOARD_UART: the runner got T6_SCREEN and an empty T6_UART, done rc 0" \
+    eval '[ "$T6_RC" = 0 ] && grep -qx "T6_SCREEN=cap-unit-t6" "$S/t6/args" && grep -qx "T6_UART=" "$S/t6/args"'
+check "nanopc-t6 with BOARD_SCREEN: screen.log names <BOARD_SCREEN>, the picture is byte for byte the runner's" \
+    eval 'grep -q "request failed (rc 1): <BOARD_SCREEN> busy" "$T6_RD/screen.log" && ! grep -rq "cap-unit-t6" "$T6_RD"/*.log "$T6_RD"/*.txt &&
+          cmp -s "$S/t6/pic.jpg" "$T6_RD/screen-003.jpg"'
+t6run back "$S/t6/screen-b.uart" BOARD_UART= T6_SCREEN=cap-unit-t6 T6_CRASH=1
+check "nanopc-t6: T6_SCREEN alone reaches the runner" grep -qx "T6_SCREEN=cap-unit-t6" "$S/t6/args"
 t6run lost "$KT/t6_hello-pass.uart"
 check "nanopc-t6 jumped, Armbian not back within the runner's bound: not_back rc 5" \
     eval '[ "$T6_RC" = 5 ] && grep -q "rc=5 verdict=not_back boot=kexec-dev DEV boot_verdict=not_back " <<<"$T6_OUT"'

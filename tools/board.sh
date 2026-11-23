@@ -220,9 +220,17 @@
 #                      tools/cts/imx8mp-console-scan.py), unset: no capture;
 #                      x2: optional in the same way (UART2, the board's own
 #                      USB serial adapter), for a kexec-dev run; nanopc-t6:
-#                      required for a run (the runner refuses without it): the
-#                      host's tty on the debug UART, only ever read (T6_UART
-#                      also read; redacted in the record)
+#                      the host's tty on the debug UART, only ever read
+#                      (T6_UART also read; redacted in the record); a run
+#                      needs it, BOARD_SCREEN or both (the runner refuses
+#                      without either)
+#   BOARD_SCREEN       nanopc-t6: the farm's name of the capture unit on the
+#                      board's HDMI output, passed to the runner as T6_SCREEN
+#                      (T6_SCREEN also read; redacted in the record; the
+#                      runner needs T6_CRASH=1 with it): the runner proves
+#                      the screen path before the load and keeps pictures
+#                      from the jump on (proof-NN.jpg, screen-SSS.jpg,
+#                      screen.log in the run directory)
 #   T6_HAND            nanopc-t6: the name of the person at the power switch for
 #                      this run (nanopc-t6.sh --go refuses without it)
 #   T6_CRASH           nanopc-t6: 1: the runner's crash route (--go --crash: no
@@ -466,6 +474,7 @@ nanopc-t6)
     # root logs in (kexec_load needs CAP_SYS_BOOT): no sudo
     SU=
     BOARD_UART=${BOARD_UART:-${T6_UART:-}}
+    BOARD_SCREEN=${BOARD_SCREEN:-${T6_SCREEN:-}}
     UART_VAR=T6_UART
     NO_CONSOLE_WHY="the runner left no uart.log"
     # the samples' result lines, and the board glue's reset line, which ends
@@ -669,12 +678,14 @@ is_run_of() {
 # address outside 192.0.2.0/24 becomes 192.0.2.<n> (one n per address, in the
 # order first seen), every MAC 02:00:00:00:00:<nn>, and each STRING (the board's
 # host name, BOARD_HOST's host part) <board-host>. Binary files included (GNU
-# sed in the C locale passes NULs through).
+# sed in the C locale passes NULs through), pictures (*.jpg, the NanoPC-T6
+# runner's screen captures) not: their bytes are pixels, a run of them that
+# looks like an address is none, and a rewrite would break the picture.
 redact_dir() {
     local dir=$1 f n=0 ip mac
     shift
     local files=()
-    for f in "$dir"/*; do [ -f "$f" ] && [ "${f##*/}" != INDEX.txt ] && files+=("$f"); done
+    for f in "$dir"/*; do [ -f "$f" ] && [ "${f##*/}" != INDEX.txt ] && [ "${f%.jpg}" = "$f" ] && files+=("$f"); done
     [ ${#files[@]} -gt 0 ] || return 0
     redact_words "$dir" "<board-host>" "$@"
     while read -r ip; do
@@ -692,12 +703,12 @@ redact_dir() {
 }
 
 # redact_words DIR PLACEHOLDER STRING...: each STRING, a whole word, becomes
-# PLACEHOLDER in DIR's files (INDEX.txt aside, as redact_dir)
+# PLACEHOLDER in DIR's files (INDEX.txt and pictures aside, as redact_dir)
 redact_words() {
     local dir=$1 as=$2 f s esc
     shift 2
     local files=()
-    for f in "$dir"/*; do [ -f "$f" ] && [ "${f##*/}" != INDEX.txt ] && files+=("$f"); done
+    for f in "$dir"/*; do [ -f "$f" ] && [ "${f##*/}" != INDEX.txt ] && [ "${f%.jpg}" = "$f" ] && files+=("$f"); done
     [ ${#files[@]} -gt 0 ] || return 0
     for s in "$@"; do
         # a short alias ("pi4") would rewrite ordinary console text: whole words
@@ -719,8 +730,13 @@ redact_run() {
         redact_words "$1" "<BOARD_UART>" "$BOARD_UART" "${UART_REAL:-}"
         if uart_is_bridge; then redact_words "$1" "<uart-bridge>" "${BOARD_UART%:*}"; fi
     fi
-    # the NanoPC-T6 runner's record.txt names the UART tty it read
-    if [ "$BOARD" = nanopc-t6 ]; then redact_words "$1" "<BOARD_UART>" "${BOARD_UART:-}"; fi
+    # the NanoPC-T6 runner's record.txt names the UART tty it read; the
+    # runner writes the capture unit as <T6_SCREEN> itself, and this catches
+    # the name wherever else it may come
+    if [ "$BOARD" = nanopc-t6 ]; then
+        redact_words "$1" "<BOARD_UART>" "${BOARD_UART:-}"
+        redact_words "$1" "<BOARD_SCREEN>" "${BOARD_SCREEN:-}"
+    fi
     redact_dir "$1" "${BHOSTNAME:-}" "${BOARD_HOST#*@}"
 }
 
@@ -2081,8 +2097,9 @@ t6_lifetime() {
 # the state again under the lock (kexec_loaded, the GPU's users, remote
 # sessions, the watchdog's users), T6_HAND, the UART (a readable tty nobody
 # has open, set raw and read back, and a marker line the board writes to its
-# console read back from it) and the record directory; the copies read
-# back; WDT_EN read back before the jump. The runner exits 3 for a refusal
+# console read back from it), the screen (BOARD_SCREEN as T6_SCREEN: a
+# picture of the capture unit that shows the run's nonce, before the load)
+# and the record directory; the copies read back; WDT_EN read back before the jump. The runner exits 3 for a refusal
 # before anything changed, makes its record directory (<rundir>/<date>-t6)
 # only after that, and writes there what happened: "jumping", then "back in
 # Armbian N s after the jump", "no Armbian N s after the jump", "the same
@@ -2093,13 +2110,14 @@ kexec_t6() {
     local go=(--go)
     [ "${T6_CRASH:-0}" != 1 ] || go+=(--crash)
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=<BOARD_UART> T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG ${go[*]} 2>&1 | tee <rundir>/kexec.log"
+        echo "DRY host\$ BOARD_HOST=\$BOARD_HOST T6_UART=${BOARD_UART:+<BOARD_UART>} T6_SCREEN=${BOARD_SCREEN:+<BOARD_SCREEN>} T6_HAND=${T6_HAND:-<unset: the runner refuses>} T6_RECORD_DIR=<rundir> bash ${runner#"$REPO"/} $IMG ${go[*]} 2>&1 | tee <rundir>/kexec.log"
+        [ -n "${BOARD_UART:-}${BOARD_SCREEN:-}" ] || echo "DRY host\$   # neither BOARD_UART nor BOARD_SCREEN is set: the runner refuses"
         echo "DRY host\$   # the runner: its board checks, board_lock.sh (LOCK_WAIT ${LOCK_WAIT}: refused while held), the board again under the lock, the record <rundir>/<date>-t6/, the jump, Armbian back (a new boot_id) within the image's bound + 180 s"
-        echo "DRY host\$ move <rundir>/<date>-t6/* (uart.log, record.txt, linux-before.dmesg-w, linux-after.dmesg) into <rundir>; console.txt = uart.log"
+        echo "DRY host\$ move <rundir>/<date>-t6/* (uart.log, record.txt, linux-before.dmesg-w, linux-after.dmesg; with BOARD_SCREEN proof-NN.jpg, screen-SSS.jpg, screen.log) into <rundir>; console.txt = uart.log"
         exit 0
     fi
     trap 'lease_release; rm -rf "$TMP"' EXIT
-    BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_HAND=${T6_HAND:-} T6_RECORD_DIR=$RD \
+    BOARD_HOST=$BOARD_HOST T6_UART=${BOARD_UART:-} T6_SCREEN=${BOARD_SCREEN:-} T6_HAND=${T6_HAND:-} T6_RECORD_DIR=$RD \
         bash "$runner" "$IMG" "${go[@]}" < /dev/null 2>&1 | tee "$RD/kexec.log"
     rc=${PIPESTATUS[0]}
     meta runner_rc "$rc"

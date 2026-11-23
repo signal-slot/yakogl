@@ -372,6 +372,57 @@ fbdev cannot change the screen between the read-back below and the jump
    records whether Linux's own mode is back. The holder also ends by itself
    after 600 s, for a runner that was killed before it could stop it.
 
+**The screen path (T6_SCREEN).** The run must be seen. `nanopc-t6.sh --go`
+takes the debug UART (`T6_UART`), the capture unit on HDMI-A-1
+(`T6_SCREEN`, the farm's name of the unit; environment only) or both, and
+refuses with neither. Each one that is set is proven before the load. The
+screen path needs `--crash`, since the proof runs through the holder, which
+only the crash route starts; `T6_SCREEN` without it is refused by name. The
+host tools it needs (`connected`, `djpeg`, `python3`) are checked before
+anything is copied. `tools/board.sh nanopc-t6 run` passes `BOARD_SCREEN` as
+`T6_SCREEN`.
+
+1. The nonce. The runner makes one per run (`t6-screen-nonce.py new`,
+   beside the runner) and passes it to the holder (`--nonce`). The holder
+   draws it into its own buffer as eight full-height vertical bars of equal
+   width, each one of the eight saturated colours (black, blue, green, cyan,
+   red, magenta, yellow, white: bit 2 red, bit 1 green, bit 0 blue). A nonce
+   is an order of all eight colours, so a blank screen, a console or any
+   picture of fewer colours never decodes to one. Four orders are left out
+   as well: the colour bars a capture unit may show without a signal
+   (white, yellow, cyan, green, magenta, red, blue, black, and that
+   reversed) and the two plain ramps (`t6-kms-mode.py`, `NONCE_NOT_USED`).
+2. The proof, after VP0's read-back (step 2 above): the runner asks the
+   unit for pictures (`connected screenshot <unit> -o <file>`, each request
+   bounded to 30 s) until one decodes to this run's nonce, at most
+   `SCREEN_PROOF_S` seconds (default 90). Each picture is read for itself:
+   on 2026-11-23 a picture showed the screen of two requests ago
+   (signal-slot/connected#1714), so no request is taken as the fresh one.
+   The decoder (`t6-screen-nonce.py decode`, on `djpeg -pnm`'s PPM) cuts the
+   picture into the same eight bars and reads a grid of samples in the
+   middle half of each bar's width and of the height: a channel at 160 or
+   above is on, at 96 or below off; a bar is the colour 80% of its samples
+   have. That leaves room for a limited range, noise and the JPEG's colour
+   blur at the bars' edges. Proven: one record line with the picture's name
+   (`proof-NN.jpg`, kept in the record) and the seconds since the hold
+   began. Not proven: the mode step's refusal (no load, no jump, the holder
+   stopped by its pid, Linux's mode back), with how many pictures came, the
+   unit's last error text and what the last picture decoded to. The unit
+   gives no picture of any mode but 1920x1080 (measured 2026-11-23), so a
+   run on which the holder had to set 1024x768 is refused by this rule,
+   not by one of its own.
+3. Across the jump: a loop takes pictures from the jump until the board is
+   back in Armbian or the runner's deadline passes, `screen-SSS.jpg` by the
+   seconds after the jump; a failed request goes to `screen.log` (the
+   tool's error output, the unit's name written `<T6_SCREEN>`). `finish()`
+   stops the loop by its pid, the request in flight with it, and records
+   how many pictures came and how many requests failed.
+4. The record's first lines name the paths the run has (UART, screen or
+   both), and a line before the jump says which were proven. With
+   `T6_SCREEN` only there is no `uart.log` and no line about one. Which
+   picture shows the probe's pattern is a separate tool's verdict; the
+   runner only proves the path and captures.
+
 Why the mode stays until the image starts. While the holder is master,
 fbdev cannot take the CRTC back: its restore (through
 `drm_client_modeset_commit`), colour map, ioctl, pan and hotplug paths need

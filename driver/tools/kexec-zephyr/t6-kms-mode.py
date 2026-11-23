@@ -4,6 +4,7 @@
 """Hold one of the adopt's modes on the NanoPC-T6's HDMI under Linux, for a crash jump.
 
     t6-kms-mode.py hold [--mode NAME] [--card PATH] [--connector NAME] [--max-hold S] [--log FILE]
+                        [--nonce BARS]
         On the board, as root, with no display server. Opens the DRM card
         (default /dev/dri/card0) as its master, finds the connector (default
         HDMI-A-1) and the CRTC that drives it, and picks the connector's mode
@@ -17,6 +18,8 @@
         SIGTERM, SIGINT or SIGHUP, or by itself after --max-hold seconds
         (default 600), then closes the card. A crash jump ends Linux with the
         mode still set: the crash route shuts no device down.
+        With --nonce the buffer shows the screen proof's bars (nanopc-t6.sh,
+        T6_SCREEN; draw_nonce() below); without it, it stays black.
     t6-kms-mode.py --self-test
         The packing, the ioctl numbers, the mode rule and the whole hold and
         give-back order against a made-up DRM device. On the host, no board.
@@ -44,9 +47,10 @@ Exit: 0 the mode is set and held (the line names the holder's pid). 3
 refused, nothing changed: no such card or connector, the connector is not
 connected or drives no CRTC, another master holds the card, or the
 connector lists no mode with the named mode's timing (the line lists the
-modes of the same size). 1 the set or its read-back failed; the CRTC was
+modes of the same size). 1 the drawing, the set or its read-back failed; the CRTC was
 given back before the exit (the line says whether that worked). 2 usage
-(also a --mode that is not a key of MODES).
+(also a --mode that is not a key of MODES, or a --nonce that is not one:
+nonce_ok()).
 
 Only the Python standard library: the board has python3 and no DRM tools.
 """
@@ -54,6 +58,7 @@ Only the Python standard library: the board has python3 and no DRM tools.
 import array
 import errno
 import fcntl
+import mmap
 import os
 import signal
 import struct
@@ -97,7 +102,23 @@ GET_ENCODER = struct.Struct("<IIIII")            # struct drm_mode_get_encoder, 
 CRTC = struct.Struct("<QIIIIIII68s")             # struct drm_mode_crtc, 104
 CREATE_DUMB = struct.Struct("<IIIIIIQ")          # struct drm_mode_create_dumb, 32
 FB_CMD = struct.Struct("<IIIIIII")               # struct drm_mode_fb_cmd, 28
+MAP_DUMB = struct.Struct("<IIQ")                 # struct drm_mode_map_dumb, 16
 U32 = struct.Struct("<I")                        # RMFB's id, drm_mode_destroy_dumb
+
+# The screen proof (nanopc-t6.sh, T6_SCREEN): the runner gives the holder a
+# per-run nonce, the holder draws it as NONCE_BARS full-height vertical bars
+# of equal width (bar k spans w * k // NONCE_BARS up to w * (k + 1) //
+# NONCE_BARS), and the runner asks the HDMI capture unit for pictures until
+# one decodes to it (t6-screen-nonce.py, beside this, decodes; its self-test
+# draws with draw_nonce() and decodes back). The nonce is one digit per bar,
+# the bar's colour: bit 2 red, bit 1 green, bit 0 blue, each channel 0 or
+# 255. It is an order of all eight colours, so a blank screen, a console
+# (black with grey text) or any picture of fewer colours never decodes to
+# one; the orders in NONCE_NOT_USED are left out as well: the colour bars a
+# capture unit may show without a signal (white, yellow, cyan, green,
+# magenta, red, blue, black, and that reversed) and the two plain ramps.
+NONCE_BARS = 8
+NONCE_NOT_USED = ("76325410", "01452367", "01234567", "76543210")
 
 
 def _ioc(direction, nr, size):
@@ -119,6 +140,7 @@ IOCTL_GETCONNECTOR = _iowr(0xA7, GET_CONNECTOR)
 IOCTL_ADDFB = _iowr(0xAE, FB_CMD)
 IOCTL_RMFB = _iowr(0xAF, U32)
 IOCTL_CREATE_DUMB = _iowr(0xB2, CREATE_DUMB)
+IOCTL_MAP_DUMB = _iowr(0xB3, MAP_DUMB)
 IOCTL_DESTROY_DUMB = _iowr(0xB4, U32)
 
 Mode = namedtuple("Mode", "clock hdisplay hsync_start hsync_end htotal hskew vdisplay vsync_start "
@@ -160,6 +182,35 @@ def mode_pick(modes, name):
     return None
 
 
+def nonce_ok(nonce):
+    """A nonce is NONCE_BARS digits, each colour once, and not one of
+    NONCE_NOT_USED."""
+    return (isinstance(nonce, str) and len(nonce) == NONCE_BARS and sorted(nonce) == list("01234567")
+            and nonce not in NONCE_NOT_USED)
+
+
+def nonce_colour(digit):
+    """(r, g, b) of one bar."""
+    i = int(digit)
+    return (255 if i & 4 else 0, 255 if i & 2 else 0, 255 if i & 1 else 0)
+
+
+def draw_nonce(buf, w, h, pitch, nonce):
+    """The bars into an XRGB8888 buffer (DRM_FORMAT_XRGB8888, the format
+    ADDFB gives depth 24 at 32 bpp: bytes B, G, R, X in memory). buf takes
+    slice assignment (the mapped dumb buffer)."""
+    row = bytearray()
+    for k in range(NONCE_BARS):
+        r, g, b = nonce_colour(nonce[k])
+        row += bytes((b, g, r, 0)) * (w * (k + 1) // NONCE_BARS - w * k // NONCE_BARS)
+    for y in range(h):
+        buf[y * pitch:y * pitch + 4 * w] = row
+
+
+def map_shared(fd, length, offset):
+    return mmap.mmap(fd, length, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=offset)
+
+
 class Refused(Exception):
     """Nothing was changed."""
 
@@ -171,11 +222,13 @@ class SetFailed(Exception):
 
 class Drm:
     """The legacy KMS ioctls this tool needs, on an open card. ioctl is
-    fcntl.ioctl on the board and a made-up device in the self-test."""
+    fcntl.ioctl on the board and a made-up device in the self-test; mapper
+    maps a dumb buffer (map_shared on the board)."""
 
-    def __init__(self, fd, ioctl=fcntl.ioctl):
+    def __init__(self, fd, ioctl=fcntl.ioctl, mapper=map_shared):
         self.fd = fd
         self.ioctl = ioctl
+        self.mapper = mapper
 
     def call(self, req, st, *fields):
         buf = bytearray(st.pack(*fields))
@@ -230,10 +283,19 @@ class Drm:
                   1 if raw_mode is not None else 0, raw_mode if raw_mode is not None else bytes(MODEINFO.size))
 
     def create_dumb(self, w, h):
-        """(handle, pitch). What the buffer shows does not matter: the image
-        puts its own window on the screen."""
+        """(handle, pitch). The kernel gives it zeroed: black, unless the
+        screen proof's bars are drawn into it (draw())."""
         got = self.call(IOCTL_CREATE_DUMB, CREATE_DUMB, h, w, 32, 0, 0, 0, 0)
         return got[4], got[5]
+
+    def draw(self, handle, w, h, pitch, nonce):
+        """The nonce's bars into the dumb buffer, through its mapping."""
+        offset = self.call(IOCTL_MAP_DUMB, MAP_DUMB, handle, 0, 0)[2]
+        m = self.mapper(self.fd, pitch * h, offset)
+        try:
+            draw_nonce(m, w, h, pitch, nonce)
+        finally:
+            m.close()
 
     def add_fb(self, w, h, pitch, handle):
         return self.call(IOCTL_ADDFB, FB_CMD, 0, w, h, pitch, 32, 24, handle)[0]
@@ -249,8 +311,9 @@ def connector_name(ctype, type_id):
     return "%s-%d" % (CONNECTOR_TYPES.get(ctype, "type%d" % ctype), type_id)
 
 
-def take(drm, name, want=DEFAULT_MODE):
-    """Set MODES[want] on the connector called name. Returns what give_back needs.
+def take(drm, name, want=DEFAULT_MODE, nonce=None):
+    """Set MODES[want] on the connector called name, its buffer showing the
+    nonce's bars when one is given. Returns what give_back needs.
     Raises Refused before any change (a read the card refuses included); on
     a failure after a change it gives the CRTC back first and raises
     SetFailed."""
@@ -292,12 +355,15 @@ def take(drm, name, want=DEFAULT_MODE):
     state = {"crtc": crtc, "conn": cid, "old": old, "handle": handle, "fb": 0, "mode": raw}
     try:
         state["fb"] = drm.add_fb(w, h, pitch, handle)
+        if nonce is not None:
+            drm.draw(handle, w, h, pitch, nonce)
         drm.set_crtc(crtc, state["fb"], 0, 0, [cid], raw)
         now = drm.get_crtc(crtc)
         if now[0] != state["fb"] or not now[3] or not mode_matches(mode_unpack(now[4]), want):
             raise RuntimeError("CRTC %d reads back fb %d, mode %s after the set"
                                % (crtc, now[0], mode_text(mode_unpack(now[4])) if now[3] else "none"))
-    except (OSError, RuntimeError) as e:
+    except (OSError, ValueError, RuntimeError) as e:
+        # mmap raises ValueError for a length or offset it cannot map
         why = os.strerror(e.errno) if isinstance(e, OSError) and e.errno else str(e)
         raise SetFailed("%s; given back: %s" % (why, give_back(drm, state)))
     return state
@@ -329,10 +395,10 @@ def give_back(drm, state):
     return "; ".join(what)
 
 
-def hold(argv, ioctl=fcntl.ioctl):
-    """The command. ioctl is the made-up device in the self-test."""
+def hold(argv, ioctl=fcntl.ioctl, mapper=map_shared):
+    """The command. ioctl and mapper are the made-up device in the self-test."""
     opts = {"--mode": DEFAULT_MODE, "--card": "/dev/dri/card0", "--connector": "HDMI-A-1", "--max-hold": "600",
-            "--log": ""}
+            "--log": "", "--nonce": ""}
     if len(argv) % 2:
         return usage()
     for k, v in zip(argv[::2], argv[1::2]):
@@ -343,16 +409,16 @@ def hold(argv, ioctl=fcntl.ioctl):
         max_hold = int(opts["--max-hold"])
     except ValueError:
         return usage()
-    if max_hold <= 0 or opts["--mode"] not in MODES:
+    if max_hold <= 0 or opts["--mode"] not in MODES or (opts["--nonce"] and not nonce_ok(opts["--nonce"])):
         return usage()
     name = opts["--connector"]
     try:
         fd = os.open(opts["--card"], os.O_RDWR | os.O_CLOEXEC)
     except OSError as e:
         return say(3, "REFUSED: cannot open %s: %s" % (opts["--card"], os.strerror(e.errno)))
-    drm = Drm(fd, ioctl)
+    drm = Drm(fd, ioctl, mapper)
     try:
-        state = take(drm, name, opts["--mode"])
+        state = take(drm, name, opts["--mode"], opts["--nonce"] or None)
     except Refused as e:
         return say(3, "REFUSED: %s; nothing was changed" % e)
     except SetFailed as e:
@@ -368,8 +434,9 @@ def hold(argv, ioctl=fcntl.ioctl):
     if pid:
         # The parent: the child has the card open too, so this close is not
         # the last one and changes nothing.
-        say(0, "t6-kms-mode: %s on CRTC %d: %s set (fb %d), read back; was %s; held by pid %d for at most %d s"
-            % (name, state["crtc"], mode_text(mode_unpack(state["mode"])), state["fb"], was, pid, max_hold))
+        say(0, "t6-kms-mode: %s on CRTC %d: %s set (fb %d%s), read back; was %s; held by pid %d for at most %d s"
+            % (name, state["crtc"], mode_text(mode_unpack(state["mode"])), state["fb"],
+               ", nonce %s drawn" % opts["--nonce"] if opts["--nonce"] else "", was, pid, max_hold))
         os._exit(0)
     # The child: its own session (the ssh session that started it ends) and
     # no tie to the caller's stdio (ssh would wait for it otherwise).
@@ -398,6 +465,7 @@ def say(rc, line):
 
 def usage():
     print("usage: t6-kms-mode.py hold [--mode %s] [--card PATH] [--connector NAME] [--max-hold S] [--log FILE]\n"
+          "                             [--nonce BARS]\n"
           "       t6-kms-mode.py --self-test" % "|".join(MODES), file=sys.stderr)
     return 2
 
@@ -434,6 +502,7 @@ def self_test():
             (IOCTL_ADDFB, 0xC01C64AE, "DRM_IOCTL_MODE_ADDFB"),
             (IOCTL_RMFB, 0xC00464AF, "DRM_IOCTL_MODE_RMFB"),
             (IOCTL_CREATE_DUMB, 0xC02064B2, "DRM_IOCTL_MODE_CREATE_DUMB"),
+            (IOCTL_MAP_DUMB, 0xC01064B3, "DRM_IOCTL_MODE_MAP_DUMB"),
             (IOCTL_DESTROY_DUMB, 0xC00464B4, "DRM_IOCTL_MODE_DESTROY_DUMB"),
             (MODEINFO.size, 68, "sizeof(struct drm_mode_modeinfo)"),
             (CARD_RES.size, 64, "sizeof(struct drm_mode_card_res)"),
@@ -441,6 +510,7 @@ def self_test():
             (GET_ENCODER.size, 20, "sizeof(struct drm_mode_get_encoder)"),
             (CRTC.size, 104, "sizeof(struct drm_mode_crtc)"),
             (CREATE_DUMB.size, 32, "sizeof(struct drm_mode_create_dumb)"),
+            (MAP_DUMB.size, 16, "sizeof(struct drm_mode_map_dumb)"),
             (FB_CMD.size, 28, "sizeof(struct drm_mode_fb_cmd)")):
         check(got == want, "uapi: %s = 0x%x (kernel 0x%x)" % (what, got, want))
 
@@ -480,6 +550,15 @@ def self_test():
         rust, same = "unread (%s)" % e, False
     check(same, "MODES are board::nanopc_t6_display::MODES (%s)" % (rust,))
     check(DEFAULT_MODE in MODES, "the default mode %s is one of MODES" % DEFAULT_MODE)
+    # The nonce rule: every colour once, not one of the orders left out.
+    check(nonce_ok("36104527") and nonce_ok("70615243"), "nonce: two orders of the eight colours are nonces")
+    check(not any(nonce_ok(n) for n in ("00000000", "77777777", "07070707", "3610452", "361045277", "36104526",
+                                        "3610452x", 36104527) + NONCE_NOT_USED),
+          "nonce: one colour, two colours, seven or nine bars, a colour twice, a non-digit, a number and the "
+          "orders left out are not")
+    check([nonce_colour(d) for d in "01234567"] == [(0, 0, 0), (0, 0, 255), (0, 255, 0), (0, 255, 255),
+                                                   (255, 0, 0), (255, 0, 255), (255, 255, 0), (255, 255, 255)],
+          "nonce: digit 0..7 is black, blue, green, cyan, red, magenta, yellow, white")
 
     def mk(clock=65000, h=(1024, 1048, 1184, 1344), v=(768, 771, 777, 806), flags=FLAG_NHSYNC | FLAG_NVSYNC,
            hskew=0, vscan=0, name="1024x768", vrefresh=60, mtype=0x40):
@@ -623,6 +702,10 @@ def self_test():
                 self.log.append("ADDFB %dx%d pitch %d bpp %d depth %d handle %d"
                                 % tuple(u32(buf, off) for off in (4, 8, 12, 16, 20, 24)))
                 put(buf, 0, 60)
+            elif req == IOCTL_MAP_DUMB:
+                # struct drm_mode_map_dumb: handle 0, pad 4, offset 8
+                self.log.append("MAP_DUMB %d" % u32(buf, 0))
+                put(buf, 8, 0x10000, "Q")
             elif req == IOCTL_RMFB:
                 self.log.append("RMFB %d" % U32.unpack(bytes(buf))[0])
             elif req == IOCTL_DESTROY_DUMB:
@@ -634,9 +717,24 @@ def self_test():
     def changes(log):
         return [e for e in log if e.split()[0] in ("SETCRTC", "CREATE_DUMB", "ADDFB", "RMFB", "DESTROY_DUMB")]
 
+    class Mapped(bytearray):
+        """A dumb buffer's mapping: the bytes, where it was mapped, closed or not."""
+        def close(self):
+            self.closed = True
+
+    maps = []
+
+    def mapper(fd, length, offset):
+        m = Mapped(length)
+        m.at, m.closed = (fd, length, offset), False
+        maps.append(m)
+        return m
+
     fake = Fake([p1080, p70, good])
-    drm = Drm(-1, fake)
+    drm = Drm(-1, fake, mapper)
     state = take(drm, "HDMI-A-1")
+    check(not maps and not any(e.startswith("MAP_DUMB") for e in fake.log),
+          "take: without a nonce the buffer is not mapped (it stays black)")
     check(changes(fake.log) == ["CREATE_DUMB 1024x768 bpp 32", "ADDFB 1024x768 pitch 4096 bpp 32 depth 24 handle 7",
                                 "SETCRTC 81 fb 60 at 0,0 conns [83] mode 1024x768"],
           "take: a 1024x768 buffer, then SETCRTC 81 with it, connector 83 and the matching mode (%s)"
@@ -662,6 +760,49 @@ def self_test():
     give_back(drm, state)
     check(changes(fake.log[n:]) == ["SETCRTC 81 fb 50 at 0,0 conns [83] mode 1920x1080", "RMFB 60", "DESTROY_DUMB 7"],
           "give_back: CRTC 81 back on fb 50 after a 1920x1080 hold (%s)" % changes(fake.log[n:]))
+
+    # With a nonce: the buffer is mapped and drawn after ADDFB and before
+    # the set, every bar in its colour (B, G, R, X), the pitch's padding
+    # untouched; the mapping is closed again.
+    fake = Fake([p1080, p70, good])
+    del maps[:]
+    drm = Drm(-1, fake, mapper)
+    state = take(drm, "HDMI-A-1", "1920x1080", "36104527")
+    names = [e.split()[0] for e in fake.log]
+    m = maps[0] if len(maps) == 1 else Mapped(0)
+    bars = []
+    for k in range(NONCE_BARS):
+        x = (1920 * k // NONCE_BARS + 1920 * (k + 1) // NONCE_BARS) // 2
+        bars.append(bytes(m[1079 * 7680 + 4 * x:1079 * 7680 + 4 * x + 4]))
+    want = [bytes((c[2], c[1], c[0], 0)) for c in (nonce_colour(d) for d in "36104527")]
+    check(names.index("ADDFB") < names.index("MAP_DUMB") < names.index("SETCRTC") and "MAP_DUMB 7" in fake.log
+          and getattr(m, "at", None) == (-1, 7680 * 1080, 0x10000) and m.closed and bars == want,
+          "take: a nonce is drawn into the mapped buffer between ADDFB and the set, each bar in its colour (%s; %s)"
+          % (getattr(m, "at", None), [b.hex() for b in bars]))
+    give_back(drm, state)
+    # A row of 10 pixels in a pitch of 48 bytes: pixel x is in bar k when
+    # 10 * k // 8 <= x < 10 * (k + 1) // 8, and the padding after the
+    # picture's bytes is untouched.
+    padded = bytearray(b"\xaa" * (48 * 2))
+    draw_nonce(padded, 10, 2, 48, "36104527")
+    px = [bytes(padded[4 * x:4 * x + 4]) for x in range(10)]
+    bar_of = [next(k for k in range(8) if 10 * k // 8 <= x < 10 * (k + 1) // 8) for x in range(10)]
+    check(px == [want[k] for k in bar_of] and padded[48:88] == padded[0:40]
+          and padded[40:48] == b"\xaa" * 8 and padded[88:96] == b"\xaa" * 8,
+          "draw: each pixel in the bar w * k // 8 puts it in, the padding after the row untouched (bars %s)" % bar_of)
+    # A mapping that fails is given back like a set that fails.
+    fake = Fake([good])
+
+    def no_map(fd, length, offset):
+        raise OSError(errno.ENOMEM, os.strerror(errno.ENOMEM))
+    try:
+        take(Drm(-1, fake, no_map), "HDMI-A-1", DEFAULT_MODE, "36104527")
+        ok, text = False, "not refused"
+    except SetFailed as e:
+        ok, text = str(e).startswith("Cannot allocate memory; given back: CRTC 81 back on fb 50"), str(e)
+    check(ok and "SETCRTC 81 fb 60 at 0,0 conns [83] mode 1024x768" not in fake.log
+          and changes(fake.log)[-2:] == ["RMFB 60", "DESTROY_DUMB 7"],
+          "take: a buffer that cannot be mapped is never set, and is removed (%s)" % text)
 
     def refused(fake, want, mode=DEFAULT_MODE):
         try:
@@ -735,7 +876,7 @@ def self_test():
     import tempfile
     import time
 
-    def run_hold(args, fake):
+    def run_hold(args, fake):  # the made-up card, and mapper above
         r, w = os.pipe()
         sys.stdout.flush()  # or the child's copy of the buffer goes out again
         pid = os.fork()
@@ -744,7 +885,7 @@ def self_test():
             os.dup2(w, 1)
             rc = 2
             try:
-                rc = hold(["--card", os.devnull] + args, fake)
+                rc = hold(["--card", os.devnull] + args, fake, mapper)
             finally:
                 os._exit(rc)
         os.close(w)
@@ -812,6 +953,15 @@ def self_test():
             os.kill(holder, signal.SIGKILL)
         if os.path.exists(log):
             os.unlink(log)
+        rc, out, eof, holder = run_hold(["--mode", "1920x1080", "--nonce", "36104527", "--log", log, "--max-hold", "1"],
+                                        Fake([good, p1080]))
+        ended = holder > 0 and gone(holder, 5)
+        check(rc == 0 and ended and ", nonce 36104527 drawn), read back; was fb 50" in out,
+              "hold: --nonce draws the bars and the line says so (%s)" % out)
+        if holder and not ended:
+            os.kill(holder, signal.SIGKILL)
+        if os.path.exists(log):
+            os.unlink(log)
         rc, out, eof, holder = run_hold(["--log", log], Fake([p1080]))
         check(rc == 3 and eof and holder == 0 and not os.path.exists(log) and out.startswith("t6-kms-mode: REFUSED: HDMI-A-1 lists no mode")
               and out.endswith("; nothing was changed"), "hold: a refusal exits 3 with one line and leaves no holder (%s)" % out)
@@ -821,8 +971,9 @@ def self_test():
               "hold: a read the card refuses exits 3 with one line, no traceback (%s)" % out)
 
     check(usage_rc(["hold", "--max-hold"]) == 2 and usage_rc(["hold", "--bogus", "1"]) == 2
-          and usage_rc(["hold", "--max-hold", "0"]) == 2 and usage_rc(["hold", "--mode", "1280x720"]) == 2,
-          "usage: a lone option, an unknown one, --max-hold 0 and a mode not in MODES exit 2")
+          and usage_rc(["hold", "--max-hold", "0"]) == 2 and usage_rc(["hold", "--mode", "1280x720"]) == 2
+          and usage_rc(["hold", "--nonce", "00000000"]) == 2 and usage_rc(["hold", "--nonce", "76325410"]) == 2,
+          "usage: a lone option, an unknown one, --max-hold 0, a mode not in MODES and a nonce that is not one exit 2")
 
     # A call over several lines reports one of them, which one depends on
     # the Python version: any line of the call counts.
