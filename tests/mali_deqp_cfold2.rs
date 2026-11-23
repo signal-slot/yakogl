@@ -28,11 +28,15 @@
 //! `const_other_ior` compiles byte-equal (the constrnd lowering's `ior` of
 //! constants), and so does `random_mixed_f2i` (its constants fold, and its
 //! mediump int uniform is the unitype lowering's); `random_mixed_rcp_inf`
-//! and `random_mixed_rsq_inf` fold their constants and refuse later. Every other
-//! test is ignored with its refusal quoted; the lowering removes the `ignore`, moves the name from `REFUSALS` to
-//! `MATCHED` in the same commit. `refusals_pinned` runs now: it asserts each
-//! ignored reference's exact current refusal, names every one that moved,
-//! and fails when a `deqp_cfold2_*` reference is in neither list.
+//! and `random_mixed_rsq_inf` fold their constants and refuse later.
+//! `random_mixed_rcp16` compiles since its `rcp` is dead and left out of the
+//! walk (`nir_fs.rs` `ir_live`), but its vertex program keeps a varying
+//! Mesa's link removes ([`DIFFERS`]). Every other test is ignored with its
+//! refusal quoted; the lowering removes the `ignore`, moves the name from
+//! `REFUSALS` to `MATCHED` in the same commit. `refusals_pinned` runs now:
+//! it asserts each ignored reference's exact current refusal, that each of
+//! `DIFFERS` still compiles and differs, names every one that moved, and
+//! fails when a `deqp_cfold2_*` reference is in no list.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_cfold2
@@ -59,7 +63,6 @@ cfold_ref! {
     cfold2_zero_operand_rcp16 => "deqp_cfold2_zero_operand_rcp16",
     cfold2_random_mixed_icmp => "deqp_cfold2_random_mixed_icmp",
     cfold2_random_mixed_inot => "deqp_cfold2_random_mixed_inot",
-    cfold2_random_mixed_rcp16 => "deqp_cfold2_random_mixed_rcp16",
     cfold2_const_other_inot => "deqp_cfold2_const_other_inot",
     cfold2_const_other_iabs => "deqp_cfold2_const_other_iabs",
     cfold2_const_other_rcp16 => "deqp_cfold2_const_other_rcp16",
@@ -99,6 +102,14 @@ fn cfold2_random_mixed_rsq_inf() {
     mali_ref::assert_matches("deqp_cfold2_random_mixed_rsq_inf");
 }
 
+/// Its `rcp` is dead and left out of the walk (`nir_fs.rs` `ir_live`); the
+/// vertex program keeps a varying Mesa's link removes.
+#[test]
+#[ignore = "differs: a varying program and the position's FAU words Mesa's link has not; pinned by refusals_pinned"]
+fn cfold2_random_mixed_rcp16() {
+    mali_ref::assert_matches("deqp_cfold2_random_mixed_rcp16");
+}
+
 /// `MaliError::ConstantFold`.
 const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
 
@@ -112,7 +123,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_cfold2_random_mixed_inot", CONSTANT_FOLD),
     ("deqp_cfold2_random_mixed_rcp_inf", "a fused multiply-add other than a matrix product's (a built-in function's)"),
     ("deqp_cfold2_random_mixed_rsq_inf", "arithmetic other than +, -, * and a dot or matrix product"),
-    ("deqp_cfold2_random_mixed_rcp16", CONSTANT_FOLD),
     ("deqp_cfold2_const_other_inot", CONSTANT_FOLD),
     ("deqp_cfold2_const_other_iabs", CONSTANT_FOLD),
     ("deqp_cfold2_const_other_rcp16", CONSTANT_FOLD),
@@ -126,6 +136,11 @@ const REFUSALS: &[(&str, &str)] = &[
 /// The references that compile byte-equal (their tests run).
 const MATCHED: &[&str] = &["deqp_cfold2_const_other_ior", "deqp_cfold2_random_mixed_f2i"];
 
+/// The references that compile with other words than Mesa's: the vertex
+/// program of `random_mixed_rcp16` stores a varying the fragment shader
+/// reads only in dead code, which Mesa's link removes (`vs.varying`).
+const DIFFERS: &[&str] = &["deqp_cfold2_random_mixed_rcp16"];
+
 #[test]
 fn refusals_pinned() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/mali/testdata");
@@ -136,9 +151,21 @@ fn refusals_pinned() {
         .filter_map(|f| f.strip_suffix(".expect.json").map(str::to_string))
         .collect();
     on_disk.sort();
-    let mut named: Vec<&str> = REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
+    let mut named: Vec<&str> =
+        REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).chain(DIFFERS.iter().copied()).collect();
     named.sort();
     assert_eq!(on_disk, named, "a deqp_cfold2_* reference is neither pinned nor matched here");
-    let moved: Vec<String> = REFUSALS.iter().filter_map(|(name, text)| mali_ref::refusal_change(name, text)).collect();
+    let mut moved: Vec<String> =
+        REFUSALS.iter().filter_map(|(name, text)| mali_ref::refusal_change(name, text)).collect();
+    for name in DIFFERS {
+        let r = mali_ref::Reference::load(name);
+        match mali_ref::compile_pair(&r.vs, &r.fs) {
+            Ok(pair) if mali_ref::differences(&r, &pair).is_empty() => {
+                moved.push(format!("{name}: now byte-equal; move it to MATCHED"))
+            }
+            Ok(_) => {}
+            Err(e) => moved.push(format!("{name}: now refused: {e}")),
+        }
+    }
     assert!(moved.is_empty(), "{}", moved.join("\n"));
 }

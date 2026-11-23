@@ -35,8 +35,8 @@ mod mali_ref;
 
 const NO_ATTR: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
 const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
-const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 const CONST_PRODUCT: &str = "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet";
+const FS_OPERAND: &str = "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet";
 
 /// The references the compiler matches byte for byte, without the
 /// `deqp_posvary_` prefix: a declared varying the vertex shader never
@@ -68,8 +68,10 @@ const REFUSED: &[(&str, &str)] = &[
     ("flat_sep_rnd13", CONST_PRODUCT),
     /* uniform + constant arithmetic beside an attribute vec4, a flat
      * varying of its own in Mesa: the vertex shader compiles since P3, the
-     * fragment shader alone is refused first (arithmetic) */
-    ("flat_sep_kau_bs26", ARITH),
+     * fragment shader alone is refused first: its int arithmetic is dead
+     * and left out of the walk (nir_fs.rs `ir_live`), so the operand form
+     * of `b - vec4(.., e, ..)` is next */
+    ("flat_sep_kau_bs26", FS_OPERAND),
     /* the uniform vec4 laid out before the interpolated float: Mesa's link
      * moves its lanes after it (words 1-4), which the per-varying layout
      * cannot hold (nir.rs `fill`) */
@@ -99,7 +101,7 @@ macro_rules! refused_ref {
 
 refused_ref! {
     flat_sep_rnd13, "refused: the fragment shader alone, a constant product (flat_sep)";
-    flat_sep_kau_bs26, "refused: the fragment shader alone, arithmetic (flat_sep)";
+    flat_sep_kau_bs26, "refused: the fragment shader alone, an operand form (flat_sep)";
     flat_sep_vec4_bs51, "refused: the uniform lanes laid out before the interpolated one, which Mesa moves after it (flat_sep)";
     flat_lane_vec4_v86, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
     flat_lane_vec4_c30, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";

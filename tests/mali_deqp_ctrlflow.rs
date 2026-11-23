@@ -51,8 +51,12 @@
 //! --instrument shim`).
 //!
 //! `vs_nested` compiles byte-equal (the constrnd lowering's `if` of a
-//! constant condition). Every other test is ignored with its refusal
-//! quoted; the lowering removes the `ignore` and the reference's entry in
+//! constant condition), and so does `fs_int_cond`: its `if` sets the dead
+//! `bvec4 h` or stores the colour unchanged, so with the dead values left
+//! out of the walk (`nir_fs.rs` `ir_live`) the colour's last store is all
+//! that is left, as after Mesa's `nir_opt_dce` and `nir_opt_dead_cf`. Every
+//! other test is ignored with its refusal quoted; the lowering removes the
+//! `ignore` and the reference's entry in
 //! [`REFUSALS`] together, and lists it in [`MATCHED`]. `refusals_pinned`
 //! runs now: it asserts each ignored reference's exact current refusal and
 //! names every one that moved.
@@ -124,7 +128,6 @@ fn ctrlflow_fs_frontfacing() {
 }
 
 #[test]
-#[ignore = "refused: control flow (if, a loop, a return before the end)"]
 fn ctrlflow_fs_int_cond() {
     mali_ref::assert_matches("deqp_ctrlflow_fs_int_cond");
 }
@@ -243,7 +246,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_fs_float_cond_colour_read", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_float_cond_varying", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_frontfacing", CONTROL_FLOW),
-    ("deqp_ctrlflow_fs_int_cond", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_int_cond_colour", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_loop_break_continue", CONTROL_FLOW),
     ("deqp_ctrlflow_fs_return_static_loop", CONTROL_FLOW),
@@ -261,8 +263,10 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_ctrlflow_vs_varying_select", CONTROL_FLOW),
 ];
 
-/// The references that compile byte-equal (their tests run).
-const MATCHED: &[&str] = &["deqp_ctrlflow_vs_nested"];
+/// The references that compile byte-equal (their tests run): `vs_nested`'s
+/// `if` of a constant condition, and `fs_int_cond`'s `if` whose sides store
+/// nothing live (nir_fs.rs `ir_live`).
+const MATCHED: &[&str] = &["deqp_ctrlflow_vs_nested", "deqp_ctrlflow_fs_int_cond"];
 
 #[test]
 fn refusals_pinned() {

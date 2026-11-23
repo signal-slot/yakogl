@@ -549,3 +549,47 @@ so Mesa never sees the conversion, but the walk returns before any fold or
 Unchanged (9): `ck_scale`, `ck_sum`, `ck_rnd_other`, `lz_scale`, `lz_rnd`,
 `lz_rnd_other`, `int_uniform`, `int_uniform_struct`, `f2i_seq`; their site
 is confirmed as the read one. Changed or refined: the 9 above (items 1 to 5).
+
+## 8. Step 5 landed: the walk builds nothing for a dead IR value
+
+HOST-ONLY. 7.2 asks step 5 to keep the walk from judging a node that
+Mesa's folds and `nir_opt_dce` kill, before any width or form question.
+`nir_fs.rs` `ir_live` does the dead-code half of that. Before the walk, it
+marks the IR instructions that the output stores, the discards and the
+`if` conditions read, to a fixed point through values and locals
+(`mod.rs` `mark_reads`, the closure `live_varying_loads` uses for the link).
+`walk_nodes` skips every unmarked instruction, so a dead value sets no
+flag, meets no refusal and builds no node. The liveness is
+flow-insensitive: a store that a later one overwrites stays live, so the
+walk keeps at least what Mesa keeps. The zero-product fold (`x * 0.0`)
+is not part of it; that is still `f2i_rnd`'s step.
+
+What moved, at the tip it was made on (the `tests/mali_*.rs` binaries and
+`--lib shaderc::online::mali`, features `host-test,gpu-mali,shaderc-online,
+no-shader-table`, ignored tests included; nothing that passed before fails):
+
+| reference | before | now |
+|---|---|---|
+| `deqp_mixcol_f2i_seq` | MIX | byte-equal |
+| `deqp_mixcol_f2i_dead` | MIX | compiles, one FAU half `-0.0` where Mesa has `0.0` (`80003c00` against `00003c00`) |
+| `deqp_gaps_mixprec_fs_mixed_other` | MIX | byte-equal |
+| `deqp_ctrlflow_fs_int_cond` | `ControlFlow` | byte-equal (the `if`'s sides store nothing live) |
+| `deqp_intval3_rsg_sconv55_fs` | `IntValue` | byte-equal |
+| `deqp_negzero_mainplain_fs` | `Arithmetic` | byte-equal |
+| `deqp_cfold2_random_mixed_rcp16` | `ConstantFold` | compiles; the vertex program keeps a varying Mesa's link removes |
+| `deqp_intrnd_dead_bool_cmp_fs`, `deqp_misc2_algebraic_random13` | `IntValue` | `Defect(LaneCycle)` (`mali-deqp-defects.md` fix C) |
+| `deqp_intrnd_dead_cond_fs` | `IntValue` | `FsOperandForm` |
+| `deqp_intrnd_dead_ivec_uniform_fs`, `deqp_misc2_algebraic_random46`, `deqp_intval3_opfs_sequence_bool_vec2_mediump` | `IntValue` | `gl_FragColor` lane (fclane) |
+| `deqp_intval3_rsg_swizzle12_fs` | `IntValue` | `FsUniform` |
+| `deqp_posvary_flat_sep_kau_bs26` | `Arithmetic` (its dead int globals) | `FsOperandForm` (`b - vec4(.., e, ..)`) |
+
+`deqp_posvary_*` came after the first cut (a6787bda); the row is from the
+redo on 34832829, where `random_mixed_rcp16` went from `ConstantFold` to
+the `DIFFERS` list beside the constrnd lowering's matched cfold2 tests.
+
+The femtovg `filter_image` and `filter_image_nodiscard` programs build 71
+and 81 fewer NIR nodes (1082 and 1070). Their BIR, FAU and immediate counts
+and their words are unchanged: `mark_live` already dropped those nodes
+after the walk. `f2i_rnd` stays MIX: its conversions are read through
+`* vec4(0, 0, 1, a)`, a product that is zero in some lanes only, which
+neither the liveness nor the link's `zero_product` folds.
