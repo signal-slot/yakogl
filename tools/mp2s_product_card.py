@@ -146,8 +146,8 @@ def main(argv=None):
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--env-text", help="input env, one name=value per line")
     g.add_argument("--env-image", help="input env image (redundant format)")
-    ap.add_argument("--env-size", type=lambda s: int(s, 0), default=0x20000,
-                    help="env size in bytes, header included (default 0x20000)")
+    ap.add_argument("--env-size", type=lambda s: int(s, 0), default=0x2000,
+                    help="env size in bytes, header included (default 0x2000, the DK CONFIG_ENV_SIZE)")
     ap.add_argument("--script", required=True, help="boot.scr.uimg to copy")
     ap.add_argument("--image", required=True, help="default.bin to copy")
     ap.add_argument("--out", required=True, help="output directory (new or empty)")
