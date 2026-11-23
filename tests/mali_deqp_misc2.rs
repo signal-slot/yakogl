@@ -82,13 +82,13 @@ fn misc2_rebalance_random_vs() {
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value"]
+#[ignore = "refused: a back end defect (LaneCycle)"]
 fn misc2_algebraic_random13() {
     mali_ref::assert_matches("deqp_misc2_algebraic_random13");
 }
 
 #[test]
-#[ignore = "refused: an integer or boolean value"]
+#[ignore = "refused: a gl_FragColor lane other than the varying's own lane or a constant"]
 fn misc2_algebraic_random46() {
     mali_ref::assert_matches("deqp_misc2_algebraic_random46");
 }
@@ -129,8 +129,13 @@ const UNITYPE: &str = "a mediump fragment shader uniform other than a float, vec
 const REBALANCE: &str =
     "three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree)";
 /// The factored sum of constant products (nir_fs.rs `Fs::op`) moved these
-/// two past `AlgebraicForm`, to their next refusal.
-const INT_VALUE: &str = "an integer or boolean value";
+/// two past `AlgebraicForm`, and the walk's liveness (nir_fs.rs `ir_live`:
+/// their int and bool values are dead) past `an integer or boolean value`,
+/// to their next refusal: the pair of a computed lane then a constant asked
+/// for again (`random13`, mali-deqp-defects.md fix C) and the colour's
+/// lanes (`random46`).
+const LANECYCLE: &str = "an invariant of the pipeline did not hold (LaneCycle)";
+const FRAGCOLOR: &str = "a gl_FragColor lane other than the varying's own lane or a constant";
 const ATTRNUM: &str =
     "a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations";
 
@@ -141,8 +146,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_misc2_rebalance_invariant", REBALANCE),
     ("deqp_misc2_rebalance_random_fs", REBALANCE),
     ("deqp_misc2_rebalance_random_vs", REBALANCE),
-    ("deqp_misc2_algebraic_random13", INT_VALUE),
-    ("deqp_misc2_algebraic_random46", INT_VALUE),
+    ("deqp_misc2_algebraic_random13", LANECYCLE),
+    ("deqp_misc2_algebraic_random46", FRAGCOLOR),
     ("deqp_misc2_attrnum_zero_lanes", ATTRNUM),
     ("deqp_misc2_attrnum_dead_attrs", ATTRNUM),
 ];
