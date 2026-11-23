@@ -27,7 +27,7 @@ mod mali_ref;
 
 /// The references the lowering made byte-equal, without the `deqp_arith_`
 /// prefix: each has a byte-compare test below.
-const LOWERED: &[&str] = &["matrix_div_fs_highp"];
+const LOWERED: &[&str] = &["matrix_div_fs_highp", "constexpr_fceil_vs_highp", "constexpr_fsign_vs_highp"];
 
 /// The references that compile with other words than Mesa's. None yet.
 const DIFFERS: &[&str] = &[];
@@ -53,7 +53,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* constexpr.bany vs highp: 3 cases of shaders.constant_expressions.builtin_functions.vector_relational.any_bvec2_vertex */
     ("constexpr_bany_vs_highp", ARITH),
     /* constexpr.fceil vs highp: 4 cases of shaders.constant_expressions.builtin_functions.common.ceil_float_vertex */
-    ("constexpr_fceil_vs_highp", ARITH),
     /* constexpr.fcos fs highp: 4 cases of shaders.constant_expressions.builtin_functions.trigonometry.cos_float_fragment */
     ("constexpr_fcos_fs_highp", ARITH),
     /* constexpr.fcos vs highp: 4 cases of shaders.constant_expressions.builtin_functions.trigonometry.cos_float_vertex */
@@ -65,7 +64,6 @@ const REFUSED: &[(&str, &str)] = &[
     /* constexpr.flog2 vs highp: 12 cases of shaders.constant_expressions.builtin_functions.exponential.log2_float_vertex */
     ("constexpr_flog2_vs_highp", ARITH),
     /* constexpr.fsign vs highp: 4 cases of shaders.constant_expressions.builtin_functions.common.sign_float_vertex */
-    ("constexpr_fsign_vs_highp", ARITH),
     /* constexpr.fsin fs highp: 9 cases of shaders.constant_expressions.builtin_functions.trigonometry.sin_float_fragment */
     ("constexpr_fsin_fs_highp", ARITH),
     /* constexpr.fsin vs highp: 9 cases of shaders.constant_expressions.builtin_functions.trigonometry.sin_float_vertex */
@@ -358,7 +356,6 @@ fn constexpr_bany_vs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (constexpr.fceil, vs, highp; 4 cases)"]
 fn constexpr_fceil_vs_highp() {
     mali_ref::assert_matches("deqp_arith_constexpr_fceil_vs_highp");
 }
@@ -394,7 +391,6 @@ fn constexpr_flog2_vs_highp() {
 }
 
 #[test]
-#[ignore = "refused: arith (constexpr.fsign, vs, highp; 4 cases)"]
 fn constexpr_fsign_vs_highp() {
     mali_ref::assert_matches("deqp_arith_constexpr_fsign_vs_highp");
 }

@@ -45,37 +45,39 @@ fn constrnd_rnd_fragment43() {
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (sqrt(0.0) in a global initializer)"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (log2(35.625) of a constant, Mesa's libm fold; then exp of an attribute, plan #367's vertex ARITH)"]
 fn constrnd_sqrt_zero_vs() {
     mali_ref::assert_matches("deqp_constrnd_sqrt_zero_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (atan of a vec4 with 0 lanes)"]
+#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (a vertex shader mediump int uniform, unitype)"]
 fn constrnd_atan_zero_lanes_vs() {
     mali_ref::assert_matches("deqp_constrnd_atan_zero_lanes_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (integer and boolean constants read as float bits)"]
+#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (a vertex shader mediump int uniform, unitype)"]
 fn constrnd_int_bits_vs() {
     mali_ref::assert_matches("deqp_constrnd_int_bits_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (textureCubeLod at a constant level)"]
 fn constrnd_lod_const_vs() {
     mali_ref::assert_matches("deqp_constrnd_lod_const_vs");
 }
 
 #[test]
-#[ignore = "refused: a constant operation on or to a value that is not a finite normal float (atan of non-zero constants)"]
+#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (log2(30.0) of a constant, Mesa's libm fold; then cos and log of an attribute, plan #367's vertex ARITH)"]
 fn constrnd_atan_const_vs() {
     mali_ref::assert_matches("deqp_constrnd_atan_const_vs");
 }
 
-/// The refusal text of the constant folds this file's shape is named after.
-const CONSTANT_FOLD: &str = "a constant operation on or to a value that is not a finite normal float";
+/// The refusal of a vertex shader's non-float uniform (unitype).
+const UNIFORM_TYPE: &str = "a uniform other than a float, vec2, vec3, vec4 or mat4";
+/// The vertex walk's arithmetic refusal (a libm fold of a constant, or
+/// #367's vertex ARITH).
+const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product";
 
 /// Every ignored reference above, and the refusal the compiler gives it now.
 const REFUSED: &[(&str, &str)] = &[
@@ -83,11 +85,10 @@ const REFUSED: &[(&str, &str)] = &[
         "deqp_constrnd_rnd_fragment43",
         "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)",
     ),
-    ("deqp_constrnd_sqrt_zero_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_atan_zero_lanes_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_int_bits_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_lod_const_vs", CONSTANT_FOLD),
-    ("deqp_constrnd_atan_const_vs", CONSTANT_FOLD),
+    ("deqp_constrnd_sqrt_zero_vs", ARITH),
+    ("deqp_constrnd_atan_zero_lanes_vs", UNIFORM_TYPE),
+    ("deqp_constrnd_int_bits_vs", UNIFORM_TYPE),
+    ("deqp_constrnd_atan_const_vs", ARITH),
 ];
 
 #[test]

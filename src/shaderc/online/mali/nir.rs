@@ -858,6 +858,61 @@ pub(super) fn plain(bits: u32) -> bool {
     e != 0xff && (e != 0 || bits & 0x7f_ffff == 0)
 }
 
+/// `nir_opt_constant_folding` (`nir_constant_expressions.py`) of a
+/// vertex walk's integer or boolean [`Alu`] `op` on constant operands `k`,
+/// the result of `bits` bits: the compares' 0 / ~0 masks, the 32-bit
+/// integer arithmetic, and the conversions (`f2i32` and `f2i16` of a
+/// finite float in range, `i2f32`, `u2u32` of a 16-bit value, `b2i32`).
+/// The front end gives these constants where Mesa's GLSL front end
+/// folded the constant expression (`ir_constant_expression.cpp`), so the
+/// folded bits are the same: `int(1) * 1 == int(int(1.0))`'s `true`
+/// (deqp_constrnd_int_bits_vs), `textureCubeLod(a, d, 6.5)`'s 8.8 level
+/// `0x680` (`build_sfixed_8_8` on a constant, deqp_constrnd_lod_const_vs's
+/// FAU word). `None`: not such an operation, or a conversion out of
+/// range, which keeps its refusal.
+fn fold_int_const(op: Alu, bits: u8, k: [u32; 3]) -> Option<u32> {
+    let (p, q) = (k[0], k[1]);
+    let mask = |t: bool| if t { u32::MAX } else { 0 };
+    let cmp = |c: Cmpf, o: core::cmp::Ordering| {
+        use core::cmp::Ordering::*;
+        mask(match c {
+            Cmpf::Eq => o == Equal,
+            Cmpf::Ne => o != Equal,
+            Cmpf::Gt => o == Greater,
+            Cmpf::Ge => o != Less,
+            Cmpf::Lt => o == Less,
+            Cmpf::Le => o != Greater,
+        })
+    };
+    let f = f32::from_bits(p);
+    match (op, bits) {
+        (Alu::F2i, 16) if f > -32769.0 && f < 32768.0 => Some(u32::from(f as i16 as u16)),
+        (_, 16) => None,
+        (Alu::Icmp(c), _) => Some(cmp(c, (p as i32).cmp(&(q as i32)))),
+        (Alu::Ucmp(c), _) => Some(cmp(c, p.cmp(&q))),
+        (Alu::Iadd, _) => Some(p.wrapping_add(q)),
+        (Alu::Isub, _) => Some(p.wrapping_sub(q)),
+        (Alu::Imul, _) => Some(p.wrapping_mul(q)),
+        (Alu::Ineg, _) => Some(p.wrapping_neg()),
+        (Alu::Iabs, _) => Some((p as i32).wrapping_abs() as u32),
+        (Alu::Imax, _) => Some((p as i32).max(q as i32) as u32),
+        (Alu::Imin, _) => Some((p as i32).min(q as i32) as u32),
+        (Alu::Iand, _) => Some(p & q),
+        (Alu::Ior, _) => Some(p | q),
+        (Alu::Ixor, _) => Some(p ^ q),
+        (Alu::Inot, _) => Some(!p),
+        (Alu::Ishl, _) => Some(p << (q & 31)),
+        (Alu::Ishr, _) => Some(((p as i32) >> (q & 31)) as u32),
+        (Alu::Ushr, _) => Some(p >> (q & 31)),
+        (Alu::B2i, _) => Some(u32::from(p != 0)),
+        (Alu::I2f, _) => Some((p as i32 as f32).to_bits()),
+        (Alu::U2f, _) => Some((p as f32).to_bits()),
+        (Alu::U2u32, _) => Some(p & 0xffff),
+        (Alu::F2i, _) if f > -2147483649.0 && f < 2147483648.0 => Some(f as i32 as u32),
+        _ => None,
+    }
+}
+
 /// `nir_opt_constant_folding` of one lane of the front end's integer and
 /// boolean operation `a` (a boolean is NIR's 32-bit 0 / ~0 after
 /// `pan_nir_lower_bool_to_bitsize`), and the rules of nir_opt_algebraic.py
@@ -2168,6 +2223,14 @@ impl<'s> Nir<'s> {
                 }
                 _ => {}
             }
+            /* an integer or boolean operation of constants reads its
+             * operands as ints, not float bits: `int(1) * 1 == int(1.0)`
+             * (deqp_constrnd_int_bits_vs), which Mesa's GLSL front end
+             * folds to a bool constant */
+            if let Some(r) = fold_int_const(op, bits, [k(0), k(1), k(2)]) {
+                self.note_user(Prod::Folded);
+                return Ok(Val::Const(r));
+            }
             let f = |k: usize| f32::from_bits(consts[k].unwrap_or(0));
             if consts[..op.arity()].iter().any(|c| !plain(c.unwrap_or(0))) {
                 return Err(MaliError::ConstantFold);
@@ -2276,7 +2339,14 @@ impl<'s> Nir<'s> {
              * (nir_constant_expressions.py:97-98; deqp_constop_cf_inf_fs's
              * 0x7f800000, cf_denorm_fs's 0x00000001). A NaN and the
              * reciprocals' (`rcp(0.0)`) have no reference */
-            let ieee = matches!(op, Alu::Fadd | Alu::Fmul | Alu::Fmin | Alu::Fmax) && !r.is_nan();
+            /* `frcp(±0.0)` is IEEE's `±inf` the same way: the arm of
+             * the front end's `atan` a constant select drops (`u =
+             * bcsel(|x| <= 1.0, x, rcp(x))`, deqp_constrnd_atan_zero_lanes_vs's
+             * 0 lanes). An infinity that another fold reads is not
+             * `plain` and stays refused there (the clamp of `1/w` of a
+             * constant `w` of 0.0) */
+            let ieee = (matches!(op, Alu::Fadd | Alu::Fmul | Alu::Fmin | Alu::Fmax) && !r.is_nan())
+                || (op == Alu::Frcp && r.is_infinite());
             if !plain(r.to_bits()) && !ieee {
                 return Err(MaliError::ConstantFold);
             }
@@ -3827,26 +3897,20 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
      * peephole limit), counted as the IR's ALU instructions */
     let side = |r: ir::Range| -> Result<usize, MaliError> {
         let mut alu = 0;
-        for nd in m.nodes_of(r) {
-            match *nd {
-                IrNode::Instr(id) => match m.instr(id) {
-                    Some(IrOp::Tex { .. } | IrOp::TexSize { .. } | IrOp::LoadUniformIdx { .. }) => {
-                        return Err(MaliError::ControlFlow)
-                    }
-                    Some(IrOp::Alu(..)) if alu == PEEPHOLE_LIMIT_GL => return Err(MaliError::ControlFlow),
-                    Some(IrOp::Alu(..)) => alu += 1,
-                    _ => {}
-                },
-                IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
-                _ => return Err(MaliError::ControlFlow),
-            }
-        }
-        Ok(r.len as usize)
+        vs_side(m, r, &mut alu, true)
     };
     let flat = |then_: ir::Range, else_: ir::Range| -> Result<usize, MaliError> { Ok(side(then_)? + side(else_)?) };
+    /* the taken side of a top-level `if` of a constant condition */
+    let taken = |cond: ir::Src, then_: ir::Range, else_: ir::Range| {
+        vs_const_cond(m, cond).map(|t| if t { then_ } else { else_ })
+    };
     let mut n = 0;
     for nd in nodes {
         n += match *nd {
+            IrNode::If { cond, then_, else_ } if taken(cond, then_, else_).is_some() => {
+                let r = taken(cond, then_, else_).unwrap_or(then_);
+                vs_side(m, r, &mut 0, false).map_or(1, |k| k.max(1))
+            }
             IrNode::If { then_, else_, .. } => flat(then_, else_).map_or(1, |k| k + 3),
             IrNode::Loop { body } if vs_loop_shape(m, body) => body.len as usize + 2,
             _ => 1,
@@ -3879,20 +3943,24 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
             }
             /* intloop_loop_nested_vs: Mesa keeps the loops as blocks */
             IrNode::Loop { .. } => put!(Step::Refuse(MaliError::LoopVertex)),
+            /* an `if` of a constant condition is its taken side, inline
+             * ([`vs_const_cond`]): no select and no peephole limit */
+            IrNode::If { cond, then_, else_ } if taken(cond, then_, else_).is_some() => {
+                let r = taken(cond, then_, else_).unwrap_or(then_);
+                match vs_side(m, r, &mut 0, false) {
+                    Ok(_) => vs_side_instrs(m, r, &mut |id| put!(Step::Instr(id))),
+                    Err(e) => put!(Step::Refuse(e)),
+                }
+            }
             IrNode::If { then_, else_, .. } if flat(then_, else_).is_err() => {
                 put!(Step::Refuse(flat(then_, else_).err().unwrap_or(MaliError::ControlFlow)))
             }
             IrNode::If { cond, then_, else_ } => {
                 put!(Step::If(cond));
-                for nd in m.nodes_of(then_) {
-                    if let IrNode::Instr(id) = *nd {
-                        put!(Step::Instr(id));
-                    }
-                }
-                put!(Step::Else);
-                for nd in m.nodes_of(else_) {
-                    if let IrNode::Instr(id) = *nd {
-                        put!(Step::Instr(id));
+                for r in [then_, else_] {
+                    vs_side_instrs(m, r, &mut |id| put!(Step::Instr(id)));
+                    if r == then_ {
+                        put!(Step::Else);
                     }
                 }
                 put!(Step::EndIf);
@@ -3901,6 +3969,111 @@ fn vs_steps<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s [Step], MaliE
         }
     }
     Ok(&steps[..k])
+}
+
+/// The value of an `if`'s condition that is a boolean constant: GLSL's
+/// `if (false)` and `if (true)`, which Mesa's GLSL optimizer removes
+/// before NIR (`opt_if_simplification.cpp`: the taken side replaces the
+/// `if`), so `nir_opt_peephole_select` never sees it
+/// (deqp_constrnd_int_bits_vs's `if (false) ...; else e = ..;` under an
+/// `if` of a uniform).
+fn vs_const_cond(m: &Module<'_>, cond: ir::Src) -> Option<bool> {
+    ir_const_lane(m, cond.val, usize::from(cond.swizzle[0] & 3), 0).map(|c| c != 0)
+}
+
+/// Lane `l` of IR value `v` when it is a constant expression of ints and
+/// bools: a constant, or an operation [`fold_int`] folds on constant
+/// lanes (deqp_constrnd_int_bits_vs's `const bool l = int(1) * 1 ==
+/// int(int(1.0))`, which Mesa's GLSL front end makes a constant). `None`
+/// for anything else.
+fn ir_const_lane(m: &Module<'_>, v: ir::ValueId, l: usize, depth: u32) -> Option<u32> {
+    match m.def(v)? {
+        IrOp::ConstF32(c) => c.get(l).copied(),
+        IrOp::ConstI32(c) => c.get(l).map(|&x| x as u32),
+        IrOp::ConstBool(c) => c.get(l).map(|&b| if b { u32::MAX } else { 0 }),
+        /* a local stored once in the stage (a global `const`, which the
+         * front end stores at the top of `main`): the stored lane */
+        &IrOp::LoadLocal { local, index: None, .. } if depth < 16 => {
+            let mut stores = m.instrs.iter().filter_map(|op| match op {
+                IrOp::StoreLocal { local: s, index, src, write_mask } if *s == local => {
+                    Some((*index, *src, *write_mask))
+                }
+                _ => None,
+            });
+            match (stores.next(), stores.next()) {
+                (Some((None, src, mask)), None) if mask & (1 << l) != 0 => {
+                    ir_const_lane(m, src.val, usize::from(src.swizzle[l] & 3), depth + 1)
+                }
+                _ => None,
+            }
+        }
+        &IrOp::Alu(a, s) if depth < 16 => {
+            let n = super::nir_fs::ir_arity(a);
+            if n > 2 {
+                return None;
+            }
+            let mut x = [Val::Undef; 2];
+            for (i, xi) in x.iter_mut().enumerate().take(n) {
+                let lane = usize::from(s[i].swizzle[l] & 3);
+                *xi = Val::Const(ir_const_lane(m, s[i].val, lane, depth + 1)?);
+            }
+            match fold_int(a, x[0], x[1])? {
+                Val::Const(c) => Some(c),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The steps a side of a flattened vertex `if` counts ([`vs_steps`]): its
+/// instructions, and those of the taken side of a nested `if` of a
+/// constant condition ([`vs_const_cond`]). With `limit`, a look-up or
+/// more than [`PEEPHOLE_LIMIT_GL`] ALU instructions (counted in `alu`)
+/// refuse, as `nir_opt_peephole_select` keeps such an `if`; without it
+/// (the taken side of a constant `if`, which is no `if` in Mesa's NIR)
+/// only control flow does.
+fn vs_side(m: &Module<'_>, r: ir::Range, alu: &mut usize, limit: bool) -> Result<usize, MaliError> {
+    let mut n = 0;
+    for nd in m.nodes_of(r) {
+        match *nd {
+            IrNode::Instr(id) => {
+                match m.instr(id) {
+                    Some(IrOp::Tex { .. } | IrOp::TexSize { .. } | IrOp::LoadUniformIdx { .. }) if limit => {
+                        return Err(MaliError::ControlFlow)
+                    }
+                    Some(IrOp::Alu(..)) if limit && *alu == PEEPHOLE_LIMIT_GL as usize => {
+                        return Err(MaliError::ControlFlow)
+                    }
+                    Some(IrOp::Alu(..)) => *alu += 1,
+                    _ => {}
+                }
+                n += 1;
+            }
+            IrNode::If { cond, then_, else_ } => match vs_const_cond(m, cond) {
+                Some(t) => n += vs_side(m, if t { then_ } else { else_ }, alu, limit)?,
+                None => return Err(MaliError::ControlFlow),
+            },
+            IrNode::Loop { .. } => return Err(MaliError::LoopVertex),
+            _ => return Err(MaliError::ControlFlow),
+        }
+    }
+    Ok(n)
+}
+
+/// The instructions of a side [`vs_side`] took, in order.
+fn vs_side_instrs(m: &Module<'_>, r: ir::Range, put: &mut dyn FnMut(ir::InstrId)) {
+    for nd in m.nodes_of(r) {
+        match *nd {
+            IrNode::Instr(id) => put(id),
+            IrNode::If { cond, then_, else_ } => {
+                if let Some(t) = vs_const_cond(m, cond) {
+                    vs_side_instrs(m, if t { then_ } else { else_ }, put);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// What a side of a flattened vertex `if` writes: the locals and the
@@ -4892,6 +5065,13 @@ fn walk<'s>(
                             }
                             vs.alu(Alu::Ffma, held[0], x(1), x(2))?
                         }
+                        /* of three constants, the fold of a built-in on
+                         * constants ([`Nir::alu`]'s unfused `a * b + c`):
+                         * the front end's `atan` polynomial of a constant
+                         * (deqp_constrnd_atan_zero_lanes_vs) */
+                        AluOp::Ffma if (0..3).all(|i| matches!(x(i), Val::Const(_))) => {
+                            vs.alu(Alu::Ffma, x(0), x(1), x(2))?
+                        }
                         AluOp::Ffma => return Err(MaliError::FusedMultiplyAdd),
                         AluOp::Fdot2 | AluOp::Fdot3 | AluOp::Fdot4 if l == 0 => {
                             vs.note(Prod::Dot);
@@ -4997,6 +5177,17 @@ fn walk<'s>(
                          * glmark2 function's `fract(sqrt(d))`) */
                         AluOp::Frsq => vs.alu(Alu::Frsq, x(0), Val::Undef, Val::Undef)?,
                         AluOp::Fsqrt if x(0) == Val::Undef => Val::Undef,
+                        /* of a constant, `sqrtf` (correctly rounded): the
+                         * GLSL folder's (ir_expression_operation.py's
+                         * `sqrt`) and NIR's `fsqrt` fold, both before
+                         * `lower_fsqrt` (deqp_constrnd_sqrt_zero_vs's
+                         * `exp2(sqrt(0.0))`; `frcp(frsq(0.0))` is a
+                         * reciprocal of an infinity) */
+                        AluOp::Fsqrt if matches!(x(0), Val::Const(_)) => {
+                            let Val::Const(c) = x(0) else { return Err(MaliError::Defect(Defect::IrIndex)) };
+                            vs.note_user(Prod::Folded);
+                            Val::Const(fold::fold_float(AluOp::Fsqrt, c, 0, 0).ok_or(MaliError::ConstantFold)?)
+                        }
                         AluOp::Fsqrt => {
                             let r = vs.alu(Alu::Frsq, x(0), Val::Undef, Val::Undef)?;
                             vs.alu(Alu::Frcp, r, Val::Undef, Val::Undef)?
@@ -5209,6 +5400,19 @@ fn walk<'s>(
                         /* `%` with a run-time divisor and the unsigned
                          * forms have no reference (ES 1.00 has neither) */
                         AluOp::Udiv | AluOp::Umod | AluOp::Umin | AluOp::Umax => return Err(MaliError::IntValue),
+                        /* another operation of constant lanes: the folds
+                         * `fold::fold_float` makes exactly (`sign`, an
+                         * `exp2` of an integer, ...), which are the bits
+                         * any libm gives; the others keep the refusal */
+                        _ if (0..super::nir_fs::ir_arity(a)).all(|i| matches!(x(i), Val::Const(_))) => {
+                            let c = |i: usize| match x(i) {
+                                Val::Const(c) => c,
+                                _ => 0,
+                            };
+                            let r = fold::fold_float(a, c(0), c(1), c(2)).ok_or(MaliError::Arithmetic)?;
+                            vs.note_user(Prod::Folded);
+                            Val::Const(r)
+                        }
                         _ => return Err(MaliError::Arithmetic),
                     };
                 }
