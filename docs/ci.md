@@ -560,6 +560,15 @@ CI gate job's `--check` step runs on a warm cache and does not set
 CARGO_INCREMENTAL, so it ignores them. `GATE_FULL_RUN=1 tools/setup-gate-host.sh
 --check` makes them `missing` and the exit status 1; use it before a full run.
 
+### 3.8 Free disk check
+
+`setup-gate-host.sh --check` also prints `disk` (the filesystem of
+`CARGO_TARGET_DIR`, default `~/.cache/yakogl/ci-target`) and `disk-build` (the
+repository's `build/`): `ok disk <GB> free`, or a line naming the need. A full
+gate needs about 220 GB free without pruning (walk-fit, disk-map);
+`YAKOGL_GATE_MIN_FREE_GB` overrides that. A shortfall is `warn`, and `missing`
+(exit status 1) when the threshold is set explicitly or `GATE_FULL_RUN=1`.
+
 ## 5. Steps, in order
 
 1. `gate.yml`: a pull request runs `tools/check.sh --changed <merge-base>`;

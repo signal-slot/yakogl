@@ -615,7 +615,40 @@ check_gate_disk() {
   fi
 }
 
+# Free disk for a full gate (docs/ci.md 3.8): the filesystem of CARGO_TARGET_DIR
+# (default ~/.cache/yakogl/ci-target) and of the repository's build/ directory
+# each need YAKOGL_GATE_MIN_FREE_GB (default 220, measured by walk-fit and
+# disk-map without pruning). A shortfall is `warn` unless the threshold is set
+# explicitly or GATE_FULL_RUN=1, then `missing`.
+check_disk() {
+  local min=${YAKOGL_GATE_MIN_FREE_GB:-220} bad=warn d probe kb gb name root
+  [ -n "${YAKOGL_GATE_MIN_FREE_GB-}" ] && bad=missing
+  [ "${GATE_FULL_RUN-}" = 1 ] && bad=missing
+  case $min in ''|*[!0-9]*) min=220 ;; esac
+  root=$(cd "$(dirname "$0")/.." && pwd)
+  for d in "${CARGO_TARGET_DIR:-$HOME/.cache/yakogl/ci-target}" "$root/build"; do
+    probe=$d
+    while [ ! -d "$probe" ] && [ "$probe" != / ] && [ "$probe" != . ]; do
+      probe=$(dirname "$probe")
+    done
+    name=disk
+    case $d in */build) name=disk-build ;; esac
+    kb=$(df -Pk "$probe" 2>/dev/null | awk 'NR==2 {print $4}')
+    case $kb in
+      ''|*[!0-9]*) line warn "$name" "cannot read the free space of $probe" ;;
+      *)
+        gb=$((kb / 1048576))
+        if [ "$gb" -ge "$min" ]; then
+          line ok "$name" "$gb GB free ($d)"
+        else
+          line "$bad" "$name" "$gb GB free on the filesystem of $d, a full gate needs about $min GB without pruning (YAKOGL_GATE_MIN_FREE_GB)"
+        fi ;;
+    esac
+  done
+}
+
 run_checks() {
+  check_disk
   check_gate_disk
   check_cargo
   check_rustup_target aarch64-unknown-none
