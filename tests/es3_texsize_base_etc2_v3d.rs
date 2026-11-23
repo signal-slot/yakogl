@@ -618,23 +618,22 @@ fn an_etc2_2d_array_at_base_level_0_has_its_level_0_size() {
 
 /* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the ETC2 `sampler2D` still hands
-/// the LEVEL-0 size, 18x10. The correct value is the base level's minified
-/// texel size, 9x5 (Mesa v3d_uniforms.c `u_minify(first_level)`; 9x5 texels,
-/// not 3x2 blocks). Flip to Ok((9, 5, 1, 1)) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): with BASE_LEVEL 1 the ETC2 `sampler2D` still
+/// hands the LEVEL-0 size, 18x10. The correct value is the base level's minified texel size, 9x5
+/// (Mesa v3d_uniforms.c `u_minify(first_level)`; 9x5 texels, not 3x2 blocks).
 #[test]
-fn an_etc2_2d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn an_etc2_2d_texture_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, 1), Ok((18, 10, 1, 1)));
+    assert_eq!(unit0_sizes(Kind::Tex2d, 1), Ok((9, 5, 1, 1)));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 3-layer ETC2 `sampler2DArray`
-/// still hands 18x10 and 3 layers. The correct value is 9x5 texels and 3
-/// layers (the layer count is whole, not minified). Flip to
-/// Ok((9, 5, 1, 3)) when the base level is applied; only width and height
-/// change.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): with BASE_LEVEL 1 the 3-layer ETC2
+/// `sampler2DArray` still hands 18x10 and 3 layers. The correct value is 9x5 texels and 3 layers
+/// (the layer count is whole, not minified).
 #[test]
-fn an_etc2_2d_array_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn an_etc2_2d_array_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, 1), Ok((18, 10, 1, 3)));
+    assert_eq!(unit0_sizes(Kind::Array, 1), Ok((9, 5, 1, 3)));
 }

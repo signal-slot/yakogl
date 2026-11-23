@@ -616,26 +616,23 @@ fn a_2d_array_grad_at_base_level_0_has_its_level_0_size() {
 
 /* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
 
-/// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 16x16x8
-/// `sampler3D` `textureGrad` hands the job builder the LEVEL-0 size and
-/// depth, 16x16 and 8, so the compiler scales the gradients by those. The
-/// post-fix value is the base level's: 8x8 and depth 4 (Mesa's v3d_uniforms.c
-/// `u_minify(first_level)` of width, height and depth). Flip the assert to
-/// (8, 8, 4, 1) when the base level is applied, and check then that the TMU
-/// does not add the base level to the explicit lod again (item gradbase).
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): with GL_TEXTURE_BASE_LEVEL 1 the 16x16x8
+/// `sampler3D` `textureGrad` hands the job builder the LEVEL-0 size and depth, 16x16 and 8, so the
+/// compiler scales the gradients by those. The post-fix value is the base level's: 8x8 and depth 4
+/// (Mesa's v3d_uniforms.c `u_minify(first_level)` of width, height and depth).
 #[test]
-fn a_3d_texture_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_3d_texture_grad_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 16x16x5 `sampler2DArray`
-/// `textureGrad` hands 16x16 and 5 layers. The post-fix value is 8x8 and 5
-/// layers: the layer count is never minified (Mesa writes the array size as
-/// is). Flip to (8, 8, 1, 5) when the base level is applied; only the width
-/// and height change.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): with BASE_LEVEL 1 the 16x16x5
+/// `sampler2DArray` `textureGrad` hands 16x16 and 5 layers. The post-fix value is 8x8 and 5 layers:
+/// the layer count is never minified (Mesa writes the array size as is).
 #[test]
-fn a_2d_array_grad_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn a_2d_array_grad_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, 1), (8, 8, 1, 5));
 }

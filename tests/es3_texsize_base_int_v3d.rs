@@ -662,48 +662,53 @@ fn a_usampler2darray_at_base_level_0_has_its_level_0_size_vs() {
 
 /* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
 
-/// Pins today's behaviour: `isampler2D` at BASE_LEVEL 1 still hands 16x16
-/// (fragment stage). Flip to (8, 8, 1, 1) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): `isampler2D` at BASE_LEVEL 1 still hands
+/// 16x16 (fragment stage).
 #[test]
-fn an_isampler2d_at_base_level_1_still_hands_the_level_0_size_fs_flip_when_the_base_level_is_applied() {
+fn an_isampler2d_at_base_level_1_hands_the_base_level_size_fs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Fragment, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Fragment, 1), (8, 8, 1, 1));
 }
 
-/// As above, vertex stage. Flip to (8, 8, 1, 1) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// As above, vertex stage.
 #[test]
-fn an_isampler2d_at_base_level_1_still_hands_the_level_0_size_vs_flip_when_the_base_level_is_applied() {
+fn an_isampler2d_at_base_level_1_hands_the_base_level_size_vs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Vertex, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Vertex, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: `isampler3D` at BASE_LEVEL 1 hands 16x16 and depth
-/// 8 (fragment stage). Flip to (8, 8, 4, 1) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): `isampler3D` at BASE_LEVEL 1 hands 16x16 and
+/// depth 8 (fragment stage).
 #[test]
-fn an_isampler3d_at_base_level_1_still_hands_the_level_0_size_fs_flip_when_the_base_level_is_applied() {
+fn an_isampler3d_at_base_level_1_hands_the_base_level_size_fs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Fragment, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Fragment, 1), (8, 8, 4, 1));
 }
 
-/// As above, vertex stage. Flip to (8, 8, 4, 1) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// As above, vertex stage.
 #[test]
-fn an_isampler3d_at_base_level_1_still_hands_the_level_0_size_vs_flip_when_the_base_level_is_applied() {
+fn an_isampler3d_at_base_level_1_hands_the_base_level_size_vs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Vertex, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Vertex, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: `usampler2DArray` at BASE_LEVEL 1 hands 16x16 and
-/// 5 layers (fragment stage). Flip to (8, 8, 1, 5) when the base level is
-/// applied; the layer count is never minified.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// (was level 0 until the draw applied the base level): `usampler2DArray` at BASE_LEVEL 1 hands
+/// 16x16 and 5 layers (fragment stage).
 #[test]
-fn a_usampler2darray_at_base_level_1_still_hands_the_level_0_size_fs_flip_when_the_base_level_is_applied() {
+fn a_usampler2darray_at_base_level_1_hands_the_base_level_size_fs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Fragment, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Fragment, 1), (8, 8, 1, 5));
 }
 
-/// As above, vertex stage. Flip to (8, 8, 1, 5) when the base level is applied.
+/// The draw applies GL_TEXTURE_BASE_LEVEL (`draw::effective_base_level`); asserts the base level's words.
+/// As above, vertex stage.
 #[test]
-fn a_usampler2darray_at_base_level_1_still_hands_the_level_0_size_vs_flip_when_the_base_level_is_applied() {
+fn a_usampler2darray_at_base_level_1_hands_the_base_level_size_vs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Vertex, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Vertex, 1), (8, 8, 1, 5));
 }
