@@ -1,0 +1,2525 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S1R17.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_linear_clamp'..
+yakogl: mali shaderc table 'IR values': high-water 12 of 2048
+yakogl: mali shaderc table 'locals': high-water 1 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 31 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 63 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 12 of 128
+yakogl: mali shaderc table 'immediates': high-water 6 of 64
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 193548
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 193548
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'desc': high-water 2544 of 1048576 bytes
+yakogl: mali arena 'data': high-water 2451608 of 3907584 bytes
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 696 of 393216 bytes
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 193548
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 520192 bytes for a block of 516128
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 193548
+yakogl: mali arena 'desc': high-water 3392 of 1048576 bytes
+yakogl: mali arena 'code': high-water 768 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_linear_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_linear_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_linear_linear_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_linear_linear_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_linear_linear_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_linear_nearest_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_linear_nearest_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_linear_nearest_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_nearest_linear_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_nearest_linear_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_nearest_linear_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_nearest_nearest_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_nearest_nearest_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_mipmap_nearest_nearest_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_nearest_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_nearest_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.linear_nearest_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_linear_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_linear_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_linear_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_linear_linear_clamp'..
+yakogl: mali shaderc table 'IR values': high-water 15 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 33 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 66 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 35 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 13 of 128
+yakogl: mali shaderc table 'immediates': high-water 7 of 64
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_linear_linear_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_linear_linear_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_linear_nearest_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_linear_nearest_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_linear_nearest_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_linear_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_linear_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_linear_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_nearest_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_nearest_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_mipmap_nearest_nearest_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_nearest_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_nearest_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.filtering.nearest_nearest_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.clamp_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.clamp_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.clamp_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.mirror_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.mirror_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.mirror_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.repeat_clamp'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.repeat_mirror'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.2d.wrap.repeat_repeat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_linear_clamp'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl: mali shaderc table 'NIR instructions': high-water 42 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 73 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 45 of 1536
+yakogl:   cube-bind: 0x2762000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 92 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl: mali arena 'desc': high-water 16240 of 1048576 bytes
+yakogl: mali arena 'data': high-water 2921204 of 3907584 bytes
+yakogl: mali arena 'cs': high-water 2280 of 393216 bytes
+yakogl:   cube-bind: 0x2762000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 127008
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 190512
+yakogl:   cube-bind: 0x276e000 unit 0 kick 93 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl: mali arena 'code': high-water 896 of 131072 bytes
+yakogl:   cube-bind: 0x2762000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2762000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x2762000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x276e000 unit 0 kick 94 (draw)
+yakogl:   cube(draw) @0x276e000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl: mali arena 'desc': high-water 17088 of 1048576 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_linear_mirror'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x2800000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 96 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 97 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2800000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x2800000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x280c000 unit 0 kick 98 (draw)
+yakogl:   cube(draw) @0x280c000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_linear_repeat'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x281e000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 100 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 101 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x281e000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x281e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x282a000 unit 0 kick 102 (draw)
+yakogl:   cube(draw) @0x282a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_linear_clamp'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x283c000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 104 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 105 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x283c000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x283c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2848000 unit 0 kick 106 (draw)
+yakogl:   cube(draw) @0x2848000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_linear_mirror'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x285a000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 108 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 109 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x285a000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x285a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2866000 unit 0 kick 110 (draw)
+yakogl:   cube(draw) @0x2866000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_linear_repeat'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x2878000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 112 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 113 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2878000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2878000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2884000 unit 0 kick 114 (draw)
+yakogl:   cube(draw) @0x2884000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_nearest_clamp'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x2896000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 116 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 117 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2896000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x2896000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28a2000 unit 0 kick 118 (draw)
+yakogl:   cube(draw) @0x28a2000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_nearest_mirror'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 120 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 121 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28b4000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28b4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28c0000 unit 0 kick 122 (draw)
+yakogl:   cube(draw) @0x28c0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_nearest_repeat'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 124 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 125 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28d2000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28d2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x28de000 unit 0 kick 126 (draw)
+yakogl:   cube(draw) @0x28de000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_nearest_linear_clamp'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 128 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 129 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28f0000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28f0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x28fc000 unit 0 kick 130 (draw)
+yakogl:   cube(draw) @0x28fc000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_nearest_linear_mirror'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x290e000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 132 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 133 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x290e000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x290e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x291a000 unit 0 kick 134 (draw)
+yakogl:   cube(draw) @0x291a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_nearest_linear_repeat'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x292c000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 136 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 137 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x292c000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x292c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2938000 unit 0 kick 138 (draw)
+yakogl:   cube(draw) @0x2938000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_nearest_nearest_clamp'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x294a000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 140 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 141 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x294a000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x294a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2956000 unit 0 kick 142 (draw)
+yakogl:   cube(draw) @0x2956000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_nearest_nearest_mirror'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x2968000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 144 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 145 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2968000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2968000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2974000 unit 0 kick 146 (draw)
+yakogl:   cube(draw) @0x2974000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_nearest_nearest_repeat'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x2986000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 148 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 149 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2986000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2986000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2992000 unit 0 kick 150 (draw)
+yakogl:   cube(draw) @0x2992000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_nearest_clamp'..
+yakogl: GL error 0x500 in glGetIntegerv
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 152 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 153 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29a4000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29a4000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29b0000 unit 0 kick 154 (draw)
+yakogl:   cube(draw) @0x29b0000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_nearest_mirror'..
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 156 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 157 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29c2000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29c2000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29ce000 unit 0 kick 158 (draw)
+yakogl:   cube(draw) @0x29ce000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_nearest_repeat'..
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 161 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29e0000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29e0000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x29ec000 unit 0 kick 162 (draw)
+yakogl:   cube(draw) @0x29ec000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_linear_clamp'..
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 164 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x29fe000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x29fe000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a0a000 unit 0 kick 166 (draw)
+yakogl:   cube(draw) @0x2a0a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_linear_mirror'..
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 168 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 169 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a1c000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a1c000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a28000 unit 0 kick 170 (draw)
+yakogl:   cube(draw) @0x2a28000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_linear_repeat'..
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 172 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 173 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a3a000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a3a000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a46000 unit 0 kick 174 (draw)
+yakogl:   cube(draw) @0x2a46000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear_clamp'..
+yakogl: mali shaderc table 'NIR instructions': high-water 44 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 76 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 47 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 14 of 128
+yakogl: mali shaderc table 'immediates': high-water 8 of 64
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 176 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 177 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a58000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a58000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a64000 unit 0 kick 178 (draw)
+yakogl:   cube(draw) @0x2a64000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear_mirror'..
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 180 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 181 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a77000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a77000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2a83000 unit 0 kick 182 (draw)
+yakogl:   cube(draw) @0x2a83000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_linear_repeat'..
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 184 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 185 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2a96000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2a96000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2aa2000 unit 0 kick 186 (draw)
+yakogl:   cube(draw) @0x2aa2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_nearest_clamp'..
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 188 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 189 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ab5000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ab5000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ac1000 unit 0 kick 190 (draw)
+yakogl:   cube(draw) @0x2ac1000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_nearest_mirror'..
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 192 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 193 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2ad3000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2ad3000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2adf000 unit 0 kick 194 (draw)
+yakogl:   cube(draw) @0x2adf000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_linear_nearest_repeat'..
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 196 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 197 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2af1000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2af1000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2afd000 unit 0 kick 198 (draw)
+yakogl:   cube(draw) @0x2afd000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear_clamp'..
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 200 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 201 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b0f000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b0f000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b1b000 unit 0 kick 202 (draw)
+yakogl:   cube(draw) @0x2b1b000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear_mirror'..
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 204 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 205 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b2e000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b2e000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b3a000 unit 0 kick 206 (draw)
+yakogl:   cube(draw) @0x2b3a000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear_repeat'..
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 208 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 209 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b4d000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b4d000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b59000 unit 0 kick 210 (draw)
+yakogl:   cube(draw) @0x2b59000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_nearest_clamp'..
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 212 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 213 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b6c000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b6c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2b78000 unit 0 kick 214 (draw)
+yakogl:   cube(draw) @0x2b78000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_nearest_mirror'..
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 216 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 217 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b8a000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b8a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2b96000 unit 0 kick 218 (draw)
+yakogl:   cube(draw) @0x2b96000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_nearest_repeat'..
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 220 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 221 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ba8000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2ba8000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bb4000 unit 0 kick 222 (draw)
+yakogl:   cube(draw) @0x2bb4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_nearest_clamp'..
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 224 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 225 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bc6000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bc6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2bd2000 unit 0 kick 226 (draw)
+yakogl:   cube(draw) @0x2bd2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_nearest_mirror'..
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 228 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 229 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2be4000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2be4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2bf0000 unit 0 kick 230 (draw)
+yakogl:   cube(draw) @0x2bf0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_nearest_repeat'..
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 232 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 233 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c02000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c02000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c0e000 unit 0 kick 234 (draw)
+yakogl:   cube(draw) @0x2c0e000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.clamp_clamp'..
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 236 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 237 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c20000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c20000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c2c000 unit 0 kick 238 (draw)
+yakogl:   cube(draw) @0x2c2c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.clamp_mirror'..
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 240 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 241 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c3e000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c3e000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c4a000 unit 0 kick 242 (draw)
+yakogl:   cube(draw) @0x2c4a000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.clamp_repeat'..
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 244 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 245 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c5c000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c5c000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c68000 unit 0 kick 246 (draw)
+yakogl:   cube(draw) @0x2c68000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.mirror_clamp'..
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 248 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 249 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c7a000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c7a000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2c86000 unit 0 kick 250 (draw)
+yakogl:   cube(draw) @0x2c86000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.mirror_mirror'..
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 252 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 253 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2c98000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2c98000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ca4000 unit 0 kick 254 (draw)
+yakogl:   cube(draw) @0x2ca4000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.mirror_repeat'..
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 256 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 257 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cb6000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cb6000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cc2000 unit 0 kick 258 (draw)
+yakogl:   cube(draw) @0x2cc2000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.repeat_clamp'..
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 260 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 261 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2cd4000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2cd4000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2ce0000 unit 0 kick 262 (draw)
+yakogl:   cube(draw) @0x2ce0000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.repeat_mirror'..
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 264 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 265 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cf2000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cf2000 32x32 x6: fmt 0, cpu 0xffff90172000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+yakogl:   cube-bind: 0x2cfe000 unit 0 kick 266 (draw)
+yakogl:   cube(draw) @0x2cfe000 32x32 x6: fmt 0, cpu 0xffff90166000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.texture.vertex.cube.wrap.repeat_repeat'..
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 268 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 269 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d10000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d10000 32x32 x6: fmt 0, cpu 0xffff92304000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+yakogl:   cube-bind: 0x2d1c000 unit 0 kick 270 (draw)
+yakogl:   cube(draw) @0x2d1c000 32x32 x6: fmt 0, cpu 0xffff922c4000 - not dumped
+  Fail (Image comparison failed)
+yakogl-mali-exit: draws=1260 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        87/90 (96.7%)
+  Failed:        3/90 (3.3%)
+  Not supported: 0/90 (0.0%)
+  Warnings:      0/90 (0.0%)
+  Waived:        0/90 (0.0%)

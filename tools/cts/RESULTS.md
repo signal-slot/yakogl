@@ -388,46 +388,48 @@ is from the two-row set.
 
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), dEQP-GLES2 (stage 5)
 
-The whole tree at origin/main `37305608` (2026-11-15, four slices in one
-boot) with the 25 rows plan #373's fixes reach rerun at origin/main
-`a2482523` (2026-11-21, one boot): `tools/cts/mali-deqp-run.sh` over
-`tools/cts/mali-gles2-tree.txt` on the board's own Armbian (kernel
+The whole tree at origin/main `8ff01055` (2026-11-24, started
+2026-11-23T16:39Z; four slices in one boot): `tools/cts/mali-deqp-run.sh`
+over `tools/cts/mali-gles2-tree.txt` on the board's own Armbian (kernel
 6.18.55-current-rockchip64, panthor) with the `tools/mali/panthor-gles` pair
-(issue #20). The rerun slice replaces the chunks of the same labels
-(`replaces=` in its `meta.txt`), so every case counts once. Causes:
-`docs/es2-cts-failures.md` section M.
+(issue #20). Causes: `docs/es2-cts-failures.md` section M.
 
 | Slices (`tools/cts/log/`) | Main | Cases | Pass | Fail | NotSupported | ResourceError | QualityWarning | Lost | Kernel lines / resets |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `2026-11-21-t6-gles2-R373-a2482523` (25 rows) | `a2482523` | 5,944 | 3,625 | 2,295 | 24 | 0 | 0 | 0 | 0 / 0 |
-| **whole list**: S1-S4 of `2026-11-15-t6-gles2-*-37305608`, 25 rows replaced by the rerun | `37305608`, `a2482523` | **17,165** | **7,353** | **8,836** | **973** | **0** | **3** | **0** | **0 / 0** |
+| `2026-11-24-t6-gles2-S1-8ff01055` (rows 1-24) | `8ff01055` | 5,141 | 3,882 | 1,222 | 34 | 0 | 3 | 0 | 0 / 0 |
+| `2026-11-24-t6-gles2-S2-8ff01055` (rows 25-38) | `8ff01055` | 4,872 | 3,638 | 1,234 | 0 | 0 | 0 | 0 | 0 / 0 |
+| `2026-11-24-t6-gles2-S3-8ff01055` (rows 39-68) | `8ff01055` | 4,477 | 1,486 | 2,551 | 440 | 0 | 0 | 0 | 0 / 0 |
+| `2026-11-24-t6-gles2-S4-8ff01055` (rows 69-76) | `8ff01055` | 2,675 | 1,944 | 699 | 32 | 0 | 0 | 0 | 0 / 0 |
+| **whole list** | `8ff01055` | **17,165** | **10,950** | **5,706** | **506** | **0** | **3** | **0** | **0 / 0** |
 
-- All 76 chunks and the 25 rerun chunks ended `done`: no crash, hang or GPU fault, ssh answered
-  after every chunk, and the boot id is the same before and after every slice.
-  `mali-deqp-tally.py --check-cover` exits 0. At `37305608` the tree read
-  5,456 Pass, 10,700 Fail, 973 NotSupported, 33 ResourceError, 3
-  QualityWarning.
-- Not Pass, 9,812: 9,728 cases have a compile or link refusal of the online
-  compiler in their own log (Fail 8,789, NotSupported 939), listed by refusal
-  text in section M's block. Of the 84 without one: 20 `negative_api` and 7
-  `state_query` (not rerun, the stub vertex shader constant); 3 wrong pixels
-  of `texture.vertex.cube` and 4 of `fbo.render.recreate_colorbuffer.rebind_*`
-  (passed at `37305608`); `texturecubelod` 1 and `shader_api.compile_link` 2;
-  10 `Failed to compile shader` without a refusal text in
-  `shaders.random`; the accepted 34 NotSupported and 3 QualityWarning of
+- All 76 chunks ended `done`: no crash, hang or GPU fault (`gpu_faults=0`,
+  `job_timeouts=0` in every exit line), ssh answered after every chunk, and
+  the boot id is the same before and after every slice.
+  `mali-deqp-tally.py --check-cover` exits 0.
+- Against the tree before (`37305608` of 2026-11-15 with 25 rows rerun at
+  `a2482523` on 2026-11-21: 7,353 Pass, 8,836 Fail, 973 NotSupported, 3
+  QualityWarning), case by case: 3,597 cases newly pass (3,374 from Fail, 223
+  from NotSupported) and no case that passed fails. 244 refused loop and
+  return cases moved from NotSupported to Fail (section M.2).
+- Not Pass, 6,215: 5,829 cases have a compile or link refusal of the online
+  compiler in their own log (Fail 5,357, NotSupported 472), listed by refusal
+  text in section M's block (issue #11251). Of the 386 without one: 299 wrong
+  pixels of shaders with a bool or bvec value that were refused before (issue
+  #11306); 17 cases whose smallest vertex shader does not compile
+  (`negative_api` 8, `state_query` 7, `shader_api.compile_link` 2; issue
+  #11328); 10 `shaders.random` links refused with a text the record misses
+  (issue #11309); 8 `uniform_api` draws refused (issue #11308); 7
+  `attribute_location.bind_aliasing.max_inactive_*` links (issue #11307); 3
+  wrong pixels of `texture.vertex.cube` and `texturecubelod` 1 (issue
+  #7489); 4 of `fbo.render.recreate_colorbuffer.rebind_*` (issue #11329);
+  the accepted 34 NotSupported and 3 QualityWarning of
   `docs/es2-cts-failures.md` section C.
-- The rerun fixed 1,904 cases: blend 828 (all 1,060 `fragment_ops.blend`
-  Pass), `fragment_ops.random` 100, shared depth/stencil 35, the 33
-  `GL_OUT_OF_MEMORY` draws, vertex cube look-ups 13 of 16, incomplete cube
-  maps 16, `GL_INVALID_OPERATION` at a draw 22 of 23, mipmapped cube maps 6,
-  `stencil_clear.rbo_rgb565_*` 2. 7 cases that passed now fail (section M.1
-  rows 5 and 14).
 - Against the first tree (2026-11-12/13, seven slices from four commits,
-  5,260 Pass): 224 cases passed at `37305608` and 28 that passed were
-  refused (section M.2).
+  5,260 Pass): 5,700 cases newly pass and 10 that passed do not (7 with wrong
+  pixels, 3 refused; section M.2).
 - The hang-risk loops (`docs/notes/mali-gles2-forecast.md` section 3, row
-  `T6S3R08`) were all refused at compile or link (`draws=0`), so none ran on
-  the GPU.
+  `T6S3R08`, 208 cases): the row's exit line reads `draws=3 refused=205`,
+  with no GPU fault and no job timeout.
 
 ## Mali: NanoPC-T6 (RK3588, Valhall v10, panthor), gl_test sweep
 
@@ -708,10 +710,11 @@ record screen on the capture unit's pictures
   the board came back to Armbian after each. The rows' filters also select
   203 cases that are not in the must-pass list (184 pass, 19 fail), so the
   images ran 17,368 cases.
-- dEQP-GLES2 against the tree on Armbian above (main `37305608`): 6,644 of
-  the must-pass cases pass (5,456 there), 9,545 fail (10,700 there) and none
-  ends in ResourceError (33 there). Not supported and quality warning are
-  the same counts.
+- dEQP-GLES2: 6,644 of the must-pass cases pass, 9,545 fail, 973 are not
+  supported and 3 are quality warnings; none ends in ResourceError. The tree
+  on Armbian above is from a later commit (main `8ff01055`: 10,950 Pass,
+  5,706 Fail, 506 NotSupported); this Zephyr tree has not been rerun since
+  `de2f2c103`.
 - dEQP-GLES2, the 9,564 failures (the 19 outside the must-pass list
   included) by their result text: 9,482 are a shader compile or a program
   link that failed, the online compiler's refusals by name (10,489 refused

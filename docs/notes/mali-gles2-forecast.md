@@ -23,8 +23,8 @@ pass. No chunk hung, crashed or faulted. Section 2's "measured" column and
 section 6 set that measurement against the forecast; sections 1 to 5 are the
 forecast as it was made.
 
-The current result is the whole tree at main `37305608` (2026-11-15, 5,456
-Pass), with each case's own refusal: `docs/es2-cts-failures.md` section M.
+The current result, with each case's own refusal, is
+`docs/es2-cts-failures.md` section M.
 This note is not redone for it; the per-case list there replaces the
 forecast as the work order.
 
@@ -437,8 +437,8 @@ Section 3's 208 hang-risk loops (row `T6S3R08`) were all refused at link,
 `PositionLane` first, and reported NotSupported by dEQP, so no kept loop with
 a run-time bound reached the GPU. No chunk hung, crashed or faulted.
 
-Section 4's new causes, from the measurement (they are still in
-`docs/es2-cts-failures.md` section M.1 for the tree at `37305608`): draws that fail with `GL_OUT_OF_MEMORY` (33 ResourceError),
+Section 4's new causes, from the measurement (rows 4, 5 and 14 of
+`docs/es2-cts-failures.md` section M.1; M.3 has their history): draws that fail with `GL_OUT_OF_MEMORY` (33 ResourceError),
 wrong pixels of `texture.vertex.cube` with no refusal (16), and 4 wrong
 pixels no refusal explains. The 164 GL errors and missing pixels in chunks
 with refusals (cause 4 there) wait for a per-case refusal record.

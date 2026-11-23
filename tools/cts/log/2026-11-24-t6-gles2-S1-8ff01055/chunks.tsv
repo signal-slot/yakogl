@@ -1,0 +1,25 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+1	T6S1R01	224	done	7	0	0	yes	yes	yakogl-mali-exit: draws=551 refused=17 first_refused=link: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a u
+2	T6S1R02	264	done	6	0	0	yes	yes	yakogl-mali-exit: draws=264 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+3	T6S1R03	349	done	9	0	0	yes	yes	yakogl-mali-exit: draws=3140 refused=2 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a 
+4	T6S1R04	101	done	5	0	0	yes	yes	yakogl-mali-exit: draws=182 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+5	T6S1R05	390	done	4	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+6	T6S1R06	319	done	11	0	0	yes	yes	yakogl-mali-exit: draws=816 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+7	T6S1R07	89	done	4	0	0	yes	yes	yakogl-mali-exit: draws=3 refused=17 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is 
+8	T6S1R08	1	done	3	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+9	T6S1R09	357	done	7	0	0	yes	yes	yakogl-mali-exit: draws=325 refused=1 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) gpu_faults
+10	T6S1R10	396	done	4	0	0	yes	yes	yakogl-mali-exit: draws=0 refused=14 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) gpu_faults=
+11	T6S1R11	40	done	4	0	0	yes	yes	yakogl-mali-exit: draws=145 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+12	T6S1R12	248	done	8	0	0	yes	yes	yakogl-mali-exit: draws=3232 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+13	T6S1R13	36	done	4	0	0	yes	yes	yakogl-mali-exit: draws=126 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+14	T6S1R14	112	done	6	0	0	yes	yes	yakogl-mali-exit: draws=1868 refused=1 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cub
+15	T6S1R15	74	done	7	0	0	yes	yes	yakogl-mali-exit: draws=284 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+16	T6S1R16	192	done	6	0	0	yes	yes	yakogl-mali-exit: draws=249 refused=2 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) gpu_faults=0
+17	T6S1R17	90	done	7	0	0	yes	yes	yakogl-mali-exit: draws=1260 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+18	T6S1R18	15	done	4	0	0	yes	yes	yakogl-mali-exit: draws=30 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+19	T6S1R19	343	done	5	0	0	yes	yes	yakogl-mali-exit: draws=4 refused=362 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is n
+20	T6S1R20	336	done	5	0	0	yes	yes	yakogl-mali-exit: draws=30 refused=327 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is 
+21	T6S1R21	294	done	5	0	0	yes	yes	yakogl-mali-exit: draws=19 refused=299 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is 
+22	T6S1R22	294	done	5	0	0	yes	yes	yakogl-mali-exit: draws=31 refused=132 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is 
+23	T6S1R23	203	done	12	0	0	yes	yes	yakogl-mali-exit: draws=203 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+24	T6S1R24	374	done	12	0	0	yes	yes	yakogl-mali-exit: draws=368 refused=0 first_refused=- gpu_faults=0 job_timeouts=0

@@ -1,0 +1,1428 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S3R23.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_gggg_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 4 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 28 of 1536
+yakogl: mali shaderc table 'IR values': high-water 24 of 2048
+yakogl: mali shaderc table 'locals': high-water 4 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+yakogl: mali arena 'desc': high-water 288 of 1048576 bytes
+yakogl: mali arena 'cs': high-water 104 of 393216 bytes
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_gggg_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 35 of 1536
+yakogl: mali arena 'desc': high-water 1200 of 1048576 bytes
+yakogl: mali arena 'data': high-water 108 of 262144 bytes
+yakogl: mali arena 'code': high-water 768 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_gr_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_gr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_grg_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_grg_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_r_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_r_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_rg_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_rg_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_rgrr_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_rgrr_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 36 of 1536
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_rr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_rr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_s_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_s_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_ss_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_ss_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_st_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_st_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_stss_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_stss_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_ts_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_ts_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_tst_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_tst_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_tttt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_tttt_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_x_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_x_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_xx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_xx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_xy_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_xy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_xyxx_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_xyxx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_yx_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_yx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_yxy_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_yxy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_yyyy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec2_yyyy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_b_fragment'..
+yakogl: mali arena 'data': high-water 124 of 262144 bytes
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_b_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bb_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bb_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bbb_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bbb_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bbbb_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bbbb_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bbg_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bbg_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bgr_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_bgr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_grg_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_grg_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_p_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_p_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pp_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppp_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pppp_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pppp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_ppt_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_pts_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_r_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rb_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rbr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rgb_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rggr_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 37 of 1536
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_rrr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_s_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sps_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_sss_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_stts_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_tst_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_x_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xxx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyyx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xyz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_xzx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_yxy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_z_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zyx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec3_zzzz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_a_vertex'..
+yakogl: mali arena 'data': high-water 140 of 262144 bytes
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaa_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaaa_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_aaag_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 38 of 1536
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ab_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abba_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abg_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_abgr_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 40 of 1536
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ar_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_bbab_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gga_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_gggg_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ppqp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_q_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qp_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpt_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qpts_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqq_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqq_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qqqt_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qs_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_r_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgba_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rgrr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_rrrr_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_s_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ssss_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stpq_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_stss_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_ttq_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_tttt_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_w_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_www_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwww_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwwy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wwwy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 279 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wz_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzyx_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzyx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzzw_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_wzzw_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_x_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 276 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_x_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_xxxx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_xxxx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_xyxx_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_xyxx_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_xyzw_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_xyzw_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_yyw_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 280 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_yyw_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_yyyy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 281 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_yyyy_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_zzwz_fragment'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_zzwz_vertex'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_gggg_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 25 of 2048
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_gggg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_gr_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_gr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_grg_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_grg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_r_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_r_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 31 of 2048
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_rg_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_rg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_rgrr_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_rgrr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_rr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_rr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_s_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_s_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_ss_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_ss_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_st_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_st_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_stss_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_stss_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_ts_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_ts_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_tst_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_tst_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_tttt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_tttt_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_x_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_x_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_xx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_xx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_xy_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_xy_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_xyxx_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_xyxx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_yx_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_yx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_yxy_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_yxy_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_yyyy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec2_yyyy_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_b_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_b_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bb_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bb_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bbb_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bbb_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bbbb_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bbbb_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bbg_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bbg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bgr_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_bgr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_grg_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_grg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_p_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_p_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_pp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_pp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_ppp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_ppp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_pppp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_pppp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_ppt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_ppt_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_pts_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_pts_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_r_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_r_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rb_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rb_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rbr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rbr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rgb_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rgb_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rggr_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rggr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rrr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_rrr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_s_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_s_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_sp_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_sp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_sps_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_sps_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_sss_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_sss_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_stp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_stp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_stts_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_stts_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_tst_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_tst_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_x_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_x_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xxx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xxx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xyyx_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xyyx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xyz_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xyz_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xz_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xz_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xzx_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_xzx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_yxy_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_yxy_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_z_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_z_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zyx_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zyx_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zz_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zz_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zzy_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zzy_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zzz_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zzz_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zzzz_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec3_zzzz_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_a_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_a_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_aaa_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_aaa_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_aaaa_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_aaaa_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_aaag_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_aaag_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ab_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ab_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_abba_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_abba_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_abg_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_abg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_abgr_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_abgr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ar_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ar_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_bbab_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_bbab_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_gga_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_gga_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_gggg_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_gggg_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ppqp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ppqp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_q_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_q_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qp_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qppq_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qppq_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qpt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qpt_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qpts_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qpts_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qqq_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qqq_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qqqq_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qqqq_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qqqt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qqqt_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qs_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 288 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_qs_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_r_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_r_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_rgba_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_rgba_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_rgrr_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_rgrr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_rrrr_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_rrrr_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_s_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 283 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_s_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ssss_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ssss_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_stpq_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_stpq_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_stss_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_stss_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ttq_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 289 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_ttq_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_tttt_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 290 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_ivec4_tttt_vertex'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+yakogl-mali-exit: draws=557 refused=116 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        61/400 (15.2%)
+  Failed:        339/400 (84.8%)
+  Not supported: 0/400 (0.0%)
+  Warnings:      0/400 (0.0%)
+  Waived:        0/400 (0.0%)

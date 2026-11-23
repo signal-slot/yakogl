@@ -1,0 +1,1453 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S4R06.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.invalid_varying_type_bool'..
+yakogl: glCompileShader(3): 0:3: 'var' : a varying must be a float, vector or matrix [vertex stage, 105 bytes]
+yakogl: glCompileShader(5): 0:1: 'var' : a varying must be a float, vector or matrix [fragment stage, 64 bytes]
+yakogl: mali arena 'desc': high-water 288 of 1048576 bytes
+yakogl: mali arena 'cs': high-water 104 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.invalid_varying_type_int'..
+yakogl: glCompileShader(3): 0:3: 'var' : a varying must be a float, vector or matrix [vertex stage, 112 bytes]
+yakogl: glCompileShader(5): 0:1: 'var' : a varying must be a float, vector or matrix [fragment stage, 71 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.invalid_varying_type_struct'..
+yakogl: glCompileShader(3): 0:3: 'struct' : an anonymous struct is not supported [vertex stage, 130 bytes]
+yakogl: glCompileShader(5): 0:1: 'struct' : an anonymous struct is not supported [fragment stage, 89 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct'..
+yakogl: mali shaderc table 'IR values': high-water 6 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 29 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 13 of 128
+yakogl: mali shaderc table 'uniform rows': high-water 2 of 256
+yakogl: mali shaderc table 'IR values': high-water 40 of 2048
+yakogl: mali shaderc table 'locals': high-water 4 of 256
+yakogl: mali shaderc table 'uniform rows': high-water 3 of 256
+yakogl: mali arena 'desc': high-water 1072 of 1048576 bytes
+yakogl: mali arena 'data': high-water 76 of 262144 bytes
+yakogl: mali arena 'code': high-water 384 of 131072 bytes
+yakogl: mali arena 'spds': high-water 64 of 32768 bytes
+yakogl: mali arena 'cs': high-water 424 of 393216 bytes
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only_vec4'..
+yakogl: mali shaderc table 'NIR instructions': high-water 31 of 1536
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only_vec4_float'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_fragment_only_vec4_vec3'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial'..
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_bvec2_vec2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_int_float'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 375 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_ivec2_ivec2'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 378 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_ivec2_vec2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec2_int'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 374 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec2_vec3'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec4'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec4_float'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec4_struct'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec4_vec3'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_partial_vec4_vec3_struct'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_use_case_rip'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_use_case_rip_sans_highp'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4'..
+yakogl: mali shaderc table 'FAU words': high-water 14 of 128
+yakogl: mali shaderc table 'NIR instructions': high-water 35 of 1536
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4_float'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vec4_vec3'..
+  Fail (Image comparison failed)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vertex_only'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vertex_only_vec4'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vertex_only_vec4_float'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.uniform_struct_vertex_only_vec4_vec3'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_1'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_3'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_4'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 159 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_5'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 172 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_6'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 172 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_7'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [vertex stage, 172 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: control flow (if, a loop, a return before the end) is not lowered yet) [fragment stage, 160 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_differing_precision_1'..
+yakogl: mali arena 'desc': high-water 1136 of 1048576 bytes
+yakogl: mali arena 'data': high-water 92 of 262144 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_differing_precision_2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_differing_precision_3'..
+yakogl: glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet)
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_readback_1'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_float'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_mat2'..
+yakogl: mali shaderc table 'IR values': high-water 44 of 2048
+yakogl: mali shaderc table 'locals': high-water 10 of 256
+yakogl: mali arena 'desc': high-water 1200 of 1048576 bytes
+yakogl: mali arena 'data': high-water 140 of 262144 bytes
+yakogl: mali arena 'code': high-water 768 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_mat3'..
+yakogl: mali shaderc table 'NIR instructions': high-water 44 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 105 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 51 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 16 of 128
+yakogl: mali shaderc table 'immediates': high-water 8 of 64
+yakogl: mali shaderc table 'IR values': high-water 56 of 2048
+yakogl: mali shaderc table 'locals': high-water 13 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 61 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 351 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_mat4'..
+yakogl: mali shaderc table 'BIR instructions': high-water 183 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 87 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 23 of 128
+yakogl: mali shaderc table 'immediates': high-water 15 of 64
+yakogl: mali shaderc table 'IR values': high-water 68 of 2048
+yakogl: mali shaderc table 'locals': high-water 16 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 100 of 1536
+yakogl: mali arena 'desc': high-water 1392 of 1048576 bytes
+yakogl: mali arena 'data': high-water 332 of 262144 bytes
+yakogl: mali arena 'code': high-water 1280 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_mismatch_2'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 71 
+  Fail (expected linking to fail, but unable to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_vec2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_vec3'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_type_vec4'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.linkage.varying_writeback_1'..
+yakogl: glCompileShader(3): 0:0: 'in0' : undeclared identifier [vertex stage, 192 bytes]
+yakogl: glCompileShader(5): 0:0: '=' : cannot assign to this expression [fragment stage, 148 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.misc.compound_assignment.mul_swizzled_vec_by_matrix_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 337 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.misc.compound_assignment.mul_swizzled_vec_by_matrix_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.correct_phases_fragment'..
+yakogl: glCompileShader(5): 0:4: '1e' : invalid suffix on an integer constant [fragment stage, 53 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.correct_phases_vertex'..
+yakogl: glCompileShader(3): 0:4: '1e' : invalid suffix on an integer constant [vertex stage, 53 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.empty_directive_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.empty_directive_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.empty_function_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.empty_function_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.empty_object_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.empty_object_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.invalid_directive_fragment'..
+yakogl: glCompileShader(5): 0:1: 'defin' : invalid preprocessor directive [fragment stage, 28 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.invalid_directive_vertex'..
+yakogl: glCompileShader(3): 0:1: 'defin' : invalid preprocessor directive [vertex stage, 28 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.invalid_identifier_fragment'..
+yakogl: glCompileShader(5): 0:5: '1x' : invalid suffix on an integer constant [fragment stage, 56 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.invalid_identifier_vertex'..
+yakogl: glCompileShader(3): 0:5: '1x' : invalid suffix on an integer constant [vertex stage, 56 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.missing_identifier_fragment'..
+yakogl: glCompileShader(5): 0:1: '#define' : #define requires a macro name [fragment stage, 25 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.missing_identifier_vertex'..
+yakogl: glCompileShader(3): 0:1: '#define' : #define requires a macro name [vertex stage, 25 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.null_directive_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 304 bytes]
+  Fail (expected shaders to compile and link properly, but failed to compile.)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.basic.null_directive_vertex'..
+yakogl: glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex))
+  Fail (expected shaders to compile and link properly, but failed to link.)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.empty_line_fragment'..
+yakogl: glCompileShader(5): 0:4: '#line' : #line requires a line number [fragment stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.empty_line_vertex'..
+yakogl: glCompileShader(3): 0:4: '#line' : #line requires a line number [vertex stage, 76 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.invalid_line_file_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '1.234' : #line requires an integer [fragment stage, 121 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.invalid_line_file_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '1.234' : #line requires an integer [vertex stage, 120 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.invalid_line_file_3_fragment'..
+yakogl: glCompileShader(5): 0:4: '2' : extra tokens at the end of the directive [fragment stage, 121 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.invalid_line_file_3_vertex'..
+yakogl: glCompileShader(3): 0:4: '2' : extra tokens at the end of the directive [vertex stage, 120 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.invalid_line_file_4_fragment'..
+yakogl: glCompileShader(5): 0:4: 'foobar' : #line requires an integer [fragment stage, 119 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.invalid_line_file_4_vertex'..
+yakogl: glCompileShader(3): 0:4: 'foobar' : #line requires an integer [vertex stage, 118 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.line_and_file_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.line_and_file_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.line_defined_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.builtin.line_defined_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.comment_trick_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.comment_trick_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.comment_trick_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.comment_trick_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.invalid_comment_fragment'..
+yakogl: glCompileShader(5): 0:4: '*' : expected an expression [fragment stage, 81 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.invalid_comment_vertex'..
+yakogl: glCompileShader(3): 0:4: '*' : expected an expression [vertex stage, 80 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.multiline_comment_define_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.multiline_comment_define_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.nested_comment_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.nested_comment_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.unterminated_comment_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '/*' : end of file in comment [fragment stage, 48 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.unterminated_comment_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '/*' : end of file in comment [vertex stage, 48 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.unterminated_comment_2_fragment'..
+yakogl: glCompileShader(5): 0:1: '/*' : end of file in comment [fragment stage, 44 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.comments.unterminated_comment_2_vertex'..
+yakogl: glCompileShader(3): 0:1: '/*' : end of file in comment [vertex stage, 44 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_4_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_5_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.basic_5_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.unary_ops_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.unary_ops_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.unary_ops_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditional_inclusion.unary_ops_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifdef_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifdef_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifdef_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifdef_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifdef_3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifdef_3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifndef_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifndef_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifndef_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.ifndef_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.invalid_ifdef_fragment'..
+yakogl: glCompileShader(5): 0:4: '1' : #ifdef requires a macro name [fragment stage, 87 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.invalid_ifdef_vertex'..
+yakogl: glCompileShader(3): 0:4: '1' : #ifdef requires a macro name [vertex stage, 86 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.invalid_ifndef_fragment'..
+yakogl: glCompileShader(5): 0:4: '1' : #ifdef requires a macro name [fragment stage, 88 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.invalid_ifndef_vertex'..
+yakogl: glCompileShader(3): 0:4: '1' : #ifdef requires a macro name [vertex stage, 87 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.mixed_conditional_inclusion_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.mixed_conditional_inclusion_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.nested_if_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.nested_if_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.nested_if_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.nested_if_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.nested_if_3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.nested_if_3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.unterminated_nested_blocks_fragment'..
+yakogl: glCompileShader(5): 0:5: '#if' : #if without #endif [fragment stage, 87 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.conditionals.unterminated_nested_blocks_vertex'..
+yakogl: glCompileShader(3): 0:5: '#if' : #if without #endif [vertex stage, 86 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.define_value_and_function_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.define_value_and_function_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_function_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_function_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_invalid_object_3_fragment'..
+yakogl: glCompileShader(5): 0:2: '__VERSION__' : cannot undefine a predefined macro [fragment stage, 99 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_invalid_object_3_vertex'..
+yakogl: glCompileShader(3): 0:2: '__VERSION__' : cannot undefine a predefined macro [vertex stage, 98 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_invalid_object_4_fragment'..
+yakogl: glCompileShader(5): 0:2: 'GL_ES' : cannot undefine a predefined macro [fragment stage, 87 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_invalid_object_4_vertex'..
+yakogl: glCompileShader(3): 0:2: 'GL_ES' : cannot undefine a predefined macro [vertex stage, 86 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_object_invalid_syntax_fragment'..
+yakogl: glCompileShader(5): 0:3: 'sdflkjfds' : extra tokens at the end of the directive [fragment stage, 171 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.definitions.undefine_object_invalid_syntax_vertex'..
+yakogl: glCompileShader(3): 0:3: 'sdflkjfds' : extra tokens at the end of the directive [vertex stage, 170 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.additional_tokens_fragment'..
+yakogl: glCompileShader(5): 0:1: 'foobar' : expected 'es' after the version number [fragment stage, 135 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.additional_tokens_vertex'..
+yakogl: glCompileShader(3): 0:1: 'foobar' : expected 'es' after the version number [vertex stage, 134 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.error_fragment'..
+yakogl: glCompileShader(5): 0:2: '1' : #error [fragment stage, 161 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.error_vertex'..
+yakogl: glCompileShader(3): 0:2: '1' : #error [vertex stage, 160 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.error_with_no_tokens_fragment'..
+yakogl: glCompileShader(5): 0:1: '' : #error [fragment stage, 122 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.error_with_no_tokens_vertex'..
+yakogl: glCompileShader(3): 0:1: '' : #error [vertex stage, 121 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.invalid_version_fragment'..
+yakogl: glCompileShader(5): 0:1: '#version' : #version requires a version number [fragment stage, 128 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.invalid_version_vertex'..
+yakogl: glCompileShader(3): 0:1: '#version' : #version requires a version number [vertex stage, 127 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_invalid_token_1_fragment'..
+yakogl: glCompileShader(5): 0:1: '100.0' : #version requires a version number [fragment stage, 130 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_invalid_token_1_vertex'..
+yakogl: glCompileShader(3): 0:1: '100.0' : #version requires a version number [vertex stage, 129 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_invalid_token_2_fragment'..
+yakogl: glCompileShader(5): 0:1: '#version' : #version requires a version number [fragment stage, 131 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_invalid_token_2_vertex'..
+yakogl: glCompileShader(3): 0:1: '#version' : #version requires a version number [vertex stage, 130 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_is_less_fragment'..
+yakogl: glCompileShader(5): 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler [fragment stage, 127 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_is_less_vertex'..
+yakogl: glCompileShader(3): 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler [vertex stage, 126 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_is_more_fragment'..
+yakogl: glCompileShader(5): 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler [fragment stage, 128 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_is_more_vertex'..
+yakogl: glCompileShader(3): 0:1: '#version' : desktop GLSL source; this is an OpenGL ES compiler [vertex stage, 127 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_missing_fragment'..
+yakogl: glCompileShader(5): 0:1: '#version' : #version requires a version number [fragment stage, 124 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_missing_vertex'..
+yakogl: glCompileShader(3): 0:1: '#version' : #version requires a version number [vertex stage, 123 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_not_first_statement_1_fragment'..
+yakogl: glCompileShader(5): 0:2: '#version' : #version must be the first directive in the shader [fragment stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_not_first_statement_1_vertex'..
+yakogl: glCompileShader(3): 0:2: '#version' : #version must be the first directive in the shader [vertex stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_not_first_statement_2_fragment'..
+yakogl: glCompileShader(5): 0:2: '#version' : #version must be the first directive in the shader [fragment stage, 100 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_not_first_statement_2_vertex'..
+yakogl: glCompileShader(3): 0:2: '#version' : #version must be the first directive in the shader [vertex stage, 99 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.directive.version_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.and_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.and_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.cmp_less_than_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.cmp_less_than_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_4_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_5_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_5_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_6_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.defined_6_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_basic_0_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_basic_0_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_basic_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_basic_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_simple_precedence_0_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_simple_precedence_0_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_simple_precedence_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.eval_simple_precedence_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.less_or_equal_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.less_or_equal_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.mod_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.mod_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.or_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.or_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_if_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_if_no_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_if_no_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_if_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_ifelse_false_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_ifelse_false_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_ifelse_true_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_ifelse_true_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_multi_if_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_multi_if_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_single_if_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_single_if_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_tricky_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_tricky_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_value_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.parenthesis_value_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.shift_left_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.shift_left_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.shift_right_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.shift_right_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.xor_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.expressions.xor_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.basic_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.basic_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.expected_colon_fragment'..
+yakogl: glCompileShader(5): 0:1: ';' : expected ':' after the extension name [fragment stage, 132 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.expected_colon_vertex'..
+yakogl: glCompileShader(3): 0:1: ';' : expected ':' after the extension name [vertex stage, 131 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_behavior_1_fragment'..
+yakogl: glCompileShader(5): 0:1: 'WARN' : invalid #extension behavior [fragment stage, 137 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_behavior_1_vertex'..
+yakogl: glCompileShader(3): 0:1: 'WARN' : invalid #extension behavior [vertex stage, 136 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_behavior_2_fragment'..
+yakogl: glCompileShader(5): 0:1: 'require' : 'all' cannot be required or enabled [fragment stage, 140 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_behavior_2_vertex'..
+yakogl: glCompileShader(3): 0:1: 'require' : 'all' cannot be required or enabled [vertex stage, 139 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_char_in_behavior_fragment'..
+yakogl: glCompileShader(5): 0:1: 'war' : invalid #extension behavior [fragment stage, 139 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_char_in_behavior_vertex'..
+yakogl: glCompileShader(3): 0:1: 'war' : invalid #extension behavior [vertex stage, 138 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_char_in_name_fragment'..
+yakogl: glCompileShader(5): 0:1: '¤' : expected ':' after the extension name [fragment stage, 139 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_char_in_name_vertex'..
+yakogl: glCompileShader(3): 0:1: '¤' : expected ':' after the extension name [vertex stage, 138 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_extension_name_fragment'..
+yakogl: glCompileShader(5): 0:1: '2' : #extension requires an extension name [fragment stage, 134 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.invalid_extension_name_vertex'..
+yakogl: glCompileShader(3): 0:1: '2' : #extension requires an extension name [vertex stage, 133 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.macro_exp_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.macro_exp_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.missing_behavior_fragment'..
+yakogl: glCompileShader(5): 0:1: 'all' : #extension requires a behavior [fragment stage, 132 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.missing_behavior_vertex'..
+yakogl: glCompileShader(3): 0:1: 'all' : #extension requires a behavior [vertex stage, 131 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.missing_colon_fragment'..
+yakogl: glCompileShader(5): 0:1: 'all' : expected ':' after the extension name [fragment stage, 130 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.missing_colon_vertex'..
+yakogl: glCompileShader(3): 0:1: 'all' : expected ':' after the extension name [vertex stage, 129 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.missing_extension_name_fragment'..
+yakogl: glCompileShader(5): 0:1: '#extension' : #extension requires an extension name [fragment stage, 126 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.missing_extension_name_vertex'..
+yakogl: glCompileShader(3): 0:1: '#extension' : #extension requires an extension name [vertex stage, 125 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.unterminated_comment_fragment'..
+yakogl: glCompileShader(5): 0:1: '/*' : end of file in comment [fragment stage, 143 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.extensions.unterminated_comment_vertex'..
+yakogl: glCompileShader(3): 0:1: '/*' : end of file in comment [vertex stage, 142 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_definitions.complex_func_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_definitions.complex_func_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_definitions.function_definition_with_comments_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_definitions.function_definition_with_comments_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_definitions.same_object_and_function_param_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_definitions.same_object_and_function_param_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.function_redefinition_1_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.function_redefinition_1_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.function_redefinition_2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.function_redefinition_2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.function_redefinition_3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.function_redefinition_3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.invalid_function_redefinition_param_1_fragment'..
+yakogl: glCompileShader(5): 0:3: 'FUNC' : macro redefined with a different definition [fragment stage, 143 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.invalid_function_redefinition_param_1_vertex'..
+yakogl: glCompileShader(3): 0:3: 'FUNC' : macro redefined with a different definition [vertex stage, 142 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.invalid_function_redefinition_param_2_fragment'..
+yakogl: glCompileShader(5): 0:3: 'FUNC' : macro redefined with a different definition [fragment stage, 148 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.invalid_function_redefinition_param_2_vertex'..
+yakogl: glCompileShader(3): 0:3: 'FUNC' : macro redefined with a different definition [vertex stage, 147 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.invalid_function_redefinition_param_3_fragment'..
+yakogl: glCompileShader(5): 0:3: 'FUNC' : macro redefined with a different definition [fragment stage, 143 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.function_redefinitions.invalid_function_redefinition_param_3_vertex'..
+yakogl: glCompileShader(3): 0:3: 'FUNC' : macro redefined with a different definition [vertex stage, 142 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.elif_after_else_fragment'..
+yakogl: glCompileShader(5): 0:8: 'elif' : #elif after #else [fragment stage, 159 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.elif_after_else_vertex'..
+yakogl: glCompileShader(3): 0:8: 'elif' : #elif after #else [vertex stage, 156 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.elif_without_if_fragment'..
+yakogl: glCompileShader(5): 0:4: 'elif' : #elif without #if [fragment stage, 86 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.elif_without_if_vertex'..
+yakogl: glCompileShader(3): 0:4: 'elif' : #elif without #if [vertex stage, 85 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.else_after_else_fragment'..
+yakogl: glCompileShader(5): 0:8: 'else' : #else after #else [fragment stage, 151 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.else_after_else_vertex'..
+yakogl: glCompileShader(3): 0:8: 'else' : #else after #else [vertex stage, 148 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.else_without_if_fragment'..
+yakogl: glCompileShader(5): 0:4: 'else' : #else without #if [fragment stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.else_without_if_vertex'..
+yakogl: glCompileShader(3): 0:4: 'else' : #else without #if [vertex stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_if_defined_fragment'..
+yakogl: glCompileShader(5): 0:4: 'if' : expected an identifier after 'defined' [fragment stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_if_defined_vertex'..
+yakogl: glCompileShader(3): 0:4: 'if' : expected an identifier after 'defined' [vertex stage, 82 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_if_fragment'..
+yakogl: glCompileShader(5): 0:4: 'if' : #if requires an expression [fragment stage, 75 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_if_vertex'..
+yakogl: glCompileShader(3): 0:4: 'if' : #if requires an expression [vertex stage, 74 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_ifdef_fragment'..
+yakogl: glCompileShader(5): 0:4: 'ifdef' : #ifdef requires a macro name [fragment stage, 78 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_ifdef_vertex'..
+yakogl: glCompileShader(3): 0:4: 'ifdef' : #ifdef requires a macro name [vertex stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_ifndef_fragment'..
+yakogl: glCompileShader(5): 0:4: 'ifndef' : #ifdef requires a macro name [fragment stage, 79 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.empty_ifndef_vertex'..
+yakogl: glCompileShader(3): 0:4: 'ifndef' : #ifdef requires a macro name [vertex stage, 78 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.endif_without_if_fragment'..
+yakogl: glCompileShader(5): 0:5: 'endif' : #endif without #if [fragment stage, 78 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.endif_without_if_vertex'..
+yakogl: glCompileShader(3): 0:5: 'endif' : #endif without #if [vertex stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.if_float_fragment'..
+yakogl: glCompileShader(5): 0:4: '1.231' : a preprocessor expression must be an integer expression [fragment stage, 131 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.if_float_vertex'..
+yakogl: glCompileShader(3): 0:4: '1.231' : a preprocessor expression must be an integer expression [vertex stage, 129 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.nested_elif_without_if_fragment'..
+yakogl: glCompileShader(5): 0:9: 'endif' : #endif without #if [fragment stage, 127 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.nested_elif_without_if_vertex'..
+yakogl: glCompileShader(3): 0:9: 'endif' : #endif without #if [vertex stage, 125 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_elif_fragment'..
+yakogl: glCompileShader(5): 0:5: 'foobar' : undefined identifier in a preprocessor expression [fragment stage, 97 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_elif_vertex'..
+yakogl: glCompileShader(3): 0:5: 'foobar' : undefined identifier in a preprocessor expression [vertex stage, 96 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_else_fragment'..
+yakogl: glCompileShader(5): 0:5: 'foobar' : extra tokens at the end of the directive [fragment stage, 103 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_else_vertex'..
+yakogl: glCompileShader(3): 0:5: 'foobar' : extra tokens at the end of the directive [vertex stage, 102 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_endif_fragment'..
+yakogl: glCompileShader(5): 0:6: 'foobar' : extra tokens at the end of the directive [fragment stage, 97 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_endif_vertex'..
+yakogl: glCompileShader(3): 0:6: 'foobar' : extra tokens at the end of the directive [vertex stage, 96 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_if_fragment'..
+yakogl: glCompileShader(5): 0:4: 'foobar' : extra tokens at the end of the directive [fragment stage, 91 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_if_vertex'..
+yakogl: glCompileShader(3): 0:4: 'foobar' : extra tokens at the end of the directive [vertex stage, 90 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_ifdef_fragment'..
+yakogl: glCompileShader(5): 0:4: 'foobar' : extra tokens at the end of the directive [fragment stage, 105 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_ifdef_vertex'..
+yakogl: glCompileShader(3): 0:4: 'foobar' : extra tokens at the end of the directive [vertex stage, 104 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_ifndef_fragment'..
+yakogl: glCompileShader(5): 0:4: ',' : extra tokens at the end of the directive [fragment stage, 115 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.tokens_after_ifndef_vertex'..
+yakogl: glCompileShader(3): 0:4: ',' : extra tokens at the end of the directive [vertex stage, 114 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_elif_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 85 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_elif_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_elif_2_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 85 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_elif_2_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_elif_3_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 85 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_elif_3_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_else_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_else_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 82 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_else_2_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_else_2_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 82 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_if_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_if_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 76 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_if_2_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_if_2_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 76 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_ifdef_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 85 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_ifdef_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_ifndef_fragment'..
+yakogl: glCompileShader(5): 0:4: '#if' : #if without #endif [fragment stage, 85 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_conditionals.unterminated_ifndef_vertex'..
+yakogl: glCompileShader(3): 0:4: '#if' : #if without #endif [vertex stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_definitions.define_non_identifier_fragment'..
+yakogl: glCompileShader(5): 0:2: '123' : #define requires a macro name [fragment stage, 88 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_definitions.define_non_identifier_vertex'..
+yakogl: glCompileShader(3): 0:2: '123' : #define requires a macro name [vertex stage, 87 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_definitions.undef_non_identifier_1_fragment'..
+yakogl: glCompileShader(5): 0:2: '123' : #undef requires a macro name [fragment stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_definitions.undef_non_identifier_1_vertex'..
+yakogl: glCompileShader(3): 0:2: '123' : #undef requires a macro name [vertex stage, 82 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_definitions.undef_non_identifier_2_fragment'..
+yakogl: glCompileShader(5): 0:2: '.' : extra tokens at the end of the directive [fragment stage, 87 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_definitions.undef_non_identifier_2_vertex'..
+yakogl: glCompileShader(3): 0:2: '.' : extra tokens at the end of the directive [vertex stage, 86 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_binary_expr_fragment'..
+yakogl: glCompileShader(5): 0:4: '' : a preprocessor expression is missing [fragment stage, 80 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_binary_expr_vertex'..
+yakogl: glCompileShader(3): 0:4: '' : a preprocessor expression is missing [vertex stage, 79 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_expr_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '4' : extra tokens at the end of the directive [fragment stage, 79 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_expr_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '4' : extra tokens at the end of the directive [vertex stage, 78 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_expr_2_fragment'..
+yakogl: glCompileShader(5): 0:4: '*' : invalid token in a preprocessor expression [fragment stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_expr_2_vertex'..
+yakogl: glCompileShader(3): 0:4: '*' : invalid token in a preprocessor expression [vertex stage, 82 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_expr_3_fragment'..
+yakogl: glCompileShader(5): 0:4: '(' : extra tokens at the end of the directive [fragment stage, 82 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_expr_3_vertex'..
+yakogl: glCompileShader(3): 0:4: '(' : extra tokens at the end of the directive [vertex stage, 81 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_unary_expr_fragment'..
+yakogl: glCompileShader(5): 0:4: '' : a preprocessor expression is missing [fragment stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.invalid_unary_expr_vertex'..
+yakogl: glCompileShader(3): 0:4: '' : a preprocessor expression is missing [vertex stage, 76 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.missing_expr_fragment'..
+yakogl: glCompileShader(5): 0:4: 'if' : #if requires an expression [fragment stage, 75 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.missing_expr_vertex'..
+yakogl: glCompileShader(3): 0:4: 'if' : #if requires an expression [vertex stage, 74 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.unclosed_parenthesis_fragment'..
+yakogl: glCompileShader(5): 0:4: '' : expected ')' in a preprocessor expression [fragment stage, 84 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.unclosed_parenthesis_vertex'..
+yakogl: glCompileShader(3): 0:4: '' : expected ')' in a preprocessor expression [vertex stage, 83 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.unopened_parenthesis_fragment'..
+yakogl: glCompileShader(5): 0:4: ')' : extra tokens at the end of the directive [fragment stage, 78 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_expressions.unopened_parenthesis_vertex'..
+yakogl: glCompileShader(3): 0:4: ')' : extra tokens at the end of the directive [vertex stage, 77 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.argument_list_1_fragment'..
+yakogl: glCompileShader(5): 0:2: 'FUNC' : missing ')' in the macro parameter list [fragment stage, 112 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.argument_list_1_vertex'..
+yakogl: glCompileShader(3): 0:2: 'FUNC' : missing ')' in the macro parameter list [vertex stage, 111 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.argument_list_2_fragment'..
+yakogl: glCompileShader(5): 0:2: 'FUNC' : missing ')' in the macro parameter list [fragment stage, 114 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.argument_list_2_vertex'..
+yakogl: glCompileShader(3): 0:2: 'FUNC' : missing ')' in the macro parameter list [vertex stage, 113 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.argument_list_3_fragment'..
+yakogl: glCompileShader(5): 0:2: ',' : macro parameter must be an identifier [fragment stage, 113 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.argument_list_3_vertex'..
+yakogl: glCompileShader(3): 0:2: ',' : macro parameter must be an identifier [vertex stage, 112 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_1_fragment'..
+yakogl: glCompileShader(5): 0:0: 'FUNC' : undeclared identifier [fragment stage, 103 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_1_vertex'..
+yakogl: glCompileShader(3): 0:0: 'FUNC' : undeclared identifier [vertex stage, 102 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_2_fragment'..
+yakogl: glCompileShader(5): 0:6: 'FUNC' : wrong number of arguments to a macro [fragment stage, 105 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_2_vertex'..
+yakogl: glCompileShader(3): 0:6: 'FUNC' : wrong number of arguments to a macro [vertex stage, 104 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_3_fragment'..
+yakogl: glCompileShader(5): 0:6: 'FUNC' : missing ')' in a macro invocation [fragment stage, 106 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_3_vertex'..
+yakogl: glCompileShader(3): 0:6: 'FUNC' : missing ')' in a macro invocation [vertex stage, 105 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_4_fragment'..
+yakogl: glCompileShader(5): 0:6: ')' : expected ';' [fragment stage, 104 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_4_vertex'..
+yakogl: glCompileShader(3): 0:6: ')' : expected ';' [vertex stage, 103 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_5_fragment'..
+yakogl: glCompileShader(5): 0:6: 'FUNC' : wrong number of arguments to a macro [fragment stage, 108 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_5_vertex'..
+yakogl: glCompileShader(3): 0:6: 'FUNC' : wrong number of arguments to a macro [vertex stage, 107 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_6_fragment'..
+yakogl: glCompileShader(5): 0:6: ';' : expected ')' in a function call [fragment stage, 111 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_6_vertex'..
+yakogl: glCompileShader(3): 0:6: ';' : expected ')' in a function call [vertex stage, 110 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_7_fragment'..
+yakogl: glCompileShader(5): 0:6: ')' : expected an expression [fragment stage, 109 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_7_vertex'..
+yakogl: glCompileShader(3): 0:6: ')' : expected an expression [vertex stage, 108 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_8_fragment'..
+yakogl: glCompileShader(5): 0:6: 'FUNC' : wrong number of arguments to a macro [fragment stage, 118 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.arguments_8_vertex'..
+yakogl: glCompileShader(3): 0:6: 'FUNC' : wrong number of arguments to a macro [vertex stage, 117 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_1_fragment'..
+yakogl: glCompileShader(5): 0:2: 'FUNC' : missing ')' in the macro parameter list [fragment stage, 97 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_1_vertex'..
+yakogl: glCompileShader(3): 0:2: 'FUNC' : missing ')' in the macro parameter list [vertex stage, 96 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_2_fragment'..
+yakogl: glCompileShader(5): 0:2: 'FUNC' : missing ')' in the macro parameter list [fragment stage, 103 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_2_vertex'..
+yakogl: glCompileShader(3): 0:2: 'FUNC' : missing ')' in the macro parameter list [vertex stage, 102 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_3_fragment'..
+yakogl: glCompileShader(5): 0:2: 'FUNC' : missing ')' in the macro parameter list [fragment stage, 107 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_3_vertex'..
+yakogl: glCompileShader(3): 0:2: 'FUNC' : missing ')' in the macro parameter list [vertex stage, 106 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_4_fragment'..
+yakogl: glCompileShader(5): 0:2: 'FUNC' : missing ')' in the macro parameter list [fragment stage, 40 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.no_closing_parenthesis_4_vertex'..
+yakogl: glCompileShader(3): 0:2: 'FUNC' : missing ')' in the macro parameter list [vertex stage, 40 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.unique_param_name_fragment'..
+yakogl: glCompileShader(5): 0:2: 'a' : duplicate macro parameter [fragment stage, 112 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_function_definitions.unique_param_name_vertex'..
+yakogl: glCompileShader(3): 0:2: 'a' : duplicate macro parameter [vertex stage, 111 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.defined_define_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.defined_define_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_1_fragment'..
+yakogl: glCompileShader(5): 0:6: 'if' : expected an identifier after 'defined' [fragment stage, 105 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_1_vertex'..
+yakogl: glCompileShader(3): 0:6: 'if' : expected an identifier after 'defined' [vertex stage, 104 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_2_fragment'..
+yakogl: glCompileShader(5): 0:6: ')' : expected an identifier after 'defined(' [fragment stage, 107 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_2_vertex'..
+yakogl: glCompileShader(3): 0:6: ')' : expected an identifier after 'defined(' [vertex stage, 106 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_3_fragment'..
+yakogl: glCompileShader(5): 0:6: 'if' : expected an identifier after 'defined(' [fragment stage, 106 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_3_vertex'..
+yakogl: glCompileShader(3): 0:6: 'if' : expected an identifier after 'defined(' [vertex stage, 105 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_4_fragment'..
+yakogl: glCompileShader(5): 0:6: ')' : expected an identifier after 'defined' [fragment stage, 106 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_4_vertex'..
+yakogl: glCompileShader(3): 0:6: ')' : expected an identifier after 'defined' [vertex stage, 105 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_5_fragment'..
+yakogl: glCompileShader(5): 0:6: '(' : expected an identifier after 'defined(' [fragment stage, 121 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_identifier_5_vertex'..
+yakogl: glCompileShader(3): 0:6: '(' : expected an identifier after 'defined(' [vertex stage, 120 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_rparen_fragment'..
+yakogl: glCompileShader(5): 0:6: 'if' : expected ')' after 'defined(' [fragment stage, 109 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_defined_expected_rparen_vertex'..
+yakogl: glCompileShader(3): 0:6: 'if' : expected ')' after 'defined(' [vertex stage, 108 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_op_1_fragment'..
+yakogl: glCompileShader(5): 0:4: '++' : invalid token in a preprocessor expression [fragment stage, 151 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_op_1_vertex'..
+yakogl: glCompileShader(3): 0:4: '++' : invalid token in a preprocessor expression [vertex stage, 149 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_op_2_fragment'..
+yakogl: glCompileShader(5): 0:4: '--' : invalid token in a preprocessor expression [fragment stage, 151 bytes]
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.preprocessor.invalid_ops.invalid_op_2_vertex'..
+yakogl: glCompileShader(3): 0:4: '--' : invalid token in a preprocessor expression [vertex stage, 149 bytes]
+  Pass (Pass)
+yakogl-mali-exit: draws=199 refused=14 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        356/383 (93.0%)
+  Failed:        27/383 (7.0%)
+  Not supported: 0/383 (0.0%)
+  Warnings:      0/383 (0.0%)
+  Waived:        0/383 (0.0%)

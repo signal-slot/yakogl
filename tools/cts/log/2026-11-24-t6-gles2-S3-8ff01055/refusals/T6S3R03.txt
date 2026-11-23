@@ -1,0 +1,366 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S3R03.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_dynamic_loop_read_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 4 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 32 of 1536
+yakogl: mali shaderc table 'IR values': high-water 23 of 2048
+yakogl: mali shaderc table 'locals': high-water 3 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 253 b
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_dynamic_loop_read_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 25 of 2048
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_dynamic_read_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 29 of 2048
+yakogl: mali shaderc table 'uniform rows': high-water 8 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 9 of 255
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+yakogl: yakogl: program 2 has no uniform 'ub4_false'
+yakogl: yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui_four'
+yakogl: yakogl: program 2 has no uniform 'ui_five'
+yakogl: yakogl: program 2 has no uniform 'ui_six'
+yakogl: yakogl: program 2 has no uniform 'ui_seven'
+yakogl: yakogl: program 2 has no uniform 'ui_eight'
+yakogl: yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: yakogl: program 2 has no uniform 'ui2_one'
+yakogl: yakogl: program 2 has no uniform 'ui2_two'
+yakogl: yakogl: program 2 has no uniform 'ui2_four'
+yakogl: yakogl: program 2 has no uniform 'ui2_five'
+yakogl: yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: yakogl: program 2 has no uniform 'ui3_one'
+yakogl: yakogl: program 2 has no uniform 'ui3_two'
+yakogl: yakogl: program 2 has no uniform 'ui3_four'
+yakogl: yakogl: program 2 has no uniform 'ui3_five'
+yakogl: yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: yakogl: program 2 has no uniform 'ui4_one'
+yakogl: yakogl: program 2 has no uniform 'ui4_two'
+yakogl: yakogl: program 2 has no uniform 'ui4_four'
+yakogl: yakogl: program 2 has no uniform 'ui4_five'
+yakogl: yakogl: program 2 has no uniform 'uf_zero'
+yakogl: yakogl: program 2 has no uniform 'uf_one'
+yakogl: yakogl: program 2 has no uniform 'uf_two'
+yakogl: yakogl: program 2 has no uniform 'uf_three'
+yakogl: yakogl: program 2 has no uniform 'uf_four'
+yakogl: yakogl: program 2 has no uniform 'uf_five'
+yakogl: yakogl: program 2 has no uniform 'uf_six'
+yakogl: yakogl: program 2 has no uniform 'uf_seven'
+yakogl: yakogl: program 2 has no uniform 'uf_eight'
+yakogl: yakogl: program 2 has no uniform 'uf_half'
+yakogl: yakogl: program 2 has no uniform 'uf_third'
+yakogl: yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: yakogl: program 2 has no uniform 'uv2_half'
+yakogl: yakogl: program 2 has no uniform 'uv2_one'
+yakogl: yakogl: program 2 has no uniform 'uv2_two'
+yakogl: yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: yakogl: program 2 has no uniform 'uv3_half'
+yakogl: yakogl: program 2 has no uniform 'uv3_one'
+yakogl: yakogl: program 2 has no uniform 'uv3_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: yakogl: program 2 has no uniform 'uv4_half'
+yakogl: yakogl: program 2 has no uniform 'uv4_one'
+yakogl: yakogl: program 2 has no uniform 'uv4_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_black'
+yakogl: yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: yakogl: program 2 has no uniform 'uv4_white'
+yakogl: mali arena 'desc': high-water 1136 of 1048576 bytes
+yakogl: mali arena 'data': high-water 592 of 262144 bytes
+yakogl: mali arena 'code': high-water 512 of 131072 bytes
+yakogl: mali arena 'spds': high-water 64 of 32768 bytes
+yakogl: mali arena 'cs': high-water 424 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_dynamic_read_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 31 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 37 of 1536
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_static_loop_read_fragment'..
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+yakogl: yakogl: program 2 has no uniform 'ub4_false'
+yakogl: yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui_zero'
+yakogl: yakogl: program 2 has no uniform 'ui_one'
+yakogl: yakogl: program 2 has no uniform 'ui_two'
+yakogl: yakogl: program 2 has no uniform 'ui_three'
+yakogl: yakogl: program 2 has no uniform 'ui_four'
+yakogl: yakogl: program 2 has no uniform 'ui_five'
+yakogl: yakogl: program 2 has no uniform 'ui_six'
+yakogl: yakogl: program 2 has no uniform 'ui_seven'
+yakogl: yakogl: program 2 has no uniform 'ui_eight'
+yakogl: yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: yakogl: program 2 has no uniform 'ui2_one'
+yakogl: yakogl: program 2 has no uniform 'ui2_two'
+yakogl: yakogl: program 2 has no uniform 'ui2_four'
+yakogl: yakogl: program 2 has no uniform 'ui2_five'
+yakogl: yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: yakogl: program 2 has no uniform 'ui3_one'
+yakogl: yakogl: program 2 has no uniform 'ui3_two'
+yakogl: yakogl: program 2 has no uniform 'ui3_four'
+yakogl: yakogl: program 2 has no uniform 'ui3_five'
+yakogl: yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: yakogl: program 2 has no uniform 'ui4_one'
+yakogl: yakogl: program 2 has no uniform 'ui4_two'
+yakogl: yakogl: program 2 has no uniform 'ui4_four'
+yakogl: yakogl: program 2 has no uniform 'ui4_five'
+yakogl: yakogl: program 2 has no uniform 'uf_zero'
+yakogl: yakogl: program 2 has no uniform 'uf_one'
+yakogl: yakogl: program 2 has no uniform 'uf_two'
+yakogl: yakogl: program 2 has no uniform 'uf_three'
+yakogl: yakogl: program 2 has no uniform 'uf_four'
+yakogl: yakogl: program 2 has no uniform 'uf_five'
+yakogl: yakogl: program 2 has no uniform 'uf_six'
+yakogl: yakogl: program 2 has no uniform 'uf_seven'
+yakogl: yakogl: program 2 has no uniform 'uf_eight'
+yakogl: yakogl: program 2 has no uniform 'uf_half'
+yakogl: yakogl: program 2 has no uniform 'uf_third'
+yakogl: yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: yakogl: program 2 has no uniform 'uv2_half'
+yakogl: yakogl: program 2 has no uniform 'uv2_one'
+yakogl: yakogl: program 2 has no uniform 'uv2_two'
+yakogl: yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: yakogl: program 2 has no uniform 'uv3_half'
+yakogl: yakogl: program 2 has no uniform 'uv3_one'
+yakogl: yakogl: program 2 has no uniform 'uv3_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: yakogl: program 2 has no uniform 'uv4_half'
+yakogl: yakogl: program 2 has no uniform 'uv4_one'
+yakogl: yakogl: program 2 has no uniform 'uv4_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_black'
+yakogl: yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: yakogl: program 2 has no uniform 'uv4_white'
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_static_loop_read_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 44 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 15 of 128
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+yakogl: yakogl: program 2 has no uniform 'ub4_false'
+yakogl: yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui_zero'
+yakogl: yakogl: program 2 has no uniform 'ui_one'
+yakogl: yakogl: program 2 has no uniform 'ui_two'
+yakogl: yakogl: program 2 has no uniform 'ui_three'
+yakogl: yakogl: program 2 has no uniform 'ui_four'
+yakogl: yakogl: program 2 has no uniform 'ui_five'
+yakogl: yakogl: program 2 has no uniform 'ui_six'
+yakogl: yakogl: program 2 has no uniform 'ui_seven'
+yakogl: yakogl: program 2 has no uniform 'ui_eight'
+yakogl: yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: yakogl: program 2 has no uniform 'ui2_one'
+yakogl: yakogl: program 2 has no uniform 'ui2_two'
+yakogl: yakogl: program 2 has no uniform 'ui2_four'
+yakogl: yakogl: program 2 has no uniform 'ui2_five'
+yakogl: yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: yakogl: program 2 has no uniform 'ui3_one'
+yakogl: yakogl: program 2 has no uniform 'ui3_two'
+yakogl: yakogl: program 2 has no uniform 'ui3_four'
+yakogl: yakogl: program 2 has no uniform 'ui3_five'
+yakogl: yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: yakogl: program 2 has no uniform 'ui4_one'
+yakogl: yakogl: program 2 has no uniform 'ui4_two'
+yakogl: yakogl: program 2 has no uniform 'ui4_four'
+yakogl: yakogl: program 2 has no uniform 'ui4_five'
+yakogl: yakogl: program 2 has no uniform 'uf_zero'
+yakogl: yakogl: program 2 has no uniform 'uf_one'
+yakogl: yakogl: program 2 has no uniform 'uf_two'
+yakogl: yakogl: program 2 has no uniform 'uf_three'
+yakogl: yakogl: program 2 has no uniform 'uf_four'
+yakogl: yakogl: program 2 has no uniform 'uf_five'
+yakogl: yakogl: program 2 has no uniform 'uf_six'
+yakogl: yakogl: program 2 has no uniform 'uf_seven'
+yakogl: yakogl: program 2 has no uniform 'uf_eight'
+yakogl: yakogl: program 2 has no uniform 'uf_half'
+yakogl: yakogl: program 2 has no uniform 'uf_third'
+yakogl: yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: yakogl: program 2 has no uniform 'uv2_half'
+yakogl: yakogl: program 2 has no uniform 'uv2_one'
+yakogl: yakogl: program 2 has no uniform 'uv2_two'
+yakogl: yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: yakogl: program 2 has no uniform 'uv3_half'
+yakogl: yakogl: program 2 has no uniform 'uv3_one'
+yakogl: yakogl: program 2 has no uniform 'uv3_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: yakogl: program 2 has no uniform 'uv4_half'
+yakogl: yakogl: program 2 has no uniform 'uv4_one'
+yakogl: yakogl: program 2 has no uniform 'uv4_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_black'
+yakogl: yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: yakogl: program 2 has no uniform 'uv4_white'
+yakogl: mali arena 'data': high-water 239952 of 262144 bytes
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_static_read_fragment'..
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.float_static_read_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_dynamic_loop_read_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an 
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_dynamic_loop_read_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_dynamic_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_dynamic_read_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_static_loop_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_static_loop_read_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 50 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_static_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec2_static_read_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_dynamic_loop_read_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) [fragment stage, 240 b
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_dynamic_loop_read_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_dynamic_read_fragment'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 15 of 255
+yakogl: mali arena 'desc': high-water 1200 of 1048576 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_dynamic_read_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_static_loop_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_static_loop_read_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 63 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 19 of 128
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_static_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec3_static_read_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_dynamic_loop_read_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an 
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_dynamic_loop_read_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an in
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_dynamic_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_dynamic_read_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+  NotSupported (Shader is not supported)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_static_loop_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_static_loop_read_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 69 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_static_read_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.indexing.uniform_array.vec4_static_read_vertex'..
+  Pass (Pass)
+yakogl-mali-exit: draws=20 refused=12 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        20/32 (62.5%)
+  Failed:        0/32 (0.0%)
+  Not supported: 12/32 (37.5%)
+  Warnings:      0/32 (0.0%)
+  Waived:        0/32 (0.0%)

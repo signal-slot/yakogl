@@ -1,0 +1,1463 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S1R20.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.bool_bvec4_both'..
+yakogl: mali shaderc table 'IR values': high-water 107 of 2048
+yakogl: mali shaderc table 'locals': high-water 5 of 256
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 907 bytes]
+yakogl: mali shaderc table 'IR values': high-water 113 of 2048
+yakogl: mali shaderc table 'locals': high-water 6 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 67 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+yakogl: mali arena 'desc': high-water 288 of 1048576 bytes
+yakogl: mali arena 'cs': high-water 104 of 393216 bytes
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 908 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.float_vec4_both'..
+yakogl: mali shaderc table 'IR values': high-water 202 of 2048
+yakogl: mali shaderc table 'locals': high-water 9 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 133 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 104 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 104 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 32 of 128
+yakogl: mali shaderc table 'uniform rows': high-water 4 of 256
+yakogl: mali shaderc table 'IR values': high-water 208 of 2048
+yakogl: mali shaderc table 'locals': high-water 10 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 177 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1013 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1013 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.float_vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 877 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 875 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.mat4_mat2_both'..
+yakogl: mali shaderc table 'IR values': high-water 1015 of 2048
+yakogl: mali shaderc table 'locals': high-water 121 of 256
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1871 bytes]
+yakogl: mali shaderc table 'IR values': high-water 1021 of 2048
+yakogl: mali shaderc table 'locals': high-water 122 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 720 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.mat4_mat2_fragment'..
+yakogl: mali shaderc table 'NIR instructions': high-water 721 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.mat4_mat2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1866 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.sampler2D_samplerCube_both'..
+yakogl: mali shaderc table 'BIR instructions': high-water 202 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 223 of 1536
+yakogl: mali shaderc table 'immediates': high-water 10 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1304 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1304 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.array_in_struct.sampler2D_samplerCube_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bool_api_float_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 304 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bool_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 303 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bool_api_float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bool_api_int_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 303 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bool_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 303 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bool_api_int_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_float_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 313 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 319 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 318 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_float_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 314 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 312 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 318 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 320 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec2_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 312 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec3_api_float_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 327 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec3_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 325 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec3_api_float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec3_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 318 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 324 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec3_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 325 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec3_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 319 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec4_api_float_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 326 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 332 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec4_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 332 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec4_api_float_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 328 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec4_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 326 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 332 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec4_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 331 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.bvec4_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 327 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.float_both'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 11 of 255
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.float_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 301 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 307 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 307 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 301 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec2_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 315 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 321 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 321 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 314 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec3_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 319 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 325 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 324 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec3_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 318 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 321 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 327 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 330 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 321 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat2_both'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 24 of 255
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat2_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat2_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat3_both'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 48 of 255
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat3_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat3_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat4_both'..
+yakogl: mali shaderc table 'FAU words': high-water 36 of 128
+yakogl: mali shaderc table 'immediates': high-water 17 of 64
+yakogl: mali shaderc table 'fragment pair nodes': high-water 78 of 255
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat4_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.mat4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.sampler2D_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.sampler2D_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.sampler2D_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.samplerCube_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 552 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 552 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.samplerCube_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec2_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec2_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec2_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec3_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec3_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec3_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec4_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec4_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic.vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bool_api_float_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 391 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bool_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bool_api_float_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 392 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bool_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 390 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bool_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bool_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 390 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bvec4_api_float_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 472 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bvec4_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bvec4_api_float_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 475 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bvec4_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 474 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bvec4_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.bvec4_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 473 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.float_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 385 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 386 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 443 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 446 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.mat4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1073 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.mat4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.sampler2D_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 728 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.sampler2D_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 728 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.sampler2D_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 663 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 663 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array.vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bool_api_float_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 391 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bool_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bool_api_float_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 392 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bool_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 390 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bool_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bool_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 390 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bvec4_api_float_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 472 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bvec4_api_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bvec4_api_float_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 475 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bvec4_api_int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 474 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bvec4_api_int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.bvec4_api_int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 473 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.float_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 385 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 386 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 443 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 446 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.mat4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1073 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.mat4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.sampler2D_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 728 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.sampler2D_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 728 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.sampler2D_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 663 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 663 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_array_first_elem_without_brackets.vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 520 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 524 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 522 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 519 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.float_vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 627 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 626 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.float_vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 518 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 522 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 523 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 516 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.mat4_mat2_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1167 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.mat4_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1161 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.mat4_mat2_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.sampler2D_samplerCube_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 704 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 704 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.basic_struct.sampler2D_samplerCube_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_basic.both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1121 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1121 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_basic.fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1117 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_basic.vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1120 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_basic_array.both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1031 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_basic_array.fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_basic_array.vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1031 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_nested_structs_arrays.both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 3326 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_nested_structs_arrays.fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.multiple_nested_structs_arrays.vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 3328 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1123 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1124 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.float_vec4_both'..
+yakogl: mali shaderc table 'uniform rows': high-water 8 of 256
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1243 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1244 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.float_vec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1103 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1102 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.mat4_mat2_both'..
+yakogl: mali shaderc table 'IR values': high-water 1209 of 2048
+yakogl: mali shaderc table 'locals': high-water 141 of 256
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 2205 bytes]
+yakogl: mali shaderc table 'IR values': high-water 1215 of 2048
+yakogl: mali shaderc table 'locals': high-water 142 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 862 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.mat4_mat2_fragment'..
+yakogl: mali shaderc table 'NIR instructions': high-water 863 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.mat4_mat2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 2198 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.sampler2D_samplerCube_both'..
+yakogl: mali shaderc table 'BIR instructions': high-water 225 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 249 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1590 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1590 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.nested_structs_arrays.sampler2D_samplerCube_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 768 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 764 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 764 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 771 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.float_vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 864 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 865 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.float_vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 738 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 734 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 733 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 734 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.mat4_mat2_both'..
+yakogl: mali shaderc table 'BIR instructions': high-water 303 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 303 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 72 of 128
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet) [fragment stage, 1612 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.mat4_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet) [fragment stage, 1607 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.mat4_mat2_vertex'..
+yakogl: mali shaderc table 'BIR instructions': high-water 304 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 304 of 1536
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.sampler2D_samplerCube_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.get_uniform.struct_in_array.sampler2D_samplerCube_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 907 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 908 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.float_vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1013 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1013 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.float_vec4_vertex'..
+yakogl: mali arena 'desc': high-water 1136 of 1048576 bytes
+yakogl: mali arena 'data': high-water 76 of 262144 bytes
+yakogl: mali arena 'code': high-water 896 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 877 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 875 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1871 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.mat4_mat2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1866 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.sampler2D_samplerCube_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1304 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1304 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.array_in_struct.sampler2D_samplerCube_vertex'..
+yakogl:   cube-bind: 0x13f4000 unit 1 kick 208 (draw)
+yakogl:   cube(draw) @0x13f4000 32x32 x6: fmt 0, cpu 0xffffbb504000 - not dumped
+yakogl:   cube-bind: 0x1406000 unit 5 kick 208 (draw)
+yakogl:   cube(draw) @0x1406000 32x32 x6: fmt 0, cpu 0xffffbb4c4000 - not dumped
+yakogl:   cube-bind: 0x1412000 unit 6 kick 208 (draw)
+yakogl:   cube(draw) @0x1412000 32x32 x6: fmt 0, cpu 0xffffb9372000 - not dumped
+yakogl:   cube-bind: 0x141e000 unit 7 kick 208 (draw)
+yakogl:   cube(draw) @0x141e000 32x32 x6: fmt 0, cpu 0xffffb9366000 - not dumped
+yakogl: yakogl: a draw was refused: mali: a vertex shader that reads more than one texture is not built yet (key 0x0); yakogl_draws_refused counts every one
+yakogl: yakogl-mali-refusal: -95 mali: a vertex shader that reads more than one texture is not built yet
+yakogl: yakogl: glDrawElements was not recorded (-95); the frame is missing it
+yakogl: GL error 0x502 in glDrawElements
+  Fail (glDrawElements(GL_TRIANGLES, DE_LENGTH_OF_ARRAY(indices), GL_UNSIGNED_SHORT, &indices[0]): glGetError() returned GL_INVALID_OPERATION at es2fUniformApiTests.cpp:1867)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bool_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 304 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bool_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 303 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bool_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec2_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 313 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 319 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 319 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 314 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec3_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 319 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 325 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 326 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec3_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 319 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 326 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 332 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 332 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 324 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.float_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.float_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 301 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 307 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 307 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 301 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec2_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 315 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 321 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 321 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 314 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec3_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 319 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 325 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 324 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec3_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 318 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 321 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 327 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 330 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 321 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat2_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat2_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat2_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat3_both'..
+yakogl: mali arena 'desc': high-water 1200 of 1048576 bytes
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat3_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat3_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat4_both'..
+yakogl: mali arena 'code': high-water 1152 of 131072 bytes
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat4_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.mat4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.sampler2D_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.sampler2D_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.sampler2D_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.samplerCube_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 552 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 552 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.samplerCube_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec2_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec2_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec2_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec3_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec3_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec3_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec4_both'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec4_fragment'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic.vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.bool_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 390 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.bool_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.bool_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 390 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 472 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 474 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.float_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.float_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.int_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 385 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.int_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.int_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 386 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 443 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 446 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1073 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.mat4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.sampler2D_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 728 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.sampler2D_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 728 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.sampler2D_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product 
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 663 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 663 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_array.vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 520 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 524 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 522 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 519 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.float_vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 627 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 626 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.float_vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 518 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 522 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 523 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 516 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.mat4_mat2_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1167 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.mat4_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1161 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.mat4_mat2_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.sampler2D_samplerCube_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 704 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 704 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.basic_struct.sampler2D_samplerCube_vertex'..
+yakogl:   cube-bind: 0x14d6000 unit 1 kick 297 (draw)
+yakogl:   cube(draw) @0x14d6000 32x32 x6: fmt 0, cpu 0xffffbb504000 - not dumped
+yakogl: yakogl-mali-refusal: -95 mali: a vertex shader that reads more than one texture is not built yet
+yakogl: yakogl: glDrawElements was not recorded (-95); the frame is missing it
+yakogl: GL error 0x502 in glDrawElements
+  Fail (glDrawElements(GL_TRIANGLES, DE_LENGTH_OF_ARRAY(indices), GL_UNSIGNED_SHORT, &indices[0]): glGetError() returned GL_INVALID_OPERATION at es2fUniformApiTests.cpp:1867)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_basic.both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1121 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1121 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_basic.fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1117 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_basic.vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1120 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_basic_array.both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1031 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_basic_array.fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_basic_array.vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 1031 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nested_structs_arrays.both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 3326 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nested_structs_arrays.fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.multiple_nested_structs_arrays.vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 3328 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1123 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 1124 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.float_vec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1243 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1244 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.float_vec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1103 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1102 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.mat4_mat2_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 2205 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.mat4_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.mat4_mat2_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform array is not lowered yet) [vertex stage, 2198 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.sampler2D_samplerCube_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1590 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1590 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.nested_structs_arrays.sampler2D_samplerCube_vertex'..
+yakogl:   cube-bind: 0x14ea000 unit 1 kick 320 (draw)
+yakogl:   cube(draw) @0x14ea000 32x32 x6: fmt 0, cpu 0xffffbb504000 - not dumped
+yakogl:   cube-bind: 0x14fc000 unit 5 kick 320 (draw)
+yakogl:   cube(draw) @0x14fc000 32x32 x6: fmt 0, cpu 0xffffbb4c4000 - not dumped
+yakogl:   cube-bind: 0x150a000 unit 7 kick 320 (draw)
+yakogl:   cube(draw) @0x150a000 32x32 x6: fmt 0, cpu 0xffffb9372000 - not dumped
+yakogl:   cube-bind: 0x1516000 unit 8 kick 320 (draw)
+yakogl:   cube(draw) @0x1516000 32x32 x6: fmt 0, cpu 0xffffb9366000 - not dumped
+yakogl: yakogl-mali-refusal: -95 mali: a vertex shader that reads more than one texture is not built yet
+yakogl: yakogl: glDrawElements was not recorded (-95); the frame is missing it
+yakogl: GL error 0x502 in glDrawElements
+  Fail (glDrawElements(GL_TRIANGLES, DE_LENGTH_OF_ARRAY(indices), GL_UNSIGNED_SHORT, &indices[0]): glGetError() returned GL_INVALID_OPERATION at es2fUniformApiTests.cpp:1867)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.bool_bvec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 768 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 764 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.bool_bvec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 764 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.bool_bvec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [vertex stage, 771 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.float_vec4_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 864 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.float_vec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 865 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.float_vec4_vertex'..
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.int_ivec4_both'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 738 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 734 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.int_ivec4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 733 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.int_ivec4_vertex'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 734 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet) [fragment stage, 1612 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet) [fragment stage, 1607 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.mat4_mat2_vertex'..
+yakogl: mali arena 'desc': high-water 1328 of 1048576 bytes
+yakogl: mali arena 'code': high-water 1920 of 131072 bytes
+  Pass (Passed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.sampler2D_samplerCube_both'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.sampler2D_samplerCube_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1077 bytes]
+  Fail (Compile failed)
+
+Test case 'dEQP-GLES2.functional.uniform_api.value.assigned.by_pointer.render.struct_in_array.sampler2D_samplerCube_vertex'..
+yakogl:   cube-bind: 0x1536000 unit 1 kick 334 (draw)
+yakogl:   cube(draw) @0x1536000 32x32 x6: fmt 0, cpu 0xffffbb504000 - not dumped
+yakogl:   cube-bind: 0x1544000 unit 3 kick 334 (draw)
+yakogl:   cube(draw) @0x1544000 32x32 x6: fmt 0, cpu 0xffffbb4c4000 - not dumped
+yakogl:   cube-bind: 0x1552000 unit 5 kick 334 (draw)
+yakogl:   cube(draw) @0x1552000 32x32 x6: fmt 0, cpu 0xffffb9372000 - not dumped
+yakogl: yakogl-mali-refusal: -95 mali: a vertex shader that reads more than one texture is not built yet
+yakogl: yakogl: glDrawElements was not recorded (-95); the frame is missing it
+yakogl: GL error 0x502 in glDrawElements
+  Fail (glDrawElements(GL_TRIANGLES, DE_LENGTH_OF_ARRAY(indices), GL_UNSIGNED_SHORT, &indices[0]): glGetError() returned GL_INVALID_OPERATION at es2fUniformApiTests.cpp:1867)
+yakogl-mali-exit: draws=30 refused=327 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        68/336 (20.2%)
+  Failed:        268/336 (79.8%)
+  Not supported: 0/336 (0.0%)
+  Warnings:      0/336 (0.0%)
+  Waived:        0/336 (0.0%)
