@@ -4,8 +4,10 @@
 #
 # mp2s_selftest_all_selftest.sh - tools/mp2s_selftest_all.sh against a fake
 # tree (MP2S_SELFTEST_ROOT) holding one passing, one failing and one hanging
-# selftest. Checks the summary, the exit code, the timeout, --list and --only,
-# and that an empty match is a pass.
+# selftest, plus a passing and a failing .py selftest. Checks the summary, the
+# exit code, the timeout, --list and --only, that an empty match is a pass,
+# that .py selftests run under python3, and that every selftest gets a TMPDIR
+# even when the caller has none.
 #
 #   tools/mp2s_selftest_all_selftest.sh
 #
@@ -36,12 +38,21 @@ hasnt() {
 
 fk=$tmp/fake
 mkdir -p "$fk/tools" "$fk/driver/tools/mp2-standalone"
-printf '#!/bin/bash\necho fine\nexit 0\n' >"$fk/tools/mp2s_good_selftest.sh"
+# the passing one doubles as the TMPDIR check: it passes only when the
+# runner gave it a usable TMPDIR
+{
+    echo '#!/bin/bash'
+    echo 'test -n "${TMPDIR:-}" && test -w "$TMPDIR" && test -d "$TMPDIR" || exit 9'
+    echo 'echo fine'
+    echo 'exit 0'
+} >"$fk/tools/mp2s_good_selftest.sh"
 {
     echo '#!/bin/bash'
     for i in $(seq 1 30); do echo "echo line$i"; done
     echo 'exit 3'
 } >"$fk/tools/mp2s_bad_selftest.sh"
+printf 'print("pyfine")\n' >"$fk/tools/mp2s_pygood_selftest.py"
+printf 'import sys\nprint("pyboom")\nsys.exit(4)\n' >"$fk/tools/mp2s_pybad_selftest.py"
 printf '#!/bin/bash\nsleep 60\n' >"$fk/driver/tools/mp2-standalone/selftest.sh"
 # must never run: this runner's own selftest
 printf '#!/bin/bash\necho RECURSED\nexit 1\n' >"$fk/tools/mp2s_selftest_all_selftest.sh"
@@ -53,6 +64,8 @@ check "list exit" $?
 has '^tools/mp2s_good_selftest.sh$' "$o"; check "list good" $?
 has '^driver/tools/mp2-standalone/selftest.sh$' "$o"; check "list standalone" $?
 hasnt mp2s_selftest_all_selftest "$o"; check "list excludes self" $?
+has '^tools/mp2s_pygood_selftest.py$' "$o"; check "list py good" $?
+has '^tools/mp2s_pybad_selftest.py$' "$o"; check "list py bad" $?
 
 # full run with a 2 s timeout
 export MP2S_SELFTEST_TIMEOUT=2
@@ -65,15 +78,27 @@ dt=$((SECONDS - t0))
 has '^ok tools/mp2s_good_selftest.sh ([0-9]*s)$' "$o"; check "ok line" $?
 has '^FAIL tools/mp2s_bad_selftest.sh (exit 3)$' "$o"; check "bad line" $?
 has '^FAIL driver/tools/mp2-standalone/selftest.sh (exit 124)$' "$o"; check "hang line" $?
+has '^ok tools/mp2s_pygood_selftest.py ([0-9]*s)$' "$o"; check "py ok line" $?
+has '^FAIL tools/mp2s_pybad_selftest.py (exit 4)$' "$o"; check "py bad line" $?
+has 'pyboom$' "$o"; check "py bad tail" $?
 has 'line30$' "$o"; check "tail has line30" $?
 hasnt 'line10$' "$o"; check "tail is 20 lines only" $?
-has '^mp2s selftests: 1 ok, 2 failed$' "$o"; check "summary" $?
+has '^mp2s selftests: 2 ok, 3 failed$' "$o"; check "summary" $?
 hasnt RECURSED "$o"; check "no recursion" $?
 
+# every selftest gets a TMPDIR, even when the caller has none: the passing
+# one fails (exit 9) if it does not see a writable directory there
+o=$(env -u TMPDIR "$run" --only mp2s_good_ 2>&1)
+check "only, caller without TMPDIR" $?
+has '^ok tools/mp2s_good_selftest.sh ([0-9]*s)$' "$o"; check "TMPDIR supplied line" $?
+
 # --only
-o=$("$run" --only good 2>&1)
+o=$("$run" --only 'mp2s_good_' 2>&1)
 check "only exit 0" $?
 has '^mp2s selftests: 1 ok, 0 failed$' "$o"; check "only summary" $?
+o=$("$run" --only pygood 2>&1)
+[ $? -eq 0 ]; check "only py exit 0" $?
+has '^mp2s selftests: 1 ok, 0 failed$' "$o"; check "only py summary" $?
 o=$("$run" --list --only 'standalone/' 2>&1)
 [ "$o" = driver/tools/mp2-standalone/selftest.sh ]; check "only list" $?
 o=$("$run" --only nomatch 2>&1)
