@@ -536,8 +536,12 @@ def stage_measure(out, jobs):
 
 def first_difference(detail):
     """The kind of a DIFFER detail's first difference: its region and what
-    differs, numbers as N (`fs.fragment: N words ours, N reference`)."""
-    first = detail.split("; ")[0]
+    differs, numbers as N (`fs.fragment: N words ours, N reference`). A
+    region whose words differ comes before a fact that differs (the stages
+    share one FAU table, so a varying program's constant shows first as the
+    position program's FAU word)."""
+    parts = detail.split("; ")
+    first = next((p for p in parts if re.match(r"\S+: \d+ words ours", p)), parts[0])
     first = re.sub(r" ours \[.*", " ours [...]", first)
     return re.sub(r"0x[0-9a-f]+|\d+", "N", first)[:100]
 
