@@ -772,21 +772,26 @@ Mustpass list: 42,810 cases. Images report ES 3.0 (`REPORT_ES2` off).
 `usamp`, 202 `blitconv`, 203 `tfcap`, 204 `srgb` and 205 `mappbo` all pass, 0
 resets.
 
-**Pi 4, first nine images** on `925dbca9` (rerun of the integration tip, tryboot, console
-through the UART bridge in `$BOARD_UART`; `tools/cts/pi4-gles3-tree.txt`, 91 images; recipe
-`docs/es3/board-recipe-pi4.md`; commit `96810ab2`): 9 of 91 images (A1, B1, C1, D1,
-FB1, FB2, FB3, FB4, FO1), 4,917 cases, 3,943 pass / 643 fail / 331
-NotSupported / 0 QualityWarning / 0 without a result, 0 GPU recoveries; `buffer` 695,
-`clipping` 602 and `fragment_ops` 677 pass in full. Rows 9-90, the ES 2.0 regression
-rows and the ES 3.0 gl_test cases were not run on this commit. Every case that is not
-Pass: `docs/es3/pi4-gles3-fails.tsv` (974 rows: `fbo.render` 305, `fbo.color`
-206, `fbo.blit` 194, `fbo.msaa` 66, `draw_buffers_indexed` 76 NotSupported,
-`fbo.completeness` 45, `fbo.invalidate` 38, `attribute_location.mixed_max_attributes`
-20, `fbo.depth` 10, `implementation_limits` 11). Against the earlier seven-image
-run (`cd738b1a`, replaced): `attribute_location` 48 -> 20, `draw.random` 14 -> 0,
-`fbo.blit` 308 -> 48 Fail, `fbo.color` 215 -> 173 Fail, `fbo.completeness` 134 -> 38.
-gl_test on the Pi 4 (last run on `cd738b1a`, not repeated): 202, 203 and 205 pass;
-196 `occl` (all results 0) and 204 `srgb` (render half refused) fail.
+**Pi 4, whole tree** on `b1b5b845` (`b1b5b8456ec69247c64d1bd07e42461266dc5136`; origin/main, tryboot, console
+through the UART bridge in `$BOARD_UART`; `tools/cts/pi4-gles3-tree.txt`, 114 rows: the 91
+images, re-split where dEQP aborted or overran; recipe `docs/es3/board-recipe-pi4.md`),
+2026-11-23: 114 of 114 images run, 42,810 mustpass cases: 35,922 Pass / 2,683 Fail /
+2,197 NotSupported / 29 other (QualityWarning, ResourceError) / 1,979 without a result
+(the case never began), 0 GPU recoveries, 0 hung jobs, 0 resets; the 114 consoles took
+2,094 s of dEQP time in all (longest T04 65 s, FO6 58 s, S12 55 s). Not final: nine
+images stop early because dEQP aborts on a refused draw (S03a, S07, T14a, T17a, TF1a,
+TF1b, TF2a, TF2b, TF2c: the V3D tile-memory refusal, the transform-feedback refusal and
+texture refusals); their 1,979 cases never began and one-case images that isolate them
+are still to run. Records:
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-{rows00-15,rows16-30,rows31-45,rows46-60,rows61-75,rows76-90,s32c,aborts}/`
+(S32c re-split into S32c1-S32c4 in `-s32c`; the S32c console of rows46-60 is superseded).
+Every case that is not Pass: `docs/es3/pi4-gles3-fails.tsv` (6,888 rows; by family:
+`texture.wrap` 1,368 (1,296 NotSupported), `shaders.builtin_functions` 1,147 (never began),
+`texture.specification` 468, `texture.shadow` 432, `transform_feedback` 759 (never began),
+`texture.filtering` 311, `fbo.render` 305, `shaders.texture_functions` 298,
+`texture.format` 298, `texture.compressed` 266 NotSupported). Not run on this commit: the
+ES 2.0 regression rows and the ES 3.0 gl_test cases. Remaining: the one-case images for the
+aborted cases, and a rerun of the images that plan #184's V3D work changes.
 
 **Host, ES 3.0 back-end capability (HOST-ONLY, no GPU result)**: the GC7000UL
 samples eight more storage classes in the library (`541975a2`; descriptor
