@@ -777,9 +777,14 @@ pub struct Nir<'s> {
     numbering_walk: bool,
     /// The walk made such a fold ([`vs_fmul`]).
     late_fold: bool,
-    /// The program's arithmetic is exact (an invariant output's,
-    /// [`build`]): no late fusion of the shader's own nodes ([`fuse`]).
-    exact: bool,
+    /// The nodes whose arithmetic is exact, one flag per node id: those an
+    /// invariant output's value reads ([`Nir::mark_exact`], [`build`]); no
+    /// late fusion of them ([`fuse`]).
+    exact: &'s mut [bool],
+    /// The IR value being built is one an invariant output reads
+    /// ([`invariant_values`]): the inexact rules of [`Nir::alu`] are not
+    /// applied to it.
+    exact_build: bool,
     /// The attribute locations Mesa numbers, one bit each
     /// ([`Nir::attribute_record`]); set by [`build`].
     pub counted: u64,
@@ -1284,7 +1289,8 @@ impl<'s> Nir<'s> {
             uniform_load: scratch.alloc_filled(MAX_NODES, u16::MAX).map_err(oom)?,
             numbering_walk: false,
             late_fold: false,
-            exact: false,
+            exact: scratch.alloc_filled(MAX_NODES, false).map_err(oom)?,
+            exact_build: false,
             counted: 0,
             output_inputs: 0,
             lane_inputs: [0; 4 * MAX_VARYINGS],
@@ -2025,6 +2031,43 @@ impl<'s> Nir<'s> {
         self.push_node(NirNode { kind, src, bits, width: 1 })
     }
 
+    /// Marks exact every node that the values `roots` read, through every
+    /// source: glsl_to_nir makes an invariant output's assignment exact
+    /// (with `propagate_invariance`, every temporary it reads), and
+    /// `nir_opt_cse` keeps `exact` on the one instruction left of two equal
+    /// ones (nir_instr_set.c: `exact` is or-ed in), so a term an invariant
+    /// output shares with another output is exact in both
+    /// (deqp_misc2_invariant_cse).
+    pub(super) fn mark_exact(&mut self, roots: &[Val]) {
+        let node = |v: Val| match v {
+            Val::Lane(n, _) | Val::Pair(n, _) => Some(n as usize),
+            _ => None,
+        };
+        for &v in roots {
+            if let Some(n) = node(v).filter(|&n| n < self.n) {
+                self.exact[n] = true;
+            }
+        }
+        /* a fixpoint: a node rewritten in place may read a later one */
+        loop {
+            let mut changed = false;
+            for x in (0..self.n).rev() {
+                if !self.exact[x] {
+                    continue;
+                }
+                for s in self.nodes[x].src {
+                    if let Some(n) = node(s).filter(|&n| n < self.n && !self.exact[n]) {
+                        self.exact[n] = true;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+    }
+
     /// Node `nd`, appended to the program order.
     pub(super) fn push_node(&mut self, nd: NirNode) -> Result<u16, MaliError> {
         if self.n >= MAX_NODES {
@@ -2298,6 +2341,15 @@ impl<'s> Nir<'s> {
              * `x2 = x1 + x0` is `abs(x0)` (gm2_locals_noise,
              * docs/notes/mali-local-arrays.md section 7) */
             Alu::Fadd if bits == 32 => {
+                /* `fadd(a, fneg(a))` is 0.0 (nir_opt_algebraic.py's inexact
+                 * `~fadd(a, fneg(a))`; the eager CSE here made the two
+                 * products of `a * b - a * b` one node,
+                 * deqp_misc2_invariant_cse's `v_unrelated`) */
+                let neg_of = |s: &Self, n: Val, x: Val| matches!(n, Val::Lane(id, 0) if s.is_alu(n, Alu::Fneg) && s.nodes[id as usize].src[0] == x);
+                if !self.exact_build && (neg_of(self, a, b) || neg_of(self, b, a)) {
+                    self.note_user(Prod::Identity);
+                    return Ok(Val::Const(F32_ZERO));
+                }
                 if let Some(r) = self.cancelled_sum(a, b).or_else(|| self.cancelled_sum(b, a)) {
                     self.note_user(Prod::Identity);
                     return Ok(r);
@@ -4346,6 +4398,46 @@ fn vs_kept_end(vs: &mut Nir<'_>, s: &KeptLoop, locals: &mut [[Val; 4]; MAX_LOCAL
     Ok(())
 }
 
+/// The IR values an invariant output reads, one flag per value: glsl's
+/// `propagate_invariance` makes every variable an invariant output's
+/// assignment reads invariant too, and glsl_to_nir makes the assignments
+/// to them exact. A local read is every store to it. The pragma's
+/// outputs are refused before this matters ([`build`]).
+fn invariant_values<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<&'s mut [bool], MaliError> {
+    let marks = scratch.alloc_filled(m.instrs.len(), false).map_err(|_| MaliError::OutOfScratch)?;
+    for (i, op) in m.instrs.iter().enumerate() {
+        if let IrOp::StoreOutput { slot, .. } = op {
+            marks[i] = m.outputs.iter().any(|o| o.is_invariant() && o.slot() == *slot);
+        }
+    }
+    loop {
+        let mut changed = false;
+        for i in (0..m.instrs.len()).rev() {
+            if !marks[i] {
+                continue;
+            }
+            let op = &m.instrs[i];
+            let mut mark = |v: ValueId| {
+                if let Some(x) = marks.get_mut(v.0 as usize).filter(|x| !**x) {
+                    *x = true;
+                    changed = true;
+                }
+            };
+            op.for_each_src(|s| mark(s.val));
+            if let IrOp::LoadLocal { local, .. } = *op {
+                for (j, o) in m.instrs.iter().enumerate() {
+                    if matches!(*o, IrOp::StoreLocal { local: l, .. } if l == local) {
+                        mark(ValueId(j as u32));
+                    }
+                }
+            }
+        }
+        if !changed {
+            return Ok(marks);
+        }
+    }
+}
+
 /// The vertex walk of [`build`]; `numbering` models Mesa's IR where it
 /// numbers the attribute locations ([`Nir::numbering_walk`]).
 fn walk<'s>(
@@ -4391,12 +4483,16 @@ fn walk<'s>(
     let mut lp = VsLoop::None;
     let mut kept_loop: Option<KeptLoop> = None;
     let steps = vs_steps(m, scratch)?;
+    let exact_values = invariant_values(m, scratch)?;
     let mut k = 0;
     while k < steps.len() {
         let step = steps[k];
         k += 1;
         let id = match step {
-            Step::Instr(id) => id,
+            Step::Instr(id) => {
+                vs.exact_build = exact_values.get(id.0 as usize).copied().unwrap_or(false);
+                id
+            }
             Step::Refuse(e) => return Err(e),
             /* a counted loop (its head test folds on the counter's
              * constants) is unrolled, pass after pass, as `simple_unroll`
@@ -5382,16 +5478,17 @@ fn walk<'s>(
      * is built exact, with no late fusion ([`fuse`]): an exact `fmul`
      * stays `FMA.f32 a, b, -0` and its `fadd` a separate `FADD.f32`, the
      * viewport transform still fused, as made
-     * (deqp_misc2_invariant_posonly). An invariant output beside a
-     * computed non-invariant one (`nir_opt_cse` carries `exact` into a
-     * shared term, deqp_misc2_invariant_cse) stays refused, and so does
-     * the pragma's */
+     * (deqp_misc2_invariant_posonly). Exactness is per value
+     * ([`Nir::mark_exact`], before [`fuse`]): an invariant output beside a
+     * computed non-invariant one keeps exact the terms they share
+     * (`nir_opt_cse` carries `exact` into the one left,
+     * deqp_misc2_invariant_cse), the rest of the other output fused. The
+     * pragma's stays refused */
     let exact = m.outputs.iter().any(|o| o.is_invariant()) && !output_copies(m, true);
     let pragma = m.outputs.iter().any(|o| o.invariant == crate::shaderc::online::ir::Invariance::Pragma);
-    if exact && (pragma || !output_copies(m, false)) {
+    if exact && pragma {
         return Err(MaliError::Invariant);
     }
-    vs.exact = exact;
     /* the locations the output lanes read, whichever the fragment shader
      * reads ([`build`]) */
     if numbering {
@@ -5640,6 +5737,7 @@ fn walk<'s>(
     }
     /* the viewport transform, before the position's store */
     vs.user = false;
+    vs.exact_build = false;
     vs.user_end = vs.n;
     let scale = vs.load(Kind::Sysval(Sysval::ViewportScale))?;
     let offset = vs.load(Kind::Sysval(Sysval::ViewportOffset))?;
@@ -5755,6 +5853,28 @@ fn walk<'s>(
                 store(&mut vs, 1, lea, word, word.is_multiple_of(4), lanes[c])?;
             }
         }
+    }
+    /* the values of the invariant outputs, exact ([`Nir::mark_exact`]) */
+    if exact {
+        let mut roots = [Val::Undef; 4 * MAX_VARYINGS + 5];
+        let mut nroots = 0;
+        let mut root = |v: Val| {
+            if let Some(r) = roots.get_mut(nroots) {
+                *r = v;
+                nroots += 1;
+            }
+        };
+        for o in m.outputs.iter().filter(|o| o.is_invariant()) {
+            match o.kind {
+                IoKind::Position => p.iter().for_each(|&v| root(v)),
+                IoKind::PointSize => point_size.iter().for_each(|&v| root(v)),
+                IoKind::Varying => {
+                    varyings.get(o.location as usize).copied().flatten().iter().flatten().for_each(|&v| root(v))
+                }
+                _ => {}
+            }
+        }
+        vs.mark_exact(&roots[..nroots]);
     }
     fuse(&mut vs);
     late_rules(&mut vs);
@@ -5956,7 +6076,7 @@ pub(super) fn fuse(vs: &mut Nir<'_>) {
         let x = vs.order[k] as usize;
         /* an exact `fadd` is not fused; the viewport transform, made after
          * the shader's own nodes, is not exact ([`Nir::exact`]) */
-        if vs.nodes[x].kind != Kind::Alu(Alu::Fadd) || (vs.exact && x < vs.user_end) {
+        if vs.nodes[x].kind != Kind::Alu(Alu::Fadd) || (vs.exact[x] && x < vs.user_end) {
             continue;
         }
         /* the rules in their list order (nir_opt_algebraic.py:3816-3820),
