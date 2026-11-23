@@ -14088,11 +14088,14 @@ pub fn select_highp(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout, scratch: 
                  * of `lower_alu_instr` resizes a `b2i32`): the 32-bit `MUX`
                  * reads the half replicated into a word (`bi_lower_swizzle`'s
                  * `MKVEC.v2i16 m.h0, m.h0`, which opt.rs makes `IADD.v2u16
-                 * r0, r0^.h00, 0x0`; deqp_intval_reslib_mixed_fs) */
+                 * r0, r0^.h00, 0x0`; deqp_intval_reslib_mixed_fs). The half
+                 * is the lane's own: lane y of a pair of masks is its high
+                 * half (deqp_audit_d1_conv_bvec2_int_to_ivec3_fs: `IADD.v2u16
+                 * r2, r0.h11, 0x0`) */
                 if op == Alu::B2i && nd.bits == 32 {
                     if let Val::Lane(c, _) = nd.src[0] {
                         if f.nir.nodes[c as usize].bits == 16 {
-                            let h = s[0].swz(Swz::H00);
+                            let h = if s[0].swz == Swz::H11 { s[0] } else { s[0].swz(Swz::H00) };
                             s[0] = Src::ssa(row(p, &mut rows, Row { op: Alu::Vec2, bits: 16, width: 2 }, &[h, h])?);
                         }
                     }
