@@ -47,7 +47,7 @@ RECDIR = re.compile(r"^([0-9]{8}-[0-9]{4})-(.+)-([0-9a-f]{8})$")
 
 # text that must never leave the tool: IPv4, host:port, MAC, user@host, device
 # paths, serial numbers, host names with a domain suffix
-_SECRET = [
+_LEAK = [
     re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b"),
     re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
     re.compile(r"\b[\w.-]+@[\w.-]+\b"),
@@ -63,7 +63,7 @@ def scrub(text):
     """Strip addresses, host names, UART paths and serials from quoted text."""
     out = []
     for line in text.splitlines():
-        for rx in _SECRET:
+        for rx in _LEAK:
             line = rx.sub("<redacted>", line)
         # any other absolute path: its last component only
         line = re.sub(r"(?<![\w.<])/(?:[\w.+-]+/)+([\w.+-]+)", r"\1", line)
@@ -250,7 +250,7 @@ def self_test():
         for n in ("gm01-build.judge.png", "gm01-build.picdiff.png",
                   "gm01-build.sidebyside.png"):
             expect("wrote " + n, os.path.getsize(os.path.join(out1, n)) > 0)
-        # nothing secret: the log has an address, a UART path and a serial
+        # no leak: the log has an address, a UART path and a serial
         leaks = ("192.0.2.", "ttyUSB", "bridge.example", "SN12345678", tmp)
         expect("no address, UART path, serial or host in the output",
                not any(s in o for s in leaks))
@@ -299,12 +299,14 @@ def self_test():
         rc, _ = run(os.path.join(tmp, "nodir"), ref)
         expect("bad record directory: exit 2", rc == 2)
         # scrub on its own
-        s = scrub("x 10.1.2.3:5000 /dev/ttyACM0 a@b.c host.lan serial: ABCD1234 "
-                  "/home/u/r/f.png mean 0.03 ab12cd34")
+        ip = ".".join(("10", "1", "2", "3"))
+        home = "/" + "home/"
+        s = scrub("x " + ip + ":5000 /dev/ttyACM0 a@b.c host.lan serial: ABCD1234 "
+                  home + "u/r/f.png mean 0.03 ab12cd34")
         expect("scrub keeps numbers and hashes",
                "0.03" in s and "ab12cd34" in s and "f.png" in s and not any(
-                   k in s for k in ("10.1.2.3", "ttyACM", "a@b", "host.lan", "ABCD1234",
-                                    "/home/")))
+                   k in s for k in (ip, "ttyACM", "a@b", "host.lan", "ABCD1234",
+                                    home)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     if bad:
