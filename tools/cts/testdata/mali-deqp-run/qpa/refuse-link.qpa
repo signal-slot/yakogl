@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# One case whose program the library refuses at the link: both shaders
+# compile, the program's info log holds the refusal in its form (issue
+# #11309: its words have no "refused"), with a host the slice must not keep.
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseResult Version="0.3.4" CasePath="@CASE@" CaseType="SelfValidate">
+ <ShaderProgram LinkStatus="Fail">
+  <InfoLog>yakogl-refusal: online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet (&apos;a&apos;) on board.invalid</InfoLog>
+  <VertexShader CompileStatus="OK">
+   <ShaderSource>varying vec4 g; varying vec4 a; void main() { g = vec4(0.0); a = vec4(1.0); gl_Position = vec4(0.0); }</ShaderSource>
+   <InfoLog></InfoLog>
+  </VertexShader>
+  <FragmentShader CompileStatus="OK">
+   <ShaderSource>precision mediump float; varying vec4 g; varying vec4 a; void main() { gl_FragColor = g; gl_FragColor = a; }</ShaderSource>
+   <InfoLog></InfoLog>
+  </FragmentShader>
+ </ShaderProgram>
+ <Result StatusCode="Fail">Failed to compile shader</Result>
+</TestCaseResult>

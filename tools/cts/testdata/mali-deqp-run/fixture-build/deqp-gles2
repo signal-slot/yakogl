@@ -7,7 +7,8 @@
 # FAKE_FIXTURES/qpa/, and does to each case what FAKE_SCENARIO (a
 # "<case><TAB><action>" table) says: pass (the default), fail, refuse (a Fail
 # whose shader info log holds the library's refusal), refuse-section (the
-# same, logged as the <Text> of an "Info Log" section), crash (SIGSEGV inside
+# same, logged as the <Text> of an "Info Log" section), refuse-link (a Fail
+# whose program info log holds the library's link refusal), crash (SIGSEGV inside
 # the case), hang (never returns), jobtimeout (a panthor job-timeout
 # line into the board's kernel log, then pass), lose-ssh (the board goes away
 # inside the case). A line "-<TAB>nolib" stands for the board's own Mesa
@@ -42,6 +43,7 @@ while read -r c; do
     fail) t=fail failed=1 ;;
     refuse) t=refuse failed=1 ;;
     refuse-section) t=refuse-section failed=1 ;;
+    refuse-link) t=refuse-link failed=1 ;;
   esac
   tmpl "$t" "$c" >> "$log"
   echo '#endTestCaseResult' >> "$log"

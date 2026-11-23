@@ -9,6 +9,7 @@
 #![allow(non_snake_case)]
 
 use core::ffi::{c_char, c_void};
+use core::fmt::Write as _;
 
 use super::consts::*;
 use super::context::{self, gl_trace, obj_index, obj_name, GlContext, GlShader, MAX_CONTEXTS, MAX_SHADERS, OBJ_SHADER};
@@ -88,6 +89,31 @@ pub(super) fn release_if_orphaned(c: &mut GlContext, shader: GLuint) {
 pub(super) fn log_text(log: &[u8; INFO_LOG_SIZE]) -> &[u8] {
     let n = log.iter().position(|&b| b == 0).unwrap_or(log.len());
     &log[..n]
+}
+
+/// The start of every info log in which the library refuses a shader or a
+/// program: `yakogl-refusal: <the reason>`. A refusal is legal GLSL the
+/// library cannot build (the back end's -ENOTSUP, its `... is not lowered
+/// yet`), never an error of the shader (-EINVAL, `0:LINE: ...` or `link
+/// error: ...`). Compile, link and the link's vertex shader builds all use
+/// it, so a tool tells a refusal from an error by this start alone
+/// (tools/cts/mali-deqp-run.sh `qpa_refusal`). The Mali's refused draws
+/// print a line of the same shape on the console instead
+/// (`yakogl-mali-refusal: <errno> <reason>`, mali/backend.rs).
+pub(super) const REFUSAL: &str = "yakogl-refusal: ";
+
+/// `log`, the back end's text for its result `rc`, in the refusal form
+/// ([`REFUSAL`]) when `rc` is -ENOTSUP; any other result leaves it as it
+/// is. The text keeps its words after the start (truncated at the end when
+/// the start makes it too long).
+pub(super) fn mark_refusal(log: &mut [u8; INFO_LOG_SIZE], rc: i32) {
+    if rc != -util::ENOTSUP {
+        return;
+    }
+    let text = *log;
+    // SAFETY: the writer stays inside the INFO_LOG_SIZE bytes of `log`.
+    let mut w = unsafe { util::CStrWriter::new(log.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE) };
+    let _ = write!(w, "{REFUSAL}{}", Bytes(log_text(&text)));
 }
 
 /// Hand `src` to the application the way glGet*InfoLog / glGetShaderSource
@@ -344,6 +370,7 @@ pub unsafe extern "C" fn glCompileShader(shader: GLuint) {
     // SAFETY: source is the NUL-terminated copy glShaderSource made; the log
     // buffer is INFO_LOG_SIZE bytes.
     let rc = compile(stage, s.source, &mut s.compiled_shader, log.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE);
+    mark_refusal(log, rc);
     s.compiled = rc == 0;
     s.missing = false;
     // SAFETY: source is the NUL-terminated copy glShaderSource made.
@@ -690,6 +717,30 @@ mod tests {
         assert_eq!(log_text(&log), b"");
         log[..5].copy_from_slice(b"ab\0cd");
         assert_eq!(log_text(&log), b"ab");
+    }
+
+    /// A refusal (-ENOTSUP) starts with the refusal form and keeps the
+    /// back end's words; an error of the shader (-EINVAL) and a success
+    /// keep their log as it is; a long refusal is cut at the end.
+    #[test]
+    fn a_refusal_log_starts_with_the_refusal_form() {
+        let link =
+            "online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('a')";
+        let mut log = [0u8; INFO_LOG_SIZE];
+        log[..link.len()].copy_from_slice(link.as_bytes());
+        let error = log;
+        mark_refusal(&mut log, -util::ENOTSUP);
+        assert_eq!(log_text(&log), format!("yakogl-refusal: {link}").as_bytes());
+        for rc in [-util::EINVAL, 0] {
+            let mut same = error;
+            mark_refusal(&mut same, rc);
+            assert_eq!(log_text(&same), link.as_bytes(), "rc {rc}");
+        }
+        let mut long = [b'x'; INFO_LOG_SIZE];
+        long[INFO_LOG_SIZE - 1] = 0;
+        mark_refusal(&mut long, -util::ENOTSUP);
+        assert!(log_text(&long).starts_with(REFUSAL.as_bytes()));
+        assert_eq!(log_text(&long).len(), INFO_LOG_SIZE - 1);
     }
 
     #[test]

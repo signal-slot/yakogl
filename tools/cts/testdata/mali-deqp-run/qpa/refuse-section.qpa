@@ -10,7 +10,7 @@
  <Section Name="Vertex Shader Info" Description="Vertex Shader Info">
   <KernelSource>void main() { gl_Position = vec4(0.0); }</KernelSource>
   <Section Name="Info Log" Description="Info Log">
-   <Text>online shaderc: the code generator refused this vertex shader: Mali(Valhall: Mesa&apos;s link on board.invalid is not lowered yet)</Text>
+   <Text>yakogl-refusal: online shaderc: the code generator refused this vertex shader: Mali(Valhall: Mesa&apos;s link on board.invalid is not lowered yet)</Text>
 </Section>
   <Text>Compilation result: Failed</Text>
 </Section>

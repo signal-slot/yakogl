@@ -123,7 +123,10 @@ commit message and the RESULTS.md row. Its files:
   for each case whose log holds one: the first shader or program info log in
   which the library refuses, whitespace folded (dEQP logs an info log in two
   forms, `<InfoLog>` and a `Section` named `Info Log`; both are read). The
-  tally takes a case's cause from it.
+  tally takes a case's cause from it. Slices of a library after issue #11309
+  take an info log that starts `yakogl-refusal: `, the one form of every
+  compile and link refusal (`src/gl/shader.rs` `REFUSAL`); earlier slices
+  took one with the word `refused`, which missed the link refusals.
 - `refusals/<label>.txt` (optional): one chunk's stdout and stderr merged, in
   the order the process wrote them: dEQP's `Test case '<case>'..` lines and
   the backend's per-draw lines `yakogl-mali-refusal: <errno> <reason>`

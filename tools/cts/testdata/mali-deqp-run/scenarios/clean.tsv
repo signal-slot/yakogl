@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-# A clean run: one dEQP Fail (its Result text must come out redacted) and two
-# cases the library refuses a shader of (their refusals go to refusals.tsv):
-# one logged in an <InfoLog>, one in the <Text> of an "Info Log" section.
+# A clean run: one dEQP Fail (its Result text must come out redacted), two
+# cases the library refuses a shader of and one it refuses the link of
+# (their refusals go to refusals.tsv): a shader's in an <InfoLog>, one in the
+# <Text> of an "Info Log" section, the program's in its <InfoLog>.
 dEQP-GLES2.functional.flush_finish.wait	fail
 dEQP-GLES2.functional.flush_finish.flush	refuse
 dEQP-GLES2.functional.flush_finish.finish	refuse-section
+dEQP-GLES2.functional.flush_finish.flush_wait	refuse-link

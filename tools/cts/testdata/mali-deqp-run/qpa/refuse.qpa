@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # One case whose fragment shader the library refuses: the vertex shader's
-# info log is empty, the fragment shader's holds the refusal (with an escaped
-# character, a host and an address the slice must not keep), and the
-# program's repeats it as a link error.
+# info log is empty, the fragment shader's holds the refusal in its form,
+# "yakogl-refusal: " first (with an escaped character, a host and an address
+# the slice must not keep), and the program's repeats its words in a link
+# error, which is no refusal.
 <?xml version="1.0" encoding="UTF-8"?>
 <TestCaseResult Version="0.3.4" CasePath="@CASE@" CaseType="SelfValidate">
  <ShaderProgram LinkStatus="false">
@@ -13,7 +14,7 @@
   </VertexShader>
   <FragmentShader CompileStatus="false">
    <ShaderSource>void main() { gl_FragColor = vec4(1 &gt; 0); }</ShaderSource>
-   <InfoLog>online shaderc: the code generator refused this fragment shader: Mali(Valhall: a &gt; b on board.invalid at 198.51.100.7 is not lowered yet)</InfoLog>
+   <InfoLog>yakogl-refusal: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a &gt; b on board.invalid at 198.51.100.7 is not lowered yet)</InfoLog>
   </FragmentShader>
   <InfoLog>link error: the fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a &gt; b is not lowered yet)</InfoLog>
  </ShaderProgram>
