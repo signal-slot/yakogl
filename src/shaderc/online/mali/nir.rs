@@ -1180,6 +1180,22 @@ pub(super) fn index_only(m: &Module<'_>, v: ValueId) -> bool {
     uses > 0 && !other
 }
 
+/// Every read of IR value `v` is its conversion to a float (`float(s.c)`,
+/// `i2f32`): an `int` uniform's word converted in place
+/// (deqp_uniarray_struct_member_vs's `S32_TO_F32 r2, u7.w0` of the struct's
+/// int member). Any other read keeps [`MaliError::UniformType`].
+pub(super) fn int_float_only(m: &Module<'_>, v: ValueId) -> bool {
+    let mut uses = 0;
+    let mut other = false;
+    for op in m.instrs.iter() {
+        match op {
+            IrOp::Alu(AluOp::I2f, s) if s[0].val == v => uses += 1,
+            _ => op.for_each_src(|s| other |= s.val == v),
+        }
+    }
+    uses > 0 && !other
+}
+
 /// Every read of IR value `v` is an operand of a signed integer compare
 /// (`<`, `<=`, `==`, `!=`) that is a loop's head test (`if (c) {} else
 /// break;`, `Lower::break_unless`): an `int` uniform a vertex loop's bound
@@ -1256,6 +1272,60 @@ pub(super) fn uniform_idx(
     }
     let src = [idx, Val::Undef, Val::Undef];
     g.push_node(NirNode { kind: Kind::UniformIdx { dword: base_dw, comps }, src, bits: 32, width: 1 })
+}
+
+/// The uniform at front-end dword `dword` is read by graph `g` only as the
+/// int index of fp16 elements at a run-time index ([`uniform_idx16`]): each
+/// live reader of its 32-bit node is such a read.
+pub(super) fn index16_only(g: &Nir<'_>, dword: u16) -> bool {
+    let mut any = false;
+    for &id in &g.order[..g.len] {
+        let nd = g.nodes[id as usize];
+        if !g.live[id as usize] || !matches!(nd.kind, Kind::Uniform { dword: d, .. } if d == dword) {
+            continue;
+        }
+        for (u, _) in g.uses(id).filter(|&(u, _)| g.live[u as usize]) {
+            if !matches!(g.nodes[u as usize], NirNode { kind: Kind::UniformIdx { .. }, bits: 16, .. }) {
+                return false;
+            }
+            any = true;
+        }
+    }
+    any
+}
+
+/// A vertex shader's read of a mediump vec2, vec3 or vec4 array's element
+/// at an int uniform's index ([`fp16_uniform`]: the block holds it as fp16
+/// halves, a word an element of two lanes, two of three or four): Mesa's
+/// 16-bit `load_ubo(0, base + (index << 2 or 3))`, `LSHIFT_OR.i32` by the
+/// byte table's 2 or 3, `IADD_IMM.i32` of the base, `LD_PKA.i32`, `.i48`
+/// or `.i64` (deqp_uniarray_dyn_vec{2,3,4}_vs, the fragment walk's
+/// `ubo_offset` and `ubo_fetch` in nir_fs.rs), as a 16-bit
+/// [`Kind::UniformIdx`] node whose lanes are the element's, two a register
+/// ([`vs_is_word16`]). Any other array or index form has no reference
+/// ([`MaliError::UniformIndexed`]).
+pub(super) fn uniform_idx16(
+    g: &mut Nir<'_>,
+    m: &Module<'_>,
+    base_dw: u16,
+    comps: u8,
+    idx: Val,
+) -> Result<u16, MaliError> {
+    let (u, _) = super::nir_fs::uniform_extent(m, base_dw)?;
+    let int_word = matches!(idx, Val::Lane(n, 0) if matches!(g.nodes[n as usize],
+        NirNode { kind: Kind::Uniform { dword, .. }, bits: 32, .. }
+            if uniform_of(m, dword).is_ok_and(|(i, _)| i.gl_type as u32 == GL_INT)));
+    let shape = match u.gl_type as u32 {
+        GL_FLOAT_VEC2 => comps == 2,
+        GL_FLOAT_VEC3 => comps == 3,
+        GL_FLOAT_VEC4 => comps == 4,
+        _ => false,
+    };
+    if !shape || u.array_len <= 1 || u.dword_off != base_dw || !int_word {
+        return Err(MaliError::UniformIndexed);
+    }
+    let src = [idx, Val::Undef, Val::Undef];
+    g.push_node(NirNode { kind: Kind::UniformIdx { dword: base_dw, comps }, src, bits: 16, width: 1 })
 }
 
 impl<'s> Nir<'s> {
@@ -3125,7 +3195,7 @@ fn vs_vec16(vs: &mut Nir<'_>, x: Val, y: Val) -> Result<Val, MaliError> {
      * whole by a two-lane operation ([`vs_tex16_word`]; gm2_texvert_3's
      * `FMA.v2f16 r0, r0^, ..` of the texels' x and y) */
     if let (Val::Lane(n, c), Val::Lane(m, d)) = (x, y) {
-        if n == m && c % 2 == 0 && d == c + 1 && vs_is_tex16(vs, n) {
+        if n == m && c % 2 == 0 && d == c + 1 && vs_is_word16(vs, n) {
             return Ok(Val::Lane(n, c));
         }
     }
@@ -3152,6 +3222,18 @@ fn vs_identity16(op: Alu, x: &[[Val; 4]], width: usize) -> Option<usize> {
     })
 }
 
+/// Node `n` is the `f2f32` of a [`uniform_sum16`] that reads an fp16 array
+/// element at a run-time index ([`uniform_idx16`]): a varying lane of
+/// uniforms alone, convergent, which Mesa's link makes flat.
+fn widened_sum16(vs: &Nir<'_>, n: u16) -> bool {
+    match vs.nodes[n as usize] {
+        NirNode { kind: Kind::Alu(Alu::F2f32), src: [Val::Lane(x, _), ..], .. } => {
+            uniform_sum16(vs, x) && vs.reads_indexed(x) && !vs.reads_attribute(x)
+        }
+        _ => false,
+    }
+}
+
 /// Node `n` is fp16 arithmetic of fp16 uniform loads alone (a mediump
 /// array's `res += u_arr[k]`, deqp_uniarray_*_const_vs; a mediump matrix's
 /// sums and products): its `f2f32` at the store
@@ -3171,7 +3253,10 @@ fn uniform_sum16(vs: &Nir<'_>, n: u16) -> bool {
         _ => false,
     };
     match nd.kind {
-        Kind::Uniform { .. } => true,
+        /* an fp16 array element read at a run-time index
+         * (deqp_uniarray_dyn_vec*_vs's `res += u_arr[ui_one]`,
+         * [`uniform_idx16`]) */
+        Kind::Uniform { .. } | Kind::UniformIdx { .. } => true,
         Kind::Alu(op @ (Alu::Fadd | Alu::Fmul | Alu::Ffma | Alu::Fneg | Alu::Vec2)) => {
             nd.src[..op.arity()].iter().all(of) && nd.src[..op.arity()].iter().any(|v| !matches!(v, Val::Const(_)))
         }
@@ -3292,11 +3377,12 @@ fn vs_lane16(vs: &Nir<'_>, v: Val, narrow: bool) -> Option<Val> {
     }
 }
 
-/// The lane is an fp16 uniform's ([`Kind::Uniform`] at 16 bits), read
+/// The lane is an fp16 uniform's ([`Kind::Uniform`] at 16 bits, or an
+/// fp16 array element read at a run-time index, [`uniform_idx16`]), read
 /// through its `f2f32` or not.
 fn vs_is_uniform16(vs: &Nir<'_>, v: Val) -> bool {
     matches!(vs_lane16(vs, v, false), Some(Val::Lane(n, _))
-        if matches!(vs.nodes[n as usize], NirNode { kind: Kind::Uniform { .. }, bits: 16, .. }))
+        if matches!(vs.nodes[n as usize], NirNode { kind: Kind::Uniform { .. } | Kind::UniformIdx { .. }, bits: 16, .. }))
 }
 
 /// The lanes of an `fmul` / `fadd` / `ffma` that are computed: those up to
@@ -3565,11 +3651,19 @@ pub(super) fn vs_is_tex16(vs: &Nir<'_>, n: u16) -> bool {
     matches!(vs.nodes[n as usize], NirNode { kind: Kind::VsTex { .. }, bits: 16, .. })
 }
 
+/// Node `n` loads its 16-bit lanes two a register in lane order: an fp16
+/// vertex look-up ([`vs_is_tex16`]) or an fp16 array element read at a
+/// run-time index ([`uniform_idx16`], the `LD_PKA` words).
+pub(super) fn vs_is_word16(vs: &Nir<'_>, n: u16) -> bool {
+    vs_is_tex16(vs, n) || matches!(vs.nodes[n as usize], NirNode { kind: Kind::UniformIdx { .. }, bits: 16, .. })
+}
+
 /// Source `v` of a two-lane fp16 operation `nd` is a whole register of an
-/// fp16 look-up: lane `c` (even) for its lanes `c` and `c + 1`
-/// ([`vs_vec16`]). A `vec2` reads its sources one half each.
+/// fp16 look-up or indexed element ([`vs_is_word16`]): lane `c` (even) for
+/// its lanes `c` and `c + 1` ([`vs_vec16`]). A `vec2` reads its sources one
+/// half each.
 pub(super) fn vs_tex16_word(vs: &Nir<'_>, nd: &NirNode, v: Val) -> bool {
-    matches!(v, Val::Lane(n, c) if c % 2 == 0 && vs_is_tex16(vs, n))
+    matches!(v, Val::Lane(n, c) if c % 2 == 0 && vs_is_word16(vs, n))
         && nd.bits == 16
         && nd.width == 2
         && nd.kind != Kind::Alu(Alu::Vec2)
@@ -4751,7 +4845,11 @@ fn walk<'s>(
             IrOp::LoadInput { .. } => return Err(MaliError::SpecialInput),
             IrOp::LoadUniform { dword_off, comps } => {
                 let (u, total) = uniform_of(m, dword_off)?;
-                if u.gl_type as u32 == GL_INT && !index_only(m, ValueId(id.0)) && !int_compare_only(m, ValueId(id.0)) {
+                if u.gl_type as u32 == GL_INT
+                    && !index_only(m, ValueId(id.0))
+                    && !int_compare_only(m, ValueId(id.0))
+                    && !int_float_only(m, ValueId(id.0))
+                {
                     return Err(MaliError::UniformType);
                 }
                 /* the load Mesa makes: the whole vector, or one column, or
@@ -4803,6 +4901,18 @@ fn walk<'s>(
              * `load_ubo(0, base + (index << 2))`, `LSHIFT_OR.i32`,
              * `IADD_IMM.i32` and `LD_PKA.i32` (uniarray_vs.expect.json's
              * varying program, docs/notes/mali-uniform-arrays.md) */
+            /* a mediump vec2, vec3 or vec4 array's fp16 element at an int
+             * uniform ([`uniform_idx16`]): each lane widened by its own
+             * `f2f32` where an fp32 operation reads it, as a constant
+             * index's element (deqp_uniarray_dyn_vec{2,3,4}_vs) */
+            IrOp::LoadUniformIdx { base_dw, index, comps, .. }
+                if uniform_of(m, base_dw).is_ok_and(|(u, _)| u.array_len > 1 && fp16_uniform(u, fp16)) =>
+            {
+                let n = uniform_idx16(&mut vs, m, base_dw, comps, lane(w, index, 0))?;
+                for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
+                    *o = vs.alu(Alu::F2f32, Val::Lane(n, c as u8), Val::Undef, Val::Undef)?;
+                }
+            }
             IrOp::LoadUniformIdx { base_dw, index, comps, .. } => {
                 let n = uniform_idx(&mut vs, m, base_dw, comps, lane(w, index, 0))?;
                 for (c, o) in out.iter_mut().enumerate().take(comps as usize) {
@@ -5829,6 +5939,12 @@ fn walk<'s>(
                  * fragment shader loads them flat, varyconst_*.expect.json) */
                 Val::Lane(..) if divergent & (1 << (v.location as usize * 4 + c)) != 0 => smooth = true,
                 Val::Lane(n, _) if vs.uniform_only(n) => flat = true,
+                /* fp16 arithmetic of fp16 array elements read at a run-time
+                 * index (`uniform_idx16`), widened at the store: convergent,
+                 * flat beside the constant lanes kept with it
+                 * (deqp_uniarray_dyn_vec2_vs's `vec4(res, 0.0, 1.0)`, the
+                 * fragment shader's `.v4.src_flat32`) */
+                Val::Lane(n, _) if widened_sum16(&vs, n) => flat = true,
                 /* no attribute behind it, and no reference of its form
                  * (a phi of uniforms) */
                 Val::Lane(n, _) if !vs.reads_attribute(n) && !vs.reads_tex(n) && !vs.reads_indexed(n) => {

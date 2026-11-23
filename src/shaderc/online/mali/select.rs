@@ -436,8 +436,15 @@ impl UboLayout {
              * mixed into those words (prec_19b) */
             let halves = vs.order[..vs.len].iter().any(|&id| {
                 let nd = vs.nodes[id as usize];
-                matches!(nd.kind, nir::Kind::Uniform { dword, .. } if nd.bits == 16
-                    && dword >= u.dword_off && dword < u.dword_off + u.dwords.max(1))
+                match nd.kind {
+                    nir::Kind::Uniform { dword, .. } => {
+                        nd.bits == 16 && dword >= u.dword_off && dword < u.dword_off + u.dwords.max(1)
+                    }
+                    /* an fp16 element read at a run-time index (nir.rs
+                     * `uniform_idx16`): the array's fp16 rows */
+                    nir::Kind::UniformIdx { dword, .. } => nd.bits == 16 && dword == u.dword_off,
+                    _ => false,
+                }
             });
             l.push_uniform(u, comps, halves)?;
         }
@@ -944,6 +951,17 @@ pub fn vs_variant(
         for v in nd.src {
             let nir::Val::Lane(n, _) = v else { continue };
             let Some(off) = pending[n as usize].take() else { continue };
+            /* an fp16 element (nir.rs `uniform_idx16`): its words, each
+             * lane its half (`LD_PKA.i32` of a vec2, `.i48` of a vec3,
+             * `.i64` of a vec4; deqp_uniarray_dyn_vec{2,3,4}_vs) */
+            if let nir::NirNode { kind: nir::Kind::UniformIdx { comps, .. }, bits: 16, .. } = vs.nodes[n as usize] {
+                let w = idx16_fetch(p, off, comps)?;
+                for c in 0..comps as usize {
+                    let swz = if c % 2 == 0 { Swz::H00 } else { Swz::H11 };
+                    lanes[n as usize][c] = Src::ssa(w[c / 2]).swz(swz);
+                }
+                continue;
+            }
             let (lo, cnt) = lanes_read(vs, n)?;
             let w = vec4_fetch(p, off, lo, cnt, &mut 0)?;
             for c in 0..cnt as usize {
@@ -1098,6 +1116,12 @@ pub fn vs_variant(
                     }
                 }
             }
+            /* an fp16 element: its offset here, its load deferred to its
+             * first reader (`pending`), as the fragment walk's
+             * (deqp_uniarray_dyn_vec2_vs: both offsets, then both loads) */
+            nir::Kind::UniformIdx { dword, comps } if nd.bits == 16 => {
+                pending[id] = Some(idx16_offset(p, ubo, dword, comps, src(lanes, nd.src[0])?)?);
+            }
             nir::Kind::UniformIdx { dword, comps: 1 } => {
                 let off = ubo_offset(p, ubo, dword, src(lanes, nd.src[0])?, &mut 0)?;
                 lanes[id][0] = Src::ssa(ubo_fetch(p, off)?);
@@ -1223,6 +1247,38 @@ pub(super) fn ubo_offset(
         off = row(p, nir::Alu::Iadd, &[Src::of(Idx::Const(4 * u32::from(base))), Src::ssa(off)])?;
     }
     Ok(off)
+}
+
+/// The byte offset of an fp16 vec2, vec3 or vec4 array element at a
+/// run-time index (nir.rs `uniform_idx16`): NIR's `ishl idx, 2` (a vec2's
+/// one word) or `ishl idx, 3` (a vec3's or vec4's two; `LSHIFT_OR.i32 r1,
+/// u5.w1, r0.b33, 0x0` of the byte table `0x3020100`), then `iadd base,
+/// that` (`IADD_IMM.i32 r1, r1^, #0x10`; deqp_uniarray_dyn_vec{2,3,4}_vs).
+fn idx16_offset(p: &mut Prog<'_>, ubo: &UboLayout, dword: u16, comps: u8, idx: Src) -> Result<u16, MaliError> {
+    let base = ubo.word(dword).ok_or(MaliError::Defect(super::Defect::IrIndex))?;
+    let row = emit::Row { op: nir::Alu::Ishl, bits: 32, width: 1 };
+    let shift = if comps <= 2 { 2 } else { 3 };
+    let mut off = emit::emit(p, row, &[idx, Src::of(Idx::Const(shift))])?;
+    if base > 0 {
+        let row = emit::Row { op: nir::Alu::Iadd, bits: 32, width: 1 };
+        off = emit::emit(p, row, &[Src::of(Idx::Const(4 * u32::from(base))), Src::ssa(off)])?;
+    }
+    Ok(off)
+}
+
+/// The fp16 element's load at its byte offset ([`idx16_offset`]): a vec2's
+/// pair `LD_PKA.i32`; a vec3's six bytes `LD_PKA.i48` (two registers, the z
+/// in the second's low half); a vec4's eight `LD_PKA.i64`; split into its
+/// words (nir_fs.rs `ubo_fetch`).
+fn idx16_fetch(p: &mut Prog<'_>, off: u16, comps: u8) -> Result<[u16; 4], MaliError> {
+    let s = [Src::ssa(off), Src::of(Idx::Const(0))];
+    if comps <= 2 {
+        let ld = alu(p, Op::LdPka { words: 1, half: false }, &s)?;
+        return Ok([ld; 4]);
+    }
+    let ld = alu(p, Op::LdPka { words: 2, half: comps == 3 }, &s)?;
+    let w = split(p, ld, 2)?;
+    Ok([w[0], w[1], 0, 0])
 }
 
 /// The element's load at its byte offset ([`ubo_offset`]): `LD_PKA.i32` of

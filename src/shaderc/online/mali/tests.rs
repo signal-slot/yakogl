@@ -1164,15 +1164,19 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (VS, "attribute vec4 p; attribute float d; attribute float a; attribute float b; varying vec4 v; void main(){ gl_Position = p; v = vec4(0.5, d, 1.0, 1.0) * vec4(0.5, -0.0, b, a); }", MaliError::AttributeNumbering),
         /* a -0.0 local two compares read (negzero_const_vector) */
         (FS, "precision highp float; varying vec2 a2; void main() { const vec2 z = vec2(-0.0); gl_FragColor = vec4(z.x == a2.x ? 1.0 : 0.25, a2.y == z.y ? 1.0 : 0.5, 0.0, 1.0); }", MaliError::NegZeroShared),
-        /* an int uniform read as a value (a mat2 is deqp_unitype_vsmat2_highp's) */
-        (VS, "uniform int i; attribute vec4 p; void main(){ gl_Position = p * float(i); }", MaliError::UniformType),
+        /* an int uniform read as a value other than converted to a float
+         * (its conversion is deqp_uniarray_struct_member_vs's; a mat2 is
+         * deqp_unitype_vsmat2_highp's) */
+        (VS, "uniform int i; attribute vec4 p; void main(){ gl_Position = p * float(i + 1); }", MaliError::UniformType),
         (VS, "uniform mat2 u[2]; void main(){ gl_Position = vec4(u[1][0], 0.0, 1.0); }", MaliError::UniformArray),
-        /* an fp16 uniform array read at a run-time index (a plain one is
-         * case 19's, the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1;
-         * one at constant indices deqp_uniarray_*_const_vs's) */
+        /* a mediump int index of an fp32 array read at a run-time index
+         * (a plain fp16 uniform is case 19's,
+         * the_fp16_vertex_uniforms_are_byte_equal_to_mesa_26_2_1; an fp16
+         * array at constant indices deqp_uniarray_*_const_vs's, at a
+         * mediump int's run-time index deqp_uniarray_dyn_vec*_vs's) */
         (
             VS,
-            "uniform mediump vec4 u[2]; uniform highp int i; void main(){ gl_Position = u[i]; }",
+            "uniform highp float u[2]; uniform mediump int i; void main(){ gl_Position = vec4(u[i]); }",
             MaliError::UniformPrecision,
         ),
         (VS, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 0.0); }", MaliError::ConstantFold),
@@ -4035,12 +4039,18 @@ fn a_highp_float_array_read_at_int_uniforms_is_byte_equal_to_mesa_26_2_1() {
 
 /// An int uniform read as a value: a highp fragment shader reads its word
 /// raw, as an index's (intuni_ishr: `ARSHIFT_OR.i32 r0, u2.w0, ..`), here
-/// converted by `S32_TO_F32`; the vertex stage reads one as an array index
-/// only and refuses it at the uniform, as before.
+/// converted by `S32_TO_F32`; the vertex stage reads one as an array index,
+/// a loop bound or converted to a float (`S32_TO_F32` of its word,
+/// deqp_uniarray_struct_member_vs; nir.rs `int_float_only`), and refuses
+/// any other arithmetic on it at the uniform.
 #[test]
 fn an_int_uniform_outside_an_array_index_is_a_raw_word() {
     let vs = "attribute vec4 p; uniform int i; uniform float a[4]; varying vec4 v;
               void main(){ gl_Position = p; v = vec4(a[i] + float(i)); }";
+    let v = compile_alone(SHC_STAGE_VERTEX, vs).expect("compiles");
+    assert!(trim(&v.code).iter().any(|w| text(*w).starts_with("S32_TO_F32")));
+    let vs = "attribute vec4 p; uniform int i; uniform float a[4]; varying vec4 v;
+              void main(){ gl_Position = p; v = vec4(a[i] + float(i + 1)); }";
     assert_eq!(gap(SHC_STAGE_VERTEX, vs), MaliError::UniformType);
     let fs = "precision highp float; uniform highp int i; uniform highp float a[4];
               void main(){ gl_FragColor = vec4(a[i] + float(i)); }";

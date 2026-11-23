@@ -51,7 +51,9 @@ fn a_point_size_shader_is_compared_by_its_no_psiz_program() {
 
 #[test]
 fn a_refused_shape_stays_refused() {
-    let vs = "attribute vec2 pos; uniform int n; void main(){ gl_Position = vec4(pos, float(n), 1.0); }";
+    /* an int uniform's arithmetic (its conversion alone compiles,
+     * deqp_uniarray_struct_member_vs) */
+    let vs = "attribute vec2 pos; uniform int n; void main(){ gl_Position = vec4(pos, float(n + 1), 1.0); }";
     let fs = "precision mediump float; void main(){ gl_FragColor = vec4(1.0); }";
     mali_ref::assert_refused(vs, fs, "a uniform other than a float, vec2, vec3, vec4 or mat4");
 }
