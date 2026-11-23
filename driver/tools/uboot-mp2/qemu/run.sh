@@ -24,7 +24,7 @@ qemu=${MP2_QEMU:-$(command -v qemu-system-aarch64 || true)}
 . "$here/build-uboot.sh"
 cross=$(mp2_qemu_cross)
 [ -n "$cross" ] || skip "no aarch64 cross compiler (set CROSS_COMPILE)"
-for t in python3 mke2fs sfdisk truncate sha256sum; do
+for t in python3 mke2fs sfdisk truncate sha256sum dd; do
 	command -v "$t" > /dev/null || [ -x "/usr/sbin/$t" ] || [ -x "/sbin/$t" ] || skip "$t not found"
 done
 export PATH=$PATH:/usr/sbin:/sbin
@@ -111,7 +111,7 @@ truncate -s 64M "$run/env.img"
 
 big=()
 if [ "${MP2_QEMU_BIG_TFTP:-1}" = 1 ]; then big=(--big-tftp); fi
-python3 -I "$here/drive.py" --qemu "$qemu" --uboot "$uboot" --disk "$disk" \
+python3 -I "$here/drive.py" --uboot-env "$here/../../../../tools/uboot_env.py" --qemu "$qemu" --uboot "$uboot" --disk "$disk" \
 	--env "$run/env.img" --tftp "$tftp" --mem "${MP2_QEMU_MEM:-2G}" \
 	--logs "$run/logs" "${big[@]}" || rc=$?
 if [ "$rc" -ne 0 ]; then echo "run.sh: console logs kept in $run/logs"; fi
