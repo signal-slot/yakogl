@@ -3224,10 +3224,14 @@ fn vs_widen(vs: &mut Nir<'_>, v: Val) -> Result<Val, MaliError> {
 /// is `a`, nir_opt_algebraic.py; deqp_colourpair_ck_lane stores the sum as
 /// it is). deqp_posvary_fract_highp_*: `color.yz = res` of `fract`'s `fadd`,
 /// read by `color * 0.80`.
-fn vs_stored_sum(vs: &Nir<'_>, m: &Module<'_>, s: ir::Src, v: Val) -> bool {
-    matches!(m.def(s.val), Some(IrOp::LoadLocal { local, .. }) if m.local_prec_of(*local) == Prec::Medium)
-        && matches!(v, Val::Lane(n, 0) if matches!(vs.nodes[n as usize],
-            NirNode { kind: Kind::Alu(Alu::Fadd), bits: 32, width: 1, .. }))
+fn vs_stored_sum(vs: &Nir<'_>, m: &Module<'_>, s: ir::Src, v: Val) -> Result<bool, MaliError> {
+    let sum = matches!(v, Val::Lane(n, 0) if matches!(vs.nodes[n as usize],
+            NirNode { kind: Kind::Alu(Alu::Fadd), bits: 32, width: 1, .. }));
+    /* the local's class is read only where it decides ([`local_class_of`]) */
+    match m.def(s.val) {
+        Some(IrOp::LoadLocal { local, .. }) if sum => Ok(local_class_of(m, *local)? == Prec::Medium),
+        _ => Ok(false),
+    }
 }
 
 /// A two-lane 16-bit node, CSE'd (`nir_opt_cse`).
@@ -3326,7 +3330,7 @@ fn uniform_sum16(vs: &Nir<'_>, n: u16) -> bool {
 /// constants or 16-bit lanes, one at least a lane: the operation is fp16
 /// ([`vs_alu16`]). Another operand (an fp32 lane: a highp value, a boolean's
 /// float, which lower_precision does not narrow) keeps the fp32 walk.
-fn vs_pairs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> bool {
+fn vs_pairs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> Result<bool, MaliError> {
     let mut any = false;
     for k in 0..2 {
         for i in 0..width {
@@ -3334,12 +3338,12 @@ fn vs_pairs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], widt
                 Val::Const(_) => {}
                 v if vs_is_f16(vs, v) => any = true,
                 /* narrowed where read ([`vs_stored_sum`]) */
-                v if vs_stored_sum(vs, m, s[k], v) => any = true,
-                _ => return false,
+                v if vs_stored_sum(vs, m, s[k], v)? => any = true,
+                _ => return Ok(false),
             }
         }
     }
-    any && width.is_multiple_of(2)
+    Ok(any && width.is_multiple_of(2))
 }
 
 /// `fmul` or `fadd` of a mediump local's lanes in the vertex stage, as
@@ -3368,7 +3372,7 @@ fn vs_alu16(
         for i in 0..width {
             x[k][i] = lane(w, s[k], i);
             /* the `f2f16` right after the sum ([`vs_narrow_stored`]) */
-            if vs_stored_sum(vs, m, s[k], x[k][i]) {
+            if vs_stored_sum(vs, m, s[k], x[k][i])? {
                 x[k][i] = vs_narrow_stored(vs, x[k][i])?;
             }
         }
@@ -3464,12 +3468,19 @@ fn vs_width16(w: &Walk<'_>, s: &[ir::Src; 3], n: usize, width: usize) -> usize {
 /// Mesa computes it at 16 bits (lower_precision with `fp16_const_buffers`
 /// keeps the uniform fp16 and narrows the attribute where the expression
 /// reads it), [`vs_alu16u`].
-fn vs_uniform16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: &[ir::Src; 3], width: usize) -> bool {
+fn vs_uniform16(
+    vs: &Nir<'_>,
+    m: &Module<'_>,
+    w: &Walk<'_>,
+    a: AluOp,
+    s: &[ir::Src; 3],
+    width: usize,
+) -> Result<bool, MaliError> {
     let n = super::nir_fs::ir_arity(a);
     let wd = vs_width16(w, s, n, width);
     let (mut uni, mut half, mut any) = (false, true, false);
     for k in 0..n {
-        let narrow = m.prec_of(s[k].val) == Prec::Medium;
+        let narrow = class_of(m, s[k].val)? == Prec::Medium;
         for i in 0..wd {
             let v = lane(w, s[k], i);
             match v {
@@ -3479,7 +3490,7 @@ fn vs_uniform16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: &[ir::S
                     half &= vs_is_f16(vs, v);
                     any = true;
                 }
-                _ => return false,
+                _ => return Ok(false),
             }
         }
         /* a pair of an fp16 uniform's lanes is its first word or one of
@@ -3495,28 +3506,51 @@ fn vs_uniform16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, a: AluOp, s: &[ir::S
                 (Some(Val::Lane(a, i)), Some(Val::Lane(b, j))) if a == b && i % 2 == 0 && (j == i + 1 || i == j)
                     || a == b && i == j);
             if !drawn {
-                return false;
+                return Ok(false);
             }
         }
     }
-    wd > 0 && (uni || (half && any))
+    Ok(wd > 0 && (uni || (half && any)))
+}
+
+/// The class of value `v` for a reader of precision (ir.rs `Prec`): a
+/// value of no known class is refused ([`MaliError::PrecisionUnknown`]),
+/// never read as "not Medium" and built at 32 bits.
+pub(super) fn class_of(m: &Module<'_>, v: ValueId) -> Result<Prec, MaliError> {
+    match m.prec_of(v) {
+        Prec::Unknown => Err(MaliError::PrecisionUnknown),
+        p => Ok(p),
+    }
+}
+
+/// [`class_of`] of local `l`'s storage.
+pub(super) fn local_class_of(m: &Module<'_>, l: ir::LocalId) -> Result<Prec, MaliError> {
+    match m.local_prec_of(l) {
+        Prec::Unknown => Err(MaliError::PrecisionUnknown),
+        p => Ok(p),
+    }
 }
 
 /// Source `s` is mediump: a mediump value, or a load of a mediump local
 /// (`in0 = a_in0.wy` of a `mediump vec2`, whose load the front end leaves
 /// unclassed).
-fn medium_src(m: &Module<'_>, s: ir::Src) -> bool {
-    m.prec_of(s.val) == Prec::Medium
-        || matches!(m.def(s.val), Some(IrOp::LoadLocal { local, .. }) if m.local_prec_of(*local) == Prec::Medium)
+fn medium_src(m: &Module<'_>, s: ir::Src) -> Result<bool, MaliError> {
+    if class_of(m, s.val)? == Prec::Medium {
+        return Ok(true);
+    }
+    match m.def(s.val) {
+        Some(IrOp::LoadLocal { local, .. }) => Ok(local_class_of(m, *local)? == Prec::Medium),
+        _ => Ok(false),
+    }
 }
 
 /// An `abs` the front end classed mediump whose computed lanes are 16-bit
 /// lanes or, through a mediump source, 32-bit attribute lanes: Mesa
 /// computes it at 16 bits ([`vs_fabs16`]).
-fn vs_abs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> bool {
-    let narrow = medium_src(m, s[0]);
+fn vs_abs16(vs: &Nir<'_>, m: &Module<'_>, w: &Walk<'_>, s: &[ir::Src; 3], width: usize) -> Result<bool, MaliError> {
+    let narrow = medium_src(m, s[0])?;
     let wd = vs_width16(w, s, 1, width);
-    wd > 0 && (0..wd).all(|i| vs_lane16(vs, lane(w, s[0], i), narrow).is_some())
+    Ok(wd > 0 && (0..wd).all(|i| vs_lane16(vs, lane(w, s[0], i), narrow).is_some()))
 }
 
 /// [`vs_abs16`]'s `abs` as Mesa's NIR holds it: each lane narrowed alone
@@ -3533,7 +3567,7 @@ fn vs_fabs16(
     out: &mut [Val; 4],
 ) -> Result<(), MaliError> {
     let u = Val::Undef;
-    let narrow = medium_src(m, s[0]);
+    let narrow = medium_src(m, s[0])?;
     let wd = vs_width16(w, s, 1, width);
     for (i, o) in out.iter_mut().enumerate().take(wd) {
         let x = match vs_lane16(vs, lane(w, s[0], i), narrow).ok_or(MaliError::Defect(Defect::IrIndex))? {
@@ -3587,7 +3621,7 @@ fn vs_ffract16(
     out: &mut [Val; 4],
 ) -> Result<(), MaliError> {
     let u = Val::Undef;
-    let narrow = medium_src(m, s[0]);
+    let narrow = medium_src(m, s[0])?;
     let wd = vs_width16(w, s, 1, width);
     let mut x = [u; 4];
     for (i, xi) in x.iter_mut().enumerate().take(wd) {
@@ -3765,7 +3799,7 @@ fn vs_alu16u(
     let width = vs_width16(w, s, n, width);
     let mut x = [[u; 4]; 3];
     for k in 0..n {
-        let narrow = m.prec_of(s[k].val) == Prec::Medium;
+        let narrow = class_of(m, s[k].val)? == Prec::Medium;
         for i in 0..width {
             x[k][i] = match lane(w, s[k], i) {
                 c @ Val::Const(_) => c,
@@ -3927,15 +3961,19 @@ fn ir_same(m: &Module<'_>, a: ValueId, b: ValueId, depth: u8) -> bool {
 /// Mesa's code ([`Kind::VsTex`]`::medium`): a mediump `fmul`, `fadd`,
 /// `ffma` or `fneg` reads it, or reads a look-up `nir_opt_cse` makes one
 /// with it ([`ir_same`]; gm2_texvert_4's `v_a` beside `v_b`).
-fn vs_tex_read16(m: &Module<'_>, id: ir::InstrId) -> bool {
+fn vs_tex_read16(m: &Module<'_>, id: ir::InstrId) -> Result<bool, MaliError> {
     let me = ValueId(id.0);
     let tex = |v: ValueId| v == me || (matches!(m.def(v), Some(IrOp::Tex { .. })) && ir_same(m, v, me, 8));
-    m.instrs.iter().enumerate().any(|(i, op)| match op {
-        IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s) => {
-            m.prec_of(ValueId(i as u32)) == Prec::Medium && s[..super::nir_fs::ir_arity(*a)].iter().any(|x| tex(x.val))
+    for (i, op) in m.instrs.iter().enumerate() {
+        if let IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s) = op {
+            if class_of(m, ValueId(i as u32))? == Prec::Medium
+                && s[..super::nir_fs::ir_arity(*a)].iter().any(|x| tex(x.val))
+            {
+                return Ok(true);
+            }
         }
-        _ => false,
-    })
+    }
+    Ok(false)
 }
 
 /// `n / d` of two 32-bit signed integers in the vertex stage: the
@@ -5299,7 +5337,7 @@ fn walk<'s>(
                  * float (`b2f`, no precision) and a constant (fp32 bits in
                  * the walk, fp16 where a 16-bit operation reads it) stay as
                  * they are; a highp local widens a 16-bit lane */
-                let medium = m.local_prec_of(local) == Prec::Medium;
+                let medium = local_class_of(m, local)? == Prec::Medium;
                 for (i, t) in lanes.iter_mut().enumerate() {
                     if write_mask & (1 << i) == 0 {
                         continue;
@@ -5342,8 +5380,7 @@ fn walk<'s>(
                  * attribute stands before). Each 16-bit lane is its own
                  * `f2f32` (`F16_TO_F32 r1, r0.h0`), in lane order at the
                  * store. */
-                let medium = m.prec_of(src.val) == Prec::Medium
-                    || matches!(m.def(src.val), Some(IrOp::LoadLocal { local, .. }) if m.local_prec_of(*local) == Prec::Medium);
+                let medium = medium_src(m, src)?;
                 /* or of fp16 uniforms alone (deqp_uniarray_*_const_vs's
                  * `vec4(res, 0.0, 1.0)` of a mediump array's sum: the
                  * constants stored in the flat `.v4` beside it, `IADD_IMM.i32
@@ -5379,25 +5416,27 @@ fn walk<'s>(
              * mediump local's narrowed lanes and constants: fp16, in lane
              * pairs ([`vs_alu16`]) */
             IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
-                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_pairs16(&vs, m, w, &s, width) =>
+                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_pairs16(&vs, m, w, &s, width)? =>
             {
                 vs_alu16(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             /* one over fp16 uniforms and mediump attributes: fp16 too, the
              * uniform's words read whole ([`vs_alu16u`]) */
             IrOp::Alu(a @ (AluOp::Fmul | AluOp::Fadd | AluOp::Ffma | AluOp::Fneg), s)
-                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_uniform16(&vs, m, w, a, &s, width) =>
+                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_uniform16(&vs, m, w, a, &s, width)? =>
             {
                 vs_alu16u(&mut vs, a, m, w, &s, width, &mut out)?;
             }
             /* `abs` of a mediump local's lanes (mediump attributes'): fp16,
              * one lane at a time ([`vs_fabs16`]) */
-            IrOp::Alu(AluOp::Fabs, s) if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_abs16(&vs, m, w, &s, width) => {
+            IrOp::Alu(AluOp::Fabs, s)
+                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_abs16(&vs, m, w, &s, width)? =>
+            {
                 vs_fabs16(&mut vs, m, w, &s, width, &mut out)?;
             }
             /* `fract` of the same lanes: fp16 too ([`vs_ffract16`]) */
             IrOp::Alu(AluOp::Ffract, s)
-                if m.prec_of(ValueId(id.0)) == Prec::Medium && vs_abs16(&vs, m, w, &s, width) =>
+                if class_of(m, ValueId(id.0))? == Prec::Medium && vs_abs16(&vs, m, w, &s, width)? =>
             {
                 vs_ffract16(&mut vs, m, w, &s, width, &mut out)?;
             }
@@ -5405,7 +5444,8 @@ fn walk<'s>(
                 /* a mediump operation of a lowp or mediump sampler's texels
                  * other than the fp16 arms' is fp16 in Mesa too, a form
                  * this fp32 walk does not build (mali-vs-lookups.md §7) */
-                if m.prec_of(ValueId(id.0)) == Prec::Medium
+                let medium = class_of(m, ValueId(id.0))? == Prec::Medium;
+                if medium
                     && (0..super::nir_fs::ir_arity(a)).any(|k| {
                         (0..width.max(1)).any(|i| {
                             matches!(lane(w, s[k], i), Val::Lane(n, _)
@@ -5448,7 +5488,7 @@ fn walk<'s>(
                      * -2.98e-8, which no fp16 holds. A result fp16 holds
                      * only as a subnormal keeps the fp32 fold */
                     if let (AluOp::Fadd | AluOp::Fmul, Val::Const(p), Val::Const(q)) = (a, x(0), x(1)) {
-                        if m.prec_of(ValueId(id.0)) == Prec::Medium {
+                        if medium {
                             if let Ok(c) = fold16(a, p, q) {
                                 *o = Val::Const(c);
                                 continue;
@@ -5483,9 +5523,7 @@ fn walk<'s>(
                          * `FMA.f32 r0, u3.w1, 0x38000000.h1, r0^.neg`, then
                          * each lane's `FMA.f32 r, r0, a, 0.5`) */
                         AluOp::Fmul
-                            if m.prec_of(ValueId(id.0)) == Prec::Medium
-                                && vs_cmp_side(&vs, x(0)).is_some()
-                                && vs_cmp_side(&vs, x(1)).is_some() =>
+                            if medium && vs_cmp_side(&vs, x(0)).is_some() && vs_cmp_side(&vs, x(1)).is_some() =>
                         {
                             match vs_cmp_and(&mut vs, x(0), x(1))? {
                                 Some(v) => v,
@@ -5996,8 +6034,8 @@ fn walk<'s>(
                  * (gm2_texvert_3's `texture2D(s, uv).xyz * 2.0 - 1.0`);
                  * after `nir_opt_cse` that holds for each copy of one
                  * look-up (gm2_texvert_4) */
-                let medium = m.prec_of(ValueId(id.0)) == Prec::Medium;
-                let half = medium && vs_tex_read16(m, id);
+                let medium = class_of(m, ValueId(id.0))? == Prec::Medium;
+                let half = medium && vs_tex_read16(m, id)?;
                 /* `nir_scalar_is_zero`: the bits 0 */
                 let (kind, src) = if level == Val::Const(F32_ZERO) {
                     (Kind::VsTex { explicit: false, cube, sampler, index: 0, medium }, [s, t, Val::Undef])

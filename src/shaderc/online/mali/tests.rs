@@ -1094,6 +1094,7 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
         | E::UniformPrecision
         | E::FsUniform
         | E::MixedPrecision
+        | E::PrecisionUnknown
         | E::UboFallback
         | E::UboRowsFull
         | E::ArithConstant
@@ -1376,6 +1377,16 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
     /* a chain GLSL rebalances whose leaf is a local do_tree_grafting may
      * graft (glsl.rs) */
     v.push((VS, REBALANCE_GRAFT.to_string(), MaliError::Rebalance));
+    /* a mediump call's argument a full-width built-in reads that is not
+     * known to vary: the front end records no class for it (lower.rs
+     * `full_width_args`; docs/notes/mali-precision-frontend.md 2.2 S3) */
+    v.push((
+        VS,
+        "attribute vec4 p; varying mediump vec4 v; void main(){ gl_Position = p; mediump float c = 0.1; \
+         v = vec4(acos(c * 2.0)); }"
+            .to_string(),
+        MaliError::PrecisionUnknown,
+    ));
     v.extend(stress_cases());
     v
 }
@@ -8857,7 +8868,7 @@ fn glsl_passes_of(stage: u32, src: &str) -> Vec<ir::Op> {
     let _k = store::test_keep();
     store::with_scratch(|s| {
         let l = codegen::lower_source(stage, src.as_bytes(), &[], s).expect("the front end takes it");
-        match super::glsl::passes(&l.module, false, s).expect("the passes take it") {
+        match super::glsl::passes(&l.module, false, &|_| false, s).expect("the passes take it") {
             Some((instrs, _)) => instrs.to_vec(),
             None => l.module.instrs.to_vec(),
         }
@@ -8902,13 +8913,14 @@ fn glsl_rebalances_the_trees_it_takes() {
         let whole = "precision highp float; uniform float a, b, c, d; void main(){ float s = a + b + c + d; \
                      gl_FragColor = vec4(s, s, s, 1.0); }";
         let l = codegen::lower_source(SHC_STAGE_FRAGMENT, whole.as_bytes(), &[], s).expect("the front end");
-        assert!(super::glsl::passes(&l.module, false, s).expect("the passes").is_none());
+        assert!(super::glsl::passes(&l.module, false, &|_| false, s).expect("the passes").is_none());
         /* two constants: no rebalance; the swap makes them meet */
         let two = "precision highp float; uniform float a, b; void main(){ float s = (a + 1.0 + b + 2.0) * a; \
                    gl_FragColor = vec4(s, s, s, 1.0); }";
         let l = codegen::lower_source(SHC_STAGE_FRAGMENT, two.as_bytes(), &[], s).expect("the front end");
-        let (instrs, _) =
-            super::glsl::passes(&l.module, false, s).expect("the passes").expect("the constants reassociated");
+        let (instrs, _) = super::glsl::passes(&l.module, false, &|_| false, s)
+            .expect("the passes")
+            .expect("the constants reassociated");
         assert!(instrs.iter().any(|o| *o == ir::Op::ConstF32([3.0f32.to_bits(); 4])), "{instrs:?}");
     })
     .expect("the scratch arena is free");
@@ -8965,6 +8977,73 @@ fn glsl_leaves_a_chain_of_matrix_local_columns_in_order() {
     let (_, [l, r, _]) = alu_at(&ir, sum.val).expect("the sum");
     assert!(alu_at(&ir, l.val).is_some_and(|(a, _)| a == AluOp::Fadd), "rebalanced: {ir:?}");
     assert!(alu_at(&ir, r.val).is_some_and(|(a, _)| a == AluOp::Fadd), "rebalanced: {ir:?}");
+}
+
+/// Mesa runs `do_rebalance_tree` after `lower_precision`
+/// (glsl_parser_extras.cpp:2491, :2597-2610), and an `f2fmp` or `f2f32` in
+/// a tree is an expression of another operation, so the tree is no
+/// reduction (opt_rebalance_tree.cpp:201-257). Mesa's NIR of each pair,
+/// drawn on the drm-shim (tools/mali/deqp_ref.sh; probes q8, q8h and q9 of
+/// docs/notes/mali-precision-frontend.md section 5): `a + b + c + d` of
+/// highp attributes is `(a + b) + (c + d)` at 32 bits (attr32); of mediump
+/// uniforms, fp16 storage, `(a + b) + (c + d)` at 16 bits (uni16); of four
+/// mediump varyings in a mediump fragment shader, each read narrowed,
+/// `((a + b) + c) + d` (fsvary). These three are byte-equal.
+#[test]
+fn glsl_rebalances_only_a_tree_without_a_conversion() {
+    let mut failed = Vec::new();
+    for (name, vs, fs, json) in [pair!("prec_rebal_attr32"), pair!("prec_rebal_uni16"), pair!("prec_rebal_fsvary")] {
+        if let Err(e) = std::panic::catch_unwind(|| check_program(vs, fs, json)) {
+            let m = e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{:?}", e.downcast_ref::<&str>()));
+            failed.push(format!("{name}: {m}"));
+        }
+    }
+    assert!(failed.is_empty(), "{} of 3 differ:\n{}", failed.len(), failed.join("\n"));
+}
+
+/// The two probes whose trees the passes now leave as Mesa's, but whose
+/// words still differ. attr16 (q8): four mediump attributes,
+/// `((a + b) + c) + d`, each read narrowed, at 16 bits. local16 (q9): four
+/// 16-bit locals, read twice each, `(ma + mb) + (mc + md)` at 16 bits, and
+/// `ma * mb` a 32-bit `fmul` of the attributes (the late mediump rule).
+/// The vertex walk builds both sums at 32 bits: it has no fp16 form for an
+/// operation of narrowed attributes alone (nir.rs `vs_uniform16` wants an
+/// fp16 uniform or a 16-bit lane), and attr16's splat of a 16-bit sum is
+/// four stores in Mesa. Pinned so that a fix of the walk moves them to the
+/// test above.
+#[test]
+fn glsl_leaves_the_probe_trees_mesa_s_but_the_walk_differs() {
+    /* the sum's root: its last `fadd`, which no `fadd` reads */
+    let root = |src: &str| {
+        let ir = glsl_passes_of(SHC_STAGE_VERTEX, src);
+        let sum = (0..ir.len())
+            .rev()
+            .map(|i| ir::ValueId(i as u32))
+            .find(|&v| alu_at(&ir, v).is_some_and(|(a, _)| a == AluOp::Fadd))
+            .expect("the sum");
+        (ir, sum)
+    };
+    let (ir, sum) = root(td!("prec_rebal_attr16.vert"));
+    let input = |s: ir::Src| matches!(ir[s.val.0 as usize], ir::Op::LoadInput { .. });
+    let (_, [l, r, _]) = alu_at(&ir, sum).expect("the sum");
+    assert!(input(r), "d last: {ir:?}");
+    let (_, [l, r, _]) = alu_at(&ir, l.val).expect("(a + b) + c");
+    assert!(input(r), "c next: {ir:?}");
+    let (_, [l, r, _]) = alu_at(&ir, l.val).expect("a + b");
+    assert!(input(l) && input(r), "{ir:?}");
+    let (ir, sum) = root(td!("prec_rebal_local16.vert"));
+    let (op, [l, r, _]) = alu_at(&ir, sum).expect("the sum");
+    assert_eq!(op, AluOp::Fadd);
+    for half in [l, r] {
+        assert!(alu_at(&ir, half.val).is_some_and(|(a, _)| a == AluOp::Fadd), "rebalanced: {ir:?}");
+    }
+    for (name, vs, fs, json) in [pair!("prec_rebal_attr16"), pair!("prec_rebal_local16")] {
+        let Err(e) = std::panic::catch_unwind(|| check_program(vs, fs, json)) else {
+            panic!("{name}: byte-equal now; move it to the test above")
+        };
+        let m = e.downcast_ref::<String>().cloned().unwrap_or_default();
+        assert!(m.starts_with("vs.varying: "), "{name}: {m}");
+    }
 }
 
 /// The chain's program in NIR's order (docs/notes/mali-remaining-families.md

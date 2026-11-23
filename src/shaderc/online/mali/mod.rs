@@ -148,6 +148,12 @@ pub enum MaliError {
     /// ([`FsPrecision`]): Mesa computes the highp ones in fp32 and the
     /// mediump and lowp ones in fp16, converting where they meet.
     MixedPrecision,
+    /// A value the code generator reads the precision class of has none
+    /// (ir.rs `Prec::Unknown`): the front end folded or shared it where
+    /// Mesa keeps it apart (docs/notes/mali-precision-frontend.md section
+    /// 2.2), or a pass dropped the tables. Refused rather than built at
+    /// 32 bits.
+    PrecisionUnknown,
     /// fp16 arithmetic on gl_FragCoord in a form no reference draws:
     /// gl_FragCoord is mediump in GLSL ES 1.00 (builtin_variables.cpp:
     /// 1333-1335), so Mesa lowers an operation whose other operands are
@@ -348,6 +354,7 @@ impl MaliError {
         MaliError::UniformPrecision,
         MaliError::FsUniform,
         MaliError::MixedPrecision,
+        MaliError::PrecisionUnknown,
         MaliError::FragCoordMediump,
         MaliError::UboFallback,
         MaliError::UboRowsFull,
@@ -432,6 +439,9 @@ impl MaliError {
             }
             MaliError::MixedPrecision => {
                 "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet"
+            }
+            MaliError::PrecisionUnknown => {
+                "Valhall: a value whose precision class the front end does not know (a folded constant a full-width built-in reads, a constant shared at two widths) is not lowered yet"
             }
             MaliError::FragCoordMediump => {
                 "Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet"
@@ -1278,8 +1288,13 @@ fn compile_module_on<'s>(
     order: Option<link::VaryingOrder>,
     scratch: &Arena<'s>,
 ) -> Result<StageCode<'s>, MaliError> {
-    /* GLSL's do_rebalance_tree and do_algebraic, ahead of NIR (glsl.rs) */
-    let rw = glsl::passes(m, m.stage == SHC_STAGE_FRAGMENT && fs.highp, scratch)?;
+    /* GLSL's do_rebalance_tree and do_algebraic, ahead of NIR (glsl.rs);
+     * a mediump or lowp uniform is fp16 storage, as for the walks */
+    let fp16 = |name: &str| {
+        use super::ast::Precision;
+        precision.iter().any(|u| u.name == name && matches!(u.precision, Precision::Medium | Precision::Low))
+    };
+    let rw = glsl::passes(m, m.stage == SHC_STAGE_FRAGMENT && fs.highp, &fp16, scratch)?;
     let rewritten = rw.map(|(instrs, shape)| shape.module(instrs, m));
     let m = rewritten.as_ref().unwrap_or(m);
     let mut marks = Marks::default();
@@ -2062,10 +2077,6 @@ fn lowered_vs_constants<'s>(
     glsl: &[u8],
     scratch: &Arena<'s>,
 ) -> Result<link::VaryingConsts, CompileError> {
-    /* built as for a fragment shader that reads nothing: no lane is stored,
-     * so none is refused for what it holds */
-    let rw = glsl::passes(&l.module, false, scratch).map_err(refused)?;
-    let m = rw.map_or(l.module, |(instrs, shape)| shape.module(instrs, &l.module));
     /* the fp16 uniforms as the program's build takes them
      * ([`compile_vs_for_reads`]); a source the interface does not read
      * has none */
@@ -2080,6 +2091,10 @@ fn lowered_vs_constants<'s>(
             })
         })
     };
+    /* built as for a fragment shader that reads nothing: no lane is stored,
+     * so none is refused for what it holds */
+    let rw = glsl::passes(&l.module, false, &fp16, scratch).map_err(refused)?;
+    let m = rw.map_or(l.module, |(instrs, shape)| shape.module(instrs, &l.module));
     let vs = nir::build(&m, scratch, Some(&[]), &[], &fp16).map_err(refused)?;
     if vs.consts.full() {
         return Err(refused(MaliError::VaryingNotFromAttribute));

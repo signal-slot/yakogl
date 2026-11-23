@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! The run-time index trees of [`super::ilt_trees`] by the shape of the IR
-//! (docs/notes/mali-indexed-locals.md sections 3.1-3.3 and 5).
+//! (docs/notes/mali-indexed-locals.md sections 3.1-3.3 and 5), and the
+//! precision tables every pass of [`super::passes`] carries.
 
 use super::super::MaliError;
 use crate::shaderc::online::codegen;
-use crate::shaderc::online::ir::{AluOp, Op, Src, ValueId};
+use crate::shaderc::online::ir::{AluOp, Module, Op, Prec, Src, ValueId};
 use crate::shaderc::online::store;
 use crate::shaderc::{SHC_STAGE_FRAGMENT, SHC_STAGE_VERTEX};
 
@@ -15,7 +16,7 @@ fn rewrite(stage: u32, src: &str) -> (Result<Vec<Op>, MaliError>, Vec<Op>) {
     let _k = store::test_keep();
     store::with_scratch(|s| {
         let l = codegen::lower_source(stage, src.as_bytes(), &[], s).expect("the front end takes it");
-        let passes = super::passes(&l.module, false, s).map(|r| match r {
+        let passes = super::passes(&l.module, false, &|_| false, s).map(|r| match r {
             Some((instrs, _)) => instrs.to_vec(),
             None => l.module.instrs.to_vec(),
         });
@@ -213,24 +214,133 @@ fn glsl_rewrites_a_write_ladder_into_the_ilt_tree() {
     assert!(!ir.iter().any(|o| matches!(o, Op::Alu(AluOp::Ilt, _))));
 }
 
-/// A stage the passes rewrite carries no precision tables (ir.rs
-/// `Module::prec`): every answer is `Prec::Unknown`, so a reader of
-/// precision refuses it rather than read an entry of the front end's
-/// numbering. The rebalanced sum renumbers nothing but rewrites in place;
-/// the front end's own module has its tables.
-#[test]
-fn a_stage_the_passes_rewrite_has_no_precision() {
-    use crate::shaderc::online::ir::Prec;
-    let src = "precision mediump float; varying vec4 a; varying vec4 b; varying vec4 c; varying vec4 d;\n\
-               void main(){ gl_FragColor = (a + b + c + d) * 0.25; }";
+/// One stage before and after [`super::passes`]: the front end's
+/// instructions and classes, then the rewritten ones, whether the
+/// rewritten module has its tables (`Module::has_prec`) and whether
+/// [`super::ilt_trees`] renumbered it. `fp16`: the uniforms stored at 16
+/// bits.
+type Classes = (Vec<Op>, Vec<Prec>, Vec<Op>, Vec<Prec>, bool, bool);
+
+fn classes(stage: u32, src: &str, fp16: &dyn Fn(&str) -> bool) -> Classes {
     let _k = store::test_keep();
     store::with_scratch(|s| {
-        let l = codegen::lower_source(SHC_STAGE_FRAGMENT, src.as_bytes(), &[], s).expect("the front end takes it");
-        assert!(l.module.has_prec(), "the front end's module has its tables");
-        let (instrs, shape) = super::passes(&l.module, false, s).expect("the passes").expect("the sum is rebalanced");
-        let m = shape.module(instrs, &l.module);
-        assert!(!m.has_prec());
-        assert!((0..m.instrs.len()).all(|i| m.prec_of(ValueId(i as u32)) == Prec::Unknown));
+        let l = codegen::lower_source(stage, src.as_bytes(), &[], s).expect("the front end takes it");
+        let m = &l.module;
+        assert!(m.has_prec(), "the front end's module has its tables");
+        let of = |m: &Module<'_>| (0..m.instrs.len()).map(|i| m.prec_of(ValueId(i as u32))).collect::<Vec<_>>();
+        /* a fragment shader's float default (mod.rs `FsPrecision::highp`) */
+        let highp = stage == SHC_STAGE_FRAGMENT && src.starts_with("precision highp float;");
+        let (instrs, shape) = super::passes(m, highp, fp16, s).expect("the passes").expect("a rewrite");
+        let r = shape.module(instrs, m);
+        (m.instrs.to_vec(), of(m), r.instrs.to_vec(), of(&r), r.has_prec(), shape.nodes.is_some())
     })
-    .expect("the scratch arena is free");
+    .expect("the scratch arena is free")
+}
+
+/// The passes carry the precision tables through every rewrite (ir.rs
+/// `Module::prec`). A rewrite in place keeps each value's class: it moves
+/// operands of one tree, whose values all have the tree's class (the
+/// rebalance, the constant reassociation, the negation and compare rules).
+/// The rebalance keeps each tree's own: a Medium sum of fp16 uniforms and a
+/// High sum of highp attributes in one stage. The index trees renumber the
+/// stage: an `ilt` and the bools made of it are High, its constant None,
+/// and each select keeps the class of the select it replaces.
+#[test]
+fn the_passes_carry_the_precision_tables() {
+    let none = |_: &str| false;
+    let in_place: [(&str, u32, &str); 7] = [
+        (
+            "rebalance",
+            SHC_STAGE_VERTEX,
+            "attribute highp vec4 p; attribute highp float a, b, c, d; uniform mediump float ua, ub, uc, ud; \
+             varying highp vec4 v; void main() { gl_Position = p; \
+             v = vec4(p.x * (a + b + c + d), p.y * (ua + ub + uc + ud), 0.0, 1.0); }",
+        ),
+        (
+            "reassociate",
+            SHC_STAGE_VERTEX,
+            "attribute vec4 p; uniform float u, w; varying vec4 v; void main() { gl_Position = p; \
+             v = vec4(2.0 * (u * (w * 3.0))); }",
+        ),
+        (
+            "negneg",
+            SHC_STAGE_FRAGMENT,
+            "precision highp float; uniform float u_q, u_a; void main() { gl_FragColor = vec4(-(-u_q), -(-u_a), 0.0, 1.0); }",
+        ),
+        (
+            "neg_products",
+            SHC_STAGE_FRAGMENT,
+            "precision mediump float; varying vec2 a2; void main() { gl_FragColor = vec4(a2 * -3.0 + 0.25, 0.0, 1.0); }",
+        ),
+        (
+            "neg_compares",
+            SHC_STAGE_FRAGMENT,
+            "precision highp float; uniform float x; void main() { if (-x < 2.0) discard; gl_FragColor = vec4(1.0); }",
+        ),
+        (
+            "neg_zero_compares",
+            SHC_STAGE_FRAGMENT,
+            "precision highp float; uniform float x; void main() { if (x < -0.0) discard; gl_FragColor = vec4(1.0); }",
+        ),
+        (
+            "sum_compares",
+            SHC_STAGE_FRAGMENT,
+            "precision highp float; uniform float x; void main() { if (x * 0.75 + 0.125 < 0.0) discard; \
+             gl_FragColor = vec4(1.0); }",
+        ),
+    ];
+    let fp16 = |n: &str| matches!(n, "ua" | "ub" | "uc" | "ud");
+    for (kind, stage, src) in in_place {
+        let (before, pb, after, pa, has, renumbered) = classes(stage, src, &fp16);
+        assert!(has && !renumbered, "{kind}");
+        assert_ne!(before, after, "{kind}: the rewrite happened");
+        assert_eq!(pb, pa, "{kind}: each value keeps its class");
+        assert!(!pa.contains(&Prec::Unknown), "{kind}: {pa:?}");
+    }
+    /* each tree its own class: the uniforms' sum Medium, the attributes'
+     * High, both rebalanced */
+    let (_, _, ir, pa, _, _) = classes(SHC_STAGE_VERTEX, in_place[0].2, &fp16);
+    let mut sums = 0;
+    for (i, o) in ir.iter().enumerate() {
+        let Op::Alu(AluOp::Fadd, [x, y, _]) = *o else { continue };
+        let leaf = |s: Src| match ir[s.val.0 as usize] {
+            Op::Alu(AluOp::Fadd, [p, _, _]) => p.val,
+            _ => s.val,
+        };
+        let want = match ir[leaf(x).0 as usize] {
+            Op::LoadUniform { .. } => Prec::Medium,
+            Op::LoadInput { .. } => Prec::High,
+            ref o => panic!("{o:?}"),
+        };
+        assert_eq!(pa[i], want, "%{i} {o:?}");
+        assert_eq!((pa[x.val.0 as usize], pa[y.val.0 as usize]), (want, want), "%{i}'s operands");
+        sums += 1;
+    }
+    assert_eq!(sums, 6, "{ir:?}");
+
+    /* the index trees: a read of a mediump array, a write of a highp one */
+    for src in [
+        "precision mediump float; uniform int u_i; void main() { float arr[3]; arr[0] = 0.125; arr[1] = 0.25; \
+         arr[2] = 0.5; gl_FragColor = vec4(arr[u_i]); }",
+        "precision highp float; uniform int u_i; uniform float u_x; void main() { float arr[3]; \
+         arr[0] = 0.125; arr[1] = 0.25; arr[2] = 0.5; arr[u_i + 1] = u_x * u_x; \
+         gl_FragColor = vec4(arr[0], arr[1], arr[2], 1.0); }",
+    ] {
+        let (before, pb, after, pa, has, renumbered) = classes(SHC_STAGE_FRAGMENT, src, &none);
+        assert!(has && renumbered);
+        let sel = |ir: &[Op], p: &[Prec]| {
+            let mut c = ir.iter().zip(p).filter(|(o, _)| matches!(o, Op::Alu(AluOp::Bcsel, _))).map(|(_, &p)| p);
+            let first = c.next().expect("a select");
+            assert!(c.all(|p| p == first), "one class for the ladder's selects");
+            first
+        };
+        assert_eq!(sel(&before, &pb), sel(&after, &pa));
+        for (o, &p) in after.iter().zip(&pa) {
+            match o {
+                Op::Alu(AluOp::Ilt | AluOp::Iand | AluOp::Inot | AluOp::Ior, _) => assert_eq!(p, Prec::High, "{o:?}"),
+                Op::ConstI32(_) => assert_eq!(p, Prec::None, "{o:?}"),
+                _ => assert_ne!(p, Prec::Unknown, "{o:?}"),
+            }
+        }
+    }
 }
