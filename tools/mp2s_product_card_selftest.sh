@@ -122,5 +122,23 @@ for r in r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11; do
 done
 if [ ! -e /dev/mp2s-card-x ] && [ ! -e /dev/shm/mp2s-card-x ]; then ok "nothing written under /dev"; fi
 
+# default --env-size is the DK's 0x2000: both copies that size, both accepted
+if run --env-text "$t/env.txt" --script "$t/boot.scr.uimg" --image "$t/default.bin" \
+      --no-linux --out "$t/od" >/dev/null &&
+   [ "$(stat -c %s "$t/od/u-boot-env-copy1.bin")" = 8192 ] &&
+   [ "$(stat -c %s "$t/od/u-boot-env-copy2.bin")" = 8192 ]; then
+  okd=1
+  # the pair as one image, then each copy as the first of a split layout
+  cat "$t/od/u-boot-env-copy1.bin" "$t/od/u-boot-env-copy2.bin" > "$t/od/pair.bin"
+  python3 -I "$here/uboot_env.py" --redundant --size 0x2000 check "$t/od/pair.bin" >/dev/null 2>&1 || okd=0
+  python3 -I "$here/uboot_env.py" --size 0x2000 --second "$t/od/u-boot-env-copy2.bin" \
+    check "$t/od/u-boot-env-copy1.bin" >/dev/null 2>&1 || okd=0
+  python3 -I "$here/uboot_env.py" --size 0x2000 --second "$t/od/u-boot-env-copy1.bin" \
+    check "$t/od/u-boot-env-copy2.bin" >/dev/null 2>&1 || okd=0
+  if [ $okd = 1 ]; then ok "default env size 0x2000, both copies pass uboot_env check"
+  else bad "default-size copy rejected by uboot_env.py"; fi
+else bad "default env size is not 0x2000"; fi
+if run --help | grep -q 'default 0x2000'; then ok "help shows default 0x2000"; else bad "help default"; fi
+
 if [ $fail = 0 ]; then echo "mp2s_product_card selftest: ok"; exit 0; fi
 echo "mp2s_product_card selftest: FAILED"; exit 1

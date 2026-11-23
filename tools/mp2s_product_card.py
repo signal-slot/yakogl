@@ -25,6 +25,11 @@ NAME=VALUE entries each ending in NUL, a final NUL, padding with 0x00). Copy 1
 is written with flags 1 and copy 2 with flags 0, so both CRCs are good and
 copy 1 is the active one. The selftest reads the pair back with
 tools/uboot_env.py.
+
+--env-size defaults to 0x2000, CONFIG_ENV_SIZE of ST's stm32mp25 U-Boot config:
+the size of each u-boot-env copy on the DK's microSD (at 0x7e000 and 0x7c000
+of the partition), the same value tools/mp2s_fwenv_check.py uses. A copy of any
+other size reads as a bad CRC.
 """
 import argparse
 import hashlib
@@ -146,8 +151,10 @@ def main(argv=None):
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--env-text", help="input env, one name=value per line")
     g.add_argument("--env-image", help="input env image (redundant format)")
-    ap.add_argument("--env-size", type=lambda s: int(s, 0), default=0x20000,
-                    help="env size in bytes, header included (default 0x20000)")
+    ap.add_argument("--env-size", type=lambda s: int(s, 0), default=0x2000,
+                    help="env size in bytes, header included (default 0x2000: "
+                         "CONFIG_ENV_SIZE of ST's stm32mp25 U-Boot config, the DK's "
+                         "u-boot-env copy size, as mp2s_fwenv_check.py uses)")
     ap.add_argument("--script", required=True, help="boot.scr.uimg to copy")
     ap.add_argument("--image", required=True, help="default.bin to copy")
     ap.add_argument("--out", required=True, help="output directory (new or empty)")
