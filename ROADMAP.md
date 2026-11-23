@@ -184,12 +184,11 @@ the five stages (issue #7, `driver/docs/nanopc-t6-mali.md`). Its back end
 (`gpu-mali`) runs on the board's own Linux through the panthor kernel
 driver. Per `tools/cts/RESULTS.md`, "Mali":
 
-- dEQP-GLES2: the whole 17,165-case list at main `37305608` (2026-11-15, one
-  boot, 76 rows, `1db8fd3d`) reads 5,456 Pass, 10,700 Fail, 973
-  NotSupported, 33 ResourceError and 3 QualityWarning, with no crash, hang or
-  kernel line; 10,583 of the non-Pass cases are refusals of the online
-  compiler (plan #309, `docs/es2-cts-failures.md` section M). Stage 5
-  needs 0 Fail.
+- dEQP-GLES2: the whole 17,165-case list at main `8ff01055` (2026-11-24, one
+  boot, 76 rows) reads 10,950 Pass, 5,706 Fail, 506 NotSupported and 3
+  QualityWarning, with no crash, hang or kernel line; 5,829 of the non-Pass
+  cases are refusals of the online compiler (issue #11251,
+  `docs/es2-cts-failures.md` section M). Stage 5 needs 0 Fail.
 - `gl_test` sweep (`tools/cts/log/2026-11-t6-sweep-1a22bd38/`, main
   `1a22bd38e`, 2026-11-12): 165 of 256 cases PASS twice, 6 refused, 73 with
   no case, 9 skipped, 3 FAIL, 0 FAULT.

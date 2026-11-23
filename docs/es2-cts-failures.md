@@ -168,34 +168,23 @@ checks the GC7000 descriptor on the host for that half.
   `src/gl/texture.rs` never take the restricted side in any build. They are
   revert checks, not stale text.
 
-## M. Mali-G610 (NanoPC-T6): the whole tree at `37305608`, 25 rows rerun at `a2482523`
+## M. Mali-G610 (NanoPC-T6): the whole tree at `8ff01055`
 
 The `gpu-mali` back end on the NanoPC-T6 (RK3588, Valhall v10), on the
 board's own Armbian (kernel 6.18.55-current-rockchip64) through panthor, with
 the `tools/mali/panthor-gles` pair, `tools/cts/mali-deqp-run.sh` over the 76
 rows of `tools/cts/mali-gles2-tree.txt` (issue #20, ROADMAP stage 5, issue
-#7). Four slices, `tools/cts/log/2026-11-15-t6-gles2-S<n>-37305608/`, all
-from one origin/main commit, `37305608`, run on 2026-11-15 in one boot of the
-board. The same build ran the tree three times that day and every case had
-the same status each time; the slices are the third run (the first two are
-not committed).
-
-Plan #373's board rerun (session R373) ran the 25 rows its fixes reach again
-from origin/main `a2482523` on 2026-11-21, in one boot:
-`tools/cts/log/2026-11-21-t6-gles2-R373-a2482523/` (5,944 cases, all 25
-chunks `done`, 0 kernel lines of a fault, timeout, reset or MMU fault, the
-same boot id before and after, ssh answering after every chunk). Its
-`meta.txt` has `replaces=` for the four slices above, so each rerun chunk
-stands in for the chunk of the same label: the tree below is the four slices
-with those 25 rows replaced, and every mustpass case has exactly one result
-(`mali-deqp-tally.py --check-cover` exits 0). No case is Lost.
+#7). Four slices, `tools/cts/log/2026-11-24-t6-gles2-S<n>-8ff01055/`, all
+from one origin/main commit, `8ff01055`, run on 2026-11-24 in one boot of the
+board. Every mustpass case has exactly one result (`mali-deqp-tally.py
+--check-cover` exits 0). No case is Lost.
 
 The board: all 76 chunks ended `done`, with 0 panthor kernel lines, 0 resets,
 ssh answering after every chunk and the same boot id before and after each
 slice. No exit line reports a GPU fault or a job timeout. No case crashed,
 hung or faulted the GPU.
 
-The block below is `mali-deqp-tally.py --tally --markdown` of the five
+The block below is `mali-deqp-tally.py --tally --markdown` of the four
 slices. The gate keeps it equal to them: the `tools/check.sh` row
 `es2-cts-failures.md's Mali block equals the tally of its slices` runs
 `--check-doc docs/es2-cts-failures.md --log tools/cts/log`. Each slice has a
@@ -208,189 +197,194 @@ dEQP reads ends cut.
 
 <!-- mali-deqp-tally begin -->
 
-Slices: `2026-11-15-t6-gles2-S1-37305608`, `2026-11-15-t6-gles2-S2-37305608`, `2026-11-15-t6-gles2-S3-37305608`, `2026-11-15-t6-gles2-S4-37305608`, `2026-11-21-t6-gles2-R373-a2482523`
-(commits `37305608`, `a2482523`).
+Slices: `2026-11-24-t6-gles2-S1-8ff01055`, `2026-11-24-t6-gles2-S2-8ff01055`, `2026-11-24-t6-gles2-S3-8ff01055`, `2026-11-24-t6-gles2-S4-8ff01055`
+(commits `8ff01055`).
 
 | Status | Cases |
 | --- | ---: |
-| Pass | 7353 |
-| Fail | 8836 |
-| NotSupported | 973 |
+| Pass | 10950 |
+| Fail | 5706 |
+| NotSupported | 506 |
 | QualityWarning | 3 |
 | **Total** | **17165** |
 
 | Status | Cause | Cases |
 | --- | --- | ---: |
-| Fail | refused, fragment shader: Valhall: an integer or boolean value is not lowered yet | 1566 |
-| Fail | refused, fragment shader: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | 885 |
-| Fail | refused, fragment shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 770 |
-| Fail | refused, vertex shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 715 |
-| Fail | refused, vertex shader: Valhall: an integer or boolean value is not lowered yet | 637 |
-| Fail | refused, vertex shader: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet | 632 |
-| Fail | refused, vertex shader: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet | 424 |
-| NotSupported | refused, vertex shader: Valhall: a loop in a vertex shader is not lowered yet | 392 |
-| Fail | refused, fragment shader: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet | 300 |
-| Fail | refused, vertex shader: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is no | 290 |
-| Fail | refused, vertex shader: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet | 270 |
-| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet | 269 |
-| Fail | refused, fragment shader: Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered | 253 |
-| Fail | refused, vertex shader: Valhall: a uniform array is not lowered yet | 216 |
-| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet | 192 |
-| Fail | refused, fragment shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 172 |
-| Fail | refused, fragment shader: Valhall: a colour pair of a constant then a varying lane is not lowered yet | 160 |
-| Fail | refused, vertex shader: Valhall: a gl_Position lane left unwritten is not lowered yet | 143 |
-| Fail | refused, vertex shader: Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet | 136 |
-| Fail | refused, fragment shader: Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet | 126 |
-| Fail | refused, vertex shader: Valhall: a loop in a vertex shader is not lowered yet | 104 |
-| NotSupported | refused, vertex shader: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet | 94 |
-| Fail | refused, fragment shader: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is | 88 |
-| Fail | refused, vertex shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 82 |
-| Fail | refused, vertex shader: Valhall: a shader with more than 32 local variables is not lowered yet | 78 |
-| Fail | refused, vertex shader: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet | 76 |
-| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet | 71 |
-| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet | 69 |
-| NotSupported | refused, fragment shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 59 |
-| Fail | refused, fragment shader: Valhall: a shader with more than 32 local variables is not lowered yet | 46 |
-| Fail | refused, fragment shader: Valhall: a uniform array is not lowered yet | 46 |
+| Fail | refused, fragment shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 865 |
+| Fail | refused, fragment shader: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | 763 |
+| Fail | refused, vertex shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 603 |
+| Fail | refused, vertex shader: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet | 371 |
+| Fail | Image comparison failed | 306 |
+| Fail | refused, vertex shader: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is no | 299 |
+| Fail | refused, fragment shader: Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered | 271 |
+| Fail | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (IrIndex) | 206 |
+| Fail | refused, vertex shader: Valhall: a uniform array is not lowered yet | 193 |
+| Fail | refused, fragment shader: Valhall: an integer or boolean value is not lowered yet | 188 |
+| Fail | refused, fragment shader: Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet | 182 |
+| Fail | refused, vertex shader: Valhall: a loop in a vertex shader is not lowered yet | 176 |
+| Fail | refused, fragment shader: Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet | 168 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet | 152 |
+| Fail | refused, vertex shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 144 |
+| Fail | refused, vertex shader: Valhall: a fused multiply-add other than a matrix product's (a built-in function's) is not lowered yet | 142 |
+| NotSupported | refused, vertex shader: Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet | 92 |
+| NotSupported | refused, fragment shader: Valhall: a loop Mesa keeps (a run-time bound) in a mediump fragment shader (its fp16 vectors carried across the back edge) is not lowered yet | 87 |
+| Fail | refused, fragment shader: Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is | 86 |
+| NotSupported | refused, fragment shader: Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet | 78 |
+| NotSupported | refused, vertex shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 73 |
+| Fail | refused, vertex shader: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet | 61 |
+| Fail | refused, vertex shader: Valhall: a vertex shader texture look-up other than 2D or cube look-ups at a level (a size query), or its fp16 texels read by a mediump operation other than a product or sum, is not lower | 60 |
+| Fail | refused, fragment shader: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes conve | 50 |
+| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet | 43 |
 | Fail | refused, fragment shader: Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet | 42 |
-| NotSupported | refused, fragment shader: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes conve | 41 |
-| Fail | refused, vertex shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 36 |
-| NotSupported | refused, fragment shader: Valhall: an integer or boolean value is not lowered yet | 35 |
-| Fail | refused, fragment shader: Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converted apart, lanes conve | 32 |
-| Fail | refused, fragment shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 31 |
-| Fail | refused, fragment shader: Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_TO_U32) is not lowered yet | 25 |
+| Fail | refused, vertex shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 41 |
+| Fail | refused, fragment shader: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet | 40 |
+| Fail | refused, fragment shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 33 |
+| Fail | refused, fragment shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 32 |
+| Fail | refused, vertex shader: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet | 31 |
+| NotSupported | refused, fragment shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 27 |
+| NotSupported | refused, fragment shader: Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside | 23 |
+| NotSupported | refused, fragment shader: Valhall: an integer or boolean value is not lowered yet | 22 |
+| Fail | refused, vertex shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet | 20 |
+| NotSupported | refused, vertex shader: Valhall: a loop in a vertex shader is not lowered yet | 20 |
+| Fail | refused, fragment shader: Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) i | 16 |
 | NotSupported | No multisample buffers | 16 |
-| Fail | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (IrIndex) | 14 |
-| Fail | Got invalid error | 12 |
-| Fail | refused, vertex shader: Valhall: an invariant output (Mesa keeps its arithmetic exact, unfused) is not lowered yet | 12 |
+| Fail | refused, fragment shader: Valhall: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there), is not lowered yet | 14 |
+| NotSupported | refused, vertex shader: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet | 12 |
 | Fail | Failed to compile shader | 10 |
-| Fail | refused, fragment shader: Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet | 10 |
+| NotSupported | refused, fragment shader: Valhall: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects) is not lowered yet | 10 |
+| Fail | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle) | 9 |
 | Fail | refused, vertex shader: Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not lowered yet | 9 |
 | NotSupported | No suitable compressed formats found | 9 |
-| Fail | Failed to retrieve uniform location | 8 |
+| NotSupported | refused, vertex shader: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet | 9 |
+| Fail | Got invalid error | 8 |
+| Fail | glDrawElements(GL_TRIANGLES, DE_LENGTH_OF_ARRAY(indices), GL_UNSIGNED_SHORT, &indices[#]): glGetError() returned GL_INVALID_OPERATION at es#fUniformApiTests.cpp:# | 8 |
 | Fail | refused, vertex shader: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet | 8 |
+| Fail | refused, vertex shader: the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet | 8 |
 | NotSupported | Required extension EXT_clip_control is not supported | 8 |
-| NotSupported | refused, fragment shader: Valhall: a shader with more than 32 local variables is not lowered yet | 8 |
-| NotSupported | refused, vertex shader: Valhall: a shader with more than 32 local variables is not lowered yet | 8 |
-| Fail | Image comparison failed | 7 |
-| NotSupported | refused, fragment shader: Valhall: a break or continue behind a run-time condition in a loop a mediump fragment shader unrolls (Mesa's ladder of fp16 selects) is not lowered yet | 6 |
-| NotSupported | refused, fragment shader: Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet | 6 |
-| NotSupported | refused, vertex shader: Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet | 5 |
+| Fail | Program link failed: <name> at glsAttributeLocationTests.cpp:# | 7 |
+| Fail | refused, fragment shader: Valhall: a fragment colour of more than 255 vectorised operations and operands is not lowered yet | 7 |
+| Fail | refused, vertex shader: Valhall back end defect: an invariant of the pipeline did not hold (Encode) | 6 |
+| Fail | refused, vertex shader: Valhall: a gl_Position lane left unwritten is not lowered yet | 6 |
+| NotSupported | refused, vertex shader: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not lo | 6 |
+| NotSupported | refused, fragment shader: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | 5 |
 | Fail | got invalid value | 4 |
 | Fail | refused, fragment shader: Valhall: three or more additions or multiplications in a chain (GLSL's do_rebalance_tree reassociates such a tree) is not lowered yet | 4 |
-| NotSupported | refused, vertex shader: Valhall: an integer or boolean value is not lowered yet | 4 |
+| NotSupported | refused, fragment shader: Valhall: a discard other than a highp fragment shader's `if (a < b) discard;` with no else (an unconditional one, one among other statements, one under another if, a mediump shader's) i | 4 |
 | Fail | expected GL_TRUE | 3 |
-| Fail | refused, fragment shader: Valhall: a comparison other than <, <=, >, >= and == of floats and < of ints (no reference draws it) is not lowered yet | 3 |
-| Fail | refused, vertex shader: Valhall: a varying lane left unwritten is not lowered yet | 3 |
+| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform fi | 3 |
 | QualityWarning | Interpolation was calculated using projected coordinateds | 3 |
-| Fail | refused, fragment shader: Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle) | 2 |
-| Fail | refused, fragment shader: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not | 2 |
-| Fail | refused, vertex shader: Valhall: a program needing more than the split file's 32 work registers (the full file, spilling) is not lowered yet | 2 |
 | Fail | refused, vertex shader: Valhall: a shader of more than 2048 IR values (or 1536 instructions before selection) is not lowered yet | 2 |
-| NotSupported | refused, fragment shader: Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside | 2 |
-| NotSupported | refused, fragment shader: Valhall: a uniform array is not lowered yet | 2 |
-| NotSupported | refused, fragment shader: Valhall: control flow (if, a loop, a return before the end) is not lowered yet | 2 |
-| NotSupported | refused, vertex shader: Valhall: a uniform array is not lowered yet | 2 |
-| NotSupported | refused, vertex shader: Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet | 2 |
+| NotSupported | refused, fragment shader: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not | 2 |
 | Fail | Fail | 1 |
 | Fail | Fail, expected LINK_STATUS to be TRUE.: <name> at es#fShaderApiTests.cpp:# | 1 |
 | Fail | Runtime check failed: <name> at es#fShaderApiTests.cpp:# | 1 |
 | Fail | refused, fragment shader: Valhall: a constant fp16 does not hold (past its normal range, or a highp colour or point size constant not exactly) is | 1 |
-| Fail | refused, fragment shader: Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform fi | 1 |
 | Fail | refused, fragment shader: Valhall: a loop past Mesa's unroll limits or with two run-time breaks, or a kept loop with more than two breaks, a continue other than the step's at its top or the colour written inside | 1 |
-| Fail | refused, fragment shader: Valhall: a shader of more than 2048 IR values (or 1536 instructions before selection) is not lowered yet | 1 |
 | Fail | refused, fragment shader: Valhall: a texture result's lanes other than its own pairs in order (a swizzle, a lane alone) is not lowered yet | 1 |
 | NotSupported | EXT_multisampled_render_to_texture is not supported at es#fMultisampledRenderToTextureTests.cpp:# | 1 |
-| NotSupported | refused, fragment shader: Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet | 1 |
-| NotSupported | refused, fragment shader: Valhall: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform, is not | 1 |
+| NotSupported | refused, fragment shader: Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered | 1 |
+| NotSupported | refused, vertex shader: Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet | 1 |
 
 <!-- mali-deqp-tally end -->
 
 ### M.1 The non-Pass cases
 
-9,812 cases are not Pass: Fail 8,836, NotSupported 973, QualityWarning 3. The
-tree is the four slices of `37305608` with 25 of its 76 rows replaced by the
-rerun `2026-11-21-t6-gles2-R373-a2482523` (commit `a2482523`, 5,944 cases;
-the slice's `meta.txt` carries `replaces=` for the four, so every case counts
-once). The rerun's rows are the rows plan #373's fixes reach. At `37305608`
-11,709 cases were not Pass; the rerun moved 1,904 of them to Pass and 7 cases
-that passed to Fail (rows 5 and 14 below).
+6,215 cases are not Pass: Fail 5,706, NotSupported 506, QualityWarning 3. In
+the tree before this one (`37305608` with 25 rows rerun at `a2482523`, M.2)
+9,812 were not Pass.
 
-**9,728 have a compile or link refusal in their own log** (Fail 8,789,
-NotSupported 939). The block lists every refusal text with its count; that
-list, by size, is the work order of the compiler plans (plan #309 for the
-sweep; a refusal name is an M.2 item). The NotSupported ones are refusals of
-a feature that GLSL ES 1.00 Appendix A makes optional, which dEQP then
-reports as NotSupported (`Loop type is not supported`, `Dynamic indexing not
-supported`, ...). 14 Pass cases log a refusal too: 9
-`shader_api.shader_source.*`, which read back the source and never draw, and
-5 expected-failure cases whose other shader the front end rejects as the case
-expects.
+**5,829 have a compile or link refusal in their own log** (Fail 5,357,
+NotSupported 472). The block lists every refusal text with its count; that
+list, by size, is the work order of the compiler (issue #11251: the general
+front half, which takes the place of the per-shape rules these texts name).
+The NotSupported ones are refusals of a feature that GLSL ES 1.00 Appendix A
+makes optional, which dEQP then reports as NotSupported (`Loop type is not
+supported`, `Dynamic indexing not supported`, ...). 9 Pass cases log a
+refusal too: `shader_api.shader_source.*`, which read back the source and
+never draw.
 
-**84 have no refusal in their log** (Fail 47, NotSupported 34,
-QualityWarning 3). At `37305608` they were 1,126. The rerun's slice has no
-`yakogl-mali-refusal:` line in any case (no draw was refused), so the
-per-case split of cause 4 (`mali-deqp-tally.py --per-case`) reads the same as
-the plain tally: the 100 `fragment_ops.random` cases all pass. The "Cases"
-column below is the count now; "was" is the count at `37305608`. Owners:
-plan #373 for the frame side and the cases it fixed, the compiler plans
-(#309 and its successors) for the compiler, #33 for the Mali frame.
+**386 have no refusal in their log** (Fail 349, NotSupported 34,
+QualityWarning 3). In the tree before they were 84: the compiler now builds
+shaders it refused then, and 314 cases that were refused now reach a draw, a
+link or a comparison and fail there (rows 16 to 18). No row below is a case
+that passed in the tree before. The "Cases" column is the count now; "Was"
+is the count in the tree before. Rows 1 to 15 keep the numbers of the tree
+before (tests and notes cite them); M.3 has the history of the fixed ones.
 
 | # | Cause | Status | Was | Cases | Where | Fix and owner |
 |---|---|---|---:|---:|---|---|
-| 1 | A blend shader refused at the draw (`a blend shader other than a constant colour's ... is not built yet`); dEQP: `Image compare failed` | Fail | 828 | 0 | `fragment_ops.blend` (1,060 Pass) | `961cbf77` (plan #373, cause 3): fixed |
-| 2 | Missing or wrong pixels (`Image comparison failed` 71) and `GL error` 29 in chunks whose exit line counts refused draws | Fail | 100 | 0 | `fragment_ops.random` (100 Pass) | plan #373 (cause 4): followed row 1 (`961cbf77`); the per-case refusal line is `fc195a8d` |
-| 3 | A depth or stencil object refused at the draw (`a depth or stencil object drawn in another framebuffer's depth/stencil pair is not built yet`); dEQP: `Got unexpected error` 21, `Image comparison failed` 14 | Fail | 35 | 0 | `fbo.render.{recreate_depthbuffer,recreate_stencilbuffer,shared_depthbuffer}.*` (70 Pass) | `e918e015` (plan #373, cause 5): fixed |
-| 4 | A draw failed with `GL_OUT_OF_MEMORY` (a counting defect in the frame's varying check, not memory) | ResourceError | 33 | 0 | `shaders.matrix` 24, `shaders.random` 6, `shaders.conditionals` 2, `fragment_ops.interaction` 1 | `b2585cf2` (plan #373, cause 6): fixed, all 33 Pass |
-| 5 | Wrong pixels from a vertex-shader cube look-up, no refusal; dEQP: `Image comparison failed` | Fail | 16 | 3 | `texture.vertex.cube.filtering.linear_mipmap_linear_{linear,nearest}_repeat`, `.wrap.repeat_repeat` | `0afaf24d`, `ea40c2b7` (plan #373, cause 7) fixed the 16; the 3 here passed at `37305608` and fail at `a2482523`: new, plan #373 |
-| 6 | An incomplete cube map refused at the draw (`GL_INVALID_OPERATION`) | Fail | 16 | 0 | `texture.completeness.cube.*` (21 Pass) | `c50f2c41` (plan #373): fixed |
-| 7 | An error code or a uniform location other than the one the case expects, in cases that build a program first: `Got invalid error` 12, `Failed to retrieve uniform location` 8 | Fail | 20 | 20 | `negative_api.shader` 14, `negative_api.vertex_array` 4, `negative_api.state` 2 | not rerun; the stub vertex shader constant (plan #373 apierr-fix, not landed) and the compiler plans by the program's refusal; each case unproven |
-| 8 | `GL_INVALID_OPERATION` at a draw (an unread attribute between read ones, a matrix column beyond column 0) | Fail | 23 | 0 | `default_vertex_attrib.{mat2,mat3}` 8, `shaders.random` 7, `shaders.operator` 6, `fragment_ops.interaction` 2 | `24c04082` (plan #373): 22 Pass; the 23rd, `shaders.random` vertex.96, is now a named compiler refusal (`a vertex shader whose attribute numbering waits for a fold ...`, M.2) |
-| 9 | Wrong pixels from a mipmapped cube map (`Image verification failed`) | Fail | 6 | 0 | `texture.mipmap.cube.{basic,bias,projected}.linear_*` (28 Pass) | `0afaf24d`, `0c3a7729` (plan #373, cause 8): fixed |
-| 10 | A query value: `current_program_binding_*` 3 (`expected GL_TRUE`), `state_query.shader.{delete_status,program_active_uniform_types,program_validate_status,shader_compile_status}` 4 (`got invalid value`) | Fail | 7 | 7 | `state_query` | not rerun; as row 7 |
-| 11 | Wrong pixels or a status with no refusal named: `shaders.texture_functions.vertex.texturecubelod` 1 (`Fail`); `shader_api.compile_link.{compile_vertex_shader,link_vertex_fragment}` 2 | Fail | 5 | 3 | `shaders.texture_functions`, `shader_api` | `0c3a7729` fixed `fbo.render.stencil_clear.rbo_rgb565_*` 2; `texturecubelod` still fails after the row 5 sampler fix (plan #373, open); `compile_link` as row 7 |
-| 12 | A feature the context does not offer: `EXT_clip_control` 8, no multisample buffers 16, `EXT_multisampled_render_to_texture` 1, no compressed format with sub-image updates 9: the 34 of section C | NotSupported | 34 | 34 | `clip_control`, `multisample`, `negative_api.texture` | accepted (section C) |
+| 1 | A blend shader refused at the draw | Fail | 0 | 0 | `fragment_ops.blend` (1,060 Pass) | fixed, `961cbf77` (M.3) |
+| 2 | Missing or wrong pixels and `GL error` in chunks whose exit line counts refused draws | Fail | 0 | 0 | `fragment_ops.random` (100 Pass) | fixed with row 1 (M.3) |
+| 3 | A depth or stencil object drawn in another framebuffer's pair refused at the draw | Fail | 0 | 0 | `fbo.render.{recreate_depthbuffer,recreate_stencilbuffer,shared_depthbuffer}.*` (70 Pass) | fixed, `e918e015` (M.3) |
+| 4 | A draw failed with `GL_OUT_OF_MEMORY` (a counting defect in the frame's varying check) | ResourceError | 0 | 0 | `shaders.matrix`, `shaders.random`, `shaders.conditionals`, `fragment_ops.interaction` | fixed, `b2585cf2` (M.3) |
+| 5 | Wrong pixels from a vertex-shader cube look-up with `GL_REPEAT` and a `LINEAR` filter near a face edge, no refusal; dEQP: `Image comparison failed` | Fail | 3 | 3 | `texture.vertex.cube.filtering.linear_mipmap_linear_{linear,nearest}_repeat`, `.wrap.repeat_repeat` | open: issue #7489 |
+| 6 | An incomplete cube map refused at the draw | Fail | 0 | 0 | `texture.completeness.cube.*` (21 Pass) | fixed, `c50f2c41` (M.3) |
+| 7 | An error code other than the one the case expects (`Got invalid error`), in cases that build a program from dEQP's smallest shader pair first; the vertex shader `void main (void) { gl_Position = vec4(0.0); }` does not compile and the cases print no info log | Fail | 20 | 8 | `negative_api.shader.{get_active_attrib,get_active_uniform,get_attrib_location,get_uniform_location}` 4, `negative_api.vertex_array.{draw_arrays,draw_elements}{,_incomplete_primitive}` 4 | 12 Pass now (`negative_api.shader.uniform*` 10, `negative_api.state.get_uniform{fv,iv}` 2); the 8: issue #11328 |
+| 8 | `GL_INVALID_OPERATION` at a draw (an unread attribute between read ones, a matrix column beyond column 0) | Fail | 0 | 0 | `default_vertex_attrib.{mat2,mat3}`, `shaders.random`, `shaders.operator`, `fragment_ops.interaction` | fixed, `24c04082` (M.3) |
+| 9 | Wrong pixels from a mipmapped cube map | Fail | 0 | 0 | `texture.mipmap.cube.{basic,bias,projected}.linear_*` (28 Pass) | fixed, `0afaf24d`, `0c3a7729` (M.3) |
+| 10 | A query value: `current_program_binding_*` 3 (`expected GL_TRUE`), `state_query.shader.{delete_status,program_active_uniform_types,program_validate_status,shader_compile_status}` 4 (`got invalid value`; the log of `delete_status` reads compile status 0 for the vertex shader of row 7) | Fail | 7 | 7 | `state_query` | as row 7: issue #11328 |
+| 11 | `shader_api.compile_link.{compile_vertex_shader,link_vertex_fragment}` 2 (`checkCompileStatus` fails on the vertex shader of row 7); `shaders.texture_functions.vertex.texturecubelod` 1 (`Fail`, wrong pixels) | Fail | 3 | 3 | `shader_api`, `shaders.texture_functions` | `compile_link`: issue #11328; `texturecubelod`: as row 5, issue #7489 |
+| 12 | A feature the context does not offer: `EXT_clip_control` 8, no multisample buffers 16, `EXT_multisampled_render_to_texture` 1, no compressed format with sub-image updates 9: the 34 of section C | NotSupported | 34 | 34 | `clip_control`, `multisample`, `multisampled_render_to_texture`, `negative_api.texture` | accepted (section C) |
 | 13 | `rasterization.interpolation.basic.lines`, `.projected.lines`, `.projected.lines_wide`: the Pi 4's three of section C | QualityWarning | 3 | 3 | `rasterization` | accepted (section C) |
-| 14 | Wrong pixels after a colour attachment is rebound (`Image comparison failed`); passed at `37305608`, new at `a2482523` | Fail | 0 | 4 | `fbo.render.recreate_colorbuffer.rebind_{rbo_rgb565,tex2d_rgb}_{stencil_index8,depth_component16_stencil_index8}` | new: plan #373 (cause not investigated; `e918e015`, which changed the held stencil clear, and `0c3a7729`, which changed the colour mask of a format without alpha, are the commits to read first) |
-| 15 | `Failed to compile shader` with no refusal text in `refusals.tsv` (the slices of `37305608` named a compiler refusal for the nine fragment cases) | Fail | 0 | 10 | `shaders.random.{basic_expression,comparison_ops,scalar_conversion,conditionals,swizzle}.fragment.*` 9, one vertex case | new: the compiler plans (the refusal text is not recorded; to read from the rerun's chunk log); the library's log line is not in the case's output |
-| | **Total** | | **1,126** | **84** | | |
+| 14 | Wrong pixels after a colour attachment without alpha is rebound next to a stencil buffer (`Image comparison failed`); the four passed at `37305608` and fail since `a2482523` | Fail | 4 | 4 | `fbo.render.recreate_colorbuffer.rebind_{rbo_rgb565,tex2d_rgb}_{stencil_index8,depth_component16_stencil_index8}` | open: issue #11329 (`e918e015` and `0c3a7729` are the commits to read first) |
+| 15 | `Failed to compile shader`: the program's link is refused, `a Mali link whose stages place a varying at different offsets is not lowered yet` (`src/shaderc/online/mali/link.rs`). The text is in the case's log; `refusals.tsv` does not record it, because the run tool's extractor looks for the word `refused` only | Fail | 10 | 10 | `shaders.random.{basic_expression,comparison_ops,scalar_conversion,conditionals,swizzle}.fragment.*` | open: issue #11309 (the link, and the extractor) |
+| 16 | Wrong pixels from a shader with a bool or bvec value, no refusal (`Image comparison failed`); every one was a compiler refusal in the tree before. `swizzles` 162 (vertex 108, fragment 54: every bvec swizzle case that compiles), `conversions` 111 (to bool or bvec 101, to ivec 10), `functions` 14, `linkage.uniform_struct*` 12 | Fail | 0 | 299 | `shaders.swizzles.vector_swizzles.mediump_bvec{2,3,4}_*`, `shaders.conversions`, `shaders.functions`, `shaders.linkage` | open: issue #11306 (cause not yet proven) |
+| 17 | A draw refused: `a vertex shader that reads more than one texture is not built yet` (`src/mali/backend.rs`); dEQP: `GL_INVALID_OPERATION` at `glDrawElements` | Fail | 0 | 8 | `uniform_api.value.assigned.{by_pointer,by_value}.render.{array_in_struct,basic_struct,nested_structs_arrays,struct_in_array}.sampler2D_samplerCube_vertex` | open: issue #11308 |
+| 18 | `Program link failed`: `attribute 'a_8' has location 16, beyond the 16 vertex inputs`. The shader declares 32 attributes and reads 16; the 16 under `if (0 != 0)` are not active and need no location | Fail | 0 | 7 | `attribute_location.bind_aliasing.max_inactive_{float,vec2,vec3,vec4,mat2,mat3,mat4}` | open: issue #11307 |
+| | **Total** | | **84** | **386** | | |
 
-Rows 14 and 15 are new at the rerun and are counted in "Cases" only; the
-"Was" total of 1,126 is the first tree's. Rows 5, 14 and 15 are the causes
-that are not yet fixed on the frame side of plan #373.
+Rows 5, 7, 10, 11 and 14 are the same cases as in the tree before, except
+the 12 of row 7 that pass. Rows 16 to 18 are cases the compiler refused
+before: each is nearer to Pass than a refusal, and each is a defect to fix
+on its own issue.
 
-### M.2 Against the first tree
+### M.2 Against the earlier trees
 
-The first whole tree (seven slices of 2026-11-12/13, commits `a50d87b5` to
-`9b5daae8`, kept under `tools/cts/log/`) read 5,260 Pass, 10,898 Fail, 971
-NotSupported. Case by case:
+**The tree before** (the four slices of `37305608` of 2026-11-15 with 25
+rows replaced by the rerun `2026-11-21-t6-gles2-R373-a2482523`, kept under
+`tools/cts/log/`) read 7,353 Pass, 8,836 Fail, 973 NotSupported, 3
+QualityWarning. Case by case:
 
-- **224 cases now pass** (206 from Fail, 18 from NotSupported): 197 of
-  `texture` (`filtering` 112, `size` 42, `mipmap` 20, `format` 18,
-  `completeness` 5), 25 of `shaders.loops`, one each of `shaders.random` and
-  `shaders.texture_functions`.
-- **28 cases that passed do not** (20 NotSupported, 8 Fail). All 28 are
-  refused now where the first tree's commit compiled them:
-  - 26 by "a fragment varying load or conversion of a form no reference
-    draws": 23 `shaders.loops.*_fragment` (`*_constant_iterations`,
-    `*_dynamic_iterations` and `*_uniform_iterations`: `single_iteration`,
-    `sequence`, `nested_sequence`, `conditional_body`, `unconditional_break`,
-    `infinite_with_unconditional_break_last`),
-    `shaders.random.basic_expression.vertex.8`,
-    `shaders.random.trigonometric.vertex.60` and
-    `shaders.return.conditional_return_always_fragment`;
-  - 2 by "a gl_FragColor lane other than the varying's own lane or a
-    constant": `shaders.operator.sequence.no_side_effects.{lowp,mediump}_vec4_fragment`.
+- **3,597 cases now pass** (3,374 from Fail, 223 from NotSupported): 2,652
+  of `shaders` (`operator` 1,233, `preprocessor` 256, `swizzles` 252, `loops`
+  235, `conversions` 190, `indexing` 119, `functions` 105,
+  `constant_expressions` 99, `constants` 49, `scoping` 32, `matrix` 30,
+  `linkage` 21, `random` 14, others 17), 571 of `vertex_arrays` (the whole
+  group), 242 of `uniform_api`, 101 of `draw` (the whole group), 16 of
+  `negative_api`, 7 of `attribute_location`, 3 of `state_query`, 3 of
+  `fragment_ops`, 2 of `light_amount`.
+- **No case that passed fails.**
+- 244 refused cases moved from NotSupported to Fail (`shaders.loops` 240,
+  `shaders.return` 4), with a refusal in both trees. dEQP asks the context
+  whether an optional loop form is supported (`glu::ContextInfo`, a small
+  shader of dEQP's own per form) and reports a refused case of an
+  unsupported form as NotSupported (`es2fShaderLoopTests.cpp`). The forms
+  read as supported now, so the same refusal is a Fail. These cases count
+  against the 0 Fail criterion until their loops are lowered.
 
-  A refusal there is the compiler's rule (words equal to Mesa's, or a named
-  refusal); these 28 come back when the two forms are lowered with a
-  reference.
+**The first whole tree** (seven slices of 2026-11-12/13, commits `a50d87b5`
+to `9b5daae8`, kept under `tools/cts/log/`) read 5,260 Pass, 10,898 Fail,
+971 NotSupported, 33 ResourceError. Case by case:
+
+- **5,700 cases now pass** (5,446 from Fail, 221 from NotSupported, 33 from
+  ResourceError).
+- **10 cases that passed do not:**
+  - 7 with wrong pixels and no refusal: the 4 of row 14 and the 3 of row 5;
+  - 3 refused now where the first tree's commit compiled them:
+    `shaders.operator.sequence.no_side_effects.{lowp,mediump}_vec4_fragment`
+    by "a gl_FragColor lane other than the varying's own lane or a
+    constant", and `shaders.return.conditional_return_always_fragment` by "a
+    fragment varying load or conversion of a form no reference draws". A
+    refusal there is the compiler's rule (words equal to Mesa's, or a named
+    refusal); the three come back when the two forms are lowered with a
+    reference.
 
 ### M.3 Landed on the host, and what the rerun showed
 
 Plan #373's causes 3 to 8 (table rows 1 to 6, 8, 9 and 11) have host fixes.
-The block and M.1 hold the board rerun of origin/main `a2482523`
-(`2026-11-21-t6-gles2-R373-a2482523`). Each entry gives the root cause, the
+This is the history of the tree before the current one: the board rerun of
+origin/main `a2482523` (`2026-11-21-t6-gles2-R373-a2482523`), whose figures
+M.2 gives. The block and M.1 hold the tree at `8ff01055`. Each entry gives the root cause, the
 commit that landed the fix, the host test that pins it, and what was
 expected from the host pins on the Mali mock (no pixels of a board).
 "Expected" is that forecast; the **Rerun** lines at the end are the board's
@@ -513,8 +507,8 @@ result, case by case.
   stencil attachment, which passed, now fail (M.1 row 14). 9 fragment
   `shaders.random` cases read `Failed to compile shader` with no refusal text
   (row 15). No other case moved from Pass to non-Pass.
-- 0 Fail is the stage 5 criterion; 8,836 Fail remain, 8,789 of them with a
-  compiler refusal (M.2's names; the compiler plans). Rows 5, 11 and 14 are
-  plan #373's; rows 7 and 10 wait for the stub vertex shader constant. The
-  tree is rerun from one origin/main commit as the refusals move, and
-  replaces this section.
+- 0 Fail is the stage 5 criterion. After that rerun 8,836 Fail remained,
+  8,789 of them with a compiler refusal. The tree at `8ff01055` (the block
+  and M.1) has 5,706 Fail, 5,357 of them with a compiler refusal. The tree
+  is rerun from one origin/main commit as the refusals move, and replaces
+  the block, M.1 and M.2.

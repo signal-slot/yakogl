@@ -71,7 +71,8 @@ records at the tip.
   row, from main `de2f2c103`, 2026-11-17: all 76 images reached their
   `deqp: done` line; of the 17,165 mustpass cases 6,644 pass, 9,545 fail,
   973 not supported, 3 quality warnings (the "Mali: NanoPC-T6 on Zephyr"
-  row of `tools/cts/RESULTS.md`; the Armbian tree above stays 5,456 Pass).
+  row of `tools/cts/RESULTS.md`; the Armbian tree below is from a later
+  commit).
   9,482 of the failures are the online compiler naming a shader form it
   refuses.
 - Raspberry Pi 5 (BCM2712, V3D 7.1.10) on Zephyr, probe images started by
@@ -88,13 +89,13 @@ records at the tip.
 - STM32MP257F-DK: no board result yet (`tools/cts/RESULTS.md` has no DK
   row); what exists is host-tested code and probes, under Added.
 - dEQP-GLES2 on the NanoPC-T6 (Mali-G610, panthor, the board's own
-  Armbian): the whole mustpass tree at main `37305608`, 2026-11-15, one
-  boot, four slices under `tools/cts/log/2026-11-15-t6-gles2-S<n>-37305608/`:
-  17,165 cases, 5,456 Pass, 10,700 Fail, 973 NotSupported, 33
-  ResourceError, 3 QualityWarning, 0 Lost; all 76 chunks done, 0 panthor
-  kernel lines, 0 resets (`1db8fd3d`, a `tools/cts/RESULTS.md` row). Since
-  the first tally (`ce050715`, 5,260 Pass) 224 cases newly pass and 28 that
-  passed are refused; most of the rest are refusals by the online compiler
+  Armbian): the whole mustpass tree at main `8ff01055`, 2026-11-24, one
+  boot, four slices under `tools/cts/log/2026-11-24-t6-gles2-S<n>-8ff01055/`:
+  17,165 cases, 10,950 Pass, 5,706 Fail, 506 NotSupported, 3
+  QualityWarning, 0 Lost; all 76 chunks done, 0 panthor kernel lines, 0
+  resets (a `tools/cts/RESULTS.md` row). Against the tree before (7,353
+  Pass) 3,597 cases newly pass and none that passed fails; 5,357 of the
+  failures are refusals by the online compiler
   (`docs/es2-cts-failures.md` section M).
 - The last green full gate reads 222 ok, 0 failed, 0 gap(s) at `c66bea9f`
   (2026-11-11, `4946e879`); green means that one commit. The full run at

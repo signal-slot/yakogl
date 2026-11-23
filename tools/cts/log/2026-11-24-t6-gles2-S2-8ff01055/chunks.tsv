@@ -1,0 +1,15 @@
+row	label	cases	status	seconds	kmsg	resets	ssh_after	boot_same	exit_line
+25	T6S2R01	400	done	7	0	0	yes	yes	yakogl-mali-exit: draws=800 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+26	T6S2R02	239	done	6	0	0	yes	yes	yakogl-mali-exit: draws=478 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+27	T6S2R03	196	done	6	0	0	yes	yes	yakogl-mali-exit: draws=1568 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+28	T6S2R04	400	done	13	0	0	yes	yes	yakogl-mali-exit: draws=59124 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+29	T6S2R05	400	done	16	0	0	yes	yes	yakogl-mali-exit: draws=112000 refused=0 first_refused=- gpu_faults=0 job_timeouts=0
+30	T6S2R06	288	done	10	0	0	yes	yes	yakogl-mali-exit: draws=20888 refused=122 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) gpu_faults=0 job_timeou
+31	T6S2R07	372	done	7	0	0	yes	yes	yakogl-mali-exit: draws=165 refused=207 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) 
+32	T6S2R08	372	done	8	0	0	yes	yes	yakogl-mali-exit: draws=283 refused=89 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured pre
+33	T6S2R09	398	done	8	0	0	yes	yes	yakogl-mali-exit: draws=307 refused=91 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is 
+34	T6S2R10	374	done	8	0	0	yes	yes	yakogl-mali-exit: draws=261 refused=113 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is
+35	T6S2R11	400	done	6	0	0	yes	yes	yakogl-mali-exit: draws=115 refused=285 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not 
+36	T6S2R12	336	done	7	0	0	yes	yes	yakogl-mali-exit: draws=168 refused=168 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) gpu_faults
+37	T6S2R13	361	done	7	0	0	yes	yes	yakogl-mali-exit: draws=260 refused=101 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) gpu_faults=0 job_timeouts=0
+38	T6S2R14	336	done	8	0	0	yes	yes	yakogl-mali-exit: draws=234 refused=102 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not 

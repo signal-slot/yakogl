@@ -1,0 +1,1190 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S1R09.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.bind_buffer'..
+yakogl: GL error 0x500 in glBindBuffer
+yakogl: mali arena 'desc': high-water 288 of 1048576 bytes
+yakogl: mali arena 'cs': high-water 104 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.bind_framebuffer'..
+yakogl: GL error 0x500 in glBindFramebuffer
+yakogl: GL error 0x500 in glBindFramebuffer
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.bind_renderbuffer'..
+yakogl: GL error 0x500 in glBindRenderbuffer
+yakogl: GL error 0x500 in glBindRenderbuffer
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.buffer_data'..
+yakogl: GL error 0x500 in glBufferData
+yakogl: GL error 0x500 in glBufferData
+yakogl: GL error 0x501 in glBufferData
+yakogl: GL error 0x502 in glBufferData
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.buffer_sub_data'..
+yakogl: GL error 0x500 in glBufferSubData
+yakogl: GL error 0x502 in glBufferSubData
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.buffer_sub_data_size_offset'..
+yakogl: GL error 0x501 in glBufferSubData
+yakogl: GL error 0x501 in glBufferSubData
+yakogl: GL error 0x501 in glBufferSubData
+yakogl: GL error 0x501 in glBufferSubData
+yakogl: GL error 0x501 in glBufferSubData
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.check_framebuffer_status'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.clear'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.delete_buffers'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.delete_framebuffers'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.delete_renderbuffers'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.framebuffer_renderbuffer'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.framebuffer_texture2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.gen_buffers'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.gen_framebuffers'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.gen_renderbuffers'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.read_pixels'..
+yakogl: gl_fb_target: framebuffer 1 incomplete (status 0x8cd7)
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.read_pixels_format_mismatch'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.buffer.renderbuffer_storage'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.blend_equation'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.blend_equation_separate'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.blend_func'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.blend_func_separate'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.cull_face'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.depth_func'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.front_face'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.line_width'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.scissor'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.stencil_func'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.stencil_func_separate'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.stencil_mask_separate'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.stencil_op'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.stencil_op_separate'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.fragment.viewport'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.attach_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.bind_attrib_location'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.compile_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.create_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.delete_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.delete_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.detach_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.get_active_attrib'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.get_active_uniform'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.get_attrib_location'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.get_uniform_location'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.link_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.release_shader_compiler'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.shader_binary'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.shader_source'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniform_matrixfv_incompatible_type'..
+yakogl: mali shaderc table 'IR values': high-water 10 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 64 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 64 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 38 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 21 of 128
+yakogl: mali shaderc table 'uniform rows': high-water 2 of 256
+yakogl: mali shaderc table 'locals': high-water 1 of 256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniform_matrixfv_invalid_count'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniform_matrixfv_invalid_location'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniform_matrixfv_invalid_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniform_matrixfv_invalid_transpose'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformf_incompatible_type'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformf_invalid_location'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformf_invalid_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformfv_incompatible_type'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformfv_invalid_count'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformfv_invalid_location'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformfv_invalid_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformi_incompatible_type'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformi_invalid_location'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformi_invalid_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformiv_incompatible_type'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformiv_invalid_count'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformiv_invalid_location'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.uniformiv_invalid_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.use_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.shader.validate_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.disable'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.enable'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_attached_shaders'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_booleanv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_buffer_parameteriv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_floatv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_framebuffer_attachment_parameteriv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_integerv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_is_enabled'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_program_info_log'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_programiv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_renderbuffer_parameteriv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_shader_info_log'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_shader_precision_format'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_shader_source'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_shaderiv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_string'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_tex_parameterfv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_tex_parameteriv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_uniformfv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_uniformiv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_vertex_attrib_pointerv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_vertex_attribfv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.get_vertex_attribiv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.hint'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.is_buffer'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.is_framebuffer'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.is_program'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.is_renderbuffer'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.is_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.state.is_texture'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.activetexture_invalid_texture'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.bindtexture_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.bindtexture_type_mismatch'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_border_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_invalid_size'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_level_max_cube_pos'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_level_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_level_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_level_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_neg_width_height_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage2d_width_height_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage_2d_invalid_format_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage_2d_invalid_format_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedteximage_2d_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_invalid_size'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_invalid_target'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_level_max_cube'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_level_max_tex2d'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_level_cube'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_level_tex2d'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_offset'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_neg_wdt_hgt'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d_offset_allowed'..
+  NotSupported (No suitable compressed formats found)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_incomplete_framebuffer'..
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_inequal_width_height_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_border_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_format_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_format_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_invalid_width_height_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_level_max_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_level_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_neg_level_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_neg_level_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copyteximage2d_width_height_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_incomplete_framebuffer'..
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_level_max_cube_pos'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_level_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_neg_level_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_neg_level_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_neg_offset'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_neg_wdt_hgt'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.copytexsubimage2d_offset_allowed'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.deletetextures_invalid_number'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.deletetextures_invalid_number_bind'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.generatemipmap_incomplete_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.generatemipmap_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.generatemipmap_npot_wdt_hgt'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.generatemipmap_zero_level_array_compressed'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.gentextures_invalid_size'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.pixelstorei_invalid_param'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.pixelstorei_invalid_pname'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_format_mismatch'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_inequal_width_height_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_invalid_border'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_invalid_format'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_invalid_internalformat'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_invalid_type'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_level_max_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_level_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_level_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_level_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_neg_width_height_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_type_format_mismatch'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_cube_neg_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_cube_neg_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_cube_neg_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_cube_pos_x'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_cube_pos_y'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_cube_pos_z'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.teximage2d_width_height_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameterf'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameterf_bind'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameterfv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameterfv_bind'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameteri'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameteri_bind'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameteriv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texparameteriv_bind'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_invalid_format'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_invalid_target'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_invalid_type'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_level_max_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_level_max_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_neg_level_cube'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_neg_level_tex2d'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_neg_offset'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_neg_wdt_hgt'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_offset_allowed'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.texture.texsubimage2d_type_format_mismatch'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.disable_vertex_attrib_array'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.draw_arrays'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.draw_arrays_incomplete_primitive'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.draw_arrays_invalid_program'..
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.draw_elements'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.draw_elements_incomplete_primitive'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Fail (Got invalid error)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.draw_elements_invalid_program'..
+yakogl: gl_fb_target: framebuffer 2 incomplete (status 0x8cd7)
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.enable_vertex_attrib_array'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.vertex_attrib'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.vertex_attrib_pointer'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.negative_api.vertex_array.vertex_attribv'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.default_displacement_with_units'..
+yakogl: mali: depth/stencil buffers: high-water 1 of 32
+yakogl: mali arena 'desc': high-water 51568 of 1048576 bytes
+yakogl: mali arena 'data': high-water 5120 of 262144 bytes
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 20008 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.default_enable'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.default_factor_0_slope'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.default_render_with_factor'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.default_render_with_units'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.fixed16_displacement_with_units'..
+yakogl: mali: depth/stencil buffers: high-water 2 of 32
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.fixed16_enable'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.fixed16_factor_0_slope'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.fixed16_render_with_factor'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.prerequisite.clear_color'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.prerequisite.read_pixels'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.prerequisite.state_reset'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.back_triangle_fan'..
+yakogl: mali shaderc table 'BIR instructions': high-water 68 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 39 of 1536
+yakogl: mali arena 'code': high-water 896 of 131072 bytes
+yakogl: mali arena 'spds': high-water 128 of 32768 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.back_triangle_fan_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.back_triangle_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.back_triangle_strip_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.back_triangles'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.back_triangles_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.both_triangle_fan'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.both_triangle_fan_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.both_triangle_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.both_triangle_strip_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.both_triangles'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.both_triangles_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.front_triangle_fan'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.front_triangle_fan_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.front_triangle_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.front_triangle_strip_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.front_triangles'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.culling.front_triangles_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.fill_rules.basic_quad'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.fill_rules.basic_quad_reverse'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.fill_rules.clipped_full'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.fill_rules.clipped_partly'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.fill_rules.projected'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.line_loop'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.line_loop_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.line_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.line_strip_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.lines'..
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.lines_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.triangle_fan'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.triangle_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.basic.triangles'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.line_loop_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.line_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.line_strip_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.lines'..
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.lines_wide'..
+  QualityWarning (Interpolation was calculated using projected coordinateds)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.triangle_fan'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.triangle_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.interpolation.projected.triangles'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.limits.points'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.line_loop'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.line_loop_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.line_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.line_strip_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.lines'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.lines_wide'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.points'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.triangle_fan'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.triangle_strip'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.rasterization.primitives.triangles'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.choose_align_1'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.choose_align_2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.choose_align_4'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.choose_align_8'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.rgba_ubyte_align_1'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.rgba_ubyte_align_2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.rgba_ubyte_align_4'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.read_pixels.rgba_ubyte_align_8'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.compile_link.compile_fragment_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.compile_link.compile_vertex_shader'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+  Fail (Runtime check failed: 'checkCompileStatus(shaderObject)' at es2fShaderApiTests.cpp:393)
+
+Test case 'dEQP-GLES2.functional.shader_api.compile_link.link_vertex_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(2): link error: vertex and fragment shaders must be attached and compiled
+  Fail (Fail, expected LINK_STATUS to be TRUE.: 'checkLinkStatus(m_program)' at es2fShaderApiTests.cpp:536)
+
+Test case 'dEQP-GLES2.functional.shader_api.create_delete.create_fragment_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.create_delete.create_vertex_shader'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.create_delete.delete_vertex_fragment'..
+yakogl: glCompileShader(9): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.delete_shader_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.delete_shader_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.detach_shader_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.detach_shader_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.reattach_shader_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.reattach_shader_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.recompile_shader_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.recompile_shader_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.replace_shader_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.replace_shader_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.replace_source_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.program_state.replace_source_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.replace_source_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.replace_source_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_2_null_terminated_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_2_null_terminated_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_2_random_negative_length_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_2_random_negative_length_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_2_specify_lengths_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_2_specify_lengths_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_4_null_terminated_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_4_null_terminated_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_4_random_negative_length_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_4_random_negative_length_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_4_specify_lengths_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_4_specify_lengths_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_8_null_terminated_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_8_null_terminated_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_8_random_negative_length_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_8_random_negative_length_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_8_specify_lengths_fragment'..
+yakogl: glCompileShader(11): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 46 bytes]
+yakogl: glLinkProgram(4): link error: vertex and fragment shaders must be attached and compiled
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shader_api.shader_source.split_source_8_specify_lengths_vertex'..
+  Pass (Pass)
+yakogl-mali-exit: draws=325 refused=1 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        335/357 (93.8%)
+  Failed:        10/357 (2.8%)
+  Not supported: 9/357 (2.5%)
+  Warnings:      3/357 (0.8%)
+  Waived:        0/357 (0.0%)

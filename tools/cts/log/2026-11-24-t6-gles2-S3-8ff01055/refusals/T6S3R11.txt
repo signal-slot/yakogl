@@ -1,0 +1,1218 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S3R11.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat2_float_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 4 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 26 of 1536
+yakogl: mali shaderc table 'IR values': high-water 31 of 2048
+yakogl: mali shaderc table 'locals': high-water 7 of 256
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+yakogl: yakogl: program 2 has no uniform 'ub4_false'
+yakogl: yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui_zero'
+yakogl: yakogl: program 2 has no uniform 'ui_one'
+yakogl: yakogl: program 2 has no uniform 'ui_two'
+yakogl: yakogl: program 2 has no uniform 'ui_three'
+yakogl: yakogl: program 2 has no uniform 'ui_four'
+yakogl: yakogl: program 2 has no uniform 'ui_five'
+yakogl: yakogl: program 2 has no uniform 'ui_six'
+yakogl: yakogl: program 2 has no uniform 'ui_seven'
+yakogl: yakogl: program 2 has no uniform 'ui_eight'
+yakogl: yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: yakogl: program 2 has no uniform 'ui2_one'
+yakogl: yakogl: program 2 has no uniform 'ui2_two'
+yakogl: yakogl: program 2 has no uniform 'ui2_four'
+yakogl: yakogl: program 2 has no uniform 'ui2_five'
+yakogl: yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: yakogl: program 2 has no uniform 'ui3_one'
+yakogl: yakogl: program 2 has no uniform 'ui3_two'
+yakogl: yakogl: program 2 has no uniform 'ui3_four'
+yakogl: yakogl: program 2 has no uniform 'ui3_five'
+yakogl: yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: yakogl: program 2 has no uniform 'ui4_one'
+yakogl: yakogl: program 2 has no uniform 'ui4_two'
+yakogl: yakogl: program 2 has no uniform 'ui4_four'
+yakogl: yakogl: program 2 has no uniform 'ui4_five'
+yakogl: yakogl: program 2 has no uniform 'uf_zero'
+yakogl: yakogl: program 2 has no uniform 'uf_one'
+yakogl: yakogl: program 2 has no uniform 'uf_two'
+yakogl: yakogl: program 2 has no uniform 'uf_three'
+yakogl: yakogl: program 2 has no uniform 'uf_four'
+yakogl: yakogl: program 2 has no uniform 'uf_five'
+yakogl: yakogl: program 2 has no uniform 'uf_six'
+yakogl: yakogl: program 2 has no uniform 'uf_seven'
+yakogl: yakogl: program 2 has no uniform 'uf_eight'
+yakogl: yakogl: program 2 has no uniform 'uf_half'
+yakogl: yakogl: program 2 has no uniform 'uf_third'
+yakogl: yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: yakogl: program 2 has no uniform 'uv2_half'
+yakogl: yakogl: program 2 has no uniform 'uv2_one'
+yakogl: yakogl: program 2 has no uniform 'uv2_two'
+yakogl: yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: yakogl: program 2 has no uniform 'uv3_half'
+yakogl: yakogl: program 2 has no uniform 'uv3_one'
+yakogl: yakogl: program 2 has no uniform 'uv3_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: yakogl: program 2 has no uniform 'uv4_half'
+yakogl: yakogl: program 2 has no uniform 'uv4_one'
+yakogl: yakogl: program 2 has no uniform 'uv4_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_black'
+yakogl: yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: yakogl: program 2 has no uniform 'uv4_white'
+yakogl: mali arena 'desc': high-water 1136 of 1048576 bytes
+yakogl: mali arena 'data': high-water 704 of 262144 bytes
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat2_float_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 33 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 35 of 1536
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+yakogl: yakogl: program 2 has no uniform 'ub4_false'
+yakogl: yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui_zero'
+yakogl: yakogl: program 2 has no uniform 'ui_one'
+yakogl: yakogl: program 2 has no uniform 'ui_two'
+yakogl: yakogl: program 2 has no uniform 'ui_three'
+yakogl: yakogl: program 2 has no uniform 'ui_four'
+yakogl: yakogl: program 2 has no uniform 'ui_five'
+yakogl: yakogl: program 2 has no uniform 'ui_six'
+yakogl: yakogl: program 2 has no uniform 'ui_seven'
+yakogl: yakogl: program 2 has no uniform 'ui_eight'
+yakogl: yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: yakogl: program 2 has no uniform 'ui2_one'
+yakogl: yakogl: program 2 has no uniform 'ui2_two'
+yakogl: yakogl: program 2 has no uniform 'ui2_four'
+yakogl: yakogl: program 2 has no uniform 'ui2_five'
+yakogl: yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: yakogl: program 2 has no uniform 'ui3_one'
+yakogl: yakogl: program 2 has no uniform 'ui3_two'
+yakogl: yakogl: program 2 has no uniform 'ui3_four'
+yakogl: yakogl: program 2 has no uniform 'ui3_five'
+yakogl: yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: yakogl: program 2 has no uniform 'ui4_one'
+yakogl: yakogl: program 2 has no uniform 'ui4_two'
+yakogl: yakogl: program 2 has no uniform 'ui4_four'
+yakogl: yakogl: program 2 has no uniform 'ui4_five'
+yakogl: yakogl: program 2 has no uniform 'uf_zero'
+yakogl: yakogl: program 2 has no uniform 'uf_one'
+yakogl: yakogl: program 2 has no uniform 'uf_two'
+yakogl: yakogl: program 2 has no uniform 'uf_three'
+yakogl: yakogl: program 2 has no uniform 'uf_four'
+yakogl: yakogl: program 2 has no uniform 'uf_five'
+yakogl: yakogl: program 2 has no uniform 'uf_six'
+yakogl: yakogl: program 2 has no uniform 'uf_seven'
+yakogl: yakogl: program 2 has no uniform 'uf_eight'
+yakogl: yakogl: program 2 has no uniform 'uf_half'
+yakogl: yakogl: program 2 has no uniform 'uf_third'
+yakogl: yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: yakogl: program 2 has no uniform 'uv2_half'
+yakogl: yakogl: program 2 has no uniform 'uv2_one'
+yakogl: yakogl: program 2 has no uniform 'uv2_two'
+yakogl: yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: yakogl: program 2 has no uniform 'uv3_half'
+yakogl: yakogl: program 2 has no uniform 'uv3_one'
+yakogl: yakogl: program 2 has no uniform 'uv3_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: yakogl: program 2 has no uniform 'uv4_half'
+yakogl: yakogl: program 2 has no uniform 'uv4_one'
+yakogl: yakogl: program 2 has no uniform 'uv4_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_black'
+yakogl: yakogl: program 2 has no uniform 'uv4_gray'
+yakogl: yakogl: program 2 has no uniform 'uv4_white'
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 101568
+yakogl: mali arena 'data': high-water 274548 of 524288 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat2_mat2_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 43 of 2048
+yakogl: mali shaderc table 'locals': high-water 11 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 229 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat2_mat2_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 45 of 2048
+yakogl: yakogl: program 2 has no uniform 'ub_true'
+yakogl: yakogl: program 2 has no uniform 'ub_false'
+yakogl: yakogl: program 2 has no uniform 'ub4_true'
+yakogl: yakogl: program 2 has no uniform 'ub4_false'
+yakogl: yakogl: program 2 has no uniform 'ui_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui_zero'
+yakogl: yakogl: program 2 has no uniform 'ui_one'
+yakogl: yakogl: program 2 has no uniform 'ui_two'
+yakogl: yakogl: program 2 has no uniform 'ui_three'
+yakogl: yakogl: program 2 has no uniform 'ui_four'
+yakogl: yakogl: program 2 has no uniform 'ui_five'
+yakogl: yakogl: program 2 has no uniform 'ui_six'
+yakogl: yakogl: program 2 has no uniform 'ui_seven'
+yakogl: yakogl: program 2 has no uniform 'ui_eight'
+yakogl: yakogl: program 2 has no uniform 'ui_oneHundredOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui2_zero'
+yakogl: yakogl: program 2 has no uniform 'ui2_one'
+yakogl: yakogl: program 2 has no uniform 'ui2_two'
+yakogl: yakogl: program 2 has no uniform 'ui2_four'
+yakogl: yakogl: program 2 has no uniform 'ui2_five'
+yakogl: yakogl: program 2 has no uniform 'ui3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui3_zero'
+yakogl: yakogl: program 2 has no uniform 'ui3_one'
+yakogl: yakogl: program 2 has no uniform 'ui3_two'
+yakogl: yakogl: program 2 has no uniform 'ui3_four'
+yakogl: yakogl: program 2 has no uniform 'ui3_five'
+yakogl: yakogl: program 2 has no uniform 'ui4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'ui4_zero'
+yakogl: yakogl: program 2 has no uniform 'ui4_one'
+yakogl: yakogl: program 2 has no uniform 'ui4_two'
+yakogl: yakogl: program 2 has no uniform 'ui4_four'
+yakogl: yakogl: program 2 has no uniform 'ui4_five'
+yakogl: yakogl: program 2 has no uniform 'uf_zero'
+yakogl: yakogl: program 2 has no uniform 'uf_one'
+yakogl: yakogl: program 2 has no uniform 'uf_two'
+yakogl: yakogl: program 2 has no uniform 'uf_three'
+yakogl: yakogl: program 2 has no uniform 'uf_four'
+yakogl: yakogl: program 2 has no uniform 'uf_five'
+yakogl: yakogl: program 2 has no uniform 'uf_six'
+yakogl: yakogl: program 2 has no uniform 'uf_seven'
+yakogl: yakogl: program 2 has no uniform 'uf_eight'
+yakogl: yakogl: program 2 has no uniform 'uf_half'
+yakogl: yakogl: program 2 has no uniform 'uf_third'
+yakogl: yakogl: program 2 has no uniform 'uf_fourth'
+yakogl: yakogl: program 2 has no uniform 'uf_fifth'
+yakogl: yakogl: program 2 has no uniform 'uf_sixth'
+yakogl: yakogl: program 2 has no uniform 'uf_seventh'
+yakogl: yakogl: program 2 has no uniform 'uf_eighth'
+yakogl: yakogl: program 2 has no uniform 'uv2_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv2_zero'
+yakogl: yakogl: program 2 has no uniform 'uv2_half'
+yakogl: yakogl: program 2 has no uniform 'uv2_one'
+yakogl: yakogl: program 2 has no uniform 'uv2_two'
+yakogl: yakogl: program 2 has no uniform 'uv3_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv3_zero'
+yakogl: yakogl: program 2 has no uniform 'uv3_half'
+yakogl: yakogl: program 2 has no uniform 'uv3_one'
+yakogl: yakogl: program 2 has no uniform 'uv3_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_minusOne'
+yakogl: yakogl: program 2 has no uniform 'uv4_zero'
+yakogl: yakogl: program 2 has no uniform 'uv4_half'
+yakogl: yakogl: program 2 has no uniform 'uv4_one'
+yakogl: yakogl: program 2 has no uniform 'uv4_two'
+yakogl: yakogl: program 2 has no uniform 'uv4_black'
+yakogl: yakogl: program 2 has no uniform 'uv4_gray'
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat3_float_fragment'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 20 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 216
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat3_float_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 38 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat3_mat3_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 59 of 2048
+yakogl: mali shaderc table 'locals': high-water 16 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 257 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat3_mat3_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 61 of 2048
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 274 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat4_float_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 40 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat4_mat4_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 84 of 2048
+yakogl: mali shaderc table 'locals': high-water 21 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 353 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_highp_mat4_mat4_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 86 of 2048
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat2_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat2_float_vertex'..
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 101568
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat2_mat2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 213
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 271 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat4_float_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 42 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat4_mat4_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_lowp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat2_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat2_mat2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 222
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 280 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat4_mat4_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.const_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat2_float_fragment'..
+yakogl: mali shaderc table 'BIR instructions': high-water 61 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 12 of 128
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 192 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat2_float_vertex'..
+yakogl: mali arena 'desc': high-water 1264 of 1048576 bytes
+yakogl: mali arena 'data': high-water 412952 of 524288 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 185 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat2_mat2_vertex'..
+yakogl: mali shaderc table 'FAU words': high-water 15 of 128
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat3_float_fragment'..
+yakogl: mali shaderc table 'NIR instructions': high-water 47 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 117 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 57 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 17 of 128
+yakogl: mali shaderc table 'immediates': high-water 9 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 171 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat3_float_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 48 of 1536
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 101568
+yakogl: mali arena 'desc': high-water 1328 of 1048576 bytes
+yakogl: mali arena 'data': high-water 585920 of 786432 bytes
+yakogl: mali arena 'code': high-water 768 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 164 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat3_mat3_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 50 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 20 of 128
+yakogl: mali shaderc table 'uniform rows': high-water 3 of 256
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 101568
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat4_float_fragment'..
+yakogl: mali shaderc table 'NIR instructions': high-water 62 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 195 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 93 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 24 of 128
+yakogl: mali shaderc table 'immediates': high-water 16 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 194 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat4_float_vertex'..
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 138384
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 138384
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 101568
+yakogl: mali arena 'desc': high-water 1392 of 1048576 bytes
+yakogl: mali arena 'data': high-water 828084 of 1572864 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 187 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_highp_mat4_mat4_vertex'..
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 138384
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 138384
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 189 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 182 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat3_float_fragment'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 21 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 168 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat3_mat3_fragment'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 23 of 255
+yakogl: mali arena 'code': high-water 896 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat3_mat3_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 65 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 191 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat4_float_vertex'..
+yakogl: mali arena 'data': a chunk of 262144 bytes for a block of 101568
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 184 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_lowp_mat4_mat4_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 86 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 198 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 191 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 177 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 200 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 193 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.dynamic_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat2_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat2_mat2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 169
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 162
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat3_mat3_vertex'..
+yakogl: mali shaderc table 'FAU words': high-water 29 of 128
+yakogl: mali shaderc table 'uniform rows': high-water 6 of 256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat4_mat4_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_highp_mat4_mat4_vertex'..
+yakogl: mali shaderc table 'FAU words': high-water 35 of 128
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat2_mat2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 166
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_lowp_mat4_mat4_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 101 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat2_mat2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 175
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add.uniform_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_highp_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 195 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_highp_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_highp_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 174 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_highp_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_highp_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 197 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_highp_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_lowp_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 192 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_lowp_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_lowp_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_lowp_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_lowp_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 194 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_lowp_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_mediump_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 201 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_mediump_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_mediump_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_mediump_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_mediump_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 203 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.add_assign.dynamic_mediump_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat2_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 229 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat3_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 257 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat4_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat4_mat4_fragment'..
+yakogl: mali shaderc table 'IR values': high-water 88 of 2048
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 353 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_highp_mat4_mat4_vertex'..
+yakogl: mali shaderc table 'IR values': high-water 90 of 2048
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 203 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 226 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 207 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 254 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 265 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 350 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_lowp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 212 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 235 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 216 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 263 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 274 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 359 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.const_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 186 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 185 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 165 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 164 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 188 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 187 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_highp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 183 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 182 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 162 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 161 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 185 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 184 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_lowp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 192 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 191 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 171 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 170 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 194 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 193 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.dynamic_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat2_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat2_mat2_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 163 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 162 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat4_float_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat4_mat4_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_highp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 181 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 180 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 160 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 159 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 183 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 182 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_lowp_mat4_mat4_vertex'..
+yakogl: mali shaderc table 'NIR instructions': high-water 113 of 1536
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat2_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 190 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat2_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 189 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat3_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 169 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat3_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 168 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat4_float_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 192 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat4_float_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 191 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div.uniform_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_highp_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 195 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_highp_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_highp_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 174 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_highp_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_highp_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 197 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_highp_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_lowp_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 192 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_lowp_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_lowp_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 171 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_lowp_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_lowp_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 194 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_lowp_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_mediump_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 201 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_mediump_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_mediump_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 180 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_mediump_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_mediump_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 203 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.div_assign.dynamic_mediump_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_highp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 200 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_highp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_highp_mat3_mat3_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 179 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_highp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_highp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_highp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_lowp_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 197 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_lowp_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_lowp_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_lowp_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_lowp_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_lowp_mat4_mat4_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_mediump_mat2_mat2_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 206 bytes]
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_mediump_mat2_mat2_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_mediump_mat3_mat3_fragment'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_mediump_mat3_mat3_vertex'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_mediump_mat4_mat4_fragment'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader program at glsShaderRenderCase.cpp:447)
+
+Test case 'dEQP-GLES2.functional.shaders.matrix.matrixcompmult.dynamic_mediump_mat4_mat4_vertex'..
+  Pass (Pass)
+yakogl-mali-exit: draws=164 refused=106 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        164/270 (60.7%)
+  Failed:        106/270 (39.3%)
+  Not supported: 0/270 (0.0%)
+  Warnings:      0/270 (0.0%)
+  Waived:        0/270 (0.0%)

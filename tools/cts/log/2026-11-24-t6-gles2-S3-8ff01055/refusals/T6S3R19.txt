@@ -1,0 +1,1214 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S3R19.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.0'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: mali shaderc table 'IR values': high-water 120 of 2048
+yakogl: mali shaderc table 'locals': high-water 16 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 764 bytes]
+yakogl: mali arena 'desc': high-water 288 of 1048576 bytes
+yakogl: mali arena 'cs': high-water 104 of 393216 bytes
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.1'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 598 bytes]
+yakogl: mali shaderc table 'IR values': high-water 197 of 2048
+yakogl: mali shaderc table 'locals': high-water 25 of 256
+yakogl: mali shaderc table 'NIR instructions': high-water 29 of 1536
+yakogl: mali shaderc table 'fragment pair nodes': high-water 10 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 113
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.10'..
+yakogl: mali shaderc table 'NIR instructions': high-water 33 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.11'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 12 of 255
+yakogl: mali arena 'desc': high-water 1072 of 1048576 bytes
+yakogl: mali arena 'data': high-water 76 of 262144 bytes
+yakogl: mali arena 'code': high-water 384 of 131072 bytes
+yakogl: mali arena 'spds': high-water 64 of 32768 bytes
+yakogl: mali arena 'cs': high-water 424 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.12'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.13'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.14'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: mali shaderc table 'NIR instructions': high-water 35 of 1536
+yakogl: mali shaderc table 'uniform rows': high-water 2 of 256
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.15'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 725 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.16'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 137 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.17'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 837 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.18'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 651 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 781 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.19'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 511 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.2'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.20'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.21'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 373 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.22'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.23'..
+yakogl: mali shaderc table 'FAU words': high-water 13 of 128
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.24'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.25'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.26'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 1
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.27'..
+yakogl: mali shaderc table 'NIR instructions': high-water 44 of 1536
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 608 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.28'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 806 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.29'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 335 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.3'..
+yakogl: mali shaderc table 'NIR instructions': high-water 54 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 113 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 56 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 16 of 128
+yakogl: mali shaderc table 'immediates': high-water 8 of 64
+yakogl: mali shaderc table 'fragment pair nodes': high-water 13 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 706
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.30'..
+yakogl: mali arena 'desc': high-water 1136 of 1048576 bytes
+yakogl: mali arena 'data': high-water 140 of 262144 bytes
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.31'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 757 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.32'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 732 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.33'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 616 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.34'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.35'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.36'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 890 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.37'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 718 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.38'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 937 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.39'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.4'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 867 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.40'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 7
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.41'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.42'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 613 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.43'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.44'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 978 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.45'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 864 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.46'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 477 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 389 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.47'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1013 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.48'..
+yakogl: mali shaderc table 'NIR instructions': high-water 65 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 19 of 128
+yakogl: mali shaderc table 'immediates': high-water 11 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.49'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.5'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 948 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.50'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.51'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 853 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.52'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 14 of 255
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.53'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.54'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.55'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 736 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 684 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.56'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 685 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.57'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.58'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 398 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 579 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.59'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 417 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.6'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1024 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 744 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.60'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.61'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 449 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.62'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 893 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.63'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.64'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 725 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.65'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.66'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.67'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 718 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.68'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.69'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.7'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.70'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1217 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.71'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.72'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 690 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 168 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.73'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1041 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.74'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 544 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.75'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1018 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.76'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 811 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.77'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.78'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.79'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 865 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.8'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.80'..
+yakogl: mali shaderc table 'uniform rows': high-water 3 of 256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.81'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: mali shaderc table 'locals': high-water 26 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1079 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.82'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.83'..
+yakogl: mali arena 'desc': high-water 1200 of 1048576 bytes
+yakogl: mali arena 'data': high-water 156 of 262144 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.84'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 293 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.85'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 20 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 613
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.86'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1013 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 475 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.87'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet) [vertex stage, 509 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.88'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.89'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 404 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.9'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.90'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 849 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 986 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.91'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.92'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.93'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.94'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 859 bytes]
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.95'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 699 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.96'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 455 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.97'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 248 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.98'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 929 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.combined.99'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.0'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 764 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.1'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 113
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.10'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.11'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.12'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.13'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.14'..
+yakogl: mali shaderc table 'BIR instructions': high-water 129 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 63 of 1536
+yakogl: mali arena 'desc': high-water 1456 of 1048576 bytes
+yakogl: mali arena 'data': high-water 252 of 262144 bytes
+yakogl: mali arena 'code': high-water 896 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.15'..
+yakogl: mali shaderc table 'BIR instructions': high-water 183 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 87 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 23 of 128
+yakogl: mali shaderc table 'immediates': high-water 15 of 64
+yakogl: mali arena 'data': high-water 332 of 262144 bytes
+yakogl: mali arena 'code': high-water 1024 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.16'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 137 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.17'..
+yakogl: glLinkProgram(2): online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('c')
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.18'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 781 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.19'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 511 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.20'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.21'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.22'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.23'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.24'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.25'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.26'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 1
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.27'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 608 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.28'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 806 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.29'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 335 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.3'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 706
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.30'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.31'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.32'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 732 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.33'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 616 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.34'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.35'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.36'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 890 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.37'..
+yakogl: mali shaderc table 'NIR instructions': high-water 68 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 219 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 105 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 26 of 128
+yakogl: mali shaderc table 'immediates': high-water 18 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 718 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.38'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 937 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.39'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.4'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.40'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 7
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.41'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.42'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 613 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.43'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.44'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 978 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.45'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 864 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.46'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 389 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.47'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1013 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.48'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.49'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.5'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 948 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.50'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.51'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.52'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.53'..
+yakogl: glLinkProgram(2): online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('a')
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.54'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.55'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 684 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.56'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)) [fragment stage, 685 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.57'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.58'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 579 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.59'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 417 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.6'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 744 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.60'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.61'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 449 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.62'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 893 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.63'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.64'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.65'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.66'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.67'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.68'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.69'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.7'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.70'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1217 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.71'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.72'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 168 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.73'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 1041 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.74'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 544 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.75'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1018 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.76'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.77'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.78'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.79'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.8'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.80'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.81'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1079 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.82'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.83'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.84'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.85'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 613
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.86'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 475 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.87'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.88'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.89'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 404 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.9'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.90'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 986 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.91'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.92'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.93'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.94'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.95'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.96'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall back end defect: an invariant of the pipeline did not hold (LaneCycle)) [fragment stage, 455 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.97'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 248 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.98'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 929 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.fragment.99'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared hi
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.0'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.1'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 963 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.10'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.11'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.12'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.13'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.14'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.15'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.16'..
+yakogl: glLinkProgram(2): link error: the vertex shader for the program's fragment shader: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet)
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.17'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.18'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 602 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.19'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 539 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.2'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.20'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.21'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 608 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.22'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.23'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.24'..
+yakogl: mali shaderc table 'IR values': high-water 232 of 2048
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.25'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.26'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 934 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.27'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.28'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 873 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.29'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 389 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.3'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.30'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.31'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.32'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.33'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.34'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.35'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.36'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 819 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.37'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 765 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.38'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 833 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.39'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.4'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.40'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 716 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.41'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.42'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 636 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.43'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 887 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.44'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 912 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.45'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 785 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.46'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.47'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 778 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.48'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.49'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.5'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.50'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.51'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.52'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.53'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.54'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.55'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 814 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.56'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.57'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.58'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 743 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.59'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.6'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.60'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 236 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.61'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 470 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.62'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.63'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.64'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.65'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.66'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.67'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.68'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.69'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not low
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.7'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.70'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 995 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.71'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.72'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.73'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.74'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.75'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1182 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.76'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.77'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1121 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.78'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.79'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.8'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.80'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 780 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.81'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.82'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.83'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 636 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.84'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.85'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.86'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 518 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.87'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.88'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 437 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.89'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 447 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.9'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.90'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 934 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.91'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.92'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.93'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.94'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.95'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.96'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.97'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a vertex shader whose attribute numbering waits for a fold Mesa's back end makes after it numbers the locations, of a form the walk does not model, is not low
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.98'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.scalar_conversion.vertex.99'..
+  Pass (Pass)
+yakogl-mali-exit: draws=106 refused=227 first_refused=compile: online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        106/300 (35.3%)
+  Failed:        194/300 (64.7%)
+  Not supported: 0/300 (0.0%)
+  Warnings:      0/300 (0.0%)
+  Waived:        0/300 (0.0%)

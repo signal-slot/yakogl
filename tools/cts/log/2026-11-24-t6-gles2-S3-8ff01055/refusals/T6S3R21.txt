@@ -1,0 +1,865 @@
+Writing test log into /root/yakogl-mali/8ff01055/T6S3R21.r0.qpa
+dEQP Core 93bca01861b0e3ef3c387027a9791e6d065f900c (0x93bca018) starting..
+  target implementation = 'YakoGL'
+yakogl-mali: loaded build=v0.1.0-3157-g8ff010556 lib=/root/yakogl-mali/8ff01055/lib/libGLESv2.so.2
+yakogl-mali-panthor: /dev/dri/renderD128 panthor 1.5.0, gpu_id 0xa8670005, tiler_features 0x809, csif cs_reg_count 96 unpreserved 4; vm 1, group 1, tiler heap ctx 0x800000015000 first chunk 0x800000a00000 chunk 0x200000
+yakogl: mali: gpu_id 0xa8670005 (G610, core_features 0x0), tiler_features 0x809, 92 user registers; tiler heap ctx 0x800000015000, first chunk 0x800000a00000, chunk 0x200000
+yakogl: mali arena 'context': high-water 832 of 4096 bytes
+yakogl: mali shaderc table 'IR values': high-water 2 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 23 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 33 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 11 of 128
+yakogl: mali shaderc table 'immediates': high-water 5 of 64
+yakogl: mali shaderc table 'uniform rows': high-water 1 of 256
+yakogl: mali shaderc table 'fragment pair nodes': high-water 2 of 255
+yakogl: mali: clear program built: 256 + 128 bytes of code
+yakogl: mali: colour preload program built: 128 bytes of code
+yakogl: mali: depth preload program built: 128 bytes of code
+yakogl: mali: stencil preload program built: 128 bytes of code
+yakogl: mali: depth/stencil preload program built: 128 bytes of code
+yakogl: mali: per-sample colour preload program built: 128 bytes of code
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.0'..
+yakogl: mali shaderc table 'IR values': high-water 6 of 2048
+yakogl: mali shaderc table 'NIR instructions': high-water 29 of 1536
+yakogl: mali shaderc table 'IR values': high-water 85 of 2048
+yakogl: mali shaderc table 'locals': high-water 11 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 508 bytes]
+yakogl: mali arena 'desc': high-water 288 of 1048576 bytes
+yakogl: mali arena 'cs': high-water 104 of 393216 bytes
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.1'..
+yakogl: mali shaderc table 'NIR instructions': high-water 56 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 153 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 75 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 20 of 128
+yakogl: mali shaderc table 'immediates': high-water 12 of 64
+yakogl: mali shaderc table 'IR values': high-water 159 of 2048
+yakogl: mali shaderc table 'locals': high-water 21 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 964 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.10'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 516 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.100'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 295 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.101'..
+yakogl: mali arena 'desc': high-water 1136 of 1048576 bytes
+yakogl: mali arena 'data': high-water 76 of 262144 bytes
+yakogl: mali arena 'code': high-water 384 of 131072 bytes
+yakogl: mali arena 'spds': high-water 64 of 32768 bytes
+yakogl: mali arena 'cs': high-water 424 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.102'..
+yakogl: mali shaderc table 'locals': high-water 23 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 932 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.103'..
+yakogl: mali arena 'desc': high-water 1200 of 1048576 bytes
+yakogl: mali arena 'data': high-water 108 of 262144 bytes
+yakogl: mali arena 'code': high-water 512 of 131072 bytes
+yakogl: mali arena 'spds': high-water 96 of 32768 bytes
+yakogl: mali arena 'cs': high-water 432 of 393216 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.104'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.105'..
+yakogl: mali shaderc table 'IR values': high-water 188 of 2048
+yakogl: mali shaderc table 'locals': high-water 27 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 980 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.106'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 722 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.107'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 8 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 113
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.108'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.109'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.11'..
+yakogl: mali shaderc table 'IR values': high-water 227 of 2048
+yakogl: mali shaderc table 'locals': high-water 33 of 256
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 1078 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.110'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment varying load or conversion of a form no reference draws (a colour lane of unmeasured precision beside a mediump varying, an aligned pair converte
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.111'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 152 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.112'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 833 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.113'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 793 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.114'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.115'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.116'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 660 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.117'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 959 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.118'..
+yakogl:   cube-bind: 0x1473000 unit 0 kick 24 (draw)
+yakogl:   cube(draw) @0x1473000 16x16 x6: fmt 0, cpu 0xffff8dd20000 - not dumped
+yakogl: mali arena 'desc': high-water 1392 of 1048576 bytes
+yakogl: mali arena 'data': high-water 124 of 262144 bytes
+yakogl: mali arena 'code': high-water 640 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.119'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 636 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.12'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 495 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.120'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 536 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.121'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.122'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.123'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 554 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.124'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.125'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.126'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 495 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.127'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.128'..
+yakogl:   cube-bind: 0x14be000 unit 0 kick 35 (draw)
+yakogl:   cube(draw) @0x14be000 16x16 x6: fmt 0, cpu 0xffff8dd20000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.129'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 634 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.13'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 771 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.130'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 718 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.131'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.132'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 682 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.133'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 561 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.134'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 527 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.135'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 746 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.136'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.137'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 616 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.138'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.139'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 514 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.14'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 524 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.140'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 650 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.141'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.142'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.143'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 687 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.144'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.145'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 558 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.146'..
+yakogl: mali shaderc table 'uniform rows': high-water 2 of 256
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.147'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.148'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 746 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.149'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 295 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.15'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 792 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.16'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 152 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.17'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.18'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 840 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.19'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.2'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 941 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.20'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 214 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.21'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.22'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 273 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.23'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.24'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 1137 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.25'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 13 of 255
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.26'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.27'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 526 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.28'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.29'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 319 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.3'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 824 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.30'..
+yakogl: mali arena 'data': high-water 172 of 262144 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.31'..
+yakogl: mali shaderc table 'NIR instructions': high-water 57 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 163 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 79 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 21 of 128
+yakogl: mali shaderc table 'immediates': high-water 13 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.32'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 811 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.33'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.34'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.35'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.36'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 818 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.37'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 9
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.38'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 535 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.39'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 371 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.4'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 793 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.40'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [fragment stage, 776 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.41'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.42'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 465 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.43'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 737 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.44'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 931 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.45'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 844 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.46'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 754 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.47'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 862 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.48'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.49'..
+yakogl:   cube-bind: 0x1614000 unit 1 kick 96 (draw)
+yakogl:   cube(draw) @0x1614000 16x16 x6: fmt 0, cpu 0xffff8dcf5000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.5'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1048 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.50'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 246 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.51'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 599 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.52'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.53'..
+yakogl: mali shaderc table 'uniform rows': high-water 4 of 256
+yakogl: mali arena 'desc': high-water 1456 of 1048576 bytes
+yakogl: mali arena 'data': high-water 220 of 262144 bytes
+yakogl: mali arena 'code': high-water 768 of 131072 bytes
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.54'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.55'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.56'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.57'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.58'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 804 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.59'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.6'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 658 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.60'..
+yakogl: mali shaderc table 'fragment pair nodes': high-water 14 of 255
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 327
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.61'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 450 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.62'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1089 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.63'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.64'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.65'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 825 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.66'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 861 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.67'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet) [fragment stage, 454
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.68'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.69'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.7'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.70'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 716 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.71'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fus
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.72'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: an integer or boolean value is not lowered yet) [fragment stage, 168 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.73'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 870 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.74'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 643 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.75'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 883 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.76'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 835 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.77'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 902 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.78'..
+yakogl: mali shaderc table 'NIR instructions': high-water 59 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 174 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 84 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 22 of 128
+yakogl: mali shaderc table 'immediates': high-water 14 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.79'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.8'..
+yakogl: mali shaderc table 'NIR instructions': high-water 63 of 1536
+yakogl: mali shaderc table 'BIR instructions': high-water 196 of 1536
+yakogl: mali shaderc table 'BIR values': high-water 94 of 1536
+yakogl: mali shaderc table 'FAU words': high-water 24 of 128
+yakogl: mali shaderc table 'immediates': high-water 16 of 64
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 517 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.80'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.81'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet) [fragment stage, 726 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.82'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 205 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.83'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 782 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.84'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.85'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 690 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.86'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 298 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.87'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 6
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.88'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: fp16 arithmetic on gl_FragCoord other than on x and y as a pair, a compare of one lane, or floor and fract of x and y is not lowered yet) [fragment stage, 4
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.89'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 398 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.9'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 808 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.90'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet) [fragment stage, 1015 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.91'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.92'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) [fragment stage, 212 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.93'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.94'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.95'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet) [fragment stage, 910 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.96'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.97'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.98'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.fragment.99'..
+yakogl: glCompileShader(5): online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture look-up other than texture2D(sampler2D, coordinate) (a bias, a level, a projection, a cube map, a size query) is not lowered yet) [fragment stage,
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.0'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 559 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.1'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.10'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.11'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 981 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.12'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.13'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 813 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.14'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 550 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.15'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 705 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.16'..
+yakogl:   cube-bind: 0x177f000 unit 0 kick 160 (draw)
+yakogl:   cube(draw) @0x177f000 16x16 x6: fmt 0, cpu 0xffff8dcf5000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.17'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.18'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 760 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.19'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.2'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 758 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.20'..
+yakogl:   cube-bind: 0x17af000 unit 0 kick 165 (draw)
+yakogl:   cube(draw) @0x17af000 16x16 x6: fmt 0, cpu 0xffff8d9a5000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.21'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 746 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.22'..
+yakogl:   cube-bind: 0x17b8000 unit 0 kick 167 (draw)
+yakogl:   cube(draw) @0x17b8000 16x16 x6: fmt 0, cpu 0xffff8dcf5000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.23'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.24'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 939 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.25'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.26'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 915 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.27'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 580 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.28'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 969 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.29'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 376 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.3'..
+yakogl:   cube-bind: 0x17f0000 unit 0 kick 175 (draw)
+yakogl:   cube(draw) @0x17f0000 16x16 x6: fmt 0, cpu 0xffff8dcf5000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.30'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.31'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.32'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.33'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.34'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 769 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.35'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.36'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 742 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.37'..
+yakogl: mali shaderc table 'NIR instructions': high-water 68 of 1536
+yakogl:   cube-bind: 0x1821000 unit 0 kick 183 (draw)
+yakogl:   cube(draw) @0x1821000 16x16 x6: fmt 0, cpu 0xffff8dcf5000 - not dumped
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.38'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 583 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.39'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 428 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.4'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 766 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.40'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.41'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 1110 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.42'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 493 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.43'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.44'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 844 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.45'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 692 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.46'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.47'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 836 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.48'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 577 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.49'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.5'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.6'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet) [vertex stage, 655 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.7'..
+  Pass (Pass)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.8'..
+yakogl: glCompileShader(3): online shaderc: the code generator refused this vertex shader: Mali(Valhall: a constant operation on or to a value that is not a finite normal float is not lowered yet) [vertex stage, 578 bytes]
+  Fail (Failed to compile shader)
+
+Test case 'dEQP-GLES2.functional.shaders.random.texture.vertex.9'..
+  Pass (Pass)
+yakogl-mali-exit: draws=38 refused=162 first_refused=compile: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet) gpu_faults=0 job_timeouts=0
+
+DONE!
+
+Test run totals:
+  Passed:        38/200 (19.0%)
+  Failed:        162/200 (81.0%)
+  Not supported: 0/200 (0.0%)
+  Warnings:      0/200 (0.0%)
+  Waived:        0/200 (0.0%)
