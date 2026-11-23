@@ -873,8 +873,8 @@ fn copy_block_member(data: &[u8], m: &shaderc::ShcBlockMember, row: &ShcUniform,
     };
     let read =
         |at: usize| -> Option<u32> { data.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])) };
-    /* a bool is any non-zero word in the buffer, and 0 / 1 in the block, as
-     * glUniform*i writes it */
+    /* a bool is any non-zero word in the buffer, and 0 / [`UNIFORM_TRUE`]
+     * in the block, as glUniform*i writes it */
     let boolean = matches!(u32::from(m.gl_type), GL_BOOL | GL_BOOL_VEC2 | GL_BOOL_VEC3 | GL_BOOL_VEC4);
     for e in 0..n {
         let base = m.offset as usize + e * m.array_stride as usize;
@@ -890,7 +890,13 @@ fn copy_block_member(data: &[u8], m: &shaderc::ShcBlockMember, row: &ShcUniform,
                     base + r * 4
                 };
                 let Some(v) = read(at) else { continue };
-                let v = if boolean { u32::from(v != 0) } else { v };
+                let v = if !boolean {
+                    v
+                } else if v != 0 {
+                    UNIFORM_TRUE
+                } else {
+                    0
+                };
                 let dst = usize::from(row.dword_off) + e * el_dw + c * col_dw + r;
                 if let Some(slot) = block.get_mut(dst) {
                     *slot = v;
@@ -2739,6 +2745,18 @@ fn store_dwords(block: &mut [f32], off: i32, bound: u32, src: &[u32]) {
     }
 }
 
+/// The word a true `bool` uniform is stored as in a stage's block: the word
+/// the GPU's shader code reads as true. Mesa stores
+/// `ctx->Const.UniformBooleanTrue`, all ones on a driver with native
+/// integers (st_extensions.c:1356, uniform_query.cpp:1417, :1441). The
+/// Mali-G610's code is Mesa's, and it reads the word as a mask:
+/// `nir_lower_io` loads a bool uniform as 32 bits under a `b2b1`, which
+/// `pan_nir_lower_bool_to_bitsize` makes a move (the compares take the word
+/// or its low half as it is: deqp_audit_v1_swz_mediump_bvec2_grg_vs's
+/// `ICMP_OR.v2u16.eq.m1 r1, r1^.h00, u3.w0.h00`). So a stored 1 is false
+/// there. The other GPUs' compilers read the word 1.
+pub(crate) const UNIFORM_TRUE: u32 = if cfg!(feature = "gpu-mali") { u32::MAX } else { 1 };
+
 /// Offset of an array element `base` dwords into the uniform; a stage the
 /// uniform is not in keeps its negative offset.
 fn element_off(off: i32, base: i32) -> i32 {
@@ -2891,8 +2909,14 @@ unsafe fn set_uniform(location: GLint, count: GLsizei, setter: Setter, values: V
             cols * col_stride
         } else {
             for (j, d) in tmp[..per].iter_mut().enumerate() {
-                /* a bool holds 0 or 1 whatever setter loaded it */
-                *d = if k.base == Base::Bool { values.truth(first + j) as u32 } else { values.bits(first + j) };
+                /* a bool holds 0 or [`UNIFORM_TRUE`] whatever setter loaded it */
+                *d = if k.base != Base::Bool {
+                    values.bits(first + j)
+                } else if values.truth(first + j) {
+                    UNIFORM_TRUE
+                } else {
+                    0
+                };
             }
             per
         };
@@ -7663,7 +7687,7 @@ mod tests {
         // SAFETY: plain GL call.
         unsafe { glUniform1i(loc(p, "b1"), 1) };
         assert_eq!(gl.error(), GL_NO_ERROR);
-        assert_eq!(vs_bits(&gl, p, 156, 1), [1]);
+        assert_eq!(vs_bits(&gl, p, 156, 1), [UNIFORM_TRUE]);
     }
 
     #[test]
@@ -7671,10 +7695,9 @@ mod tests {
         let gl = fresh();
         let p = setter_program(&gl);
         // SAFETY: plain GL call.
-        unsafe { glUniform1f(loc(p, "b1"), 1.0) };
+        unsafe { glUniform1f(loc(p, "b1"), 2.0) };
         assert_eq!(gl.error(), GL_NO_ERROR);
-        assert_ne!(vs_bits(&gl, p, 156, 1), [0]);
-        assert_ne!(vs_bits(&gl, p, 156, 1), [SENTINEL]);
+        assert_eq!(vs_bits(&gl, p, 156, 1), [UNIFORM_TRUE], "any non-zero float is the GPU's true word");
     }
 
     /* ---- setter errors ---- */
