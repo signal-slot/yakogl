@@ -864,6 +864,10 @@ fn the_stand_in_is_four_and_goes_back_to_zero() {
         }
         assert_eq!(v, [4, 4]);
     }
+    // Read under the lock with no rig alive: a rig stores 0 before its guard
+    // releases the lock, so this is what the last rig left. Without the lock
+    // the next test's rig may have stored its 4 already.
+    let _l = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     assert_eq!(yakogl::backend::HOST_DRAW_TARGETS.load(Ordering::Relaxed), 0);
 }
 
