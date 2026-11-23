@@ -122,6 +122,10 @@ pub mod lexer;
 pub mod lodkey;
 pub mod loop_count;
 pub mod lower;
+/// The constant fold of GLSL built-ins with Mesa 26.2.1's bits (built on
+/// `fmath`, hence its condition; docs/notes/mali-libm-fold.md).
+#[cfg(any(test, feature = "host-test", not(feature = "report-es2")))]
+pub(crate) mod mesa_fold;
 pub mod parser;
 pub mod pp;
 pub mod precision;

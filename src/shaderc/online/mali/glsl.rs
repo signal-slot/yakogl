@@ -88,6 +88,10 @@ struct Tree<'m, 'a> {
     /// What [`Tree::fold`] makes of each value, its lanes unswizzled, once
     /// [`Tree::fill_folds`] has run (empty for a stage with no compare).
     folds: &'a [Cell<Option<[Lane; 4]>>],
+    /// Per value, then per local: it reads an input, a uniform or a texel
+    /// somewhere under it ([`Tree::fill_varies`]; empty for a stage with no
+    /// compare).
+    vary: &'a mut [bool],
 }
 
 /// A child of an expression record in [`dsw`]: an expression or a leaf.
@@ -177,7 +181,8 @@ pub(super) fn passes<'s>(
         instrs.iter().any(|op| matches!(op, IrOp::Alu(AluOp::Flt | AluOp::Fle | AluOp::Feq | AluOp::Fne, _)));
     let folds = scratch.alloc_filled(if compares { n } else { 0 }, None).map_err(oom)?;
     let folds = Cell::from_mut(folds).as_slice_of_cells();
-    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds };
+    let vary = scratch.alloc_filled(if compares { n + m.locals.len() } else { 0 }, false).map_err(oom)?;
+    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds, vary };
     t.count();
     t.rebalance()?;
     t.reassociate()?;
@@ -1825,6 +1830,7 @@ impl Tree<'_, '_> {
         let n = self.instrs.len();
         let mut any = false;
         let mut folded = false;
+        self.fill_varies();
         /* each compare decides on the constants as written; a constant
          * whose -0.0 lanes the compares turn into 0.0 is rewritten after
          * all of them (a `feq(-0.0, a)` after another compare of the same
@@ -1837,7 +1843,7 @@ impl Tree<'_, '_> {
             /* a compare of two constant expressions (no input, uniform or
              * texel under either side) folds to a constant boolean: no
              * operand is encoded, and -0.0 and 0.0 compare the same */
-            if !self.varies(s[0], 0, 0) && !self.varies(s[1], 0, 0) {
+            if !self.varies(s[0]) && !self.varies(s[1]) {
                 continue;
             }
             if !folded {
@@ -2321,38 +2327,63 @@ impl Tree<'_, '_> {
     }
 
     /// Value `s` reads an input, a uniform or a texel somewhere under it
-    /// (through a local's stores too): it is no constant expression. A
-    /// local read again under its own stores adds nothing; one past the
-    /// first 64, or a walk too deep, counts as varying.
-    fn varies(&self, s: Src, depth: usize, seen: u64) -> bool {
-        if depth > 16 {
-            return true;
+    /// (through a local's stores too): it is no constant expression.
+    fn varies(&self, s: Src) -> bool {
+        self.vary.get(s.val.0 as usize).copied().unwrap_or(true)
+    }
+
+    /// [`Tree::varies`] of every value, to a fixed point: a value varies
+    /// when it loads an input, a uniform or a texel, or reads a value that
+    /// varies; a load of a local when its index varies or a store of the
+    /// local writes a value (or at an index) that varies. A local read
+    /// again under its own stores (a loop) adds nothing. Whole, with no cut:
+    /// the walk it replaces stopped at a depth of 16 and took a chain of
+    /// constant globals (`const bool l = .. float(ab) ..` of
+    /// all_features.fragment.13, deqp_negzero_constglobal_reduced) for a
+    /// varying one.
+    fn fill_varies(&mut self) {
+        let n = self.instrs.len();
+        if self.vary.len() < n {
+            return;
         }
-        match self.instrs.get(s.val.0 as usize) {
-            None => true,
-            Some(
-                IrOp::LoadInput { .. }
-                | IrOp::LoadUniform { .. }
-                | IrOp::LoadUniformIdx { .. }
-                | IrOp::Tex { .. }
-                | IrOp::TexSize { .. },
-            ) => true,
-            Some(&IrOp::LoadLocal { local, index, .. }) => {
-                let Some(bit) = 1u64.checked_shl(local.0) else { return true };
-                if seen & bit != 0 {
-                    return false;
+        self.vary.fill(false);
+        let (vals, locals) = self.vary.split_at_mut(n);
+        let src = |vals: &[bool], x: Src| vals.get(x.val.0 as usize).copied().unwrap_or(true);
+        loop {
+            let mut changed = false;
+            for i in 0..n {
+                let v = match self.instrs[i] {
+                    IrOp::LoadInput { .. }
+                    | IrOp::LoadUniform { .. }
+                    | IrOp::LoadUniformIdx { .. }
+                    | IrOp::Tex { .. }
+                    | IrOp::TexSize { .. } => true,
+                    IrOp::LoadLocal { local, index, .. } => {
+                        index.is_some_and(|x| src(vals, x)) || locals.get(local.0 as usize).copied().unwrap_or(true)
+                    }
+                    IrOp::StoreLocal { local, src: x, index, .. } => {
+                        let v = src(vals, x) || index.is_some_and(|x| src(vals, x));
+                        if let Some(b) = locals.get_mut(local.0 as usize) {
+                            if v && !*b {
+                                *b = true;
+                                changed = true;
+                            }
+                        }
+                        v
+                    }
+                    ref op => {
+                        let mut v = false;
+                        op.for_each_src(|x| v |= src(vals, x));
+                        v
+                    }
+                };
+                if v && !vals[i] {
+                    vals[i] = true;
+                    changed = true;
                 }
-                index.is_some_and(|x| self.varies(x, depth + 1, seen))
-                    || self.instrs.iter().any(|st| {
-                        matches!(*st, IrOp::StoreLocal { local: to, src, index, .. } if to == local
-                            && (self.varies(src, depth + 1, seen | bit)
-                                || index.is_some_and(|x| self.varies(x, depth + 1, seen | bit))))
-                    })
             }
-            Some(op) => {
-                let mut v = false;
-                op.for_each_src(|x| v |= self.varies(x, depth + 1, seen));
-                v
+            if !changed {
+                break;
             }
         }
     }

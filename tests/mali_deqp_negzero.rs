@@ -26,9 +26,11 @@
 //! The dEQP pairs are verbatim from the `.qpa` of
 //! `tools/mali/deqp-host-measure.sh` (VK-GL-CTS 93bca018).
 //!
-//! None compiles at the tip: each test is ignored with its refusal quoted;
-//! the lowering removes the `ignore` and the reference's entry in
-//! `REFUSALS` together. `refusals_pinned` runs now: it asserts each ignored
+//! `constglobal_reduced` compiles byte-equal (negzero N1: the -0.0 rule
+//! no longer takes a deep chain of constant globals for a varying
+//! compare). The others are ignored with their refusal quoted; the
+//! lowering removes the `ignore` and the reference's entry in `REFUSALS`
+//! together. `refusals_pinned` runs now: it asserts each ignored
 //! reference's exact current refusal and names every one that moved.
 //!
 //! ```text
@@ -44,13 +46,12 @@ fn negzero_constglobal_fs() {
 }
 
 #[test]
-#[ignore = "refused: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)"]
 fn negzero_constglobal_reduced() {
     mali_ref::assert_matches("deqp_negzero_constglobal_reduced");
 }
 
 #[test]
-#[ignore = "refused: a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)"]
+#[ignore = "refused: a fused multiply-add other than a matrix product's (a built-in function's)"]
 fn negzero_constglobal_vs() {
     mali_ref::assert_matches("deqp_negzero_constglobal_vs");
 }
@@ -93,12 +94,12 @@ fn negzero_array_inout_vs() {
 
 const NEG_ZERO: &str = "a -0.0 that a comparison reads through a variable, or that another value reads too (Mesa's rules make it 0.0 there)";
 const ARITH: &str = "arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)";
+const FMA: &str = "a fused multiply-add other than a matrix product's (a built-in function's)";
 
 /// Every ignored reference above and the refusal the compiler gives it now.
 const REFUSALS: &[(&str, &str)] = &[
     ("deqp_negzero_constglobal_fs", NEG_ZERO),
-    ("deqp_negzero_constglobal_reduced", NEG_ZERO),
-    ("deqp_negzero_constglobal_vs", NEG_ZERO),
+    ("deqp_negzero_constglobal_vs", FMA),
     ("deqp_negzero_mainbuiltin_vs", NEG_ZERO),
     ("deqp_negzero_mainbuiltin_fs", NEG_ZERO),
     ("deqp_negzero_mainplain_vs", NEG_ZERO),
@@ -107,8 +108,8 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_negzero_array_inout_vs", ARITH),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+/// The references that compile byte-equal (their tests run).
+const MATCHED: &[&str] = &["deqp_negzero_constglobal_reduced"];
 
 #[test]
 fn refusals_pinned() {
