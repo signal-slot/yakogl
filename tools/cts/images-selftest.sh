@@ -29,7 +29,7 @@ unset BOARD BOARD_UART DEQP_MODULE DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_WORK \
     ZEPHYR_VENV ZEPHYR_WORKSPACE ZEPHYR_WS LANGUAGE LC_CTYPE LC_MESSAGES GIT_DIR GIT_WORK_TREE GIT_TEMPLATE_DIR
 # what board-stage.sh and the Pi 4 builder read besides the above
 unset BOARD_BOOT BOARD_HDMI_TIMINGS BOARD_HOST CTS CCFARM_DEPS_DIR CONNECTED_DEPS_DIR DEQP_WORK_GLES3 \
-    DEQP_PVR_NATIVE_3D GLES3_WORK RUSTUP_TOOLCHAIN BOARD_STAGE_SOURCE_ONLY
+    DEQP_PVR_NATIVE_3D DEQP_PVR_INSTANCE_DIVISOR GLES3_WORK RUSTUP_TOOLCHAIN BOARD_STAGE_SOURCE_ONLY
 export LANG=C LC_ALL=C
 # git: the host's ~/.gitconfig (commit.gpgsign, hooks, templates, safe.directory) must not reach the
 # scratch repository; HOME is the scratch directory
@@ -80,8 +80,8 @@ S=$R/tools/cts/am62p-deqp-images.sh
 # TREE_ROWS in the shell would select rows, a node's IMX8MP_OUT / DEQP_STAGE1_GLES3 would replace
 # the stage 1 path the X2 checks expect, ...)
 unset WEST_VENV TREE_ROWS DEQP_MODULE ZEPHYR_BASE CLUSTER_DIR DEQP_GL_CONFIG_NAME BOARD IMX8MP_BOARD \
-    IMX8MP_OUT DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_PVR_NATIVE_3D IMX8MP_CONSOLE WDOG_SELF_ARM DRYRUN \
-    ZEPHYR_MODULES
+    IMX8MP_OUT DEQP_STAGE1 DEQP_STAGE1_GLES3 DEQP_PVR_NATIVE_3D DEQP_PVR_INSTANCE_DIVISOR \
+    IMX8MP_CONSOLE WDOG_SELF_ARM DRYRUN ZEPHYR_MODULES
 export ZEPHYR_WS=$T/ws DEQP_WORK=$T/work PATH="$T/bin:$PATH"
 git init -q "$R" 2>/dev/null
 
@@ -607,6 +607,46 @@ cp "$HERE/common-images.sh" "$R/tools/cts/broken-images.sh"
 echo ': "${SLINT_NOSTD_DIR:-}"' >> "$R/tools/cts/broken-images.sh"
 out=$(unlisted_deps "$R/tools/cts" broken-images.sh)
 check "a builder reading an entry in no row is named" "SLINT_NOSTD_DIR broken-images.sh" "$out"
+
+echo
+echo "== 9. DEQP_PVR_INSTANCE_DIVISOR: the PowerVR hardware instance-divisor arm"
+# (P3, docs/notes/instanceid-per-draw.md row "P3 (full path)"): the arm reaches
+# west as -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y/n, the conformance check runs
+# with --pvr-instance-divisor when it is 1, and board-stage.sh names it in the
+# gles3 build and record directories (the fake west records its whole command
+# line in zephyr.bin, the fake conformance check its arguments in CHECK_LOG).
+printf 'dEQP-GLES2.a.*\n' > "$T/idiv.txt"
+out=$(CHECK_LOG=$T/idiv-un.log "$S" "$T/idiv.txt" "$T/idivu" t 2>/dev/null); rc=$?
+[ "$rc" = 0 ] && ok "arm unset: sweep rc 0" || bad "arm unset: rc=$rc: $out"
+absent "arm unset: west gets no instance-divisor argument" "CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR" "$(cat "$T/idivu/img1-t/zephyr/zephyr.bin")"
+absent "arm unset: the conformance check runs without the flag" "--pvr-instance-divisor" "$(cat "$T/idiv-un.log")"
+out=$(DEQP_PVR_INSTANCE_DIVISOR=1 CHECK_LOG=$T/idiv-on.log "$S" "$T/idiv.txt" "$T/idivo" t 2>/dev/null); rc=$?
+[ "$rc" = 0 ] && ok "arm 1: sweep rc 0" || bad "arm 1: rc=$rc: $out"
+check "arm 1: west gets the Kconfig on" "-DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y" "$(cat "$T/idivo/img1-t/zephyr/zephyr.bin")"
+check "arm 1: the conformance check runs with the flag" "--pvr-instance-divisor" "$(cat "$T/idiv-on.log")"
+out=$(DEQP_PVR_INSTANCE_DIVISOR=0 CHECK_LOG=$T/idiv-off.log "$S" "$T/idiv.txt" "$T/idivz" t 2>/dev/null); rc=$?
+[ "$rc" = 0 ] && ok "arm 0: sweep rc 0" || bad "arm 0: rc=$rc: $out"
+check "arm 0: west gets the Kconfig off" "-DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=n" "$(cat "$T/idivz/img1-t/zephyr/zephyr.bin")"
+absent "arm 0: the conformance check runs without the flag" "--pvr-instance-divisor" "$(cat "$T/idiv-off.log")"
+out=$(DEQP_PVR_INSTANCE_DIVISOR=2 "$S" "$T/idiv.txt" "$T/idivx" t 2>&1); rc=$?
+# (the die is after mkdir -p "$OUT", like DEQP_PVR_NATIVE_3D's: the refusal is
+# before the row loop, so no image directory is ever made)
+[ "$rc" = 2 ] && [ ! -e "$T/idivx/img1-t" ] && ok "arm 2: rc 2 before image 1 is built" || bad "arm 2: rc=$rc: $out"
+check "arm 2 names the variable" "DEQP_PVR_INSTANCE_DIVISOR must be 0 or 1" "$out"
+# board-stage.sh am62p gles3: the arm in the directories, the dry run, the refusals
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 tools/cts/board-stage.sh am62p gles3 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gles3 dry run, arm unset: rc 0" || bad "gles3 dry run, arm unset: rc=$rc: $out"
+absent "arm unset: no idiv directory in the dry run" "-idiv" "$out"
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 DEQP_PVR_INSTANCE_DIVISOR=1 tools/cts/board-stage.sh am62p gles3 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gles3 dry run, arm 1: rc 0" || bad "gles3 dry run, arm 1: rc=$rc: $out"
+n=$(printf '%s\n' "$out" | grep -c 'idiv1')
+[ "$n" = 2 ] && ok "arm 1: build and record directory name it" || bad "arm 1 idiv1 lines: $n: $out"
+check "arm 1: the dry run echoes the arm on the command" "DEQP_PVR_INSTANCE_DIVISOR=1 DEQP_WORK" "$out"
+check "arm 1: the dry run prints the arm" "instance divisors: 1" "$out"
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 DEQP_PVR_NATIVE_3D=0 DEQP_PVR_INSTANCE_DIVISOR=1 tools/cts/board-stage.sh am62p gles3 2>&1); rc=$?
+[ "$rc" = 0 ] && check "both arms compose (-n3d0-idiv1)" "-n3d0-idiv1" "$out" || bad "both arms: rc=$rc: $out"
+out=$(cd "$REPO_ROOT" && BOARD_STAGE_DRY_RUN=1 DEQP_PVR_INSTANCE_DIVISOR=2 tools/cts/board-stage.sh am62p gles3 2>&1); rc=$?
+[ "$rc" = 2 ] && check "board-stage refuses arm 2 (rc 2)" "DEQP_PVR_INSTANCE_DIVISOR must be 0 or 1" "$out" || bad "board-stage arm 2: rc=$rc: $out"
 
 echo
 if [ "$fail" = 0 ]; then echo "images-selftest: all checks passed"; else echo "images-selftest: $fail check(s) FAILED"; exit 1; fi
