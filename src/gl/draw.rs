@@ -4978,6 +4978,15 @@ fn build_common(
                 (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = s;
             }
             (tb.linear_filter, tb.min_linear, tb.mip_filter, tb.mip_levels) = sampling_fields(t);
+            /* A PowerVR NPOT cube's chain is laid out packed for the native
+             * cube's copy (texture.rs native_cube_npot_chain); a stacked-cube
+             * program (pvr_native_cube off when it compiled) still binds the
+             * tall stacked image, whose levels the TPU would look for by
+             * power-of-two arithmetic: it samples the base level, as it did
+             * when such a cube kept one level. */
+            if tb.type_ == GLES_TEXTYPE_CUBE && super::texture::packed_npot_cube_chain(t) {
+                (tb.mip_filter, tb.mip_levels) = (0, 1);
+            }
             /* The Mali's 3D texture: its back end copies every level of the
              * grid the GL core holds after level 0 (`volume_of`,
              * `grid_level_at`; docs/notes/mali-3d-levels.md section 4), so it
