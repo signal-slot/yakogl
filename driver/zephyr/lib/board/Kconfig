@@ -297,14 +297,29 @@ config YAKOGL_BOARD_HOLD_FAIL_S
 	range 0 3000
 
 config YAKOGL_BOARD_RECORD_SCREEN
-	bool "Pi 4: freeze the console ring on the framebuffer at the end"
+	bool "Pi 4, T6: the console's last lines on the screen at the end"
 	default y
-	depends on YAKOGL_BOARD_RPI4
+	depends on YAKOGL_BOARD_RPI4 || YAKOGL_BOARD_NANOPC_T6
 	help
 	  The last lines of the console, the last yk-record line at the
-	  bottom, drawn over the framebuffer when board_finish() runs, and
-	  kept until the watchdog resets the board: a camera reads the result
-	  of a run whose UART was not captured.
+	  bottom, drawn over the picture on the screen when the run is over:
+	  a camera or a capture unit reads the result of a run whose UART was
+	  not captured. The Pi 4 draws it when board_finish()'s hold ends and
+	  keeps it until the watchdog resets the board. The T6 draws it over
+	  the last window shown: after the hold, kept for
+	  YAKOGL_BOARD_RECORD_SCREEN_S before the reset, and when its
+	  watchdog's feeding stops or a fatal error halts the image, kept
+	  until WDT0 resets the SoC.
+
+config YAKOGL_BOARD_RECORD_SCREEN_S
+	int "T6: seconds the record screen stays before the reset"
+	default 20
+	range 0 600
+	depends on YAKOGL_BOARD_RECORD_SCREEN && YAKOGL_BOARD_NANOPC_T6
+	help
+	  The T6's reset is a call, not a watchdog period, so the record
+	  screen needs a hold of its own. A capture unit that gives a picture
+	  every 5 s, two requests late, sees it after 15 s.
 
 config YAKOGL_BOARD_ANIMATE_S
 	int "Seconds a sample animates after its checked frames"

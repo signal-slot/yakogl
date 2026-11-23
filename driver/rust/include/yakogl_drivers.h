@@ -95,6 +95,43 @@ int yd_record_progress(struct yd_record_writer *w, uint32_t where, uint32_t upti
 int yd_record_breadcrumb(struct yd_record_writer *w, uint32_t kind, uint32_t tag, uint32_t w1,
 			 uint32_t w2, uint32_t w3, uint32_t out[4]);
 
+/* ---- the record screen (board::record_screen; common/record_screen.c) ----
+ * The console's last lines, drawn over the picture when a run ends: the
+ * board's printk hook puts every character into the ring (all zero is the
+ * empty ring), and the board draws it into the buffer on the screen. The
+ * ring keeps the line being written and the 47 before it, 158 characters
+ * of each, and the last complete line that began with "yk-record: ". */
+#define YD_RECORD_SCREEN_LINES  48
+#define YD_RECORD_SCREEN_COLS   158
+#define YD_RECORD_SCREEN_GLYPHS 95 /* printable ASCII, 0x20.. */
+#define YD_RECORD_SCREEN_FONT_H 16 /* a glyph: a byte per row, bit 7 leftmost */
+
+struct yd_record_screen {
+	uint8_t text[YD_RECORD_SCREEN_LINES][YD_RECORD_SCREEN_COLS];
+	uint8_t len[YD_RECORD_SCREEN_LINES];
+	uint8_t record[YD_RECORD_SCREEN_COLS];
+	uint8_t record_len;
+	uint8_t next;
+	uint8_t count;
+	uint8_t pad;
+};
+
+/* One console character (the low byte of c): '\n' ends the line, '\r' is
+ * dropped. One call at a time on a ring; no draw during it. */
+void yd_record_screen_put(struct yd_record_screen *r, uint32_t c);
+/* Draw the screen over the width x height XRGB8888 picture at px (rows
+ * stride_bytes apart, top row first): every pixel the background, then the
+ * head_len characters at head on the first row, under it the newest lines
+ * that fit (a long line continues on the next row), on the last rows the
+ * last record line or "yk-record: none". Returns the console lines drawn;
+ * 0 with nothing written when the picture holds no three rows of one
+ * character; -EINVAL with nothing written for a null or unaligned pointer
+ * or a stride that is no whole pixels. No put on r during the call. */
+int yd_record_screen_draw(const struct yd_record_screen *r, uint32_t *px, uint32_t width,
+			  uint32_t height, uint32_t stride_bytes,
+			  const uint8_t (*font)[YD_RECORD_SCREEN_GLYPHS][YD_RECORD_SCREEN_FONT_H],
+			  const char *head, size_t head_len);
+
 /* kind GLMARK2's w1..w3 (record.rs glmark2_words, Glmark2Outcome): the
  * entries are indices in glmark2's benchmark list, YK_RECORD_GLMARK2_ENTRY_NONE
  * when there is none; why is a YK_RECORD_GLMARK2_WHY_*, which
@@ -2130,6 +2167,10 @@ _Static_assert(offsetof(struct yd_imx8mp_hold, reset_max) == 32, "yd_imx8mp_hold
 _Static_assert(offsetof(struct yd_record_writer, seq) == 0, "yd_record_writer.seq");
 _Static_assert(offsetof(struct yd_record_writer, have_result) == 1, "yd_record_writer.have_result");
 _Static_assert(offsetof(struct yd_record_writer, progress_count) == 4, "yd_record_writer.progress_count");
+_Static_assert(sizeof(struct yd_record_screen) == 7794, "struct yd_record_screen");
+_Static_assert(offsetof(struct yd_record_screen, len) == 7584, "yd_record_screen.len");
+_Static_assert(offsetof(struct yd_record_screen, record) == 7632, "yd_record_screen.record");
+_Static_assert(offsetof(struct yd_record_screen, record_len) == 7790, "yd_record_screen.record_len");
 _Static_assert(sizeof(struct yd_glmark2_outcome) == 56, "struct yd_glmark2_outcome");
 _Static_assert(offsetof(struct yd_glmark2_outcome, failed_entry) == 24, "yd_glmark2_outcome.failed_entry");
 _Static_assert(offsetof(struct yd_glmark2_outcome, unsupported_entries) == 32,

@@ -31,6 +31,18 @@ uint32_t t6_watchdog_period_ms(void);
  * Thread context. */
 FUNC_NORETURN void t6_reset_to_linux(const char *why);
 
+/* The feeder stopped before a reset call (the lifetime is over, or no
+ * progress): the board layer draws its record screen over the picture
+ * (board_nanopc_t6.c), which then stays until WDT0's reset. Nothing without
+ * CONFIG_YAKOGL_BOARD_RECORD_SCREEN. Timer context. */
+#ifdef CONFIG_YAKOGL_BOARD_RECORD_SCREEN
+void t6_record_screen(void);
+#else
+static inline void t6_record_screen(void)
+{
+}
+#endif
+
 /* Print the record of a display adopt (yd_t6_display_adopt, or the first
  * yd_t6_screen_show) and its return value `rc`: what it found, what it did
  * up to its stop, then one line with the stop's name. Every line starts with

@@ -408,6 +408,10 @@ static void feed_tick(struct k_timer *t)
 		       v < ARRAY_SIZE(feed_stop_why) && feed_stop_why[v] ? feed_stop_why[v] :
 									  "unknown verdict",
 		       s_arm.period_ms);
+		/* after a reset call the record was shown and held already */
+		if (v != YD_T6_FEED_RELEASED) {
+			t6_record_screen();
+		}
 		return;
 	}
 	yd_dw_wdt_feed(s_wdt);
