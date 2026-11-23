@@ -6,13 +6,14 @@
 //!
 //! tests/es3_texsize_base_level_v3d.rs and ..._vs_v3d.rs pin float and shadow
 //! samplers only. The size words 44-47 come from the draw's `V3dJobTmu`
-//! (`texture_units`, src/v3d/backend.rs), which holds the LEVEL-0 sizes:
-//! `GL_TEXTURE_BASE_LEVEL` is not applied. This file pins that for
+//! (`texture_units`, src/v3d/backend.rs), which holds the sizes at the
+//! bind's `GlesTextureBind::base_level`, the effective
+//! `GL_TEXTURE_BASE_LEVEL` the draw fills. This file checks that for
 //! `isampler2D` (RGBA8I), `isampler3D` (R32I) and `usampler2DArray`
 //! (RGBA32UI): 16x16 level 0, full chain, 3D 8 deep, array 5 layers. The
-//! BASE_LEVEL 0 controls stay; each `..._flip_when_the_base_level_is_applied`
-//! test asserts today's level-0 record and names the post-fix value in its doc
-//! comment: (8, 8, 1, 1) 2D, (8, 8, 4, 1) 3D, (8, 8, 1, 5) array (the layer
+//! BASE_LEVEL 0 controls assert level 0's sizes; the BASE_LEVEL 1 tests
+//! (pinned at level 0 until item basefield flipped them) assert the base
+//! level's: (8, 8, 1, 1) 2D, (8, 8, 4, 1) 3D, (8, 8, 1, 5) array (the layer
 //! count is never minified; Mesa's v3d_uniforms.c `u_minify(first_level)`).
 //!
 //! Return-size rule: a `textureSize` lowers to no look-up, so no P0/P1 word
@@ -660,50 +661,47 @@ fn a_usampler2darray_at_base_level_0_has_its_level_0_size_vs() {
     assert_eq!(unit0_sizes(Kind::UintArray, Stage::Vertex, 0), (16, 16, 1, 5));
 }
 
-/* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's size ---- */
 
-/// Pins today's behaviour: `isampler2D` at BASE_LEVEL 1 still hands 16x16
-/// (fragment stage). Flip to (8, 8, 1, 1) when the base level is applied.
+/// `isampler2D` at BASE_LEVEL 1 hands the base level's 8x8 (fragment stage).
 #[test]
-fn an_isampler2d_at_base_level_1_still_hands_the_level_0_size_fs_flip_when_the_base_level_is_applied() {
+fn an_isampler2d_at_base_level_1_hands_the_base_level_size_fs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Fragment, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Fragment, 1), (8, 8, 1, 1));
 }
 
-/// As above, vertex stage. Flip to (8, 8, 1, 1) when the base level is applied.
+/// As above, vertex stage.
 #[test]
-fn an_isampler2d_at_base_level_1_still_hands_the_level_0_size_vs_flip_when_the_base_level_is_applied() {
+fn an_isampler2d_at_base_level_1_hands_the_base_level_size_vs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Vertex, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Int2d, Stage::Vertex, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: `isampler3D` at BASE_LEVEL 1 hands 16x16 and depth
-/// 8 (fragment stage). Flip to (8, 8, 4, 1) when the base level is applied.
+/// `isampler3D` at BASE_LEVEL 1 hands 8x8 and depth 4 (fragment stage).
 #[test]
-fn an_isampler3d_at_base_level_1_still_hands_the_level_0_size_fs_flip_when_the_base_level_is_applied() {
+fn an_isampler3d_at_base_level_1_hands_the_base_level_size_fs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Fragment, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Fragment, 1), (8, 8, 4, 1));
 }
 
-/// As above, vertex stage. Flip to (8, 8, 4, 1) when the base level is applied.
+/// As above, vertex stage.
 #[test]
-fn an_isampler3d_at_base_level_1_still_hands_the_level_0_size_vs_flip_when_the_base_level_is_applied() {
+fn an_isampler3d_at_base_level_1_hands_the_base_level_size_vs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Vertex, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Int3d, Stage::Vertex, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: `usampler2DArray` at BASE_LEVEL 1 hands 16x16 and
-/// 5 layers (fragment stage). Flip to (8, 8, 1, 5) when the base level is
-/// applied; the layer count is never minified.
+/// `usampler2DArray` at BASE_LEVEL 1 hands 8x8 and 5 layers (fragment
+/// stage); the layer count is never minified.
 #[test]
-fn a_usampler2darray_at_base_level_1_still_hands_the_level_0_size_fs_flip_when_the_base_level_is_applied() {
+fn a_usampler2darray_at_base_level_1_hands_the_base_level_size_fs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Fragment, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Fragment, 1), (8, 8, 1, 5));
 }
 
-/// As above, vertex stage. Flip to (8, 8, 1, 5) when the base level is applied.
+/// As above, vertex stage.
 #[test]
-fn a_usampler2darray_at_base_level_1_still_hands_the_level_0_size_vs_flip_when_the_base_level_is_applied() {
+fn a_usampler2darray_at_base_level_1_hands_the_base_level_size_vs() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Vertex, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::UintArray, Stage::Vertex, 1), (8, 8, 1, 5));
 }

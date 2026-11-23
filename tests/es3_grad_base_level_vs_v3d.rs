@@ -12,15 +12,16 @@
 //! The cube stream reads the width word (lane 0) in both stages, so the
 //! cube cases pin width and height. The vertex stage's units (`vs_tmu`) come
 //! from the same `texture_units` fill as the fragment stage's (`tmu`), so
-//! they hold level 0's sizes at BASE_LEVEL 1 too.
+//! they hold the base level's sizes at BASE_LEVEL 1 too (the draw fills
+//! `GlesTextureBind::base_level`; the TMU state's Base Level stays 0 until
+//! item basefix).
 //! tests/es3_texsize_base_level_vs_v3d.rs pins vertex `textureSize`,
 //! the fragment 3D and 2D-array grads are pinned by a sibling item's test.
 //!
-//! The BASE_LEVEL 0 controls assert the correct sizes and stay. Each
-//! `..._flip_when_the_base_level_is_applied` test asserts today's level-0
-//! record with BASE_LEVEL 1; its post-fix value (Mesa's v3d_uniforms.c
+//! The BASE_LEVEL 0 controls assert the level-0 sizes. The BASE_LEVEL 1
+//! tests assert the base level's (Mesa's v3d_uniforms.c
 //! `u_minify(first_level)`: width, height, depth minified, layer count as
-//! is) is in its doc comment. The fix flips those asserts in its commit.
+//! is); they were pinned at level 0 until item basefield flipped them.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_grad_base_level_vs_v3d
@@ -665,41 +666,38 @@ fn fragment_grad_of_a_cube_at_base_level_0_has_its_level_0_size() {
     assert_eq!(unit0_sizes(Kind::Cube, Stage::Fragment, 0), (16, 16, 1, 1));
 }
 
-/* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's size ---- */
 
-/// Pins today's behaviour: vertex `textureGrad` of a mipmapped 16x16x8 3D
-/// texture with BASE_LEVEL 1 hands (16, 16, 8), level 0's sizes, so the
-/// gradients are scaled by them. Post-fix (the base level's sizes, as Mesa's
-/// `u_minify(first_level)`): (8, 8, 4, 1). Flip when the base level is applied.
+/// Vertex `textureGrad` of a mipmapped 16x16x8 3D texture with BASE_LEVEL 1
+/// hands the base level's sizes (8, 8, 4, 1), as Mesa's
+/// `u_minify(first_level)`, so the gradients are scaled by them.
 #[test]
-fn vertex_grad_of_a_3d_texture_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn vertex_grad_of_a_3d_texture_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Vertex, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Vertex, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: vertex `textureGrad` of a mipmapped 16x16, 5-layer
-/// 2D array with BASE_LEVEL 1 hands (16, 16) and 5 layers. Post-fix: (8, 8,
-/// 1, 5); the layer count is never minified (and is not a gradient scale).
+/// Vertex `textureGrad` of a mipmapped 16x16, 5-layer 2D array with
+/// BASE_LEVEL 1 hands (8, 8) and 5 layers; the layer count is never minified
+/// (and is not a gradient scale).
 #[test]
-fn vertex_grad_of_a_2d_array_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn vertex_grad_of_a_2d_array_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, Stage::Vertex, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, Stage::Vertex, 1), (8, 8, 1, 5));
 }
 
-/// Pins today's behaviour: vertex `textureGrad` of a mipmapped 16x16 cube
-/// with BASE_LEVEL 1 hands (16, 16); `cube_lod` reads the width word (lane 0)
-/// for (W / 2)^2. Post-fix: (8, 8, 1, 1).
+/// Vertex `textureGrad` of a mipmapped 16x16 cube with BASE_LEVEL 1 hands
+/// (8, 8); `cube_lod` reads the width word (lane 0) for (W / 2)^2.
 #[test]
-fn vertex_grad_of_a_cube_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn vertex_grad_of_a_cube_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Cube, Stage::Vertex, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Cube, Stage::Vertex, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: fragment `textureGrad` of a mipmapped 16x16 cube
-/// with BASE_LEVEL 1 hands (16, 16); `cube_lod` reads the width word in the
-/// fragment stage too. Post-fix: (8, 8, 1, 1).
+/// Fragment `textureGrad` of a mipmapped 16x16 cube with BASE_LEVEL 1 hands
+/// (8, 8); `cube_lod` reads the width word in the fragment stage too.
 #[test]
-fn fragment_grad_of_a_cube_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn fragment_grad_of_a_cube_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Cube, Stage::Fragment, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Cube, Stage::Fragment, 1), (8, 8, 1, 1));
 }

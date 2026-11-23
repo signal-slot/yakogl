@@ -729,40 +729,43 @@ fn base_level_0_with_a_lod_range_has_the_unranged_sampler_flip_when_the_lod_rang
 /* ---- BASE_LEVEL 1: today's words and records, pinned ---- */
 
 /// Pins today's behaviour: with BASE_LEVEL 1 and MIN_LOD 0.5 / MAX_LOD 2.0
-/// the size words (44-47) are still level 0's and the texture record's Base
-/// Level / Max Level still (0, 4), as without a LOD range. After the base
-/// level is applied: words (8, 8, 1, 1) for the 2D texture, (8, 8, 4, 1)
-/// for the 3D texture (depth minified) and (8, 8, 1, 5) for the array
-/// (layers as is), levels (1, 4) (Mesa: `first_level` = the base level,
+/// the texture record's Base Level / Max Level are still (0, 4), as without
+/// a LOD range. The size words (44-47) already are the base level's (the
+/// draw fills `GlesTextureBind::base_level`): (8, 8, 1, 1) for the 2D
+/// texture, (8, 8, 4, 1) for the 3D texture (depth minified) and
+/// (8, 8, 1, 5) for the array (layers as is). After the base level is
+/// applied to the record: levels (1, 4) (Mesa: `first_level` = the base level,
 /// `last_level` = the last level in effect, v3dx_state.c
 /// `v3d_setup_texture_shader_state`; v3d_uniforms.c `u_minify(first_level)`).
 /// The LOD range does not move them: the TMU's LOD is relative to its Base
 /// Level, so (1, 4) holds for any MIN_LOD / MAX_LOD.
 #[test]
-fn base_level_1_with_a_lod_range_still_hands_level_0_words_and_levels_flip_when_the_base_level_is_applied() {
+fn base_level_1_with_a_lod_range_hands_level_1_words_and_still_level_0_levels_flip_when_the_base_level_is_applied() {
     let _g = rig();
     for kind in KINDS {
         let u = unit0(kind, 1, Some((0.5, 2.0)));
         let post = (level_1_sizes(kind), (1, 4));
-        assert_eq!((u.sizes, u.levels), (level_0_sizes(kind), (0, 4)), "{kind:?} (post-fix {post:?})");
+        assert_eq!((u.sizes, u.levels), (level_1_sizes(kind), (0, 4)), "{kind:?} (post-fix {post:?})");
     }
 }
 
 /// Pins today's behaviour: with BASE_LEVEL 1 and MIN_LOD 3.0 > MAX_LOD 1.0
-/// (no GL error: the range is simply empty) the words are level 0's and the
-/// texture record's levels (0, 4). After the base level is applied they are
-/// the same as without the inverted range: words level 1's ((8, 8, 1, 1),
-/// (8, 8, 4, 1), (8, 8, 1, 5)), levels (1, 4). The inverted range does not
+/// (no GL error: the range is simply empty) the words already are level 1's
+/// ((8, 8, 1, 1), (8, 8, 4, 1), (8, 8, 1, 5)) and the texture record's
+/// levels still (0, 4). After the base level is applied to the record they
+/// are the same as without the inverted range: levels (1, 4). The inverted
+/// range does not
 /// change them: the TMU clamps its LOD itself, and Mesa's sampler writes
 /// max = max(max, min) (`v3d_upload_sampler_state_variant`), so the record
 /// stays valid.
 #[test]
-fn base_level_1_with_min_lod_above_max_lod_still_hands_level_0_words_and_levels_flip_when_the_base_level_is_applied() {
+fn base_level_1_with_min_lod_above_max_lod_hands_level_1_words_and_still_level_0_levels_flip_when_the_base_level_is_applied(
+) {
     let _g = rig();
     for kind in KINDS {
         let u = unit0(kind, 1, Some((3.0, 1.0)));
         let post = (level_1_sizes(kind), (1, 4));
-        assert_eq!((u.sizes, u.levels), (level_0_sizes(kind), (0, 4)), "{kind:?} (post-fix {post:?})");
+        assert_eq!((u.sizes, u.levels), (level_1_sizes(kind), (0, 4)), "{kind:?} (post-fix {post:?})");
     }
 }
 

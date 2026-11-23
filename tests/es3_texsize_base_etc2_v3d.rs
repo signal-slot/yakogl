@@ -5,13 +5,15 @@
 //! tests/es3_texsize_base_level_v3d.rs, which uses RGBA8).
 //!
 //! The texture size uniform words 44-47 come from the draw's `V3dJobTmu`
-//! (`texture_units` in src/v3d/backend.rs), which holds the LEVEL-0 sizes
-//! today: `GL_TEXTURE_BASE_LEVEL` is not applied there. The ETC2 textures are
+//! (`texture_units` in src/v3d/backend.rs), which holds the sizes at the
+//! bind's `GlesTextureBind::base_level`, the effective
+//! `GL_TEXTURE_BASE_LEVEL` the draw fills. The ETC2 textures are
 //! `GL_COMPRESSED_RGBA8_ETC2_EAC`, 18x10 (not a multiple of the 4x4 block),
 //! the whole chain 18x10, 9x5, 4x2, 2x1, 1x1 given level by level, as a 2D
 //! texture (`glCompressedTexImage2D`) and as a 3-layer 2D array
-//! (`glCompressedTexImage3D`). The post-fix values in the doc comments are
-//! minified TEXEL sizes (not block counts), the layer count whole.
+//! (`glCompressedTexImage3D`). The BASE_LEVEL 1 values are minified TEXEL
+//! sizes (not block counts), the layer count whole; they were pinned at
+//! level 0 until item basefield flipped them.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_texsize_base_etc2_v3d
@@ -616,25 +618,21 @@ fn an_etc2_2d_array_at_base_level_0_has_its_level_0_size() {
     assert_eq!(unit0_sizes(Kind::Array, 0), Ok((18, 10, 1, 3)));
 }
 
-/* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
+/* ---- BASE_LEVEL 1: the base level's size ---- */
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the ETC2 `sampler2D` still hands
-/// the LEVEL-0 size, 18x10. The correct value is the base level's minified
+/// With BASE_LEVEL 1 the ETC2 `sampler2D` hands the base level's minified
 /// texel size, 9x5 (Mesa v3d_uniforms.c `u_minify(first_level)`; 9x5 texels,
-/// not 3x2 blocks). Flip to Ok((9, 5, 1, 1)) when the base level is applied.
+/// not 3x2 blocks).
 #[test]
-fn an_etc2_2d_texture_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn an_etc2_2d_texture_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex2d, 1), Ok((18, 10, 1, 1)));
+    assert_eq!(unit0_sizes(Kind::Tex2d, 1), Ok((9, 5, 1, 1)));
 }
 
-/// Pins today's behaviour: with BASE_LEVEL 1 the 3-layer ETC2 `sampler2DArray`
-/// still hands 18x10 and 3 layers. The correct value is 9x5 texels and 3
-/// layers (the layer count is whole, not minified). Flip to
-/// Ok((9, 5, 1, 3)) when the base level is applied; only width and height
-/// change.
+/// With BASE_LEVEL 1 the 3-layer ETC2 `sampler2DArray` hands 9x5 texels and
+/// 3 layers (the layer count is whole, not minified).
 #[test]
-fn an_etc2_2d_array_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn an_etc2_2d_array_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, 1), Ok((18, 10, 1, 3)));
+    assert_eq!(unit0_sizes(Kind::Array, 1), Ok((9, 5, 1, 3)));
 }

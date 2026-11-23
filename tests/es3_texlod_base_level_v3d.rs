@@ -6,12 +6,13 @@
 //!
 //! Under GLES 3.0 the explicit lod of `textureLod` is relative to the base
 //! level (the sampled level is `base + lod`, clamped to the texture's
-//! levels). Today the draw hands the job builder the LEVEL-0 sizes (words
+//! levels). The draw hands the job builder the BASE level's sizes (words
 //! 44-47: `V3dJobTmu` width, height, depth, array_size, from `texture_units`
-//! in src/v3d/backend.rs) and `texture::state` builds the record with Base
-//! Level 0 and Max Level = levels - 1, whatever `GL_TEXTURE_BASE_LEVEL` says
-//! (tests/es3_sample_base_level_v3d.rs and tests/es3_texsize_base_level_v3d.rs
-//! pin the same for `texture()` and `textureSize`). The compiler writes no
+//! in src/v3d/backend.rs at `GlesTextureBind::base_level`, which the draw
+//! fills since item basefield), but today `texture::state` builds the record
+//! with Base Level 0 and Max Level = levels - 1, whatever
+//! `GL_TEXTURE_BASE_LEVEL` says (tests/es3_sample_base_level_v3d.rs pins the
+//! same for `texture()`). The compiler writes no
 //! uniform word for the lod itself: a literal lod goes into the TMU
 //! configuration as is, so the only lod-related words the stream carries are
 //! the size words, and those do not depend on the lod value (the lod 0 and
@@ -681,13 +682,23 @@ fn unit0(kind: Kind, stage: Stage, base: GLint, lod: u32) -> Rec {
     Rec { sizes: (u.width, u.height, u.depth, u.array_size), levels: (u32::from(b15 >> 4), u32::from(b15 & 15)) }
 }
 
-/// The level-0 sizes of a kind's texture: what the words hold today at any
-/// BASE_LEVEL.
+/// The level-0 sizes of a kind's texture: what the words hold at BASE_LEVEL 0.
 fn level0_sizes(kind: Kind) -> (u32, u32, u32, u32) {
     match kind {
         Kind::Tex2d | Kind::Cube => (16, 16, 1, 1),
         Kind::Tex3d => (16, 16, 8, 1),
         Kind::Array => (16, 16, 1, 5),
+    }
+}
+
+/// The level-1 sizes of a kind's texture: what the words hold at BASE_LEVEL 1
+/// (the draw fills `GlesTextureBind::base_level`, `texture_units` takes the
+/// words at that level, as v3d_uniforms.c `u_minify(first_level)`).
+fn level1_sizes(kind: Kind) -> (u32, u32, u32, u32) {
+    match kind {
+        Kind::Tex2d | Kind::Cube => (8, 8, 1, 1),
+        Kind::Tex3d => (8, 8, 4, 1),
+        Kind::Array => (8, 8, 1, 5),
     }
 }
 
@@ -703,16 +714,17 @@ macro_rules! cases {
         }
 
         #[doc = concat!("Pins today's behaviour: a ", $kname, " `textureLod` at lod ", stringify!($lod),
-            " in the ", $sname, " stage at BASE_LEVEL 1 hands the LEVEL-0 sizes and TMU levels (0, 4): ",
+            " in the ", $sname, " stage at BASE_LEVEL 1 hands TMU levels (0, 4): ",
             "the TMU samples from level 0, so the lod is relative to level 0, not to the GL base level. ",
-            "The post-fix record is ", $post, " and TMU levels (1, 4): Mesa programs Base Level = ",
+            "The size words already are the base level's: ", $post, ". ",
+            "The post-fix TMU levels are (1, 4): Mesa programs Base Level = ",
             "first_level and Max Level = last_level (absolute levels) while the lod is passed through ",
             "unchanged and relative to the base, so the lod is not added to the base twice. Flip the ",
             "assert when the base level is applied.")]
         #[test]
         fn $pin() {
             let _g = rig();
-            assert_eq!(unit0(Kind::$kind, Stage::$stage, 1, $lod), rec(level0_sizes(Kind::$kind), (0, 4)));
+            assert_eq!(unit0(Kind::$kind, Stage::$stage, 1, $lod), rec(level1_sizes(Kind::$kind), (0, 4)));
         }
     )*};
 }

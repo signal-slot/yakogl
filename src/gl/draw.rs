@@ -784,6 +784,23 @@ fn texture_fixed_depth(t: &GlTexture) -> bool {
         && !matches!(t.type_, GL_FLOAT | GL_FLOAT_32_UNSIGNED_INT_24_8_REV)
 }
 
+/// [`GlesTextureBind::base_level`] of texture `t`: the effective
+/// GL_TEXTURE_BASE_LEVEL (Mesa st's first_level). An immutable texture
+/// clamps it to its last level; a mutable one uses it when the texture has
+/// an image at that level and it is at most 15, else 0 (completeness of that
+/// case is decided elsewhere). Only carried: no completeness rule reads it.
+pub(crate) fn bind_base_level(t: &GlTexture) -> u8 {
+    let base = t.base_level.max(0);
+    let v = if t.immutable && t.immutable_levels > 0 {
+        base.min(t.immutable_levels as i32 - 1)
+    } else if base <= 15 && (t.level_defined >> base) & 1 != 0 {
+        base
+    } else {
+        0
+    };
+    v.min(u8::MAX as i32) as u8
+}
+
 pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
     let (linear_filter, min_linear, mip_filter, mip_levels) = sampling_fields(t);
     GlesTextureBind {
@@ -811,6 +828,7 @@ pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
         no_alpha: texture_has_no_alpha(t) as u8,
         depth_luminance: texture_depth_luminance(t) as u8,
         swizzle: bind_swizzle(t),
+        base_level: bind_base_level(t),
         ..GlesTextureBind::ZERO
     }
 }
@@ -5032,6 +5050,7 @@ fn build_common(
             tb.wrap_t = map_wrap(t.wrap_t);
             tb.wrap_r = map_wrap(t.wrap_r);
             tb.swizzle = bind_swizzle(t);
+            tb.base_level = bind_base_level(t);
             let incomplete = incomplete_reason(t);
             (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = own;
             if let Some(why) = incomplete {

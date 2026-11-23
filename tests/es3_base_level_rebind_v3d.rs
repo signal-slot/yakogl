@@ -9,19 +9,17 @@
 //! then back at 0. Nothing is uploaded or touched between the draws, so
 //! the rebind changes nothing the cache could see except the base level.
 //!
-//! Today the three draws are indistinguishable to the back end:
+//! Today the back end tells the three draws apart only by their size words:
 //!
-//! - the draw does not fill `GlesTextureBind::base_level` (src/backend.rs,
-//!   offset 3): src/gl/draw.rs:3611 says it outright, "the draw does not
-//!   apply GL_TEXTURE_BASE_LEVEL (`GlTexture::base_level`)", so every draw
-//!   hands the back end a bind with base_level 0;
+//! - the draw fills `GlesTextureBind::base_level` (src/backend.rs, offset
+//!   3) with the effective GL_TEXTURE_BASE_LEVEL (src/gl/draw.rs
+//!   `bind_base_level`, item basefield);
+//! - the words 44-47 read `V3dJobTmu`'s `width`/`height`/`depth`/
+//!   `array_size`, which `texture_units` (src/v3d/backend.rs) fills at that
+//!   base level, so draw 2 hands the level-1 words;
 //! - `texture::state` (src/v3d/texture.rs) packs the 24-byte texture state
 //!   record with `base_level: 0` and `max_level = levels - 1` whatever GL
 //!   says (Mesa's v3dx_state.c programs Base Level from the GL base level);
-//! - the words 44-47 read `V3dJobTmu`'s `width`/`height`/`depth`/
-//!   `array_size`, which `texture_units` (src/v3d/backend.rs) fills from
-//!   the LEVEL-0 sizes — tests/es3_texsize_base_level_v3d.rs pinned that
-//!   for one draw at BASE_LEVEL 1;
 //! - and the key a kept texture copy lives under, `TexKey`
 //!   (src/v3d/backend.rs:189: base_gpu, width, height, levels, bgra,
 //!   format, content_gen, layers, type_, depth_id), has no base level, so
@@ -38,16 +36,15 @@
 //! TMU state's base level IS observable here, and today it is 0 in all
 //! three draws.
 //!
-//! This file pins today's behaviour. The asserts named
-//! `..._flip_when_the_base_level_is_applied` are the BASE_LEVEL 1 draw's
-//! size words and its record's base level; their doc comments give the
-//! post-fix values. After basefix — which fills `GlesTextureBind::base_level`
-//! from GL_TEXTURE_BASE_LEVEL, applies the base level to the size words
-//! and to `texture::state`, and adds it to `TexKey` so a kept copy follows
-//! the base level — draw 2 hands the level-1 words (8, 8, 1, 1),
-//! (8, 8, 4, 1) and (8, 8, 1, 5) (a 2D array's layer count is never
-//! minified; dEQP es3fShaderTextureFunctionTests.cpp:1408-1411 and :1511,
-//! Mesa's v3d_uniforms.c `u_minify(first_level)`) and a record with
+//! Draw 2 hands the level-1 words (8, 8, 1, 1), (8, 8, 4, 1) and
+//! (8, 8, 1, 5) (a 2D array's layer count is never minified; dEQP
+//! es3fShaderTextureFunctionTests.cpp:1408-1411 and :1511, Mesa's
+//! v3d_uniforms.c `u_minify(first_level)`); those asserts were pinned at
+//! level 0 until item basefield flipped them. The asserts named
+//! `..._flip_when_the_base_level_is_applied` pin the BASE_LEVEL 1 draw's
+//! record base level 0; their doc comments give the post-fix values. After
+//! basefix — which applies the base level to `texture::state` and adds it to
+//! `TexKey` so a kept copy follows the base level — draw 2 has a record with
 //! base_level 1; draws 1 and 3 are the level-0 values today and after.
 //!
 //! The textures are `glTexStorage` 16x16 (3D 8 deep, halved per level; 2D
@@ -740,46 +737,39 @@ fn the_two_2d_array_draws_at_base_level_0_around_the_base_level_change_hand_iden
     assert_eq!(seen[2].words, seen[0].words);
 }
 
-/* ---- BASE_LEVEL 1 between the draws: today, pinned ---- */
+/* ---- BASE_LEVEL 1 between the draws: the base level's words ---- */
 
-/// Pins today's behaviour: the `sampler2D` drawn between the two BASE_LEVEL
-/// 0 draws, its BASE_LEVEL the only thing that changed, still hands the
-/// LEVEL-0 words — the same (16, 16, 1, 1) as the draw before it. After the
-/// base level is applied the draw hands the level-1 size instead: **(8, 8,
-/// 1, 1)** (dEQP es3fShaderTextureFunctionTests.cpp:1408-1411 sets the base
-/// level and :1511 expects the minified size; Mesa's v3d_uniforms.c
-/// `u_minify(first_level)`). Flip the assert to (8, 8, 1, 1) then.
+/// The `sampler2D` drawn between the two BASE_LEVEL 0 draws, its BASE_LEVEL
+/// the only thing that changed, hands the level-1 size **(8, 8, 1, 1)**, not
+/// the (16, 16, 1, 1) of the draw before it (dEQP
+/// es3fShaderTextureFunctionTests.cpp:1408-1411 sets the base level and
+/// :1511 expects the minified size; Mesa's v3d_uniforms.c
+/// `u_minify(first_level)`).
 #[test]
-fn the_2d_draw_at_base_level_1_between_the_draws_still_hands_the_level_0_words_flip_when_the_base_level_is_applied() {
+fn the_2d_draw_at_base_level_1_between_the_draws_hands_the_level_1_words() {
     let _g = rig();
     let seen = rebind(Kind::Tex2d);
-    assert_eq!(seen[1].words, (16, 16, 1, 1));
+    assert_eq!(seen[1].words, (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: the `sampler3D` re-drawn at BASE_LEVEL 1 hands
-/// the LEVEL-0 size and depth, the same (16, 16, 8, 1) as the draw before
-/// it. After the base level is applied it hands **(8, 8, 4, 1)**: width and
-/// height minified like the 2D, and the level-1 depth 4 (`u_minify` of
-/// width, height and depth). Flip the assert to (8, 8, 4, 1) then.
+/// The `sampler3D` re-drawn at BASE_LEVEL 1 hands **(8, 8, 4, 1)**: width
+/// and height minified like the 2D, and the level-1 depth 4 (`u_minify` of
+/// width, height and depth).
 #[test]
-fn the_3d_draw_at_base_level_1_between_the_draws_still_hands_the_level_0_words_flip_when_the_base_level_is_applied() {
+fn the_3d_draw_at_base_level_1_between_the_draws_hands_the_level_1_words() {
     let _g = rig();
     let seen = rebind(Kind::Tex3d);
-    assert_eq!(seen[1].words, (16, 16, 8, 1));
+    assert_eq!(seen[1].words, (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: the `sampler2DArray` re-drawn at BASE_LEVEL 1
-/// hands the LEVEL-0 size and 5 layers, the same (16, 16, 1, 5) as the draw
-/// before it. After the base level is applied it hands **(8, 8, 1, 5)**:
+/// The `sampler2DArray` re-drawn at BASE_LEVEL 1 hands **(8, 8, 1, 5)**:
 /// width and height minified, the layer count as is (Mesa writes the array
-/// size unminified). Flip the assert to (8, 8, 1, 5) then; only the width
-/// and height change.
+/// size unminified).
 #[test]
-fn the_2d_array_draw_at_base_level_1_between_the_draws_still_hands_the_level_0_words_flip_when_the_base_level_is_applied(
-) {
+fn the_2d_array_draw_at_base_level_1_between_the_draws_hands_the_level_1_words() {
     let _g = rig();
     let seen = rebind(Kind::Array);
-    assert_eq!(seen[1].words, (16, 16, 1, 5));
+    assert_eq!(seen[1].words, (8, 8, 1, 5));
 }
 
 /* ---- the TMU record: today's base level 0, pinned ---- */
