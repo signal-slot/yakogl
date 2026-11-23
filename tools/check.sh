@@ -2180,6 +2180,9 @@ step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_shadow.rs)" \
 # The PowerVR's native 3D texture (docs/notes/pvr-3d-native.md): the smp each
 # sampler3D form compiles to, the record bit, textureSize, and the grid of
 # slices with the switch off. Compiles to nothing under report-es2.
+# The online compile cache keys on the native 3D and 2D-array switches.
+step "test    host-test,gpu-powervr,shaderc-online (tests/pvr_native_switch_cache.rs)" \
+  cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test pvr_native_switch_cache
 step "test    host-test,gpu-powervr,shaderc-online (tests/es3_pvr_3d.rs)" \
   cargo_test --no-fail-fast --no-default-features --features host-test,gpu-powervr,shaderc-online --test es3_pvr_3d
 # PowerVR textureSize (the 38 dEQP shaders.texture_functions.texturesize
