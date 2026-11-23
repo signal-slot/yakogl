@@ -14,9 +14,11 @@ NOTE defaults to the by-eye note. The '## Verdicts' table has the columns
       scenes` (or of FILE, same line format), each once;
   (c) a row whose verdict is not `not yet looked at` has an 8-lowercase-hex
       commit, a record `records/imx8mp/YYYYMMDD-HHMM-<name>-<sha8>/` whose
-      sha8 is the commit, a route of dump, photograph or both, and a verdict
-      of right, wrong or `seen without a value`; photograph goes only with
-      `seen without a value`, dump and both never do; a `wrong` row has an
+      sha8 is the commit, a route of dump, photograph, both or photograph+probes
+      (a camera photograph judged by content plus the same boot's
+      `glmark2-picture:` value line), and a verdict of right, wrong or `seen
+      without a value`; photograph goes only with `seen without a value`, dump,
+      both and photograph+probes never do; a `wrong` row has an
       entry (its scene text) under '## Wrong scenes' if that heading exists;
   (d) with --complete every row is filled in: no `not yet looked at`, no `-`,
       and acceptance criterion c2's grep counts 33.
@@ -38,7 +40,7 @@ TESTDATA = os.path.join(HERE, "testdata/imx8mp-glmark2-verdicts")
 NROWS = 33
 TODO = "not yet looked at"
 VERDICTS = ("right", "wrong", "seen without a value", TODO)
-ROUTES = ("dump", "photograph", "both")
+ROUTES = ("dump", "photograph", "both", "photograph+probes")
 RECORD = re.compile(r"records/imx8mp/[0-9]{8}-[0-9]{4}-[^ |]+-([0-9a-f]{8})/?")
 C2 = re.compile(r"^\| \[[a-z0-9]+\] .*\| [0-9a-f]{8} \| "
                 r"records/imx8mp/[0-9]{8}-[0-9]{4}-[^ |]+-[0-9a-f]{8}/? \|")
@@ -108,7 +110,7 @@ def check(text, scenes, complete):
         elif route == "photograph" and verdict != "seen without a value":
             probs.append(f"{scene}: route photograph needs 'seen without a value', "
                          f"not '{verdict}'")
-        elif route in ("dump", "both") and verdict == "seen without a value":
+        elif route in ("dump", "both", "photograph+probes") and verdict == "seen without a value":
             probs.append(f"{scene}: route {route} has a value, not 'seen without a value'")
         if verdict == "wrong" and wrong is not None and scene not in wrong:
             probs.append(f"{scene}: wrong, but no entry under '## Wrong scenes'")
@@ -164,6 +166,9 @@ CASES = [
     ("bad-route.md", False, 1, "route 'camera' is not one of"),
     ("bad-verdict.md", False, 1, "verdict 'good' is not one of"),
     ("bad-photograph.md", False, 1, "route photograph needs 'seen without a value'"),
+    ("partial-probes.md", False, 0, "ok: 33 rows, 2 filled"),
+    ("bad-probes-novalue.md", False, 1,
+     "route photograph+probes has a value, not 'seen without a value'"),
     ("bad-dump-novalue.md", False, 1, "has a value, not 'seen without a value'"),
     ("bad-wrong-entry.md", False, 1, "wrong, but no entry under '## Wrong scenes'"),
     ("bad-dash.md", True, 1, "not filled in (--complete)"),
