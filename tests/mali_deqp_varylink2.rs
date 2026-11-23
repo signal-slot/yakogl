@@ -8,9 +8,11 @@
 //! `docs/notes/mali-deqp-varylink.md`. Counts, Mesa's link per shape and the
 //! proposed lowering are in `docs/notes/mali-deqp-varylink2.md`.
 //!
-//! Every reference is refused at the tip: each test is `#[ignore]`d with its
-//! refusal quoted. `refusals_pinned` runs now and asserts each reference's
-//! exact current refusal, so the lowering that reaches one moves its pin and
+//! `fract_vec2` is byte-equal (plan #387 item negzero-lower, step V1 = P2
+//! of `docs/notes/mali-posvary-lowering.md`). Every other reference is
+//! refused at the tip: each test is `#[ignore]`d with its refusal quoted.
+//! `refusals_pinned` runs now and asserts each reference's exact current
+//! refusal, so the lowering that reaches one moves its pin and
 //! removes its ignore. Shape U (`a varying lane left unwritten`) and the
 //! struct sampler lane are pinned by `tests/mali_deqp_varylink.rs`
 //! (`deqp_varylink_unwritten`) and `varymerge_structsampler`, not here.
@@ -23,10 +25,9 @@ mod mali_ref;
 
 const EQUAL: &str = "Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet";
 const NO_ATTRIBUTE: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
-const POSITION: &str = "Valhall: a gl_Position lane left unwritten is not lowered yet";
 
 /// Each reference and the refusal it meets at the tip.
-const PINS: [(&str, &str); 8] = [
+const PINS: [(&str, &str); 7] = [
     ("swz_mixed", EQUAL),
     ("prec_mixed", EQUAL),
     ("mat2", EQUAL),
@@ -34,7 +35,6 @@ const PINS: [(&str, &str); 8] = [
     ("vec_uniform", NO_ATTRIBUTE),
     ("scalar_uniform", NO_ATTRIBUTE),
     ("loop_uniform", NO_ATTRIBUTE),
-    ("fract_vec2", POSITION),
 ];
 
 /// `out0 = in0.grg`: Mesa merges lane 2 into lane 0 at the link and stores
@@ -93,10 +93,10 @@ fn loop_uniform() {
     mali_ref::assert_matches("deqp_varylink2_loop_uniform");
 }
 
-/// `color.yz = fract(in0); color * 0.80 + 0.10`: Mesa computes the four
-/// lanes at fp16 and stores each.
+/// `color.yz = fract(in0); color * 0.80 + 0.10`: `fract` of the highp copy
+/// at fp32, narrowed where the mediump colour's `FMA.v2f16` reads it, and
+/// the four lanes stored.
 #[test]
-#[ignore = "refused: a gl_Position lane left unwritten (an undefined operand lane, not gl_Position); pinned by refusals_pinned"]
 fn fract_vec2() {
     mali_ref::assert_matches("deqp_varylink2_fract_vec2");
 }

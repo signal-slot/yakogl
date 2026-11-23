@@ -14,8 +14,11 @@
 //! * `a varying lane left unwritten` (4 cases): a varying the vertex shader
 //!   declares and never writes.
 //!
-//! Three `unwritten` references are byte-equal ([`MATCHED`]). Every other
-//! test is `#[ignore]`d with its
+//! Eleven references are byte-equal ([`MATCHED`]): three `unwritten`, the
+//! six `fract_*` (plan #387 item negzero-lower, steps P2 of
+//! `docs/notes/mali-posvary-lowering.md`) and the two `tex_uniform_w*`
+//! (step P4: a convergent lane in the interpolated vec4's free word). Every
+//! other test is `#[ignore]`d with its
 //! refusal ([`REFUSED`]) and [`refusals_pinned`] asserts the whole
 //! `MaliError` message of every one, exactly, plus that every
 //! `deqp_posvary_*` reference on disk is listed: the lowering that lifts one
@@ -31,32 +34,50 @@
 mod mali_ref;
 
 const NO_ATTR: &str = "Valhall: a varying lane computed from no attribute (a constant or a uniform alone, which Mesa's link moves or rewrites) is not lowered yet";
-const POS_LANE: &str = "Valhall: a gl_Position lane left unwritten is not lowered yet";
 const CONTROL_FLOW: &str = "Valhall: control flow (if, a loop, a return before the end) is not lowered yet";
+const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
+const CONST_PRODUCT: &str = "Valhall: a constant product in a shape Mesa's algebraic rules move or fold (a constant times a product with a constant, a negation of a negation, a constant in a fused multiply-add) is not lowered yet";
 
 /// The references the compiler matches byte for byte, without the
 /// `deqp_posvary_` prefix: a declared varying the vertex shader never
 /// writes is an undef the link takes into the fragment shader's loads
-/// (`link::VaryingConsts::push_undef`), no slot stored for it.
-const MATCHED: &[&str] = &["unwritten_not_declared", "unwritten_declared_unused", "unwritten_negative_vs"];
+/// (`link::VaryingConsts::push_undef`), no slot stored for it; `fract` of a
+/// local copy, fp32 then narrowed into the mediump colour (highp) or fp16
+/// throughout (mediump, lowp; nir.rs `vs_ffract16`); a uniform alpha beside
+/// texel lanes, interpolated in the vec4's free word (nir.rs `fill`).
+const MATCHED: &[&str] = &[
+    "unwritten_not_declared",
+    "unwritten_declared_unused",
+    "unwritten_negative_vs",
+    "fract_highp_vec2",
+    "fract_highp_vec3",
+    "fract_mediump_vec2",
+    "fract_mediump_vec3",
+    "fract_lowp_vec2",
+    "fract_lowp_vec3",
+    "tex_uniform_w",
+    "tex_uniform_w_array",
+];
 
 /// Every reference with its whole `MaliError` message, without the
 /// `deqp_posvary_` prefix.
 const REFUSED: &[(&str, &str)] = &[
-    /* uniform copy beside an attribute vec4: Mesa moves it into the
-     * fragment shader (note section 5, shape `flat_sep`) */
-    ("flat_sep_rnd13", NO_ATTR),
-    /* uniform + constant arithmetic beside an attribute vec4: stays a flat
-     * varying in Mesa */
-    ("flat_sep_kau_bs26", NO_ATTR),
+    /* uniform copy beside an attribute vec4 (shape `flat_sep`): the vertex
+     * shader alone compiles since P3 (the lane flat after the full vec4); its
+     * fragment shader alone is refused first, a constant product */
+    ("flat_sep_rnd13", CONST_PRODUCT),
+    /* uniform + constant arithmetic beside an attribute vec4, a flat
+     * varying of its own in Mesa: the vertex shader compiles since P3, the
+     * fragment shader alone is refused first (arithmetic) */
+    ("flat_sep_kau_bs26", ARITH),
+    /* the uniform vec4 laid out before the interpolated float: Mesa's link
+     * moves its lanes after it (words 1-4), which the per-varying layout
+     * cannot hold (nir.rs `fill`) */
     ("flat_sep_vec4_bs51", NO_ATTR),
-    /* uniform lanes inside a vec4 with attribute lanes (shape `flat_lane`) */
+    /* uniform lanes inside a vec4 with attribute lanes (shape `flat_lane`),
+     * before them: Mesa moves them after the interpolated lanes */
     ("flat_lane_vec4_v86", NO_ATTR),
     ("flat_lane_vec4_c30", NO_ATTR),
-    /* texture look-up rgb and a uniform alpha (shape `tex_uniform_w`);
-     * the struct sampler of dEQP is flattened, gl_ref.py cannot set it */
-    ("tex_uniform_w", NO_ATTR),
-    ("tex_uniform_w_array", NO_ATTR),
     /* a loop over uniform bounds and constant arrays (shape `loop_phi`) */
     ("loop_phi_array", NO_ATTR),
     /* a declared varying the vertex shader does not write, read under a
@@ -64,14 +85,6 @@ const REFUSED: &[(&str, &str)] = &[
      * Mesa's (the undef folds the select), but the fragment shader alone,
      * which selects its colour under a boolean uniform, is refused */
     ("unwritten_declared_dead_read", CONTROL_FLOW),
-    /* `fract` of a local copy of an attribute swizzle, written into the
-     * lanes of a mediump colour (shape `fract_local`) */
-    ("fract_highp_vec2", POS_LANE),
-    ("fract_highp_vec3", POS_LANE),
-    ("fract_mediump_vec2", POS_LANE),
-    ("fract_mediump_vec3", POS_LANE),
-    ("fract_lowp_vec2", POS_LANE),
-    ("fract_lowp_vec3", POS_LANE),
 ];
 
 macro_rules! refused_ref {
@@ -85,21 +98,13 @@ macro_rules! refused_ref {
 }
 
 refused_ref! {
-    flat_sep_rnd13, "refused: a uniform-only varying beside attribute lanes (flat_sep)";
-    flat_sep_kau_bs26, "refused: a uniform-only varying beside attribute lanes (flat_sep)";
-    flat_sep_vec4_bs51, "refused: a uniform-only varying beside attribute lanes (flat_sep)";
+    flat_sep_rnd13, "refused: the fragment shader alone, a constant product (flat_sep)";
+    flat_sep_kau_bs26, "refused: the fragment shader alone, arithmetic (flat_sep)";
+    flat_sep_vec4_bs51, "refused: the uniform lanes laid out before the interpolated one, which Mesa moves after it (flat_sep)";
     flat_lane_vec4_v86, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
     flat_lane_vec4_c30, "refused: uniform lanes inside a vec4 with attribute lanes (flat_lane)";
-    tex_uniform_w, "refused: texture rgb and a uniform alpha in one vec4 (tex_uniform_w)";
-    tex_uniform_w_array, "refused: texture rgb and a uniform alpha in one vec4 (tex_uniform_w)";
     loop_phi_array, "refused: a loop over uniform bounds stored in a varying (loop_phi)";
     unwritten_declared_dead_read, "refused: the fragment shader alone selects its colour under a boolean uniform (control flow)";
-    fract_highp_vec2, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
-    fract_highp_vec3, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
-    fract_mediump_vec2, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
-    fract_mediump_vec3, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
-    fract_lowp_vec2, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
-    fract_lowp_vec3, "refused as a gl_Position lane left unwritten: fract of a local copy (fract_local)";
 }
 
 /// A declared varying never written (shape `unwritten`) that the fragment
@@ -120,6 +125,42 @@ fn unwritten_declared_unused() {
 #[test]
 fn unwritten_negative_vs() {
     mali_ref::assert_matches("deqp_posvary_unwritten_negative_vs");
+}
+
+macro_rules! matched_ref {
+    ($($(#[$doc:meta])* $name:ident;)*) => {$(
+        $(#[$doc])*
+        #[test]
+        fn $name() {
+            mali_ref::assert_matches(concat!("deqp_posvary_", stringify!($name)));
+        }
+    )*};
+}
+
+matched_ref! {
+    /// `fract` of a highp local copy (`a_in0.wy`): `FROUND.f32.rtn` and
+    /// `FADD.f32` per lane, narrowed where the mediump colour's fp16
+    /// `FMA.v2f16` reads it (`FADD.f32 r0.h0, r0^, 0x0.neg`).
+    fract_highp_vec2;
+    /// The same of `a_in0.zxy`.
+    fract_highp_vec3;
+    /// `fract` of a mediump local copy at fp16: each lane narrowed alone,
+    /// `FROUND.v2f16.rtn r2, r1.h00` per lane, their `MKVEC.v2i16`, then
+    /// `FADD.v2f16 r1, r1^.h00, r2.neg.h00` per lane.
+    fract_mediump_vec2;
+    /// The same of `a_in0.zxy`: x and y one `V2F32_TO_V2F16` and one
+    /// `FROUND.v2f16.rtn r3, r0`, z alone, the load `.v4`.
+    fract_mediump_vec3;
+    /// lowp: the words of mediump.
+    fract_lowp_vec2;
+    /// lowp: the words of mediump.
+    fract_lowp_vec3;
+    /// Texel rgb and a uniform alpha: the alpha is a convergent lane in
+    /// the interpolated vec4's free word, stored as it is (no `FMA x, 0,
+    /// x`), one `.v4` load.
+    tex_uniform_w;
+    /// The same through a sampler array.
+    tex_uniform_w_array;
 }
 
 /// Each reference is refused with exactly its text in [`REFUSED`] (the
