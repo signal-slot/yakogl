@@ -118,8 +118,10 @@ may differ: each place where that matters is marked):
   (`env-layout-check` found this reads the DK's environment byte for byte as
   ST's own tools do; the board read of 2026-11-16 confirms the offsets and
   the CRC of copy 0 on the DK. Because copy 1 is zeros, `check` and `print`
-  refuse the whole image; to print copy 0 alone, copy 0's bytes over copy 1's
-  in a host-side copy of the image first, as the read did.)
+  refuse the whole image **unless `--allow-blank-copy` is given**, which
+  accepts an all-zero copy and loads the other one; the runner and the
+  collector pass it. Without it, copy 0's bytes over copy 1's in a host-side
+  copy of the image first, as the read did.)
 
   **Linux's `fw_printenv` does not run as shipped** (board read 2026-11-16,
   `fw_printenv` prints "Cannot initialize environment"; `cat /etc/fw_env.config`:
@@ -129,7 +131,20 @@ may differ: each place where that matters is marked):
   `fw_printenv -c /etc/fw_env.config.mmc` prints "Cannot read environment,
   using default". There is no `fw_setenv` (`/usr/sbin/fw_*` absent;
   `/usr/bin/fw_printenv` is the only one). So the stored environment is read
-  by `dd` of the partition and `tools/uboot_env.py`, as above.
+  by `dd` of the partition and `tools/uboot_env.py`, as above, and neither the
+  runner nor the collector depends on `fw_printenv`:
+  `tools/board-stm32mp2-uboot.sh:533-583` (`env_read`) runs
+  `dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none` over ssh
+  (`:546-549`, `:565`), insists on exactly 512 KiB (`:568-569`), and runs
+  `python3 -I tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000
+  --offset2 0x7c000 --allow-blank-copy check` and then `print` on the host
+  (`ENV_LAYOUT`, `:548`; `:570-573`).
+  `tools/probes/stm32mp257f_dk/env_read/collect.sh:60-64` keeps
+  `fw_printenv`'s output only as a secondary record (its failure is not an
+  error) and dumps the partition the same way; `summarize.py:65-75` takes the
+  variables from `u-boot-env.bin`. `--allow-blank-copy` (`uboot_env.py:21`,
+  `:259-263`) accepts one **all-zero** copy, which is the stock card's copy 1
+  (see the contradictions below); any other bad CRC is still refused.
 - **`bootcmd` and `env_check`.** The compiled-in `bootcmd_stm32mp` prints
   "Boot over ...", runs `env_check`, sets `boot_targets` to `mmc${boot_instance}`
   when it booted from mmc, and runs `distro_bootcmd`
@@ -415,8 +430,8 @@ a reboot nobody asked for finds nothing to fetch;
 `nb_tftp_canary` of `tools/uboot-netboot-lib.sh` fetches a canary with `curl`
 to prove the server answers before the board is touched. What is **not**
 shared with the i.MX8MP and AM62P is the library's hook
-(`YAKO_HOOK`, `fw_setenv`, `saveenv`): the DK's Linux has `fw_printenv` and no
-`fw_setenv` (`board-stm32mp2.sh` header), and the route needs no arming at all.
+(`YAKO_HOOK`, `fw_setenv`, `saveenv`): the DK's Linux has no working
+`fw_printenv` and no `fw_setenv` (section 1; `board-stm32mp2.sh` header), and the route needs no arming at all.
 The i.MX8MP record's TFTP tuning (`tftptimeout`, `tftpblocksize`,
 `tftpwindowsize` in `YAKO_NET`) is not in the scripts: it was for a different
 MAC and U-Boot; `TODO(board-run)`: the transfer rate and any timeouts.
@@ -445,15 +460,18 @@ recorded with its addresses), and that the TFTP server is reachable from it. The
    (header, footprint inside the window, size under 255 MiB, the watchdog
    marker `gc_wdog_arm: armed`). Print the undo of everything the next steps do.
 2. Take the board lock, check ssh and the supply (below), the console is free
-   (`mp2_uboot_console.py probe`), record `fw_printenv` and the `sha256` of
-   every file of `/boot` (the before record).
+   (`mp2_uboot_console.py probe`), record the stored environment (`dd` of
+   `u-boot-env` decoded by `uboot_env.py`, section 1; `env-before.txt`,
+   `tools/board-stm32mp2-uboot.sh:853`, read again under the lock at `:727`)
+   and the `sha256` of every file of `/boot` (the before record).
 3. Stage `<token>.scr` and the image under `/boot/yakogl/` (route 1) or into
    the TFTP root (route 2); read them back by sha256.
 4. Start the capture (`mp2_uboot_console.py capture`/`typed`), reboot the
    board, the typed runner stops autoboot, types the line, waits for the
    scan to say `done` (or one of the other verdicts), see below.
-5. When Linux is back: remove the staged files, record `fw_printenv` and the
-   `/boot` sha256 again and compare (the after record).
+5. When Linux is back: remove the staged files, record the environment (the
+   same `dd` + `uboot_env.py` read, `env-after.txt`, `:939`) and the `/boot`
+   sha256 again and compare (the after record, `:942-943`).
 
 `mp2_uboot_console.py scan` phases and verdicts (its docstring): `bl2`,
 `optee`, `uboot`, `stopped`, `script`, `refused`, `go`, `image`, `image_end`,
@@ -498,10 +516,33 @@ no persistent environment at all.
   it recorded (the existing runner's check, `tools/board-stm32mp2.sh`, "both
   copies' CRCs must check before any write"; here before any run). The
   `imx8mp-netboot.md` run saw the same class of effect (a `saveenv` stores
-  U-Boot's runtime variables): the before/after `fw_printenv` diff is what shows
-  it. `TODO(board-run)`: the diff is expected empty. The environment itself is
-compared on the partition's `dd` image with `tools/uboot_env.py --size 0x2000
---redundant --offset 0x7e000 --offset2 0x7c000 diff before.bin after.bin` (section 8).
+  U-Boot's runtime variables): the before/after environment diff is what shows
+  it. `TODO(board-run)`: the diff is expected empty.
+
+**What "unchanged" means, as the runner measures it.** Two records:
+
+1. The runner reads the partition with `dd` before and after (both copies, at
+   0x7e000 and 0x7c000, 0x2000 each), requires both to pass
+   `uboot_env.py check` (`--allow-blank-copy`, so the stock all-zero copy 1
+   counts as blank-but-accepted; section 1), prints the **active** copy's
+   variables, sorts them and `diff`s the two texts
+   (`tools/board-stm32mp2-uboot.sh:570-572`, `:942`): empty gives
+   `env_diff=empty` in the verdict line (`:794`). The raw images are not kept
+   in the run directory (they carry the MAC and the serial); their `sha256`
+   go to `meta.txt` (`:574`), and the before and after values must be equal.
+2. A text diff does not see the flag bytes or the blank copy; the equal image
+   `sha256` does (both copies' bytes, flag bytes and the blank copy 1
+   identical). For a person with the two `dd` files,
+   `tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000
+   --offset2 0x7c000 --allow-blank-copy diff before.bin after.bin` is the
+   comparison (section 8). `env_read/summarize.py` does the same for a
+   collector's two directories (its `## fw_printenv diff` heading keeps the
+   old name; the variables come from the partition).
+
+"Unchanged" is therefore: both copies' CRCs valid before and after, the same
+active copy, equal image `sha256`, and an empty variable diff. The runner also
+refuses to start on a bad CRC (`:570-571`), no `bootcmd`, or a `scriptaddr`
+unset or near the go window (`:575-582`).
 
 ## 8. The undo of a cut-off run (f)
 
@@ -533,15 +574,17 @@ RAM is gone at the next reset; only the card and the TFTP root persist.
 - the exact dump and compare (the layout of section 1): `dd` the
   `u-boot-env` partition to `before.bin` and `after.bin`, then
   `tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 check before.bin`
-  (exit 0 only if both CRCs are valid) and the same options with
+  (exit 0 only if both CRCs are valid; add `--allow-blank-copy` on the stock
+  card, whose copy 1 is zeros) and the same options with
   `diff before.bin after.bin` (exit 0 when they are identical). The active
   copy is the one with the **higher flag byte** (`ST/env/common.c:365-374`;
   0xff against 0x00 counts the 0x00 one as newer, equal flags take copy 0), so
   the flag bytes of both copies must also match before and after, and `print`
-  shows the active one for the `fw_printenv` comparison;
-- compare `fw_printenv` with the before copy; `u-boot-env`'s two copies are
-  not written by the one-shot, so the dump of the partition (`dd` of the
-  512 KiB, read-only) can be compared too;
+  shows the active one for the variable comparison (what the runner diffs as
+  `env-before.txt` and `env-after.txt`, section 7);
+- the one-shot writes neither copy, so `sha256sum before.bin after.bin` must
+  be equal (the runner records both in `meta.txt`); `fw_printenv` is no part
+  of this, it does not run on the DK;
 - if the board sits at the `STM32MP> ` prompt and nobody is typing: `run
   bootcmd` or `reset` (neither saves anything), or, if U-Boot's watchdog is not
   fed (section 9), wait for the reset;
@@ -679,7 +722,7 @@ command that could break them:
 | `TODO(board-run)` | link and DHCP in U-Boot, the TFTP server's reachability (section 5) |
 | `TODO(board-run)` | the `mp2-handover:` line: `el`, `sctlr`, `m`, `c`, `i`, `x0`..`x3` (sections 2, 4) |
 | `TODO(board-run)` | the prompt text as printed; the TFTP rate; the verdict (sections 5, 6) |
-| `TODO(board-run)` | the `fw_printenv` diff before and after, expected empty (section 7) |
+| `TODO(board-run)` | the environment diff before and after (`dd` + `uboot_env.py`), expected empty, the two image `sha256` equal (section 7) |
 | `TODO(board-run)` | the `/boot` sha256 comparison, expected identical but for `yakogl/` (section 8) |
 | `TODO(board-run)` | the watchdog's behaviour from U-Boot's `go` (section 9) |
 
@@ -692,13 +735,16 @@ Board read 2026-11-16 against the design above:
    depend on it.
 2. **Linux's `fw_printenv` is unusable as shipped** (no `/etc/fw_env.config`;
    the `.mmc` sample lists the same offset twice). A runner or the `env_read`
-   probe that calls `fw_printenv` on this card fails; they must read the
-   partition with `dd` and decode it with `tools/uboot_env.py`.
-3. **Copy 1 (0x7c000) is zeros**, so `tools/uboot_env.py check` refuses the
-   image today, and a `check` that requires both copies valid will fail
-   before any run. The c5 comparison must compare copy 0 and the `dd` image's
-   sha256, and treat copy 1 as "invalid before and after" unless a run saves
-   the environment.
+   probe that calls `fw_printenv` on this card fails; they read the
+   partition with `dd` and decode it with `tools/uboot_env.py` (done:
+   `board-stm32mp2-uboot.sh:533-583`, `env_read/collect.sh:60-64`).
+3. **Copy 1 (0x7c000) is zeros**, so a plain `tools/uboot_env.py check`
+   refuses the image. The runner and the collector pass `--allow-blank-copy`
+   (`board-stm32mp2-uboot.sh:548`), which accepts exactly an all-zero copy and
+   reads copy 0; the c5 comparison is copy 0's variables plus the `dd`
+   image's `sha256`, and copy 1 stays "blank before and after" unless a run
+   saves the environment (then it is no longer blank and the `sha256`
+   differs).
 4. The stored environment carries `fileaddr=90100000`, `filesize=108d`: values
    a one-shot's own `load` changes in RAM only; the stored ones must come out
    identical after the run.
