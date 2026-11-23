@@ -1657,6 +1657,24 @@ pi4|v3d_tfu: PASS (levels 0-6 checked, 0 px wrong)|rc=4 verdict=no_end_line boot
 pi4|rpi5_dtb: done|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
 EOF
 
+echo "== 3h2. Pi 5 rpi5_tex: v3d_tex and v3d_cube verdicts before the end line; a FAIL of either, or a record cut before the end line, is never done"
+tx=0
+while IFS='|' read -r recs want; do
+    tx=$((tx + 1))
+    d="$S/pi5probes/20261108-1300-p5t$tx-0123abcd"
+    mkrun "$d" board=pi5 boot=tryboot "name=p5t$tx" probe=0 back=1 t_reboot=100 t_back=290
+    { printf '12:00:00 board: PM watchdog resets the SoC ~50 s after boot\n'
+      printf '%b' "$recs" | sed 's/^/12:00:01 /'; } > "$d/console.txt"
+    check "pi5 rpi5_tex record $tx: $want" says pi5 "$d" "$want"
+done <<'EOF'
+v3d_tex: PASS 0 of 4096 px wrong\nv3d_cube: PASS seamless=yes 0 of 24 samples wrong\nrpi5_tex: done (both parts ran)\n|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_tex_done
+v3d_tex: FAIL 17 of 4096 px wrong\nv3d_cube: PASS seamless=yes 0 of 24 samples wrong\nrpi5_tex: done (both parts ran)\n|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_tex_fail
+v3d_tex: PASS 0 of 4096 px wrong\nv3d_cube: FAIL seamless=no 6 of 24 samples wrong\nrpi5_tex: done (both parts ran)\n|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_cube_fail
+v3d_tex: PASS 0 of 4096 px wrong\nv3d_cube: PASS seamless=yes 0 of 24 samples wrong\nrpi5_tex: FAIL (T1 v3d_tex71 refused the records)\n|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_tex_fail
+v3d_tex: PASS 0 of 4096 px wrong\nv3d_cube: PASS seamless=yes 0 of 24 samples wrong\n|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+v3d_tex: FAIL 17 of 4096 px wrong\n|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+EOF
+
 echo "== 3i. Pi 5 gl_test image: the record's end, the per-case verdicts, the scrub (board71's six cases 5 58 59 66 67 102)"
 # a synthetic list run in the shape of the Pi 4's (tools/testdata/pi4-tryboot-GT21-*:
 # "gl_test: start (case=-1 ...)", one "gl_test: case N name: PASS|FAIL" per case,
