@@ -46,9 +46,15 @@ mod backend71;
 #[path = "../src/v3d/clearplan71.rs"]
 #[allow(dead_code)]
 mod clearplan71;
+#[path = "../src/v3d/draw71.rs"]
+#[allow(dead_code)]
+mod draw71;
 #[path = "../src/v3d/ffi71.rs"]
 #[allow(dead_code)]
 mod ffi71;
+#[path = "../src/v3d/fill71.rs"]
+#[allow(dead_code)]
+mod fill71;
 #[path = "../src/v3d/format71.rs"]
 #[allow(dead_code)]
 mod format71;
@@ -58,6 +64,9 @@ mod ident71;
 #[path = "../src/v3d/limits71.rs"]
 #[allow(dead_code)]
 mod limits71;
+#[path = "../src/v3d/prim71.rs"]
+#[allow(dead_code)]
+mod prim71;
 #[path = "../src/v3d/record71.rs"]
 mod record71;
 #[path = "../src/v3d/rt71.rs"]

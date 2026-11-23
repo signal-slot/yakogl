@@ -8,8 +8,9 @@
 //! attribute records, then the C job builder `driver/src/v3d/v3d_job71.c`.
 //!
 //! Self-contained: no `crate::` path. The siblings are reached as
-//! `super::{admit71, attr71, clearplan71, ffi71, ident71, record71, rt71,
-//! uniform71, zskeep71}` (and, through admit71, `format71` and `limits71`):
+//! `super::{admit71, attr71, clearplan71, ffi71, fill71, ident71, record71,
+//! rt71, uniform71, zskeep71}` (and, through admit71 and fill71, `format71`,
+//! `limits71`, `draw71` and `prim71`):
 //! the same names a test gives them when it includes the files with
 //! `#[path]` at its crate root (tests/v3d71_backend71.rs). Nothing hooks this
 //! module into `src/v3d/mod.rs` yet; that, the `gpu-v3d71` feature and the
@@ -31,7 +32,7 @@
 //!    tile-buffer clear (`Clear Render Targets`, packet 25) with each target's
 //!    clear value packed by `rt71::clear_words71`; a masked or scissored
 //!    clear (a clear draw) and a clear that must open a new job are refused by
-//!    name here: they are the six gl_test shapes' work (cases71);
+//!    name on this path: they take the fill71 path below;
 //! 3. decides the depth and stencil loads, stores and clear values
 //!    (`zskeep71::decide`) into `V3dJob71Clear`;
 //! 4. per draw: fills the three uniform streams (`uniform71::fill` with the
@@ -47,11 +48,24 @@
 //!    attribute record byte for byte. A difference is a named refusal: the job
 //!    must not be submitted.
 //!
+//! # fill71's jobs
+//!
+//! The GL table's own path is [`assemble_filled`]: `fill71::fill` maps a
+//! flush (its `glClear`s and draws in GL order) to one `FilledJob` per job,
+//! with the clear draws (Mesa's blitter clear: fill71's clear quad) among
+//! the draws and a new job wherever a whole clear follows queued draws.
+//! `assemble_filled` admits the framebuffer again for limits71's tile size,
+//! turns each `FilledDraw` into a [`Draw71`] ([`draw_of`]: arrays, one
+//! instance, no point size; the rest is refused by name, [`FILLED_REFUSALS`])
+//! and runs steps 4 to 6 with fill71's `V3dJob71Clear`. The six gl_test
+//! shapes and the 4- and 8-target clears assemble this way
+//! (tests/v3d71_backend71_shapes.rs against tools/v3d/pi5/gl_*.clif).
+//!
 //! Every refusal is an [`admit71::Refusal`] (module and reason), the
 //! modules' own text where they have one; this module's own are tagged
 //! `backend71`, the builder's `v3d_job71`.
 
-use super::{admit71, attr71, clearplan71, ffi71, ident71, record71, rt71, uniform71, zskeep71};
+use super::{admit71, attr71, clearplan71, ffi71, fill71, ident71, record71, rt71, uniform71, zskeep71};
 
 pub use admit71::Refusal;
 
@@ -162,14 +176,16 @@ pub fn plan_frame(f: &Frame71<'_>) -> Result<FramePlan71, Refusal> {
     let (cleared_rts, plan_depth, plan_stencil) = match clear_plan {
         None | Some(clearplan71::ClearPlan::Nothing) => (0u8, false, false),
         Some(clearplan71::ClearPlan::TileClear { new_job: true, .. }) => {
-            return Err(own("a clear after queued draws opens a new job: the caller ends the open job first"));
+            return Err(own(
+                "a clear after queued draws opens a new job: the caller ends the open job first (fill71 splits the flush: assemble_filled)",
+            ));
         }
         Some(clearplan71::ClearPlan::TileClear { targets, depth, stencil, new_job: false }) => {
             (targets, depth, stencil)
         }
         Some(clearplan71::ClearPlan::Draw(_)) => {
             return Err(own(
-                "a masked, scissored or partial clear is a clear draw, which this table does not assemble yet",
+                "a masked, scissored or partial clear is a clear draw: Frame71 has no draw for it (fill71's clear quad: assemble_filled)",
             ));
         }
     };
@@ -598,6 +614,33 @@ pub fn check_draw(
     Ok(())
 }
 
+/// Steps 4 to 6 for a job whose frame is decided: plan every draw, build,
+/// check the tile size and every draw's data.
+fn build_checked(
+    table: &Table71,
+    tile: (u32, u32),
+    target: &ffi71::V3dJob71Target,
+    draws: &[Draw71<'_>],
+    clear: &ffi71::V3dJob71Clear,
+    builder: &mut dyn Builder71,
+) -> Result<(Vec<DrawPlan71>, Built71), Refusal> {
+    let ind_gpu = builder.gpu(List71::Ind);
+    let plans = draws.iter().map(|d| plan_draw(table, d, ind_gpu)).collect::<Result<Vec<_>, _>>()?;
+    let built = builder.build(target, draws, clear).map_err(|e| refuse("v3d_job71", e))?;
+    let got = (built.tiling.tile_w, built.tiling.tile_h);
+    if got != tile {
+        return Err(own(format_args!("v3d_job71 chose a {}x{} tile, limits71 {}x{}", got.0, got.1, tile.0, tile.1)));
+    }
+    if built.layouts.len() != draws.len() {
+        return Err(own("v3d_job71 recorded another number of draws"));
+    }
+    let ind = builder.bytes(List71::Ind);
+    for (i, (p, lo)) in plans.iter().zip(&built.layouts).enumerate() {
+        check_draw(table, i, p, lo, ind, ind_gpu)?;
+    }
+    Ok((plans, built))
+}
+
 /// One job: the frame, its draws in order, through `builder`. Steps 1 to 6
 /// of the module docs; the first refusal ends it (nothing may then be
 /// submitted).
@@ -608,22 +651,107 @@ pub fn assemble(
     builder: &mut dyn Builder71,
 ) -> Result<Assembled71, Refusal> {
     let fp = plan_frame(frame)?;
-    let ind_gpu = builder.gpu(List71::Ind);
-    let plans = draws.iter().map(|d| plan_draw(table, d, ind_gpu)).collect::<Result<Vec<_>, _>>()?;
-    let built = builder.build(&frame.target, draws, &fp.clear).map_err(|e| refuse("v3d_job71", e))?;
-    let tile = (built.tiling.tile_w, built.tiling.tile_h);
-    if tile != fp.admitted.tile {
-        return Err(own(format_args!(
-            "v3d_job71 chose a {}x{} tile, limits71 {}x{}",
-            tile.0, tile.1, fp.admitted.tile.0, fp.admitted.tile.1
-        )));
-    }
-    if built.layouts.len() != draws.len() {
-        return Err(own("v3d_job71 recorded another number of draws"));
-    }
-    let ind = builder.bytes(List71::Ind);
-    for (i, (p, lo)) in plans.iter().zip(&built.layouts).enumerate() {
-        check_draw(table, i, p, lo, ind, ind_gpu)?;
-    }
+    let (plans, built) = build_checked(table, fp.admitted.tile, &frame.target, draws, &fp.clear, builder)?;
     Ok(Assembled71 { frame: fp, draws: plans, built })
+}
+
+// ---- fill71's jobs -----------------------------------------------------------
+
+/// The refusals of the fill71 path that this module names itself (module
+/// `backend71`): what fill71 can describe but [`Draw71`] (and so the
+/// [`Builder71`] calls) does not carry yet.
+pub const FILLED_REFUSALS: [&str; 4] = [REF_INDEXED, REF_INSTANCED, REF_PSIZ, REF_TARGET];
+
+const REF_INDEXED: &str = "an indexed draw: the 7.1 table assembles glDrawArrays only (Draw71 has no index buffer)";
+const REF_INSTANCED: &str = "an instanced draw (more than one instance): the 7.1 table assembles one instance per draw";
+const REF_PSIZ: &str = "a vertex program writing gl_PointSize: the 7.1 table does not assemble point-size records";
+const REF_TARGET: &str = "fill71's target descriptor is not the framebuffer's (size or render target count)";
+
+/// A fill71 draw as the builder takes it. The views point into `fd`.
+pub fn draw_of(fd: &fill71::FilledDraw) -> Result<Draw71<'_>, Refusal> {
+    if fd.indexed {
+        return Err(own(REF_INDEXED));
+    }
+    if fd.instances > 1 {
+        return Err(own(REF_INSTANCED));
+    }
+    if fd.vs_writes_psiz {
+        return Err(own(REF_PSIZ));
+    }
+    Ok(Draw71 {
+        st: fd.state,
+        fs: fd.fs,
+        vs: fd.vs,
+        cs: fd.cs,
+        fs_uniforms: &fd.fs_uniforms,
+        vs_uniforms: &fd.vs_uniforms,
+        cs_uniforms: &fd.cs_uniforms,
+        fs_gl: &fd.fs_words,
+        vs_gl: &fd.vs_words,
+        attrs: &fd.attrs,
+        prim: fd.prim,
+        count: fd.count,
+        first: fd.first,
+    })
+}
+
+/// The framebuffer's admission as fill71 asks it (formats, size, target
+/// count; limits71's tile size). fill71 has already admitted the same
+/// framebuffer: this is the tile size the builder must choose.
+pub fn admit_framebuffer(fb: &fill71::Framebuffer<'_>) -> Result<admit71::FrameAdmitted, Refusal> {
+    let colors: Vec<admit71::ColorTarget> = fb
+        .colors
+        .iter()
+        .map(|c| admit71::ColorTarget {
+            gl_format: c.gl_format,
+            uses: admit71::BufferUse::default(),
+            clear_color: None,
+            sampled: false,
+        })
+        .collect();
+    let ds = fb.ds.map(|d| admit71::DepthStencil {
+        gl_format: d.gl_format,
+        depth: admit71::BufferUse::default(),
+        stencil: admit71::BufferUse::default(),
+    });
+    admit71::admit_frame(&admit71::Frame {
+        width: fb.width,
+        height: fb.height,
+        colors: &colors,
+        depth_stencil: ds,
+        msaa: false,
+        double_buffer: false,
+    })
+}
+
+/// An assembled fill71 job: the admission, the draws' predictions and the
+/// builder's result.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AssembledJob71 {
+    pub admitted: admit71::FrameAdmitted,
+    pub draws: Vec<DrawPlan71>,
+    pub built: Built71,
+}
+
+/// One of fill71's jobs ([`fill71::fill`] on `fb`) through `builder`: the
+/// clear draws (clearplan71's `Draw`, fill71's clear quads) and the jobs a
+/// clear after queued draws opens (one [`fill71::FilledJob`] each) included.
+/// The frame decisions (loads, stores, clear values) are fill71's
+/// `FilledJob::clear`; steps 4 to 6 of the module docs check every draw.
+/// A clear quad's caller writes its `FilledDraw::quad` where the quad's
+/// attribute reads before the job runs; that is not checked here.
+pub fn assemble_filled(
+    table: &Table71,
+    fb: &fill71::Framebuffer<'_>,
+    job: &fill71::FilledJob,
+    builder: &mut dyn Builder71,
+) -> Result<AssembledJob71, Refusal> {
+    let admitted = admit_framebuffer(fb)?;
+    let t = &job.target;
+    if t.width != fb.width || t.height != fb.height || t.rts as usize != fb.colors.len() {
+        return Err(own(REF_TARGET));
+    }
+    let draws = job.draws.iter().map(draw_of).collect::<Result<Vec<_>, _>>()?;
+    let (plans, built) = build_checked(table, admitted.tile, t, &draws, &job.clear, builder)?;
+    Ok(AssembledJob71 { admitted, draws: plans, built })
 }
