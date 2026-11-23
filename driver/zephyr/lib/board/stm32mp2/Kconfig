@@ -97,6 +97,24 @@ config YAKOGL_STM32MP2_DISPLAY
 	  LTDC driver's board hooks (yakogl_drv/stm32_ltdc.h). Needs
 	  YAKOGL_STM32MP2_WDOG.
 
+# The display path's power-on runs on the main thread (POST_KERNEL init in
+# bg_thread_main), and its SCMI requests log every OP-TEE frame in hex. The
+# deepest chain, read off the A35 build's prologues at 23514c2f, is about
+# 4.3 KiB: mp2_display_power_init 384, power_on 48, yd_mp2_display_power_on
+# 848, soc::stm32mp2::display::call 752, optee::Client::call 464,
+# LoggedSmc::log 672, CLog::hex 464, then printk 272, vprintk 80,
+# __d_vfprintf 208 and the console, under bg_thread_main and the init loop.
+# Arm64's 4096 lets it run ~256 bytes below z_main_stack into the top of
+# z_idle_stacks, which the linker places directly below it with no guard:
+# the idle thread's initial exception frame. The first k_msleep (the LTDC
+# driver's HPD poll after adv7535_init) switches to idle for the first time,
+# z_arm64_exit_exc restores the clobbered SPSR and eret is illegal: EC 0xe at
+# ELR z_thread_entry with x0 = idle, x1 = &_kernel (board-display2,
+# mp2_gpu_scanout). An image's prj.conf may still set its own (gl_test,
+# glmark2 do, far larger).
+configdefault MAIN_STACK_SIZE
+	default 16384 if YAKOGL_STM32MP2_DISPLAY
+
 config YAKOGL_STM32MP2_DISPLAY_INIT_PRIORITY
 	int "POST_KERNEL priority of the display path's power-on"
 	default 45
