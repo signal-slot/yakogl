@@ -568,8 +568,12 @@ record (`driver/tools/kexec-zephyr/t6-verdict.sh`). A development result: the
 sign-off form (U-Boot starting the image) has not run. The steps Z1 to Z4,
 their predicted records and the result of Z1's first half (`t6_hello`,
 2026-10-19) are in `driver/docs/nanopc-t6-mali.md`; a step gets its row
-here when it has run. The last two rows are gl_test and the dEQP-GLES2 tree,
-run by `tools/board.sh nanopc-t6 run` and judged by their own summary lines.
+here when it has run. The rows after Z4 are gl_test, the dEQP-GLES2 tree
+and the two images on the HDMI screen (the triangle and glmark2), run by
+`tools/board.sh nanopc-t6 run` and judged by their own summary lines. The
+two on the screen ran with no UART wired: their lines are read from the
+record screen on the capture unit's pictures
+(`driver/docs/nanopc-t6-display.md`, section 4).
 
 | Step | Image | Result | Build | Run | Record |
 |---|---|---|---|---|---|
@@ -579,6 +583,8 @@ run by `tools/board.sh nanopc-t6 run` and judged by their own summary lines.
 | Z4: one frame submitted from our kernel side | `t6_submit` | **PASS**, `VERDICT t6_submit PASS`: `t6_submit: Z4h: target red 2048 blue 2048 fill 0 other 0 of 4096 pixels`, `t6_submit: PASS` | `v0.1.0-1045-gef86672bf` (main `ef86672bf`) | 2026-11-12 16:42 JST | `records/nanopc-t6/20261112-1642-t6_submit-9dabc1c7` |
 | gl_test, the regression set, on the GL back end over our kernel side | `gl_test` | **50 of 50 cases pass**: `gl_test: all: 0 of 50 cases failed (50 passed; 0 timed out; ...)` | `v0.1.0-1780-g9ad07f55f` (main `9ad07f55f`) | 2026-11-16 02:54 JST | `records/nanopc-t6/20261116-0254-gl_test-6e41d680` |
 | dEQP-GLES2, the whole tree: the 76 rows of `tools/cts/mali-gles2-tree.txt`, one image per row (`tools/cts/t6-deqp-images.sh`) | `t6_deqp` | **76 of 76 images reached their `deqp: done` line**; of the must-pass list's 17,165 cases 6,644 pass, 9,545 fail, 973 are not supported, 3 end in a quality warning | `v0.1.0-2217-gde2f2c103` (main `de2f2c103`) | 2026-11-17 21:11 to 22:36 JST | `records/nanopc-t6/20261117-2111-T6S1R01-5660b27f` to `records/nanopc-t6/20261117-2235-T6S4R08-636f18f5`, one per row |
+| The triangle on HDMI: the first show adopts the screen Linux left (1920x1080, a 1024x600 window) | `examples/triangle` | **PASS**: `triangle: check PASS (every pixel read back)`, `triangle: PASS`; 0 of 614,400 pixels wrong, 0 of 23 glReadPixels points differ; the triangle is on 10 pictures of the capture unit | `v0.1.0-3106-g79cf24481` (PR #7016), sha256 `64aead21790f1b13` | 2026-11-23 19:27 JST | `records/nanopc-t6/20261123-1927-triangle-7016-64aead21` |
+| glmark2 on HDMI, two scenes (`-b build -b shading`, 800x600): the first double-buffered image, the flip | `driver/samples/zephyr/glmark2` | **PASS**: `glmark2: score 119: 2 scenes ran, 0 failed, 0 unsupported (2 list entries): window 800x600, shown yes, GPU resets 0`, `glmark2: PASS`, `board: screen state 1, 2400 flips`; 0 GL errors, 0 draws refused; the horse and the cat are on the pictures. The score is the display's flip rule (two flips per 60 Hz frame), not the GPU's speed | `v0.1.0-3108-g24e03e6ea` (PR #7016), sha256 `a11fab031a882409` | 2026-11-23 19:49 JST | `records/nanopc-t6/20261123-1949-glmark2-7016-a11fab03` |
 
 - Z2: every line of the predicted record was seen: Z1's power-on (`GPU_ID`
   0xa8670005, L2 ready), the cache flush round trip (2 polls of 1 µs), AS0's

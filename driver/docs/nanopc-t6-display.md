@@ -7,7 +7,9 @@ modules, the chain, the adopt probe `t6_display` and the cold probe
 `t6_cold`). On the board: D0, and D3b's triangle by crash kexec (2026-11-23,
 a development run): the adopt with the GL window, the Mali-rendered triangle
 on HDMI at 1920x1080 and the image's check PASS, read from the record screen
-(section 4). The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
+(section 4); and the flip, by glmark2's build and shading scenes the same
+day: 2400 flips at two per frame of the display, no GPU reset, the image's
+verdict PASS. The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
 in the product form: U-Boot starts Zephyr from the eMMC, with no Linux before
 it. This page is the plan the implementation follows: the chain, the routes,
 the mode, the hand-over from the GPU, the proofs, the dump the lead takes and
@@ -800,10 +802,29 @@ vertical periods. A frame start interrupt for it is a later step.
 
 **What the triangle proves.** `examples/triangle` is single-buffered and
 shows the same window every frame, so its picture proves the first show: a
-Mali-rendered window adopted in place. It does not flip. The flip and the
-busy rule are first run on the board by a double-buffered image (gl_test,
-dEQP); the board library prints the screen's flip count at the end of a run
-so that the UART record says whether they ran.
+Mali-rendered window adopted in place. It does not flip. The board library
+prints the screen's flip count at the end of a run so that the record says
+whether the flip and the busy rule ran.
+
+**What glmark2 shows.** glmark2 is double-buffered by EGL, so its swaps are
+the board's flips. Its build and shading scenes ran by crash kexec on
+2026-11-23 (a development run, `tools/cts/RESULTS.md`): the horse and the
+cat are on the capture unit's pictures, and the record screen reads
+`board: screen state 1, 2400 flips` for the 1199 + 1203 frames of the two
+scenes. A swap shows the frame before it, so the first swap shows nothing
+and the second one is the adopt: 2402 swaps are 2400 flips. EGL's once-only
+line `the display held every window buffer; the swap waited for one to be
+free` is in the record: the busy rule ran, and each wait ended. No GPU
+reset, no GL error, no refused draw.
+
+**The frame rate under the busy rule.** Both scenes ran at two flips per
+frame of the 60 Hz display: 8.3 ms per frame, of which the swap is 8.1 ms
+and GL 0.2 ms. That is the rule above, not the GPU's speed: the third flip
+inside one frame finds every buffer busy, and EGL polls until the display
+has caught up at the next frame start. An
+on-screen glmark2 score on this board is therefore about 120 for any scene
+the GPU draws in less than half a frame (119 in this run); it says that the
+scenes ran and were shown, and is not a figure to compare with other boards.
 
 **The record screen.** A run judged from the capture unit's pictures has no
 UART text, so the picture alone does not say whether the image's own check
@@ -997,7 +1018,7 @@ answers polls, takes injected failures and records the order.
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
 | D2 | Adopt (route a): `nanopc-t6.sh --crash` (with its mode step, `t6-kms-mode.py`, section 2(a)) and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with both dumps (each mode accepted and kept, a third mode refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
 | D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
-| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done. On the board by crash kexec on 2026-11-23 (development run): the triangle on HDMI, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), read from the record screen; the flip count of a double-buffered image is open | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
+| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done. On the board by crash kexec on 2026-11-23 (development run): the triangle on HDMI, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), read from the record screen. The flip, the same day: glmark2's build and shading scenes, 2400 flips for 2402 swaps at two per frame, score 119, the image's verdict PASS | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |

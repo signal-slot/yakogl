@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 # glmark2: glmark2-es2 (Linaro's OpenGL ES 2.0 benchmark) as a Zephyr image on
-# the board layer, one source for the Verdin AM62P, the Verdin iMX8M Plus and
-# the Raspberry Pi 4 (driver/docs/glmark2.md).
+# the board layer, one source for the Verdin AM62P, the Verdin iMX8M Plus, the
+# Raspberry Pi 4 and the NanoPC-T6 (driver/docs/glmark2.md).
 #
 #   -DGLMARK2_SRC=<glmark2 checkout at GLMARK2_COMMIT>
 #
