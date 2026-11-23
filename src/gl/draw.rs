@@ -3931,6 +3931,17 @@ fn cube_face_mean(texels: &[u8], off: usize, lw: u32, lh: u32, pitch: u32) -> f3
     }
 }
 
+/// Is texture `ti` an attachment of the framebuffer being drawn (the draw
+/// would read what it writes: a feedback loop)?
+fn drawn_into(c: &GlContext, ti: usize) -> bool {
+    c.framebuffer_ref(c.bound_framebuffer).is_some_and(|fb| {
+        core::iter::once(&fb.color)
+            .chain(fb.color_n.iter())
+            .chain([&fb.depth, &fb.stencil])
+            .any(|a| a.type_ == GL_TEXTURE && a.name as usize == ti)
+    })
+}
+
 /// One cube map's faces, level by level. `unit` is the sampler binding it was
 /// sampled through (0 from the swap).
 fn dump_cube_atlas(c: &mut GlContext, ti: usize, unit: u8, when: &str) {
@@ -4924,7 +4935,17 @@ fn build_common(
                  * reads too (one staleness source for both copies) */
                 let rendered = tb.target_kick;
                 let open = rendered != 0 && rendered == backend::kick_id();
-                if !open && (rendered == 0 || !backend::kick_pending(rendered) || backend::finish() == 0) {
+                /* A face drawn into in the open frame and sampled by a draw
+                 * of another framebuffer is no feedback loop: the frame is
+                 * submitted and waited for, and the copy reads what was
+                 * drawn (tests/pvr_cube_rt.rs). Only a cube attached to the
+                 * framebuffer being drawn keeps the stacked image. */
+                let feedback = open && drawn_into(c, ti);
+                let submitted = !open || feedback || backend::flush() == 0;
+                if submitted
+                    && !feedback
+                    && (rendered == 0 || !backend::kick_pending(rendered) || backend::finish() == 0)
+                {
                     /* one level sampled (no mipmap filter, or a one-level
                      * chain): a one-level copy, which the backend describes
                      * as one level (the same rule, pvr/backend.rs) */
