@@ -192,7 +192,7 @@ int yd_record_gm_page_words(uint32_t tag, const struct yd_gm_scene *s, uint32_t 
 #define YD_GM_LIST_MAX         128
 
 struct yd_gm_list_scene {
-	const char *info;  /* upstream's Scene::info_string(): "[name] <opt=val:...>" */
+	const char *info;  /* upstream's Scene::info_string(): "[name] opt=val:...", "[name] <default>" */
 	size_t info_len;
 	const char *error; /* glmark2's first "Error: " line in the set-up and the line after it */
 	size_t error_len;

@@ -160,26 +160,38 @@ the benchmark list, whether it ran and why not, on the last screen. Each
 scene prints six or more lines, so the per-scene lines never fit it. After
 the score banner the sample prints one block, worded by the driver crate
 (`driver/rust/src/board/glmark2_list.rs`, through `yd_gm_list_block`). The
-Mali's default list as the host harness runs it today
-(`tools/hostharness/glmark2/FINDINGS-mali-allscenes.md`), terrain the entry
-the run ended in:
+score lines come first:
 
 ```text
-glmark2: score 119: 15 scenes ran, 17 failed, 0 unsupported (33 list entries)
-glmark2: 800x600, shown yes, GPU resets 0, GL errors recorded 1
-glmark2: GL errors raised 352, draws that sampled an incomplete texture 0
-glmark2-list:  0 build:use-vbo=false     ran 119 fps      1 build:use-vbo=true      ran 120 fps
+glmark2: score <n>: <r> scenes ran, <f> failed, <u> unsupported (33 list entries)
+glmark2: 800x600, shown yes, GPU resets <g>, GL errors recorded <n>
+glmark2: GL errors raised <n>, draws that sampled an incomplete texture <n>
+```
+
+then the list part. The NanoPC-T6's run of the default list on 2026-11-24
+halted in terrain (entry 22) on a fatal error, and the fatal path printed
+the list part; this is it, as the crate's test
+`the_board_run_of_the_default_list_reads_on_one_screen` words it:
+
+```text
+glmark2-list:  0 build:use-vbo=false     ran 120 fps      1 build:use-vbo=true      ran 121 fps
 glmark2-list:  2 texture:texture-filte.. failed link      3 texture:texture-filte.. failed link
-...
-glmark2-list: 22 terrain                 no end          23 shadow                  failed fragment
-...
-glmark2-list: 32 loop:fragment-uniform.. failed fragment
+glmark2-list:  4 texture:texture-filte.. failed link      5 shading:shading=gouraud ran 121 fps
+glmark2-list:  6 shading:shading=blinn.. failed fragment  7 shading:shading=phong   failed fragment
+glmark2-list:  8 shading:shading=cel     failed fragment  9 bump:bump-render=high.. failed fragment
+glmark2-list: 10 bump:bump-render=norm.. failed fragment 11 bump:bump-render=height failed fragment
+glmark2-list: 12 effect2d:kernel=0,1,0.. failed fragment 13 effect2d:kernel=1,1,1.. ran 121 fps
+glmark2-list: 14 pulsar                  ran 121 fps     15 desktop:effect=blur     ran 121 fps
+glmark2-list: 16 desktop:effect=shadow   ran 121 fps     17 buffer:interleave=fal.. ran 120 fps
+glmark2-list: 18 buffer:interleave=fal.. ran 120 fps     19 buffer:interleave=true  ran 120 fps
+glmark2-list: 20 ideas                   failed vertex   21 jellyfish               failed fragment
+glmark2-list: 22 terrain                 no end
 glmark2-list: why 2-4: link: a texture coordinate other than a vec2 varying read whole or two cons..
 glmark2-list: why 6 8-11: fragment shader: a constant operation on or to a value that is not a fin..
-glmark2-list: why 7 24: fragment shader: a constant product in a shape Mesa's algebraic rules move..
-glmark2-list: why 12 13: fragment shader: a fragment shader texture look-up beside another in a fo..
+glmark2-list: why 7: fragment shader: a constant product in a shape Mesa's algebraic rules move or..
+glmark2-list: why 12: fragment shader: a fragment shader texture look-up beside another in a form ..
 glmark2-list: why 20: vertex shader: control flow (if, a loop, a return before the end) is not low..
-glmark2-list: why 21 23 29 32: fragment shader: arithmetic
+glmark2-list: why 21: fragment shader: a fragment shader operand of a form or in a place no refere..
 ```
 
 - The score line ends at the list's size; the window, whether it was shown,

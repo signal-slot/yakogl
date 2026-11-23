@@ -557,7 +557,7 @@ mod tests {
     /// what it cannot read is refused.
     #[test]
     fn gm_list_entry_point_is_the_block_function() {
-        let (a, b, e) = (b"[build] <use-vbo=false>", b"[build] <use-vbo=true>", b"Error: Could not open 3ds file 'x'");
+        let (a, b, e) = (b"[build] use-vbo=false", b"[build] use-vbo=true", b"Error: Could not open 3ds file 'x'");
         let s = |info: &[u8], error: &[u8], entry, result| GmListScene {
             info: info.as_ptr(),
             info_len: info.len(),

@@ -15,10 +15,10 @@
 //! [`ROWS`] lines. It is, in order:
 //!
 //! ```text
-//! glmark2: score 119: 15 scenes ran, 17 failed, 0 unsupported (33 list entries)
-//! glmark2: 800x600, shown yes, GPU resets 0, GL errors recorded 1
-//! glmark2: GL errors raised 352, draws that sampled an incomplete texture 0
-//! glmark2-list:  0 build:use-vbo=false     ran 119 fps      1 build:use-vbo=true      ran 120 fps
+//! glmark2: score <n>: <r> scenes ran, <f> failed, <u> unsupported (33 list entries)
+//! glmark2: 800x600, shown yes, GPU resets <g>, GL errors recorded <n>
+//! glmark2: GL errors raised <n>, draws that sampled an incomplete texture <n>
+//! glmark2-list:  0 build:use-vbo=false     ran 120 fps      1 build:use-vbo=true      ran 121 fps
 //! glmark2-list:  2 texture:texture-filte.. failed link      3 texture:texture-filte.. failed link
 //! ...
 //! glmark2-list: why 2-4: link: a texture coordinate other than a vec2 varying read whole or two cons..
@@ -79,7 +79,7 @@ const CELL: usize = (COLS - PREFIX.len() - 1) / 2;
 /// One entry as the sample kept it.
 #[derive(Clone, Copy, Debug)]
 pub struct Scene<'a> {
-    /// Upstream's `Scene::info_string()`: `[name] <opt=val:opt=val>`, or
+    /// Upstream's `Scene::info_string()`: `[name] opt=val:opt=val`, or
     /// `[name] <default>` when no option is set.
     pub info: &'a [u8],
     /// glmark2's first error line while the entry set up and the line after
@@ -121,12 +121,15 @@ pub struct End {
     pub pass: u32,
 }
 
-/// The scene's name and its options (`opt=val:...`, empty for `<default>`).
+/// The scene's name and its options: upstream's info string is `[name]
+/// opt=val:opt=val`, or `[name] <default>` when no option is set
+/// (scene.cpp, construct_title); the sample's `[name]` before the set-up
+/// has none.
 fn parse(info: &[u8]) -> (&[u8], &[u8]) {
     let Some(rest) = info.strip_prefix(b"[") else { return (info, &[]) };
     let Some(close) = rest.iter().position(|&c| c == b']') else { return (info, &[]) };
-    let opts = rest[close + 1..].strip_prefix(b" <").and_then(|o| o.strip_suffix(b">")).unwrap_or(&[]);
-    (&rest[..close], if opts == b"default" { &[] } else { opts })
+    let opts = rest[close + 1..].strip_prefix(b" ").unwrap_or(&[]);
+    (&rest[..close], if opts == b"<default>" { &[] } else { opts })
 }
 
 fn options(opts: &[u8]) -> impl Iterator<Item = &[u8]> {
@@ -528,41 +531,43 @@ mod tests {
     use super::*;
 
     /// glmark2's default list (default-benchmarks.h at the pinned commit) as
-    /// upstream's info strings name its entries: the options set, by name.
+    /// upstream's info strings name its entries (scene.cpp construct_title:
+    /// the options set, by name, `<default>` only when none is): the same as
+    /// a real run logs them (`the_test_list_is_what_glmark2_logs`).
     const DEFAULT_LIST: [&str; 33] = [
-        "[build] <use-vbo=false>",
-        "[build] <use-vbo=true>",
-        "[texture] <texture-filter=nearest>",
-        "[texture] <texture-filter=linear>",
-        "[texture] <texture-filter=mipmap>",
-        "[shading] <shading=gouraud>",
-        "[shading] <shading=blinn-phong-inf>",
-        "[shading] <shading=phong>",
-        "[shading] <shading=cel>",
-        "[bump] <bump-render=high-poly>",
-        "[bump] <bump-render=normals>",
-        "[bump] <bump-render=height>",
-        "[effect2d] <kernel=0,1,0;1,-4,1;0,1,0;>",
-        "[effect2d] <kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;>",
-        "[pulsar] <light=false:quads=5:texture=false>",
-        "[desktop] <blur-radius=5:effect=blur:passes=1:separable=true:windows=4>",
-        "[desktop] <effect=shadow:windows=4>",
-        "[buffer] <columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map>",
-        "[buffer] <columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata>",
-        "[buffer] <columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map>",
-        "[ideas] <speed=duration>",
+        "[build] use-vbo=false",
+        "[build] use-vbo=true",
+        "[texture] texture-filter=nearest",
+        "[texture] texture-filter=linear",
+        "[texture] texture-filter=mipmap",
+        "[shading] shading=gouraud",
+        "[shading] shading=blinn-phong-inf",
+        "[shading] shading=phong",
+        "[shading] shading=cel",
+        "[bump] bump-render=high-poly",
+        "[bump] bump-render=normals",
+        "[bump] bump-render=height",
+        "[effect2d] kernel=0,1,0;1,-4,1;0,1,0;",
+        "[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;",
+        "[pulsar] light=false:quads=5:texture=false",
+        "[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4",
+        "[desktop] effect=shadow:windows=4",
+        "[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map",
+        "[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata",
+        "[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map",
+        "[ideas] speed=duration",
         "[jellyfish] <default>",
         "[terrain] <default>",
         "[shadow] <default>",
         "[refract] <default>",
-        "[conditionals] <fragment-steps=0:vertex-steps=0>",
-        "[conditionals] <fragment-steps=5:vertex-steps=0>",
-        "[conditionals] <fragment-steps=0:vertex-steps=5>",
-        "[function] <fragment-complexity=low:fragment-steps=5>",
-        "[function] <fragment-complexity=medium:fragment-steps=5>",
-        "[loop] <fragment-loop=false:fragment-steps=5:vertex-steps=5>",
-        "[loop] <fragment-steps=5:fragment-uniform=false:vertex-steps=5>",
-        "[loop] <fragment-steps=5:fragment-uniform=true:vertex-steps=5>",
+        "[conditionals] fragment-steps=0:vertex-steps=0",
+        "[conditionals] fragment-steps=5:vertex-steps=0",
+        "[conditionals] fragment-steps=0:vertex-steps=5",
+        "[function] fragment-complexity=low:fragment-steps=5",
+        "[function] fragment-complexity=medium:fragment-steps=5",
+        "[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5",
+        "[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5",
+        "[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5",
     ];
 
     /// The texture scene's link error of the NanoPC-T6 run of 2026-11-23,
@@ -599,25 +604,31 @@ mod tests {
         }
     }
 
-    /// The default list as the Mali runs it today (the host harness's
-    /// record): 14 ran, 17 failed at a refused shader, terrain the run's end.
-    fn mali_run() -> Vec<Scene<'static>> {
+    /// The NanoPC-T6's run of the default list on 2026-11-24 (records/
+    /// nanopc-t6, 20261124-0439-glmark2-list-11123): entries 0 to 21 ended,
+    /// the run halted in 22 (terrain) on a fatal error. Each failure carries
+    /// the Mali code generator's words (src/shaderc/online/mali/mod.rs).
+    fn board_run() -> Vec<Scene<'static>> {
         let const_fold = "a constant operation on or to a value that is not a finite normal float is not lowered yet";
-        let arith_const = "a constant product in a shape Mesa's algebraic rules move or fold is not lowered yet";
+        let arith_const = "a constant product in a shape Mesa's algebraic rules move or fold (a constant times a \
+                           product with a constant, a negation of a negation, a constant in a fused multiply-add) is \
+                           not lowered yet";
         let tex_multi = "a fragment shader texture look-up beside another in a form only a lone look-up takes \
                          (a mediump computed coordinate, a cube map), or more than 64 look-ups, is not lowered yet";
-        DEFAULT_LIST
+        let fs_operand = "a fragment shader operand of a form or in a place no reference draws (a lane alone first \
+                          in a sum, a uniform first) is not lowered yet";
+        let fps = [120, 121, 0, 0, 0, 121, 0, 0, 0, 0, 0, 0, 0, 121, 121, 121, 121, 120, 120, 120, 0, 0];
+        DEFAULT_LIST[..23]
             .iter()
             .enumerate()
             .map(|(i, info)| {
                 let mut s = scene(info, i as u32, RAN);
-                s.fps = 119 + (i as u32 % 3);
                 let fail = |s: &mut Scene<'static>, why, error| (s.result, s.why, s.error) = (FAILED, why, error);
                 match i {
                     2..=4 => fail(&mut s, GLMARK2_WHY_LINK, LINK_ERROR.as_bytes()),
                     6 | 8..=11 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs(const_fold)),
-                    7 | 24 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs(arith_const)),
-                    12 | 13 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs(tex_multi)),
+                    7 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs(arith_const)),
+                    12 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs(tex_multi)),
                     20 => fail(
                         &mut s,
                         GLMARK2_WHY_VERTEX_SHADER,
@@ -625,65 +636,47 @@ mod tests {
                           generator refused this vertex shader: Mali(Valhall: control flow (if, a loop, a return \
                           before the end) is not lowered yet)",
                     ),
-                    21 | 23 | 29 | 32 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs("arithmetic")),
+                    21 => fail(&mut s, GLMARK2_WHY_FRAGMENT_SHADER, mali_fs(fs_operand)),
                     22 => s.result = NO_END,
-                    _ => {}
+                    _ => s.fps = fps[i],
                 }
                 s
             })
             .collect()
     }
 
-    fn end_of(list: &[Scene]) -> End {
-        let count = |r| list.iter().filter(|s| s.result == r).count() as u32;
-        End {
-            score: 119,
-            ran: count(RAN),
-            failed: count(FAILED),
-            unsupported: count(UNSUPPORTED),
-            listed: 33,
-            w: 800,
-            h: 600,
-            shown: 1,
-            gl_errors: 352,
-            gl_recorded: 1,
-            ..End::default()
-        }
-    }
-
+    /// What the board's record screen showed after the fatal error, the
+    /// names now with the options that tell the entries apart (the board's
+    /// image, before the fix in parse(), showed the scene alone).
     #[test]
-    fn the_mali_run_of_the_default_list_reads_on_one_screen() {
-        let list = mali_run();
-        let b = block(Some(&end_of(&list)), &list);
+    fn the_board_run_of_the_default_list_reads_on_one_screen() {
+        let list = board_run();
+        let b = block(None, &list);
         // printed for the record of this module's output (cargo test -- --nocapture)
         for x in &b {
             println!("{x}");
         }
-        assert_eq!(b[0], "glmark2: score 119: 15 scenes ran, 17 failed, 0 unsupported (33 list entries)");
-        assert_eq!(b[1], "glmark2: 800x600, shown yes, GPU resets 0, GL errors recorded 1");
-        assert_eq!(
-            b[3],
-            "glmark2-list:  0 build:use-vbo=false     ran 119 fps      1 build:use-vbo=true      ran 120 fps"
-        );
-        assert_eq!(
-            b[4],
-            "glmark2-list:  2 texture:texture-filte.. failed link      3 texture:texture-filte.. failed link"
-        );
-        assert_eq!(
-            b[14],
-            "glmark2-list: 22 terrain                 no end          23 shadow                  failed fragment"
-        );
-        assert_eq!(b[19], "glmark2-list: 32 loop:fragment-uniform.. failed fragment");
-        assert_eq!(
-            b[20],
-            "glmark2-list: why 2-4: link: a texture coordinate other than a vec2 varying read whole or two cons.."
-        );
-        assert_eq!(
-            b[21],
-            "glmark2-list: why 6 8-11: fragment shader: a constant operation on or to a value that is not a fin.."
-        );
-        assert_eq!(b[25], "glmark2-list: why 21 23 29 32: fragment shader: arithmetic");
-        assert_eq!(b.len(), 26, "every reason shown");
+        let want = [
+            "glmark2-list:  0 build:use-vbo=false     ran 120 fps      1 build:use-vbo=true      ran 121 fps",
+            "glmark2-list:  2 texture:texture-filte.. failed link      3 texture:texture-filte.. failed link",
+            "glmark2-list:  4 texture:texture-filte.. failed link      5 shading:shading=gouraud ran 121 fps",
+            "glmark2-list:  6 shading:shading=blinn.. failed fragment  7 shading:shading=phong   failed fragment",
+            "glmark2-list:  8 shading:shading=cel     failed fragment  9 bump:bump-render=high.. failed fragment",
+            "glmark2-list: 10 bump:bump-render=norm.. failed fragment 11 bump:bump-render=height failed fragment",
+            "glmark2-list: 12 effect2d:kernel=0,1,0.. failed fragment 13 effect2d:kernel=1,1,1.. ran 121 fps",
+            "glmark2-list: 14 pulsar                  ran 121 fps     15 desktop:effect=blur     ran 121 fps",
+            "glmark2-list: 16 desktop:effect=shadow   ran 121 fps     17 buffer:interleave=fal.. ran 120 fps",
+            "glmark2-list: 18 buffer:interleave=fal.. ran 120 fps     19 buffer:interleave=true  ran 120 fps",
+            "glmark2-list: 20 ideas                   failed vertex   21 jellyfish               failed fragment",
+            "glmark2-list: 22 terrain                 no end",
+            "glmark2-list: why 2-4: link: a texture coordinate other than a vec2 varying read whole or two cons..",
+            "glmark2-list: why 6 8-11: fragment shader: a constant operation on or to a value that is not a fin..",
+            "glmark2-list: why 7: fragment shader: a constant product in a shape Mesa's algebraic rules move or..",
+            "glmark2-list: why 12: fragment shader: a fragment shader texture look-up beside another in a form ..",
+            "glmark2-list: why 20: vertex shader: control flow (if, a loop, a return before the end) is not low..",
+            "glmark2-list: why 21: fragment shader: a fragment shader operand of a form or in a place no refere..",
+        ];
+        assert_eq!(b, want);
     }
 
     /// The worst run the block must fit: every entry failed with a reason of
@@ -798,6 +791,31 @@ mod tests {
         assert!(b.iter().all(|x| x.len() <= COLS));
     }
 
+    /// The list above is upstream's own text: the info strings a real run of
+    /// the default list logged (glmark2-es2 at the pinned commit on the
+    /// NanoPC-T6's Linux, the per-scene logs of tools/cts/testdata/
+    /// glmark2-mali-tally/clean, "<info>: FPS: ..." or "<info>: Set up
+    /// failed").
+    #[test]
+    fn the_test_list_is_what_glmark2_logs() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/cts/testdata/glmark2-mali-tally/clean");
+        let mut logs: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|x| x == "log"))
+            .collect();
+        logs.sort();
+        let infos: Vec<String> = logs
+            .iter()
+            .map(|p| {
+                let text = std::fs::read_to_string(p).unwrap();
+                let line = text.lines().find(|l| l.starts_with('[')).unwrap_or_else(|| panic!("{p:?}"));
+                line.split(": ").next().unwrap().to_string()
+            })
+            .collect();
+        assert_eq!(infos, DEFAULT_LIST);
+    }
+
     #[test]
     fn names_keep_the_options_that_tell_the_entries_of_a_scene_apart() {
         let list: Vec<_> = DEFAULT_LIST.iter().enumerate().map(|(i, info)| scene(info, i as u32, RAN)).collect();
@@ -847,7 +865,7 @@ mod tests {
         ];
         assert_eq!(names, want);
         // the same entry twice: nothing tells them apart, the index does
-        let twice = [scene("[build] <use-vbo=true>", 0, RAN), scene("[build] <use-vbo=true>", 1, RAN)];
+        let twice = [scene("[build] use-vbo=true", 0, RAN), scene("[build] use-vbo=true", 1, RAN)];
         assert_eq!(
             block(None, &twice),
             ["glmark2-list: 0 build                          ran 0 fps 1 build                          ran 0 fps"]
