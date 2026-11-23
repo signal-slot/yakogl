@@ -869,9 +869,141 @@ Supply. Neither failure looks like a hardware fault: both are software
 exceptions with a register dump, the board came back to Linux on its own in
 44 s and 60 s, and the `hdmi 5v` and SCMI clock requests were answered.
 
+## Board scan-out record (board-display3, 2026-11-23)
+
+Third DK display session, the rerun after vivante-st-selector's fixes
+(368e7875: main stack 16 KiB under the display path, `mp2_display` 64 xlat
+tables, `CONFIG_STACK_SENTINEL` in both probes). Run with
+`tools/board-stm32mp2.sh` only, both images built at 368e7875 with the
+READMEs' west lines for `stm32mp257f_dk/stm32mp257fxx/a35` (Zephyr
+af17c0c8aa2a; `.config`: `MAIN_STACK_SIZE=16384` in both, `MAX_XLAT_TABLES`
+64 and 256, `STACK_SENTINEL=y`). Same procedure as board-display2: blind runs
+(`MP2_NO_CONSOLE=1`, `MP2_HOLD_S=30`), the console captured over the console
+resource's MCP server and handed to the runner's `judge` verb (an excerpt
+with the logged OP-TEE/SCMI frames left out, marked as such in the file),
+`install` (undo printed first) before the runs and `uninstall` after them.
+
+**Both fixes held, and both probes now fail at the same, later step: the
+whole chain comes up (LTDC enabled with its reload taken, DSI host and PHY
+up, ADV7535 started) and then no LTDC line interrupt arrives within the
+first-frame wait: `FAIL: frame -116` (-ETIMEDOUT), the chain is taken down
+again, and no picture reaches the HDMI capture.** No `PASS` is claimed.
+
+| commit | image | runner | verdict lines | observation | stock boot files |
+| --- | --- | --- | --- | --- | --- |
+| 368e7875 | `mp2_display` (sha256 ad3f957130d941c1…, 119192 bytes) | `MP2_HOLD_S=30 MP2_NO_CONSOLE=1 tools/board-stm32mp2.sh run build/zephyr-werror/mp2_display/zephyr/zephyr.bin <rec> mp2_display`, then `judge` (record `20261123-1905-mp2_display-ad3f9571`) | `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=208s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:mp2_display back_after=208s console=external` | reaches `*** Booting Zephyr OS ***` and `main()`; HPD 1, EDID read (CEA extension), 1920x1080@60 chosen; `mp2_display: FAIL: frame -116`; no `crc:` or `hold:` line; `mp2: lifetime over: PSCI SYSTEM_RESET at 150000 ms` | staged image removed by the run |
+| 368e7875 | `mp2_gpu_scanout` (sha256 e26261858e6aadec…, 160152 bytes) | the same call with `mp2_gpu_scanout` (record `20261123-1910-mp2_gpu_scanout-e2626185`) | `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=191s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:mp2_gpu_scanout back_after=191s console=external` | past HPD/EDID to the `mode` line; the GPU renders the 1080p triangle and its linear copy (`linear: PASS ... 0 failing checks`); LTDC, DSI and ADV7535 report up, then `E: chain step 12 failed (-116)`, `mp2_gpu_scanout: FAIL: frame -116`; same lifetime reset | `status` before `uninstall`: `stock boot files: unchanged since install`; `uninstall`: `stock boot files: unchanged since install`, `unhooked: no preboot of ours, no yako_* variable, bootcmd 'run bootcmd_stm32mp' (not written), /boot/yakogl removed. Nothing was rebooted.` |
+
+What the runs read back, in order:
+
+1. U-Boot's one-shot as before (`yakogl-mp2: hook`, `once=...`, `cleared`,
+   `go 0xa0000000`), the layer's `MP2:B console up`, hand-over at EL2,
+   the OP-TEE watchdog armed (32 s, petted to 150 s).
+2. RIF, SCMI, RCC, pins and the bridge reset exactly as in board-display2
+   (clocks 90, 94 at 200 MHz, 12 at 100 MHz, 28 at 27 MHz, 27 at 148.5 MHz;
+   `hdmi 5v 0 -> 7, supplies 0x7`; `rcc dsicfgr: PHY reference is not
+   FLEXGEN_28 (kept as found)`; `syscfg displayclkcr 0x00000002`;
+   `display_power: up`). No `CONFIG_MAX_XLAT_TABLES` error, no exception, no
+   `Stack sentinel` or `fatal error 2` line in either image: the
+   vivante-st-selector diagnosis (xlat tables; main stack overrunning the
+   idle stack) is confirmed by the absence of both failures.
+3. `mp2_display` (console):
+
+   ```
+   *** Booting Zephyr OS build af17c0c8aa2a ***
+   mp2_display: build 368e7875, hold 60 s
+   display_power: fb 0xb0000000 + 0x800000: risaf4 region 9
+   display_power: fb 0xb0000000 + 0x800000: region 9 verdict 0 rc 0
+   mp2_display: bars: equal to the crate's
+   mp2_display: chain step frame err -116, hpd 1, edid 1 (header 00 ff, ext 1), choice 0
+   mp2_display: mode 1920x1080 148500000 Hz h 88/44/148 v 4/5/36 flags 0x0, hdmi vic 16
+   mp2_display: ltdc hwver 0x040101 bus 8 layers 3 on 0, pitch 7680, fb 0xb0000000, clock 148500000 Hz
+   mp2_display: dsi on 0 lanes 4 lane 891000 kbit/s (timings 891 Mbit/s) pll idf 4 ndiv 66 odf 1, hline 1650, failed step 0 errno 0
+   mp2_display: adv7535 rev 0x14 hpd 1 started 0
+   mp2_display: FAIL: frame -116
+   mp2: lifetime over: PSCI SYSTEM_RESET at 150000 ms
+   ```
+
+   The failure is inside `display_get_capabilities()` (the chain owner
+   brings the chain up there), so the `on 0` / `started 0` fields are the
+   state after `ltdc_chain_down()`; `mp2_gpu_scanout`'s driver log (item 4)
+   shows each stage did come up first.
+4. `mp2_gpu_scanout` (console, the GPU's lines shortened):
+
+   ```
+   I: adv7535: chip revision 0x14
+   I: mode 1920x1080 148500000 Hz (choice 0, hpd 1, edid 1), hdmi vic 16
+   mp2_gpu_scanout: mode 1920x1080, buffer pitch 7680
+   mp2_gpu_scanout: target 1920x1080 stride 7680 at GPU 0xfa860000
+   mp2_gpu_scanout: linear: PASS 1920x1080 pitch 7680 at GPU 0xfb04e000 phys 0xfb04e000 (0 failing checks)
+   display_power: fb 0xfb04e000 + 0x7e9000: region 10 verdict 0 rc 0
+   I: ltdc: version 0x040101, 3 layers, 8-byte bus
+   I: DSI PHY: ref 27000 kHz, idf 4 ndiv 66 odf 1: 891000 kbit/s per lane
+   I: DSI up: 4 lanes at 891 Mbit/s, esc div 6, line 1650 lbcc
+   I: adv7535: up, 1920x1080 at 148500000 Hz, 4 lanes
+   E: chain step 12 failed (-116)
+   mp2_gpu_scanout: FAIL: frame -116
+   ```
+
+What step 12 is. `ltdc_chain_up()`
+(`driver/drivers/display/display_yakogl_stm32_ltdc.c:288-388`) enables the
+LTDC (`yd_mp25_ltdc_enable`: `LTDCEN` plus a vertical-blanking reload that
+must be taken within two 24 Hz frames, else "ltdc: reload not taken, no
+pixel clock?" — it was taken, no such line), sets the DSI mode, attaches the
+DSI device, starts the ADV7535, clears the LTDC's status and then waits for
+one line interrupt flag (`ISR.LIF` at `LIPCR`, `ip::stm32_ltdc::wait_frame`,
+83 ms by polling, `IER` has only the error bits). That wait timed out. So
+the timing generator reached a vertical blank once at enable, but no `LIF`
+was seen after the DSI host started streaming. Not decided by this session
+(the driver prints neither `ISR` nor the current position at the timeout):
+
+- whether the MP25's LTDC (0x040101) latches `LIF` in `ISR` while `IER.LIE`
+  is clear (ST's `ltdc.c` always sets `LIE` before it relies on the line
+  interrupt);
+- whether the scan position stops once the DSI host is in video mode (the
+  pixel clock path: `SYSCFG DISPLAYCLKCR` 0x2 found as left by ST's boot,
+  and the DSI PHY reference "not FLEXGEN_28, kept as found");
+- or whether 83 ms is too short for the first frame after the bridge start.
+
+The next fix (an item, not made here): on the frame timeout, log `ISR`,
+`CPSR` (current position, read twice), `CDSR` and `GCR` before the chain is
+taken down, and pin the MP25's `LIF`/`LIE` behaviour against ST's r3.1
+`ltdc.c`; if `CPSR` does not move, the pixel clock source after the DSI
+start (`DISPLAYCLKCR`, `RCC_DSICFGR`) is the next suspect.
+
+The picture. The KVM answered throughout (1920x1080 JPEG). The screenshot
+during `mp2_display`'s hold, taken right after its `FAIL` line, shows ST's
+Weston launcher (OpenSTLinux demo grid) with the taskbar clock at the minute
+Linux rebooted for the run: a frame held from the board's own Linux, not a
+probe picture. The screenshot during `mp2_gpu_scanout`'s hold shows ST's
+OpenSTLinux splash (yellow "STM32MPU" banner, penguin, city skyline): again a
+frame from ST's boot chain, no triangle. Judged (JPEG converted to PPM with a
+stdlib baseline-JPEG decoder kept outside the tree):
+`colorbars: FAIL: partial: 2 of 8 bars (white black)` and
+`triangle: FAIL: missing vertex colour: red, green, blue`.
+
+Supply. No hardware fault: both images ran to the layer's own lifetime reset
+(`Reset reason: System reset (SYSRST) (0x2074). Warm boot.` in BL2 after
+each), and the board came back to ST's Linux in 208 s and 191 s (the probes
+keep running to 150 s by design).
+
+Board state after the session: ST's Linux answering, `/boot/yakogl`
+removed, no `preboot` or `yako_*` variable, `bootcmd` ST's own, stock boot
+files unchanged since install (runner lines above). Nothing else on the board
+was written.
+
 ## GPU buffer scan-out
 
-Not achieved at commit 23514c2f (record `20261123-0547-mp2_gpu_scanout-76ada5a3`).
+**board-display3 (368e7875, record `20261123-1910-mp2_gpu_scanout-e2626185`):
+not achieved.** The GPU half works on the board: gc_triangle's render at
+1920x1080 and its linear copy at 0xfb04e000 (RISAF4 region 10, verdict 0)
+pass every probe check (`linear: PASS ... 0 failing checks`). The scan-out
+half stops at the chain's first-frame wait (`E: chain step 12 failed
+(-116)`, `mp2_gpu_scanout: FAIL: frame -116`), the same failure as
+`mp2_display`; see "Board scan-out record (board-display3, ...)" above. The
+EC 0xe exception below is gone at 368e7875.
+
+Earlier: not achieved at commit 23514c2f (record `20261123-0547-mp2_gpu_scanout-76ada5a3`).
 `mp2_gpu_scanout` printed no `mp2_gpu_scanout: PASS` or `FAIL` line. The
 console around the failure (x6 to lr shortened to one line):
 
