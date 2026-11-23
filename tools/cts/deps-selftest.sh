@@ -91,6 +91,19 @@ print("same" if pinned == used else f"pinned only: {sorted(pinned - used)} built
 PY
 )
 check "MALI_DEQP_TOOLCHAIN unpacks exactly its pinned packages" "same" "$out"
+# MP2_QEMU (the uboot-mp2 qemu row's binary) is a gate entry: --check has it,
+# and its build unpacks every pinned source by name and nothing else.
+out=$("$ENV_SH" --check 2>&1)
+check "--check has the MP2_QEMU entry" "missing  MP2_QEMU  $L/mp2-qemu/bin/qemu-system-aarch64" "$out"
+out=$(python3 -I - "$HERE/deps.toml" <<'PY' 2>&1
+import re, sys, tomllib
+d = next(e for e in tomllib.load(open(sys.argv[1], "rb"))["dep"] if e["name"] == "MP2_QEMU")
+pinned = {i["url"].rsplit("/", 1)[1] for i in d["inputs"]}
+used = set(re.findall(r"[\w.+-]+\.tar\.(?:gz|xz)", d["build"]))
+print("same" if pinned == used else f"pinned only: {sorted(pinned - used)} built only: {sorted(used - pinned)}")
+PY
+)
+check "MP2_QEMU unpacks exactly its pinned sources" "same" "$out"
 out=$("$ENV_SH" nosuchboard 2>&1); rc=$?
 [ "$rc" -eq 2 ] && ok "an unknown board exits 2" || bad "an unknown board: rc $rc"
 

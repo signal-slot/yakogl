@@ -33,7 +33,13 @@ U-Boot (a few minutes); later runs take about a minute.
   `e1000` and user-mode networking (slirp). Tested with 10.0.2 from the Zephyr
   SDK host tools (`zephyr-sdk-x86_64-hosttools-standalone-0.10.sh -y -d DIR`;
   the binary is `DIR/sysroots/x86_64-pokysdk-linux/usr/bin/`): put its
-  directory on `PATH` or set `MP2_QEMU`.
+  directory on `PATH` or set `MP2_QEMU`. The project's own is the `MP2_QEMU`
+  entry of `tools/cts/deps.toml`: `tools/cts/deps-env.sh --build MP2_QEMU`
+  builds QEMU 10.0.2 (`aarch64-softmmu`) and the glib and libslirp it needs
+  from pinned sources, without root, into the dependency layout, and
+  `tools/check.sh` exports it (`deps-env.sh --present`), so the gate's row
+  runs instead of being a gap. The gate workflow builds it on a runner that
+  lacks it.
 - Cross compiler: `CROSS_COMPILE`, else the first of `aarch64-linux-gnu-`,
   `aarch64-none-elf-` on `PATH`, else the Zephyr SDK's `aarch64-zephyr-elf-`
   under `ZEPHYR_SDK_INSTALL_DIR` or `$CONNECTED_DEPS_DIR/zephyr-sdk-*`. The

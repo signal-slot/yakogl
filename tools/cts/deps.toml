@@ -55,9 +55,10 @@
 #
 # deps-env.sh --check is what every host and image is judged by. --build is
 # for hosts and images, run on purpose; the gate never builds these, but for
-# MALI_CSFFW (one pinned file), LZ4 (one small program) and DEQP_GLES3_TEST_DIR
-# (one directory at a pinned commit), fetched by .github/workflows/gate.yml
-# when a runner lacks them (their notes).
+# MALI_CSFFW (one pinned file), LZ4 (one small program), MP2_QEMU (one QEMU
+# binary from pinned sources) and DEQP_GLES3_TEST_DIR (one directory at a
+# pinned commit), fetched by .github/workflows/gate.yml when a runner lacks
+# them (their notes).
 
 [[dep]]
 name = "ZEPHYR_WS"
@@ -294,6 +295,84 @@ packages.portage = ["dev-build/make", "sys-devel/gcc"]
 [[dep.inputs]]
 url = "https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz"
 sha256 = "537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
+
+[[dep]]
+name = "MP2_QEMU"
+path = "mp2-qemu/bin/qemu-system-aarch64"
+marker = "mp2-qemu/bin/qemu-system-aarch64"
+note = "the qemu-system-aarch64 of the uboot-mp2 qemu row of tools/check.sh (driver/tools/uboot-mp2/qemu/run.sh reads $MP2_QEMU; without it the row is a gap): upstream QEMU 10.0.2, the version that row was first tested with, aarch64-softmmu only, with the virt machine, sdhci-pci, sd-card, e1000 and user-mode networking (slirp, TFTP). Built without root and without a distribution package beyond the gate's own build tools: glib 2.84.1 (with pcre2 10.45 and libffi 3.4.8 linked in) and libslirp 4.9.1 are built from their pinned sources, with QEMU's own bundled meson (the host's may be older than glib's minimum). What stays is bin/qemu-system-aarch64, the two libraries it loads in lib/ (found through an $ORIGIN rpath, so the directory can be moved) and e1000's option ROM in share/qemu/, 35 MB; the build fails unless the binary has the devices drive.py asks for. The bundled dtc builds with -Werror, and the const-preserving memchr of a newer glibc (2.43, checked 2026-11-23) makes two of its lines warn, so that one warning stays a warning. About 7 minutes on 4 cores (431 s, 2026-11-23), once. The gate workflow builds this entry when it is absent"
+build = '''
+p="$DEPS/mp2-qemu.part"
+rm -rf "$p"
+mkdir -p "$p/src" "$p/lib" "$p/share/qemu"
+cd "$p/src"
+for t in qemu-10.0.2.tar.xz pcre2-10.45.tar.gz libffi-3.4.8.tar.gz glib-2.84.1.tar.xz libslirp-v4.9.1.tar.gz; do
+  tar -xf "$DEPS/downloads/$t"
+done
+# QEMU's own meson for every meson build: the host's may be older than glib's minimum.
+python3 -m venv venv
+venv/bin/pip install -q --no-index qemu-10.0.2/python/wheels/meson-*.whl
+# the libraries go to a prefix of the build only; QEMU's lib/ gets the two it loads
+pre="$p/src/prefix"
+export PATH="$p/src/venv/bin:$PATH" PKG_CONFIG_PATH="$pre/lib/pkgconfig"
+j=$(nproc)
+(cd pcre2-10.45 && ./configure -q --prefix="$pre" --libdir="$pre/lib" --disable-shared --with-pic && make -s -j"$j" && make -s install) > /dev/null
+(cd libffi-3.4.8 && ./configure -q --prefix="$pre" --libdir="$pre/lib" --disable-shared --with-pic --disable-docs && make -s -j"$j" && make -s install) > /dev/null
+meson setup --wrap-mode=nodownload --prefix="$pre" --libdir=lib --buildtype=release \
+  -Dtests=false -Dintrospection=disabled -Dnls=disabled -Dman-pages=disabled -Ddocumentation=false \
+  -Dselinux=disabled -Dxattr=false -Dlibmount=disabled -Dsysprof=disabled -Dlibelf=disabled \
+  glib-2.84.1/build glib-2.84.1
+meson install -C glib-2.84.1/build --quiet
+meson setup --wrap-mode=nodownload --prefix="$pre" --libdir=lib --buildtype=release libslirp-v4.9.1/build libslirp-v4.9.1
+meson install -C libslirp-v4.9.1/build --quiet
+mkdir qemu-build
+cd qemu-build
+../qemu-10.0.2/configure --prefix="$p/src/qemu" --target-list=aarch64-softmmu \
+  --without-default-features --enable-tcg --enable-slirp --enable-fdt=internal \
+  --disable-docs --disable-werror --disable-debug-info --disable-install-blobs \
+  --extra-cflags=-Wno-error=discarded-qualifiers \
+  --extra-ldflags='-Wl,-rpath,$ORIGIN/../lib -Wl,--disable-new-dtags'
+make -s -j"$j" qemu-system-aarch64
+cd ..
+mkdir "$p/bin"
+cp qemu-build/qemu-system-aarch64 "$p/bin/"
+cp -P "$pre"/lib/libglib-2.0.so.0* "$pre"/lib/libslirp.so.0* "$p/lib/"
+# e1000's option ROM (QEMU loads it from <bin>/../share/qemu)
+cp qemu-10.0.2/pc-bios/efi-e1000.rom "$p/share/qemu/"
+cd "$p"
+rm -rf "$p/src"
+# what run.sh (drive.py) asks for: the virt machine and these devices
+devs=$(bin/qemu-system-aarch64 -machine virt -device help)
+for d in sdhci-pci sd-card e1000; do
+  grep -q "name \"$d\"" <<<"$devs" || { echo "MP2_QEMU: no device $d"; exit 1; }
+done
+nets=$(bin/qemu-system-aarch64 -machine virt -netdev help)
+grep -qx user <<<"$nets" || { echo "MP2_QEMU: no user-mode network"; exit 1; }
+rm -rf "$DEPS/mp2-qemu"
+mv "$p" "$DEPS/mp2-qemu"
+'''
+packages.apt = ["gcc", "make", "python3", "python3-venv", "ninja-build", "pkg-config", "xz-utils", "zlib1g-dev"]
+packages.portage = ["sys-devel/gcc", "dev-build/make", "dev-lang/python", "dev-build/ninja", "virtual/pkgconfig", "app-arch/xz-utils", "sys-libs/zlib"]
+
+[[dep.inputs]]
+url = "https://download.qemu.org/qemu-10.0.2.tar.xz"
+sha256 = "ef786f2398cb5184600f69aef4d5d691efd44576a3cff4126d38d4c6fec87759"
+
+[[dep.inputs]]
+url = "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.45/pcre2-10.45.tar.gz"
+sha256 = "0e138387df7835d7403b8351e2226c1377da804e0737db0e071b48f07c9d12ee"
+
+[[dep.inputs]]
+url = "https://github.com/libffi/libffi/releases/download/v3.4.8/libffi-3.4.8.tar.gz"
+sha256 = "bc9842a18898bfacb0ed1252c4febcc7e78fa139fd27fdc7a3e30d9d9356119b"
+
+[[dep.inputs]]
+url = "https://download.gnome.org/sources/glib/2.84/glib-2.84.1.tar.xz"
+sha256 = "2b4bc2ec49611a5fc35f86aca855f2ed0196e69e53092bab6bb73396bf30789a"
+
+[[dep.inputs]]
+url = "https://gitlab.freedesktop.org/slirp/libslirp/-/archive/v4.9.1/libslirp-v4.9.1.tar.gz"
+sha256 = "3970542143b7c11e6a09a4d2b50f30a133473c41f15ed0bdcc3b7a1c450d9a5c"
 
 [[dep]]
 name = "PVR_FW_BLOB"
