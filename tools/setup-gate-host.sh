@@ -58,6 +58,15 @@
 # or the GitHub archive directory glmark2-<pin>); --install only prints the
 # commands that fetch it. --check also reports DEQP_GLES3_TEST_DIR (the dEQP
 # shader tree es3_shaderc_corpus reads: unset skips it, a bad path fails it).
+# --check also reports the cargo target directory, the free space of its
+# filesystem and CARGO_INCREMENTAL, as "warn" lines (never counted as missing,
+# so the CI gate job's --check step is unaffected) with the remedy. With
+# GATE_FULL_RUN=1 (a host about to run a full tools/check.sh) a short disk, a
+# target under /tmp or CARGO_INCREMENTAL not 0 is "missing" instead.
+# GATE_MIN_FREE_GB (default 120) sets the free space a full run needs; the
+# figure is the 2026-11-14 run of 760aad3d, whose shared target directory
+# reached 180 GB (80 GB of it debug/incremental) and filled a 193 GB disk,
+# less the ~80 GB CARGO_INCREMENTAL=0 saves, plus margin. See docs/ci.md 3.7.
 # --check also reports a HAL_NXP_DIR, ZEPHYR_WS or PCO_SHC that is set: unset
 # is ok (tools/cts/deps-env.sh --present supplies the layout), but a set value
 # overrides the layout and must hold the marker deps.toml gives for that entry
@@ -571,7 +580,43 @@ check_cc_aarch64() {
   fi
 }
 
+# The disk a full gate run needs and CARGO_INCREMENTAL (docs/ci.md 3.7).
+check_gate_disk() {
+  local dir bad=warn min=${GATE_MIN_FREE_GB:-120} free_kb free_gb probe
+  [ "${GATE_FULL_RUN-}" = 1 ] && bad=missing
+  case $min in ''|*[!0-9]*) min=120 ;; esac
+  dir=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
+    sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+  [ -n "$dir" ] || dir=${CARGO_TARGET_DIR:-target}
+  line ok gate-target-dir "$dir"
+  case $dir in
+    /tmp|/tmp/*|/var/tmp|/var/tmp/*)
+      line "$bad" gate-target-tmp "$dir is under /tmp (memory on some hosts): set CARGO_TARGET_DIR to a larger disk" ;;
+  esac
+  probe=$dir
+  while [ ! -d "$probe" ] && [ "$probe" != / ] && [ "$probe" != . ]; do
+    probe=$(dirname "$probe")
+  done
+  free_kb=$(df -Pk "$probe" 2>/dev/null | awk 'NR==2 {print $4}')
+  case $free_kb in
+    ''|*[!0-9]*) line warn gate-disk "cannot read the free space of $probe" ;;
+    *)
+      free_gb=$((free_kb / 1048576))
+      if [ "$free_gb" -ge "$min" ]; then
+        line ok gate-disk "$free_gb GB free, a full run needs $min GB"
+      else
+        line "$bad" gate-disk "$free_gb GB free, a full run needs $min GB (GATE_MIN_FREE_GB): use CARGO_INCREMENTAL=0, a CARGO_TARGET_DIR on a larger disk (never /tmp), or cargo clean of the old target"
+      fi ;;
+  esac
+  if [ "${CARGO_INCREMENTAL-}" = 0 ]; then
+    line ok gate-cargo-incremental "CARGO_INCREMENTAL=0"
+  else
+    line "$bad" gate-cargo-incremental "CARGO_INCREMENTAL=${CARGO_INCREMENTAL-unset}: export CARGO_INCREMENTAL=0 for a full run (debug/incremental was 80 GB on 760aad3d)"
+  fi
+}
+
 run_checks() {
+  check_gate_disk
   check_cargo
   check_rustup_target aarch64-unknown-none
   # the board target of yakogl-mali-panthor (check.sh's mali gltest rows)
@@ -812,7 +857,7 @@ case ${1-} in
   --check)
     run_checks
     if [ "$missing_count" -gt 0 ]; then
-      echo "missing: $missing_count tool(s); run $PROG --install"
+      echo "missing: $missing_count item(s); run $PROG --install for tools (it fixes no disk or CARGO_INCREMENTAL line)"
       exit 1
     fi
     exit 0
