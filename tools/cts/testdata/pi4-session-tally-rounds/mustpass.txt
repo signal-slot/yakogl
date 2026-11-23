@@ -1,0 +1,6 @@
+dEQP-GLES3.functional.shaders.g.c1
+dEQP-GLES3.functional.shaders.g.c2
+dEQP-GLES3.functional.shaders.g.c3
+dEQP-GLES3.functional.shaders.g.c4
+dEQP-GLES3.functional.texture.t.c1
+dEQP-GLES3.functional.texture.t.c2
