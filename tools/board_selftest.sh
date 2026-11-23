@@ -1631,7 +1631,7 @@ while IFS='|' read -r board line want; do
     p5=$((p5 + 1))
     d="$S/pi5probes/20261108-1200-p5x$p5-0123abcd"
     mkrun "$d" board="$board" boot=tryboot "name=p5x$p5" probe=0 back=1 t_reboot=100 t_back=290
-    printf '12:00:00 board: PM watchdog resets the SoC ~50 s after boot\n12:00:01 %s\n' "$line" > "$d/console.txt"
+    printf '12:00:00 board: PM watchdog resets the SoC ~50 s after boot\n12:00:01 %s\n' "${line//@@/$'\n'12:00:02 }" > "$d/console.txt"
     check "$board console ending '$line': $want" says "$board" "$d" "$want"
 done <<'EOF'
 pi5|rpi5_hello: counted 10 s in 10003 ms|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_hello_counted
@@ -1645,6 +1645,12 @@ pi5|v3d_triangle: PASS (64x64 read back, 0 of 4096 px wrong: 1440 inside, 2512 o
 pi5|v3d_triangle: FAIL (17 of 4096 px differ by more than 3: 12 inside, 0 outside, 5 edge, first at 20,31; shaders mesa)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_triangle_fail
 pi5|v3d_tfu: PASS (levels 0-6 checked, 0 px wrong: level 0 exact, levels 1-6 (1365 px) within 2 of the 2x2 box (max 1); done by TFUC in 40 us; IOC 0x00086061; HUB_IDENT1 0x00081117 bit 17 0)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:v3d_tfu_pass
 pi5|v3d_tfu: FAIL (timeout: no TFUC and no CS count in 1000000 us, CS 0x00000000 SU 0x00000000 hub INT_STS 0x00000000; HUB_IDENT1 0x00081117)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_tfu_fail
+pi5|v3d_tex: PASS 0 of 4096 px wrong@@v3d_cube: PASS seamless=yes 0 of 54 samples wrong@@rpi5_tex: done (both parts ran)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_tex_pass
+pi5|v3d_tex: FAIL 3 of 4096 px wrong@@v3d_cube: PASS seamless=yes 0 of 54 samples wrong@@rpi5_tex: done (both parts ran)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_tex_fail
+pi5|v3d_tex: PASS 0 of 4096 px wrong@@v3d_cube: FAIL seamless=no 12 of 54 samples wrong@@rpi5_tex: done (both parts ran)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_cube_fail
+pi5|v3d_tex: PASS 0 of 4096 px wrong@@rpi5_tex: done (both parts ran)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:v3d_cube_fail
+pi5|v3d_tex: PASS 0 of 4096 px wrong|rc=4 verdict=no_end_line boot=tryboot row boot_verdict=no_end_line result=none
+pi5|rpi5_tex: FAIL (no frame done)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_tex_fail
 pi5|rpi5_mbox: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_mbox_done
 pi5|rpi5_mbox: FAIL (selftest)|rc=4 verdict=failed boot=tryboot row boot_verdict=complete result=legacy:rpi5_mbox_fail
 pi5|rpi5_dispregs: done (selftest)|rc=0 verdict=done boot=tryboot row boot_verdict=complete result=legacy:rpi5_dispregs_done
