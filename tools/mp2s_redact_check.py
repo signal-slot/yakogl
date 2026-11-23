@@ -41,6 +41,11 @@ FQDN_ALLOW = ("github.com", "kernel.org", "st.com")
 TLDS = ("com net org io dev edu gov mil arpa jp de uk fr cn ru us "
         "local lan internal home corp intranet localdomain").split()
 
+# ST's stock U-Boot env (stm32mp25 default, st-env/) carries exactly one
+# address, "serverip=192.168.1.1": a vendor default, not a farm address.
+# Only that text in that position is allowed; the same address elsewhere
+# and any other serverip value are still findings.
+ST_STOCK_V4 = re.compile(r"(?<![\w.])serverip=192\.168\.1\.1(?![\w.])")
 RE_V4 = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w]|\.\d)")
 RE_V6 = re.compile(r"(?<![\w:.])[0-9A-Fa-f:]{2,}(?![\w])")
 RE_MAC = re.compile(r"(?<![0-9A-Za-z:-])(?:[0-9A-Fa-f]{2}[:-]){5}"
@@ -93,7 +98,10 @@ def find_line(line, envs):
             continue
         if not (a.is_loopback or a.is_unspecified):
             raw.append((m.start(), m.end(), "ipv6"))
+    stock = [m.span() for m in ST_STOCK_V4.finditer(line)]
     for m in RE_V4.finditer(line):
+        if any(a <= m.start() and m.end() <= b for a, b in stock):
+            continue
         try:
             a = ipaddress.IPv4Address(m.group())
         except ValueError:
