@@ -1314,7 +1314,11 @@ fn uniform_precision(decls: &[super::reflect::UniformDecl<'_>], name: &str) -> O
     if member.contains(['.', '[']) {
         return None;
     }
+    /* an array of structs' element (`u_lights[0].position`,
+     * deqp_unitype_vsmat3_light): the array's declaration */
+    let base = base.split_once('[').map_or(base, |(b, _)| b);
     let ty = decls.iter().find(|u| u.name == base)?.ty;
+    let ty = if ty.ends_with(']') { ty.rsplit_once('[').map_or(ty, |(t, _)| t) } else { ty };
     let body = ty.strip_prefix("struct ")?.split_once('{')?.1.strip_suffix('}')?;
     if body.contains('{') {
         return None;
