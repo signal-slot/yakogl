@@ -4,10 +4,14 @@
 #
 # mp2s_selftest_all.sh - one entry point for every DK standalone host selftest.
 # The selftests are found by glob at run time (a newly merged one needs no
-# edit): tools/mp2s_*_selftest.sh, tools/board_stm32mp2_standalone_selftest.sh,
-# tools/efi_varfile_selftest.sh, tools/fwu_metadata_selftest.sh and
-# driver/tools/mp2-standalone/selftest.sh. Missing ones are skipped silently;
-# this runner's own selftest is excluded (no recursion).
+# edit): tools/mp2s_*_selftest.sh and tools/mp2s_*_selftest.py, and these
+# named ones: tools/board_stm32mp2_standalone_selftest.sh,
+# tools/fwu_metadata_selftest.py, tools/testdata/efi_varfile_selftest.sh,
+# tools/testdata/mp2s-env/test_mp2s_env.py (a fixture test, not a *selftest)
+# and driver/tools/mp2-standalone/selftest.sh. A .sh file runs under bash,
+# a .py file under `python3 -I -B` (isolated, no __pycache__ in the tree).
+# Missing ones are skipped silently; this runner's own selftest is excluded
+# (no recursion).
 #
 #   tools/mp2s_selftest_all.sh [--list] [--only REGEX]
 #
@@ -16,7 +20,10 @@
 #
 # One line per test: "ok NAME (Ns)" or "FAIL NAME (exit N)" followed by the
 # last 20 lines of its output. Ends with "mp2s selftests: N ok, M failed";
-# exit 0 only when M is 0. A timed out test fails with exit 124.
+# exit 0 only when M is 0. A timed out test fails with exit 124. Each test
+# runs with TMPDIR set to a scratch directory of this run: a test that needs
+# one (test_mp2s_env.py's regen.sh refuses an unset TMPDIR, never /tmp) gets
+# it even when the caller has none.
 set -uo pipefail
 export LC_ALL=C
 
@@ -32,7 +39,7 @@ while [ $# -gt 0 ]; do
         [ $# -ge 2 ] || { echo "mp2s_selftest_all: --only needs a REGEX" >&2; exit 2; }
         only=$2
         shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "mp2s_selftest_all: unknown argument: $1" >&2; exit 2 ;;
     esac
     shift
@@ -43,9 +50,11 @@ esac
 
 found=()
 for f in "$root"/tools/mp2s_*_selftest.sh \
+         "$root"/tools/mp2s_*_selftest.py \
          "$root"/tools/board_stm32mp2_standalone_selftest.sh \
-         "$root"/tools/efi_varfile_selftest.sh \
-         "$root"/tools/fwu_metadata_selftest.sh \
+         "$root"/tools/fwu_metadata_selftest.py \
+         "$root"/tools/testdata/efi_varfile_selftest.sh \
+         "$root"/tools/testdata/mp2s-env/test_mp2s_env.py \
          "$root"/driver/tools/mp2-standalone/selftest.sh; do
     [ -f "$f" ] || continue
     n=${f#"$root"/}
@@ -63,14 +72,22 @@ if [ "$list" = 1 ]; then
     exit 0
 fi
 
-out=$(mktemp "${TMPDIR:-/tmp}/mp2s_all.XXXXXX") || exit 2
-trap 'rm -f "$out"' EXIT
+# one scratch directory for the run: `out` lives in it, and every selftest
+# runs with TMPDIR pointing at it
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/mp2s_all.XXXXXX") || exit 2
+trap 'rm -rf "$scratch"' EXIT
+out=$scratch/out
+export TMPDIR=$scratch
 ok=0
 bad=0
 for n in "${tests[@]+"${tests[@]}"}"; do
     [ -n "$n" ] || continue
     t0=$SECONDS
-    (cd "$root" && timeout -k 5 "$tmo" bash "$n") >"$out" 2>&1 </dev/null
+    case $n in
+    *.py) interp=(python3 -I -B) ;;
+    *) interp=(bash) ;;
+    esac
+    (cd "$root" && timeout -k 5 "$tmo" "${interp[@]}" "$n") >"$out" 2>&1 </dev/null
     rc=$?
     dt=$((SECONDS - t0))
     if [ "$rc" -eq 0 ]; then
