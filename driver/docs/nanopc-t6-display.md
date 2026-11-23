@@ -9,7 +9,8 @@ a development run): the adopt with the GL window, the Mali-rendered triangle
 on HDMI at 1920x1080 and the image's check PASS, read from the record screen
 (section 4); and the flip, by glmark2's build and shading scenes the same
 day: 2400 flips at two per frame of the display, no GPU reset, the image's
-verdict PASS. The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
+verdict PASS; and the Slint cluster (`examples/slint`), one window shown in
+place, its check PASS. The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
 in the product form: U-Boot starts Zephyr from the eMMC, with no Linux before
 it. This page is the plan the implementation follows: the chain, the routes,
 the mode, the hand-over from the GPU, the proofs, the dump the lead takes and
