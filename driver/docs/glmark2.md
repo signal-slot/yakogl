@@ -122,8 +122,8 @@ carries them) and `glmark2-picture:` (the picture value, below). An entry
 that is unsupported or failed prints `glmark2: entry N <scene>: unsupported`
 or `... failed, why <w>` and has no frame or picture line
 (`log_scene_result` in `driver/samples/zephyr/glmark2/src/main.cpp`).
-At the end, after the score line, one `glmark2-list:` line per entry ("The
-list at the end", below).
+At the end, from the score line on, one block that fits the record screen
+("The list at the end", below).
 
 ```text
 glmark2: upstream 22c527cb... (2023.01), size 800x600, args ""
@@ -138,10 +138,11 @@ glmark2: upstream 22c527cb... (2023.01), size 800x600, args ""
                                   glmark2 Score: <n>
 =======================================================
 glmark2: GL error <k> of <e>: 0x.. in gl.., entry <n>      (one per kept error, at most 8, below)
-glmark2: score <n>: <r> scenes ran, <f> failed, <u> unsupported (33 list entries); window 800x600, shown yes, GPU resets <g>
-glmark2: GL errors raised <e>, draws that sampled an incomplete texture <i> (GL errors recorded <k>)
-glmark2-list:  0 build:use-vbo=false  ran <fps> fps        (one line per entry)
-...
+glmark2: score <n>: <r> scenes ran, <f> failed, <u> unsupported (33 list entries)
+glmark2: 800x600, shown yes, GPU resets <g>, GL errors recorded <k>
+glmark2: GL errors raised <e>, draws that sampled an incomplete texture <i>
+glmark2-list:  0 build:use-vbo=false ran <fps> fps  1 ...  (two entries a line)
+glmark2-list: why 2-4: link: <reason>                      (each reason once)
 yk-record: 594b12.. ...                                   (kind GLMARK2: the verdict)
 glmark2: PASS | glmark2: FAIL rc=<rc>                      (board_finish)
 ```
@@ -153,73 +154,94 @@ NanoPC-T6's) shows the sample's own lines only.
 ### The list at the end (`glmark2-list:`)
 
 A run read from its record screen alone (the NanoPC-T6: no UART wired, the
-screen shows the console's last lines, `driver/docs/nanopc-t6-display.md`,
-"The record screen") needs, per scene, whether it ran and why not, on the
-last screen. Each scene prints six or more lines, so the per-scene lines of
-the default list never fit it. After the score line the sample prints one
-line per entry that reached its set-up, worded by the driver crate
-(`driver/rust/src/board/glmark2_list.rs`, through `yd_gm_list_line`):
+screen shows the console's last lines over the window,
+`driver/docs/nanopc-t6-display.md`, "The record screen") needs, per entry of
+the benchmark list, whether it ran and why not, on the last screen. Each
+scene prints six or more lines, so the per-scene lines never fit it. After
+the score banner the sample prints one block, worded by the driver crate
+(`driver/rust/src/board/glmark2_list.rs`, through `yd_gm_list_block`). The
+Mali's default list as the host harness runs it today
+(`tools/hostharness/glmark2/FINDINGS-mali-allscenes.md`), terrain the entry
+the run ended in:
 
 ```text
-glmark2-list:  0 build:use-vbo=false                            ran 119 fps
-glmark2-list:  2 texture:texture-filter=nearest                 failed, link: a texture coordinate other than a vec2 varying r..
-glmark2-list:  7 shading:shading=phong                          failed, fragment shader: no matching overloaded function found
-glmark2-list: 13 effect2d:kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1; ran 120 fps
-glmark2-list: 17 buffer:interleave=false:update-method=map      unsupported
-glmark2-list: 22 terrain                                        no end (the run stopped in it)
+glmark2: score 119: 15 scenes ran, 17 failed, 0 unsupported (33 list entries)
+glmark2: 800x600, shown yes, GPU resets 0, GL errors recorded 1
+glmark2: GL errors raised 352, draws that sampled an incomplete texture 0
+glmark2-list:  0 build:use-vbo=false     ran 119 fps      1 build:use-vbo=true      ran 120 fps
+glmark2-list:  2 texture:texture-filte.. failed link      3 texture:texture-filte.. failed link
+...
+glmark2-list: 22 terrain                 no end          23 shadow                  failed fragment
+...
+glmark2-list: 32 loop:fragment-uniform.. failed fragment
+glmark2-list: why 2-4: link: a texture coordinate other than a vec2 varying read whole or two cons..
+glmark2-list: why 6 8-11: fragment shader: a constant operation on or to a value that is not a fin..
+glmark2-list: why 7 24: fragment shader: a constant product in a shape Mesa's algebraic rules move..
+glmark2-list: why 12 13: fragment shader: a fragment shader texture look-up beside another in a fo..
+glmark2-list: why 20: vertex shader: control flow (if, a loop, a return before the end) is not low..
+glmark2-list: why 21 23 29 32: fragment shader: arithmetic
 ```
 
-- The entry: its index in the benchmark list, as in the `glmark2: entry N`
-  and `glmark2-mem: entry N` lines.
-- The name: the scene and the fewest of its options (upstream's info string,
-  by name) that tell the entry apart from the other entries of the same
-  scene in the list, an option every such entry sets first
-  (`desktop:effect=blur`, not `blur-radius=5`); none for a scene with one
-  entry. At most 48 characters, a longer one ends in `..`.
-- The result: `ran <n> fps` (the FPS integer of upstream's line), `failed,
-  <step>: <reason>`, `unsupported`, or `no end (the run stopped in it)` for
-  the entry a run ended inside (below). The step is the record's
-  `GLMARK2_WHY_*` in words; the reason is glmark2's first error in the
-  set-up without its own head: a refused shader's log, the linker's log, or
-  the error line. When the whole reason does not fit the line, its last
-  clause does (after its last `: `; for the nested log of the online
-  compiler, the compiler's own words); a clause still too long ends in `..`.
-- A line is at most 128 characters: one row of the record screen at the
-  widest window the T6 shows (1024 pixels, 8 pixels a character), and less
-  than the 158 the screen's ring keeps of a line. Every byte is printable
-  ASCII. The crate's tests prove both for the default list and for names and
-  reasons longer than any line.
+- The score line ends at the list's size; the window, whether it was shown,
+  the GPU resets and the GL errors recorded follow on a line of their own.
+- Two entries a line, in list order. An entry is its index (as in the
+  `glmark2: entry N` and `glmark2-mem: entry N` lines), a name and the
+  result: `ran <n> fps` (the FPS integer of upstream's line), `failed
+  <step>` (vertex, fragment, link, file, other), `unsupported`, or `no end`
+  (the entry a run ended inside, below). The index is the entry's identity;
+  the name is a help, cut to its cell: the scene and the fewest of its
+  options that tell it from the other entries of the same scene (an option
+  every such entry sets first: `desktop:effect=blur`, not `blur-radius=5`).
+- Then each distinct failure reason once: the entries that share it (a run
+  of three or more as a range), the step in words and glmark2's first error
+  in the set-up without its own head (a refused shader's log, the linker's
+  log, or the error line). When the whole reason does not fit the line, its
+  last clause does (after its last `: `; for the online compiler's nested
+  log, the compiler's own words); still too long, it ends in `..`.
+- As many reasons as the rows left allow; when some are not shown, the last
+  line says `<n> more reasons not shown`. A list too long for its rows shows
+  its last entries under `<n> earlier entries not shown`.
+- A pass with unsupported entries ends the block with the "no scene failed;
+  N unsupported" line.
+
+**Why it fits.** The bound is the record screen's, named once in the crate:
+over the benchmark's 800x600 window (`WINDOW_W`, `WINDOW_H`) the screen
+draws 37 text rows of 100 characters (`record_screen::cols`, `rows`), the
+first the head and the last the record, so 35 for console lines
+(`record_screen::console_rows`, which the screen's own test ties to
+`Ring::draw`). Every line of the block is at most 100 characters, so none
+wraps. After the block `board_finish` prints at most 7 lines (the sample's
+record, an APP record when the GPU was reset, `shaderc: keep`, `yakogl:
+draws refused`, PASS or FAIL, `board: holding`, `board: screen state` on the
+T6), which leaves the block 28 lines: the three score lines, 24 for the list
+and its reasons, the pass line. The default list takes 17 rows of entries,
+so 7 rows of reasons. The crate's test `the_worst_run_fits_the_record_screen`
+holds the rule for the worst run: all 33 entries failed with reasons of
+their own (6 shown, then "27 more reasons not shown"), unsupported entries
+and an entry with no end, a pass, every counter at its largest, the
+`board_finish` lines at their largest: every line at most 100 characters
+and printable ASCII, the block with `board_finish`'s lines at most 35 lines,
+and with the eight `glmark2: GL error <k> of <n>` lines before the score
+line (printed before it for this reason) inside the ring's 47. The form is
+the same for every window: on a wider one the lines are shorter than its
+rows.
 
 The readers of the console (`tools/cts/glmark2-ms.py`, `common-tally.py`,
 `mp2-glmark2-tally.py`, `x2-scene-table.py`, `pr-regress-compare.py`, the
-end lines of `tools/board.sh`) match none of these lines: no `[scene]`
-form, no `FPS:`, no `glmark2: ` prefix.
+end lines of `tools/board.sh`) match no list line: no `[scene]` form, no
+`FPS:`, no `glmark2: ` prefix. `mp2-glmark2-tally.py` reads the score line
+in both forms and the window from its own line.
 
-**What fits the last screen.** From the score line on, a run prints: the
-score line, the GL errors line, the 33 list lines, the record line, and
-`board_finish`'s five (`shaderc: keep`, `yakogl: draws refused`, PASS or
-FAIL, `board: holding`, `board: screen state` on the T6): 41 lines, 42 with
-the "no scene failed; N unsupported" line of a pass. The `glmark2: GL error
-<k> of <n>` lines (up to 8) come before the score line for this reason: after
-it they would make up to 50. The screen's ring keeps 47 lines. A window of
-1024x768 shows 46 rows of 128 characters under its head row and over the
-record's row, so the 41 fit. **An 800x600 window shows 35 rows of 100
-characters**, and the score line takes two of them: the list's first lines
-are not on the screen there. A screen-only run of the default list on the
-T6 is therefore built with `-DCONFIG_GLMARK2_SIZE="1024x768"` (the largest
-window the T6 shows); its on-screen score is the display's flip rule anyway
-(section 4).
-
-**A run that does not end.** The sample keeps the list as it stands as text
-(each entry joins it at its set-up as one with no end), and
-`board_last_lines()` (`yakogl_board.h`) prints it. The T6 board layer calls
-it from its fatal error handler, under Zephyr's register lines and the
-`board: fatal error` line, and when its watchdog feeder stops (a hang, the
-lifetime's end), right before it draws the record screen; `main()` calls it
-after a C++ exception. The list so far is then on the screen with the entry
-that was running last, `no end`. Before this the screen after a fatal error
-held the register lines and the last scene's own lines only: the ran scenes'
-FPS (upstream's lines) never reach `printk`.
+**A run that does not end.** The sample keeps the list part as it stands
+as text (each entry joins it at its set-up with no end yet), and
+`board_last_lines()` (`yakogl_board.h`) prints it in the same form. The T6
+board layer calls it from its fatal error handler, under Zephyr's register
+lines and the `board: fatal error` line, and when its watchdog feeder stops
+(a hang, the lifetime's end), right before it draws the record screen;
+`main()` calls it after a C++ exception. The list part has at most 24
+lines, so the screen shows it with the lines before it. Before this the
+screen after a fatal error held the register lines and the last scene's own
+lines only: the ran scenes' FPS (upstream's lines) never reach `printk`.
 
 ## 2. The port
 
@@ -714,10 +736,13 @@ AXE-1-16M) are left out.
 
 ## 4. The NanoPC-T6 (Rockchip RK3588, Mali-G610, back end `gpu-mali`, issue #20)
 
-This board runs Linux (Armbian 26.8.10 trixie, kernel 6.18.55-current-rockchip64,
-the panthor driver), not Zephyr: glmark2-es2 is a Linux program here, built on
-the host and linked against YakoGL's own GL/EGL pair, not the board's glvnd
-and Mesa. `tools/cts/mali-glmark2-build.sh` makes it:
+The board runs glmark2 two ways. This sample's Zephyr image
+(`boards/nanopc_t6.conf`) runs on its HDMI screen and is read from the record
+screen: build and shading pass there; the run of the default list is open
+(issue #11123). On the board's Linux (Armbian 26.8.10 trixie, kernel
+6.18.55-current-rockchip64, the panthor driver) glmark2-es2 is a Linux
+program, built on the host and linked against YakoGL's own GL/EGL pair, not
+the board's glvnd and Mesa. `tools/cts/mali-glmark2-build.sh` makes it:
 
 ```
 tools/cts/mali-glmark2-build.sh [--dev] [--dry-run] [--gles-lib DIR] <outdir>

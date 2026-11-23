@@ -846,11 +846,13 @@ buffer the VOP already scans, so it writes no register. Three ends draw it:
 
 At the last two the sample's own last lines (`board_last_lines()`,
 `yakogl_board.h`) are printed first, so they are on the screen: glmark2's
-list of the entries so far (`driver/docs/glmark2.md`, "The list at the
-end").
+list of the entries so far, two a line, and their failure reasons, at most
+24 lines (`driver/docs/glmark2.md`, "The list at the end").
 
 The window is 1024 pixels wide at most, so a row holds 128 characters of the
-8x16 font and a longer line continues on the next row.
+8x16 font and a longer line continues on the next row. glmark2's 800x600
+window holds 37 rows of 100: the head, 35 console lines and the record
+(`record_screen::cols`, `console_rows`).
 
 ## 5. Proof without a camera
 

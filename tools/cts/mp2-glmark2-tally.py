@@ -22,6 +22,9 @@ driver/samples/zephyr/glmark2/src/main.cpp:
   glmark2 Score: N                          main.cpp:1646
   glmark2: score N: R scenes ran, F failed, U unsupported (L list entries);
       window WxH..., shown yes|no, GPU resets G           main.cpp:1653
+      or, since the end block fits the record screen, the score line ends
+      at "(L list entries)" and the next line is
+  glmark2: WxH[ off-screen], shown yes|no, GPU resets G, GL errors recorded N
   glmark2: GL errors raised N, draws that sampled an incomplete texture M
                                                            main.cpp:1665
 
@@ -48,8 +51,11 @@ MEM = re.compile(r"^\s*glmark2-mem: entry (\d+) (before setup|end):")
 ENTRY = re.compile(r"^\s*glmark2: entry (\d+) (.*?): (unsupported|failed, why (\d+))\s*$")
 SCORE_LOG = re.compile(r"^\s*glmark2 Score:\s*(\d+)\s*$")
 SCORE = re.compile(r"^\s*glmark2: score (\d+): (\d+) scenes ran, (\d+) failed, (\d+) unsupported "
-                   r"\((\d+) list entries\); window (\d+)x(\d+)(?: off-screen)?, shown (yes|no), "
-                   r"GPU resets (\d+)")
+                   r"\((\d+) list entries\)(?:; window (\d+)x(\d+)(?: off-screen)?, shown (yes|no), "
+                   r"GPU resets (\d+))?")
+# the second line of the end block's score (driver/docs/glmark2.md, "The list
+# at the end"): the window, whether it was shown, the GPU resets
+SHOWN = re.compile(r"^\s*glmark2: (\d+)x(\d+)(?: off-screen)?, shown (yes|no), GPU resets (\d+)")
 GLERR = re.compile(r"^\s*glmark2: GL errors raised (\d+), draws that sampled an incomplete "
                    r"texture (\d+)")
 
@@ -107,11 +113,17 @@ def tally(text):
             continue
         m = SCORE.match(line)
         if m:
-            g = [int(x) if x.isdigit() else x for x in m.groups()]
+            g = [int(x) if x and x.isdigit() else x for x in m.groups()]
             res["score"] = g[0]
             res["summary"] = {"ran": g[1], "failed": g[2], "unsupported": g[3], "entries": g[4],
-                              "window": "%dx%d" % (g[5], g[6]), "shown": g[7] == "yes",
-                              "gpu_resets": g[8]}
+                              "window": None, "shown": None, "gpu_resets": None}
+            if g[5] is not None:
+                res["summary"].update(window="%dx%d" % (g[5], g[6]), shown=g[7] == "yes", gpu_resets=g[8])
+            continue
+        m = SHOWN.match(line)
+        if m and res["summary"]:
+            g = m.groups()
+            res["summary"].update(window="%sx%s" % (g[0], g[1]), shown=g[2] == "yes", gpu_resets=int(g[3]))
             continue
         m = GLERR.match(line)
         if m:
@@ -166,7 +178,7 @@ def render(t):
         "complete" if t["complete"] else "TRUNCATED (no 'glmark2: score' line)",
         "absent" if t["score"] is None else t["score"],
         ", ".join("%d %s" % (v, k) for k, v in sorted(t["counts"].items())) or "no scenes"))
-    if t["summary"]:
+    if t["summary"] and t["summary"]["window"] is not None:
         out.append("window %s, shown %s, GPU resets %d" % (
             t["summary"]["window"], "yes" if t["summary"]["shown"] else "no",
             t["summary"]["gpu_resets"]))

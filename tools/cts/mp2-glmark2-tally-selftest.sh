@@ -46,6 +46,21 @@ if printf '%s' "$j" | python3 -I -c 'import json,sys; json.load(sys.stdin)'; the
 ) > "$T/ok.log"
 run "$T/ok.log" >/dev/null; rc "clean run exits 0" 0 $?
 
+# the end block's two score lines and its list lines (driver/docs/glmark2.md,
+# "The list at the end")
+( scene 0 build 'FPS: 100 FrameTime: 10.000 ms'
+  echo '                                  glmark2 Score: 100 '
+  echo 'glmark2: score 100: 1 scenes ran, 0 failed, 0 unsupported (1 list entries)'
+  echo 'glmark2: 1280x720, shown yes, GPU resets 2, GL errors recorded 0'
+  echo 'glmark2: GL errors raised 0, draws that sampled an incomplete texture 0'
+  echo 'glmark2-list: 0 build                          ran 100 fps'
+) > "$T/block.log"
+out=$(run "$T/block.log"); r=$?
+rc "the end block's run exits 0" 0 "$r"
+want "the block's score" "score: 100" "$out"
+want "the block's window line" "window 1280x720, shown yes, GPU resets 2" "$out"
+want "the list line is no scene" "1 ok" "$out"
+
 ( scene 0 build 'FPS: 100 FrameTime: 10.000 ms'
   echo 'glmark2-mem: entry 1 before setup: used 1'
 ) > "$T/hung.log"

@@ -172,18 +172,23 @@ struct yd_gm_scene {
 
 int yd_record_gm_page_words(uint32_t tag, const struct yd_gm_scene *s, uint32_t n, uint32_t out[3]);
 
-/* The glmark2 sample's list at a run's end (board::glmark2_list): one
- * "glmark2-list: <entry> <name> <result>" line per entry that reached its
- * set-up, the name the scene's and the options that tell its entries apart.
- * yd_gm_list_line writes line i of the n entries at list into out (cap
- * bytes, no newline, no NUL) and returns its length, at most
- * YD_GM_LIST_LINE_MAX; 0 when i >= n; -EINVAL for a null pointer or more
- * than YD_GM_LIST_MAX entries. */
+/* The block that ends a glmark2 run (board::glmark2_list): the score lines,
+ * then the list, two entries a line ("glmark2-list: <entry> <name> <result>"),
+ * then each distinct failure reason once with the entries that share it. It
+ * fits the record screen over the benchmark's 800x600 window: lines of at
+ * most YD_GM_LIST_COLS characters, at most YD_GM_BLOCK_ROWS of them, the
+ * list part alone (end NULL: a run that ends inside an entry) at most
+ * YD_GM_LIST_ROWS. yd_gm_list_block writes line k into out (cap bytes, no
+ * newline, no NUL) and returns its length; 0 past the last line; -EINVAL for
+ * a null list or out, an info or error null with a length, or more than
+ * YD_GM_LIST_MAX entries. */
 #define YD_GM_LIST_RAN         0 /* fps: upstream's FPS integer */
 #define YD_GM_LIST_FAILED      1 /* why, and glmark2's error lines */
 #define YD_GM_LIST_UNSUPPORTED 2
 #define YD_GM_LIST_NO_END      3 /* the run ended inside the entry */
-#define YD_GM_LIST_LINE_MAX    128
+#define YD_GM_LIST_COLS        100
+#define YD_GM_LIST_ROWS        24
+#define YD_GM_BLOCK_ROWS       28
 #define YD_GM_LIST_MAX         128
 
 struct yd_gm_list_scene {
@@ -197,7 +202,19 @@ struct yd_gm_list_scene {
 	uint32_t why;      /* YK_RECORD_GLMARK2_WHY_* */
 };
 
-int yd_gm_list_line(const struct yd_gm_list_scene *list, size_t n, size_t i, char *out, size_t cap);
+struct yd_gm_end {
+	uint32_t score, ran, failed, unsupported;
+	uint32_t listed;     /* the benchmark list's entries */
+	uint32_t w, h;
+	uint32_t offscreen;  /* 1: --off-screen */
+	uint32_t shown;      /* 1: the window was shown */
+	uint32_t gpu_resets;
+	uint32_t gl_errors, gl_recorded, incomplete_draws; /* the GL core's counters */
+	uint32_t pass;       /* 1: no scene failed and the score is not 0 */
+};
+
+int yd_gm_list_block(const struct yd_gm_end *end, const struct yd_gm_list_scene *list, size_t n,
+		     size_t k, char *out, size_t cap);
 
 /* kind DISPLAY's w1..w3 (record.rs display_words, Display): the i.MX8MP
  * display chain while it scans a window. */
@@ -2210,6 +2227,9 @@ _Static_assert(sizeof(struct yd_gm_list_scene) == 48, "struct yd_gm_list_scene")
 _Static_assert(offsetof(struct yd_gm_list_scene, error) == 16, "yd_gm_list_scene.error");
 _Static_assert(offsetof(struct yd_gm_list_scene, entry) == 32, "yd_gm_list_scene.entry");
 _Static_assert(offsetof(struct yd_gm_list_scene, why) == 44, "yd_gm_list_scene.why");
+_Static_assert(sizeof(struct yd_gm_end) == 56, "struct yd_gm_end");
+_Static_assert(offsetof(struct yd_gm_end, offscreen) == 28, "yd_gm_end.offscreen");
+_Static_assert(offsetof(struct yd_gm_end, pass) == 52, "yd_gm_end.pass");
 _Static_assert(sizeof(struct yd_record_display) == 32, "struct yd_record_display");
 _Static_assert(offsetof(struct yd_record_display, irq_now) == 12, "yd_record_display.irq_now");
 _Static_assert(offsetof(struct yd_record_display, pitch) == 28, "yd_record_display.pitch");

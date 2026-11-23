@@ -177,23 +177,31 @@ const _: () = assert!(offset_of!(GmListScene, error) == 16);
 const _: () = assert!(offset_of!(GmListScene, entry) == 32);
 const _: () = assert!(offset_of!(GmListScene, why) == 44);
 
-/// The longest list [`yd_gm_list_line`] takes: every entry is copied to the
-/// stack, and the screen shows fewer lines than this.
+const _: () = assert!(size_of::<glmark2_list::End>() == 56);
+const _: () = assert!(offset_of!(glmark2_list::End, offscreen) == 28);
+const _: () = assert!(offset_of!(glmark2_list::End, pass) == 52);
+
+/// The longest list [`yd_gm_list_block`] takes: every entry is copied to the
+/// stack, and the screen shows fewer entries than this.
 pub const GM_LIST_MAX: usize = 128;
 
-/// Line `i` of the `n` entries at `list` ([`glmark2_list::line`]) into `out`
-/// (`cap` bytes, no newline, no NUL): its length, at most
-/// [`glmark2_list::LINE_MAX`]; 0 when `i` is not below `n`; -EINVAL for a null
-/// pointer or more than [`GM_LIST_MAX`] entries.
+/// Line `k` of the block that ends a glmark2 run ([`glmark2_list::block_line`];
+/// `end` null: the list part alone) for the `n` entries at `list`, into
+/// `out` (`cap` bytes, no newline, no NUL): its length, at most
+/// [`glmark2_list::COLS`]; 0 past the last line; -EINVAL for a null `list` or
+/// `out`, an `info` or `error` null with a length, or more than
+/// [`GM_LIST_MAX`] entries.
 ///
 /// # Safety
-/// `list` is readable for `n` entries, each `info` and `error` for its length
-/// (or null with length 0), and `out` writable for `cap` bytes.
+/// `end` is null or readable; `list` is readable for `n` entries, each `info`
+/// and `error` for its length (or null with length 0); `out` is writable for
+/// `cap` bytes.
 #[no_mangle]
-pub unsafe extern "C" fn yd_gm_list_line(
+pub unsafe extern "C" fn yd_gm_list_block(
+    end: *const glmark2_list::End,
     list: *const GmListScene,
     n: usize,
-    i: usize,
+    k: usize,
     out: *mut u8,
     cap: usize,
 ) -> i32 {
@@ -210,17 +218,17 @@ pub unsafe extern "C" fn yd_gm_list_line(
     };
     let empty = glmark2_list::Scene { info: &[], error: &[], entry: 0, result: 0, fps: 0, why: 0 };
     let mut scenes = [empty; GM_LIST_MAX];
-    for (k, s) in scenes.iter_mut().enumerate().take(n) {
+    for (j, s) in scenes.iter_mut().enumerate().take(n) {
         // SAFETY: the caller's contract.
-        let c = unsafe { *list.add(k) };
+        let c = unsafe { *list.add(j) };
         let (Some(info), Some(error)) = (bytes(c.info, c.info_len), bytes(c.error, c.error_len)) else {
             return -EINVAL;
         };
         *s = glmark2_list::Scene { info, error, entry: c.entry, result: c.result, fps: c.fps, why: c.why };
     }
     // SAFETY: the caller's contract.
-    let out = unsafe { core::slice::from_raw_parts_mut(out, cap) };
-    glmark2_list::line(&scenes[..n], i, out) as i32
+    let (end, out) = unsafe { (end.as_ref(), core::slice::from_raw_parts_mut(out, cap)) };
+    glmark2_list::block_line(end, &scenes[..n], k, out) as i32
 }
 
 // ---- kind DISPLAY (driver/zephyr/lib/board/imx8mp, board_finish_record) ----
@@ -545,10 +553,10 @@ mod tests {
         assert_eq!(out, record::glmark2_words(&o));
     }
 
-    /// The list's entry point: the lines of `glmark2_list::line`, and what it
-    /// cannot read is refused.
+    /// The block's entry point: the lines of `glmark2_list::block_line`, and
+    /// what it cannot read is refused.
     #[test]
-    fn gm_list_entry_point_is_the_list_function() {
+    fn gm_list_entry_point_is_the_block_function() {
         let (a, b, e) = (b"[build] <use-vbo=false>", b"[build] <use-vbo=true>", b"Error: Could not open 3ds file 'x'");
         let s = |info: &[u8], error: &[u8], entry, result| GmListScene {
             info: info.as_ptr(),
@@ -561,23 +569,24 @@ mod tests {
             why: record::GLMARK2_WHY_FILE,
         };
         let mut list = [s(a, b"", 0, glmark2_list::RAN), s(b, e, 1, glmark2_list::FAILED)];
+        let end = glmark2_list::End { score: 61, ran: 1, failed: 1, listed: 2, w: 800, h: 600, ..Default::default() };
         let mut out = [0u8; 160];
-        let line = |list: &[GmListScene], i, out: &mut [u8]| unsafe {
-            yd_gm_list_line(list.as_ptr(), list.len(), i, out.as_mut_ptr(), out.len())
+        let line = |end: *const glmark2_list::End, list: &[GmListScene], k, out: &mut [u8]| unsafe {
+            yd_gm_list_block(end, list.as_ptr(), list.len(), k, out.as_mut_ptr(), out.len())
         };
-        let n = line(&list, 1, &mut out);
-        assert_eq!(
-            &out[..n as usize],
-            b"glmark2-list: 1 build:use-vbo=true  failed, a file: Could not open 3ds file 'x'"
-        );
-        assert_eq!(line(&list, 2, &mut out), 0);
+        let n = line(&end, &list, 0, &mut out);
+        assert_eq!(&out[..n as usize], b"glmark2: score 61: 1 scenes ran, 1 failed, 0 unsupported (2 list entries)");
+        let n = line(core::ptr::null(), &list, 1, &mut out);
+        assert_eq!(&out[..n as usize], b"glmark2-list: why 1: a file: Could not open 3ds file 'x'");
+        assert_eq!(line(core::ptr::null(), &list, 2, &mut out), 0, "past the last line");
         list[0].error = core::ptr::null();
-        assert_eq!(line(&list, 0, &mut out), 46, "a null error of no bytes is none");
+        assert!(line(core::ptr::null(), &list, 0, &mut out) > 0, "a null error of no bytes is none");
         list[0].error_len = 1;
-        assert_eq!(line(&list, 0, &mut out), -EINVAL);
+        assert_eq!(line(core::ptr::null(), &list, 0, &mut out), -EINVAL);
         let many = [list[1]; GM_LIST_MAX + 1];
-        assert_eq!(line(&many, 0, &mut out), -EINVAL);
-        assert_eq!(unsafe { yd_gm_list_line(core::ptr::null(), 0, 0, out.as_mut_ptr(), 1) }, -EINVAL);
+        assert_eq!(line(core::ptr::null(), &many, 0, &mut out), -EINVAL);
+        let p = out.as_mut_ptr();
+        assert_eq!(unsafe { yd_gm_list_block(&end, core::ptr::null(), 0, 0, p, 1) }, -EINVAL);
         // the C header's numbers
         const H: &str = include_str!("../../include/yakogl_drivers.h");
         let def = |name: &str| -> usize {
@@ -589,7 +598,9 @@ mod tests {
             ("YD_GM_LIST_FAILED", glmark2_list::FAILED as usize),
             ("YD_GM_LIST_UNSUPPORTED", glmark2_list::UNSUPPORTED as usize),
             ("YD_GM_LIST_NO_END", glmark2_list::NO_END as usize),
-            ("YD_GM_LIST_LINE_MAX", glmark2_list::LINE_MAX),
+            ("YD_GM_LIST_COLS", glmark2_list::COLS),
+            ("YD_GM_LIST_ROWS", glmark2_list::LIST_ROWS),
+            ("YD_GM_BLOCK_ROWS", glmark2_list::BLOCK_ROWS),
             ("YD_GM_LIST_MAX", GM_LIST_MAX),
         ] {
             assert_eq!(def(name), v, "{name}");
