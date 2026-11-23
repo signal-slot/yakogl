@@ -8766,10 +8766,14 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
      * q.x no one reads), the earlier slot first where they are equal (the
      * conversions of a vector, in lane order, nir_lower_alu_width) */
     let mut first_read = [u32::MAX; MAX_VARYINGS];
-    /* (a flat lane kept, an interpolated lane kept): the link packs flat
-     * lanes in slots of their own, a layout no reference draws beside
-     * interpolated ones (nir.rs refuses the pair's vertex shader too) */
-    let (mut flat, mut smooth) = (false, false);
+    /* each kept lane's class in scalar slot order, `(location, lane,
+     * convergent)` (the vertex shader's uniform-only lanes,
+     * [`super::link::VaryingConsts::flat`]), which [`super::nir::fill`]
+     * packs as the vertex shader does; and whether a declared `flat` lane
+     * stands beside an interpolated one, a layout no reference draws */
+    let mut classes = [(0u8, 0u8, false); 4 * MAX_VARYINGS];
+    let mut nclasses = 0;
+    let (mut declared_flat, mut smooth) = (false, false);
     /* the lanes laid out, by the first vertex lane of their value
      * (`deduplicate_outputs`, nir_opt_varyings.c:3253-3420, in scalar slot
      * order: the first kept, the others read from it; fsload_dup_swz's
@@ -8810,11 +8814,14 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
                 .inputs
                 .iter()
                 .any(|d| d.kind == IoKind::Varying && d.location == at.location && d.interp == ir::INTERP_FLAT);
-            if declared || f.prec.consts.flat(at.location, comp) {
-                flat = true;
+            let convergent = f.prec.consts.flat(at.location, comp);
+            if declared {
+                declared_flat = true;
             } else {
                 smooth = true;
             }
+            *classes.get_mut(nclasses).ok_or(MaliError::VaryingLocation)? = (at.location, comp, convergent);
+            nclasses += 1;
             let (slot, lane) = ((s / 4) as usize, (s % 4) as u8);
             *held.get_mut(slot).ok_or(MaliError::VaryingLocation)? |= 1 << lane;
             *placed.get_mut(nplaced).ok_or(MaliError::VaryingLocation)? = (class, slot as u8, lane);
@@ -8830,9 +8837,15 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
         f.reads[f.nreads] = FsRead { location: at.location, mask: keep, offset: 4 * first };
         f.nreads += 1;
     }
-    if flat && smooth {
+    if declared_flat && smooth {
         return Err(MaliError::VaryingNotFromAttribute);
     }
+    /* the scalar slots from which the lanes are flat: every one with no
+     * interpolated lane, else those past the interpolated vec4s the
+     * convergent lanes fill ([`super::nir::fill`]) */
+    let interp = classes[..nclasses].iter().filter(|l| !l.2).count();
+    let filled = super::nir::fill(&classes[..nclasses])?.count_ones() as usize;
+    let flat_from = if declared_flat || interp == 0 { 0 } else { interp + filled };
     /* a slot is loaded when the program reads a lane of it, at the width
      * the link left it (`nir_unlower_io_to_vars` makes one variable of the
      * slot's lanes, loaded whole; `pan_nir_lower_fs_inputs` loads
@@ -8847,7 +8860,7 @@ pub fn layout(f: &mut Fs<'_>, m: &Module<'_>, order: Option<super::link::Varying
             continue;
         }
         let mut v = FsVarying::new(slot as u8, held[slot].count_ones() as u8, 16 * slot as u16, first_read[slot]);
-        v.flat = flat;
+        v.flat = 4 * slot >= flat_from && (declared_flat || nclasses > interp);
         v.whole = used[slot] != held[slot];
         slots[nslots] = v;
         nslots += 1;
