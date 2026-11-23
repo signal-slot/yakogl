@@ -45,6 +45,30 @@ use yakogl::shaderc::online::v3d::verify71::{registers_fit_threads71, verify71};
 use yakogl::shaderc::online::{lower, store};
 
 static GEN_COUNTS_71: &str = include_str!("../tools/shaders/deqp_es2_gen_counts_71.tsv");
+static KNOWN_71: &str = include_str!("../tools/shaders/known-uncompilable-v3d71-deqp-gen.txt");
+
+/// The pins, from the harvest of CTS 93bca01 at tip da11eb6b
+/// (`tools/cts/deqp-es2-programs.sh`): the programs, those the 4.2 back end
+/// compiled (index.tsv), those the 7.1 back end compiled, and those it
+/// refused. A harvest of another CTS commit moves them: re-derive and change
+/// them with the corpus.
+const PROGRAMS: usize = 10599;
+const COMPILED_42: usize = 9723;
+const COMPILED_71: usize = 9720;
+const REFUSED_71: usize = 879;
+/// Programs 4.2 refused and 7.1 compiles. Each 7.1-only refusal (4.2
+/// compiled, 7.1 refuses) is in `known-uncompilable-v3d71-deqp-gen.txt`.
+const COMPILED_71_ONLY: usize = 3;
+
+/// The list's entries: `<program id>: <message>`; `#` lines are reasons.
+fn listed() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
+    for l in KNOWN_71.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        let (k, v) = l.split_once(": ").unwrap_or_else(|| panic!("a list line without `: `: {l}"));
+        assert!(m.insert(k.to_string(), v.to_string()).is_none(), "{k} listed twice");
+    }
+    m
+}
 
 /// The scratch region is one per process: the tests take turns
 /// (tests/v3d71_online_corpus.rs's idiom).
@@ -130,6 +154,8 @@ fn every_harvested_deqp_program_compiles_at_7_1_or_is_named() {
 
     let mut refused: BTreeMap<String, String> = BTreeMap::new();
     let mut only_71: BTreeMap<String, String> = BTreeMap::new();
+    let mut ids: BTreeMap<String, String> = BTreeMap::new(); // program id to refusal
+    let mut gained = 0usize; // 4.2 refused, 7.1 compiled
     let mut compiled = 0usize;
     let mut both = 0usize;
     let (mut ours, mut mesa_n) = ([0usize; 2], [0usize; 2]);
@@ -140,6 +166,7 @@ fn every_harvested_deqp_program_compiles_at_7_1_or_is_named() {
         match compile(id, &vs, &fs) {
             Ok(n) => {
                 compiled += 1;
+                gained += !*c42 as usize;
                 /* Mesa's rows for this program's two stages, when it has them */
                 let m = [mesa.get(&format!("{id}\tfs")).copied(), mesa.get(&format!("{id}\tvs")).copied()];
                 if let (Some(m0), Some(m1)) = (m[0], m[1]) {
@@ -152,6 +179,7 @@ fn every_harvested_deqp_program_compiles_at_7_1_or_is_named() {
             }
             Err(e) => {
                 let key = format!("{id} {case}");
+                ids.insert(id.clone(), e.clone());
                 if *c42 {
                     only_71.insert(key.clone(), e.clone());
                 }
@@ -179,5 +207,26 @@ fn every_harvested_deqp_program_compiles_at_7_1_or_is_named() {
     by.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
     for (m, n) in &by {
         println!("  {n:>4} x {m}");
+    }
+
+    /* the pins */
+    assert_eq!(rows.len(), PROGRAMS, "programs");
+    assert_eq!(n_42, COMPILED_42, "compiled at 4.2");
+    assert_eq!(compiled, COMPILED_71, "compiled at 7.1");
+    assert_eq!(refused.len(), REFUSED_71, "refused at 7.1");
+    assert_eq!(gained, COMPILED_71_ONLY, "compiled at 7.1 only");
+
+    /* every program 4.2 compiles compiles at 7.1 or is listed with its exact
+     * message; a listed program that compiles now (or refuses with another
+     * message, or 4.2 refuses too) fails */
+    let known = listed();
+    for (k, m) in &only_71 {
+        let id = k.split(' ').next().unwrap();
+        assert_eq!(known.get(id), Some(m), "7.1-only refusal {k} is not listed with this message");
+    }
+    for (id, m) in &known {
+        assert_eq!(ids.get(id), Some(m), "{id} is listed but no longer refuses with that message");
+        let p = format!("{id} ");
+        assert!(only_71.keys().any(|k| k.starts_with(&p)), "{id} is listed but 4.2 refuses it too");
     }
 }
