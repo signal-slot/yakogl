@@ -89,6 +89,12 @@
 #                     library's default). The arm is named in the build and
 #                     record directories (...-n3d0, ...-n3d1) and in
 #                     <records>/stage-notes.txt, so two arms never mix.
+#   DEQP_PVR_INSTANCE_DIVISOR  0|1: -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y/n for
+#                     every image (zephyr/Kconfig, the crate's
+#                     pvr-instance-divisor feature; unset: n, the software
+#                     path). Like native 3D, the arm is named in the build and
+#                     record directories (...-idiv1) and in stage-notes.txt;
+#                     with both arms set the suffix is ...-n3d1-idiv1.
 #   BOARD_STAGE_DRY_RUN=1  print the commands, the rows and the directories,
 #                     build and run nothing (needs no deps layout or board)
 #
@@ -202,13 +208,19 @@ if [ "$what" = gles3 ] && [ "$board" = am62p ]; then
     0 | 1) arm=-n3d$DEQP_PVR_NATIVE_3D ;;
     *) die "DEQP_PVR_NATIVE_3D must be 0 or 1, not '$DEQP_PVR_NATIVE_3D'" ;;
     esac
+    case "${DEQP_PVR_INSTANCE_DIVISOR:-}" in
+    '') ;;
+    0) arm=$arm-idiv0 ;;
+    1) arm=$arm-idiv1 ;;
+    *) die "DEQP_PVR_INSTANCE_DIVISOR must be 0 or 1, not '$DEQP_PVR_INSTANCE_DIVISOR'" ;;
+    esac
     G3_BUILD=build/deqp/am62p-gles3-$H8$arm
     G3_REC=records/am62p/deqp-gles3-$H8$arm
     G3_TREE=tools/cts/am62p-gles3-tree.txt
     if [ "${BOARD_STAGE_DRY_RUN:-}" = 1 ]; then
         echo "board-stage.sh: am62p gles3 at $H8 (dry run: nothing is built or run)"
-        echo "native 3D: ${DEQP_PVR_NATIVE_3D:-unset (-1: library default)}  rows: ${TREE_ROWS:-all}"
-        echo "board-stage.sh\$ DEQP_MODULE=gles3 DEQP_PVR_NATIVE_3D=${DEQP_PVR_NATIVE_3D:-} DEQP_WORK=${GLES3_WORK:-<DEQP_WORK>-gles3} tools/cts/am62p-deqp-images.sh $G3_TREE $G3_BUILD $H8"
+        echo "native 3D: ${DEQP_PVR_NATIVE_3D:-unset (-1: library default)}  instance divisors: ${DEQP_PVR_INSTANCE_DIVISOR:-unset (n: software path)}  rows: ${TREE_ROWS:-all}"
+        echo "board-stage.sh\$ DEQP_MODULE=gles3 DEQP_PVR_NATIVE_3D=${DEQP_PVR_NATIVE_3D:-} DEQP_PVR_INSTANCE_DIVISOR=${DEQP_PVR_INSTANCE_DIVISOR:-} DEQP_WORK=${GLES3_WORK:-<DEQP_WORK>-gles3} tools/cts/am62p-deqp-images.sh $G3_TREE $G3_BUILD $H8"
         tools/cts/am62p-deqp-images.sh --dry-run "$G3_TREE" "$G3_BUILD" "$H8" | sed 's/^/  /'
         echo "board-stage.sh\$ TREE_IMAGE_DIR=$G3_BUILD TREE_TAG=$H8 tools/board.sh am62p tree $G3_TREE $G3_REC"
         exit 0
@@ -452,6 +464,7 @@ gles3)
     {
         echo "commit $H8 ($(git describe --always --dirty 2>/dev/null || echo unknown))"
         echo "DEQP_PVR_NATIVE_3D=${DEQP_PVR_NATIVE_3D:-unset (-1: library default)}"
+        echo "DEQP_PVR_INSTANCE_DIVISOR=${DEQP_PVR_INSTANCE_DIVISOR:-unset (n: software path)}"
         echo "TREE_ROWS=${TREE_ROWS:-all}"
         echo "gles3 stage 1: $G3_WORK"
     } >> "$G3_REC/stage-notes.txt"

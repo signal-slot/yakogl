@@ -5,6 +5,7 @@
 
   tools/cts/check-deqp-images.py                  the recipes in this checkout
   tools/cts/check-deqp-images.py --config <.config> [--ms4] [--gles3]
+                                  [--pvr-instance-divisor]
                                                   one built image's Kconfig result
   tools/cts/check-deqp-images.py --self-test
 
@@ -40,6 +41,13 @@ on the result of Kconfig itself (the builders run it after each image).
 the compiler and no table as before, and both REPORT_ES2 symbols off, since
 dEQP-GLES3 judges a context that reports ES 3.0; without it a resolved
 configuration that reports ES 3.0 is refused as before.
+--pvr-instance-divisor is an image built with the arm
+DEQP_PVR_INSTANCE_DIVISOR=1 (am62p-deqp-images.sh): the resolved
+configuration must keep CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y, and without
+the flag an image that carries it is refused. The symbol depends on
+YAKOGL_GPU_POWERVR and Kconfig drops it for another board with no more
+than a build-log warning; without this rule a software-path image could
+end up under the hardware arm's name.
 """
 import fnmatch
 import os
@@ -110,8 +118,11 @@ def kconfig_block(sym):
     return '\n'.join(out)
 
 
-def conformance_rules(c, name, gles3=False, ms4=None):
-    """Rules on one resolved configuration C (dict) -> list of problems."""
+def conformance_rules(c, name, gles3=False, ms4=None, idiv=None):
+    """Rules on one resolved configuration C (dict) -> list of problems.
+    idiv: the image was built with (True) or without (False) the
+    DEQP_PVR_INSTANCE_DIVISOR=1 arm; None (the board and recipe rules) checks
+    nothing about it."""
     bad = []
     if c.get('YAKOGL_SHADERC_ONLINE') != 'y':
         bad.append("%s: YAKOGL_SHADERC_ONLINE is not y (the compiler is conformance's back end)" % name)
@@ -132,12 +143,18 @@ def conformance_rules(c, name, gles3=False, ms4=None):
         bad.append("%s: DEQP_GL_CONFIG_NAME is '%s', the multisample image needs rgba8888d24s8ms4" % (name, gl))
     if ms4 is False and gl:
         bad.append("%s: DEQP_GL_CONFIG_NAME is '%s': a sweep image runs on the default config" % (name, gl))
+    if idiv is True and c.get('YAKOGL_PVR_INSTANCE_DIVISOR') != 'y':
+        bad.append('%s: YAKOGL_PVR_INSTANCE_DIVISOR is not y (the image was built for the '
+                   'PowerVR hardware instance divisors; Kconfig dropped the symbol)' % name)
+    if idiv is False and c.get('YAKOGL_PVR_INSTANCE_DIVISOR') == 'y':
+        bad.append('%s: YAKOGL_PVR_INSTANCE_DIVISOR=y (an image not built with the arm '
+                   'runs the software path)' % name)
     return bad
 
 
-def check_dotconfig(path, ms4, gles3=False):
+def check_dotconfig(path, ms4, gles3=False, idiv=False):
     c = parse_dotconfig(path)
-    bad = conformance_rules(c, path, gles3=gles3, ms4=ms4)
+    bad = conformance_rules(c, path, gles3=gles3, ms4=ms4, idiv=idiv)
     for s in ('YAKOGL_REPORT_ES2', 'DEQP_REPORT_ES2'):
         if gles3:
             # a dEQP-GLES3 image must report ES 3.0: dEQP's GLES3 context
@@ -286,7 +303,7 @@ def check_repo():
     zk = read(os.path.join(REPO, 'zephyr/Kconfig'))
     if not re.search(r'choice YAKOGL_SHADERC\s+prompt[^\n]*\n\s*default YAKOGL_SHADERC_ONLINE', zk):
         bad.append('zephyr/Kconfig: the shader back end choice no longer defaults to YAKOGL_SHADERC_ONLINE')
-    for s in ('YAKOGL_PRECOMPILED_SHADERS', 'YAKOGL_TEST_KNOBS'):
+    for s in ('YAKOGL_PRECOMPILED_SHADERS', 'YAKOGL_TEST_KNOBS', 'YAKOGL_PVR_INSTANCE_DIVISOR'):
         if has(s, r'default y'):
             bad.append('zephyr/Kconfig: %s is on by default' % s)
     if not has('DEQP_TEST_KNOBS', r'select YAKOGL_TEST_KNOBS'):
@@ -394,6 +411,14 @@ def self_test():
     ok(conformance_rules(good, 'g', ms4=True), 'the ms4 image without its config is refused')
     ok(conformance_rules(dict(good, DEQP_GL_CONFIG_NAME='rgba8888d24s8ms4'), 'g', ms4=True) == [], 'the ms4 image on its config passes')
     ok(conformance_rules({'YAKOGL_SHADERC_ONLINE': 'y'}, 'g', gles3=True) == [], 'a GLES3 image may report ES 3.0')
+    # the DEQP_PVR_INSTANCE_DIVISOR=1 arm (am62p-deqp-images.sh): the resolved
+    # image must keep the symbol, an image without the arm must not carry it
+    ok(conformance_rules(dict(good, YAKOGL_PVR_INSTANCE_DIVISOR='y'), 'g', idiv=True) == [],
+       'a hardware instance-divisor image with its Kconfig on passes')
+    ok(conformance_rules(good, 'g', idiv=True),
+       'an image built with the arm that lost YAKOGL_PVR_INSTANCE_DIVISOR is refused')
+    ok(conformance_rules(dict(good, YAKOGL_PVR_INSTANCE_DIVISOR='y'), 'g', idiv=False),
+       'a sweep image with YAKOGL_PVR_INSTANCE_DIVISOR=y is refused')
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, '.config')
         open(p, 'w').write('CONFIG_YAKOGL_SHADERC_ONLINE=y\nCONFIG_YAKOGL_REPORT_ES2=y\nCONFIG_DEQP_REPORT_ES2=y\n'
@@ -478,10 +503,13 @@ def main(argv):
     if argv[1:] == ['--self-test']:
         return 1 if self_test() else 0
     if argv[1:2] == ['--config']:
-        if len(argv) < 3 or not os.path.isfile(argv[2]) or any(a not in ('--ms4', '--gles3') for a in argv[3:]):
-            print('usage: check-deqp-images.py --config <.config> [--ms4] [--gles3]', file=sys.stderr)
+        if len(argv) < 3 or not os.path.isfile(argv[2]) or any(
+                a not in ('--ms4', '--gles3', '--pvr-instance-divisor') for a in argv[3:]):
+            print('usage: check-deqp-images.py --config <.config> [--ms4] [--gles3] [--pvr-instance-divisor]',
+                  file=sys.stderr)
             return 2
-        bad = check_dotconfig(argv[2], '--ms4' in argv[3:], '--gles3' in argv[3:])
+        bad = check_dotconfig(argv[2], '--ms4' in argv[3:], '--gles3' in argv[3:],
+                              idiv='--pvr-instance-divisor' in argv[3:])
     elif len(argv) == 1:
         bad, notes = check_repo()
         for n in notes:

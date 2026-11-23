@@ -874,7 +874,15 @@ built by `cts-build-zephyr.sh MODULE=gles3` otherwise; every image is checked wi
 `TREE_ROWS=3,5-9` builds and runs only those rows (rows from 0, as board.sh), and
 `DEQP_PVR_NATIVE_3D=0|1` passes `-DCONFIG_DEQP_PVR_NATIVE_3D` to every image; the
 arm is then part of both directory names (`...-n3d1`) and of `stage-notes.txt` in
-the record directory. `BOARD_STAGE_DRY_RUN=1` prints the build and tree commands
+the record directory. `DEQP_PVR_INSTANCE_DIVISOR=0|1` does the same for the PowerVR
+hardware instance divisors (`-DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y/n`, the crate's
+`pvr-instance-divisor` feature, `docs/notes/instanceid-per-draw.md` row
+"P3 (full path)"): an unset arm leaves the Kconfig default n (the software path,
+the back end takes divisor 1 only), both arms compose (`...-n3d1-idiv1`), and an
+image built with 1 is only reported built when its resolved `.config` still carries
+the symbol (`check-deqp-images.py --pvr-instance-divisor`; on a non-PowerVR board the
+deqp sample's CMake already refuses the arm at configure time).
+`BOARD_STAGE_DRY_RUN=1` prints the build and tree commands
 and the rows without a layout or a board.
 
 Measured on 2026-10-10 from main `c4ccc966`
