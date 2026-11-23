@@ -1,0 +1,9 @@
+# glBindAttribLocation of the draw, as dEQP's max_cond_mat4 binds (glsAttributeLocationTests.cpp)
+a_0 12
+a_16 12
+a_1 8
+a_17 8
+a_2 4
+a_18 4
+a_3 0
+a_19 0

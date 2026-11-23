@@ -1209,6 +1209,14 @@ fn compile_and_publish_keyed(
                 let plain = or_without_consts(stage, glsl, plain, scratch);
                 plain
             }
+            /* the Mali's at the link's locations is built for the fragment
+             * shader's reads as well (`vs_for_fragment` with the map) */
+            #[cfg(feature = "gpu-mali")]
+            Some(map) => {
+                let reads = facts.fs_reads.program.then(|| facts.fs_reads.reads());
+                codegen::compile_vs_mapped_blocks(glsl, map, reads, facts.fs_reads.moved, scratch, store::keep())
+            }
+            #[cfg(not(feature = "gpu-mali"))]
             Some(map) => codegen::compile_vs_mapped_blocks(glsl, map, scratch, store::keep()),
         };
         compiled.and_then(|(sh, b)| {
@@ -2086,12 +2094,14 @@ pub fn v3d_f32_rt_variant(
 
 /// `compile_vs_linked`: the vertex shader again for the program
 /// glLinkProgram is linking. With a `map`, at the attribute locations the
-/// link decided (SHADERC_NOTES.md, "Attribute registers decided at link");
-/// `fs` is not read then. With no map, for the program's fragment shader
-/// `fs`: on the Mali, the vertex shader storing only the components `fs`
-/// reads ([`vs_for_fragment`], Mesa's nir_opt_varyings); 1, and `*out`
+/// link decided (SHADERC_NOTES.md, "Attribute registers decided at link").
+/// With no map, for the program's fragment shader `fs`: on the Mali, the
+/// vertex shader storing only the components `fs` reads
+/// ([`vs_for_fragment`], Mesa's nir_opt_varyings); 1, and `*out`
 /// untouched, when there is nothing to build (the shader's own vertex code
-/// is the program's, on every other GPU always).
+/// is the program's, on every other GPU always). With a map the Mali reads
+/// `fs` too: the program's vertex shader is built for `fs` at the map's
+/// locations (#11388); the other GPUs do not read it then.
 /// A program's copy, so at the program's end of the keep region, and cached
 /// under the source and the map or the reads.
 unsafe extern "C" fn online_compile_vs_linked(
@@ -2114,11 +2124,22 @@ unsafe extern "C" fn online_compile_vs_linked(
         // SAFETY: a NUL-terminated source; `fs` is the program's fragment
         // shader, valid across the call.
         let (text, fs) = unsafe { (cstr_bytes(glsl), &*fs) };
-        return vs_for_fragment(text, fs, out, &mut log);
+        return vs_for_fragment(text, None, fs, out, &mut log);
     }
     // SAFETY: a NUL-terminated source (the shader object's copy) and a map
     // the caller holds across the call.
     let (text, map) = unsafe { (cstr_bytes(glsl), &*map) };
+    /* the Mali's program vertex shader is built for the fragment shader's
+     * reads at the link's locations too; 1 when `fs` is none of its
+     * records, and then the shader stores every output it writes */
+    #[cfg(feature = "gpu-mali")]
+    if !fs.is_null() {
+        // SAFETY: `fs` is the program's fragment shader, valid across the call.
+        match vs_for_fragment(text, Some(map), unsafe { &*fs }, out, &mut log) {
+            1 => {}
+            rc => return rc,
+        }
+    }
     match compile_and_publish_linked(
         SHC_STAGE_VERTEX,
         text,
@@ -2138,8 +2159,10 @@ unsafe extern "C" fn online_compile_vs_linked(
     }
 }
 
-/// [`online_compile_vs_linked`] with no map: the vertex shader for the
-/// program's fragment shader `fs`, or 1 when its own code is the program's.
+/// [`online_compile_vs_linked`]'s vertex shader for the program's fragment
+/// shader `fs`, at the attribute locations of `map` when the link decided
+/// them (`mali::compile_vs_mapped_blocks`), or 1 when its own code is the
+/// program's.
 ///
 /// On the Mali the program's vertex shader is always built for what `fs`
 /// reads (`mali::fragment_reads`), as Mesa's link leaves it: gl_nir_link_
@@ -2159,7 +2182,13 @@ unsafe extern "C" fn online_compile_vs_linked(
 /// under the record key the link's compile finds again. The vertex shader
 /// stores what that fragment shader still reads and nothing else: none when
 /// the fold leaves no read, as Mesa's link then keeps no varying program.
-fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut CStrWriter) -> i32 {
+fn vs_for_fragment(
+    text: &[u8],
+    map: Option<&crate::shaderc::ShcAttribMap>,
+    fs: &ShcShader,
+    out: *mut ShcShader,
+    log: &mut CStrWriter,
+) -> i32 {
     #[cfg(feature = "gpu-mali")]
     let linked = base_of(fs).map(|fr| (link_consts_of(text, fr.source).filter(|c| !c.is_none()), fr));
     #[cfg(feature = "gpu-mali")]
@@ -2230,7 +2259,7 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
             text,
             0,
             &ZeroList::EMPTY,
-            None,
+            map,
             facts,
             store::KeepEnd::Low,
             log,
@@ -2243,7 +2272,7 @@ fn vs_for_fragment(text: &[u8], fs: &ShcShader, out: *mut ShcShader, log: &mut C
             Err(rc) => rc,
         };
     }
-    let _ = (text, fs, out, log);
+    let _ = (text, map, fs, out, log);
     1
 }
 

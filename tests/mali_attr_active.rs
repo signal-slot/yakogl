@@ -183,7 +183,10 @@ fn compile(ty: GLenum, text: &str) -> GLuint {
         glCompileShader(s);
         let mut ok: GLint = 0;
         glGetShaderiv(s, GL_COMPILE_STATUS, &mut ok);
-        assert_eq!(ok, 1, "the shader does not compile:\n{text}");
+        let mut log = [0 as c_char; 1024];
+        glGetShaderInfoLog(s, 1024, core::ptr::null_mut(), log.as_mut_ptr());
+        let log = CStr::from_ptr(log.as_ptr()).to_string_lossy();
+        assert_eq!(ok, 1, "the shader does not compile: {log}\n{text}");
         s
     }
 }
@@ -202,7 +205,10 @@ fn link(label: &str, vs: &str, fs: &str, binds: &[(&CStr, GLuint)]) -> GLuint {
         glLinkProgram(p);
         let mut ok: GLint = 0;
         glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
-        assert_eq!(ok, 1, "{label}: the program does not link");
+        let mut log = [0 as c_char; 1024];
+        glGetProgramInfoLog(p, 1024, core::ptr::null_mut(), log.as_mut_ptr());
+        let log = CStr::from_ptr(log.as_ptr()).to_string_lossy();
+        assert_eq!(ok, 1, "{label}: the program does not link: {log}");
         p
     }
 }
@@ -280,37 +286,82 @@ fn a_bound_position_keeps_the_other_attribute_active() {
     draw("bound", p, 3, 1);
 }
 
-/// dEQP-GLES2 attribute_location.bind_aliasing.max_inactive_<type>'s vertex
-/// shader (glsAttributeLocationTests.cpp, `BindInactiveAliasingAttributeTest`):
-/// for each location run of the type, from the top down, `a_k` read under
-/// `if (u_A != 0.0)` and `a_(k+16)` under `if (0 != 0)`, both bound to the
-/// run. 32 declared attributes, 16 locations.
-fn max_inactive(ty: &str, columns: u32) -> (String, Vec<(String, GLuint, bool)>) {
-    let to_vec4 = |n: &str| match ty {
-        "vec2" => format!("vec4({n}.xy, {n}.yx)"),
-        "vec3" => format!("vec4({n}.xyz, {n}.x)"),
-        _ => format!("vec4({n})"),
+/// When a dEQP attribute_location case reads an attribute
+/// (glsAttributeLocationTests.cpp, `generateOutputCode`): under
+/// `if (u_A != 0.0)`, under `if (u_A == 0.0)`, or under `if (0 != 0)`.
+#[derive(Clone, Copy, PartialEq)]
+enum Cond {
+    A,
+    NotA,
+    Never,
+}
+
+/// One declared attribute of a case: name, type, the location it is bound
+/// to, and when it is read.
+struct Attr {
+    name: String,
+    ty: &'static str,
+    at: GLuint,
+    cond: Cond,
+}
+
+/// The vertex shader dEQP's `generateVertexShaderTemplate` writes for
+/// `attrs` (ES 1.00).
+fn deqp_vs(attrs: &[Attr]) -> String {
+    let to_vec4 = |a: &Attr| match a.ty {
+        "vec2" => format!("vec4({n}.xy, {n}.yx)", n = a.name),
+        "vec3" => format!("vec4({n}.xyz, {n}.x)", n = a.name),
+        _ => format!("vec4({})", a.name),
     };
+    let mut s = String::from("#version 100\nvarying mediump vec4 v_color;\n");
+    for a in attrs {
+        s += &format!("attribute mediump {} {};\n", a.ty, a.name);
+    }
+    s += "\n";
+    if attrs.iter().any(|a| a.cond != Cond::Never) {
+        s += "uniform mediump float u_A;\n";
+    }
+    s += "\nvoid main (void)\n{\n\tmediump vec4 color = vec4(0.0);\n\n";
+    for a in attrs {
+        let cond = match a.cond {
+            Cond::A => "u_A != 0.0",
+            Cond::NotA => "u_A == 0.0",
+            Cond::Never => "0 != 0",
+        };
+        s += &format!("\tif ({cond})\n\t{{\n\t\tcolor += {};\n\t}}\n", to_vec4(a));
+    }
+    s += "\n\tv_color = color;\n\tgl_Position = color;\n}\n";
+    s
+}
+
+/// The location runs of `ty` dEQP's `BindMaxAliasingAttributeTest` and
+/// `BindInactiveAliasingAttributeTest` use: from the top of the 16 down,
+/// `a_k` and `a_(k+16)` bound to the k-th run, `a_k` read when `first`
+/// holds and `a_(k+16)` when `second` does. 32 declared names at most, on 16
+/// locations.
+fn max_pairs(ty: &'static str, columns: u32, first: Cond, second: Cond) -> Vec<Attr> {
     let mut attrs = Vec::new();
     let mut loc = 16 - columns as i32;
     let mut k = 0;
     while loc >= 0 {
-        attrs.push((format!("a_{k}"), loc as GLuint, true));
-        attrs.push((format!("a_{}", k + 16), loc as GLuint, false));
+        attrs.push(Attr { name: format!("a_{k}"), ty, at: loc as GLuint, cond: first });
+        attrs.push(Attr { name: format!("a_{}", k + 16), ty, at: loc as GLuint, cond: second });
         loc -= columns as i32;
         k += 1;
     }
-    let mut s = String::from("#version 100\nvarying mediump vec4 v_color;\n");
-    for (n, _, _) in &attrs {
-        s += &format!("attribute mediump {ty} {n};\n");
-    }
-    s += "\nuniform mediump float u_A;\n\nvoid main (void)\n{\n\tmediump vec4 color = vec4(0.0);\n\n";
-    for (n, _, active) in &attrs {
-        let cond = if *active { "u_A != 0.0" } else { "0 != 0" };
-        s += &format!("\tif ({cond})\n\t{{\n\t\tcolor += {};\n\t}}\n", to_vec4(n));
-    }
-    s += "\n\tv_color = color;\n\tgl_Position = color;\n}\n";
-    (s, attrs)
+    attrs
+}
+
+/// The types of the attribute_location cases and their columns.
+const TYPES: [(&str, u32); 7] =
+    [("float", 1), ("vec2", 1), ("vec3", 1), ("vec4", 1), ("mat2", 2), ("mat3", 3), ("mat4", 4)];
+
+/// Link `attrs`' vertex shader with dEQP's fragment shader and their
+/// bindings, as dEQP's `runTest` does.
+fn link_bound(label: &str, attrs: &[Attr]) -> GLuint {
+    let names: Vec<CString> = attrs.iter().map(|a| CString::new(a.name.as_str()).unwrap()).collect();
+    let binds: Vec<(&CStr, GLuint)> = names.iter().zip(attrs).map(|(n, a)| (n.as_c_str(), a.at)).collect();
+    link(label, &deqp_vs(attrs), DEQP_FS, &binds)
 }
 
 /// The fragment shader of the attribute_location cases.
@@ -324,20 +375,104 @@ const DEQP_FS: &str =
 #[test]
 fn an_attribute_read_only_in_a_never_taken_branch_takes_no_location() {
     let _g = context();
-    for (ty, columns) in [("float", 1), ("vec2", 1), ("vec3", 1), ("vec4", 1), ("mat2", 2), ("mat3", 3), ("mat4", 4)] {
-        let (vs, attrs) = max_inactive(ty, columns);
-        let names: Vec<CString> = attrs.iter().map(|(n, _, _)| CString::new(n.as_str()).unwrap()).collect();
-        let binds: Vec<(&CStr, GLuint)> = names.iter().zip(&attrs).map(|(n, a)| (n.as_c_str(), a.1)).collect();
-        let p = link(ty, &vs, DEQP_FS, &binds);
+    for (ty, columns) in TYPES {
+        let attrs = max_pairs(ty, columns, Cond::A, Cond::Never);
+        let p = link_bound(ty, &attrs);
         // SAFETY: plain GL calls; the names are NUL-terminated.
         unsafe {
             let mut n: GLint = 0;
             glGetProgramiv(p, GL_ACTIVE_ATTRIBUTES, &mut n);
             assert_eq!(n, 16 / columns as GLint, "{ty}: the active attributes");
-            for ((_, at, active), name) in attrs.iter().zip(&names) {
+            for a in &attrs {
+                let name = CString::new(a.name.as_str()).unwrap();
                 let l = glGetAttribLocation(p, name.as_ptr());
-                let want = if *active { *at as GLint } else { -1 };
+                let want = if a.cond == Cond::A { a.at as GLint } else { -1 };
                 assert_eq!(l, want, "{ty}: glGetAttribLocation({name:?})");
+            }
+            glDeleteProgram(p);
+        }
+    }
+}
+
+/// dEQP-GLES2 attribute_location.bind_aliasing.cond_<type> and
+/// cond_<type>_offset_1 (`BindAliasingAttributeTest`): `a_0` of the type
+/// read when `u_A != 0.0`, a vec4 `a_1` read when `u_A == 0.0`, `a_0` bound
+/// to 1 and `a_1` to 1 + offset; and max_cond_<type>
+/// (`BindMaxAliasingAttributeTest`): the 16 locations taken twice over,
+/// `a_k` read when `u_A != 0.0` and `a_(k+16)` when `u_A == 0.0` (#11388).
+/// Both names of a location are active (ES 2.0 section 2.10.4 allows the
+/// alias when no path reads both): the link passes, every attribute is
+/// listed at its binding, and a draw with each side of `u_A` is not refused.
+#[test]
+fn attributes_bound_to_one_location_link_and_draw() {
+    let _g = context();
+    let mut cases = Vec::new();
+    for (ty, columns) in TYPES {
+        let offsets: &[GLuint] = if columns > 1 { &[0, 1] } else { &[0] };
+        for &offset in offsets {
+            let attrs = vec![
+                Attr { name: "a_0".into(), ty, at: 1, cond: Cond::A },
+                Attr { name: "a_1".into(), ty: "vec4", at: 1 + offset, cond: Cond::NotA },
+            ];
+            let label = if offset == 0 { format!("cond_{ty}") } else { format!("cond_{ty}_offset_{offset}") };
+            cases.push((label, columns, attrs));
+        }
+        cases.push((format!("max_cond_{ty}"), columns, max_pairs(ty, columns, Cond::A, Cond::NotA)));
+    }
+    let failed: Vec<String> = cases
+        .iter()
+        .filter_map(|(label, columns, attrs)| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| link_and_draw(label, *columns, attrs)))
+                .err()
+                .map(|e| e.downcast_ref::<String>().cloned().unwrap_or_else(|| format!("{label}: failed")))
+        })
+        .collect();
+    assert!(failed.is_empty(), "{} of {} cases:\n{}", failed.len(), cases.len(), failed.join("\n"));
+}
+
+/// One case of [`attributes_bound_to_one_location_link_and_draw`].
+fn link_and_draw(label: &str, columns: u32, attrs: &[Attr]) {
+    {
+        let p = link_bound(label, attrs);
+        // SAFETY: plain GL calls; the names are NUL-terminated; `FULL` is
+        // static and outlives the draws.
+        unsafe {
+            let mut n: GLint = 0;
+            glGetProgramiv(p, GL_ACTIVE_ATTRIBUTES, &mut n);
+            assert_eq!(n, attrs.len() as GLint, "{label}: the active attributes");
+            for a in attrs {
+                let name = CString::new(a.name.as_str()).unwrap();
+                assert_eq!(glGetAttribLocation(p, name.as_ptr()), a.at as GLint, "{label}: {name:?}");
+            }
+            /* an array at every column of every binding */
+            let mut used = [false; 16];
+            for a in attrs {
+                let cols = if a.ty == "vec4" { 1 } else { columns };
+                for c in a.at..a.at + cols {
+                    used[c as usize] = true;
+                }
+            }
+            glUseProgram(p);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            for (l, _) in used.iter().enumerate().filter(|(_, u)| **u) {
+                glVertexAttribPointer(l as GLuint, 4, GL_FLOAT, 0, 0, FULL.as_ptr() as *const c_void);
+                glEnableVertexAttribArray(l as GLuint);
+            }
+            for side in [1.0, 0.0] {
+                glUniform1f(glGetUniformLocation(p, c"u_A".as_ptr()), side);
+                while glGetError() != GL_NO_ERROR {}
+                let before = backend::draws_refused();
+                LOG.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+                glFinish();
+                let refused = backend::draws_refused() - before;
+                let log = LOG.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                let lines: Vec<_> = log.iter().filter(|l| l.contains("refus")).collect();
+                assert_eq!(refused, 0, "{label}, u_A = {side}: the draw was refused; {lines:?}");
+                assert_eq!(glGetError(), GL_NO_ERROR, "{label}, u_A = {side}: GL error after the draw");
+            }
+            for (l, _) in used.iter().enumerate().filter(|(_, u)| **u) {
+                glDisableVertexAttribArray(l as GLuint);
             }
             glDeleteProgram(p);
         }

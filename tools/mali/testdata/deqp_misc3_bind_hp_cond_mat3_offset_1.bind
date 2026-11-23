@@ -1,0 +1,3 @@
+# glBindAttribLocation of the draw, as dEQP's cond_mat3_offset_1 binds (glsAttributeLocationTests.cpp)
+a_0 1
+a_1 2

@@ -1777,7 +1777,12 @@ fn attrib_layout(
             if map.b[..n].iter().any(|d| util::name_bytes(&d.name) == name) {
                 continue;
             }
-            let columns = rows.iter().filter(|o| util::name_bytes(&o.name) == name).count();
+            /* a back end that lists a matrix as one row (the Mali,
+             * gl/draw.rs `vertex_inputs` splits it) has its columns in the
+             * type: a mat2 bound to 1 takes 1 and 2, and a vec4 bound to 2
+             * aliases its column 1 */
+            let rows_of = rows.iter().filter(|o| util::name_bytes(&o.name) == name).count();
+            let columns = rows_of.max(gl_type_shape(a.gl_type).0);
             /* a row is an attribute the shader reads */
             map.b[n] = ShcAttribBinding {
                 name: a.name,

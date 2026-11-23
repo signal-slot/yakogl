@@ -119,8 +119,6 @@ pub enum Defect {
 /// lowered yet"; [`MaliError::Defect`] is the one that does not.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MaliError {
-    /// A vertex shader with the link's attribute locations.
-    LinkedVertexNotLowered,
     /// A blend variant: the Mali blends through its blend descriptor, and
     /// a blend shader (for the modes the descriptor cannot express) is not
     /// lowered.
@@ -260,6 +258,10 @@ pub enum MaliError {
     VaryingNotFromAttribute,
     /// Two varying lanes of equal value: Mesa's link merges them.
     VaryingDuplicate,
+    /// A vertex shader whose active attributes take more locations than
+    /// there are attribute records, built without the link's locations:
+    /// its code waits for them ([`deferred_vertex`]).
+    AttribLocationsAtLink,
     /// A fragment colour of more vectorised operations and operands than
     /// nir_fs.rs keeps.
     FragmentTooLarge,
@@ -343,7 +345,6 @@ impl MaliError {
     /// Every gap, for the tests that check the messages are distinct. A
     /// slice, so that a new gap adds its own line and no count.
     pub const GAPS: &'static [MaliError] = &[
-        MaliError::LinkedVertexNotLowered,
         MaliError::BlendVariantNotLowered,
         MaliError::ControlFlow,
         MaliError::Arithmetic,
@@ -410,14 +411,12 @@ impl MaliError {
         MaliError::ConvertWiden,
         MaliError::MovedTooLarge,
         MaliError::AttributeNumbering,
+        MaliError::AttribLocationsAtLink,
     ];
 
     /// The log text of each gap.
     pub const fn message(self) -> &'static str {
         match self {
-            MaliError::LinkedVertexNotLowered => {
-                "the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet"
-            }
             MaliError::BlendVariantNotLowered => "a Mali blend shader variant is not lowered yet",
             MaliError::ControlFlow => "Valhall: control flow (if, a loop, a return before the end) is not lowered yet",
             MaliError::Arithmetic => {
@@ -520,6 +519,9 @@ impl MaliError {
             }
             MaliError::VaryingDuplicate => {
                 "Valhall: two varying lanes of equal value (Mesa's link merges them) is not lowered yet"
+            }
+            MaliError::AttribLocationsAtLink => {
+                "Valhall: a vertex shader whose active attributes take more than 16 locations, without the link's locations (glBindAttribLocation), is not lowered yet"
             }
             MaliError::FsOperandForm => {
                 "Valhall: a fragment shader operand of a form or in a place no reference draws (a lane alone first in a sum, a uniform first) is not lowered yet"
@@ -1506,11 +1508,16 @@ fn compile_stage<'s>(
          * `nir::Nir::attribute_record`); a matrix takes one location per
          * column, each its own record (other_63_matattr: mat4 `a_xf` at 1
          * is records 1..4; vsattr_matcol: a mat2's unread column 0 takes
-         * none) */
+         * none). Two attributes the link bound to one location
+         * (`compile_vs_mapped_blocks`) are two declarations of it and one
+         * record: it is listed once. */
+        let mut listed = 0u64;
         for d in m.inputs.iter() {
             let ir_mod::IoSlot::Attrib(base) = d.slot() else { continue };
             for loc in (0..glsl::columns(d.gl_type)).filter_map(|c| base.checked_add(c)) {
-                if vs.counted & 1u64.checked_shl(u32::from(loc)).unwrap_or(0) != 0 {
+                let bit = 1u64.checked_shl(u32::from(loc)).unwrap_or(0);
+                if vs.counted & bit & !listed != 0 {
+                    listed |= bit;
                     let slot = sc.attributes.get_mut(sc.nattr).ok_or(MaliError::Defect(Defect::IrIndex))?;
                     *slot = (loc, vs.attribute_record(loc)?);
                     sc.nattr += 1;
@@ -1856,7 +1863,7 @@ fn const_lane(m: &ir_mod::Module<'_>, v: ir_mod::ValueId, lane: u8, depth: u8) -
 fn record(
     stage: u32,
     l: &super::lower::Lowered<'_>,
-    es3: bool,
+    at_front_end: bool,
     sc: &StageCode<'_>,
     scratch: &Arena<'_>,
     keep: &'static Arena<'static>,
@@ -1936,23 +1943,38 @@ fn record(
          * them to the attributes declared (the same lines, by the ES 3.2
          * aliasing rule), and a `layout(location)` is the front end's
          * location already (dEQP-GLES2 attribute_location.bind_aliasing.
-         * max_inactive_*: 32 declared, 16 active, #11307). */
+         * max_inactive_*: 32 declared, 16 active, #11307). A shader
+         * compiled with the link's locations ([`compile_vs_mapped_blocks`])
+         * keeps them too: they are the GL locations.
+         *
+         * Two attributes the link bound to one location (ES 1.00 allows it
+         * when no path reads both) have one row: the first, which covers
+         * the location's columns; a row whose columns earlier rows cover
+         * all is left out. The GL core stages each location once from it,
+         * the frame builder finds the location's record there, and the GL
+         * core answers glGetActiveAttrib from the link's map then
+         * (gl/program.rs `active_entries`). */
         let dead = dead_sides(m, scratch)?;
         let mut n = 0usize;
         let mut next = 0u8;
+        /* one bit a location: a front-end location counts every declared
+         * column, so 32 mat4 reach 127 */
+        let mut covered = 0u128;
         for a in l.reflection.attribs.iter() {
             let width = glsl::columns(a.gl_type);
             let columns = a.location..a.location.saturating_add(width);
-            let loaded = m.instrs.iter().zip(dead.iter()).any(|(op, dead)| {
-                !dead && matches!(op, ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Attrib(l), .. } if columns.contains(l))
-            });
             let recorded = sc.attributes[..sc.nattr].iter().any(|(loc, _)| columns.contains(loc));
-            if !loaded && !recorded {
+            if !statically_read(m, dead, a) && !recorded {
                 continue;
             }
+            let span = columns.clone().fold(0u128, |s, c| s | 1u128.checked_shl(u32::from(c)).unwrap_or(0));
+            if span != 0 && span & !covered == 0 {
+                continue;
+            }
+            covered |= span;
             let dst = sh.attribs.get_mut(n).ok_or(refused(MaliError::Defect(Defect::IrIndex)))?;
             crate::util::set_name(&mut dst.name, a.name.as_bytes());
-            dst.location = if es3 { a.location } else { next };
+            dst.location = if at_front_end { a.location } else { next };
             dst.components = a.components;
             dst.vi_reg = a.location;
             dst.format = 0;
@@ -1984,6 +2006,16 @@ fn record(
      * this pointer beside its own record when it publishes the shader) */
     sh.priv_ = super::backend::codegen_priv(rec.as_ptr() as *const core::ffi::c_void);
     Ok(sh)
+}
+
+/// Whether vertex module `m` reads attribute `a` (any of its columns) in a
+/// load outside the sides of an `if` that `dead` marks ([`dead_sides`]):
+/// an active attribute of the program ([`record`]).
+fn statically_read(m: &ir_mod::Module<'_>, dead: &[bool], a: &super::reflect::AttribRow<'_>) -> bool {
+    let columns = a.location..a.location.saturating_add(glsl::columns(a.gl_type));
+    m.instrs.iter().zip(dead.iter()).any(|(op, dead)| {
+        !dead && matches!(op, ir_mod::Op::LoadInput { slot: ir_mod::IoSlot::Attrib(l), .. } if columns.contains(l))
+    })
 }
 
 /// The front end (`codegen::lower_source`), then the c = 0.5 remap of a
@@ -2036,6 +2068,12 @@ fn compile_lowered<'s>(
     scratch: &Arena<'s>,
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
+    if stage == SHC_STAGE_VERTEX {
+        if let Some(deferred) = deferred_vertex(&l, keep, scratch)? {
+            let blocks = (l.reflection.blocks, l.reflection.block_members, [l.reflection.uniforms, &[][..]]);
+            return Ok((deferred, blocks));
+        }
+    }
     let st = if stage == SHC_STAGE_VERTEX { super::sema::Stage::Vertex } else { super::sema::Stage::Fragment };
     let src = core::str::from_utf8(glsl).map_err(|_| refused(MaliError::Defect(Defect::IrIndex)))?;
     let src = scratch.alloc_str(src).map_err(|_| refused(MaliError::OutOfScratch))?;
@@ -2056,6 +2094,56 @@ fn compile_lowered<'s>(
     let sh = record(stage, &l, decls.es3(), &sc, scratch, keep)?;
     let blocks = (l.reflection.blocks, l.reflection.block_members, [l.reflection.uniforms, &[][..]]);
     Ok((sh, blocks))
+}
+
+/// A vertex shader whose active attributes take more locations than there
+/// are attribute records ([`MAX_ATTRIBUTES`]; a matrix takes one a column):
+/// its record with no code, and every declared attribute
+/// (`layout_at_link`, `codegen::deferred_record`). None for any other.
+///
+/// Such a shader links only when glBindAttribLocation puts two of them on
+/// one location (ES 1.00 allows it when no path reads both, ES 2.0 section
+/// 2.10.4), so its code waits for the link's locations, and glLinkProgram
+/// compiles it again with them ([`compile_vs_mapped_blocks`]). Mesa
+/// compiles it there too: the state tracker builds the vertex program at
+/// link, after the locations are assigned
+/// (`M:compiler/glsl/gl_nir_linker.c:4108`), so two names on one location
+/// are one input (`M:mesa/state_tracker/st_program.c:397, 423-424`). Built
+/// with the attributes' own locations instead, the 17th read location's
+/// record does not fit LD_ATTR_IMM's 4-bit index, and the packer failed as
+/// `Defect(Encode)` (dEQP-GLES2 attribute_location.bind_aliasing.
+/// max_cond_*: 32 declared and read, 16 locations, #11388).
+///
+/// Active is [`record`]'s rule ([`statically_read`]): an attribute read
+/// only in a side of an `if` its constant condition does not take is not,
+/// so max_inactive_* (32 declared, 16 active) keeps its code here.
+fn deferred_vertex(
+    l: &super::lower::Lowered<'_>,
+    keep: &'static Arena<'static>,
+    scratch: &Arena<'_>,
+) -> Result<Option<ShcShader>, CompileError> {
+    if !waits_for_link(l, scratch)? {
+        return Ok(None);
+    }
+    let dead = dead_sides(&l.module, scratch)?;
+    let active = |a: &super::reflect::AttribRow<'_>| statically_read(&l.module, dead, a);
+    let attrib = |e| CompileError::BackEnd(super::codegen::BackEndError::Attrib(e));
+    super::codegen::deferred_record(l.reflection.attribs, active, keep, attrib).map(Some)
+}
+
+/// Whether vertex shader `l`'s active attributes ([`statically_read`])
+/// take more locations than there are attribute records
+/// ([`deferred_vertex`]).
+fn waits_for_link(l: &super::lower::Lowered<'_>, scratch: &Arena<'_>) -> Result<bool, CompileError> {
+    let dead = dead_sides(&l.module, scratch)?;
+    let locations: usize = l
+        .reflection
+        .attribs
+        .iter()
+        .filter(|a| statically_read(&l.module, dead, a))
+        .map(|a| usize::from(glsl::columns(a.gl_type)))
+        .sum();
+    Ok(locations > MAX_ATTRIBUTES)
 }
 
 /// The varying lanes vertex shader `glsl` stores as constants, which Mesa's
@@ -2168,6 +2256,12 @@ pub fn compile_vs_for_reads<'s>(
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
     let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
+    /* its glCompileShader record waits for the link's locations, and the
+     * GL core compiles it again with them (`compile_vs_mapped_blocks`):
+     * without them there is no program to build */
+    if waits_for_link(&l, scratch)? {
+        return Err(refused(MaliError::AttribLocationsAtLink));
+    }
     let src = core::str::from_utf8(glsl).map_err(|_| refused(MaliError::Defect(Defect::IrIndex)))?;
     let src = scratch.alloc_str(src).map_err(|_| refused(MaliError::OutOfScratch))?;
     let decls = super::reflect::interface(scratch, super::sema::Stage::Vertex, src)
@@ -2447,16 +2541,50 @@ pub fn reads_at_vertex_locations(
     Ok(Some(out))
 }
 
-/// A vertex shader at the attribute locations the link chose: the front
-/// end's verdict, then the gap.
+/// A vertex shader at the attribute locations the link chose (`map`,
+/// gl/program.rs `attrib_layout`), for a program whose fragment shader
+/// reads `reads` (location and component mask) with the moved expressions
+/// `moved` ([`compile_vs_for_reads`]), or storing every output it writes
+/// when `reads` is None (and `moved` empty).
+///
+/// Each attribute's loads, declaration and reflection row move to the map's
+/// location (`powervr::abi::with_attrib_map`, the GC7000's and the V3D's
+/// step): two names bound to one location (Mesa allows the alias for a
+/// vertex input, `M:compiler/glsl/gl_nir_link_varyings.c:1224-1275`) load
+/// one location, so they read one attribute record, numbered among the
+/// read locations as any other ([`nir::Nir::attribute_record`]). That is Mesa's input: the state
+/// tracker compiles the vertex program at link with the assigned
+/// locations, a variable's location is its attribute's
+/// (`M:compiler/glsl/gl_nir_linker.c:4108`), the inputs are numbered over
+/// `inputs_read` (`M:mesa/state_tracker/st_program.c:397, 423-424`), and
+/// one LD_ATTR_IMM a location serves both names (dEQP-GLES2
+/// attribute_location.bind_aliasing.cond_*: `a_0` and `a_1` at location 1
+/// are one `index:0x0` load, tools/mali/testdata/deqp_misc3_bind_*). The
+/// record's rows are at the map's locations, one a location ([`record`]).
 pub fn compile_vs_mapped_blocks<'s>(
     glsl: &[u8],
-    _map: &crate::shaderc::ShcAttribMap,
-    scratch: &Arena<'s>,
-    _keep: &'static Arena<'static>,
+    map: &crate::shaderc::ShcAttribMap,
+    reads: Option<&[(u8, u8)]>,
+    moved: &[u8],
+    scratch: &'s Arena<'s>,
+    keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
-    lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
-    Err(refused(MaliError::LinkedVertexNotLowered))
+    let l = lower_source(SHC_STAGE_VERTEX, glsl, &[], scratch)?;
+    let module = scratch.alloc_copy(core::slice::from_ref(&l.module)).map_err(|_| refused(MaliError::OutOfScratch))?;
+    let (m, rows) = super::powervr::abi::with_attrib_map(scratch, &module[0], l.reflection.attribs, map)
+        .map_err(|e| CompileError::BackEnd(super::codegen::BackEndError::Attrib(e)))?;
+    let l =
+        super::lower::Lowered { module: *m, reflection: super::reflect::Reflection { attribs: rows, ..l.reflection } };
+    let src = core::str::from_utf8(glsl).map_err(|_| refused(MaliError::Defect(Defect::IrIndex)))?;
+    let src = scratch.alloc_str(src).map_err(|_| refused(MaliError::OutOfScratch))?;
+    let decls = super::reflect::interface(scratch, super::sema::Stage::Vertex, src)
+        .map_err(|_| refused(MaliError::Defect(Defect::IrIndex)))?;
+    let mut mv = [motion::Moved::NONE; motion::MAX_MOVED];
+    let n = motion::decode(moved, &mut mv).map_err(refused)?;
+    let sc = compile_module_for(&l.module, decls.uniforms, reads, &mv[..n], scratch).map_err(refused)?;
+    let sh = record(SHC_STAGE_VERTEX, &l, true, &sc, scratch, keep)?;
+    let blocks = (l.reflection.blocks, l.reflection.block_members, [l.reflection.uniforms, &[][..]]);
+    Ok((sh, blocks))
 }
 
 /* the test modules last: clippy's items_after_test_module (a newer clippy

@@ -1083,8 +1083,8 @@ fn unreachable_from_es100(e: MaliError) -> Option<&'static str> {
              lanes (lower.rs), which glsl.rs rewrites into Mesa's ilt trees; it emits no indexed LoadLocal or \
              StoreLocal, the walks' guard",
         ),
-        E::LinkedVertexNotLowered
-        | E::BlendVariantNotLowered
+        E::BlendVariantNotLowered
+        | E::AttribLocationsAtLink
         | E::ControlFlow
         | E::Arithmetic
         | E::IntValue
@@ -1404,9 +1404,9 @@ fn every_reachable_gap_is_reached_by_an_es100_source() {
         assert!(MaliError::GAPS.contains(&want), "{want:?} is not in MaliError::GAPS");
         reached.insert(want.message());
     }
-    /* two gaps are reached through the entry points, not a source alone */
+    /* gaps reached through the entry points, not a source alone */
     reached.insert(a_blend_variant_is_refused_gap().message());
-    reached.insert(a_linked_vertex_shader_is_refused_gap().message());
+    reached.insert(seventeen_locations_without_the_link_s_gap().message());
     let reachable: Vec<_> = MaliError::GAPS.iter().filter(|e| unreachable_from_es100(**e).is_none()).collect();
     for e in &reachable {
         assert!(reached.contains(e.message()), "no case reaches {e:?}");
@@ -1505,24 +1505,57 @@ fn a_blend_variant_is_refused() {
     assert_eq!(a_blend_variant_is_refused_gap(), MaliError::BlendVariantNotLowered);
 }
 
-/// A vertex shader at the link's attribute locations is refused after the
-/// front end's verdict.
-fn a_linked_vertex_shader_is_refused_gap() -> MaliError {
+/// 17 float attributes, each read under a uniform's condition: more active
+/// locations than attribute records (#11388).
+fn seventeen_attributes() -> String {
+    let mut s = String::from("attribute vec4 a_pos;\nuniform float u_A;\n");
+    for k in 0..16 {
+        s += &format!("attribute float a_{k};\n");
+    }
+    s += "void main() {\n    vec4 c = a_pos;\n";
+    for k in 0..16 {
+        s += &format!("    if (u_A != 0.0) c.x += a_{k};\n");
+    }
+    s += "    gl_Position = c;\n}\n";
+    s
+}
+
+/// Its program's vertex shader for a fragment shader's reads, without the
+/// link's locations.
+fn seventeen_locations_without_the_link_s_gap() -> MaliError {
     let _k = store::test_keep();
-    let map = crate::shaderc::ShcAttribMap::ZERO;
-    let r = store::with_scratch(|s| {
-        codegen::compile_vs_mapped_blocks(TRI_VS.as_bytes(), &map, s, store::keep()).map(|_| ())
-    })
-    .unwrap();
+    let vs = seventeen_attributes();
+    let r =
+        store::with_scratch(|s| codegen::compile_vs_for_reads(vs.as_bytes(), &[], &[], s, store::keep()).map(|_| ()))
+            .unwrap();
     match r {
         Err(CompileError::BackEnd(codegen::BackEndError::Mali(e))) => e,
         r => panic!("not a Mali gap: {r:?}"),
     }
 }
 
+/// glCompileShader of a vertex shader whose active attributes take more
+/// than 16 locations gives a record with no code that waits for the link's
+/// locations (it was `Defect(Encode)`: LD_ATTR_IMM's index is 4 bits), and
+/// its program's vertex shader without them is refused by name.
 #[test]
-fn a_linked_vertex_shader_is_refused() {
-    assert_eq!(a_linked_vertex_shader_is_refused_gap(), MaliError::LinkedVertexNotLowered);
+fn more_than_16_active_locations_wait_for_the_link() {
+    {
+        let _k = store::test_keep();
+        let vs = seventeen_attributes();
+        let sh = store::with_scratch(|s| {
+            codegen::compile_linked_blocks(SHC_STAGE_VERTEX, vs.as_bytes(), 0, &[], s, store::keep()).map(|(sh, _)| sh)
+        })
+        .unwrap()
+        .expect("the vertex shader compiles");
+        assert_eq!(sh.layout_at_link, 1);
+        assert_eq!(sh.usc_dw, 0, "no code before the link's locations");
+        assert_eq!(sh.num_declared, 17);
+        // SAFETY: the record's declared list, num_declared entries in keep.
+        let declared = unsafe { core::slice::from_raw_parts(sh.declared, 17) };
+        assert!(declared.iter().all(|d| d.active == 1 && d.location == crate::shaderc::SHC_ATTRIB_NO_LOCATION));
+    }
+    assert_eq!(seventeen_locations_without_the_link_s_gap(), MaliError::AttribLocationsAtLink);
 }
 
 /* ---- the frame builder's side (src/mali/frame.rs) ------------------- */

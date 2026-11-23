@@ -2,19 +2,26 @@
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 //! Byte-compare of the Mali online compiler against the Mesa 26.2.1
 //! references `tools/mali/testdata/deqp_misc3_*` (plan #387, item
-//! board-baseline-rows; `docs/notes/mali-deqp-misc2.md` section 6). The
-//! eight `attribute_location.bind_aliasing` shapes `MaliError::
-//! LinkedVertexNotLowered` refuses at the link: `cond_{float,vec2,vec3,vec4,
-//! mat2,mat3,mat4}` (`a_0` of the type and `a_1` a vec4, both bound to
-//! location 1, selected by `u_A`) and `max_cond_mat4` (eight mat4 on four
-//! locations). Mesa draws each with the `.bind` file's bindings
-//! (`gl_ref.py --attrib-bindings`), so each is compiled the way
-//! glBindAttribLocation + glLinkProgram compile it ([`compile_bound`]), as
-//! `tests/mali_deqp_defects.rs` does for its aliasing references.
+//! board-baseline-rows; `docs/notes/mali-deqp-misc2.md` section 6): the
+//! `attribute_location.bind_aliasing` shapes, two attributes bound to one
+//! location. `cond_{float,vec2,vec3,vec4,mat2,mat3,mat4}` (`a_0` of the type
+//! and `a_1` a vec4, both bound to location 1, selected by `u_A`) and
+//! `max_cond_mat4` (eight mat4 on four locations) are dEQP's shaders; the
+//! `hp_*` ones are the 17 shapes of the group (the `_offset_1` ones and every
+//! `max_cond_*` too) with the vertex shader highp, so that the words check
+//! the attribute layout at the link's locations alone (#11388,
+//! `docs/notes/mali-attribute-records.md`). Mesa draws each with the
+//! `.bind` file's bindings (`gl_ref.py --attrib-bindings`), so each is
+//! compiled the way glBindAttribLocation + glLinkProgram compile it
+//! ([`compile_bound`]), as `tests/mali_deqp_defects.rs` does for its
+//! aliasing references.
 //!
-//! None matches at the tip: each test is ignored with its refusal quoted; the
-//! lowering removes the `ignore` and the reference's entry in `REFUSALS`
-//! together. `refusals_pinned` runs now and names every one that moved.
+//! All compile. The ones that differ are ignored with the difference quoted:
+//! dEQP's mediump vertex arithmetic is fp32 here (#4536), and in 13 of the
+//! highp ones the first `FCMP` comes after the first `LD_ATTR_IMM` (Mesa:
+//! before it; the same with one attribute and no aliasing). The lowering
+//! removes the `ignore` and moves the reference from `REFUSALS` to
+//! `MATCHED`; `refusals_pinned` runs now and names every one that moved.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_misc3
@@ -33,69 +40,190 @@ use yakogl::shaderc::{
 const LOG: usize = 4096;
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_float() {
     assert_matches_bound("deqp_misc3_bind_cond_float");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_vec2() {
     assert_matches_bound("deqp_misc3_bind_cond_vec2");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_vec3() {
     assert_matches_bound("deqp_misc3_bind_cond_vec3");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_vec4() {
     assert_matches_bound("deqp_misc3_bind_cond_vec4");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_mat2() {
     assert_matches_bound("deqp_misc3_bind_cond_mat2");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_mat3() {
     assert_matches_bound("deqp_misc3_bind_cond_mat3");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_cond_mat4() {
     assert_matches_bound("deqp_misc3_bind_cond_mat4");
 }
 
 #[test]
-#[ignore = "refused at the link: a vertex shader whose attributes share locations (LinkedVertexNotLowered)"]
+#[ignore = "differs: the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)"]
 fn misc3_bind_max_cond_mat4() {
     assert_matches_bound("deqp_misc3_bind_max_cond_mat4");
 }
 
-const LINKED: &str = "the Valhall back end of a vertex shader at the link's attribute locations is not lowered yet";
+/* the same shapes with the vertex shader highp: the attribute layout at
+ * the link's locations, byte for byte (#11388) */
 
-/// Every ignored reference and the refusal the bound compile gives it now.
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_float() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_float");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_vec2() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_vec2");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_vec3() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_vec3");
+}
+
+#[test]
+fn misc3_bind_hp_cond_vec4() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_vec4");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_mat2() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_mat2");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_mat2_offset_1() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_mat2_offset_1");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_mat3() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_mat3");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_mat3_offset_1() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_mat3_offset_1");
+}
+
+#[test]
+fn misc3_bind_hp_cond_mat4() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_mat4");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_cond_mat4_offset_1() {
+    assert_matches_bound("deqp_misc3_bind_hp_cond_mat4_offset_1");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_max_cond_float() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_float");
+}
+
+#[test]
+fn misc3_bind_hp_max_cond_vec2() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_vec2");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_max_cond_vec3() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_vec3");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_max_cond_vec4() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_vec4");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_max_cond_mat2() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_mat2");
+}
+
+#[test]
+fn misc3_bind_hp_max_cond_mat3() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_mat3");
+}
+
+#[test]
+#[ignore = "differs: the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa"]
+fn misc3_bind_hp_max_cond_mat4() {
+    assert_matches_bound("deqp_misc3_bind_hp_max_cond_mat4");
+}
+
+const MEDIUMP: &str = "the mediump vertex arithmetic is fp32 here, fp16 in Mesa (#4536)";
+
+/// Every ignored reference and why it differs now.
 const REFUSALS: &[(&str, &str)] = &[
-    ("deqp_misc3_bind_cond_float", LINKED),
-    ("deqp_misc3_bind_cond_vec2", LINKED),
-    ("deqp_misc3_bind_cond_vec3", LINKED),
-    ("deqp_misc3_bind_cond_vec4", LINKED),
-    ("deqp_misc3_bind_cond_mat2", LINKED),
-    ("deqp_misc3_bind_cond_mat3", LINKED),
-    ("deqp_misc3_bind_cond_mat4", LINKED),
-    ("deqp_misc3_bind_max_cond_mat4", LINKED),
+    ("deqp_misc3_bind_cond_float", MEDIUMP),
+    ("deqp_misc3_bind_cond_vec2", MEDIUMP),
+    ("deqp_misc3_bind_cond_vec3", MEDIUMP),
+    ("deqp_misc3_bind_cond_vec4", MEDIUMP),
+    ("deqp_misc3_bind_cond_mat2", MEDIUMP),
+    ("deqp_misc3_bind_cond_mat3", MEDIUMP),
+    ("deqp_misc3_bind_cond_mat4", MEDIUMP),
+    ("deqp_misc3_bind_max_cond_mat4", MEDIUMP),
+    ("deqp_misc3_bind_hp_cond_float", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_vec2", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_vec3", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_mat2", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_mat2_offset_1", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_mat3", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_mat3_offset_1", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_cond_mat4_offset_1", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_max_cond_float", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_max_cond_vec3", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_max_cond_vec4", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_max_cond_mat2", FIRST_LOAD),
+    ("deqp_misc3_bind_hp_max_cond_mat4", FIRST_LOAD),
 ];
 
-/// The references that compile byte-equal (their tests run): none yet.
-const MATCHED: &[&str] = &[];
+const FIRST_LOAD: &str = "the first FCMP comes after the first LD_ATTR_IMM here, before it in Mesa";
+
+/// The references that compile byte-equal (their tests run).
+const MATCHED: &[&str] = &[
+    "deqp_misc3_bind_hp_cond_vec4",
+    "deqp_misc3_bind_hp_cond_mat4",
+    "deqp_misc3_bind_hp_max_cond_vec2",
+    "deqp_misc3_bind_hp_max_cond_mat3",
+];
 
 #[test]
 fn refusals_pinned() {
@@ -115,9 +243,11 @@ fn refusals_pinned() {
         .filter_map(|(name, text)| {
             let r = mali_ref::Reference::load(name);
             match compile_bound(&r.vs, &r.fs, &bindings(name)) {
-                Ok(_) => Some(format!("{name}: now compiles; remove its #[ignore] and its pin")),
-                Err(e) if e.contains(text) => None,
-                Err(e) => Some(format!("{name}: expected a refusal containing {text:?}, got: {e}")),
+                Ok(pair) if mali_ref::differences(&r, &pair).is_empty() => {
+                    Some(format!("{name}: now matches; remove its #[ignore] and its pin"))
+                }
+                Ok(_) => None,
+                Err(e) => Some(format!("{name}: expected it to compile ({text}), got: {e}")),
             }
         })
         .collect();

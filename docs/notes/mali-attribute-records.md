@@ -141,6 +141,76 @@ and Mesa places the unbound attributes largest first
 (`M:compiler/glsl/gl_nir_link_varyings.c:60-70, 1453`), ours in declaration
 order.
 
+## Two attributes bound to one location (#11388)
+
+dEQP-GLES2 attribute_location.bind_aliasing.cond_* bind two attributes to
+one location and read each under one side of `u_A` (`a_0` when
+`u_A != 0.0`, `a_1` when `u_A == 0.0`); max_cond_* do it for all 16
+locations, 32 declared and read. ES 1.00 allows it when no path reads both,
+and so does Mesa (`M:compiler/glsl/gl_nir_link_varyings.c:1224-1275`).
+
+Mesa compiles the vertex program at link, after the locations are
+assigned (`M:compiler/glsl/gl_nir_linker.c:4108`): the two variables have
+one location, the inputs are numbered over `inputs_read`
+(`M:mesa/state_tracker/st_program.c:397, 423-424`), and one `LD_ATTR_IMM`
+of the location serves both names. The references
+`tools/mali/testdata/deqp_misc3_bind_*` show it: `cond_float` is one
+`LD_ATTR_IMM.v4` at `index:0x0`; `max_cond_mat4`'s locations 12, 8, 4, 0 are
+indices 3, 2, 1, 0; `max_cond_float` has 16 loads, `index:0xF` down to 0.
+
+Ours had two faults:
+
+- The GL core relinks a program whose bindings alias with the link's map
+  (gl/program.rs `link_attrib_layout`), and `compile_vs_mapped_blocks`
+  always refused (`LinkedVertexNotLowered`): 8 cases.
+- glCompileShader of a max_cond_* shader built it at the front end's
+  locations, where the 32 read attributes are 32 records: record 16 does not
+  fit LD_ATTR_IMM's 4-bit index and the packer failed (`Defect(Encode)`):
+  6 cases (`max_cond_mat4` reads one column of each mat4, 8 records, so it
+  failed only at the relink).
+
+The change:
+
+- `mali::compile_vs_mapped_blocks` moves each attribute's loads,
+  declaration and row to the map's location
+  (`powervr::abi::with_attrib_map`, the GC7000's and the V3D's step), then
+  builds the vertex shader for the program's fragment shader as
+  `compile_vs_for_reads` does (online backend.rs `vs_for_fragment` with the
+  map). Two names on one location are one record; the record list names a
+  location once (`compile_stage`), and the rows list it once (`record`:
+  the first row that covers it), so the GL core stages it once and the
+  frame builder finds it there. The rows keep the map's locations; after
+  the relink the GL core answers glGetActiveAttrib from the map.
+- A vertex shader whose active attributes take more than 16 locations is
+  compiled to a record with no code that waits for the link
+  (`mali::deferred_vertex`, `codegen::deferred_record`, the other GPUs'
+  `layout_at_link` record). Active is the rule of the rows above, so
+  max_inactive_* (16 active of 32) keeps its code. Its program's vertex
+  shader without the link's locations is refused by name
+  (`AttribLocationsAtLink`).
+- The GL core counted a matrix's locations by its rows, and the Mali lists a
+  matrix as one row: a mat2 bound to 1 took only location 1, so a vec4 bound
+  to 2 was not seen as an alias (cond_mat{2,3,4}_offset_1 then built three
+  records where Mesa has two). `attrib_layout` now takes the columns from
+  the type too.
+
+Not the same as Mesa yet (both seen without aliasing too):
+
+- dEQP's shaders are mediump; their vertex arithmetic is fp32 here and fp16
+  in Mesa (`FCMP_OR.v2f16`, `MUX.v2i16`), the mediump vertex walk of #4536.
+  So the 14 cases compile with a program that is not Mesa's, as every
+  mediump vertex shader does today.
+- With the shaders made highp (`deqp_misc3_bind_hp_*`), 4 of 17 are byte
+  equal. In the other 13 the only difference is the order of the first two
+  instructions: ours puts the first `LD_ATTR_IMM` before the first `FCMP`,
+  Mesa after it. The same happens with one float attribute read in two `if`
+  sides under a uniform's condition, with no aliasing, so it is not the
+  layout's.
+- An attribute that is not active (read only in a side a constant
+  condition does not take) and is in a program whose bindings alias makes
+  the relink refuse its load (`with_attrib_map`, `AttribOutOfRange`): Mesa
+  drops that side first. No dEQP case has the shape.
+
 ## The tests
 
 - `tests/mali_attr_active.rs` (GL on the Mali mock): gl_test case 1's pair,
@@ -168,6 +238,14 @@ order.
   and a tail. Each asserts no refusal, no refusal line and `GL_NO_ERROR`.
 - `src/mali/backend_tests.rs` keeps the back end's own refusal for a
   location the draw does not stage.
+- `tests/mali_attr_active.rs`,
+  `attributes_bound_to_one_location_link_and_draw`: the 17 bind_aliasing
+  cond_* / cond_*_offset_1 / max_cond_* shapes with dEQP's bindings (the 14
+  of #11388 and the 3 offset ones) link, every attribute is active at its
+  binding, and a draw with each side of `u_A` is not refused.
+- `tests/mali_deqp_misc3.rs`: the byte compares of the section above.
+- `src/shaderc/online/mali/tests.rs`,
+  `more_than_16_active_locations_wait_for_the_link`.
 
 The board effect (shaders.operator.sequence, the shaders.random vertex
 cases, fragment_ops.interaction, default_vertex_attrib mat2/mat3) is for the

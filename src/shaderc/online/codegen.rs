@@ -228,6 +228,9 @@ pub enum BackEndError {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BackEndError {
     Mali(super::mali::MaliError),
+    /* the link-time attribute layout (the shared `powervr::abi` helpers:
+     * with_attrib_map, deferred_record's declared list), as on the GC7000 */
+    Attrib(super::powervr::abi::UscAbiError),
 }
 
 #[cfg(feature = "gpu-v3d")]
@@ -724,16 +727,19 @@ pub fn compile_vs_without_consts<'s>(
     compile_vs_for_reads(glsl, &reads[..n], &[], scratch, keep)
 }
 
-/// A vertex shader compiled with the attribute locations the link decided:
-/// on the Mali the front end's verdict, then the gap (`mali`).
+/// A vertex shader compiled with the attribute locations the link decided,
+/// for the program's fragment shader's `reads` and moved expressions when
+/// given (`mali::compile_vs_mapped_blocks`).
 #[cfg(feature = "gpu-mali")]
 pub fn compile_vs_mapped_blocks<'s>(
     glsl: &[u8],
     map: &crate::shaderc::ShcAttribMap,
-    scratch: &Arena<'s>,
+    reads: Option<&[(u8, u8)]>,
+    moved: &[u8],
+    scratch: &'s Arena<'s>,
     keep: &'static Arena<'static>,
 ) -> Result<(ShcShader, Blocks<'s>), CompileError> {
-    super::mali::compile_vs_mapped_blocks(glsl, map, scratch, keep)
+    super::mali::compile_vs_mapped_blocks(glsl, map, reads, moved, scratch, keep)
 }
 
 /// [`compile_linked`], and the shader's uniform-block table.
@@ -1129,8 +1135,8 @@ pub fn compile_vs_mapped_blocks<'s>(
 /// compiles it again with the program's locations
 /// ([`compile_vs_mapped_blocks`]), where attributes bound to one location
 /// share its registers (dEQP-GLES2 attribute_location.bind_aliasing.max_*:
-/// 32 declared, 16 locations). Not on the Mali, whose back end stops before
-/// any layout (`mali::MaliError`).
+/// 32 declared, 16 locations). The Mali's active attributes follow its own
+/// rule ([`deferred_record`], `mali::compile_lowered`).
 #[cfg(not(feature = "gpu-mali"))]
 fn deferred_vertex(
     m: &super::ir::Module<'_>,
@@ -1138,14 +1144,32 @@ fn deferred_vertex(
     keep: &'static Arena<'static>,
     record: impl Fn(super::powervr::abi::UscAbiError) -> CompileError,
 ) -> Result<ShcShader, CompileError> {
-    use super::powervr::abi::{attribs_read, matrix_columns, UscAbiError};
+    use super::powervr::abi::{attribs_read, matrix_columns};
+    /* active: loaded by any LoadInput in the lowered IR, dead branches
+     * included (the front end's static use, ES 2.0 2.10.4) */
+    let read = attribs_read(m).map_err(&record)?;
+    let active = |r: &super::reflect::AttribRow<'_>| {
+        (0..u32::from(matrix_columns(r.gl_type).unwrap_or(1)))
+            .any(|c| u32::from(r.location) + c < 32 && read & (1 << (u32::from(r.location) + c)) != 0)
+    };
+    deferred_record(attribs, active, keep, record)
+}
+
+/// The record of a vertex shader whose layout waits for the link
+/// (`layout_at_link`, [`deferred_vertex`]): no code, and every declared
+/// attribute of `attribs` with no location, `active` saying which ones the
+/// shader reads.
+pub(super) fn deferred_record(
+    attribs: &[super::reflect::AttribRow<'_>],
+    active: impl Fn(&super::reflect::AttribRow<'_>) -> bool,
+    keep: &'static Arena<'static>,
+    record: impl Fn(super::powervr::abi::UscAbiError) -> CompileError,
+) -> Result<ShcShader, CompileError> {
+    use super::powervr::abi::{matrix_columns, UscAbiError};
     use crate::shaderc::{ShcAttribBinding, SHC_ATTRIB_NO_LOCATION, SHC_MAX_DECLARED_ATTRIBS};
     if attribs.len() > SHC_MAX_DECLARED_ATTRIBS {
         return Err(record(UscAbiError::TooManyAttribs { got: attribs.len(), max: SHC_MAX_DECLARED_ATTRIBS }));
     }
-    /* active: loaded by any LoadInput in the lowered IR, dead branches
-     * included (the front end's static use, ES 2.0 2.10.4) */
-    let read = attribs_read(m).map_err(&record)?;
     let mut declared = [ShcAttribBinding::ZERO; SHC_MAX_DECLARED_ATTRIBS];
     for (i, (d, r)) in declared.iter_mut().zip(attribs).enumerate() {
         if r.name.len() >= d.name.len() {
@@ -1157,10 +1181,7 @@ fn deferred_vertex(
         d.location = SHC_ATTRIB_NO_LOCATION;
         d.columns = matrix_columns(r.gl_type).unwrap_or(1);
         d.gl_type = r.gl_type;
-        d.active = u8::from(
-            (0..u32::from(d.columns))
-                .any(|c| u32::from(r.location) + c < 32 && read & (1 << (u32::from(r.location) + c)) != 0),
-        );
+        d.active = u8::from(active(r));
     }
     let kept = keep
         .alloc_copy(&declared[..attribs.len()])
