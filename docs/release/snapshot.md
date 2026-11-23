@@ -197,14 +197,17 @@ from the first is "private classes not run", not a pass. The snapshot
 directory is removed after a rehearsal; nothing is pushed and no remote is
 added.
 
-### Rehearsal on a real tip commit (2026-11-23)
+### Rehearsal on the origin/main tip (2026-11-23, real commit da11eb6b)
 
 - **Source** (a real commit, no throw-away commit):
   `da11eb6b5881bf96bd64bffe9fe103d96e1ed515` ("tree: accidental gitlink
   `before` (a9ca11e1) removed, the snapshot tool accepts the tree again"),
   the commit that removed the `before` gitlink and a descendant of the
-  redaction cleanup (Part 4 at `3b8f4949`, the `docs/release/snapshot.md`
-  lab-host rule). Its tree (`8bf46873`) has no mode-160000 entry.
+  redaction cleanup `3a0ef3d1` ("release: private redaction scan clean at
+  the tip (one reworded resource id, one narrow lab-host rule)", the commit
+  that last changed `tools/release/redaction-scan.allow` for the
+  `docs/release/snapshot.md` lab-host rule; `git merge-base --is-ancestor
+  3a0ef3d1 da11eb6b` holds). Its tree (`8bf46873`) has no mode-160000 entry.
 - **Identity and date**: `yakogl rehearsal <rehearsal@invalid>`,
   `2026-01-01T00:00:00Z`, given as `--author` and `--date`.
 - **Tool output** (exit 0, both runs): `source
