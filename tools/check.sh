@@ -1132,6 +1132,9 @@ TEST_TREE_PATHS=(
   tools/v3d/pi5 tools/v3d/gltest-shaders71
   driver/docs/rpi5-v3d71-facts.md docs/notes/pre-study-rpi5.md
   src/v3d/zskeep71.rs src/v3d/backend.rs src/v3d/ffi.rs src/shaderc/online/v3d/select.rs
+  # tests/capi_feature_forward.rs: the capi crate's features and the build
+  # files that pass them to cargo
+  capi/Cargo.toml capi/yakogl_capi.cmake CMakeLists.txt zephyr/CMakeLists.txt baremetal.mk
 )
 # tree_key_scan: the row that checks the list above against the test code
 # (tools/check_tree_key_scan.py over TREE_KEY_SCAN_DIRS).
