@@ -38,6 +38,10 @@
 
 use super::layout::{self, Layout};
 
+/// The TS entry that marks a tile cleared (`ts::TS_CLEAR_VALUE`'s nibble,
+/// `rs_interp::TS_CLEAR_CODE`; local because this file is core-only).
+const TS_CLEAR_CODE: u8 = 0x1;
+
 /// What the pixel engine is told the depth buffer holds. The caller maps it
 /// to `GC_PE_DEPTH_FORMAT_*`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -152,6 +156,61 @@ pub fn read_super_tiled(
                 PeDepthFormat::D16 => (u16::from_le_bytes([b[0], b[1]]) as f64 / 65535.0) as f32,
                 PeDepthFormat::D24S8 => {
                     ((u32::from_le_bytes([b[0], b[1], b[2], b[3]]) >> 8) as f64 / 16_777_215.0) as f32
+                }
+            };
+        }
+    }
+}
+
+/// [`read_super_tiled`] through a depth tile-status buffer (W12b groundwork,
+/// docs/notes/gc-tiled-wire.md): a pixel whose tile's TS entry is
+/// [`TS_CLEAR_CODE`] reads as `clear_value`'s depth (the word the depth fast
+/// clear programs, `TS_DEPTH_CLEAR_VALUE`: D24S8 `depth << 8 | stencil`, D16
+/// the doubled half), whatever the surface holds there; every other entry
+/// reads the surface as [`read_super_tiled`] does. The TS is Mesa's
+/// (`ts.rs`): one 4-bit entry per `tile_bytes` of surface (128, or 256 with
+/// `TS_MODE_256B`), the low nibble of a byte first, the tile of a pixel being
+/// its [`layout::offset`] `/ tile_bytes`, as `rs_interp`'s `ts_entry`. A tile
+/// past the end of `ts` counts as not cleared. Compression is not modelled
+/// (this part has none outside MSAA): any other entry reads memory.
+/// Same bounds and panics as [`read_super_tiled`].
+#[allow(clippy::too_many_arguments)]
+pub fn read_super_tiled_ts(
+    format: PeDepthFormat,
+    surface: &[u8],
+    stride: u32,
+    w: u32,
+    h: u32,
+    dst: &mut [f32],
+    pitch: u32,
+    ts: &[u8],
+    tile_bytes: u32,
+    clear_value: u32,
+) {
+    assert!(w <= pitch, "width {w} over pitch {pitch}");
+    assert!(dst.len() >= h as usize * pitch as usize, "dst too short");
+    assert!(tile_bytes > 0, "tile_bytes is zero");
+    let bpp = bytes_per_pixel(format);
+    let cleared = match format {
+        PeDepthFormat::D16 => ((clear_value & 0xffff) as f64 / 65535.0) as f32,
+        PeDepthFormat::D24S8 => ((clear_value >> 8) as f64 / 16_777_215.0) as f32,
+    };
+    let cols = w.min(stride / bpp as u32);
+    let rows = h.min(surface.len().div_ceil(stride.max(1) as usize) as u32);
+    for y in 0..rows {
+        for x in 0..cols {
+            let at = layout::offset(Layout::SuperTiled, x, y, bpp as u32, stride);
+            let Some(b) = surface.get(at..at + bpp) else { continue };
+            let tile = at / tile_bytes as usize;
+            let code = ts.get(tile / 2).map(|e| (e >> (4 * (tile % 2))) & 0xf);
+            dst[y as usize * pitch as usize + x as usize] = if code == Some(TS_CLEAR_CODE) {
+                cleared
+            } else {
+                match format {
+                    PeDepthFormat::D16 => (u16::from_le_bytes([b[0], b[1]]) as f64 / 65535.0) as f32,
+                    PeDepthFormat::D24S8 => {
+                        ((u32::from_le_bytes([b[0], b[1], b[2], b[3]]) >> 8) as f64 / 16_777_215.0) as f32
+                    }
                 }
             };
         }
