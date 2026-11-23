@@ -105,11 +105,13 @@ pub const DB_IMX8MP: DbEntry = DbEntry {
 };
 
 /// The STM32MP257F's row, read on the DK (issue #1281): model 0x8000,
-/// revision 0x6205, product 0x80003, eco 0. The customer id was not read, so
-/// it is not matched (Mesa's st row says 0x15). Limits from Mesa's st
-/// gc_feature_database.h `GCNANOULTRA31_VIP2` row (:4720, model :4722,
-/// revision :4723, product :4724, streams :4756) and the same facts in
-/// Linux's etnaviv_hwdb.c :199-216.
+/// revision 0x6205, product 0x80003, eco 0, customer id 0x15 — read on the
+/// board (`docs/notes/stm32mp257f-dk-bringup.md` step 4: the `mp2_gpu`
+/// line `customer=0x15` and the `gpu-identity` verdict, matching Mesa's st
+/// row and Linux's etnaviv entry). A part with another customer id is
+/// refused. Limits from Mesa's st gc_feature_database.h `GCNANOULTRA31_VIP2`
+/// row (:4720, model :4722, revision :4723, product :4724, streams :4756)
+/// and the same facts in Linux's etnaviv_hwdb.c :199-216.
 pub const DB_STM32MP257F: DbEntry = DbEntry {
     name: "GCNANOULTRA31_VIP2",
     chip_id: 0x8000,
@@ -117,7 +119,7 @@ pub const DB_STM32MP257F: DbEntry = DbEntry {
     revision: 0x6205,
     product_id: 0x80003,
     eco_id: Some(0),
-    customer_id: None,
+    customer_id: Some(0x15),
     board_revision: 0x6205,
     temp_registers: 0x40,
     thread_count: 0x200,

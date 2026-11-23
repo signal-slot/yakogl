@@ -48,10 +48,11 @@
 //!   `CHIP_CUSTOMER_ID`, then `CHIP_PRODUCT_ID` and `CHIP_ECO_ID`; so the
 //!   model is at 0x020 and the revision at 0x024 (the item's brief wrote
 //!   0x018 and 0x020; 0x018 is `CHIP_IDENTITY`). The values are #1281's
-//!   day-one readings under ST's Linux: model 0x8000, revision 0x6205,
-//!   product 0x80003, eco 0. The customer id was not read (Mesa's
-//!   `GCNANOULTRA31_VIP2` row says 0x15, `gpu::vivante::hw`) and
-//!   `CHIP_IDENTITY` was not recorded: both start at 0 here. All idle reads
+//!   day-one readings under ST's Linux — model 0x8000, revision 0x6205,
+//!   product 0x80003, eco 0 — and the customer id 0x15 read on the DK
+//!   (`docs/notes/stm32mp257f-dk-bringup.md` step 4; Mesa's
+//!   `GCNANOULTRA31_VIP2` row said 0x15 too, and `gpu::vivante::hw` now
+//!   pins it). `CHIP_IDENTITY` starts at 0 here. All idle reads
 //!   0x7fffffff (every module idle, `AXI_LP` bit 31 clear), as
 //!   [`crate::model::Model`]'s GC does, once the domain is on, the clock runs
 //!   and the reset is released. `HI_INTR_ENBL` is storage; `HI_INTR_ACKNOWLEDGE`
@@ -306,7 +307,7 @@ impl Default for Mp2Config {
             revision: 0x6205,
             product_id: 0x8_0003,
             eco_id: 0,
-            customer_id: 0,
+            customer_id: 0x15,
             identity: 0,
             never_idle: false,
             display_scmi: false,
@@ -997,7 +998,7 @@ mod tests {
             (0x018, 0),
             (0x020, 0x8000),
             (0x024, 0x6205),
-            (0x030, 0),
+            (0x030, 0x15),
             (0x0a8, 0x8_0003),
             (0x0e8, 0),
             (0x004, 0x7fff_ffff),
