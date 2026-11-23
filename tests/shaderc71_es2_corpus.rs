@@ -22,8 +22,14 @@
 //! of a program that compiles decodes with codec71 to its instruction and the
 //! instructions pass verify71, `registers_fit_threads71` and
 //! `branches_are_structured71`. Refusals are counted, summarised by message
-//! and named; the count that compiles is printed (the pin is re-derived with
-//! the corpus, not here).
+//! and named.
+//!
+//! Pinned: `PROGRAMS`, `COMPILED` and `REFUSED` exactly, and the refusals
+//! against `tools/shaders/known-uncompilable-v3d71-es2.txt`
+//! (`<key>: <exact message> # <reason>`): a refusal not listed, a listed
+//! refusal whose message changed, and a listed key that now compiles all
+//! fail. Mesa 7.1's counts (and the stages it refuses) are printed, not
+//! enforced.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test shaderc71_es2_corpus -- --nocapture
@@ -46,6 +52,43 @@ use yakogl::shaderc::online::v3d::verify71::{registers_fit_threads71, verify71};
 use yakogl::shaderc::online::{lower, store};
 
 static LIB_COUNTS_71: &str = include_str!("../tools/shaders/deqp_es2_lib_counts_71.tsv");
+static LIST: &str = include_str!("../tools/shaders/known-uncompilable-v3d71-es2.txt");
+
+/// The expect-pass, `version 100` programs of VK-GL-CTS 93bca01
+/// data/gles2/shaders (es2lib-ref71.sh's `programs: 1778`).
+const PROGRAMS: usize = 1778;
+/// Those that compile at 7.1 and pass codec71 and verify71 (at 9f5f6e76).
+const COMPILED: usize = 1778;
+/// Those the 7.1 back end refuses: the entries of the list.
+const REFUSED: usize = 0;
+
+/// The start of `l`'s trailing reason: the rightmost `#` with a space before
+/// it, a space after it and text after that (tests/shaderc71_lists.rs's
+/// rule; a `#` glued to a word, `#version`, stays in the message).
+fn trailing_reason(l: &str) -> Option<usize> {
+    let mut from = l.len();
+    while let Some(j) = l[..from].rfind("# ") {
+        if j > 0 && l.as_bytes()[j - 1] == b' ' && !l[j + 2..].trim().is_empty() {
+            return Some(j);
+        }
+        from = j;
+    }
+    None
+}
+
+/// The list: key to the exact refusal message, the trailing reason dropped.
+fn listed() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
+    for l in LIST.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        let j = trailing_reason(l).unwrap_or_else(|| panic!("known-uncompilable-v3d71-es2.txt: no `# reason`: {l}"));
+        let (k, msg) = l[..j]
+            .trim_end()
+            .split_once(": ")
+            .unwrap_or_else(|| panic!("known-uncompilable-v3d71-es2.txt: not `<key>: <message>`: {l}"));
+        assert!(m.insert(k.to_string(), msg.to_string()).is_none(), "{k} is listed twice");
+    }
+    m
+}
 
 /// The scratch region is one per process: the tests take turns
 /// (tests/v3d71_online_corpus.rs's idiom).
@@ -176,6 +219,34 @@ fn every_es2_library_program_compiles_at_7_1_or_is_named() {
     for (k, m) in &refused {
         println!("  refused {k}: {m}");
     }
+    /* Mesa 7.1's refusals, printed next to ours, not enforced. */
+    for l in LIB_COUNTS_71.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        let c: Vec<&str> = l.split('\t').collect();
+        if c[2] != "yes" {
+            let ours = if refused.contains_key(c[0]) { "refused" } else { "compiled" };
+            println!("  Mesa 7.1 refuses {} {}: {} (ours: {ours})", c[0], c[1], c[3]);
+        }
+    }
+
+    /* The list, both ways, then the pins. */
+    let list = listed();
+    let mut bad = Vec::new();
+    for (k, m) in &refused {
+        match list.get(k) {
+            None => bad.push(format!("refused, not listed: {k}: {m}")),
+            Some(want) if want != m => bad.push(format!("listed message changed: {k}: listed `{want}`, now `{m}`")),
+            Some(_) => {}
+        }
+    }
+    for k in list.keys().filter(|k| !refused.contains_key(*k)) {
+        bad.push(format!("listed but compiles now (or no such program): {k}"));
+    }
+    assert!(bad.is_empty(), "tools/shaders/known-uncompilable-v3d71-es2.txt is out of date:\n{}", bad.join("\n"));
+    assert_eq!(
+        (programs.len(), compiled, refused.len()),
+        (PROGRAMS, COMPILED, REFUSED),
+        "(programs, compiled, refused) at 7.1"
+    );
 }
 
 /// The reader's own cases (the ES 3.00 side is es3_shaderc_corpus's); this

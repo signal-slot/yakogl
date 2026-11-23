@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# dEQP-GLES2 shader library programs that the V3D 7.1 online back end refuses
+# (tests/shaderc71_es2_corpus.rs): the expect-pass, `version 100` programs of
+# VK-GL-CTS 93bca01 data/gles2/shaders/*.test, named as tools/cts/es2lib-ref71.sh
+# names them (`<file stem>.<case>[_vertex|_fragment]`). One entry per line:
+# `<key>: <exact message> # <reason>`, the message being the front end's
+# (`front end <stage>: <message>`) or V3d71Error's Debug form, the reason
+# `4.2 also refuses`, `Mesa 7.1 also refuses` or `7.1-only` with the cause's
+# file:line in src/shaderc/online/v3d/*71*.rs. A refusal not listed, a changed
+# message and a listed key that now compiles all fail the test.
+#
+# Empty at 9f5f6e76: all 1778 programs compile at 7.1 and pass codec71 and
+# verify71. The 13 stage rows Mesa 7.1 refuses (deqp_es2_lib_counts_71.tsv)
+# are ones we compile; the test prints them and does not enforce them.
