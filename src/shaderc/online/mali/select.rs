@@ -654,8 +654,11 @@ impl UboLayout {
             let stride = nir::array_element(u).map_or(comps, |(s, _)| s);
             for e in 0..u16::from(u.array_len.max(1)) {
                 l.push(u.dword_off + e * stride, comps, halves)?;
-                /* as the other two layouts mark them */
-                if u.array_len > 1 || is_matrix(u.gl_type) {
+                /* as the other two layouts mark them; a struct's member too:
+                 * Mesa loads each word of it the shader reads alone
+                 * (linkage.uniform_struct_partial_vec4's `val.b.y` is the
+                 * FAU word `u2.w0`, `val.b.x` is not pushed) */
+                if u.array_len > 1 || is_matrix(u.gl_type) || u.name.contains('.') {
                     l.split_last();
                 }
             }

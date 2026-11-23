@@ -468,6 +468,9 @@ pub const STRUCT_VALUES: &[&str] = &[
     "deqp_fclane2_struct_basic_float",
     "deqp_fclane2_struct_basic_int",
     "deqp_fclane2_struct_nested_float",
+    "deqp_structmember_uniform_struct",
+    "deqp_structmember_uniform_struct_partial",
+    "deqp_structmember_uniform_struct_partial_vec4",
 ];
 
 /// Dwords of one element of an array row of GL type `ty` (the front end's
