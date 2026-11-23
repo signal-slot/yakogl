@@ -8,11 +8,12 @@ core reports and programs today, which cases depend on it, and the decision for
 P9 (`docs/notes/pre-study-stm32mp257f-dk.md`, Q11 at :876 and the P9 row at
 :965). Nothing here was measured on the board.
 
-Sources: Mesa's `etnaviv_screen.c:366-368` and the hwdb lines are **cited**
-from `src/vivante/profile.rs` and `tools/vivante/README.md`, not re-read for
-this note: no `$MESA_ETNA_TREE` was set and the fetch of Mesa 26.2.1 into
-`$CONNECTED_DEPS_DIR` was refused in this session. The dEQP sources were not
-opened either; what dEQP requires of the range is stated as unread below.
+Sources: Mesa 26.2.1's `etnaviv_screen.c:366-368` was read (fetched from the
+`mesa-26.2.1` tag): `max_line_width` and `max_line_width_aa` are
+`VIV_FEATURE(screen, ETNA_FEATURE_WIDELINE_TRIANGLE_EMU) ? 1.0f : 8192.0f`.
+The hwdb lines are cited from `src/vivante/profile.rs` and
+`tools/vivante/README.md`, not re-read. The dEQP sources were not opened;
+what dEQP requires of the range is stated as unread below.
 
 ## 1. What the row supports
 
