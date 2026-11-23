@@ -13996,6 +13996,9 @@ mod builtin_constant_tests {
         use crate::gl::context::{
             CAP_COMBINED_TEXTURE_UNITS, CAP_TEXTURE_UNITS, MAX_UNIFORM_DWORDS, MAX_VARYING_VECTORS, MAX_VERTEX_ATTRIBS,
         };
+        /* gl_MaxDrawBuffers is read twice, here and by the compile: no other
+         * test's rig may stand in for another back end in between */
+        let _serial = crate::testutil::serial();
         let v = "attribute vec4 p;\nattribute float in0;\nvarying float out0;\n";
         for (name, want) in [
             ("gl_MaxVertexAttribs", MAX_VERTEX_ATTRIBS),
@@ -14228,6 +14231,8 @@ mod es3_builtin_constant_tests {
     #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
     #[test]
     fn the_es3_constants_are_the_limits_the_gl_core_reports() {
+        /* as in the ES 1.00 test: gl_MaxDrawBuffers is read twice */
+        let _serial = crate::testutil::serial();
         for (name, want) in [
             ("gl_MaxVertexAttribs", MAX_VERTEX_ATTRIBS as i64),
             ("gl_MaxVertexUniformVectors", (MAX_UNIFORM_DWORDS / 4) as i64),
