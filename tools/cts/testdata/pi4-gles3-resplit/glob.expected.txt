@@ -1,0 +1,12 @@
+# A small tree in 5 images, the format of tools/cts/pi4-gles3-tree.txt.
+
+# image A: 6 (a glob)
+dEQP-GLES3.functional.g1.a.*
+# image B1: 1 (g1.b.x.1 alone: dEQP stopped at it in B at abc12345)
+dEQP-GLES3.functional.g1.b.x.1
+# image B2: 4 (the rest of B after g1.b.x.1, never begun at abc12345)
+dEQP-GLES3.functional.g1.b.x.2,dEQP-GLES3.functional.g1.b.y.*,dEQP-GLES3.functional.g1.b.z
+# image C: 4 (named cases)
+dEQP-GLES3.functional.g2.c.1,dEQP-GLES3.functional.g2.c.2,dEQP-GLES3.functional.g2.c.3,dEQP-GLES3.functional.g2.c.4
+# image D: 1
+dEQP-GLES3.functional.g3.*

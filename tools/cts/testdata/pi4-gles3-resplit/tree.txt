@@ -1,0 +1,10 @@
+# A small tree in 4 images, the format of tools/cts/pi4-gles3-tree.txt.
+
+# image A: 6 (a glob)
+dEQP-GLES3.functional.g1.a.*
+# image B: 5 (a glob over a subtree)
+dEQP-GLES3.functional.g1.b.*
+# image C: 4 (named cases)
+dEQP-GLES3.functional.g2.c.1,dEQP-GLES3.functional.g2.c.2,dEQP-GLES3.functional.g2.c.3,dEQP-GLES3.functional.g2.c.4
+# image D: 1
+dEQP-GLES3.functional.g3.*

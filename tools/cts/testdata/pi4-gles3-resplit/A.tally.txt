@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Pi 4 dEQP-GLES3 image A: deqp-uart-tally.py --mustpass tools/cts/gles3-mustpass.txt A.console.txt
+A.console.txt: deqp: done: 2 passed, 1 failed, 0 not supported, 0 warnings, complete=0 | STOPPED: dEQP ended the session early (complete=0); the cases after the last one here never began
+group  pass fail
+ResourceError dEQP-GLES3.functional.g1.a.3
