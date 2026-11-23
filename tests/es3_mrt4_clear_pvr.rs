@@ -757,3 +757,23 @@ fn glclearbufferuiv_of_integer_attachment_three_reaches_the_fourth_target() {
     assert_eq!(k[0].frag.num_rt, 4);
     assert_ne!(attach3(&k[0]), [0, 0], "render target 3 has PBE state");
 }
+
+/// Draw buffers {A0, A1, A2, GL_NONE}: glClearBufferfv of draw buffer 3 has
+/// no effect and no error (ES 3.0 4.2.3); the back end gets no clear of
+/// render target 3 (no kick at all).
+#[test]
+fn glclearbufferfv_of_a_none_drawbuffer_3_clears_nothing() {
+    let _g = rig();
+    fbo4([GL_RGBA8; 4]);
+    let bufs = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_NONE];
+    let k = kicks_of(|| {
+        // SAFETY: four draw buffers; four floats.
+        unsafe {
+            glDrawBuffers(4, bufs.as_ptr());
+            assert_eq!(glGetError(), GL_NO_ERROR);
+            glClearBufferfv(GL_COLOR, 3, C.as_ptr());
+        }
+    });
+    assert_eq!(error(), GL_NO_ERROR, "{:?}", logs());
+    assert!(k.is_empty(), "nothing is cleared, so nothing is kicked: {:?}", logs());
+}
