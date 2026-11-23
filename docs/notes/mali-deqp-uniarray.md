@@ -400,6 +400,52 @@ No glmark2 verdict moves (`mali_glmark2_corpus`, fixture byte-identical).
 mat3-array uniform rule (`a vertex shader uniform that is not highp`),
 which is unitype's, so its pin stays.
 
+## 10. What landed (spike-uniarray-rest2, at 87388100)
+
+At the start, 7 of 24 references were ignored. This item makes four
+byte-equal and un-ignores them: `dyn_vec2_vs`, `dyn_vec3_vs`, `dyn_vec4_vs`
+and `struct_member_vs`. Their pins are gone.
+
+- **A vertex fp16 element at a run-time index** (`nir::uniform_idx16`). A
+  `LoadUniformIdx` of a mediump vec2, vec3 or vec4 array (`fp16_uniform`)
+  at an int uniform's index becomes a 16-bit `Kind::UniformIdx` node. Its
+  lanes are the element's, two to a register, and each lane gets its own
+  `f2f32` as a constant index's element does. The node is a load of
+  16-bit words like the fp16 vertex look-up (`nir::vs_is_word16`, which
+  `vs_vec16` and `vs_tex16_word` now ask), so a pair of its lanes is a
+  register read whole (`FADD.v2f16 r1, r4^, r2^`) and a vec3's z is a lane
+  alone (`r5^.h00`). `vs_is_uniform16` and `uniform_sum16` take it as an
+  fp16 uniform's lane, so `vs_alu16u` makes Mesa's `FADD.v2f16` sums.
+  `select.rs` `idx16_offset` emits `LSHIFT_OR.i32` by 2 (vec2) or 3 (vec3,
+  vec4) and the `IADD_IMM.i32` of the base. `idx16_fetch` emits
+  `LD_PKA.i32`, `.i48` or `.i64`, sunk to the first reader like the vec4
+  path's `pending` load. `UboLayout::vs` lays the array as fp16 rows, as at
+  a constant index (section 8).
+- **The mediump int index.** The four `ui_*` ints are mediump. Mesa keeps an
+  int 32-bit (`caps->int16` is false), so an int read only as such an index
+  (`nir::index16_only`) passes the vertex precision rule (mod.rs).
+- **The flat varying.** The sums' lanes read no attribute. Mesa's link makes
+  them flat with the constants `vec4(res, 0.0, 1.0)` keeps
+  (`.v4.src_flat32`, `IADD_IMM.i32 r4, 0x0, #0x0`). `nir::widened_sum16`
+  counts such a lane as flat beside the `kept_flat` constants, where it
+  counted as interpolated and met the "computed from no attribute" refusal.
+- **`struct_member_vs`.** The int member `s.c` read only through `float(s.c)`
+  (`nir::int_float_only`) is no longer `UniformType`: `S32_TO_F32 r2,
+  u7.w0` of its pushed word.
+
+No glmark2 verdict moves (`mali_glmark2_corpus` on a PowerVR
+`tools/hostharness/glmark2/run.sh` corpus of 69 shaders;
+`MALI_GLMARK2_WRITE=1` leaves the fixture byte-identical).
+`tests/mali_deqp_unif2.rs` `arr_struct_array` moved its pin to the
+vertex precision rule (`docs/notes/mali-deqp-unitype.md`, last section).
+
+Left (pins unchanged):
+
+| Test | Stops at | What it needs |
+|---|---|---|
+| `struct_member_fs` | `FsUniform` | the mediump fragment walk's leaf for the int member converted, `S32_TO_F32 r0, u3.w1` then `FADD.f32 r0.h0, r0^, 0x0.neg`, paired by `MKVEC.v2i16` with the narrowed fp32 member `b[1]` (`FADD.f32 r1.h0, u3.w0, 0x0.neg`); the other two members `V2F32_TO_V2F16 r0, u2.w0, u2.w1` |
+| `struct`, `api_float` | `ColourForm` / `FsUniform` | `compare_float`'s `abs` and `?:` (Mesa's `FMAX` of the abs values and one `FCMP`), constop's fragment compare tree |
+
 ## Open
 
 - ~~The exact generated GLSL of A-F is not read~~. The `indexing` and

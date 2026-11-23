@@ -31,8 +31,12 @@ fn dyn_vec2_fs() {
     mali_ref::assert_matches("deqp_uniarray_dyn_vec2_fs");
 }
 
+/// The vertex walk's fp16 element at a mediump int's index (nir.rs
+/// `uniform_idx16`): `LSHIFT_OR.i32` by the byte table's 2 (a vec2's word)
+/// or 3 (a vec3's or vec4's two), `IADD_IMM.i32 #0x10`, `LD_PKA.i32`,
+/// `.i48` or `.i64` sunk to its first reader, the `FADD.v2f16` sums of the
+/// registers, and the varying flat with its kept constants.
 #[test]
-#[ignore = "refused: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform (a vertex shader's fp16 element read more than once, LD_PKA.i32), a lower-uniarray follow-up"]
 fn dyn_vec2_vs() {
     mali_ref::assert_matches("deqp_uniarray_dyn_vec2_vs");
 }
@@ -43,7 +47,6 @@ fn dyn_vec3_fs() {
 }
 
 #[test]
-#[ignore = "refused: a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform (a vertex shader's fp16 element read more than once, LD_PKA.i48), a lower-uniarray follow-up"]
 fn dyn_vec3_vs() {
     mali_ref::assert_matches("deqp_uniarray_dyn_vec3_vs");
 }
@@ -54,7 +57,6 @@ fn dyn_vec4_fs() {
 }
 
 #[test]
-#[ignore = "refused: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, owned by unitype"]
 fn dyn_vec4_vs() {
     mali_ref::assert_matches("deqp_uniarray_dyn_vec4_vs");
 }
@@ -109,8 +111,9 @@ fn struct_member_fs() {
     mali_ref::assert_matches("deqp_uniarray_struct_member_fs");
 }
 
+/// The int member `s.c` read as `float(s.c)` (nir.rs `int_float_only`):
+/// `S32_TO_F32 r2, u7.w0` of its pushed word.
 #[test]
-#[ignore = "refused: a uniform other than a float, vec2, vec3, vec4 or mat4 (the int member s.c read as a value, S32_TO_F32), owned by intval"]
 fn struct_member_vs() {
     mali_ref::assert_matches("deqp_uniarray_struct_member_vs");
 }
@@ -152,28 +155,12 @@ const REFUSALS: &[(&str, &str)] = &[
         "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp",
     ),
     (
-        "dyn_vec2_vs",
-        "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform",
-    ),
-    (
-        "dyn_vec3_vs",
-        "a uniform read at a run-time index other than a float array's element or a mediump fragment shader's vec4 array first in the block read once, indexed by an int uniform",
-    ),
-    (
-        "dyn_vec4_vs",
-        "a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member",
-    ),
-    (
         "struct",
         "a gl_FragColor lane other than the varying's own lane or a constant",
     ),
     (
         "struct_member_fs",
         "a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp",
-    ),
-    (
-        "struct_member_vs",
-        "a uniform other than a float, vec2, vec3, vec4 or mat4",
     ),
 ];
 

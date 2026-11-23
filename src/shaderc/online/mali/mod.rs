@@ -1430,7 +1430,18 @@ fn compile_stage<'s>(
              * stage: deqp_intval_uniapi_bool_vs's `u_var` (plan #377
              * lower-intval-2) */
             let bool = nir::bool_type(u.gl_type as u32);
-            if !member && !bool && !matches!(prec(u.name), Some(Precision::High)) && ubo.half(u.dword_off).is_none() {
+            /* an int is a 32-bit word whatever its precision (`caps->int16`
+             * is false, pan_screen.c:591: lower_precision narrows no
+             * integer): a mediump int read only as an fp16 array's run-time
+             * index (deqp_uniarray_dyn_vec{2,3,4}_vs's `ui_zero`, the
+             * `LSHIFT_OR.i32 r1, u5.w1, ..` of its pushed word) */
+            let index = nir::index16_only(&vs, u.dword_off);
+            if !member
+                && !bool
+                && !index
+                && !matches!(prec(u.name), Some(Precision::High))
+                && ubo.half(u.dword_off).is_none()
+            {
                 return Err(MaliError::UniformPrecision);
             }
         }

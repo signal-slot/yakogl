@@ -28,6 +28,11 @@ const ARRAY: &str = "Valhall: a uniform array is not lowered yet";
 const OTHER_VS: &str = "Valhall: a uniform other than a float, vec2, vec3, vec4 or mat4 is not lowered yet";
 const FS_OTHER: &str = "Valhall: a mediump fragment shader uniform other than a float, vec2, vec3, vec4, vec4 array or int read in its own fp16 lane pairs or as one lane, or one declared highp, is not lowered yet";
 const LANE: &str = "Valhall: a gl_FragColor lane other than the varying's own lane or a constant is not lowered yet";
+/// A vertex shader uniform kept fp16 Mesa's way other than the plain ones:
+/// `arr_struct_array`'s members of a struct array's nested struct array
+/// (`s[0].b[1].b[0]`), since plan #377's spike-uniarray-rest2 took its
+/// `float(s[0].c)` (nir.rs `int_float_only`).
+const VS_PRECISION: &str = "Valhall: a vertex shader uniform that is not highp (Mesa's fp16 uniform), other than a float, vec2, vec3, vec4 or mat4 that is neither an array nor a struct member, is not lowered yet";
 const ARITH: &str = "Valhall: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs) is not lowered yet";
 
 /// The references that compile byte-equal, without the `deqp_unif2_` prefix.
@@ -38,7 +43,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("arr_bool_array", ARRAY),
     ("arr_int_array", ARRAY),
     ("arr_mat_array", ARRAY),
-    ("arr_struct_array", OTHER_VS),
+    ("arr_struct_array", VS_PRECISION),
     ("fs_bool_uniform", FS_OTHER),
     ("fs_int_uniform", FS_OTHER),
     ("fs_mat_uniform", LANE),
