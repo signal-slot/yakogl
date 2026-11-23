@@ -28,7 +28,9 @@
 //!
 //! `constglobal_reduced` compiles byte-equal (the -0.0 rule walks constant
 //! chains of any depth, folds `float()` of int and bool literals and reads a
-//! local's reaching store in `main`'s block). The others are ignored with
+//! local's reaching store in `main`'s block), and so does `mainplain_fs`
+//! since the walk leaves out the dead values whose arithmetic it refused
+//! (`nir_fs.rs` `ir_live`). The others are ignored with
 //! their refusal quoted; only `mainbuiltin_fs` still stops at the -0.0 rule
 //! (`log` and `sqrt` of constants are not folded); the rest stop at
 //! arithmetic or a fused multiply-add after it. The lowering removes the
@@ -78,7 +80,6 @@ fn negzero_mainplain_vs() {
 }
 
 #[test]
-#[ignore = "refused: arithmetic other than +, -, * and a dot or matrix product (in a fragment shader: +, -, * and abs)"]
 fn negzero_mainplain_fs() {
     mali_ref::assert_matches("deqp_negzero_mainplain_fs");
 }
@@ -106,13 +107,12 @@ const REFUSALS: &[(&str, &str)] = &[
     ("deqp_negzero_mainbuiltin_vs", ARITH),
     ("deqp_negzero_mainbuiltin_fs", NEG_ZERO),
     ("deqp_negzero_mainplain_vs", ARITH),
-    ("deqp_negzero_mainplain_fs", ARITH),
     ("deqp_negzero_array_inout_fs", ARITH),
     ("deqp_negzero_array_inout_vs", ARITH),
 ];
 
 /// The references that compile byte-equal (their tests run).
-const MATCHED: &[&str] = &["deqp_negzero_constglobal_reduced"];
+const MATCHED: &[&str] = &["deqp_negzero_constglobal_reduced", "deqp_negzero_mainplain_fs"];
 
 #[test]
 fn refusals_pinned() {
