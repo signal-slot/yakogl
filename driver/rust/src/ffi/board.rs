@@ -7,7 +7,9 @@
 //! one of these, and stores `out` in its sink when the call returns 1.
 
 use crate::board::record::{self, Display, Glmark2Outcome, GmScene, Writer};
+use crate::board::record_screen::{self, Ring};
 use crate::board::{imx8mp, rpi4, rpi_fb};
+use crate::errno::EINVAL;
 use core::mem::{offset_of, size_of};
 
 const _: () = assert!(size_of::<Writer>() == 8);
@@ -325,6 +327,67 @@ const _: () = assert!(size_of::<rpi4::Fb>() == 24);
 const _: () = assert!(offset_of!(rpi4::Fb, width) == 8);
 const _: () = assert!(offset_of!(rpi4::Fb, rows) == 20);
 
+/// One console character into the record screen's ring
+/// ([`record_screen::Ring::put`]; the low byte of `c`). A null `r` is
+/// ignored.
+///
+/// # Safety
+/// `r` is null or points to a ring the caller owns, with no other call on
+/// it running.
+#[no_mangle]
+pub unsafe extern "C" fn yd_record_screen_put(r: *mut Ring, c: u32) {
+    // SAFETY: the caller's contract.
+    if let Some(r) = unsafe { r.as_mut() } {
+        r.put(c as u8);
+    }
+}
+
+/// Draw the record screen ([`record_screen::Ring::draw`]) over the `width` x
+/// `height` XRGB8888 picture at `px` (rows `stride_bytes` apart, top row
+/// first) with the 8x16 glyphs of printable ASCII at `font` and the
+/// `head_len` characters at `head` as the first row. Returns the console
+/// lines drawn; 0 with nothing written for a picture of fewer than three
+/// text rows of one character; -EINVAL with nothing written for a null or
+/// unaligned pointer or a stride that is no whole pixels.
+///
+/// # Safety
+/// `r` is a ring no `yd_record_screen_put` runs on during the call; `px` is
+/// valid for `stride_bytes * (height - 1) + width * 4` bytes of writes,
+/// `font` for [`record_screen::FONT_GLYPHS`] glyphs and `head` for
+/// `head_len` bytes of reads.
+#[no_mangle]
+pub unsafe extern "C" fn yd_record_screen_draw(
+    r: *const Ring,
+    px: *mut u32,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+    font: *const record_screen::Font,
+    head: *const u8,
+    head_len: usize,
+) -> i32 {
+    if r.is_null() || px.is_null() || !px.is_aligned() || font.is_null() || (head.is_null() && head_len != 0) {
+        return -EINVAL;
+    }
+    if !stride_bytes.is_multiple_of(4) {
+        return -EINVAL;
+    }
+    let (stride, width, height) = (stride_bytes as usize / 4, width as usize, height as usize);
+    if height == 0 || stride < width {
+        return 0;
+    }
+    let Some(len) = stride.checked_mul(height - 1).and_then(|n| n.checked_add(width)) else { return 0 };
+    // SAFETY: the caller's contract; `len` pixels are the bytes it names.
+    let (r, px, font, head) = unsafe {
+        let head = if head_len == 0 { &[][..] } else { core::slice::from_raw_parts(head, head_len) };
+        (&*r, core::slice::from_raw_parts_mut(px, len), &*font, head)
+    };
+    r.draw(px, stride, width, height, font, head) as i32
+}
+
+const _: () = assert!(size_of::<Ring>() == 7794);
+const _: () = assert!(size_of::<record_screen::Font>() == 95 * 16);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,6 +410,45 @@ mod tests {
             assert_eq!(yd_record_result_tag(&mut w, kind::PROBES as u32, 2, 1, 2, 3, &mut out), 1);
             assert_eq!(out, [0x594B0602, 1, 2, 3]);
         }
+    }
+
+    /// The record screen's entry points: the ring's lines reach the pixels,
+    /// and what the call cannot draw into is refused before any write.
+    #[test]
+    fn record_screen_entry_points_draw_or_refuse() {
+        use record_screen::{BG, FG, FONT_H};
+        let mut font = [[0u8; FONT_H]; 95];
+        font[(b'a' - 0x20) as usize][0] = 0x80; // 'a': the cell's top left pixel
+        let mut r = Ring::new();
+        let (w, h, stride) = (16u32, 3 * FONT_H as u32, 20u32);
+        let mut px = vec![1u32; (stride * (h - 1) + w) as usize];
+        let n = px.len();
+        unsafe {
+            yd_record_screen_put(core::ptr::null_mut(), b'a' as u32);
+            for c in *b" a\n" {
+                yd_record_screen_put(&mut r, 0x100 | c as u32); // the low byte counts
+            }
+            let draw = |px: *mut u32, stride_bytes, font: *const record_screen::Font, head: *const u8, head_len| {
+                yd_record_screen_draw(&r, px, w, h, stride_bytes, font, head, head_len)
+            };
+            let p = px.as_mut_ptr();
+            assert_eq!(draw(core::ptr::null_mut(), stride * 4, &font, b"a".as_ptr(), 1), -EINVAL);
+            assert_eq!(draw(p.cast::<u8>().add(1).cast(), stride * 4, &font, b"a".as_ptr(), 1), -EINVAL);
+            assert_eq!(draw(p, stride * 4 + 2, &font, b"a".as_ptr(), 1), -EINVAL);
+            assert_eq!(draw(p, stride * 4, core::ptr::null(), b"a".as_ptr(), 1), -EINVAL);
+            assert_eq!(draw(p, stride * 4, &font, core::ptr::null(), 1), -EINVAL);
+            assert_eq!(yd_record_screen_draw(core::ptr::null(), p, w, h, stride * 4, &font, b"a".as_ptr(), 1), -EINVAL);
+            assert_eq!(draw(p, (w - 1) * 4, &font, b"a".as_ptr(), 1), 0, "rows closer than the width");
+            assert_eq!(yd_record_screen_draw(&r, p, w, 0, stride * 4, &font, b"a".as_ptr(), 1), 0);
+            assert!(px.iter().all(|&p| p == 1), "a refused call wrote");
+            // a null head of no characters is an empty first row
+            assert_eq!(draw(p, stride * 4, &font, core::ptr::null(), 0), 1);
+        }
+        assert_eq!(px.len(), n);
+        let at = |x: u32, y: u32| px[(y * stride + x) as usize];
+        // row 1 is the line " a": the second cell's top left pixel
+        assert_eq!((at(8, FONT_H as u32), at(0, FONT_H as u32), at(0, 0)), (FG, BG, BG));
+        assert_eq!(at(w, 0), 1, "a pixel between the rows' ends is not the picture's");
     }
 
     #[test]

@@ -61,6 +61,18 @@ static inline bool board_wdog_alive(void)
 }
 #endif
 
+#ifdef CONFIG_YAKOGL_BOARD_RECORD_SCREEN
+/* common/record_screen.c (the boards that compile it: lib/board/CMakeLists.txt):
+ * draw the record screen over the width x height XRGB8888 picture at px
+ * (rows stride bytes apart, top row first, 4-byte aligned): a first row
+ * that says when, the console's last lines that fit, the last yk-record
+ * line at the bottom (yakogl_drivers.h, yd_record_screen_draw). Only memory
+ * is written, with interrupts off: any context. Returns the console lines
+ * drawn, 0 with nothing written for a picture of fewer than three text rows,
+ * -EINVAL with nothing written for a pointer or stride it cannot use. */
+int board_record_screen_draw(void *px, uint32_t width, uint32_t height, uint32_t stride);
+#endif
+
 /* The literal every board prints once its watchdog is armed; the runner
  * (tools/board.sh) requires it in the image. */
 #define BOARD_WDOG_ARMED_LINE "board: watchdog armed\n"

@@ -800,6 +800,26 @@ busy rule are first run on the board by a double-buffered image (gl_test,
 dEQP); the board library prints the screen's flip count at the end of a run
 so that the UART record says whether they ran.
 
+**The record screen.** A run judged from the capture unit's pictures has no
+UART text, so the picture alone does not say whether the image's own check
+passed. With `CONFIG_YAKOGL_BOARD_RECORD_SCREEN` (default on) the board
+library keeps the console's last lines in a ring
+(`driver/zephyr/lib/board/common/record_screen.c`; the rules are
+`board::record_screen` in the driver crate) and draws them over the window
+shown last, the last `yk-record:` line at the bottom. It draws into the
+buffer the VOP already scans, so it writes no register. Three ends draw it:
+
+- `board_reset()`, after `board_finish()`'s hold: the record stays for
+  `CONFIG_YAKOGL_BOARD_RECORD_SCREEN_S` (20 s), then the reset. A run that
+  failed before its first frame shows the window it took, which is the adopt;
+- the watchdog's feeder when it stops for no progress or at the lifetime's
+  end (a hang): the record stays until WDT0's reset, one period;
+- a fatal error (`k_sys_fatal_error_handler`): Zephyr's register lines are in
+  the ring; the image halts and the record stays until WDT0's reset.
+
+The window is 1024 pixels wide at most, so a row holds 128 characters of the
+8x16 font and a longer line continues on the next row.
+
 ## 5. Proof without a camera
 
 What can be read back (every one of these is a register Linux names; values

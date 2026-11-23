@@ -34,6 +34,11 @@ if(CONFIG_YAKOGL_NANOPC_T6)
     # The board layer's part (nanopc_t6/Kconfig, YAKOGL_BOARD_NANOPC_T6): its
     # window is the Mali OSAL's (osal_internal.h).
     zephyr_library_sources_ifdef(CONFIG_YAKOGL_BOARD_NANOPC_T6 nanopc_t6/board_nanopc_t6.c)
+    # The record screen's ring and its drawing (CONFIG_YAKOGL_BOARD_RECORD_SCREEN
+    # with the board layer; the Pi 4 has a ring of its own in board_rpi4.c).
+    if(CONFIG_YAKOGL_BOARD_NANOPC_T6 AND CONFIG_YAKOGL_BOARD_RECORD_SCREEN)
+      zephyr_library_sources(common/record_screen.c)
+    endif()
     zephyr_library_include_directories("${_t6_repo}/src/osal" "${_t6_repo}/driver/src")
   endif()
   # The early banner's reset.S hooks and the WDT0 arming must be ours in

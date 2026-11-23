@@ -17,6 +17,8 @@
 //! and the display a crash kexec left running, adopted and then shown on
 //! ([`nanopc_t6_display`]), or brought up from cold after a normal kexec
 //! ([`nanopc_t6_display_cold`]).
+//! The record screen, the console's last lines drawn over the picture when a
+//! run ends, is any board's ([`record_screen`]).
 //! The C side reaches both through `ffi::board`.
 
 pub mod imx8mp;
@@ -46,6 +48,7 @@ pub mod nanopc_t6_sections;
 #[cfg(any(all(feature = "rk3588", feature = "mali"), test))]
 pub mod nanopc_t6_submit;
 pub mod record;
+pub mod record_screen;
 pub mod rpi4;
 pub mod rpi_fb;
 

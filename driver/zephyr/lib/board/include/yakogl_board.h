@@ -23,8 +23,10 @@
  *   CONFIG_YAKOGL_BOARD_ALIVE_S     board_watchdog_feed()'s window
  *   CONFIG_YAKOGL_BOARD_HOLD_S      board_finish(): hold after a pass
  *   CONFIG_YAKOGL_BOARD_HOLD_FAIL_S board_finish(): hold after a fail
- *   CONFIG_YAKOGL_BOARD_RECORD_SCREEN  Pi 4: the console ring frozen on the
- *                                   framebuffer at the end (the record screen)
+ *   CONFIG_YAKOGL_BOARD_RECORD_SCREEN  Pi 4, T6: the console's last lines
+ *                                   drawn over the picture at the end (the
+ *                                   record screen); the T6 keeps it for
+ *                                   CONFIG_YAKOGL_BOARD_RECORD_SCREEN_S
  *   CONFIG_YAKOGL_BOARD_ANIMATE_S   read by samples: how long to animate after
  *                                   the checked frames
  *
