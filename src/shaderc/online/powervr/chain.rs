@@ -507,6 +507,10 @@ pub struct BuiltFragment<'a> {
     pub tile_buffers: Option<(u8, u16)>,
     /// Block members read with `ld` ([`UboPlace`]).
     pub ubo: Option<UboPlace>,
+    /// A multi key's program reads the pixel of some draw buffer (a blend
+    /// or a colour mask that needs it, [`build_fragment_multi`]): the
+    /// record's `uses_fbfetch`.
+    pub multi_reads_pixel: bool,
 }
 
 /// A fragment shader that writes one `gl_FragColor` and reads smooth
@@ -537,9 +541,9 @@ pub fn build_fragment_for<'a>(
     blend_key: u32,
 ) -> Result<BuiltFragment<'a>, ChainError> {
     if let Some((t, n)) = mixed_key_targets(blend_key) {
-        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]), None);
+        return build_fragment_with(m, limits, a, buf, 0, Some(&t[..n]), None, None);
     }
-    build_fragment_with(m, limits, a, buf, blend_key, None, None)
+    build_fragment_with(m, limits, a, buf, blend_key, None, None, None)
 }
 
 /// The per-target list a mixed key (`crate::target_key`,
@@ -558,6 +562,133 @@ pub fn mixed_key_targets(blend_key: u32) -> Option<([TargetPack; MAX_PACK_TARGET
         };
     }
     Some((t, n))
+}
+
+/// One draw buffer of a multi key ([`MultiKey`]): its target and the
+/// channels `glColorMask` disables (bit 0 R .. 3 A, only channels the target
+/// has).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MultiSlot {
+    pub target: TargetPack,
+    pub masked: u32,
+}
+
+impl MultiSlot {
+    /// The channels the target has, as mask bits.
+    pub const fn channels(&self) -> u32 {
+        match self.target {
+            TargetPack::Int(rt) => (1 << rt.channels) - 1,
+            TargetPack::Class(crate::shaderc::SHC_RT_F16 | crate::shaderc::SHC_RT_F32) => 1,
+            TargetPack::Class(_) => 0xf,
+        }
+    }
+
+    /// Every channel disabled: the slot writes nothing (Mesa removes the
+    /// store, nir_lower_blend.c:1052-1058), so its register keeps the pixel.
+    pub const fn writes_nothing(&self) -> bool {
+        self.masked == self.channels()
+    }
+}
+
+/// A decoded 64-bit multi key (`crate::target_key::shc_blend_key_multi`,
+/// docs/notes/pvr-blend-multi.md section 3.2): the blend word every float
+/// target shares (0: the replace state) and draw buffer `i`'s slot at
+/// `slots[i]`, `None` for no target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MultiKey {
+    pub word: u32,
+    pub slots: [Option<MultiSlot>; crate::target_key::SHC_MULTI_SLOTS],
+}
+
+impl MultiKey {
+    /// The multi key `key` decodes to; `None` for any key that is not a
+    /// canonical multi key (`shc_blend_key_multi_slots`).
+    pub fn decode(key: u64) -> Option<MultiKey> {
+        let (word, raw) = crate::target_key::shc_blend_key_multi_slots(key)?;
+        let mut slots = [None; crate::target_key::SHC_MULTI_SLOTS];
+        for (s, &v) in slots.iter_mut().zip(&raw) {
+            let code = v & 0x1f;
+            if code == 0 {
+                continue;
+            }
+            /* the slot codes of src/target_key.rs: an integer layout's key
+             * bits [5:9], or 0x10 | class << 2 */
+            let target = if code & 3 != 0 {
+                TargetPack::Int(crate::shaderc::ShcIntRt::of_key(code << 5)?)
+            } else {
+                TargetPack::Class((code >> 2) & 3)
+            };
+            *s = Some(MultiSlot { target, masked: v >> 5 });
+        }
+        Some(MultiKey { word, slots })
+    }
+
+    /// The present draw buffers as a dense per-target list (draw buffer `i`
+    /// at `[i]`) and how many. Refused by name: no target at all, and a
+    /// target after a gap, whose registers depend on the GL_NONE draw
+    /// buffer's attachment, which the key does not carry (`pvr-r09`).
+    pub fn targets(&self) -> Result<([TargetPack; MAX_PACK_TARGETS], usize), ChainError> {
+        let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
+        let n = self.slots.iter().take_while(|s| s.is_some()).count();
+        if self.slots[n..].iter().any(Option::is_some) {
+            return Err(unsupported("a multi key with a target after a GL_NONE draw buffer"));
+        }
+        if n == 0 || n > MAX_PACK_TARGETS {
+            return Err(unsupported("a multi key with no target"));
+        }
+        let mut t = [TargetPack::Class(crate::shaderc::SHC_RT_RGBA8); MAX_PACK_TARGETS];
+        for (p, s) in t.iter_mut().zip(self.slots.iter().flatten()) {
+            *p = s.target;
+        }
+        Ok((t, n))
+    }
+
+    /// The channels each draw buffer's mask disables, 0 past the slots.
+    pub fn masks(&self) -> [u32; MAX_PACK_TARGETS] {
+        core::array::from_fn(|i| self.slots.get(i).copied().flatten().map_or(0, |s| s.masked))
+    }
+
+    /// Draw buffer `i`'s blend: the shared word with its class and mask
+    /// ([`super::blend::Blend::for_slot`]); `None` for no target, an
+    /// integer target (only masked), one drawn as written, and one that
+    /// writes nothing.
+    pub fn blend_of(&self, i: usize) -> Result<Option<super::blend::Blend>, ChainError> {
+        match self.slots.get(i).copied().flatten() {
+            Some(s @ MultiSlot { target: TargetPack::Class(class), masked }) if !s.writes_nothing() => {
+                super::blend::Blend::for_slot(self.word, class, masked)
+                    .map_err(|e| ChainError::Build(BuildError::Unsupported(e)))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Does a blended slot read the blend colour (`glBlendColor`)?
+    pub fn reads_constants(&self) -> bool {
+        (0..self.slots.len()).any(|i| self.blend_of(i).ok().flatten().is_some_and(|b| b.reads_constants()))
+    }
+}
+
+/// [`build_fragment`] for the 64-bit multi key `key` ([`MultiKey`],
+/// docs/notes/pvr-blend-multi.md section 4): draw buffer `i` written from
+/// output location `i` at its registers by the mrt layout, as
+/// [`build_fragment_targets`] writes it, each float target blended with the
+/// shared blend word for its own class and masked by its own mask
+/// (`blend::step` reading its pixel from its own registers), each integer
+/// target only masked (its masked fields kept from the pixel's packed
+/// dwords), a target with every channel disabled not written at all.
+///
+/// Refused by name: a key that is not a canonical multi key, a target after
+/// a gap, a blended or masked target spilled to a tile buffer, and
+/// [`build_fragment_targets`]'s refusals.
+pub fn build_fragment_multi<'a>(
+    m: &'a ir::Module<'a>,
+    limits: Limits,
+    a: &'a Arena<'a>,
+    buf: &mut [u8],
+    key: u64,
+) -> Result<BuiltFragment<'a>, ChainError> {
+    let mk = MultiKey::decode(key).ok_or(ChainError::Build(BuildError::Unsupported("not a multi key")))?;
+    build_fragment_with(m, limits, a, buf, 0, None, None, Some(&mk))
 }
 
 /// [`build_fragment`] for colour attachments of different classes, the
@@ -582,7 +713,7 @@ pub fn build_fragment_targets<'a>(
     buf: &mut [u8],
     targets: &[TargetPack],
 ) -> Result<BuiltFragment<'a>, ChainError> {
-    build_fragment_with(m, limits, a, buf, 0, Some(targets), None)
+    build_fragment_with(m, limits, a, buf, 0, Some(targets), None, None)
 }
 
 /// The class of a plain replace key (`SHC_BLEND_KEY_REPLACE` with no colour
@@ -597,7 +728,9 @@ fn replace_class(blend_key: u32) -> Option<u32> {
 }
 
 /// [`build_fragment_for`]'s body, and [`build_fragment_targets`]'s when
-/// `targets` is given (`blend_key` is then 0).
+/// `targets` is given (`blend_key` is then 0), and [`build_fragment_multi`]'s
+/// when `multi` is (`blend_key` 0, `targets` `None`: the key's present draw
+/// buffers are the list).
 fn build_fragment_with<'a>(
     m: &'a ir::Module<'a>,
     limits: Limits,
@@ -606,7 +739,27 @@ fn build_fragment_with<'a>(
     blend_key: u32,
     targets: Option<&[TargetPack]>,
     layout: Option<SharedLayout<'a>>,
+    multi: Option<&MultiKey>,
 ) -> Result<BuiltFragment<'a>, ChainError> {
+    let multi_list = match multi {
+        Some(_) if blend_key != 0 || targets.is_some() => {
+            return Err(ChainError::Build(BuildError::Unsupported("a multi key beside another key")));
+        }
+        Some(mk) => Some(mk.targets()?),
+        None => None,
+    };
+    let targets = match &multi_list {
+        Some((t, n)) => Some(&t[..*n]),
+        None => targets,
+    };
+    let masks = multi.map_or([0; MAX_PACK_TARGETS], MultiKey::masks);
+    /* A multi key's draw buffer 0 blended: its tail blends the alpha from
+     * before alpha-to-one and applies the flag last, as one target's does,
+     * so the pair is kept for it. */
+    let keep_a2one = match multi {
+        Some(mk) => mk.blend_of(0)?.is_some(),
+        None => false,
+    };
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     use super::fragment::{coefficient_offsets, IterMode, Iterated};
     use super::sel::{Bank, Mods, SelDst, SelSrc};
@@ -651,10 +804,14 @@ fn build_fragment_with<'a>(
      * clamped below and fed back before the writes, as for one target. A
      * shader that discards carries alpha-to-one's pair; output 0's alpha
      * already has the control word's select applied (`select.rs`), and only
-     * a blend variant, which a per-target list never is, reads the pair, so
-     * it is dropped here. */
+     * a blend variant reads the pair, so it is dropped here unless a multi
+     * key blends draw buffer 0. A multi key's integer target is packed under
+     * its own colour mask. */
     let sel = match targets {
-        Some(t) => pack_target_outputs(Selected { alpha_to_one: None, ..sel }, t, a)?,
+        Some(t) => {
+            let alpha_to_one = if keep_a2one { sel.alpha_to_one } else { None };
+            pack_target_outputs(Selected { alpha_to_one, ..sel }, t, &masks[..t.len()], a)?
+        }
         None => sel,
     };
     /* An integer render target: the output packed for its layout here, and
@@ -901,6 +1058,7 @@ fn build_fragment_with<'a>(
             int_dwords: None,
             tile_buffers: None,
             ubo: None,
+            multi_reads_pixel: false,
         });
     }
     /* One gl_FragColor, or several outputs (`layout(location = n) out`,
@@ -989,8 +1147,11 @@ fn build_fragment_with<'a>(
      * does for pco's variants -- where the control word and gl_FragCoord's
      * pair also sit, so those are refused together for now. */
     let blend = super::blend::Blend::from_key(blend_key).map_err(|e| ChainError::Build(BuildError::Unsupported(e)))?;
-    let blend_consts = match blend {
-        Some(b) if b.reads_constants() => {
+    /* A multi key's constants are the same four words, read by every
+     * blended draw buffer. */
+    let reads_constants = blend.is_some_and(|b| b.reads_constants()) || multi.is_some_and(MultiKey::reads_constants);
+    let blend_consts = match reads_constants {
+        true => {
             if discard.is_some() || ytf_off.is_some() || ff_off.is_some() {
                 return Err(ChainError::Build(BuildError::Unsupported(
                     "a constant-colour blend in a shader that discards or reads gl_FragCoord or gl_FrontFacing",
@@ -1005,7 +1166,7 @@ fn build_fragment_with<'a>(
             }
             Some(m.uniform_dwords)
         }
-        _ => None,
+        false => None,
     };
     /* A blend variant blends the alpha from before alpha-to-one, and the
      * tail applies the flag to the blended colour (pco's order). */
@@ -1015,6 +1176,7 @@ fn build_fragment_with<'a>(
         a2one_flag = Some(flag);
     }
     let mut output_regs = None;
+    let mut multi_reads_pixel = false;
     let mut tile_buffers = None;
     let (len, temps) = if let Some(t) = targets {
         /* Attachments of different classes: output i at target i's
@@ -1054,9 +1216,36 @@ fn build_fragment_with<'a>(
             let Some((_, comps)) = sel.outputs.iter().find(|(slot, _)| *slot == ir::IoSlot::FragColor(i as u8)) else {
                 continue;
             };
-            let out = match *target {
-                TargetPack::Int(_) => TargetOut::Packed { dwords: resolve(comps)?, n },
-                TargetPack::Class(class) => TargetOut::Colour { class, colour: resolve(comps)? },
+            /* A multi key's draw buffer: one with every channel disabled
+             * is not written; a float one blended and masked by its tail; an
+             * integer one was packed under its mask (reading the pixel when
+             * the mask is partial). */
+            let mslot = multi.and_then(|mk| mk.slots[i]);
+            if mslot.is_some_and(|s| s.writes_nothing()) {
+                continue;
+            }
+            let slot_blend = match multi {
+                Some(mk) => mk.blend_of(i)?,
+                None => None,
+            };
+            let out = match (*target, slot_blend) {
+                (TargetPack::Int(_), _) => {
+                    multi_reads_pixel |= mslot.is_some_and(|s| s.masked != 0);
+                    TargetOut::Packed { dwords: resolve(comps)?, n }
+                }
+                (TargetPack::Class(_), Some(b)) => {
+                    multi_reads_pixel |= b.reads_pixel();
+                    let mut colour = resolve(comps)?;
+                    /* draw buffer 0's alpha from before alpha-to-one, the
+                     * flag applied after the blend (`keep_a2one`) */
+                    let mut a2one = None;
+                    if let (0, Some((alpha, flag))) = (i, alpha_to_one) {
+                        colour[3] = (Bank::Temp, alpha);
+                        a2one = Some(flag);
+                    }
+                    TargetOut::Blended { blend: b, colour, consts: blend_consts.map(|c| base + c), a2one }
+                }
+                (TargetPack::Class(class), None) => TargetOut::Colour { class, colour: resolve(comps)? },
             };
             let place = match slot {
                 TargetSlot::Register { first } => TargetPlace::Register(u16::from(first)),
@@ -1065,7 +1254,9 @@ fn build_fragment_with<'a>(
             outs[placed] = (place, out);
             placed += 1;
         }
-        if placed == 0 {
+        /* a multi key may disable every channel of every draw buffer: the
+         * program then writes no colour */
+        if placed == 0 && multi.is_none() {
             return Err(ChainError::FragmentOutputsNotBuilt);
         }
         output_regs = Some(lay.output_regs);
@@ -1131,9 +1322,11 @@ fn build_fragment_with<'a>(
         /* Several outputs: RGBA8 attachments, one pixel output register
          * each, in location order (src/pvr/backend.rs emits attachment i
          * from register i when every attachment is 8-bit, and when every one
-         * is sRGB, whose colours `encode_srgb_outputs` encoded). A blend variant
-         * carries the target class and blends one colour, so it is refused
-         * here, and so is alpha-to-one, which only a blend variant applies. */
+         * is sRGB, whose colours `encode_srgb_outputs` encoded). A 32-bit
+         * blend key carries one target's class and mask, so it is refused
+         * here: several blended or masked outputs take a 64-bit multi key
+         * ([`build_fragment_multi`], which never reaches this branch). So is
+         * alpha-to-one, which only a blend variant applies. */
         use super::assemble::MAX_RGBA8_OUTPUTS;
         let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
         if blend.is_some() {
@@ -1192,6 +1385,7 @@ fn build_fragment_with<'a>(
         int_dwords,
         tile_buffers,
         ubo,
+        multi_reads_pixel,
     })
 }
 
@@ -1239,9 +1433,8 @@ fn pack_int_output<'a>(
     mask: u32,
     a: &'a Arena<'a>,
 ) -> Result<(Selected<'a>, u8), ChainError> {
-    use super::sel::{Bank, OpType, SelDst, SelOp, SelSrc};
+    use super::sel::{OpType, SelDst, SelOp, SelSrc};
     use crate::shaderc::online::arena::AVec;
-    use ir::AluOp::{Iand, Ior};
     let unsupported = |why| ChainError::Build(BuildError::Unsupported(why));
     let oom = |_| ChainError::OutOfScratch;
     let mask = mask & ((1u32 << rt.channels) - 1);
@@ -1277,36 +1470,12 @@ fn pack_int_output<'a>(
         groups.push(a, SelGroup { op, ty, dst: Some(SelDst::Virtual(v)), srcs }).map_err(oom)?;
         Ok(SelSrc::Virtual { v, mods: super::sel::Mods::default() })
     };
-    let field = |c: u32| int_field(rt, c);
-    /* the bits of dword k (of one output) that its masked fields hold */
-    let mut keep = [0u32; 4];
-    for c in (0..u32::from(rt.channels)).filter(|c| mask & (1 << c) != 0) {
-        let (dword, offset, width) = field(c);
-        keep[dword as usize] |= if width == 32 { u32::MAX } else { ((1u32 << width) - 1) << offset };
-    }
     let mut packed: [Option<SelSrc>; 4] = [None; 4];
     for (o, &i) in at[..count].iter().enumerate() {
         let at = (o as u32 * per) as usize;
-        insert_int_channels(&sel.outputs[i].1, rt, mask, &mut emit, &mut packed[at..at + per as usize])?;
-        /* the masked fields: the pixel's dword, its kept bits beside the new */
-        for (dword, &bits) in keep[..per as usize].iter().enumerate().filter(|(_, b)| **b != 0) {
-            let k = o as u32 * per + dword as u32;
-            let pixout = SelSrc::Fixed {
-                bank: Bank::Special,
-                reg: super::assemble::PIXOUT0 + k as u16,
-                mods: super::sel::Mods::default(),
-            };
-            let old = emit(SelOp::Copy, OpType::U32, [Some(pixout), None, None])?;
-            let d = &mut packed[k as usize];
-            *d = Some(match *d {
-                /* every field of the dword masked */
-                None => old,
-                Some(new) => {
-                    let kept = emit(SelOp::Alu(Iand), OpType::U32, [Some(old), Some(SelSrc::Imm(bits)), None])?;
-                    emit(SelOp::Alu(Ior), OpType::U32, [Some(new), Some(kept), None])?
-                }
-            });
-        }
+        let out = &mut packed[at..at + per as usize];
+        insert_int_channels(&sel.outputs[i].1, rt, mask, &mut emit, out)?;
+        keep_masked_fields(rt, mask, at as u16, &mut emit, out)?;
     }
     let n = (per * count as u32) as usize;
     let first = packed[0].ok_or(ChainError::FragmentOutputsNotBuilt)?;
@@ -1315,6 +1484,51 @@ fn pack_int_output<'a>(
     let comps = core::array::from_fn(|k| if k < n { packed[k] } else { Some(first) });
     let outputs = a.alloc_copy(&[(ir::IoSlot::FragColor(0), comps)]).map_err(oom)?;
     Ok((Selected { groups: groups.into_slice(), vregs, outputs, alpha_to_one: None, ..sel }, n as u8))
+}
+
+/// The fields of an integer target's channels that `mask` disables (bit k:
+/// channel k), kept from the pixel: each dword of `packed` (one output's,
+/// [`insert_int_channels`] filled it) that holds such a field becomes
+/// `(old & keep) | new`, `old` the pixel's dword read from pixel output
+/// register `reg0 + dword` and `keep` the masked fields' bits; a dword whose
+/// fields are all masked becomes `old` as it is. Nothing for a zero mask.
+fn keep_masked_fields(
+    rt: crate::shaderc::ShcIntRt,
+    mask: u32,
+    reg0: u16,
+    emit: &mut impl FnMut(
+        super::sel::SelOp,
+        super::sel::OpType,
+        [Option<super::sel::SelSrc>; 3],
+    ) -> Result<super::sel::SelSrc, ChainError>,
+    packed: &mut [Option<super::sel::SelSrc>],
+) -> Result<(), ChainError> {
+    use super::sel::{Bank, OpType, SelOp, SelSrc};
+    use ir::AluOp::{Iand, Ior};
+    /* the bits of each dword that its masked fields hold */
+    let mut keep = [0u32; 4];
+    for c in (0..u32::from(rt.channels)).filter(|c| mask & (1 << c) != 0) {
+        let (dword, offset, width) = int_field(rt, c);
+        keep[dword as usize] |= if width == 32 { u32::MAX } else { ((1u32 << width) - 1) << offset };
+    }
+    for (dword, &bits) in keep[..packed.len()].iter().enumerate().filter(|(_, b)| **b != 0) {
+        let pixout = SelSrc::Fixed {
+            bank: Bank::Special,
+            reg: super::assemble::PIXOUT0 + reg0 + dword as u16,
+            mods: super::sel::Mods::default(),
+        };
+        let old = emit(SelOp::Copy, OpType::U32, [Some(pixout), None, None])?;
+        let d = &mut packed[dword];
+        *d = Some(match *d {
+            /* every field of the dword masked */
+            None => old,
+            Some(new) => {
+                let kept = emit(SelOp::Alu(Iand), OpType::U32, [Some(old), Some(SelSrc::Imm(bits)), None])?;
+                emit(SelOp::Alu(Ior), OpType::U32, [Some(new), Some(kept), None])?
+            }
+        });
+    }
+    Ok(())
 }
 
 /// Channel `c` of an integer target's packed value: (dword, bit offset,
@@ -1507,12 +1721,20 @@ pub fn target_layout(targets: &[TargetPack]) -> Option<TargetLayout> {
 ///
 /// A written gl_FragDepth passes through untouched.
 ///
+/// `masks[i]` (a multi key's, empty for none) is the channels
+/// `glColorMask` disables on target `i`: an integer target's masked fields
+/// are kept from the pixel at its registers ([`keep_masked_fields`], as
+/// [`pack_int_output`] keeps them), and one with every channel disabled is
+/// left unpacked (it is not written).
+///
 /// Refused by name: a class outside RGBA8, F16X4, F16 and F32, a list that
-/// [`target_layout`] cannot lay out, and an output that is neither the depth
-/// nor a colour at a location the list has.
+/// [`target_layout`] cannot lay out, an output that is neither the depth
+/// nor a colour at a location the list has, and a masked integer target
+/// spilled to a tile buffer.
 fn pack_target_outputs<'a>(
     sel: Selected<'a>,
     targets: &[TargetPack],
+    masks: &[u32],
     a: &'a Arena<'a>,
 ) -> Result<Selected<'a>, ChainError> {
     use super::sel::SelDst;
@@ -1550,13 +1772,27 @@ fn pack_target_outputs<'a>(
         groups.push(a, SelGroup { op, ty, dst: Some(SelDst::Virtual(v)), srcs }).map_err(oom)?;
         Ok(super::sel::SelSrc::Virtual { v, mods: super::sel::Mods::default() })
     };
+    let lay = target_layout(targets).ok_or(ChainError::FragmentOutputsNotBuilt)?;
     let outputs = a.alloc_copy(sel.outputs).map_err(oom)?;
     for (slot, comps) in outputs.iter_mut() {
         let ir::IoSlot::FragColor(loc) = *slot else { continue };
         let TargetPack::Int(rt) = targets[usize::from(loc)] else { continue };
+        let all = (1u32 << rt.channels) - 1;
+        let mask = masks.get(usize::from(loc)).copied().unwrap_or(0) & all;
+        /* every channel disabled: the target is not written (the builder
+         * skips it), so there is nothing to pack */
+        if mask == all {
+            continue;
+        }
         let mut packed = [None; 4];
         let n = rt.dwords() as usize;
-        insert_int_channels(comps, rt, 0, &mut emit, &mut packed[..n])?;
+        insert_int_channels(comps, rt, mask, &mut emit, &mut packed[..n])?;
+        if mask != 0 {
+            let TargetSlot::Register { first } = lay.place[usize::from(loc)].0 else {
+                return Err(unsupported("a masked integer target spilled to a tile buffer"));
+            };
+            keep_masked_fields(rt, mask, u16::from(first), &mut emit, &mut packed[..n])?;
+        }
         let first = packed[0].ok_or(ChainError::FragmentOutputsNotBuilt)?;
         *comps = core::array::from_fn(|k| if k < n { packed[k] } else { Some(first) });
     }
@@ -2031,12 +2267,12 @@ pub fn compile_fragment_for<'a>(
      * carries the key the back end checks before it draws the targets. No
      * target reads the pixel, so `uses_fbfetch` stays 0. */
     if let Some((t, n)) = mixed_key_targets(blend_key) {
-        return compile_fragment_with(m, reflection, a, 0, Some(&t[..n])).map(|mut sh| {
+        return compile_fragment_with(m, reflection, a, 0, Some(&t[..n]), None).map(|mut sh| {
             sh.blend_key = blend_key;
             sh
         });
     }
-    compile_fragment_with(m, reflection, a, blend_key, None)
+    compile_fragment_with(m, reflection, a, blend_key, None, None)
 }
 
 /// [`compile_fragment`] for colour attachments of different classes
@@ -2049,16 +2285,39 @@ pub fn compile_fragment_targets<'a>(
     a: &'a Arena<'a>,
     targets: &[TargetPack],
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
-    compile_fragment_with(m, reflection, a, 0, Some(targets))
+    compile_fragment_with(m, reflection, a, 0, Some(targets), None)
 }
 
-/// [`compile_fragment_for`]'s body, and [`compile_fragment_targets`]'s.
+/// [`compile_fragment`] for the 64-bit multi key `key`
+/// ([`build_fragment_multi`]): the record's `num_outputs` is the pixel
+/// output registers the present draw buffers span, `uses_fbfetch` says
+/// whether any draw buffer's tail reads its pixel, and, when a blended draw
+/// buffer reads the blend colour, `blend_consts_off` says where. The record
+/// can hold only the key's low half (`blend_key`, bits 0-31, as
+/// docs/notes/pvr-blend-multi.md 3.4 keeps it); the high half waits for the
+/// ABI's `blend_key_hi`.
+pub fn compile_fragment_multi<'a>(
+    m: &'a ir::Module<'a>,
+    reflection: &crate::shaderc::online::reflect::Reflection<'a>,
+    a: &'a Arena<'a>,
+    key: u64,
+) -> Result<crate::shaderc::ShcShader, ChainError> {
+    let mk = MultiKey::decode(key).ok_or(ChainError::Build(BuildError::Unsupported("not a multi key")))?;
+    compile_fragment_with(m, reflection, a, 0, None, Some(&mk)).map(|mut sh| {
+        sh.blend_key = key as u32;
+        sh
+    })
+}
+
+/// [`compile_fragment_for`]'s body, [`compile_fragment_targets`]'s and
+/// [`compile_fragment_multi`]'s.
 fn compile_fragment_with<'a>(
     m: &'a ir::Module<'a>,
     reflection: &crate::shaderc::online::reflect::Reflection<'a>,
     a: &'a Arena<'a>,
     blend_key: u32,
     targets: Option<&[TargetPack]>,
+    multi: Option<&MultiKey>,
 ) -> Result<crate::shaderc::ShcShader, ChainError> {
     let m = super::abi::with_matrix_varyings_split(m, a).map_err(|_| ChainError::OutOfScratch)?;
     let image = a.alloc_filled(MAX_IMAGE_BYTES, 0u8).map_err(|_| ChainError::OutOfScratch)?;
@@ -2081,10 +2340,21 @@ fn compile_fragment_with<'a>(
         int_dwords,
         tile_buffers,
         ubo,
-    } = build_fragment_with(m, LIMITS, a, image, blend_key, targets, {
-        let consts = super::blend::Blend::from_key(blend_key).ok().flatten().is_some_and(|b| b.reads_constants());
-        shared_layout(m, reflection, a, consts)?
-    })?;
+        multi_reads_pixel,
+    } = build_fragment_with(
+        m,
+        LIMITS,
+        a,
+        image,
+        blend_key,
+        targets,
+        {
+            let consts = super::blend::Blend::from_key(blend_key).ok().flatten().is_some_and(|b| b.reads_constants())
+                || multi.is_some_and(MultiKey::reads_constants);
+            shared_layout(m, reflection, a, consts)?
+        },
+        multi,
+    )?;
     let words = a.alloc_filled(len / 4, 0u32).map_err(|_| ChainError::OutOfScratch)?;
     for (w, c) in words.iter_mut().zip(image[..len].as_chunks::<4>().0) {
         *w = u32::from_le_bytes(*c);
@@ -2142,6 +2412,9 @@ fn compile_fragment_with<'a>(
                  * sRGB target's linear halves too). */
                 sh.num_outputs = 2;
             }
+        }
+        if multi.is_some() {
+            sh.uses_fbfetch = u8::from(multi_reads_pixel);
         }
         if let Some(r) = output_regs {
             sh.num_outputs = r;
@@ -2686,7 +2959,7 @@ mod tests {
         let a = Arena::new(&mut buf);
         let sel = Selected { groups: &[], vregs: 10, outputs: &outs, inputs: &[], discard: None, alpha_to_one: None };
         let t = [Class(SHC_RT_RGBA8), Int(RG16UI), Class(SHC_RT_F32)];
-        let out = pack_target_outputs(sel, &t, &a).expect("packs");
+        let out = pack_target_outputs(sel, &t, &[], &a).expect("packs");
         assert_eq!(out.outputs[0], outs[0], "RGBA8 keeps its colour");
         assert_eq!(out.outputs[2], outs[2], "F32 keeps its colour");
         let ops: std::vec::Vec<(SelOp, std::option::Option<SelSrc>)> =
@@ -2708,15 +2981,15 @@ mod tests {
         let t = [Class(SHC_RT_RGBA8), Int(R32UI)];
         let sel =
             Selected { groups: &[], vregs: 10, outputs: &outs[..2], inputs: &[], discard: None, alpha_to_one: None };
-        let out = pack_target_outputs(sel, &t, &a).expect("packs");
+        let out = pack_target_outputs(sel, &t, &[], &a).expect("packs");
         assert_eq!(out.groups.len(), 1);
         assert_eq!((out.groups[0].op, out.groups[0].srcs[0]), (SelOp::Copy, v(4)));
         /* an output with no attachment, a class with no per-target pack */
         let sel = Selected { groups: &[], vregs: 10, outputs: &outs, inputs: &[], discard: None, alpha_to_one: None };
-        assert!(pack_target_outputs(sel, &t, &a).is_err());
+        assert!(pack_target_outputs(sel, &t, &[], &a).is_err());
         let sel =
             Selected { groups: &[], vregs: 10, outputs: &outs[..1], inputs: &[], discard: None, alpha_to_one: None };
-        assert!(pack_target_outputs(sel, &[Class(crate::shaderc::SHC_RT_SRGB)], &a).is_err());
+        assert!(pack_target_outputs(sel, &[Class(crate::shaderc::SHC_RT_SRGB)], &[], &a).is_err());
     }
 
     /// RGBA8 beside R32UI: the colour packed (one `pck`) into pixel output
@@ -2800,6 +3073,225 @@ mod tests {
             compile_targets(src, &[TargetPack::Class(SHC_RT_RGBA8), TargetPack::Int(R32UI)]).expect("compiles");
         assert_eq!(num_outputs, 2);
         assert_eq!(pixel_writes(&ops), [32, 33], "{ops:?}");
+    }
+
+    /// What [`compile_fragment_multi`] made of a shader: the record and the
+    /// program's operations.
+    #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
+    struct Multi {
+        rec: crate::shaderc::ShcShader,
+        /// Each group's first operation.
+        names: std::vec::Vec<&'static str>,
+        /// The pixel output registers (0..3) read, in program order.
+        reads: std::vec::Vec<u32>,
+        /// The pixel output registers (0..3) written, in program order.
+        writes: std::vec::Vec<u32>,
+    }
+
+    #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
+    impl Multi {
+        fn count(&self, name: &str) -> usize {
+            self.names.iter().filter(|n| **n == name).count()
+        }
+    }
+
+    /// `src` compiled for the multi key of `word` and `slots`
+    /// (`shc_blend_key_multi`).
+    #[cfg(not(feature = "report-es2"))] // used only by the tests here that compile GLSL ES 3.00
+    fn compile_multi(src: &str, word: u32, slots: [u32; 4]) -> Result<Multi, std::string::String> {
+        use crate::shaderc::online::powervr::{decode::decode_group, isa::ops_for, operands};
+        use crate::shaderc::online::{lower, sema::Stage, store};
+        let key = crate::target_key::shc_blend_key_multi(word, slots).expect("a multi key");
+        let _l = store::test_lock();
+        store::with_scratch(|a| {
+            let _keep = store::begin_keep().expect("keep");
+            let text = a.alloc_str(src).unwrap();
+            let l = lower::compile_to_ir(a, Stage::Fragment, text).map_err(|e| format!("front end: {}", e.msg))?;
+            let rec = compile_fragment_multi(&l.module, &l.reflection, a, key).map_err(|e| format!("{e:?}"))?;
+            assert_eq!(rec.blend_key, key as u32, "the record keeps the key's low half");
+            // SAFETY: the record's code lives in `keep`, `usc_dw` dwords.
+            let code = unsafe { core::slice::from_raw_parts(rec.usc, rec.usc_dw as usize) };
+            let image: std::vec::Vec<u8> = code.iter().flat_map(|w| w.to_le_bytes()).collect();
+            let special = super::super::sel::Bank::Special.hw();
+            let pixout =
+                |o: &operands::Operand| (o.bank == special && (32..36).contains(&o.index)).then(|| o.index - 32);
+            let mut m = Multi { rec, names: std::vec![], reads: std::vec![], writes: std::vec![] };
+            let mut off = 0usize;
+            while off < image.len() {
+                let g = decode_group(&image, off).expect("decodes");
+                if let Some(n) = g.instrs().find_map(|(_, ph, r)| ops_for(r, ph).next()) {
+                    m.names.push(n.name);
+                }
+                m.reads.extend(
+                    g.lower.iter().chain(g.upper.iter()).flat_map(operands::srcs).flatten().filter_map(|o| pixout(&o)),
+                );
+                m.writes.extend(g.dst.iter().flat_map(operands::dsts).flatten().filter_map(|o| pixout(&o)));
+                off += g.total;
+            }
+            Ok(m)
+        })
+        .unwrap()
+    }
+
+    /// The slot codes of `src/target_key.rs` (docs/notes/pvr-blend-multi.md
+    /// 3.2) and a slot with its disabled channels.
+    #[cfg(not(feature = "report-es2"))]
+    const RGBA8: u32 = 0x10;
+    #[cfg(not(feature = "report-es2"))]
+    const F16X4: u32 = 0x14;
+    #[cfg(not(feature = "report-es2"))]
+    const F32: u32 = 0x1C;
+    #[cfg(not(feature = "report-es2"))]
+    const fn int_slot(rt: crate::shaderc::ShcIntRt) -> u32 {
+        (crate::shaderc::shc_blend_key_int_rt(rt) >> 5) & 0x1f
+    }
+    #[cfg(not(feature = "report-es2"))]
+    const fn masked(slot: u32, off: u32) -> u32 {
+        slot | off << 5
+    }
+    #[cfg(not(feature = "report-es2"))]
+    const RGBA8UI: crate::shaderc::ShcIntRt = crate::shaderc::ShcIntRt { channels: 4, bits: 8, signed: false };
+
+    /// SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ADD on both groups.
+    #[cfg(not(feature = "report-es2"))]
+    const OVER: u32 = crate::shaderc::shc_blend_key(
+        crate::shaderc::SHC_BF_SRC_ALPHA,
+        crate::shaderc::SHC_BF_INV_SRC_ALPHA,
+        crate::shaderc::SHC_BF_SRC_ALPHA,
+        crate::shaderc::SHC_BF_INV_SRC_ALPHA,
+        crate::shaderc::SHC_BLEND_ADD,
+        crate::shaderc::SHC_BLEND_ADD,
+    );
+
+    #[cfg(not(feature = "report-es2"))]
+    const FOUR_OUT: &str = "#version 300 es\nin mediump vec4 c;\n\
+        layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out mediump vec4 o1;\n\
+        layout(location = 2) out mediump vec4 o2;\nlayout(location = 3) out mediump vec4 o3;\n\
+        void main() { o0 = c; o1 = c * 0.5; o2 = c.wzyx; o3 = vec4(c.xy, 0.25, 1.0); }\n";
+
+    /// Four RGBA8 draw buffers under one blend (the RC14 draw): each read
+    /// from its own register 0..3 and unpacked, blended, packed and written
+    /// back there; the record reads the pixel and spans four registers, and
+    /// the four colours and the one scratch fit the temporaries.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn a_multi_key_blends_four_rgba8_targets_each_at_its_register() {
+        let m = compile_multi(FOUR_OUT, OVER, [RGBA8; 4]).expect("compiles");
+        assert_eq!((m.rec.num_outputs, m.rec.uses_fbfetch), (4, 1));
+        assert_eq!(m.reads, [0, 1, 2, 3], "{:?}", m.names);
+        assert_eq!(m.writes, [0, 1, 2, 3], "{:?}", m.names);
+        assert_eq!((m.count("unpck"), m.count("pck")), (4, 4), "{:?}", m.names);
+        assert!(m.rec.temps <= LIMITS.temps);
+        /* the blend colour, read by every slot from the same four words */
+        let konst = crate::shaderc::shc_blend_key(
+            crate::shaderc::SHC_BF_CONST_COLOR,
+            crate::shaderc::SHC_BF_INV_CONST_COLOR,
+            crate::shaderc::SHC_BF_ONE,
+            crate::shaderc::SHC_BF_ZERO,
+            crate::shaderc::SHC_BLEND_ADD,
+            crate::shaderc::SHC_BLEND_ADD,
+        );
+        let m = compile_multi(FOUR_OUT, konst, [RGBA8; 4]).expect("compiles");
+        assert_eq!(m.rec.uniform_dwords, 4, "the four constants counted in the block");
+        assert_eq!(m.writes, [0, 1, 2, 3]);
+        /* a shader that discards: draw buffer 0 takes alpha-to-one's flag
+         * after its blend, as one target does */
+        let src = FOUR_OUT.replace("void main() {", "void main() { if (c.x < 0.125) discard;");
+        let m = compile_multi(&src, OVER, [RGBA8; 4]).expect("compiles");
+        assert_eq!((m.reads, m.writes), (std::vec![0, 1, 2, 3], std::vec![0, 1, 2, 3]));
+    }
+
+    /// RGBA16F beside RGBA8: the halves read from registers 0 and 1 and
+    /// unpacked twice, the bytes from register 2; written back there.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn a_multi_key_blends_f16x4_beside_rgba8() {
+        let src = "#version 300 es\nin mediump vec4 c;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out mediump vec4 o1;\n\
+                   void main() { o0 = c * 4.0; o1 = c; }\n";
+        let m = compile_multi(src, OVER, [F16X4, RGBA8, 0, 0]).expect("compiles");
+        assert_eq!((m.rec.num_outputs, m.rec.uses_fbfetch), (3, 1));
+        assert_eq!(m.reads, [0, 1, 2], "{:?}", m.names);
+        assert_eq!(m.writes, [0, 1, 2], "{:?}", m.names);
+        assert_eq!((m.count("unpck"), m.count("pck")), (3, 3), "{:?}", m.names);
+        /* the other order: the pair on registers 2-3 */
+        let m = compile_multi(src, OVER, [RGBA8, F16X4, 0, 0]).expect("compiles");
+        assert_eq!((m.reads, m.writes), (std::vec![0, 2, 3], std::vec![0, 2, 3]));
+    }
+
+    /// An integer draw buffer is never blended, only masked: under a blend
+    /// with green disabled it reads its own packed dword (register 1) to keep
+    /// green's byte and unpacks nothing; with nothing disabled it reads
+    /// nothing. The RGBA8 draw buffer beside it blends as before.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn a_multi_key_only_masks_an_integer_target() {
+        let src = "#version 300 es\nin mediump vec4 c;\nflat in highp uvec4 v;\n\
+                   layout(location = 0) out mediump vec4 o0;\nlayout(location = 1) out highp uvec4 o1;\n\
+                   void main() { o0 = c; o1 = v + uvec4(1u); }\n";
+        let ui = int_slot(RGBA8UI);
+        let m = compile_multi(src, OVER, [RGBA8, masked(ui, 0b0010), 0, 0]).expect("compiles");
+        assert_eq!((m.rec.num_outputs, m.rec.uses_fbfetch), (2, 1));
+        let mut reads = m.reads.clone();
+        reads.sort_unstable();
+        assert_eq!(reads, [0, 1], "{:?}", m.names);
+        assert_eq!(m.writes, [0, 1]);
+        assert_eq!(m.count("unpck"), 1, "only the RGBA8 pixel is unpacked: {:?}", m.names);
+        let m = compile_multi(src, OVER, [RGBA8, ui, 0, 0]).expect("compiles");
+        assert_eq!((m.reads, m.writes), (std::vec![0], std::vec![0, 1]));
+        /* no blend: the integer target's mask (its kept green byte) is the only reader */
+        let m = compile_multi(src, 0, [RGBA8, masked(ui, 0b0010), 0, 0]).expect("compiles");
+        assert_eq!((m.rec.uses_fbfetch, m.reads.clone(), m.count("unpck")), (1, std::vec![1], 0));
+        /* every channel of the integer target disabled: it is not written */
+        let m = compile_multi(src, OVER, [RGBA8, masked(ui, 0xf), 0, 0]).expect("compiles");
+        assert_eq!((m.reads, m.writes), (std::vec![0], std::vec![0]));
+    }
+
+    /// A draw buffer with every channel disabled writes nothing and reads
+    /// nothing, under a blend or not; one in the replace state with nothing
+    /// disabled reads nothing. With every draw buffer disabled the program
+    /// writes no colour at all and reads no pixel.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn a_slot_with_every_channel_disabled_writes_nothing() {
+        let off = masked(RGBA8, 0xf);
+        let m = compile_multi(FOUR_OUT, 0, [off, RGBA8, off, RGBA8]).expect("compiles");
+        assert_eq!((m.rec.num_outputs, m.rec.uses_fbfetch), (4, 0));
+        assert_eq!((m.reads.len(), m.writes.clone()), (0, std::vec![1, 3]), "{:?}", m.names);
+        let m = compile_multi(FOUR_OUT, OVER, [off, RGBA8, off, RGBA8]).expect("compiles");
+        assert_eq!((m.reads, m.writes), (std::vec![1, 3], std::vec![1, 3]));
+        /* R32F's one channel disabled */
+        let m = compile_multi(FOUR_OUT, OVER, [RGBA8, masked(F32, 1), RGBA8, RGBA8]).expect("compiles");
+        assert_eq!((m.reads, m.writes), (std::vec![0, 2, 3], std::vec![0, 2, 3]));
+        /* replace, nothing disabled: drawn as written */
+        let m = compile_multi(FOUR_OUT, 0, [RGBA8, F32, RGBA8, RGBA8]).expect("compiles");
+        assert_eq!((m.rec.uses_fbfetch, m.reads.len(), m.count("unpck")), (0, 0, 0));
+        assert_eq!(m.writes, [0, 1, 2, 3]);
+        /* everything disabled */
+        let m = compile_multi(FOUR_OUT, OVER, [off; 4]).expect("compiles");
+        assert_eq!((m.rec.uses_fbfetch, m.reads.len(), m.writes.len()), (0, 0, 0), "{:?}", m.names);
+    }
+
+    /// Refused by name: a target after a GL_NONE draw buffer (its registers
+    /// are the gap attachment's to decide), and a key that is no multi key.
+    #[test]
+    #[cfg(not(feature = "report-es2"))] // compiles GLSL ES 3.00, which a report-es2 build refuses (pp.rs out_of_scope)
+    fn multi_keys_refused_by_name() {
+        let e = compile_multi(FOUR_OUT, OVER, [RGBA8, 0, RGBA8, 0]).err().expect("refused");
+        assert!(e.contains("after a GL_NONE draw buffer"), "{e}");
+        assert_eq!(MultiKey::decode(u64::from(OVER)), None);
+        assert_eq!(
+            MultiKey::decode(crate::target_key::shc_blend_key_multi(OVER, [RGBA8, masked(F16X4, 3), 0, 0]).unwrap()),
+            Some(MultiKey {
+                word: OVER,
+                slots: [
+                    Some(MultiSlot { target: TargetPack::Class(crate::shaderc::SHC_RT_RGBA8), masked: 0 }),
+                    Some(MultiSlot { target: TargetPack::Class(crate::shaderc::SHC_RT_F16X4), masked: 3 }),
+                    None,
+                    None,
+                ],
+            })
+        );
     }
 
     /// GLSL ES 1.00 section 4.6.1: an `invariant` output computed by the
