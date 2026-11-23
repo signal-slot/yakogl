@@ -806,20 +806,121 @@ Plan #349 has merged. Its two DK notes are committed: `docs/notes/stm32mp257f-dk
 1. **The safe first mode.** D349:272-273: "the safe first mode is 1080p60, 4 lanes, which needs no lane change" — 720p moved to 3 lanes by ST's own fix-up (D349:269-271), 1080p60 sitting exactly on the bridge's 148.5 MHz ceiling (D349:265-267), and D349's open question 11 again says "First run: fixed 1080p60" (D349:534-536). This note, following the plan's 1280x720, runs 720p first — 3 lanes as the board's own ST driver does, 4 lanes as the comparison ("The lane count at 720p is a difference between the trees", open question 4). **The two notes recommend opposite first runs.** Both recommendations are [D]; no source decides. The lane question stays open question 4, and what the farm's HDMI capture accepts (item kvm-mode-study) may decide which picture can be judged at all. Recorded as a disagreement, not resolved here.
 2. **SCMI at 1080p60.** D349:362: "1080p60 needs no SCMI clock request at all". This note's rows 9 to 10 and "What changes against D349": the *rate* needs none, the *enables* (FLEXGEN_27, FLEXGEN_28, FLEXGEN_12, GPIOB, GPIOF) go through SCMI `CONFIG_SET` in every case. Flagged against D349 when this section was written; it stands. scmi-session-study has delivered its rules ("SCMI request rules"); whether our image's agent may switch these on at all still waits for a recorded session — B349:130-133 is the run that first tests the transport.
 
-## Board scan-out record (not run yet)
+## Board scan-out record (board-display2, 2026-11-23)
 
-Nothing here has run, and it cannot yet: the DK's board time sits behind #349's eight steps (B349:26-43), connected serializes it, and #349's own verdicts are all *not run yet* too (B349:292-307). The shape follows `driver/docs/imx8mp-display-cold.md`'s "Board plan" — staged runs with read-backs between them, the golden comparison against a Linux dump, the picture judged last — with the row shape of #349's verdict table (B349:292-307): one row per run, replaced by the board item that runs it with its verdict, its date and the runner's record directory; the current results then move to `tools/cts/RESULTS.md` and `tools/cts/STATUS.md` (B349:10-16; the CTS half waits for plan #336). The `commit` and `runner` cells come from the record itself: the runner writes its build, the board, the boot backend, the image hash and the verdict line into `INDEX.txt` (`tools/board-stm32mp2.sh:588-600`).
+Second DK display session, run with `tools/board-stm32mp2.sh` only (build
+23514c2f, Zephyr af17c0c8aa2a, both images built with the READMEs' west lines
+for `stm32mp257f_dk/stm32mp257fxx/a35`). The shape is
+`driver/docs/imx8mp-display-cold.md`'s "Board plan": the runs in order, what
+each read back, then the picture. **Neither probe reached its result line;
+no picture was scanned out, and no colour bars or GPU frame were seen on the
+HDMI capture.** No `PASS` is claimed.
 
-Rows run on the DK (`resource:<dk>`, with its console resource `resource:<dk-console>` and reset resource `resource:<dk-reset>`) through `tools/board-stm32mp2.sh`; the picture is judged from the HDMI capture resource (`resource:<dk-hdmi-kvm>`) with `tools/probes/stm32mp257f_dk/display_check/colorbars.py`. Boot files: the runner's `install` prints its exact undo before changing anything, every run is a one-shot boot U-Boot clears before loading, and the hook never edits ST's `bootcmd` contents (B349:52-58) — a row is "restored" when the one-shot cleared the boot or the `undo` ran, and the record says which. A failing row is read against the supply guide (B349:260-289) before any register-level theory. `MP2_HOLD_S` holds the board after the result line so the capture can take a screenshot; the probe must keep scanning out for at least the hold (`tools/board-stm32mp2.sh:162-175`).
+How it ran. The console is a farm device this host reaches only through its
+MCP server; the runner has no local device or bridge for `BOARD_UART`, so
+each run was the runner's blind run (`MP2_NO_CONSOLE=1`, `MP2_HOLD_S=30`)
+with the console captured over MCP during the run and handed to the runner's
+own `judge <rundir> <console-file>` verb afterwards (`console=external` in the
+verdict). The runner's `hold: result seen at` line needs the runner's own
+console, so it was not printed; it would not have helped here, because
+neither image printed a result line. The runner's `install` (undo printed
+first) added the hook before the runs and its `uninstall` removed it after
+them. Nothing else on the board was written.
 
-| commit | image | runner | verdict lines (expected) | observation | stock boot files |
+| commit | image | runner | verdict lines | observation | stock boot files |
 | --- | --- | --- | --- | --- | --- |
-| <record> | ST's Linux (no image; item linux-dump) | `tools/probes/stm32mp257f_dk/linux_display_dump/run_dump.sh`, read-only | none: a reference reading, no probe verdict | the display registers and the sink's EDID as ST's Linux drives HDMI; seeds the golden comparison (item linux-golden) | untouched by this row — **not run yet** |
-| <record> | `mp2_display_state` | `tools/board-stm32mp2.sh run <img> <rec> mp2_display_state` | the probe's state lines | open questions 1 to 6 decided by reading: the RIMC and RISAF4 state, `RCC_LTDCCFGR`, `RCC_DSICFGR`, `RCC_I2C2CFGR`, `DISPLAYCLKCR`, the flexgen and SCMI clock states | restored after the run — **not run yet** |
-| <record> | `mp2_display`, staged bring-up (the probe names its stops) | the same call, one row per stage once run | each stage's own line; the names are item probe-skel's to fix — none is pre-filled here | the clock table's rows 6 to 8 read back; the DSI PHY lock and the clock lane's stop state; the ADV7535 register read-backs | restored after each stage — **not run yet** |
-| <record> | `mp2_display`, first picture: 1280x720 colour bars, lane count per contradiction 1 above | the same with `MP2_HOLD_S=<n>` | the probe's result line, and the capture judged bar by bar by `colorbars.py`; the record carries the reading, not a format | the bars on the HDMI capture; the LTDC's own frame check once the CRC item lands | restored after the run — **not run yet** |
+| 23514c2f | `mp2_display` (sha256 f2b3d48d…, 115096 bytes) | `MP2_HOLD_S=30 MP2_NO_CONSOLE=1 tools/board-stm32mp2.sh run build/zephyr-werror/mp2_display/zephyr/zephyr.bin <rec> mp2_display`, then `judge` (record `20261123-0545-mp2_display-f2b3d48d`) | `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=44s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_display rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=none back_after=44s console=external` | no result line, no `crc:` line: the image stops at `ERROR: CONFIG_MAX_XLAT_TABLES is too small` right after `display_power: up`, before `*** Booting Zephyr OS ***`; `mp2: fatal error 4`, `mp2: fatal error: PSCI SYSTEM_RESET at 2065 ms` | staged image removed (read back); `stock boot files: unchanged since install` |
+| 23514c2f | `mp2_gpu_scanout` (sha256 76ada5a3…, 160152 bytes) | the same call with `mp2_gpu_scanout` (record `20261123-0547-mp2_gpu_scanout-76ada5a3`) | `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=60s`; judged: `board-stm32mp2.sh stm32mp257f-dk mp2_gpu_scanout rc=0 verdict=done boot=uboot-sd row boot_verdict=complete result=none back_after=60s console=external` | see "GPU buffer scan-out" below: a CPU exception after `I: adv7535: chip revision 0x14`; no `ltdc`, `crc:` or result line | staged image removed (read back); `stock boot files: unchanged since install`; after `uninstall`: `unhooked: no preboot of ours, no yako_* variable, bootcmd 'run bootcmd_stm32mp' (not written), /boot/yakogl removed` |
 
-The `mp2_display` verdict line itself and the GPU-rendered scan-out row belong to the board items that produce them (board-display; gpu-scanout, ordered after #349's triangle-run per the plan): this skeleton leaves them open.
+What the runs read back, in order (both images, the same board layer):
+
+1. U-Boot's one-shot: `yakogl-mp2: hook`, `once=...`, `cleared`, `go
+   0xa0000000`; the layer's `MP2:B console up`, the hand-over at EL2, the
+   OP-TEE watchdog armed (32 s).
+2. RIF: RIFSC ids 80, 119, 81, 42, 120 to 123 all `sec 0 priv 0 cidcfgr 0`
+   (`Ok`); RIMU 11 to 13 `0x00000204` (`cidsel 1 mcid 0 msec 0 mpriv 1`);
+   summary `rif refused 0x0, rimc 0x00000204 0x00000204 0x00000204, fb region
+   0 verdict 7`. In `mp2_gpu_scanout`'s later check: `fb 0xb0000000 +
+   0x800000: risaf4 region 9`, `region 9 verdict 0 rc 0`.
+3. SCMI through OP-TEE (every frame logged): clocks 90 and 94 (GPIOB, GPIOF)
+   on at 200 MHz, 12 (I2C2) at 100 MHz, 28 (DSI PHY reference) at 27 MHz, 27
+   (LTDC) at 148.5 MHz; `hdmi 5v 0 -> 7`, `supplies 0x7`. The SCMI transport
+   from our image works for the display's clocks and the HDMI 5 V.
+4. RCC: `i2c2cfgr`, `dsicfgr`, `ltdccfgr` all `0x00000006 -> 0x00000006`;
+   `rcc dsicfgr: PHY reference is not FLEXGEN_28 (kept as found)`; SYSCFG
+   `displayclkcr 0x00000002`.
+5. Pins and bridge reset: `gpiob moder 0xffffdcff gpiof moder 0xffffffea afrl
+   0x000009a9`, `adv7535 reset pulsed on PB6; pb4 0`, `display_power: up`.
+6. `mp2_display` stops here (the xlat tables, above). `mp2_gpu_scanout` goes
+   on: GPU identity `GC8000 rev 0x6205 product 0x80003 customer 0x15 eco 0`,
+   milestone 1 complete at 800 MHz, `mp2_gpu_scanout: build 23514c2f, hold 60
+   s`, I2C2 at 400 kHz (`TIMINGR 0x00c0727f`), and the ADV7535 answers on
+   I2C (`chip revision 0x14`) before the exception.
+
+The picture. The KVM (`resource:<dk-hdmi-kvm>`, 1920x1080) answered
+throughout. Both images reset within 3 s of starting, before any LTDC
+enable, so there was no hold to capture; the screenshot taken after the runs
+shows ST's Weston launcher (OpenSTLinux demo grid), the board's own Linux
+display, not a probe picture. Judged for the record:
+`colorbars: FAIL: partial: 2 of 8 bars (white black)` and `triangle: FAIL:
+missing vertex colour: red, blue`, as expected for that screen.
+
+Supply. Neither failure looks like a hardware fault: both are software
+exceptions with a register dump, the board came back to Linux on its own in
+44 s and 60 s, and the `hdmi 5v` and SCMI clock requests were answered.
+
+## GPU buffer scan-out
+
+Not achieved at commit 23514c2f (record `20261123-0547-mp2_gpu_scanout-76ada5a3`).
+`mp2_gpu_scanout` printed no `mp2_gpu_scanout: PASS` or `FAIL` line. The
+console around the failure (x6 to lr shortened to one line):
+
+```
+display_power: fb 0xb0000000 + 0x800000: risaf4 region 9
+display_power: fb 0xb0000000 + 0x800000: region 9 verdict 0 rc 0
+I: adv7535: chip revision 0x14
+E: ELR_ELn: 0x00000000a0002b8c
+E: ESR_ELn: 0x000000003a000000
+E:   EC:  0xe (Illegal Execution state)
+E:   IL:  0x1
+E:   ISS: 0x0
+E: TPIDRRO: 0x01000000a0134290
+E: x0:  0x00000000a0009630  x1:  0x00000000a0134290
+E: x2:  0x0000000000000000  x3:  0x0000000000000000
+E: x4:  0xffffffffffffffff  x5:  0xffffffffffffffff
+  (x6 to x18 and lr all 0xffffffffffffffff)
+E: >>> ZEPHYR FATAL ERROR 0: CPU exception on CPU 0
+E: Current thread: 0xa01340a0 (unknown)
+mp2: fatal error 0
+mp2: fatal error: PSCI SYSTEM_RESET at 2903 ms
+```
+
+No LTDC status or CRC line was printed: the failure is before the chain's
+`ltdc` record and before the CRC self-check. An illegal-execution-state
+exception with x4 to lr all ones looks like a return through a clobbered
+exception frame or stack (a thread whose stack overflowed, or an `eret`
+with a bad SPSR) during the ADV7535 bring-up, right after its first I2C
+read. That diagnosis is unconfirmed and is the fix item's job.
+
+`mp2_display`'s failure (excerpt; the full register dump is in the record):
+
+```
+display_power: up
+ERROR: CONFIG_MAX_XLAT_TABLES is too small
+ELR_ELn: 0x00000000a00031a4
+ESR_ELn: 0x0000000056000002
+  EC:  0x15 (Unknown)
+  ISS: 0x2
+mp2: fatal error 4
+mp2: fatal error: PSCI SYSTEM_RESET at 2065 ms
+```
+
+The built `.config` has `CONFIG_MAX_XLAT_TABLES=8` (Zephyr's default) for
+`mp2_display` and `256` for `mp2_gpu_scanout` (which pulls in the GPU's
+settings), so `mp2_display`'s device and frame-buffer mappings run out of
+translation tables before `main()`. The fix (a probe `prj.conf` or board
+default) belongs to a fix item. After that, `mp2_display` may well reach the
+same ADV7535 step that `mp2_gpu_scanout` crashes in.
 
 ## Golden comparison against the real Linux dump (state-probe, host only)
 
@@ -843,11 +944,10 @@ These are the host model's reset values against a live Linux state, not yet
 decided register by register: each is either a model default to correct or an
 allow-list entry with a reason, and that is the next item's work.
 
-**Not recorded here:** the board session's runner verdict lines
-(`mp2_display: PASS`, `mp2_gpu_scanout`), the KVM observation and the
-restored boot files were not part of this item's input, so the "Board
-scan-out record" and a "GPU buffer scan-out" section are not written and no
-PASS is claimed. They need the `board-display` report's text.
+**Board session:** the runner verdict lines, the KVM observation and the
+restored boot files of board-display2 are in "Board scan-out record" and
+"GPU buffer scan-out" above; neither probe reached its result line, so no
+PASS is claimed.
 
 ## Corrections and additions to the pre-study and to D349 (not made there)
 
