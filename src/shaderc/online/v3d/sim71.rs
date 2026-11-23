@@ -410,13 +410,21 @@ fn peripherals(a: &Alu71) -> [u32; 3] {
     ) {
         add |= P_SFU;
     }
-    if magic(add_on, a.add.magic, a.add.waddr, &|w| (16..=18).contains(&w)) {
+    // TSY by either half: qpu_validate.c:268-269 and :285-286 count a TSY
+    // write of the mul half in its one-peripheral rule (:332-346), at 7.1
+    // too. qpu_peripherals (qpu_schedule.c:883-885) looks at the add half
+    // only, because the scheduler never places a TSY write on the mul half.
+    let tsy = |on: bool, m: bool, w: u8| magic(on, m, w, &|w| (16..=18).contains(&w));
+    if tsy(add_on, a.add.magic, a.add.waddr) {
         add |= P_TSY;
     }
     if a.add.op == Tmuwt {
         add |= P_TMU_WAIT;
     }
-    let mul = half(mul_on, a.mul.magic, a.mul.waddr);
+    let mut mul = half(mul_on, a.mul.magic, a.mul.waddr);
+    if tsy(mul_on, a.mul.magic, a.mul.waddr) {
+        mul |= P_TSY;
+    }
     let mut sig = 0;
     if a.sig.ldtmu {
         sig |= P_TMU_READ;
@@ -1037,13 +1045,12 @@ mod tests {
         bad(&a);
     }
 
-    /// A TSY write by the mul half is a restricted peripheral too, if Mesa's
-    /// `qpu_peripherals` (qpu_schedule.c:855-892) looks at both halves for
-    /// it. `peripherals` sets P_TSY from the add half only, so this
-    /// instruction (SFU on the add half, TSY on the mul half) passes `check`.
-    /// Unverified against Mesa (no tree here); reported, not fixed.
+    /// A TSY write by the mul half is a restricted peripheral too: Mesa's
+    /// validator counts it beside the add half's (qpu_validate.c:285-286,
+    /// the sum at :332-346, "Only one of [TMU, SFU, TSY, TLB read, VPM]").
+    /// Its scheduler's `qpu_peripherals` (qpu_schedule.c:883-885) reads the
+    /// add half only, which only matters because it never emits one.
     #[test]
-    #[ignore = "peripherals() sets P_TSY from the add half only: a mul-half TSY write beside an SFU op passes check"]
     fn a_mul_half_tsy_write_is_restricted() {
         let mut a = add(AddOp71::Recip, 10, false, rf(5), Operand::default());
         a.mul = mul(MulOp71::Mov, 16, true, rf(5), Operand::default()).mul;
