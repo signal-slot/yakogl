@@ -53,9 +53,9 @@ The six dEQP-GLES3 cases
 `functional.instanced.{draw_arrays_instanced,draw_elements_instanced}.mixed.{2,4,20}_instances`
 use arrays with divisor 0, 1 and 2, and the vertex shader reads
 `gl_InstanceID`. Both back ends set `max_instance_divisor` to 1. So
-`draw_instanced` (`src/gl/draw.rs:5445`) draws one instance per draw. It feeds
+`draw_instanced` (`src/gl/draw.rs:5811`) draws one instance per draw. It feeds
 each divisor array as a constant and sets `GlesDraw::instance_id` to the
-instance number (`src/gl/draw.rs:5515-5516`).
+instance number (`src/gl/draw.rs:5881-5882`).
 
 - **PowerVR: refused.** The draw entry refuses an instance > 0 when the
   program reads `gl_InstanceID`. The host shows `-EINVAL` for instances 1..3.
@@ -174,7 +174,7 @@ row.
 
 Related sites:
 
-- `src/vivante/backend.rs:4020`: `max_instance_divisor: 0xffff,` (V1; it was
+- `src/vivante/backend.rs:4021`: `max_instance_divisor: 0xffff,` (V1; it was
   1 until `6c4759ea`, and whether the FE takes more than 1 is unmeasured)
 - `src/vivante/backend.rs:3190-3191`: `divisor` is `u32::from(a.divisor.max(1))`
   for a per-instance array, else 0, and goes into `GcStream` (V1; before
@@ -241,10 +241,10 @@ Related sites:
 
 The GL core needs no change for any option below. `draw_instanced`
 already compares each divisor with `max_instance_divisor`
-(`src/gl/draw.rs:5470-5477`, `draw_instanced` at `:5445`). It hands `GlesAttrib::divisor` (u16) to a back
+(`src/gl/draw.rs:5836-5843`, `draw_instanced` at `:5811`). It hands `GlesAttrib::divisor` (u16) to a back
 end that takes it (`tests/es3_instanced.rs`
 `any_divisor_backend_gets_one_draw_with_the_divisors`). It also sets
-`GlesDraw::instance_id` per instance (`src/gl/draw.rs:5515-5516`; `divisor_1_backend_draws_each_instance_with_its_id_and_values`).
+`GlesDraw::instance_id` per instance (`src/gl/draw.rs:5881-5882`; `divisor_1_backend_draws_each_instance_with_its_id_and_values`).
 So plan #19 (`src/gl/draw.rs`) is not needed for any option.
 
 ### PowerVR
@@ -300,7 +300,7 @@ must be re-run on the board.
 |---|---|---|---|---|---|
 | **V0** (done, `7897e809`) | Make the refusal work: give GC7000UL programs `vs_instance_id_reg1` | In selection, record `InstanceId` reads apart from `VertexId` reads (`src/shaderc/online/select.rs:4917-4919` and `:4937`, `abi.rs:633-636`). Set `ShcShader::vs_instance_id_reg1 = vs_id_in_reg + 1` (or any non-zero value) when `gl_InstanceID` is read. Test with real compiler output in `src/vivante/backend_tests.rs`: instance 2 is refused and counted. **Landed in `7897e809`** (test `the_real_compiler_refuses_a_split_instanced_draw_that_reads_gl_instance_id`, `src/vivante/backend_tests.rs`: it compiles a real program, checks `vs_instance_id_reg1 == viv.vs_id_in_reg + 1` and counts 3 refused draws). Without V0, a draw that is still split into instances (divisor > `max_instance_divisor`) is drawn wrong without any message. | ~20 lines + test | `src/shaderc/online/select.rs`, `src/shaderc/online/abi.rs` (and the `ShcShader` fill for the GC7000UL output), `src/vivante/backend_tests.rs` | compiler: plan #19 (the online compiler; `select.rs`/`abi.rs` are not in the files #19 marks as held, so the owner must confirm) + #18 for the test |
 | V0' (not needed: V0 landed) | Back-end-only refusal on `viv.vs_id_in_reg != SHC_VIV_NO_REG` | One line in `draw_one` (`backend.rs:3307`). It also refuses programs that read only `gl_VertexID`, which are drawn correctly today. That is a regression, so this is a stop-gap only. | 1 line + test | `src/vivante/backend.rs` | #18 |
-| **V1** (done, `6c4759ea`) | Hardware divisor | `src/vivante/backend.rs:3190`: `let divisor = if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 };`, into `GcStream` (`:3191`); `:4020`: `max_instance_divisor: 0xffff`. `emit_streams` (`:1548`; the write is `:1558`) writes the word into 0x14680 + 4i. The GL core hands the mixed draw over as one DRAW_INSTANCED of n instances, and the FE gives `gl_InstanceID` 0..n-1. **Landed in `6c4759ea`**; the third-stream (0x14688) assertions followed in `256ec05b`. Host tests: see section 4 (`tests/gc_stream_divisor.rs`). **Not measured on the board**: no one knows if the GC7000UL FE takes a divisor > 1. etnaviv relies on it on every HALTI2+ part, and this GPU is HALTI5 (it uses `FE_HALTI5_ID_CONFIG`). The X2 check is section 5. | ~5 lines + ~40 test lines | `src/vivante/backend.rs`, `src/vivante/backend_tests.rs`, `tests/gc_stream_divisor.rs` | #18 |
+| **V1** (done, `6c4759ea`) | Hardware divisor | `src/vivante/backend.rs:3190`: `let divisor = if a.per_instance != 0 { u32::from(a.divisor.max(1)) } else { 0 };`, into `GcStream` (`:3191`); `:4021`: `max_instance_divisor: 0xffff`. `emit_streams` (`:1548`; the write is `:1558`) writes the word into 0x14680 + 4i. The GL core hands the mixed draw over as one DRAW_INSTANCED of n instances, and the FE gives `gl_InstanceID` 0..n-1. **Landed in `6c4759ea`**; the third-stream (0x14688) assertions followed in `256ec05b`. Host tests: see section 4 (`tests/gc_stream_divisor.rs`). **Not measured on the board**: no one knows if the GC7000UL FE takes a divisor > 1. etnaviv relies on it on every HALTI2+ part, and this GPU is HALTI5 (it uses `FE_HALTI5_ID_CONFIG`). The X2 check is section 5. | ~5 lines + ~40 test lines | `src/vivante/backend.rs`, `src/vivante/backend_tests.rs`, `tests/gc_stream_divisor.rs` | #18 |
 | V2 (fallback, not needed unless the board shows the FE ignores divisors above 1; otherwise only for divisor > 0xffff) | Per-draw uniform for split draws | The compiler loads `gl_InstanceID` from a constant register (a new `ShcViv` field, ABI change) instead of the FE's `.y`, and the back end writes `instance_id` there for each draw. There is no FE base-instance state (section 2), so there is no register-only way. | ~150-200 lines | `src/shaderc/online/select.rs`, `src/shaderc/mod.rs`, `src/abi_layout.rs`, `src/abi_layout_check.c`, `src/vivante/{backend,shader}.rs` | #19 + #18. Not needed now: with V1 it matters only for divisors > 65535, or if the board shows the FE ignores a divisor above 1 (then `max_instance_divisor` goes back to 1). |
 
 ## 4. Host check (both refusal sites, with the real compiler)
