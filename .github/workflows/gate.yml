@@ -408,10 +408,15 @@ jobs:
           for d in "${CARGO_TARGET_DIR:-}" "${TMPDIR:-}" "$GITHUB_WORKSPACE"; do
             if [ -d "$d" ]; then du -sh "$d"; fi
           done
-      - name: the gate log
+      # build/check-fail/ holds the whole output of each failed row
+      # (tools/check.sh prints only its last 40 lines): without it a failed
+      # check further up cannot be named once the runner is gone (issue #11244).
+      - name: the gate log and the whole output of each failed row
         if: always() && steps.seen.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: gate-${{ github.sha }}
-          path: build/gate-ci.log
+          path: |
+            build/gate-ci.log
+            build/check-fail/
           if-no-files-found: ignore

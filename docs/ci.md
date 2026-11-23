@@ -439,7 +439,8 @@ test row stay on pull requests.
 #### The nightly: a red one is a fix task
 
 Today the repository has **no automatic path** from a red nightly to a task:
-`gate.yml` only uploads the log (artifact `gate-<sha>`), and no document,
+`gate.yml` only uploads the log and the whole output of each failed row
+(artifact `gate-<sha>`: `build/gate-ci.log`, `build/check-fail/`), and no document,
 workflow or label in the tree turns a red run on main into an issue. Clippy
 now lands on main unchecked, so a red nightly is how a warning is found, and
 it must not wait for someone to look at the Actions page. What is needed
