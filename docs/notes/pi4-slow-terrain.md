@@ -306,7 +306,69 @@ else on the CPU side of the frame is above a few ms.
 
 ## Fix candidates, ranked
 
-Gains are ms a frame on the board, against 161.8.
+Two lists. **What is left** is the current one: it ranks what still costs
+terrain time on the Pi 4 after the measured fixes. The four candidates of the
+first breakdown follow it, as first written, each with its outcome.
+
+### What is left, ranked (current)
+
+Starting point: terrain **34.722 ms** a frame at `a4b9c551`
+(`pi4-terrain-board-jobs.md`: `glmark2-frame` 34687 us, 8.003 jobs a frame,
+every end waited for, `waits` 8.003, **`wait.ns` 28.349 ms**, **frame less
+`wait.ns` 6.34 ms**, `glmark2-jobs` frame 10: render sum 27.234 ms, TFU
+5 jobs 2.632 ms, `idle` sum 95 us, `bin` sum 3672 us, 1 of 8 jobs marked
+`~`). The pending-job look (`e9410974` against `92f35267`) read 34.713
+against 34.77 ms. The frame is GPU-bound: render and TFU are 29.87 ms of
+34.69, and 4.8 ms is not printed GPU work (bin, cache clean, start-up) or
+CPU work. Gains are ms a frame of those 34.7. **Every gain below is an
+estimate or a bound taken from a note, except where it says measured**, and
+rows 1 and 2 are pending studies. Each row names the note it comes from and
+the board record value (a field of the `glmark2-jobs`, `glmark2-counters` or
+`glmark2-frame` line, read as `parse.py` reads it) that would confirm it.
+The rows that are not shaders sum to about 1 to 4 ms: nearly all that is
+left is shader work inside the two big jobs.
+
+| # | candidate | gain | note | confirming record value |
+|---|---|---|---|---|
+| 1 | **pending: v3d-terrain-shaders.md**. Terrain's shaders (the noise pass of job 2, the terrain draw of job 4) in V3D instructions, threads and TMU operations, ours against Mesa's. Entry 2 renders 7931 us and entry 4 9374 us, 17.3 of the 27.2 ms render sum (63 %) | **pending**. No note on the tip estimates it. The pool is the 17.3 ms; `v3d-blur-jobs.md` finds both jobs' setup equal to Mesa's, so the time is fragment ALU work (about 1,900 instruction slots a pixel in the noise job) | `v3d-blur-jobs.md` (setup excluded), `v3d-terrain-gpu.md` (samples) | `glmark2-jobs` frame 10: `render` of entries 2 and 4 (7931 and 9374 us now); the frame follows them 1:1 (`glmark2-frame` frame, `wait.ns`) |
+| 2 | **pending: v3d-tile-state-zero.md**. Skip the tile-state `memset` of a job whose state is already zero (`src/osal/zephyr_v3d.c:1431`) | **pending**. Range from the notes: under 0.1 ms to 1.8 ms. `pi4-terrain-cpu-left.md` gives 0.07 to 1.8 ms (rates R1 to R5; 182,784 B a frame); the one job that started with the GPU idle read `prep` 1 us, which `pi4-terrain-board-jobs.md` reads as under 0.1 ms. `v3d-bin-overlap.md` counts the same memset inside its 0.2 to 2 ms | `pi4-terrain-cpu-left.md` candidate 3, `pi4-terrain-board-jobs.md`, `v3d-bin-overlap.md` | `glmark2-jobs` frame 10: `prep` of entry 2 (1 us now; the job that starts with the GPU idle). A fall in `glmark2-frame` frame by more than 0.1 ms confirms a gain; `prep` of the other entries is queue time and does not |
+| 3 | **TFU chain bytes: skip a chain no draw reads below level 0.** Exact part: the lazy chain plus a magnification proof drops bloom V's 256x256 chain (5 to 4 TFU chains a frame). The rest (chains read at lambda 0.0001 to 0.019) is not exact under ES 2.0 | **0.10 ms exact** (`lazy-mip-chain.md`, a prediction); 0.1 to 1.8 ms with the inexact chains (`v3d-terrain-gpu.md` candidate 2). `v3d-tfu-raster-chain.md` adds nothing here: the chains already run on the TFU (`tile.ns` 0.16 ms a frame, `tiled.n` 0) | `lazy-mip-chain.md`, `v3d-terrain-gpu.md`, `terrain-mip-usage.md` | `glmark2-counters` terrain: `mip.queued` 4.986 to about 3.99 a frame; `glmark2-jobs` frame 10: `tfu` count 5 to 4 and its sum 2632 us down by about 113 us |
+| 4 | **D16 depth for a `DEPTH_COMPONENT16` renderbuffer** (Z only, as Mesa; the backend keeps D24S8, 5.76 MB of depth traffic a frame) | **0.4 ms** on the overlay job, plus up to 0.2 ms hidden in the terrain draw (`v3d-blur-jobs.md` candidate 1, bytes at 4.4 MB/ms; an estimate) | `v3d-blur-jobs.md`, `v3d-depth-store-terrain.md` (the traffic) | `glmark2-jobs` frame 10: `render` of entry 7 (the overlay, 1754 us now) down about 0.4 ms; `glmark2-frame` frame down about the same |
+| 5 | **Overlap job N+1's bin with job N's render** (a second tile-state and binner pool, 6.8 MiB) | **0.2 to 2 ms estimated, likely under 1** (`v3d-bin-overlap.md`). The board `bin` values bound the pairs that can hide at **0.29 ms** (`pi4-terrain-board-jobs.md`: the sum of min(bin N+1, render N)). Job 4's 3.53 ms bin follows the 191 us render of job 3 and hides only after a reorder, which is not this candidate | `v3d-bin-overlap.md`, `pi4-terrain-board-jobs.md` | `glmark2-jobs` frame 10: `bin` sum 3672 us (entry 4 is 3529 of it) and the `bin` of entries 2 and 5 to 8 (about 0.1 ms, the part that can hide). After a change: `glmark2-frame` frame and `wait.ns` down by that sum; `idle` stays near 95 us |
+| 6 | **Shorten the CPU's recording** (`texture_units`, `begin_job`, `emit_state`, `check_program` per draw) | **under 0.3 ms** (`pi4-terrain-cpu-left.md` candidate 4) | `pi4-terrain-cpu-left.md` | frame less `wait.ns` (6.34 ms now) falling; `glmark2-frame` `gl` less `wait.ns` cannot be formed on this record (`wait.ns` 28.349 ms is above `gl` 26.41 ms, swap holds waits too) |
+| 7 | **Start a parked job without the CPU in a wait** (the optional `z_submit` poll, `v3d-pending-start.md` (f)) | **under 0.1 ms, measured**: `v3d-pending-look` (`e9410974`) against `92f35267`: frame 34.735 to 34.678 ms (-0.057 ms), inside the 0.1 ms spread (`pi4-terrain-board-jobs.md`, "Pending-job look"). The GPU is never idle between jobs, so the exposure is bounded by the `idle` sum | `v3d-pending-start.md`, `pi4-terrain-board-jobs.md` | `glmark2-jobs` frame 10: `idle` sum 95 us (94 us before) and the one `~` job (entry 1). Not worth more work unless `idle` grows |
+| 8 | **Early Z for the terrain draw** (job 4). Last: not worth building for terrain | **about 0.13 ms** (0.10 to 0.16; overdraw 1.03, `terrain-overdraw.md`; `4.3 ms x (overdraw - 1)` of `v3d-early-z.md`) | `terrain-overdraw.md`, `v3d-early-z.md` | `glmark2-jobs` frame 10: `render` of entry 4 down about 130 us, inside the run-to-run spread, so one run cannot show it |
+
+Not on the list, with the note that closes each:
+
+- **The blur passes sample one level** (`v3d-terrain-gpu.md` candidate 1, up
+  to 8.6 ms of samples): ruled out on the probe. gl_test case 220 measured a
+  mipmap/linear time ratio of 1.00 on a 1:1 quad, and the tilt-shift H job
+  (entry 8, 2801 us) already runs at that probe's sampling rate
+  (`v3d-blur-jobs.md`: no setup change can make the blurs much faster). Its
+  TFU-bytes half is row 3. The blur jobs are entries 8 and 1 (2.8 ms and at
+  most 4.4 ms `~`); the 7.9 and 9.4 ms jobs are the noise pass and the
+  terrain draw (row 1), not the blurs (`v3d-blur-jobs.md`, "Which entry is
+  which job"; `v3d-jobs-readout.md` for the fields and the `~` mark).
+- **Skip the depth store and load** (`v3d-depth-store-terrain.md`): no exact
+  rule at the time job 6 is built (the fact that kills job 6's store is
+  known a frame later); at most 0.43 ms, likely under 0.2. Not built.
+- **`tfu_tile` level by level and a TFU chain from a raster level 0**
+  (`v3d-tfu-raster-chain.md`): 0 ms on terrain, no chain reaches the CPU
+  path (`first-sample` and `unknown` flat). It is for frames that still fall
+  back; unmeasured on the TFU hardware.
+- **Do not drain the GPU before a CPU filter of a target** (candidate 4
+  below): dropped. `gl-settle-drain.md`: `wait_kick(target)` waits for what
+  the full drain waits for, because the V3D runs jobs in order and no newer
+  job is outstanding when terrain's filter starts. Expected gain 0.
+
+### The first breakdown's four candidates, as first written
+
+Outcomes: 1 done (`c6b16f71`), no speed gain on top of 2 (16 image slots
+already held all 9 targets); 2 done (`31a4cf8d`), measured **126.2 ms** a
+frame, no eviction counter built; 3a done (`21a236e5`), no gain on terrain
+(the path is not taken), 3b is the TFU raster chain item above; **4 dropped**
+(see above). The gains in these four are against the 161.8 ms frame.
 
 1. **Clear a texture's target-use entry when the texture is freed.**
    `src/gl/texture.rs:5009` `free_texture`: call
@@ -599,6 +661,19 @@ agree, no GL error). The ratio is 1.00, not near 2: trilinear filtering
 costs nothing more on a 1:1 quad, so `v3d-terrain-gpu.md` candidate 1
 (up to 8.6 ms) is ruled out on this probe. (The image's console printed the
 case twice, the same figures both times.)
+
+### Later records (`a4b9c551`, `e9410974`)
+
+Two further runs are written up in `pi4-terrain-board-jobs.md` (not repeated
+there or here beyond these figures). At `a4b9c551` (origin/main of
+2026-11-22; `glmark2-jobs` now prints each job's `bin` and `prep`): terrain
+**34.722 ms** a frame, `wait.ns` 28.349 ms, frame less `wait.ns` 6.34 ms,
+`waits` 8.003, idle sum 95 us, 1 job marked `~`, `bin` sum 3672 us (job 4:
+3529 us); within the 0.1 ms spread of `e07d066a`, so nothing in between moved
+terrain. The pending-job look (`v3d-pending-look`, `e9410974` against its
+parent `92f35267`) gave 34.713 against 34.77 ms: **no gain** (-0.057 ms),
+as `v3d-pending-start.md` row 7 above. What is left is "What is left,
+ranked" above.
 
 ### How the console was captured (session-specific)
 
