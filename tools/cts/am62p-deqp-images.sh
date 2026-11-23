@@ -64,6 +64,9 @@
 #                 reports ES 3.0)
 #   DEQP_PVR_NATIVE_3D  optional, 0 or 1: -DCONFIG_DEQP_PVR_NATIVE_3D=<v> for every
 #                 image (unset: the Kconfig default -1, the library's default)
+#   DEQP_PVR_NATIVE_ARRAY  optional, 0 or 1: -DCONFIG_DEQP_PVR_NATIVE_ARRAY=<v> for every
+#                 image (unset: the Kconfig default -1, the library's default); an int
+#                 option, so the value is the number 0 or 1, never y
 #   DEQP_PVR_INSTANCE_DIVISOR  optional, 0 or 1: -DCONFIG_YAKOGL_PVR_INSTANCE_DIVISOR=y/n
 #                 for every image (unset: the Kconfig default n): the PowerVR
 #                 hardware instance divisors (P3, docs/notes/instanceid-per-draw.md,
@@ -151,6 +154,11 @@ case "${DEQP_PVR_NATIVE_3D:-}" in
     '') ;;
     0 | 1) MODARGS="$MODARGS -DCONFIG_DEQP_PVR_NATIVE_3D=$DEQP_PVR_NATIVE_3D" ;;
     *) die "DEQP_PVR_NATIVE_3D must be 0 or 1, not '$DEQP_PVR_NATIVE_3D'" ;;
+esac
+case "${DEQP_PVR_NATIVE_ARRAY:-}" in
+    '') ;;
+    0 | 1) MODARGS="$MODARGS -DCONFIG_DEQP_PVR_NATIVE_ARRAY=$DEQP_PVR_NATIVE_ARRAY" ;;
+    *) die "DEQP_PVR_NATIVE_ARRAY must be 0 or 1, not '$DEQP_PVR_NATIVE_ARRAY'" ;;
 esac
 IDIV=
 case "${DEQP_PVR_INSTANCE_DIVISOR:-}" in
