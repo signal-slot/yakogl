@@ -214,6 +214,10 @@ __weak void board_finish_record(bool pass)
 	ARG_UNUSED(pass);
 }
 
+__weak void board_last_lines(void)
+{
+}
+
 FUNC_NORETURN void board_finish(const char *name, int rc)
 {
 	uint32_t resets = board_gpu_resets();

@@ -78,6 +78,18 @@
  * record (record.rs, GL_ERROR: the code, the entry, the FNV-1a of the entry
  * point's name, every error raised as a 32-bit count).
  *
+ * The list at the end (driver/docs/glmark2.md, "The list at the end"): after
+ * the score line, one "glmark2-list:" line per entry that reached its
+ * set-up, worded by the driver crate (board::glmark2_list): its index, a
+ * short name, and ran with the FPS, failed with glmark2's reason, or
+ * unsupported. The first GL errors by name are printed before the score
+ * line, so the lines from the score line on fit the record screen of a
+ * board read from its screen alone (the NanoPC-T6). The list so far is
+ * also kept as text for a run that ends without board_finish:
+ * board_last_lines() prints it, the entry running last "no end", from that
+ * board's fatal error handler and watchdog timer, and from main() after a
+ * throw.
+ *
  * The per-scene values for a runner without a console (the i.MX8MP,
  * docs/notes/imx8mp-gm-record.md): with the selector YK_RECORD_GM_SEL | t <<
  * YK_RECORD_GM_SEL_T_SHIFT | n the benchmark list is cut to one page's
@@ -693,7 +705,9 @@ public:
 
 /* The stream Log::init hands every log line to (upstream log.cc, extra_out):
  * while armed, it keeps why the first "Error: " line says a setup failed
- * (yd_record_glmark2_why). The upstream lines still go to std::cerr. */
+ * (yd_record_glmark2_why), and that line with the one after it, which holds
+ * a shader's log (the glmark2-list: line's reason). The upstream lines still
+ * go to std::cerr. */
 class SetupErrors : public std::streambuf
 {
 public:
@@ -701,6 +715,8 @@ public:
     {
         armed_ = true;
         why_ = YK_RECORD_GLMARK2_WHY_NO_ERROR;
+        error_.clear();
+        error_lines_ = 0;
         n_ = 0;
     }
     /* Ends the window: a last line without its newline counts too. */
@@ -710,6 +726,8 @@ public:
         armed_ = false;
         return why_;
     }
+    /* The first error line and the line after it, '\n' between. */
+    const std::string &error() const { return error_; }
 
 protected:
     int_type overflow(int_type c) override
@@ -728,15 +746,28 @@ protected:
 private:
     void line_end()
     {
-        if (armed_ && why_ == YK_RECORD_GLMARK2_WHY_NO_ERROR && n_ != 0) {
-            why_ = yd_record_glmark2_why(line_, n_);
+        if (armed_ && n_ != 0) {
+            if (why_ == YK_RECORD_GLMARK2_WHY_NO_ERROR) {
+                why_ = yd_record_glmark2_why(line_, n_);
+                if (why_ != YK_RECORD_GLMARK2_WHY_NO_ERROR) {
+                    error_.assign(line_, n_);
+                    error_lines_ = 1;
+                }
+            } else if (error_lines_ == 1) {
+                error_ += '\n';
+                error_.append(line_, n_);
+                error_lines_ = 2;
+            }
         }
         n_ = 0;
     }
 
     bool armed_ = false;
     uint32_t why_ = YK_RECORD_GLMARK2_WHY_NO_ERROR;
-    char line_[160];
+    std::string error_;
+    unsigned int error_lines_ = 0;
+    /* a link error line holds the whole log: the Mali's is about 300 characters */
+    char line_[512];
     size_t n_ = 0;
 };
 
@@ -1060,17 +1091,75 @@ void store_perf_page()
 }
 #endif /* GM_PERF */
 
+/* ---- the list at the end (glmark2-list:) -------------------------------- */
+
+/* One benchmark-list entry that reached its set-up, as the list words it
+ * (board::glmark2_list in the driver crate; driver/docs/glmark2.md, "The
+ * list at the end"). */
+struct ListEntry {
+    uint32_t entry = 0;
+    uint32_t result = YD_GM_LIST_NO_END; /* until the entry ends */
+    uint32_t fps = 0;
+    uint32_t why = YK_RECORD_GLMARK2_WHY_NO_ERROR;
+    std::string info;  /* upstream's info_string(); "[name]" before the set-up */
+    std::string error; /* glmark2's first error lines in the set-up */
+};
+
+/* The lines of `list` (its last YD_GM_LIST_MAX entries) in order, each to
+ * `f(line)`. */
+template <typename F> void list_lines(const std::vector<ListEntry> &list, F f)
+{
+    const size_t first = list.size() > YD_GM_LIST_MAX ? list.size() - YD_GM_LIST_MAX : 0u;
+    std::vector<struct yd_gm_list_scene> c;
+    for (size_t i = first; i < list.size(); i++) {
+        const ListEntry &e = list[i];
+        c.push_back({e.info.data(), e.info.size(), e.error.data(), e.error.size(), e.entry,
+                     e.result, e.fps, e.why});
+    }
+    for (size_t i = 0; i < c.size(); i++) {
+        char line[YD_GM_LIST_LINE_MAX + 1];
+        const int n = yd_gm_list_line(c.data(), c.size(), i, line, YD_GM_LIST_LINE_MAX);
+        if (n > 0) {
+            line[n] = '\0';
+            f(line);
+        }
+    }
+}
+
+/* The list as it stands, kept for a run that ends without board_finish
+ * (board_last_lines: the fatal error handler, the watchdog's timer): its
+ * last lines, as many as the record screen's ring holds. Written with
+ * interrupts locked, so the reader sees whole lines. */
+constexpr size_t KEPT_LINES = YD_RECORD_SCREEN_LINES - 1;
+char s_kept[KEPT_LINES][YD_GM_LIST_LINE_MAX + 1];
+size_t s_kept_n;
+
+void keep_list(const std::vector<ListEntry> &list)
+{
+    std::vector<std::string> lines;
+    list_lines(list, [&](const char *l) { lines.emplace_back(l); });
+    const size_t first = lines.size() > KEPT_LINES ? lines.size() - KEPT_LINES : 0u;
+    const unsigned int key = irq_lock();
+    s_kept_n = 0;
+    for (size_t i = first; i < lines.size(); i++) {
+        memcpy(s_kept[s_kept_n], lines[i].c_str(), lines[i].size() + 1u);
+        s_kept_n++;
+    }
+    irq_unlock(key);
+}
+
 /* ---- the main loop, counting outcomes ----------------------------------- */
 
 /* The counts and, for the record, which list entries did not run: the first
- * failed one with why, the first two unsupported ones; and each scene's
- * values as kind GM_PAGE carries them, in run order. */
+ * failed one with why, the first two unsupported ones; each scene's values
+ * as kind GM_PAGE carries them, in run order; and the list's entries. */
 struct Outcomes {
     unsigned int ran = 0, failed = 0, unsupported = 0;
     uint32_t failed_entry = YK_RECORD_GLMARK2_ENTRY_NONE;
     uint32_t why = YK_RECORD_GLMARK2_WHY_NO_ERROR;
     uint32_t unsupported_entries[2] = {YK_RECORD_GLMARK2_ENTRY_NONE, YK_RECORD_GLMARK2_ENTRY_NONE};
     std::vector<struct yd_gm_scene> scenes;
+    std::vector<ListEntry> list;
 };
 
 class RecordingLoop : public MainLoop
@@ -1145,15 +1234,27 @@ public:
         s_cost.frames++;
     }
 
-    /* The scene's setup is the window in which an error line says why. */
+    /* The scene's setup is the window in which an error line says why. The
+     * entry joins the list here with no end yet; a fatal error inside it
+     * leaves it so. */
     void before_scene_setup() override
     {
         /* the GL errors from here to the next entry's setup are this entry's */
         yakogl_gl_error_tag(entry());
         print_mem("before setup");
+        ListEntry e;
+        e.entry = entry();
+        e.info = "[" + scene_->name() + "]";
+        out_.list.push_back(e);
+        keep_list(out_.list);
         s_setup_errors.arm();
     }
-    void after_scene_setup() override { setup_why_ = s_setup_errors.disarm(); }
+    void after_scene_setup() override
+    {
+        setup_why_ = s_setup_errors.disarm();
+        out_.list.back().info = scene_->info_string();
+        keep_list(out_.list);
+    }
 
     /* After the scene set up: its frames start here. */
     void log_scene_info() override
@@ -1198,15 +1299,19 @@ public:
         print_mem("end");
         keep_scene();
         const uint32_t entry = this->entry();
+        ListEntry &e = out_.list.back();
         switch (scene_setup_status_) {
         case SceneSetupStatusSuccess:
             out_.ran++;
+            e.result = YD_GM_LIST_RAN;
+            e.fps = scene_fps();
             break;
         case SceneSetupStatusUnsupported:
             if (out_.unsupported < 2u) {
                 out_.unsupported_entries[out_.unsupported] = entry;
             }
             out_.unsupported++;
+            e.result = YD_GM_LIST_UNSUPPORTED;
             printk("glmark2: entry %u %s: unsupported\n", entry, scene_->info_string().c_str());
             break;
         default:
@@ -1215,10 +1320,14 @@ public:
                 out_.why = setup_why_;
             }
             out_.failed++;
+            e.result = YD_GM_LIST_FAILED;
+            e.why = setup_why_;
+            e.error = s_setup_errors.error();
             printk("glmark2: entry %u %s: failed, why %u\n", entry, scene_->info_string().c_str(),
                    setup_why_);
             break;
         }
+        keep_list(out_.list);
     }
 
 private:
@@ -1229,18 +1338,24 @@ private:
         return static_cast<uint32_t>(entry_base_ + static_cast<size_t>(bench_iter_ - benchmarks_.begin()));
     }
 
-    /* The scene's values for kind GM_PAGE: the FPS integer upstream's result
-     * line prints (main-loop.cpp:178, from the same Scene::stats()), or the
-     * did-not-run code; the frames; the last frame's picture value (0 x 0
-     * when the readback failed). A scene that set up but drew no frame has
-     * no frame time: fps 0. */
+    /* The FPS integer upstream's result line prints (main-loop.cpp:178, from
+     * the same Scene::stats()). A scene that set up but drew no frame has no
+     * frame time: 0. */
+    uint32_t scene_fps()
+    {
+        const double t = scene_->stats().average_frame_time;
+        return t > 0.0 ? static_cast<uint32_t>(ceil(1.0 / t)) : 0u;
+    }
+
+    /* The scene's values for kind GM_PAGE: scene_fps(), or the did-not-run
+     * code; the frames; the last frame's picture value (0 x 0 when the
+     * readback failed). */
     void keep_scene()
     {
         struct yd_gm_scene s {};
         switch (scene_setup_status_) {
         case SceneSetupStatusSuccess: {
-            const double t = scene_->stats().average_frame_time;
-            s.fps = t > 0.0 ? static_cast<unsigned>(ceil(1.0 / t)) : 0u;
+            s.fps = scene_fps();
             s.frames = static_cast<uint32_t>(s_cost.frames);
             break;
         }
@@ -1651,6 +1766,16 @@ int run()
     Log::info("=======================================================\n");
     results.end();
 
+    /* What the GL core counted over the whole run: glmark2 never calls
+     * glGetError, so a GL error it hits is otherwise only a console line,
+     * and the i.MX8MP has no console (issue #13). Recorded is the part
+     * glGetError could have returned (the first error masks the rest). The
+     * first errors by name come first: from the score line on, the run's
+     * last lines fit the record screen together (driver/docs/glmark2.md,
+     * "The list at the end"). */
+    const uint32_t gl_errors = yakogl_gl_errors_raised();
+    const uint32_t incomplete_draws = yakogl_incomplete_texture_draws();
+    print_first_gl_errors(gl_errors);
     /* An entry with an empty scene name only sets options and never reaches
      * log_scene_result, so the outcomes are what is compared. */
     const unsigned int seen = out.ran + out.failed + out.unsupported;
@@ -1660,16 +1785,10 @@ int run()
            w, h, Options::offscreen ? " off-screen" : "", native.shown() ? "yes" : "no",
            board_gpu_resets());
     const bool pass = seen != 0 && out.ran != 0 && out.failed == 0 && score != 0;
-    /* What the GL core counted over the whole run: glmark2 never calls
-     * glGetError, so a GL error it hits is otherwise only a console line,
-     * and the i.MX8MP has no console (issue #13). Recorded is the part
-     * glGetError could have returned (the first error masks the rest). */
-    const uint32_t gl_errors = yakogl_gl_errors_raised();
-    const uint32_t incomplete_draws = yakogl_incomplete_texture_draws();
     printk("glmark2: GL errors raised %u, draws that sampled an incomplete texture %u (GL "
            "errors recorded %u)\n",
            gl_errors, incomplete_draws, yakogl_gl_errors_recorded());
-    print_first_gl_errors(gl_errors);
+    list_lines(out.list, [](const char *l) { printk("%s\n", l); });
     if (pass && out.unsupported != 0) {
         printk("glmark2: no scene failed; %u unsupported, left out of the score (not a pass or "
                "a fail)\n",
@@ -1705,6 +1824,15 @@ int run()
 
 } // namespace
 
+/* yakogl_board.h: the list so far, for a run that ends without board_finish
+ * (a fatal error, a hang); the lines keep_list() kept. */
+extern "C" void board_last_lines(void)
+{
+    for (size_t i = 0; i < s_kept_n; i++) {
+        printk("%s\n", s_kept[i]);
+    }
+}
+
 int main(void)
 {
     int rc;
@@ -1712,8 +1840,10 @@ int main(void)
     try {
         rc = run();
     } catch (const std::exception &e) {
-        /* Options::parse_args and the scenes throw on bad option values */
+        /* Options::parse_args and the scenes throw on bad option values;
+         * a scene's throw ends the run inside it: the list so far */
         printk("glmark2: exception: %s\n", e.what());
+        board_last_lines();
         rc = -EIO;
     }
     board_finish("glmark2", rc);

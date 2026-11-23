@@ -921,7 +921,9 @@ pub fn glmark2_why(line: &[u8]) -> u32 {
     }
 }
 
-fn glmark2_why_name(why: u32) -> &'static str {
+/// The step a GLMARK2_WHY_* names, in words (the decoder's and the
+/// `glmark2-list:` lines').
+pub(crate) fn glmark2_why_name(why: u32) -> &'static str {
     match why {
         GLMARK2_WHY_NO_ERROR => "no error logged",
         GLMARK2_WHY_VERTEX_SHADER => "vertex shader",

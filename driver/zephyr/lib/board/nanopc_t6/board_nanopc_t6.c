@@ -215,21 +215,29 @@ static bool record_screen(bool show)
 }
 
 /* The watchdog's feeder stopped (nanopc_t6.c): the image hangs or its
- * lifetime is over, and the record stays until WDT0's reset. Timer context. */
+ * lifetime is over, and the record stays until WDT0's reset. The sample's
+ * last lines (board_last_lines) go under the feeder's line. Timer context. */
 void t6_record_screen(void)
 {
+	unsigned int key = irq_lock();
+
+	board_last_lines();
+	irq_unlock(key);
 	(void)record_screen(false);
 }
 
-/* A fatal error. Zephyr printed its registers, which are in the ring: put
- * the record on the screen, then halt with interrupts off as the default
- * handler does. The feeder stops with them and WDT0 resets the SoC within
- * one period: the time the record stays. */
+/* A fatal error. Zephyr printed its registers, which are in the ring; the
+ * sample's last lines (board_last_lines: the glmark2 list so far) go under
+ * them, so a run read from the screen alone keeps what it did before the
+ * error. Then the record on the screen, and the halt with interrupts off as
+ * the default handler does. The feeder stops with them and WDT0 resets the
+ * SoC within one period: the time the record stays. */
 void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
 	ARG_UNUSED(esf);
 	printk("board: fatal error %u: halted, WDT0 resets the SoC within %u ms\n", reason,
 	       t6_watchdog_period_ms());
+	board_last_lines();
 	(void)record_screen(false);
 	k_fatal_halt(reason);
 }

@@ -172,6 +172,33 @@ struct yd_gm_scene {
 
 int yd_record_gm_page_words(uint32_t tag, const struct yd_gm_scene *s, uint32_t n, uint32_t out[3]);
 
+/* The glmark2 sample's list at a run's end (board::glmark2_list): one
+ * "glmark2-list: <entry> <name> <result>" line per entry that reached its
+ * set-up, the name the scene's and the options that tell its entries apart.
+ * yd_gm_list_line writes line i of the n entries at list into out (cap
+ * bytes, no newline, no NUL) and returns its length, at most
+ * YD_GM_LIST_LINE_MAX; 0 when i >= n; -EINVAL for a null pointer or more
+ * than YD_GM_LIST_MAX entries. */
+#define YD_GM_LIST_RAN         0 /* fps: upstream's FPS integer */
+#define YD_GM_LIST_FAILED      1 /* why, and glmark2's error lines */
+#define YD_GM_LIST_UNSUPPORTED 2
+#define YD_GM_LIST_NO_END      3 /* the run ended inside the entry */
+#define YD_GM_LIST_LINE_MAX    128
+#define YD_GM_LIST_MAX         128
+
+struct yd_gm_list_scene {
+	const char *info;  /* upstream's Scene::info_string(): "[name] <opt=val:...>" */
+	size_t info_len;
+	const char *error; /* glmark2's first "Error: " line in the set-up and the line after it */
+	size_t error_len;
+	uint32_t entry;    /* the index in glmark2's benchmark list */
+	uint32_t result;   /* YD_GM_LIST_* */
+	uint32_t fps;
+	uint32_t why;      /* YK_RECORD_GLMARK2_WHY_* */
+};
+
+int yd_gm_list_line(const struct yd_gm_list_scene *list, size_t n, size_t i, char *out, size_t cap);
+
 /* kind DISPLAY's w1..w3 (record.rs display_words, Display): the i.MX8MP
  * display chain while it scans a window. */
 struct yd_record_display {
@@ -2179,6 +2206,10 @@ _Static_assert(offsetof(struct yd_glmark2_outcome, h) == 44, "yd_glmark2_outcome
 _Static_assert(offsetof(struct yd_glmark2_outcome, gl_errors) == 48, "yd_glmark2_outcome.gl_errors");
 _Static_assert(offsetof(struct yd_glmark2_outcome, incomplete_draws) == 52,
 	       "yd_glmark2_outcome.incomplete_draws");
+_Static_assert(sizeof(struct yd_gm_list_scene) == 48, "struct yd_gm_list_scene");
+_Static_assert(offsetof(struct yd_gm_list_scene, error) == 16, "yd_gm_list_scene.error");
+_Static_assert(offsetof(struct yd_gm_list_scene, entry) == 32, "yd_gm_list_scene.entry");
+_Static_assert(offsetof(struct yd_gm_list_scene, why) == 44, "yd_gm_list_scene.why");
 _Static_assert(sizeof(struct yd_record_display) == 32, "struct yd_record_display");
 _Static_assert(offsetof(struct yd_record_display, irq_now) == 12, "yd_record_display.irq_now");
 _Static_assert(offsetof(struct yd_record_display, pitch) == 28, "yd_record_display.pitch");
