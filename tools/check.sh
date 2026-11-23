@@ -3639,6 +3639,9 @@ print(len(l), "cases"); sys.exit(0 if ok else 1)'
   # tools/hostharness/glmark2/ref71.sh: its refusals (a missing V3D_SHC or
   # GLMARK2_SRC exits 3 naming it). Needs no Mesa tree. Host only.
   step "tools   glmark2 ref71-selftest.sh (Mesa 7.1 counts script, its refusals)" no_board_env bash tools/hostharness/glmark2/ref71-selftest.sh
+  # tools/cts/mali-testdata-ref71.sh: its refusals (a missing v3d_shc exits 3
+  # naming V3D_SHC). Needs no Mesa tree. Host only.
+  step "tools   mali-testdata-ref71-selftest.sh (Mesa 7.1 counts script, its refusals)" no_board_env bash tools/cts/mali-testdata-ref71-selftest.sh
   # tools/host-replay/selftest/selftest.sh: the replay glue against a stand-in
   # sample (fake_sample.c), per GPU. A clean run must pass and a FAKE_BAD=1 run
   # must be reported. It builds the library per GPU into its output directory
