@@ -253,8 +253,6 @@ fn program(vs: &str, fs: &str) -> GLuint {
 }
 
 /// The streams submitted since the last call.
-
-/// The streams submitted since the last call.
 fn take_kicks() -> Vec<Vec<u32>> {
     with_platform(|p| core::mem::take(&mut p.kicks))
 }

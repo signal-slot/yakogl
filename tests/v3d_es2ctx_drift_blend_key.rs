@@ -397,12 +397,12 @@ fn v3d_mode(gl: GLenum) -> u64 {
 /// A float in [0, 1] as an IEEE half, for the values the file uses (exact).
 fn half(v: f32) -> u64 {
     match v {
-        x if x == 0.0 => 0x0000,
-        x if x == 0.125 => 0x3000,
-        x if x == 0.25 => 0x3400,
-        x if x == 0.5 => 0x3800,
-        x if x == 0.75 => 0x3a00,
-        x if x == 1.0 => 0x3c00,
+        0.0 => 0x0000,
+        0.125 => 0x3000,
+        0.25 => 0x3400,
+        0.5 => 0x3800,
+        0.75 => 0x3a00,
+        1.0 => 0x3c00,
         _ => panic!("half({v})"),
     }
 }
@@ -511,7 +511,7 @@ fn check(what: &str, s: Surface, g: &Gl, fs: &mut Option<usize>) {
     assert_eq!(seen.refused, None, "{what}: refused");
     assert!(seen.num_targets <= 1, "{what}: {} targets", seen.num_targets);
     assert_eq!(seen.alpha_bits != 0, s.alpha(), "{what}: the target's alpha bits");
-    let st = seen.job.clone().unwrap_or_else(|why| panic!("{what}: job_state refuses: {why}"));
+    let st = seen.job.unwrap_or_else(|why| panic!("{what}: job_state refuses: {why}"));
     /* the single-target variant: the program's own fragment shader, however
      * it blends (the V3D blends in fixed function; key 0) */
     assert_eq!(*fs.get_or_insert(seen.fs), seen.fs, "{what}: a different fragment shader");
