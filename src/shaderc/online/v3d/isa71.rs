@@ -537,3 +537,176 @@ pub enum Instr71 {
 pub fn magic_waddr_name(waddr: u8) -> Option<&'static str> {
     qpu_ffi::magic_waddr_name_for(Gen::V71, waddr)
 }
+
+#[cfg(test)]
+mod tests {
+    //! The model's own helpers, against Mesa 26.2.1 `src/broadcom/qpu`
+    //! (facts and file:line only): `qpu_instr.c` `v3d_qpu_magic_waddr_name`
+    //! (:31-:86), `add_op_args`/`mul_op_args` (:405-:553) and
+    //! `v3d_qpu_sig_writes_address` (:1095, ver >= 41).
+    use super::*;
+
+    fn dst(a: u8) -> bool {
+        a & ARG_D != 0
+    }
+
+    #[test]
+    fn tables_are_dense_and_in_discriminant_order() {
+        for (i, op) in AddOp71::ALL.iter().enumerate() {
+            // 51 is Mesa's V3D_QPU_A_VDWWT, absent on 7.1: the table skips it.
+            let want = if i < 51 { i } else { i + 1 };
+            assert_eq!(*op as usize, want, "{:?}", op);
+        }
+        let mut last = None;
+        for op in MulOp71::ALL {
+            assert!(last.is_none_or(|l| (op as u32) > l), "{:?}", op);
+            last = Some(op as u32);
+        }
+        assert!(MulOp71::ALL.iter().all(|o| *o as u32 != 3), "3 is UMUL24_RTOP0");
+        for (i, u) in Unpack71::ALL.iter().enumerate() {
+            assert_eq!(*u as usize, i);
+        }
+        assert_eq!(Unpack71::default(), Unpack71::None);
+    }
+
+    #[test]
+    fn writes_address_signals() {
+        // qpu_instr.c:1095: ldunifrf, ldunifarf, ldvary, ldtmu, ldtlb, ldtlbu.
+        let yes = [
+            Sig71 { ldunifrf: true, ..Default::default() },
+            Sig71 { ldunifarf: true, ..Default::default() },
+            Sig71 { ldvary: true, ..Default::default() },
+            Sig71 { ldtmu: true, ..Default::default() },
+            Sig71 { ldtlb: true, ..Default::default() },
+            Sig71 { ldtlbu: true, ..Default::default() },
+        ];
+        for s in yes {
+            assert!(s.writes_address(), "{:?}", s);
+        }
+        let no = [
+            Sig71::default(),
+            Sig71 { thrsw: true, ..Default::default() },
+            Sig71 { ldunif: true, ..Default::default() },
+            Sig71 { ldunifa: true, ..Default::default() },
+            Sig71 { ucb: true, ..Default::default() },
+            Sig71 { rotate: true, ..Default::default() },
+            Sig71 { wrtmuc: true, ..Default::default() },
+            Sig71 { small_imm_a: true, ..Default::default() },
+            Sig71 { small_imm_d: true, ..Default::default() },
+        ];
+        for s in no {
+            assert!(!s.writes_address(), "{:?}", s);
+        }
+    }
+
+    #[test]
+    fn operand_counts_and_destinations() {
+        // add_op_args, qpu_instr.c:405 (FADD, D|A|B), :438 (NOT, D|A),
+        // :444 (SETMSF, D|A), :446 (NOP, 0), :448 (EIDX, D), :466 (TMUWT, D),
+        // :503 (STVPMV, A|B, no destination).
+        let n = |op| num_src(add_op_args(op));
+        assert_eq!((n(AddOp71::Fadd), dst(add_op_args(AddOp71::Fadd))), (2, true));
+        assert_eq!((n(AddOp71::Not), dst(add_op_args(AddOp71::Not))), (1, true));
+        assert_eq!((n(AddOp71::Setmsf), dst(add_op_args(AddOp71::Setmsf))), (1, true));
+        assert_eq!((n(AddOp71::Nop), dst(add_op_args(AddOp71::Nop))), (0, false));
+        assert_eq!((n(AddOp71::Eidx), dst(add_op_args(AddOp71::Eidx))), (0, true));
+        assert_eq!((n(AddOp71::Tmuwt), dst(add_op_args(AddOp71::Tmuwt))), (0, true));
+        assert_eq!((n(AddOp71::Stvpmv), dst(add_op_args(AddOp71::Stvpmv))), (2, false));
+        // The SFU is an ALU operation on 7.1: one source and a destination
+        // (:443, RECIP D|A).
+        for op in [AddOp71::Recip, AddOp71::Rsqrt, AddOp71::Exp, AddOp71::Log, AddOp71::Sin, AddOp71::Rsqrt2] {
+            assert_eq!((n(op), dst(add_op_args(op))), (1, true), "{:?}", op);
+        }
+        // mul_op_args, :532 (ADD), :538 (MULTOP), :539/:541 (FMOV/MOV),
+        // :540 (NOP), :553 (V8DOT).
+        let m = |op| num_src(mul_op_args(op));
+        assert_eq!((m(MulOp71::Add), dst(mul_op_args(MulOp71::Add))), (2, true));
+        assert_eq!((m(MulOp71::Fmul), dst(mul_op_args(MulOp71::Fmul))), (2, true));
+        assert_eq!((m(MulOp71::Multop), dst(mul_op_args(MulOp71::Multop))), (2, true));
+        assert_eq!((m(MulOp71::V8dot), dst(mul_op_args(MulOp71::V8dot))), (2, true));
+        assert_eq!((m(MulOp71::Fmov), dst(mul_op_args(MulOp71::Fmov))), (1, true));
+        assert_eq!((m(MulOp71::Mov), dst(mul_op_args(MulOp71::Mov))), (1, true));
+        assert_eq!((m(MulOp71::Nop), dst(mul_op_args(MulOp71::Nop))), (0, false));
+    }
+
+    #[test]
+    fn nop_is_mesas_nop() {
+        let n = Alu71::nop();
+        assert_eq!(n.add.op, AddOp71::Nop);
+        assert_eq!(n.mul.op, MulOp71::Nop);
+        assert_eq!((n.add.waddr, n.add.magic), (WADDR_NOP, true));
+        assert_eq!((n.mul.waddr, n.mul.magic), (WADDR_NOP, true));
+        assert_eq!(n.sig, Sig71::default());
+        assert!(!n.sig.writes_address());
+        assert_eq!((n.sig_addr, n.sig_magic), (0, false));
+        assert_eq!(n.flags, Flags::default());
+        assert_eq!(n.read_operands().count(), 0);
+    }
+
+    #[test]
+    fn operands_order_and_small_imm_flags() {
+        let mut a = Alu71::nop();
+        a.add.a.raddr = 1;
+        a.add.b.raddr = 2;
+        a.mul.a.raddr = 3;
+        a.mul.b.raddr = 4;
+        a.sig.small_imm_b = true;
+        a.sig.small_imm_c = true;
+        let got: Vec<(u8, bool)> = a.operands().iter().map(|(op, f)| (op.raddr, *f)).collect();
+        assert_eq!(got, [(1, false), (2, true), (3, true), (4, false)]);
+    }
+
+    #[test]
+    fn read_operands_follow_the_operand_counts() {
+        let mut a = Alu71::nop();
+        a.add.op = AddOp71::Fadd; // two sources
+        a.mul.op = MulOp71::Mov; // one source
+        a.add.a.raddr = 10;
+        a.add.b.raddr = 11;
+        a.mul.a.raddr = 12;
+        a.mul.b.raddr = 13;
+        a.sig.small_imm_c = true;
+        let got: Vec<(u8, bool)> = a.read_operands().map(|(o, f)| (o.raddr, f)).collect();
+        assert_eq!(got, [(10, false), (11, false), (12, true)]);
+
+        a.add.op = AddOp71::Not; // one source
+        a.mul.op = MulOp71::Fmul; // two
+        let got: Vec<u8> = a.read_operands().map(|(o, _)| o.raddr).collect();
+        assert_eq!(got, [10, 12, 13]);
+
+        a.add.op = AddOp71::Eidx; // none: the raddrs are opcode
+        a.mul.op = MulOp71::Nop;
+        assert_eq!(a.read_operands().count(), 0);
+    }
+
+    #[test]
+    fn small_imm_values() {
+        // v3d_qpu_small_imm_unpack: 0..15 the integers, 16..31 -16..-1,
+        // 32.. are the powers of two from 2^-8; past the 48-entry table is None.
+        let imm = |r| Alu71::small_imm(Operand { raddr: r, unpack: Unpack71::None });
+        assert_eq!(imm(0), Some(0));
+        assert_eq!(imm(15), Some(15));
+        assert_eq!(imm(16), Some(-16i32 as u32));
+        assert_eq!(imm(32), Some(0x3b80_0000)); // 2^-8, qpu_pack.c:248
+        assert_eq!(imm(40), Some(1.0f32.to_bits()));
+        assert_eq!(imm(48), None);
+        assert_eq!(imm(63), None);
+    }
+
+    #[test]
+    fn magic_names() {
+        // qpu_instr.c:31-:86 at ver 71: QUAD (5) and REP (55) replace R5 and
+        // R5REP, NOP (6) is "-", the accumulators 0..4 and the 4.x SFU
+        // 19..24 are reserved on 7.x (qpu_instr.h), gaps have no name.
+        assert_eq!(WADDR_QUAD, 5);
+        assert_eq!(WADDR_REP, 55);
+        assert_eq!(magic_waddr_name(WADDR_QUAD), Some("quad"));
+        assert_eq!(magic_waddr_name(WADDR_REP), Some("rep"));
+        assert_eq!(magic_waddr_name(WADDR_NOP), Some("-"));
+        assert_eq!(magic_waddr_name(7), Some("tlb"));
+        assert_eq!(magic_waddr_name(8), Some("tlbu"));
+        for w in (0..5).chain(19..32).chain(47..55).chain(56..64) {
+            assert_eq!(magic_waddr_name(w), None, "waddr {}", w);
+        }
+    }
+}
