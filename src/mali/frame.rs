@@ -1077,7 +1077,8 @@ impl TargetFormat {
     /// core keeps a `GL_RGB565` (or `GL_RGB8`, `GL_RGB`) colour buffer in
     /// RGBA8 storage, and such a buffer reads alpha 1 (ES 2.0 4.3.1): the
     /// clear stores 1 (the GL core quantises the clear's alpha to 0 bits)
-    /// and no draw may overwrite it. Mesa draws `GL_RGB565` into an
+    /// and no draw may overwrite it (the colour preload reads it as 1,
+    /// [`TargetFormat::preload_swizzle`]). Mesa draws `GL_RGB565` into an
     /// R5G6B5 target that holds no alpha (zs-refs'
     /// `stencil_clear__rbo_rgb565_*.txt`: `Internal Format: R5G6B5A0`,
     /// `Writeback Format: R5G6B5`), so its alpha reads 1 the same; the V3D
@@ -1089,6 +1090,22 @@ impl TargetFormat {
             mask & 0x7
         } else {
             mask
+        }
+    }
+
+    /// The swizzle of the colour preload's texture ([`colour_preload_dcd`]):
+    /// alpha 1 where [`TargetFormat::draw_mask`] keeps the stored alpha (a GL
+    /// format without alpha in a layout that stores one), else the identity.
+    /// The tile then starts from alpha 1 whatever the storage holds: the
+    /// GL core zeroes new storage, and a frame that preloads it and clears
+    /// the colour with the quad (whose mask is `draw_mask`'s too) would
+    /// write that 0 back. The V3D back end loads such a target with alpha 1
+    /// the same way (src/v3d/backend.rs, `force_alpha_1`).
+    pub fn preload_swizzle(self, alpha_bits: u8) -> u32 {
+        if self.has_alpha() && alpha_bits == 0 {
+            SWIZZLE_RGB1
+        } else {
+            SWIZZLE_RGBA
         }
     }
 }
@@ -1775,6 +1792,10 @@ pub struct OpenFrame {
     /// "unbacked": blend off, no fragment shader unless it has side
     /// effects, render target mask 0 ([`emit_draw`]).
     pub no_colour: bool,
+    /// `GlesDraw::target_alpha_bits` of target 0 (8 from
+    /// [`begin_frame_targets`]): 0 is a GL format without alpha, which the
+    /// colour preload reads as alpha 1 ([`TargetFormat::preload_swizzle`]).
+    pub alpha_bits: u8,
 }
 
 impl OpenFrame {
@@ -2117,6 +2138,7 @@ pub fn begin_frame_targets(desc: &mut Arena, cs: &mut Stream, more: &[Target]) -
         more_targets,
         float_blend: false,
         no_colour: false,
+        alpha_bits: 8,
     })
 }
 
@@ -2347,7 +2369,8 @@ pub fn end_frame(
      * target's one sample while the store holds nothing of it */
     let reload = store.filter(|s| s.reload);
     if open.colour_preload.is_some() || zs_part.is_some() {
-        params.frame_shader_dcds = preload_dcds(desc, t, zs_part, open.colour_preload, reload, tls.gpu)?;
+        params.frame_shader_dcds =
+            preload_dcds(desc, t, open.alpha_bits, zs_part, open.colour_preload, reload, tls.gpu)?;
         if open.colour_preload.is_some() {
             /* INTERSECT loads only the tiles the frame's draws reach, the
              * others keep their memory; a resolve writes every tile
@@ -2659,11 +2682,12 @@ fn check_draw(
 /// pan_fb_preload.c:1302-1340, v9-v12): the four corners of the target in
 /// pixels, uploaded once for both parts; Mesa's three DCDs (pre frame 0 and
 /// 1, post frame), the unused ones left zero; then the depth/stencil part
-/// into DCD 1 and the colour part into DCD 0, in Mesa's order. Returns the
-/// DCD array's address.
+/// into DCD 1 and the colour part into DCD 0, in Mesa's order (`alpha_bits`
+/// is [`OpenFrame::alpha_bits`]). Returns the DCD array's address.
 fn preload_dcds(
     desc: &mut Arena,
     t: &Target,
+    alpha_bits: u8,
     zs: Option<(&ZsAttachment, ZsPreload)>,
     colour: Option<FrameShader>,
     store: Option<SampleStore>,
@@ -2686,7 +2710,7 @@ fn preload_dcds(
     }
     if let Some(p) = colour {
         let planes = zs.map_or((false, false), |(_, p)| (p.z, p.s));
-        let draw = colour_preload_dcd(desc, t, planes, coords.gpu, tls, p, store)?;
+        let draw = colour_preload_dcd(desc, t, alpha_bits, planes, coords.gpu, tls, p, store)?;
         desc.write(dcds, 0, &draw.pack()?)?;
     }
     Ok(dcds.gpu)
@@ -2787,8 +2811,9 @@ fn preload_zsd(desc: &mut Arena, (z, s): (bool, bool)) -> Result<Block, FrameErr
 
 /// The colour part (`pan_preload_emit_dcd`, pan_fb_preload.c:1019-1162, for
 /// one single-sampled RGBA8 target): the target as a 2D RGBA8 texture of
-/// one level, an opaque blend into target 0 (`pan_preload_emit_blend`,
-/// :100-160), the preload ZSD
+/// one level (alpha read as 1 for a GL format without alpha, `alpha_bits`
+/// 0: [`TargetFormat::preload_swizzle`]), an opaque blend into target 0
+/// (`pan_preload_emit_blend`, :100-160), the preload ZSD
 /// ([`preload_zsd`] of the planes the frame also preloads), and
 /// the DCD that names them: early depth/stencil forced (no ATEST in the
 /// program), forward pixel kill allowed, the tiles still clean.
@@ -2799,9 +2824,11 @@ fn preload_zsd(desc: &mut Arena, (z, s): (bool, bool)) -> Result<Block, FrameErr
 /// draw is multisampled and run once a sample (`pan_preload_is_ms`,
 /// pan_fb_preload.c:1095, 1144-1145), so `p` must be the program that
 /// fetches the sample it runs for.
+#[allow(clippy::too_many_arguments)]
 fn colour_preload_dcd(
     desc: &mut Arena,
     t: &Target,
+    alpha_bits: u8,
     zs: (bool, bool),
     coords: u64,
     tls: u64,
@@ -2835,7 +2862,7 @@ fn colour_preload_dcd(
         width: t.width,
         height: t.height,
         sample_count,
-        swizzle: SWIZZLE_RGBA,
+        swizzle: t.format.preload_swizzle(alpha_bits),
         levels: 1,
         array_size: 1,
         surfaces: plane.gpu,
