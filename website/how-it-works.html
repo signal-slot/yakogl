@@ -54,8 +54,8 @@
       <li><span class="n">03</span><div><p class="tag">Link</p><h3>One source, three GPUs.</h3>
         <p>The GL core and the supported GPU back ends are one <code>no_std</code> Rust crate with a C
         ABI (<code>libyakogl.a</code>). C, C++ and Rust applications link it alike: glmark2,
-        the Khronos conformance tests and the <a href="https://slint.dev/">Slint</a> UI
-        toolkit run on it.</p></div></li>
+        the Khronos dEQP-GLES2 tests (our own runs, not a conformance certification) and the
+        <a href="https://slint.dev/">Slint</a> UI toolkit run on it.</p></div></li>
     </ol>
   </div>
 </section>
@@ -165,7 +165,7 @@ directly. C/Rust struct layouts are pinned on both sides, so drift fails the bui
       <strong><span data-fig="size.table"></span></strong> bytes of flash and grows with the
       application's shader set. So precompiled shaders are an option for an image that wants
       no compiler, not the default.</p>
-      <noscript><p>Compiler and precompiled-table memory costs depend on the image. Read the recorded flash and RAM costs in <a href="https://github.com/signal-slot/yakogl/blob/main/zephyr/Kconfig">zephyr/Kconfig</a>.</p></noscript>
+      <noscript><p>Compiler and precompiled-table memory costs depend on the image. Read the measured flash and RAM costs in the <a href="https://github.com/signal-slot/yakogl/blob/main/README.md#shader-compilers">README, Shader compilers</a>.</p></noscript>
       <p class="prov js-only">Compiler: <span data-prov="size.compiler"></span><br>Table: <span data-prov="size.table"></span></p>
       <p class="muted">The online compiler and precompiled application shaders use YakoGL’s
       compiler. The bare-metal make build defaults to a Mesa reference table for measurements;
