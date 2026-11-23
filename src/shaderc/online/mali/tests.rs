@@ -1303,9 +1303,11 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
         (FS, "precision mediump float; void main(){ gl_FragColor = vec4(1.0e-6, 0.0, 0.0, 1.0); }", MaliError::Fp16Inexact),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.xzyw; }", MaliError::ColourForm),
         (FS, "precision mediump float; varying vec4 v; void main(){ gl_FragColor = v.yxzw; }", MaliError::FsOperandForm),
-        /* a constant then a lane as an operand (as a word of the colour it
-         * is the `MKVEC`, deqp_colourpair_ck_lane_highpcolour) */
-        (FS, "precision mediump float; varying vec4 c; varying float d; void main(){ gl_FragColor = c * vec4(0.25, d, 0.5, d); }", MaliError::ColourPair),
+        /* a constant then a lane as a word of a highp shader's colour
+         * (`word_of`; a mediump one's is the `MKVEC`,
+         * deqp_colourpair_ck_lane_highpcolour, and so is the pair as a
+         * product's operand, deqp_colourpair_rnd_fs_ck_product) */
+        (FS, "precision highp float; varying vec4 v; void main(){ gl_FragColor = vec4(0.5, v.y, v.z, v.w); }", MaliError::ColourPair),
         /* a pair Mesa makes of a discard's lane and a colour lane, y low
          * (fsload_disc_col.expect.json) */
         (
@@ -1314,9 +1316,11 @@ fn gap_cases() -> Vec<(u32, String, MaliError)> {
              void main(){ if (a.y > 0.5) discard; gl_FragColor = vec4(a.x, 0.5, 0.0, 1.0); }",
             MaliError::FsVaryingLoad,
         ),
-        /* a lane and 0.0 as an operand (as a word of the colour it is the
-         * `U16_TO_U32`, sel_vc_zero) */
-        (FS, "precision mediump float; varying vec4 c; varying float d; void main(){ gl_FragColor = c * vec4(d, 0.0, 0.5, 0.5); }", MaliError::ColourZeroHalf),
+        /* a computed lane of a form `vec_tree` does not take and 0.0 (a
+         * load's lane and 0.0 is the `U16_TO_U32`, sel_vc_zero, as a word
+         * or an operand, deqp_mixcol_lz_scale; so is a uniform's sum,
+         * deqp_colourpair_rnd_fs_uniform_tz_ck) */
+        (FS, "precision mediump float; uniform sampler2D t; varying vec2 v; void main(){ gl_FragColor = vec4(texture2D(t, v).x * 0.5, 0.0, 0.0, 1.0); }", MaliError::ColourZeroHalf),
         /* the S4 rows no reference draws: `!=` on floats and on integers;
          * the clamp forms Mesa's late rules make; a negated float(bool) in
          * a product */

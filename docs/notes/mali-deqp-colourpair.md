@@ -327,3 +327,29 @@ to another family.
   and `rnd_fs_zk_tree` are its references.
 - `lane_word`'s refusal (`rnd_fs_uniform_tz_ck`) is a classifier edit of
   the same kind as item 3, for a tree instead of a load.
+
+## Lowering (item spike-colourpair-rest, 2026-11-23)
+
+Done after lower-varylink step B, host only (nothing run on a board).
+`tests/mali_deqp_colourpair.rs` and `tests/mali_deqp_mixcol.rs` hold the
+result: no `deqp_colourpair_*` reference is refused any more.
+
+- **A split pair** (`nir_fs.rs`, `Fs::split`): the lanes the walk makes
+  one at a time from a pair `nir_lower_alu_width` splits (a mixed
+  constructor's constants across two pairs, the `Fmul` and `Fadd` arm)
+  are not paired by `vectorise`; each lane is its own tree and the word is
+  packed afterwards, as Mesa does. Byte-equal: `rnd_fs_zk_tree`,
+  `rnd_fs_ck_product`.
+- **A constant then a uniform's component, and a uniform tree and 0.0**
+  (`lane_srcs`, `uniform_tree`): `MKVEC.v2i16 <half>.h0, x` with the
+  constant the low half, and `U16_TO_U32` of a sum of uniform components
+  and constants. Byte-equal: `rnd_fs_uniform_tz_ck`.
+- `rnd_fs_ck_madd` compiles to Mesa's operations and values with other
+  words (`FS_DIFFERS`): Mesa makes the product's two constant pairs with
+  `IADD_IMM`, we push them to the FAU.
+- `deqp_mixcol_ck_scale`, `_ck_sum` and `_lz_scale` are byte-equal; the
+  other colourpair rows of `mali_deqp_mixcol.rs` move to their next
+  refusal (a colour lane form, or a varying load or conversion form).
+
+`MaliError::ColourPair` and `ColourZeroHalf` stay for the shapes no
+reference draws (the unit tests in `tests.rs` pin one shape each).
