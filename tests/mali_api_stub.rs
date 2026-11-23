@@ -5,19 +5,17 @@
 //! the GL core on the Mali mock.
 //!
 //! Those dEQP cases build a program from a one-line stub pair
-//! (`void main(void) { gl_Position = vec4(0.0); }` and
-//! `void main(void) { gl_FragColor = vec4(0.0); }`, as in dEQP-GLES2's
-//! es2fNegativeShaderApiTests, es2fShaderStateQueryTests and
-//! es2fShaderApiTests; the sources were not at hand, the text is from
-//! memory of them) and then check an error code or a query value. The online
-//! Mali compiler refuses the constant `gl_Position`, so the program does not
-//! link and the later GL calls answer something else.
+//! (`void main (void) { gl_Position = vec4(0.0); }` and
+//! `void main (void) { gl_FragColor = vec4(0.0); }`, VK-GL-CTS
+//! es2fNegativeShaderApiTests.cpp:43-44, es2fNegativeVertexArrayApiTests.cpp,
+//! es2fShaderApiTests.cpp `getSimpleShaderSource`; es2fShaderStateQueryTests
+//! and es2fIntegerStateQueryTests have the same body over four lines) and
+//! then check an error code or a query value. A program that does not link
+//! makes the later GL calls answer something else; the constant
+//! `gl_Position` compiles byte-equal to Mesa's
+//! (`deqp_cfold2_zero_operand_rcp_inf`, issue #11328).
 //!
-//! Each test is one dEQP expectation. A test that passes at the tip runs
-//! normally. A test the stub-shader refusal breaks carries
-//! `#[ignore = "apierr-fix: stub vertex shader constant (<dEQP case>)"]`;
-//! apierr-fix removes the ignores when the stub vertex shader links.
-//! `cargo test ... -- --ignored` shows which of them still fail.
+//! Each test is one dEQP expectation.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_api_stub
@@ -30,6 +28,7 @@ use std::ffi::CString;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use yakogl::backend;
 use yakogl::gl::consts::*;
+use yakogl::gl::draw::*;
 use yakogl::gl::framebuffer::*;
 use yakogl::gl::program::*;
 use yakogl::gl::shader::*;
@@ -168,9 +167,11 @@ fn api() -> MutexGuard<'static, ()> {
     g
 }
 
-/// dEQP's stub pair.
-const VS_STUB: &str = "void main(void)\n{\n\tgl_Position = vec4(0.0);\n}\n";
-const FS_STUB: &str = "void main(void)\n{\n\tgl_FragColor = vec4(0.0);\n}\n";
+/// dEQP's stub pair (es2fNegativeShaderApiTests.cpp:43-44).
+const VS_STUB: &str = "void main (void) { gl_Position = vec4(0.0); }\n";
+const FS_STUB: &str = "void main (void) { gl_FragColor = vec4(0.0); }\n";
+/// The vertex stub of es2fShaderStateQueryTests.cpp:47-50.
+const VS_STUB_LINES: &str = "void main (void)\n{\n    gl_Position = vec4(0.0);\n}\n";
 
 fn shader(ty: GLenum, text: &str) -> GLuint {
     let text = CString::new(text).unwrap();
@@ -218,7 +219,7 @@ fn stub_program() -> (GLuint, GLuint, GLuint) {
     (p, v, f)
 }
 
-/* ---- what works at the tip ------------------------------------------------ */
+/* ---- the expectations ------------------------------------------------------ */
 
 #[test]
 fn fragment_stub_compiles() {
@@ -294,16 +295,16 @@ fn negative_api_attach_detach_errors() {
 /* ---- what the stub vertex shader's refusal breaks ------------------------ */
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (shader_api.compile_link.compile_vertex_shader)"]
 fn vertex_stub_compiles() {
     let _g = api();
-    let v = shader(GL_VERTEX_SHADER, VS_STUB);
-    assert_eq!(compile_status(v), 1);
+    for text in [VS_STUB, VS_STUB_LINES] {
+        let v = shader(GL_VERTEX_SHADER, text);
+        assert_eq!(compile_status(v), 1, "{text}");
+    }
     assert_eq!(err(), GL_NO_ERROR);
 }
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (shader_api.compile_link.link_vertex_fragment)"]
 fn stub_pair_links() {
     let _g = api();
     let (p, _v, _f) = stub_program();
@@ -312,7 +313,6 @@ fn stub_pair_links() {
 }
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (state_query.current_program_binding_*)"]
 fn current_program_binding() {
     let _g = api();
     let (p, _v, _f) = stub_program();
@@ -334,7 +334,6 @@ fn current_program_binding() {
 }
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (state_query.shader.delete_status)"]
 fn delete_status() {
     let _g = api();
     let (p, v, f) = stub_program();
@@ -357,7 +356,6 @@ fn delete_status() {
 }
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (state_query.shader.shader_compile_status)"]
 fn shader_compile_status() {
     let _g = api();
     let v = shader(GL_VERTEX_SHADER, VS_STUB);
@@ -370,7 +368,6 @@ fn shader_compile_status() {
 }
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (state_query.shader.program_validate_status)"]
 fn program_validate_status() {
     let _g = api();
     let (p, _v, _f) = stub_program();
@@ -417,7 +414,6 @@ fn active_uniform_query() {
 }
 
 #[test]
-#[ignore = "apierr-fix: stub vertex shader constant (negative_api.shader.use_program, get_uniform_location, uniform_*, link_program, validate_program)"]
 fn negative_api_with_a_linked_program() {
     let _g = api();
     let (p, v, _f) = stub_program();
@@ -446,6 +442,54 @@ fn negative_api_with_a_linked_program() {
         let (mut len, mut size, mut ty): (GLsizei, GLint, GLenum) = (0, 0, 0);
         let mut name = [0 as c_char; 8];
         glGetActiveUniform(p, 1, 8, &mut len, &mut size, &mut ty, name.as_mut_ptr());
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glUseProgram(0);
+    }
+}
+
+/// negative_api.shader.{get_active_attrib,get_active_uniform,
+/// get_attrib_location,get_uniform_location} and
+/// negative_api.vertex_array.draw_*: each call with the stub program in use
+/// and the error dEQP expects (the calls of the board's .qpa).
+#[test]
+fn negative_api_errors_with_the_stub_program_in_use() {
+    let _g = api();
+    let (p, v, _f) = stub_program();
+    use core::ptr::null_mut as nul;
+    // SAFETY: plain GL calls; null out pointers with a buffer size of 0 or
+    // less, as dEQP passes them; the draws fail before reading indices.
+    unsafe {
+        assert_eq!(program_iv(p, GL_LINK_STATUS), 1);
+        glUseProgram(p);
+        assert_eq!(err(), GL_NO_ERROR);
+        glGetActiveAttrib(u32::MAX, 0, 0, nul(), nul(), nul(), nul());
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glGetActiveAttrib(v, 0, 0, nul(), nul(), nul(), nul());
+        assert_eq!(err(), GL_INVALID_OPERATION);
+        glGetActiveAttrib(p, 0, 0, nul(), nul(), nul(), nul());
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glGetActiveAttrib(p, 0, -1, nul(), nul(), nul(), nul());
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glGetActiveUniform(p, 5, 0, nul(), nul(), nul(), nul());
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glGetActiveUniform(p, 0, -1, nul(), nul(), nul(), nul());
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glBindAttribLocation(p, 0, c"test".as_ptr());
+        assert_eq!(err(), GL_NO_ERROR);
+        assert_eq!(glGetAttribLocation(p, c"test".as_ptr()), -1);
+        assert_eq!(err(), GL_NO_ERROR);
+        assert_eq!(glGetUniformLocation(u32::MAX - 1, c"test".as_ptr()), -1);
+        assert_eq!(err(), GL_INVALID_VALUE);
+        glDrawArrays(u32::MAX, 0, 1);
+        assert_eq!(err(), GL_INVALID_ENUM);
+        glDrawArrays(GL_POINTS, 0, -1);
+        assert_eq!(err(), GL_INVALID_VALUE);
+        let index = [0u8; 4];
+        glDrawElements(u32::MAX, 1, GL_UNSIGNED_BYTE, index.as_ptr().cast());
+        assert_eq!(err(), GL_INVALID_ENUM);
+        glDrawElements(GL_POINTS, 1, u32::MAX, index.as_ptr().cast());
+        assert_eq!(err(), GL_INVALID_ENUM);
+        glDrawElements(GL_POINTS, -1, GL_UNSIGNED_BYTE, index.as_ptr().cast());
         assert_eq!(err(), GL_INVALID_VALUE);
         glUseProgram(0);
     }

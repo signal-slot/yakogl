@@ -203,6 +203,20 @@ own. Step 1 alone does it: 204 - 148 = 56.
   `MATCHED` is empty at this tip.
 - At `5cb80624`: 1 passed, 19 ignored. With `--ignored`, each of the 19
   fails only because the pair is refused.
+- Issue #11328 lowered `zero_operand_rcp_inf` (step 2 for the viewport
+  transform only; it is in `MATCHED`). The viewport transform's `frcp` of a
+  w of ±0.0 folds to ±inf and its `fmax`/`fmin` take it to ±2^15
+  (`nir.rs`, the viewport transform in `walk`). That holds only when the
+  IR stores one constant vector to `gl_Position`: Mesa's first
+  `nir_opt_constant_folding` folds the whole chain. With a lane that is not
+  constant (`vec4(p, 0.0, 0.0)`) the w reaches `frcp` as a constant only
+  after copy propagation, `nir_opt_algebraic` turns the clamp into
+  `fcanonicalize` first, and Mesa stores w = +inf (`IADD_IMM ...
+  #0x7F800000`, pan_shc); that shape stays refused (`tests.rs`, the gap
+  list). pan_shc also gives our words for `vec4(0.5, -0.25, 0.75, 0.0)`,
+  `vec4(0.0, 0.0, 0.0, -0.0)` and `vec4(1.0, 2.0, 0.0, -0.0)`; no shim
+  reference was drawn for them. An infinity in the shader's own code is
+  still refused.
 
 ## 6. Issue comment text (for #20; agents do not post it)
 
