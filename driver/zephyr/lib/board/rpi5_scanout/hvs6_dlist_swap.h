@@ -99,8 +99,9 @@
  *  3. hvs6s_swap: our entry from hvs6_dlist_write.h (10 words, Linux's
  *     layout), written and read back word by word; the cache cleaned over
  *     the list (fb_flush.h's line-rounded range) and a barrier; the bus
- *     address of the list from bus_addr.h recorded; then LPTRS, last, as
- *     one write. Then three results, each on its own: LPTRS read back as
+ *     address of the list from bus_addr.h recorded; then, by default, a
+ *     frame edge found by reads (below, swap-vblank-lib); then LPTRS, last,
+ *     as one write, and the tight pickup loop. Then three results, each on its own: LPTRS read back as
  *     written and FRCNT advanced (6-bit wrap aware), each within max_polls
  *     polls, and the pickup, DL.LACT equal to our start, within
  *     hvs6s_lact_limit polls (cfg.lact_polls, 0: max_polls) and, with
@@ -158,6 +159,49 @@
  *   dlswap restore-lact ok|FAIL polls=N frcnt=A..B want=W lact=L
  * after restore-lptrs.
  *
+ * Vblank write and pickup timing (swap-vblank-lib, plan #390): the LPTRS
+ * write of hvs6s_swap is no longer made at an arbitrary point of the frame.
+ * By default (cfg.write_at HVS6S_AT_VBLANK, the zeroed value) hvs6s_swap
+ * first waits for a frame edge by reads only: STATUS of the channel read in
+ * a tight loop (no io->wait) until FRCNT steps, at most cfg.vblank_reads
+ * reads (0: HVS6S_VBLANK_READS_DEF); otherwise HVS6S_ERR_VBLANK (appended)
+ * and LPTRS is not written. FRCNT (STATUS 21:16, rpi:vc4_regs.h:605) is the
+ * only STATUS field recorded as moving on the board (vblank-regs, plan
+ * #390); its step is taken as the start of the vertical blank, which no
+ * source states (driver/docs/rpi5-v3d71-facts.md section 10, "What the
+ * reading could not settle"). YLINE (STATUS 12:0, hvs6_dlist.h:100,111,
+ * rpi:vc4_regs.h:612) is recorded at the write and at the pickup and never
+ * decides anything: its range and direction are unproven. No pixel valve,
+ * HDMI or PHY register is read or written (struct hvs6s_io reaches only the
+ * HVS); pv_irq.h's pv_wait_vblank is not used, it writes PV_INTSTAT
+ * (pv_irq.h:101-107, :140-152). The write is followed by a tight loop (DL,
+ * then STATUS, per iteration, no io->wait), at most cfg.tight_reads
+ * iterations (0: HVS6S_TIGHT_READS_DEF), until DL.LACT (rpi:vc4_regs.h:619)
+ * reads the new head. It records the iteration of the pickup and of the
+ * first FRCNT step after the write, FRCNT and YLINE at the write and at the
+ * pickup, and, with the optional io->now_ns (NULL: not timed), the pickup
+ * time from the write and the measured time of one register read.
+ * The pickup is on a frame boundary (r->lact_boundary) when LACT reached the
+ * head within one iteration of an FRCNT step, or, for a write made in the
+ * vblank (r->write_in_vblank: HVS6S_AT_VBLANK, the step found and, with a
+ * clock, the write within cfg.vblank_window_us of it, 0: HVS6S_VBLANK_US_DEF),
+ * before any FRCNT step and, with a clock, still within that window of the
+ * step. A tight loop that runs out is not an error by itself: the bounded
+ * poll of the pickup criterion above (lact_polls, lact_frames) goes on, and
+ * r->tight_pickup stays 0.
+ * HVS6S_AT_MIDFRAME is one deliberate mid-frame write, for contrast: two
+ * steps found by reads, the STATUS reads of one frame counted between them,
+ * then half that many reads before the write (write_in_vblank 0). HVS6S_AT_ONCE
+ * is the old behaviour exactly (no wait, no tight loop, no new lines). New
+ * fields are appended to struct hvs6s_io (now_ns), struct hvs6s_cfg and
+ * struct hvs6s_report; a zeroed cfg and an io without now_ns keep compiling.
+ * hvs6s_lines adds, for VBLANK and MIDFRAME,
+ *   dlswap vblank ok|FAIL mode=<m> reads=N frame_reads=F frcnt=F yline=Y since_us=S invblank=yes|no
+ * after the write line (or the write FAIL line), and after lact-pickup
+ *   dlswap lact-timing tight=ok|miss reads=K step=J frcnt=A..B yline=Y..Z dt_us=D read_us=P boundary=yes|no
+ * (since_us, dt_us and read_us "none" without io->now_ns; step "none" when
+ * FRCNT did not step in the tight loop). The restore's write is unchanged.
+ *
  * The list memory sits at HVS + 0x4000 and is device memory on the Pi 5's
  * Zephyr map; the clean is then a no-op, kept so that a staged list in
  * normal memory and the A/B buffers of the caller are treated alike. The
@@ -194,6 +238,18 @@
  * SA_DL_LACT_MASK, rpi:vc4_regs.h:619). The pickup criterion of a swap and of
  * the restore (swap-lact-lib): LACT equal to the head just written. */
 #define HVS6S_DL_LACT_MASK 0x00000fffu
+/* STATUS.YLINE, bits 12:0 (hvs6_dlist.h:100,111; rpi:vc4_regs.h:612). Recorded
+ * only: its range and count direction on the board are unproven. */
+#define HVS6S_YLINE_MASK 0x1fffu
+/* Default bound of the vblank wait, in STATUS reads (several frames at any
+ * plausible read time of the SoC window). */
+#define HVS6S_VBLANK_READS_DEF 1000000u
+/* Default bound of the tight pickup loop, in iterations (one DL and one STATUS
+ * read each). */
+#define HVS6S_TIGHT_READS_DEF 1000000u
+/* Vertical blank of the firmware's 1920x1080p60 mode: (vfp 4 + vsync 5 + vbp
+ * 36) lines of 2200 pixels at 148.5 MHz = 666.7 us (pv_timing.h:56). */
+#define HVS6S_VBLANK_US_DEF 667u
 /* FRCNT advances to wait past a pointer write before the old list is reused. */
 #define HVS6S_SETTLE_FRAMES 2u
 /* The record's prefix of every line hvs6s_lines prints. */
@@ -249,6 +305,16 @@ struct hvs6s_io {
 	void (*barrier)(void *ctx); /* dsb: the list's writes before LPTRS */
 	void (*wait)(void *ctx);    /* one poll interval, well under a frame */
 	void *ctx;
+	/* optional (NULL: not timed): a monotonic clock in nanoseconds, for the
+	 * pickup time and the read period (swap-vblank-lib) */
+	uint64_t (*now_ns)(void *ctx);
+};
+
+/* When hvs6s_swap writes LPTRS (swap-vblank-lib). */
+enum hvs6s_write_at {
+	HVS6S_AT_VBLANK = 0, /* just after an FRCNT step found by reads (default) */
+	HVS6S_AT_MIDFRAME,   /* half a frame of reads after an FRCNT step, for contrast */
+	HVS6S_AT_ONCE,       /* at once, no wait and no tight loop (the old behaviour) */
 };
 
 struct hvs6s_cfg {
@@ -266,6 +332,15 @@ struct hvs6s_cfg {
 	/* and frames: the pickup fails once FRCNT moved more than this many
 	 * frames past the write without it; 0 means no frame bound. */
 	uint32_t lact_frames;
+	/* swap-vblank-lib: when the LPTRS write is made; the bounds of the
+	 * reads-only vblank wait (STATUS reads; 0: HVS6S_VBLANK_READS_DEF) and of
+	 * the tight pickup loop (iterations; 0: HVS6S_TIGHT_READS_DEF); the
+	 * vblank's length for write_in_vblank and the boundary (us; 0:
+	 * HVS6S_VBLANK_US_DEF), used only with io->now_ns. */
+	enum hvs6s_write_at write_at;
+	uint32_t vblank_reads;
+	uint32_t tight_reads;
+	uint32_t vblank_window_us;
 };
 
 /* What failed, first failure only; HVS6S_OK when everything passed. */
@@ -292,6 +367,7 @@ enum hvs6s_err {
 	HVS6S_ERR_PLACE_CHAN,   /* no END: another channel's LPTRS.HEADE is in our range */
 	HVS6S_ERR_LACT_PICKUP,  /* DL.LACT never reached our new head within the bound */
 	HVS6S_ERR_RESTORE_LACT, /* restore: DL.LACT never came back to the firmware's head */
+	HVS6S_ERR_VBLANK,       /* no FRCNT step within the vblank wait's reads; LPTRS not written */
 };
 
 static inline const char *hvs6s_err_name(enum hvs6s_err e)
@@ -319,6 +395,7 @@ static inline const char *hvs6s_err_name(enum hvs6s_err e)
 	case HVS6S_ERR_PLACE_CHAN: return "place: another channel's LPTRS.HEADE in range";
 	case HVS6S_ERR_LACT_PICKUP: return "DL.LACT did not reach the new head";
 	case HVS6S_ERR_RESTORE_LACT: return "restore: DL.LACT not back on the firmware's head";
+	case HVS6S_ERR_VBLANK: return "no FRCNT step (vblank) within the read bound";
 	}
 	return "?";
 }
@@ -442,6 +519,28 @@ struct hvs6s_report {
 	uint32_t restore_frcnt_pickup;/* FRCNT at the pickup, or at the last poll */
 	uint32_t restore_lact_want;   /* the firmware's LPTRS.HEADE */
 	uint32_t restore_lact_seen;   /* DL.LACT at the pickup, or the last value read */
+
+	/* swap-vblank-lib: the vblank wait (by reads) before the LPTRS write */
+	int vb_tried;                /* write_at was VBLANK or MIDFRAME */
+	enum hvs6s_write_at write_at;
+	int vb_found;                /* the FRCNT step(s) were found */
+	uint32_t vb_reads;           /* STATUS reads of the wait, all of them */
+	uint32_t vb_frame_reads;     /* MIDFRAME: STATUS reads from one step to the next */
+	uint32_t vb_status;          /* STATUS of the read that saw the (last) step, or the last read */
+	int write_in_vblank;         /* VBLANK: written right after the step (and within the window) */
+	uint64_t vb_since_ns;        /* clock from the step's read to the write */
+	uint32_t write_frcnt, write_yline; /* STATUS just before the write (at_write) */
+	/* the tight pickup loop */
+	int timed;                   /* io->now_ns given: the _ns and _us fields are set */
+	int tight_pickup;            /* LACT reached the head within the tight loop */
+	uint32_t tight_reads;        /* iterations run (one DL and one STATUS read each) */
+	uint32_t pickup_read;        /* iteration of the pickup */
+	int64_t step_read;           /* iteration of the first FRCNT step after the write, -1: none */
+	uint32_t pickup_frcnt, pickup_yline; /* STATUS at the pickup, or at the last iteration */
+	uint32_t lact_dt_us;         /* clock from the write to the pickup, us (lact_dt_ns / 1000) */
+	uint64_t lact_dt_ns;
+	uint32_t read_ns;            /* measured time of one register read in the tight loop, ns */
+	int lact_boundary;           /* the pickup was on a frame boundary (see the header) */
 };
 
 static inline void hvs6s_report_init(struct hvs6s_report *r)
@@ -451,6 +550,7 @@ static inline void hvs6s_report_init(struct hvs6s_report *r)
 	r->place_bad_word = -1;
 	r->place_chan = -1;
 	r->start = HVS6S_AUTO;
+	r->step_read = -1;
 }
 
 static inline void hvs6s_fail(struct hvs6s_report *r, enum hvs6s_err e)
@@ -705,7 +805,8 @@ static inline int hvs6s_hw_parse(const char *t, struct hvs6s_hw_set *out)
 static inline int hvs6s_cfg_ok(const struct hvs6s_cfg *c)
 {
 	return c && c->chan < YD5_HVS6_NUM_CHANNELS && c->max_polls > 0 &&
-	       c->mem_words >= HVS6S_KEPT && hvs6s_hw_ok(&c->hw);
+	       c->mem_words >= HVS6S_KEPT && hvs6s_hw_ok(&c->hw) &&
+	       (unsigned int)c->write_at <= (unsigned int)HVS6S_AT_ONCE;
 }
 
 static inline void hvs6s_sample(const struct hvs6s_io *io, unsigned int ch, struct hvs6s_regs *s)
@@ -992,6 +1093,84 @@ static inline uint32_t hvs6s_lact_limit(const struct hvs6s_cfg *c)
 	return c->lact_polls ? c->lact_polls : c->max_polls;
 }
 
+static inline uint64_t hvs6s_now(const struct hvs6s_io *io)
+{
+	return io->now_ns ? io->now_ns(io->ctx) : 0u;
+}
+
+static inline uint32_t hvs6s_yline(uint32_t status)
+{
+	return status & HVS6S_YLINE_MASK;
+}
+
+/*
+ * Reads only: STATUS of the channel in a tight loop (no io->wait) until its
+ * FRCNT differs from the first read's, at most *budget reads (each counted
+ * off *budget and added to *reads). 1 with the step's STATUS in *status and
+ * the clock just after that read in *t; 0 when the budget ran out (*status
+ * the last read).
+ */
+static inline int hvs6s_find_step(const struct hvs6s_io *io, unsigned int ch, uint32_t *budget,
+				  uint32_t *reads, uint32_t *status, uint64_t *t)
+{
+	uint32_t f0;
+
+	if (!*budget)
+		return 0;
+	*status = io->read32(io->ctx, hvs6s_status_reg(ch));
+	(*budget)--;
+	(*reads)++;
+	f0 = hvs6s_frcnt(*status);
+	while (*budget) {
+		*status = io->read32(io->ctx, hvs6s_status_reg(ch));
+		*t = hvs6s_now(io);
+		(*budget)--;
+		(*reads)++;
+		if (hvs6s_frcnt(*status) != f0)
+			return 1;
+	}
+	return 0;
+}
+
+/*
+ * Before the LPTRS write (cfg.write_at VBLANK or MIDFRAME): the FRCNT step,
+ * found by reads; for MIDFRAME a second step, the STATUS reads from the
+ * first to it counted (vb_frame_reads), then half that many more STATUS
+ * reads. Never writes. HVS6S_ERR_VBLANK when the read bound ran out.
+ * *t_edge is the clock just after the (last) step's read.
+ */
+static inline enum hvs6s_err hvs6s_wait_vblank_reads(const struct hvs6s_io *io,
+						     const struct hvs6s_cfg *c,
+						     struct hvs6s_report *r, uint64_t *t_edge)
+{
+	uint32_t budget = c->vblank_reads ? c->vblank_reads : HVS6S_VBLANK_READS_DEF;
+	uint32_t st = 0;
+
+	r->vb_tried = 1;
+	r->write_at = c->write_at;
+	if (!hvs6s_find_step(io, c->chan, &budget, &r->vb_reads, &st, t_edge)) {
+		r->vb_status = st;
+		return HVS6S_ERR_VBLANK;
+	}
+	if (c->write_at == HVS6S_AT_MIDFRAME) {
+		uint32_t before = r->vb_reads, half;
+
+		if (!hvs6s_find_step(io, c->chan, &budget, &r->vb_reads, &st, t_edge)) {
+			r->vb_status = st;
+			return HVS6S_ERR_VBLANK;
+		}
+		r->vb_frame_reads = r->vb_reads - before;
+		half = r->vb_frame_reads / 2u;
+		for (uint32_t k = 0; k < half; k++) {
+			(void)io->read32(io->ctx, hvs6s_status_reg(c->chan));
+			r->vb_reads++;
+		}
+	}
+	r->vb_status = st;
+	r->vb_found = 1;
+	return HVS6S_OK;
+}
+
 /* 3. Write our list at start, then LPTRS last; the three results (LPTRS read
  * back, FRCNT advanced, DL.LACT on our start); the settle. */
 static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct hvs6s_cfg *c,
@@ -999,8 +1178,8 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 {
 	uint32_t list[HVS6W_LIST_WORDS];
 	uint32_t f0, last, total = 0, lp_poll = 0, fr_poll = 0, la_poll = 0, la_lim;
-	int n, lp_ok = 0, fr_ok = 0, la_ok = 0;
-	uint64_t arm, bus;
+	int n, lp_ok = 0, fr_ok = 0, la_ok = 0, tight;
+	uint64_t arm, bus, t_edge = 0, t_write;
 	uint32_t i;
 
 	if (!hvs6s_io_ok(io) || !hvs6s_cfg_ok(c) || !r)
@@ -1043,20 +1222,87 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 		io->clean(io->ctx, r->cleaned.start, r->cleaned.end - r->cleaned.start);
 	io->barrier(io->ctx);
 
+	r->lptrs_written = dla_ptr(start) & YD5_HVS6_LPTRS_HEADE_MASK;
+	r->lact_want = r->lptrs_written;
+	tight = c->write_at != HVS6S_AT_ONCE;
+	r->timed = tight && io->now_ns != NULL;
+	if (tight) {
+		/* reads only until the frame edge (swap-vblank-lib) */
+		enum hvs6s_err ve = hvs6s_wait_vblank_reads(io, c, r, &t_edge);
+
+		if (ve != HVS6S_OK)
+			return ve; /* LPTRS not written */
+	}
 	hvs6s_sample(io, c->chan, &r->at_write);
 	f0 = hvs6s_frcnt(r->at_write.status);
-	r->lptrs_written = dla_ptr(start) & YD5_HVS6_LPTRS_HEADE_MASK;
+	r->write_frcnt = f0;
+	r->write_yline = hvs6s_yline(r->at_write.status);
+	t_write = r->timed ? hvs6s_now(io) : 0u;
 	io->write32(io->ctx, hvs6s_lptrs_reg(c->chan), r->lptrs_written); /* the one write */
 	r->swapped = 1;
+	r->lact_frcnt_write = f0;
+	last = f0;
+
+	if (tight) {
+		/* The tight pickup loop: DL then STATUS, no io->wait, bounded in
+		 * iterations; the frames it sees count toward the results below. */
+		uint32_t lim = c->tight_reads ? c->tight_reads : HVS6S_TIGHT_READS_DEF;
+		uint32_t win = c->vblank_window_us ? c->vblank_window_us : HVS6S_VBLANK_US_DEF;
+		uint64_t win_ns = (uint64_t)win * 1000u, t_pick = 0, t_end;
+		uint32_t k, st = r->at_write.status;
+		int got = 0;
+
+		r->vb_since_ns = r->timed && t_write >= t_edge ? t_write - t_edge : 0u;
+		r->write_in_vblank = r->vb_found && c->write_at == HVS6S_AT_VBLANK &&
+				     (!r->timed || r->vb_since_ns <= win_ns);
+		for (k = 0; k < lim;) {
+			uint32_t dl = io->read32(io->ctx, hvs6s_dl_reg(c->chan));
+
+			st = io->read32(io->ctx, hvs6s_status_reg(c->chan));
+			if (r->timed)
+				t_pick = hvs6s_now(io);
+			k++;
+			total += hvs6s_frdelta(last, hvs6s_frcnt(st));
+			last = hvs6s_frcnt(st);
+			if (r->step_read < 0 && total)
+				r->step_read = (int64_t)k - 1;
+			r->lact_seen = dl & HVS6S_DL_LACT_MASK;
+			if (r->lact_seen == r->lact_want) {
+				got = 1;
+				break;
+			}
+		}
+		t_end = r->timed ? hvs6s_now(io) : 0u;
+		r->tight_reads = k;
+		r->pickup_frcnt = hvs6s_frcnt(st);
+		r->pickup_yline = hvs6s_yline(st);
+		if (r->timed && k)
+			r->read_ns = (uint32_t)((t_end - t_write) / (2u * (uint64_t)k));
+		if (got) {
+			int64_t d = (int64_t)k - 1 - r->step_read;
+
+			r->tight_pickup = 1;
+			r->pickup_read = k - 1u;
+			la_ok = 1;
+			la_poll = 0;
+			r->lact_frcnt_pickup = last;
+			if (r->timed) {
+				r->lact_dt_ns = t_pick - t_write;
+				r->lact_dt_us = (uint32_t)(r->lact_dt_ns / 1000u);
+			}
+			if (r->step_read >= 0 && d >= -1 && d <= 1)
+				r->lact_boundary = 1; /* with an FRCNT step */
+			else if (r->step_read < 0 && r->write_in_vblank &&
+				 (!r->timed || r->vb_since_ns + r->lact_dt_ns <= win_ns))
+				r->lact_boundary = 1; /* inside the vblank it was written in */
+		}
+	}
 
 	/* Results 1, 2 and 3, polled together, each kept on its own and each
 	 * with its own bound: LPTRS and FRCNT max_polls, the LACT pickup
 	 * hvs6s_lact_limit polls and, when set, lact_frames frames. */
 	r->lptrs_first = io->read32(io->ctx, hvs6s_lptrs_reg(c->chan));
-	r->lact_want = r->lptrs_written;
-	r->lact_frcnt_write = f0;
 	la_lim = hvs6s_lact_limit(c);
-	last = f0;
 	for (i = 0;; i++) {
 		struct hvs6s_regs s;
 		int lpfr_done, la_done;
@@ -1072,7 +1318,8 @@ static inline enum hvs6s_err hvs6s_swap(const struct hvs6s_io *io, const struct 
 			fr_ok = 1;
 			fr_poll = i;
 		}
-		r->lact_seen = s.dl & HVS6S_DL_LACT_MASK;
+		if (!la_ok)
+			r->lact_seen = s.dl & HVS6S_DL_LACT_MASK;
 		if (!la_ok && r->lact_seen == r->lact_want) {
 			la_ok = 1;
 			la_poll = i;
@@ -1276,6 +1523,74 @@ static inline void hvs6s_lact_line(const struct hvs6s_emit *em, const char *step
 	em->line(em->ctx, b);
 }
 
+static inline const char *hvs6s_write_at_name(enum hvs6s_write_at m)
+{
+	switch (m) {
+	case HVS6S_AT_VBLANK: return "vblank";
+	case HVS6S_AT_MIDFRAME: return "midframe";
+	case HVS6S_AT_ONCE: return "once";
+	}
+	return "?";
+}
+
+/* ns as "<us>.<3 digits>" into b, or "none" when not timed. */
+static inline const char *hvs6s_us_text(int timed, uint64_t ns, char *b, size_t len)
+{
+	if (!timed)
+		(void)snprintf(b, len, "none");
+	else
+		(void)snprintf(b, len, "%llu.%03u", (unsigned long long)(ns / 1000u),
+			       (unsigned)(ns % 1000u));
+	return b;
+}
+
+/*
+ * The vblank wait of a swap (swap-vblank-lib), when one was tried:
+ *   dlswap vblank ok|FAIL mode=<m> reads=N frame_reads=F frcnt=F yline=Y since_us=S invblank=yes|no
+ * frcnt and yline from the STATUS read that saw the step (or the last one).
+ */
+static inline void hvs6s_vblank_line(const struct hvs6s_emit *em, const struct hvs6s_report *r)
+{
+	char b[200], t[32];
+
+	(void)snprintf(b, sizeof(b),
+		       HVS6S_TAG " vblank %s mode=%s reads=%u frame_reads=%u frcnt=%u yline=%u "
+		       "since_us=%s invblank=%s",
+		       r->vb_found ? "ok" : "FAIL", hvs6s_write_at_name(r->write_at),
+		       (unsigned)r->vb_reads, (unsigned)r->vb_frame_reads,
+		       (unsigned)hvs6s_frcnt(r->vb_status), (unsigned)hvs6s_yline(r->vb_status),
+		       hvs6s_us_text(r->timed && r->swapped, r->vb_since_ns, t, sizeof(t)),
+		       r->write_in_vblank ? "yes" : "no");
+	em->line(em->ctx, b);
+}
+
+/*
+ * The tight pickup loop of a swap that wrote LPTRS after a vblank wait:
+ *   dlswap lact-timing tight=ok|miss reads=K step=J frcnt=A..B yline=Y..Z dt_us=D read_us=P boundary=yes|no
+ * K iterations (the pickup's index + 1 when ok), J the iteration of the
+ * first FRCNT step after the write ("none"), FRCNT and YLINE at the write
+ * and at the pickup (or the last iteration).
+ */
+static inline void hvs6s_timing_line(const struct hvs6s_emit *em, const struct hvs6s_report *r)
+{
+	char b[224], st[24], dt[32], rd[32];
+
+	if (r->step_read < 0)
+		(void)snprintf(st, sizeof(st), "none");
+	else
+		(void)snprintf(st, sizeof(st), "%lld", (long long)r->step_read);
+	(void)snprintf(b, sizeof(b),
+		       HVS6S_TAG " lact-timing tight=%s reads=%u step=%s frcnt=%u..%u yline=%u..%u "
+		       "dt_us=%s read_us=%s boundary=%s",
+		       r->tight_pickup ? "ok" : "miss", (unsigned)r->tight_reads, st,
+		       (unsigned)r->write_frcnt, (unsigned)r->pickup_frcnt, (unsigned)r->write_yline,
+		       (unsigned)r->pickup_yline,
+		       hvs6s_us_text(r->timed && r->tight_pickup, r->lact_dt_ns, dt, sizeof(dt)),
+		       hvs6s_us_text(r->timed && r->tight_reads, r->read_ns, rd, sizeof(rd)),
+		       r->lact_boundary ? "yes" : "no");
+	em->line(em->ctx, b);
+}
+
 /*
  * The differing words of one compare, kind "restore" or "readback": one
  * "dlswap <kind>-diff word ..." line per kept word, then the count line
@@ -1376,6 +1691,10 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 			       (unsigned long long)r->cleaned.start,
 			       (unsigned long long)(r->cleaned.end - r->cleaned.start));
 		em->line(em->ctx, b);
+		if (r->vb_tried) {
+			hvs6s_vblank_line(em, r);
+			n++;
+		}
 		hvs6s_regs_line(em, "at-write", &r->at_write);
 		hvs6s_regs_line(em, "after", &r->after);
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " lptrs-readback %s first=0x%08x poll=%u",
@@ -1387,6 +1706,10 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 		em->line(em->ctx, b);
 		hvs6s_lact_line(em, "lact-pickup", r->lact_pickup, r->lact_polls, r->lact_frcnt_write,
 				r->lact_frcnt_pickup, r->lact_want, r->lact_seen);
+		if (r->vb_tried) {
+			hvs6s_timing_line(em, r);
+			n++;
+		}
 		(void)snprintf(b, sizeof(b), HVS6S_TAG " settle %s polls=%u",
 			       r->settle_ok ? "ok" : (r->frcnt_ok ? "FAIL" : "skip"),
 			       (unsigned)r->settle_polls);
@@ -1398,6 +1721,10 @@ static inline size_t hvs6s_lines(const struct hvs6s_snap *s, const struct hvs6s_
 			       r->place_err == HVS6S_OK ? hvs6s_err_name(r->err) : "(not placed)");
 		em->line(em->ctx, b);
 		n++;
+		if (r->vb_tried) {
+			hvs6s_vblank_line(em, r);
+			n++;
+		}
 	}
 	if (r->ldiff.total)
 		n += hvs6s_diff_lines(em, "readback", &r->ldiff, &r->hw);
