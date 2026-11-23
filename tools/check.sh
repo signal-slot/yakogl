@@ -2517,11 +2517,11 @@ step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
 # GL core on the Mali mock (feature sets are those of each file's header).
 # mali_zs_sharing and the second mali_vcube_magswitch run need `report-es2`:
 # without it their ES 2.0 cases are compiled out.
-step "test    $MALI_CONFIG (tests/mali_{blend_states,draw_oom,fragment_random,cube_samplers,rgb565_stencil,cube_complete,attr_gap,vcube_magswitch}.rs)" \
+step "test    $MALI_CONFIG (tests/mali_{blend_states,draw_oom,fragment_random,cube_samplers,rgb565_stencil,cube_complete,attr_gap,attr_active,vcube_magswitch}.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
     --test mali_blend_states --test mali_draw_oom --test mali_fragment_random \
     --test mali_cube_samplers --test mali_rgb565_stencil --test mali_cube_complete \
-    --test mali_attr_gap --test mali_vcube_magswitch
+    --test mali_attr_gap --test mali_attr_active --test mali_vcube_magswitch
 # Plan #377's dEQP-GLES2 compile-refusal families: each tests/mali_deqp_<family>.rs
 # compiles the shader pairs of its Mesa 26.2.1 references
 # (tools/mali/testdata/deqp_<family>_*) and byte-compares the program with their

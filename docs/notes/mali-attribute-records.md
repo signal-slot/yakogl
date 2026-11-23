@@ -71,7 +71,30 @@ Nothing in the code words changes: the records, their numbering and the
 ATTRIBUTE descriptors are the same; only the reflection rows the GL core
 stages from are completed.
 
+## The rows are the active attributes, the records are what the code reads
+
+`ShcShader::attribs` is also what `glGetActiveAttrib`, `GL_ACTIVE_ATTRIBUTES`
+and `glGetAttribLocation` answer from. Since the program's vertex shader is
+built for its fragment shader's reads (`vs_for_fragment`,
+docs/notes/mali-product-route.md), an attribute that feeds only a varying
+the fragment shader does not read is loaded by no code and has no record
+(gl_test case 1: `v_color = a_color` under a fragment shader that reads no
+varying). Rows made from the records alone dropped it from the program's
+active attributes, where the PowerVR, Vivante and V3D back ends list it
+(`ShcAttribBinding::active`: the shader statically reads it, ES 2.0 section
+2.10.4), and gl_test case 1 failed on the NanoPC-T6 (#11239).
+
+So `record` lists a row for every attribute the vertex shader statically
+reads (a load anywhere in the front end's IR, taken or not) and for every
+attribute a record names, in declaration order. An attribute with a row and
+no record is staged by the GL core and left out of the attribute table, like
+the unread matrix column above.
+
 ## The tests
+
+- `tests/mali_attr_active.rs` (GL on the Mali mock): gl_test case 1's pair,
+  plain and with `a_pos` bound to 3; the active attributes and their
+  locations, and a draw that is not refused.
 
 - `src/shaderc/online/mali/tests.rs`,
   `attribute_rows_cover_the_matrix_columns_read`: a `mat2` with column 1
