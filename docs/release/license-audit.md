@@ -13,10 +13,11 @@ does so for the named classes only. `tools/cts/cts-selftest.sh` (run by
 of this tool, and the audit over the repository (below). The repository's own
 allowlist is `tools/license_audit.allow`, read by default.
 
-Measured at `0dce654a8` (origin/main, 2026-10-26) plus the origin pass of
-2026-10-26 ("Remaining findings" below): 6513 tracked files. The figures of
-the SPDX header pass (`c2538996e81`, 6291 files, 79 `undecided`) are kept in
-the sections that describe that pass.
+Measured at `fec1e65b` (origin/main, 2026-11-23) plus the allowlist review of
+that day ("Allowlist review of 2026-11-23" below): 15003 tracked files. The
+figures of the SPDX header pass (`c2538996e81`, 6291 files, 79 `undecided`)
+and of the origin pass (`0dce654a8`, 6513 files) are kept in the sections
+that describe those passes.
 
 ## Gate (check 25)
 
@@ -39,16 +40,16 @@ tree, which must fail.
 Counts (`python3 -I tools/license_audit.py`):
 
 ```
-licence audit: 6513 files, 1684 with an SPDX line, 4622 allowlisted
+licence audit: 15003 files, 5748 with an SPDX line, 7703 allowlisted
 LICENSES/: Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CC-BY-ND-4.0, GPL-2.0-only, GPL-3.0-only, LicenseRef-Slint-Royalty-free-2.0, LicenseRef-Slint-Software-3.0, MIT, Zlib
-identifier use: Apache-2.0=6210, BSD-2-Clause=1, BSD-3-Clause=3, BSL-1.0=1, CC-BY-ND-4.0=1, GPL-2.0-only=1, GPL-3.0-only=1, LicenseRef-Slint-Royalty-free-2.0=1, LicenseRef-Slint-Software-3.0=1, MIT=208, Zlib=1
+identifier use: Apache-2.0=13341, BSD-2-Clause=1, BSD-3-Clause=3, BSL-1.0=1, CC-BY-ND-4.0=1, GPL-2.0-only=1, GPL-3.0-only=22, LicenseRef-Slint-Royalty-free-2.0=1, LicenseRef-Slint-Software-3.0=1, MIT=1535, Zlib=1
 missing-spdx: 0
 third-party-unlabelled: 13
 undecided: 0
 unknown-id: 0
 unused-license: 0
 third-party-mismatch: 0
-generated: 59 (mismatch: 0)
+generated: 91 (mismatch: 0)
 findings: 0
 ```
 
@@ -189,6 +190,35 @@ licence was read from. `undecided: 0`.
 | 15 | `driver/docs/part1-ddk-fw-bringup.md` | 1 | Our article (Qiita front matter; first commit `4402bcb3e`, Tasuku Suzuki). The header after the front matter says `Apache-2.0`, Signal Slot, Inc. | No change: the header states the licence. |
 | 16 | The `*.json` default row | - | `tools/v3d/tri-shaders/*.json`: v3d_shc (Mesa) and our compiler's output for the v3d triangle sample's own probe shaders (commit `2e759bf7b`; the sample left the tree in `5a496fd50`, the shaders stay as test inputs). | No change: the default row (ours) holds. |
 | 17 | `third-party-unlabelled` (13) | 13 | Mesa's `docs/license.rst`, `box.h`, `u_atomic.h`, XML/YAML inputs; DDK `config_kernel.h`, `README`; the Zephyr PR's `LICENSE`. Covered by the licence files UPSTREAM lists. | Information only. |
+
+## Allowlist review of 2026-11-23
+
+Between `9767d44d` and `fec1e65b` more than 400 commits added about 4800
+files, most of them under the catch-all row
+`tools/mali/testdata/* | Apache-2.0 | probe shaders written for this project`.
+That row's reason did not describe several families, so rows that are each a
+subset of it (no glob widened; first match wins) now precede it:
+
+- `gm2_tc425_*.{vert,frag}`, `gm2_fsop_1/2.frag`, `gm2_fsop_*.vert` (19
+  files): `Apache-2.0 AND GPL-3.0-only`, near-verbatim glmark2 `22c527cb`
+  `light-basic.vert`, `light-basic-tex.frag`, `gradient.frag`,
+  `gradient.vert` (glmark2 is GPL-3.0). The other `gm2_*` shaders are
+  original reductions (commit bodies: "no glmark2 text"): `Apache-2.0`.
+- `fvg_*.{frag,vert}`: `MIT OR Apache-2.0`, byte for byte the femtovg 0.26.0
+  files of `tools/shaders/femtovg` and `offarm` (NOTICE 8).
+- `*.trace`, `*.pandecode`, `*.stderr`, `*.disasm`, `pan_tex_ref/*.desc`,
+  `pan_blend_ref/shaders/*.txt`, `blend_case*.txt`: `Apache-2.0 AND MIT`,
+  Mesa pandecode and valhall disassembly output (NOTICE 1b, 1e3).
+- `deqp_*.{frag,vert,bind}` (dEQP-GLES2, NOTICE 5), `*.words` and `*.stdout`
+  get their own `Apache-2.0` rows with the true reason.
+
+Open for plan #391 (NOTICE): no NOTICE entry names glmark2 as the source of
+the 19 files above (NOTICE covers only `libmatrix-util-zephyr.patch`); and
+`src/shaderc/online/mali/motion.rs` carries "2023-2025 Advanced Micro
+Devices, Inc." while NOTICE has no AMD line. The other holders found in
+headers (Khronos, Arm, Collabora, Intel, Broadcom, Imagination, Igalia,
+Google, Etnaviv, Zodiac, Android Open Source Project, femtovg, glow, Bevy,
+SixtyFPS, Texas Instruments) appear in NOTICE.
 
 ## Generated files (60)
 
