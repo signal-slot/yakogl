@@ -207,7 +207,15 @@ records at the tip.
 - PowerVR: `mrt_layout`, the four-target colour layout and its
   end-of-tile program (`a47bcb77`); the vertex program adds a per-draw
   base to `gl_InstanceID` (`a489b1b8`,
-  `docs/notes/instanceid-per-draw.md`); a texture swizzle composes
+  `docs/notes/instanceid-per-draw.md`); the hardware per-stream
+  instance divisor (P3), opt-in behind the cargo feature
+  `pvr-instance-divisor` (CMake `YAKOGL_PVR_INSTANCE_DIVISOR`, Kconfig
+  `CONFIG_YAKOGL_PVR_INSTANCE_DIVISOR`): Mesa's PDS multiplier and shift
+  (`pvr_pipeline_pds.c:846-864`), `max_instance_divisor` 0xffff, streams
+  coalesced only at equal divisor, chunks through `instance_id_modifier`
+  and no base move (`0fbc924d`, `3ef0bbef`, `4f4310a6`, `6f1955f5`),
+  host-tested only, no board run, and without the feature
+  `max_instance_divisor` stays 1; a texture swizzle composes
   into the texture state (`2df189df`); and the pvrlab `gl_test` wires
   the ES 3.0 flat-line, `drawrandom` and precision cases 230-242
   (`99f6aaf6`).
