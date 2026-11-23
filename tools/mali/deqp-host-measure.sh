@@ -234,7 +234,7 @@ extern void osal_set_ops(const struct osal_ops *ops);
 #define OSAL_QUERY_MALI_GPU 15u
 #define OSAL_QUERY_MALI_TILER_HEAP 16u
 struct osal_mali_gpu {
-	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count;
+	uint32_t gpu_id, tiler_features, cs_reg_count, unpreserved_cs_reg_count, core_features;
 };
 struct osal_mali_heap {
 	uint64_t ctx_gpu, first_chunk_gpu;
@@ -283,7 +283,7 @@ static int hm_query(uint32_t what, void *out, size_t out_sz)
 	if (what == OSAL_QUERY_MALI_GPU) {
 		static const struct osal_mali_gpu gpu = {
 			.gpu_id = 0xa8670005u, .tiler_features = 0x809,
-			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4,
+			.cs_reg_count = 96, .unpreserved_cs_reg_count = 4, .core_features = 0,
 		};
 
 		if (!out || out_sz != sizeof(gpu))
