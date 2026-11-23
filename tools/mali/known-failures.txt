@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The Mali tests that fail today for a defect that has its own issue. The
+# rows `test ... (--lib, every test but the mali:: ones ...)` and
+# `test ... (every tests/ target ...)` of tools/check.sh compare the tests
+# that failed with this list: a failing test that is not here turns the row
+# red, and so does a test listed here that passed, was ignored or did not
+# run. So the list cannot hide a new failure, and cannot go stale: the fix
+# of a defect removes its lines in the same commit.
+#
+# A test that the Mali back end does not do today by design or by a known
+# gap (an ES 3.0 feature, a shader the compiler refuses by name) is not
+# listed here: the test itself says so, `#[cfg_attr(feature = "gpu-mali",
+# ignore = "<reason>")]`.
+#
+# One test a line: <set> <target> <test path> <issue>
+#   set     lib (the library, the Mali feature set), tests (the tests/
+#           targets, the Mali feature set) or tests-es2 (the same with
+#           report-es2)
+#   target  the cargo target (yakogl for the library, else the file name)
+#   issue   the issue of the defect, `#<number>` (`#TODO-<name>` until it has one)
+#
+# #7073: the Mali's partial-varying link does not keep only the lanes the
+# fragment shader reads (mask 0b111 where the test wants 0b010).
+lib yakogl gl::program::tests::a_program_s_vertex_shader_is_built_for_a_fragment_shader_that_reads_part_of_a_varying #7073
+# #387 (docs/notes/mali-deqp-defects.md, defect `encode`): a vertex shader
+# that reads more than 16 attributes fails an invariant at encode
+# (MaliError::Defect(Encode)); dEQP attribute_location.bind_aliasing.max_cond_*
+# fail on the board for it.
+lib yakogl shaderc::online::backend::tests::attributes_that_alias_only_at_link_compile_there #387
