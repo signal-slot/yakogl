@@ -820,9 +820,9 @@ fn kept_local(m: &Module<'_>, s: ir::Src) -> bool {
 /// function and loop scenes. GLSL's lower_precision narrows no bare
 /// dereference (`handle_rvalue`, lower_precision.cpp:835-843), so Mesa's
 /// local takes the fp32 read. A read any other instruction takes stays the
-/// mediump one ([`Fs::frag_coord16`]); a module without precision tables
-/// has no highp local.
-fn highp_copy(m: &Module<'_>, id: u32) -> bool {
+/// mediump one ([`Fs::frag_coord16`]); a local of no known class is
+/// refused ([`super::nir::local_class_of`]).
+fn highp_copy(m: &Module<'_>, id: u32) -> Result<bool, MaliError> {
     let mut users = 0usize;
     let mut highp = true;
     for op in m.instrs.iter() {
@@ -832,33 +832,42 @@ fn highp_copy(m: &Module<'_>, id: u32) -> bool {
             continue;
         }
         users += 1;
-        highp &=
-            matches!(op, ir::Op::StoreLocal { local, index: None, .. } if m.local_prec_of(*local) == ir::Prec::High);
+        highp &= match *op {
+            ir::Op::StoreLocal { local, index: None, .. } => super::nir::local_class_of(m, local)? == ir::Prec::High,
+            _ => false,
+        };
     }
-    users > 0 && highp
+    Ok(users > 0 && highp)
 }
 
 /// Every local the mediump ES 1.00 shader declares highp
 /// ([`FsPrecision::highp_locals`]) is a copy of gl_FragCoord: each store to
 /// it stores a read [`highp_copy`] gives to highp locals alone. Any other
 /// highp local has no reference (the shader is mixed).
-fn highp_locals_copy(m: &Module<'_>, prec: &FsPrecision, vals: &[[Val; 4]]) -> bool {
+fn highp_locals_copy(m: &Module<'_>, prec: &FsPrecision, vals: &[[Val; 4]]) -> Result<bool, MaliError> {
     let named = |h: u64| prec.highp_locals.contains(&h) && h != 0;
-    m.locals.iter().enumerate().filter(|(_, d)| named(super::name_hash(d.name))).all(|(l, _)| {
+    for (l, _) in m.locals.iter().enumerate().filter(|(_, d)| named(super::name_hash(d.name))) {
         if folded_counter(m, l, vals) || fne_copy(m, l) {
-            return true;
+            continue;
         }
         let mut stores = 0usize;
-        let all = m.instrs.iter().all(|op| match *op {
-            ir::Op::StoreLocal { local, src, .. } if local.0 as usize == l => {
-                stores += 1;
-                matches!(m.def(src.val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }))
-                    && highp_copy(m, src.val.0)
+        for op in m.instrs.iter() {
+            let ir::Op::StoreLocal { local, src, .. } = *op else { continue };
+            if local.0 as usize != l {
+                continue;
             }
-            _ => true,
-        });
-        all && stores > 0
-    })
+            stores += 1;
+            if !matches!(m.def(src.val), Some(ir::Op::LoadInput { slot: IoSlot::FragCoord, .. }))
+                || !highp_copy(m, src.val.0)?
+            {
+                return Ok(false);
+            }
+        }
+        if stores == 0 {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 /// Highp local `l` copies varyings' lanes that only float `!=` compares
@@ -4558,7 +4567,7 @@ pub fn walk<'s>(m: &Module<'_>, scratch: &Arena<'s>, prec: FsPrecision) -> Resul
     /* the highp locals copy gl_FragCoord alone; a read beside the copy
      * that the walk narrowed ([`Fs::frag_coord16`]) may meet the fp32 copy
      * in a highp tree, where Mesa reads it at fp32: no reference */
-    f.mixed |= !highp_locals_copy(m, &prec, vals) || (f.fc_copy && f.frag16.is_some());
+    f.mixed |= !highp_locals_copy(m, &prec, vals)? || (f.fc_copy && f.frag16.is_some());
     f.ir_vals = vals;
     f.mark_live();
     lone_negations(&mut f, m);
@@ -6212,7 +6221,7 @@ fn walk_nodes(
              * variable takes the result (gm2_cf_ifelse_fs.expect.json:
              * `FMA.f32` x2, `FROUND.f32.rtn`, `FADD.f32`, then `FADD.f32
              * r0.h0, r0^, 0x0.neg`) */
-            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp && highp_copy(m, id.0) => {
+            ir::Op::LoadInput { slot: IoSlot::FragCoord, .. } if !prec.frag_coord_highp && highp_copy(m, id.0)? => {
                 f.fc_copy = true;
                 out = f.frag_coord(at)?;
             }
@@ -6277,8 +6286,7 @@ fn walk_nodes(
                 let temporary = m.locals.get(local.0 as usize).is_some_and(|d| d.name.is_empty());
                 /* a local declared highp keeps the fp32 lanes (glmark2's
                  * `highp vec2 FragCoord`, [`highp_copy`]) */
-                let highp_local = m.local_prec_of(local) == ir::Prec::High;
-                if !prec.highp && !temporary && !highp_local {
+                if !prec.highp && !temporary && super::nir::local_class_of(m, local)? != ir::Prec::High {
                     for (i, t) in lanes.iter_mut().enumerate() {
                         if write_mask & (1 << i) != 0 && (f.fc32_float(*t) || f.int_float(*t)) {
                             *t = f.narrow_stored(*t, at)?;
@@ -6515,7 +6523,7 @@ fn walk_nodes(
              * r0.h0`) */
             ir::Op::Alu(a @ (AluOp::Fmul | AluOp::Fadd), s)
                 if !prec.highp
-                    && m.prec_of(ir::ValueId(id.0)) == ir::Prec::High
+                    && super::nir::class_of(m, ir::ValueId(id.0))? == ir::Prec::High
                     && (0..width_of(m, ir::ValueId(id.0))).all(|i| {
                         let (x, y) = (lane(vals, s[0], i), lane(vals, s[1], i));
                         let wide = |v: Val| f.narrowed_uniform(v).is_some() || f.fp32_lane(v);
@@ -6860,12 +6868,16 @@ fn walk_nodes(
              * then the narrowing): no form here yet */
             ir::Op::Alu(a @ (AluOp::Fceil | AluOp::Ffloor), s) => {
                 let op = if a == AluOp::Fceil { Alu::Fceil } else { Alu::Ffloor };
-                let high = m.prec_of(ir::ValueId(id.0)) == ir::Prec::High;
                 let w = width_of(m, ir::ValueId(id.0));
                 for (i, o) in out.iter_mut().enumerate().take(w) {
                     let x = f.fp16_operand(lane(vals, s[0], i));
-                    let varying = f.input_lane(x).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS) && !high;
                     let computed = f.alu_of(x).is_some() && a == AluOp::Fceil;
+                    /* the class is read where it decides: for a varying's
+                     * lane that is no computed operand (a class the front
+                     * end does not know is refused there, nir.rs `class_of`) */
+                    let varying = !computed
+                        && f.input_lane(x).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS)
+                        && super::nir::class_of(m, ir::ValueId(id.0))? != ir::Prec::High;
                     if !computed && !varying {
                         return Err(MaliError::Arithmetic);
                     }
@@ -6979,12 +6991,16 @@ fn walk_nodes(
                      * r1^.h00`, then `FMIN.v2f16`); a highp one is Mesa's fp32
                      * operation (op_common_clamp_fs_highp's `FMAX.f32`), no
                      * form here yet */
-                    let high = m.prec_of(ir::ValueId(id.0)) == ir::Prec::High;
                     let varying = |f: &Fs<'_>, v: Val| {
-                        !high && f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS)
+                        !f.is_f16(v) && f.input_lane(v).is_some_and(|(loc, _)| (loc as usize) < MAX_VARYINGS)
                     };
-                    let lane16 = |f: &Fs<'_>, v: Val| f.is_f16(v) || varying(f, v);
-                    if lane16(f, x) && lane16(f, y) {
+                    let (vx, vy) = (varying(f, x), varying(f, y));
+                    let pair = (f.is_f16(x) || vx) && (f.is_f16(y) || vy);
+                    /* the class is read where it decides: for a pair with a
+                     * varying's lane (a class the front end does not know
+                     * is refused there, nir.rs `class_of`; the `max` under a
+                     * `pow` of gm2_fsarith_1 has none and reads no varying) */
+                    if pair && (!(vx || vy) || super::nir::class_of(m, ir::ValueId(id.0))? != ir::Prec::High) {
                         *o = f.node(if a == AluOp::Fmax { Alu::Fmax } else { Alu::Fmin }, [x, y, u], at)?;
                         continue;
                     }
@@ -7242,7 +7258,7 @@ fn walk_nodes(
              * and `acos`'s, which the front end builds at 32 bits as Mesa
              * does (lower.rs; op_angle_acos_fs_mediump's `FCMP_OR.f32`): no
              * form here yet */
-            ir::Op::Alu(AluOp::Fsign, _) if m.prec_of(ir::ValueId(id.0)) == ir::Prec::High => {
+            ir::Op::Alu(AluOp::Fsign, _) if super::nir::class_of(m, ir::ValueId(id.0))? == ir::Prec::High => {
                 return Err(MaliError::Arithmetic);
             }
             ir::Op::Alu(AluOp::Fsign, s) => {

@@ -29,6 +29,15 @@
 //!    NIR folds them (`nir_opt_constant_folding`); this pass folds them in
 //!    place, the value fp32 as NIR computes it.
 //!
+//! Both run after `lower_precision` (glsl_parser_extras.cpp:2491), on a
+//! tree that holds its conversions (`f2fmp`, `f2f32`): a conversion is an
+//! expression of another operation, so a tree with one inside is no
+//! reduction, and the constant's walk stops at one. The IR keeps no
+//! conversion; the front end's classes (ir.rs `Module::prec`,
+//! `Module::local_prec`) say where Mesa has one ([`Tree::read_at`]), and
+//! every rewrite here carries both tables, each new or moved instruction
+//! with its tree's class.
+//!
 //! Ahead of them, a pass of Mali's NIR on the front end's run-time index
 //! ladders ([`ilt_trees`]): the `ieq` ladders of an element, column or lane
 //! read or written at a run-time index become Mesa's `ilt` binary search,
@@ -49,12 +58,14 @@
 //! change that reads a local `do_tree_grafting` may graft (assigned once,
 //! read once: opt_tree_grafting.cpp:389-401) or a value with more than one
 //! use is [`MaliError::Rebalance`]; a constant moved across a change of
-//! width is [`MaliError::ArithConstant`].
+//! width is [`MaliError::ArithConstant`]. A tree of no known class is
+//! refused the same way (`Rebalance` for a chain of three or more,
+//! `ArithConstant` for a constant's walk).
 
 use super::{Defect, MaliError};
 use crate::shaderc::online::arena::Arena;
 use crate::shaderc::online::ir::{
-    AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Range, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
+    AluOp, IoKind, IoSlot, Module, Node as IrNode, Op as IrOp, Prec, Range, Src, ValueId, VarDecl, SWIZZLE_IDENTITY,
 };
 use core::cell::Cell;
 
@@ -72,7 +83,7 @@ enum Use {
 }
 
 /// The IR of one stage and its use tables, rebuilt after each change.
-struct Tree<'m, 'a> {
+struct Tree<'m, 'a, 'f> {
     m: &'m Module<'m>,
     instrs: &'a mut [IrOp],
     comps: &'a mut [u8],
@@ -92,6 +103,12 @@ struct Tree<'m, 'a> {
     /// somewhere under it ([`Tree::fill_varies`]; empty for a stage with no
     /// compare).
     varying: &'a mut [bool],
+    /// The class of each value (ir.rs `Module::prec`), carried through
+    /// every rewrite; empty when the stage has no tables.
+    prec: &'a mut [Prec],
+    /// A uniform of this name is stored at 16 bits (nir.rs
+    /// `fp16_uniform`'s test: mediump or lowp).
+    fp16: &'f dyn Fn(&str) -> bool,
 }
 
 /// A child of an expression record in [`dsw`]: an expression or a leaf.
@@ -117,12 +134,15 @@ const MAX_TREE: usize = 64;
 /// A stage's instructions, and the rest of its [`Shape`], rewritten.
 pub(super) type Rewritten<'s> = (&'s [IrOp], Shape<'s>);
 
-/// What [`passes`] rewrites besides the instructions: their widths, and
-/// the node list when [`ilt_trees`] renumbered the stage.
+/// What [`passes`] rewrites besides the instructions: their widths, the
+/// precision tables, and the node list when [`ilt_trees`] renumbered the
+/// stage.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Shape<'s> {
     pub comps: &'s [u8],
     pub nodes: Option<(&'s [IrNode], Range)>,
+    pub prec: &'s [Prec],
+    pub local_prec: &'s [Prec],
 }
 
 impl<'s> Shape<'s> {
@@ -132,21 +152,36 @@ impl<'s> Shape<'s> {
         's: 'x,
     {
         let (nodes, body) = self.nodes.unwrap_or((m.nodes, m.body));
-        /* The passes rewrite instructions (and `ilt_trees` renumbers
-         * them) without carrying the precision tables: the result has none
-         * (ir.rs `Module::prec`), so a reader of precision refuses it. */
-        Module { instrs, comps: self.comps, nodes, body, lanes: &[], prec: &[], local_prec: &[], ..*m }
+        /* The passes carry the precision tables entry for entry (ir.rs
+         * `Module::prec`): each rewrite stays inside one tree, and a new
+         * or moved instruction takes its tree's class. They add no local.
+         * The exact widths (`lanes`) are not carried: a reader that needs
+         * one refuses. */
+        Module {
+            instrs,
+            comps: self.comps,
+            nodes,
+            body,
+            lanes: &[],
+            prec: self.prec,
+            local_prec: self.local_prec,
+            ..*m
+        }
     }
 }
 
 /// Run the passes on `m`: the run-time index trees ([`ilt_trees`]), then
-/// GLSL's two. `None`: they change nothing (and refuse nothing);
-/// otherwise the stage's instructions and their shape after them.
+/// GLSL's two. `fp16`: a uniform of this name is stored at 16 bits.
+/// `None`: they change nothing (and refuse nothing); otherwise the stage's
+/// instructions and their shape after them.
 pub(super) fn passes<'s>(
     m: &Module<'_>,
     highp_fragment: bool,
+    fp16: &dyn Fn(&str) -> bool,
     scratch: &Arena<'s>,
 ) -> Result<Option<Rewritten<'s>>, MaliError> {
+    let oom = |_| MaliError::OutOfScratch;
+    let local_prec = scratch.alloc_copy(if m.has_prec() { m.local_prec } else { &[] }).map_err(oom)?;
     let trees = ilt_trees(m, scratch)?;
     let shaped;
     let m = match trees {
@@ -157,8 +192,8 @@ pub(super) fn passes<'s>(
                 nodes: t.nodes,
                 body: t.body,
                 lanes: &[],
-                prec: &[],
-                local_prec: &[],
+                prec: t.prec,
+                local_prec,
                 ..*m
             };
             &shaped
@@ -166,7 +201,6 @@ pub(super) fn passes<'s>(
         None => m,
     };
     let n = m.instrs.len();
-    let oom = |_| MaliError::OutOfScratch;
     let instrs = scratch.alloc_copy(m.instrs).map_err(oom)?;
     let comps = scratch.alloc_filled(n, 4u8).map_err(oom)?;
     for (i, c) in comps.iter_mut().enumerate() {
@@ -182,7 +216,12 @@ pub(super) fn passes<'s>(
     let folds = scratch.alloc_filled(if compares { n } else { 0 }, None).map_err(oom)?;
     let folds = Cell::from_mut(folds).as_slice_of_cells();
     let varying = scratch.alloc_filled(if compares { n + m.locals.len() } else { 0 }, false).map_err(oom)?;
-    let mut t = Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds, varying };
+    let prec = scratch.alloc_filled(if m.has_prec() { n } else { 0 }, Prec::Unknown).map_err(oom)?;
+    for (i, p) in prec.iter_mut().enumerate() {
+        *p = m.prec_of(ValueId(i as u32));
+    }
+    let mut t =
+        Tree { m, instrs, comps, uses, locals, pos, changed: false, highp_fragment, folds, varying, prec, fp16 };
     t.count();
     t.rebalance()?;
     t.reassociate()?;
@@ -194,8 +233,9 @@ pub(super) fn passes<'s>(
     if !t.changed && trees.is_none() {
         return Ok(None);
     }
-    let Tree { instrs, comps, .. } = t;
-    Ok(Some((&*instrs, Shape { comps: &*comps, nodes: trees.map(|t| (t.nodes, t.body)) })))
+    let Tree { instrs, comps, prec, .. } = t;
+    let local_prec = if prec.is_empty() { &[] } else { &*local_prec };
+    Ok(Some((&*instrs, Shape { comps: &*comps, nodes: trees.map(|t| (t.nodes, t.body)), prec: &*prec, local_prec })))
 }
 
 /// Locals `a` and `b` (`a < b`) are slots of one variable: the front end
@@ -220,13 +260,15 @@ const LADDER_GROWTH: usize = 64;
 /// No ladder, no value.
 const NONE: u32 = u32::MAX;
 
-/// A stage after [`ilt_trees`]: renumbered, in a node list of its own.
+/// A stage after [`ilt_trees`]: renumbered, in a node list of its own,
+/// its precision table carried (empty when the stage had none).
 #[derive(Clone, Copy)]
 struct Trees<'s> {
     instrs: &'s [IrOp],
     comps: &'s [u8],
     nodes: &'s [IrNode],
     body: Range,
+    prec: &'s [Prec],
 }
 
 /// One `ieq` ladder of the front end (lower.rs) over the `n` elements of a
@@ -552,6 +594,11 @@ fn find(m: &Module<'_>, uses: &[u16], pos: &[u32], r: Range, f: &mut Found<'_>, 
 struct Build<'b> {
     instrs: &'b mut [IrOp],
     comps: &'b mut [u8],
+    /// The class of each instruction (empty: the stage has no tables). An
+    /// instruction rewritten in place keeps its own: an `ilt` takes an
+    /// `ieq`'s (High, a 32-bit bool of an int compare), a select a
+    /// select's.
+    prec: &'b mut [Prec],
     next: usize,
     seq: &'b mut [u32],
     ns: usize,
@@ -570,17 +617,20 @@ impl Build<'_> {
         self.push(id)
     }
 
-    /// A new instruction, as a node of the ladder.
-    fn add(&mut self, op: IrOp, w: u8) -> Result<ValueId, MaliError> {
+    /// A new instruction, as a node of the ladder, of class `p`.
+    fn add(&mut self, op: IrOp, w: u8, p: Prec) -> Result<ValueId, MaliError> {
         let id = ValueId(self.next as u32);
         self.next += 1;
+        if let Some(q) = self.prec.get_mut(id.0 as usize) {
+            *q = p;
+        }
         self.set(id, op, w)?;
         Ok(id)
     }
 
     /// `ilt(i, mid)` of a new constant `mid` (`nir_ilt_imm`), into `c`.
     fn ilt(&mut self, i: Src, mid: usize, c: ValueId) -> Result<(), MaliError> {
-        let k = Src::id(self.add(IrOp::ConstI32([mid as i32; 4]), 4)?);
+        let k = Src::id(self.add(IrOp::ConstI32([mid as i32; 4]), 4, Prec::None)?);
         self.set(c, IrOp::Alu(AluOp::Ilt, [i, k, k]), 1)
     }
 
@@ -674,8 +724,9 @@ impl Build<'_> {
         let mut at: Option<(Src, bool)> = None;
         for &(c, left) in path[..np].iter().rev() {
             let c = splat(c);
-            let and = |b: &mut Self, x: Src, y: Src| b.add(IrOp::Alu(AluOp::Iand, [x, y, y]), 1).map(splat);
-            let not = |b: &mut Self, x: Src| b.add(IrOp::Alu(AluOp::Inot, [x, x, x]), 1).map(splat);
+            /* bools of int compares: High (lower.rs `instr_prec`) */
+            let and = |b: &mut Self, x: Src, y: Src| b.add(IrOp::Alu(AluOp::Iand, [x, y, y]), 1, Prec::High).map(splat);
+            let not = |b: &mut Self, x: Src| b.add(IrOp::Alu(AluOp::Inot, [x, x, x]), 1, Prec::High).map(splat);
             at = Some(match (left, at) {
                 (true, None) => (c, true),
                 (false, None) => (c, false),
@@ -687,7 +738,9 @@ impl Build<'_> {
                     (and(self, c, nb)?, true)
                 }
                 /* bcsel(a, b, bcsel(c, b, d)) -> bcsel(a | c, b, d) (:2488) */
-                (false, Some((b, false))) => (self.add(IrOp::Alu(AluOp::Ior, [c, b, b]), 1).map(splat)?, false),
+                (false, Some((b, false))) => {
+                    (self.add(IrOp::Alu(AluOp::Ior, [c, b, b]), 1, Prec::High).map(splat)?, false)
+                }
                 /* bcsel(a, b, bcsel(c, d, b)) -> bcsel(c & ~a, d, b) (:2489) */
                 (false, Some((b, true))) => {
                     let na = not(self, c)?;
@@ -776,9 +829,13 @@ fn ilt_trees<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Trees<'s>
     for (i, c) in comps[..n].iter_mut().enumerate() {
         *c = m.comps_of(ValueId(i as u32));
     }
+    let prec = scratch.alloc_filled(if m.has_prec() { cap } else { 0 }, Prec::None).map_err(oom)?;
+    for (i, p) in prec.iter_mut().take(n).enumerate() {
+        *p = m.prec_of(ValueId(i as u32));
+    }
     let nseq: usize = ladders.iter().map(|l| (l.span.1 - l.span.0 + 1) as usize + LADDER_GROWTH * 2).sum();
     let seq = scratch.alloc_filled(nseq, 0u32).map_err(oom)?;
-    let mut b = Build { instrs, comps, next: n, seq, ns: 0 };
+    let mut b = Build { instrs, comps, prec, next: n, seq, ns: 0 };
     for l in ladders.iter_mut() {
         let first = b.ns;
         let k = l.ncond();
@@ -813,7 +870,7 @@ fn ilt_trees<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Trees<'s>
         }
         l.seq = (first as u32, (b.ns - first) as u32);
     }
-    let Build { instrs, comps, next: ext, seq, .. } = b;
+    let Build { instrs, comps, prec, next: ext, seq, .. } = b;
 
     /* renumbered in the order the stage runs */
     let map = scratch.alloc_filled(ext, NONE).map_err(oom)?;
@@ -825,6 +882,7 @@ fn ilt_trees<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Trees<'s>
     let Some(body) = r.layout(m.body, map, out, &mut nout, 0) else { return Ok(None) };
     let fin = scratch.alloc_filled(total as usize, IrOp::ConstI32([0; 4])).map_err(oom)?;
     let fcomps = scratch.alloc_filled(total as usize, 4u8).map_err(oom)?;
+    let fprec = scratch.alloc_filled(if prec.is_empty() { 0 } else { total as usize }, Prec::None).map_err(oom)?;
     for (old, &new) in map.iter().enumerate() {
         if new == NONE {
             continue;
@@ -853,8 +911,11 @@ fn ilt_trees<'s>(m: &Module<'_>, scratch: &Arena<'s>) -> Result<Option<Trees<'s>
         }
         fin[new as usize] = op;
         fcomps[new as usize] = comps[old];
+        if let (Some(p), Some(&q)) = (fprec.get_mut(new as usize), prec.get(old)) {
+            *p = q;
+        }
     }
-    Ok(Some(Trees { instrs: fin, comps: fcomps, nodes: &out[..nout], body }))
+    Ok(Some(Trees { instrs: fin, comps: fcomps, nodes: &out[..nout], body, prec: fprec }))
 }
 
 /// The stage's nodes with each ladder's span replaced by its new nodes.
@@ -973,7 +1034,7 @@ pub(super) fn columns(gl_type: u16) -> u8 {
     }
 }
 
-impl Tree<'_, '_> {
+impl Tree<'_, '_, '_> {
     /// Rebuild the use tables from the instructions.
     fn count(&mut self) {
         self.uses.fill(Use::None);
@@ -1039,6 +1100,12 @@ impl Tree<'_, '_> {
         self.uses.get(v.0 as usize).copied().unwrap_or(Use::None)
     }
 
+    /// The class of value `v` (ir.rs `Prec`): `Unknown` where the stage
+    /// has no precision tables.
+    fn class(&self, v: ValueId) -> Prec {
+        self.prec.get(v.0 as usize).copied().unwrap_or(Prec::Unknown)
+    }
+
     /// `v` is an expression in GLSL's tree: an ALU value whose one use is
     /// an ALU operation's operand.
     fn inline(&self, v: ValueId) -> bool {
@@ -1093,11 +1160,29 @@ impl Tree<'_, '_> {
         same_run(self.m.locals, l, l + 1) || l.checked_sub(1).is_some_and(|k| same_run(self.m.locals, k, l))
     }
 
-    /// GLSL's view of a leaf of a tree: a constant (`Some(true)`), a
-    /// variable dereference (`Some(false)`), or a dereference that ends the
-    /// reduction (`None` in `Err(Not)`), or a value whose GLSL form is not
-    /// known (`Err(Unknown)`).
-    fn leaf(&self, s: Src) -> Result<bool, Reduction> {
+    /// A variable stored at `storage` (16 bits `Medium`, 32 bits `High`)
+    /// read by a tree of `class`. Mesa's `lower_precision` runs first
+    /// (glsl_parser_extras.cpp:2491, before :2597-2610), and it converts a
+    /// read whose storage is not its tree's width: an `f2fmp` of a 32-bit
+    /// variable in a Medium tree (lower_precision.cpp:723-735; an input is
+    /// never 16-bit storage, :1022-1060), an `f2f32` of a 16-bit one in a
+    /// High tree (:1226-1260). The conversion is an expression of another
+    /// operation, which ends the reduction (`Err(Not)`). A width or class
+    /// not known: `Err(Unknown)`.
+    fn read_at(storage: Prec, class: Prec) -> Result<bool, Reduction> {
+        match (storage, class) {
+            (Prec::High, Prec::High) | (Prec::Medium, Prec::Medium) => Ok(false),
+            (Prec::High | Prec::Medium, Prec::High | Prec::Medium) => Err(Reduction::Not),
+            _ => Err(Reduction::Unknown),
+        }
+    }
+
+    /// GLSL's view of a leaf of a tree of `class`: a constant
+    /// (`Some(true)`), a variable dereference (`Some(false)`), or a
+    /// dereference that ends the reduction (`None` in `Err(Not)`: an array
+    /// or record dereference, or a read Mesa converts, [`Tree::read_at`]),
+    /// or a value whose GLSL form is not known (`Err(Unknown)`).
+    fn leaf(&self, s: Src, class: Prec) -> Result<bool, Reduction> {
         let m = self.m;
         match self.op(s.val).ok_or(Reduction::Unknown)? {
             IrOp::ConstF32(_) => Ok(true),
@@ -1116,7 +1201,9 @@ impl Tree<'_, '_> {
                 if u.array_len > 1 || u.inner > 1 || is_matrix(u.gl_type) || u.name.contains(['.', '[']) {
                     return Err(Reduction::Not);
                 }
-                Ok(false)
+                /* a mediump or lowp float uniform is fp16 storage
+                 * (`fp16_const_buffers`, lower_precision.cpp:1026-1031) */
+                Self::read_at(if (self.fp16)(u.name) { Prec::Medium } else { Prec::High }, class)
             }
             IrOp::LoadInput { slot: IoSlot::Attrib(loc) | IoSlot::Varying(loc), .. } => {
                 let col = |d: &&crate::shaderc::online::ir::IoDecl<'_>| {
@@ -1129,9 +1216,9 @@ impl Tree<'_, '_> {
                 if m.inputs.iter().any(|d| col(&d)) {
                     return Err(Reduction::Not);
                 }
-                Ok(false)
+                Self::read_at(Prec::High, class)
             }
-            IrOp::LoadInput { .. } => Ok(false),
+            IrOp::LoadInput { .. } => Self::read_at(Prec::High, class),
             IrOp::LoadLocal { index: Some(_), .. } | IrOp::LoadUniformIdx { .. } => Err(Reduction::Not),
             IrOp::LoadLocal { local, index: None, .. } => {
                 let l = local.0 as usize;
@@ -1142,6 +1229,9 @@ impl Tree<'_, '_> {
                 if m.locals.get(l).is_some_and(|d| d.array_len > 1) || self.run_slot(l) {
                     return Err(Reduction::Not);
                 }
+                /* a graft keeps the read's conversion (on the grafted
+                 * value), so a converted read ends it either way */
+                Self::read_at(m.local_prec_of(local), class)?;
                 if self.graftable(l) {
                     return Err(Reduction::Unknown);
                 }
@@ -1152,13 +1242,19 @@ impl Tree<'_, '_> {
     }
 
     /// `is_reduction` (opt_rebalance_tree.cpp:201-257) over the tree at
-    /// `root`, an `fadd` or `fmul`.
+    /// `root`, an `fadd` or `fmul`, on the tree `lower_precision` left: an
+    /// expression of another class than the root's is a conversion in
+    /// Mesa's tree (an `f2f32` of a Medium root under a High tree, :819-856
+    /// of lower_precision.cpp), which ends it, and so does a converted
+    /// leaf ([`Tree::read_at`]).
     fn reduction(&self, root: ValueId) -> Reduction {
         let Some(op) = self.tree_op(root) else { return Reduction::Not };
         let w = self.width(root);
+        let class = self.class(root);
+        let known = |p: Prec| matches!(p, Prec::High | Prec::Medium);
         let mut n = 0usize;
         let mut konst = false;
-        let mut unknown = false;
+        let mut unknown = !known(class);
         let mut stack = [ValueId(0); MAX_TREE];
         let mut sp = 0usize;
         stack[sp] = root;
@@ -1169,6 +1265,12 @@ impl Tree<'_, '_> {
             /* an expression of another operation or type ends it */
             if self.tree_op(v) != Some(op) || self.width(v) != w {
                 return Reduction::Not;
+            }
+            if self.class(v) != class {
+                if known(self.class(v)) && known(class) {
+                    return Reduction::Not;
+                }
+                unknown = true;
             }
             n += 1;
             let Some(IrOp::Alu(_, s)) = self.op(v) else { return Reduction::Unknown };
@@ -1190,7 +1292,7 @@ impl Tree<'_, '_> {
                     }
                     continue;
                 }
-                match self.leaf(*c) {
+                match self.leaf(*c, class) {
                     Ok(true) if konst => return Reduction::Not,
                     Ok(true) => konst = true,
                     Ok(false) => {}
@@ -1393,6 +1495,11 @@ impl Tree<'_, '_> {
             core::array::from_fn(|j| if j < nord { self.instrs[order[j] as usize] } else { IrOp::ConstF32([0; 4]) });
         let oldc: [u8; 2 * MAX_TREE + 2] =
             core::array::from_fn(|j| if j < nord { self.comps[order[j] as usize] } else { 0 });
+        let oldp: [Prec; 2 * MAX_TREE + 2] =
+            core::array::from_fn(|j| if j < nord { self.class(ValueId(order[j])) } else { Prec::None });
+        /* a reduction's expressions are all of its root's class
+         * ([`Tree::reduction`]), and a leaf keeps its own */
+        let root_class = self.class(root);
         let w = self.width(root);
         for j in 0..nord {
             let to = ids[j] as usize;
@@ -1410,6 +1517,9 @@ impl Tree<'_, '_> {
                 None => old[j],
             };
             self.comps[to] = if k.is_some() { w } else { oldc[j] };
+            if let Some(p) = self.prec.get_mut(to) {
+                *p = if k.is_some() { root_class } else { oldp[j] };
+            }
         }
         /* every other read of a moved leaf; the tree's value stays at the
          * root's id, the last of the span */
@@ -1470,6 +1580,15 @@ impl Tree<'_, '_> {
         let ir2 = ir2s.val;
         if depth > MAX_TREE || !self.inline(ir2) || self.tree_op(ir2) != Some(op) {
             return Ok(false);
+        }
+        /* `lower_precision` ran first: where `ir2` is of another class
+         * than `ir1`, Mesa's tree holds a conversion between them, an
+         * expression of another operation, and the walk stops there
+         * (:179-180); a class not known: refused */
+        match (self.class(ir1), self.class(ir2)) {
+            (Prec::High, Prec::High) | (Prec::Medium, Prec::Medium) => {}
+            (Prec::High | Prec::Medium, Prec::High | Prec::Medium) => return Ok(false),
+            _ => return Err(MaliError::ArithConstant),
         }
         let Some(IrOp::Alu(_, s2)) = self.op(ir2) else { return Ok(false) };
         /* a swizzle is no `as_expression()`; a scalar operand of a vector
@@ -1538,7 +1657,7 @@ impl Tree<'_, '_> {
     }
 }
 
-impl Tree<'_, '_> {
+impl Tree<'_, '_, '_> {
     /// NIR's `fneg(fneg(a))` -> `fcanonicalize(a)` -> `a`
     /// (nir_opt_algebraic.py:230, :161-167), after the GLSL passes, which
     /// see the negations: each read of the outer negation reads `a`
@@ -1576,7 +1695,7 @@ impl Tree<'_, '_> {
     }
 }
 
-impl Tree<'_, '_> {
+impl Tree<'_, '_, '_> {
     /// `fmul(fneg(a), b)` is `fneg(fmul(a, b))` (nir_opt_algebraic.py:2387,
     /// a commutative match: `a` the fneg's source, first, on whichever
     /// side the fneg stood) for a negated literal: glsl_to_nir gives
@@ -1687,6 +1806,10 @@ impl Tree<'_, '_> {
             }
             self.instrs[nid] = IrOp::Alu(AluOp::Fmul, [Src { val: c.val, swizzle }, other, other]);
             self.comps[nid] = self.comps[p];
+            /* the product moves to the fneg's place: its class with it */
+            if let Some(&q) = self.prec.get(p) {
+                self.prec[nid] = q;
+            }
             self.instrs[p] = IrOp::Alu(AluOp::Fneg, [Src::id(ValueId(nid as u32)); 3]);
             any = true;
         }
