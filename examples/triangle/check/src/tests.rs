@@ -75,6 +75,34 @@ fn a_correct_frame_passes_in_every_format() {
     }
 }
 
+/// The X byte of an XRGB8888 window is not judged: it means nothing to the
+/// scan-out, and glReadPixels reads alpha 1 whatever it holds
+/// (src/gl/framebuffer.rs, `opaque`). The back ends store different things
+/// there: the Mali one 0, as Mesa's B8G8R8X8 writeback does (swizzle BGR0,
+/// src/mali/frame.rs), the others the alpha the draw wrote. The NanoPC-T6
+/// run of 2026-11-23 drew every pixel right and failed on that byte
+/// ("first wrong at GL 0,0: 0x00202020, expected 0xff202020").
+#[test]
+fn the_x_byte_of_an_xrgb_window_is_not_judged() {
+    for format in [FORMAT_XRGB8888, FORMAT_XRGB8888 | FORMAT_BOTTOM_UP] {
+        for x_byte in [0x00u32, 0x5a, 0xff] {
+            let mut px = drawn(format);
+            for p in &mut px[..(W * H) as usize] {
+                *p = *p & 0x00ff_ffff | x_byte << 24;
+            }
+            let fr = Frame::new(&px, W, H, GUARD_ROWS, format).unwrap();
+            // glReadPixels: the colour in memory, alpha 1
+            let o = check(&fr, |x, y| {
+                let c = fr.at_gl(x, y);
+                [c[0], c[1], c[2], 0xff]
+            });
+            assert_eq!(o.verdict(), None, "format {format:#x} X {x_byte:#x}: {o:?}");
+            assert_eq!((o.bad_in, o.bad_out, o.bad_edge, o.reads_bad), (0, 0, 0, 0));
+            assert_eq!(o.edge_drawn, o.n_edge);
+        }
+    }
+}
+
 /// The edge band accepts the clear colour too (a rasteriser that does not
 /// cover a pixel the reference half-covers).
 #[test]

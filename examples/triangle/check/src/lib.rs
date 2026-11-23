@@ -35,8 +35,10 @@
 //!
 //! The guard is [`GUARD_ROWS`] rows after the window's memory (the board
 //! layer gives the window). The window may be XRGB8888 and bottom-up (the
-//! board's choice), so memory is read through [`Frame`]. The edge distance is
-//! compared squared, which needs no `sqrt` (not in `core`).
+//! board's choice), so memory is read through [`Frame`]; the alpha rules
+//! above are for RGBA8888 memory, an XRGB8888 window has none and its X
+//! byte is not judged. The edge distance is compared squared, which needs
+//! no `sqrt` (not in `core`).
 #![cfg_attr(not(test), no_std)]
 
 /// The result record, the one definition (the board layer's), compiled into
@@ -276,11 +278,15 @@ impl<'a> Frame<'a> {
         }
     }
 
-    /// A memory word as R, G, B, A (A is the X byte of XRGB8888).
+    /// A memory word as R, G, B, A. An XRGB8888 word has no alpha: it reads
+    /// 255, as glReadPixels reads it, whatever the X byte holds. The byte
+    /// means nothing to the scan-out and the back ends store different
+    /// things there (the Mali one 0, as Mesa's B8G8R8X8 writeback does; the
+    /// others the alpha the draw wrote), so the check does not judge it.
     fn rgba(&self, px: u32) -> [u8; 4] {
         let b = px.to_le_bytes();
         if self.xrgb {
-            [b[2], b[1], b[0], b[3]]
+            [b[2], b[1], b[0], 0xff]
         } else {
             b
         }
