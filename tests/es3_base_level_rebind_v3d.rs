@@ -742,44 +742,32 @@ fn the_two_2d_array_draws_at_base_level_0_around_the_base_level_change_hand_iden
 
 /* ---- BASE_LEVEL 1 between the draws: today, pinned ---- */
 
-/// Pins today's behaviour: the `sampler2D` drawn between the two BASE_LEVEL
-/// 0 draws, its BASE_LEVEL the only thing that changed, still hands the
-/// LEVEL-0 words — the same (16, 16, 1, 1) as the draw before it. After the
-/// base level is applied the draw hands the level-1 size instead: **(8, 8,
-/// 1, 1)** (dEQP es3fShaderTextureFunctionTests.cpp:1408-1411 sets the base
-/// level and :1511 expects the minified size; Mesa's v3d_uniforms.c
-/// `u_minify(first_level)`). Flip the assert to (8, 8, 1, 1) then.
+/// The `sampler2D` drawn between the two BASE_LEVEL 0 draws, its BASE_LEVEL
+/// the only thing that changed, hands the level-1 size (8, 8, 1, 1)
+/// (dEQP es3fShaderTextureFunctionTests.cpp:1408-1411, :1511).
 #[test]
-fn the_2d_draw_at_base_level_1_between_the_draws_still_hands_the_level_0_words_flip_when_the_base_level_is_applied() {
+fn the_2d_draw_at_base_level_1_between_the_draws_hands_the_level_1_words() {
     let _g = rig();
     let seen = rebind(Kind::Tex2d);
-    assert_eq!(seen[1].words, (16, 16, 1, 1));
+    assert_eq!(seen[1].words, (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: the `sampler3D` re-drawn at BASE_LEVEL 1 hands
-/// the LEVEL-0 size and depth, the same (16, 16, 8, 1) as the draw before
-/// it. After the base level is applied it hands **(8, 8, 4, 1)**: width and
-/// height minified like the 2D, and the level-1 depth 4 (`u_minify` of
-/// width, height and depth). Flip the assert to (8, 8, 4, 1) then.
+/// The `sampler3D` re-drawn at BASE_LEVEL 1 hands (8, 8, 4, 1): width,
+/// height and depth minified.
 #[test]
-fn the_3d_draw_at_base_level_1_between_the_draws_still_hands_the_level_0_words_flip_when_the_base_level_is_applied() {
+fn the_3d_draw_at_base_level_1_between_the_draws_hands_the_level_1_words() {
     let _g = rig();
     let seen = rebind(Kind::Tex3d);
-    assert_eq!(seen[1].words, (16, 16, 8, 1));
+    assert_eq!(seen[1].words, (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: the `sampler2DArray` re-drawn at BASE_LEVEL 1
-/// hands the LEVEL-0 size and 5 layers, the same (16, 16, 1, 5) as the draw
-/// before it. After the base level is applied it hands **(8, 8, 1, 5)**:
-/// width and height minified, the layer count as is (Mesa writes the array
-/// size unminified). Flip the assert to (8, 8, 1, 5) then; only the width
-/// and height change.
+/// The `sampler2DArray` re-drawn at BASE_LEVEL 1 hands (8, 8, 1, 5): width and
+/// height minified, the layer count as is.
 #[test]
-fn the_2d_array_draw_at_base_level_1_between_the_draws_still_hands_the_level_0_words_flip_when_the_base_level_is_applied(
-) {
+fn the_2d_array_draw_at_base_level_1_between_the_draws_hands_the_level_1_words() {
     let _g = rig();
     let seen = rebind(Kind::Array);
-    assert_eq!(seen[1].words, (16, 16, 1, 5));
+    assert_eq!(seen[1].words, (8, 8, 1, 5));
 }
 
 /* ---- the TMU record: today's base level 0, pinned ---- */

@@ -784,11 +784,29 @@ fn texture_fixed_depth(t: &GlTexture) -> bool {
         && !matches!(t.type_, GL_FLOAT | GL_FLOAT_32_UNSIGNED_INT_24_8_REV)
 }
 
+/// The base level a draw samples from, and whether it makes the texture
+/// incomplete (ES 3.0 3.8.10, 3.8.13): GL_TEXTURE_BASE_LEVEL, below 0 taken
+/// as 0; for an immutable texture clamped to [0, levels - 1]; for a mutable
+/// one that has no such level, 0 with the texture incomplete.
+fn effective_base_level(t: &GlTexture) -> (u8, bool) {
+    let b = t.base_level.max(0) as u32;
+    if t.immutable && t.immutable_levels > 0 {
+        return (b.min(u32::from(t.immutable_levels) - 1) as u8, false);
+    }
+    if b >= u32::from(t.levels).max(1) {
+        (0, true)
+    } else {
+        (b as u8, false)
+    }
+}
+
 pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
     let (linear_filter, min_linear, mip_filter, mip_levels) = sampling_fields(t);
+    let (base_level, base_missing) = effective_base_level(t);
     GlesTextureBind {
         format: t.texfmt,
         type_: GLES_TEXTYPE_2D,
+        base_level,
         layers: 1,
         base_gpu: t.mem.gpu,
         content_gen: t.content_gen,
@@ -807,7 +825,7 @@ pub(crate) fn texture_bind_2d(t: &GlTexture) -> GlesTextureBind {
         wrap_r: map_wrap(t.wrap_r),
         /* B,G,R,A: an XRGB8888 image, or a texture a draw rendered into */
         bgra: (t.bgra || t.pe_order) as u8,
-        incomplete: incomplete_reason(t).is_some() as u8,
+        incomplete: (base_missing || incomplete_reason(t).is_some()) as u8,
         no_alpha: texture_has_no_alpha(t) as u8,
         depth_luminance: texture_depth_luminance(t) as u8,
         swizzle: bind_swizzle(t),
@@ -5032,7 +5050,10 @@ fn build_common(
             tb.wrap_t = map_wrap(t.wrap_t);
             tb.wrap_r = map_wrap(t.wrap_r);
             tb.swizzle = bind_swizzle(t);
-            let incomplete = incomplete_reason(t);
+            let (base_level, base_missing) = effective_base_level(t);
+            tb.base_level = base_level;
+            let incomplete = incomplete_reason(t).or(base_missing
+                .then_some("GL_TEXTURE_BASE_LEVEL names a level a mutable texture does not have (ES 3.0 3.8.13)"));
             (t.min_filter, t.mag_filter, t.wrap_s, t.wrap_t, t.wrap_r) = own;
             if let Some(why) = incomplete {
                 tb.incomplete = 1;

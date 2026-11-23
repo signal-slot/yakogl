@@ -667,39 +667,34 @@ fn fragment_grad_of_a_cube_at_base_level_0_has_its_level_0_size() {
 
 /* ---- BASE_LEVEL 1: today's level-0 values, pinned ---- */
 
-/// Pins today's behaviour: vertex `textureGrad` of a mipmapped 16x16x8 3D
-/// texture with BASE_LEVEL 1 hands (16, 16, 8), level 0's sizes, so the
-/// gradients are scaled by them. Post-fix (the base level's sizes, as Mesa's
-/// `u_minify(first_level)`): (8, 8, 4, 1). Flip when the base level is applied.
+/// The bind carries the effective base level (src/gl/draw.rs
+/// `effective_base_level`); the draw hands the base level's words (8, 8, 4, 1).
 #[test]
-fn vertex_grad_of_a_3d_texture_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn vertex_grad_of_a_3d_texture_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Vertex, 1), (16, 16, 8, 1));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Vertex, 1), (8, 8, 4, 1));
 }
 
-/// Pins today's behaviour: vertex `textureGrad` of a mipmapped 16x16, 5-layer
-/// 2D array with BASE_LEVEL 1 hands (16, 16) and 5 layers. Post-fix: (8, 8,
-/// 1, 5); the layer count is never minified (and is not a gradient scale).
+/// The bind carries the effective base level (src/gl/draw.rs
+/// `effective_base_level`); the draw hands the base level's words (8, 8, 1, 5).
 #[test]
-fn vertex_grad_of_a_2d_array_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn vertex_grad_of_a_2d_array_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Array, Stage::Vertex, 1), (16, 16, 1, 5));
+    assert_eq!(unit0_sizes(Kind::Array, Stage::Vertex, 1), (8, 8, 1, 5));
 }
 
-/// Pins today's behaviour: vertex `textureGrad` of a mipmapped 16x16 cube
-/// with BASE_LEVEL 1 hands (16, 16); `cube_lod` reads the width word (lane 0)
-/// for (W / 2)^2. Post-fix: (8, 8, 1, 1).
+/// The bind carries the effective base level (src/gl/draw.rs
+/// `effective_base_level`); the draw hands the base level's words (8, 8, 1, 1).
 #[test]
-fn vertex_grad_of_a_cube_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn vertex_grad_of_a_cube_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Cube, Stage::Vertex, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Cube, Stage::Vertex, 1), (8, 8, 1, 1));
 }
 
-/// Pins today's behaviour: fragment `textureGrad` of a mipmapped 16x16 cube
-/// with BASE_LEVEL 1 hands (16, 16); `cube_lod` reads the width word in the
-/// fragment stage too. Post-fix: (8, 8, 1, 1).
+/// The bind carries the effective base level (src/gl/draw.rs
+/// `effective_base_level`); the draw hands the base level's words (8, 8, 1, 1).
 #[test]
-fn fragment_grad_of_a_cube_at_base_level_1_hands_the_level_0_size_flip_when_the_base_level_is_applied() {
+fn fragment_grad_of_a_cube_at_base_level_1_hands_the_base_level_size() {
     let _g = rig();
-    assert_eq!(unit0_sizes(Kind::Cube, Stage::Fragment, 1), (16, 16, 1, 1));
+    assert_eq!(unit0_sizes(Kind::Cube, Stage::Fragment, 1), (8, 8, 1, 1));
 }

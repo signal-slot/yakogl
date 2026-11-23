@@ -675,18 +675,15 @@ mod controls {
 
 macro_rules! pin {
     ($name:ident, $kind:expr, $depth:expr, $stage:expr) => {
-        /// Pins today's behaviour: with GL_TEXTURE_BASE_LEVEL 1 the 16x16
-        /// shadow depth texture still hands the job builder the LEVEL-0 size,
-        /// 16x16 (the draw is accepted; the unit is size-only). The correct
-        /// value is the base level's, 8x8 (dEQP
-        /// es3fShaderTextureFunctionTests.cpp:1408-1411 sets the base level,
-        /// :1511 expects the minified size; Mesa's v3d_uniforms.c
-        /// `u_minify(first_level)`). Flip the assert to (8, 8, 1, 1) when the
-        /// base level is applied.
+        /// With GL_TEXTURE_BASE_LEVEL 1 the 16x16 shadow depth texture hands
+        /// the job builder the base level's size, 8x8 (the draw is accepted;
+        /// the unit is size-only; dEQP es3fShaderTextureFunctionTests.cpp:
+        /// 1408-1411 sets the base level, :1511 expects the minified size;
+        /// Mesa's v3d_uniforms.c `u_minify(first_level)`).
         #[test]
         fn $name() {
             let _g = rig();
-            assert_eq!(unit0_sizes($kind, $depth, $stage, 1), (16, 16, 1, 1));
+            assert_eq!(unit0_sizes($kind, $depth, $stage, 1), (8, 8, 1, 1));
         }
     };
 }
@@ -694,12 +691,12 @@ macro_rules! pin {
 #[rustfmt::skip]
 mod pins {
     use super::*;
-    pin!(a_2d_shadow_d16_fragment_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::Shadow2d, Depth::D16, Stage::Fragment);
-    pin!(a_2d_shadow_d32f_fragment_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::Shadow2d, Depth::D32F, Stage::Fragment);
-    pin!(a_2d_shadow_d16_vertex_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::Shadow2d, Depth::D16, Stage::Vertex);
-    pin!(a_2d_shadow_d32f_vertex_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::Shadow2d, Depth::D32F, Stage::Vertex);
-    pin!(a_cube_shadow_d16_fragment_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::ShadowCube, Depth::D16, Stage::Fragment);
-    pin!(a_cube_shadow_d32f_fragment_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::ShadowCube, Depth::D32F, Stage::Fragment);
-    pin!(a_cube_shadow_d16_vertex_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::ShadowCube, Depth::D16, Stage::Vertex);
-    pin!(a_cube_shadow_d32f_vertex_at_base_level_1_still_hands_the_level_0_size_flip_when_the_base_level_is_applied, Kind::ShadowCube, Depth::D32F, Stage::Vertex);
+    pin!(a_2d_shadow_d16_fragment_at_base_level_1_hands_the_base_level_size, Kind::Shadow2d, Depth::D16, Stage::Fragment);
+    pin!(a_2d_shadow_d32f_fragment_at_base_level_1_hands_the_base_level_size, Kind::Shadow2d, Depth::D32F, Stage::Fragment);
+    pin!(a_2d_shadow_d16_vertex_at_base_level_1_hands_the_base_level_size, Kind::Shadow2d, Depth::D16, Stage::Vertex);
+    pin!(a_2d_shadow_d32f_vertex_at_base_level_1_hands_the_base_level_size, Kind::Shadow2d, Depth::D32F, Stage::Vertex);
+    pin!(a_cube_shadow_d16_fragment_at_base_level_1_hands_the_base_level_size, Kind::ShadowCube, Depth::D16, Stage::Fragment);
+    pin!(a_cube_shadow_d32f_fragment_at_base_level_1_hands_the_base_level_size, Kind::ShadowCube, Depth::D32F, Stage::Fragment);
+    pin!(a_cube_shadow_d16_vertex_at_base_level_1_hands_the_base_level_size, Kind::ShadowCube, Depth::D16, Stage::Vertex);
+    pin!(a_cube_shadow_d32f_vertex_at_base_level_1_hands_the_base_level_size, Kind::ShadowCube, Depth::D32F, Stage::Vertex);
 }
