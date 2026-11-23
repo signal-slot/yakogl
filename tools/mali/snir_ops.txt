@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+#
+# The NIR opcodes the shader NIR's translation and its ported passes may
+# create (docs/notes/mali-shader-nir.md section 3.3, rule 2). One Mesa
+# opcode name per line; `#` starts a comment. tools/mali/gen_nir_tables.py
+# closes this set under the replacement of every algebraic transform that
+# can fire on the Mali-G610 and emits the closure as `REACHABLE` in
+# src/shaderc/online/mali/snir/opcodes.rs; snir's builder refuses any other
+# opcode. A name Mesa does not have stops the generation. M2 to M4 add names.
+
+# The translation (note section 4.5): glsl_to_nir.cpp's cases for the
+# float operations of the step 1 class, and the vectors of constructors.
+mov
+vec2
+vec3
+vec4
+fadd
+fsub
+fmul
+fdiv
+fneg
+fabs
+fsat
+fmin
+fmax
+fdot2
+fdot3
+fdot4
+frcp
+frsq
+fsqrt
+fexp2
+flog2
+fpow
+fsin
+fcos
+ffloor
+fceil
+ftrunc
+ffract
+fsign
+flrp
+
+# The ported passes (note section 5): nir_lower_alu_width splits fdot into
+# fmul, ffma_weak and fadd; nir_lower_flrp and nir_lower_viewport_transform
+# build ffma, fmul, fadd, frcp, fmin and fmax; pan_nir_lower_vs_outputs
+# builds the store address with iadd and pack_64_2x32.
+ffma
+ffma_weak
+iadd
+pack_64_2x32
+
+# The blend shader (blend_nir.rs `Op`), the first user of snir (step S8).
+fcanonicalize
+f2f16
+iand
+u2u8
+pack_32_4x8_split

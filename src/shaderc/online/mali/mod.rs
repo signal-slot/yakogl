@@ -65,6 +65,8 @@ pub mod preload;
 pub mod ra;
 pub mod sched;
 pub mod select;
+#[cfg(any(test, feature = "host-test"))]
+pub mod snir;
 pub mod vec16;
 
 use super::arena::Arena;
