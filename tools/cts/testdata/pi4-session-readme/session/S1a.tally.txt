@@ -1,0 +1,5 @@
+# Pi 4 dEQP-GLES3 image S1a: synthetic round 2, the one-case image of the refusing case
+S1a.console.txt: deqp: done: 0 passed, 1 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 1 cases begun, 1 with a result, 0 without | STOPPED: dEQP ended the session early (complete=0); the cases after the last one here never began
+group                                       pass   fail    n/s  other
+shaders                                        0      0      0      1
+TOTAL                                          0      0      0      1

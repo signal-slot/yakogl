@@ -1,0 +1,6 @@
+# Pi 4 dEQP-GLES3 image S1: synthetic round 1 (stopped at the fourth case)
+S1.console.txt: deqp: done: 3 passed, 1 failed, 0 not supported, 0 warnings, complete=0 | deqp: summary: 4 cases begun, 4 with a result, 0 without | STOPPED: dEQP ended the session early (complete=0); the cases after the last one here never began
+group                                       pass   fail    n/s  other
+shaders                                        2      0      0      1
+texture                                        1      0      0      0
+TOTAL                                          3      0      0      1
