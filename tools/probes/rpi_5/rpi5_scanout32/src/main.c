@@ -93,6 +93,9 @@
 #define ALL_ONES  0xffffffffu
 #define CHAN      0u             /* the channel the firmware drives HDMI0 from */
 #define DL_WORDS  ((HVS_SIZE - HVS6_DLIST_OFFSET) / 4u)
+
+#include "io_filter.h" /* needs HVS_SIZE and CHAN */
+
 #define SNAP_MAX  HVS6S_FW_MAX   /* S3: words read from HEADE */
 #define DUMP_MAX  64u            /* S3: words printed when no END is in view */
 
@@ -172,10 +175,19 @@ static uint32_t io_read32(void *ctx, uint32_t off)
 	return hvs_rd(off);
 }
 
+/* writes io_write32 refused (scanout32_write_ok); any is a FAIL */
+static unsigned int refused_writes;
+
 static void io_write32(void *ctx, uint32_t off, uint32_t val)
 {
 	ARG_UNUSED(ctx);
-	if (hvs != 0 && off < HVS_SIZE) {
+	if (!scanout32_write_ok(off)) {
+		/* by construction: only list words >= HVS6S_KEPT and channel 0's LPTRS */
+		printk("rpi5_scanout32: refused write off 0x%x\n", off);
+		refused_writes++;
+		return;
+	}
+	if (hvs != 0) {
 		sys_write32(val, hvs + off);
 	}
 }
@@ -839,6 +851,11 @@ int main(void)
 			if (e != HVS6S_OK && first_err == HVS6S_OK) {
 				first_err = e;
 			}
+			if (e != HVS6S_OK) {
+				/* no more LPTRS writes; S10 restores at once */
+				go = false;
+				snprintk(why, sizeof(why), "swap %u failed", k + 1u);
+			}
 			if (e == HVS6S_OK && w == SWAP_OURS) {
 				swaps_ok++;
 			}
@@ -1010,6 +1027,12 @@ int main(void)
 			       "written)\n");
 			printk("u3 restore: FAIL not run (no snapshot; nothing was written)\n");
 		}
+	}
+
+	if (refused_writes != 0u && fail == NULL) {
+		snprintk(failbuf, sizeof(failbuf), "%u write(s) refused by the io filter",
+			 refused_writes);
+		fail = failbuf;
 	}
 
 	/* The dlswap record of the plan when hvs6s_run did not run (it printed
