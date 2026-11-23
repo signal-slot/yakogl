@@ -1043,7 +1043,7 @@ pub const GC_SH_HALTI5_UNIFORMS_VS: u32 = 0x00034000;
 /// the fragment stage's window
 pub const GC_SH_HALTI5_UNIFORMS_PS: u32 = 0x00036000;
 /// vec4 registers, both stages
-pub const GC_NUM_CONSTANTS: u32 = 320;
+pub const GC_NUM_CONSTANTS: u32 = super::profile::ACTIVE.constants;
 
 /* ---- multisampling: the sample positions the rasteriser needs ----------- *
  *
