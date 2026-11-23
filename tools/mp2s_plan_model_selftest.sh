@@ -67,12 +67,12 @@ for n in 1 2 3 4 5 6 7 8 9; do
     fail=$((fail + 1)); echo "FAIL default $n: env_plan refused"; sed 's/^/     /' "$T/plan.out"; continue
   fi
   python3 -I "$UE" "${LAY[@]}" print "$T/d.bin" > "$T/d.env"
-  cmp_model default "$n" "$T/pristine.env" "$T/d.env" | report "default $n"
+  report "default $n" < <(cmp_model default "$n" "$T/pristine.env" "$T/d.env")
   if ! python3 -I "$PLAN" nodefault "$T/d.bin" "$T/u.bin" --record "$T/rec" "${LAY[@]}" > "$T/plan.out" 2>&1; then
     fail=$((fail + 1)); echo "FAIL nodefault after $n: env_plan refused"; sed 's/^/     /' "$T/plan.out"; continue
   fi
   python3 -I "$UE" "${LAY[@]}" print "$T/u.bin" > "$T/u.env"
-  cmp_model nodefault "$n" "$T/d.env" "$T/u.env" | report "nodefault after $n"
+  report "nodefault after $n" < <(cmp_model nodefault "$n" "$T/d.env" "$T/u.env")
   if cmp -s <(sort "$T/pristine.env") <(sort "$T/u.env"); then
     pass=$((pass + 1))
   else
