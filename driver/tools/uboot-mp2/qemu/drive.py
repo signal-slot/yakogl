@@ -215,6 +215,35 @@ def printenv(q):
     return env
 
 
+ENV_PART = 512 * 1024   # the DK's u-boot-env partition: the runner's dd reads this much
+
+
+def dd_read(path):
+    """The runner's read, `dd if=DEV bs=64k` of the 512 KiB partition (here the
+    start of the env pflash file), by the real dd."""
+    return subprocess.run(["dd", "if=" + path, "bs=64k", "count=%d" % (ENV_PART // 65536),
+                           "status=none"], check=True, stdout=subprocess.PIPE).stdout
+
+
+def env_parse(uenv, image, size, tmp):
+    """tools/uboot_env.py as the runner calls it (`check`, then `print`), with
+    this build's layout (one copy at 0, ENV_SIZE bytes) in place of the DK's
+    redundant pair. Returns (check rc, check text, {name: value} or None)."""
+    with open(tmp, "wb") as f:
+        f.write(image)
+    lay = ["--size", hex(size), "--offset", "0"]
+    c = subprocess.run([sys.executable, "-I", uenv] + lay + ["check", tmp],
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    pr = subprocess.run([sys.executable, "-I", uenv] + lay + ["print", tmp],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    env = {}
+    for ln in pr.stdout.split("\n"):
+        if "=" in ln:
+            k, v = ln.split("=", 1)
+            env[k] = v
+    return c.returncode, c.stdout, env if pr.returncode == 0 else None
+
+
 def sha(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -225,7 +254,7 @@ def sha(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    for a in ("qemu", "uboot", "disk", "env", "tftp", "mem", "logs"):
+    for a in ("qemu", "uboot", "disk", "env", "tftp", "mem", "logs", "uboot-env"):
         ap.add_argument("--" + a, required=True)
     ap.add_argument("--big-tftp", action="store_true")
     a = ap.parse_args()
@@ -266,11 +295,50 @@ def main():
             q.close()
 
     # The stored environment: one saveenv, here and nowhere else.
+    setup_size = []
+
     def setup(q):
         q.cmd("saveenv")
-        return printenv(q)
+        # "Environment size: N/M bytes": M is ENV_SIZE less the 4-byte CRC
+        env = {}
+        for ln in q.cmd("printenv"):
+            m = re.match(r"Environment size: (\d+)/(\d+) bytes", ln)
+            if m:
+                setup_size.append(int(m.group(2)) + 4)
+            elif "=" in ln:
+                k, v = ln.split("=", 1)
+                env[k] = v
+        return env
     setup_env = session("setup", setup) or {}
     env_sha, disk_sha = sha(a.env), sha(a.disk)
+
+    # The DK runner reads the stored environment by dd and tools/uboot_env.py
+    # (tools/board-stm32mp2-uboot.sh env_read). The same read here, on what
+    # this U-Boot stored: dd bs=64k of 512 KiB, `check`, `print`; it must say
+    # what U-Boot's own printenv said. The layout options are this build's
+    # (one copy of ENV_SIZE at the start of the pflash), not the DK's
+    # redundant 0x2000 pair (README.md, "The dd read").
+    dd0 = dd_read(a.env)
+    parsed0 = None
+    check("envdd: ENV_SIZE read from printenv", len(setup_size) == 1 and setup_size[0] > 4,
+          repr(setup_size))
+    if len(setup_size) == 1:
+        tmp = os.path.join(a.logs, "envdd.bin")
+        rc0, txt0, parsed0 = env_parse(a.uboot_env, dd0, setup_size[0], tmp)
+        check("envdd: dd read is 512 KiB", len(dd0) == ENV_PART, str(len(dd0)))
+        check("envdd: uboot_env.py check accepts the stored copy", rc0 == 0, txt0.strip())
+        check("envdd: uboot_env.py print has variables", bool(parsed0) and len(parsed0) > 5)
+        pe = parsed0 or {}
+        check("envdd: uboot_env.py print = U-Boot printenv (every variable and value)",
+              pe == setup_env and bool(setup_env),
+              "differs in " + ", ".join(sorted(k for k in set(pe) | set(setup_env)
+                                               if pe.get(k) != setup_env.get(k))))
+        check("envdd: the stored bootcmd is the stock one", pe.get("bootcmd") == STOCK_BOOTCMD,
+              repr(pe.get("bootcmd")))
+        bad = bytearray(dd0)
+        bad[8] ^= 1   # a flipped bit in the data: the CRC must catch it
+        rcb, _, _ = env_parse(a.uboot_env, bytes(bad), setup_size[0], tmp)
+        check("envdd: uboot_env.py check rejects a flipped byte", rcb != 0)
     first = {}
 
     for c in cases(a.big_tftp):
@@ -378,6 +446,13 @@ def main():
         check(name + ": bootcmd is the stock value", env.get("bootcmd") == STOCK_BOOTCMD
               and env.get("bootcmd") == setup_env.get("bootcmd"), repr(env.get("bootcmd")))
         check(name + ": stored environment unchanged after the reboot", sha(a.env) == env_sha)
+        if parsed0 is not None:
+            ddn = dd_read(a.env)
+            rcn, _, parsedn = env_parse(a.uboot_env, ddn, setup_size[0],
+                                        os.path.join(a.logs, "envdd.bin"))
+            check(name + ": dd of the stored environment byte-identical to the setup's", ddn == dd0)
+            check(name + ": dd + uboot_env.py read after the cut = before (check ok, same variables)",
+                  rcn == 0 and parsedn == parsed0)
 
     print("run.sh: %d ok, %d failed" % (res["ok"], res["failed"]))
     return 0 if res["failed"] == 0 else 1

@@ -18,7 +18,7 @@ network beyond QEMU's own. It does not change the scripts or anything else in
 | `image.S` | the stand-in image: an arm64 Image header and code that prints and returns |
 
 ```sh
-driver/tools/uboot-mp2/qemu/run.sh     # "run.sh: N ok, 0 failed", or "run.sh: skip: <why>"
+driver/tools/uboot-mp2/qemu/run.sh     # "run.sh: N ok, 0 failed" (N is 129 with the big TFTP case), or "run.sh: skip: <why>"
 ```
 
 `run.sh` prints `run.sh: skip: <why>` and exits 0 when `qemu-system-aarch64`
@@ -193,6 +193,35 @@ How the cut window is guaranteed, on any host speed:
 A copy of the scripts with `setenv bootdelay 5; saveenv` added after the undo
 line fails checks 4, 5 and the final readback (checked once by hand, not
 part of the run).
+
+## The dd read of the stored environment
+
+The DK runner (`tools/board-stm32mp2-uboot.sh`, `env_read`) does not use
+`fw_printenv`: it `dd`s the 512 KiB `u-boot-env` partition (`bs=64k`) and
+parses it with `tools/uboot_env.py` (`check`, then `print`). After the setup
+`saveenv`, `drive.py` does the same to what real U-Boot v2023.10 stored: the
+real `dd bs=64k` of the first 512 KiB of the env pflash file, then
+`tools/uboot_env.py` (path passed by `run.sh`; the tool is not edited).
+
+| check | what |
+| --- | --- |
+| `envdd: ENV_SIZE read from printenv` | `Environment size: N/M bytes` gives the copy's size, M + 4 |
+| `envdd: dd read is 512 KiB` | the runner's size check |
+| `envdd: uboot_env.py check accepts the stored copy` | U-Boot's CRC32 is the tool's |
+| `envdd: uboot_env.py print = U-Boot printenv` | every variable and value equal to U-Boot's own `printenv` over the console |
+| `envdd: the stored bootcmd is the stock one` | the fragment's `BOOTCOMMAND` |
+| `envdd: uboot_env.py check rejects a flipped byte` | the CRC is really read |
+| each power-cut case: `dd of the stored environment byte-identical ...`, `dd + uboot_env.py read after the cut = before` | the dd bytes equal the setup's and parse to the same variables |
+
+The layout options are this build's (`--size` ENV_SIZE, `--offset 0`, one
+copy), not the DK's `--size 0x2000 --redundant --offset 0x7e000 --offset2
+0x7c000 --allow-blank-copy`: `qemu_arm64_defconfig` keeps its environment in
+CFI flash with 256 KiB sectors, so two 0x2000 copies a few KiB apart cannot be
+erased apart, and the redundant layout with its flag byte cannot be made by
+this U-Boot. What is shown is the CRC32, the `name=value\0` body and the
+variables of real U-Boot against the tool; the DK's offsets and flag byte stay
+with `tools/uboot_env_mp2_selftest.py` and the board's read. `run.sh` also
+needs `dd` on the host.
 
 ## What it does not show
 
