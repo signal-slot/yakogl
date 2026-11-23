@@ -6,19 +6,18 @@
 //! ES 3.0 3.8.10 / 3.8.13: for a texture made by `glTexStorage2D/3D` the
 //! effective base level is `GL_TEXTURE_BASE_LEVEL` clamped to
 //! `[0, levels - 1]`, and the texture stays complete. So `textureSize(s, 0)`
-//! answers the size of the LAST level. The item `basefix` makes the V3D size
-//! words 44-47 follow the base level (as Mesa's v3d_uniforms.c does,
-//! minifying at `first_level`); it must use the CLAMPED level, not a naive
-//! `>> base_level` (which would give 1 or 0 where the last level is 4x4) and
-//! not a refusal.
-//!
-//! The draw's `V3dJobTmu` (`texture_units` in src/v3d/backend.rs) holds the
-//! LEVEL-0 sizes today: the base level is not applied. Each
-//! `..._flip_when_the_clamped_base_level_is_applied` test pins what the draw
-//! carries now and documents the target values. The control with a mutable
+//! answers the size of the LAST level. The V3D size words 44-47 follow the
+//! base level (as Mesa's v3d_uniforms.c does, minifying at `first_level`) at
+//! the CLAMPED level, not a naive `>> base_level` (which would give 1 or 0
+//! where the last level is 4x4) and not a refusal: the draw fills
+//! `GlesTextureBind::base_level` with min(base, levels - 1) (src/gl/draw.rs
+//! `bind_base_level`) and `texture_units` (src/v3d/backend.rs) takes the
+//! words at it. The immutable tests were pinned at level 0 until item
+//! basefield flipped them. The control with a mutable
 //! texture (`glTexImage3D`, BASE_LEVEL past its levels: incomplete by the
-//! spec, no clamp) pins the level-0 words the rig shows today, not the 1/1
-//! stand-in of tests/es3_tex_words46_47_edge_v3d.rs.
+//! spec, no clamp) pins the level-0 words the rig shows today (a mutable
+//! base level without an image gives `base_level` 0), not the 1/1 stand-in of
+//! tests/es3_tex_words46_47_edge_v3d.rs.
 //!
 //! Fragment stage cases plus one vertex stage case (`vs_tmu`).
 //!
@@ -646,58 +645,49 @@ fn unit0_sizes(kind: Kind, stage: Stage, t: GLuint) -> Option<(u32, u32, u32, u3
     out
 }
 
-/* ---- immutable textures, BASE_LEVEL past the last level: today's level-0 words ---- */
+/* ---- immutable textures, BASE_LEVEL past the last level: the last level's words ---- */
 
-/// Pins today's behaviour: a `glTexStorage3D` 16x16x8 `GL_TEXTURE_3D` with 3
-/// levels (16x16x8, 8x8x4, 4x4x2) and BASE_LEVEL 5 draws and hands the
-/// LEVEL-0 record, (16, 16, 8, 1). ES 3.0 3.8.10 clamps the base level to
-/// levels-1 = 2 and the texture stays complete, so the correct words are the
-/// last level's: **(4, 4, 2, 1)**: width 4, height 4, depth 2. Flip the
-/// assert to (4, 4, 2, 1) when the CLAMPED base level is applied (not
-/// (0, 0, 0, 1) from `16 >> 5`, and not a refusal).
+/// A `glTexStorage3D` 16x16x8 `GL_TEXTURE_3D` with 3 levels (16x16x8, 8x8x4,
+/// 4x4x2) and BASE_LEVEL 5 draws. ES 3.0 3.8.10 clamps the base level to
+/// levels-1 = 2 and the texture stays complete, so the words are the last
+/// level's: **(4, 4, 2, 1)**: width 4, height 4, depth 2 (not (0, 0, 0, 1)
+/// from `16 >> 5`, and not a refusal).
 #[test]
-fn an_immutable_3d_with_base_level_past_its_levels_hands_level_0_flip_when_the_clamped_base_level_is_applied() {
+fn an_immutable_3d_with_base_level_past_its_levels_hands_the_clamped_base_level_words() {
     let _g = rig();
     let t = immutable(Kind::Tex3d, 3, 5);
-    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Fragment, t), Some((16, 16, 8, 1)));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Fragment, t), Some((4, 4, 2, 1)));
 }
 
-/// Pins today's behaviour: a `glTexStorage3D` 16x16 `GL_TEXTURE_2D_ARRAY` of
-/// 5 layers with 3 levels and BASE_LEVEL 7 draws and hands the LEVEL-0
-/// record, (16, 16, 1, 5). The clamped base level is 2, so the correct words
-/// are **(4, 4, 1, 5)**: width and height 4, the layer count 5 as is (never
-/// minified). Flip the assert to (4, 4, 1, 5) when the CLAMPED base level is
-/// applied.
+/// A `glTexStorage3D` 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with 3 levels
+/// and BASE_LEVEL 7 draws. The clamped base level is 2, so the words are
+/// **(4, 4, 1, 5)**: width and height 4, the layer count 5 as is (never
+/// minified).
 #[test]
-fn an_immutable_2d_array_with_base_level_past_its_levels_hands_level_0_flip_when_the_clamped_base_level_is_applied() {
+fn an_immutable_2d_array_with_base_level_past_its_levels_hands_the_clamped_base_level_words() {
     let _g = rig();
     let t = immutable(Kind::Array, 3, 7);
-    assert_eq!(unit0_sizes(Kind::Array, Stage::Fragment, t), Some((16, 16, 1, 5)));
+    assert_eq!(unit0_sizes(Kind::Array, Stage::Fragment, t), Some((4, 4, 1, 5)));
 }
 
-/// Pins today's behaviour: a `glTexStorage2D` 16x16 `GL_TEXTURE_2D` with 2
-/// levels (16x16, 8x8) and BASE_LEVEL 4 draws and hands the LEVEL-0 record,
-/// (16, 16, 1, 1). The clamped base level is 1, so the correct words are
-/// **(8, 8, 1, 1)**. Flip the assert to (8, 8, 1, 1) when the CLAMPED base
-/// level is applied (not 16 >> 4 = 1).
+/// A `glTexStorage2D` 16x16 `GL_TEXTURE_2D` with 2 levels (16x16, 8x8) and
+/// BASE_LEVEL 4 draws. The clamped base level is 1, so the words are
+/// **(8, 8, 1, 1)** (not 16 >> 4 = 1).
 #[test]
-fn an_immutable_2d_with_base_level_past_its_levels_hands_level_0_flip_when_the_clamped_base_level_is_applied() {
+fn an_immutable_2d_with_base_level_past_its_levels_hands_the_clamped_base_level_words() {
     let _g = rig();
     let t = immutable(Kind::Tex2d, 2, 4);
-    assert_eq!(unit0_sizes(Kind::Tex2d, Stage::Fragment, t), Some((16, 16, 1, 1)));
+    assert_eq!(unit0_sizes(Kind::Tex2d, Stage::Fragment, t), Some((8, 8, 1, 1)));
 }
 
-/// Pins today's behaviour, vertex stage: the same 3D storage (3 levels,
-/// BASE_LEVEL 5) asked by the vertex shader hands the LEVEL-0 record in
-/// `vs_tmu`, (16, 16, 8, 1). The correct words are the clamped level 2's,
-/// **(4, 4, 2, 1)**. Flip the assert to (4, 4, 2, 1) when the CLAMPED base
-/// level is applied.
+/// Vertex stage: the same 3D storage (3 levels, BASE_LEVEL 5) asked by the
+/// vertex shader hands the clamped level 2's words in `vs_tmu`,
+/// **(4, 4, 2, 1)**.
 #[test]
-fn a_vertex_stage_immutable_3d_with_base_level_past_its_levels_hands_level_0_flip_when_the_clamped_base_level_is_applied(
-) {
+fn a_vertex_stage_immutable_3d_with_base_level_past_its_levels_hands_the_clamped_base_level_words() {
     let _g = rig();
     let t = immutable(Kind::Tex3d, 3, 5);
-    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Vertex, t), Some((16, 16, 8, 1)));
+    assert_eq!(unit0_sizes(Kind::Tex3d, Stage::Vertex, t), Some((4, 4, 2, 1)));
 }
 
 /* ---- the control: a mutable texture is incomplete past its levels ---- */

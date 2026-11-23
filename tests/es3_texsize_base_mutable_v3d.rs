@@ -5,10 +5,12 @@
 //! #1261).
 //!
 //! The V3D size uniform words 44-47 (width, height, 3D depth, array layer
-//! count; docs/notes/v3d-texture-size-words.md) are taken from level 0 today
-//! and ignore the base level, and the GL core's completeness check in
-//! src/gl/draw.rs does not look at it either. The item `basefix` makes the
-//! words base-relative. ES 3.0 3.8.13: a mutable texture is complete when
+//! count; docs/notes/v3d-texture-size-words.md) are taken at the bind's
+//! `GlesTextureBind::base_level`: the draw fills it with the base level when
+//! the texture has an image there (and it is at most 15), else 0
+//! (src/gl/draw.rs `bind_base_level`, item basefield). The GL core's
+//! completeness check in src/gl/draw.rs does not look at the base level yet
+//! (item basecompl). ES 3.0 3.8.13: a mutable texture is complete when
 //! levels base..=q are defined consistently (levels below the base level are
 //! not looked at, and nothing is clamped), where q = min(last level of the
 //! full chain, `GL_TEXTURE_MAX_LEVEL`); with a base level that is not
@@ -26,9 +28,10 @@
 //! - (c) BASE_LEVEL past the last defined level (incomplete);
 //! - (d) BASE_LEVEL 1 with MAX_LEVEL 1.
 //!
-//! Tests whose value changes with the fix carry the suffix
-//! `_flip_when_the_base_level_is_applied`; the others are controls that hold
-//! after it. Fragment stage.
+//! Cases (a) and (d) hand the base level's words (pinned at level 0's until
+//! item basefield flipped them). Tests whose value changes with the
+//! completeness fix carry the suffix `_flip_when_the_base_level_is_applied`;
+//! the others hold after it. Fragment stage.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_texsize_base_mutable_v3d
@@ -696,37 +699,37 @@ fn a_mutable_array_with_a_full_chain_and_base_level_0_hands_level_0() {
 
 /* ---- (a) a full chain, BASE_LEVEL 1 ---- */
 
-/// Case (a), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with levels 0..5 defined and
-/// BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). `textureSize(s, 0)` is
-/// level 1's size, so the correct words are **(8, 8, 1, 1)** (width, height, depth, layers;
-/// layers never minify). Flip the assert to (8, 8, 1, 1) when the base level is
-/// applied.
+/// Case (a): a 16x16 `GL_TEXTURE_2D` with levels 0..5 defined and
+/// BASE_LEVEL 1 draws and hands level 1's words **(8, 8, 1, 1)**: `textureSize(s, 0)`
+/// is level 1's size (width, height, depth, layers; layers never minify).
+/// Pinned at level 0's words until item basefield filled
+/// `GlesTextureBind::base_level`.
 #[test]
-fn a_mutable_2d_with_a_full_chain_and_base_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_a_full_chain_and_base_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, None), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, None), Some((8, 8, 1, 1)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with levels 0..4 defined and
-/// BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). `textureSize(s, 0)` is
-/// level 1's size, so the correct words are **(8, 8, 4, 1)** (width, height, depth, layers;
-/// layers never minify). Flip the assert to (8, 8, 4, 1) when the base level is
-/// applied.
+/// Case (a): a 16x16x8 `GL_TEXTURE_3D` with levels 0..4 defined and
+/// BASE_LEVEL 1 draws and hands level 1's words **(8, 8, 4, 1)**: `textureSize(s, 0)`
+/// is level 1's size (width, height, depth, layers; layers never minify).
+/// Pinned at level 0's words until item basefield filled
+/// `GlesTextureBind::base_level`.
 #[test]
-fn a_mutable_3d_with_a_full_chain_and_base_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_a_full_chain_and_base_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, None), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, None), Some((8, 8, 4, 1)));
 }
 
-/// Case (a), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0..5 defined and
-/// BASE_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 5). `textureSize(s, 0)` is
-/// level 1's size, so the correct words are **(8, 8, 1, 5)** (width, height, depth, layers;
-/// layers never minify). Flip the assert to (8, 8, 1, 5) when the base level is
-/// applied.
+/// Case (a): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with levels 0..5 defined and
+/// BASE_LEVEL 1 draws and hands level 1's words **(8, 8, 1, 5)**: `textureSize(s, 0)`
+/// is level 1's size (width, height, depth, layers; layers never minify).
+/// Pinned at level 0's words until item basefield filled
+/// `GlesTextureBind::base_level`.
 #[test]
-fn a_mutable_array_with_a_full_chain_and_base_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_a_full_chain_and_base_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..5), 1, None), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..5), 1, None), Some((8, 8, 1, 5)));
 }
 
 /* ---- (b) only levels 1.. defined, BASE_LEVEL 1 ---- */
@@ -817,32 +820,29 @@ fn a_mutable_array_with_base_level_past_its_defined_levels_hands_level_0_flip_wh
 
 /* ---- (d) BASE_LEVEL 1 with MAX_LEVEL 1 ---- */
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D` with its full chain, BASE_LEVEL 1
-/// and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 1). The texture is
-/// complete with the single level 1, so the correct words are **(8, 8, 1, 1)**. Flip
-/// the assert to (8, 8, 1, 1) when the base level is applied.
+/// Case (d): a 16x16 `GL_TEXTURE_2D` with its full chain, BASE_LEVEL 1
+/// and MAX_LEVEL 1 draws. The texture is complete with the single level 1 and
+/// hands its words **(8, 8, 1, 1)** (pinned at level 0's until item basefield).
 #[test]
-fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_2d_with_base_level_1_and_max_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((16, 16, 1, 1)));
+    assert_eq!(words(Kind::Tex2d, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16x8 `GL_TEXTURE_3D` with its full chain, BASE_LEVEL 1
-/// and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 8, 1). The texture is
-/// complete with the single level 1, so the correct words are **(8, 8, 4, 1)**. Flip
-/// the assert to (8, 8, 4, 1) when the base level is applied.
+/// Case (d): a 16x16x8 `GL_TEXTURE_3D` with its full chain, BASE_LEVEL 1
+/// and MAX_LEVEL 1 draws. The texture is complete with the single level 1 and
+/// hands its words **(8, 8, 4, 1)** (pinned at level 0's until item basefield).
 #[test]
-fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_3d_with_base_level_1_and_max_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((16, 16, 8, 1)));
+    assert_eq!(words(Kind::Tex3d, &lv(0..4), 1, Some(1)), Some((8, 8, 4, 1)));
 }
 
-/// Case (d), pins today's behaviour: a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with its full chain, BASE_LEVEL 1
-/// and MAX_LEVEL 1 draws and hands the LEVEL-0 words (16, 16, 1, 5). The texture is
-/// complete with the single level 1, so the correct words are **(8, 8, 1, 5)**. Flip
-/// the assert to (8, 8, 1, 5) when the base level is applied.
+/// Case (d): a 16x16 `GL_TEXTURE_2D_ARRAY` of 5 layers with its full chain, BASE_LEVEL 1
+/// and MAX_LEVEL 1 draws. The texture is complete with the single level 1 and
+/// hands its words **(8, 8, 1, 5)** (pinned at level 0's until item basefield).
 #[test]
-fn a_mutable_array_with_base_level_1_and_max_level_1_hands_level_0_flip_when_the_base_level_is_applied() {
+fn a_mutable_array_with_base_level_1_and_max_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((16, 16, 1, 5)));
+    assert_eq!(words(Kind::Array, &lv(0..5), 1, Some(1)), Some((8, 8, 1, 5)));
 }

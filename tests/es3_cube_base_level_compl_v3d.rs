@@ -40,10 +40,10 @@
 //! - (e) BASE_LEVEL 0 controls, mutable and immutable.
 //!
 //! Asserts whose value disagrees with the spec today carry the suffix
-//! `_flip_when_completeness_follows_the_base_level` (or, for (d), whose
-//! completeness already agrees, `_flip_when_the_base_level_is_applied`, the
-//! size-word fix of the sibling files); their doc comment gives the spec
-//! value. The others hold after the fix.
+//! `_flip_when_completeness_follows_the_base_level`; their doc comment gives
+//! the spec value. The others hold after the fix. The size words of a
+//! complete cube are the base level's (the draw fills
+//! `GlesTextureBind::base_level`, item basefield): (8, 8) at BASE_LEVEL 1.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-v3d,shaderc-online,no-shader-table --test es3_cube_base_level_compl_v3d
@@ -742,7 +742,8 @@ fn b_a_mutable_cube_with_only_levels_1_up_and_a_face_missing_at_base_level_1_is_
 /// Case (b2), pins today's behaviour: all six faces at levels 0..4 except
 /// -Z missing at level 1, BASE_LEVEL 1. Today the check looks at level 0
 /// (the per-level face records only under a mipmap filter), so the cube is
-/// complete and hands level 0's words (16, 16).
+/// complete; its words are the base level's (8, 8) (the other faces' level 1,
+/// `texture_units` at the bind's base level).
 ///
 /// Spec value: ES 3.0 3.8.13: -Z's base level (1) is not defined, so the
 /// cube is not cube complete: the stand-in, **`drawn(true, (1, 1))`**. Flip
@@ -750,7 +751,7 @@ fn b_a_mutable_cube_with_only_levels_1_up_and_a_face_missing_at_base_level_1_is_
 #[test]
 fn b2_a_full_level_0_under_a_face_missing_at_base_level_1_is_complete_flip_when_completeness_follows_the_base_level() {
     let _g = rig();
-    assert_eq!(outcome(mutable_cube(0..5, Some(1), None, 1)), drawn(false, (16, 16)));
+    assert_eq!(outcome(mutable_cube(0..5, Some(1), None, 1)), drawn(false, (8, 8)));
 }
 
 /* ---- (c) faces of different sizes at the base level ---- */
@@ -767,7 +768,7 @@ fn c_a_mutable_cube_with_faces_of_different_sizes_at_base_level_1_is_incomplete(
 
 /// Case (c2), pins today's behaviour: all six faces at levels 0..4 except
 /// +Z 4x4 at level 1, BASE_LEVEL 1. Today the check looks at level 0, so
-/// the cube is complete and hands level 0's words (16, 16).
+/// the cube is complete; its words are the base level's (8, 8).
 ///
 /// Spec value: ES 3.0 3.8.13: the six base (level 1) images are not of one
 /// size, so the cube is not cube complete: the stand-in,
@@ -777,7 +778,7 @@ fn c_a_mutable_cube_with_faces_of_different_sizes_at_base_level_1_is_incomplete(
 fn c2_a_full_level_0_under_faces_of_different_sizes_at_base_level_1_is_complete_flip_when_completeness_follows_the_base_level(
 ) {
     let _g = rig();
-    assert_eq!(outcome(mutable_cube(0..5, None, Some(1), 1)), drawn(false, (16, 16)));
+    assert_eq!(outcome(mutable_cube(0..5, None, Some(1), 1)), drawn(false, (8, 8)));
 }
 
 /* ---- (d) an immutable cube, BASE_LEVEL 1 ---- */
@@ -792,14 +793,12 @@ fn d_an_immutable_cube_with_base_level_1_is_complete() {
     assert_eq!((o.error, o.drew, o.incomplete, o.stand_in), (GL_NO_ERROR, true, false, false));
 }
 
-/// Case (d), pins today's behaviour: its words 44/45 are LEVEL 0's (16, 16).
-///
-/// Spec value: `textureSize(s, 0)` is the base level's size, **(8, 8)**
-/// (GLSL ES 3.00 8.9.1; tests/es3_texsize_base_level_v3d.rs pins the same
-/// for an immutable cube). Not a completeness disagreement: flip to (8, 8)
-/// when the base level is applied to the size words (item basefix).
+/// Case (d): its words 44/45 are the base level's size, **(8, 8)**
+/// (`textureSize(s, 0)`, GLSL ES 3.00 8.9.1; tests/es3_texsize_base_level_v3d.rs
+/// checks the same for a cube). Pinned at level 0's (16, 16) until item
+/// basefield filled `GlesTextureBind::base_level`.
 #[test]
-fn d_an_immutable_cube_with_base_level_1_hands_level_0_words_flip_when_the_base_level_is_applied() {
+fn d_an_immutable_cube_with_base_level_1_hands_the_base_level_words() {
     let _g = rig();
-    assert_eq!(outcome(immutable_cube(1)).size, (16, 16));
+    assert_eq!(outcome(immutable_cube(1)).size, (8, 8));
 }
