@@ -838,6 +838,67 @@ side to diff. `cs_ours.c`'s mode list reserves the number as golden-only.
 The mode is the reference the tile-status steps of `gc-tiled-targets.md`
 are checked against once they exist.
 
+### A depth texture sampled: mode 31 and `testdata/depth-view.golden`
+
+Mesa's words for the depth view of `docs/notes/gc-depth-sample-wire.md`
+outcome (a), the texture unit reading a D24S8 depth surface as
+`TEXTURE_FORMAT_D24X8`. Mode 31 has glmark2 shadow's shape: a 64x64
+`GL_DEPTH_COMPONENT` / `GL_UNSIGNED_INT` texture (`OES_depth_texture`),
+NEAREST and CLAMP_TO_EDGE, is the only attachment of one FBO. A depth clear
+and one `GL_LESS` quad at z 0.5 go into it. Then a quad into an RGBA8 target
+samples it from unit 0 (`texture2D(u_depth, v_uv).x`), and `glFinish`. The
+mode exits 3, by name, on a context without `GL_OES_depth_texture`.
+
+The golden has two parts, both printed by `cs_decode.py` with nothing added:
+the stream (one submit of 832 words), then the `--tex-desc` print of the
+descriptors the sampling draw leaves bound. To regenerate it from the tree
+under "Building it" (`tools/vivante/mesa-etna-build.sh` makes that tree, and
+`--check` prints its `MESA_ETNA_TREE`):
+
+```sh
+MESA=<mesa-26.2.1, patched>          # "Building it" above
+BUILD=$MESA/build/mesa-etnaviv-host
+cc -O1 -o cs_golden tools/vivante/cs_golden.c -I$MESA/include \
+    -L$BUILD/src/egl -L$BUILD/src/mesa/glapi/es2api -lEGL -lGLESv2
+rm -f depth-view.cs depth-view.mem   # the shim appends to both
+LD_LIBRARY_PATH=$BUILD/src/egl:$BUILD/src/mesa/glapi/es2api:$BUILD/src/gallium/targets/dri \
+LD_PRELOAD=$BUILD/src/etnaviv/drm-shim/libetnaviv_noop_drm_shim.so \
+MESA_LOADER_DRIVER_OVERRIDE=etnaviv ETNA_SHIM_GPU=GC7000UL \
+ETNA_SHIM_CS_DUMP=depth-view.cs ETNA_SHIM_MEM_DUMP=depth-view.mem \
+    ./cs_golden 31
+R="--regs $MESA/src/etnaviv/hw/state_3d.xml.h --regs2 $MESA/src/etnaviv/hw/state.xml.h"
+{ python3 tools/vivante/cs_decode.py depth-view.cs $R
+  python3 tools/vivante/cs_decode.py depth-view.cs $R --mem depth-view.mem --tex-desc \
+      --texdesc-regs $MESA/src/etnaviv/hw/texdesc_3d.xml.h
+} | diff tools/vivante/testdata/depth-view.golden -
+```
+
+It prints `renderer: Vivante GC7000 rev 6204` and `drew; gl error 0x0`,
+exits 0, and the diff is empty. Measured on 2026-11-23 with a tree built by
+`mesa-etna-build.sh` (1022 of 1022 steps): the raw dump's sha256 is
+`be3d00bf...68cba5`, the memory dump's `b31845ae...f75598`. The same tree
+and `cs_golden.c` reproduce `ts-clear.golden` and `tiled-ez.golden` byte for
+byte (modes 29 and 30).
+
+What to read in it:
+
+| what | where | words |
+| --- | --- | --- |
+| the depth pass | `PE_DEPTH_CONFIG`, `PE_PIPE_DEPTH_ADDR[0]`, `TS_MEM_CONFIG` | 0x05051111 (super-tiled, early Z), the surface at 0xffff6000, 0x41 (depth fast clear and compression); the clear is an RS fill of the depth TS |
+| the sampler's tile status | `TS_SAMPLER_CONFIG[0]` .. `TS_SAMPLER_SURFACE_BASE[0]` | 0x63, the depth TS at 0xffff5000, clear value 0xffffff00, the surface at 0xffff6000 |
+| slot 0's sampler | `NTE_DESCRIPTOR_TX_CTRL[0]`, `SAMP_CTRL0[0]` .. `SAMP_ANISOTROPY[0]` | 0x23 (`TS_MODE`, `TS_ENABLE`, `COMPRESSION`), 0x00202212 (U and V clamp, W repeat, NEAREST, MIP NONE, `UNK21`, no `INT_FILTER`, no compare), 0x2, 0xfff, 0, 0 |
+| slot 0's descriptor | `--tex-desc`, slot 0 | `LOD_ADDR[0]` the depth surface itself (no copy), `CONFIG0` 0x00022002 (2D, D24X8, TILED), `CONFIG1` 0x08500000 (swizzle R, R, R, 1; `HALIGN` super-tiled), `SIZE` 64x64, `LINEAR_STRIDE` 0x100, `SLICE` 0x4000, `LOG_SIZE_EXT` 0x06000600, `CONFIG2` 0x30000, `ASTC0` 0x0c0c0c00, `3D_CONFIG` 1 |
+
+`tests/gc_depth_view_golden.rs` is its twin: `depth_sample::view_binding`'s
+words for the same texture (knob `gc_debug_set_depth_tpu(1)`) against these.
+They are equal but for six named fields: the address; `ADDRESSING` and
+`HALIGN`, because Mesa's depth is super-tiled and the view is LINEAR by
+design; `TX_CTRL`'s tile status, which this backend does not have; and two
+fields that differ for every texture this backend samples, not just the view
+(`SAMP_CTRL0`'s W wrap, and `ASTC0`'s constant bytes). **There is no
+`cs_ours` mode 31.** The view is only reachable with the test knob, and the
+test builds its words without a context.
+
 ### What the patch does, and why each piece is needed
 
 Four changes, all to the shim, none to the driver (`GC7000UL` is the first

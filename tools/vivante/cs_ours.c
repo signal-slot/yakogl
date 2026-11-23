@@ -88,6 +88,10 @@
  *         texture + D24S8 FBO, a depth clear and one LEQUAL quad. The twin
  *         is tests/gc_tiled_ez_golden.rs, which needs the gc_tiled_rt test
  *         knob (testdata/tiled-ez.golden)
+ *   31    golden only: a depth texture rendered, then sampled as
+ *         TEXTURE_FORMAT_D24X8 (glmark2 shadow's shape). The twin is
+ *         tests/gc_depth_view_golden.rs over depth_sample.rs's view words
+ *         (testdata/depth-view.golden)
  */
 struct pc_vertex {
 	float pos[4];
