@@ -65,7 +65,7 @@ section, not the code's literals.
 | A2 | 6565 | a draw with no colour target and no depth/stencil buffer | the GL core's framebuffer status already prevents it (an FBO with nothing attached is `GL_FRAMEBUFFER_UNDEFINED`/incomplete) | none, a guard | 0 |
 | A3 | 6568 | 4x multisampling with no colour target | depth-only multisampled FBO (`fbo.msaa.*.depth_*`, `multisample.fbo_4_samples.depth`) | `msaa` | 0..10: `fbo.msaa.4_samples.depth*` (5 of the 22 `4_samples` rows), `multisample.fbo_4_samples.depth` and `.stencil` (2), only if the core ever makes the surface |
 | A4 | 6574 | the target is outside the V3D's 32-bit address space | any target allocated above 4 GiB | none, a guard | 0 |
-| A5 | 6582, 6585 (#1261) | until #1261 one string, "a target larger than the tile memory is sized for (2048x2048), or empty", for an empty target (`-EINVAL`) and any side past 2048 (`-ENOTSUP`; `-EINVAL` before b7c1484e). Since #1261 (6d2e7d0d) two: "an empty target (0 pixels on a side)" (`refuse`, `-EINVAL`) and "a target larger than the tile memory is sized for (4096x4096)" (`refuse_unsupported`, `-ENOTSUP`; the GL core makes no storage past 4096, so a guard) | `GL_MAX_RENDERBUFFER_SIZE` / `GL_MAX_TEXTURE_SIZE` renders; a zero-size target. The tile memory is sized for 4096 a side, what the GL core reports (docs/notes/v3d-large-targets.md) | fix-v3d (plan #376), done | not 0 as this row said: the dEQP shader executor's 4096 x 2-6 targets fired the 2048 arm in 1,030 of the 1,147 `shaders.builtin_functions.precision.*` cases on the host and aborted Pi 4 images S03-S08 at their first `highp_fragment.scalar` case (1,142 mustpass cases without a result, b1b5b845 and 8990a5cc). Since #1261 those targets draw; the 4096 guard is reached by no GL call |
+| A5 | 6582, 6585 (#1261; 6824, 6827, 6835 at `89d3e1c3`, section E) | until #1261 one string, "a target larger than the tile memory is sized for (2048x2048), or empty", for an empty target (`-EINVAL`) and any side past 2048 (`-ENOTSUP`; `-EINVAL` before b7c1484e). Since #1261 (6d2e7d0d) two: "an empty target (0 pixels on a side)" (`refuse`, `-EINVAL`) and "a target larger than the tile memory is sized for (4096x4096)" (`refuse_unsupported`, `-ENOTSUP`; the GL core makes no storage past 4096, so a guard) | `GL_MAX_RENDERBUFFER_SIZE` / `GL_MAX_TEXTURE_SIZE` renders; a zero-size target. The tile memory is sized for 4096 a side, what the GL core reports (docs/notes/v3d-large-targets.md) | fix-v3d (plan #376), done | not 0 as this row said: the dEQP shader executor's 4096 x 2-6 targets fired the 2048 arm in 1,030 of the 1,147 `shaders.builtin_functions.precision.*` cases on the host and aborted Pi 4 images S03-S08 at their first `highp_fragment.scalar` case (1,142 mustpass cases without a result, b1b5b845 and 8990a5cc). Since #1261 those targets draw; the 4096 guard is reached by no GL call |
 | A6 | 6612 | 4x multisampling of several colour attachments | multisampled MRT (`glRenderbufferStorageMultisample` on several attachments) | `msaa` | `multisample.fbo_4_samples.*` (16), `fbo.msaa.4_samples.*` (22): only with MRT cases, 0 of them name MRT; so ~0 directly |
 | A7 | 6617 | 4x multisampling of an ES 3.0 colour format | 4x RBO of R8, RG8, R16F, RGBA16F, RGB10_A2, sRGB, integers (`typed()` is every format but RGBA8, XRGB8 and RGB565, `state.rs:513`) | `msaa` | up to 22 (`fbo.msaa.4_samples.*`), 12 `rasterization.fbo.rbo_multisample_4`, 8 `fbo.blit.*msaa*`: the core's FBO is single-sampled today, so these rows are NotSupported/Fail before the back end, see C3 |
 | A8 | 6051 (`draw_clear_quad`; the string is gone) | a scissored or masked colour clear of several colour attachments | `glClearBufferiv/fv` with scissor test or colour mask on a multi-RT FBO | `mrt-clear`, **done**: the clear is one quad from `src/v3d/clear_mrt.rs` (`draw_clear_quad`, docs/notes/v3d-mrt-clear.md section 0); the string is no longer in the code | `fragment_ops.scissor.*` (21 rows: FO6 stops at `clear_int_buffer`, 20 NoResult behind it, one of them the stop itself), plus the several-attachment part of `fbo.color.repeated_clear.*` (55) and `fbo.color.clear.*` (24): the single-attachment integer clear is done (e883be8f), the several-attachment one with v3d-mrt-clear; the Pi 4 rerun of FO6 and M1 (#1261) says what they cost |
@@ -111,7 +111,7 @@ callees (`Attempt::Refused`, `NoMemory`).
 | B3.6 | 3746, 3764 | a vertex array outside the V3D's 32-bit address space / an attribute the program reads has no array | guards | none | 0 |
 | B3.7 | 3775, 3780, 3786, 3787 | an index size other than 1, 2 or 4 bytes; the staged indices are shorter than index_count; an index buffer outside the 32-bit space; an index list too long to address | `glDrawElements` types (UNSIGNED_INT is ES 3.0 core) | none | 0 |
 | B3.8 | 3800 | an unknown primitive | none reachable | none | 0 |
-| B3.9 | 3836 | the job builder refused the draw (a uniform, program or primitive it does not write) | catch-all of `v3d_job_*` status | none | seen in the FO2-SQ consoles (two logs); unnamed cause. See note below |
+| B3.9 | 3836 (3988-3990 at `89d3e1c3`, section E) | the job builder refused the draw (a uniform, program or primitive it does not write) | catch-all of `v3d_job_*` status | none | seen in the FO2-SQ consoles (two logs); unnamed cause. See note below |
 | B3.10 | 4117 -> texture.rs | every string of B4, through `tex_state_for` | | | |
 | B3.11 | 4155, 5396 | the texture state does not fit its record (v3d_tex_pack_state refused a field) | a field the record cannot hold | none | 0 known |
 | B3.12 | 4251, 4257 | the depth buffer a depth texture was to be sampled from holds no stored depth of the texture's size / the TMU layout refused the depth buffer's size | sampling a rendered depth texture (`v3d-shadow.md`) | none | shadow rows (`shadow.*`) are outside the 21 images |
@@ -132,7 +132,7 @@ below): it hides the cause for every draw `v3d_job_*` rejects.
 | B4.1 | 129 | a cube map whose faces are not square | incomplete cube | none | 0 (a completeness case) |
 | B4.2 | 132 | a cube map binding without its six faces | incomplete cube | none | 0 |
 | B4.3 | 136 | a 2D array or 3D texture is not sampled yet | `sampler2DArray`, `sampler3D`, shadow arrays | plan 308 (`v3d-qpu-array-3d`) | `samplers.single_tex_3d` 7, `samplers.multi_tex_3d` 7 (14 Fail); the 2D-array rows (`texture.*`, `texel_fetch`) are not in the 21 images |
-| B4.4 | 139 | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | ETC2/EAC compressed formats; RGB10_A2 sampling | `rgb10a2` for the second half; ETC2: none | RGB10_A2: 42 rows name `rgb10_a2` (31 Fail, 9 NotSupported, 2 NoResult), mostly the render side; ETC2: `implementation_limits.num_compressed_texture_formats` 1 and the compressed-texture groups (not in the 21 images) |
+| B4.4 | 139 (390 and 439-440 at `89d3e1c3`, section E; the string is now "a texel format the V3D does not sample") | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | ETC2/EAC compressed formats; RGB10_A2 sampling | `rgb10a2` for the second half; ETC2: none | RGB10_A2: 42 rows name `rgb10_a2` (31 Fail, 9 NotSupported, 2 NoResult), mostly the render side; ETC2: `implementation_limits.num_compressed_texture_formats` 1 and the compressed-texture groups (not in the 21 images) |
 | B4.5 | 145 | a look-up compiled for the 32-bit TMU output reads a texture of a 16-bit format | the ret32 pairing | `v3d-vs-ret32` | 0 known (the 2026-11 TF1/TF2/S32 consoles show the converse, B4.6) |
 | B4.6 | 147 | a texture of 32-bit channels (R32F, RGBA32F, RGBA32UI, RGBA32I) read by a look-up compiled for the 16-bit TMU output | 32-bit-class texture look-ups | `v3d-vs-ret32` | seen in three 2026-11 consoles; rows are outside this tsv |
 | B4.7 | 152 | a texture size the TMU cannot address (0, or 16384 or more) | `GL_MAX_TEXTURE_SIZE` | none | 0 |
@@ -195,3 +195,136 @@ it.
    gone since #1261.
 
 The report of this item holds the issue drafts for 1-3 and 5-6.
+
+## E. The b1b5b845 Pi 4 aborts at 89d3e1c3
+
+The whole-tree Pi 4 run at `b1b5b845` (#1261) has 1,979 cases without a
+result, because dEQP aborted in nine images (S03a, S07, T14a, T17a, TF1a,
+TF1b, TF2a, TF2b, TF2c). T05ca, T05cb and T05cc also stopped on their one
+ETC2 cube case each. The consoles are in
+`tools/cts/log/2026-11-pi4-gles3-b1b5b845-aborts/` (S07's is in
+`-rows16-30/`). Each console has one `draw refused:` line before the
+ResourceError. Code is read at `89d3e1c3`, the integration tip. The
+origin/main snapshot `f77b0626` differs in `src/v3d` and `driver/src/v3d`
+only by 1ee37fe7, which is V3D 7.1 code (`ffi71.rs`, `v3d_job71.h`), so
+every line below holds there too.
+
+At `b1b5b845` every refusal answered `-EINVAL`, because b7c1484e, 6d2e7d0d,
+455c3bb5 and 6581f22b are not ancestors of `b1b5b845` (a 2026-11-05
+commit). The GL core turns any return other than `-ENOTSUP` into
+GL_OUT_OF_MEMORY (`src/gl/draw.rs:683`). dEQP reads that as ResourceError
+and ends the image. `-ENOTSUP` becomes GL_INVALID_OPERATION, which fails one
+case.
+
+### E1. One row per aborted image
+
+| Image | Case that aborted (`dEQP-GLES3.functional.`) | Console's refusal (`b1b5b845`) | Row | At `89d3e1c3` | Return at the tip | Commit | Host test |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| S03a | `shaders.builtin_functions.precision.abs.highp_fragment.vec2` | a target larger than the tile memory is sized for (2048x2048), or empty | A5 | `backend.rs:6826-6827`: refused only past `MAX_TARGET` = 4096 (`backend.rs:447`); the shader executor's 4096 x 2-6 target draws | **gone** (a target over 4096 would get `-ENOTSUP`, but no GL call makes one) | 6d2e7d0d (A5 split, 4096 targets); b7c1484e (`-ENOTSUP`) | `a_target_of_4096_a_side_is_one_job` (`backend_tests.rs:4667`), `a_backend_gap_is_enotsup_and_counted` (`:4580`) |
+| S07 | `shaders.builtin_functions.precision.reflect.highp_fragment.scalar` (not in the mustpass; its one mustpass case `reflect.highp_fragment.vec3` never began) | same as S03a | A5 | same as S03a | **gone** | 6d2e7d0d | same as S03a |
+| T05ca | `texture.format.compressed.etc2_eac_rgba8_cube_pot` | a texel format the V3D does not sample (ETC2, or the RGB10A2 class the GL core keeps in RGBA8 here) | B4.4 | `texture.rs:439-440` (`NOT_SAMPLED`, `:390`): `V3D_SAMPLED_TEXFMTS` (`src/backend.rs:290-309`) now holds `GLES_TEXFMT_ETC2_RGB`, `_RGBA`, `_SRGB_RGB` and `_SRGB_RGBA` | **gone** for the four classes. Any format still outside the set gets `-ENOTSUP` (`texture::GAPS`, `backend.rs:4499`) | 455c3bb5 (ETC2 sampled); b7c1484e | `the_gl_cores_etc2_classes_sample_as_their_rows` (`texture.rs:1581`), `tests/es3_etc2_v3d.rs` |
+| T05cb | `texture.format.compressed.etc2_rgb8_cube_npot` | same as T05ca | B4.4 | same as T05ca | **gone** | 455c3bb5 | same as T05ca |
+| T05cc | `texture.format.compressed.etc2_rgb8_cube_pot` | same as T05ca | B4.4 | same as T05ca | **gone** | 455c3bb5 | same as T05ca |
+| T14a | `texture.units.8_units.only_cube.2` | no empty job holds the draw (its lists, or its client data with no memory of its own); before it, `osal(v3d): out of GPU memory` for 2,117,632, 3,149,824 and 4,206,592 bytes, with 9,502,720 of 16,777,216 bytes of tiled copies live | none in A/B (`draw_in_job`'s lost draw). Not B3.14: the textures are smaller than the 8 MiB arena, so no B3.14 string is reached | `backend.rs:6214-6218`, unchanged since `b1b5b845` (`:5531` there). The kept tiled copy finds no GPU memory (`tiled_copy`, `backend.rs:4880-4892`). The fallback into the job's texture arena (`backend.rs:4768`, `Attempt::Full`) does not fit an empty job either: the 8 cube units need more than the arena. `draw_in_job`'s second attempt breaks out at `:6188` | **`-E2BIG`, still aborts** (GL_OUT_OF_MEMORY, `src/gl/draw.rs:683`) | none (the retry with the open job run first, `:6190-6210`, is in both) | `every_refused_draw_is_counted_and_nothing_else` (`backend_tests.rs:4537`) pins `-E2BIG` for a draw no empty job holds |
+| T17a | `texture.wrap.etc2_eac_rgba8.clamp_clamp_linear_pot` (the image also holds `wrap.etc2_rgb8`) | same as T05ca | B4.4 | same as T05ca | **gone** | 455c3bb5 | same as T05ca |
+| TF1a | `transform_feedback.array.interleaved.lines.highp_mat3` | the job builder refused the draw (a uniform, program or primitive it does not write) | B3.9 | `backend.rs:3988-3990` (`Attempt::Unsupported`). The job builder's input cap at `b1b5b845`, `d->fs->num_inputs > 24` (`v3d_job.c:775` there), is `> 64` at the tip (`driver/src/v3d/v3d_job.c:876`), and the flag words of inputs 24..63 are written | **gone** on the host. A job-builder refusal that is left would be `-ENOTSUP` (one Fail, no abort) | 6581f22b (inputs 24..63), 218c90ec (flags packet count); b7c1484e (`-ENOTSUP`) | `tests/es3_tf_v3d.rs` (the real `v3d_job.c`): `cases_over_24_inputs_draw_and_capture` and `cases_within_the_input_cap_draw_and_capture` draw all 252 `basic_types`/`array` cases with no GL error |
+| TF1b | `transform_feedback.array.separate.lines.highp_mat3` | same as TF1a | B3.9 | same as TF1a | **gone** on the host (`-ENOTSUP` otherwise) | 6581f22b; b7c1484e | same as TF1a |
+| TF2a | `transform_feedback.basic_types.interleaved.lines.lowp_mat4` | same as TF1a | B3.9 | same as TF1a | **gone** on the host (`-ENOTSUP` otherwise) | 6581f22b; b7c1484e | same as TF1a |
+| TF2b | `transform_feedback.basic_types.separate.lines.highp_mat4` | same as TF1a | B3.9 | same as TF1a | **gone** on the host (`-ENOTSUP` otherwise) | 6581f22b; b7c1484e | same as TF1a |
+| TF2c | `transform_feedback.random_full_array_capture.interleaved.lines.1` | same as TF1a | B3.9 | same as TF1a | `-ENOTSUP` at most (fails one case). No host test models `random_full_array_capture` | b7c1484e; 6581f22b likely | none for this group |
+
+What the tip removes:
+
+- S03a and S07 (A5): the tip removes both aborts. Their 1,142 mustpass
+  cases now begin; whether they pass is for the board.
+- T05ca, T05cb, T05cc and T17a (B4.4, ETC2): the tip removes all four. The
+  four ETC2 classes the GL core stores are sampled.
+- TF1a, TF1b, TF2a, TF2b and TF2c (B3.9): none of them can abort at the tip,
+  because the job builder's catch-all is `-ENOTSUP`. On the host the four
+  `array`/`basic_types` cases draw. One caveat: `es3_tf_v3d.rs` models the
+  failing cases with a 24-input cap. Its `lowp_mat4` (16 inputs) is under
+  that cap, yet TF2a's `lowp_mat4` was refused on the board. Its cause may
+  be something other than the input cap, and only a board run shows whether
+  these cases pass or fail as one case each.
+- T14a still aborts: the lost draw answers `-E2BIG`, which becomes
+  GL_OUT_OF_MEMORY.
+
+### E2. The image labels the post-b1b5b845 V3D changes reach
+
+Taken from `git log b1b5b845..f77b0626 -- src/v3d driver/src/v3d` (37
+commits besides the V3D 7.1 ones). The groups are mapped to
+`tools/cts/pi4-gles3-tree.txt` labels by that file's filters. One line per
+change. "Reaches" means the change alters what the V3D does for draws of
+that image. It does not mean a row is known to move.
+
+- 6d2e7d0d (A5 split, 4096 targets, `docs/notes/v3d-large-targets.md`): S03,
+  S03a, S04, S05, S06, S07, S08 (`shaders.builtin_functions.precision`).
+- 0ebbd507 + 48f6017c (a colour write mask per RT; the GL core sets it only
+  where the written targets' masks differ, an R/RG integer target beside
+  another): FR1, FR2 (`fragment_out.array`, `.random`) and D1
+  (`draw_buffers_indexed`, mostly NotSupported in the GL core first, C4).
+  It reaches FB3 and FB4 (`fbo.color`, `fbo.render`) only in their
+  two-attachment cases.
+- 9cccb4ae (per-RT BLEND_ENABLES; integer and 32F RTs unblended; GL_NONE
+  RTs masked, several-target draws only): FR1, FR2, D1. Not FO1-FO5:
+  one-target draws emit what they did.
+- 684ef106 (BLEND_ENABLES names every RT when RT 0 blends; RGBA32F and
+  RG32F tile-buffer rows): D1, FR1, FR2 for blending MRT draws. The 32F
+  rows matter only with e59119a1's float colour targets, which images get
+  only with `YAKOGL_COLOR_BUFFER_FLOAT=ON` (`CMakeLists.txt:113`, OFF by
+  default). With it they reach FR1, FR2, FB2, FB3, FB4 and M1
+  (`pbo.renderbuffer`).
+- 9fd2209e + 8e285d55 (size words 44-47 from `texture::size_words` at
+  `base_level`) and 337a9453 (`state_at`): no image at the tip.
+  `GlesTextureBind::base_level` stays 0 because the draw does not apply
+  GL_TEXTURE_BASE_LEVEL (`src/gl/draw.rs:3611`), and the commit says nothing
+  moves. T07 (`texture.mipmap`) and S32a, S32b (`textureSize`) are reached
+  once the GL core fills it.
+- 298fe11c (uniform words 46/47: 3D depth and array layer count) with
+  8ae0a44b (2D-array and 3D look-ups): T02, T03, T04, F3C1-F3C4, F3F1-F3F5,
+  F3S1, F3S2 (`texture.filtering` 2d_array/3d), T05a, T06 (`texture.format`
+  sized 2d_array/3d), T08, T09 (`texture.shadow` 2d_array), T10-T13
+  (`texture.specification`), T14b (`texture.vertex`), S32a, S32b
+  (`shaders.texture_functions`), R1 (`samplers`).
+- e6d72a23 (colour attachments of different sizes draw and clear at their
+  intersection): FB3, FB4 (`fbo.color`, `fbo.render`). 0 to a few rows
+  (`docs/notes/v3d-mrt-sizes.md`). FB1's `fbo.completeness.size` only reads
+  the status.
+- 949f0bef (clears of glDrawBuffers lists whose draw buffer 0 is GL_NONE)
+  and 822d8ca9 (draw-buffer order, **not wired**: `state::draw_buffer_order`
+  has no caller in `backend.rs`, so such draws are still B1.5): D1, FR2, for
+  clears only.
+- 7fa02269 + 3c3e5470 (a scissored or masked clear of several attachments
+  is one quad, A8): FO6 (`fragment_ops.scissor`, `.stencil` behind it),
+  FB3 (`fbo.color.clear`, `.repeated_clear`), D1.
+- 455c3bb5 + 333a19f7 + 765cbf81 (ETC2/EAC sampled): T05b, T05c, T05ca,
+  T05cb, T05cc, T05d, T17, T17a, T17b.
+- 6581f22b + 218c90ec (fragment inputs 24..63, 15 varying vectors): TF1,
+  TF1a, TF1b, TF2, TF2a, TF2b, TF2c, and shader cases with more than 24
+  fragment input scalars (image not identified here).
+- 080240bc (a unit that only `textureSize` reads takes a 32-bit texture):
+  S32a, S32b.
+- b7c1484e (refusals of legal GL state are `-ENOTSUP`): every image. A
+  refusal now fails its case instead of ending the image.
+
+### E3. What is left, and the shape of a fix
+
+- T14a (lost draw, `-E2BIG`): a V3D-only fix is likely, but the code alone
+  does not give it. The eight cube units' kept copies (2-4 MiB each) do not
+  find memory in the 48 MiB carve-out while 9.5 MiB of copies are live. The
+  arena fallback cannot hold them, so the draw is lost. Candidates in
+  `src/v3d` are freeing the kept copies no unit of this draw samples before
+  the no-memory answer, or a carve-out and budget sizing that fits eight
+  cube units. A host reproduction (8 cube units at the case's sizes, with
+  `fail_alloc_from`) should come first. Answering `-ENOTSUP` here would
+  hide a real shortage. GL_OUT_OF_MEMORY for every non-`-ENOTSUP` code is
+  `src/gl/draw.rs:683`, which is outside this plan (named only).
+- TF1a, TF1b, TF2a, TF2b, TF2c (B3.9): no abort at the tip. If the board
+  still refuses one, the cause is unnamed, because `v3d_job_draw` returns
+  one `V3D_JOB_REFUSED` for `draw_is_supported`, `record_draw` and a bad
+  field alike (`v3d_job.c:1078`, `:1093`). Splitting that status would be a
+  V3D-only change that names the cause; it needs no `src/gl` change.
+  TF2a's refused `lowp_mat4` (16 inputs, under the old cap) says a second
+  cause is possible.
+- S03a, S07, T05ca, T05cb, T05cc, T17a: nothing is left on the V3D side
+  for the abort. Their cases now produce results on the board.
