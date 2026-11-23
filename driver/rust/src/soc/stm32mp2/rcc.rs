@@ -12,18 +12,29 @@
 //!   recorded in docs/notes/pre-study-stm32mp257f-dk.md section 4. The ids come
 //!   from the device tree (#1281: `clocks = <&rcc 91>, <&rcc 340>`,
 //!   `resets = <&rcc 75>`; `include/dt-bindings/reset/st,stm32mp25-rcc.h`).
-//! - RM0457 could not be read (r-rm0457): **every offset and bit below is
-//!   unconfirmed against the manual.**
+//! - RM0457 could not be read (r-rm0457): the offset and the bit names
+//!   (`GPURST` bit 0, `GPUEN` bit 1, `GPULPEN` bit 2) now come from the headers
+//!   of TF-A (`v2.10-stm32mp-r3.1`, `stm32mp25_rcc.h`) and OP-TEE
+//!   (`4.0.0-stm32mp-r3.1`), as `model_stm32mp2.rs` cites them; only the
+//!   manual's meaning and reset value of the bits are unconfirmed.
 //!
-//! Reset polarity (`RCC_GPUCFGR` bit 0): assert sets the bit, deassert clears
-//! it ([`RESET`] set = asserted). Derived from ST's reset driver, not read on
-//! the board: Linux `drivers/clk/stm32/reset-stm32.c:54-100` and `:123-136`
-//! (v6.6-stm32mp-r3.1) writes the bit to assert, clears it to deassert, then
-//! waits for it to read back zero; its `set_clr` is 0 for `LTDC_R` and `DSI_R`
-//! (docs/notes/stm32mp257f-dk-display.md, "Resets"). That is the same register
-//! family, not the GPU's own entry (`GPU_R`, id 75), and RM0457 is unread, so
-//! the GPU's polarity stays **unverified on the board** until the first
-//! `RCC_GPUCFGR` read-back.
+//! Reset polarity (`RCC_GPUCFGR` bit 0), **read on the board**: set = asserted
+//! ([`RESET`]), clear = released. The DK session of 2026-11-21 (record
+//! `20261121-1107-mp2_gpu-9e520020`, commits 2da6568d and 226cd9a2, step 4 of
+//! docs/notes/stm32mp257f-dk-bringup.md) read 0x7 with the reset held and 0x6
+//! after the release, and the GPU then reached idle. The first run
+//! (`20261121-1059-mp2_gpu-e0ee66cb`) read the register once right after the
+//! clearing write and still saw 0x7, so the release is not instant;
+//! [`GpuRcc::wait_reset_released`] (2da6568d) reads until bit 0 clears. This
+//! matches ST's reset driver, Linux `drivers/clk/stm32/reset-stm32.c:54-100`
+//! and `:123-136` (v6.6-stm32mp-r3.1): write the bit to assert, clear it to
+//! deassert, then wait for it to read back zero.
+//!
+//! Bit 2 (`GPULPEN` in the TF-A and OP-TEE headers; presumably the GPU's
+//! clock low-power enable) was already set at entry on the board (0x6, bit 1
+//! set too) and the probe does not write it. Its meaning and reset value are
+//! **unconfirmed** (RM0457's text for it is unread). Every change here is a
+//! read-modify-write, so bit 2 is preserved; nothing clears it.
 //!
 //! The RCC base is a parameter (the device tree's `rcc` node); the caller
 //! owns the power-domain order (SCMI first, then this module) and RIFSC.
@@ -34,8 +45,9 @@ use crate::mmio::Mmio;
 
 /// `RCC_GPUCFGR` offset (r-galcore, r-rcc-src; unconfirmed from RM0457).
 pub const GPUCFGR: usize = 0x83C;
-/// Bit 0: the GPU reset (`GPU_R`, reset id 75); 1 = asserted (derived from
-/// ST's reset driver, see the module documentation; not read on the board).
+/// Bit 0: the GPU reset (`GPU_R`, reset id 75); 1 = asserted (matches
+/// ST's reset driver and read on the board: 0x7 held, 0x6 released; see the
+/// module documentation).
 pub const RESET: u32 = 1 << 0;
 /// Bit 1: the gate of both GPU clocks (`CK_BUS_GPU` 91 and `CK_KER_GPU` 340);
 /// 1 = clocks run.
