@@ -79,18 +79,51 @@ may differ: each place where that matters is marked):
   section 1). The layout of a copy is `crc32` (4 bytes, over the data), `flags`
   (1 byte, the redundancy flag) and the data (`ST/include/env_internal.h:59-64`,
   `:80-86`). **Read on the board** (board read 2026-11-16, `lsblk -o
-  NAME,SIZE,TYPE,PARTLABEL,MOUNTPOINT` and `dd if=<u-boot-env partition>
-  bs=64k status=none` into a host file): the microSD is `mmcblk0` (59.5 GiB)
-  and `u-boot-env` is its partition 7, **512 KiB**, so the offsets above
-  hold. **Copy 0 (0x7e000) is valid**: CRC 0x7e7016c1, flag byte 0x02,
-  73 variables, 5489 of 8187 data bytes used. **Copy 1 (0x7c000) is all
+  NAME,SIZE,TYPE,PARTLABEL,MOUNTPOINT` and `dd if=<the resolved u-boot-env
+  partition> bs=64k status=none` into a host file, resolved by the device
+  rule below): in that read's numbering the microSD was `mmcblk0`
+  (59.5 GiB) and `u-boot-env` was its partition 7, **512 KiB**, so the
+  offsets above hold. **Copy 0 (0x7e000) is valid**: CRC 0x7e7016c1,
+  flag byte 0x02, 73 variables, 5489 of 8187 data bytes used. **Copy 1 (0x7c000) is all
   zeros: stored CRC 0x00000000, which does not match its data, so it is
   invalid** (never written, or erased). Flag 0x02 against an invalid other
   copy means U-Boot uses copy 0 and a later `env save` writes copy 1 with
   flag 0x03. `tools/uboot_env.py ... check` therefore exits 2 ("1 bad
   copy(ies): copy 2") on this image although the board's U-Boot reads it
-  fine (see "Contradictions" in section 11). The eMMC (`mmcblk1`, 7.3 GiB)
-  carries its own `u-boot-env` (1 MiB) and `bootfs`; it was not read.
+  fine (see "Contradictions" in section 11). The eMMC (in that same read
+  `mmcblk1`, 7.3 GiB) carries a `u-boot-env` partition (1 MiB) and a
+  `bootfs` under the **same partition labels** as the card's; it was not
+  read, and under the device rule below nothing reads or writes it.
+
+  **The device rule — one rule for every DK tool, every run, every
+  session.** The card is the disk `/boot` is mounted from, and that
+  disk's `/sys/block/<disk>/device/type` says `SD`. Its `u-boot-env`
+  partition is the partition labelled `u-boot-env` **on that disk**: both
+  storage the DK carries have a partition with that label (the card's 512
+  KiB, the eMMC's 1 MiB), so the label names a partition only of a disk
+  already identified. Resolve it with `lsblk` in each session — once
+  before the run, and again after every reboot the run does: a device
+  resolved before a reboot is never used after it. Never assume it from
+  an earlier session, and never by an `mmcblkN` number: on the DK the
+  numbers change from boot to boot (`mmcblk2` before a reboot,
+  `mmcblk0` after it, seen 2026-11-21), which is why
+  `tools/board-stm32mp2.sh:147-153` (plan #349, board-proven) knows the
+  card and the eMMC by their `device/type` and records both renumberings;
+  the numbering quoted in the 2026-11-16 read above is that session's
+  snapshot, not an identity. The same lines record that on the DK
+  `/dev/disk/by-partlabel` names the **eMMC's** partitions and that the
+  board-proven guard refuses any `/dev/disk/` path; nothing in this note
+  resolves a device through it either. The eMMC is whichever disk's
+  `device/type` says `MMC`, and it is never written and never read. A
+  tool refuses to run when `/boot` is not mounted from an `SD`-type disk.
+  This rule is `tools/board-stm32mp2.sh`'s `dev_guard` and `card_check`,
+  and it matches U-Boot's own choice: with `CONFIG_SYS_MMC_ENV_DEV=-1`
+  (above) U-Boot reads the environment of the medium it booted from,
+  which under the rule is the card. Plan items **runner-partdev**
+  (`tools/board-stm32mp2-uboot.sh`), **oneshot-partdev**
+  (`driver/tools/uboot-mp2/oneshot.sh`) and **env-read-renumber**
+  (`tools/probes/stm32mp257f_dk/env_read`) carry it into this note's
+  route; every `dd` written below is in that resolved form.
   **The layout, in one table** (ST's tree, tag `v2023.10-stm32mp-r3.1`;
   `uboot_env.py` numbers the copies 1 and 2, U-Boot's `env/mmc.c` 0 and 1):
 
@@ -127,22 +160,30 @@ may differ: each place where that matters is marked):
   `fw_printenv` prints "Cannot initialize environment"; `cat /etc/fw_env.config`:
   no such file; `ls /etc/fw_env.config*`: `.mmc`, `.nand`, `.nor` only).
   `/etc/fw_env.config.mmc` names `/dev/disk/by-partlabel/u-boot-env` twice,
-  both `-0x2000 0x2000`, i.e. the **same** copy for both entries, and
+  both `-0x2000 0x2000`, i.e. the **same** copy for both entries (that
+  device name is ST's own config, a board fact, not this design's choice —
+  and it is what makes the config dangerous on the DK:
+  `/dev/disk/by-partlabel/u-boot-env` names the **eMMC's** `u-boot-env`
+  partition, the device rule above, so a `fw_printenv` that ran as shipped
+  would read the **eMMC's** environment, not the card's).
   `fw_printenv -c /etc/fw_env.config.mmc` prints "Cannot read environment,
   using default". There is no `fw_setenv` (`/usr/sbin/fw_*` absent;
-  `/usr/bin/fw_printenv` is the only one). So the stored environment is read
-  by `dd` of the partition and `tools/uboot_env.py`, as above, and neither the
-  runner nor the collector depends on `fw_printenv`:
-  `tools/board-stm32mp2-uboot.sh:533-583` (`env_read`) runs
-  `dd if=/dev/disk/by-partlabel/u-boot-env bs=64k status=none` over ssh
-  (`:546-549`, `:565`), insists on exactly 512 KiB (`:568-569`), and runs
-  `python3 -I tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000
-  --offset2 0x7c000 --allow-blank-copy check` and then `print` on the host
-  (`ENV_LAYOUT`, `:548`; `:570-573`).
-  `tools/probes/stm32mp257f_dk/env_read/collect.sh:60-64` keeps
-  `fw_printenv`'s output only as a secondary record (its failure is not an
-  error) and dumps the partition the same way; `summarize.py:65-75` takes the
-  variables from `u-boot-env.bin`. `--allow-blank-copy` (`uboot_env.py:21`,
+  `/usr/bin/fw_printenv` is the only one). So the stored environment is
+  read by `dd` of the **resolved** partition (device rule above) and
+  `tools/uboot_env.py`, as above, and neither the runner nor the collector
+  depends on `fw_printenv`: `tools/board-stm32mp2-uboot.sh`'s `env_read`
+  resolves the card's `u-boot-env` partition the rule states (plan item
+  runner-partdev carries it there; this note quotes no line numbers of
+  that file, because it changes in parallel), runs
+  `dd if=<the resolved partition> bs=64k status=none` over ssh, insists on
+  exactly 512 KiB, and runs `python3 -I tools/uboot_env.py --size 0x2000
+  --redundant --offset 0x7e000 --offset2 0x7c000 --allow-blank-copy check`
+  and then `print` on the host (`ENV_LAYOUT`).
+  `tools/probes/stm32mp257f_dk/env_read/collect.sh` keeps `fw_printenv`'s
+  output only as a secondary record (its failure is not an error) and
+  dumps the partition resolved from `/boot`'s mount; `summarize.py` takes
+  the variables from `u-boot-env.bin` (env-read-renumber adds the
+  SD-type refusal to that collector). `--allow-blank-copy` (`uboot_env.py:21`,
   `:259-263`) accepts one **all-zero** copy, which is the stock card's copy 1
   (see the contradictions below); any other bad CRC is still refused.
 - **`bootcmd` and `env_check`.** The compiled-in `bootcmd_stm32mp` prints
@@ -180,8 +221,11 @@ may differ: each place where that matters is marked):
   quoted above (`env_check`, then `boot_targets` narrowed to
   `mmc${boot_instance}`, then `distro_bootcmd`). `scan_dev_for_boot_part`
   lists the bootable partitions of the device (`part list ... -bootable`) and
-  the bootfs is partition 8 (`devplist=8`; `/boot` is `/dev/mmcblk0p8`, 64 MiB,
-  34500 KiB free of 60033 KiB, board read 2026-11-16, `df -P /boot`). The
+  the bootfs is the card's partition 8 (`devplist=8`; in the 2026-11-16
+  read's numbering `/boot` was `/dev/mmcblk0p8`, 64 MiB, 34500 KiB free of
+  60033 KiB, board read 2026-11-16, `df -P /boot`). A partition's number
+  **on its own disk** is fixed by the partition table and stable across
+  reboots; the disk's number is not (device rule above). The
   stored environment also holds `fileaddr=90100000` and `filesize=108d`
   (4237 bytes, the size of the stock `boot.scr.uimg`): an earlier boot loaded
   that script to `scriptaddr` and the environment was saved afterwards.
@@ -392,10 +436,15 @@ load mmc <dev>:<part> ${scriptaddr} /yakogl/<token>.scr && source ${scriptaddr};
 The image and `<token>.scr` (built by `driver/tools/uboot-mp2/build.sh`,
 `mkimage -A arm64 -O linux -T script -C none`) are staged from Linux under
 `/boot/yakogl/` on bootfs, which U-Boot reads as `/yakogl/` on that partition,
-with `ext4load`/`load` (the partition number is the runner's to read from
-Linux, where bootfs is mounted on `/boot`; the device is `${boot_instance}`,
-the medium U-Boot booted from). Names are never `extlinux.conf`, `boot.scr` or
-`boot.scr.uimg`, and never under an `*_extlinux` directory.
+with `ext4load`/`load`. Both sides name the card by role, never by a number
+(section 1's device rule): the partition is the bootfs partition of the disk
+`/boot` is mounted from, resolved with `lsblk` in each session — resolved
+again after the run's reboot, because the disk's number can change there —
+while its number **on the card** is stable (`devplist=8`); the U-Boot device
+is `${boot_instance}`, the medium ST's U-Boot booted from, which is the card
+because the one-shot runs on a board that booted from it. Names are never
+`extlinux.conf`, `boot.scr` or `boot.scr.uimg`, and never under an
+`*_extlinux` directory.
 
 **Why not the distro loop's own files** (the shape asked for in the plan: an
 `extlinux` entry or a `boot.scr.uimg` staged under `/boot` and removed again).
@@ -460,18 +509,22 @@ recorded with its addresses), and that the TFTP server is reachable from it. The
    (header, footprint inside the window, size under 255 MiB, the watchdog
    marker `gc_wdog_arm: armed`). Print the undo of everything the next steps do.
 2. Take the board lock, check ssh and the supply (below), the console is free
-   (`mp2_uboot_console.py probe`), record the stored environment (`dd` of
-   `u-boot-env` decoded by `uboot_env.py`, section 1; `env-before.txt`,
-   `tools/board-stm32mp2-uboot.sh:853`, read again under the lock at `:727`)
-   and the `sha256` of every file of `/boot` (the before record).
+   (`mp2_uboot_console.py probe`), resolve the card and its partitions per
+   section 1's device rule, record the stored environment (`dd` of the
+   resolved `u-boot-env` partition decoded by `uboot_env.py`, section 1;
+   `env-before.txt`, read again under the lock) and the `sha256` of every
+   file of `/boot` (the before record).
 3. Stage `<token>.scr` and the image under `/boot/yakogl/` (route 1) or into
    the TFTP root (route 2); read them back by sha256.
 4. Start the capture (`mp2_uboot_console.py capture`/`typed`), reboot the
    board, the typed runner stops autoboot, types the line, waits for the
    scan to say `done` (or one of the other verdicts), see below.
-5. When Linux is back: remove the staged files, record the environment (the
-   same `dd` + `uboot_env.py` read, `env-after.txt`, `:939`) and the `/boot`
-   sha256 again and compare (the after record, `:942-943`).
+5. When Linux is back: **resolve the card again** (the disk's number may
+   have changed across the reboot — section 1's device rule; a device
+   resolved before a reboot is never used after it), remove the staged
+   files, record the environment (the same `dd` + `uboot_env.py` read on
+   the re-resolved partition, `env-after.txt`) and the `/boot` sha256
+   again and compare (the after record).
 
 `mp2_uboot_console.py scan` phases and verdicts (its docstring): `bl2`,
 `optee`, `uboot`, `stopped`, `script`, `refused`, `go`, `image`, `image_end`,
@@ -521,15 +574,17 @@ no persistent environment at all.
 
 **What "unchanged" means, as the runner measures it.** Two records:
 
-1. The runner reads the partition with `dd` before and after (both copies, at
-   0x7e000 and 0x7c000, 0x2000 each), requires both to pass
-   `uboot_env.py check` (`--allow-blank-copy`, so the stock all-zero copy 1
-   counts as blank-but-accepted; section 1), prints the **active** copy's
-   variables, sorts them and `diff`s the two texts
-   (`tools/board-stm32mp2-uboot.sh:570-572`, `:942`): empty gives
-   `env_diff=empty` in the verdict line (`:794`). The raw images are not kept
-   in the run directory (they carry the MAC and the serial); their `sha256`
-   go to `meta.txt` (`:574`), and the before and after values must be equal.
+1. The runner reads the **resolved** `u-boot-env` partition with `dd` before
+   and after — resolved per section 1's device rule, and resolved again
+   after the run's reboot (`env_read`; a before-run node is never reused
+   after it) — with both copies read (at 0x7e000 and 0x7c000, 0x2000
+   each), requires both to pass `uboot_env.py check` (`--allow-blank-copy`,
+   so the stock all-zero copy 1 counts as blank-but-accepted; section 1),
+   prints the **active** copy's variables, sorts them and `diff`s the two
+   texts: empty gives `env_diff=empty` in the verdict line. The raw images
+   are not kept in the run directory (they carry the MAC and the serial);
+   their `sha256` go to `meta.txt`, and the before and after values must
+   be equal.
 2. A text diff does not see the flag bytes or the blank copy; the equal image
    `sha256` does (both copies' bytes, flag bytes and the blank copy 1
    identical). For a person with the two `dd` files,
@@ -541,8 +596,8 @@ no persistent environment at all.
 
 "Unchanged" is therefore: both copies' CRCs valid before and after, the same
 active copy, equal image `sha256`, and an empty variable diff. The runner also
-refuses to start on a bad CRC (`:570-571`), no `bootcmd`, or a `scriptaddr`
-unset or near the go window (`:575-582`).
+refuses to start on a bad CRC, no `bootcmd`, a `scriptaddr` unset or near the
+go window, or a `/boot` not mounted from an `SD`-type disk (section 10).
 
 ## 8. The undo of a cut-off run (f)
 
@@ -571,8 +626,10 @@ RAM is gone at the next reset; only the card and the TFTP root persist.
   the run: they are **never written**, so they must match byte for byte, and
   the extra files must be only the `yakogl/` ones. `TODO(board-run)`: the
   before listing of `/boot` and its sha256 file, and the after comparison;
-- the exact dump and compare (the layout of section 1): `dd` the
-  `u-boot-env` partition to `before.bin` and `after.bin`, then
+- the exact dump and compare (the layout of section 1): resolve the card's
+  `u-boot-env` partition as section 1's device rule states (`lsblk` on the
+  disk `/boot` is mounted from; never `/dev/disk/by-partlabel`), `dd` it to
+  `before.bin` and `after.bin`, then
   `tools/uboot_env.py --size 0x2000 --redundant --offset 0x7e000 --offset2 0x7c000 check before.bin`
   (exit 0 only if both CRCs are valid; add `--allow-blank-copy` on the stock
   card, whose copy 1 is zeros) and the same options with
@@ -678,17 +735,22 @@ only measurement of the bound.
 
 These are the DK's, from `board-stm32mp2.sh` and `stm32mp257f-dk-bringup.md`,
 and bind every step of both routes. The runner enforces them before every
-write (the sibling runner's `dev_guard`) and the typed lines contain no
-command that could break them:
+write (the sibling runner's `dev_guard` and `card_check`), on devices
+resolved by section 1's device rule, and the typed lines contain no command
+that could break them:
 
 - **Never write** the card's partitions `fsbla1`, `fsbla2`, `metadata1`,
   `metadata2`, `fip-a`, `fip-b` (TF-A, OP-TEE and U-Boot live there: a bad
   write leaves a board whose ROM finds nothing), nor `vendorfs`, `rootfs`,
   `userfs`, nor `u-boot-env`: the one-shot does not write the environment.
   The only writes are the files under `/boot/yakogl/` on bootfs, from Linux.
-- **Never write the eMMC** (`mmcblk0`; the card is the disk `/boot` is mounted
-  from, and it must say it is an SD card). `mmc write`, `ext4write` and
-  friends are not in the scripts.
+- **Never write the eMMC, and never read it.** The eMMC is whichever disk's
+  `/sys/block/<disk>/device/type` says `MMC` — never a `mmcblkN` number
+  (section 1's device rule; the runner resolves the card first, so its
+  guards can never resolve to an MMC-type disk, and nowhere does it read
+  the eMMC's environment). The card is the disk `/boot` is mounted from, and
+  a runner refuses to run unless that disk's `device/type` says `SD`.
+  `mmc write`, `ext4write` and friends are not in the scripts.
 - **No repartitioning** (`gpt`, `part`, `sgdisk`), no filesystem creation, no
   change to ST's files under `/boot`.
 - **No kernel module load or unload** (loading etnaviv reportedly panicked
@@ -715,10 +777,10 @@ command that could break them:
 | marker | what to read or record |
 | --- | --- |
 | done 2026-11-16 | the stored environment's variables: section 1 (distro loop, memory layout), section 3 |
-| done 2026-11-16 | the `u-boot-env` partition: both copies' CRC and flag, the size (section 1) |
+| done 2026-11-16 | the `u-boot-env` partition: both copies' CRC and flag, the size (section 1); the `mmcblkN` numbers that read saw are that session's snapshot, not the identity |
 | `TODO(board-run)` | `bdinfo` at the prompt once: `relocaddr`, `sp start`, `fdt_blob` far above 0xb0000000 (section 3) |
 | `TODO(board-run)` | whether the watchdog is serviced at the prompt: the `WDT:   Started` line in a console capture, `wdt list` (section 9) |
-| done 2026-11-16 | the listing of `/boot`: names, sizes, `sha256sum`, free space; the partition number of bootfs (section 1) |
+| done 2026-11-16 | the listing of `/boot`: names, sizes, `sha256sum`, free space; the partition number of bootfs, stable on its own disk (section 1) |
 | `TODO(board-run)` | link and DHCP in U-Boot, the TFTP server's reachability (section 5) |
 | `TODO(board-run)` | the `mp2-handover:` line: `el`, `sctlr`, `m`, `c`, `i`, `x0`..`x3` (sections 2, 4) |
 | `TODO(board-run)` | the prompt text as printed; the TFTP rate; the verdict (sections 5, 6) |
@@ -728,19 +790,25 @@ command that could break them:
 
 ### Contradictions the board read found
 
-Board read 2026-11-16 against the design above:
+The board read of 2026-11-16 and plan #349's board records against the
+design above:
 
 1. **`boot_prefixes=/mmc0_`**, not `/ /boot/`: the loop never reaches the
    stock `/boot.scr.uimg`; the one-shot is typed, so the design does not
    depend on it.
 2. **Linux's `fw_printenv` is unusable as shipped** (no `/etc/fw_env.config`;
-   the `.mmc` sample lists the same offset twice). A runner or the `env_read`
-   probe that calls `fw_printenv` on this card fails; they read the
-   partition with `dd` and decode it with `tools/uboot_env.py` (done:
-   `board-stm32mp2-uboot.sh:533-583`, `env_read/collect.sh:60-64`).
+   the `.mmc` sample lists the same offset twice, **and its device,
+   `/dev/disk/by-partlabel/u-boot-env`, names the eMMC's partition on the
+   DK**, so a `fw_printenv` that ran at all would read the eMMC's
+   environment). A runner or the `env_read` probe that calls `fw_printenv`
+   on this card fails; they read the card's partition — resolved by
+   section 1's device rule — with `dd` and decode it with
+   `tools/uboot_env.py` (done: `board-stm32mp2-uboot.sh`'s `env_read`,
+   `env_read/collect.sh`; runner-partdev and env-read-renumber carry the
+   resolution rule to both).
 3. **Copy 1 (0x7c000) is zeros**, so a plain `tools/uboot_env.py check`
    refuses the image. The runner and the collector pass `--allow-blank-copy`
-   (`board-stm32mp2-uboot.sh:548`), which accepts exactly an all-zero copy and
+   (the runner's `ENV_LAYOUT`), which accepts exactly an all-zero copy and
    reads copy 0; the c5 comparison is copy 0's variables plus the `dd`
    image's `sha256`, and copy 1 stays "blank before and after" unless a run
    saves the environment (then it is no longer blank and the `sha256`
@@ -751,6 +819,17 @@ Board read 2026-11-16 against the design above:
 5. Nothing contradicts the 0xa0000000..0xb0000000 window: `scriptaddr`,
    `kernel_addr_r`, `fdt_addr_r`, `ramdisk_addr_r` are the compiled-in
    defaults, all below it.
+6. **Device numbers are not identity.** The 2026-11-16 read numbered the
+   microSD `mmcblk0` and the other storage `mmcblk1`, the eMMC;
+   plan #349's board-proven `tools/board-stm32mp2.sh:147-153` (seen
+   2026-11-21) numbered the card `mmcblk2` before a reboot and
+   `mmcblk0` after it, recorded the same labels on both storage, and
+   recorded `/dev/disk/by-partlabel` as naming the eMMC's partitions.
+   An earlier draft of this note used `mmcblkN` numbers as identity —
+   inconsistently between sections 1 and 10 — and read the environment
+   through `by-partlabel`; both were wrong against the board facts, and
+   section 1's device rule is now the note's single rule, carried by the
+   runners (runner-partdev, oneshot-partdev).
 
 ## Board run
 
