@@ -4706,9 +4706,11 @@ void main (void)
         });
         rx.recv().unwrap();
         /* a source no other test compiles: a cache hit would not open keep */
-        let (rc, log) = compile(SHC_STAGE_VERTEX, b"attribute vec4 p; void main(){ gl_Position = p * 1234.5; }");
+        let sh = compile_out(SHC_STAGE_VERTEX, "attribute vec4 p; void main(){ gl_Position = p * 1234.5; }");
         other.join().unwrap();
-        assert_eq!(rc, 0, "{log}");
+        /* given back: a record left in the keep region splits it for a later
+         * test (store's femtovg replay needs one long free run) */
+        release(&sh);
     }
 
     /// A release is serialised the same way: a test that holds the lock sees

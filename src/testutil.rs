@@ -1734,22 +1734,12 @@ pub fn shader_source(name: &str) -> &'static str {
     }
 }
 
-/// Make `stage` read as one the OFFLINE table compiled: no record of the
-/// build's own compiler behind it (`shaderc::is_online` is then false), so
-/// the GL core reads its uniform rows in the table's shape (one flattened
-/// row per struct-array member, `program::row_is_flattened`). With a table
-/// the stages the tests link already are that; in a `no-shader-table` build
-/// every stage is the compiler's, and a test that hands the core the table's
-/// reflection shape marks the stage it hand-built. The stage's own record
-/// stays in the keep region until the next reset.
-pub fn mark_stage_offline(stage: &mut crate::shaderc::ShcShader) {
-    stage.priv_ = core::ptr::null();
-    assert!(!crate::shaderc::is_online(stage), "a stage without a record is not the compiler's");
-}
-
 /// A fresh GL context on the mocks, current for the guard's lifetime.
 pub struct TestGl {
     ctx: *mut GlContext,
+    /// The stages [`TestGl::mark_stage_offline`] took the record from: the
+    /// program's copy of each, released when the context is gone.
+    offline: core::cell::RefCell<Vec<crate::shaderc::ShcShader>>,
     _serial: MutexGuard<'static, ()>,
 }
 
@@ -1770,9 +1760,27 @@ impl TestGl {
             context::gl_context_create(w, h)
         };
         assert!(!ctx.is_null(), "context pool exhausted");
-        let gl = TestGl { ctx, _serial: serial };
+        let gl = TestGl { ctx, offline: core::cell::RefCell::new(Vec::new()), _serial: serial };
         gl.clear_recordings();
         gl
+    }
+
+    /// Make `stage` read as one the OFFLINE table compiled: no record of the
+    /// build's own compiler behind it (`shaderc::is_online` is then false), so
+    /// the GL core reads its uniform rows in the table's shape (one flattened
+    /// row per struct-array member, `program::row_is_flattened`). With a table
+    /// the stages the tests link already are that; in a `no-shader-table` build
+    /// every stage is the compiler's, and a test that hands the core the table's
+    /// reflection shape marks the stage it hand-built. The stage still points
+    /// into its record (its code), so the record lives on: this guard holds
+    /// the program's copy and releases it after the context, as the program
+    /// would have. Kept in the keep region past the test, the record split
+    /// the region for a later test that needs one long free run
+    /// (`store::tests::femtovgs_thirty_programs_fit_when_each_lifetime_has_its_end`).
+    pub fn mark_stage_offline(&self, stage: &mut crate::shaderc::ShcShader) {
+        self.offline.borrow_mut().push(*stage);
+        stage.priv_ = core::ptr::null();
+        assert!(!crate::shaderc::is_online(stage), "a stage without a record is not the compiler's");
     }
 
     /// Panic with the faults the mock recorded (see the module documentation).
@@ -2274,6 +2282,10 @@ impl Drop for TestGl {
             crate::gl::draw::reset_for_tests(true);
             context::gl_context_set_current(core::ptr::null_mut());
         }
+        /* the records of the stages marked offline, the program's copies */
+        for stage in self.offline.borrow_mut().drain(..) {
+            crate::shaderc::release_shader(&stage);
+        }
         /* the GPU runs what was submitted */
         with_mock(|m| m.complete(m.last_fence));
         let faults = with_mock(|m| core::mem::take(&mut m.faults));
@@ -2289,6 +2301,17 @@ impl Drop for TestGl {
             panic!("mock OSAL/backend faults:\n  {}", faults.join("\n  "));
         }
     }
+}
+
+/// The lock every [`TestGl`] and [`OwnOsal`] holds, taken with no context:
+/// while it is held no GL test runs, so none holds compiled programs in the
+/// shader compiler's keep region. For a test that needs that region at rest
+/// (`store::tests::femtovgs_thirty_programs_fit_when_each_lifetime_has_its_end`
+/// needs one long free run: a GL test's live programs on another thread split
+/// it). Take it before `store::test_lock`, the order a GL test's compiles
+/// take the two in.
+pub fn no_gl_test() -> MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// A test that runs a real backend over an OSAL of its own (the Mali

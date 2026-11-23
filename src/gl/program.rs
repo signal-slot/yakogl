@@ -5125,8 +5125,8 @@ mod tests {
         let c = gl.ctx();
         let p = &mut context::objects(c.group).programs[obj_index(prog)];
         if offline {
-            crate::testutil::mark_stage_offline(&mut p.rvs);
-            crate::testutil::mark_stage_offline(&mut p.rfs);
+            gl.mark_stage_offline(&mut p.rvs);
+            gl.mark_stage_offline(&mut p.rfs);
         }
         set_table(&mut p.rvs, vs);
         set_table(&mut p.rfs, fs);
@@ -6043,7 +6043,7 @@ mod tests {
      * on a program whose stages the build's back end compiled. build_locations
      * flattens only rows of an offline-compiled stage (`!shaderc::is_online`),
      * so they run on `fake_offline_program`, which marks the stages offline
-     * (`testutil::mark_stage_offline`): a `no-shader-table` build has no
+     * (`TestGl::mark_stage_offline`): a `no-shader-table` build has no
      * offline stage of its own. The online shape of the same dEQP contract
      * is pinned by
      * `nested_struct_array_uniforms_reach_the_shader_as_deqp_sets_them`. */
