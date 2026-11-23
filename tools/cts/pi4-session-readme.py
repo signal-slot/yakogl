@@ -33,6 +33,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOTAL = re.compile(r"^TOTAL\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$", re.M)
 VERDICT = re.compile(r"\b[0-9a-f]{6,40} ((?:DONE|STOPPED|ABORTED|FATAL|INCOMPLETE)[^:;|]*)")
+STOPPED = re.compile(r"STOPPED: dEQP ended the session early")
+GROUP = re.compile(r"^(?!TOTAL\b)([A-Za-z_][\w.]*)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$", re.M)
 SUMMARY = re.compile(r"deqp: summary: (\d+) cases begun, (\d+) with a result, (\d+) without")
 PRIVATE = re.compile(
     r"/home/|/Users/|(?<![\w.-])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])|\.ts\.net|/dev/tty")
@@ -69,11 +71,19 @@ def read_tally(path):
         text = f.read()
     t = TOTAL.search(text)
     counts = t.groups() if t else ("-",) * 4
+    if t:
+        # the group rows above TOTAL must add up to it
+        rows = [list(map(int, g.groups()[1:])) for g in GROUP.finditer(text)]
+        if rows and [sum(c) for c in zip(*rows)] != [int(x) for x in counts]:
+            raise SystemExit("%s: the group rows do not add up to TOTAL" % path)
     m = VERDICT.search(text)
+    s = SUMMARY.search(text)
     if m:
         verdict = m.group(1).strip()
+    elif STOPPED.search(text):
+        verdict = "STOPPED after %s cases (dEQP ended the session early)" % (
+            s.group(1) if s else "?")
     else:
-        s = SUMMARY.search(text)
         if "complete=1" in text and s and s.group(3) == "0":
             verdict = "complete"
         else:
@@ -89,6 +99,10 @@ def build(sessdir, commit, tree, times, notes):
             if os.path.isfile(os.path.join(sessdir, lab + ".tally.txt"))]
     if not have:
         raise SystemExit("%s: no <LABEL>.tally.txt of the tree" % sessdir)
+    extra = sorted(f[:-len(".tally.txt")] for f in os.listdir(sessdir)
+                   if f.endswith(".tally.txt") and f[:-len(".tally.txt")] not in labels)
+    if extra:
+        raise SystemExit("%s: tally of a label not in the tree: %s" % (sessdir, " ".join(extra)))
     rows = [labels.index(lab) + 1 for lab in have]
     lo, hi = min(rows), max(rows)
     name = os.path.basename(os.path.normpath(sessdir))

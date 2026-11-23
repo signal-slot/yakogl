@@ -1,0 +1,13 @@
+# Synthetic two-round re-split tree (no real cases).
+# image A1: dEQP-GLES3.a
+x
+# image S1: dEQP-GLES3.s.one
+y
+# image S1a: dEQP-GLES3.s.refuse
+y
+# image S1b: dEQP-GLES3.s.rest1
+y
+# image S1c: dEQP-GLES3.s.rest2
+y
+# image Z9: dEQP-GLES3.z
+z

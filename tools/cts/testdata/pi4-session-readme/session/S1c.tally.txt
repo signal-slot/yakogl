@@ -1,0 +1,6 @@
+# Pi 4 dEQP-GLES3 image S1c: synthetic round 2, the rest of S1 (second part)
+S1c.console.txt: deqp: done: 4 passed, 0 failed, 2 not supported, 0 warnings, complete=1 | deqp: summary: 6 cases begun, 6 with a result, 0 without
+group                                       pass   fail    n/s  other
+shaders                                        3      0      2      0
+texture                                        1      0      0      0
+TOTAL                                          4      0      2      0
