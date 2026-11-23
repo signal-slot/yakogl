@@ -69,8 +69,15 @@ image = ("*** Booting Zephyr OS build v4.0 ***\n"
          "mp2: mp2_hello done: PSCI SYSTEM_RESET at 20000 ms\n")
 linux = ("mp2s: default used up, booting Linux\nSCRIPT FAILED: continuing...\n"
          "Starting kernel ...\n\nstm32mp2 login: ")
+# the DK's own lines: OpenSTLinux's banner, then the automatic login
+autologin = linux[:-len("stm32mp2 login: ")] + (
+    "ST OpenSTLinux - Weston - (A Yocto Project Based Distro) 5.0.17 stm32mp2 ttySTM0\n\n"
+    "stm32mp2 login: root (automatic login)\n\nroot@stm32mp2:~# ")
+nologin = linux[:-len("stm32mp2 login: ")] + "[    1.000000] systemd[1]: no login: yet\n"
 for name, text in (
         ("good", bl2() + left(1) + load + image + bl2() + left(0) + load + image + bl2() + linux),
+        ("autologin", bl2() + left(1) + load + image + bl2() + left(0) + load + image + bl2() + autologin),
+        ("nologin", bl2() + left(1) + load + image + bl2() + left(0) + load + image + bl2() + nologin),
         ("noleft0", bl2() + left(1) + load + image + bl2() + load + image + bl2() + linux),
         ("cut", bl2() + left(1) + load + image + bl2() + left(0) + load + image + bl2())):
     open(f"{t}/{name}.log", "w").write(text.replace("\n", "\r\n"))
@@ -193,6 +200,14 @@ check "good run: nodefault and uninstall once, at the end" \
     "$(count_is '^runner nodefault' "$STATE/calls" 1 && count_is '^runner uninstall' "$STATE/calls" 1; echo $?)"
 check "good run: env restored, /boot the same" "$(in_out '^mp2s-env: restored' && in_out '^mp2s-boot: same'; echo $?)"
 check "good run: the board host is never printed" "$(! in_out stubhost; echo $?)"
+
+scenario "$T/tools" autologin.log ok
+rc=$?
+check "the DK's automatic login line: exit 0, PASS" "$([ "$rc" = 0 ] && last_is 'mp2s-session: PASS'; echo $?)"
+
+scenario "$T/tools" nologin.log ok
+check "Linux started, no login line: FAIL record" "$(t last_is 'mp2s-session: FAIL record')"
+check "no login line: says so" "$(t in_out 'no login prompt in raw.log')"
 
 scenario "$T/tools" noleft0.log lenient
 check "no 'boots left 0': FAIL record" "$(t last_is 'mp2s-session: FAIL record')"

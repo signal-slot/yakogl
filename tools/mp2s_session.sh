@@ -80,7 +80,10 @@ ROOT=$(cd "$HERE/.." && pwd)
 P="mp2s-session:"
 COUNT=2
 USAGE="usage: tools/mp2s_session.sh [--dry-run] IMAGE"
-LOGIN_RE='(^|[[:space:]])[[:alnum:]-]+ login: ?$'
+# OpenSTLinux logs root in by itself, so the DK's line is
+# "<host> login: root (automatic login)": a pattern that wants the line to
+# end after "login:" fails the record step of a good run (board, 2026-11-23)
+LOGIN_RE='^[[:alnum:]-]+ login:( |$)'
 STEPS="precheck capture console runner comeback record undo env manifest"
 
 DRY=0

@@ -980,7 +980,9 @@ and is empty now, `rmdir /boot/yakogl` puts back the directory listing too
 
 ## Board run
 
-2026-11-22, `resource:stm32mp257f-dk` with its console and reset resources.
+2026-11-23, `resource:stm32mp257f-dk` with its console and reset resources:
+the run of 2026-11-22 repeated by hand, step by step, with the merged tools
+at `1600bdd4`. The result is the same; the values below are this run's.
 OpenSTLinux Starter Package v26.06.10 on the microSD; TF-A
 v2.10-stm32mp2-r2.0, OP-TEE 4.0.0, U-Boot 2023.10-stm32mp-r3.1. No person was
 present: no `forever`, and the reset resource was not used. The console was
@@ -991,14 +993,14 @@ the image, the kernel and the login), with the host name replaced. The
 board's address and console path came from the lease and appear nowhere here.
 
 1. **The image and the build.** `mp2_hello`, built as its README says from
-   this change's tree (it prints `mp2_hello: build 063a6db8`, a local commit
-   of that tree), run with `MP2_NO_WATCHDOG=1`. `zephyr.bin` is 41224 bytes,
-   sha256 `585734ca8227f497fe3de070888c98f7acf6252573c1a38baaa542456983dead`,
+   the tree at `1600bdd4` (it prints `mp2_hello: build 1600bdd4`), run with
+   `MP2_NO_WATCHDOG=1`. `zephyr.bin` is 41224 bytes,
+   sha256 `8f8c3da6dd8e11cc3c4b259e603c06fc8014e4ad9a56b681f136724f316d374e`,
    and its header `image_size` is 638976 bytes. The script built by
    `driver/tools/mp2-standalone/build.sh` (`boot.scr.uimg`, 5525 bytes) has
    sha256 `3a4679c55c40e442db4caa30fe030954a76f60f45b9a0b441efff403492898bc`.
-2. **Before.** `/boot` on `/dev/mmcblk2p8` (disk type `SD`), the card's
-   `u-boot-env` on `/dev/mmcblk2p7`: `boot_prefixes=/mmc0_`, 73 variables,
+2. **Before.** `/boot` on `/dev/mmcblk0p8` (disk type `SD`), the card's
+   `u-boot-env` on `/dev/mmcblk0p7`: `boot_prefixes=/mmc0_`, 73 variables,
    copy 1 active. `/boot` held 25 files, and there was no `/boot/yakogl/`.
    No `ubootefi.var`; `fwu: bank 0 accepted`. bootfs had 35328000 bytes
    free. The guard said `allow`, and the edit fit with the 256-byte margin
@@ -1007,7 +1009,7 @@ board's address and console path came from the lease and appear nowhere here.
    uninstall` first and wrote no environment. The dry run of `default`
    passes `mp2s_undo_order.py` (2 changes, each after its undo). `default`
    printed both undo lines and `fwu: bank 0 accepted`. It then wrote copy 2
-   with flags 0x4b and left copy 1 (flags 0x4a, active) alone, read the
+   with flags 0x4f and left copy 1 (flags 0x4e, active) alone, read the
    partition back (`verify default: ok`, changed `boot_prefixes`,
    `mp2s_left`, `mp2s_prefixes`, `mp2s_ver`) and said `default set for 2
    boots; nothing was rebooted.` `status` then read
@@ -1039,10 +1041,11 @@ board's address and console path came from the lease and appear nowhere here.
    cycle(s))`. `mp2s_record_check.py --count 2`: `VERDICT: PASS 2 image
    boot(s) then Linux, 3 boot(s) in the record`. `mp2s_reset_reason.py`: 3
    boots, 0 supply, 0 watchdog, 3 software.
-5. **After.** Linux now called the card `mmcblk0` (section 1), and the
+5. **After.** Linux now called the card `mmcblk2` (section 1; on
+   2026-11-22 it went the other way, `mmcblk2` to `mmcblk0`), and the
    runner, which tells the eMMC by `device/type` alone, read it at once
-   (`/dev/mmcblk0p7: active: copy 1`). `mp2s_comeback.sh --before-boot-id`:
-   `comeback: ok OpenSTLinux kernel 6.6.129, /boot on /dev/mmcblk0p8 (ext4,
+   (`/dev/mmcblk2p7: active: copy 1`). `mp2s_comeback.sh --before-boot-id`:
+   `comeback: ok OpenSTLinux kernel 6.6.129, /boot on /dev/mmcblk2p8 (ext4,
    disk type SD) ... no mp2s_* and no /yakogl/standalone/ prefix, new boot`.
    The environment against the one before: `mp2s-env: restored`.
    `mp2s_guard.py --for oneshot`: `allow`. Still no `ubootefi.var`.
@@ -1072,6 +1075,13 @@ board's address and console path came from the lease and appear nowhere here.
      OpenSTLinux logs root in by itself (`<host> login: root (automatic
      login)`), so the grep now matches `login: ` anywhere after the host
      name.
+   - `tools/mp2s_session.sh` kept the old pattern for the same line
+     (`login: ?$`), so its `record` step would have failed a good run read
+     from the console device (found on 2026-11-23 against this run's
+     record; the session here was run by hand, because the lease's serial
+     server holds the console). Its pattern is now `^<host> login:` followed
+     by a space or the end of the line, with self-test cases for the DK's
+     line and for a log with no login line.
    - `tools/mp2s_fakeboard.sh` took only `fw_setenv` as an environment
      write, so the runner's one `dd` of a copy failed on the fake board. It
      now accepts a `dd of=` the card's `u-boot-env` with `conv=notrunc`. It
