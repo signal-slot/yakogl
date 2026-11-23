@@ -1,5 +1,7 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* SPDX-FileCopyrightText: 2026 Signal Slot, Inc. */
+/* SPDX-FileCopyrightText: 2008 Ben Smith */
+/* SPDX-FileCopyrightText: 2010-2012 Linaro Limited */
 /*
  * host_main.cpp - glmark2-es2 on the host against YakoGL, the Linux OSAL
  * (src/osal/linux.c: GPU memory is malloc'd, every submit completes at once,
