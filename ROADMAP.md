@@ -227,8 +227,16 @@ the MMU and both caches off, x0 = 1, x3 = the load address, CNTFRQ 40 MHz,
 PSCI 1.1. `mp2_gpu` (`20261121-1107-mp2_gpu-9e520020`) then powered the GPU
 over SCMI through OP-TEE plus the RCC gate and read model 0x8000, revision
 0x6205, product 0x80003, eco 0, customer 0x15; `HI_INTR_ENBL` read back
-0xffffffff and the reset reached idle. `gc_fence`, `gc_clear`,
-`gc_triangle`, `gl_test`, dEQP and the display have not run on the board.
+0xffffffff and the reset reached idle. On 2026-11-21 `gc_fence` passed
+(`20261121-1855-gc_fence-55ae8385`: `gc_fence: fence 1 irqs 1 elapsed 4169 us
+irq-latency 21 us`, SPI 183 routed, board back after 58 s) and `gc_clear`
+passed (`20261121-1859-gc_clear-e1a37b77`: `gc_clear: 256x128 wrong pixels 0
+(clear 1 0, clear 2 0, guard 0)`, back after 45 s). On 2026-11-23
+`gc_triangle` passed (`20261123-0451-gc_triangle-250f61d4`) and `gl_test`
+case 1 passed (`20261123-0454-gl_test_case1-ed1e6361`; that run printed no
+`gl_test: all:` tally). Steps 5 to 8 are recorded in the same note's "Board
+verdicts" (commits `83c00813` and `cc0fccf2`). The full `gl_test` set, dEQP,
+the display, the direct boot and ES 3.0 and 3.1 have not run on the board.
 
 The other candidate boards (#321, #327, #332, #336, #341) are issues only;
 the tree holds no board record for them.
