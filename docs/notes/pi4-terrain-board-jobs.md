@@ -140,3 +140,81 @@ and leaves 2 undecided; none of them is more than about 0.3 ms by what is
 printed. The 3.53 ms `bin` of job 4 is the one new large item and no
 overlap hides it. What remains is the GPU cost of the jobs (jobs 2 and 4 at
 7.9 and 9.4 ms): `v3d-terrain-gpu.md`.
+
+## Pending-job look: before and after
+
+Two board runs of glmark2 on the Pi 4 (#1209), to measure `v3d-pending-look`
+(`kick_pending_look`, `v3d-pending-start.md` (e)). The change is commit
+`e9410974` ("v3d: a draw, a clear and a job's start let the OSAL start a
+parked job whose predecessor has finished"), on origin/main
+(`refs/connected/origin/remotes/origin/main` `da52a267`; `git ls-remote origin`
+failed here with "Host key verification failed"). Its parent on main is
+`92f35267`. (The plan's item text names `b0c4b045` and `3691e957`; those are
+not the commits in this history, and the two above were used.) Both images are
+the GM image of `tools/cts/common-images.sh pi4 ... GM`, built from a checkout
+of that commit with a clean tree, build lines `YAKOGL_SAMPLE_TABLE=6c5b8a70`
+and `YAKOGL_SAMPLE_TREE=<sha8>`. Run with `tools/board.sh pi4 run <image>
+records/pi4 glmark2-<sha8>`, parsed with
+`tools/hostharness/terrain-records/parse.py`. One run each, no repeat, same
+board and session (about 8 minutes apart). No code changed.
+
+| | before `92f35267` | after `e9410974` |
+|---|---|---|
+| image sha256 (first 8) | `5afd6197` | `d3865791` |
+| records path | `records/pi4/20261123-0449-glmark2-92f35267-5afd6197/` | `records/pi4/20261123-0457-glmark2-e9410974-d3865791/` |
+| terrain FrameTime | 34.77 ms, 29 FPS | 34.713 ms, 29 FPS |
+| `glmark2-frame` gl / swap / frame us | 26455 / 8278 / 34735 | 26392 / 8285 / 34678 |
+| `wait.ns` a frame | 28.382 ms | 28.309 ms |
+| frame less `wait.ns` | 6.353 ms | 6.369 ms |
+| jobs, `waits` a frame | 8.003, 8.003 | 8.003, 8.003 |
+| frame-10 render sum | 27.220 ms | 27.276 ms |
+| frame-10 idle sum | 94 us | 95 us |
+| frame-10 bin sum / prep sum | 4543 / 29633 us | 3688 / 28792 us |
+
+Verdict lines, verbatim:
+
+```
+board.sh pi4 glmark2-92f35267 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=record:GLMARK2 resets=0 record=594b1201,fc3f00c3,6184003f,00258320 back_after=430s unsupported=0
+board.sh pi4 glmark2-e9410974 rc=0 verdict=done boot=tryboot row boot_verdict=complete result=record:GLMARK2 resets=0 record=594b1201,fc3f00c3,6184003f,00258320 back_after=427s unsupported=0
+```
+
+Frame-10 jobs (us; `~` marks the job whose render was not read exactly):
+
+| job | render before | render after | idle b/a | bin b/a | prep b/a |
+|---|---|---|---|---|---|
+| 1 | 4396~ | 4439~ | 13 / 14 | 43 / 41 | 3611 / 3612 |
+| 2 | 7931 | 7930 | 80 / 80 | 7 / 7 | 1 / 1 |
+| 3 | 193 | 192 | 1 / 1 | 7 / 7 | 7855 / 7853 |
+| 4 | 9377 | 9392 | 0 / 0 | 4400 / 3547 | 131 / 129 |
+| 5 | 460 | 461 | 0 / 0 | 7 / 7 | 14546 / 13709 |
+| 6 | 289 | 289 | 0 / 0 | 7 / 7 | 538 / 538 |
+| 7 | 1770 | 1770 | 0 / 0 | 35 / 35 | 376 / 378 |
+| 8 | 2804 | 2803 | 0 / 0 | 37 / 37 | 2575 / 2572 |
+
+### Verdict against the four values of `v3d-pending-start.md` (e)
+
+1. **Frame down 0.4 to 1.6 ms: not met.** The frame is 0.057 ms lower
+   (34.735 to 34.678 ms in `glmark2-frame`, 34.77 to 34.713 ms FrameTime),
+   inside the 0.1 ms run-to-run spread seen between `e07d066a` and `a4b9c551`.
+2. **Render of the `~` job down by about the same: not met.** Job 1's render
+   went 4396 to 4439 us (up 0.04 ms).
+3. **Frame less `wait.ns` up by at most 2 ms: met, trivially.** 6.353 to
+   6.369 ms (+0.016 ms); `wait.ns` is 0.073 ms lower.
+4. **`waits` unchanged at about 8.003: met** (8.003 both). **Idle unchanged:
+   met** (94 and 95 us).
+
+**Measured no-gain.** Two of the four expected effects (the frame and the `~`
+render) did not appear; the other two held because nothing moved. Every job's
+render, idle and `waits` are identical to within 0.05 ms. The one number that
+moved is job 4's `bin` (4400 to 3547 us), and with it job 5's `prep` (14546 to
+13709 us): that is one frame (frame 10) of one run, and `a4b9c551`'s run read
+3.53 ms for the same `bin`, so the before run's 4.4 ms is the outlier; the
+mean frame did not move by it. Reason, from what the record shows: terrain's
+jobs are queued behind a running job in each case (`prep` is queue time of
+7.9 to 14.5 ms for jobs 3 and 5), the GPU is never idle between them (idle
+sum 95 us), so a start without the CPU in a wait has no GPU gap to close;
+and the per-job `completed` call `choose_arenas` already makes (the "For the
+planner" remark of `v3d-pending-look`) already started the parked job at the
+same points. The next step named by that item is the optional `z_submit` poll
+in the OSAL (note (f)); this record gives no reason to expect it to do better,
+since the idle it would remove is 95 us a frame.
