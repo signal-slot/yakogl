@@ -220,23 +220,29 @@ pub const V3D_INDEX_TYPE_32: u32 = 2;
 
 /* ---- v3d_job71.h ------------------------------------------------------------ */
 
-/// `V3D_JOB71_MAX_RTS` (v3d_job71.h:66): `devinfo->max_render_targets` of a
+/// `V3D_JOB71_MAX_RTS` (v3d_job71.h:67): `devinfo->max_render_targets` of a
 /// 7.x device.
 pub const V3D_JOB71_MAX_RTS: usize = 8;
-/// `V3D_JOB71_MAX_SIZE` (v3d_job71.h:67): pixels, either side.
+/// `V3D_JOB71_MAX_SIZE` (v3d_job71.h:68): pixels, either side.
 pub const V3D_JOB71_MAX_SIZE: u32 = 7680;
-/// `V3D_QUNIFORM_TEXTURE_*` (v3d_job71.h:74-77): a texture's base level size,
+/// `V3D_QUNIFORM_TMU_CONFIG_P0` / `_P1` (v3d_job71.h:78-79): the TMU
+/// configuration words of the sampler binding in bits 24..31 of `data`:
+/// `V3dJob71Tmu::tex_state` (P0) or `sampler` (P1) ORed with the low 24 bits
+/// (Mesa's `write_tmu_p0` / `write_tmu_p1`).
+pub const V3D_QUNIFORM_TMU_CONFIG_P0: u32 = 40;
+pub const V3D_QUNIFORM_TMU_CONFIG_P1: u32 = 41;
+/// `V3D_QUNIFORM_TEXTURE_*` (v3d_job71.h:82-85): a texture's base level size,
 /// depth and layer count at the sampler binding `data`.
 pub const V3D_QUNIFORM_TEXTURE_WIDTH: u32 = 44;
 pub const V3D_QUNIFORM_TEXTURE_HEIGHT: u32 = 45;
 pub const V3D_QUNIFORM_TEXTURE_DEPTH: u32 = 46;
 pub const V3D_QUNIFORM_TEXTURE_ARRAY_SIZE: u32 = 47;
-/// `V3D_JOB71_ZS_DEPTH` / `_STENCIL` (v3d_job71.h:242-243): the aspect bits of
+/// `V3D_JOB71_ZS_DEPTH` / `_STENCIL` (v3d_job71.h:256-257): the aspect bits of
 /// `V3dJob71Clear::zs_load_aspects` / `zs_store_aspects`.
 pub const V3D_JOB71_ZS_DEPTH: u8 = 1;
 pub const V3D_JOB71_ZS_STENCIL: u8 = 2;
 
-/// `v3d_job71_draw`'s results (v3d_job71.h:262-264).
+/// `v3d_job71_draw`'s results (v3d_job71.h:276-278).
 pub const V3D_JOB71_OK: i32 = 0;
 pub const V3D_JOB71_FULL: i32 = 1;
 pub const V3D_JOB71_REFUSED: i32 = 2;
@@ -262,7 +268,7 @@ pub const V3D_OUTPUT_IMAGE_FORMAT_D16: u32 = 42;
 pub const V3D_OUTPUT_IMAGE_FORMAT_D24S8: u32 = 43;
 pub const V3D_OUTPUT_IMAGE_FORMAT_S8: u32 = 44;
 
-/// `struct v3d_job71_rt` (v3d_job71.h:81): one colour render target.
+/// `struct v3d_job71_rt` (v3d_job71.h:89): one colour render target.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct V3dJob71Rt {
@@ -279,7 +285,7 @@ pub struct V3dJob71Rt {
     pub pad: [u8; 2],
 }
 
-/// `struct v3d_job71_zs` (v3d_job71.h:98): a depth/stencil image in memory.
+/// `struct v3d_job71_zs` (v3d_job71.h:106): a depth/stencil image in memory.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct V3dJob71Zs {
@@ -289,7 +295,7 @@ pub struct V3dJob71Zs {
     pub height_in_ub: u32,
 }
 
-/// `struct v3d_job71_target` (v3d_job71.h:109): the job's framebuffer.
+/// `struct v3d_job71_target` (v3d_job71.h:117): the job's framebuffer.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct V3dJob71Target {
@@ -305,7 +311,7 @@ pub struct V3dJob71Target {
     pub s: V3dJob71Zs,
 }
 
-/// `struct v3d_job71_stencil_face` (v3d_job71.h:132).
+/// `struct v3d_job71_stencil_face` (v3d_job71.h:140).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct V3dJob71StencilFace {
@@ -318,7 +324,7 @@ pub struct V3dJob71StencilFace {
     pub write_mask: u32,
 }
 
-/// `struct v3d_job71_state` (v3d_job71.h:140): one draw's state, field for
+/// `struct v3d_job71_state` (v3d_job71.h:148): one draw's state, field for
 /// field `ffi.rs`'s `V3dJobState`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -359,8 +365,9 @@ pub struct V3dJob71State {
     pub oq_addr: u32,
 }
 
-/// `struct v3d_job71_tmu` (v3d_job71.h:174): one sampler binding; at 7.1 only
-/// its sizes are read.
+/// `struct v3d_job71_tmu` (v3d_job71.h:183): one sampler binding: the
+/// record addresses for the TMU configuration words (`tex_state` low 4 bits
+/// and `sampler` low 3 bits 0), the sizes for the `TEXTURE_*` words.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct V3dJob71Tmu {
@@ -373,7 +380,7 @@ pub struct V3dJob71Tmu {
     pub array_size: u32,
 }
 
-/// `struct v3d_job71_draw` (v3d_job71.h:185).
+/// `struct v3d_job71_draw` (v3d_job71.h:199).
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct V3dJob71Draw {
@@ -401,7 +408,7 @@ pub struct V3dJob71Draw {
     pub instances: u32,
 }
 
-/// `struct v3d_job71_clear` (v3d_job71.h:208): what the render list does with
+/// `struct v3d_job71_clear` (v3d_job71.h:222): what the render list does with
 /// the tile buffer around the draws.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -424,7 +431,7 @@ pub struct V3dJob71Clear {
     pub pad: [u8; 1],
 }
 
-/// `struct v3d_job71` (v3d_job71.h:245): the builder's state; the caller
+/// `struct v3d_job71` (v3d_job71.h:259): the builder's state; the caller
 /// zeroes it and `v3d_job71_begin` fills it.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -476,7 +483,7 @@ impl V3dJob71 {
     };
 }
 
-/// `struct v3d_job71_draw_layout` (v3d_job71.h:254): where the job put what
+/// `struct v3d_job71_draw_layout` (v3d_job71.h:268): where the job put what
 /// one draw wrote (GPU addresses), for a checker. `rec` is the 96 bytes of
 /// `struct V3D71_GL_SHADER_STATE_RECORD_DRAW_INDEX` (Mesa's unpacked record,
 /// 24 words), not read from Rust; the C check pins its offset and the size.
@@ -497,7 +504,7 @@ impl V3dJob71DrawLayout {
 }
 
 extern "C" {
-    /// v3d_job71.h:268. False (and the job is broken) for a target the builder
+    /// v3d_job71.h:282. False (and the job is broken) for a target the builder
     /// refuses or a list overflow.
     pub fn v3d_job71_begin(
         j: *mut V3dJob71,
@@ -506,10 +513,10 @@ extern "C" {
         rcl: *mut V3dCl,
         ind: *mut V3dCl,
     ) -> bool;
-    /// v3d_job71.h:272. `layout` may be null. `V3D_JOB71_OK` / `_FULL` /
+    /// v3d_job71.h:286. `layout` may be null. `V3D_JOB71_OK` / `_FULL` /
     /// `_REFUSED`; a draw that is not recorded leaves nothing behind.
     pub fn v3d_job71_draw(j: *mut V3dJob71, d: *const V3dJob71Draw, layout: *mut V3dJob71DrawLayout) -> i32;
-    /// v3d_job71.h:279. `tile_list_start` / `end` may be null. False when the
+    /// v3d_job71.h:293. `tile_list_start` / `end` may be null. False when the
     /// job is broken, a buffer to load or store is not given, a Z/S aspect is
     /// not one the buffer holds, or a list overflowed.
     pub fn v3d_job71_end(
@@ -518,7 +525,7 @@ extern "C" {
         tile_list_start: *mut u32,
         tile_list_end: *mut u32,
     ) -> bool;
-    /// v3d_job71.h:285: the submit's tile allocation size (rounded up to
+    /// v3d_job71.h:299: the submit's tile allocation size (rounded up to
     /// `page_size`, 16 KiB on the Pi 5's kernel) and tile state size.
     pub fn v3d_job71_alloc_sizes(
         j: *const V3dJob71,

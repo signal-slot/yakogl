@@ -118,6 +118,8 @@ _Static_assert(V3D_JOB71_MAX_RTS == 8 && V3D_JOB71_MAX_SIZE == 7680, "7.1 limits
 _Static_assert(V3D_QUNIFORM_TEXTURE_WIDTH == 44 && V3D_QUNIFORM_TEXTURE_HEIGHT == 45 &&
 		       V3D_QUNIFORM_TEXTURE_DEPTH == 46 && V3D_QUNIFORM_TEXTURE_ARRAY_SIZE == 47,
 	       "texture size uniforms");
+_Static_assert(V3D_QUNIFORM_TMU_CONFIG_P0 == 40 && V3D_QUNIFORM_TMU_CONFIG_P1 == 41,
+	       "TMU configuration uniforms");
 _Static_assert(V3D_JOB71_ZS_DEPTH == 1 && V3D_JOB71_ZS_STENCIL == 2, "Z/S aspect bits");
 _Static_assert(V3D_JOB71_OK == 0 && V3D_JOB71_FULL == 1 && V3D_JOB71_REFUSED == 2, "job results");
 

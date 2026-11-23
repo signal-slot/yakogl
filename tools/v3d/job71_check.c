@@ -31,11 +31,16 @@
  *                          zs_load_aspects / zs_store_aspects), the LOAD and
  *                          STORE fields read back; aspects a buffer does not
  *                          hold refused
+ *   job71_check tmu <file> the TMU configuration words P0/P1 of Mesa's 7.1
+ *                          texture jobs (gl_tex2d, gl_texfmt, gl_cube), one
+ *                          job a line of <file> (job71.sh's tmu.py), each
+ *                          the reference's FS uniform stream word for word
  *
  * JOB71_CLIF=<file> stores the decoded CLIF text of clear, triangle or multi.
  * The last line is "job71_check: <mode> ...: ok" or ends "FAIL". Built with
  * the cc line of check71.d/job71.sh (Mesa's include paths, -DV3D_CL_VER=71,
- * -Itools/v3d/tri-shaders71, the reference build's libmesa_ref.a).
+ * -Itools/v3d/tri-shaders71 -Itools/v3d/gltest-mesa71-tex, the reference
+ * build's libmesa_ref.a).
  */
 #include <stdarg.h>
 #include <stdio.h>
@@ -52,6 +57,7 @@
 #include "v3d_job71.h"
 
 #include "mesa_passthrough_interp_color.h"
+#include "texture.h" /* tools/v3d/gltest-mesa71-tex: Mesa's gl_test_texture_fs_src program */
 
 #if V3D_CL_VER != 71
 #error "job71_check is built with -DV3D_CL_VER=71"
@@ -1310,9 +1316,133 @@ static int run_g1(void)
 }
 
 /* ------------------------------------------------------------------------ */
+/* tmu: the TMU configuration words (QUNIFORM_TMU_CONFIG_P0/P1) of Mesa's 7.1
+ * texture jobs, tools/v3d/pi5/gl_tex2d, gl_texfmt and gl_cube. Each line of
+ * the input (job71.sh's tmu.py) is one job: a label, the addresses of the
+ * texture state and sampler state records it samples, found in the dump by
+ * their contents (not read from the uniforms), and the words of the
+ * reference's fragment shader uniform stream. The draw is the board's
+ * triangle with the fragment shader's uniform list of Mesa's
+ * gl_test_texture_fs_src program (tools/v3d/gltest-mesa71-tex/texture.h:
+ * P0 data 3, P1 data 4, binding 0), the binding at those addresses; the FS
+ * stream v3d_job71 writes must be the reference's word for word. */
+
+static struct v3d_uniform tex_fs_u[MESA71_TEXTURE_FS_UNIFORM_COUNT];
+
+/* Build the triangle with `fs_u` (n entries) and `tmu` (ntmu bindings) into
+ * a fresh job; the FS stream's words into `out` (n of them). The draw's
+ * v3d_job71_draw result. */
+static int tmu_draw(const struct v3d_uniform *fs_u, uint32_t n, const struct v3d_job71_tmu *tmu,
+		    uint32_t ntmu, uint32_t *out)
+{
+	struct v3d_cl bcl, rcl, ind;
+	init_lists(&TRI_PLACE, &bcl, &rcl, &ind);
+	struct v3d_job71_target t;
+	board_target(&TRI_PLACE, &t);
+	struct v3d_job71 j;
+	if (!v3d_job71_begin(&j, &t, &bcl, &rcl, &ind))
+		return -1;
+	struct v3d_job71_draw d;
+	tri_draw(&TRI_PLACE, &d);
+	struct v3d_fs_prog fs = tri_fs;
+	fs.uniforms = fs_u;
+	fs.num_uniforms = n;
+	d.fs = &fs;
+	d.tmu = tmu;
+	d.num_tmu = ntmu;
+	struct v3d_job71_draw_layout lo = { 0 };
+	int r = v3d_job71_draw(&j, &d, &lo);
+	if (r == V3D_JOB71_OK) {
+		const uint8_t *p = b_ind + (lo.fs_uniforms - TRI_PLACE.indirect);
+		for (uint32_t i = 0; i < n; i++)
+			out[i] = (uint32_t)p[4 * i] | (uint32_t)p[4 * i + 1] << 8 |
+				 (uint32_t)p[4 * i + 2] << 16 | (uint32_t)p[4 * i + 3] << 24;
+	}
+	return r;
+}
+
+static int run_tmu(const char *path)
+{
+	FILE *in = fopen(path, "r");
+	if (!in) {
+		fail("cannot read %s", path);
+		return 1;
+	}
+	for (uint32_t i = 0; i < MESA71_TEXTURE_FS_UNIFORM_COUNT; i++)
+		tex_fs_u[i] = (struct v3d_uniform){ mesa71_texture_fs_uniform_contents[i],
+						     mesa71_texture_fs_uniform[i] };
+	char line[512];
+	int jobs = 0, words = 0;
+	while (fgets(line, sizeof(line), in)) {
+		char label[64];
+		uint32_t tex, smp, want[8];
+		int used = 0;
+		if (sscanf(line, "%63s %x %x%n", label, &tex, &smp, &used) != 3)
+			continue;
+		uint32_t nw = 0;
+		for (const char *p = line + used; nw < 8;) {
+			int k = 0;
+			if (sscanf(p, "%x%n", &want[nw], &k) != 1)
+				break;
+			nw++;
+			p += k;
+		}
+		jobs++;
+		if (nw != MESA71_TEXTURE_FS_UNIFORM_COUNT) {
+			fail("%s: the reference's FS stream has %u words, the program's %u", label, nw,
+			     MESA71_TEXTURE_FS_UNIFORM_COUNT);
+			continue;
+		}
+		const struct v3d_job71_tmu b = { .unit = 0, .tex_state = tex, .sampler = smp };
+		uint32_t got[MESA71_TEXTURE_FS_UNIFORM_COUNT];
+		int r = tmu_draw(tex_fs_u, MESA71_TEXTURE_FS_UNIFORM_COUNT, &b, 1, got);
+		if (r != V3D_JOB71_OK) {
+			fail("%s: v3d_job71_draw returned %d", label, r);
+			continue;
+		}
+		for (uint32_t i = 0; i < nw; i++, words++)
+			if (got[i] != want[i])
+				fail("%s: FS uniform %u (contents %u): 0x%08x, the reference 0x%08x", label, i,
+				     tex_fs_u[i].contents, got[i], want[i]);
+		printf("job71_check: tmu %s texture 0x%08x sampler 0x%08x: P0 0x%08x P1 0x%08x\n", label,
+		       tex, smp, got[0], got[1]);
+	}
+	fclose(in);
+	if (jobs == 0)
+		fail("no job in %s", path);
+
+	/* The bits Mesa's texture jobs leave 0: P1's output type 32-bit (bit
+	 * 0, the 7.1 compiler's 16-bit return off) and unnormalised
+	 * coordinates (bit 1) ORed in as given, and the binding of each word
+	 * found among several by its unit (bits 24..31 of the data) */
+	const struct v3d_job71_tmu bs[3] = {
+		{ .unit = 0, .tex_state = 0x1060, .sampler = 0x1078 },
+		{ .unit = 2, .tex_state = 0x2000, .sampler = 0x2048 },
+		{ .unit = 5, .tex_state = 0x3020, .sampler = 0x3070 },
+	};
+	const struct v3d_uniform syn[6] = {
+		{ V3D_QUNIFORM_TMU_CONFIG_P0, (2u << 24) | 0xf }, { V3D_QUNIFORM_TMU_CONFIG_P1, (2u << 24) | 0x1 },
+		{ V3D_QUNIFORM_TMU_CONFIG_P1, (5u << 24) | 0x7 }, { V3D_QUNIFORM_TMU_CONFIG_P0, (5u << 24) | 0x1 },
+		{ V3D_QUNIFORM_TMU_CONFIG_P1, 0x2 },              { V3D_QUNIFORM_TMU_CONFIG_P0, 0x0 },
+	};
+	const uint32_t syn_want[6] = { 0x200f, 0x2049, 0x3077, 0x3021, 0x107a, 0x1060 };
+	uint32_t got[6];
+	int r = tmu_draw(syn, 6, bs, 3, got);
+	if (r != V3D_JOB71_OK)
+		fail("synthetic: v3d_job71_draw returned %d", r);
+	else
+		for (int i = 0; i < 6; i++, words++)
+			if (got[i] != syn_want[i])
+				fail("synthetic: uniform %d: 0x%08x, expected 0x%08x", i, got[i], syn_want[i]);
+	printf("job71_check: tmu %d reference job(s) and 1 synthetic, %d words: %s\n", jobs, words,
+	       failures ? "FAIL" : "ok");
+	return failures ? 1 : 0;
+}
+
+/* ------------------------------------------------------------------------ */
 /* refusals: each a copy of the board's triangle job changed in one way */
 
-#define REFUSALS 18
+#define REFUSALS 23
 
 static bool refused(int which, const char **what)
 {
@@ -1335,6 +1465,8 @@ static bool refused(int which, const char **what)
 	d.cs = &cs;
 	struct v3d_job71_clear c;
 	board_clear(&c);
+	struct v3d_job71_tmu tb = { .unit = 0, .tex_state = 0x1060, .sampler = 0x1078 };
+	struct v3d_uniform fu[2] = { { V3D_QUNIFORM_TMU_CONFIG_P0, 3 }, { V3D_QUNIFORM_TMU_CONFIG_P1, 4 } };
 	switch (which) {
 	case 0: *what = "width 0"; t.width = 0; break;
 	case 1: *what = "width 7681"; t.width = 7681; break;
@@ -1343,7 +1475,7 @@ static bool refused(int which, const char **what)
 	case 4: *what = "a depth format as a colour RT"; t.rt[0].format = V3D_OUTPUT_IMAGE_FORMAT_D24S8; break;
 	case 5: *what = "an S8 depth buffer"; t.zs = (struct v3d_job71_zs){ 0x40000, V3D_OUTPUT_IMAGE_FORMAT_S8, 0, 0 }; break;
 	case 6: *what = "a Z/S store without a Z/S buffer"; c.zs_store = true; break;
-	case 7: *what = "a TMU configuration uniform (7.1 texture state not yet)"; u[3].contents = 40; break;
+	case 7: *what = "a TMU configuration uniform without its sampler binding"; u[3].contents = 40; break;
 	case 8: *what = "a viewport Z scale of 0 (NO_GUARDBAND)"; st.vp.scale[2] = 0.0f; break;
 	case 9: *what = "separate VPM segments"; vs.separate_segments = true; break;
 	case 10: *what = "a CS reading the base instance"; cs.uses_biid = true; break;
@@ -1354,7 +1486,19 @@ static bool refused(int which, const char **what)
 	case 15: *what = "lists of 64 bytes"; cap = 64; break;
 	case 16: *what = "an 8-bit index type past 32-bit"; d.indexed = true; d.index_type = 3; break;
 	case 17: *what = "a depth type past DEPTH_16"; t.depth_type = 3; break;
+	case 18: *what = "a P0 of a texture state address with a low bit set"; tb.tex_state = 0x1068; break;
+	case 19: *what = "a P1 of a sampler state address with a low bit set"; tb.sampler = 0x107c; break;
+	case 20: *what = "a P0 payload past the return words (0x10)"; fu[0].data = 0x10; break;
+	case 21: *what = "a P1 payload past bit 2 (0x8)"; fu[1].data = 0x8; break;
+	case 22: *what = "a P1 of a binding with no sampler address"; tb.sampler = 0; break;
 	default: return false;
+	}
+	if (which >= 18) {
+		/* Mesa's texture FS stream (P0 data 3, P1 data 4) on binding 0 */
+		fs.uniforms = fu;
+		fs.num_uniforms = 2;
+		d.tmu = &tb;
+		d.num_tmu = 1;
 	}
 	v3d_cl_init(&bcl, b, TRI_PLACE.bcl, cap);
 	v3d_cl_init(&rcl, r, TRI_PLACE.rcl, cap);
@@ -1396,6 +1540,8 @@ int main(int argc, char **argv)
 		return run_gl(argv[2]);
 	if (strcmp(mode, "g1") == 0)
 		return run_g1();
-	printf("job71_check: FAIL usage: job71_check clear|triangle|multi|refusals|gl <dir>|g1\n");
+	if (strcmp(mode, "tmu") == 0 && argc > 2)
+		return run_tmu(argv[2]);
+	printf("job71_check: FAIL usage: job71_check clear|triangle|multi|refusals|gl <dir>|g1|tmu <file>\n");
 	return 1;
 }
