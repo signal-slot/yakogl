@@ -623,6 +623,20 @@ must end with `check-gles3-tree: tools/cts/pi4-gles3-tree.txt: <N> images,
 (N the new image count; the header comment's image count, now "100", follows it), and
 `tools/cts/cts-selftest.sh` check 19 and `check-deqp-images.py` say the same.
 
+`tools/cts/pi4-gles3-resplit.py` does the split by program: it reads the tree and
+the aborted labels' tally files (`--tally <LABEL>.tally.txt`, only those that say
+STOPPED; their last `<Status> <case>` line is the refusing case) or a list
+(`--refuse 'LABEL CASE'`, `--refuse-file FILE`), and writes the re-split tree
+(`-o OUT`, else stdout; `--at <sha8>` names the commit in the notes). For each
+aborted label the cases that ran stay in it (the label goes if the first case
+refused), the refusing case is a one-case image `<LABEL>1`, and the never-begun
+rest follows in `<LABEL>2`... of equal size, by the table above
+(`builtin_functions.precision` 200, `--size N` overrides). A label that ends in
+a digit gets a letter appended, one that ends in a letter a number (`S03a` ->
+`S03a1`, `S03a1` -> `S03a1a`). Other rows and the header text are kept, the
+header's image count is rewritten, and the check above must still pass;
+`tools/cts/pi4-gles3-resplit-selftest.sh` is its test.
+
 ## 7. Reading the first run against the AM62P's
 
 The AM62P's GLES3 run (RESULTS.md 1r, `396d667a`) had 8,835 failures in 78

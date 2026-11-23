@@ -1,0 +1,24 @@
+# A small tree in 11 images, the format of tools/cts/pi4-gles3-tree.txt.
+
+# image A: 2 (the cases of A that ran before g1.a.3 at abc12345; g1.a.3 alone in A1, the rest in A2-A3)
+dEQP-GLES3.functional.g1.a.1,dEQP-GLES3.functional.g1.a.2
+# image A1: 1 (g1.a.3 alone: dEQP stopped at it in A at abc12345)
+dEQP-GLES3.functional.g1.a.3
+# image A2a: 1 (g1.a.4 alone: dEQP stopped at it in A2 at def67890)
+dEQP-GLES3.functional.g1.a.4
+# image A2b: 1 (the rest of A2 after g1.a.4, never begun at def67890)
+dEQP-GLES3.functional.g1.a.5
+# image A3: 1 (the rest of A after g1.a.3, never begun at abc12345)
+dEQP-GLES3.functional.g1.a.6
+# image B1: 1 (g1.b.x.1 alone: dEQP stopped at it in B at abc12345)
+dEQP-GLES3.functional.g1.b.x.1
+# image B2: 2 (the rest of B after g1.b.x.1, never begun at abc12345)
+dEQP-GLES3.functional.g1.b.x.2,dEQP-GLES3.functional.g1.b.y.1
+# image B3: 1 (the cases of B3 that ran before g1.b.z at def67890; g1.b.z alone in B3a)
+dEQP-GLES3.functional.g1.b.y.2
+# image B3a: 1 (g1.b.z alone: dEQP stopped at it in B3 at def67890)
+dEQP-GLES3.functional.g1.b.z
+# image C: 4 (named cases)
+dEQP-GLES3.functional.g2.c.1,dEQP-GLES3.functional.g2.c.2,dEQP-GLES3.functional.g2.c.3,dEQP-GLES3.functional.g2.c.4
+# image D: 1
+dEQP-GLES3.functional.g3.*

@@ -1,0 +1,3 @@
+# the same two aborts, as a list
+A dEQP-GLES3.functional.g1.a.3
+B dEQP-GLES3.functional.g1.b.x.1

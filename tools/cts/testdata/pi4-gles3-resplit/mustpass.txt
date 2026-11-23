@@ -1,0 +1,16 @@
+dEQP-GLES3.functional.g1.a.1
+dEQP-GLES3.functional.g1.a.2
+dEQP-GLES3.functional.g1.a.3
+dEQP-GLES3.functional.g1.a.4
+dEQP-GLES3.functional.g1.a.5
+dEQP-GLES3.functional.g1.a.6
+dEQP-GLES3.functional.g1.b.x.1
+dEQP-GLES3.functional.g1.b.x.2
+dEQP-GLES3.functional.g1.b.y.1
+dEQP-GLES3.functional.g1.b.y.2
+dEQP-GLES3.functional.g1.b.z
+dEQP-GLES3.functional.g2.c.1
+dEQP-GLES3.functional.g2.c.2
+dEQP-GLES3.functional.g2.c.3
+dEQP-GLES3.functional.g2.c.4
+dEQP-GLES3.functional.g3.d.1
