@@ -10020,11 +10020,17 @@ fn scalar(f: &Fs<'_>, pr: &mut Pairs, v: Val, pair: u8) -> Result<u8, MaliError>
 /// alu_branchlane), a constant's half, or a varying's lane converted alone
 /// (`FADD.f32 r0.h0, r1^, 0x0.neg`, then `DISCARD.f32.lt 0x38000000.h1,
 /// r0^.h0`; discard_81_branchquad, whose varying the link keeps whole,
-/// [`layout`]). Any other operand has no reference
+/// [`layout`]), or a texel of the look-up's fp16 result, its half of the
+/// word (ideas df64's `c.w < 0.5`, gm2_ideas_1: `DISCARD.f32.lt r1.h1,
+/// 0x38000000.h1`). Any other operand has no reference
 /// ([`MaliError::DiscardForm`]).
 fn cmp_leaf(f: &Fs<'_>, pr: &mut Pairs, v: Val, ubo: &UboLayout) -> Result<(u8, Swz), MaliError> {
     let (leaf, swz) = match (f.alu_of(v), f.input_lane(v), f.uniform_dword(v), v) {
         (_, _, _, Val::Const(c)) => (Leaf::Const(u32::from(f16_rtne(c).ok_or(MaliError::Fp16Inexact)?)), Swz::H00),
+        (None, None, None, _) if f.texel(v).is_some() => {
+            let (j, c) = f.texel(v).ok_or(MaliError::Defect(Defect::IrIndex))?;
+            (Leaf::TexLane(j as u8, c), if c % 2 == 0 { Swz::H00 } else { Swz::H11 })
+        }
         (None, Some((loc, c)), _, _) if (loc as usize) < MAX_VARYINGS => {
             let (k, c) = index(f, loc, c)?;
             (Leaf::Splat { k, c }, Swz::H00)
@@ -10799,6 +10805,25 @@ fn late_rules(pr: &mut Pairs, roots: [u8; 2]) {
 }
 
 /// The nodes a tree uses; a product the fusion took is not one of them.
+/// Pair `x` is operations on gl_FragCoord's narrowed x and y
+/// ([`Leaf::Frag`]) and constants alone, one of them the position: the
+/// two-lane computed coordinate a reference draws (gm2_ideas_1).
+fn frag_coord_tree(pr: &Pairs, x: u8) -> bool {
+    fn walk(pr: &Pairs, x: u8, depth: u8, frag: &mut bool) -> bool {
+        match pr.nodes[x as usize] {
+            P::Leaf(Leaf::Frag) => {
+                *frag = true;
+                true
+            }
+            P::Leaf(Leaf::Const(_)) => true,
+            P::Op(op, s) if depth < 8 => s.iter().take(op.arity()).all(|&y| walk(pr, y, depth + 1, frag)),
+            _ => false,
+        }
+    }
+    let mut frag = false;
+    walk(pr, x, 0, &mut frag) && frag
+}
+
 fn mark(pr: &Pairs, x: u8, live: &mut [bool; MAX_PAIRS]) {
     if live[x as usize] {
         return;
@@ -10925,15 +10950,30 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         _ => None,
     };
     /* a computed coordinate: one fp16 lane in both (case 121's `vec2(c.w *
-     * 0.5)`), its nodes of one lane, converted at the look-up; two lanes
-     * have no reference */
+     * 0.5)`), its nodes of one lane, converted at the look-up; or two
+     * lanes paired as a cube direction's x and y are (`nir_opt_vectorize`;
+     * ideas df64's `gl_FragCoord.xy / 32.0`, gm2_ideas_1: `FMA.v2f16 r0,
+     * r0^, u3.w0, 0x0.neg`, then `F16_TO_F32 r1, r0.h0`, `F16_TO_F32 r0,
+     * r0^.h1` and the two moves to the staging words) */
     let coord = match lone {
         Some(TexLookup { coord: TexCoord::Computed, cube: None, node, .. }) => {
             let nd = f.nir.nodes[node as usize];
             if nd.src[0] != nd.src[1] {
-                return Err(MaliError::TexCoord);
+                let xy = vectorise(f, &mut pr, nd.src[0], nd.src[1], 0, ubo)?;
+                /* only gl_FragCoord's word and constants under it: a
+                 * varying's lanes (gm2_constfold_5, 6: `TextureCoord +
+                 * vec2(k, 0.0)`) and uniforms have no reference here */
+                if !frag_coord_tree(&pr, xy) {
+                    return Err(MaliError::TexCoord);
+                }
+                pr.note(xy, Place::Output, &mut f.prods);
+                if f.prods & !ADMITTED != 0 {
+                    return Err(MaliError::FsOperandForm);
+                }
+                Some((xy, true))
+            } else {
+                Some((coord_lane(f, &mut pr, nd.src[0])?, false))
             }
-            Some(coord_lane(f, &mut pr, nd.src[0])?)
         }
         _ => None,
     };
@@ -11086,7 +11126,7 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
         .flatten()
         .flatten();
     let cmp_nodes = discards[..nd].iter().flat_map(|d| d.2.map(|x| x.0));
-    for r in roots.into_iter().chain(coord).chain(cube_nodes).chain(cmp_nodes) {
+    for r in roots.into_iter().chain(coord.map(|c| c.0)).chain(cube_nodes).chain(cmp_nodes) {
         mark(&pr, r, &mut live);
     }
     /* events: (key, pair, what, its index): a load, the look-up, the
@@ -11240,9 +11280,16 @@ pub fn select(p: &mut Prog<'_>, f: &mut Fs<'_>, ubo: &UboLayout) -> Result<(), M
                 };
                 let mut staging = [Src::NULL; 3];
                 let n = match (coord, cube) {
-                    (Some(r), _) => {
+                    (Some((r, false)), _) => {
                         let x = f2f32(p, &mut rows, operand(&pr, r, &lv, &val)?.swz(Swz::H00))?;
                         staging[..2].copy_from_slice(&[x, x]);
+                        2
+                    }
+                    (Some((r, true)), _) => {
+                        let w = operand(&pr, r, &lv, &val)?;
+                        let x = f2f32(p, &mut rows, w.swz(Swz::H00))?;
+                        let y = f2f32(p, &mut rows, w.swz(Swz::H11))?;
+                        staging[..2].copy_from_slice(&[x, y]);
                         2
                     }
                     /* each lane to fp32 (`F16_TO_F32 r1, r0.h0`, `r0^.h1`,

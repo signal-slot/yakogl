@@ -45,11 +45,11 @@
 20 ideas:speed=duration fs 1aca: Valhall: an integer or boolean value is not lowered yet
 20 ideas:speed=duration fs 23c8: ok
 20 ideas:speed=duration fs c565: Valhall: an integer or boolean value is not lowered yet
-20 ideas:speed=duration fs df64: Valhall: a texture coordinate other than a vec2 varying read whole or two constants is not lowered yet
+20 ideas:speed=duration fs df64: ok
 20 ideas:speed=duration fs e6a9: ok
 20 ideas:speed=duration vs 038e: ok
 20 ideas:speed=duration vs 4f27: ok
-20 ideas:speed=duration vs 51b2: Valhall: control flow (if, a loop, a return before the end) is not lowered yet
+20 ideas:speed=duration vs 51b2: ok
 20 ideas:speed=duration vs a09e: ok
 20 ideas:speed=duration vs bf4b: ok
 20 ideas:speed=duration vs c236: ok

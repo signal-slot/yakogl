@@ -262,3 +262,12 @@ gm2_texmulti_3  gm2_texmulti_3.vert gm2_texmulti_3.frag triangles vs.position=eq
 gm2_texmulti_4  gm2_texmulti_4.vert gm2_texmulti_4.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:76:a673af719157
 gm2_texmulti_5  gm2_texmulti_5.vert gm2_texmulti_5.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:56:6771e91161ea
 gm2_texmulti_6  gm2_texmulti_6.vert gm2_texmulti_6.frag triangles vs.position=equal vs.varying=equal fs.fragment=differs:mediump:31:47300629587a
+# #367 lower-ideas: ideas fs df64's alpha-tested glyph (gl_FragCoord.xy / 32.0 as a mediump two-lane coordinate, the
+# discard on the texel's w) and vs 51b2's early-return `unitvec` (three nested `if`s, the outer one's condition folded on
+# the constant second argument; docs/notes/mali-ideas.md, mali-control-flow.md), drawn with --uniform-values. Our
+# compiler is byte-equal to gm2_ideas_1 and to gm2_cf_earlyret_vs's vertex programs (tests/mali_ideas.rs; its fragment
+# shader stops at FS_VARYING_LOAD). pan_shc's SPIR-V path has no lower_precision: _1's coordinate is an fp32 product by
+# 0.03125 (`mediump`); its vertex programs of gm2_cf_earlyret_vs hold 117 and 75 instructions against Mesa's 56 and
+# 87, the matrix order and the flattened function among them (`unanalysed`).
+gm2_ideas_1         gm2_ideas_1.vert        gm2_ideas_1.frag        triangles vs.position=equal fs.fragment=differs:mediump:16:2cf0e24d70a3
+gm2_cf_earlyret_vs  gm2_cf_earlyret_vs.vert gm2_cf_earlyret_vs.frag triangles vs.position=differs:unanalysed:117:6b6c72c35da2 vs.varying=differs:unanalysed:87:67e4a44355fb fs.fragment=differs:mediump:13:043920c93422
