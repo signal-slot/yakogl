@@ -1360,6 +1360,10 @@ mod es3 {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali refuses these uniform-block shaders by name (each failing case's log names the refusal)"
+    )]
     fn single_basic_type_and_array() {
         let _g = context();
         let mut cases = Vec::new();
@@ -1398,6 +1402,10 @@ mod es3 {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali refuses these uniform-block shaders by name (each failing case's log names the refusal)"
+    )]
     fn instance_array_basic_type() {
         let _g = context();
         let mut cases = Vec::new();
@@ -1470,6 +1478,10 @@ mod es3 {
     }
 
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali refuses these uniform-block shaders by name (each failing case's log names the refusal)"
+    )]
     fn multi_basic_types_and_nested_structs() {
         let _g = context();
         let mut cases = Vec::new();
@@ -1522,6 +1534,7 @@ mod es3 {
             const STRUCT_KINDS: [(&str, usize); [$($kind),*].len()] = [$(($kind, $count)),*];
             $(
                 #[test]
+                #[cfg_attr(feature = "gpu-mali", ignore = "Mali refuses these uniform-block shaders by name (each failing case's log names the refusal)")]
                 fn $test() {
                     structs_of($kind);
                 }
@@ -1571,6 +1584,7 @@ mod es3 {
             const MIXED_PARTS: [(&str, &str, usize); [$($mode),*].len()] = [$(($mode, $layout, $count)),*];
             $(
                 #[test]
+                #[cfg_attr(feature = "gpu-mali", ignore = "Mali refuses these uniform-block shaders by name (each failing case's log names the refusal)")]
                 fn $test() {
                     mixed_of($mode, $layout);
                 }
@@ -1659,6 +1673,10 @@ mod es3 {
     /// Revert check: index the block by `i / mat`, `i % mat` in
     /// `program::get_uniform` and the non-square rows below fail.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali refuses these uniform-block shaders by name (each failing case's log names the refusal)"
+    )]
     fn non_square_matrices_read_back_what_was_set() {
         type Setter = unsafe extern "C" fn(GLint, GLsizei, GLboolean, *const GLfloat);
         let _g = context();

@@ -1149,6 +1149,8 @@ mod tests {
     /// the program the board and the host both named.
     #[test]
     fn femtovgs_thirty_programs_fit_when_each_lifetime_has_its_end() {
+        /* the region at rest: no GL test holds programs in it meanwhile */
+        let _gl = crate::testutil::no_gl_test();
         let _serial = test_lock();
         struct Restore(bool);
         impl Drop for Restore {

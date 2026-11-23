@@ -270,7 +270,11 @@ fn quad(z: f32, what: &str) -> Seen {
 /// pixel type `ty` (an unsized one is no attachment in the default ES 3.0
 /// report, ES 3.0 4.4.4.2; glmark2's ES 2.0 report is `report-es2`), attached alone as
 /// GL_DEPTH_ATTACHMENT, drawn into with the depth test on. Returns its name.
+/// In a `report-es2` build the texture is GL_OES_depth_texture's unsized
+/// GL_DEPTH_COMPONENT of `ty`, as glmark2 makes it (an ES 2.0 report takes
+/// no sized internal format: GL_INVALID_VALUE).
 fn depth_pass(internal: GLenum, ty: GLenum, z: f32) -> GLuint {
+    let internal = if cfg!(feature = "report-es2") { GL_DEPTH_COMPONENT } else { internal };
     let (mut tex, mut fbo) = (0, 0);
     // SAFETY: room for one name each; null pixels.
     unsafe {

@@ -231,6 +231,10 @@ fn floats(i: usize) -> [f32; 4] {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali refuses a fragment shader that mixes highp and mediump floats (not lowered yet)"
+)]
 fn per_instance_split_stages_raw_integer_dwords_and_restores_typed_current_values() {
     let _g = context(&DIVISOR_1);
     const N: usize = 3;

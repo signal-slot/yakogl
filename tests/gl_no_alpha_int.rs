@@ -239,6 +239,10 @@ fn check(got: Option<u8>, want: u8, what: &str, taken: &mut u32) {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn integer_base_formats_without_alpha_say_so() {
     let _g = context();
     let mut taken = 0;
@@ -252,6 +256,7 @@ fn integer_base_formats_without_alpha_say_so() {
 }
 
 #[test]
+#[cfg_attr(feature = "gpu-mali", ignore = "Mali refuses a highp sampler (not lowered yet)")]
 fn formats_with_alpha_do_not() {
     let _g = context();
     let mut taken = 0;

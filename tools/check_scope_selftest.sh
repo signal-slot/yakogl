@@ -253,12 +253,19 @@ expect "v3d: a MESA_V3D_TREE without build-v3d is a gap" "^gap   v3d tex_check, 
 out=$(plan src/mali/genxml/pack.rs)
 expect "mali: its clippy row" '^plan  clippy  host-test,gpu-mali,shaderc-online,no-shader-table$' "$out"
 expect "mali: its tests" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(--lib mali' "$out"
+mali_lib='^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(--lib, every test but the mali:: ones, failures as tools/mali/known-failures.txt\)$'
+expect "mali: the rest of the library" "$mali_lib" "$out"
+mali_all='^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(every tests/ target, failures as tools/mali/known-failures.txt\)$'
+mali_all_es2='^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table,report-es2 \(every tests/ target, failures as tools/mali/known-failures.txt\)$'
+expect "mali: every tests/ target" "$mali_all" "$out"
+expect "mali: every tests/ target, report-es2" "$mali_all_es2" "$out"
 expect "mali: the generated packers" '^plan  gen     src/mali/genxml == tools/mali/gen_pack_rs.py' "$out"
 expect "mali: the generated ISA table" '^plan  gen     src/shaderc/online/mali/isa/v10.rs == tools/mali/gen_isa_rs.py' "$out"
 expect "mali: no V3D row" '^skip  clippy  host-test,gpu-v3d,shaderc-online,no-shader-table$' "$out"
-# a dEQP byte-compare test: its row (and the rest of the mali scope), nothing else
+# a dEQP byte-compare test: the mali rows (every tests/ target), nothing else
 out=$(plan tests/mali_deqp_intval.rs)
-expect "mali: the deqp byte-compare row" '^plan  test    host-test,gpu-mali,shaderc-online,no-shader-table \(tests/mali_deqp_' "$out"
+expect "mali: a deqp test runs in every tests/ target" "$mali_all" "$out"
+expect "mali: and in its report-es2 twin" "$mali_all_es2" "$out"
 expect "mali: a deqp test change, the mali rows and the tree key row only" '^check.sh: .*\(--changed HEAD, scopes: mali treekey \)' "$out"
 # A harness script runs in the row that calls it: tools/hostharness/glmark2/run.sh
 # is run by the glmark2 corpus row (a change there once passed a gate that
@@ -471,6 +478,8 @@ expect "tests: the target's own row (V3D)" '^plan  test    host-test,gpu-v3d,sha
 expect "tests: no other target's row" '^skip  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(tests/es3_srgb.rs\)$' "$tests_plan"
 v3d_all='^plan  test    host-test,gpu-v3d,shaderc-online,no-shader-table \(every tests/ target\)$'
 expect "tests: the whole-directory V3D row" "$v3d_all" "$tests_plan"
+expect "tests: the whole-directory Mali row" "$mali_all" "$tests_plan"
+expect "tests: the whole-directory Mali row, report-es2" "$mali_all_es2" "$tests_plan"
 v3d_plan=$(plan src/v3d/job.rs)
 expect "v3d: the whole-directory tests row" "$v3d_all" "$v3d_plan"
 count "v3d: the whole-directory tests row, once" "$v3d_all" 1 "$v3d_plan"

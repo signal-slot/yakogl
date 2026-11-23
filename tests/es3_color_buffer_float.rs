@@ -338,6 +338,10 @@ fn half_float_extension_today() {
 /* ---- (b) the 32-bit formats are incomplete without the extension -------- */
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn r32f_rg32f_rgba32f_r11g11b10_incomplete() {
     let _g = context();
     #[cfg(not(feature = "color-buffer-float"))]
@@ -415,6 +419,10 @@ fn multisample_storage_error(internalformat: GLenum) -> GLenum {
 /// attachments, as textures and as renderbuffers (ES 3.0.6 4.4.4.1 with
 /// EXT_color_buffer_float), and both storage calls take them.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn claimed_all_seven_complete() {
     let _g = context();
     let _c = Claimed::on();
@@ -429,6 +437,10 @@ fn claimed_all_seven_complete() {
 /// RGBA32F or R11F_G11F_B10F surface the back end draws, those three stay
 /// out (GL_INVALID_ENUM, incomplete) and R32F is in.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn claimed_rule_without_a_surface_keeps_the_three_out() {
     let _g = context();
     let _c = Claimed::on();
@@ -492,6 +504,10 @@ fn floats(v: &[f32]) -> Vec<u8> {
 /// pair reads the values clamped; a pair of neither kind is
 /// GL_INVALID_OPERATION.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn claimed_readpixels_float_pairs() {
     let _g = context();
     let _c = Claimed::on();
@@ -565,6 +581,10 @@ fn renderbuffer_param(pname: GLenum) -> GLint {
 /// renderbuffer (glGetRenderbufferParameteriv and the attachment query) and
 /// as a texture attachment: GL_FLOAT, the format's own sizes.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn claimed_getters_match_the_formats() {
     let _g = context();
     let _c = Claimed::on();

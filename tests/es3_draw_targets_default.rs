@@ -174,6 +174,10 @@ fn geti(pname: GLenum) -> Result<GLint, GLenum> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+)]
 fn the_product_build_answers_three() {
     let _g = context();
     assert_eq!(backend::DRAW_TARGETS, 3, "every back end draws three until its own four-target half lands");
@@ -203,6 +207,10 @@ fn the_product_build_answers_three() {
 /// A fourth colour attachment is no attachment point this GL names, and
 /// four draw buffers are past the answer of GL_MAX_DRAW_BUFFERS.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+)]
 fn a_fourth_target_is_refused() {
     let _g = context();
     // SAFETY: plain GL calls; names made here.
@@ -247,6 +255,10 @@ fn a_fourth_target_is_refused() {
 /// to pin the other side, the stand-in's 4.
 #[cfg(all(feature = "shaderc-online", not(feature = "report-es2")))]
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: it draws four targets (mali::backend::DRAW_TARGETS); this test needs a three-target back end"
+)]
 fn gl_max_draw_buffers_is_three() {
     use yakogl::gl::shader::*;
     let _g = context();

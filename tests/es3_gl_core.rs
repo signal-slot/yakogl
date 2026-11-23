@@ -488,6 +488,10 @@ mod es3 {
     /// refuses by name (glTexStorage2D's GL_INVALID_OPERATION) is the
     /// formats-* items' and is skipped. RGB10_A2 every back end stores.
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+    )]
     fn es3_texture_attachments_answer_their_type_and_sizes() {
         let _g = context();
         let fb = framebuffer();

@@ -223,6 +223,10 @@ fn must_fail(outs: &str, body: &str) {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali refuses a fragment shader that leaves gl_FragColor unwritten (not lowered yet)"
+)]
 fn location_3_links() {
     must_link("layout(location = 3) out vec4 o;", "o = vec4(1.0);");
 }
@@ -238,6 +242,10 @@ fn array_of_four_at_location_0_links() {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali refuses a fragment shader that leaves gl_FragColor unwritten (not lowered yet)"
+)]
 fn outputs_at_1_and_3_without_0_link() {
     must_link("layout(location = 1) out vec4 a;\nlayout(location = 3) out vec4 b;", "a = vec4(1.0); b = vec4(2.0);");
 }

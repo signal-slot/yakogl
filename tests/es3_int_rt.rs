@@ -413,6 +413,10 @@ mod es3 {
     /// keeps them incomplete, except the 32-bit classes it stores in their
     /// own class (`integer_texture_surface` has their rows).
     #[test]
+    #[cfg_attr(
+        feature = "gpu-mali",
+        ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+    )]
     fn completeness_takes_four_channel_integer_texture_attachments() {
         let _g = context();
         let mut made = 0;

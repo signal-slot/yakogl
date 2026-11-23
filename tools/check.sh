@@ -2497,9 +2497,70 @@ mali_lib_tests() {
   printf '%s\n' "$out" | tests_as_declared "${MALI_TEST_SOURCES[@]}" ||
     { echo "the Mali tests that passed are not the tests declared in MALI_TEST_SOURCES ($MALI_GATE_ENV)"; return 1; }
 }
+# mali_known_failures <set> <cargo_test argument>...: run cargo_test (libtest)
+# and compare the tests that failed with the lines of <set> in
+# MALI_KNOWN_FAILURES (tools/mali/known-failures.txt): green when they are the
+# same, test for test. A failure the list does not have is red; so is a listed
+# test that passed, was ignored or did not run (the list cannot go stale), a
+# binary that failed with no failing test named (a crash, a build failure), and
+# a list line without its issue. A test outside what the Mali does today is not
+# listed: it says so itself (`cfg_attr(feature = "gpu-mali", ignore = ...)`).
+mali_known_failures() {
+  local set=$1 out listed got bad=0
+  shift
+  [ -r "${MALI_KNOWN_FAILURES-}" ] ||
+    { echo "no MALI_KNOWN_FAILURES: $MALI_GATE_ENV is missing or does not set it"; return 1; }
+  listed=$(awk -v set="$set" '
+    /^[ \t]*(#|$)/ { next }
+    $1 == set {
+      if (NF != 4 || $4 !~ /^#([0-9]+|TODO-[a-z0-9-]+)$/) { print "BAD " FILENAME ":" NR ": not <set> <target> <test> #<issue>: " $0; next }
+      print $2 " " $3
+    }' "$MALI_KNOWN_FAILURES") || return 1
+  if printf '%s\n' "$listed" | grep -q '^BAD '; then
+    printf '%s\n' "$listed" | sed -n 's/^BAD //p'
+    return 1
+  fi
+  out=$(cargo_test --libtest "$@" 2>&1)
+  # "<target> <test> <outcome>" for every test that ran; "<target> CRASHED"
+  # for a binary cargo_test names as failed
+  got=$(printf '%s\n' "$out" | awk '
+    /^     Running / { t = $2; next }
+    /^test [^ ]+ \.\.\. (ok|FAILED|ignored)/ && t != "" { o = $0; sub(/^test [^ ]+ \.\.\. /, "", o); sub(/[ ,].*/, "", o); print t " " $2 " " o }
+    /^  FAILED binary / { print $3 " CRASHED" }')
+  local failed ran
+  failed=$(printf '%s\n' "$got" | awk '$3 == "FAILED" { print $1 " " $2 }' | LC_ALL=C sort -u)
+  ran=$(printf '%s\n' "$got" | awk 'NF == 3 { print $1 " " $2 " " $3 }')
+  # a binary that failed with no failing test of its own
+  for b in $(printf '%s\n' "$got" | awk '$2 == "CRASHED" { print $1 }' | LC_ALL=C sort -u); do
+    printf '%s\n' "$failed" | grep -q "^$b " ||
+      { echo "binary $b failed with no failing test named (see its log above)"; bad=1; }
+  done
+  local new stale l
+  new=$(LC_ALL=C comm -23 <(printf '%s\n' "$failed" | grep .) <(printf '%s\n' "$listed" | grep . | LC_ALL=C sort -u))
+  stale=$(LC_ALL=C comm -13 <(printf '%s\n' "$failed" | grep .) <(printf '%s\n' "$listed" | grep . | LC_ALL=C sort -u))
+  if [ -n "$new" ]; then
+    printf '%s\n' "$new" | sed 's/^/failed, not in the list: /'
+    bad=1
+  fi
+  if [ -n "$stale" ]; then
+    while IFS= read -r l; do
+      echo "listed, $(printf '%s\n' "$ran" | awk -v k="$l" '$1 " " $2 == k { o = $3 } END { print (o == "" ? "did not run" : o == "ok" ? "passed" : o) }'): $l ($MALI_KNOWN_FAILURES)"
+    done <<< "$stale"
+    bad=1
+  fi
+  [ "$bad" -eq 0 ] || { printf '%s\n' "$out" | grep -E '^test result|panicked' | head -40; return 1; }
+  printf '%s\n' "$out" | grep -E '^test result' | awk '{ p += $4; f += $6; i += $8 } END { print p " passed, " f " failed (each one listed), " i " ignored, in " NR " binaries" }'
+}
 scope mali local
 step "clippy  $MALI_CONFIG" cargo clippy --no-default-features --features "$MALI_CONFIG" --all-targets
 step "test    $MALI_CONFIG (--lib mali::, every declared test: packers and ISA vs Mesa and the board)" mali_lib_tests
+# The rest of the library in the Mali feature set: the GL core's tests on the
+# Mali back end and the shader compiler's. The `mali::` tests and the triangle
+# sample's Mali test are left to the row above, so none runs twice (libtest's
+# --skip is the same substring match as that row's filters).
+step "test    $MALI_CONFIG (--lib, every test but the mali:: ones, failures as tools/mali/known-failures.txt)" \
+  mali_known_failures lib --no-fail-fast --no-default-features --features "$MALI_CONFIG" --lib \
+    -- --skip mali:: --skip the_triangle_sample_shaders_build_on_the_mali
 # tools/mali/route.sh measure over the reference directory: the tool runs
 # and gives one row per pair (it compares the two counts itself). The rows
 # are not judged here: the landing rules are `compare` of two trees.
@@ -2509,41 +2570,20 @@ mali_route_measure() {
   printf '%s\n' "$out" | cut -f2 | LC_ALL=C sort | uniq -c
 }
 step "run     mali route.sh measure on tools/mali/testdata (one row per pair)" mali_route_measure
-# ES 3.0 multisample renderbuffers on the Mali: the pins of today's one-sample
-# behaviour and the ignored tests of the 4x result (not run).
-step "test    $MALI_CONFIG (tests/es3_msaa_mali.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test es3_msaa_mali
-# The GL-on-mock pins of the NanoPC-T6 dEQP-GLES2 fixes: each draws through the
-# GL core on the Mali mock (feature sets are those of each file's header).
-# mali_zs_sharing and the second mali_vcube_magswitch run need `report-es2`:
-# without it their ES 2.0 cases are compiled out.
-step "test    $MALI_CONFIG (tests/mali_{blend_states,draw_oom,fragment_random,cube_samplers,rgb565_stencil,cube_complete,attr_gap,attr_active,vcube_magswitch}.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
-    --test mali_blend_states --test mali_draw_oom --test mali_fragment_random \
-    --test mali_cube_samplers --test mali_rgb565_stencil --test mali_cube_complete \
-    --test mali_attr_gap --test mali_attr_active --test mali_vcube_magswitch
-# Plan #377's dEQP-GLES2 compile-refusal families: each tests/mali_deqp_<family>.rs
-# compiles the shader pairs of its Mesa 26.2.1 references
-# (tools/mali/testdata/deqp_<family>_*) and byte-compares the program with their
-# expect.json through tests/mali_ref; a reference the compiler still refuses is
-# #[ignore]d and one test of the file pins its exact refusal text. The files
-# therefore run as-is, not through tests_as_declared (which wants no ignored
-# test); tests/mali_ref_selftest.rs is that shared module's own test.
-step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uniarray,mixprec,colourpair,loops,misc}.rs, mali_ref_selftest.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
-    --test mali_deqp_intval --test mali_deqp_varylink --test mali_deqp_constop \
-    --test mali_deqp_unitype --test mali_deqp_uniarray --test mali_deqp_mixprec \
-    --test mali_deqp_colourpair --test mali_deqp_loops --test mali_deqp_misc \
-    --test mali_ref_selftest
-# Plan #367's glmark2 compile pins: each file compiles reductions of glmark2's
-# shader shapes (Mesa 26.2.1 references where the record has one) and pins the
-# program or the refusal. Feature sets are those of each file's header.
-step "test    $MALI_CONFIG (tests/mali_{arith_const,fs_arith,fau_page,tex_swizzle}.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
-    --test mali_arith_const --test mali_fs_arith --test mali_fau_page --test mali_tex_swizzle
-step "test    $MALI_CONFIG,report-es2 (tests/mali_zs_sharing.rs, mali_vcube_magswitch.rs)" \
-  cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" \
-    --test mali_zs_sharing --test mali_vcube_magswitch
+# Every integration test target of tests/ in the Mali feature set and in its
+# report-es2 twin, as the V3D row does: a new tests/mali_*.rs file runs with
+# no edit here. Each file's header says the feature sets it needs (the others
+# compile it to nothing). The tests/mali_deqp_*.rs files #[ignore] the
+# references the compiler still refuses and pin the refusal text in one test
+# of each file, so these rows compare failures, not the ignored count
+# (tests_as_declared wants none ignored). A change confined to tests/ (scope
+# `tests`) reaches them too; whole directory, so they do not narrow to
+# TEST_TARGETS.
+scope mali local tests
+step "test    $MALI_CONFIG (every tests/ target, failures as tools/mali/known-failures.txt)" \
+  mali_known_failures tests --no-fail-fast --no-default-features --features "$MALI_CONFIG" --test '*'
+step "test    $MALI_CONFIG,report-es2 (every tests/ target, failures as tools/mali/known-failures.txt)" \
+  mali_known_failures tests-es2 --no-fail-fast --no-default-features --features "$MALI_CONFIG,report-es2" --test '*'
 # src/mali/genxml/v10.rs and v10_cases.rs are what tools/mali/gen_pack_rs.py
 # makes from the vendored v10.xml, byte for byte (third_party/mesa-26.2.1/UPSTREAM,
 # "Used by"); a failing generator prints nothing and so differs too.

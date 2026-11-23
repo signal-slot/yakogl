@@ -277,8 +277,10 @@ const VARYING_VECTORS: GLint = if cfg!(feature = "gpu-vivante") { 15 } else { 8 
 
 /// GL_ALIASED_POINT_SIZE_RANGE's upper end: the size each GPU really clamps
 /// a point to (state.rs POINT_SIZE_MAX, measured per board by dEQP
-/// rasterization.limits.points): PowerVR 511, GC7000 64, V3D 512. ES 2.0
-/// table 6.20 asks for a range that covers 1.
+/// rasterization.limits.points): PowerVR 511, GC7000 64, V3D 512; the
+/// Mali-G610 Mesa's `max_point_size` (`mali::backend::POINT_SIZE_MAX`).
+/// ES 2.0 table 6.20 asks for a range that covers 1.
+#[cfg(not(feature = "gpu-mali"))]
 const POINT_SIZE_MAX: GLfloat = if cfg!(feature = "gpu-powervr") {
     511.0
 } else if cfg!(feature = "gpu-vivante") {
@@ -286,6 +288,8 @@ const POINT_SIZE_MAX: GLfloat = if cfg!(feature = "gpu-powervr") {
 } else {
     512.0
 };
+#[cfg(feature = "gpu-mali")]
+const POINT_SIZE_MAX: GLfloat = yakogl::mali::backend::POINT_SIZE_MAX;
 
 /* ---- the version and the extension list ------------------------------------------ */
 
@@ -372,8 +376,9 @@ fn es3_version_queries_are_invalid_enum() {
 /// fragdata cases read the first to learn whether a second buffer exists.
 /// GL_MAX_COLOR_ATTACHMENTS is the same token as
 /// GL_MAX_COLOR_ATTACHMENTS_NV, which GL_NV_fbo_color_attachments (claimed)
-/// defines: the attachment points exist (CAP_COLOR_ATTACHMENTS, 3) though
-/// nothing on this surface draws into more than the first.
+/// defines: the attachment points exist (the back end's
+/// `backend::DRAW_TARGETS`: 3, or 4 on the Mali) though nothing on this
+/// surface draws into more than the first.
 #[test]
 fn draw_buffer_queries_are_invalid_enum() {
     let _g = context();
@@ -381,7 +386,7 @@ fn draw_buffer_queries_are_invalid_enum() {
     for i in 0..4 {
         assert_eq!(geti(GL_DRAW_BUFFER0 + i), Err(GL_INVALID_ENUM), "GL_DRAW_BUFFER{i}");
     }
-    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(3));
+    assert_eq!(geti(GL_MAX_COLOR_ATTACHMENTS), Ok(yakogl::backend::DRAW_TARGETS as GLint));
 }
 
 /// The implementation-dependent values ES 2.0 defines (tables 6.18 to 6.20

@@ -293,6 +293,9 @@ fn unrenderable_format() -> Fbo {
 /// GL_INVALID_FRAMEBUFFER_OPERATION on the framebuffer `$setup` builds, and
 /// send nothing to the back end.
 macro_rules! incomplete_cases {
+    ($setup:ident, #[$attr:meta]: $( $name:ident => $call:ident ),+ $(,)?) => {
+        $( incomplete_cases!(@case [$attr] $setup $name $call); )+
+    };
     ($setup:ident, $reason:literal: $( $name:ident => $call:ident ),+ $(,)?) => {
         $( incomplete_cases!(@case [ignore = $reason] $setup $name $call); )+
     };
@@ -328,7 +331,9 @@ incomplete_cases!(missing_level, "check_status: level 1 of a level-0-only textur
     missing_level_clear_buffer_fv => call_fv,
     missing_level_clear_buffer_fi => call_fi,
 );
-incomplete_cases!(unrenderable_format:
+/* GL_RGBA8_SNORM is no texture on the Mali yet: the setup's glTexImage2D
+ * is GL_INVALID_OPERATION before any framebuffer is checked. */
+incomplete_cases!(unrenderable_format, #[cfg_attr(feature = "gpu-mali", ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION")]:
     unrenderable_format_clear => call_clear,
     unrenderable_format_clear_buffer_iv => call_iv,
     unrenderable_format_clear_buffer_uiv => call_uiv,

@@ -94,10 +94,15 @@ fn padded(src: &str, n: usize) -> String {
 /// with nested `if`s, kept loops with `break`s and unrolled guarded passes
 /// compile to the same words with 190 more locals declared (each table
 /// then 190 entries wider), so the copies are whole at any width.
+/// `intloop_divnest` is GLSL ES 3.00, which a `report-es2` build refuses
+/// at the front end: that build checks the other four.
 #[test]
 fn many_locals_leave_branches_and_loops_as_they_were() {
     for name in ["case87_databreak", "intloop_divnest", "cflow_148_texbranch", "fvg_filter_image", "gm2_locals_noise"] {
         let r = mali_ref::Reference::load_unset(name);
+        if cfg!(feature = "report-es2") && r.vs.starts_with("#version 300 es") {
+            continue;
+        }
         let a = mali_ref::compile_pair(&r.vs, &r.fs).unwrap_or_else(|e| panic!("{name}: {e}"));
         let b = mali_ref::compile_pair(&padded(&r.vs, 190), &padded(&r.fs, 190))
             .unwrap_or_else(|e| panic!("{name} with 190 more locals: {e}"));

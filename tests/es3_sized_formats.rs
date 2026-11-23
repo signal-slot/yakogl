@@ -218,6 +218,10 @@ fn the_accept_matrix_is_table_3_2() {
 /// What each GPU's mask turns each format into: the first class it samples,
 /// and a named refusal where it samples none.
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali: no ES 3.0 texture class is sampled yet (mali::backend::SAMPLED_TEXFMTS is 0), so this format is GL_INVALID_OPERATION"
+)]
 fn storage_per_gpu_and_the_refusals() {
     if cfg!(feature = "report-es2") {
         return;

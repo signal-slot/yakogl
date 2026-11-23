@@ -236,6 +236,10 @@ fn draw_lines() -> Vec<String> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali refuses fragment arithmetic other than +, -, * and abs (sin; not lowered yet)"
+)]
 fn off_by_default_no_line_is_logged() {
     let _g = context();
     assert_eq!(yakogl_fs_dump_budget.load(Ordering::Relaxed), 0, "the default is off");
@@ -244,6 +248,10 @@ fn off_by_default_no_line_is_logged() {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "gpu-mali",
+    ignore = "Mali refuses fragment arithmetic other than +, -, * and abs (sin; not lowered yet)"
+)]
 fn on_the_block_is_dumped_and_the_budget_counts_down() {
     let _g = context();
     yakogl_fs_dump_budget.store(1, Ordering::Relaxed);
