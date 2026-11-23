@@ -586,6 +586,8 @@ pub(super) fn attachment_storage(c: &GlContext, a: &GlAttachment) -> Option<Stor
              * attachment by its sized format: GL_RGBA32F is not
              * colour-renderable without GL_EXT_color_buffer_float */
             GLES_TEXFMT_RGBA16F if t.rgba32f => GL_RGBA32F,
+            /* the same name where the PowerVR stores it in its own class (the GC keeps its own) */
+            backend::GLES_TEXFMT_RGBA32F if cfg!(feature = "gpu-powervr") => GL_RGBA32F,
             GLES_TEXFMT_RGBA16F if rgb16f => GL_RGB16F,
             GLES_TEXFMT_RGBA16F => GL_RGBA16F,
             GLES_TEXFMT_R16F => GL_R16F,
