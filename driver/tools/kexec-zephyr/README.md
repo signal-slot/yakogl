@@ -131,9 +131,13 @@ and the white border in the right places is the person's answer.
 `tools/board.sh nanopc-t6 run <zephyr.bin> <logdir>` runs an image through
 this script the way the other boards run (backend `kexec-dev`, so the verdict
 line says DEV). It calls `nanopc-t6.sh <zephyr.bin> --go` with
-`T6_RECORD_DIR` set to the run directory and `BOARD_UART` (or `T6_UART`) as
-`T6_UART`, and with `T6_CRASH=1` it adds `--crash`, this script's crash route
-(`driver/docs/nanopc-t6-display.md`, section 2(a)); every refusal stays this
+`T6_RECORD_DIR` set to the run directory, `BOARD_UART` (or `T6_UART`) as
+`T6_UART` and `BOARD_SCREEN` (or `T6_SCREEN`) as `T6_SCREEN`, and with
+`T6_CRASH=1` it adds `--crash`, this script's crash route
+(`driver/docs/nanopc-t6-display.md`, section 2(a)). A run needs the UART,
+the screen (the capture unit on the HDMI output; crash route only) or both,
+and each one set is proven before the load (section 2(a), "The screen
+path"); every refusal stays this
 script's, and the lock is this script's
 too (board.sh takes only its board lease, which waits no longer:
 `LOCK_WAIT` 0). The run's verdict comes from the `uart.log`: for a probe
@@ -147,6 +151,8 @@ BOARD_HOST=root@<t6> BOARD_UART=<tty> T6_HAND=<name> \
   tools/board.sh nanopc-t6 run build/t6_hello/zephyr/zephyr.bin <logdir>                              # the jump
 BOARD_HOST=root@<t6> BOARD_UART=<tty> T6_HAND=<name> T6_CRASH=1 \
   tools/board.sh nanopc-t6 run build/t6_hello/zephyr/zephyr.bin <logdir>                              # the jump, crash route
+BOARD_HOST=root@<t6> BOARD_SCREEN=<unit> T6_HAND=<name> T6_CRASH=1 \
+  tools/board.sh nanopc-t6 run build/t6_display/zephyr/zephyr.bin <logdir>                            # seen through the HDMI capture
 ```
 
 ## The Armadillo-X2: `tools/board.sh x2`

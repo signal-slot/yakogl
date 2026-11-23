@@ -146,6 +146,22 @@
 # a board without a console=ttyS entry is refused; the host never writes a
 # byte into the tty; the dry run names the console and writes nothing.
 #
+# A thirteenth (issue #11022): the screen path. nanopc-t6.sh --go takes
+# T6_SCREEN, the capture unit on the board's HDMI output, as well as or
+# instead of T6_UART. Here `connected` is a fake unit that answers with the
+# screen of two requests ago (a PPM the holder's own draw_nonce() drew, or
+# black for Linux's screen), gives no picture while 1024x768 is held, and
+# `djpeg` passes the PPM through. The checks: T6_SCREEN without --crash and
+# a run with neither path are refused before anything is copied; a run with
+# T6_SCREEN only is proven at the third picture (the first two stale), keeps
+# the proof pictures, has no uart.log and says so, and its capture loop
+# takes pictures across the jump and is stopped by its pid, a request in
+# flight with it; a unit that gives no picture, pictures of another nonce,
+# or none at 1024x768 is refused in the mode step: no jump, the holder
+# stopped by its pid, Linux's mode back. The record never names the unit.
+# t6-screen-nonce.py's own self-test (the holder's drawing decoded back,
+# the pictures that must not pass, a JPEG round trip) runs as one check.
+#
 # The T6's other runners on the lock, driver/tools/uboot-t6/prompt-reads.sh
 # (the reads at the U-Boot prompt) and prompt-go.sh (an image started with
 # U-Boot's go), are held to the same rule: LOCK_WAIT 0 before they source
@@ -451,12 +467,13 @@ case "\$last" in
 *'printf "kexec_loaded='*) cat "$tmp/fresh" ;;
 *'kill -TERM'*)
 	p=\$(sed -n 's/^set -- \([0-9]*\) .*/\1/p' <<<"\$last")
-	rm -f "$tmp/mode-held"
+	rm -f "$tmp/mode-held" "$tmp/screen-nonce"
 	printf 'pid %s ended after SIGTERM\nt6-kms-mode: pid %s: stop (signal SIGTERM): CRTC 81 back on fb 50; card closed\nvp0=' "\$p" "\$p"
 	if [ -n "\${T6_FAKE_VP0_AFTER+set}" ]; then printf '%s\n' "\$T6_FAKE_VP0_AFTER"; else linux_mode; fi ;;
 *'t6-kms-mode.py hold --mode '*)
 	m=\$(sed -n 's/.* hold --mode \([0-9x]*\) .*/\1/p' <<<"\$last")
 	[ "\${T6_FAKE_HOLD_RC:-0}" != 0 ] || printf '%s\n' "\$m" > "$tmp/mode-held"
+	sed -n 's/.* --nonce \([0-7]*\)\$/\1/p' <<<"\$last" > "$tmp/screen-nonce"
 	if [ -n "\${T6_FAKE_HOLD_OUT+set}" ]; then printf '%s\n' "\$T6_FAKE_HOLD_OUT"; else cat "$tmp/held-\$m"; fi
 	exit "\${T6_FAKE_HOLD_RC:-0}" ;;
 *vp0_mode)
@@ -483,7 +500,53 @@ EOS
 printf '#!/bin/sh\ncase " $* " in *" -a "*) echo "speed 1500000 baud; line = 0; -parenb cs8 -cstopb clocal -icrnl -ixon -opost -icanon -echo" ;; esac\n' > "$tmp/fakebin/stty"
 printf '#!/bin/sh\nexit 1\n' > "$tmp/fakebin/fuser"
 printf '#!/bin/sh\necho "$*" >> "%s/scp.log"\n' "$tmp" > "$tmp/fakebin/scp"
-chmod +x "$tmp/fakebin/ssh" "$tmp/fakebin/stty" "$tmp/fakebin/fuser" "$tmp/fakebin/scp"
+# The capture unit: `connected screenshot <unit> -o <file>` writes the screen
+# as it was two requests ago (a PPM, which the fake `djpeg -pnm` passes
+# through): the holder's bars for the nonce it was given while it holds
+# 1920x1080, nothing while it holds 1024x768 (the unit gives no picture of
+# that mode), black while no holder runs. T6_FAKE_SCREEN: none (every
+# request fails with the unit's error text), other (every picture shows
+# another nonce), slow (each request takes 2 s). Each call's unit is logged.
+cat > "$tmp/screen.py" <<'EOS'
+import importlib.util, sys
+what, out = sys.argv[1:3]
+w, h = 1920, 1080
+if what == "black":
+    rgb = bytes(3 * w * h)
+else:
+    spec = importlib.util.spec_from_file_location("holder", sys.argv[3])
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    row = bytearray(4 * w)
+    mod.draw_nonce(row, w, 1, 4 * w, what)
+    line = bytearray(3 * w)
+    line[0::3], line[1::3], line[2::3] = row[2::4], row[1::4], row[0::4]
+    rgb = bytes(line) * h
+with open(out, "wb") as f:
+    f.write(b"P6\n%d %d\n255\n" % (w, h) + rgb)
+EOS
+cat > "$tmp/fakebin/connected" <<EOS
+#!/bin/bash
+[ "\$1 \$3" = "screenshot -o" ] || { echo "fake connected: usage" >&2; exit 2; }
+echo "\$2" >> "$tmp/connected.log"
+[ "\${T6_FAKE_SCREEN:-}" != slow ] || sleep 2
+if [ "\${T6_FAKE_SCREEN:-}" = none ]; then echo "cube_screenshot failed: failed to capture screenshot (\$2)" >&2; exit 1; fi
+# what the screen shows now, then the answer: what it showed two requests ago
+if [ "\$(cat "$tmp/mode-held" 2>/dev/null)" = 1024x768 ]; then now=nosignal
+elif [ -e "$tmp/mode-held" ] && [ -s "$tmp/screen-nonce" ]; then now=\$(cat "$tmp/screen-nonce")
+else now=black; fi
+if [ "\${T6_FAKE_SCREEN:-}" = other ]; then
+	now=70615243
+	[ "\$(cat "$tmp/screen-nonce" 2>/dev/null)" != 70615243 ] || now=36104527
+fi
+echo "\$now" >> "$tmp/screen-history"
+shown=\$(tail -n 3 "$tmp/screen-history" | head -n 1)
+[ "\$(wc -l < "$tmp/screen-history")" -ge 3 ] || shown=black
+if [ "\$shown" = nosignal ]; then echo "cube_screenshot failed: failed to capture screenshot" >&2; exit 1; fi
+python3 -I "$tmp/screen.py" "\$shown" "\$4" "$here/t6-kms-mode.py"
+EOS
+printf '#!/bin/sh\n[ "$1" = -pnm ] && [ -s "$2" ] && exec cat "$2"\necho "fake djpeg: no picture" >&2; exit 1\n' > "$tmp/fakebin/djpeg"
+chmod +x "$tmp/fakebin/ssh" "$tmp/fakebin/stty" "$tmp/fakebin/fuser" "$tmp/fakebin/scp" "$tmp/fakebin/connected" "$tmp/fakebin/djpeg"
 t6_image "$tmp/top13.bin" 'board: watchdog armed'
 sed -i 's/; top 9; /; top 13; /' "$tmp/top13.bin"
 t6_board_run() {
@@ -545,13 +608,16 @@ wire_users() {
 printf 'bytes from another console\r\n' > "$tmp/noise"
 # t6_go_run <iomem lines> [--crash]: --go to the end on the fake board, with
 # T6_HAND, a record directory, the stand-in UART (the fake stty and fuser
-# pass it) and stand-ins for the two tools. The read under the lock gives
+# pass it; t6_uart= leaves T6_UART empty), T6_SCREEN $t6_screen (default
+# empty), SCREEN_PROOF_S $t6_proof_s (default 90) and stand-ins for the two
+# tools. The read under the lock gives
 # kexec_crash_loaded $t6_fresh_crash (default 0). The jump command reaches
 # the fake ssh's log; the fake board writes the UART proof's marker line
 # back on the wire unless T6_FAKE_UART says otherwise (none: nothing; noise:
 # other bytes; fail: the ssh command fails).
 t6_go_run() {
-	rm -rf "$tmp/rec" "$tmp/jumped" "$tmp/ssh.log" "$tmp/scp.log" "$tmp/mode-held"
+	rm -rf "$tmp/rec" "$tmp/jumped" "$tmp/ssh.log" "$tmp/scp.log" "$tmp/mode-held" "$tmp/screen-nonce" \
+		"$tmp/screen-history" "$tmp/connected.log"
 	mkdir "$tmp/rec"
 	printf 'kexec_loaded=0\nkexec_crash_loaded=%s\nboot_id=boot-before\ngpu_users=\nwdt_users=\nwho_remote=\n' \
 		"${t6_fresh_crash:-0}" > "$tmp/fresh"
@@ -560,7 +626,8 @@ t6_go_run() {
 	local staged=("$tmp/top13.bin" "$tmp/kz")
 	[ "${2:-}" != --crash ] || staged+=("$here/t6-kms-mode.py")
 	T6_FAKE_SHAS=$(sha256sum "${staged[@]}" | cut -d' ' -f1 | tr '\n' ' ') \
-		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=$wire_tty KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
+		T6_HAND=selftest T6_RECORD_DIR=$tmp/rec T6_UART=${t6_uart-$wire_tty} T6_SCREEN=${t6_screen:-} \
+		SCREEN_PROOF_S=${t6_proof_s:-90} KEXEC_ZEPHYR=$tmp/kz MMIO_RD=$tmp/mr \
 		BOARD_LOCK=$tmp/t6go.lock t6_board_run "$1" "$gic_out" --go ${2:+"$2"}
 }
 out=$(t6_board_run "$kernel" "$gic_out")
@@ -812,6 +879,109 @@ $ck" "$gic_out" --crash)
 rc=$?
 check "nanopc-t6.sh: --crash without VP0 in the DRM state is refused (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'REFUSED: --crash: no video_port0 in /sys/kernel/debug/dri/0/state' <<<"$out"; echo $?)"
+# The screen path (issue #11022). unit is the capture unit's name: it must
+# reach `connected` and never the record.
+unit=selftest-capture-unit
+# no_go: rc 3, refuse's second line, no record, nothing copied or staged,
+# no picture asked for.
+no_go() {
+	[ "$rc" = 3 ] && grep -qF 'nanopc-t6.sh: nothing was copied, loaded or changed.' <<<"$out" &&
+		[ -z "$(ls -A "$tmp/rec")" ] && [ ! -e "$tmp/scp.log" ] && ! grep -qF 'mkdir -p /tmp/yakogl-kexec' "$tmp/ssh.log" &&
+		[ ! -e "$tmp/connected.log" ]
+}
+out=$(t6_uart='' t6_screen=$unit t6_go_run "$kernel")
+rc=$?
+check "nanopc-t6.sh: T6_SCREEN without --crash is refused by name before anything is copied (rc $rc)" \
+	"$(no_go && grep -qF 'REFUSED: T6_SCREEN needs --crash: the screen proof runs through the mode holder' <<<"$out"; echo $?)"
+out=$(t6_uart='' t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+rc=$?
+check "nanopc-t6.sh: --go with neither T6_UART nor T6_SCREEN is refused (rc $rc)" \
+	"$(no_go && grep -qF "REFUSED: --go needs T6_UART=<the host tty on the T6's debug UART> (read only), T6_SCREEN=<the capture unit" <<<"$out"; echo $?)"
+# sc_go: --crash --go with T6_SCREEN and no T6_UART, the proof bounded by
+# $t6_proof_s (default 90); sets out, rc, rd (the record directory), rec.
+sc_go() {
+	out=$(t6_uart='' t6_screen=$unit t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+	rc=$?
+	rd=$(find "$tmp/rec" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+	rec=$(cat "$rd/record.txt" 2>/dev/null)
+}
+# loop_gone: the capture loop's pid (its record line) no longer runs, and
+# no fake `connected` of the test is left.
+loop_gone() {
+	local p q
+	p=$(sed -n 's/.* screen: capture loop started (pid \([0-9]*\)).*/\1/p' <<<"$rec")
+	[ -n "$p" ] && ! kill -0 "$p" 2>/dev/null || return 1
+	for q in $(marked); do
+		[[ "$(tr '\0' ' ' <"/proc/$q/cmdline" 2>/dev/null)" == *fakebin/connected* ]] && return 1
+	done
+	return 0
+}
+t0=$(date +%s)
+sc_go
+t1=$(date +%s)
+proof_re="screen: proven: picture proof-03.jpg \(request 3, picture 3 that came\) shows this run's nonce ([0-7]{8}) \(proof-03.jpg: 1920x1080: bars ([0-7]{8})\), [0-9]+\.[0-9] s after the hold began"
+nonce1= bars1=
+if [[ "$rec" =~ $proof_re ]]; then nonce1=${BASH_REMATCH[1]} bars1=${BASH_REMATCH[2]}; fi
+check "nanopc-t6.sh: T6_SCREEN only: the holder draws the nonce, the first two pictures are stale, the third proves it, before the jump ($((t1 - t0)) s; nonce ${nonce1:-none}; rc $rc)" \
+	"$([ "$rc" = 0 ] && [ -n "$nonce1" ] && [ "$nonce1" = "$bars1" ] && held_and_jumped 1920x1080 "$vp0_1080" &&
+		grep -qF "t6-kms-mode.py hold --mode 1920x1080 --max-hold 600 --log /tmp/yakogl-kexec/kms-mode.log --nonce $nonce1" "$tmp/ssh.log" &&
+		[ -s "$rd/proof-01.jpg" ] && [ -s "$rd/proof-02.jpg" ] && [ -s "$rd/proof-03.jpg" ] && [ ! -e "$rd/proof-04.jpg" ] &&
+		[ "$(grep -n '^.* screen: proven: ' <<<"$rec" | cut -d: -f1)" -lt "$(grep -n ' jumping (linux_wdt' <<<"$rec" | cut -d: -f1)" ]; echo $?)"
+check "nanopc-t6.sh: T6_SCREEN only: the record's first lines name the paths, no uart.log and no line about one" \
+	"$(sed -n 2p "$rd/record.txt" | grep -qF "paths: no UART (T6_UART not set: no uart.log); screen (T6_SCREEN: proven in the mode step before the load, else no jump; nonce $nonce1)" &&
+		grep -qF 'paths proven before the jump: screen' <<<"$rec" && [ ! -e "$rd/uart.log" ] &&
+		! grep -q 'uart: proven\|UART capture started\|uart.log: ' <<<"$rec" && grep -qF 'no uart.log (T6_UART not set)' <<<"$rec"; echo $?)"
+pics=$(find "$rd" -maxdepth 1 -name 'screen-*.jpg' | wc -l)
+check "nanopc-t6.sh: the capture loop takes pictures from the jump on (screen-SSS.jpg: $pics), is stopped by its pid and leaves no request behind" \
+	"$([ "$pics" -ge 1 ] && find "$rd" -maxdepth 1 -name 'screen-*.jpg' | grep -qE '/screen-[0-9]{3}\.jpg$' &&
+		! find "$rd" -maxdepth 1 -name 'screen-*.jpg' | grep -qvE '/screen-[0-9]{3}\.jpg$' &&
+		grep -qE "screen: capture loop pid [0-9]+ stopped: $pics pictures, 0 failed requests" <<<"$rec" && loop_gone; echo $?)"
+check "nanopc-t6.sh: every request named the unit, and the record does not ($(sort -u "$tmp/connected.log" 2>/dev/null | tr '\n' ' '))" \
+	"$([ "$(sort -u "$tmp/connected.log")" = "$unit" ] && ! grep -rqF "$unit" "$rd"; echo $?)"
+T6_FAKE_SCREEN=slow sc_go
+check "nanopc-t6.sh: a request in flight when the loop is stopped is stopped with it (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qE 'screen: capture loop pid [0-9]+ stopped: ' <<<"$rec" && loop_gone; echo $?)"
+# Not proven: the "mode: REFUSED ... not jumping" path, the holder stopped
+# by its pid, Linux's mode back. The proof is bounded at 4 s here.
+screen_refused() {
+	[ "$rc" = 1 ] && ! grep -q 'kexec_zephyr /tmp/yakogl-kexec/zephyr.bin' "$tmp/ssh.log" && stopped_4242 &&
+		grep -qF "mode: Linux's own mode is back on VP0" <<<"$rec" && ! grep -qF 'capture loop' <<<"$rec"
+}
+T6_FAKE_SCREEN=none t6_proof_s=4 sc_go
+check "nanopc-t6.sh: a unit that gives no picture: refused before the load, its error text named (rc $rc)" \
+	"$(screen_refused && grep -qE "mode: REFUSED: screen path not proven: 0 of [0-9]+ requests to the capture unit \(T6_SCREEN\) gave a picture in [0-9.]+ s since the hold began, none with this run's nonce [0-7]{8}; the unit's last error: rc 1: cube_screenshot failed: failed to capture screenshot \(<T6_SCREEN>\); the last picture: no picture came; not jumping" <<<"$out" &&
+		grep -qE '^[0-9-]+ [0-9:]+ proof-01\.jpg: request failed \(rc 1\): cube_screenshot failed' "$rd/screen.log" && ! grep -rqF "$unit" "$rd"; echo $?)"
+T6_FAKE_SCREEN=other t6_proof_s=4 sc_go
+check "nanopc-t6.sh: pictures of another nonce: refused, the last one's bars named (rc $rc)" \
+	"$(screen_refused && grep -qE "mode: REFUSED: screen path not proven: ([0-9]+) of \1 requests .* none with this run's nonce [0-7]{8}; the unit's last error: none; the last picture: proof-[0-9]{2}\.jpg: 1920x1080: bars (00000000|70615243|36104527); not jumping" <<<"$out"; echo $?)"
+T6_FAKE_VP0_LINUX=$vp0_720 t6_proof_s=4 sc_go
+check "nanopc-t6.sh: 1024x768 set (Linux ran 1280x720), the unit gives no picture of it: refused by the same rule (rc $rc)" \
+	"$(screen_refused && grep -qF 'mode: VP0 runs none of the adopted modes: set 1024x768' <<<"$rec" &&
+		grep -qE "screen path not proven: 2 of [0-9]+ requests .* the last picture: proof-02\.jpg: 1920x1080: bars 00000000; not jumping" <<<"$out"; echo $?)"
+# Both paths: each proven, both named.
+out=$(t6_screen=$unit t6_crash_size=268435456 t6_go_run "$kernel
+$ck" --crash)
+rc=$?
+rec=$(cat "$tmp"/rec/*/record.txt 2>/dev/null)
+check "nanopc-t6.sh: T6_UART and T6_SCREEN: both proven and named, uart.log kept (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'paths: UART (proven before anything was copied, below); screen (T6_SCREEN:' <<<"$rec" &&
+		grep -qF 'uart: proven before anything was copied' <<<"$rec" && grep -qF 'screen: proven: picture proof-03.jpg' <<<"$rec" &&
+		grep -qF 'paths proven before the jump: UART and screen' <<<"$rec" && [ -e "$(dirname "$(ls "$tmp"/rec/*/record.txt)")/uart.log" ]; echo $?)"
+out=$(T6_SCREEN=$unit t6_crash_size=268435456 t6_board_run "$kernel
+$ck" "$gic_out" --crash)
+rc=$?
+check "nanopc-t6.sh: the --crash dry run with T6_SCREEN names the proof and the holder's nonce (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'screen: T6_SCREEN is set: --go has the mode holder show this run'"'"'s nonce' <<<"$out" &&
+		grep -qF -- '--max-hold 600 --nonce <this run'"'"'s>' <<<"$out" && ! grep -qF 'would refuse' <<<"$out"; echo $?)"
+# t6-screen-nonce.py's own self-test. Its JPEG round trip needs cjpeg and
+# djpeg on this host; without them it is skipped, and the last line says so.
+got=$(python3 -I "$here/t6-screen-nonce.py" --self-test 2>&1)
+rc=$?
+[ "$rc" = 0 ] || grep -E ' FAIL$' <<<"$got"
+check "t6-screen-nonce.py --self-test (rc $rc: $(tail -n 1 <<<"$got"))" \
+	"$([ "$rc" = 0 ] && tail -n 1 <<<"$got" | grep -qE '^t6-screen-nonce self-test: [0-9]+ checks run, 0 failed(, skipped: the JPEG round trip \(no [a-z ]+ on this host\))?$'; echo $?)"
 # vp0_mode, the board's read of VP0's mode, on a DRM state in the format of
 # linux v6.18 drm_atomic.c:443-455 (planes first, then the CRTCs by id, then
 # the connectors): VP0's lines only, also with VP1 printed before it.
