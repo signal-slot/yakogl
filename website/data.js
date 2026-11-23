@@ -28,8 +28,8 @@
 window.YAKOGL_DATA = {
   "repo": "https://github.com/signal-slot/yakogl",
   "checkedAgainst": {
-    "commit": "226cd9a27e88d886f48e072b626fb334cb9fb4d4",
-    "date": "2026-11-21",
+    "commit": "0943693f6e439cc7d7b4d22fcd446d9fc09bc689",
+    "date": "2026-11-23",
     "source": "tools/cts/RESULTS.md"
   },
   "boards": [
@@ -223,13 +223,13 @@ window.YAKOGL_DATA = {
       "board": "pi4",
       "value": "13 / 13",
       "unit": "cases passed, 0 GPU resets",
-      "commit": "975a6792",
+      "commit": "f784bfab",
       "onMain": true,
-      "date": "2026-11-21",
+      "date": "2026-11-22",
       "source": "tools/cts/RESULTS.md",
       "section": "Common set (stage 2 input)",
       "status": "pass",
-      "note": "Run from main 975a6792 (the common set Pi 4 row, tryboot). The glmark2 figure below is an earlier run.",
+      "note": "Run from main f784bfab (the common set Pi 4 row, tryboot). The glmark2 figure below is an earlier run.",
       "provenance": {
         "kind": "repository",
         "recordCommit": "cb6d6db3df1130c14ad5a74d52626df0a780fa57"
