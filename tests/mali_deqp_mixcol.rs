@@ -37,8 +37,9 @@ const LZ: &str = "Valhall: a colour pair of a varying lane and 0.0 (Mesa's U16_T
 
 /// The references that compile byte-equal (their tests run): `hp_mat`, a
 /// shader with no default precision whose floats are all declared highp
-/// (mod.rs `FsPrecision::implicit_highp`).
-const MATCHED: &[&str] = &["hp_mat"];
+/// (mod.rs `FsPrecision::implicit_highp`), and `hp_loop`, the highp counter
+/// folded away with the unrolled loop (`nir_fs.rs` `folded_counter`).
+const MATCHED: &[&str] = &["hp_mat", "hp_loop"];
 
 /// Every reference (without the `deqp_mixcol_` prefix) and the whole
 /// `MaliError` message the compiler refuses its pair with now.
@@ -48,7 +49,6 @@ const REFUSALS: &[(&str, &str)] = &[
     ("hp_scale", MIX),
     ("hp_bool", MIX),
     ("hp_param", MIX),
-    ("hp_loop", MIX),
     ("hp_seq", MIX),
     /* mixprec, an int read as a float: S32_TO_F32 at 32 bits */
     ("int_uniform", MIX),
@@ -93,7 +93,6 @@ fn mixcol_hp_param() {
 }
 
 #[test]
-#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) (hp_loop)"]
 fn mixcol_hp_loop() {
     mali_ref::assert_matches("deqp_mixcol_hp_loop");
 }
@@ -190,7 +189,7 @@ fn refusals_pinned() {
     on_disk.sort();
     let mut listed: Vec<&str> = REFUSALS.iter().map(|(n, _)| *n).chain(MATCHED.iter().copied()).collect();
     listed.sort_unstable();
-    assert_eq!(on_disk, listed, "a deqp_mixcol_* reference has no entry in REFUSALS");
+    assert_eq!(on_disk, listed, "a deqp_mixcol_* reference has no entry in REFUSALS or MATCHED");
     let mut changed = Vec::new();
     for (name, refused) in REFUSALS {
         let r = mali_ref::Reference::load(&format!("deqp_mixcol_{name}"));

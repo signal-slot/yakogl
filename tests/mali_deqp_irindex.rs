@@ -31,9 +31,14 @@ const DIFFERS: &[&str] = &[];
 
 const IR_INDEX: &str = "Valhall back end defect: an invariant of the pipeline did not hold (IrIndex)";
 
+/// `sqrt_op_value` past its defect (the two lanes alone as an operand,
+/// `nir_fs.rs` `op`'s `Leaf::Pack`): its highp locals in a mediump shader.
+const MIXED: &str =
+    "Valhall: a fragment shader that mixes highp and mediump or lowp float values (Mesa's fp32 and fp16) is not lowered yet";
+
 /// Every ignored reference with its whole `MaliError` message: all nine
-/// meet `Defect(IrIndex)` at `3497799a` (the note's section 2 names the
-/// site of each).
+/// met `Defect(IrIndex)` at `3497799a` (the note's section 2 names the
+/// site of each); `sqrt_op_value` is past it now ([`MIXED`]).
 const REFUSED: &[(&str, &str)] = &[
     ("b2f16_pair", IR_INDEX),
     ("load_mat3", IR_INDEX),
@@ -42,7 +47,7 @@ const REFUSED: &[(&str, &str)] = &[
     ("mat4_pair_unread", IR_INDEX),
     ("pair_hi_unread", IR_INDEX),
     ("pair_lo_unread", IR_INDEX),
-    ("sqrt_op_value", IR_INDEX),
+    ("sqrt_op_value", MIXED),
     ("val16_abs_fold", IR_INDEX),
 ];
 
@@ -89,7 +94,7 @@ fn pair_lo_unread() {
 }
 
 #[test]
-#[ignore = "Defect(IrIndex): nir_fs.rs:13198 (operand), the mediump colour walk reads an operation's value it has not made (sqrt of a swizzled highp varying)"]
+#[ignore = "refused: a fragment shader that mixes highp and mediump or lowp float values (its highp sqrt of a swizzled highp varying; the operand defect of nir_fs.rs `operand` is gone)"]
 fn sqrt_op_value() {
     mali_ref::assert_matches("deqp_irindex_sqrt_op_value");
 }
