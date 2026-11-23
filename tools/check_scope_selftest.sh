@@ -268,6 +268,7 @@ expect "hostharness: the glmark2 corpus row" '^plan  test    glmark2 corpus gene
 expect "hostharness: not every row" '^check.sh: .*\(--changed HEAD, scopes: tools \)' "$out"
 out=$(plan tools/mali/pan_shc.c)
 expect "mali: the pan_shc row, a gap without MESA_PAN_TREE" '^gap   mali pan_shc on the tri pair, the blend references and blend_nir_rules.rs: no MESA_PAN_TREE' "$out"
+expect "mali: the snir tables row, a gap without MESA_PAN_TREE" '^gap   mali snir tables == gen_nir_tables.py: no MESA_PAN_TREE' "$out"
 expect "mali: the pan_ref_diff self-test needs no Mesa tree" '^plan  run     mali pan_ref_diff and ref_cases self-test' "$out"
 expect "mali: the route_cells self-test" '^plan  run     mali route_cells self-test$' "$out"
 expect "mali: route.sh measure runs" '^plan  run     mali route.sh measure on tools/mali/testdata' "$out"
