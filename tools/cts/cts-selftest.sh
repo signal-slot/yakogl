@@ -39,6 +39,9 @@
 # Check 57 keeps the licence audit's --fail-on class list equal in its three
 # written copies (tools/check.sh's licence row, check 25 above, checklist
 # row 7's Evidence command) and requires undecided in it.
+# Check 59 runs gles3-rerun-rows.py (the TREE_ROWS of the AM62P GLES3 tree
+# that hold a case glob or a not-pass family) on a synthetic tree, mustpass
+# list, not-pass list and rule file.
 set -u
 
 HERE=$(dirname "$0")
@@ -992,6 +995,11 @@ gl3check 55 pi4-gles3-preflight-selftest.sh "the Pi 4 session preflight on a fak
 # tallied with relative paths, an aborted image named, an unknown label
 # refused before any tally is written.
 gl3check 56 pi4-session-tally-selftest.sh "a Pi 4 session directory tallied, aborts named, unknown labels refused"
+
+# 59: gles3-rerun-rows.py on a synthetic AM62P-shaped tree, mustpass list,
+# not-pass list and rule file: case globs, families (rules, message regex,
+# family column), range merging, the per-row stderr counts, the error cases.
+gl3check 59 gles3-rerun-rows-selftest.sh "the TREE_ROWS of globs and families on a synthetic tree, errors named"
 
 # ---- 57: the licence audit's --fail-on list: three copies, one list -----------
 #
