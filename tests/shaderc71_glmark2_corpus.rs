@@ -44,6 +44,30 @@ use yakogl::shaderc::online::{lower, store};
 /// index.txt's shaders (tests/glmark2_corpus.rs's pin of the same corpus).
 const SHADERS: usize = 69;
 
+/// Pairs (vs file, fs file of one index entry) the test compiles.
+const PAIRS: usize = 93;
+/// Pairs that compile and link at 7.1.
+const LINKED: usize = 69;
+/// The index lists an entry's vertex and fragment shaders without saying
+/// which meet, so the test tries the cross product; a pair whose fragment
+/// shader reads a varying that vertex shader does not write is not a program
+/// glmark2 builds (GL's link fails it too). Those are printed, not refused.
+const MISMATCH: &str = "Chain(VaryingWithoutVertexOutput)";
+
+/// Named refusals, `<vs>+<fs>: <message> # reason` (the format of
+/// `known-uncompilable-v3d71.txt`); the file is absent or header-only when
+/// every pair links.
+fn known_refusals() -> BTreeMap<String, String> {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/shaders/known-uncompilable-v3d71-glmark2.txt");
+    let mut m = BTreeMap::new();
+    let Ok(t) = std::fs::read_to_string(p) else { return m };
+    for l in t.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()) {
+        let (k, msg) = l.split_once(": ").expect("`<vs>+<fs>: <message> # reason`");
+        m.insert(k.to_string(), msg.to_string());
+    }
+    m
+}
+
 static COUNTS_71: &str = include_str!("../tools/shaders/glmark2_counts_71.tsv");
 
 /// The scratch region is one per process: the tests take turns
@@ -207,5 +231,17 @@ fn every_glmark2_shader_compiles_and_links_at_7_1() {
     for (k, m) in &refused {
         println!("  refused {k}: {m}");
     }
+    let (mismatched, refused): (BTreeMap<_, _>, BTreeMap<_, _>) = refused.into_iter().partition(|(_, m)| m == MISMATCH);
+    println!("mismatched pairs (a varying the vertex shader does not write): {}", mismatched.len());
+    println!("refused: {}", refused.len() + failed.len());
+    let known = known_refusals();
+    let unlisted: Vec<_> = refused.keys().filter(|k| !known.contains_key(*k)).collect();
+    assert!(unlisted.is_empty(), "v3d71: glmark2 pairs refused and not listed: {unlisted:#?}");
+    let stale: Vec<_> = known.keys().filter(|k| !refused.contains_key(*k)).collect();
+    assert!(stale.is_empty(), "v3d71: listed glmark2 refusals that now link: {stale:#?}");
+    assert_eq!(tried.len(), PAIRS, "pairs tried; re-derive the pin if the corpus changed");
+    let distinct_ok = tried.values().filter(|r| r.is_ok()).count();
+    assert_eq!(distinct_ok, LINKED, "distinct pairs linked at 7.1");
+    assert_eq!(distinct_ok + mismatched.len() + refused.len(), tried.len());
     assert!(failed.is_empty(), "v3d71: glmark2 shaders that do not compile and link at 7.1: {failed:#?}");
 }
