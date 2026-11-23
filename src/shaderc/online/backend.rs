@@ -71,6 +71,9 @@ struct Compiled {
     sha: [u8; 32],
     stage: u32,
     blend_key: u32,
+    /// [`switches_now`] when the record was compiled: the PowerVR's native
+    /// 3D and 2D-array switches change the code, so they are part of the key.
+    switches: u8,
     /// The source, kept because a blend variant is the same text compiled
     /// again for one blend state.
     source: &'static [u8],
@@ -279,7 +282,21 @@ pub fn forget_compiled() {
     super::store::reset_keep();
 }
 
+/// The runtime switches the PowerVR instruction selection reads
+/// (`pvr_native_3d` bit 0, `pvr_native_array` bit 1); 0 without the PowerVR.
+fn switches_now() -> u8 {
+    #[cfg(feature = "gpu-powervr")]
+    {
+        u8::from(crate::shaderc::native_3d_enabled()) | (u8::from(crate::shaderc::native_array_enabled()) << 1)
+    }
+    #[cfg(not(feature = "gpu-powervr"))]
+    {
+        0
+    }
+}
+
 fn cache_find(sha: &[u8; 32], stage: u32, blend_key: u32) -> Option<&'static Compiled> {
+    let switches = switches_now();
     // SAFETY: single-threaded by contract.
     let c = unsafe { CACHE.get() };
     c.slots[..c.used]
@@ -287,7 +304,7 @@ fn cache_find(sha: &[u8; 32], stage: u32, blend_key: u32) -> Option<&'static Com
         .filter(|p| !p.is_null())
         // SAFETY: an indexed record is live (release takes it out first).
         .map(|&p| unsafe { &*p })
-        .find(|r| r.stage == stage && r.blend_key == blend_key && &r.sha == sha)
+        .find(|r| r.stage == stage && r.blend_key == blend_key && r.switches == switches && &r.sha == sha)
 }
 
 /// Take a freed record out of the index, so that its slot is free again.
@@ -539,6 +556,7 @@ fn publish_as(
                 sha,
                 stage,
                 blend_key,
+                switches: switches_now(),
                 source: src,
                 w_constant: facts.w_constant,
                 lod_key: facts.lod_key,
@@ -3816,6 +3834,7 @@ void main (void)
                     sha: [0; 32],
                     stage: SHC_STAGE_VERTEX,
                     blend_key: 0,
+                    switches: 0,
                     source: b"",
                     w_constant: false,
                     lod_key: LodKey::NONE,
