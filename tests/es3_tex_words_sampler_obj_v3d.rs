@@ -597,8 +597,10 @@ fn make(target: GLenum, layers: i32) -> (GLuint, String) {
     (t, size_fs(sampler, true))
 }
 
-const CASES: [(GLenum, i32, (u32, u32, u32, u32)); 2] =
-    [(GL_TEXTURE_3D, 4, (4, 4, 4, 1)), (GL_TEXTURE_2D_ARRAY, 5, (4, 4, 1, 5))];
+/// A texture target, its layer count, and what `unit0` gives for it.
+type Case = (GLenum, i32, (u32, u32, u32, u32));
+
+const CASES: [Case; 2] = [(GL_TEXTURE_3D, 4, (4, 4, 4, 1)), (GL_TEXTURE_2D_ARRAY, 5, (4, 4, 1, 5))];
 
 /// A sampler object with another wrap R, other filters and a LOD range,
 /// bound to unit 0, changes neither word.
