@@ -4,8 +4,10 @@
 
 Status: the host side of D1, D2, D3a and D4 to D8 is in the tree (the
 modules, the chain, the adopt probe `t6_display` and the cold probe
-`t6_cold`); D0 is the only step run on the board. The T6 leaves "work in
-progress" only when Zephyr and YakoGL put the rendered picture on a display
+`t6_cold`). On the board: D0, and D3b's triangle by crash kexec (2026-11-23,
+a development run): the adopt with the GL window, the Mali-rendered triangle
+on HDMI at 1920x1080 and the image's check PASS, read from the record screen
+(section 4). The T6 leaves "work in progress" only when Zephyr and YakoGL put the rendered picture on a display
 in the product form: U-Boot starts Zephyr from the eMMC, with no Linux before
 it. This page is the plan the implementation follows: the chain, the routes,
 the mode, the hand-over from the GPU, the proofs, the dump the lead takes and
@@ -492,13 +494,16 @@ host). The PMIC's own interrupt line on a GPIO bank
 (`rockchip_gpio_irq ... rk806`) stays after the unbind and did no harm.
 
 The crash route itself ran on the board on 2026-11-15 with `t6_hello` only
-(above); the adoption has not run yet. What it proves: the VOP2 window programming, the
-frame buffer format and stride, the hand-over from a buffer to the screen.
-What it does not prove: power, clocks, the PHY, the controller, the mode.
-A risk of its own: the crash route also leaves panthor's GPU and its firmware
-running, which the Z1-Z4 power-on has never met (they all ran after a normal
-kexec). The adopt probe therefore draws with the CPU first; a Mali frame on
-the adopted display is a separate step.
+(above). The adoption first ran on 2026-11-23, inside the triangle image
+(step D3b): Esmart0 took the GL window and the picture came out on HDMI.
+What it proves: the VOP2 window programming, the frame buffer format and
+stride, the hand-over from a buffer to the screen. What it does not prove:
+power, clocks, the PHY, the controller, the mode. A risk of its own: the
+crash route also leaves panthor's GPU and its firmware running, which the
+Z1-Z4 power-on had never met (they all ran after a normal kexec). The
+triangle run met it: the power-on and a Mali frame ran after the crash
+kexec, and the image's check passed. The adopt probe `t6_display`, which
+draws with the CPU, has not run on the board.
 
 What an image must do first after a crash kexec (facts for D3 and the
 K steps). The GPU is still powered, and its CSF firmware runs from Linux's
@@ -992,7 +997,7 @@ answers polls, takes injected failures and records the order.
 | D1 | `ip::vop2`: register map, Esmart window (format, address, stride, size, enable, AXI ids), overlay select, VP timing and dividers, `REG_CFG_DONE`, internal PD (`SYS_PD_CTRL`), STANDBY with DSP_HOLD wait, status read-back; `ip::rk_iommu`: paging off and check | layout = section 1; timing words for the dump's mode; a window refused above 4 GiB, unaligned, or with a stride over 16 bits; CFG_DONE after the window writes; standby waits for DSP_HOLD | none alone | 700 lines + tests | no |
 | D2 | Adopt (route a): `nanopc-t6.sh --crash` (with its mode step, `t6-kms-mode.py`, section 2(a)) and the T6 crash reservation; a `t6_display` probe that adopts VP0, turns the IOMMU off, shows a CPU pattern in Esmart0, prints the section 5 read-backs | the adopt policy over the model loaded with both dumps (each mode accepted and kept, a third mode refused, AFBC cluster replaced by Esmart0) | read-backs as in section 5, then the person confirms the pattern | 250 lines + script change | yes |
 | D3a | The T6's show, flip and busy rules over `ip::vop2` (section 4, step D3): `board::nanopc_t6_display` `show` / `busy`, the carve-out's reserved end, the C entries. Done, host only | the first show is the adopt with the GL window; a flip writes the address then `REG_CFG_DONE` and never waits; busy until the frame start that takes the flip; a stopped adopt is final; the reserved end is mapped and never allocated | none alone | 330 lines + tests | no |
-| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done, the board proof open | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
+| D3b | The T6 board library: `board_window()` (the reserved end), `board_show()`, `board_display_busy()`; the triangle image and its gate row. Done. On the board by crash kexec on 2026-11-23 (development run): the triangle on HDMI, check PASS (0 wrong pixels, 0 of 23 glReadPixels points differ), read from the record screen; the flip count of a double-buffered image is open | the image builds with `-Werror` and fits the kexec window (gate row) | `gl_triangle` on screen by crash kexec; the flip count of a double-buffered image | 200 lines | yes |
 | D4 | `soc::rk3588` display power and clocks: PD_VOP, PD_VO1 on/off (the PD_GPU code with a domain table), the gates, muxes and resets of section 1, the PMU1 CRU | the domain table = `pm-domains.c` lines cited; order: clocks, power, repair poll, idle release; reset assert/release words; off-then-on loses block state in the model | none alone | 400 lines + tests | no |
 | D5 | `ip::hdptx`: the TMDS bring-up order of section 1, the ROPLL plan (integer and SDM) and the register values from the dump, lock and ready polls, power-off | the plan for 25.2, 27, 74.25, 148.5 MHz; the write order inside the reset window; no lock = timeout; the dump's register file equals the model's image | none alone | 600 lines + tests | no |
 | D6 | `ip::dw_hdmi_qp`: bind values, DVI enable, HDCP2 bypass, HPD and GRF glue bits, the CMU status read; I2C master left for D10 | layout; DVI vs HDMI bit; GRF words with their masks | none alone | 250 lines + tests | no |
@@ -1028,8 +1033,8 @@ variant of it.
 | U5 | Does a read of a block whose domain is off hang the bus or return zeros? | not to be tested by reading; the code reads status only after power-on and repair status, so the answer is not needed |
 | U6 | Are `SYS_PD_CTRL`'s internal domains on as soon as the bit is cleared, or is there a settle time (Linux polls nothing)? | D8: read `SYS_PD_CTRL` back, then a window read-back (`t6_cold`'s "VOP:" line and its read-backs) |
 | U7 | `CMU_*_FREQ` units and `VIDEO_MONITOR_STATUS` fields | answered by D0: 4 kHz per count; the monitor words hold sync, porch, total and active (section 6) |
-| U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | D2: read it right after the write and after one frame. D3's busy rule is safe with either answer (section 4, step D3) |
-| U9 | Does the crash reservation fit the image window (0x10000000-0x1fffffff) on Armbian without moving anything else, and does the crash route leave panthor's GPU in a state Z1's power-on handles? | D2: `/proc/iomem` after reboot with `crashkernel=`; the probe draws with the CPU, the Mali case is D3 |
+| U8 | Is `REG_CFG_DONE`'s VP bit self-clearing at the frame boundary (usable as "update taken")? | answered by the triangle's adopt on 2026-11-23: 0x00008001 right after the write, 0x00008000 after the frame start (16600 us later), so VP0's bit clears itself at the frame boundary. D3's busy rule is safe with either answer (section 4, step D3) |
+| U9 | Does the crash reservation fit the image window (0x10000000-0x1fffffff) on Armbian without moving anything else, and does the crash route leave panthor's GPU in a state Z1's power-on handles? | the reservation: the runner reads it before each crash jump (0x10000000-0x1fffffff on Armbian with `crashkernel=`). The GPU: answered by the triangle on 2026-11-23, Z1's power-on and a Mali frame ran after the crash kexec |
 | U10 | Which physical connector is HDMI0 on the T6? | answered by D0: the one the LCD is on is `card0-HDMI-A-1`, `fde80000.hdmi` |
 | U11 | The 1920x720 panel's pixel clock and whether it accepts DVI | D0 with that panel: `modes`, the EDID, the PHY registers |
 | U12 | A sink that is slow to answer DDC after power saving (seen with a 1920x720 panel on this board) | D10 retries; the fixed mode stays the fallback |
