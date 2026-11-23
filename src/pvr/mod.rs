@@ -44,3 +44,6 @@ pub mod spm;
 /// The per-target key list of a draw's colour targets and its mixed key
 /// (docs/notes/pvr-int-mixed-targets.md, sections 2.1, 3 and 5).
 pub mod target_keys;
+/// GL_TEXTURE_BASE_LEVEL, MAX_LEVEL, MIN_LOD and MAX_LOD in the texture
+/// state words (texstate.xml's baselevel, minlod and maxlod).
+pub mod texture;
