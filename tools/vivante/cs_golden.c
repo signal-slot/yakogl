@@ -84,6 +84,14 @@
  *      target comes only from a scanout modifier, which an ES 2.0 harness on
  *      the shim cannot ask for, so the colour tiling bits are a listed
  *      difference in the test, not a match
+ *  31  a depth texture sampled (golden only): glmark2 shadow's shape, a
+ *      64x64 GL_DEPTH_COMPONENT / GL_UNSIGNED_INT texture (OES_depth_texture)
+ *      rendered by one depth-tested quad, then sampled from unit 0 by a
+ *      second quad into an RGBA8 target. Slot 0's NTE_DESCRIPTOR_SAMP_* words
+ *      and its descriptor (--tex-desc) are what to read here: Mesa's
+ *      TEXTURE_FORMAT_D24X8 view, the reference of
+ *      docs/notes/gc-depth-sample-wire.md outcome (a)
+ *      (testdata/depth-view.golden, tests/gc_depth_view_golden.rs)
  *  16case 20's ETC2 RGBA8 EAC texture. The branch is here, but ES 2.0 has
  *      no ETC2 and this context rejects the upload with GL_INVALID_ENUM, so
  *      there is no golden to be had: it stops with exit 3 and says why,
@@ -331,6 +339,106 @@ static int tiled_ez_mode_g(void)
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
 	glClear(GL_DEPTH_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glFinish();
+	fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
+	return 0;
+}
+
+/* Mode 31: a depth texture rendered and then sampled, glmark2 shadow's shape
+ * (docs/notes/gc-depth-sample-wire.md outcome (a)): a 64x64
+ * GL_DEPTH_COMPONENT / GL_UNSIGNED_INT texture (OES_depth_texture), NEAREST
+ * and CLAMP_TO_EDGE, as the only attachment of one FBO; a depth clear and one
+ * GL_LESS quad at z 0.5 into it; then a second FBO with an RGBA8 colour
+ * renderbuffer, and one quad whose fragment shader reads
+ * texture2D(u_depth, v_uv).x from unit 0; glFinish. Slot 0's sampler state in
+ * the stream and its descriptor in the memory dump are Mesa's words for a
+ * depth texture sampled as TEXTURE_FORMAT_D24X8
+ * (testdata/depth-view.golden, tests/gc_depth_view_golden.rs). */
+static int depth_view_mode_g(void)
+{
+	static const char vs_depth[] =
+		"attribute vec4 a_pos;\n"
+		"void main() { gl_Position = a_pos; }\n";
+	static const char fs_depth[] =
+		"precision mediump float;\n"
+		"void main() { gl_FragColor = vec4(1.0); }\n";
+	static const char vs_sample[] =
+		"attribute vec4 a_pos;\n"
+		"varying vec2 v_uv;\n"
+		"void main() { gl_Position = a_pos; v_uv = a_pos.xy * 0.5 + 0.5; }\n";
+	static const char fs_sample[] =
+		"precision mediump float;\n"
+		"uniform sampler2D u_depth;\n"
+		"varying vec2 v_uv;\n"
+		"void main() { float d = texture2D(u_depth, v_uv).x; gl_FragColor = vec4(d, d, d, 1.0); }\n";
+	static const float quad[16] = {
+		-1, -1, 0.5f, 1,   1, -1, 0.5f, 1,   -1, 1, 0.5f, 1,   1, 1, 0.5f, 1,
+	};
+	const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+	GLuint depth_fbo, colour_fbo, tex, rb, vbo, prog_depth, prog_sample;
+
+	if (!ext || !strstr(ext, "GL_OES_depth_texture")) {
+		fprintf(stderr, "cs_golden: mode 31: no GL_OES_depth_texture in this context\n");
+		return 3;
+	}
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+
+	/* the depth pass */
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 64, 64, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &depth_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, depth_fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		fprintf(stderr, "cs_golden: mode 31: depth-texture FBO incomplete\n");
+		return 3;
+	}
+	glViewport(0, 0, 64, 64);
+	prog_depth = glCreateProgram();
+	glAttachShader(prog_depth, compile(GL_VERTEX_SHADER, vs_depth));
+	glAttachShader(prog_depth, compile(GL_FRAGMENT_SHADER, fs_depth));
+	glBindAttribLocation(prog_depth, 0, "a_pos");
+	glLinkProgram(prog_depth);
+	glUseProgram(prog_depth);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 16, (const void *)0);
+	glEnableVertexAttribArray(0);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+	/* the sampling pass */
+	glGenFramebuffers(1, &colour_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, colour_fbo);
+	glGenRenderbuffers(1, &rb);
+	glBindRenderbuffer(GL_RENDERBUFFER, rb);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8_OES, 64, 64);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rb);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		fprintf(stderr, "cs_golden: mode 31: colour FBO incomplete\n");
+		return 3;
+	}
+	glDisable(GL_DEPTH_TEST);
+	prog_sample = glCreateProgram();
+	glAttachShader(prog_sample, compile(GL_VERTEX_SHADER, vs_sample));
+	glAttachShader(prog_sample, compile(GL_FRAGMENT_SHADER, fs_sample));
+	glBindAttribLocation(prog_sample, 0, "a_pos");
+	glLinkProgram(prog_sample);
+	glUseProgram(prog_sample);
+	glUniform1i(glGetUniformLocation(prog_sample, "u_depth"), 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	glFinish();
 	fprintf(stderr, "drew; gl error 0x%x\n", glGetError());
@@ -857,7 +965,7 @@ int main(int argc, char **argv)
 		 * drift from the code the way the old duplicate mode list did. If
 		 * you add a branch, add the number here. */
 		static const int have[] = { 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18,
-					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
+					    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31 };
 		size_t k;
 		int known = 0;
 
@@ -897,6 +1005,10 @@ int main(int argc, char **argv)
 	if (mode == 30) {
 		/* its own FBO: a texture, not the renderbuffer below */
 		return tiled_ez_mode_g();
+	}
+	if (mode == 31) {
+		/* its own two FBOs: a depth texture, then a colour target */
+		return depth_view_mode_g();
 	}
 
 	glGenFramebuffers(1, &fbo);
