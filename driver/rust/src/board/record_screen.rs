@@ -25,6 +25,28 @@ pub const FONT_FIRST: u8 = 0x20;
 pub const FONT_GLYPHS: usize = 95;
 pub type Font = [[u8; FONT_H]; FONT_GLYPHS];
 
+/// The characters a row of a picture `width` pixels wide holds.
+pub const fn cols(width: usize) -> usize {
+    width / FONT_W
+}
+
+/// The text rows of a picture `height` pixels high.
+pub const fn rows(height: usize) -> usize {
+    height / FONT_H
+}
+
+/// The rows [`Ring::draw`] keeps for the console's lines on a picture
+/// `height` pixels high: all but the head's row and the record's, when the
+/// record line fits one row (a picture of at least [`RECORD_LINE`]
+/// characters a row).
+pub const fn console_rows(height: usize) -> usize {
+    rows(height).saturating_sub(2)
+}
+
+/// The characters of a record line (common/record.c: "yk-record: " and four
+/// words of eight hex digits).
+pub const RECORD_LINE: usize = RECORD.len() + 4 * 9 - 1;
+
 /// The text's and the background's XRGB8888 pixel.
 pub const FG: u32 = 0x00ff_ffff;
 pub const BG: u32 = 0x0020_2020;
@@ -115,7 +137,7 @@ impl Ring {
     /// picture holds no three text rows of one character or `px` is too
     /// short for it.
     pub fn draw(&self, px: &mut [u32], stride: usize, width: usize, height: usize, font: &Font, head: &[u8]) -> usize {
-        let (cols, rows) = (width / FONT_W, height / FONT_H);
+        let (cols, rows) = (cols(width), rows(height));
         if cols == 0 || rows < 3 || stride < width {
             return 0;
         }
@@ -267,6 +289,24 @@ mod tests {
         // a later record replaces it; one that is not at the line's start does not
         let r = ring(&(text + "yk-record: late\nsee yk-record: no\n"));
         assert_eq!(screen(&r, 20, 4, "h").1[3], "yk-record: late");
+    }
+
+    /// cols() and console_rows() are what draw() does: on an 800x600 picture
+    /// 35 lines of 100 characters, each one row, under the head and over the
+    /// record.
+    #[test]
+    fn the_grid_functions_are_the_drawn_screen() {
+        let (cols, rows) = (cols(800), console_rows(600));
+        assert_eq!((cols, rows), (100, 35));
+        let mut text = String::from("yk-record: 594b1201 fcc10077 6208103f 00258320\n");
+        assert_eq!(text.len() - 1, RECORD_LINE);
+        for i in 0..LINES {
+            text += &format!("{i:<width$}\n", width = cols);
+        }
+        let (lines, s) = screen(&ring(&text), cols, rows + 2, "h");
+        assert_eq!(lines, rows);
+        assert_eq!(s[rows].trim_end(), (LINES - 1).to_string());
+        assert_eq!(s[rows + 1], "yk-record: 594b1201 fcc10077 6208103f 00258320");
     }
 
     #[test]
