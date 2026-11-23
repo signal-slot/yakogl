@@ -34,8 +34,13 @@ not section 3's one quad per attachment:
   until every job that may read it has completed (`src/osal/v3d_frees.h`),
   and the job builder copied the program's record when the quad was
   recorded. The pattern costs a compile again when it returns.
-- The colour mask is the job's one `COLOR_WRITE_MASKS` (section 2: ES 3.0
-  has one mask for every draw buffer); no per-RT mask ABI change. The
+- The colour mask is the job's `COLOR_WRITE_MASKS` (section 2: ES 3.0 has
+  one mask for every draw buffer). Until `48f6017c` the job carried one
+  mask for every RT, "no per-RT mask ABI change"; since then it can carry one
+  per RT (`V3dJobState::rt_colormask_own` / `rt_colormask`,
+  `src/v3d/ffi.rs:391-394`), which a draw uses where the targets' channels
+  differ (`tests/es3_v3d_int_rg_mrt_mask.rs`). This clear quad still takes
+  the one application mask. The
   depth and stencil halves ride on the same quad. The unscissored, unmasked
   clear is the TLB's as before.
 - Why one quad and not k: tests/es3_mrt_ds_clear_v3d.rs and
@@ -211,9 +216,12 @@ Mesa's one quad - a program writing locations 0..k-1 of one class, one
 variant per k; it saves k-1 draws and is a pure performance change.
 
 **Alternative rejected: one mixed-class quad with a per-RT mask**
-(Mesa's shape). It needs one `COLOR_WRITE_MASKS` nibble per RT (an extension
-of `V3dJobState`, `ffi.rs:366` and `v3d_job.c:698`, a C-driver ABI change)
-plus programs for every class/RT pattern. More surface, same pixels.
+(Mesa's shape). At the time it needed one `COLOR_WRITE_MASKS` nibble per RT
+(an extension of `V3dJobState`, a C-driver ABI change) plus programs for every
+class/RT pattern: more surface, same pixels. History: `48f6017c` has since
+added that per-RT mask to `V3dJobState` and `v3d_job.c:787-792` for draws, so
+the ABI half of this objection is gone; the per-class programs half stands,
+and the quad here is not changed.
 
 **Open points for the code item.** (a) That an RT the quad's shader does not
 output keeps its value in the tile buffer (read from `vir_emit_tlb_color_write`;
