@@ -99,9 +99,9 @@ name = "HAL_NXP_DIR"
 path = "zephyr-ws/modules/hal/nxp"
 marker = "zephyr-ws/modules/hal/nxp/zephyr/module.yml"
 requires = ["WEST_VENV"]
-note = "hal_nxp, the i.MX8MP register check; west update of the workspace fetches it (the generator pins 1e91007b)"
+note = "hal_nxp, the i.MX8MP register check; west update of the workspace fetches it (the generator pins 1e91007b). A plain `west update`: hal_nxp comes through zephyr's import, and west refuses `west update hal_nxp` for an imported project"
 build = '''
-cd "$DEPS/zephyr-ws" && .venv/bin/west update hal_nxp
+cd "$DEPS/zephyr-ws" && .venv/bin/west update
 '''
 
 [[dep]]

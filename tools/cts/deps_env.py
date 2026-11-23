@@ -213,6 +213,12 @@ def build(d, by_name, deps, board, done):
         if not build(by_name[r], by_name, deps, board, done):
             print(f"failed   {name}: needs {r}")
             return False
+    # A requirement's build may make this entry too (ZEPHYR_WS's `west update`
+    # fetches hal_nxp, HAL_NXP_DIR): it is then present, not built again.
+    if os.path.exists(marker):
+        print(f"present  {name}  {marker}")
+        done[name] = True
+        return True
     if "build" not in d:
         print(f"nobuild  {name}: {d.get('note', 'no build recipe')}")
         return False
@@ -295,8 +301,10 @@ def main(argv):
         return 0
     if mode in ("build", "build-missing"):
         deps.mkdir(parents=True, exist_ok=True)
-    elif not deps.is_dir():
+    elif not deps.is_dir() and mode != "check":
         die(f"no dependency layout at {deps} on {socket.gethostname()}", 1)
+    # --check on a new host, whose layout directory is not made yet, still
+    # names every entry (all missing, exit 1): the list is what --build takes.
     sel = [d for d in all_deps if in_set(d, board)]
 
     if mode == "build":
@@ -329,7 +337,8 @@ def main(argv):
         for n in (d["name"], *d.get("aliases", [])):
             print(f"{n}={value}")
     if missing:
-        print(f"deps-env.sh: {missing} entr{'y' if missing == 1 else 'ies'} missing in {deps}")
+        absent = "" if deps.is_dir() else " (the layout directory does not exist yet)"
+        print(f"deps-env.sh: {missing} entr{'y' if missing == 1 else 'ies'} missing in {deps}{absent}")
         return 1
     return 0
 

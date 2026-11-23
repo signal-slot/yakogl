@@ -52,6 +52,17 @@ check "--check accepts the layout itself as a marker" "ok       GLSL2USC_CACHE  
 absent "--check without a board has no board entry" DEQP_WORK "$out"
 check "--check has the Mali firmware entry" "missing  MALI_CSFFW  $L/mali-csffw/mali_csffw.bin" "$out"
 check "--check has the rustup target entry" "RUST_TARGET_AARCH64_LINUX  $(rustc --print sysroot)/lib/rustlib/aarch64-unknown-linux-gnu/lib" "$out"
+# a new host: no layout directory at all
+N=$T/no-layout
+out=$(CCFARM_DEPS_DIR=$N "$ENV_SH" --check 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "--check without a layout directory exits 1" || bad "--check without a layout directory: rc $rc"
+check "--check without a layout directory names every entry" "missing  ZEPHYR_WS  $N/zephyr-ws/.west/config" "$out"
+check "--check without a layout directory marks GLSL2USC_CACHE missing" "missing  GLSL2USC_CACHE  $N" "$out"
+check "--check without a layout directory says so" "missing in $N (the layout directory does not exist yet)" "$out"
+[ ! -e "$N" ] && ok "--check makes no layout directory" || bad "--check made $N"
+out=$(CCFARM_DEPS_DIR=$N "$ENV_SH" --present 2>&1); rc=$?
+[ "$rc" -eq 1 ] && ok "--present without a layout directory still exits 1" || bad "--present without a layout directory: rc $rc"
+check "--present without a layout directory says why" "no dependency layout at $N" "$out"
 
 out=$("$ENV_SH" 2>&1)
 check "env prints a name" "ZEPHYR_WS=$L/zephyr-ws" "$out"
@@ -173,6 +184,19 @@ path = "w-{board}"
 marker = "w-{board}/done"
 board = "*"
 build = 'mkdir -p "\$DEPS/w-\$BOARD_NAME" && touch "\$DEPS/w-\$BOARD_NAME/done"'
+
+[[dep]]
+name = "P"
+path = "p"
+marker = "p/done"
+build = 'mkdir -p "\$DEPS/p/sub" && : > "\$DEPS/p/sub/done" && : > "\$DEPS/p/done"'
+
+[[dep]]
+name = "Q"
+path = "p/sub"
+marker = "p/sub/done"
+requires = ["P"]
+build = 'echo ran >> "\$DEPS/q.runs"; exit 1'
 EOF
 export DEPS_TOML=$T/deps.toml
 
@@ -186,6 +210,11 @@ out=$("$ENV_SH" --build A_ALIAS B 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "--build of present entries succeeds (alias accepted)" || bad "--build again: rc $rc"
 check "--build leaves a present entry alone" "present  A" "$out"
 [ "$(wc -l < "$L/a.runs")" -eq 1 ] && ok "A's build ran once" || bad "A's build ran again"
+# an entry its requirement's build makes too (HAL_NXP_DIR after ZEPHYR_WS)
+out=$("$ENV_SH" --build Q 2>&1); rc=$?
+[ "$rc" -eq 0 ] && ok "--build Q, made by its requirement P, succeeds" || bad "--build Q: rc $rc: $out"
+check "--build finds an entry its requirement made present" "present  Q  $L/p/sub/done" "$out"
+[ ! -e "$L/q.runs" ] && ok "Q's own build did not run" || bad "Q's own build ran"
 
 out=$("$ENV_SH" --build C 2>&1); rc=$?
 [ "$rc" -eq 1 ] && ok "--build of an entry without a build exits 1" || bad "--build C: rc $rc"

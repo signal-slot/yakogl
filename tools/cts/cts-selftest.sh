@@ -195,7 +195,7 @@ fi
 # the retry of a cut download, and the nanopc_t6 set's MALI_DEQP_TOOLCHAIN).
 # Its count is pinned like
 # images-selftest's.
-DEPS_SELFTEST_CHECKS=67
+DEPS_SELFTEST_CHECKS=77
 echo
 echo "== 20b. deps-selftest.sh: deps.toml, deps-env.sh --check / --build"
 dout=$("$HERE/deps-selftest.sh" 2>&1)
