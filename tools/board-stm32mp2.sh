@@ -212,6 +212,46 @@
 # image that does not arm the watchdog itself needs MP2_NO_WATCHDOG=1 (BL2's
 # IWDG is what resets it), as for any run. The record carries expect_wdog=1.
 #
+# MP2_RAMLOG=1: the console text of a run through the image's RAM ring
+# (driver/zephyr/lib/board/common/ramlog.c; the host side is
+# tools/probes/stm32mp257f_dk/ramlog/). For a blind run (MP2_NO_CONSOLE=1)
+# it is the only console text; alongside a console it is kept as ramlog.txt
+# and the console stays the verdict's. The image must have been built with
+# CONFIG_YAKOGL_RAMLOG=y: the runner reads the image's Zephyr .config (beside
+# the image, as build/zephyr/ has zephyr.bin and .config; MP2_RAMLOG_CONFIG
+# names another) and refuses before anything changes when the option is off,
+# the file is missing or newer than the image, or the ring
+# (CONFIG_YAKOGL_RAMLOG_ADDR, _SIZE: header included) is not in DDR or
+# overlaps the load window 0xa0000000..0xb0000000 (ramlog-study's choice:
+# 0xb0100000, 1 MiB). The hook must be reached through preboot=run yako_hook
+# (the bootcmd fallback is refused). The UNDO printed before staging names
+# the ramlog edit; then the arm's one environment write also sets
+#   preboot          = "run yako_ramlog; run yako_hook"
+#   yako_ramlog      = the one command line of ramlog/uboot_snippet.txt: when
+#                      the ring's magic is at yako_ramlog_addr, ext4write of
+#                      yako_ramlog_size bytes to /yakogl/ramlog.bin on bootfs,
+#                      then the magic cleared (mw.l)
+#   yako_ramlog_addr, yako_ramlog_size  from the image's .config
+# so the boot after the image's reset saves the ring before ST's boot. Once
+# the board answers again the runner writes preboot=run yako_hook back and
+# unsets yako_ramlog* (read back like every write), reads
+# /boot/yakogl/ramlog.bin over ssh, deletes it, checks that the bootfs file
+# list is again the one recorded right after staging and that the stock
+# files match boot-sha256.txt (meta: bootfs_list=, stock_files=), and decodes
+# the ring (ramlog_decode.py) into ramlog.txt; for a blind run that text is
+# console.txt (meta: console_source=ramlog) and the verdict below is computed
+# from it, the line marked "blind ... console=ramlog": a blind run is never a
+# row (meta: row_eligible=no). No ramlog.bin, or a ring that does not decode
+# (meta: ramlog=missing|no_ring|truncated|unreadable), gives verdict=done
+# with boot_verdict=unknown and result=none: the board came back, nothing
+# more is known. The ramlog.bin itself is not kept (ramlog_sha256 in
+# meta.txt). The undo: an exit while the one-shot is the runner's writes the
+# pre-arm environment back (preboot included); after the board left its
+# Linux the EXIT trap puts preboot back if the board answers, else the state
+# file names it. "disarm" and "uninstall" remove the ramlog preboot, the
+# yako_ramlog* variables and ramlog.bin; "install" over a ramlog preboot left
+# behind puts preboot=run yako_hook back.
+#
 # The verdict line:
 #   board-stm32mp2.sh stm32mp257f-dk <name> rc=<rc> verdict=<v> boot=uboot-sd <row|blind>
 #       boot_verdict=<bv> result=<pass:<prog>|fail:<prog>|none> back_after=<s>s
@@ -250,6 +290,8 @@
 #                    local serial device (115200); the console is a farm
 #                    device attached to a node that need not be this one
 #   MP2_NO_CONSOLE   1: run without a console (blind; never a row)
+#   MP2_RAMLOG       1: the console text through the image's RAM ring (above)
+#   MP2_RAMLOG_CONFIG  the image's Zephyr .config (default: beside the image)
 #   MP2_NO_WATCHDOG  1: accept an image without the marker (BL2's IWDG runs)
 #   MP2_SUDO         prefix for root on the board ("" for root, "sudo -n ")
 #   MP2_ENV_OFFSET, MP2_ENV_OFFSET2, MP2_ENV_SIZE  the environment's layout
@@ -348,7 +390,15 @@ YAKO_HOOK='echo yakogl-mp2: hook; if test -n "${yako_once}"; then echo yakogl-mp
 YAKO_MMC='if ext4load mmc ${boot_instance}:${yako_part} ${yako_addr} ${yako_file}; then echo yakogl-mp2: go ${yako_addr}; dcache off; icache off; go ${yako_addr}; fi; echo yakogl-mp2: mmc load failed, booting Linux'
 HOOK_PREFIX='run yako_hook; '    # the bootcmd fallback a person types (a U-Boot without USE_PREBOOT)
 PREBOOT='run yako_hook'           # preboot: the runner's own, written only where the environment has none
-OUR_VARS="yako_hook yako_mmc yako_addr yako_part yako_bootcmd_prev yako_once yako_file"
+# MP2_RAMLOG=1: preboot while a run's ring save is armed, and its variables
+PREBOOT_RAMLOG='run yako_ramlog; run yako_hook'
+RAMLOG_VARS="yako_ramlog yako_ramlog_addr yako_ramlog_size"
+RAMLOG_FILE=$STAGE_DIR/ramlog.bin
+RAMLOG_DIR=$HERE/probes/stm32mp257f_dk/ramlog
+RAMLOG=${MP2_RAMLOG:-0}
+RAMLOG_SET=0        # 1 while the environment carries the ring save (arm .. its removal)
+RAMLOG_DONE=0       # 1 once ramlog.bin was dealt with after the cycle
+OUR_VARS="yako_hook yako_mmc yako_addr yako_part yako_bootcmd_prev yako_once yako_file $RAMLOG_VARS"
 
 TMP=$(mktemp -d)
 CAP=
@@ -503,7 +553,7 @@ env_hook() {
         BOOTCMD_BARE=$bc; HOOK_VIA=preboot
     fi
     pb=$(env_get "$in" preboot) || pb=
-    if [ "$HOOK_VIA" = preboot ] && [ -n "$pb" ] && [ "$pb" != "$PREBOOT" ]; then
+    if [ "$HOOK_VIA" = preboot ] && [ -n "$pb" ] && [ "$pb" != "$PREBOOT" ] && [ "$pb" != "$PREBOOT_RAMLOG" ]; then
         PREBOOT_OTHER=$pb
         needs_person_hook
     fi
@@ -524,6 +574,11 @@ env_hook() {
     fi
     if env_get "$in" yako_hook >/dev/null; then EDIT_HOW=upgraded; else EDIT_HOW=installed; fi
     env_tool set "$in" "$out" "${vars[@]}" >/dev/null || die "uboot_env.py refused the edit" 2
+    # a run's ring save left behind (preboot set back above): its variables go too
+    if [ "$pb" = "$PREBOOT_RAMLOG" ]; then
+        # shellcheck disable=SC2086  # the names, one per word
+        env_tool unset "$out" "$out" $RAMLOG_VARS >/dev/null || die "uboot_env.py refused the edit" 2
+    fi
 }
 # bootcmd_line hook|unhook: what a person types at U-Boot's prompt (autoboot
 # stopped) to put the hook in front of bootcmd, or to take it away again
@@ -544,17 +599,37 @@ env_unhook() {
     bc=$(env_get "$in" bootcmd) || die "the environment has no bootcmd"
     if [ "${bc#"$HOOK_PREFIX"}" != "$bc" ]; then
         HOOKED=1; BOOTCMD_BARE=${bc#"$HOOK_PREFIX"}
-        env_tool unset "$in" "$out" yako_once yako_file >/dev/null || die "uboot_env.py refused the edit" 2
+        # shellcheck disable=SC2086  # the names, one per word
+        env_tool unset "$in" "$out" yako_once yako_file $RAMLOG_VARS >/dev/null || die "uboot_env.py refused the edit" 2
         EDIT_HOW="bootcmd still hooked"; return 0
     fi
     HOOKED=0; BOOTCMD_BARE=$bc
-    [ "$(env_get "$in" preboot)" != "$PREBOOT" ] || names="preboot $names"
+    case "$(env_get "$in" preboot)" in "$PREBOOT" | "$PREBOOT_RAMLOG") names="preboot $names" ;; esac
     # shellcheck disable=SC2086  # the names, one per word
     env_tool unset "$in" "$out" $names >/dev/null || die "uboot_env.py refused the edit" 2
     EDIT_HOW=unhooked
 }
-env_arm() { env_tool set "$1" "$2" "yako_once=$3" "yako_file=$4" >/dev/null || die "uboot_env.py refused the edit" 2; }
-env_disarm() { env_tool unset "$1" "$2" yako_once yako_file >/dev/null || die "uboot_env.py refused the edit" 2; }
+# env_arm IN OUT TOKEN FILE [NAME=VALUE...]: the one-shot (and, with
+# MP2_RAMLOG=1, the ring save's preboot and variables) in one edit
+env_arm() {
+    local in=$1 out=$2 tok=$3 f=$4
+    shift 4
+    env_tool set "$in" "$out" "yako_once=$tok" "yako_file=$f" "$@" >/dev/null || die "uboot_env.py refused the edit" 2
+}
+# env_unramlog IN OUT: the ring save gone: yako_ramlog* unset and preboot
+# back to run yako_hook (only where it is the ramlog one)
+env_unramlog() {
+    # shellcheck disable=SC2086  # the names, one per word
+    env_tool unset "$1" "$2" $RAMLOG_VARS >/dev/null || die "uboot_env.py refused the edit" 2
+    if [ "$(env_get "$2" preboot)" = "$PREBOOT_RAMLOG" ]; then
+        env_tool set "$2" "$2" "preboot=$PREBOOT" >/dev/null || die "uboot_env.py refused the edit" 2
+    fi
+}
+# env_disarm IN OUT: the one-shot and a ring save, whatever a run left
+env_disarm() {
+    env_tool unset "$1" "$2" yako_once yako_file >/dev/null || die "uboot_env.py refused the edit" 2
+    env_unramlog "$2" "$2"
+}
 
 # ---- the environment partition, on the board ----------------------------------------
 # where_env: ENV_DEV (the u-boot-env partition of the card Linux booted from)
@@ -760,6 +835,7 @@ env_restore() {
 # be read is refused, never taken as "absent" (a dry run reads an installed
 # hook; its DRY line goes to stderr so a caller's capture sees the word alone)
 INSTALLED=
+INST_PREBOOT=   # preboot as installed() read it
 installed() {
     local out bc pb
     env_board_vars out "bootcmd preboot $OUR_VARS" \
@@ -773,6 +849,7 @@ yako_bootcmd_prev=run bootcmd_stm32mp" 1>&2 ||
         die "cannot read the environment of $ENV_DEV (dd over ssh, decoded by uboot_env.py): the hook's state is unknown, not taken as absent"
     bc=$(sed -n 's/^bootcmd=//p' <<<"$out")
     pb=$(sed -n 's/^preboot=//p' <<<"$out")
+    INST_PREBOOT=$pb
     BOOTCMD_BARE=${bc#"$HOOK_PREFIX"}
     if ! grep -q '^yako_' <<<"$out"; then
         INSTALLED=absent
@@ -784,6 +861,10 @@ yako_bootcmd_prev=run bootcmd_stm32mp" 1>&2 ||
     [ "$(sed -n 's/^yako_mmc=//p' <<<"$out")" = "$YAKO_MMC" ] || { INSTALLED="stale: yako_mmc is another version's"; return 0; }
     [ "$(sed -n 's/^yako_addr=//p' <<<"$out")" = "$YAKO_ADDR" ] || { INSTALLED="stale: yako_addr is not $YAKO_ADDR"; return 0; }
     [ -n "$(sed -n 's/^yako_part=//p' <<<"$out")" ] || { INSTALLED="stale: yako_part is absent"; return 0; }
+    if [ "$pb" = "$PREBOOT_RAMLOG" ]; then
+        INSTALLED="stale: preboot is a run's ring save ('$PREBOOT_RAMLOG', MP2_RAMLOG=1) left behind: 'disarm' puts preboot=$PREBOOT back"
+        return 0
+    fi
     # hooked: preboot=run yako_hook (the runner's), or the fallback prefix a person put on bootcmd
     if [ "$pb" = "$PREBOOT" ] || [ "${bc#"$HOOK_PREFIX"}" != "$bc" ]; then
         INSTALLED=ok
@@ -843,6 +924,115 @@ check_image() {
     IMG_SIZE=$(stat -c %s "$img")
     IMG_ZEPHYR=$(grep -aoE 'Booting Zephyr OS build [0-9A-Za-z._+-]+' "$img" | head -1 | sed 's/.* build //')
     IMG_ZEPHYR=${IMG_ZEPHYR:-absent (no Zephyr banner in the image)}
+}
+# check_ramlog IMG (MP2_RAMLOG=1): the image's Zephyr .config has the ring
+# on, at an address in DDR outside the load window; RAMLOG_ADDR, RAMLOG_SIZE
+# (header included, the bytes U-Boot saves) and RAMLOG_SNIPPET (the one
+# command line of uboot_snippet.txt) set. Refuses (rc 3) before any change.
+check_ramlog() {
+    local img=$1 cfg lo hi want
+    cfg=${MP2_RAMLOG_CONFIG:-$(dirname "$img")/.config}
+    [ -f "$cfg" ] || die "REFUSED: MP2_RAMLOG=1 needs the image's Zephyr .config, and $cfg is not there (MP2_RAMLOG_CONFIG names it): build with -DCONFIG_YAKOGL_RAMLOG=y -DCONFIG_YAKOGL_RAMLOG_ADDR=0xb0100000"
+    grep -qx 'CONFIG_YAKOGL_RAMLOG=y' "$cfg" ||
+        die "REFUSED: MP2_RAMLOG=1, but $img was not built with CONFIG_YAKOGL_RAMLOG=y ($cfg): its console would not reach the ring"
+    [ ! "$cfg" -nt "$img" ] || die "REFUSED: $cfg is newer than $img: the image may not be built from it (rebuild)"
+    RAMLOG_ADDR=$(sed -n 's/^CONFIG_YAKOGL_RAMLOG_ADDR=//p' "$cfg" | tail -1)
+    RAMLOG_SIZE=$(sed -n 's/^CONFIG_YAKOGL_RAMLOG_SIZE=//p' "$cfg" | tail -1)
+    [[ $RAMLOG_ADDR =~ ^0x[0-9a-fA-F]{1,8}$ ]] || die "REFUSED: CONFIG_YAKOGL_RAMLOG_ADDR in $cfg is '${RAMLOG_ADDR:-unset}', not a 32-bit hex address"
+    [[ $RAMLOG_SIZE =~ ^0x[0-9a-fA-F]{1,8}$ ]] || die "REFUSED: CONFIG_YAKOGL_RAMLOG_SIZE in $cfg is '${RAMLOG_SIZE:-unset}', not a hex size"
+    lo=$((RAMLOG_ADDR)); hi=$((RAMLOG_ADDR + RAMLOG_SIZE))
+    { [ $((RAMLOG_SIZE)) -ge $((0x1000)) ] && [ $((RAMLOG_SIZE)) -le $((0x10000000)) ]; } ||
+        die "REFUSED: CONFIG_YAKOGL_RAMLOG_SIZE $RAMLOG_SIZE is outside the Kconfig range 0x1000..0x10000000"
+    { [ "$lo" -ge $((0x80000000)) ] && [ "$hi" -le $((0x100000000)) ] && [ $((lo % 4)) = 0 ]; } ||
+        die "REFUSED: the ring $RAMLOG_ADDR+$RAMLOG_SIZE is not word-aligned in the DK's DDR below 4 GiB (0x80000000..)"
+    { [ "$hi" -le $((YAKO_ADDR)) ] || [ "$lo" -ge $((LOAD_END)) ]; } ||
+        die "REFUSED: the ring $RAMLOG_ADDR+$RAMLOG_SIZE overlaps the image's load window $YAKO_ADDR..$LOAD_END"
+    [ -f "$RAMLOG_DIR/uboot_snippet.txt" ] && [ -f "$RAMLOG_DIR/ramlog_decode.py" ] ||
+        die "REFUSED: no $RAMLOG_DIR/uboot_snippet.txt or ramlog_decode.py"
+    RAMLOG_SNIPPET=$(grep -v '^#' "$RAMLOG_DIR/uboot_snippet.txt" | grep -v '^[[:space:]]*$')
+    # shellcheck disable=SC2016  # U-Boot's ${...}, literally
+    want='ext4write mmc ${boot_instance}:${yako_part} ${yako_ramlog_addr} /yakogl/ramlog.bin ${yako_ramlog_size}'
+    { [ "$(grep -c . <<<"$RAMLOG_SNIPPET")" = 1 ] && grep -qF "$want" <<<"$RAMLOG_SNIPPET"; } ||
+        die "REFUSED: $RAMLOG_DIR/uboot_snippet.txt is not one command line with '$want'"
+}
+# ramlog_off: the ring save out of the environment (preboot=run yako_hook,
+# yako_ramlog* unset), read back; in a subshell: a refusal ends it, not the caller
+ramlog_off() {
+    env_read "$TMP/env.r" || exit 1
+    env_unramlog "$TMP/env.r" "$TMP/env.r2"
+    cmp -s "$TMP/env.r" "$TMP/env.r2" && exit 0
+    printf 'preboot=%s\n' "$PREBOOT" > "$TMP/expect"
+    env_write "$TMP/env.r2" "ramlog off"
+    local v
+    env_board_get v yako_ramlog
+    [ -z "$v" ]
+}
+# ramlog_collect: after the cycle (the board answers, the card resolved
+# again): the ring save off, ramlog.bin pulled and deleted, the bootfs file
+# list and the stock files checked, the ring decoded into ramlog.txt (and,
+# for a blind run, console.txt)
+ramlog_collect() {
+    local has now chk r lost
+    if [ "$DRY" = 1 ]; then
+        env_read "$TMP/env.r"
+        echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> $RAMLOG_VARS; ... set <env.new> <env.new> 'preboot=$PREBOOT'   # the ring save off"
+        printf 'preboot=%s\n' "$PREBOOT" > "$TMP/expect"
+        env_write "<env.new>" "ramlog off"
+    elif ( ramlog_off ); then RAMLOG_SET=0; meta ramlog_preboot "removed after the cycle (preboot=$PREBOOT)"
+    else meta ramlog_preboot "NOT removed"; note "WARNING: the ring save's preboot was not removed: 'disarm' puts preboot=$PREBOOT back" >&2; fi
+    boot_check
+    bget has "test -f $RAMLOG_FILE && echo yes || echo no" yes || has=unreadable
+    if [ "$has" = yes ]; then
+        if [ "$DRY" = 1 ]; then
+            echo "DRY board\$ ${SU}cat $RAMLOG_FILE   # > <rundir>/ramlog.bin"
+        else
+            fgw timeout 60 ssh "${SSH_OPTS[@]}" "$BOARD_HOST" "${SU}cat $RAMLOG_FILE" > "$RD/ramlog.bin" 2> "$TMP/ramlog.pull.err" ||
+                { rm -f "$RD/ramlog.bin"; meta ramlog_pull failed; }
+        fi
+        boot_check
+        if b "${SU}rm -f $RAMLOG_FILE && ! test -e $RAMLOG_FILE"; then meta ramlog_removed yes
+        else meta ramlog_removed NO; note "WARNING: $RAMLOG_FILE was not removed" >&2; fi
+    fi
+    RAMLOG_DONE=1
+    boot_check
+    bget now "cd /boot && find . -xdev | LC_ALL=C sort" "$BOOT_STAGED" || now=unreadable
+    if [ "$now" = "$BOOT_STAGED" ]; then meta bootfs_list staged
+    else
+        meta bootfs_list differs
+        diff <(printf '%s\n' "$BOOT_STAGED") <(printf '%s\n' "$now") | grep '^[<>]' | tr '\n' ' ' > "$TMP/bootfs.diff"
+        note "WARNING: the bootfs file list is not the one recorded after staging: $(cat "$TMP/bootfs.diff")" >&2
+    fi
+    bget chk "if test -f $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt; then cd /boot && ${SU}sha256sum -c $STAGE_DIR/$BACKUP_SUB/boot-sha256.txt --quiet 2>&1 && echo unchanged; else echo norecord; fi" unchanged || chk=unreadable
+    if [ "$chk" = unchanged ] || [ "$chk" = norecord ]; then
+        meta stock_files "$chk"
+    else
+        meta stock_files differ
+        note "WARNING: the stock boot files differ from the record of install: ${chk//$'\n'/;}" >&2
+    fi
+    if [ "$DRY" = 1 ]; then
+        local why=
+        [ "$BLIND" = 0 ] || why="   # console.txt, console_source=ramlog"
+        echo "DRY host\$ python3 -I tools/probes/stm32mp257f_dk/ramlog/ramlog_decode.py <rundir>/ramlog.bin > <rundir>/ramlog.txt$why"
+        return 0
+    fi
+    if [ "$has" = no ]; then meta ramlog missing; return 0; fi
+    if [ "$has" != yes ]; then meta ramlog unreadable; return 0; fi
+    [ -s "$RD/ramlog.bin" ] || { meta ramlog unreadable; return 0; }
+    meta ramlog_sha256 "$(sha256sum < "$RD/ramlog.bin" | cut -d' ' -f1)"
+    r=0
+    python3 -I "$RAMLOG_DIR/ramlog_decode.py" "$RD/ramlog.bin" > "$RD/ramlog.txt" 2> "$TMP/ramlog.err" || r=$?
+    rm -f "$RD/ramlog.bin"
+    if [ "$r" = 0 ]; then
+        meta ramlog decoded
+        lost=$(sed -n -E 's/^\[ramlog: ([0-9]+) bytes lost\]$/\1/p' "$TMP/ramlog.err")
+        [ -z "$lost" ] || meta ramlog_lost "$lost"
+        if [ "$BLIND" = 1 ]; then cp "$RD/ramlog.txt" "$RD/console.txt"; meta console_source ramlog; fi
+        return 0
+    fi
+    rm -f "$RD/ramlog.txt"
+    if [ "$r" = 3 ]; then meta ramlog no_ring
+    elif [ "$r" = 4 ]; then meta ramlog truncated
+    else meta ramlog "unreadable (decoder rc $r)"; fi
 }
 
 # ---- the run directory ---------------------------------------------------------------
@@ -912,19 +1102,28 @@ for row in sys.stdin.buffer:
 
 # verdict_line DIR: V_LINE and V_RC from the run's files (meta.txt, console.txt)
 verdict_line() {
-    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect ext=
+    local dir=$1 name back t0 t1 after con bv res v rc cycle blind expect ext= src ramlog kind=row
     expect=$(mget expect_wdog "$dir")
     name=$(mget name "$dir"); back=$(mget back "$dir"); blind=$(mget blind "$dir")
+    src=$(mget console_source "$dir"); ramlog=$(mget ramlog "$dir")
+    [ "$blind" = 1 ] && kind=blind
     # a blind run whose console text was handed in by 'judge' is judged like a
     # run with a console; the return verdict below stays the runner's
-    if [ "$blind" = 1 ] && [ "$(mget console_source "$dir")" = external ]; then
-        blind=0; ext=" console=external"
+    if [ "$blind" = 1 ] && [ "$src" = external ]; then
+        blind=0; kind=row; ext=" console=external"
+    fi
+    # a blind run whose text came back through the RAM ring (MP2_RAMLOG=1):
+    # judged from that text, and still never a row
+    if [ "$blind" = 1 ] && [ "$src" = ramlog ]; then
+        blind=0; ext=" console=ramlog"
     fi
     t0=$(mget t_reboot "$dir"); t1=$(mget t_back "$dir"); cycle=$(mget rc_cycle "$dir")
     if [ -n "$t0" ] && [ -n "$t1" ] && [ "$back" = 1 ]; then after="$((t1 - t0))s"; else after=absent; fi
     con=$dir/console.txt
     res=none
-    if [ "$blind" = 1 ]; then
+    if [ "$blind" = 1 ] && [ -n "$ramlog" ]; then
+        bv=unknown   # MP2_RAMLOG=1 and no ring came back (ramlog= says why)
+    elif [ "$blind" = 1 ]; then
         bv=no_console
     elif [ ! -s "$con" ]; then
         bv=no_lines
@@ -943,6 +1142,7 @@ verdict_line() {
     fi
     if [ "$(mget rebooted "$dir")" = 0 ]; then v=not_rebooted; rc=4; after=absent
     elif [ "$back" != 1 ]; then v=not_back; rc=5
+    elif [ "$blind" = 1 ] && [ -n "$ramlog" ]; then v=done; rc=0
     elif [ "$blind" = 1 ]; then v=returned; rc=0
     elif [ "${res%%:*}" = fail ]; then v=failed; rc=4
     elif [ "$bv" = psci_returned ]; then v=psci_returned; rc=4
@@ -953,8 +1153,6 @@ verdict_line() {
     else v=no_end_line; rc=4; fi
     [ "$cycle" = 6 ] && [ "$rc" = 0 ] && rc=6
     [ "$cycle" = 7 ] && rc=7   # the card refused after the reboot: a person
-    local kind=row
-    [ "$blind" = 1 ] && kind=blind
     V_LINE="$TAG $name rc=$rc verdict=$v boot=$BOOT $kind boot_verdict=$bv result=$res back_after=$after$ext"
     V_RC=$rc
 }
@@ -1254,7 +1452,7 @@ cmd_uninstall() {
     echo "  (or: tools/board-stm32mp2.sh install)"
     if [ "$DRY" = 1 ]; then
         echo "DRY host\$ mkdir -p $bdir && cp <env.bin> $PRISTINE"
-        echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> preboot $OUR_VARS   # preboot only when it is '$PREBOOT' (another is never touched); bootcmd is ST's: never written; while it begins with the hook, only yako_once yako_file"
+        echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> preboot $OUR_VARS   # preboot only when it is '$PREBOOT' or '$PREBOOT_RAMLOG', a run's ring save (another is never touched); bootcmd is ST's: never written; while it begins with the hook, only yako_once yako_file $RAMLOG_VARS"
         : > "$TMP/expect"
         env_write "<env.new>" "uninstall"
         boot_check
@@ -1279,7 +1477,7 @@ cmd_uninstall() {
     env_board_get left yako_hook
     [ -z "$left" ] || die "yako_hook is still set after the uninstall" 5
     env_board_get left preboot
-    [ "$left" != "$PREBOOT" ] || die "preboot is still '$PREBOOT' after the uninstall" 5
+    [ "$left" != "$PREBOOT" ] && [ "$left" != "$PREBOOT_RAMLOG" ] || die "preboot is still '$left' after the uninstall" 5
     # the stock boot files as install recorded them, before the record goes
     local chk
     boot_check
@@ -1300,14 +1498,19 @@ cmd_disarm() {
     take_lock
     where_env
     left_show
-    local once file rest
+    local once file rest rl pb
     env_board_get once yako_once
     env_board_get file yako_file
-    if [ -n "$once$file" ] || [ "$DRY" = 1 ]; then
-        echo "$TAG: disarming: yako_once='$once' yako_file='$file' (the runner's own variables; nothing else is written)"
+    env_board_get rl yako_ramlog
+    env_board_get pb preboot
+    [ "$pb" = "$PREBOOT_RAMLOG" ] && rl="$rl (preboot '$pb')"
+    local rlmsg=
+    [ -z "$rl" ] || rlmsg=" and the ring save of a run with MP2_RAMLOG=1"
+    if [ -n "$once$file$rl" ] || [ "$DRY" = 1 ]; then
+        echo "$TAG: disarming: yako_once='$once' yako_file='$file'$rlmsg (the runner's own variables; nothing else is written)"
         env_read "$TMP/env.bin"
         if [ "$DRY" = 1 ]; then
-            echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> yako_once yako_file"
+            echo "DRY host\$ python3 tools/uboot_env.py ... unset <env.bin> <env.new> yako_once yako_file; ... unset $RAMLOG_VARS; preboot=$PREBOOT where it is '$PREBOOT_RAMLOG'"
             : > "$TMP/expect"
             env_write "<env.new>" "disarm"
         else
@@ -1316,10 +1519,12 @@ cmd_disarm() {
             env_write "$TMP/env.new" "disarm"
             env_board_get once yako_once
             [ -z "$once" ] || die "yako_once is still '$once'" 5
+            env_board_get pb preboot
+            [ "$pb" != "$PREBOOT_RAMLOG" ] || die "preboot is still '$pb'" 5
         fi
     fi
     boot_check
-    b "${SU}rm -f $STAGE_DIR/once-*.bin $STAGE_DIR/once-*.bin.part" || die "cannot remove the staged images"
+    b "${SU}rm -f $STAGE_DIR/once-*.bin $STAGE_DIR/once-*.bin.part $RAMLOG_FILE && ! test -e $RAMLOG_FILE" || die "cannot remove the staged images (and $RAMLOG_FILE)"
     bget rest "ls $STAGE_DIR/once-* 2>/dev/null   # must print nothing" '' || true
     [ -z "$rest" ] || die "staged images are still on the card: $rest" 5
     left_clear
@@ -1358,8 +1563,19 @@ run_undo() {
     local left=()
     if [ "$ARMED" = 1 ]; then
         note "ending while the one-shot is still the runner's: writing the pre-arm environment back" >&2
-        if ( undo_arm ); then ARMED=0; meta disarmed "on exit"; else left+=("the one-shot may still be armed (yako_once=${TOKEN:-?})"); fi
+        if ( undo_arm ); then ARMED=0; RAMLOG_SET=0; meta disarmed "on exit"; else left+=("the one-shot may still be armed (yako_once=${TOKEN:-?})"); fi
     fi
+    # MP2_RAMLOG=1 after the board left its Linux: the ring save is U-Boot's
+    # until the board answers again; then it goes (ramlog_off)
+    if [ "$RAMLOG_SET" = 1 ] && [ "$ARMED" = 0 ]; then
+        if [ "$BACK" = 1 ] && [ -z "$CARD_REFUSED" ] && ( ramlog_off ); then
+            RAMLOG_SET=0; meta ramlog_preboot "removed on exit"
+        else
+            left+=("preboot may still be '$PREBOOT_RAMLOG' with yako_ramlog* set ('disarm' puts preboot=$PREBOOT back)")
+        fi
+    fi
+    [ "$RAMLOG" = 1 ] && [ "$WENT" = 1 ] && [ "$RAMLOG_DONE" = 0 ] &&
+        left+=("$RAMLOG_FILE may be on the card ('disarm' removes it)")
     if [ -n "$STAGED" ]; then
         if [ "$STAGED_OURS" = 1 ] && remove_staged; then
             meta cleanup "removed on exit"
@@ -1392,6 +1608,8 @@ cmd_run() {
     [[ $NAME =~ ^[A-Za-z0-9_-]+$ ]] || die "name '$NAME': letters, digits, _ and - only" 2
     need_board
     env_range
+    case "$RAMLOG" in 0 | 1) ;; *) die "MP2_RAMLOG must be 0 or 1, got '$RAMLOG'" 2 ;; esac
+    [ "$RAMLOG" = 0 ] || [ "$PROBE" = 0 ] || die "MP2_RAMLOG=1 is for run, not probe (no image runs)" 2
     BLIND=0
     if [ -z "${BOARD_UART:-}" ]; then
         if [ "${MP2_NO_CONSOLE:-0}" = 1 ]; then BLIND=1
@@ -1402,6 +1620,7 @@ cmd_run() {
         IMG_SHA=none; IMG_SIZE=0; footprint=none; sha8=probe; IMG_ZEPHYR="absent (probe: no image)"
     else
         check_image "$IMG"
+        [ "$RAMLOG" = 0 ] || check_ramlog "$IMG"
         sha8=${IMG_SHA:0:8}
     fi
     RD="$LOGDIR/$(date +%Y%m%d-%H%M)-$NAME-$sha8"
@@ -1413,6 +1632,8 @@ cmd_run() {
     fi
     meta board "$BOARD"; meta boot "$BOOT"; meta name "$NAME"; meta probe "$PROBE"; meta blind "$BLIND"
     [ "$BLIND" = 1 ] && meta no_console_why "MP2_NO_CONSOLE=1"
+    [ "$BLIND" = 1 ] && meta row_eligible no
+    if [ "$RAMLOG" = 1 ]; then meta ramlog_addr "$RAMLOG_ADDR"; meta ramlog_size "$RAMLOG_SIZE"; fi
     meta image "${IMG:+$(basename "$IMG")}"; meta image_sha256 "$IMG_SHA"; meta image_size "$IMG_SIZE"
     meta footprint "${footprint:-none}"; meta image_zephyr "$IMG_ZEPHYR"
     meta started "$(date '+%F %T')"
@@ -1431,11 +1652,17 @@ cmd_run() {
     st=$INSTALLED
     [ "${st#needs a person}" = "$st" ] || needs_person_hook
     [ "$st" = ok ] || die "the U-Boot hook is not installed as this script writes it ($st): 'install' first"
+    [ "$RAMLOG" = 0 ] || [ "$INST_PREBOOT" = "$PREBOOT" ] ||
+        die "REFUSED: MP2_RAMLOG=1 adds the ring save to preboot=$PREBOOT, and U-Boot reaches the hook through the bootcmd fallback here (preboot '${INST_PREBOOT}')"
     env_board_get once yako_once
     [ -z "$once" ] || die "a one-shot is already pending (yako_once=$once); find its owner, or 'disarm'"
     boot_check
     bget left "ls $STAGE_DIR/once-* 2>/dev/null; true   # must print nothing" '' || die "cannot list $STAGE_DIR on the board"
     [ -z "$left" ] || die "$STAGE_DIR holds a one-shot image (or a cut-off copy) of a run that did not clean up ($left): look at it, or 'disarm'"
+    if [ "$RAMLOG" = 1 ]; then
+        bget left "test -e $RAMLOG_FILE && echo present; true   # must print nothing" '' || die "cannot look for $RAMLOG_FILE on the board"
+        [ -z "$left" ] || die "$RAMLOG_FILE of an earlier run is on the card: 'disarm' removes it"
+    fi
     # the board shows nothing left: from here this run owns the state file
     if [ -n "$LEFT" ] && [ -s "$LEFT" ]; then note "the board shows none of that record's state: it is cleared" >&2; fi
     RUN_OWNS_LEFT=1
@@ -1458,6 +1685,9 @@ cmd_run() {
     # the undo, before anything changes
     echo "$TAG: UNDO, should this run be cut off (its exit does it itself while the board's Linux answers; what it could not do is recorded in ${LEFT:-<lock>.mp2-left}):"
     echo "  tools/board-stm32mp2.sh disarm   # unsets yako_once and yako_file, removes $STAGE_DIR/once-*.bin and once-*.bin.part"
+    if [ "$RAMLOG" = 1 ]; then
+        echo "  (MP2_RAMLOG=1) the arm also sets preboot='$PREBOOT_RAMLOG' and $RAMLOG_VARS (ring $RAMLOG_ADDR, $RAMLOG_SIZE bytes); its undo, the same disarm, puts preboot=$PREBOOT back, unsets $RAMLOG_VARS and removes $RAMLOG_FILE"
+    fi
     STAGED=$STAGE_DIR/$file
     STAGED_OURS=1
     left_write "staging $STAGED"
@@ -1473,6 +1703,12 @@ cmd_run() {
     st=${st%% *}
     [ "$st" = "$IMG_SHA" ] || die "the card's copy $STAGE_DIR/$file reads back as '$st', not $IMG_SHA (removed on exit)"
     meta staged "$STAGE_DIR/$file on bootfs, read back equal"
+    BOOT_STAGED=
+    if [ "$RAMLOG" = 1 ]; then
+        # the file list U-Boot's ext4write must leave as it is but for ramlog.bin
+        boot_check
+        bget BOOT_STAGED "cd /boot && find . -xdev | LC_ALL=C sort" "(the staged list)" || die "cannot list /boot on the board"
+    fi
 
     # 4. the capture, before anything can print
     if [ "$BLIND" = 0 ]; then capture_start || die "the console capture ended at once (bridge busy or unreachable; no reboot)"; fi
@@ -1480,22 +1716,35 @@ cmd_run() {
     # 5. arm: one environment write, read back with dd and decoded; the image read
     # just before is the undo (on_exit writes it back while ARMED is 1)
     env_read "$TMP/env.bin"
+    local rvars=()
+    [ "$RAMLOG" = 0 ] || rvars=("preboot=$PREBOOT_RAMLOG" "yako_ramlog=$RAMLOG_SNIPPET" "yako_ramlog_addr=$RAMLOG_ADDR" "yako_ramlog_size=$RAMLOG_SIZE")
     if [ "$DRY" = 1 ]; then
-        echo "DRY host\$ python3 tools/uboot_env.py ... set <env.bin> <env.new> yako_once=$token yako_file=/yakogl/$file"
+        echo "DRY host\$ python3 tools/uboot_env.py ... set <env.bin> <env.new> yako_once=$token yako_file=/yakogl/$file$([ "$RAMLOG" = 1 ] && printf " '%s'" "${rvars[@]}")"
     else
         cp "$TMP/env.bin" "$TMP/env.prearm"
-        env_arm "$TMP/env.bin" "$TMP/env.new" "$token" "/yakogl/$file"
-        left_write "armed yako_once=$token" "$STAGED on the card"
+        env_arm "$TMP/env.bin" "$TMP/env.new" "$token" "/yakogl/$file" "${rvars[@]+"${rvars[@]}"}"
+        if [ "$RAMLOG" = 1 ]; then
+            left_write "armed yako_once=$token" "$STAGED on the card" "preboot='$PREBOOT_RAMLOG' with yako_ramlog* set"
+        else
+            left_write "armed yako_once=$token" "$STAGED on the card"
+        fi
         ARMED=1
+        RAMLOG_SET=$RAMLOG
     fi
     printf 'yako_once=%s\nyako_file=/yakogl/%s\n' "$token" "$file" > "$TMP/expect"
+    [ "$RAMLOG" = 0 ] || printf 'preboot=%s\nyako_ramlog_addr=%s\nyako_ramlog_size=%s\n' "$PREBOOT_RAMLOG" "$RAMLOG_ADDR" "$RAMLOG_SIZE" >> "$TMP/expect"
     if [ "$DRY" = 1 ]; then env_write "<env.new>" "arm"; else env_write "$TMP/env.new" "arm"; fi
     meta t_arm "$(date +%s)"
 
     # 6. reboot; the ssh session ends with it. The one-shot stays the
     # runner's (ARMED) until the board is seen to leave its Linux: a reboot
     # that did not happen is disarmed, not reported as a board that is gone.
-    left_write "rebooting with yako_once=$token armed (U-Boot clears it before it loads)" "$STAGED on the card"
+    if [ "$RAMLOG" = 1 ]; then
+        left_write "rebooting with yako_once=$token armed (U-Boot clears it before it loads)" "$STAGED on the card" \
+            "preboot='$PREBOOT_RAMLOG' with yako_ramlog* set, and $RAMLOG_FILE once U-Boot saves the ring ('disarm' removes both)"
+    else
+        left_write "rebooting with yako_once=$token armed (U-Boot clears it before it loads)" "$STAGED on the card"
+    fi
     REBOOT_SENT=1
     b "sync; ${SU}systemctl reboot" || true
     T_REBOOT=$(date +%s)
@@ -1505,6 +1754,7 @@ cmd_run() {
         echo "DRY host\$ the card resolved again in the new boot (its number may differ), checked on the board; a check that fails: REFUSED, nothing written, NEEDS A PERSON"
         reresolve || die "REFUSED: $CARD_REFUSED"
         echo "DRY board\$ ${SU}dd if=$ENV_DEV bs=64k status=none   # > host, decoded there: yako_once must be unset (U-Boot's hook cleared it)"
+        [ "$RAMLOG" = 0 ] || ramlog_collect
         b "${SU}rm -f $STAGE_DIR/$file"
         echo "DRY host\$ the verdict line from the run directory"
         exit 0
@@ -1562,7 +1812,7 @@ cmd_run() {
         meta back 1
         meta rebooted 0
         note "the board's Linux still answered from the boot before the reboot ${el}s after it (uptime ${up}s): the reboot did not happen; writing the pre-arm environment back" >&2
-        if ( undo_arm ); then ARMED=0; meta disarmed "not rebooted"; else note "WARNING: the disarm did not read back" >&2; fi
+        if ( undo_arm ); then ARMED=0; RAMLOG_SET=0; meta disarmed "not rebooted"; else note "WARNING: the disarm did not read back" >&2; fi
         STAGED_OURS=1
         if remove_staged; then meta cleanup "removed (not rebooted)"; else meta cleanup "NOT removed"; fi
         rcc=
@@ -1581,12 +1831,14 @@ cmd_run() {
             note "yako_once is '$once_left' after the cycle: disarming" >&2
             if ( env_read "$TMP/env.x" && env_disarm "$TMP/env.x" "$TMP/env.y" && : > "$TMP/expect" && env_write "$TMP/env.y" "disarm" ); then
                 meta disarmed "after the cycle"
+                RAMLOG_SET=0   # env_disarm took the ring save out too
             else
                 note "WARNING: the disarm after the cycle failed" >&2
                 ARMED=1   # on_exit tries once more (the pre-arm image) and records what is left
             fi
             rcc=6
         fi
+        [ "$RAMLOG" = 0 ] || ramlog_collect
         if remove_staged; then
             meta cleanup "$STAGE_DIR/$file removed (read back)"
         else
