@@ -1,5 +1,7 @@
 /*
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: Apache-2.0 AND MIT
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ * SPDX-FileCopyrightText: 2025 Imagination Technologies Ltd.
  *
  * capture_spm_load.c -- print the machine code and the metadata of Mesa's
  * SPM (partial render) background-object load shader for the BXS-4-64
