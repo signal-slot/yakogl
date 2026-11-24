@@ -85,6 +85,34 @@ out=$(run "$D/empty.log"); rc=$?
 chk "empty: missing 5" bash -c "grep -q 'missing 5\$' <<<'$out'"
 chk "empty: exit 1" test $rc -eq 1
 
+# a case that skips itself prints its own line (case 16's real wording): a
+# verdict, not "missing"; a case with no line at all stays missing
+cat >"$D/self.log" <<'EOF'
+gl_test: case 1 a: PASS
+gl_test: case 2 b: PASS
+gl_test: case 3 c: PASS
+gl_test: case 4 d: PASS
+gl_test: case 5 msaa: 1x half done; SKIP the 4x half (no 4x EGL config offered)
+EOF
+out=$(run "$D/self.log"); rc=$?
+chk "self-skip the i.MX8MP skips too: missing 0" grep -qx 'mp2-gltest-diff: new 0, flaky 0, expected 0, missing 0' <<<"$out"
+chk "self-skip: exit 0" test $rc -eq 0
+# the i.MX8MP skips 5; a self-skip of case 4 on the DK alone is a skip difference
+sed 's/case 4 d: PASS/case 4 d: 1x half done; SKIP the 4x half/' "$D/self.log" >"$D/self4.log"
+out=$(run "$D/self4.log")
+chk "self-skip DK only: reported 4 (DK only)" grep -qx '4 (DK only)' <<<"$out"
+chk "self-skip DK only: not missing" grep -q 'missing 0$' <<<"$out"
+# no line at all for case 5: still missing
+grep -v 'case 5' "$D/self.log" >"$D/noline.log"
+out=$(run "$D/noline.log"); rc=$?
+chk "no line at all: missing 1" grep -q 'missing 1$' <<<"$out"
+chk "no line at all: exit 1" test $rc -eq 1
+# a verdict line wins over a self-skip sub-line, in either order
+printf 'gl_test: case 4 d: x; SKIP sub\ngl_test: case 4 d: FAIL\n' >"$D/w.log"
+chk "verdict after sub-skip wins" grep -q 'new 1,' <<<"$(run "$D/w.log")"
+printf 'gl_test: case 4 d: FAIL\ngl_test: case 4 d: x; SKIP sub\n' >"$D/w2.log"
+chk "sub-skip after verdict ignored" grep -q 'new 1,' <<<"$(run "$D/w2.log")"
+
 # error exits
 run "$D/nonexistent" >/dev/null; chk "missing input exits 2" test $? -eq 2
 python3 -I "$TOOL" --results "$D/lib.rs" "$D/clean.log" >/dev/null 2>&1
