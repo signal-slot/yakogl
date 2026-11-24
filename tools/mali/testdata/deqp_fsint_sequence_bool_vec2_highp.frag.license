@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The frag shader of a plan #402 item ref-fsint pair, written after the ShaderOperatorTests generator template (VK-GL-CTS 93bca01, NOTICE 5) as dEQP-GLES2.functional.shaders.operator.sequence.no_side_effects.highp_bool_vec2_fragment uses it; docs/notes/mali-deqp-fsint.md section 3.

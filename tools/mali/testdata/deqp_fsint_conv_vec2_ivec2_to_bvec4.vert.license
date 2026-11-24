@@ -1,0 +1,3 @@
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Khronos Group Inc.
+The vert shader of a plan #402 item ref-fsint pair, written after the ShaderLibrary template of data/gles2/shaders/conversions.test (VK-GL-CTS 93bca01, NOTICE 5) as dEQP-GLES2.functional.shaders.conversions.vector_combine.vec2_ivec2_to_bvec4_fragment uses it; docs/notes/mali-deqp-fsint.md section 3.
