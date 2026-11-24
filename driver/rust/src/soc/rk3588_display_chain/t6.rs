@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
-//! The NanoPC-T6's configuration of the display chain: the measured mode,
-//! the PHY's image and ROPLL dividers for its 65 MHz, the controller's
-//! identity. Every value here is the D0 dump's
-//! (driver/docs/nanopc-t6-display-dump-linux.txt, Linux 6.18 showing the
-//! mode on HDMI0, 2026-11-12), and the golden test
-//! (`soc::rk3588_display_golden`) holds this file to it.
+//! The NanoPC-T6's configuration of the display chain: the two measured
+//! modes ([`Mode`]), the PHY's image, the ROPLL dividers for each mode's
+//! pixel clock, the controller's identity. Every value here is read from a
+//! dump of Linux 6.18 showing that mode on HDMI0: the D0 dump at 1024x768
+//! (driver/docs/nanopc-t6-display-dump-linux.txt, 2026-11-12) and the
+//! 1920x1080 dump (nanopc-t6-display-dump-linux-1920x1080.txt, 2026-11-23).
+//! The golden test (`soc::rk3588_display_golden`) holds this file to both.
 //!
 //! The PHY image (owner decision U1): the registers are the 189 that Linux's
 //! TMDS init tables for 340 MHz and below write (hdptx.c:459-690: the two
@@ -15,9 +16,11 @@
 //! hdptx.c:571), 0x46 (0xff, :503), 0x48 (0x44, :505), lanes 0x31e, 0x41e,
 //! 0x51e (0x00, :671, :673, :675) and 0x61e (0x08, :677). Those hold
 //! Linux's value, and the allow list masks them. The tables' values
-//! themselves are not carried here: only the dump's.
+//! themselves are not carried here: only the dump's. Outside the ROPLL
+//! fields the plan writes, the 1920x1080 dump reads the same 189 values,
+//! so the image is one for both modes.
 
-use super::{Config, MODE_1024X768_60};
+use super::{Config, MODE_1024X768_60, MODE_1920X1080_60};
 use crate::ip::dw_hdmi_qp::{BindParams, Sink, LINUX_TIMER_BASE_HZ};
 use crate::ip::hdptx::{Image, Plan, Sdm};
 
@@ -208,7 +211,7 @@ const LANES: [(u16, u32); 68] = [
     (0x620, 0xa0),
 ];
 
-/// The PHY's image for 65 MHz (module text).
+/// The PHY's image (module text), the same for both modes.
 pub const PHY_IMAGE: Image = Image { cmn: &CMN, sb: &SB, lane_top: &LANE_TOP, lanes: &LANES };
 
 /// The ROPLL dividers the dump reads back for 65 MHz: Linux's table row
@@ -221,11 +224,40 @@ pub const PLAN: Plan =
 /// the timer base Linux writes (the dump reads it back).
 pub const BIND: BindParams = BindParams { core_id: 0x4851_5458, timer_base_hz: LINUX_TIMER_BASE_HZ };
 
-/// The T6's chain: the measured mode in DVI (the display gives no EDID).
-pub const fn config(force_cold: bool, power_cycle: bool, stop_after: u32) -> Config<'static> {
+/// The ROPLL dividers the 1920x1080 dump reads back for 148.5 MHz: Linux's
+/// table row (hdptx.c:427-428), not [`crate::ip::hdptx::plan`]'s (M 124,
+/// SDM -1/4): M 123, S 4, SDM +3/4, SDC N 8 and 5/16 (`PllWords::plan` of
+/// that dump's words).
+pub const PLAN_1920X1080: Plan =
+    Plan { rate_hz: 148_500_000, m: 123, s: 4, sdm: Some(Sdm { minus: false, k: 3, lc: 4, n: 8, a: 5, b: 16 }) };
+
+/// The size of the picture in both modes: the probes' frame buffer
+/// (`board::nanopc_t6_display::FB_WIDTH` x `FB_HEIGHT`). At 1920x1080 it is
+/// the screen's top left, as the adopt shows it
+/// (`board::nanopc_t6_display::WINDOW_AREA`).
+pub const WINDOW: (u32, u32) = (1024, 768);
+
+/// The mode the cold chain runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// 1024x768 at 60 Hz, 65 MHz: the mode of the D0 dump (a display that
+    /// gives no EDID).
+    M1024x768,
+    /// 1920x1080 at 60 Hz, 148.5 MHz: the mode of the 1920x1080 dump, for a
+    /// sink that takes no other (the HDMI capture unit).
+    M1920x1080,
+}
+
+/// The T6's chain in `mode`, in DVI.
+pub const fn config(mode: Mode, force_cold: bool, power_cycle: bool, stop_after: u32) -> Config<'static> {
+    let (mode, plan) = match mode {
+        Mode::M1024x768 => (MODE_1024X768_60, PLAN),
+        Mode::M1920x1080 => (MODE_1920X1080_60, PLAN_1920X1080),
+    };
     Config {
-        mode: MODE_1024X768_60,
-        plan: PLAN,
+        mode,
+        window: WINDOW,
+        plan,
         image: PHY_IMAGE,
         bind: BIND,
         sink: Sink::Dvi,

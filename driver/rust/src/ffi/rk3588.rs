@@ -2597,7 +2597,9 @@ const _: () = assert!(offset_of!(YdT6DisplayCold, detail) == 16);
 
 /// The display chain from cold ([`crate::board::nanopc_t6_display_cold::cold`])
 /// on the blocks of `b`, showing the buffer at physical `fb_pa` (1024x768
-/// XRGB8888, stride 4096, drawn and cleaned by the caller). `flags` are
+/// XRGB8888, stride 4096, drawn and cleaned by the caller) at the top left
+/// of the mode, which is 1024x768 at 60 Hz, or 1920x1080 at 60 Hz with
+/// `YD_T6_DISPLAY_COLD_MODE_1920X1080`. `flags` are
 /// `YD_T6_DISPLAY_COLD_*`; `stop_after` 0 runs to the end, N stops after
 /// stage N. Every line goes to `env`'s log as it happens. 0 when the chain
 /// ran through, `-ECANCELED` when it stopped after `stop_after` as asked,
@@ -2746,6 +2748,7 @@ mod display_tests {
         }
         assert_eq!(def("YD_T6_DISPLAY_COLD_POWER_CYCLE"), flags::POWER_CYCLE);
         assert_eq!(def("YD_T6_DISPLAY_COLD_FORCE_COLD"), flags::FORCE_COLD);
+        assert_eq!(def("YD_T6_DISPLAY_COLD_MODE_1920X1080"), flags::MODE_1920X1080);
         for n in stage::START..=stage::VIDEO {
             assert_eq!(def(&format!("YD_T6_DISPLAY_COLD_STAGE_{}", stage::name(n))), n);
         }

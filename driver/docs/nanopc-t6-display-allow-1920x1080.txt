@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+# Bits that may differ between the Zephyr cold path at 1920x1080 and the
+# Linux dump of that mode (nanopc-t6-display-dump-linux-1920x1080.txt), on
+# top of nanopc-t6-display-allow.txt, which holds for both dumps. The rows
+# here hold for this dump only: the 1024x768 comparison still checks these
+# bits. Format as there: ADDRESS MASK REASON.
+
+# HDMI QP TX0. Linux read the capture unit's EDID and runs the link in HDMI
+# mode with an AVI InfoFrame. The cold chain sends DVI in both modes; its
+# InfoFrame is step D10 (driver/docs/nanopc-t6-display.md, section 7).
+0xfde80968 0x00000010 LINK_CONFIG0 OPMODE_DVI (dw-hdmi-qp.h:177-179): Linux clears it for an HDMI sink (dw-hdmi-qp.c:857-863); the cold chain sets it (DVI)
+0xfde80aa8 0x00002008 PKTSCHED_PKT_EN AVI_TX_EN (bit 13) and GCP_TX_EN (bit 3): Linux sets them with the AVI InfoFrame (dw-hdmi-qp.c:751-752); DVI sends no packet
+0xfde80be0 0xffffffff PKT_AVI_CONTENTS0: Linux's AVI InfoFrame (dw-hdmi-qp.c:735); DVI sends none
+0xfde80be4 0xffffffff PKT_AVI_CONTENTS1: likewise (dw-hdmi-qp.c:746)
+0xfde80be8 0xffffffff PKT_AVI_CONTENTS2: likewise
+
+# VOP2
+0xfdd90d2c 0xffffffff VP1 DSP_BG: Linux writes it only when it enables the port (rockchip_drm_vop2.c:1596) and did not drive VP1 in this boot (GRF_VOP_CON2 bit 4 and DSP_IF_EN bit 5 read 0, unlike the 1024x768 dump); not modelled (inference: Linux did not enable the port, so the dump holds a value Linux did not write); the design uses VP0 only

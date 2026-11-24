@@ -435,6 +435,31 @@ sed '/^t6_cold: VOP OVL_PORT_SEL/s/YRGB_MST 0x1001d000/YRGB_MST 0x1001e000/' "$D
 check t6_cold-mst 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/cmst.log"
 sed '/^t6_cold: VOP OVL_PORT_SEL/s/OVL_PORT_SEL 0x80007880/OVL_PORT_SEL 0x80007873/' "$D/t6_cold-pass.uart" >"$WORK/cops.log"
 check t6_cold-port-sel 1 "VERDICT t6_cold FAIL (1 of $COLD)" "$((COLD - 1)) 0 1" t6_cold "$WORK/cops.log"
+# the mode (T6_COLD_MODE): a build with the option prints its mode after the
+# options line, one line more than the records above, which are of a build
+# before it. The 1920x1080 record is the 1024x768 one with what the mode
+# changes: the size on the "up" line, VP0's totals, the pixel clock and the
+# monitor words; the frame buffer and REGION0_VIR stay 1024x768.
+sed '/^t6_cold: options: /a t6_cold: mode 1024x768' "$D/t6_cold-pass.uart" >"$WORK/cmode.log"
+check t6_cold-mode-line 0 'VERDICT t6_cold PASS' "$((COLD + 1)) 0 0" t6_cold "$WORK/cmode.log"
+sed -e '/^t6_cold: options: /a t6_cold: mode 1920x1080' -e 's/^t6 display: up, 1024x768 at /t6 display: up, 1920x1080 at /' \
+	-e 's/pixel clock 65002 kHz/pixel clock 148504 kHz/' \
+	-e 's/HTOTAL_HS_END 0x05400088 VTOTAL_VS_END 0x03260006/HTOTAL_HS_END 0x0898002c VTOTAL_VS_END 0x04650005/' \
+	-e 's/0x00880018 0x014000a0 0x05400400 0x00060003 0x0026001d 0x03260300/0x002c0058 0x01180094 0x08980780 0x00050004 0x002d0024 0x04650438/' \
+	"$D/t6_cold-pass.uart" >"$WORK/c1080.log"
+check t6_cold-1920x1080 0 'VERDICT t6_cold PASS' "$((COLD + 1)) 0 0" t6_cold "$WORK/c1080.log"
+# each of the mode's values differs on its own line
+sed 's/^t6 display: up, 1920x1080 at /t6 display: up, 1024x768 at /' "$WORK/c1080.log" >"$WORK/c1080up.log"
+check t6_cold-1920x1080-up 1 "VERDICT t6_cold FAIL (1 of $((COLD + 1)))" "$COLD 0 1" t6_cold "$WORK/c1080up.log"
+sed 's/pixel clock 148504 kHz/pixel clock 65002 kHz/' "$WORK/c1080.log" >"$WORK/c1080pclk.log"
+check t6_cold-1920x1080-pclk 1 "VERDICT t6_cold FAIL (1 of $((COLD + 1)))" "$COLD 0 1" t6_cold "$WORK/c1080pclk.log"
+# a build that says 1920x1080 and programs 1024x768: the "up" line, the
+# totals, the pixel clock and the monitor words differ
+sed '/^t6_cold: options: /a t6_cold: mode 1920x1080' "$D/t6_cold-pass.uart" >"$WORK/csays.log"
+check t6_cold-says-1920x1080 1 "VERDICT t6_cold FAIL (4 of $((COLD + 1)))" "$((COLD - 3)) 0 4" t6_cold "$WORK/csays.log"
+# a mode line naming neither mode differs (the rest is judged as 1024x768)
+sed '/^t6_cold: options: /a t6_cold: mode 1280x720' "$D/t6_cold-pass.uart" >"$WORK/cother.log"
+check t6_cold-other-mode 1 "VERDICT t6_cold FAIL (1 of $((COLD + 1)))" "$COLD 0 1" t6_cold "$WORK/cother.log"
 
 # Z1's record in the stop fixtures is what t6_z1.c prints (host cc, the
 # probes' printk as printf): a fixture cannot drift from the code
