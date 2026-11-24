@@ -3332,6 +3332,11 @@ pub unsafe extern "C" fn glCopyTexImage2D(
     }
     gl_trace!(glCopyTexImage2D);
     let Some(c) = context::current() else { return };
+    /* ES 3.0 3.8.5: a read framebuffer with a sample buffer */
+    if read_has_samples(c) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
 
     if target != GL_TEXTURE_2D && !is_face_target(target) {
         c.set_error(GL_INVALID_ENUM, FUNC);
@@ -3448,6 +3453,11 @@ pub unsafe extern "C" fn glCopyTexSubImage2D(
     }
     gl_trace!(glCopyTexSubImage2D);
     let Some(c) = context::current() else { return };
+    /* ES 3.0 3.8.5: a read framebuffer with a sample buffer */
+    if read_has_samples(c) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
 
     if target != GL_TEXTURE_2D && !is_face_target(target) {
         c.set_error(GL_INVALID_ENUM, FUNC);
@@ -6276,6 +6286,11 @@ pub unsafe extern "C" fn glCopyTexSubImage3D(
     }
     gl_trace!(glCopyTexSubImage3D);
     let Some(c) = context::current() else { return };
+    /* ES 3.0 3.8.5: a read framebuffer with a sample buffer */
+    if read_has_samples(c) {
+        c.set_error(GL_INVALID_OPERATION, FUNC);
+        return;
+    }
 
     if target != GL_TEXTURE_3D && target != GL_TEXTURE_2D_ARRAY {
         c.set_error(GL_INVALID_ENUM, FUNC);
@@ -6465,6 +6480,18 @@ fn es3_image_check(c: &mut GlContext, internalformat: GLenum, format: GLenum, ty
         return false;
     }
     true
+}
+
+/// Does the READ framebuffer have a sample buffer (GL_SAMPLE_BUFFERS 1)? The
+/// copy entry points call this after `as_read` has made the read framebuffer
+/// the current binding, so `bound_framebuffer` is the read one here: a 4x
+/// framebuffer object, or the window when it is multisampled.
+fn read_has_samples(c: &GlContext) -> bool {
+    if c.bound_framebuffer == 0 {
+        c.default_samples > 1
+    } else {
+        framebuffer::framebuffer_samples(c) > 0
+    }
 }
 
 /// May the read framebuffer's colour buffer be copied into an image of this
