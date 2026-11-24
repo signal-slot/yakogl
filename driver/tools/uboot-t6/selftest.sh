@@ -23,6 +23,9 @@
 #   and with a T6_UART that is no tty.
 # - prompt-reads.sh (prompt-lib.sh is shared): its dry run and the same two
 #   refusals, with its own self-test answered by a fake python3.
+# - both with T6_UART=rfc2217://<host>:<port>: the dry runs say so without
+#   connecting, --go goes through t6-uart-rfc2217.py, and no output names
+#   the address.
 #
 # The last line: "uboot-t6 selftest: N checks run, F failed", with ", check
 # lines not run: ..." when a check line of this file did not run.
@@ -165,6 +168,57 @@ out=$(T6_HAND=test T6_RECORD_DIR=$tmp T6_UART=$tmp/not-a-tty fake_reads --go)
 rc=$?
 check "prompt-reads --go: a T6_UART that is no character device is refused (rc $rc)" \
 	"$([ "$rc" = 3 ] && grep -qF 'is not a character device' <<<"$out"; echo $?)"
+
+# T6_UART=rfc2217://<host>:<port> (issue #11611). A listener on 127.0.0.1
+# stands for the adapter: it logs each connection and closes it at once. The
+# dry runs say T6_UART is an RFC 2217 address and do not connect; --go
+# goes through ../kexec-zephyr/t6-uart-rfc2217.py (one connection, its
+# refusal: exit 40, before the script's own checks). No output names the
+# address.
+cat >"$tmp/listen.py" <<'PY'
+import os, socket, sys
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(4)
+with open(sys.argv[1] + ".new", "w") as o:
+    o.write("%d\n" % s.getsockname()[1])
+os.rename(sys.argv[1] + ".new", sys.argv[1])
+while True:
+    c, _ = s.accept()
+    with open(sys.argv[2], "a") as o:
+        o.write("accepted\n")
+    c.close()
+PY
+python3 -I "$tmp/listen.py" "$tmp/listen.port" "$tmp/listen.log" &
+listen_pid=$!
+trap 'kill "$listen_pid" 2>/dev/null; rm -rf "$tmp"' EXIT
+for _ in $(seq 50); do [ -s "$tmp/listen.port" ] && break; sleep 0.1; done
+lport=$(cat "$tmp/listen.port" 2>/dev/null)
+lurl=rfc2217://127.0.0.1:${lport:-0}
+: >"$tmp/listen.log"
+no_address() { ! grep -qF "127.0.0.1" <<<"$1" && ! grep -qF ":$lport" <<<"$1"; }
+out=$(T6_UART=$lurl fake_reads)
+rc=$?
+check "prompt-reads dry run with an RFC 2217 address: exit 0, says so, no address, no connection (rc $rc)" \
+	"$([ "$rc" = 0 ] && [ -n "$lport" ] && grep -qF 'T6_UART is an RFC 2217 address (not opened in a dry run)' <<<"$out" &&
+		no_address "$out" && [ ! -s "$tmp/listen.log" ]; echo $?)"
+out=$(T6_UART=$lurl fake_go "$tmp/t6_hello.bin" t6_hello)
+rc=$?
+check "prompt-go dry run with an RFC 2217 address: exit 0, says so, no address, no connection (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 'T6_UART is an RFC 2217 address (not opened in a dry run)' <<<"$out" &&
+		no_address "$out" && [ ! -s "$tmp/listen.log" ]; echo $?)"
+for r in reads go; do
+	: >"$tmp/listen.log"
+	if [ "$r" = reads ]; then
+		out=$(T6_HAND=test T6_RECORD_DIR=$tmp T6_UART=$lurl fake_reads --go)
+	else
+		out=$(T6_HAND=test T6_RECORD_DIR=$tmp T6_UART=$lurl fake_go "$tmp/t6_hello.bin" t6_hello --go)
+	fi
+	rc=$?
+	check "prompt-$r --go with an RFC 2217 address: through t6-uart-rfc2217.py, one connection, its refusal 40, no address (rc $rc)" \
+		"$([ "$rc" = 40 ] && [ "$(grep -c accepted "$tmp/listen.log")" = 1 ] &&
+			grep -qF 't6-uart-rfc2217: REFUSED: the server closed the connection' <<<"$out" && no_address "$out"; echo $?)"
+done
 rm "$tmp/fakebin/python3"
 
 # A stock file changed behind the fingerprint's back: check fails, naming it.

@@ -8,6 +8,7 @@
 #   BOARD_HOST=root@<t6> driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin>          # dry run
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_UART=<tty> \
 #     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go [--no-linux-wdt] [--crash]  # the jump
+#   ... T6_UART=rfc2217://<host>:<port> ... --go          # the UART on a network serial adapter
 #   BOARD_HOST=root@<t6> T6_HAND=<name> T6_RECORD_DIR=<dir> T6_SCREEN=<unit> \
 #     driver/tools/kexec-zephyr/nanopc-t6.sh <zephyr.bin> --go --crash  # seen through the HDMI capture
 #
@@ -149,6 +150,16 @@
 #                   uart.log 0 bytes, the wire delivering nothing).
 #                   --go needs T6_UART, T6_SCREEN or both; each one set
 #                   must be proven, and neither is refused.
+#                   T6_UART=rfc2217://<host>:<port>: the debug UART on a
+#                   network serial adapter that speaks RFC 2217. --go runs
+#                   this script again through t6-uart-rfc2217.py, beside
+#                   this: it opens the session, sets 1500000 8N1 and
+#                   requires the adapter's answers to say so (else exit 40,
+#                   nothing done), and gives the script a pty as T6_UART,
+#                   raw with no echo, that it holds open nowhere; every
+#                   check above then runs on the pty, and the record names
+#                   it "the debug UART over RFC 2217". The address is never
+#                   printed or recorded. A dry run does not connect.
 #   T6_SCREEN       --go --crash: the farm's name of the capture unit on the
 #                   board's HDMI output (`connected screenshot <unit> -o
 #                   <file>` writes a JPEG of what it shows). Refused without
@@ -279,6 +290,21 @@ ROUTE=normal
 : "${BOARD_HOST:?set BOARD_HOST=root@<the NanoPC-T6>}"
 # shellcheck disable=SC2206  # options are words
 SSH_OPTS=(${BOARD_SSH_OPTS:-})
+# T6_UART=rfc2217://<host>:<port>: --go runs again through
+# t6-uart-rfc2217.py, which sets the line and hands this script its pty as
+# T6_UART (and T6_UART_RFC2217=1); see T6_UART above. UART_SHOWN is how the
+# messages and the record name the UART: never the address.
+if [[ ${T6_UART:-} == rfc2217://* ]] && [ "$GO" = 1 ]; then
+	[ -z "${T6_UART_RFC2217:-}" ] || die "T6_UART is still an rfc2217:// address inside t6-uart-rfc2217.py"
+	exec python3 -I "$HERE/t6-uart-rfc2217.py" run -- bash "$HERE/$(basename "$0")" "$@"
+fi
+if [[ ${T6_UART:-} == rfc2217://* ]]; then
+	UART_SHOWN="T6_UART's RFC 2217 address"
+elif [ -n "${T6_UART_RFC2217:-}" ]; then
+	UART_SHOWN="the debug UART over RFC 2217 (t6-uart-rfc2217.py's pty $T6_UART)"
+else
+	UART_SHOWN=${T6_UART:-}
+fi
 
 echo "nanopc-t6.sh: build $(git -C "$HERE" describe --always --dirty 2>/dev/null || echo unknown)"
 
@@ -512,8 +538,10 @@ else
 	echo "board: --no-linux-wdt: nothing covers the image's pre-arm window; a hang there holds the board until its power is cut"
 fi
 if [ -n "${T6_UART:-}" ]; then
-	if [ -c "$T6_UART" ]; then
-		echo "uart: T6_UART $T6_UART is a character device (not opened in a dry run; --go reads it only)"
+	if [[ $T6_UART == rfc2217://* ]]; then
+		echo "uart: T6_UART is an RFC 2217 address (not opened in a dry run; --go opens it with t6-uart-rfc2217.py, sets 1500000 8N1, and reads the pty it gives only)"
+	elif [ -c "$T6_UART" ]; then
+		echo "uart: T6_UART $UART_SHOWN is a character device (not opened in a dry run; --go reads it only)"
 	else
 		echo "uart: T6_UART $T6_UART is absent: --go would refuse"
 	fi
@@ -656,7 +684,7 @@ fi
 { [ -n "${T6_RECORD_DIR:-}" ] && [ -d "$T6_RECORD_DIR" ]; } ||
 	refuse "--go needs T6_RECORD_DIR=<an existing directory outside the checkout> for the run's record"
 [ -n "${T6_UART:-}${T6_SCREEN:-}" ] ||
-	refuse "--go needs T6_UART=<the host tty on the T6's debug UART> (read only), T6_SCREEN=<the capture unit on the board's HDMI output> (with --crash), or both: without one, nothing of the run is seen"
+	refuse "--go needs T6_UART=<the host tty on the T6's debug UART, or rfc2217://<host>:<port>> (read only), T6_SCREEN=<the capture unit on the board's HDMI output> (with --crash), or both: without one, nothing of the run is seen"
 if [ -n "${T6_SCREEN:-}" ]; then
 	[ "$CRASH" = 1 ] ||
 		refuse "T6_SCREEN needs --crash: the screen proof runs through the mode holder (t6-kms-mode.py), which only the crash route starts"
@@ -672,17 +700,17 @@ if [ -n "${T6_SCREEN:-}" ]; then
 		refuse "T6_SCREEN: t6-screen-nonce.py new gave no nonce ('${screen_nonce:-}')"
 fi
 if [ -n "${T6_UART:-}" ]; then
-	[ -c "$T6_UART" ] && [ -r "$T6_UART" ] || refuse "T6_UART $T6_UART is not a readable character device"
+	[ -c "$T6_UART" ] && [ -r "$T6_UART" ] || refuse "T6_UART $UART_SHOWN is not a readable character device"
 	if fuser "$T6_UART" >/dev/null 2>&1; then
-		refuse "T6_UART $T6_UART is already open (pids $(fuser "$T6_UART" 2>/dev/null | tr -s " " | cut -c1-80)): a second reader would split the bytes; stop the other capture first"
+		refuse "T6_UART $UART_SHOWN is already open (pids $(fuser "$T6_UART" 2>/dev/null | tr -s " " | cut -c1-80)): a second reader would split the bytes; stop the other capture first"
 	fi
 	# raw, no echo: with echo on, the tty would send every received byte back
 	# to the board's root shell.
 	UART_STTY=(1500000 raw -echo -icrnl -ixon cs8 -cstopb -parenb clocal)
-	stty -F "$T6_UART" "${UART_STTY[@]}" || refuse "stty on $T6_UART failed"
-	uart_mode=$(stty -F "$T6_UART" -a | tr "\n;" "  ") || refuse "stty -a on $T6_UART failed"
+	stty -F "$T6_UART" "${UART_STTY[@]}" || refuse "stty on $UART_SHOWN failed"
+	uart_mode=$(stty -F "$T6_UART" -a | tr "\n;" "  ") || refuse "stty -a on $UART_SHOWN failed"
 	for w in 'speed 1500000' ' -echo ' ' -icrnl ' ' -ixon ' ' cs8 ' ' -cstopb ' ' -parenb ' ' clocal ' ' -opost ' ' -icanon '; do
-		[[ " $uart_mode " == *"$w"* ]] || refuse "$T6_UART does not read back '${w# }' after stty: $uart_mode"
+		[[ " $uart_mode " == *"$w"* ]] || refuse "$UART_SHOWN does not read back '${w# }' after stty: $uart_mode"
 	done
 fi
 # Before the lock: board_lock.sh chains the EXIT trap it finds.
@@ -832,7 +860,7 @@ secs() { printf '%d.%d' $(($1 / 1000)) $(($1 % 1000 / 100)); }
 if [ -n "${T6_UART:-}" ]; then
 	console=$(fact console)
 	[[ "$console" =~ ^ttyS[0-9]+$ ]] ||
-		refuse "the board's kernel command line has no console=ttyS entry ('$console'): there is no serial console to write the UART proof's marker line to, so the path to $T6_UART cannot be proven"
+		refuse "the board's kernel command line has no console=ttyS entry ('$console'): there is no serial console to write the UART proof's marker line to, so the path to $UART_SHOWN cannot be proven"
 	proof_log=$tmp/uart-proof.log
 	uart_dev=$(readlink -f "$T6_UART")
 	cat <"$T6_UART" >"$proof_log" &
@@ -853,7 +881,7 @@ if [ -n "${T6_UART:-}" ]; then
 	}
 	if [ "$opened" = 0 ]; then
 		proof_stop
-		refuse "the UART proof's capture (cat <$T6_UART) did not open $T6_UART within 5 s; nothing was written to the board's console"
+		refuse "the UART proof's capture (cat <$T6_UART) did not open $UART_SHOWN within 5 s; nothing was written to the board's console"
 	fi
 	marker="yakogl-uart-proof $(od -A n -N 8 -t x1 /dev/urandom | tr -d ' \n')"
 	t_write=$(now_ms)
@@ -879,9 +907,9 @@ if [ -n "${T6_UART:-}" ]; then
 	proof_bytes=$(wc -c <"$proof_log")
 	if [ -z "$got_ms" ]; then
 		if [ "$proof_bytes" = 0 ]; then
-			refuse "UART path not proven: the capture of $T6_UART read 0 bytes in $(secs "$open_ms") s, and $written. Check first the wire between the board's debug header (UART2: its TX to the adapter's RX, and GND) and the host's adapter"
+			refuse "UART path not proven: the capture of $UART_SHOWN read 0 bytes in $(secs "$open_ms") s, and $written. Check first the wire between the board's debug header (UART2: its TX to the adapter's RX, and GND) and the host's adapter"
 		fi
-		refuse "UART path not proven: the capture of $T6_UART read $proof_bytes bytes in $(secs "$open_ms") s, but not the marker line, and $written. The bytes are not that line: check that T6_UART is this board's debug UART (not another board's console) and that it runs at 1500000 baud"
+		refuse "UART path not proven: the capture of $UART_SHOWN read $proof_bytes bytes in $(secs "$open_ms") s, but not the marker line, and $written. The bytes are not that line: check that T6_UART is this board's debug UART (not another board's console) and that it runs at 1500000 baud"
 	fi
 fi
 
@@ -893,7 +921,7 @@ rec "build $(git -C "$HERE" describe --always --dirty 2>/dev/null || echo unknow
 # The paths out of the board this run has: the UART's proof is above, the
 # screen's comes in the mode step, before the load ("screen: proven ...").
 if [ -n "${T6_UART:-}" ]; then
-	paths="UART (proven before anything was copied, below)"
+	paths="UART${T6_UART_RFC2217:+ (the debug UART over RFC 2217)} (proven before anything was copied, below)"
 else
 	paths="no UART (T6_UART not set: no uart.log)"
 fi
@@ -907,7 +935,7 @@ rec "board $BOARD_HOST, boot_id $old_boot; hand at the power switch: $T6_HAND; l
 rec "image $IMG, sha256 $(sha256sum "$IMG" | cut -d' ' -f1): $markers"
 rec "bound: back in reset by $bound_s s after the jump at the latest"
 if [ -n "${T6_UART:-}" ]; then
-	rec "uart: proven before anything was copied: the marker line '$marker' the board wrote to /dev/$console was read back from $T6_UART $got_ms ms after the write began; that capture read $proof_bytes bytes in $(secs "$open_ms") s (not part of uart.log)"
+	rec "uart: proven before anything was copied: the marker line '$marker' the board wrote to /dev/$console was read back from $UART_SHOWN $got_ms ms after the write began; that capture read $proof_bytes bytes in $(secs "$open_ms") s (not part of uart.log)"
 fi
 
 build_tool() {
@@ -924,7 +952,7 @@ MMIO=${MMIO_RD:-}
 if [ -n "${T6_UART:-}" ]; then
 	cat <"$T6_UART" >"$REC/uart.log" &
 	uart_pid=$!
-	rec "UART capture started (pid $uart_pid, read only): $T6_UART -> $REC/uart.log"
+	rec "UART capture started (pid $uart_pid, read only): $UART_SHOWN -> $REC/uart.log"
 fi
 
 # dmesg -w of the old Linux, from here until the jump drops the connection

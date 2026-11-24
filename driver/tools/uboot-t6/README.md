@@ -31,6 +31,12 @@ BOARD_HOST=root@<t6> T6_HAND=<who> T6_RECORD_DIR=<dir> T6_UART=<tty> \
   driver/tools/uboot-t6/prompt-reads.sh --go
 ```
 
+`T6_UART` may also be `rfc2217://<host>:<port>`, the network serial adapter
+on the debug UART: `--go` then runs through
+`../kexec-zephyr/t6-uart-rfc2217.py`, which sets 1500000 8N1 and gives the
+runner a pty (`../kexec-zephyr/README.md`, "The debug UART over RFC 2217";
+exit 40 when the line cannot be set). This holds for `prompt-go.sh` too.
+
 What it guarantees:
 
 - Every command is a read. The list has no `mw`, no `bootm`, `booti` or `go`,
@@ -134,7 +140,8 @@ entered, Armbian back; 9 `go` not answered (no "## Starting application");
 10 the image started, no Linux login: the board needs a hand; 11 the verdict
 FAIL, Armbian back. `prompt-go.sh` adds 1 the board did not come back into
 Armbian, 2 usage, 3 refused before anything changed (only that: the board
-was not rebooted). The two runners share their ssh, board-fact, UART and
+was not rebooted), and with an RFC 2217 address 40 (the line could not be
+set, nothing done) or 41 (that tool failed during the run). The two runners share their ssh, board-fact, UART and
 reboot-and-wait code in `prompt-lib.sh`.
 
 From `go` until the image arms WDT0 (`T6:A3`) nothing resets a board whose

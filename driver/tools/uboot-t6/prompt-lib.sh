@@ -34,7 +34,7 @@ printf "who_remote=%s\n" "$(who_remote)"'
 # nanopc-t6.sh does the same), and read back.
 uart_ready() {
 	local uart_mode w
-	[ -n "${T6_UART:-}" ] || refuse "--go needs T6_UART=<the host tty on the T6's debug UART>"
+	[ -n "${T6_UART:-}" ] || refuse "--go needs T6_UART=<the host tty on the T6's debug UART, or rfc2217://<host>:<port>>"
 	[ -c "$T6_UART" ] && [ -r "$T6_UART" ] && [ -w "$T6_UART" ] ||
 		refuse "T6_UART $T6_UART is not a character device this user can read and write"
 	if fuser "$T6_UART" >/dev/null 2>&1; then
@@ -45,6 +45,20 @@ uart_ready() {
 	for w in 'speed 1500000' ' -echo ' ' -icrnl ' ' -ixon ' ' cs8 ' ' -cstopb ' ' -parenb ' ' clocal ' ' -opost ' ' -icanon '; do
 		[[ " $uart_mode " == *"$w"* ]] || refuse "$T6_UART does not read back '${w# }' after stty: $uart_mode"
 	done
+}
+
+# uart_dry: the dry run's line for an RFC 2217 address in T6_UART (not
+# opened in a dry run; the address is not printed).
+uart_dry() {
+	[[ ${T6_UART:-} == rfc2217://* ]] || return 0
+	echo "  T6_UART is an RFC 2217 address (not opened in a dry run): --go would open it with"
+	echo "  ../kexec-zephyr/t6-uart-rfc2217.py, set 1500000 8N1, and give $TOOL.py the pty it makes."
+}
+
+# uart_record: the record's line when T6_UART is t6-uart-rfc2217.py's pty.
+uart_record() {
+	[ -z "${T6_UART_RFC2217:-}" ] ||
+		rec "uart: the debug UART over RFC 2217 (t6-uart-rfc2217.py set 1500000 8N1 and read it back), through its pty $T6_UART"
 }
 
 # Wait until the tool says it listens (10 s); otherwise the board is not

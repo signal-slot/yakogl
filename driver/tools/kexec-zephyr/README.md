@@ -71,7 +71,8 @@ capture read, whether the board's write succeeded, and the wire from the
 debug header to the host's adapter as the first thing to check (2026-11-22:
 a jump whose `uart.log` stayed at 0 bytes). The host never writes to
 `T6_UART`. The record says the marker was read back; the marker line
-itself is not in `uart.log`. By default it opens `/dev/watchdog0` for the jump, so
+itself is not in `uart.log`. `T6_UART` may also be the network serial
+adapter on the debug UART ("The debug UART over RFC 2217", below). By default it opens `/dev/watchdog0` for the jump, so
 Linux's dw_wdt covers the image's pre-arm window (the script's header says
 why that holds), and it jumps only after the board has read `WDT_CR.WDT_EN`
 back as 1 after the open: the record carries that line ("linux-wdt: WDT_EN
@@ -176,6 +177,49 @@ BOARD_HOST=root@<t6> BOARD_UART=<tty> T6_HAND=<name> T6_CRASH=1 \
 BOARD_HOST=root@<t6> BOARD_SCREEN=<unit> T6_HAND=<name> T6_CRASH=1 \
   tools/board.sh nanopc-t6 run build/t6_display/zephyr/zephyr.bin <logdir>                            # seen through the HDMI capture
 ```
+
+### The debug UART over RFC 2217
+
+The T6's debug UART (UART2, 1500000 8N1) can be wired to a network serial
+adapter that speaks RFC 2217 instead of a USB adapter on the host. The
+adapter stores 115200; each session must set 1500000 itself, and it takes
+one client at a time. The three T6 runners (`nanopc-t6.sh`,
+`../uboot-t6/prompt-reads.sh`, `../uboot-t6/prompt-go.sh`) take it as
+
+```sh
+T6_UART=rfc2217://<host>:<port>   # in the environment, as with a tty
+```
+
+With `--go` a runner runs itself again through `t6-uart-rfc2217.py`
+(`run -- <command>`). That tool:
+
+- reads the address from `T6_UART` only (never from its command line) and
+  never prints it; the runners' messages and records say "the debug UART
+  over RFC 2217" and the pty's path;
+- sets 1500000 baud, 8 data bits, no parity, 1 stop bit and no flow control,
+  and requires the adapter's answers to say exactly that; otherwise it
+  exits 40 and the runner does not start (41: the tool failed during the
+  run);
+- gives the runner a pty as `T6_UART` (and `T6_UART_RFC2217=1`), raw with
+  no echo before any byte is relayed, and holds no fd of the pty's slave,
+  so the runners' own checks (`fuser`, `stty` read-back, `TIOCEXCL`, the
+  UART proof by a marker line) run unchanged on it;
+- drops the board's bytes while no process has the pty open, and flushes
+  what a reader left unread when it closes, so no old boot's lines reach
+  the next reader;
+- doubles 0xff (telnet IAC) both ways;
+- opens a lost connection again, sets the line again, and prints one
+  line with the time and the length of the gap (the gap's bytes are lost);
+- passes SIGTERM and SIGHUP to the runner, SIGINT to its process group, and
+  waits for it: a runner is never killed between the steps of a jump;
+- exits with the runner's status and leaves no process or file behind.
+
+A dry run does not connect; it says that `T6_UART` is an RFC 2217
+address. `python3 -I t6-uart-rfc2217.py --self-test` proves each point
+against a made-up adapter on 127.0.0.1, and `board_lock_selftest.sh` runs
+it and a `nanopc-t6.sh --go` through it on its fake board. Through
+`tools/board.sh nanopc-t6`, `BOARD_UART=rfc2217://<host>:<port>` is handed on
+as `T6_UART` the same way.
 
 ## The Armadillo-X2: `tools/board.sh x2`
 

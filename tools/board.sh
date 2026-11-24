@@ -220,10 +220,14 @@
 #                      tools/cts/imx8mp-console-scan.py), unset: no capture;
 #                      x2: optional in the same way (UART2, the board's own
 #                      USB serial adapter), for a kexec-dev run; nanopc-t6:
-#                      the host's tty on the debug UART, only ever read
-#                      (T6_UART also read; redacted in the record); a run
-#                      needs it, BOARD_SCREEN or both (the runner refuses
-#                      without either)
+#                      the host's tty on the debug UART, or
+#                      rfc2217://<host>:<port> of the network serial adapter
+#                      on it (the runner opens that session through
+#                      driver/tools/kexec-zephyr/t6-uart-rfc2217.py and never
+#                      prints the address), only ever read (T6_UART also
+#                      read; redacted in the record); a run needs it,
+#                      BOARD_SCREEN or both (the runner refuses without
+#                      either)
 #   BOARD_SCREEN       nanopc-t6: the farm's name of the capture unit on the
 #                      board's HDMI output, passed to the runner as T6_SCREEN
 #                      (T6_SCREEN also read; redacted in the record; the

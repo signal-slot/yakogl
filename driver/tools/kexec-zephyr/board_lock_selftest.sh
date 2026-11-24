@@ -176,6 +176,13 @@
 # after the hold undone from the host; no undo after a jump, nor in another
 # Linux; without T6_CPU_KHZ the record lines and no write.
 #
+# A fifteenth (issue #11611): the T6's debug UART is now a network serial
+# adapter that speaks RFC 2217, and T6_UART=rfc2217://<host>:<port> runs the
+# runner through t6-uart-rfc2217.py, which sets 1500000 8N1 and gives the
+# runner a pty. Its self-test (a made-up adapter on 127.0.0.1) runs here as
+# one check; then nanopc-t6.sh's dry run and one --go through it against
+# that adapter (see the checks for what they show).
+#
 # The T6's other runners on the lock, driver/tools/uboot-t6/prompt-reads.sh
 # (the reads at the U-Boot prompt) and prompt-go.sh (an image started with
 # U-Boot's go), are held to the same rule: LOCK_WAIT 0 before they source
@@ -537,8 +544,8 @@ case "\$last" in
 	else cat "$tmp/vp0-\$(cat "$tmp/mode-held")"; fi ;;
 *'yakogl-uart-proof '*)
 	case "\${T6_FAKE_UART:-marker}" in
-	marker) printf '\r\n%s\r\n' "\$(grep -o 'yakogl-uart-proof [0-9a-f]*' <<<"\$last")" > "$tmp/wire.fifo" ;;
-	noise) cat "$tmp/noise" > "$tmp/wire.fifo" ;;
+	marker) printf '\r\n%s\r\n' "\$(grep -o 'yakogl-uart-proof [0-9a-f]*' <<<"\$last")" > "\${T6_FAKE_WIRE:-$tmp/wire.fifo}" ;;
+	noise) cat "$tmp/noise" > "\${T6_FAKE_WIRE:-$tmp/wire.fifo}" ;;
 	fail) exit 255 ;;
 	esac ;;
 *sha256sum*) printf '%s' "\$T6_FAKE_SHAS" ;;
@@ -547,7 +554,10 @@ case "\$last" in
 		echo 'linux-wdt: WDT0 CR 0x00000000 TORR 0x0000000e after the open: WDT_EN is not 1, not jumping'
 		exit "\$T6_FAKE_JUMP_RC"
 	fi
-	touch "$tmp/jumped"; exit 255 ;;
+	touch "$tmp/jumped"
+	# the image's first line, on the RFC 2217 adapter's wire only
+	[ -z "\${T6_FAKE_WIRE:-}" ] || printf 'T6:A image line\r\n' > "\$T6_FAKE_WIRE"
+	exit 255 ;;
 'cat /proc/sys/kernel/random/boot_id') if [ -e "$tmp/jumped" ]; then echo boot-after; else echo boot-before; fi ;;
 esac
 exit 0
@@ -847,6 +857,70 @@ rc=$?
 check "nanopc-t6.sh: the dry run names the board's console and writes no marker (rc $rc)" \
 	"$([ "$rc" = 0 ] && grep -qF "uart: the board's serial console (its kernel command line): /dev/ttyS2; --go has the board write one marker line" <<<"$out" && ! grep -qF yakogl-uart-proof "$tmp/ssh.log"; echo $?)"
 
+# The debug UART over RFC 2217 (issue #11611): T6_UART=rfc2217://<host>:<port>
+# is a network serial adapter, and --go runs nanopc-t6.sh again through
+# t6-uart-rfc2217.py, which sets the line and gives it a pty. Here the
+# adapter is the tool's own made-up one (FakeAdapter) on 127.0.0.1, and the
+# fake board's console writes go to it (T6_FAKE_WIRE) instead of wire.py.
+# The checks: the tool's self-test; the dry run says T6_UART is an RFC 2217
+# address and does not connect; --go through the tool proves the UART path
+# on the pty, records it as "the debug UART over RFC 2217", gets the image's
+# line into uart.log, opens one session, writes no byte to the board, and
+# no message or record names the address.
+out=$(python3 -I "$here/t6-uart-rfc2217.py" --self-test 2>&1)
+got=$(tail -n 1 <<<"$out")
+check "t6-uart-rfc2217.py --self-test ('$got'$(grep -E '^FAIL' <<<"$out" | sed 's/^/; /' | tr -d '\n'))" \
+	"$(grep -qE '^t6-uart-rfc2217 self-test: [1-9][0-9]* checks run, 0 failed$' <<<"$got"; echo $?)"
+cat > "$tmp/adapter.py" <<'EOS'
+import importlib.util, os, select, sys
+tool, fifo, portfile, state = sys.argv[1:5]
+spec = importlib.util.spec_from_file_location("t6uart", tool)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+srv = mod.FakeAdapter()
+srv.start()
+f = os.open(fifo, os.O_RDWR)
+with open(portfile + ".new", "w") as o:
+    o.write("%d\n" % srv.port)
+os.rename(portfile + ".new", portfile)
+while True:
+    if select.select([f], [], [], 0.1)[0]:
+        srv.board(os.read(f, 4096))
+    with open(state + ".new", "w") as o:
+        o.write("conns=%d host=%d\n" % (srv.conns, len(srv.got) + len(srv.garbled)))
+    os.rename(state + ".new", state)
+EOS
+mkfifo "$tmp/adapter.fifo"
+python3 -I "$tmp/adapter.py" "$here/t6-uart-rfc2217.py" "$tmp/adapter.fifo" "$tmp/adapter.port" "$tmp/adapter.state" &
+adapter_pid=$!
+for _ in $(seq 50); do [ -s "$tmp/adapter.port" ] && break; sleep 0.1; done
+aport=$(cat "$tmp/adapter.port" 2>/dev/null)
+aurl=rfc2217://127.0.0.1:${aport:-0}
+# no_address <text>: the adapter's address is not in it
+no_address() { ! grep -qF "127.0.0.1" <<<"$1" && ! grep -qF ":$aport" <<<"$1"; }
+out=$(T6_UART=$aurl t6_board_run "$kernel" "$gic_out")
+rc=$?
+sleep 0.3
+check "nanopc-t6.sh: the dry run with an RFC 2217 address says so, prints no address and does not connect ($(cat "$tmp/adapter.state" 2>/dev/null); rc $rc)" \
+	"$([ "$rc" = 0 ] && [ -n "$aport" ] && grep -qF 'uart: T6_UART is an RFC 2217 address (not opened in a dry run; --go opens it with t6-uart-rfc2217.py' <<<"$out" &&
+		no_address "$out" && grep -qx 'conns=0 host=0' "$tmp/adapter.state"; echo $?)"
+out=$(T6_FAKE_WIRE=$tmp/adapter.fifo t6_uart=$aurl t6_go_run "$kernel")
+rc=$?
+rec=$(cat "$tmp"/rec/*/record.txt 2>/dev/null)
+sleep 0.3
+check "nanopc-t6.sh --go through t6-uart-rfc2217.py: the line set, the UART proven on its pty and recorded as the debug UART over RFC 2217 (rc $rc)" \
+	"$([ "$rc" = 0 ] && grep -qF 't6-uart-rfc2217: the debug UART over RFC 2217: 1500000 8N1, no flow control' <<<"$out" &&
+		grep -qF 'paths: UART (the debug UART over RFC 2217) (proven before anything was copied' <<<"$rec" &&
+		grep -qE "uart: proven before anything was copied: the marker line 'yakogl-uart-proof [0-9a-f]{16}' the board wrote to /dev/ttyS2 was read back from the debug UART over RFC 2217 \(t6-uart-rfc2217.py's pty /dev/pts/[0-9]+\)" <<<"$rec" &&
+		grep -qF 'back in Armbian' <<<"$rec"; echo $?)"
+check "nanopc-t6.sh --go through t6-uart-rfc2217.py: uart.log holds the image's line and not the marker; one session, no byte to the board ($(cat "$tmp/adapter.state" 2>/dev/null))" \
+	"$(grep -qaF 'T6:A image line' "$tmp"/rec/*/uart.log && ! grep -qaF yakogl-uart-proof "$tmp"/rec/*/uart.log &&
+		grep -qx 'conns=1 host=0' "$tmp/adapter.state"; echo $?)"
+check "nanopc-t6.sh --go through t6-uart-rfc2217.py: neither its output nor the record names the address" \
+	"$(no_address "$out" && no_address "$rec"; echo $?)"
+kill "$adapter_pid" 2>/dev/null
+wait "$adapter_pid" 2>/dev/null
+
 # The crash route's mode step (issues #10520, #11001): t6-kms-mode.py holds
 # VP0's own mode when it is one the image adopts (no size change), else it
 # sets 1024x768; VP0's mode is read back from Linux, and the jump happens
@@ -953,7 +1027,7 @@ out=$(t6_uart='' t6_crash_size=268435456 t6_go_run "$kernel
 $ck" --crash)
 rc=$?
 check "nanopc-t6.sh: --go with neither T6_UART nor T6_SCREEN is refused (rc $rc)" \
-	"$(no_go && grep -qF "REFUSED: --go needs T6_UART=<the host tty on the T6's debug UART> (read only), T6_SCREEN=<the capture unit" <<<"$out"; echo $?)"
+	"$(no_go && grep -qF "REFUSED: --go needs T6_UART=<the host tty on the T6's debug UART, or rfc2217://<host>:<port>> (read only), T6_SCREEN=<the capture unit" <<<"$out"; echo $?)"
 # sc_go: --crash --go with T6_SCREEN and no T6_UART, the proof bounded by
 # $t6_proof_s (default 90); sets out, rc, rd (the record directory), rec.
 sc_go() {
