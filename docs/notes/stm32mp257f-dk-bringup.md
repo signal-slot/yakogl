@@ -112,6 +112,61 @@ board, needs the fix. If the board does not come back, the runner prints
 `NEEDS A PERSON` and never retries (`:136-139`): release the board and report
 it (plan #322 rule).
 
+### The return trial through the RAM ring (2026-11-24; ramlog, no console: board evidence, not a row)
+
+Item ramlog-trial ran steps 1 and 2 again over ssh only (no console, no
+reset line on any farm machine), with the console text meant to come back
+through the RAM ring (`MP2_NO_CONSOLE=1 MP2_RAMLOG=1 MP2_NO_WATCHDOG=1`,
+`--expect-watchdog` for step 2). Images built at `384dd08d` (on main) with
+`-DYAKOGL_WERROR=ON` and
+`-DEXTRA_CONF_FILE=tools/probes/stm32mp257f_dk/ramlog_conf/ramlog.conf`
+(ring 0xb0100000, 0x10000 bytes); the hang image adds
+`-DCONFIG_MP2_HELLO_HANG=y`. Sequence: `status`, `install`, run (a),
+run (b), `uninstall`.
+
+| run | record | runner verdict | back after | Linux started |
+| --- | --- | --- | --- | --- |
+| (a) `mp2_hello` | `20261124-0242-mp2_hello-e47f2db8` | `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=58s` | 58 s | 27 s after the reboot |
+| (b) `mp2_hello_hang` | `20261124-0247-mp2_hello_hang-e00ebc6d` | `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=76s` | 76 s | 54 s after the reboot |
+
+- **The return held both times, with no person**: the one-shot was taken
+  (U-Boot cleared `yako_once`, the runner found it gone), the board came back
+  into ST's Linux within the bound, and the runner's cleanup read back.
+- **The ring did not come back** (meta `ramlog=missing` in both runs): no
+  `/boot/yakogl/ramlog.bin` after either reset, so there is no console text,
+  and `dk_verdict.py` had nothing to judge. Run on the empty text, it gives
+  `verdict return-trial banner=FAIL psci-reset=FAIL` for (a) and
+  `verdict hang-trial banner=FAIL hang-line=FAIL no-psci-reset=FAIL` for (b).
+  These are FAILs of missing evidence, not of the board. The ring writer is
+  linked into both images (`ramlog_init`, `ramlog_out` in `zephyr.map`). ST's
+  r3.1 `ext4fs_write` refuses only `metadata_csum`, which bootfs does not
+  have (its features: `has_journal ext_attr resize_inode orphan_file
+  filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink
+  extra_isize`). No pristine-env variable loads near 0xb0100000. Linux has
+  `STRICT_DEVMEM=y`, so the ring's RAM cannot be read from Linux afterwards.
+  Without U-Boot's console (`yakogl-mp2: ramlog saved` / `… write failed`, or
+  neither) it stays open whether the ring was lost in the warm reset (BL2
+  initialises the DDR on every boot; the ramlog-study's claim that the
+  content survives is a source reading, not a measurement), was overwritten
+  before `preboot` ran, or the snippet never matched the magic. The reset
+  reason is not in any ring (BL2's line comes before our image in any case).
+- **Indirect timing evidence** (*derived*, from meta `t_reboot`, `t_back`,
+  `up`): Linux started 27 s later in (b) than in (a). That matches a hang
+  reset by the 32 s watchdog against a 5 s run ended by PSCI (about 27 s),
+  and not the layer's 20 s lifetime timer (about 15 s). In both runs the old
+  Linux was gone 13 s after the reboot.
+- End check: `uninstall` reported `stock boot files: unchanged since
+  install`; `/boot` is again 25 files with listing digest `dc6c9b99…`, as
+  before the session. The `u-boot-env` partition was not byte for byte back
+  after `uninstall` (`a2d1b144…` against `979256b1…`): U-Boot's own
+  `saveenv` in the hook had changed `api_address` (`f807c680` to
+  `f807c840`) and rewritten the inactive copy, and `uninstall` only unsets
+  the runner's variables. The pristine 16 KiB that `install` kept (its
+  printed undo, the two copies at 0x7c000) were written back with `dd`.
+  The partition then read `979256b1…`, and `status` showed copy 1 with CRC
+  0x31f3ce39 and flags 0x62 (73 variables) and copy 2 with CRC 0x9aa9c6b4
+  and flags 0x61, as before the session.
+
 ## Step 3: the layer, OP-TEE's watchdog, the marker
 
 `mp2_identify` arms the `arm,smc-wdt` (SMC fid 0xbc000000, timeout 32 s, a
@@ -400,6 +455,11 @@ runner record directory name) and folds the findings into the pre-study
 | 6 `gc_clear` | fence-clear | **PASS** 2026-11-21, `20261121-1859-gc_clear-e1a37b77`: `gc_clear: 256x128 wrong pixels 0 (clear 1 0, clear 2 0, guard 0)`, back after 45 s |
 | 7 `gc_triangle` | triangle-rerun | **PASS** 2026-11-23, `20261123-0451-gc_triangle-250f61d4`: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, `verdict=returned rc=0` (judged `verdict=done … result=pass:gc_triangle`), back after 44 s |
 | 8 `gl_test` case 1 (`gc_gl_triangle`) | triangle-rerun | **PASS** 2026-11-23, `20261123-0454-gl_test_case1-ed1e6361`: `gl_test: case 1 uniform: PASS` (10 checks), `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), back after 57 s; no `gl_test: all:` tally line (a defect of the one-case image, below) |
+
+Ramlog, no console: board evidence, not a row (ramlog-trial, 2026-11-24, `384dd08d`; "The return trial through the RAM ring" above). These blind runs do not replace rows 1 and 2, which rest on the console:
+
+- return trial, ends: `20261124-0242-mp2_hello-e47f2db8`, `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=58s`; the ring did not come back (`ramlog=missing`), and `dk_verdict.py --expect return-trial` on the empty text gives `verdict return-trial banner=FAIL psci-reset=FAIL` (no evidence, not a board fault).
+- return trial, watchdog-caught hang: `20261124-0247-mp2_hello_hang-e00ebc6d`, `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=76s`; `ramlog=missing`, and `dk_verdict.py --expect hang-trial` gives `verdict hang-trial banner=FAIL hang-line=FAIL no-psci-reset=FAIL` (the same: no evidence).
 
 ### How steps 1-4 were run and judged (2026-11-21)
 
