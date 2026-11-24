@@ -456,6 +456,82 @@ runner record directory name) and folds the findings into the pre-study
 | 7 `gc_triangle` | triangle-rerun | **PASS** 2026-11-23, `20261123-0451-gc_triangle-250f61d4`: `gc_triangle: PASS (0 failing checks)`, all five checks PASS, `verdict=returned rc=0` (judged `verdict=done … result=pass:gc_triangle`), back after 44 s |
 | 8 `gl_test` case 1 (`gc_gl_triangle`) | triangle-rerun | **PASS** 2026-11-23, `20261123-0454-gl_test_case1-ed1e6361`: `gl_test: case 1 uniform: PASS` (10 checks), `verdict=returned rc=0` (judged `verdict=done … result=pass:gl_test`), back after 57 s; no `gl_test: all:` tally line (a defect of the one-case image, below) |
 
+### The `gl_test` regression set (2026-11-24, `a5f1dc8e`): 5 FAIL, 1 SKIP, 44 PASS
+
+The whole 50-case `SET_ORDER` (`driver/tools/pvrlab/runner/src/lib.rs:53-54`)
+fits one run in the 100 s lifetime (back on Linux after 58-70 s). Images from
+origin/main `a5f1dc8e`. Two runs: `20261124-1038-gl_test_set-a5f1dc8e` (default
+image, case 10 skipped by `GL_TEST_MP2_SKIP`) and
+`20261124-1044-gl_test_all-a5f1dc8e` (`GL_TEST_MP2_SKIP=""`, the whole set; the
+reading below). Tally:
+
+`gl_test: all: 5 of 49 cases failed (44 passed; 0 timed out; first failure case 6 at index 5; second failure case 11; 1 skipped, first skip case 16)`
+
+- runner: `board-stm32mp2.sh stm32mp257f-dk gl_test_all rc=0 verdict=returned boot=uboot-sd blind boot_verdict=no_console result=none back_after=58s`
+- judged on the captured serial console: `rc=4 verdict=failed boot=uboot-sd row boot_verdict=complete result=fail:gl_test`
+- against the i.MX8MP (`tools/cts/mp2-gltest-diff.py`): new failures 6, 11, 47, 182, 189; flaky 0; expected 0; stale 1 (case 10); skip differences 0; no verdict 1 (case 16). Last line:
+
+`mp2-gltest-diff: new 5, flaky 0, expected 0, missing 1`
+
+Verdict per case, in `SET_ORDER` order (names from `case_names` in `driver/tools/pvrlab/gl_test.c`):
+
+| case | name | verdict |
+| --- | --- | --- |
+| 1 | uniform | PASS |
+| 2 | texture | PASS |
+| 3 | depth | PASS |
+| 4 | cull | PASS |
+| 5 | scissor | PASS |
+| 6 | fbo | **FAIL** |
+| 8 | blend | PASS |
+| 9 | stencil | PASS |
+| 10 | prims | PASS |
+| 22 | vao | PASS |
+| 11 | persist | **FAIL** |
+| 34 | unishare | PASS |
+| 12 | stencil2 | PASS |
+| 23 | winding | PASS |
+| 13 | zls | PASS |
+| 40 | qtstrip | PASS |
+| 14 | api | PASS |
+| 24 | compact | PASS |
+| 58 | clearscis | PASS |
+| 59 | clearmask | PASS |
+| 60 | wrapmode | PASS |
+| 61 | texincomp | PASS |
+| 15 | egl | PASS |
+| 16 | msaa | SKIP |
+| 19 | es100 | PASS |
+| 20 | etc | PASS |
+| 41 | es3cube | PASS |
+| 42 | es3array | PASS |
+| 43 | es3vid | PASS |
+| 46 | es3size | PASS |
+| 47 | es3inst | **FAIL** |
+| 48 | es3vol | PASS |
+| 49 | es3facing | PASS |
+| 45 | es3dyn | PASS |
+| 44 | es3hdr | PASS |
+| 172 | swapzs | PASS |
+| 173 | splitzs | PASS |
+| 181 | fusemad | PASS |
+| 182 | fsat | **FAIL** |
+| 183 | unipad | PASS |
+| 188 | predif | PASS |
+| 189 | mulone | **FAIL** |
+| 190 | blendonce | PASS |
+| 191 | varyfma | PASS |
+| 192 | predlive | PASS |
+| 197 | vtxgrid | PASS |
+| 199 | es3trunc | PASS |
+| 21 | rgb565 | PASS |
+| 17 | ctx2 | PASS |
+| 18 | image | PASS |
+
+- Case 10 (`prims`) ran in the whole-set run and **passed**. It is on `tools/cts/mp2-gltest-expected.txt` as pending Q11, so the diff calls the entry stale. This is evidence for Q11, read in `docs/notes/stm32mp257f-dk-p9.md` section 4 (a later item updates that note).
+- Case 16 (`msaa`) skips itself without a 4x config (`driver/tools/pvrlab/runner/src/lib.rs:65`), so it has no verdict and the diff counts it as missing; it is a SKIP, not a pass.
+- After the runs `u-boot-env` read back identical to the baseline digest and `/boot` was the same 25 files with no yakogl directory.
+
 Ramlog, no console: board evidence, not a row (ramlog-trial, 2026-11-24, `384dd08d`; "The return trial through the RAM ring" above). These blind runs do not replace rows 1 and 2, which rest on the console:
 
 - return trial, ends: `20261124-0242-mp2_hello-e47f2db8`, `rc=0 verdict=done … blind boot_verdict=unknown result=none back_after=58s`; the ring did not come back (`ramlog=missing`), and `dk_verdict.py --expect return-trial` on the empty text gives `verdict return-trial banner=FAIL psci-reset=FAIL` (no evidence, not a board fault).
