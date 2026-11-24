@@ -118,8 +118,10 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod crc32;
+pub mod emmc;
 pub mod inflate;
 pub mod lz4;
+pub mod usdhc;
 
 use core::ffi::c_char;
 
@@ -867,6 +869,141 @@ pub unsafe extern "C" fn bs2_jump(entry: u64) -> ! {
     }
 }
 
+/// The uSDHC's registers at a mapped device address (the C side maps the
+/// block uncached, as device memory).
+struct HwRegs {
+    base: usize,
+}
+
+impl usdhc::Regs for HwRegs {
+    fn read32(&self, off: usize) -> u32 {
+        // SAFETY: bs2_count_run's contract: `base` plus the block's offsets
+        // are mapped device registers.
+        unsafe { core::ptr::read_volatile((self.base + off) as *const u32) }
+    }
+    fn write32(&self, off: usize, val: u32) {
+        // SAFETY: as read32.
+        unsafe { core::ptr::write_volatile((self.base + off) as *mut u32, val) }
+    }
+}
+
+#[cfg(not(test))]
+unsafe extern "C" {
+    fn bs2_udelay(us: u32);
+}
+
+fn udelay(us: u32) {
+    #[cfg(not(test))]
+    // SAFETY: the C side's busy wait; no memory involved.
+    unsafe {
+        bs2_udelay(us)
+    };
+    #[cfg(test)]
+    let _ = us;
+}
+
+/// The counted way back (emmc.rs): the uSDHC at `usdhc` (a mapped address)
+/// with its root clock at `rate_hz` (0: unknown), the count in boot1's
+/// `sector`, `requested` non-zero for the console's request. Returns the
+/// outcome (`emmc::Outcome`: 1 boot, 2 back, 3 failed); `out` says what was
+/// read and written and where it stopped.
+///
+/// # Safety
+/// `usdhc` is the uSDHC's register block mapped as device memory, nothing
+/// else uses the controller, and `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn bs2_count_run(
+    usdhc: usize,
+    rate_hz: u32,
+    sector: u32,
+    requested: u32,
+    out: *mut emmc::Report,
+) -> u32 {
+    let regs = HwRegs { base: usdhc };
+    let mut rep = emmc::Report::new();
+    let outcome = count_on(&regs, rate_hz, sector, requested != 0, &mut rep, udelay);
+    // SAFETY: the caller's contract.
+    unsafe { out.write(rep) };
+    outcome as u32
+}
+
+/// bs2_count_run over any registers (the host tests' model).
+pub fn count_on<R: usdhc::Regs>(
+    regs: &R,
+    rate_hz: u32,
+    sector: u32,
+    requested: bool,
+    rep: &mut emmc::Report,
+    delay: impl FnMut(u32),
+) -> emmc::Outcome {
+    let mut bus = usdhc::Usdhc::new(regs, rate_hz, delay);
+    rep.rate_hz = bus.rate();
+    if let Err(code) = bus.init() {
+        rep.fail(emmc::Stage::Controller, code);
+        rep.outcome = emmc::Outcome::Failed as u32;
+        return emmc::Outcome::Failed;
+    }
+    rep.ident_hz = bus.sd_hz;
+    let outcome = emmc::count_run(&mut bus, sector, requested, rep);
+    rep.transfer_hz = bus.sd_hz;
+    outcome
+}
+
+/// The way back on the card bs2_count_run left in TRAN (it returned 1): the
+/// console's request before the jump. The outcome as for bs2_count_run.
+///
+/// # Safety
+/// As bs2_count_run, after a bs2_count_run that returned 1.
+#[no_mangle]
+pub unsafe extern "C" fn bs2_count_back(usdhc: usize, rate_hz: u32, out: *mut emmc::Report) -> u32 {
+    let regs = HwRegs { base: usdhc };
+    let mut rep = emmc::Report::new();
+    let outcome = back_on(&regs, rate_hz, &mut rep, udelay);
+    // SAFETY: the caller's contract.
+    unsafe { out.write(rep) };
+    outcome as u32
+}
+
+/// bs2_count_back over any registers (the host tests' model).
+pub fn back_on<R: usdhc::Regs>(
+    regs: &R,
+    rate_hz: u32,
+    rep: &mut emmc::Report,
+    delay: impl FnMut(u32),
+) -> emmc::Outcome {
+    let mut bus = usdhc::Usdhc::new(regs, rate_hz, delay);
+    rep.rate_hz = bus.rate();
+    emmc::back_run(&mut bus, rep)
+}
+
+/// A name for an `emmc::Stage` (`bs2_count_report.fail_stage`).
+#[no_mangle]
+pub extern "C" fn bs2_count_stage_name(stage: u32) -> *const c_char {
+    let s: &'static [u8] = match stage {
+        0 => b"none\0",
+        1 => b"controller reset\0",
+        2 => b"CMD0\0",
+        3 => b"CMD1 (card not ready)\0",
+        4 => b"CMD1 (byte-addressed card)\0",
+        5 => b"CMD2\0",
+        6 => b"CMD3\0",
+        7 => b"SD clock\0",
+        8 => b"CMD7\0",
+        9 => b"EXT_CSD read\0",
+        10 => b"count sector outside boot1\0",
+        11 => b"CMD6 access boot1\0",
+        12 => b"count read\0",
+        13 => b"count write\0",
+        14 => b"count read-back\0",
+        15 => b"CMD6 access user area\0",
+        16 => b"CMD6 PARTITION_CONFIG boot0\0",
+        17 => b"EXT_CSD read-back\0",
+        18 => b"PARTITION_CONFIG read-back differs\0",
+        _ => b"?\0",
+    };
+    s.as_ptr().cast()
+}
+
 /// The panic handler of the staticlib: hand the location to the C side,
 /// which prints it and stops. Nothing here panics on purpose (every input
 /// error is a Bs2Error); this is for a broken invariant only.
@@ -884,5 +1021,7 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     unsafe { bs2_panic(file.as_ptr(), file.len(), line) }
 }
 
+#[cfg(test)]
+mod emmc_tests;
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+description: |
+  The i.MX 95's uSDHC as the second-stage loader's polled eMMC path
+  (driver/samples/zephyr/boot_stage2, BOOT_STAGE2_COUNT; loader/src/usdhc.rs):
+  no Zephyr driver binds it. Zephyr's nxp,imx-usdhc driver does not build
+  for the i.MX 95 A55 at the workspace pin (its MCUX fsl_usdhc needs
+  USDHC_Type, which the MIMX9596 A55 device header names WAKEUP_USDHC_Type).
+  The loader maps reg, reads the clock's rate through the SCMI clock
+  protocol, and relies on the boot stage before it (U-Boot SPL, which booted
+  from this card) for the clock root being on and for the pads' mux.
+compatible: "yakogl,imx95-usdhc-boot"
+include: base.yaml
+properties:
+  reg:
+    required: true
+  clocks:
+    required: true
+    description: the uSDHC's root clock (the "per" clock), as <&scmi_clk id>

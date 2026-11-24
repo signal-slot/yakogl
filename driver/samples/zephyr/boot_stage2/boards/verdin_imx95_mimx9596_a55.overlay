@@ -1,0 +1,65 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+ *
+ * The second-stage loader on the Verdin iMX95 A55
+ * (docs/notes/imx95-direct-boot.md, section 3 (a2) and section 5). Three
+ * changes to the board:
+ *
+ * 1. Its own RAM, 0x90200000 + 32 MiB: TF-A's BL31 enters BL33 there
+ *    (PLAT_NS_IMAGE_OFFSET, U-Boot proper's slot in container 2, which SPL
+ *    copies there). It must end below 0x93200000: SPL's heap while it loads
+ *    container 2, then OP-TEE's devicetree overlay (BL32_FDT_OVERLAY_ADDR).
+ *    It ends at 0x92200000.
+ *
+ * 2. The payload's region, 0xd0000000 + 256 MiB (the board's own
+ *    zephyr,sram node, memory@d0000000, where every direct image is linked),
+ *    identity mapped write-back cacheable so the loader inflates into it at
+ *    the addresses the image is linked at. Kconfig BOOT_STAGE2_LOAD/_STAGING/
+ *    _REGION_END lie in it. Below 4 GiB on every module size.
+ *
+ * 3. USDHC1, the module's eMMC (Linux imx95-verdin.dtsi: usdhc1, 8 bit,
+ *    non-removable, mmc0), at 0x42850000 (the MIMX9596 A55 device header's
+ *    WAKEUP__USDHC1_BASE), with its root clock IMX95_CLK_USDHC1 through the
+ *    System Manager's SCMI clock protocol, for the boot count
+ *    (BOOT_STAGE2_COUNT). Polled, so no interrupt; 1-bit, so only CLK, CMD
+ *    and DAT0 carry anything. Pins: as SPL left them (it read container 2
+ *    over them); see yakogl,imx95-usdhc-boot.yaml.
+ *
+ * The GPU is off.
+ */
+
+#include <mem.h>
+#include <zephyr/dt-bindings/memory-attr/memory-attr-arm64.h>
+
+/ {
+	chosen {
+		zephyr,sram = &stage2_ram;
+	};
+
+	stage2_ram: memory@90200000 {
+		reg = <0x90200000 DT_SIZE_M(32)>;
+	};
+
+	/* The same node as the board's dram (memory@d0000000). */
+	stage2_payload: memory@d0000000 {
+		compatible = "zephyr,memory-region";
+		reg = <0xd0000000 DT_SIZE_M(256)>;
+		zephyr,memory-region = "STAGE2_PAYLOAD";
+		/* DT_MEM_ARM64_MMU_NORMAL = DT_MEM_CACHEABLE | the WB bit: without
+		 * DT_MEM_CACHEABLE the region is MT_NORMAL_NC, and the inflate ran
+		 * at 6.8 MB/s on the AM62P (2026-10-21). */
+		zephyr,memory-attr = <(DT_MEM_ARM64_MMU_NORMAL)>;
+	};
+
+	stage2_emmc: mmc@42850000 {
+		compatible = "yakogl,imx95-usdhc-boot";
+		reg = <0x42850000 0x10000>;
+		clocks = <&scmi_clk IMX95_CLK_USDHC1>;
+		status = "okay";
+	};
+};
+
+&gpu {
+	status = "disabled";
+};

@@ -488,7 +488,9 @@ config YAKOGL_DRV_GPU_PVR_RUST
 	  libyakogl_drivers.a and link it to the driver library. Selected by
 	  YAKOGL_DRV_GPU_PVR.
 
-if YAKOGL_DRV_DISPLAY_RUST || YAKOGL_DRV_GPU_PVR_RUST || YAKOGL_BOARD_RECORD_RUST
+# The log level of yd_zephyr.c (the drivers crate's shim), in every image that
+# links the crate (driver/zephyr/CMakeLists.txt: the Verdin iMX95 glue does).
+if YAKOGL_DRV_DISPLAY_RUST || YAKOGL_DRV_GPU_PVR_RUST || YAKOGL_BOARD_RECORD_RUST || YAKOGL_VERDIN_IMX95
 module = YAKOGL_DRV_DISPLAY_RUST
 module-str = yakogl-drivers (Rust)
 source "subsys/logging/Kconfig.template.log_config"

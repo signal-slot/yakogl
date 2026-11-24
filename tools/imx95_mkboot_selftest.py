@@ -10,8 +10,11 @@ container 1 the DDR dummy, the OEI, the System Manager, SPL and the V2X dummy,
 container 2 BL31, U-Boot and OP-TEE. No vendor binary: every image is filler
 bytes. The tool's output is then read back here field by field (offsets,
 alignment, hashes, the trampoline's instructions, the bytes before container
-2), and every refusal is provoked once. Writes only to its own temporary
-directory."""
+2), and every refusal is provoked once. Then a loader in the BL33 slot (its
+AArch64 header's image_size against SPL's heap), the named limits (boot1,
+boot0), and the boot count record (`count`, `count-info`): its bytes and the
+CRC-32 the loader's own host test pins (driver/samples/zephyr/boot_stage2/
+loader/src/emmc_tests.rs). Writes only to its own temporary directory."""
 import hashlib
 import os
 import shutil
@@ -301,6 +304,55 @@ rc, out = run("info", w("notag.bin", bytes(notag)))
 ok(rc == 1 and "no container header at 0x20c00" in out, "info: no container at SPL's offset (%s)" % out)
 rc, out = run("check", p_out, "--limit", "0x20000")
 ok(rc == 1 and "past the limit 0x20000" in out, "check: the limit")
+
+# --bl33 with a loader's AArch64 Image header (driver/samples/zephyr/boot_stage2
+# for verdin_imx95: RAM 0x90200000 + 32 MiB): its image_size must end below
+# SPL's heap at 0x93200000; the named limits.
+def loader_image(image_size, n=0x1F000):
+    b = bytearray(filler(n, 15))
+    b[0x08:0x10] = b"\0" * 8
+    b[0x10:0x18] = struct.pack("<Q", image_size)
+    b[0x38:0x3C] = b"ARM\x64"
+    return bytes(b)
+
+
+p_ld = w("bs2.bin", loader_image(0x89000))
+rc, out = run("build", "--base", p_base, "--bl33", p_ld, "-o", os.path.join(d, "bs2-direct.bin"), "--limit", "boot1")
+ok(rc == 0 and "of the limit 0x1f7dc00" in out, "build --bl33 a loader, --limit boot1 = 0x1f7dc00 (%s)" % out)
+rc, out = run("check", os.path.join(d, "bs2-direct.bin"), "--limit", "boot0")
+ok(rc == 0 and "limit 0x1f7de00" in out, "check --limit boot0 = 0x1f7de00 (%s)" % out)
+refused("a loader whose RAM reaches SPL's heap",
+        ["build", "--base", p_base, "--bl33", w("bs2-big.bin", loader_image(0x3000001)), "-o", o, "--limit", "boot1"],
+        "past 0x93200000")
+
+# count: the record the loader reads at boot1 sector 64494 (loader/src/emmc.rs)
+p_c = os.path.join(d, "count.bin")
+rc, out = run("count", "--remaining", "3", "-o", p_c)
+ok(rc == 0 and "seek=64494" in out and "offset 0x1f7dc00" in out, "count exits 0 and names the sector (%s)" % out)
+rec = open(p_c, "rb").read() if rc == 0 else b""
+ok(len(rec) == 512 and rec[:8] == b"YKBOOTCT", "count: one sector, the magic")
+ok(rec[8:24] == struct.pack("<IIII", 1, 3, 3, 64494) and not any(rec[24:508]), "count: version, remaining, initial, sector, zeros")
+# The same CRC the loader's host test pins (emmc_tests.rs record_layout_and_crc).
+ok(rec[508:] == struct.pack("<I", 0xB8414914), "count: the CRC-32 the loader's test expects")
+rc, out = run("count-info", p_c)
+ok(rc == 0 and "3 of 3 starts left" in out, "count-info reads it back (%s)" % out)
+rc, out = run("count-info", w("zero.bin", b"\0" * 512))
+ok(rc == 1 and "no record (magic)" in out and "way back" in out, "count-info: boot1 as delivered (%s)" % out)
+dump = bytearray(64512 * 512)
+dump[64494 * 512:64495 * 512] = rec
+rc, out = run("count-info", w("boot1.bin", bytes(dump)))
+ok(rc == 0 and "boot1 dump at 0x1f7dc00" in out and "3 of 3" in out, "count-info: a whole boot1 dump (%s)" % out)
+bad = bytearray(rec)
+bad[12] = 2
+rc, out = run("count-info", w("count-bad.bin", bytes(bad)))
+ok(rc == 1 and "CRC" in out, "count-info: a changed count without its CRC (%s)" % out)
+rc, out = run("count", "--remaining", "0", "--initial", "2", "-o", os.path.join(d, "count0.bin"))
+rc2, out2 = run("count-info", os.path.join(d, "count0.bin"))
+ok(rc == 0 and rc2 == 0 and "0 of 2" in out2 and "takes the way back" in out2, "count 0: the next start goes back (%s)" % out2)
+refused("remaining above initial", ["count", "--remaining", "4", "--initial", "3", "-o", os.path.join(d, "c4.bin")],
+        "--remaining <= --initial")
+rc, out = run("count-info", w("short.bin", b"\0" * 100))
+ok(rc == 1 and "one 512-byte sector" in out, "count-info: neither a sector nor a dump")
 
 shutil.rmtree(d)
 print("imx95_mkboot_selftest: %d checks, %d failed" % (checks, fails))

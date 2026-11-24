@@ -31,9 +31,15 @@
 #include <zephyr/storage/disk_access.h>
 #endif
 #ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
-#include <zephyr/drivers/pm_cpu_ops.h>
 #include <zephyr/drivers/uart.h>
+#endif
+#if defined(CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST) && defined(CONFIG_BOOT_STAGE2_SOURCE_EMMC)
+#include <zephyr/drivers/pm_cpu_ops.h>
 #include <zephyr/sd/sd_spec.h>
+#endif
+#ifdef CONFIG_BOOT_STAGE2_COUNT
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/sys/device_mmio.h>
 #endif
 
 #include "boot_stage2.h"
@@ -239,6 +245,13 @@ BUILD_ASSERT(DT_REG_ADDR(PAYLOAD_NODE) + DT_REG_SIZE(PAYLOAD_NODE) == CONFIG_BOO
 BUILD_ASSERT(CONFIG_BOOT_STAGE2_LOAD < CONFIG_BOOT_STAGE2_STAGING, "staging above the load address");
 BUILD_ASSERT(CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_SIZE * 1024ull <= CONFIG_BOOT_STAGE2_LOAD,
 	     "the loader's own RAM ends below the image");
+#ifdef CONFIG_BOARD_VERDIN_IMX95
+/* BL31 enters BL33 at 0x90200000; from 0x93200000 is SPL's heap while it
+ * loads container 2, then OP-TEE's devicetree overlay. */
+BUILD_ASSERT(CONFIG_SRAM_BASE_ADDRESS == 0x90200000u, "the Verdin iMX95 loader is BL33 at 0x90200000");
+BUILD_ASSERT(CONFIG_SRAM_BASE_ADDRESS + CONFIG_SRAM_SIZE * 1024ull <= 0x93200000ull,
+	     "the loader's RAM ends below SPL's heap and OP-TEE's overlay at 0x93200000");
+#endif
 
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
 #define SDHC_NODE DT_NODELABEL(main_sdhci0)
@@ -435,7 +448,9 @@ static int64_t zero_wait(void)
 #define MMC_STATUS_STATE(s)      (((s) >> 9) & 0xfu)
 #define MMC_STATE_TRAN           4u
 
+#ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
 static uint8_t ext_csd[512] __aligned(64);
+#endif
 
 /* Whether the word has arrived on the console. Never waits: it takes what
  * the UART's receiver holds now and returns. The match carries over from one
@@ -465,6 +480,9 @@ static bool boot0_requested(void)
 	return seen;
 }
 BUILD_ASSERT(sizeof(CONFIG_BOOT_STAGE2_BOOT0_WORD) - 1 >= 8, "a request word of at least 8 characters");
+#endif /* CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST */
+
+#if defined(CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST) && defined(CONFIG_BOOT_STAGE2_SOURCE_EMMC)
 
 static int ext_csd_read(const struct device *sdhc)
 {
@@ -566,11 +584,124 @@ static void boot0_on_request(void)
 	printk("boot_stage2: the reset did not happen; power-cycle to start from boot0\n");
 	halt();
 }
+#elif !defined(CONFIG_BOOT_STAGE2_COUNT)
+static inline void boot0_on_request(void)
+{
+}
+#endif
+
+#ifdef CONFIG_BOOT_STAGE2_COUNT
+/*
+ * The counted way back (Kconfig BOOT_STAGE2_COUNT; loader/src/emmc.rs and
+ * usdhc.rs do the work; docs/notes/imx95-direct-boot.md, section 5). Run
+ * first in main(), before the payload's header is read: neither the count
+ * nor the way back depends on the payload. These lines are the ones the
+ * note's first board run expects; they are printed whatever
+ * BOOT_STAGE2_PROGRESS_LOG says (about 300 characters, 26 ms at 115200 Bd).
+ */
+#define EMMC_NODE DT_NODELABEL(stage2_emmc)
+BUILD_ASSERT(DT_NODE_HAS_STATUS(EMMC_NODE, okay), "the board overlay's stage2_emmc node");
+
+/* The board glue's PSCI SYSTEM_RESET (driver/zephyr/lib/board/verdin_imx95/
+ * verdin_imx95.c); if it returns, WDOG3 resets the board. */
+FUNC_NORETURN void verdin_imx95_reset(const char *why);
+
+static mm_reg_t emmc_regs;
+static uint32_t emmc_rate;
+
+void bs2_udelay(uint32_t us)
+{
+	k_busy_wait(us);
+}
+
+static const char *const count_why[] = {"-", "no starts left", "no valid record", "requested on the console",
+					"a step failed"};
+static const char *const record_errors[] = {"ok", "no record (magic)", "version", "CRC", "sector",
+					    "reserved bytes", "count above initial"};
+
+static void count_report(const struct bs2_count_report *r)
+{
+	if (r->fail_stage != 0u) {
+		printk("boot_stage2: count: %s at %s (code 0x%x)\n",
+		       r->outcome == BS2_COUNT_FAILED ? "FAILED" : "failure", bs2_count_stage_name(r->fail_stage),
+		       r->fail_code);
+	}
+	if (r->found_config == BS2_COUNT_NOT_READ) {
+		return;
+	}
+	printk("boot_stage2: count: eMMC mid 0x%02x, PARTITION_CONFIG 0x%02x, boot partitions %u sectors, "
+	       "BOOT_WP 0x%02x; SD clock %u/%u Hz from %u Hz\n",
+	       r->cid0 == BS2_COUNT_NOT_READ ? 0u : r->cid0 >> 24, r->found_config, r->boot_sectors, r->boot_wp,
+	       r->ident_hz, r->transfer_hz, r->rate_hz);
+	if (r->record_error == 0u) {
+		printk("boot_stage2: count: boot1 sector %u: %u of %u left\n", CONFIG_BOOT_STAGE2_COUNT_SECTOR,
+		       r->remaining_before, r->initial);
+	} else if (r->record_error != BS2_COUNT_NOT_READ) {
+		printk("boot_stage2: count: boot1 sector %u: %s\n", CONFIG_BOOT_STAGE2_COUNT_SECTOR,
+		       r->record_error < ARRAY_SIZE(record_errors) ? record_errors[r->record_error] : "?");
+	}
+}
+
+/* BS2_COUNT_BOOT returns; the way back resets; a failure stops. */
+static void count_end(uint32_t outcome, const struct bs2_count_report *r)
+{
+	if (outcome == BS2_COUNT_BOOT) {
+		printk("boot_stage2: count: %u left after this start (written, read back); starting the payload\n",
+		       r->remaining_after);
+		return;
+	}
+	if (outcome == BS2_COUNT_BACK) {
+		printk("boot_stage2: count: %s: PARTITION_CONFIG 0x%02x -> 0x%02x (boot0, read back)\n",
+		       r->why < ARRAY_SIZE(count_why) ? count_why[r->why] : "?", r->found_config, r->final_config);
+		k_busy_wait(20000); /* the lines, out of the UART */
+		verdin_imx95_reset("boot_stage2: count: the next start is boot0");
+	}
+	printk("boot_stage2: count: neither the count nor the way back could be written; "
+	       "the board glue's lifetime reset, then WDOG3, starts this chain again\n");
+	halt();
+}
+
+static void count_step(bool requested)
+{
+	const struct device *clk = DEVICE_DT_GET(DT_CLOCKS_CTLR(EMMC_NODE));
+	struct bs2_count_report r;
+	uint32_t outcome;
+
+	device_map(&emmc_regs, DT_REG_ADDR(EMMC_NODE), DT_REG_SIZE(EMMC_NODE), K_MEM_CACHE_NONE);
+	/* The root's rate as the System Manager has it (read only); 0, and so
+	 * the crate's slower assumption, when it does not answer. */
+	if (!device_is_ready(clk) ||
+	    clock_control_get_rate(clk, (clock_control_subsys_t)DT_CLOCKS_CELL(EMMC_NODE, name), &emmc_rate) != 0) {
+		emmc_rate = 0;
+	}
+	outcome = bs2_count_run((uintptr_t)emmc_regs, emmc_rate, CONFIG_BOOT_STAGE2_COUNT_SECTOR, requested, &r);
+	count_report(&r);
+	count_end(outcome, &r);
+}
+
+#ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
+/* The second look, before the jump: the card is selected as count_step left it. */
+static void boot0_on_request(void)
+{
+	struct bs2_count_report r;
+	uint32_t outcome;
+
+	if (!boot0_requested()) {
+		return;
+	}
+	printk("boot_stage2: \"%s\" on the console: eMMC boot partition 1 (boot0) for the next start\n",
+	       CONFIG_BOOT_STAGE2_BOOT0_WORD);
+	outcome = bs2_count_back((uintptr_t)emmc_regs, emmc_rate, &r);
+	count_report(&r);
+	count_end(outcome, &r);
+	halt(); /* BS2_COUNT_BOOT is not an outcome of the way back */
+}
 #else
 static inline void boot0_on_request(void)
 {
 }
 #endif
+#endif /* CONFIG_BOOT_STAGE2_COUNT */
 
 static const char *compression_name(uint32_t compression)
 {
@@ -586,6 +717,16 @@ int main(void)
 	int64_t t0 = k_uptime_get();
 	int64_t t_ready = 0;
 	int ret;
+
+#ifdef CONFIG_BOOT_STAGE2_COUNT
+	/* First: the count, or the way back (which does not return). */
+#ifdef CONFIG_BOOT_STAGE2_BOOT0_ON_REQUEST
+	count_step(boot0_requested());
+#else
+	count_step(false);
+#endif
+	t_ready = k_uptime_get() - t0;
+#endif
 
 #ifdef CONFIG_BOOT_STAGE2_SOURCE_EMMC
 	/* A compressed segment of a version-3 payload is read to STAGING + its

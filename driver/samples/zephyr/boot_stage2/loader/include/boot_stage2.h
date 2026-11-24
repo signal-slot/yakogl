@@ -116,4 +116,53 @@ void bs2_mark(uint32_t stage);
 /* Called by the crate's panic handler; the C side prints and stops. */
 __attribute__((noreturn)) void bs2_panic(const char *file, size_t file_len, uint32_t line);
 
+/*
+ * The counted way back (loader/src/emmc.rs, usdhc.rs; BOOT_STAGE2_COUNT):
+ * the boot count in one sector of eMMC boot1 and the EXT_CSD
+ * PARTITION_CONFIG write that selects boot0 again, over the uSDHC polled.
+ */
+#define BS2_COUNT_BOOT   1 /* start the payload: the decremented count is on the card */
+#define BS2_COUNT_BACK   2 /* PARTITION_CONFIG selects boot0 (read back): reset the SoC */
+#define BS2_COUNT_FAILED 3 /* neither: stop */
+
+#define BS2_WHY_SPENT     1 /* remaining was 0 */
+#define BS2_WHY_INVALID   2 /* the record did not check (record_error) */
+#define BS2_WHY_REQUESTED 3 /* the word on the console */
+#define BS2_WHY_FAILURE   4 /* a step failed (fail_stage, fail_code) */
+
+#define BS2_COUNT_NOT_READ 0xffffffffu
+
+struct bs2_count_report {
+	uint32_t outcome;          /* BS2_COUNT_* */
+	uint32_t why;              /* BS2_WHY_*, 0 when it boots */
+	uint32_t fail_stage;       /* the first failure (bs2_count_stage_name), 0: none */
+	uint32_t fail_code;        /* its bus error, card status or value */
+	uint32_t record_error;     /* 0: the record checked; 1 magic 2 version 3 CRC 4 sector
+				    * 5 reserved 6 count */
+	uint32_t found_config;     /* EXT_CSD[179] as found */
+	uint32_t final_config;     /* EXT_CSD[179] read back after the way back */
+	uint32_t boot_sectors;     /* BOOT_SIZE_MULT * 256 */
+	uint32_t boot_wp;          /* EXT_CSD[173] BOOT_WP */
+	uint32_t remaining_before; /* the record's count as read */
+	uint32_t remaining_after;  /* as written and read back */
+	uint32_t initial;          /* as imx95-mkboot.py count wrote it */
+	uint32_t cid0;             /* CID bits 127..96: manufacturer id in 31..24 */
+	uint32_t cmd1_polls;
+	uint32_t rate_hz;          /* the uSDHC root clock used (given or assumed) */
+	uint32_t ident_hz;         /* the SD clocks it gave */
+	uint32_t transfer_hz;
+};
+
+_Static_assert(sizeof(struct bs2_count_report) == 68, "bs2_count_report layout");
+_Static_assert(offsetof(struct bs2_count_report, cid0) == 48, "bs2_count_report layout");
+
+uint32_t bs2_count_run(uintptr_t usdhc, uint32_t rate_hz, uint32_t sector, uint32_t requested,
+		       struct bs2_count_report *out);
+/* The way back on the card a bs2_count_run that returned BS2_COUNT_BOOT left
+ * selected: the console's request before the jump. */
+uint32_t bs2_count_back(uintptr_t usdhc, uint32_t rate_hz, struct bs2_count_report *out);
+const char *bs2_count_stage_name(uint32_t stage);
+/* Called by the crate between polls; the C side busy-waits. */
+void bs2_udelay(uint32_t us);
+
 #endif /* BOOT_STAGE2_H */

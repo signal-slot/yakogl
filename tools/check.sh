@@ -4652,6 +4652,18 @@ zephyr_direct_images() {
     echo "the AM62P loader has no linked payload"
     return 1
   }
+  # The Verdin iMX95's (docs/notes/imx95-direct-boot.md, section 5): BL33 at
+  # 0x90200000 with the counted way back (BOOT_STAGE2_COUNT) and the board
+  # glue's WDOG3 arming linked.
+  zephyr_werror_image verdin_imx95/mimx9596/a55 boot_stage2 imx95-boot-stage2 \
+    "-DBOOT_STAGE2_PAYLOAD=$v/ok-deflate-small.img" || return 1
+  local s95
+  s95=$(nm --defined-only build/zephyr-werror/imx95-boot-stage2/zephyr/zephyr.elf) || return 1
+  for s in bs2_payload_start bs2_count_run bs2_count_back yd_wdog32_arm verdin_imx95_reset; do
+    grep -q " $s\$" <<<"$s95" || { echo "the Verdin iMX95 loader does not link $s"; return 1; }
+  done
+  grep -q '^CONFIG_SRAM_BASE_ADDRESS=0x90200000$' build/zephyr-werror/imx95-boot-stage2/zephyr/.config ||
+    { echo "the Verdin iMX95 loader is not linked at 0x90200000 (BL33)"; return 1; }
 }
 # The NanoPC-T6 image (Z1): it builds, and its watchdog glue is in it: the
 # EARLY hook resets the GIC's EOI mode, the report, the feeder, and the image
@@ -4958,7 +4970,7 @@ if [ "$QUICK" -eq 0 ]; then
       zephyr_triangle_rust_image rpi_4b rpi4-triangle-rust
     scope pvr vivante drivers samples tools
     needs_pvr_fw_blob
-    step "zephyr  direct-boot images: am62p and imx8mp triangle (direct variants), boot_stage2 for both, -Werror" \
+    step "zephyr  direct-boot images: am62p and imx8mp triangle (direct variants), boot_stage2 for both and for verdin_imx95, -Werror" \
       zephyr_direct_images
     scope drivers samples
     step "zephyr  nanopc_t6 t6_hello image (Z1, the watchdog glue), -Werror on our C files" \
