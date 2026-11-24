@@ -1,5 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2016 Broadcom
+//
+// The SIG table below is transcribed from Mesa 26.2.1
+// src/broadcom/qpu/qpu_pack.c and src/broadcom/qpu/qpu_instr.h (MIT,
+// Copyright © 2016 Broadcom).
 //! codec71's signal decode of all 32 SIG field values against Mesa's
 //! `v3d71_sig_map`, and the re-encode of each signal set the map has.
 //!

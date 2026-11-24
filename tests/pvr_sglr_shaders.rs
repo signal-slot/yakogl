@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
+// SPDX-FileCopyrightText: 2014 The Android Open Source Project
+//
+// The shader templates below are rebuilt from VK-GL-CTS (dEQP) modules/gles3
+// functional sources (Apache-2.0, Copyright 2014 The Android Open Source
+// Project).
 //! The dEQP sglr shaders of texture.specification, texture.units and
 //! fbo.color / fbo.depth compile and link on the PowerVR online compiler.
 //!
