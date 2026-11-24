@@ -1,0 +1,13 @@
+# Pi 4 dEQP-GLES3 image K: synthetic console, dEQP aborted at k.c (filter k.*)
+v3d_deqp: build abababab
+deqp: case filter 'dEQP-GLES3.k.*'
+Test case 'dEQP-GLES3.k.a'..
+deqp: Pass dEQP-GLES3.k.a
+Test case 'dEQP-GLES3.k.b'..
+deqp: Pass dEQP-GLES3.k.b
+Test case 'dEQP-GLES3.k.c'..
+deqp: ResourceError dEQP-GLES3.k.c
+Test run was ABORTED!
+deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=0
+deqp: summary: 3 cases begun, 3 with a result, 0 without
+v3d_deqp: build abababab STOPPED EARLY by dEQP (complete=0; later cases never began): 3 cases, P 2 F 0 R 1 N 0 other 0

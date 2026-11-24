@@ -1,0 +1,6 @@
+# Pi 4 dEQP-GLES3 image L1: synthetic tally of a finished image
+L1.console.txt: deqp: done: 2 passed, 0 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 2 cases begun, 2 with a result, 0 without
+group                                       pass   fail    n/s  other
+l                                              2      0      0      0
+TOTAL                                          2      0      0      0
+  L1: abababab DONE, all passed: 2 cases, P 2 F 0 R 0 N 0 other 0

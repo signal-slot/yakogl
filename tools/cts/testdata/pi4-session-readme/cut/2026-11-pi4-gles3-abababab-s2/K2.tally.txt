@@ -1,0 +1,6 @@
+# Pi 4 dEQP-GLES3 image K2: synthetic tally of the cut remainder of K
+K2.console.txt: deqp: done: 2 passed, 1 failed, 0 not supported, 0 warnings, complete=1 | deqp: summary: 3 cases begun, 3 with a result, 0 without
+group                                       pass   fail    n/s  other
+k                                              2      1      0      0
+TOTAL                                          2      1      0      0
+  K2: abababab DONE: 3 cases, P 2 F 1 R 0 N 0 other 0
