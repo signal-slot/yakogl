@@ -53,7 +53,7 @@
 //!   ALU's; `can_do_mul_as_add`, `qpu_schedule.c`), and the input unpacks of
 //!   `qpu_instr.h:320-346`: on MOV (either ALU) UL/UH/IL/IH, the low or high
 //!   16 bits zero- or sign-extended (`qpu_pack.c:1361-1368`, `1559-1566`); on
-//!   the add FMOV SAT, NSAT and MAX0, a clamp of the f32 to [0, 1], [-1, 1]
+//!   FMOV (either ALU) SAT, NSAT and MAX0, a clamp of the f32 to [0, 1], [-1, 1]
 //!   and [0, +inf] (`qpu_pack.c:1370-1382`; Mesa's `fsat`, `fsat_signed`,
 //!   `fclamp_pos`, `nir_to_vir.c:1863-1895`). MOV sets Z as 4.2's MOV does
 //!   (with no unpack; with one, no flag is described), FMOV Z and N as 4.2's
@@ -327,6 +327,18 @@ pub(super) fn mul_op(m: &mut Machine, a: &Alu71, lowered: &Alu) -> R<Option<Comp
             let mut c = Computed::new(false);
             for l in 0..LANES {
                 c.vals[l] = int_unpack(x[l], u, &what)?;
+            }
+            Ok(Some(c))
+        }
+        /* the clamps of the FMOV's f32 unpack, on the mul unit as on the add
+         * (Mesa emits fsat on either, qpu_pack.c's v3d71 FMOV packing) */
+        MulOp71::Fmov if matches!(u, Unpack71::Sat | Unpack71::Nsat | Unpack71::Max0) => {
+            let x = src(m, Mux::R2, &what)?;
+            let mut c = Computed::new(true);
+            for l in 0..LANES {
+                let v = float_unpack(x[l], u, &what)?;
+                c.vals[l] = v;
+                c.flags[l] = FlagVals { z: Some(fl(v) == 0.0), n: Some(fl(v) < 0.0), c: None };
             }
             Ok(Some(c))
         }

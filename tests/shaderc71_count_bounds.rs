@@ -55,11 +55,14 @@ const CORPUS_PROGRAMS: usize = 1090;
 // The pins, measured at b953cc96 (2026-11-22) with this file's cargo
 // command: the sums over es100 (12973 words, 1502 threads, 0 programs over
 // 2x) and qpu_corpus_71 (107796 words, 10408 threads, 164 over 2x).
+// Lowered with the fsat / fclamp_pos FMOV unpacks and the signal-aware
+// interleave order (2026-11-23): es100 12918 words, qpu_corpus_71 107117
+// (fs 40246 -> 39567); threads and the over-2x count unchanged.
 // ---------------------------------------------------------------------------
 
 /// The total words of the fs, vs and cs of every program both sets compile
 /// at 7.1.
-const COUNT_CEILING: usize = 120_769;
+const COUNT_CEILING: usize = 120_035;
 /// The sum of those programs' thread counts (fs + vs + cs each).
 const THREAD_FLOOR: usize = 11_910;
 /// The programs whose comparable total is more than 2x Mesa 7.1's.
