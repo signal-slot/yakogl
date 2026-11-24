@@ -164,6 +164,12 @@ unexplained-shader-single-case	dEQP-GLES3.functional.shaders.constant_expression
 unexplained-shader-single-case	dEQP-GLES3.functional.shaders.conversions.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
 unexplained-shader-single-case	dEQP-GLES3.functional.shaders.precision.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
 unexplained-shader-single-case	dEQP-GLES3.functional.shaders.random.*	unexplained: single shaders failures (constant_expressions builtin_functions.common, conversions matrix_combine, precision int highp_div, random basic_expression / scalar_conversion)
+# Entries 51-132, before the board has run them: only groups whose cause a repository document names. Each title cites the
+# document; a group no document explains stays on the 'unexplained' lines below.
+rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.mipmap.3d.*	RC18 wrap R: the 3D mipmap cases set GL_TEXTURE_WRAP_R, which the GC7000UL back end sends from S (docs/notes/gc-texture-swizzle-wrap.md sections 1 and 7; docs/es3-cts-failures.md RC18)
+rc18-swizzle-wrap-r	dEQP-GLES3.functional.texture.vertex.3d.*	RC18 wrap R: texture.vertex.3d sets GL_TEXTURE_WRAP_R, which the GC7000UL back end sends from S (docs/notes/gc-texture-swizzle-wrap.md section 7; docs/es3-cts-failures.md RC18)
+gc-ubo-const-limit	dEQP-GLES3.functional.ubo.single_nested_struct_array.*_instance_array_both	GC7000UL 320 constant registers: 368 needed, fixed on the host by reading block members with load, board run open (docs/notes/gc-ubo-const-limit.md sections 1 and 7)
+rc13-shader-compiler	dEQP-GLES3.functional.uniform_api.random.21	RC13 shader compiler refusals (docs/es3-cts-failures.md RC13: GC7000UL library refuses uniform_api.random.21 and .83)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.specification.*	unexplained: texture.specification, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.wrap.*	unexplained: texture.wrap, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
 unexplained-texture-no-record	dEQP-GLES3.functional.texture.filtering.*	unexplained: texture.filtering, no board record (host verdicts are HOST-ONLY render verdicts, hgc4 README)
