@@ -177,10 +177,23 @@ the runner asks the board over ssh, as it does after every run
 - No answer within 180 s: no sign of Linux. 6 or 10 stays the exit, and the
   board needs `T6_HAND`.
 
+The tools do not wait their whole time for a login that cannot come (issue
+#11943: the run of record `20261124-185856-t6-uboot-go` ended 574 s after
+the reboot command, with Linux up after about 133 s). While its tool
+listens, the runner asks the board for its boot_id every 5 s
+(`prompt-lib.sh`, `reboot_and_wait_tool`), and on a new one it makes a file
+the tool got as its last argument. A wait for the autoboot line or for
+Linux's login ends when that file is there and the UART has been silent for
+30 s. A UART that still delivers bytes is read to the login as before. The
+exit codes do not change: 6 and 10 as above, and 12 when it was the autoboot
+line that never came (the board booted Linux without the line reaching the
+tool; nothing was written).
+
 The record shows the hole: when a wait for the login ends without it, the
 tool closes `uart.log` with one line that starts with `####` and gives the
 time and the byte offset of the last byte read (the times are those of
-`typed.log`, which says the same). `image.log`, the verdict's input, keeps
+`typed.log`, which says the same), and whether the wait ran its whole time
+or ended on the runner's word. `image.log`, the verdict's input, keeps
 only the bytes read. The Zephyr part of the record is read before the
 kernel starts, so the verdict does not depend on the stop.
 

@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """Start a Zephyr image on the NanoPC-T6 from its U-Boot prompt.
 
-    prompt-go.py run TTY RECORD_DIR NAME SIZE CRC PROBE IMAGE_WAIT
+    prompt-go.py run TTY RECORD_DIR NAME SIZE CRC PROBE IMAGE_WAIT [BACK]
         Opens the board's debug UART and waits, writing nothing, for
         U-Boot's autoboot line (the caller reboots the board: prompt-go.sh).
         At that line one space, and at the prompt one command at a time,
@@ -29,6 +29,9 @@
         answers.txt, as prompt-reads.py's (a wait for Linux's login that
         ends without it closes uart.log with a "####" line that says where
         the stream went silent; image.log keeps only the bytes read).
+        BACK is prompt-reads.py's: the file the caller makes when Armbian
+        answers over ssh with a new boot_id, which ends a wait for the
+        autoboot line or for Linux's login on a UART silent for 30 s.
     prompt-go.py plan NAME SIZE CRC
         Prints the commands and what each answer must be, nothing else.
     prompt-go.py --self-test
@@ -50,7 +53,9 @@ can stop its stream for good in the middle of the kernel's boot output
 (issue #11874), and a login printed after that is never read. So 6 and 10
 below mean "no Linux login on the UART"; prompt-go.sh then asks the board
 over ssh, and only when that finds no new boot either does a 6 or a 10 stay
-its exit (prompt-lib.sh, exit_when_back).
+its exit (prompt-lib.sh, exit_when_back). With BACK the same answer over
+ssh also ends the wait early (issue #11943): 6, 10 and 12 below are then
+given as soon as the UART has been silent for 30 s.
 
 Exit: 0 the image ran, its verdict is PASS and Linux's login came back. 2
 usage. 12 no autoboot line in time (nothing written; not 3, which
@@ -165,13 +170,14 @@ def judge(probe, log, out):
     return r.returncode, lines[-1] if lines else ""
 
 
-def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=180, gap=0.003, scale=1.0):
+def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=180, gap=0.003, scale=1.0,
+        back=None):
     os.makedirs(rec, exist_ok=True)
     ok = go_allowed(name, size)
     with open(os.path.join(rec, "uart.log"), "wb") as raw, \
             open(os.path.join(rec, "typed.log"), "w") as typed, \
             open(os.path.join(rec, "answers.txt"), "w") as ans:
-        con = P.Console(fd, raw, typed, gap, tool="prompt-go")
+        con = P.Console(fd, raw, typed, gap, tool="prompt-go", back=back, quiet=30 * scale)
 
         def say(msg):
             con.log(msg)
@@ -183,8 +189,8 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
 
         try:
             say("listening, nothing written (waiting up to %d s for the autoboot line)" % boot_wait)
-            if not con.wait_for(P.AUTOBOOT, boot_wait):
-                raise P.Stop(12, "no autoboot line in %d s after the reboot: nothing was written" % boot_wait)
+            if not con.wait_for(P.AUTOBOOT, boot_wait, back=True):
+                raise P.Stop(12, P.NO_AUTOBOOT_BACK if con.told else P.NO_AUTOBOOT % boot_wait)
             con.armed = True
             con.buf = b""
             con.write(b" ")
@@ -205,7 +211,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
                 con.armed = False
                 con.buf = b""
                 if not con.wait_login(login_wait):
-                    raise P.Stop(6, "reset entered after the refusal, no Linux login on the UART in %d s" % login_wait)
+                    raise P.Stop(6, "reset entered after the refusal, no Linux login on the UART in %d s" % con.waited)
                 say("STOP (8): refused before go, reset entered, Linux's login came back")
                 return 8
             go = commands(name, size)[-1]
@@ -229,7 +235,7 @@ def run(fd, rec, name, size, crc, probe, image_wait, boot_wait=240, login_wait=1
                 # Not "the board needs a hand": the UART may have stopped in
                 # the kernel's output; prompt-go.sh asks the board over ssh.
                 say("STOP (10): the image started, no Linux login on the UART in %d s (uart.log's last line "
-                    "says where the stream went silent)" % (image_wait + login_wait))
+                    "says where the stream went silent)" % con.waited)
                 return 10
             if vrc != 0:
                 say("STOP (11): Linux's login came back, the verdict is not PASS (verdict.txt)")
@@ -335,7 +341,9 @@ def self_test():
     check = P.Checks(self_test)
     name, size, crc = "t6_hello.bin", 0x2a5c0, 0x1b2c3d4e
 
-    def case(how="ok", lines=None):
+    def case(how="ok", lines=None, back=False):
+        """back: the runner's file (Armbian answers over ssh with a new
+        boot_id) is there from the start."""
         master, slave = pty.openpty()
         a = termios.tcgetattr(slave)
         a[0] = a[1] = a[3] = 0
@@ -346,8 +354,12 @@ def self_test():
             out = sys.stdout
             sys.stdout = open(os.devnull, "w")
             try:
+                flag = os.path.join(d, "linux-back")
+                if back:
+                    open(flag, "w").close()
                 fake.start()
-                rc = run(slave, d, name, size, crc, "t6_hello", 1, boot_wait=3, login_wait=2, gap=0, scale=0.03)
+                rc = run(slave, d, name, size, crc, "t6_hello", 1, boot_wait=3, login_wait=2, gap=0, scale=0.03,
+                         back=flag if back else None)
             finally:
                 sys.stdout.close()
                 sys.stdout = out
@@ -397,8 +409,16 @@ def self_test():
           "refused, kernel stop: exit 6, nothing written after reset, uart.log says where the hole is (rc %d)" % rc)
 
     # 2b. No autoboot line after the reboot: nothing written, its own code.
-    rc, f, _ = case("noautoboot")
+    rc, f, files = case("noautoboot")
     check(rc == 12 and f.got == b"", "no autoboot line: exit 12, nothing written (rc %d, %r)" % (rc, f.got))
+    check(b"STOP (12): no autoboot line in 3 s after the reboot" in files.get("typed.log", b""),
+          "no autoboot line: typed.log says the whole wait passed")
+
+    # 2c. The same when ssh sees Linux (issue #11943): the wait for the line
+    # ends once the UART is silent, and the stop says so.
+    rc, f, files = case("noautoboot", back=True)
+    check(rc == 12 and f.got == b"" and b"STOP (12): " + P.NO_AUTOBOOT_BACK.encode() in files.get("typed.log", b""),
+          "no autoboot line, ssh sees Linux: exit 12, nothing written, the stop names both witnesses (rc %d)" % rc)
 
     # 3. The prompt lost after ext4load: nothing more is typed, no go, no reset.
     rc, f, _ = case("lost")
@@ -436,6 +456,39 @@ def self_test():
     check(b"STOP (10): the image started, no Linux login on the UART" in typed and b"needs a hand" not in typed
           and b"no Linux login on the UART: no byte was read after" in typed,
           "kernel stop: typed.log says no login on the UART and where it went silent, not 'needs a hand'")
+    check(b"because the runner saw Armbian" not in files.get("uart.log", b""),
+          "kernel stop: no word of ssh without the runner's file")
+
+    # 6c. The same with the runner's file (issue #11943): Armbian answers over
+    # ssh, so the wait ends once the UART has been silent for a while, not
+    # after the image's and the login's whole time. Still exit 10, the
+    # verdict taken, one '####' line at the hole's byte; the line says why
+    # the wait ended and typed.log gives the time really waited.
+    rc, f, files = case("ok-kstop", back=True)
+    typed = files.get("typed.log", b"")
+    check(rc == 10 and f.entered == cmds and f.shell == b""
+          and files.get("verdict.txt", b"").rstrip().endswith(b"VERDICT t6_hello PASS") and hole(files),
+          "kernel stop, ssh sees Linux: exit 10, the verdict PASS taken, the hole said (rc %d)" % rc)
+    check(b"because the runner saw Armbian over ssh with a new boot_id while the UART was silent"
+          in files.get("uart.log", b""),
+          "kernel stop, ssh sees Linux: uart.log's last line says why the wait ended")
+    w = re.search(rb"STOP \(10\): the image started, no Linux login on the UART in (\d+) s", typed)
+    check(w is not None and int(w.group(1)) < 3,
+          "kernel stop, ssh sees Linux: typed.log gives the time waited, under the whole 3 s (%r)"
+          % (w.group(0) if w else None))
+
+    # 6d. A refusal, reset, the stream stops, ssh sees Linux: exit 6 the same way.
+    rc, f, files = case("missing-kstop", back=True)
+    check(rc == 6 and f.entered == cmds[:1] + ["reset"] and f.shell == b"" and hole(files)
+          and b"because the runner saw Armbian" in files.get("uart.log", b""),
+          "refused, kernel stop, ssh sees Linux: exit 6, the hole said with its reason (rc %d)" % rc)
+
+    # 6e. The runner's file alone ends nothing: with it there from the start
+    # and the UART alive, the image's record is whole and the login is read.
+    rc, f, files = case(back=True)
+    check(rc == 0 and files.get("verdict.txt", b"").rstrip().endswith(b"VERDICT t6_hello PASS")
+          and b"####" not in files.get("uart.log", b"####"),
+          "ssh sees Linux, the UART alive: exit 0, verdict PASS, no line about a hole (rc %d)" % rc)
 
     # 7. What may be typed.
     ok = go_allowed(name, size)
@@ -486,15 +539,16 @@ def main(argv):
             return 2
         print(plan(argv[2], int(argv[3]), int(argv[4], 16)))
         return 0
-    if len(argv) == 9 and argv[1] == "run":
-        tty, rec, name, size, crc, probe, wait = argv[2:]
+    if len(argv) in (9, 10) and argv[1] == "run":
+        tty, rec, name, size, crc, probe, wait = argv[2:9]
+        back = argv[9] if len(argv) == 10 else None
         why = args_ok(name, size, crc)
         if why or probe not in TYPES or not wait.isdigit():
             sys.stderr.write("prompt-go.py: %s\n" % (why or "PROBE or IMAGE_WAIT is wrong"))
             return 2
         fd = P.open_tty(tty)
         try:
-            return run(fd, rec, name, int(size), int(crc, 16), probe, int(wait))
+            return run(fd, rec, name, int(size), int(crc, 16), probe, int(wait), back=back)
         finally:
             os.close(fd)
     sys.stderr.write(__doc__)

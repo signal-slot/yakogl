@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Signal Slot, Inc.
 """The read-only facts of the NanoPC-T6 at its U-Boot prompt.
 
-    prompt-reads.py run TTY RECORD_DIR
+    prompt-reads.py run TTY RECORD_DIR [BACK]
         Opens the board's debug UART (UART2, 1500000 8N1) and waits, writing
         nothing, for U-Boot's "Hit any key to stop autoboot". The caller
         reboots the board (prompt-reads.sh does). At that line it sends one
@@ -15,6 +15,10 @@
         A wait for Linux's login that ends without it closes uart.log with
         one line that starts with "####" and says where the stream went
         silent: what the board printed after that point is not recorded.
+        BACK is a file the caller makes when Armbian answers over ssh with
+        a new boot_id. A wait for the autoboot line or for Linux's login
+        then ends once the UART has also been silent for 30 s, not at its
+        full time: what it waits for cannot come any more (issue #11943).
     prompt-reads.py plan
         Prints the commands, nothing else.
     prompt-reads.py --self-test
@@ -52,12 +56,14 @@ Three steps depend on what was read before them:
     not be the one that causes a probe.
 
 Exit: 0 done (every command answered, `reset` entered, the Linux login seen
-again). 12 no autoboot line in time (nothing written; not 3, which
-prompt-reads.sh keeps for "refused before the reboot"). 4 the autoboot was
+again). 12 no autoboot line in time, or until BACK on a silent UART
+(nothing written; not 3, which prompt-reads.sh keeps for "refused before
+the reboot"). 4 the autoboot was
 missed (one space written, Linux booted). 5 stopped at the prompt (an echo
 that never matched, or a command without an answer): the board stays at the
 U-Boot prompt until someone resets it. 6 `reset` entered but no Linux login
-on the UART in time (the UART alone cannot say Linux is not back:
+on the UART in time, or until BACK on a silent UART (the UART alone cannot
+say Linux is not back:
 prompt-reads.sh asks the board over ssh). 7 U-Boot left the prompt during a command (a fault resets the
 board) and started Linux; nothing was written after that command. 2 usage.
 """
@@ -72,6 +78,10 @@ import threading
 import time
 
 AUTOBOOT = b"Hit any key to stop autoboot"
+# Why a run stops with 12 (prompt-go.py's too).
+NO_AUTOBOOT = "no autoboot line in %d s after the reboot: nothing was written"
+NO_AUTOBOOT_BACK = ("no autoboot line, the UART is silent and Armbian answers over ssh with a new boot_id: "
+                    "the board booted without the line reaching this tool, nothing was written")
 KERNEL = b"Starting kernel"
 LOGIN = b"login:"
 PROMPT = b"=> "
@@ -213,8 +223,14 @@ class Stop(Exception):
 class Console:
     """The UART: every byte read goes to uart.log, every write to typed.log."""
 
-    def __init__(self, fd, raw, typed, gap=0.003, tool="prompt-reads"):
+    def __init__(self, fd, raw, typed, gap=0.003, tool="prompt-reads", back=None, quiet=30.0):
         self.fd, self.raw, self.typed, self.gap, self.tool = fd, raw, typed, gap, tool
+        # back: a file the shell runner makes when Armbian answers over ssh
+        # with a new boot_id (None: no such witness); quiet: how long the
+        # UART must have been silent then for a wait to end on that word.
+        self.back, self.quiet = back, quiet
+        self.told = False         # the last wait_for ended on the runner's word
+        self.waited = 0.0         # how long the last wait_login waited
         self.buf = b""
         self.kernel = False       # "Starting kernel" was read: never write again
         self.armed = False        # the autoboot line was read
@@ -258,13 +274,26 @@ class Console:
         t = self.buf
         return t.endswith(PROMPT) and (len(t) == len(PROMPT) or t[-len(PROMPT) - 1:-len(PROMPT)] in b"\r\n")
 
-    def wait_for(self, needle, timeout):
+    def wait_for(self, needle, timeout, back=False):
+        """Reads until needle; False when timeout seconds passed without it.
+
+        back: the wait is for something that cannot come once Linux runs
+        again (the autoboot line, Linux's login itself). It then also ends,
+        False and with self.told set, when the runner's file says Armbian
+        answers over ssh with a new boot_id and the UART has been silent
+        for self.quiet seconds (issue #11943). Both are needed: a stream
+        that still runs brings its bytes by itself, and a stopped one
+        would keep the run waiting for minutes after Linux is back."""
+        self.told = False
         end = time.monotonic() + timeout
         while needle not in self.buf:
-            left = end - time.monotonic()
-            if left <= 0:
+            now = time.monotonic()
+            if now >= end:
                 return False
-            self.read(min(left, 0.2))
+            if back and self.back and now - self.last >= self.quiet and os.path.exists(self.back):
+                self.told = True
+                return False
+            self.read(min(end - now, 0.2))
         return True
 
     def wait_login(self, timeout):
@@ -277,13 +306,26 @@ class Console:
         that starts with "####" and says where the stream went silent (the
         hole in the record), and says the same in typed.log. Whether Linux
         is back is decided by the shell runner around the tool, over ssh
-        (prompt-lib.sh, exit_when_back: a new boot_id)."""
-        if self.wait_for(LOGIN, timeout):
-            return True
+        (prompt-lib.sh, exit_when_back: a new boot_id).
+
+        The runner tells the tool as soon as it sees that (wait_for's
+        back), so a silent UART does not hold the run for the whole
+        timeout after Linux is back. The line in uart.log then says that
+        this is why the wait ended."""
+        start = time.monotonic()
+        came = self.wait_for(LOGIN, timeout, back=True)
         now = time.monotonic()
-        hole = ("no byte was read after %.3f s (byte %d of uart.log); the wait for Linux's login ended at %.3f s, "
-                "%.1f s later: the UART stream stopped or the board printed nothing, and what it printed after this "
-                "point is not in this record" % (self.last - self.t0, self.nread, now - self.t0, now - self.last))
+        self.waited = now - start
+        if came:
+            return True
+        hole = "no byte was read after %.3f s (byte %d of uart.log); the wait for Linux's login ended at %.3f s, " \
+               "%.1f s later" % (self.last - self.t0, self.nread, now - self.t0, now - self.last)
+        if self.told:
+            hole += (", because the runner saw Armbian over ssh with a new boot_id while the UART was silent: "
+                     "what the board printed after this point is not in this record")
+        else:
+            hole += (": the UART stream stopped or the board printed nothing, and what it printed after this "
+                     "point is not in this record")
         self.raw.write(b"\r\n#### %s: %s\r\n" % (self.tool.encode(), hole.encode()))
         self.raw.flush()
         self.log("no Linux login on the UART: " + hole)
@@ -349,13 +391,13 @@ def enter(con, cmd, timeout, ok=allowed, wait=True):
     return out.lstrip("\n")
 
 
-def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30):
+def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30, back=None, quiet=30.0):
     os.makedirs(rec, exist_ok=True)
     answers = {}
     with open(os.path.join(rec, "uart.log"), "wb") as raw, \
             open(os.path.join(rec, "typed.log"), "w") as typed, \
             open(os.path.join(rec, "answers.txt"), "w") as ans:
-        con = Console(fd, raw, typed, gap)
+        con = Console(fd, raw, typed, gap, back=back, quiet=quiet)
 
         def say(msg):
             con.log(msg)
@@ -369,8 +411,8 @@ def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30):
 
         try:
             say("listening, nothing written (waiting up to %d s for the autoboot line)" % boot_wait)
-            if not con.wait_for(AUTOBOOT, boot_wait):
-                raise Stop(12, "no autoboot line in %d s after the reboot: nothing was written" % boot_wait)
+            if not con.wait_for(AUTOBOOT, boot_wait, back=True):
+                raise Stop(12, NO_AUTOBOOT_BACK if con.told else NO_AUTOBOOT % boot_wait)
             con.armed = True
             con.buf = b""
             con.write(b" ")
@@ -392,7 +434,7 @@ def run(fd, rec, boot_wait=240, login_wait=180, gap=0.003, cmd_wait=30):
             con.buf = b""
             t = time.monotonic()
             if not con.wait_login(login_wait):
-                raise Stop(6, "reset entered, no Linux login on the UART in %d s" % login_wait)
+                raise Stop(6, "reset entered, no Linux login on the UART in %d s" % con.waited)
             say("done: %d commands, the Linux login %d s after reset" % (len(answers) - 1, time.monotonic() - t))
             return 0
         except Stop as s:
@@ -583,7 +625,9 @@ def self_test():
     import tempfile
     check = Checks(self_test)
 
-    def case(**kw):
+    def case(back=False, **kw):
+        """back: the runner's file (Armbian answers over ssh with a new
+        boot_id) is there from the start."""
         master, slave = pty.openpty()
         a = termios.tcgetattr(slave)
         a[0] = a[1] = a[3] = 0
@@ -594,8 +638,12 @@ def self_test():
             out = sys.stdout
             sys.stdout = open(os.devnull, "w")
             try:
+                flag = os.path.join(d, "linux-back")
+                if back:
+                    open(flag, "w").close()
                 fake.start()
-                rc = run(slave, d, boot_wait=3, login_wait=3, gap=0, cmd_wait=2)
+                rc = run(slave, d, boot_wait=3, login_wait=3, gap=0, cmd_wait=2,
+                         back=flag if back else None, quiet=1.0)
             finally:
                 sys.stdout.close()
                 sys.stdout = out
@@ -635,6 +683,32 @@ def self_test():
           "kernel stop: uart.log ends with one '####' line at the hole's byte (%r)" % log[-160:])
     check(b"no Linux login on the UART: no byte was read after" in files["typed.log"],
           "kernel stop: typed.log says the same")
+    check(b"because the runner saw Armbian" not in log, "kernel stop: no word of ssh without the runner's file")
+
+    # 1c. The same with the runner's file (Armbian answers over ssh, issue
+    # #11943): the wait ends once the UART has been silent for quiet, still
+    # exit 6 and one '####' line at the hole's byte, and the line says why.
+    rc, f, files = case(kernel_stop=True, back=True)
+    log = files["uart.log"]
+    at = log.find(b"\r\n#### prompt-reads: no byte was read after ")
+    m = re.search(rb"\(byte (\d+) of uart\.log\)", log[at:])
+    check(rc == 6 and f.entered == want and f.shell == b"",
+          "kernel stop, ssh sees Linux: exit 6, nothing written after reset (rc %d, %r)" % (rc, f.shell))
+    check(at > 0 and log.endswith(b"not in this record\r\n") and log.count(b"####") == 1
+          and m is not None and int(m.group(1)) == at and log[:at].endswith(b"[    0.0")
+          and b"because the runner saw Armbian over ssh with a new boot_id while the UART was silent" in log[at:],
+          "kernel stop, ssh sees Linux: one '####' line at the hole's byte, and it says why the wait ended (%r)"
+          % log[-200:])
+    w = re.search(rb"no Linux login on the UART in (\d+) s", files["typed.log"])
+    check(w is not None and int(w.group(1)) < 3,
+          "kernel stop, ssh sees Linux: typed.log gives the time waited, under the whole login wait (%r)"
+          % (w.group(0) if w else None))
+
+    # 1d. The runner's file alone ends nothing: with it there from the start
+    # and the UART alive, the run is the whole run and the login is read.
+    rc, f, files = case(back=True)
+    check(rc == 0 and f.entered == want and b"####" not in files["uart.log"],
+          "ssh sees Linux, the UART alive: exit 0, the login read, no line about a hole (rc %d)" % rc)
 
     # 2. PD_GPU on: the four QoS blocks are read, five words each.
     rc, f, _ = case(words=PMU_ON)
@@ -659,8 +733,16 @@ def self_test():
     check(rc == 4 and f.got == b" " and f.entered == [], "missed: exit 4, one space written in all (%r)" % f.got)
 
     # 5. No autoboot line: nothing is written.
-    rc, f, _ = case(mode="noautoboot")
+    rc, f, files = case(mode="noautoboot")
     check(rc == 12 and f.got == b"", "no autoboot line: exit 12, nothing written (%r)" % f.got)
+    check(b"STOP (12): no autoboot line in 3 s after the reboot" in files["typed.log"],
+          "no autoboot line: typed.log says the whole wait passed")
+
+    # 5b. The same when ssh sees Linux: the wait for the line ends once the
+    # UART is silent, and the stop says so.
+    rc, f, files = case(mode="noautoboot", back=True)
+    check(rc == 12 and f.got == b"" and b"STOP (12): " + NO_AUTOBOOT_BACK.encode() in files["typed.log"],
+          "no autoboot line, ssh sees Linux: exit 12, nothing written, the stop names both witnesses (%r)" % f.got)
 
     # 6. One damaged line: dropped with ctrl-c, typed again, entered once.
     rc, f, _ = case(garble=1)
@@ -722,10 +804,10 @@ def main(argv):
         print("# then, if dm tree shows the pmic probed: pmic list; pmic dev <its name>; pmic dump")
         print("reset")
         return 0
-    if len(argv) == 4 and argv[1] == "run":
+    if len(argv) in (4, 5) and argv[1] == "run":
         fd = open_tty(argv[2])
         try:
-            return run(fd, argv[3])
+            return run(fd, argv[3], back=argv[4] if len(argv) == 5 else None)
         finally:
             os.close(fd)
     sys.stderr.write(__doc__)

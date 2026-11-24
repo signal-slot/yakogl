@@ -235,7 +235,7 @@ rec "probe $PROBE; the image ends by $image_wait s after go at the latest"
 rec "board boot_id $old_boot, up $(fresh_fact uptime) s; hand at the power switch: $T6_HAND"
 uart_record
 
-python3 -I "$PY" run "$T6_UART" "$REC" "$NAME" "$size" "$crc" "$PROBE" "$image_wait" >"$tmp/py.out" 2>&1 &
+python3 -I "$PY" run "$T6_UART" "$REC" "$NAME" "$size" "$crc" "$PROBE" "$image_wait" "$tmp/linux-back" >"$tmp/py.out" 2>&1 &
 py_pid=$!
 wait_listening
 reboot_and_wait_tool
