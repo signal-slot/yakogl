@@ -794,6 +794,24 @@ after its 5 V came on, and the chain does not wait for it (a fixed mode
 needs no EDID). The read-backs after the hold must read `HPD 1` on both
 routes: that line proves a connected display.
 
+A GL image on the board layer (the triangle, glmark2, Slint) proves the same
+at the end of its run: after `board_finish()`'s hold the board layer prints
+the section 5 read-backs under the tag `board`, with the probes' own lines
+(`t6_display_read_back`, `t6_display_record.c`), on every route. With
+`T6_ROUTE=uboot` `t6-verdict.sh triangle` requires them, `HPD 1` among them,
+and takes `HPD 0` or 1 on the chain's VIDEO line as for `t6_cold`; on the
+kexec route the chain's `HPD 1` stays required and the read-backs are judged
+when the record has them. The hold is the board layer's
+`CONFIG_YAKOGL_BOARD_HOLD_S` (60 s by default, inside the 300 s lifetime of
+`CONFIG_YAKOGL_BOARD_LIFETIME_S`). The run's own work takes a few seconds,
+so with 60 s the picture is up until about 62 s after the 5 V came on, then
+the record screen over it until about 82 s; the capture unit's first picture
+came 40 to 68 s after the switch (2026-11-24), so a run for it is built with
+90 s, which leaves the picture up until about 92 s:
+
+    west build -p always -b nanopc_t6 -d build/triangle-uboot yakogl/examples/triangle \
+      -- -DCONFIG_YAKOGL_BOARD_NANOPC_T6_COLD_1920X1080=y -DCONFIG_YAKOGL_BOARD_HOLD_S=90
+
 What the PHY PLL needs (`hdptx.c:900-970`): the PLL output is 5x the TMDS
 character rate divided out of a VCO of 2.0-4.0 GHz, `VCO = 24 MHz x M`
 (P = refdiv = 1), `S` even or 1, M 20-255. For 148.5 MHz: 742.5 MHz x 4 =
@@ -1005,7 +1023,8 @@ library keeps the console's last lines in a ring
 shown last, the last `yk-record:` line at the bottom. It draws into the
 buffer the VOP already scans, so it writes no register. Three ends draw it:
 
-- `board_reset()`, after `board_finish()`'s hold: the record stays for
+- `board_reset()`, after `board_finish()`'s hold and the section 5
+  read-backs (section 3, the U-Boot route): the record stays for
   `CONFIG_YAKOGL_BOARD_RECORD_SCREEN_S` (20 s), then the reset. A run that
   failed before its first frame shows the window it took, which is the adopt;
 - the watchdog's feeder when it stops for no progress or at the lifetime's
