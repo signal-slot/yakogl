@@ -2548,12 +2548,12 @@ step "test    $MALI_CONFIG (tests/mali_{blend_states,draw_oom,fragment_random,cu
 # #[ignore]d and one test of the file pins its exact refusal text. The files
 # therefore run as-is, not through tests_as_declared (which wants no ignored
 # test); tests/mali_ref_selftest.rs is that shared module's own test.
-step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uniarray,mixprec,colourpair,loops,misc}.rs, mali_ref_selftest.rs)" \
+step "test    $MALI_CONFIG (tests/mali_deqp_{intval,varylink,constop,unitype,uniarray,mixprec,colourpair,loops,misc,varydead}.rs, mali_ref_selftest.rs)" \
   cargo_test --no-fail-fast --no-default-features --features "$MALI_CONFIG" \
     --test mali_deqp_intval --test mali_deqp_varylink --test mali_deqp_constop \
     --test mali_deqp_unitype --test mali_deqp_uniarray --test mali_deqp_mixprec \
     --test mali_deqp_colourpair --test mali_deqp_loops --test mali_deqp_misc \
-    --test mali_ref_selftest
+    --test mali_deqp_varydead --test mali_ref_selftest
 # The corpus differential (tools/mali/corpus_diff.py, issue #11252): our side,
 # tests/mali_corpus_diff.rs, checks itself on committed references; then the
 # tool's self-test without Mesa or the CTS: the pairing of single shaders and

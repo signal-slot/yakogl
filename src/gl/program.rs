@@ -1863,7 +1863,8 @@ fn link_attrib_layout(
             write_log(
                 log,
                 format_args!(
-                    "link error: the vertex shader's attributes need their layout at link, which this shader compiler does not do"
+                    "{}the vertex shader's attributes need their layout at link, which this shader compiler does not do",
+                    shader::REFUSAL
                 ),
             );
             return Err(());
@@ -1880,13 +1881,7 @@ fn link_attrib_layout(
     // and `out` live across the call; the log buffer is INFO_LOG_SIZE bytes.
     let rc = unsafe { relink(vs_src, &map, &p.rfs, &mut out, clog.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE) };
     if rc != 0 {
-        write_log(
-            log,
-            format_args!(
-                "link error: the vertex shader with the program's attribute locations: {}",
-                Bytes(&clog[..clog.iter().position(|&b| b == 0).unwrap_or(clog.len())])
-            ),
-        );
+        vs_build_failed(log, rc, "the vertex shader with the program's attribute locations", &clog);
         return Err(());
     }
     /* ES 2.0 2.10.4: more active locations than GL_MAX_VERTEX_ATTRIBS is a
@@ -1938,16 +1933,18 @@ fn link_vs_for_fs(p: &mut GlProgram, vs_src: *const c_char, log: &mut [u8; INFO_
             Ok(())
         }
         _ => {
-            write_log(
-                log,
-                format_args!(
-                    "link error: the vertex shader for the program's fragment shader: {}",
-                    Bytes(&clog[..clog.iter().position(|&b| b == 0).unwrap_or(clog.len())])
-                ),
-            );
+            vs_build_failed(log, rc, "the vertex shader for the program's fragment shader", &clog);
             Err(())
         }
     }
+}
+
+/// A vertex shader the link builds (`compile_vs_linked`) was not built, `rc`
+/// and `clog` the back end's result and log: a link error, or a refusal
+/// when the back end refused it (-ENOTSUP, [`shader::REFUSAL`]).
+fn vs_build_failed(log: &mut [u8; INFO_LOG_SIZE], rc: i32, what: &str, clog: &[u8; INFO_LOG_SIZE]) {
+    let start = if rc == -util::ENOTSUP { shader::REFUSAL } else { "link error: " };
+    write_log(log, format_args!("{start}{what}: {}", Bytes(log_text(clog))));
 }
 
 /// The active entries of a link's attribute map, in declaration order, or
@@ -2298,6 +2295,7 @@ pub(super) unsafe fn link_with(c: &mut GlContext, program: GLuint, inputs: &Link
         // INFO_LOG_SIZE bytes.
         let rc = link(&p.rvs, &mut p.rfs, log.as_mut_ptr() as *mut c_char, INFO_LOG_SIZE);
         if rc != 0 {
+            shader::mark_refusal(log, rc);
             return false;
         }
     }

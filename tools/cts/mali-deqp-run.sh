@@ -83,7 +83,8 @@
 #                not-run|wrong-lib as the detail
 #   refusals.tsv case refusal: for each case whose log holds one, the first
 #                shader or program info log in which the library refuses
-#                ("... refused this vertex shader: ..."), whitespace folded.
+#                (it starts "yakogl-refusal: ", the one form of every compile
+#                and link refusal, src/gl/shader.rs REFUSAL), whitespace folded.
 #                The exit line of chunks.tsv names only the chunk's first
 #                refusal; this file names each case's own.
 #   refusals/<label>.txt  the chunk's stdout and stderr merged in print order
@@ -239,15 +240,21 @@ def plan(tree, mustpass, a, b, casedir):
         print('%d\t%s\t%d' % (i, lab, len(cases)))
 
 
+# The start of every info log in which the library refuses a shader or a
+# program (compile, link and the link's vertex shader builds alike):
+# src/gl/shader.rs REFUSAL. A GLSL error of the shader never has it.
+REFUSAL = 'yakogl-refusal: '
+
+
 def qpa_refusal(body):
     """The first info log of a case's log in which the library refuses a
-    shader or a program, or ''. dEQP writes an info log in two forms:
-    <InfoLog> inside a <ShaderProgram>, and the <Text> of a
+    shader or a program ([REFUSAL]), or ''. dEQP writes an info log in two
+    forms: <InfoLog> inside a <ShaderProgram>, and the <Text> of a
     <Section Name="Info Log"> (the attribute-location tests)."""
     for m in re.finditer(r'<InfoLog>(.*?)</InfoLog>'
                          r'|<Section Name="Info Log"[^>]*>\s*<Text>(.*?)</Text>', body, re.S):
         text = html.unescape(m.group(1) if m.group(1) is not None else m.group(2))
-        if re.search(r'\brefused\b', text):
+        if text.lstrip().startswith(REFUSAL):
             return text
     return ''
 

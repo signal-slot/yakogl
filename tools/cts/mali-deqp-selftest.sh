@@ -7,7 +7,7 @@
 # a directory of this host, and a fake deqp-gles2 writes its .qpa from the
 # fixtures in tools/cts/testdata/mali-deqp-run/ (README.md there). It covers a
 # clean run (with two cases whose shader the library refuses, one per info-log
-# form of dEQP, kept in refusals.tsv), a crash mid-row with resume, a hang hitting the timeout, a panthor
+# form of dEQP, and one whose link it refuses, kept in refusals.tsv), a crash mid-row with resume, a hang hitting the timeout, a panthor
 # job-timeout line counted in resets, a missing "yakogl-mali: loaded" line
 # (wrong-lib), lost ssh, a commit not on the main ref refused, and --dry-run
 # making no ssh call (also bare, without --build and --out, with fakes that fail); --out equal to the raw
@@ -22,7 +22,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FIX=$HERE/testdata/mali-deqp-run
 RUN=$HERE/mali-deqp-run.sh
-EXPECT=51
+EXPECT=52
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/mali-deqp-selftest-XXXXXX")
 # The fake board's dmesg -w of the lost-ssh case is never stopped by the
 # runner (the board is gone): end every process still reading under $tmp.
@@ -110,16 +110,19 @@ check "chunks.tsv has the shared header" \
   bash -c "head -1 '$tmp/clean/slice/chunks.tsv' | grep -qxP 'row\tlabel\tcases\tstatus\tseconds\tkmsg\tresets\tssh_after\tboot_same\texit_line'"
 check "every chunk is done, 0 resets, ssh_after yes, boot_same yes" \
   bash -c "[ \"\$(awk -F'\t' 'NR > 1 { print \$2, \$3, \$4, \$7, \$8, \$9 }' '$tmp/clean/slice/chunks.tsv' | paste -sd,)\" = 'T1 6 done 0 yes yes,T2 6 done 0 yes yes,T3 5 done 0 yes yes' ]"
-check "results.tsv has its header and all 17 cases: 14 Pass, 3 Fail" \
-  bash -c "head -1 '$tmp/clean/slice/results.tsv' | grep -qxP 'case\tstatus\tdetail' && [ \$(wc -l < '$tmp/clean/slice/results.tsv') = 18 ] && [ \$(grep -cP '\tPass\t' '$tmp/clean/slice/results.tsv') = 14 ] && [ \$(grep -cP '\tFail\t' '$tmp/clean/slice/results.tsv') = 3 ]"
-check "refusals.tsv has its header and the two cases the library refused a shader of" \
-  bash -c "[ \"\$(cut -f1 '$tmp/clean/slice/refusals.tsv' | paste -sd,)\" = 'case,dEQP-GLES2.functional.flush_finish.finish,dEQP-GLES2.functional.flush_finish.flush' ] && head -1 '$tmp/clean/slice/refusals.tsv' | grep -qxP 'case\trefusal'"
+check "results.tsv has its header and all 17 cases: 13 Pass, 4 Fail" \
+  bash -c "head -1 '$tmp/clean/slice/results.tsv' | grep -qxP 'case\tstatus\tdetail' && [ \$(wc -l < '$tmp/clean/slice/results.tsv') = 18 ] && [ \$(grep -cP '\tPass\t' '$tmp/clean/slice/results.tsv') = 13 ] && [ \$(grep -cP '\tFail\t' '$tmp/clean/slice/results.tsv') = 4 ]"
+check "refusals.tsv has its header and the three cases the library refused a shader or the link of" \
+  bash -c "[ \"\$(cut -f1 '$tmp/clean/slice/refusals.tsv' | paste -sd,)\" = 'case,dEQP-GLES2.functional.flush_finish.finish,dEQP-GLES2.functional.flush_finish.flush,dEQP-GLES2.functional.flush_finish.flush_wait' ] && head -1 '$tmp/clean/slice/refusals.tsv' | grep -qxP 'case\trefusal'"
 check "the refusal is the shader's own info log, unescaped, its host and address redacted" \
   refusal_is clean dEQP-GLES2.functional.flush_finish.flush \
-  "online shaderc: the code generator refused this fragment shader: Mali(Valhall: a > b on <host> at <addr> is not lowered yet)"
+  "yakogl-refusal: online shaderc: the code generator refused this fragment shader: Mali(Valhall: a > b on <host> at <addr> is not lowered yet)"
 check "a refusal logged as the <Text> of an \"Info Log\" section is read the same way" \
   refusal_is clean dEQP-GLES2.functional.flush_finish.finish \
-  "online shaderc: the code generator refused this vertex shader: Mali(Valhall: Mesa's link on <host> is not lowered yet)"
+  "yakogl-refusal: online shaderc: the code generator refused this vertex shader: Mali(Valhall: Mesa's link on <host> is not lowered yet)"
+check "a link refusal is the program's info log, read by its form though its words have no \"refused\"" \
+  refusal_is clean dEQP-GLES2.functional.flush_finish.flush_wait \
+  "yakogl-refusal: online shaderc: a Mali link whose stages place a varying at different offsets is not lowered yet ('a') on <host>"
 check "meta.txt has the ten keys in order, the full commit and both boot_ids" \
   bash -c "[ \"\$(cut -d= -f1 '$tmp/clean/slice/meta.txt' | paste -sd' ')\" = 'commit session rows tree boot_id_before boot_id_after kernel lib started ended' ] &&
     grep -qx 'commit=$c1' '$tmp/clean/slice/meta.txt' && grep -qx 'session=smoke' '$tmp/clean/slice/meta.txt' &&
