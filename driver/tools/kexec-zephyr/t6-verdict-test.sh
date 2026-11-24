@@ -589,11 +589,15 @@ check t6_cold-uboot-held-hpd0 1 "VERDICT t6_cold FAIL (1 of $((COLD + 7)))" "$((
 # proof of a connected display is still to come)
 sed '/^t6 display: VIDEO: /s/, HPD 1$/, HPD 0/' "$D/triangle-cold-pass.uart" >"$WORK/thpd0.log"
 check triangle-video-hpd0 1 "VERDICT triangle FAIL (1 of $TRI)" "$((TRI - 1)) 0 1" triangle "$WORK/thpd0.log"
-# Still to come (issue #11873): the board record of the U-Boot route's
-# picture proof as a fixture (t6_cold-uboot-hold90-pass.uart: t6_cold at
-# 1920x1080, a 90 s hold, a 130 s lifetime, started by U-Boot's go), from a
-# run of a clean build. Until then the cases above are made from kexec
-# records.
+# the board's record of the U-Boot route's picture proof (t6_cold at
+# 1920x1080, a 90 s hold, a 130 s lifetime, started by U-Boot's go; the
+# Zephyr part of the record only). Its chain line reads HPD 0 and the line
+# after the hold HPD 1. Read as a kexec record it misses the EOImode line
+# and differs on the chain's HPD and on T6:G.
+check t6_cold-uboot-hold90-pass 0 'VERDICT t6_cold PASS' "$((COLD + 7)) 0 0" t6_cold "$D/t6_cold-uboot-hold90-pass.uart" T6_ROUTE=uboot
+check t6_cold-uboot-hold90-as-kexec 1 "VERDICT t6_cold FAIL (3 of $((COLD + 7)))" "$((COLD + 5)) 1 2" t6_cold "$D/t6_cold-uboot-hold90-pass.uart"
+sed '/^t6_cold: HPD 1 /s/^t6_cold: HPD 1 /t6_cold: HPD 0 /' "$D/t6_cold-uboot-hold90-pass.uart" >"$WORK/uboard-hold0.log"
+check t6_cold-uboot-hold90-held-hpd0 1 "VERDICT t6_cold FAIL (1 of $((COLD + 7)))" "$((COLD + 6)) 0 1" t6_cold "$WORK/uboard-hold0.log" T6_ROUTE=uboot
 
 # the progress records are not judged
 sed '/^yk-record: 594b05/d' "$D/triangle-cold-pass.uart" >"$WORK/tnoprog.log"
