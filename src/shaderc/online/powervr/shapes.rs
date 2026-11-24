@@ -354,10 +354,11 @@ pub const UMULHI: Template = Template {
 };
 
 /// `group_map(O_FSIGN)`: `ft0 = sat(x * +inf)` (1.0 for a positive x),
-/// `ft1 = -1.0` (the constant one, negated, in phase 1), a `tst` of x's bits
-/// as s32 against zero (`gez`: the sign bit is clear), and `movc` taking ft0
-/// when it is and ft1 when not. That is pco's sign, and -0.0 gives -1.0 on
-/// it where GLSL says 0.0; transcribed as pco has it.
+/// `ft1 = -1.0` (the constant one, negated, in phase 1), a `tst` of x as f32
+/// against zero (`gez`), and `movc` taking ft0 when it holds and ft1 when
+/// not. pco tests the bits as s32 (the sign bit), which gives -0.0 -> -1.0
+/// where GLSL says 0.0; an IEEE compare takes -0.0 >= 0, so -0.0 takes the
+/// `sat(x * inf)` arm +0.0 takes (a NaN takes -1.0).
 pub const FSIGN: Template = Template {
     name: "fsign",
     bitwise: false,
@@ -370,7 +371,7 @@ pub const FSIGN: Template = Template {
         Step {
             op: "tst",
             phase: PH_2_TST,
-            fields: &[("tst_op", "gez"), ("pwen", "0"), ("type", "s32"), ("p2end", "1"), ("elem", "0")],
+            fields: &[("tst_op", "gez"), ("pwen", "0"), ("type", "f32"), ("p2end", "1"), ("elem", "0")],
         },
         Step {
             op: "movc",

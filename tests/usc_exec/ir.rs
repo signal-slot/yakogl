@@ -213,9 +213,9 @@ impl Ev<'_, '_> {
                 }
                 Fneg => p ^ 0x8000_0000,
                 Fabs => p & 0x7fff_ffff,
-                /* The sign bit decides, as both compilers' sign does. */
+                /* `tst gez f32`: -0.0 >= 0, so zero of either sign gives 0. */
                 Fsign => {
-                    if (p as i32) < 0 {
+                    if f(p) < 0.0 || f(p).is_nan() {
                         fb(-1.0)
                     } else if f(p) > 0.0 {
                         fb(1.0)
