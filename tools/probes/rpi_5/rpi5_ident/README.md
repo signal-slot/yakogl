@@ -99,6 +99,16 @@ Its default end matcher already knows `rpi5_ident: done` and
 reboot. `BOARD_HOST` and `BOARD_UART` come from the leases, never from a file.
 Run it only after `rpi5_wdog` has shown that the watchdog resets the board.
 
+## Verdicts
+
+`sh tools/probes/rpi_5/rpi5_ident/verdicts.sh <console.log>` checks a run's
+console log against the board values below (the eight words, the decoded
+`V3D 7.1, 1 core(s), 12 QPUs, ...` line and the `done` end), prints one
+`rpi5_ident verdict:` line per check and `PASS` or `FAIL`. Exit 0 is done and
+every check ok, 1 no end line, 3 FAIL (a wrong or missing word, or the image's
+`FAIL`), 2 usage. `verdicts_selftest.sh` feeds it inline logs (good, FAIL,
+truncated, wrong ident); the gate runs it through `tools/check_selftests.py`.
+
 ## On the board (D2, 2026-11-19)
 
 The default image (no power or clock setup), built from `8eb2b3cf` with
