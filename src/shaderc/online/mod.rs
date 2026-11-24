@@ -108,8 +108,9 @@ pub mod codegen;
 /// only.
 #[cfg(any(test, feature = "host-test", not(feature = "report-es2")))]
 pub mod eval;
-/// The float functions the evaluator's capture computes with (no libm).
-#[cfg(any(test, feature = "host-test", not(feature = "report-es2")))]
+/// The float functions the evaluator's capture computes with (no libm), and
+/// the Mali back end's constant folds of built-ins (`mesa_fold`).
+#[cfg(any(test, feature = "host-test", not(feature = "report-es2"), feature = "gpu-mali"))]
 pub mod fmath;
 /// Float operations on constants, folded exactly (the V3D's `prepare` and the
 /// USC's `select`).
@@ -122,6 +123,14 @@ pub mod lexer;
 pub mod lodkey;
 pub mod loop_count;
 pub mod lower;
+/// The constant fold of GLSL built-ins with Mesa 26.2.1's bits
+/// (docs/notes/mali-libm-fold.md), on `fmath`; the Mali front end's -0.0
+/// rules read it (`mali/glsl.rs`). Its NIR, fp16 and `fma` folds wait for
+/// their callers (cfold CF1 in `mali/nir.rs`, constprod K4; the note's
+/// section 5).
+#[cfg(feature = "gpu-mali")]
+#[allow(dead_code, reason = "fold_nir, fold_nir_f16 and fma32 have no caller until CF1 and K4")]
+pub(crate) mod mesa_fold;
 pub mod parser;
 pub mod pp;
 pub mod precision;
