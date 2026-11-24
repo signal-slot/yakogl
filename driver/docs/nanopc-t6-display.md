@@ -767,6 +767,33 @@ for whoever reads them:
   console black reads (0,0,0) in the same unit's pictures; what the unit
   does differently for Linux's HDMI signal is not known (U16).
 
+**The picture proof on the U-Boot route** (step D9: `t6_cold` started by
+U-Boot's `go`, `driver/tools/uboot-t6/prompt-go.sh`). Measured (board,
+2026-11-24): the board comes out of a reset, so the 5 V of the USB Type-A
+ports is off until the image switches it on, and the capture unit on HDMI0
+takes its power from those ports. With the 5 V on at the image's start and
+the chain run at once, the chain passed, but the unit answered no picture
+request for the first 40 s (it was booting); from then on every picture
+showed the pattern. So the unit locks onto a signal that began before it
+finished booting, and the default hold of 30 s inside a 60 s lifetime ends
+before it shows anything. A display with its own power has no such delay.
+Such a proof is built with a longer hold and a lifetime that fits it, at
+1920x1080 for this sink:
+
+    west build -p always -b nanopc_t6 -d build/t6_cold-uboot yakogl/tools/probes/nanopc_t6/t6_cold \
+      -- -DT6_COLD_MODE=1920x1080 -DT6_PICTURE_HOLD_S=90 -DCONFIG_YAKOGL_NANOPC_T6_LIFETIME_S=130
+
+The hold (`T6_PICTURE_HOLD_S`, `tools/probes/nanopc_t6/common/
+t6_picture.cmake`, 30 s by default) is a multiple of 10, at least 30, and
+ends 10 s before the watchdog's lifetime at least (`common/t6_picture.c`
+checks it at build time). `T6_ROUTE=uboot t6-verdict.sh t6_cold` takes the
+hold and the lifetime from the record's own lines and checks the same
+rules. For the same reason the chain's VIDEO line may read `HPD 0` on this
+route: the unit has not raised hot-plug when the chain ends, some 60 ms
+after its 5 V came on, and the chain does not wait for it (a fixed mode
+needs no EDID). The read-backs after the hold must read `HPD 1` on both
+routes: that line proves a connected display.
+
 What the PHY PLL needs (`hdptx.c:900-970`): the PLL output is 5x the TMDS
 character rate divided out of a VCO of 2.0-4.0 GHz, `VCO = 24 MHz x M`
 (P = refdiv = 1), `S` even or 1, M 20-255. For 148.5 MHz: 742.5 MHz x 4 =
