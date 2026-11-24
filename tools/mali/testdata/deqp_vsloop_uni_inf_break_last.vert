@@ -8,7 +8,6 @@ void main()
     gl_Position = a_position;
     mediump vec4 coords = a_coords;
     mediump vec4 res = coords;
-    mediump int i = 0;
     do { res = res.yzwx; break; } while (true);
     v_color = res.rgb;
 }

@@ -1,3 +1,3 @@
 SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: The Khronos Group Inc.
-The fragment shader of dEQP-GLES2.functional.shaders.functions.control_flow.return_after_break_vertex as dEQP-GLES2 writes it, verbatim deqp_loops2_vs_fn_return_in_loop.frag (the shader-library harness of functions.control_flow, the same for every case with one float output).
+The fragment shader of dEQP-GLES2.functional.shaders.functions.control_flow.return_after_break_vertex as dEQP-GLES2 writes it (VK-GL-CTS 93bca01), verbatim from the .qpa of tools/mali/deqp-host-measure.sh at 63c6418d (programs/a0c3fb41d17e4866.frag; plan #402 item ref-vsloop).

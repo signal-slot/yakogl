@@ -9,7 +9,7 @@ void main()
     mediump vec4 coords = a_coords;
     mediump vec4 res = coords;
     	mediump int i = 0;
-    do { continue; } while (++i < ui_three);
+	do  { continue; }  while (++i < ui_three);
 
     v_color = res.rgb;
 }

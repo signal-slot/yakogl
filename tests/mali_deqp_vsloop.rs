@@ -36,8 +36,13 @@
 //! `vector_subscript`'s dynamic loops, three `functions.control_flow`
 //! cases); `functions.control_flow.return_in_loop_if_vertex` (1 Fail) and
 //! `struct.uniform.{dynamic_,}loop_nested_struct_array_vertex` (1 Fail,
-//! 1 NotSupported) have no reference (their GLES2 text was not at hand).
-//! The note has the full table and the provenance of each source.
+//! 1 NotSupported) have no reference (the eight slots are used).
+//!
+//! Every source is verbatim from the `.qpa` of the HOST-ONLY measure at
+//! `63c6418d` (`tools/mali/deqp-host-measure.sh --cases`, the 196 cases).
+//! There, 179 cases still stop at LoopVertex, 8 dynamic nested loops at
+//! UniformType, one struct case at a non-finite constant op, and 8 constant
+//! nested `for`/`while` loops compile. The note has the full table.
 //!
 //! ```text
 //! cargo test --no-default-features --features host-test,gpu-mali,shaderc-online,no-shader-table --test mali_deqp_vsloop
