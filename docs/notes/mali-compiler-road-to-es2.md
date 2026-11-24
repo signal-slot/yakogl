@@ -2,8 +2,10 @@
 <!-- SPDX-FileCopyrightText: 2026 Signal Slot, Inc. -->
 # Mali (Valhall): does family-by-family lowering reach zero refusals, or does the compiler need general mechanisms?
 
-**Status: study, no code.** This note reads and measures; it changes nothing
-under `src/`, `tests/` or `tools/`. It answers the owner's question for the
+**Status: study, no code.** Sections 0 to 5 read and measure; they change
+nothing under `src/`, `tests/` or `tools/`. Section 6 is the baseline of the
+corpus check that section 4.4 names as the first work item, built after the
+study (`tools/mali/corpus_check.py`). It answers the owner's question for the
 `gpu-mali` online compiler (`src/shaderc/online/mali/`, NanoPC-T6 Mali-G610;
 the Verdin iMX95 Mali-G310 gets the same words, `mali-g310-vs-g610.md`):
 will removing refusal families one by one, in count order (plan #387,
@@ -502,7 +504,8 @@ Under (C), plan #387's per-family items fall into three groups:
 
    This becomes the convergence meter for both A and B. Today it is the
    missing measure: the plan counts refusals, not words.
-   Size: about 500 lines of script.
+   Size: about 500 lines of script. **Built:** `tools/mali/corpus_check.py`,
+   baseline in section 6.
 2. **The shader NIR, step 1.** Generalise `blend_nir.rs` into a shader
    NIR:
    - blocks, phis, and int/uint/bool1 types with a bit size per value;
@@ -566,3 +569,198 @@ Under (C), plan #387's per-family items fall into three groups:
      with spills or the full register file. If many do, M5 moves before M4
      finishes. Whether the existing single-block unroller in `nir_fs.rs`
      can be kept as a reference oracle while M4 is built.
+
+## 6. The corpus check: the baseline
+
+`tools/mali/corpus_check.py` is work item 1 of section 4.4. The command and
+its modes:
+
+```sh
+# every program of the selection (default all three): rows, then the summary
+python3 -I tools/mali/corpus_check.py run [--select deqp|testdata|glmark2]... \
+    [--sample N --seed K] [--deqp-cases slices|FILE] [--jobs N] [--cache DIR] [--out ROWS]
+python3 -I tools/mali/corpus_check.py summary ROWS [--board-refused slices|FILE]
+python3 -I tools/mali/corpus_check.py diff OLD_ROWS NEW_ROWS   # exit 1 on a regression
+```
+
+- **The corpus.** `deqp`: every dEQP-GLES2 must-pass case, run on the host
+  through `deqp-host-measure.sh --cases` (the library of the tree), each
+  program read from the `.qpa`. `testdata`: every pair of
+  `tools/mali/testdata` against its committed reference (the rule of
+  `route.sh`). `glmark2`: the 55 programs of the 33 default scenes
+  (`tests/mali_glmark2_corpus.rs`).
+- **Our side.** The integration tests' own measure (`tests/mali_ref/mod.rs`
+  `measure`): the GL core's entry points in its order, then `differences`
+  (words, FAU words, `work_reg_count`, preload, the varying program and its
+  offset). It is one rule with `route.sh`, which fixes issue #8783.
+- **Mesa's side.** A drm-shim draw (`drm_shim_ref.sh run --uniform-values`,
+  then `pan_ref_diff.py extract --draw`), made on demand.
+- **The rows.** One row per (program, stage), with these verdicts:
+  - EQUAL, DIFFER (with the class of the first difference), REFUSED (with
+    the `MaliError` text and the reason class of section 1.1);
+  - REJECTED: refused by the front end or the link, and Mesa refuses too
+    (dEQP's negative cases);
+  - BLOCKED: this stage compiled, the other stage refused;
+  - NOREF: compiled, and Mesa drew nothing;
+  - ERROR: the comparison could not read the reference;
+  - CRASH: the measure's process died.
+
+  A dEQP case takes its worst program.
+- **Caches.** Under `~/.cache/yakogl-gate/mali-corpus`, outside the tree:
+  - the sources and Mesa's references, by content hash (and by the hash of
+    the reference tools);
+  - our rows, by the tree key of the compiler (`src/shaderc`, `src/mali`,
+    `src/util`, `tests/mali_ref`) and the program;
+  - the dEQP run, by the tree key of the library.
+
+  So a rerun is incremental, and a tree on another main measures its own
+  side again.
+
+**Where the bulk lives.** The rows of this baseline are
+`~/.cache/yakogl-gate/mali-corpus/rows-v0.1.0-2631-g8560b50a3.tsv` on the
+gate host that made them (32,526 rows; never committed). `summary` remakes
+every table below from that file. The numbers were measured at origin/main
+`786cfacd2` plus this branch, which changes no compiler code.
+
+**Wall time on this host** (12 threads, other builds running beside it):
+
+| Run | Wall time |
+|---|--:|
+| Everything cold: dEQP build and run (161 s), 10,693 Mesa references (1,144 s), our 12,075 programs (63 s) | 1,388 s |
+| The board-refused cases alone (`--deqp-cases slices`), cold: 8,879 references (580 s), our side (16 s); the dEQP run (about 150 s) comes on top | 606 s |
+| A change of the compiler: the library and the dEQP run again (152 s), our side again (48 s), the references cached | 255 s |
+| A change of the tests' module only: our side again | 46 s |
+| Nothing changed | 8 s |
+| `--sample 200 --seed 387` of the dEQP cases, cached | 5 s |
+
+Per change, the cost is the dEQP run plus our side: about 4 minutes, of
+which 50 s is the compile and compare of every program. The references are
+made once per program (0.3 s each on 11 threads).
+
+### 6.1 dEQP-GLES2 at the baseline
+
+All 17,165 must-pass cases, by each case's worst program:
+
+| Outcome | Cases | Board-refused cases (the study's 10,597) |
+|---|--:|--:|
+| EQUAL (every program is Mesa's to the byte) | 3,475 | 2,967 |
+| DIFFER (compiled; a program is not Mesa's) | 1,935 | 1,444 |
+| NOREF (compiled; Mesa refuses the draw) | 32 | 32 |
+| REFUSED | 6,130 | 6,128 |
+| REJECTED (a negative case: we and Mesa both refuse) | 873 | 4 |
+| NOSHADER (dEQP logs no shader: blend, depth_stencil, clipping, fbo, state queries, ...) | 4,720 | 22 |
+| **Compiled: share not Mesa's** | **35.6 % (1,935 of 5,442)** | **32.5 % (1,444 of 4,443)** |
+
+The first refusal by reason class (the classes of section 1.1):
+
+| Reason class | All cases | Board-refused |
+|---|--:|--:|
+| missing operation | 1,572 | 1,572 |
+| reference missing | 1,237 | 1,237 |
+| type domain | 1,141 | 1,141 |
+| order (algebraic, fold) | 895 | 894 |
+| control flow | 626 | 626 |
+| precision | 351 | 351 |
+| type domain, through a defect (`Defect(IrIndex)`) | 187 | 187 |
+| order (link) | 87 | 87 |
+| not the code generator (the link's varying offsets) | 11 | 10 |
+| deliberate guard (`Invariant`) | 9 | 9 |
+| registers and size | 8 | 8 |
+| defect (`Defect(Encode)`) | 6 | 6 |
+
+Behind the 6,128 refused cases are 4,902 distinct refusing shaders.
+
+The DIFFER cases:
+- by stage, of all 1,935: the vertex program in 1,336, the fragment program
+  in 377, and both in 222;
+- by the first difference: words in 1,885, FAU words alone in 30, and the
+  varying program in 20.
+
+The vertex program is the larger part. In the audit, too, the largest cause
+was on the vertex side: the mediump vertex arithmetic, M3. This baseline
+does not attribute causes.
+
+By dEQP group (the largest; `summary` lists all of them):
+
+| Group | Cases | EQUAL | DIFFER | REFUSED | Distinct refusing shaders |
+|---|--:|--:|--:|--:|--:|
+| shaders.operator | 2,949 | 908 | 847 | 1,194 | 1,194 |
+| shaders.random | 1,898 | 272 | 111 | 1,513 | 1,413 |
+| uniform_api.value | 1,008 | 43 | 124 | 818 | 212 |
+| shaders.matrix | 738 | 125 | 226 | 387 | 375 |
+| shaders.swizzles | 648 | 240 | 174 | 234 | 113 |
+| shaders.loops | 625 | 162 | 7 | 456 | 450 |
+| shaders.indexing | 568 | 45 | 61 | 462 | 426 |
+| shaders.conversions | 524 | 131 | 170 | 169 | 104 |
+| shaders.constant_expressions | 462 | 268 | 43 | 151 | 151 |
+
+### 6.2 The other corpora
+
+- **testdata** (1,391 pairs against their committed references; 1,355
+  distinct programs):
+  - both stages EQUAL: 625 programs;
+  - a stage DIFFER: 35;
+  - a stage REFUSED: 693;
+  - CRASH: 2, the `lanecycle` stack overflow of
+    `tests/mali_deqp_defects.rs`. `route.sh measure` now reports it as a
+    REFUSED row and goes on. Before, a share that died ended the whole
+    measure.
+
+  By `route.sh`'s program verdicts: EQUAL 646, DIFFER 34, NOREF 7,
+  REFUSED 704.
+- **glmark2** (55 programs, 48 distinct):
+  - 14 of 33 scenes compile clean, as `tests/fixtures/mali_glmark2_verdicts.txt`
+    says.
+  - 8 scenes are Mesa's to the byte.
+  - 4 programs DIFFER: the buffer scenes' vertex program, conditionals
+    `fragment-steps=5`, and loop `vertex-steps=5`.
+  - The 8 programs of `ideas` are ERROR. They declare uniforms through a
+    macro precision (`uniform MEDIUMP_OR_DEFAULT float ...`), which
+    `tests/mali_ref`'s `uniform_names` does not read, so their uniform
+    words cannot be computed. This is a limit of the comparison, not a
+    verdict.
+
+### 6.3 Against the study's numbers
+
+**"4,471 of 10,597 board-refused cases compile".** Here 4,443 compile
+(EQUAL + DIFFER + NOREF), 6,128 are REFUSED, 22 are NOSHADER and 4 are
+REJECTED. That is 4,469 not refused, against the study's 4,471. The
+difference, case by case against the study's `measure.tsv`:
+- **10 cases the study counts as compiling are REFUSED here.** The link
+  refuses them with "a Mali link whose stages place a varying at different
+  offsets". The study counted only the code generator's text ("online
+  shaderc: the code generator refused"), so a link refusal looked like a
+  compile to it.
+- **8 cases the study counts as refused compile here, and DIFFER.** They are
+  `attribute_location.bind_aliasing.cond_*`. dEQP binds their attribute
+  locations, and the board refuses them with `Defect(Encode)`. The measure,
+  like Mesa's reference draw, binds none.
+- **22 cases are NOSHADER** (`fragment_ops.scissor.clear_*` and the like).
+  dEQP logs no shader source for them, so there is no program to measure.
+  The study counted them as compiling.
+- **4 cases are REJECTED** (`shaders.constants.const_float_assign_*`). Our
+  front end refuses them, and so does Mesa. The study did not count front
+  end refusals as refusals.
+
+The refusal texts agree with section 2.1 to the case. For example, fs
+`Arithmetic` is 890, `ColourForm` 821, vs `UniformType` 462 and
+`Defect(IrIndex)` 187, and the distinct refusing shaders are 4,902 against
+4,901.
+
+**"About a third of compiled cases differ from Mesa"** (the audit's 300
+sampled pairs, 108 not Mesa's). Over every compiled board-refused case the
+share is 32.5 % (1,444 of 4,443), and over the whole must-pass list 35.6 %.
+The audit's estimate holds, now measured rather than sampled.
+
+- The vertex program is the larger part: 1,336 of the 1,935 DIFFER cases
+  differ only there.
+- 30 cases differ only in FAU words. These are real differences, for
+  example:
+  - Mesa packs a uniform-array compare's constants as fp16 pairs where we
+    keep an fp32 word;
+  - the last bit of a folded constant (`length`, `degrees`);
+  - `gl_MaxVertexUniformVectors`, whose value differs.
+
+The next measure of the plan is `diff` of two row files: what moved
+refused -> equal, refused -> differ, and equal -> differ, the last being a
+regression.
